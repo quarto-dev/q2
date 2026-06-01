@@ -257,6 +257,26 @@ struct SerializableSourcePiece {
     length: usize,
 }
 
+/// Reserved source-info pool slot for React-constructed (user-edit) content.
+///
+/// The Rust JSON writer pre-populates pool slot 0 with
+/// `Generated{by: By::user_edit(), from: smallvec![]}` regardless of whether
+/// any node references it. The React framework's `stampUserEdits` walker
+/// (Plan 7f Phase 3) stamps `s: USER_EDIT_SOURCE_INFO_ID` on every AST node
+/// a `setLocalAst` call introduces without an existing `s:`.
+///
+/// The framework can't allocate into the Rust pool, so the slot ID has to be
+/// agreed in advance. Future reserved slots chain via
+/// `USER_EDIT_SOURCE_INFO_ID + 1`, etc.; the parity test in this module's
+/// `tests` mod asserts `pool[USER_EDIT_SOURCE_INFO_ID].kind() == "user-edit"`
+/// so silent rearrangement breaks the test rather than the consumer.
+///
+/// Hand-mirror of the TS constant `USER_EDIT_SOURCE_INFO_ID` in
+/// `ts-packages/preview-renderer/src/types/sourceInfo.ts`. A separate parity
+/// test reads the TS file textually and asserts equality (same discipline as
+/// `ATOMIC_CUSTOM_NODES` in `crates/quarto-pandoc-types/src/atomic_custom_nodes.rs`).
+pub const USER_EDIT_SOURCE_INFO_ID: usize = 0;
+
 /// Serializer that builds a pool of unique SourceInfo objects and assigns IDs.
 ///
 /// During AST traversal, each SourceInfo is interned into the pool. Rc-shared
@@ -265,6 +285,9 @@ struct SerializableSourcePiece {
 ///
 /// This approach reduces JSON size by ~93% for documents with many nodes sharing
 /// the same parent chains (e.g., YAML metadata with siblings).
+///
+/// The pool starts pre-populated with one reserved entry at index
+/// `USER_EDIT_SOURCE_INFO_ID` (= 0); see the constant's docstring above.
 struct SourceInfoSerializer<'a> {
     pool: Vec<SerializableSourceInfo>,
     // Dedup cache for `Substring` parent edges, keyed by `Arc::as_ptr(parent)`.
@@ -283,8 +306,23 @@ struct SourceInfoSerializer<'a> {
 
 impl<'a> SourceInfoSerializer<'a> {
     fn new(context: &'a ASTContext, config: &'a JsonConfig) -> Self {
+        // Pre-populate slot 0 (USER_EDIT_SOURCE_INFO_ID) with a Generated
+        // entry for React-constructed user edits. The framework's
+        // `stampUserEdits` walker cites slot 0 by ID; the slot must exist
+        // regardless of whether any node references it in the current
+        // document. See the constant's docstring.
+        let mut pool = Vec::new();
+        pool.push(SerializableSourceInfo {
+            id: USER_EDIT_SOURCE_INFO_ID,
+            start_offset: 0,
+            end_offset: 0,
+            mapping: SerializableSourceMapping::Generated {
+                by: By::user_edit(),
+                from: Vec::new(),
+            },
+        });
         SourceInfoSerializer {
-            pool: Vec::new(),
+            pool,
             arc_parent_ids: HashMap::new(),
             context,
             config,
@@ -3893,12 +3931,14 @@ mod tests {
 
         let id = serializer.intern(&source_info);
 
-        // Should get ID 0 for the first entry
-        assert_eq!(id, 0);
-        assert_eq!(serializer.pool.len(), 1);
+        // Slot 0 is reserved (USER_EDIT_SOURCE_INFO_ID); the first intern
+        // lands at slot 1.
+        let first_user_id = USER_EDIT_SOURCE_INFO_ID + 1;
+        assert_eq!(id, first_user_id);
+        assert_eq!(serializer.pool.len(), first_user_id + 1);
 
         // Verify the pool entry
-        let entry = &serializer.pool[0];
+        let entry = &serializer.pool[first_user_id];
         assert_eq!(entry.start_offset, 0);
         assert_eq!(entry.end_offset, 10);
         match &entry.mapping {
@@ -3910,16 +3950,22 @@ mod tests {
 
         // Interning the same SourceInfo again produces a fresh pool entry.
         let id2 = serializer.intern(&source_info);
-        assert_eq!(id2, 1);
-        assert_eq!(serializer.pool.len(), 2);
+        assert_eq!(id2, first_user_id + 1);
+        assert_eq!(serializer.pool.len(), first_user_id + 2);
 
         // Both entries resolve to structurally-equal pool values.
         assert_eq!(
-            serializer.pool[0].start_offset,
-            serializer.pool[1].start_offset
+            serializer.pool[first_user_id].start_offset,
+            serializer.pool[first_user_id + 1].start_offset
         );
-        assert_eq!(serializer.pool[0].end_offset, serializer.pool[1].end_offset);
-        match (&serializer.pool[0].mapping, &serializer.pool[1].mapping) {
+        assert_eq!(
+            serializer.pool[first_user_id].end_offset,
+            serializer.pool[first_user_id + 1].end_offset
+        );
+        match (
+            &serializer.pool[first_user_id].mapping,
+            &serializer.pool[first_user_id + 1].mapping,
+        ) {
             (
                 SerializableSourceMapping::Original { file_id: a },
                 SerializableSourceMapping::Original { file_id: b },
@@ -3949,12 +3995,14 @@ mod tests {
 
         let child_id = serializer.intern(&child);
 
-        // Parent should be interned first (ID 0), child second (ID 1)
-        assert_eq!(child_id, 1);
-        assert_eq!(serializer.pool.len(), 2);
+        // Slot 0 is reserved (USER_EDIT_SOURCE_INFO_ID); parent is interned
+        // first at slot 1, child second at slot 2.
+        let parent_id = USER_EDIT_SOURCE_INFO_ID + 1;
+        assert_eq!(child_id, parent_id + 1);
+        assert_eq!(serializer.pool.len(), parent_id + 2);
 
         // Verify parent entry
-        let parent_entry = &serializer.pool[0];
+        let parent_entry = &serializer.pool[parent_id];
         assert_eq!(parent_entry.start_offset, 0);
         assert_eq!(parent_entry.end_offset, 100);
         match &parent_entry.mapping {
@@ -3965,12 +4013,14 @@ mod tests {
         }
 
         // Verify child entry
-        let child_entry = &serializer.pool[1];
+        let child_entry = &serializer.pool[parent_id + 1];
         assert_eq!(child_entry.start_offset, 10);
         assert_eq!(child_entry.end_offset, 20);
         match &child_entry.mapping {
-            SerializableSourceMapping::Substring { parent_id } => {
-                assert_eq!(*parent_id, 0); // References parent
+            SerializableSourceMapping::Substring {
+                parent_id: parent_ref,
+            } => {
+                assert_eq!(*parent_ref, parent_id); // References parent
             }
             _ => panic!("Expected Substring mapping"),
         }
@@ -4011,18 +4061,21 @@ mod tests {
         let id2 = serializer.intern(&child2);
         let id3 = serializer.intern(&child3);
 
-        // Parent should be ID 0, children should be 1, 2, 3
-        assert_eq!(id1, 1);
-        assert_eq!(id2, 2);
-        assert_eq!(id3, 3);
-        assert_eq!(serializer.pool.len(), 4); // 1 parent + 3 children
+        // Slot 0 reserved; parent at slot 1, children at slots 2/3/4.
+        let parent_id = USER_EDIT_SOURCE_INFO_ID + 1;
+        assert_eq!(id1, parent_id + 1);
+        assert_eq!(id2, parent_id + 2);
+        assert_eq!(id3, parent_id + 3);
+        assert_eq!(serializer.pool.len(), parent_id + 4); // reserved + parent + 3 children
 
-        // All children should reference the same parent (ID 0)
-        for child_id in [1, 2, 3] {
+        // All children should reference the same parent
+        for child_id in [id1, id2, id3] {
             let child_entry = &serializer.pool[child_id];
             match &child_entry.mapping {
-                SerializableSourceMapping::Substring { parent_id } => {
-                    assert_eq!(*parent_id, 0);
+                SerializableSourceMapping::Substring {
+                    parent_id: parent_ref,
+                } => {
+                    assert_eq!(*parent_ref, parent_id);
                 }
                 _ => panic!("Expected Substring mapping"),
             }
@@ -4075,12 +4128,14 @@ mod tests {
 
         let deepest_id = serializer.intern(&level5);
 
-        // Should have 6 entries total (0-5)
-        assert_eq!(deepest_id, 5);
-        assert_eq!(serializer.pool.len(), 6);
+        // Slot 0 reserved; level0..level5 interned at slots 1..6.
+        let level0_id = USER_EDIT_SOURCE_INFO_ID + 1;
+        assert_eq!(deepest_id, level0_id + 5);
+        assert_eq!(serializer.pool.len(), level0_id + 6);
 
         // Verify the chain: each level should reference its parent
-        for i in 1..=5 {
+        for offset in 1..=5 {
+            let i = level0_id + offset;
             let entry = &serializer.pool[i];
             match &entry.mapping {
                 SerializableSourceMapping::Substring { parent_id } => {
@@ -4133,19 +4188,20 @@ mod tests {
 
         let concat_id = serializer.intern(&concat);
 
-        // Should have 3 entries: piece1, piece2, concat
-        assert_eq!(concat_id, 2);
-        assert_eq!(serializer.pool.len(), 3);
+        // Slot 0 reserved; piece1, piece2, concat interned at slots 1, 2, 3.
+        let piece1_id = USER_EDIT_SOURCE_INFO_ID + 1;
+        assert_eq!(concat_id, piece1_id + 2);
+        assert_eq!(serializer.pool.len(), piece1_id + 3);
 
         // Verify concat entry
-        let concat_entry = &serializer.pool[2];
+        let concat_entry = &serializer.pool[concat_id];
         match &concat_entry.mapping {
             SerializableSourceMapping::Concat { pieces } => {
                 assert_eq!(pieces.len(), 2);
-                assert_eq!(pieces[0].source_info_id, 0); // References piece1
+                assert_eq!(pieces[0].source_info_id, piece1_id); // References piece1
                 assert_eq!(pieces[0].offset_in_concat, 0);
                 assert_eq!(pieces[0].length, 10);
-                assert_eq!(pieces[1].source_info_id, 1); // References piece2
+                assert_eq!(pieces[1].source_info_id, piece1_id + 1); // References piece2
                 assert_eq!(pieces[1].offset_in_concat, 10);
                 assert_eq!(pieces[1].length, 10);
             }
@@ -4182,20 +4238,25 @@ mod tests {
         serializer.intern(&child1);
         serializer.intern(&child2);
 
-        // Should have 3 entries: parent (once), child1, child2
-        assert_eq!(serializer.pool.len(), 3);
+        // Slot 0 reserved; parent at slot 1, child1 at 2, child2 at 3.
+        let parent_id = USER_EDIT_SOURCE_INFO_ID + 1;
+        assert_eq!(serializer.pool.len(), parent_id + 3);
 
         // Both children should reference the same parent ID
-        match &serializer.pool[1].mapping {
-            SerializableSourceMapping::Substring { parent_id } => {
-                assert_eq!(*parent_id, 0);
+        match &serializer.pool[parent_id + 1].mapping {
+            SerializableSourceMapping::Substring {
+                parent_id: parent_ref,
+            } => {
+                assert_eq!(*parent_ref, parent_id);
             }
             _ => panic!("Expected Substring"),
         }
 
-        match &serializer.pool[2].mapping {
-            SerializableSourceMapping::Substring { parent_id } => {
-                assert_eq!(*parent_id, 0); // Same parent ID as child1
+        match &serializer.pool[parent_id + 2].mapping {
+            SerializableSourceMapping::Substring {
+                parent_id: parent_ref,
+            } => {
+                assert_eq!(*parent_ref, parent_id); // Same parent ID as child1
             }
             _ => panic!("Expected Substring"),
         }
@@ -4411,9 +4472,12 @@ mod tests {
         };
         let id = serializer.intern(&gen_info);
 
-        assert_eq!(id, 0);
-        assert_eq!(serializer.pool.len(), 1);
-        let entry = &serializer.pool[0];
+        // Slot 0 is reserved (USER_EDIT_SOURCE_INFO_ID); this intern lands
+        // at slot 1.
+        let first_user_id = USER_EDIT_SOURCE_INFO_ID + 1;
+        assert_eq!(id, first_user_id);
+        assert_eq!(serializer.pool.len(), first_user_id + 1);
+        let entry = &serializer.pool[id];
         assert_eq!(entry.start_offset, 0);
         assert_eq!(entry.end_offset, 0);
         match &entry.mapping {
@@ -4467,18 +4531,19 @@ mod tests {
         };
 
         let id = serializer.intern(&gen_info);
-        // Anchor target interned first (ID 0), Generated second (ID 1).
-        assert_eq!(id, 1);
+        // Slot 0 reserved; anchor target interned at slot 1, Generated at 2.
+        let target_id = USER_EDIT_SOURCE_INFO_ID + 1;
+        assert_eq!(id, target_id + 1);
         assert!(matches!(
-            serializer.pool[0].mapping,
+            serializer.pool[target_id].mapping,
             SerializableSourceMapping::Original { .. }
         ));
-        match &serializer.pool[1].mapping {
+        match &serializer.pool[id].mapping {
             SerializableSourceMapping::Generated { by, from } => {
                 assert_eq!(by.kind, "shortcode");
                 assert_eq!(from.len(), 1);
                 assert!(matches!(from[0].0, AnchorRole::Invocation));
-                assert_eq!(from[0].1, 0); // si_id points to the target
+                assert_eq!(from[0].1, target_id); // si_id points to the target
             }
             _ => panic!("Expected Generated mapping"),
         }
@@ -4512,8 +4577,10 @@ mod tests {
         let id2 = serializer.intern(&make());
         let id3 = serializer.intern(&make());
 
-        // Pool: shared(0), gen1(1), gen2(2), gen3(3) — shared interned once.
-        assert_eq!(serializer.pool.len(), 4);
+        // Slot 0 reserved; shared(1), gen1(2), gen2(3), gen3(4) — shared
+        // interned once.
+        let shared_id = USER_EDIT_SOURCE_INFO_ID + 1;
+        assert_eq!(serializer.pool.len(), shared_id + 4);
         let original_count = serializer
             .pool
             .iter()
@@ -4525,7 +4592,7 @@ mod tests {
             match &serializer.pool[id].mapping {
                 SerializableSourceMapping::Generated { from, .. } => {
                     assert_eq!(from.len(), 1);
-                    assert_eq!(from[0].1, 0); // all reference the same si_id
+                    assert_eq!(from[0].1, shared_id); // all reference the same si_id
                 }
                 _ => panic!("Expected Generated"),
             }
@@ -4546,21 +4613,22 @@ mod tests {
         let concat = SourceInfo::concat(vec![(g1, 5), (g2, 7)]);
 
         let id = serializer.intern(&concat);
-        // Two Generated entries (0, 1) + Concat (2).
-        assert_eq!(id, 2);
+        // Slot 0 reserved; two Generated entries at 1, 2; Concat at 3.
+        let g1_id = USER_EDIT_SOURCE_INFO_ID + 1;
+        assert_eq!(id, g1_id + 2);
         assert!(matches!(
-            serializer.pool[0].mapping,
+            serializer.pool[g1_id].mapping,
             SerializableSourceMapping::Generated { .. }
         ));
         assert!(matches!(
-            serializer.pool[1].mapping,
+            serializer.pool[g1_id + 1].mapping,
             SerializableSourceMapping::Generated { .. }
         ));
-        match &serializer.pool[2].mapping {
+        match &serializer.pool[id].mapping {
             SerializableSourceMapping::Concat { pieces } => {
                 assert_eq!(pieces.len(), 2);
-                assert_eq!(pieces[0].source_info_id, 0);
-                assert_eq!(pieces[1].source_info_id, 1);
+                assert_eq!(pieces[0].source_info_id, g1_id);
+                assert_eq!(pieces[1].source_info_id, g1_id + 1);
             }
             _ => panic!("Expected Concat"),
         }
@@ -4582,14 +4650,18 @@ mod tests {
         };
         let id = serializer.intern(&child);
 
-        assert_eq!(id, 1);
+        // Slot 0 reserved; Generated parent at 1, Substring at 2.
+        let parent_id = USER_EDIT_SOURCE_INFO_ID + 1;
+        assert_eq!(id, parent_id + 1);
         assert!(matches!(
-            serializer.pool[0].mapping,
+            serializer.pool[parent_id].mapping,
             SerializableSourceMapping::Generated { .. }
         ));
-        match &serializer.pool[1].mapping {
-            SerializableSourceMapping::Substring { parent_id } => {
-                assert_eq!(*parent_id, 0);
+        match &serializer.pool[id].mapping {
+            SerializableSourceMapping::Substring {
+                parent_id: parent_ref,
+            } => {
+                assert_eq!(*parent_ref, parent_id);
             }
             _ => panic!("Expected Substring"),
         }
@@ -4616,16 +4688,18 @@ mod tests {
         };
         let _ = serializer.intern(&gen_info);
 
-        let gen_entry_json = serializer.pool[1].to_json();
+        // Slot 0 reserved; anchor target at 1, Generated at 2.
+        let target_id = USER_EDIT_SOURCE_INFO_ID + 1;
+        let gen_entry_json = serializer.pool[target_id + 1].to_json();
         assert_eq!(gen_entry_json.t, 4);
         assert_eq!(gen_entry_json.r, [0, 0]);
 
         // Expected wire shape:
         //   { "by": { "kind": "shortcode", "data": { "name": "meta" } },
-        //     "from": [ { "role": "invocation", "si_id": 0 } ] }
+        //     "from": [ { "role": "invocation", "si_id": <target_id> } ] }
         let expected = json!({
             "by": { "kind": "shortcode", "data": { "name": "meta" } },
-            "from": [ { "role": "invocation", "si_id": 0 } ]
+            "from": [ { "role": "invocation", "si_id": target_id } ]
         });
         assert_eq!(gen_entry_json.d, expected);
     }
@@ -4639,12 +4713,100 @@ mod tests {
         let mut serializer = SourceInfoSerializer::new(&context, &config);
 
         let gen_info = SourceInfo::generated(By::sectionize());
-        let _ = serializer.intern(&gen_info);
-        let entry_json = serializer.pool[0].to_json();
+        let id = serializer.intern(&gen_info);
+        let entry_json = serializer.pool[id].to_json();
         assert_eq!(entry_json.t, 4);
         // Exactly: { "by": { "kind": "sectionize" } } — no data, no from.
         let expected = json!({ "by": { "kind": "sectionize" } });
         assert_eq!(entry_json.d, expected);
+    }
+
+    /// The reserved pool slot at `USER_EDIT_SOURCE_INFO_ID` is pre-populated
+    /// with `Generated{by: user_edit, from: []}` on every
+    /// `SourceInfoSerializer::new()` regardless of whether any node references
+    /// it. The framework's `stampUserEdits` walker cites the slot by ID, so
+    /// rearranging reserved slots silently would break consumer sites; this
+    /// test pins the layout so the breakage shows up here instead.
+    #[test]
+    fn test_reserved_slot_user_edit() {
+        let context = make_test_context();
+        let config = make_test_config();
+        let serializer = SourceInfoSerializer::new(&context, &config);
+
+        // Slot 0 exists from construction time, without any intern calls.
+        assert!(serializer.pool.len() > USER_EDIT_SOURCE_INFO_ID);
+
+        let entry = &serializer.pool[USER_EDIT_SOURCE_INFO_ID];
+        assert_eq!(entry.start_offset, 0);
+        assert_eq!(entry.end_offset, 0);
+        match &entry.mapping {
+            SerializableSourceMapping::Generated { by, from } => {
+                assert_eq!(by.kind, "user-edit");
+                assert!(by.data.is_null());
+                assert!(from.is_empty());
+            }
+            _ => panic!("Reserved slot {USER_EDIT_SOURCE_INFO_ID} must be Generated"),
+        }
+    }
+
+    /// Cross-language parity: the Rust constant `USER_EDIT_SOURCE_INFO_ID`
+    /// must agree with the TypeScript hand-mirror at
+    /// `ts-packages/preview-renderer/src/types/sourceInfo.ts`. The two are
+    /// independent literals (Rust can't import TS at build time and vice
+    /// versa); silent drift between them would let the React framework
+    /// stamp `s:` references that resolve to the wrong reserved slot.
+    ///
+    /// This test reads the TS source file textually and parses the
+    /// `export const USER_EDIT_SOURCE_INFO_ID = N;` line. Fails loudly if
+    /// the TS file is moved, the declaration shape changes, or the value
+    /// drifts.
+    #[test]
+    fn test_user_edit_slot_id_matches_typescript_mirror() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let ts_path = std::path::Path::new(manifest_dir)
+            .join("..")
+            .join("..")
+            .join("ts-packages")
+            .join("preview-renderer")
+            .join("src")
+            .join("types")
+            .join("sourceInfo.ts");
+
+        let src = std::fs::read_to_string(&ts_path).unwrap_or_else(|err| {
+            panic!(
+                "Failed to read TS hand-mirror at {}: {err}. \
+                 If the file moved, update the path in this test and \
+                 the docstring on USER_EDIT_SOURCE_INFO_ID.",
+                ts_path.display()
+            )
+        });
+
+        // Match `export const USER_EDIT_SOURCE_INFO_ID = <digits>;` with
+        // optional whitespace. Looser than a real TS parser, but tight
+        // enough that a renamed/restructured declaration will fail here.
+        let needle = "export const USER_EDIT_SOURCE_INFO_ID";
+        let start = src.find(needle).unwrap_or_else(|| {
+            panic!(
+                "TS file at {} no longer contains `{needle}`; \
+                 either the constant was renamed or the file changed shape.",
+                ts_path.display()
+            )
+        });
+        let after = &src[start + needle.len()..];
+        let eq = after.find('=').expect("missing `=` after constant name");
+        let semicolon = after.find(';').expect("missing `;` after value");
+        let value_str = after[eq + 1..semicolon].trim();
+        let ts_value: usize = value_str
+            .parse()
+            .unwrap_or_else(|err| panic!("TS value `{value_str}` did not parse as usize: {err}"));
+
+        assert_eq!(
+            ts_value, USER_EDIT_SOURCE_INFO_ID,
+            "Rust USER_EDIT_SOURCE_INFO_ID ({}) and TypeScript hand-mirror ({}) \
+             diverged. Update both files together — see the docstring on \
+             USER_EDIT_SOURCE_INFO_ID for the contract.",
+            USER_EDIT_SOURCE_INFO_ID, ts_value
+        );
     }
 
     /// AnchorRole round-trip via the writer's `serialize_anchor_role` —
