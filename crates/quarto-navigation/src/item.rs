@@ -21,7 +21,7 @@
 
 use quarto_pandoc_types::ConfigMapEntry;
 use quarto_pandoc_types::config_value::ConfigValue;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 /// A single navigation item — a link, an icon button, or a submenu.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -36,7 +36,7 @@ pub struct NavigationItem {
     /// so Generate transforms can resolve href values relative to the
     /// file they were authored in (frontmatter sidebars resolve against
     /// the doc's directory; `_quarto.yml` sidebars against the project
-    /// root). `SourceInfo::default()` for programmatically-constructed
+    /// root). `SourceInfo::generated(By::programmatic_config())` for programmatically-constructed
     /// items (tests, in-memory builders) — the path resolution helper
     /// short-circuits on that case and treats the href as already
     /// project-root-relative.
@@ -97,7 +97,7 @@ impl NavigationItem {
                     .and_then(|v| v.as_plain_text().map(|s| (s, v.source_info.clone())))
             })
             .map(|(s, info)| (Some(s), info))
-            .unwrap_or_else(|| (None, SourceInfo::default()));
+            .unwrap_or_else(|| (None, SourceInfo::generated(By::programmatic_config())));
 
         let text = cv.get("text").cloned();
         let icon = cv.get("icon").and_then(|v| v.as_plain_text());
@@ -152,11 +152,11 @@ impl NavigationItem {
     ///
     /// `href`'s `SourceInfo` is round-tripped from `self.href_source` so
     /// the Generate → Render handoff preserves the original YAML
-    /// location. Other fields use `SourceInfo::default()` — they are
+    /// location. Other fields use `SourceInfo::generated(By::programmatic_config())` — they are
     /// either programmatic (`active`) or unused for diagnostic
     /// location today.
     pub fn to_config_value(&self) -> ConfigValue {
-        let source_info = SourceInfo::default();
+        let source_info = SourceInfo::generated(By::programmatic_config());
         let mut entries: Vec<ConfigMapEntry> = Vec::new();
 
         if let Some(ref href) = self.href {

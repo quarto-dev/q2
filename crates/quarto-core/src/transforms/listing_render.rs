@@ -42,7 +42,7 @@ use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::{Block, Div};
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::project::listing::ResolvedListing;
@@ -257,7 +257,7 @@ fn render_one(
                 attrs,
             ),
             content: parsed_blocks,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::programmatic_config()),
             attr_source: AttrSourceInfo::empty(),
         }));
     }

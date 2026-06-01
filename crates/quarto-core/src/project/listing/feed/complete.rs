@@ -26,7 +26,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use quarto_system_runtime::{RuntimeError, SystemRuntime};
 use regex::RegexBuilder;
 
@@ -326,13 +326,13 @@ fn make_q_12_16(path: &Path) -> DiagnosticMessage {
         path.display()
     ))
     .with_code("Q-12-16")
-    .with_location(SourceInfo::default())
+    .with_location(SourceInfo::generated(By::unknown()))
     .build()
 }
 
 fn diagnostic_warning(msg: String) -> DiagnosticMessage {
     DiagnosticMessageBuilder::warning(msg)
-        .with_location(SourceInfo::default())
+        .with_location(SourceInfo::generated(By::unknown()))
         .build()
 }
 

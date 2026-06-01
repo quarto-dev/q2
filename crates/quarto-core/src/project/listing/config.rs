@@ -22,7 +22,7 @@ use std::path::PathBuf;
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::config_value::ConfigValueKind;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use yaml_rust2::Yaml;
 
 // ─────────────────────────────────────────────────────────────────
@@ -66,9 +66,11 @@ pub struct Listing {
     pub categories: ListingCategoriesMode,
     /// Span on the `categories:` YAML key, captured by the parser
     /// for L5's `Q-12-12` "categories enabled but no item has any"
-    /// diagnostic. `SourceInfo::default()` (a zero span) when the
-    /// listing was constructed without parsing — e.g. by the
-    /// `Default` impl or in tests.
+    /// diagnostic. `Generated{by: programmatic_config}` (a
+    /// no-real-source sentinel — recognised by
+    /// [`By::is_programmatic_sentinel`]) when the listing was
+    /// constructed without parsing — e.g. by the `Default` impl
+    /// or in tests.
     pub categories_source: SourceInfo,
     pub feed: Option<ListingFeedOptions>,
 }
@@ -110,7 +112,7 @@ impl Default for Listing {
             include: Vec::new(),
             exclude: Vec::new(),
             categories: ListingCategoriesMode::Disabled,
-            categories_source: SourceInfo::default(),
+            categories_source: SourceInfo::generated(By::programmatic_config()),
             feed: None,
         }
     }

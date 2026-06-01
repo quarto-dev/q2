@@ -26,7 +26,7 @@ use quarto_error_reporting::DiagnosticMessage;
 use quarto_navigation::{Navbar, NavigationItem, render_html::navbar_to_html};
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::project::index::ProjectIndex;
@@ -121,7 +121,7 @@ impl AstTransform for NavbarRenderTransform {
 
         ast.meta.insert_path(
             &["rendered", "navigation", "navbar"],
-            ConfigValue::new_string(&html, SourceInfo::default()),
+            ConfigValue::new_string(&html, SourceInfo::generated(By::programmatic_config())),
         );
 
         Ok(())

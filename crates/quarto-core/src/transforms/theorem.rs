@@ -309,8 +309,8 @@ fn convert_div(mut div: Div, ref_type: &str, kind: &str) -> CustomNode {
 ///
 /// Uses `AttrSourceInfo`'s positional-alignment invariant (see
 /// `crates/quarto-pandoc-types/src/attr.rs`) to find the value's
-/// `SourceInfo`; falls back to `SourceInfo::default()` if alignment
-/// fails (bd-3aolj / bd-1e6a5) so production never panics.
+/// `SourceInfo`; falls back to `None` if alignment fails (bd-3aolj
+/// / bd-1e6a5) so production never panics.
 fn extract_name_attr(attr: &mut Attr, attr_source: &AttrSourceInfo) -> Option<Inlines> {
     let (_id, _classes, kvs) = attr;
 

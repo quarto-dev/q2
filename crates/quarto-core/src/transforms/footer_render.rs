@@ -28,7 +28,7 @@ use quarto_navigation::{
 };
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::project::index::ProjectIndex;
@@ -104,7 +104,7 @@ impl AstTransform for FooterRenderTransform {
 
         ast.meta.insert_path(
             &["rendered", "navigation", "footer"],
-            ConfigValue::new_string(&html, SourceInfo::default()),
+            ConfigValue::new_string(&html, SourceInfo::generated(By::programmatic_config())),
         );
 
         Ok(())

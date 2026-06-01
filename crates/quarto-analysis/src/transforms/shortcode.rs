@@ -169,7 +169,6 @@ fn resolve_block(block: &mut Block, metadata: &ConfigValue, ctx: &mut dyn Analys
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_pandoc_types::inline::{Inline, Str, Strong};
 use quarto_pandoc_types::shortcode::ShortcodeArg;
-use quarto_source_map::SourceInfo;
 
 /// Resolve shortcodes in a list of inlines.
 fn resolve_inlines(
@@ -189,6 +188,15 @@ fn resolve_inlines(
 
                 let source_info = shortcode.source_info.clone();
 
+                // Replacement content takes the shortcode token's range
+                // as its source; the shortcode bytes are what these inlines
+                // are standing in for. (Plan 7f Phase 6.5 — the previous
+                // `SourceInfo::default()` placeholders here lost attribution
+                // entirely. The full producer-contract enrichment pattern
+                // — `Generated{by: shortcode("meta"), from: [Invocation(…)]}`
+                // — lives in `quarto-core/src/transforms/shortcode_resolve.rs`;
+                // this static-analysis pass uses the simpler reuse-the-token
+                // form.)
                 let replacement = if let Some(key) = key {
                     // Look up the metadata value using get_nested
                     if let Some(value) = metadata.get_nested(&key) {
@@ -196,7 +204,7 @@ fn resolve_inlines(
                         if let Some(text) = value.as_plain_text() {
                             vec![Inline::Str(Str {
                                 text,
-                                source_info: SourceInfo::default(),
+                                source_info: source_info.clone(),
                             })]
                         } else {
                             // Value exists but can't be converted to text
@@ -205,16 +213,16 @@ fn resolve_inlines(
                                     "Metadata key `{}` exists but cannot be converted to text",
                                     key
                                 ))
-                                .with_location(source_info)
+                                .with_location(source_info.clone())
                                 .build();
                             ctx.add_diagnostic(diag);
 
                             vec![Inline::Strong(Strong {
                                 content: vec![Inline::Str(Str {
                                     text: format!("?meta:{}", key),
-                                    source_info: SourceInfo::default(),
+                                    source_info: source_info.clone(),
                                 })],
-                                source_info: SourceInfo::default(),
+                                source_info: source_info.clone(),
                             })]
                         }
                     } else {
@@ -222,16 +230,16 @@ fn resolve_inlines(
                         let diag = DiagnosticMessageBuilder::warning("Unknown metadata key")
                             .problem(format!("Metadata key `{}` not found in document", key))
                             .add_hint("Check that the key exists in your YAML frontmatter")
-                            .with_location(source_info)
+                            .with_location(source_info.clone())
                             .build();
                         ctx.add_diagnostic(diag);
 
                         vec![Inline::Strong(Strong {
                             content: vec![Inline::Str(Str {
                                 text: format!("?meta:{}", key),
-                                source_info: SourceInfo::default(),
+                                source_info: source_info.clone(),
                             })],
-                            source_info: SourceInfo::default(),
+                            source_info: source_info.clone(),
                         })]
                     }
                 } else {
@@ -239,16 +247,16 @@ fn resolve_inlines(
                     let diag = DiagnosticMessageBuilder::warning("Missing shortcode argument")
                         .problem("The `meta` shortcode requires a metadata key")
                         .add_hint("Use `{{< meta key >}}` where `key` is a metadata field name")
-                        .with_location(source_info)
+                        .with_location(source_info.clone())
                         .build();
                     ctx.add_diagnostic(diag);
 
                     vec![Inline::Strong(Strong {
                         content: vec![Inline::Str(Str {
                             text: "?meta".to_string(),
-                            source_info: SourceInfo::default(),
+                            source_info: source_info.clone(),
                         })],
-                        source_info: SourceInfo::default(),
+                        source_info: source_info.clone(),
                     })]
                 };
 
@@ -372,6 +380,7 @@ mod tests {
         ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp,
     };
     use quarto_pandoc_types::shortcode::Shortcode;
+    use quarto_source_map::SourceInfo;
     use yaml_rust2::Yaml;
 
     fn make_meta_shortcode(key: &str) -> Inline {

@@ -41,7 +41,7 @@ use base64::Engine;
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::project::listing::ResolvedListing;
@@ -110,13 +110,16 @@ impl AstTransform for CategoriesSidebarTransform {
                         // listings disagreeing the page-level span is
                         // already informative. Refining this is part
                         // of phase 8's diagnostic-source-info polish.
-                        SourceInfo::default(),
+                        SourceInfo::generated(By::programmatic_config()),
                     ));
                 }
                 let html = render_sidebar_html(&agg);
                 ast.meta.insert_path(
                     &["rendered", "navigation", "margin_categories"],
-                    ConfigValue::new_string(&html, SourceInfo::default()),
+                    ConfigValue::new_string(
+                        &html,
+                        SourceInfo::generated(By::programmatic_config()),
+                    ),
                 );
             }
         }
@@ -194,7 +197,7 @@ pub fn aggregate_categories(resolved: &[ResolvedListing]) -> AggregateOutcome {
     let mut mixed_modes = false;
     let mut any_enabled = false;
     let mut first_enabled_id: Option<String> = None;
-    let mut first_enabled_source: SourceInfo = SourceInfo::default();
+    let mut first_enabled_source: SourceInfo = SourceInfo::generated(By::programmatic_config());
 
     for r in resolved {
         if r.listing.categories == ListingCategoriesMode::Disabled {

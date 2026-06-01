@@ -165,26 +165,34 @@ impl ShortcodeHandler for MetaShortcodeHandler {
 }
 
 /// Convert a ConfigValue to inline content.
+///
+/// The synthesized `Inline::Str` instances reuse the input
+/// `ConfigValue`'s own `source_info` — the bytes effectively come
+/// from the YAML value being interpolated. Plan 7f Phase 6.5
+/// switched these from `SourceInfo::default()`; the canonical
+/// `stamp_block`/`stamp_inline` enrichment pass (further down in
+/// this file) wraps the result with the shortcode token's
+/// `Invocation` anchor.
 fn config_value_to_inlines(value: &ConfigValue) -> Vec<Inline> {
     // Use helper methods on ConfigValue for scalar types
     if let Some(s) = value.as_str() {
         return vec![Inline::Str(Str {
             text: s.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: value.source_info.clone(),
         })];
     }
 
     if let Some(b) = value.as_bool() {
         return vec![Inline::Str(Str {
             text: b.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: value.source_info.clone(),
         })];
     }
 
     if let Some(n) = value.as_int() {
         return vec![Inline::Str(Str {
             text: n.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: value.source_info.clone(),
         })];
     }
 
@@ -194,40 +202,42 @@ fn config_value_to_inlines(value: &ConfigValue) -> Vec<Inline> {
         ConfigValueKind::PandocBlocks(blocks) => {
             // For blocks in inline context, flatten to plain text
             // This matches TS Quarto behavior
-            flatten_blocks_to_inlines(blocks)
+            flatten_blocks_to_inlines(blocks, &value.source_info)
         }
         // Scalar that wasn't captured by helpers (e.g., float, null)
         ConfigValueKind::Scalar(_) => {
             if let Some(plain) = value.as_plain_text() {
                 vec![Inline::Str(Str {
                     text: plain,
-                    source_info: SourceInfo::default(),
+                    source_info: value.source_info.clone(),
                 })]
             } else {
                 vec![Inline::Str(Str {
                     text: String::new(),
-                    source_info: SourceInfo::default(),
+                    source_info: value.source_info.clone(),
                 })]
             }
         }
         // Arrays and maps - not suitable for inline context
         ConfigValueKind::Array(_) | ConfigValueKind::Map(_) => vec![Inline::Str(Str {
             text: "?invalid meta type".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: value.source_info.clone(),
         })],
         // Path, Glob, Expr were handled by as_str() above
         ConfigValueKind::Path(_) | ConfigValueKind::Glob(_) | ConfigValueKind::Expr(_) => {
             // This shouldn't be reached since as_str() handles these
             vec![Inline::Str(Str {
                 text: "?invalid meta type".to_string(),
-                source_info: SourceInfo::default(),
+                source_info: value.source_info.clone(),
             })]
         }
     }
 }
 
-/// Flatten blocks to inlines (extracts text content).
-fn flatten_blocks_to_inlines(blocks: &[Block]) -> Vec<Inline> {
+/// Flatten blocks to inlines (extracts text content). The inter-paragraph
+/// `Space` reuses the surrounding `ConfigValue.source_info` so the
+/// synthesized separator is still attributable.
+fn flatten_blocks_to_inlines(blocks: &[Block], value_source: &SourceInfo) -> Vec<Inline> {
     let mut result = Vec::new();
     for block in blocks {
         match block {
@@ -236,7 +246,7 @@ fn flatten_blocks_to_inlines(blocks: &[Block]) -> Vec<Inline> {
                 if !result.is_empty() {
                     // Add space between paragraphs
                     result.push(Inline::Space(quarto_pandoc_types::inline::Space {
-                        source_info: SourceInfo::default(),
+                        source_info: value_source.clone(),
                     }));
                 }
                 result.extend(para.content.clone());
@@ -492,9 +502,11 @@ fn lua_result_to_shortcode_result(
         pampa::lua::LuaShortcodeResult::Inlines(inlines) => ShortcodeResult::Inlines(inlines),
         pampa::lua::LuaShortcodeResult::Blocks(blocks) => ShortcodeResult::Blocks(blocks),
         pampa::lua::LuaShortcodeResult::Text(text) => {
+            // Reuse the shortcode token's range; the stamper pass that
+            // wraps this result then attaches the `Invocation` anchor.
             ShortcodeResult::Inlines(vec![Inline::Str(Str {
                 text,
-                source_info: SourceInfo::default(),
+                source_info: source_info.clone(),
             })])
         }
         pampa::lua::LuaShortcodeResult::Error(msg) => {
@@ -1216,7 +1228,8 @@ fn resolve_inlines<'a>(
                     }
                     ShortcodeResult::Blocks(blocks) => {
                         // Graceful degradation: flatten blocks to inlines
-                        let replacement = flatten_blocks_to_inlines(&blocks);
+                        let replacement =
+                            flatten_blocks_to_inlines(&blocks, &shortcode_owned.source_info);
                         let replacement_len = replacement.len();
                         inlines.splice(i..=i, replacement);
                         i += replacement_len.max(1);

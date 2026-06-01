@@ -33,7 +33,7 @@ use async_trait::async_trait;
 use quarto_pandoc_types::block::Block;
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::inline::Inline;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use quarto_system_runtime::SystemRuntime;
 use yaml_rust2::Yaml;
 
@@ -120,7 +120,7 @@ fn fill_string_if_absent(meta: &mut ConfigValue, key: &str, value: Option<String
     let Some(v) = value else { return };
     meta.insert_path(
         &["listing-item", key],
-        ConfigValue::new_string(v, SourceInfo::default()),
+        ConfigValue::new_string(v, SourceInfo::generated(By::programmatic_config())),
     );
 }
 
@@ -132,7 +132,10 @@ fn fill_u32_if_absent(meta: &mut ConfigValue, key: &str, value: Option<u32>) {
     let Some(n) = value else { return };
     meta.insert_path(
         &["listing-item", key],
-        ConfigValue::new_scalar(Yaml::Integer(n as i64), SourceInfo::default()),
+        ConfigValue::new_scalar(
+            Yaml::Integer(n as i64),
+            SourceInfo::generated(By::programmatic_config()),
+        ),
     );
 }
 

@@ -16,7 +16,7 @@ use std::sync::Arc;
 use quarto_pandoc_types::block::Block;
 use quarto_pandoc_types::inline::{Inline, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::render::RenderContext;
@@ -276,7 +276,7 @@ impl JupyterTransform {
                     // Replace the Code inline with a Str inline
                     para.content[inline_idx] = Inline::Str(Str {
                         text: result,
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::generated(By::jupyter_output()),
                     });
                 }
             }

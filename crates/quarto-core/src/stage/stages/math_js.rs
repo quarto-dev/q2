@@ -55,7 +55,7 @@ use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::custom::Slot;
 use quarto_pandoc_types::inline::Inline;
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
@@ -446,7 +446,7 @@ impl PipelineStage for MathJsStage {
         // block lands ahead of the loader (matters for MathJax).
         doc.ast.meta.insert_path(
             &["math"],
-            ConfigValue::new_string(math_html, SourceInfo::default()),
+            ConfigValue::new_string(math_html, SourceInfo::generated(By::programmatic_config())),
         );
 
         trace_event!(

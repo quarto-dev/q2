@@ -673,6 +673,37 @@ impl By {
         }
     }
 
+    /// Producer kind for content synthesized from execution-engine
+    /// output (Jupyter cell stdout / stderr, rich-display MIME bundles,
+    /// kernel error tracebacks). The bytes come from kernel execution,
+    /// not from user-written source.
+    ///
+    /// Atomic — execution outputs are regenerated on every re-run;
+    /// editing them through the preview would be a UX bug.
+    pub fn jupyter_output() -> Self {
+        Self {
+            kind: "jupyter-output".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Producer kind for callout-decoration synthesis:
+    /// default-title injection (`Note`, `Warning`, etc. when the user
+    /// omits a title and `appearance="default"`) and the
+    /// screen-reader-only type announcement span.
+    ///
+    /// Non-atomic — the wrapper Div is structural, and its children
+    /// (the user's actual callout body) remain editable through the
+    /// preview. The synthesized title text itself has no preimage but
+    /// regenerates from the callout type when the user changes it,
+    /// so atomicity at the wrapper level would be incorrect.
+    pub fn callout() -> Self {
+        Self {
+            kind: "callout".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
     /// Empty-Map sentinel `ConfigValue` used during metadata merging
     /// when no value is present. Non-atomic. The bytes don't exist —
     /// the node is structural. See [`By::is_programmatic_sentinel`].
@@ -733,7 +764,12 @@ impl By {
     pub fn is_atomic_kind(&self) -> bool {
         matches!(
             self.kind.as_str(),
-            "filter" | "shortcode" | "title-block" | "tree-sitter-postprocess" | "citeproc"
+            "filter"
+                | "shortcode"
+                | "title-block"
+                | "tree-sitter-postprocess"
+                | "citeproc"
+                | "jupyter-output"
         )
     }
 
@@ -927,6 +963,9 @@ mod tests {
         assert!(By::title_block().is_atomic_kind());
         assert!(By::tree_sitter_postprocess().is_atomic_kind());
         assert!(By::citeproc().is_atomic_kind());
+        assert!(By::jupyter_output().is_atomic_kind());
+
+        assert!(!By::callout().is_atomic_kind());
 
         assert!(!By::sectionize().is_atomic_kind());
         assert!(!By::user_edit().is_atomic_kind());
@@ -985,6 +1024,26 @@ mod tests {
         // Atomic — citeproc output is non-editable in the preview.
         assert!(by.is_atomic_kind());
         // Not a "no real source" sentinel; the bytes come from CSL output.
+        assert!(!by.is_programmatic_sentinel());
+    }
+
+    #[test]
+    fn test_by_jupyter_output_constructor() {
+        let by = By::jupyter_output();
+        assert_eq!(by.kind, "jupyter-output");
+        assert!(by.data.is_null());
+        // Atomic — execution outputs regenerate on every re-run.
+        assert!(by.is_atomic_kind());
+        assert!(!by.is_programmatic_sentinel());
+    }
+
+    #[test]
+    fn test_by_callout_constructor() {
+        let by = By::callout();
+        assert_eq!(by.kind, "callout");
+        assert!(by.data.is_null());
+        // Non-atomic — callout wrapper is structural; children stay editable.
+        assert!(!by.is_atomic_kind());
         assert!(!by.is_programmatic_sentinel());
     }
 

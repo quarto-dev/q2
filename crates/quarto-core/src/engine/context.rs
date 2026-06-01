@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use quarto_pandoc_types::ConfigValue;
-use quarto_source_map::{SourceContext, SourceInfo};
+use quarto_source_map::{By, SourceContext, SourceInfo};
 
 use crate::stage::PandocIncludes;
 
@@ -89,7 +89,10 @@ impl ExecutionContext {
             format: format.into(),
             quiet: false,
             engine_config: None,
-            source_info: SourceInfo::default(),
+            // "no source location known yet" sentinel; `with_source_info`
+            // overwrites this with the real qmd serialization range before
+            // any consumer reads it.
+            source_info: SourceInfo::generated(By::unknown()),
             source_context: Arc::new(SourceContext::new()),
         }
     }

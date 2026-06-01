@@ -28,7 +28,7 @@ use quarto_navigation::page_nav::PageNavigation;
 use quarto_navigation::render_html::page_navigation_to_html;
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::render::RenderContext;
@@ -108,7 +108,7 @@ impl AstTransform for PageNavRenderTransform {
         let html = page_navigation_to_html(&page_nav);
         ast.meta.insert_path(
             &["rendered", "navigation", "page_navigation"],
-            ConfigValue::new_string(&html, SourceInfo::default()),
+            ConfigValue::new_string(&html, SourceInfo::generated(By::programmatic_config())),
         );
 
         Ok(())

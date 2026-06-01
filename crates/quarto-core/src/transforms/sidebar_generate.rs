@@ -206,7 +206,7 @@ fn enrich_text_from_index(
 ) {
     use quarto_navigation::SidebarEntry;
     use quarto_pandoc_types::config_value::ConfigValue;
-    use quarto_source_map::SourceInfo;
+    use quarto_source_map::{By, SourceInfo};
 
     for entry in entries.iter_mut() {
         match entry {
@@ -225,7 +225,10 @@ fn enrich_text_from_index(
                     if let Some(h) = href.as_deref() {
                         if let Some(profile) = index.lookup_by_source(std::path::Path::new(h)) {
                             if let Some(title) = &profile.title {
-                                *text = Some(ConfigValue::new_string(title, SourceInfo::default()));
+                                *text = Some(ConfigValue::new_string(
+                                    title,
+                                    SourceInfo::generated(By::programmatic_config()),
+                                ));
                             }
                         }
                     }
