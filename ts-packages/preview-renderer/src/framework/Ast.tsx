@@ -42,7 +42,8 @@ type AstProps =
  *  2. Call `unwrapCustomNodes(parsed)` on both branches so the registry
  *     dispatchers only ever see real Divs/Spans (no `__quarto_custom_node`
  *     wrappers leak through).
- *  3. Extract `astContext.sourceInfoPool` from the parsed AST onto the
+ *  3. Extract `astContext.p` (the source-info pool, renamed from
+ *     `sourceInfoPool` in Plan 7f Phase 5) from the parsed AST onto the
  *     RegistryContext.Provider value so the atomic-aware gate inside
  *     `Node` (in dispatch.tsx) can read it.
  */
@@ -78,13 +79,13 @@ export function Ast(props: AstProps) {
     const astContext = (
         parsed as unknown as {
             astContext?: {
-                sourceInfoPool?: SourceInfoPool;
+                p?: SourceInfoPool;
                 attribution?: { s: number; actor: string; time: number }[];
                 attributionActors?: Record<string, { name: string; color: string }>;
             };
         }
     ).astContext;
-    const pool = astContext?.sourceInfoPool;
+    const pool = astContext?.p;
 
     // Phase 5c — per-node attribution lookup built once per AST. Off
     // path (`astContext.attribution` absent) leaves the context value

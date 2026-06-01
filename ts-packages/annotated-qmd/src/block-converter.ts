@@ -80,7 +80,7 @@ export class BlockConverter {
           kind: 'Header',
           source,
           components: [
-            ...this.convertAttr(block.c[1], block.attrS),
+            ...this.convertAttr(block.c[1], block.a),
             ...block.c[2].map(inline => this.inlineConverter.convertInline(inline))
           ],
           start,
@@ -93,7 +93,7 @@ export class BlockConverter {
           result: block.c as unknown as import('./types.js').JSONValue,
           kind: 'CodeBlock',
           source,
-          components: this.convertAttr(block.c[0], block.attrS),
+          components: this.convertAttr(block.c[0], block.a),
           start,
           end
         };
@@ -155,7 +155,7 @@ export class BlockConverter {
           kind: 'Div',
           source,
           components: [
-            ...this.convertAttr(block.c[0], block.attrS),
+            ...this.convertAttr(block.c[0], block.a),
             ...block.c[1].map(b => this.convertBlock(b))
           ],
           start,
@@ -175,7 +175,7 @@ export class BlockConverter {
               longCaption: block.c[1][1]
             }),
             ...block.c[2].map(b => this.convertBlock(b)),
-            ...this.convertAttr(block.c[0], block.attrS)
+            ...this.convertAttr(block.c[0], block.a)
           ],
           start,
           end
@@ -225,7 +225,7 @@ export class BlockConverter {
               longCaption: block.c[1][1]
             }, block.captionS),
             // Table attr - extracted from caption, so comes last
-            ...this.convertAttr(block.c[0], block.attrS)
+            ...this.convertAttr(block.c[0], block.a)
           ],
           start,
           end
@@ -245,14 +245,14 @@ export class BlockConverter {
    */
   private convertAttr(
     attr: [string, string[], [string, string][]],
-    attrS: { id: number | null; classes: (number | null)[]; kvs: [number | null, number | null][] }
+    attrSource: { id: number | null; classes: (number | null)[]; kvs: [number | null, number | null][] }
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 
     // ID
-    if (attr[0] && attrS.id !== null) {
+    if (attr[0] && attrSource.id !== null) {
       const { source, start, end } =
-        this.sourceReconstructor.getAnnotatedParseSourceFields(attrS.id);
+        this.sourceReconstructor.getAnnotatedParseSourceFields(attrSource.id);
       components.push({
         result: attr[0],
         kind: 'attr-id',
@@ -266,7 +266,7 @@ export class BlockConverter {
     // Classes
     for (let i = 0; i < attr[1].length; i++) {
       const className = attr[1][i];
-      const classSourceId = attrS.classes[i];
+      const classSourceId = attrSource.classes[i];
       if (classSourceId !== null) {
         const { source, start, end } =
           this.sourceReconstructor.getAnnotatedParseSourceFields(classSourceId);
@@ -284,7 +284,7 @@ export class BlockConverter {
     // Key-value pairs
     for (let i = 0; i < attr[2].length; i++) {
       const [key, value] = attr[2][i];
-      const [keySourceId, valueSourceId] = attrS.kvs[i];
+      const [keySourceId, valueSourceId] = attrSource.kvs[i];
 
       if (keySourceId !== null) {
         const { source, start, end } =
@@ -384,7 +384,7 @@ export class BlockConverter {
     const components: AnnotatedParse[] = [];
 
     // Head attr
-    components.push(...this.convertAttr(head[0], headS.attrS));
+    components.push(...this.convertAttr(head[0], headS.a));
 
     // Head rows (each row is now a structural node)
     head[1].forEach((row, i) => {
@@ -415,7 +415,7 @@ export class BlockConverter {
     const components: AnnotatedParse[] = [];
 
     // Body attr
-    components.push(...this.convertAttr(body[0], bodyS.attrS));
+    components.push(...this.convertAttr(body[0], bodyS.a));
 
     // Body head rows (each row is now a structural node)
     body[2].forEach((row, i) => {
@@ -451,7 +451,7 @@ export class BlockConverter {
     const components: AnnotatedParse[] = [];
 
     // Foot attr
-    components.push(...this.convertAttr(foot[0], footS.attrS));
+    components.push(...this.convertAttr(foot[0], footS.a));
 
     // Foot rows (each row is now a structural node)
     foot[1].forEach((row, i) => {
@@ -482,7 +482,7 @@ export class BlockConverter {
     const components: AnnotatedParse[] = [];
 
     // Row attr
-    components.push(...this.convertAttr(row[0], rowS.attrS));
+    components.push(...this.convertAttr(row[0], rowS.a));
 
     // Row cells (each cell is now a structural node)
     row[1].forEach((cell, i) => {
@@ -513,7 +513,7 @@ export class BlockConverter {
     const components: AnnotatedParse[] = [];
 
     // Cell attr
-    components.push(...this.convertAttr(cell[0], cellS.attrS));
+    components.push(...this.convertAttr(cell[0], cellS.a));
 
     // Cell content (blocks)
     components.push(...cell[4].map(block => this.convertBlock(block)));

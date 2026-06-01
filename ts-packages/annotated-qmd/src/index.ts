@@ -197,7 +197,7 @@ import type { SourceInfoErrorHandler } from './source-map.js';
  *   },
  *   blocks: [],
  *   astContext: {
- *     sourceInfoPool: [
+ *     p: [
  *       { r: [11, 16], t: 0, d: 0 }
  *     ],
  *     files: [
@@ -226,7 +226,7 @@ export function parseRustQmdMetadata(
 
   // 1. Create SourceInfoReconstructor with pool and context
   const sourceReconstructor = new SourceInfoReconstructor(
-    json.astContext.sourceInfoPool,
+    json.astContext.p,
     sourceContext,
     errorHandler
   );
@@ -280,7 +280,7 @@ export function parseRustQmdDocument(
 
   // Create SourceInfoReconstructor
   const sourceReconstructor = new SourceInfoReconstructor(
-    json.astContext.sourceInfoPool,
+    json.astContext.p,
     sourceContext,
     errorHandler
   );
@@ -299,7 +299,7 @@ export function parseRustQmdDocument(
  * Convert an array of blocks to AnnotatedParse structures
  *
  * @param blocks - Array of annotated blocks from quarto-markdown-pandoc
- * @param json - The full JSON for source context (needed for sourceInfoPool)
+ * @param json - The full JSON for source context (needed for the `p` source-info pool)
  * @param errorHandler - Optional error handler for SourceInfo reconstruction errors
  * @returns Array of AnnotatedParse structures, one per block
  *
@@ -324,7 +324,7 @@ export function parseRustQmdBlocks(
   };
 
   const sourceReconstructor = new SourceInfoReconstructor(
-    json.astContext.sourceInfoPool,
+    json.astContext.p,
     sourceContext,
     errorHandler
   );
@@ -337,7 +337,7 @@ export function parseRustQmdBlocks(
  * Convert a single block to AnnotatedParse
  *
  * @param block - A single annotated block from quarto-markdown-pandoc
- * @param json - The full JSON for source context (needed for sourceInfoPool)
+ * @param json - The full JSON for source context (needed for the `p` source-info pool)
  * @param errorHandler - Optional error handler for SourceInfo reconstruction errors
  * @returns AnnotatedParse structure for the block
  *
@@ -362,7 +362,7 @@ export function parseRustQmdBlock(
   };
 
   const sourceReconstructor = new SourceInfoReconstructor(
-    json.astContext.sourceInfoPool,
+    json.astContext.p,
     sourceContext,
     errorHandler
   );
@@ -375,7 +375,7 @@ export function parseRustQmdBlock(
  * Convert a single inline to AnnotatedParse
  *
  * @param inline - A single annotated inline from quarto-markdown-pandoc
- * @param json - The full JSON for source context (needed for sourceInfoPool)
+ * @param json - The full JSON for source context (needed for the `p` source-info pool)
  * @param errorHandler - Optional error handler for SourceInfo reconstruction errors
  * @returns AnnotatedParse structure for the inline
  *
@@ -400,7 +400,7 @@ export function parseRustQmdInline(
   };
 
   const sourceReconstructor = new SourceInfoReconstructor(
-    json.astContext.sourceInfoPool,
+    json.astContext.p,
     sourceContext,
     errorHandler
   );

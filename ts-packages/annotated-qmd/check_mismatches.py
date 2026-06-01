@@ -3,12 +3,14 @@ import json, sys
 def find_attrs_mismatches(obj, path=''):
     issues = []
     if isinstance(obj, dict):
-        if 'attrS' in obj and 'c' in obj:
+        # Wire-format key for attribute source info is `a` (renamed from
+        # `attrS` in Plan 7f Phase 5).
+        if 'a' in obj and 'c' in obj:
             c = obj.get('c', [])
             if isinstance(c, list) and len(c) > 0:
                 attr = c[0] if isinstance(c[0], list) and len(c[0]) >= 3 else None
                 if attr:
-                    attr_s = obj['attrS']
+                    attr_s = obj['a']
                     classes = attr[1]
                     kvs = attr[2]
 
@@ -17,9 +19,9 @@ def find_attrs_mismatches(obj, path=''):
                             'path': path,
                             'type': obj.get('t'),
                             'classes_in_attr': len(classes),
-                            'classes_in_attrS': len(attr_s.get('classes', [])),
+                            'classes_in_a': len(attr_s.get('classes', [])),
                             'classes': classes,
-                            'attrS_classes': attr_s.get('classes', [])
+                            'a_classes': attr_s.get('classes', [])
                         })
 
                     if len(kvs) != len(attr_s.get('kvs', [])):
@@ -27,7 +29,7 @@ def find_attrs_mismatches(obj, path=''):
                             'path': path,
                             'type': obj.get('t'),
                             'kvs_in_attr': len(kvs),
-                            'kvs_in_attrS': len(attr_s.get('kvs', [])),
+                            'kvs_in_a': len(attr_s.get('kvs', [])),
                         })
 
         for k, v in obj.items():

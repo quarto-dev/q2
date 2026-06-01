@@ -32,9 +32,9 @@ of the transform layer.
 ## 1. Decision tree for new transforms
 
 **Wire-format requirement.** Every AST node in the JSON wire format
-carries an `s:` field referencing a valid `sourceInfoPool` entry
-(post-Plan-7f, after the wire-format renames, the field is `s:` and
-the pool is `p:`). The Rust JSON reader rejects bare nodes with
+carries an `s:` field referencing a valid entry in the source-info
+pool — `astContext.p` (renamed from `sourceInfoPool` in Plan 7f Phase
+5). The Rust JSON reader rejects bare nodes with
 `Err(JsonReadError::MissingSourceInfoRef { node_path })`. There is no
 fallback to `SourceInfo::default()` and no silent stamping; producers
 are responsible for populating `s:` on every node, and the reader's

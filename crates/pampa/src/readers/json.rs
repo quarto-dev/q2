@@ -66,12 +66,12 @@ impl std::fmt::Display for JsonReadError {
                 )
             }
             JsonReadError::MalformedSourceInfoPool => {
-                write!(f, "Malformed sourceInfoPool in astContext")
+                write!(f, "Malformed source-info pool (`p`) in astContext")
             }
             JsonReadError::CircularSourceInfoReference(id) => {
                 write!(
                     f,
-                    "Circular or forward reference in sourceInfoPool: ID {} references a parent that doesn't exist yet",
+                    "Circular or forward reference in source-info pool (`p`): ID {} references a parent that doesn't exist yet",
                     id
                 )
             }
@@ -85,7 +85,7 @@ type Result<T> = std::result::Result<T, JsonReadError>;
 
 /// Deserializer that reconstructs SourceInfo objects from a pool.
 ///
-/// During JSON deserialization, the sourceInfoPool from astContext is parsed
+/// During JSON deserialization, the source-info pool (`p`) from astContext is parsed
 /// into a Vec<SourceInfo>. References in the AST ({"$ref": id}) are resolved
 /// by looking up the ID in this pool.
 ///
@@ -152,7 +152,7 @@ impl SourceInfoDeserializer {
         }
     }
 
-    /// Build the pool from the sourceInfoPool JSON array (compact format)
+    /// Build the pool from the `p` (source-info pool) JSON array (compact format)
     ///
     /// New format: {"r": [start_offset, end_offset], "t": type_code, "d": data}
     /// Old format: {"r": [start_off, start_row, start_col, end_off, end_row, end_col], "t": type_code, "d": data}
@@ -620,7 +620,7 @@ fn read_attr_source(
     value: Option<&Value>,
     deserializer: &SourceInfoDeserializer,
 ) -> Result<AttrSourceInfo> {
-    // If attrS field is missing or null, return empty
+    // If `a` (attr_source) field is missing or null, return empty
     let Some(obj) = value.and_then(|v| v.as_object()) else {
         return Ok(AttrSourceInfo::empty());
     };
@@ -782,7 +782,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .as_str()
                 .ok_or_else(|| JsonReadError::InvalidType("Code text must be string".to_string()))?
                 .to_string();
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Inline::Code(Code {
                 attr,
                 text,
@@ -952,7 +952,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .ok_or_else(|| JsonReadError::InvalidType("Link title must be string".to_string()))?
                 .to_string();
             let target = (url, title);
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
 
             Ok(Inline::Link(Link {
                 attr,
@@ -1028,7 +1028,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 })?
                 .to_string();
             let target = (url, title);
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
 
             Ok(Inline::Image(Image {
                 attr,
@@ -1060,7 +1060,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             }
 
             let content = read_inlines(&arr[1], deserializer)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Inline::Span(Span {
                 attr,
                 content,
@@ -1302,10 +1302,10 @@ fn read_pandoc(value: &Value, completing_default_by: Option<By>) -> Result<(Pand
         ASTContext::new()
     };
 
-    // Extract sourceInfoPool and create deserializer
+    // Extract `p` (source-info pool) and create deserializer
     let mut deserializer = if let Some(ast_context_val) = obj.get("astContext") {
         if let Some(ast_context_obj) = ast_context_val.as_object() {
-            if let Some(pool_json) = ast_context_obj.get("sourceInfoPool") {
+            if let Some(pool_json) = ast_context_obj.get("p") {
                 SourceInfoDeserializer::new(pool_json)?
             } else {
                 SourceInfoDeserializer::empty()
@@ -1559,7 +1559,7 @@ fn read_cell(
     let s_obj_map = source_val.and_then(|v| v.as_object());
     let source_info =
         deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "Cell")?;
-    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("attrS")), deserializer)?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
 
     Ok(Cell {
         attr,
@@ -1598,7 +1598,7 @@ fn read_row(
     let s_obj_map = source_val.and_then(|v| v.as_object());
     let source_info =
         deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "Row")?;
-    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("attrS")), deserializer)?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
     let cells_source = s_obj_map
         .and_then(|o| o.get("cellsS"))
         .and_then(|v| v.as_array());
@@ -1647,7 +1647,7 @@ fn read_table_head(
     let s_obj_map = source_val.and_then(|v| v.as_object());
     let source_info =
         deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "TableHead")?;
-    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("attrS")), deserializer)?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
     let rows_source = s_obj_map
         .and_then(|o| o.get("rowsS"))
         .and_then(|v| v.as_array());
@@ -1702,7 +1702,7 @@ fn read_table_body(
     let s_obj_map = source_val.and_then(|v| v.as_object());
     let source_info =
         deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "TableBody")?;
-    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("attrS")), deserializer)?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
     let head_source = s_obj_map
         .and_then(|o| o.get("headS"))
         .and_then(|v| v.as_array());
@@ -1766,7 +1766,7 @@ fn read_table_foot(
     let s_obj_map = source_val.and_then(|v| v.as_object());
     let source_info =
         deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "TableFoot")?;
-    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("attrS")), deserializer)?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
     let rows_source = s_obj_map
         .and_then(|o| o.get("rowsS"))
         .and_then(|v| v.as_array());
@@ -1856,7 +1856,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                     JsonReadError::InvalidType("CodeBlock text must be string".to_string())
                 })?
                 .to_string();
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::CodeBlock(CodeBlock {
                 attr,
                 text,
@@ -1979,7 +1979,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             })? as usize;
             let attr = read_attr(&arr[1])?;
             let content = read_inlines(&arr[2], deserializer)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::Header(Header {
                 level,
                 attr,
@@ -2007,7 +2007,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let caption_source = obj.get("captionS");
             let caption = read_caption(&arr[1], deserializer, caption_source)?;
             let content = read_blocks(&arr[2], deserializer)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::Figure(Figure {
                 attr,
                 caption,
@@ -2057,7 +2057,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 })
                 .collect::<Result<Vec<_>>>()?;
             let foot = read_table_foot(&arr[5], deserializer, foot_source)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::Table(Table {
                 attr,
                 caption,
@@ -2089,7 +2089,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             }
 
             let content = read_blocks(&arr[1], deserializer)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::Div(Div {
                 attr,
                 content,

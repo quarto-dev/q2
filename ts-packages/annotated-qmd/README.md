@@ -30,7 +30,7 @@ const json: RustQmdJson = {
     { t: 'Para', c: [{ t: 'Str', c: 'Hello', s: 1 }], s: 2 }
   ],
   astContext: {
-    sourceInfoPool: [
+    p: [
       { r: [11, 22], t: 0, d: 0 },
       { r: [30, 35], t: 0, d: 0 },
       { r: [30, 35], t: 0, d: 0 }
@@ -202,7 +202,7 @@ npm run clean
 
 The package consists of several converter classes that work together:
 
-- **SourceInfoReconstructor** - Reconstructs source locations from the sourceInfoPool
+- **SourceInfoReconstructor** - Reconstructs source locations from the source-info pool (`p` in the wire format)
 - **MetadataConverter** - Converts YAML metadata to AnnotatedParse
 - **InlineConverter** - Converts inline elements (Str, Emph, Link, etc.)
 - **BlockConverter** - Converts block elements (Para, Header, Table, etc.)

@@ -318,7 +318,7 @@ Some content here.
 fn test_yaml_tagged_value_source_tracking() {
     /*
      * Test that YAML tagged values (!expr, !date, etc.) have source tracking
-     * for the tag in the Span's attrS field.
+     * for the tag in the Span's `a` (attr_source) field.
      *
      * File: tests/snapshots/json/yaml-tags.qmd
      * (Also available in: ts-packages/annotated-qmd/examples/yaml-tags.qmd)
@@ -396,15 +396,20 @@ fn test_yaml_tagged_value_source_tracking() {
                             "Should have tag='expr' attribute"
                         );
 
-                        // Check attrS - source tracking info for tag
+                        // Check `a` (attr_source) - source tracking info for tag
                         // NOTE: As of Phase 4 migration (ConfigValue path), source tracking
                         // for YAML tag attributes is not preserved. The Span correctly has
                         // the class and tag attribute, but attr_source is empty.
                         // This is a known limitation tracked in issue k-d4r0.
-                        eprintln!("\n🔍 Checking attrS.attributes for tag source tracking...");
-                        eprintln!("   attrS.id: {:?}", span.attr_source.id);
-                        eprintln!("   attrS.classes: {:?}", span.attr_source.classes);
-                        eprintln!("   attrS.attributes: {:?}", span.attr_source.attributes);
+                        eprintln!(
+                            "\n🔍 Checking attr_source.attributes for tag source tracking..."
+                        );
+                        eprintln!("   attr_source.id: {:?}", span.attr_source.id);
+                        eprintln!("   attr_source.classes: {:?}", span.attr_source.classes);
+                        eprintln!(
+                            "   attr_source.attributes: {:?}",
+                            span.attr_source.attributes
+                        );
 
                         // With ConfigValue migration, attr_source is empty
                         // The functional behavior (Span with correct class/attrs) is correct

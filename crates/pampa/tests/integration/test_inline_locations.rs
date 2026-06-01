@@ -105,9 +105,9 @@ fn test_inline_source_locations() {
         serde_json::from_str(&json_output).expect("Failed to parse JSON output");
 
     // Get the source info pool
-    let pool = json_value["astContext"]["sourceInfoPool"]
+    let pool = json_value["astContext"]["p"]
         .as_array()
-        .expect("Expected sourceInfoPool to be an array");
+        .expect("Expected source-info pool (`p`) to be an array");
 
     // Create FileInformation for computing row/column from offsets
     let file_info = quarto_source_map::FileInformation::new(input);
@@ -202,9 +202,9 @@ fn test_merged_strings_preserve_location() {
         serde_json::from_str(&json_output).expect("Failed to parse JSON output");
 
     // Get the source info pool
-    let pool = json_value["astContext"]["sourceInfoPool"]
+    let pool = json_value["astContext"]["p"]
         .as_array()
-        .expect("Expected sourceInfoPool to be an array");
+        .expect("Expected source-info pool (`p`) to be an array");
 
     // Create FileInformation for computing row/column from offsets
     let file_info = quarto_source_map::FileInformation::new(input);
@@ -274,9 +274,9 @@ fn test_separate_strings_keep_separate_locations() {
         serde_json::from_str(&json_output).expect("Failed to parse JSON output");
 
     // Get the source info pool
-    let pool = json_value["astContext"]["sourceInfoPool"]
+    let pool = json_value["astContext"]["p"]
         .as_array()
-        .expect("Expected sourceInfoPool to be an array");
+        .expect("Expected source-info pool (`p`) to be an array");
 
     // Create FileInformation for computing row/column from offsets
     let file_info = quarto_source_map::FileInformation::new(input);
@@ -351,9 +351,9 @@ fn test_note_source_location() {
         serde_json::from_str(&json_output).expect("Failed to parse JSON output");
 
     // Get the source info pool
-    let pool = json_value["astContext"]["sourceInfoPool"]
+    let pool = json_value["astContext"]["p"]
         .as_array()
-        .expect("Expected sourceInfoPool to be an array");
+        .expect("Expected source-info pool (`p`) to be an array");
 
     // Create FileInformation for computing row/column from offsets
     let file_info = quarto_source_map::FileInformation::new(input);
@@ -455,9 +455,9 @@ fn test_note_reference_source_location() {
         serde_json::from_str(&json_output).expect("Failed to parse JSON output");
 
     // Get the source info pool
-    let pool = json_value["astContext"]["sourceInfoPool"]
+    let pool = json_value["astContext"]["p"]
         .as_array()
-        .expect("Expected sourceInfoPool to be an array");
+        .expect("Expected source-info pool (`p`) to be an array");
 
     // Create FileInformation for computing row/column from offsets
     let file_info = quarto_source_map::FileInformation::new(input);

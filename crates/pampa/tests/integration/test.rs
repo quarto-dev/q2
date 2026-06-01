@@ -398,20 +398,21 @@ fn normalize_api_version(pandoc_json: &mut serde_json::Value, our_json: &serde_j
 /// shape. After scrubbing, the remaining structure is the pure-content view
 /// of the AST and can be compared by equality across two parses of the
 /// same document, even if the two parses produced differently-sized
-/// `astContext.sourceInfoPool`s.
+/// `astContext.p` (source-info pool) entries.
 ///
-/// The S-suffix convention (`attrS`, `captionS`, `bodiesS`, ...) is used
-/// throughout `crates/pampa/src/writers/json.rs` for foreign keys into
-/// `astContext.sourceInfoPool` (or for source-info envelopes containing
-/// such keys). Every S-suffix key emitted by the JSON writer is listed
-/// here; if a new one is added, this list must be extended too.
+/// The S-suffix convention (`captionS`, `bodiesS`, ...) is used throughout
+/// `crates/pampa/src/writers/json.rs` for foreign keys into the source-info
+/// pool (or for source-info envelopes containing such keys). The
+/// attribute-source key is `a` (Phase 5 rename of the former `attrS`). Every
+/// source-info key emitted by the JSON writer is listed here; if a new one
+/// is added, this list must be extended too.
 fn remove_location_fields(json: &mut serde_json::Value) {
     if let Some(obj) = json.as_object_mut() {
         obj.remove("l"); // old SourceInfo
         obj.remove("s"); // quarto_source_map::SourceInfo foreign key
         obj.remove("astContext"); // pool itself + metaTopLevelKeySources
-        // S-suffix source-info foreign keys / envelopes:
-        obj.remove("attrS");
+        // Source-info foreign keys / envelopes:
+        obj.remove("a"); // attribute source info (renamed from attrS in Phase 5)
         obj.remove("bodiesS");
         obj.remove("bodyS");
         obj.remove("captionS");

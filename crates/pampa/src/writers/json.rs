@@ -91,7 +91,7 @@ struct AstContextJson {
     files: Vec<FileEntryJson>,
     #[serde(skip_serializing_if = "Option::is_none")]
     meta_top_level_key_sources: Option<Value>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(rename = "p", skip_serializing_if = "Vec::is_empty")]
     source_info_pool: Vec<SourceInfoJson>,
 }
 
@@ -141,10 +141,11 @@ struct AttrSourceJson {
 }
 
 /// Node with attribute source info.
-/// Fields ordered alphabetically: attrS, c, s, t
+/// Fields ordered alphabetically: a, c, s, t
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct NodeWithAttrJson {
+    #[serde(rename = "a")]
     attr_s: AttrSourceJson,
     #[serde(skip_serializing_if = "Option::is_none")]
     c: Option<Value>,
@@ -758,7 +759,7 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
             obj.insert("t".to_string(), json!("Code"));
             obj.insert("c".to_string(), json!([write_attr(&c.attr), c.text]));
             ctx.serializer.add_source_info(&mut obj, &c.source_info);
-            obj.insert("attrS".to_string(), write_attr_source(&c.attr_source, ctx));
+            obj.insert("a".to_string(), write_attr_source(&c.attr_source, ctx));
             Value::Object(obj)
         }
         Inline::Math(m) => {
@@ -824,7 +825,7 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
                 [link.target.0, link.target.1]
             ]));
             ctx.serializer.add_source_info(&mut obj, &link.source_info);
-            obj.insert("attrS".to_string(), write_attr_source(&link.attr_source, ctx));
+            obj.insert("a".to_string(), write_attr_source(&link.attr_source, ctx));
             obj.insert("targetS".to_string(), write_target_source(&link.target_source, ctx));
             Value::Object(obj)
         }
@@ -843,7 +844,7 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
                 [image.target.0, image.target.1]
             ]));
             ctx.serializer.add_source_info(&mut obj, &image.source_info);
-            obj.insert("attrS".to_string(), write_attr_source(&image.attr_source, ctx));
+            obj.insert("a".to_string(), write_attr_source(&image.attr_source, ctx));
             obj.insert("targetS".to_string(), write_target_source(&image.target_source, ctx));
             Value::Object(obj)
         }
@@ -855,7 +856,7 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
                 write_inlines(&span.content, ctx)
             ]));
             ctx.serializer.add_source_info(&mut obj, &span.source_info);
-            obj.insert("attrS".to_string(), write_attr_source(&span.attr_source, ctx));
+            obj.insert("a".to_string(), write_attr_source(&span.attr_source, ctx));
             Value::Object(obj)
         }
         Inline::Note(note) => node_with_source(
@@ -1079,7 +1080,7 @@ fn write_cell(cell: &crate::pandoc::table::Cell, ctx: &mut JsonWriterContext) ->
 fn write_cell_source(cell: &crate::pandoc::table::Cell, ctx: &mut JsonWriterContext) -> Value {
     json!({
         "s": ctx.serializer.to_json_ref(&cell.source_info),
-        "attrS": write_attr_source(&cell.attr_source, ctx)
+        "a": write_attr_source(&cell.attr_source, ctx)
     })
 }
 
@@ -1098,7 +1099,7 @@ fn write_row(row: &crate::pandoc::table::Row, ctx: &mut JsonWriterContext) -> Va
 fn write_row_source(row: &crate::pandoc::table::Row, ctx: &mut JsonWriterContext) -> Value {
     json!({
         "s": ctx.serializer.to_json_ref(&row.source_info),
-        "attrS": write_attr_source(&row.attr_source, ctx),
+        "a": write_attr_source(&row.attr_source, ctx),
         "cellsS": row.cells
             .iter()
             .map(|cell| write_cell_source(cell, ctx))
@@ -1124,7 +1125,7 @@ fn write_table_head_source(
 ) -> Value {
     json!({
         "s": ctx.serializer.to_json_ref(&head.source_info),
-        "attrS": write_attr_source(&head.attr_source, ctx),
+        "a": write_attr_source(&head.attr_source, ctx),
         "rowsS": head.rows
             .iter()
             .map(|row| write_row_source(row, ctx))
@@ -1155,7 +1156,7 @@ fn write_table_body_source(
 ) -> Value {
     json!({
         "s": ctx.serializer.to_json_ref(&body.source_info),
-        "attrS": write_attr_source(&body.attr_source, ctx),
+        "a": write_attr_source(&body.attr_source, ctx),
         "headS": body.head
             .iter()
             .map(|row| write_row_source(row, ctx))
@@ -1185,7 +1186,7 @@ fn write_table_foot_source(
 ) -> Value {
     json!({
         "s": ctx.serializer.to_json_ref(&foot.source_info),
-        "attrS": write_attr_source(&foot.attr_source, ctx),
+        "a": write_attr_source(&foot.attr_source, ctx),
         "rowsS": foot.rows
             .iter()
             .map(|row| write_row_source(row, ctx))
@@ -1208,10 +1209,7 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
             );
             ctx.serializer
                 .add_source_info(&mut obj, &figure.source_info);
-            obj.insert(
-                "attrS".to_string(),
-                write_attr_source(&figure.attr_source, ctx),
-            );
+            obj.insert("a".to_string(), write_attr_source(&figure.attr_source, ctx));
             // Plan 7f Phase 4: emit `captionS` so the strict reader can
             // recover the caption's source_info. Same shape as Table's
             // `captionS` sibling.
@@ -1272,10 +1270,7 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
                 ]),
             );
             ctx.serializer.add_source_info(&mut obj, &table.source_info);
-            obj.insert(
-                "attrS".to_string(),
-                write_attr_source(&table.attr_source, ctx),
-            );
+            obj.insert("a".to_string(), write_attr_source(&table.attr_source, ctx));
             obj.insert(
                 "captionS".to_string(),
                 write_caption_source(&table.caption, ctx),
@@ -1302,12 +1297,9 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
         }
 
         Block::Div(div) => {
-            // Insert fields in alphabetical order: attrS, c, s, t
+            // Insert fields in alphabetical order: a, c, s, t
             let mut obj = serde_json::Map::new();
-            obj.insert(
-                "attrS".to_string(),
-                write_attr_source(&div.attr_source, ctx),
-            );
+            obj.insert("a".to_string(), write_attr_source(&div.attr_source, ctx));
             obj.insert(
                 "c".to_string(),
                 json!([write_attr(&div.attr), write_blocks(&div.content, ctx)]),
@@ -1353,10 +1345,7 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
             );
             ctx.serializer
                 .add_source_info(&mut obj, &header.source_info);
-            obj.insert(
-                "attrS".to_string(),
-                write_attr_source(&header.attr_source, ctx),
-            );
+            obj.insert("a".to_string(), write_attr_source(&header.attr_source, ctx));
             Value::Object(obj)
         }
         Block::CodeBlock(codeblock) => {
@@ -1369,7 +1358,7 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
             ctx.serializer
                 .add_source_info(&mut obj, &codeblock.source_info);
             obj.insert(
-                "attrS".to_string(),
+                "a".to_string(),
                 write_attr_source(&codeblock.attr_source, ctx),
             );
             Value::Object(obj)
@@ -2211,7 +2200,7 @@ fn stream_write_location_key_if_mapped<W: io::Write>(
     Ok(true)
 }
 
-/// Emit a node with attrS: `{attrS, c, l?, s, t}`. Alphabetical.
+/// Emit a node with attr_source: `{a, c, l?, s, t}`. Alphabetical.
 fn stream_write_attrs_node<W: io::Write, FC>(
     w: &mut JsonStreamWriter<W>,
     type_name: &str,
@@ -2226,7 +2215,7 @@ where
     let s_id = ctx.serializer.intern(source_info);
     ctx.maybe_record_attribution_for(source_info, s_id);
     w.begin_object()?;
-    w.key("attrS")?;
+    w.key("a")?;
     stream_write_attr_source(w, attr_source, ctx)?;
     w.key("c")?;
     content(w, ctx)?;
@@ -2335,7 +2324,7 @@ fn stream_write_cell_source<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     w.begin_object()?;
-    w.key("attrS")?;
+    w.key("a")?;
     stream_write_attr_source(w, &cell.attr_source, ctx)?;
     w.key("s")?;
     stream_source_ref(w, ctx, &cell.source_info)?;
@@ -2365,7 +2354,7 @@ fn stream_write_row_source<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     w.begin_object()?;
-    w.key("attrS")?;
+    w.key("a")?;
     stream_write_attr_source(w, &row.attr_source, ctx)?;
     w.key("cellsS")?;
     w.begin_array()?;
@@ -2401,7 +2390,7 @@ fn stream_write_table_head_source<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     w.begin_object()?;
-    w.key("attrS")?;
+    w.key("a")?;
     stream_write_attr_source(w, &head.attr_source, ctx)?;
     w.key("rowsS")?;
     w.begin_array()?;
@@ -2443,7 +2432,7 @@ fn stream_write_table_body_source<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     w.begin_object()?;
-    w.key("attrS")?;
+    w.key("a")?;
     stream_write_attr_source(w, &body.attr_source, ctx)?;
     w.key("bodyS")?;
     w.begin_array()?;
@@ -2485,7 +2474,7 @@ fn stream_write_table_foot_source<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     w.begin_object()?;
-    w.key("attrS")?;
+    w.key("a")?;
     stream_write_attr_source(w, &foot.attr_source, ctx)?;
     w.key("rowsS")?;
     w.begin_array()?;
@@ -2634,7 +2623,7 @@ fn stream_write_inline<W: io::Write>(
             let s_id = ctx.serializer.intern(&link.source_info);
             ctx.maybe_record_attribution_for(&link.source_info, s_id);
             w.begin_object()?;
-            w.key("attrS")?;
+            w.key("a")?;
             stream_write_attr_source(w, &link.attr_source, ctx)?;
             w.key("c")?;
             w.begin_array()?;
@@ -2675,7 +2664,7 @@ fn stream_write_inline<W: io::Write>(
             let s_id = ctx.serializer.intern(&image.source_info);
             ctx.maybe_record_attribution_for(&image.source_info, s_id);
             w.begin_object()?;
-            w.key("attrS")?;
+            w.key("a")?;
             stream_write_attr_source(w, &image.attr_source, ctx)?;
             w.key("c")?;
             w.begin_array()?;
@@ -2958,13 +2947,14 @@ fn stream_write_block<W: io::Write>(
     match block {
         Block::Figure(figure) => {
             // Inlined (rather than via `stream_write_attrs_node`) so we can
-            // emit `captionS` between `attrS` and `c` — wire-format key
-            // order is alphabetical. Plan 7f Phase 4: the strict reader
-            // needs `captionS` to recover the caption's source_info.
+            // emit `captionS` after `c` — wire-format key order is
+            // alphabetical (a, c, captionS, s, t). Plan 7f Phase 4: the
+            // strict reader needs `captionS` to recover the caption's
+            // source_info.
             let s_id = ctx.serializer.intern(&figure.source_info);
             ctx.maybe_record_attribution_for(&figure.source_info, s_id);
             w.begin_object()?;
-            w.key("attrS")?;
+            w.key("a")?;
             stream_write_attr_source(w, &figure.attr_source, ctx)?;
             w.key("c")?;
             w.begin_array()?;
@@ -3035,7 +3025,7 @@ fn stream_write_block<W: io::Write>(
             let s_id = ctx.serializer.intern(&table.source_info);
             ctx.maybe_record_attribution_for(&table.source_info, s_id);
             w.begin_object()?;
-            w.key("attrS")?;
+            w.key("a")?;
             stream_write_attr_source(w, &table.attr_source, ctx)?;
             w.key("bodiesS")?;
             w.begin_array()?;
@@ -3601,7 +3591,7 @@ fn stream_write_config_value_as_meta<W: io::Write>(
     }
 }
 
-/// Emit the pool as the `sourceInfoPool` array.
+/// Emit the pool as the `p` (sourceInfoPool) array.
 fn stream_write_source_info_pool<W: io::Write>(
     w: &mut JsonStreamWriter<W>,
     ctx: &JsonWriterContext,
@@ -3719,10 +3709,10 @@ fn stream_write_json_value<W: io::Write>(w: &mut JsonStreamWriter<W>, v: &Value)
 
 /// Emit the whole document. Streaming order:
 /// `{blocks, meta, pandoc-api-version, astContext}` — alphabetical-friendly
-/// except astContext last (it carries `sourceInfoPool` which is only complete
-/// after we've walked `blocks` and `meta`). Object keys are unordered in the
-/// JSON specification, so any consumer that does property lookup gets the
-/// same data.
+/// except astContext last (it carries `p` (the sourceInfoPool) which is only
+/// complete after we've walked `blocks` and `meta`). Object keys are unordered
+/// in the JSON specification, so any consumer that does property lookup gets
+/// the same data.
 fn stream_write_pandoc<W: io::Write>(
     w: &mut JsonStreamWriter<W>,
     pandoc: &Pandoc,
@@ -3745,7 +3735,7 @@ fn stream_write_pandoc<W: io::Write>(
         w.end_array()?;
         w.key("astContext")?;
         w.begin_object()?;
-        // files (alphabetical: files, metaTopLevelKeySources?, sourceInfoPool)
+        // files (alphabetical: files, metaTopLevelKeySources?, p)
         w.key("files")?;
         w.begin_array()?;
         for idx in 0..ast_context.filenames.len() {
@@ -3789,9 +3779,9 @@ fn stream_write_pandoc<W: io::Write>(
             }
         }
 
-        // sourceInfoPool
+        // p (sourceInfoPool)
         if !ctx.serializer.pool.is_empty() {
-            w.key("sourceInfoPool")?;
+            w.key("p")?;
             stream_write_source_info_pool(w, &ctx)?;
         }
 
