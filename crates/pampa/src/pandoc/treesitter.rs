@@ -577,8 +577,8 @@ fn process_native_inline<T: Write>(
         //
         // see tests/cursed/002.qmd for why this cannot be parsed directly in
         // the block grammar.
-        PandocNativeIntermediate::IntermediateAttr(attr, attr_source) => {
-            Inline::Attr(InlineAttr::new(attr, attr_source))
+        PandocNativeIntermediate::IntermediateAttr(attr, attr_source, source_info) => {
+            Inline::Attr(InlineAttr::new(attr, attr_source, source_info))
         }
         PandocNativeIntermediate::IntermediateUnknown(range) => {
             writeln!(
@@ -1184,7 +1184,8 @@ fn native_visitor<T: Write>(
         }
         "commonmark_specifier" => {
             // Process commonmark attributes (id, classes, key-value pairs)
-            process_commonmark_attribute(children, context)
+            let span = node_source_info_with_context(node, context);
+            process_commonmark_attribute(children, context, span)
         }
         "unnumbered_specifier" => {
             // Process {-} syntax as "unnumbered" class
@@ -1196,12 +1197,11 @@ fn native_visitor<T: Write>(
                 LinkedHashMap::new(),
             );
 
+            let span = node_source_info_with_context(node, context);
             let mut attr_source = AttrSourceInfo::empty();
-            attr_source
-                .classes
-                .push(Some(node_source_info_with_context(node, context)));
+            attr_source.classes.push(Some(span.clone()));
 
-            PandocNativeIntermediate::IntermediateAttr(attr, attr_source)
+            PandocNativeIntermediate::IntermediateAttr(attr, attr_source, span)
         }
         "attribute_specifier" => {
             // Filter out delimiter nodes and pass through the relevant child result
@@ -1223,6 +1223,7 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateAttr(
                 (String::new(), vec![], LinkedHashMap::new()),
                 AttrSourceInfo::empty(),
+                node_source_info_with_context(node, context),
             )
         }
         // Link, span, and image-related nodes

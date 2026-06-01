@@ -132,7 +132,7 @@ pub fn process_pandoc_code_span(
             "attribute_specifier" => {
                 // Process attributes, raw format, or language specifier if present
                 match child {
-                    PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src) => {
+                    PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src, _) => {
                         attr = attrs.clone();
                         attr_source = attrs_src.clone();
                     }

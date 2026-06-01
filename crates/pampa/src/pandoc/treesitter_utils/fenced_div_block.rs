@@ -27,7 +27,7 @@ pub fn process_fenced_div_block(
             continue;
         }
         match child {
-            PandocNativeIntermediate::IntermediateAttr(a, as_) => {
+            PandocNativeIntermediate::IntermediateAttr(a, as_, _) => {
                 attr = a;
                 attr_source = as_;
             }

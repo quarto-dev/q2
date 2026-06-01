@@ -25,10 +25,11 @@ pub fn process_info_string(
     let lang_source = range_to_source_info_with_context(&range, context);
 
     let mut attr_source = AttrSourceInfo::empty();
-    attr_source.classes.push(Some(lang_source));
+    attr_source.classes.push(Some(lang_source.clone()));
 
     PandocNativeIntermediate::IntermediateAttr(
         (String::new(), vec![lang_text], LinkedHashMap::new()),
         attr_source,
+        lang_source,
     )
 }

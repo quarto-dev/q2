@@ -1500,7 +1500,11 @@ mod tests {
         let mut filter =
             Filter::new().with_inlines(|inlines, _ctx| FilterReturn::Unchanged(inlines));
         let mut ctx = FilterContext::new();
-        let inline = Inline::Attr(InlineAttr::new(empty_attr(), AttrSourceInfo::empty()));
+        let inline = Inline::Attr(InlineAttr::new(
+            empty_attr(),
+            AttrSourceInfo::empty(),
+            quarto_source_map::SourceInfo::for_test(),
+        ));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Inline::Attr(_)));
@@ -1510,7 +1514,11 @@ mod tests {
     fn test_traverse_attr_without_filter() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let inline = Inline::Attr(InlineAttr::new(empty_attr(), AttrSourceInfo::empty()));
+        let inline = Inline::Attr(InlineAttr::new(
+            empty_attr(),
+            AttrSourceInfo::empty(),
+            quarto_source_map::SourceInfo::for_test(),
+        ));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Inline::Attr(_)));
@@ -2120,7 +2128,11 @@ mod tests {
     fn test_inline_filterable_structure_attr() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let inline_attr = InlineAttr::new(empty_attr(), AttrSourceInfo::empty());
+        let inline_attr = InlineAttr::new(
+            empty_attr(),
+            AttrSourceInfo::empty(),
+            quarto_source_map::SourceInfo::for_test(),
+        );
         let result = inline_attr.filter_structure(&mut filter, &mut ctx);
         assert!(matches!(result, Inline::Attr(_)));
     }

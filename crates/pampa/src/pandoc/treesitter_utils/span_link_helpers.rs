@@ -126,7 +126,7 @@ pub fn process_pandoc_span(
                 }
             }
             "attribute_specifier" => {
-                if let PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src) = child {
+                if let PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src, _) = child {
                     attr = attrs;
                     attr_source = attrs_src;
                 }
@@ -281,7 +281,7 @@ pub fn process_pandoc_image(
                 }
             }
             "attribute_specifier" => {
-                if let PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src) = child {
+                if let PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src, _) = child {
                     attr = attrs;
                     attr_source = attrs_src;
                 }

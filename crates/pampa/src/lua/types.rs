@@ -2932,6 +2932,7 @@ mod tests {
         let inline = Inline::Attr(crate::pandoc::inline::InlineAttr::new(
             (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_si(),
+            quarto_source_map::SourceInfo::for_test(),
         ));
         assert_eq!(LuaInline::new(inline).tag_name(), "Attr");
     }

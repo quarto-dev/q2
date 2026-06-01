@@ -2253,7 +2253,8 @@ mod unit_tests {
         assert_eq!(
             inline_tag(&Inline::Attr(InlineAttr::new(
                 (String::new(), vec![], LinkedHashMap::new()),
-                AttrSourceInfo::empty()
+                AttrSourceInfo::empty(),
+                quarto_source_map::SourceInfo::for_test(),
             ))),
             "Attr"
         );

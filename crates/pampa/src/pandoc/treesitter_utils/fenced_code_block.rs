@@ -34,7 +34,7 @@ pub fn process_fenced_code_block(
         } else if node == "attribute_specifier" {
             // Handle attribute_specifier which can contain IntermediateAttr, IntermediateRawFormat, or IntermediateBaseText (language specifier)
             match child {
-                PandocNativeIntermediate::IntermediateAttr(a, as_) => {
+                PandocNativeIntermediate::IntermediateAttr(a, as_, _) => {
                     attr = a;
                     attr_source = as_;
                 }
@@ -56,7 +56,7 @@ pub fn process_fenced_code_block(
                 }
             }
         } else if node == "info_string" {
-            let PandocNativeIntermediate::IntermediateAttr(inner_attr, inner_as_) = child else {
+            let PandocNativeIntermediate::IntermediateAttr(inner_attr, inner_as_, _) = child else {
                 panic!("Expected Attr in info_string, got {:?}", child)
             };
             attr = inner_attr;
