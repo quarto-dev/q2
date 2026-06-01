@@ -11,7 +11,7 @@
 
 use crate::block::Blocks;
 use crate::inline::{Inline, Inlines};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use serde::{Deserialize, Serialize};
 use yaml_rust2::Yaml;
 
@@ -412,7 +412,7 @@ impl Default for ConfigValue {
     fn default() -> Self {
         Self {
             value: ConfigValueKind::Map(vec![]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::config_default()),
             merge_op: MergeOp::Concat,
         }
     }
@@ -536,7 +536,7 @@ impl ConfigValue {
     /// // Creates: { format: { html: { source-location: "full" } } }
     /// ```
     pub fn from_path(path: &[&str], value: &str) -> Self {
-        let source_info = SourceInfo::default();
+        let source_info = SourceInfo::generated(By::programmatic_config());
 
         if path.is_empty() {
             return Self::new_string(value, source_info);
@@ -781,7 +781,10 @@ impl ConfigValue {
     /// let mut config = ConfigValue::default();
     /// config.insert_path(
     ///     &["navigation", "toc", "title"],
-    ///     ConfigValue::new_string("Contents", SourceInfo::default()),
+    ///     ConfigValue::new_string(
+    ///         "Contents",
+    ///         SourceInfo::generated(By::programmatic_config()),
+    ///     ),
     /// );
     /// // config is now: { navigation: { toc: { title: "Contents" } } }
     /// ```
@@ -819,11 +822,14 @@ impl ConfigValue {
                     entry.value.insert_path(rest, value);
                 } else {
                     // Entry doesn't exist - create an empty map and recurse
-                    let mut new_map = ConfigValue::new_map(vec![], SourceInfo::default());
+                    let mut new_map = ConfigValue::new_map(
+                        vec![],
+                        SourceInfo::generated(By::programmatic_config()),
+                    );
                     new_map.insert_path(rest, value);
                     entries.push(ConfigMapEntry {
                         key: first_key.to_string(),
-                        key_source: SourceInfo::default(),
+                        key_source: SourceInfo::generated(By::programmatic_config()),
                         value: new_map,
                     });
                 }

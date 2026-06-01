@@ -2208,8 +2208,13 @@ fn read_config_value_top_level(
 
     Ok(ConfigValue {
         value: ConfigValueKind::Map(entries),
-        // Legitimate default: top-level meta doesn't have source tracking in JSON
-        source_info: quarto_source_map::SourceInfo::default(),
+        // Top-level meta doesn't have a JSON-level source_info field, so we
+        // stamp it with the same `config_default` provenance the writer uses
+        // for `ConfigValue::default()`. Plan 7f Phase 6.5: matches the
+        // `By::config_default()` kind landing in `quarto-pandoc-types`.
+        source_info: quarto_source_map::SourceInfo::generated(
+            quarto_source_map::By::config_default(),
+        ),
         merge_op: quarto_pandoc_types::MergeOp::default(),
     })
 }
