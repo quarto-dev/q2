@@ -169,7 +169,7 @@ mod tests {
     use yaml_rust2::yaml::Hash;
 
     fn source_info() -> SourceInfo {
-        SourceInfo::default()
+        SourceInfo::for_test()
     }
 
     /// Create a YamlWithSourceInfo hash with a single key-value pair

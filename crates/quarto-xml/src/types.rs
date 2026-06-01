@@ -298,18 +298,18 @@ mod tests {
     fn test_element_get_attribute() {
         let attr = XmlAttribute::new(
             "name".to_string(),
-            SourceInfo::default(),
+            SourceInfo::for_test(),
             None,
             "value".to_string(),
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
 
         let element = XmlElement::new(
             "test".to_string(),
-            SourceInfo::default(),
+            SourceInfo::for_test(),
             None,
             vec![attr],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
 
         assert_eq!(element.get_attribute("name"), Some("value"));
@@ -320,19 +320,19 @@ mod tests {
     fn test_element_children() {
         let child = XmlElement::new(
             "child".to_string(),
-            SourceInfo::default(),
+            SourceInfo::for_test(),
             None,
             vec![],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
 
         let parent = XmlElement::with_elements(
             "parent".to_string(),
-            SourceInfo::default(),
+            SourceInfo::for_test(),
             None,
             vec![],
             vec![child],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
 
         assert!(parent.has_elements());
@@ -344,12 +344,12 @@ mod tests {
     fn test_element_text() {
         let element = XmlElement::with_text(
             "text".to_string(),
-            SourceInfo::default(),
+            SourceInfo::for_test(),
             None,
             vec![],
             "Hello, world!".to_string(),
-            SourceInfo::default(),
-            SourceInfo::default(),
+            SourceInfo::for_test(),
+            SourceInfo::for_test(),
         );
 
         assert!(element.has_text());

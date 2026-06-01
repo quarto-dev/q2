@@ -63,7 +63,7 @@ mod tests {
     use yaml_rust2::yaml::Hash;
 
     fn source_info() -> quarto_yaml::SourceInfo {
-        quarto_yaml::SourceInfo::default()
+        quarto_yaml::SourceInfo::for_test()
     }
 
     // ==================== parse_anyof_schema tests ====================
