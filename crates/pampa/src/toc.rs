@@ -46,7 +46,7 @@
 use crate::pandoc::block::{Block, Div, Header};
 use crate::pandoc::inline::Inline;
 use quarto_pandoc_types::config_value::{ConfigMapEntry, ConfigValue};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use serde::{Deserialize, Serialize};
 use yaml_rust2::Yaml;
 
@@ -95,7 +95,7 @@ pub struct TocEntry {
 impl TocEntry {
     /// Convert this entry to a ConfigValue for metadata storage.
     pub fn to_config_value(&self) -> ConfigValue {
-        let source_info = SourceInfo::default();
+        let source_info = SourceInfo::generated(By::programmatic_config());
         let mut entries = vec![
             ConfigMapEntry {
                 key: "id".to_string(),
@@ -187,7 +187,7 @@ pub struct NavigationToc {
 impl NavigationToc {
     /// Convert this TOC to a ConfigValue for metadata storage.
     pub fn to_config_value(&self) -> ConfigValue {
-        let source_info = SourceInfo::default();
+        let source_info = SourceInfo::generated(By::programmatic_config());
         let mut entries = vec![];
 
         if let Some(ref title) = self.title {

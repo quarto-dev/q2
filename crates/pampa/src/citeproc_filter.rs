@@ -489,7 +489,9 @@ fn transform_inlines(
 
                     let replacement = Inline::Str(crate::pandoc::Str {
                         text: rendered.clone(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::generated(
+                            quarto_source_map::By::citeproc(),
+                        ),
                     });
                     inlines[i] = replacement;
                 }
@@ -570,7 +572,9 @@ fn generate_bibliography(processor: &mut Processor) -> Result<Vec<Block>, Citepr
                     hashlink::LinkedHashMap::new(),
                 ),
                 content: blocks,
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::citeproc(),
+                ),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
             });
             bib_blocks.push(entry_div);
@@ -612,7 +616,7 @@ fn insert_bibliography(blocks: &mut Vec<Block>, bib_blocks: Vec<Block>) {
             hashlink::LinkedHashMap::new(),
         ),
         content: bib_blocks,
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::citeproc()),
         attr_source: crate::pandoc::AttrSourceInfo::empty(),
     });
     blocks.push(refs_div);

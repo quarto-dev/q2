@@ -601,7 +601,9 @@ fn build_glob_inlines(glob: &str, source_info: &SourceInfo) -> Inlines {
             text: glob.to_string(),
             source_info: source_info.clone(),
         })],
-        source_info: SourceInfo::default(),
+        // Wrapper around the glob scalar — reuse the value's range
+        // so attribution points at the YAML.
+        source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
     })]
 }
@@ -622,7 +624,9 @@ fn build_expr_inlines(expr: &str, source_info: &SourceInfo) -> Inlines {
             text: expr.to_string(),
             source_info: source_info.clone(),
         })],
-        source_info: SourceInfo::default(),
+        // Wrapper around the expr scalar — same reasoning as the
+        // glob branch above.
+        source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
     })]
 }

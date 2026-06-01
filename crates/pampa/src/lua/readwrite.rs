@@ -242,10 +242,13 @@ fn config_value_to_lua(lua: &Lua, config: &ConfigValue) -> Result<Value> {
 /// Phase 5: Convert a Lua table to ConfigValue.
 fn lua_to_config_value(lua: &Lua, val: Value) -> Result<ConfigValue> {
     use quarto_pandoc_types::MergeOp;
-    use quarto_source_map::SourceInfo;
+    use quarto_source_map::{By, SourceInfo};
 
     let merge_op = MergeOp::default();
-    let source_info = SourceInfo::default();
+    // Lua-side ConfigValue conversion — no YAML source bytes exist.
+    // `filter_source_info` may later overwrite if this flows through
+    // a Lua filter return path.
+    let source_info = SourceInfo::generated(By::unknown());
 
     match val {
         Value::Nil => Ok(ConfigValue {
@@ -295,7 +298,7 @@ fn lua_to_config_value(lua: &Lua, val: Value) -> Result<ConfigValue> {
                     let (k, v) = pair?;
                     entries.push(ConfigMapEntry {
                         key: k,
-                        key_source: SourceInfo::default(),
+                        key_source: source_info.clone(),
                         value: lua_to_config_value(lua, v)?,
                     });
                 }

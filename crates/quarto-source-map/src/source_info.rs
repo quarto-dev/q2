@@ -658,6 +658,21 @@ impl By {
         }
     }
 
+    /// Producer kind for citeproc-rendered content (citation Str
+    /// replacements, bibliography `Div`s, `#refs` wrappers). The bytes
+    /// come from CSL processing of bibliographic metadata, not from
+    /// user-written source.
+    ///
+    /// Atomic — citeproc output is generated content the user can't
+    /// edit through the preview; changes go through the CSL pipeline,
+    /// not through inline editing.
+    pub fn citeproc() -> Self {
+        Self {
+            kind: "citeproc".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
     /// Empty-Map sentinel `ConfigValue` used during metadata merging
     /// when no value is present. Non-atomic. The bytes don't exist —
     /// the node is structural. See [`By::is_programmatic_sentinel`].
@@ -718,7 +733,7 @@ impl By {
     pub fn is_atomic_kind(&self) -> bool {
         matches!(
             self.kind.as_str(),
-            "filter" | "shortcode" | "title-block" | "tree-sitter-postprocess"
+            "filter" | "shortcode" | "title-block" | "tree-sitter-postprocess" | "citeproc"
         )
     }
 
@@ -911,6 +926,7 @@ mod tests {
         assert!(By::shortcode("meta").is_atomic_kind());
         assert!(By::title_block().is_atomic_kind());
         assert!(By::tree_sitter_postprocess().is_atomic_kind());
+        assert!(By::citeproc().is_atomic_kind());
 
         assert!(!By::sectionize().is_atomic_kind());
         assert!(!By::user_edit().is_atomic_kind());
@@ -959,6 +975,17 @@ mod tests {
         assert_eq!(by.kind, "programmatic-config");
         assert!(by.data.is_null());
         assert!(!by.is_atomic_kind());
+    }
+
+    #[test]
+    fn test_by_citeproc_constructor() {
+        let by = By::citeproc();
+        assert_eq!(by.kind, "citeproc");
+        assert!(by.data.is_null());
+        // Atomic — citeproc output is non-editable in the preview.
+        assert!(by.is_atomic_kind());
+        // Not a "no real source" sentinel; the bytes come from CSL output.
+        assert!(!by.is_programmatic_sentinel());
     }
 
     #[test]
