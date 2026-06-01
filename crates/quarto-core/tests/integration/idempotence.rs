@@ -1,5 +1,5 @@
 /*
- * tests/idempotence.rs
+ * tests/integration/idempotence.rs
  * Copyright (c) 2026 Posit, PBC
  *
  * Plan 3 — q2-preview pipeline idempotence gate.
