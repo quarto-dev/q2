@@ -356,8 +356,9 @@ pub fn resolve_doc_relative_href(
 /// when any of these fail:
 ///
 /// - The href is external / fragment-only (delegates to [`is_external`]).
-/// - `source` is `SourceInfo::default()` — programmatically-constructed
-///   value with no real source file.
+/// - `source`'s `by.kind` is a programmatic sentinel (`config-default`,
+///   `programmatic-config`, `unknown`) — no real source file exists.
+///   See [`By::is_programmatic_sentinel`].
 /// - The `FileId` can't be looked up in `source_context` (e.g. the
 ///   value came from `_quarto.yml` whose `FileId` is hash-based and
 ///   not registered in the document's per-doc `SourceContext`).
@@ -374,12 +375,16 @@ pub fn resolve_metadata_path(
     if is_external(raw) || raw.starts_with('#') {
         return raw.to_string();
     }
-    // `SourceInfo::default()` is the programmatic / in-memory
-    // sentinel: `Original { file_id: FileId(0), start: 0, end: 0 }`.
-    // Don't conflate it with a *real* source pointing at FileId(0)
-    // (which is how `ASTContext::with_filename` registers the
-    // document's own file). Detect default by full equality.
-    if source == &SourceInfo::default() {
+    // Programmatic sentinel (`config-default`, `programmatic-config`,
+    // `unknown`) — value has no real source bytes; return `raw`
+    // unchanged. Plan 7f Phase 6.5 swapped the pre-existing
+    // `source == &SourceInfo::default()` equality check for this
+    // predicate so the producer-side `By::*` kind controls the
+    // semantic instead of relying on the historical `Original{0,0,0}`
+    // sentinel value.
+    if let SourceInfo::Generated { by, .. } = source
+        && by.is_programmatic_sentinel()
+    {
         return raw.to_string();
     }
     let Some((file_id_val, _, _)) = source.resolve_byte_range() else {

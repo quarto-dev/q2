@@ -27,7 +27,7 @@
 
 use std::path::{Path, PathBuf};
 
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -120,7 +120,7 @@ impl RawResourcePattern {
     pub fn without_source(pattern: impl Into<String>) -> Self {
         Self {
             pattern: pattern.into(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::unknown()),
         }
     }
 }
@@ -536,9 +536,15 @@ pub fn resolve_reported_resources(
             doc_dir.join(&entry.raw_path)
         };
         // Engine/Lua-filter entries don't have a YAML source location;
-        // diagnostics degrade to a span-less message.
-        let canonical =
-            canonicalize_within_project(project_root, &absolute, &raw_str, &SourceInfo::default())?;
+        // diagnostics degrade to a span-less message. Plan 7f follow-up
+        // beads issue: refactor `canonicalize_within_project` to take
+        // `Option<&SourceInfo>` so this site doesn't need a sentinel.
+        let canonical = canonicalize_within_project(
+            project_root,
+            &absolute,
+            &raw_str,
+            &SourceInfo::generated(By::unknown()),
+        )?;
         let rel = canonical
             .strip_prefix(project_root)
             .expect("canonicalize_within_project verified containment")
