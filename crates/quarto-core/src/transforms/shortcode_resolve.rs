@@ -1794,12 +1794,12 @@ mod tests {
             match resolution_ctx {
                 ResolutionContext::Block => ShortcodeResult::Blocks(vec![Block::HorizontalRule(
                     quarto_pandoc_types::block::HorizontalRule {
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                     },
                 )]),
                 ResolutionContext::Inline => ShortcodeResult::Inlines(vec![Inline::Str(Str {
                     text: "inline-fallback".to_string(),
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::for_test(),
                 })]),
             }
         }
@@ -1902,9 +1902,9 @@ mod tests {
             ShortcodeResult::Blocks(vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "from-block".to_string(),
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::for_test(),
                 })],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })])
         }
     }
@@ -2426,16 +2426,16 @@ mod tests {
                 Inline::Strong(Strong {
                     content: vec![Inline::Str(Str {
                         text: "Bold".into(),
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                     })],
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::for_test(),
                 }),
                 Inline::Space(quarto_pandoc_types::inline::Space {
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::for_test(),
                 }),
                 Inline::Str(Str {
                     text: "Title".into(),
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::for_test(),
                 }),
             ])
         }

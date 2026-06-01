@@ -74,7 +74,7 @@ mod tests {
     use super::*;
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     /// Test 1 — default is empty.

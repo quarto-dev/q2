@@ -560,7 +560,7 @@ mod tests {
             is_intermediate: false,
             supporting_files: vec![],
             metadata: quarto_pandoc_types::ConfigValue::null(
-                quarto_source_map::SourceInfo::default(),
+                quarto_source_map::SourceInfo::for_test(),
             ),
             source_context: quarto_source_map::SourceContext::new(),
         };
@@ -599,14 +599,14 @@ mod tests {
 
     fn meta_with_template(template_path: &str) -> quarto_pandoc_types::ConfigValue {
         use quarto_pandoc_types::ConfigMapEntry;
-        let si = quarto_source_map::SourceInfo::default();
+        let si = quarto_source_map::SourceInfo::for_test();
         quarto_pandoc_types::ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "template".to_string(),
                 key_source: si.clone(),
                 value: quarto_pandoc_types::ConfigValue::new_path(template_path.to_string(), si),
             }],
-            quarto_source_map::SourceInfo::default(),
+            quarto_source_map::SourceInfo::for_test(),
         )
     }
 
@@ -617,7 +617,7 @@ mod tests {
     /// custom templates from `quarto render`.
     fn meta_with_template_as_inlines(template_path: &str) -> quarto_pandoc_types::ConfigValue {
         use quarto_pandoc_types::{ConfigMapEntry, Inline, Str};
-        let si = quarto_source_map::SourceInfo::default();
+        let si = quarto_source_map::SourceInfo::for_test();
         let inlines: quarto_pandoc_types::Inlines = vec![Inline::Str(Str {
             text: template_path.to_string(),
             source_info: si.clone(),
@@ -628,7 +628,7 @@ mod tests {
                 key_source: si.clone(),
                 value: quarto_pandoc_types::ConfigValue::new_inlines(inlines, si),
             }],
-            quarto_source_map::SourceInfo::default(),
+            quarto_source_map::SourceInfo::for_test(),
         )
     }
 
@@ -637,7 +637,7 @@ mod tests {
         partial_paths: &[&str],
     ) -> quarto_pandoc_types::ConfigValue {
         use quarto_pandoc_types::ConfigMapEntry;
-        let si = quarto_source_map::SourceInfo::default();
+        let si = quarto_source_map::SourceInfo::for_test();
         let partials_array: Vec<quarto_pandoc_types::ConfigValue> = partial_paths
             .iter()
             .map(|p| quarto_pandoc_types::ConfigValue::new_path(p.to_string(), si.clone()))
@@ -659,7 +659,7 @@ mod tests {
                     value: quarto_pandoc_types::ConfigValue::new_array(partials_array, si),
                 },
             ],
-            quarto_source_map::SourceInfo::default(),
+            quarto_source_map::SourceInfo::for_test(),
         )
     }
 
@@ -901,7 +901,7 @@ mod tests {
             is_intermediate: false,
             supporting_files: vec![],
             metadata: quarto_pandoc_types::ConfigValue::null(
-                quarto_source_map::SourceInfo::default(),
+                quarto_source_map::SourceInfo::for_test(),
             ),
             source_context: quarto_source_map::SourceContext::new(),
         };

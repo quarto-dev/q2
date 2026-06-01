@@ -256,23 +256,23 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     fn b(x: bool) -> ConfigValue {
-        ConfigValue::new_bool(x, SourceInfo::default())
+        ConfigValue::new_bool(x, SourceInfo::for_test())
     }
 
     fn arr(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     fn make_profile(source: &str, title: &str) -> DocumentProfile {
@@ -604,9 +604,9 @@ mod tests {
         use quarto_pandoc_types::inline::Inline;
         let inlines = vec![Inline::Str(quarto_pandoc_types::inline::Str {
             text: "Site".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })];
-        let title_cv = ConfigValue::new_inlines(inlines, SourceInfo::default());
+        let title_cv = ConfigValue::new_inlines(inlines, SourceInfo::for_test());
         let sidebar_cv = config_map(vec![("contents", arr(vec![s("about.qmd")]))]);
         let meta = config_map(vec![(
             "website",

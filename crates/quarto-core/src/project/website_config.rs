@@ -87,7 +87,7 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn s(value: &str) -> ConfigValue {
-        ConfigValue::new_string(value.to_string(), SourceInfo::default())
+        ConfigValue::new_string(value.to_string(), SourceInfo::for_test())
     }
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
@@ -95,23 +95,23 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(entries, SourceInfo::default())
+        ConfigValue::new_map(entries, SourceInfo::for_test())
     }
 
     fn null() -> ConfigValue {
-        ConfigValue::null(SourceInfo::default())
+        ConfigValue::null(SourceInfo::for_test())
     }
 
     fn pandoc_inlines(text: &str) -> ConfigValue {
         let inlines = vec![Inline::Str(quarto_pandoc_types::inline::Str {
             text: text.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })];
-        ConfigValue::new_inlines(inlines, SourceInfo::default())
+        ConfigValue::new_inlines(inlines, SourceInfo::for_test())
     }
 
     /// Test 1 (plan §Tests / Unit tests — `website_config` helpers):

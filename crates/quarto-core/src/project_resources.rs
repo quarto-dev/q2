@@ -1397,15 +1397,15 @@ mod tests {
                 ConfigValue::new_string("first.txt", si_first.clone()),
                 ConfigValue::new_string("second.txt", si_second.clone()),
             ],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         let outer = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "resources".into(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: array,
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
 
         let extracted = extract_resource_patterns(&outer, &["resources"]);
@@ -1428,10 +1428,10 @@ mod tests {
         let outer = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "resources".into(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: scalar,
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
 
         let extracted = extract_resource_patterns(&outer, &["resources"]);

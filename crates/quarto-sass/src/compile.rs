@@ -667,7 +667,7 @@ mod tests {
         let runtime = NativeRuntime::new();
         let config = ConfigValue {
             value: ConfigValueKind::Map(vec![]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
@@ -688,19 +688,19 @@ mod tests {
         // Build flattened config: { theme: "cosmo" }
         let theme_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String("cosmo".to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
 
         let config = ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 

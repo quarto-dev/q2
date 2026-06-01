@@ -685,7 +685,7 @@ mod tests {
         let mut i = item("X");
         i.extra.insert(
             "status".to_string(),
-            ConfigValue::new_string("draft", SourceInfo::default()),
+            ConfigValue::new_string("draft", SourceInfo::for_test()),
         );
         let ctx = build_listing_context(&listing(), &[i], "posts", &ConfigValue::default());
         let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
@@ -759,24 +759,24 @@ mod tests {
             vec![
                 ConfigMapEntry {
                     key: "site-url".to_string(),
-                    key_source: SourceInfo::default(),
-                    value: ConfigValue::new_string("https://example.com", SourceInfo::default()),
+                    key_source: SourceInfo::for_test(),
+                    value: ConfigValue::new_string("https://example.com", SourceInfo::for_test()),
                 },
                 ConfigMapEntry {
                     key: "title".to_string(),
-                    key_source: SourceInfo::default(),
-                    value: ConfigValue::new_string("My Site", SourceInfo::default()),
+                    key_source: SourceInfo::for_test(),
+                    value: ConfigValue::new_string("My Site", SourceInfo::for_test()),
                 },
             ],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         let meta = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "website".to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: website,
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         let ctx = build_listing_context(&listing(), &[item("A")], "posts", &meta);
         let TemplateValue::Map(p) = ctx.get("project").unwrap() else {

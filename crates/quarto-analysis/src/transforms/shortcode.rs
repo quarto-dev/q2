@@ -380,7 +380,7 @@ mod tests {
             name: "meta".to_string(),
             positional_args: vec![ShortcodeArg::String(key.to_string())],
             keyword_args: Default::default(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
 
@@ -389,10 +389,10 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: ConfigValue {
                     value: ConfigValueKind::Scalar(Yaml::String(v.to_string())),
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::for_test(),
                     merge_op: MergeOp::Concat,
                 },
             })
@@ -400,7 +400,7 @@ mod tests {
 
         ConfigValue {
             value: ConfigValueKind::Map(map_entries),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::Concat,
         }
     }
@@ -416,7 +416,7 @@ mod tests {
                 level: 1,
                 attr: Default::default(),
                 content: vec![make_meta_shortcode("title")],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
             })],
             ..Default::default()
@@ -450,7 +450,7 @@ mod tests {
             meta: metadata,
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![make_meta_shortcode("nonexistent")],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
             ..Default::default()
         };
@@ -492,11 +492,11 @@ mod tests {
                 content: vec![
                     Inline::Str(Str {
                         text: "Written by ".to_string(),
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                     }),
                     make_meta_shortcode("author"),
                 ],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
             })],
             ..Default::default()

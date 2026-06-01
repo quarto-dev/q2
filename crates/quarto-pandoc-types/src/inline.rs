@@ -1451,7 +1451,11 @@ mod tests {
 
     #[test]
     fn source_info_attr_empty() {
-        // Empty AttrSourceInfo → source_info is SourceInfo::default()
+        // Pins today's fallback: empty AttrSourceInfo → InlineAttr::new
+        // calls `combine_all().unwrap_or_default()`, which returns
+        // SourceInfo::default(). Plan 7f Phase 6.5 deletes both the
+        // fallback and this test as part of the InlineAttr::new
+        // signature refactor.
         let inline = Inline::Attr(InlineAttr::new(
             (String::new(), vec![], LinkedHashMap::new()),
             AttrSourceInfo::empty(),

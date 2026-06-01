@@ -548,18 +548,18 @@ mod tests {
     fn s(text: &str) -> Inline {
         Inline::Str(Str {
             text: text.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
     fn space() -> Inline {
         Inline::Space(Space {
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
     fn para(content: Vec<Inline>) -> Block {
         Block::Paragraph(Paragraph {
             content,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
     fn heading(level: usize, content: Vec<Inline>) -> Block {
@@ -567,7 +567,7 @@ mod tests {
             level,
             attr: empty_attr(),
             content,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         })
     }
@@ -576,7 +576,7 @@ mod tests {
             attr: empty_attr(),
             content: vec![],
             target: (src.to_string(), String::new()),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
         })
@@ -586,7 +586,7 @@ mod tests {
             attr: empty_attr(),
             content,
             target: (target.to_string(), String::new()),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
         })
@@ -594,7 +594,7 @@ mod tests {
     fn note(content: Vec<Block>) -> Inline {
         Inline::Note(Note {
             content,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
 
@@ -628,16 +628,16 @@ mod tests {
         ] {
             m.insert_path(
                 &["listing-item", k],
-                ConfigValue::new_string(v, SourceInfo::default()),
+                ConfigValue::new_string(v, SourceInfo::for_test()),
             );
         }
         m.insert_path(
             &["listing-item", "word-count"],
-            ConfigValue::new_scalar(Yaml::Integer(99), SourceInfo::default()),
+            ConfigValue::new_scalar(Yaml::Integer(99), SourceInfo::for_test()),
         );
         m.insert_path(
             &["listing-item", "reading-time-minutes"],
-            ConfigValue::new_scalar(Yaml::Integer(7), SourceInfo::default()),
+            ConfigValue::new_scalar(Yaml::Integer(7), SourceInfo::for_test()),
         );
 
         let blocks = vec![para(vec![s("Different paragraph text")])];
@@ -802,7 +802,7 @@ mod tests {
         let mut m = ConfigValue::default();
         m.insert_path(
             &["listing-item", "extra", "status"],
-            ConfigValue::new_string("draft", SourceInfo::default()),
+            ConfigValue::new_string("draft", SourceInfo::for_test()),
         );
         let blocks = vec![para(vec![s("body")])];
         let after = run_autofill(blocks, m, default_runtime());

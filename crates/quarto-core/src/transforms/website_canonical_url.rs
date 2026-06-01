@@ -121,15 +121,15 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(entries, SourceInfo::default())
+        ConfigValue::new_map(entries, SourceInfo::for_test())
     }
 
     fn s(value: &str) -> ConfigValue {
-        ConfigValue::new_string(value.to_string(), SourceInfo::default())
+        ConfigValue::new_string(value.to_string(), SourceInfo::for_test())
     }
 
     /// Plan test 19: no `website.site-url` → `canonical-url`
@@ -199,7 +199,7 @@ mod tests {
     /// Set or replace mutates metadata correctly.
     #[test]
     fn set_canonical_url_inserts_when_absent() {
-        let mut meta = ConfigValue::new_map(Vec::new(), SourceInfo::default());
+        let mut meta = ConfigValue::new_map(Vec::new(), SourceInfo::for_test());
         set_canonical_url(&mut meta, "https://example.com/x.html".to_string());
         assert_eq!(
             meta.get("canonical-url").and_then(|v| v.as_str()),
@@ -214,10 +214,10 @@ mod tests {
         let mut meta = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "canonical-url".to_string(),
-                key_source: SourceInfo::default(),
-                value: ConfigValue::new_string("old", SourceInfo::default()),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_string("old", SourceInfo::for_test()),
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         set_canonical_url(&mut meta, "new".to_string());
         if let ConfigValueKind::Map(entries) = &meta.value {
@@ -238,7 +238,7 @@ mod tests {
     /// Defensive: a non-map metadata is not mutated.
     #[test]
     fn set_canonical_url_no_op_on_non_map_meta() {
-        let mut meta = ConfigValue::null(SourceInfo::default());
+        let mut meta = ConfigValue::null(SourceInfo::for_test());
         set_canonical_url(&mut meta, "https://example.com/x.html".to_string());
         // Just shouldn't panic; the value remains null.
         assert!(matches!(

@@ -385,14 +385,14 @@ mod tests {
         ConfigValue {
             value: ConfigValueKind::Map(vec![ConfigMapEntry {
                 key: "code-copy".to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: ConfigValue {
                     value,
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::for_test(),
                     merge_op: MergeOp::Concat,
                 },
             }]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::Concat,
         }
     }

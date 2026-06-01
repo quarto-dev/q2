@@ -694,9 +694,9 @@ mod tests {
         let inner_auto = SidebarEntry::Auto(AutoSpec::All);
         let mut sb = Sidebar {
             contents: vec![SidebarEntry::Section {
-                text: Some(ConfigValue::new_string("Outer", SourceInfo::default())),
+                text: Some(ConfigValue::new_string("Outer", SourceInfo::for_test())),
                 href: None,
-                href_source: SourceInfo::default(),
+                href_source: SourceInfo::for_test(),
                 id: None,
                 contents: vec![inner_auto],
                 expanded: false,

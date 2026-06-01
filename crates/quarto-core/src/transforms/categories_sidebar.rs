@@ -784,10 +784,10 @@ mod tests {
         ast.meta = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "listing".to_string(),
-                key_source: SourceInfo::default(),
-                value: ConfigValue::new_bool(false, SourceInfo::default()),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_bool(false, SourceInfo::for_test()),
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         let resolved = vec![rl(
             "x",
@@ -804,7 +804,7 @@ mod tests {
         let mut ast = empty_pandoc();
         ast.meta.insert_path(
             &["rendered", "navigation", "margin_categories"],
-            ConfigValue::new_string("preset html", SourceInfo::default()),
+            ConfigValue::new_string("preset html", SourceInfo::for_test()),
         );
         let resolved = vec![rl(
             "x",

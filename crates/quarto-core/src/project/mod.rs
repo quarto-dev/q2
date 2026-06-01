@@ -757,7 +757,7 @@ mod tests {
         use quarto_pandoc_types::ConfigValue;
         use quarto_source_map::SourceInfo;
 
-        let metadata = ConfigValue::new_string("test", SourceInfo::default());
+        let metadata = ConfigValue::new_string("test", SourceInfo::for_test());
         let config = ProjectConfig::with_metadata(metadata.clone());
 
         assert_eq!(config.project_kind, ProjectKind::Default);

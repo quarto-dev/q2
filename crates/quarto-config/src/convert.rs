@@ -113,14 +113,14 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn make_scalar(value: &str) -> YamlWithSourceInfo {
-        YamlWithSourceInfo::new_scalar(Yaml::String(value.into()), SourceInfo::default())
+        YamlWithSourceInfo::new_scalar(Yaml::String(value.into()), SourceInfo::for_test())
     }
 
     fn make_scalar_with_tag(value: &str, tag: &str) -> YamlWithSourceInfo {
         YamlWithSourceInfo::new_scalar_with_tag(
             Yaml::String(value.into()),
-            SourceInfo::default(),
-            Some((tag.to_string(), SourceInfo::default())),
+            SourceInfo::for_test(),
+            Some((tag.to_string(), SourceInfo::for_test())),
         )
     }
 
@@ -177,7 +177,7 @@ mod tests {
         let items = vec![make_scalar("a"), make_scalar("b")];
         let yaml = YamlWithSourceInfo::new_array(
             Yaml::Array(vec![Yaml::String("a".into()), Yaml::String("b".into())]),
-            SourceInfo::default(),
+            SourceInfo::for_test(),
             items,
         );
 
@@ -194,21 +194,21 @@ mod tests {
         let mut diagnostics = Vec::new();
 
         let key =
-            YamlWithSourceInfo::new_scalar(Yaml::String("name".into()), SourceInfo::default());
+            YamlWithSourceInfo::new_scalar(Yaml::String("name".into()), SourceInfo::for_test());
         let value = make_scalar("value");
         let entry = quarto_yaml::YamlHashEntry::new(
             key,
             value,
-            SourceInfo::default(),
-            SourceInfo::default(),
-            SourceInfo::default(),
+            SourceInfo::for_test(),
+            SourceInfo::for_test(),
+            SourceInfo::for_test(),
         );
 
         let mut hash = yaml_rust2::yaml::Hash::new();
         hash.insert(Yaml::String("name".into()), Yaml::String("value".into()));
 
         let yaml =
-            YamlWithSourceInfo::new_hash(Yaml::Hash(hash), SourceInfo::default(), vec![entry]);
+            YamlWithSourceInfo::new_hash(Yaml::Hash(hash), SourceInfo::for_test(), vec![entry]);
 
         let config = config_value_from_yaml(yaml, &mut diagnostics);
 

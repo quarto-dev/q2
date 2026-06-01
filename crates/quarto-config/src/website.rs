@@ -55,15 +55,15 @@ mod tests {
     use yaml_rust2::Yaml;
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     fn b(x: bool) -> ConfigValue {
-        ConfigValue::new_bool(x, SourceInfo::default())
+        ConfigValue::new_bool(x, SourceInfo::for_test())
     }
 
     fn arr(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
@@ -71,11 +71,11 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     #[test]
@@ -289,10 +289,10 @@ mod tests {
         let meta = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "navbar".to_string(),
-                key_source: SourceInfo::default(),
-                value: ConfigValue::new_scalar(Yaml::Boolean(false), SourceInfo::default()),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_scalar(Yaml::Boolean(false), SourceInfo::for_test()),
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         let resolved = resolve_website_value(&meta, "navbar").unwrap();
         assert_eq!(resolved.as_bool(), Some(false));

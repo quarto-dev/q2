@@ -232,7 +232,7 @@ mod tests {
     use super::*;
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
-        let info = SourceInfo::default();
+        let info = SourceInfo::for_test();
         let map_entries: Vec<ConfigMapEntry> = entries
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
@@ -245,7 +245,7 @@ mod tests {
     }
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     #[test]
@@ -292,7 +292,7 @@ mod tests {
                 s("sub1.qmd"),
                 map(vec![("text", s("Sub Two")), ("href", s("sub2.qmd"))]),
             ],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         let cv = map(vec![("text", s("Parent")), ("menu", menu_arr)]);
         let item = NavigationItem::from_config_value(&cv).unwrap();
@@ -353,7 +353,7 @@ mod tests {
             ("text", s("Dropdown")),
             (
                 "menu",
-                ConfigValue::new_array(vec![s("sub.qmd")], SourceInfo::default()),
+                ConfigValue::new_array(vec![s("sub.qmd")], SourceInfo::for_test()),
             ),
         ]))
         .unwrap();

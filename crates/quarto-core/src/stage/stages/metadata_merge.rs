@@ -536,21 +536,21 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     /// Helper to create a scalar string ConfigValue
     fn config_str(s: &str) -> ConfigValue {
-        ConfigValue::new_string(s, SourceInfo::default())
+        ConfigValue::new_string(s, SourceInfo::for_test())
     }
 
     /// Helper to create a scalar bool ConfigValue
     fn config_bool(b: bool) -> ConfigValue {
-        ConfigValue::new_bool(b, SourceInfo::default())
+        ConfigValue::new_bool(b, SourceInfo::for_test())
     }
 
     // ============================================================================
@@ -1778,10 +1778,10 @@ mod tests {
         let shortcodes_array = ConfigValue {
             value: ConfigValueKind::Array(vec![ConfigValue {
                 value: ConfigValueKind::Path("handler.lua".to_string()),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: Default::default(),
             }]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: Default::default(),
         };
 

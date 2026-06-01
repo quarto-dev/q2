@@ -102,7 +102,7 @@ mod tests {
         let idx = ProjectIndex::new(vec![profile("about.qmd", "About Us")]);
         let mut items = vec![NavigationItem {
             href: Some("about.qmd".to_string()),
-            text: Some(ConfigValue::new_string("Profile", SourceInfo::default())),
+            text: Some(ConfigValue::new_string("Profile", SourceInfo::for_test())),
             ..NavigationItem::default()
         }];
         enrich_navigation_items(&mut items, &idx);
@@ -125,7 +125,7 @@ mod tests {
             profile("ref.qmd", "Reference"),
         ]);
         let mut items = vec![NavigationItem {
-            text: Some(ConfigValue::new_string("Docs", SourceInfo::default())),
+            text: Some(ConfigValue::new_string("Docs", SourceInfo::for_test())),
             menu: vec![
                 NavigationItem {
                     href: Some("start.qmd".to_string()),
@@ -176,7 +176,7 @@ mod tests {
     fn enrich_noop_for_item_without_href() {
         let idx = ProjectIndex::new(vec![profile("about.qmd", "About")]);
         let mut items = vec![NavigationItem {
-            text: Some(ConfigValue::new_string("Header", SourceInfo::default())),
+            text: Some(ConfigValue::new_string("Header", SourceInfo::for_test())),
             ..NavigationItem::default()
         }];
         enrich_navigation_items(&mut items, &idx);

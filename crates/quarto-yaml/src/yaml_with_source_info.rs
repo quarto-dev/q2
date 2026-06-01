@@ -266,7 +266,7 @@ mod tests {
     #[test]
     fn test_scalar_creation() {
         let yaml = Yaml::String("test".into());
-        let info = SourceInfo::default();
+        let info = SourceInfo::for_test();
         let node = YamlWithSourceInfo::new_scalar(yaml.clone(), info.clone());
 
         assert_eq!(node.yaml, yaml);
@@ -280,12 +280,13 @@ mod tests {
     #[test]
     fn test_array_creation() {
         let child1 =
-            YamlWithSourceInfo::new_scalar(Yaml::String("a".into()), SourceInfo::default());
+            YamlWithSourceInfo::new_scalar(Yaml::String("a".into()), SourceInfo::for_test());
         let child2 =
-            YamlWithSourceInfo::new_scalar(Yaml::String("b".into()), SourceInfo::default());
+            YamlWithSourceInfo::new_scalar(Yaml::String("b".into()), SourceInfo::for_test());
 
         let yaml = Yaml::Array(vec![Yaml::String("a".into()), Yaml::String("b".into())]);
-        let node = YamlWithSourceInfo::new_array(yaml, SourceInfo::default(), vec![child1, child2]);
+        let node =
+            YamlWithSourceInfo::new_array(yaml, SourceInfo::for_test(), vec![child1, child2]);
 
         assert!(node.is_array());
         assert_eq!(node.len(), 2);
@@ -296,12 +297,13 @@ mod tests {
     #[test]
     fn test_get_array_item() {
         let child1 =
-            YamlWithSourceInfo::new_scalar(Yaml::String("a".into()), SourceInfo::default());
+            YamlWithSourceInfo::new_scalar(Yaml::String("a".into()), SourceInfo::for_test());
         let child2 =
-            YamlWithSourceInfo::new_scalar(Yaml::String("b".into()), SourceInfo::default());
+            YamlWithSourceInfo::new_scalar(Yaml::String("b".into()), SourceInfo::for_test());
 
         let yaml = Yaml::Array(vec![Yaml::String("a".into()), Yaml::String("b".into())]);
-        let node = YamlWithSourceInfo::new_array(yaml, SourceInfo::default(), vec![child1, child2]);
+        let node =
+            YamlWithSourceInfo::new_array(yaml, SourceInfo::for_test(), vec![child1, child2]);
 
         assert_eq!(node.get_array_item(0).unwrap().yaml.as_str(), Some("a"));
         assert_eq!(node.get_array_item(1).unwrap().yaml.as_str(), Some("b"));

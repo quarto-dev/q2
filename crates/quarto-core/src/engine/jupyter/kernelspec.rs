@@ -189,7 +189,7 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn string_config(s: &str) -> ConfigValue {
-        ConfigValue::new_string(s, SourceInfo::default())
+        ConfigValue::new_string(s, SourceInfo::for_test())
     }
 
     fn map_config(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
@@ -197,11 +197,11 @@ mod tests {
             .into_iter()
             .map(|(key, value)| ConfigMapEntry {
                 key: key.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     #[test]

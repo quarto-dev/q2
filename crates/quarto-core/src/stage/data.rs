@@ -478,7 +478,7 @@ mod tests {
         let doc_source = PipelineData::DocumentSource(DocumentSource::new(
             PathBuf::from("test.qmd"),
             String::new(),
-            ConfigValue::null(SourceInfo::default()),
+            ConfigValue::null(SourceInfo::for_test()),
         ));
         assert_eq!(doc_source.kind(), PipelineDataKind::DocumentSource);
     }

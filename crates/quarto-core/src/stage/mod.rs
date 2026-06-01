@@ -402,7 +402,7 @@ mod tests {
                         PipelineData::DocumentSource(DocumentSource::new(
                             s.path,
                             content,
-                            quarto_pandoc_types::ConfigValue::null(SourceInfo::default()),
+                            quarto_pandoc_types::ConfigValue::null(SourceInfo::for_test()),
                         ))
                     } else {
                         input

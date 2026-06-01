@@ -390,10 +390,10 @@ mod tests {
         let engine_config = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "results".to_string(),
-                key_source: SourceInfo::default(),
-                value: ConfigValue::new_string("results.json", SourceInfo::default()),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_string("results.json", SourceInfo::for_test()),
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
 
         let exec_ctx = ExecutionContext::new(
@@ -419,10 +419,10 @@ mod tests {
         let engine_config = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "results".to_string(),
-                key_source: SourceInfo::default(),
-                value: ConfigValue::new_string("does-not-exist.json", SourceInfo::default()),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_string("does-not-exist.json", SourceInfo::for_test()),
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         let exec_ctx = ExecutionContext::new(
             PathBuf::from("/tmp"),

@@ -215,19 +215,19 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     fn b(x: bool) -> ConfigValue {
-        ConfigValue::new_bool(x, SourceInfo::default())
+        ConfigValue::new_bool(x, SourceInfo::for_test())
     }
 
     fn make_profile(source: &str, output_href: &str, title: &str) -> DocumentProfile {
@@ -256,7 +256,7 @@ mod tests {
         let entries: Vec<ConfigValue> = hrefs.iter().map(|h| s(h)).collect();
         config_map(vec![(
             "contents",
-            ConfigValue::new_array(entries, SourceInfo::default()),
+            ConfigValue::new_array(entries, SourceInfo::for_test()),
         )])
     }
 

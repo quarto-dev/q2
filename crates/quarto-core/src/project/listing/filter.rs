@@ -130,7 +130,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn s(value: &str) -> ConfigValue {
-        ConfigValue::new_string(value, SourceInfo::default())
+        ConfigValue::new_string(value, SourceInfo::for_test())
     }
 
     fn make_item(
@@ -226,7 +226,7 @@ mod tests {
             vec!["rust"],
             vec![(
                 "categories",
-                ConfigValue::new_array(vec![s("draft")], SourceInfo::default()),
+                ConfigValue::new_array(vec![s("draft")], SourceInfo::for_test()),
             )],
         )];
         apply_filters(
@@ -242,7 +242,7 @@ mod tests {
             vec!["rust"],
             vec![(
                 "categories",
-                ConfigValue::new_array(vec![s("draft")], SourceInfo::default()),
+                ConfigValue::new_array(vec![s("draft")], SourceInfo::for_test()),
             )],
         )];
         apply_filters(

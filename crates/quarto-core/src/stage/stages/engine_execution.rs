@@ -1374,7 +1374,12 @@ mod tests {
             PathBuf::from("/project/doc.qmd"),
             "html",
         );
-        // Default source_info should be SourceInfo::default()
+        // ExecutionContext::new uses SourceInfo::default() as the "no
+        // source location known yet" sentinel; `with_source_info` later
+        // overwrites it with the real qmd serialization range. This test
+        // pins that production behavior — Phase 7's deprecation will
+        // force engine/context.rs:92 onto an explicit `By::*` kind at
+        // which point this assertion gets updated alongside.
         assert_eq!(ctx.source_info, quarto_source_map::SourceInfo::default());
     }
 

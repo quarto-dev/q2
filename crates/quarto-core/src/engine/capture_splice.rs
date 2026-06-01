@@ -337,7 +337,7 @@ mod tests {
     // ── Test-fixture builders ───────────────────────────────────────
 
     fn empty_meta() -> ConfigValue {
-        ConfigValue::new_map(Vec::new(), SourceInfo::default())
+        ConfigValue::new_map(Vec::new(), SourceInfo::for_test())
     }
 
     fn pandoc_of(blocks: Vec<Block>) -> Pandoc {
@@ -353,7 +353,7 @@ mod tests {
         Block::CodeBlock(CodeBlock {
             attr: (String::new(), classes, LinkedHashMap::new()),
             text: body.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         })
     }
@@ -362,9 +362,9 @@ mod tests {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
 
@@ -380,7 +380,7 @@ mod tests {
                 LinkedHashMap::new(),
             ),
             content: vec![prose(marker)],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         })
     }
@@ -604,7 +604,7 @@ mod tests {
         let block = Block::CodeBlock(CodeBlock {
             attr,
             text: "x <- 1".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         });
         assert_eq!(engine_cell_lang(&block), None);

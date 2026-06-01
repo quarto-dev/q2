@@ -937,15 +937,15 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn s(value: &str) -> ConfigValue {
-        ConfigValue::new_string(value, SourceInfo::default())
+        ConfigValue::new_string(value, SourceInfo::for_test())
     }
 
     fn b(value: bool) -> ConfigValue {
-        ConfigValue::new_bool(value, SourceInfo::default())
+        ConfigValue::new_bool(value, SourceInfo::for_test())
     }
 
     fn arr(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
@@ -953,11 +953,11 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     fn parse(value: ConfigValue) -> (Vec<Listing>, Vec<DiagnosticMessage>) {
@@ -1078,9 +1078,9 @@ mod tests {
         // raw string regardless of any wrapping spans/classes.
         let inlines: quarto_pandoc_types::inline::Inlines = vec![Inline::Str(Str {
             text: "posts/*.qmd".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })];
-        let contents_val = ConfigValue::new_inlines(inlines, SourceInfo::default());
+        let contents_val = ConfigValue::new_inlines(inlines, SourceInfo::for_test());
         let (listings, diags) = parse(map(vec![
             ("type", s("default")),
             ("contents", contents_val),
@@ -1102,13 +1102,13 @@ mod tests {
         let make_inlines = |t: &str| -> ConfigValue {
             let inlines: quarto_pandoc_types::inline::Inlines = vec![Inline::Str(Str {
                 text: t.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })];
-            ConfigValue::new_inlines(inlines, SourceInfo::default())
+            ConfigValue::new_inlines(inlines, SourceInfo::for_test())
         };
         let arr_val = ConfigValue::new_array(
             vec![make_inlines("posts/*.qmd"), make_inlines("notes/*.qmd")],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         let (listings, _) = parse(map(vec![("type", s("default")), ("contents", arr_val)]));
         assert_eq!(

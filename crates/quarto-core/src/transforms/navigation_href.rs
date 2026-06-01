@@ -573,14 +573,14 @@ mod tests {
         );
     }
 
-    /// `SourceInfo::default()` (FileId(0) anonymous) returns raw
+    /// `SourceInfo::for_test()` (FileId(0) anonymous) returns raw
     /// unchanged — this is the in-memory / test construction path.
     #[test]
     fn metadata_path_default_source_returns_raw() {
         let root = PathBuf::from("/project");
         let (ctx, _) = source_for("docs/guide/index.qmd", &root);
         assert_eq!(
-            resolve_metadata_path("about.qmd", &SourceInfo::default(), &ctx, &root),
+            resolve_metadata_path("about.qmd", &SourceInfo::for_test(), &ctx, &root),
             "about.qmd"
         );
     }

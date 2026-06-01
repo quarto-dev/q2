@@ -823,7 +823,7 @@ mod tests {
     use super::*;
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
-        let info = SourceInfo::default();
+        let info = SourceInfo::for_test();
         let map_entries: Vec<ConfigMapEntry> = entries
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
@@ -836,19 +836,19 @@ mod tests {
     }
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     fn b(x: bool) -> ConfigValue {
-        ConfigValue::new_bool(x, SourceInfo::default())
+        ConfigValue::new_bool(x, SourceInfo::for_test())
     }
 
     fn i(x: i64) -> ConfigValue {
-        ConfigValue::new_scalar(Yaml::Integer(x), SourceInfo::default())
+        ConfigValue::new_scalar(Yaml::Integer(x), SourceInfo::for_test())
     }
 
     fn arr(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     /// Test 1 — single object form with leaf links.
@@ -1003,7 +1003,7 @@ mod tests {
                 SidebarEntry::Section {
                     text: Some(s("Advanced")),
                     href: None,
-                    href_source: SourceInfo::default(),
+                    href_source: SourceInfo::for_test(),
                     id: Some("adv".to_string()),
                     expanded: true,
                     contents: vec![SidebarEntry::Link {

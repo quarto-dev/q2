@@ -891,13 +891,13 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     fn str_inline(text: &str) -> Inline {
         Inline::Str(Str {
             text: text.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
 
@@ -1097,19 +1097,19 @@ mod tests {
         let inlines = vec![
             str_inline("A"),
             Inline::Space(quarto_pandoc_types::inline::Space {
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }),
             Inline::Strong(Strong {
                 content: vec![str_inline("bold")],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }),
             Inline::Space(quarto_pandoc_types::inline::Space {
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }),
             str_inline("Title"),
         ];
         let navbar = Navbar {
-            title: NavbarTitle::Text(ConfigValue::new_inlines(inlines, SourceInfo::default())),
+            title: NavbarTitle::Text(ConfigValue::new_inlines(inlines, SourceInfo::for_test())),
             ..Navbar::with_defaults()
         };
         let html = navbar_to_html(&navbar, None, "./");
@@ -1184,15 +1184,15 @@ mod tests {
         let inlines = vec![
             str_inline("©"),
             Inline::Space(quarto_pandoc_types::inline::Space {
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }),
             Inline::Strong(Strong {
                 content: vec![str_inline("Acme")],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }),
         ];
         let footer = PageFooter {
-            left: FooterRegion::Text(ConfigValue::new_inlines(inlines, SourceInfo::default())),
+            left: FooterRegion::Text(ConfigValue::new_inlines(inlines, SourceInfo::for_test())),
             ..PageFooter::default()
         };
         let html = page_footer_to_html(&footer);
@@ -1260,17 +1260,17 @@ mod tests {
                 attr: (String::new(), vec![], Default::default()),
                 content: vec![str_inline("site")],
                 target: ("https://example.com".to_string(), String::new()),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
             }),
             Inline::Space(quarto_pandoc_types::inline::Space {
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }),
             Inline::Code(quarto_pandoc_types::inline::Code {
                 attr: (String::new(), vec![], Default::default()),
                 text: "x & y".to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
             }),
         ];
@@ -1412,7 +1412,7 @@ mod tests {
             contents: vec![SidebarEntry::Section {
                 text: Some(s("Docs")),
                 href: None,
-                href_source: SourceInfo::default(),
+                href_source: SourceInfo::for_test(),
                 id: None,
                 contents: vec![link("start.html", "Start")],
                 expanded: false,
@@ -1439,7 +1439,7 @@ mod tests {
             contents: vec![SidebarEntry::Section {
                 text: Some(s("Docs")),
                 href: None,
-                href_source: SourceInfo::default(),
+                href_source: SourceInfo::for_test(),
                 id: None,
                 contents: vec![link("start.html", "Start")],
                 expanded: true,
@@ -1545,7 +1545,7 @@ mod tests {
             contents: vec![SidebarEntry::Section {
                 text: Some(s("Guides")),
                 href: Some("guides/index.html".to_string()),
-                href_source: SourceInfo::default(),
+                href_source: SourceInfo::for_test(),
                 id: None,
                 contents: vec![link("guides/a.html", "A")],
                 expanded: true,
@@ -1571,7 +1571,7 @@ mod tests {
             contents: vec![SidebarEntry::Section {
                 text: Some(s("Docs")),
                 href: None,
-                href_source: SourceInfo::default(),
+                href_source: SourceInfo::for_test(),
                 id: None,
                 contents: vec![active_link("guide.html", "Guide")],
                 expanded: true, // set by active-state expansion
@@ -1712,15 +1712,15 @@ mod tests {
         let inlines = vec![
             Inline::Strong(Strong {
                 content: vec![str_inline("bold")],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }),
             Inline::Space(quarto_pandoc_types::inline::Space {
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }),
             str_inline("site"),
         ];
         let sb = Sidebar {
-            title: SidebarTitle::Text(ConfigValue::new_inlines(inlines, SourceInfo::default())),
+            title: SidebarTitle::Text(ConfigValue::new_inlines(inlines, SourceInfo::for_test())),
             ..Sidebar::with_defaults()
         };
         let html = sidebar_to_html(&sb, "./");

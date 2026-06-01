@@ -406,7 +406,7 @@ mod tests {
                 Default::default(),
             ),
             text: code.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         })
     }
@@ -415,16 +415,16 @@ mod tests {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
 
     #[test]
     fn test_extract_code_cells_empty() {
         let ast = Pandoc {
-            meta: ConfigValue::new_map(vec![], SourceInfo::default()),
+            meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
             blocks: vec![make_paragraph("Hello")],
         };
 
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn test_extract_code_cells_python() {
         let ast = Pandoc {
-            meta: ConfigValue::new_map(vec![], SourceInfo::default()),
+            meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
             blocks: vec![
                 make_paragraph("Intro"),
                 make_code_block("python", "print('hello')"),
@@ -456,7 +456,7 @@ mod tests {
     #[test]
     fn test_extract_code_cells_non_jupyter() {
         let ast = Pandoc {
-            meta: ConfigValue::new_map(vec![], SourceInfo::default()),
+            meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
             blocks: vec![
                 make_code_block("rust", "fn main() {}"),
                 make_code_block("javascript", "console.log('hi')"),
