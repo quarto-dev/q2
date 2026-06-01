@@ -569,10 +569,10 @@ Why widen the enum rather than wire through three callers separately: provenance
 - [x] Apply `config_value.rs:822, 826` (insert_path intermediates) fix → `By::programmatic_config()`. Also forwarded the same kind into `pampa/src/readers/json.rs:2212` (top-level meta) to keep round-trips lossless.
 - [x] Apply `project_resources.rs:541` fix → `By::unknown()`. Follow-up beads issue `bd-3az78` filed to refactor `canonicalize_within_project` to take `Option<&SourceInfo>`. Also fixed `project_resources.rs:123` (`Pattern::without_source`) which surfaced during the audit.
 - [x] Apply `navigation_href.rs:382` fix → replace `source == &SourceInfo::default()` with the `Generated { by, .. } if by.is_programmatic_sentinel()` pattern.
-- [ ] Apply newly-discovered production sites (cross-crate audit 2026-06-01):
-  - `crates/quarto-citeproc/src/output.rs:1274` → `By::raw("citeproc", Value::Null)` (or define a new `By::citeproc()` if the site warrants a dedicated kind; the agent flagged it as a "generated content" producer). **DEFERRED — see "Discovered production residue" below.**
-  - `crates/quarto-config/src/materialize.rs:132, 152, 165` → `By::config_default()` or `By::programmatic_config()` per site. **DEFERRED.**
-  - `crates/quarto-core/src/project/listing/feed/stage.rs:596, 602` → `By::unknown()`. **DEFERRED.**
+- [x] Apply newly-discovered production sites (cross-crate audit 2026-06-01):
+  - `crates/quarto-citeproc/src/output.rs:1274` — landed as dedicated `By::citeproc()` (atomic).
+  - `crates/quarto-config/src/materialize.rs:132, 152, 165` — landed as `By::programmatic_config()` / `By::unknown()` per site.
+  - `crates/quarto-core/src/project/listing/feed/stage.rs:596, 602` — landed as `By::unknown()`. Same shape applied to the sibling sites in `feed/complete.rs` and `listing/post_render_upgrade/substitute.rs`.
 - [x] Change `SchemaError::InvalidStructure::location` to `Option<SourceInfo>`; update the 4 `None` sentinel sites (`schema/merge.rs:32, 51, 88`; `schema/mod.rs:250`), wrap the ~11 real-source sites in `helpers.rs:20, 40, 56, 70, 86, 95, 114, 125, 151, 158` in `Some(...)`. Actual scope was wider — 33 `Some(...)` wraps across helpers.rs, parser.rs, parsers/{combinators,enum,objects,ref,wrappers}.rs — applied via compile-error-driven sweep. Formatter at `error.rs:33-46` now branches on `Option`. New regression test `test_schema_error_invalid_structure_display_no_location`.
 - [x] Refactor `InlineAttr::new` signature (at `crates/quarto-pandoc-types/src/inline.rs:340`); add `new_from_attr_source` convenience.
 - [x] Widen `PandocNativeIntermediate::IntermediateAttr` from `(Attr, AttrSourceInfo)` to `(Attr, AttrSourceInfo, SourceInfo)`. Updated every constructor site (5 production sites in `treesitter.rs` + `commonmark_attribute.rs` + `info_string.rs` + `language_specifier.rs`) and every consumer site (the three plan-named sites + 8 destructuring sites in `atx_heading`, `code_span_helpers`, `editorial_marks`, `fenced_code_block` ×2, `fenced_div_block`, `span_link_helpers` ×2).
@@ -583,44 +583,70 @@ Why widen the enum rather than wire through three callers separately: provenance
 - [x] Clean up the stale doc-comment at `crates/quarto-pandoc-types/src/attr.rs:45-46`: doc now reads "fall back to `None` (or whatever Option<SourceInfo>-aware behavior the consumer prefers)" and cross-references `theorem.rs` / `proof.rs` as canonical patterns.
 - [ ] Verify: `cargo xtask verify --skip-hub-build` clean after all sites are updated. **Promoted to full `cargo xtask verify` for Phase 8 (see below).**
 
-### Discovered production residue (deferred to Phase 7's `-D deprecated` audit)
+### Discovered production residue — landed during Phase 6.5
 
 The Phase 6 sweep surfaced ~70 production `SourceInfo::default()`
-sites the plan didn't enumerate. They live in:
+sites the plan didn't enumerate. Per user direction (2026-06-01),
+they were all addressed during Phase 6.5 rather than deferred to
+Phase 7's compiler audit. Three new `By::*` kinds were defined to
+support them:
 
-- **pampa/src/** (33 sites): `citeproc_filter.rs` (3), `pandoc/meta.rs`
-  (3), `template/config_merge.rs` (5), `toc.rs` (2),
-  `writers/json.rs` (2), `lua/types.rs` (8), `lua/utils.rs` (10).
-  Plus `lua/readwrite.rs` (2) — Lua→ConfigValue conversion. Plus
-  `readers/json.rs` (7) — explicitly *legitimate* per
-  `provenance-contract.md` §10 (Pandoc-legacy-JSON backward compat),
-  these will need `#[allow(deprecated)]` when Phase 7 lands.
-- **quarto-analysis/src/transforms/shortcode.rs** (7).
-- **quarto-core/src/engine/** (12): `jupyter/output.rs` (11),
-  `context.rs` (1), `jupyter/transform.rs` (1).
-- **quarto-core/src/project/listing/** (5): `config.rs` (2),
-  `feed/{complete,stage}.rs` (2 each — `stage.rs` is enumerated
-  in the original plan but the additional sites are new),
-  `post_render_upgrade/substitute.rs` (1).
-- **quarto-core/src/transforms/** (28): `callout_resolve.rs` (3),
-  `categories_sidebar.rs` (3), `footer_render.rs` (1),
-  `listing_render.rs` (1), `navbar_render.rs` (1),
-  `navigation_enrich.rs` (1), `navigation_href.rs` (2 *non-line-382*
-  sites), `page_nav_render.rs` (1), `shortcode_resolve.rs` (9),
-  `sidebar_auto.rs` (4), `sidebar_generate.rs` (1),
-  `sidebar_render.rs` (2), `theorem.rs` (1), `toc_render.rs` (1).
-- **quarto-navigation/src/** (16): `footer.rs` (3), `item.rs` (4),
-  `navbar.rs` (2), `page_nav.rs` (1), `sidebar.rs` (6).
-- **quarto-pandoc-types/src/attr.rs** (1).
-- **quarto-yaml-validation/src/schema/{merge,mod}.rs** — already
-  fixed via the `Option<SourceInfo>` refactor.
-- **quarto-source-map/src/source_info.rs** (1) — the actual
-  `impl Default for SourceInfo` body; Phase 7 deprecates this.
+- `By::citeproc()` (atomic) — CSL-rendered citation/bibliography
+  content.
+- `By::jupyter_output()` (atomic) — kernel-execution outputs;
+  regenerate on every re-run.
+- `By::callout()` (non-atomic) — callout-decoration synthesis
+  (default-title injection, screen-reader-only spans). The user's
+  callout body stays editable.
 
-Per Plan 7f's "the -D deprecated strategy" section, these are
-intentionally left for the compiler-driven sweep: once Phase 7
-turns on `#![deny(deprecated)]`, each becomes either a per-site
-fix (preferred) or `#[allow(deprecated)]` with a clear rationale.
+Per-site landing summary:
+
+- **pampa/src/** (28 sites): `citeproc_filter.rs` → `By::citeproc()`;
+  `pandoc/meta.rs` + `writers/json.rs` yaml-tagged-string spans →
+  reuse the YAML value's `source_info` for both wrapper and inner
+  scalar; `template/config_merge.rs` → `By::config_default()`;
+  `toc.rs` → `By::programmatic_config()`;
+  `lua/{types,utils,readwrite}.rs` → `By::unknown()` (Lua-side
+  synthesis; `filter_source_info` may overwrite downstream).
+  `readers/json.rs` (5 sites) — legitimate per
+  `provenance-contract.md` §10; retained.
+- **quarto-analysis/src/transforms/shortcode.rs** (7) — reuse the
+  shortcode token's source range; same pattern as the canonical
+  `shortcode_resolve.rs` enrichment, in the simpler static-analysis
+  form.
+- **quarto-citeproc/src/output.rs** (1) — `By::citeproc()`.
+- **quarto-config/src/materialize.rs** (3) —
+  `By::programmatic_config()` / `By::unknown()` per site.
+- **quarto-core/src/engine/** (13) — `By::unknown()` for context
+  default + `By::jupyter_output()` for cell-output synthesis.
+- **quarto-core/src/project/listing/** (8) — `By::unknown()` for
+  diagnostic-span fallbacks; `By::programmatic_config()` for
+  Listing defaults.
+- **quarto-core/src/transforms/** (28) — `By::callout()` for
+  callout decorations, `By::programmatic_config()` for navigation/
+  render config storage, source_info-reuse for shortcode_resolve
+  innermost synthesis sites (the canonical stamper still wraps with
+  `Invocation`).
+- **quarto-navigation/src/** (16) — `By::programmatic_config()`
+  for navigation-item construction without YAML context.
+- **quarto-yaml-validation/src/schema/{merge,mod}.rs** — fixed via
+  the `Option<SourceInfo>` refactor in the InvalidStructure
+  signature change.
+
+Residue that remains after Phase 6.5:
+
+- **`crates/pampa/src/readers/json.rs`** (5 sites) — Pandoc
+  legacy-JSON backward-compat per `provenance-contract.md` §10.
+  Will need `#[allow(deprecated)]` annotations once Phase 7's
+  `#![deny(deprecated)]` lands.
+- **`crates/quarto-source-map/src/source_info.rs`** (1 site) —
+  the `impl Default for SourceInfo` body itself; Phase 7
+  deprecates it.
+
+Phase 7's compiler audit now has a much smaller surface to cover
+— the deprecation lights up just these 6 sites plus any
+`unwrap_or_default()` / `Default::default()` callers we haven't
+spotted yet.
 
 ## Phase 7 — Deprecate `SourceInfo::default()`
 
