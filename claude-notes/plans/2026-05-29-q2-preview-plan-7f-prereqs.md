@@ -376,9 +376,9 @@ Work items:
 
 - [x] Add `By::test_scaffold()` constructor in `quarto-source-map`.
 - [x] Add `SourceInfo::for_test()` convenience in `quarto-source-map`.
-- [ ] Audit test-file usages of `SourceInfo::default()`; replace with one of the four patterns above.
-- [ ] Update writer-exercising test expectations where switching to `for_test()` changes the dispatch rule (R1-empty-range → R5/R3) — the new output is the correct one.
-- [ ] Verify: `cargo nextest run --workspace` passes after replacements.
+- [x] Audit test-file usages of `SourceInfo::default()`; replace with one of the four patterns above. Swept ~700 sites across 3 commits: pampa batch (filter_tests.rs + 85 src test-mod sites + 156 tests/ sites), 4-crate scaffolding batch (quarto-xml, quarto-yaml-validation, quarto-ast-reconcile, quarto-core integration tests — 61 sites), and workspace-wide batch (~ 60 PURE_TEST files + 28 MIXED-file test-mod regions, ~570 sites).
+- [x] Update writer-exercising test expectations where switching to `for_test()` changes the dispatch rule (R1-empty-range → R5/R3) — the new output is the correct one. Two assertion-pin fixes surfaced and addressed (`engine_execution.rs:1378`, `inline.rs:1459`); neither was a writer-byte-output test, both pinned production behavior that Phase 7's deprecation will surface for proper fix-up.
+- [x] Verify: `cargo nextest run --workspace` passes after replacements (9736/9736 pass after the test-mod sweep + later Phase 6.5 commits).
 
 ## Phase 6.5 — Production-residue fix sweep
 
@@ -564,24 +564,63 @@ Why widen the enum rather than wire through three callers separately: provenance
   - Assert `By::test_scaffold()`, `By::config_default()`, `By::programmatic_config()` all return `false` from `is_atomic_kind()`. Pins the property explicitly so a future producer-contract change can't accidentally promote one to atomic.
   - Assert `By::unknown()` (from Phase 4) returns `false` from `is_atomic_kind()`.
   - Assert `is_programmatic_sentinel()` returns `true` for `By::config_default()`, `By::programmatic_config()`, `By::unknown()` and `false` for `By::user_edit()`, `By::filter("x.lua", 1)`, `By::shortcode("meta")`.
-- [ ] Apply `config_value.rs:415` (Default impl) fix → `By::config_default()`.
-- [ ] Apply `config_value.rs:539` (from_path) fix → `By::programmatic_config()`.
-- [ ] Apply `config_value.rs:822, 826` (insert_path intermediates) fix → `By::programmatic_config()`.
-- [ ] Apply `project_resources.rs:541` fix → `By::unknown()`. Open a beads follow-up to refactor `canonicalize_within_project` to take `Option<&SourceInfo>`.
-- [ ] Apply `navigation_href.rs:382` fix → replace `source == &SourceInfo::default()` with the `Generated { by, .. } if by.is_programmatic_sentinel()` pattern.
+- [x] Apply `config_value.rs:415` (Default impl) fix → `By::config_default()`.
+- [x] Apply `config_value.rs:539` (from_path) fix → `By::programmatic_config()`.
+- [x] Apply `config_value.rs:822, 826` (insert_path intermediates) fix → `By::programmatic_config()`. Also forwarded the same kind into `pampa/src/readers/json.rs:2212` (top-level meta) to keep round-trips lossless.
+- [x] Apply `project_resources.rs:541` fix → `By::unknown()`. Follow-up beads issue `bd-3az78` filed to refactor `canonicalize_within_project` to take `Option<&SourceInfo>`. Also fixed `project_resources.rs:123` (`Pattern::without_source`) which surfaced during the audit.
+- [x] Apply `navigation_href.rs:382` fix → replace `source == &SourceInfo::default()` with the `Generated { by, .. } if by.is_programmatic_sentinel()` pattern.
 - [ ] Apply newly-discovered production sites (cross-crate audit 2026-06-01):
-  - `crates/quarto-citeproc/src/output.rs:1274` → `By::raw("citeproc", Value::Null)` (or define a new `By::citeproc()` if the site warrants a dedicated kind; the agent flagged it as a "generated content" producer).
-  - `crates/quarto-config/src/materialize.rs:132, 152, 165` → `By::config_default()` or `By::programmatic_config()` per site (intermediates in `materialize_cursor` where source info is provably lost during merge).
-  - `crates/quarto-core/src/project/listing/feed/stage.rs:596, 602` → `By::unknown()` (synthetic diagnostic builders that degrade to span-less; same shape as `project_resources.rs:541`).
-- [ ] Change `SchemaError::InvalidStructure::location` to `Option<SourceInfo>`; update the 4 `None` sentinel sites (`schema/merge.rs:32, 51, 88`; `schema/mod.rs:250`), wrap the ~11 real-source sites in `helpers.rs:20, 40, 56, 70, 86, 95, 114, 125, 151, 158` in `Some(...)`, and adapt the formatter at `crates/quarto-yaml-validation/src/error.rs:33-46` to handle `Option`. Test-side `InvalidStructure { message, .. }` destructures need no change.
-- [ ] Refactor `InlineAttr::new` signature (at `crates/quarto-pandoc-types/src/inline.rs:340`); add `new_from_attr_source` convenience.
-- [ ] Widen `PandocNativeIntermediate::IntermediateAttr` from `(Attr, AttrSourceInfo)` to `(Attr, AttrSourceInfo, SourceInfo)`. Update every constructor site (search `grep -rn 'IntermediateAttr(' crates/`) to supply source_info from its local parse context. Update the three consumer sites — `crates/pampa/src/pandoc/treesitter.rs:559`, `crates/pampa/src/pandoc/treesitter_utils/caption.rs:50`, `crates/pampa/src/pandoc/treesitter_utils/paragraph.rs:30` — to destructure three fields and pass source_info through to `InlineAttr::new`.
-- [ ] Update the **test-code** `InlineAttr::new` call sites (`quarto-pandoc-types/src/inline.rs:1455, 1474, 1491`; `pampa/src/filters.rs:1503, 1513, 2123`; `pampa/src/writers/plaintext.rs:887`; `pampa/src/lua/types.rs:2932`; `pampa/src/lua/filter.rs:2254`) to pass `SourceInfo::for_test()`. This is technically Phase 6 work, but it falls out of the signature change and should land in the same commit as the refactor.
-- [ ] Delete `source_info_attr_empty` test at `inline.rs:1453`.
-- [ ] Audit `AttrSourceInfo::empty()` call sites (separate from `InlineAttr::new` callers): the eight reconciler-test sites at `quarto-ast-reconcile/src/lib.rs:107, 116, 132, 322, 1178` and the three block-test sites at `quarto-pandoc-types/src/block.rs:222, 235, 247` are test scaffolding for Block fixtures; they don't trigger any `SourceInfo::default()` path. Leave them as-is unless Phase 6 decides to rename `AttrSourceInfo::empty()` itself.
-- [ ] Decide whether `AttrSourceInfo::empty()` should be renamed (`empty()` → `test_scaffold()`) or kept as a clearly-documented test convenience. Recommend keep — the current name is honest ("an empty AttrSourceInfo") and the rename would touch every test fixture that builds a Block-with-attr.
-- [ ] Clean up the stale doc-comment at `crates/quarto-pandoc-types/src/attr.rs:45-46` ("fall back to `SourceInfo::default()` on mismatch"): the real consumers in `crates/quarto-core/src/transforms/theorem.rs:333` and `proof.rs:176` fall back to `None`, not to `SourceInfo::default()`. Tighten the doc.
-- [ ] Verify: `cargo xtask verify --skip-hub-build` clean after all sites are updated.
+  - `crates/quarto-citeproc/src/output.rs:1274` → `By::raw("citeproc", Value::Null)` (or define a new `By::citeproc()` if the site warrants a dedicated kind; the agent flagged it as a "generated content" producer). **DEFERRED — see "Discovered production residue" below.**
+  - `crates/quarto-config/src/materialize.rs:132, 152, 165` → `By::config_default()` or `By::programmatic_config()` per site. **DEFERRED.**
+  - `crates/quarto-core/src/project/listing/feed/stage.rs:596, 602` → `By::unknown()`. **DEFERRED.**
+- [x] Change `SchemaError::InvalidStructure::location` to `Option<SourceInfo>`; update the 4 `None` sentinel sites (`schema/merge.rs:32, 51, 88`; `schema/mod.rs:250`), wrap the ~11 real-source sites in `helpers.rs:20, 40, 56, 70, 86, 95, 114, 125, 151, 158` in `Some(...)`. Actual scope was wider — 33 `Some(...)` wraps across helpers.rs, parser.rs, parsers/{combinators,enum,objects,ref,wrappers}.rs — applied via compile-error-driven sweep. Formatter at `error.rs:33-46` now branches on `Option`. New regression test `test_schema_error_invalid_structure_display_no_location`.
+- [x] Refactor `InlineAttr::new` signature (at `crates/quarto-pandoc-types/src/inline.rs:340`); add `new_from_attr_source` convenience.
+- [x] Widen `PandocNativeIntermediate::IntermediateAttr` from `(Attr, AttrSourceInfo)` to `(Attr, AttrSourceInfo, SourceInfo)`. Updated every constructor site (5 production sites in `treesitter.rs` + `commonmark_attribute.rs` + `info_string.rs` + `language_specifier.rs`) and every consumer site (the three plan-named sites + 8 destructuring sites in `atx_heading`, `code_span_helpers`, `editorial_marks`, `fenced_code_block` ×2, `fenced_div_block`, `span_link_helpers` ×2).
+- [x] Update the **test-code** `InlineAttr::new` call sites (`quarto-pandoc-types/src/inline.rs:1455, 1474, 1491`; `pampa/src/filters.rs:1503, 1513, 2123`; `pampa/src/writers/plaintext.rs:887`; `pampa/src/lua/types.rs:2932`; `pampa/src/lua/filter.rs:2254`) to pass `SourceInfo::for_test()`. Two `inline.rs` tests migrated to `new_from_attr_source` since they specifically exercise the derive-from-AttrSourceInfo path.
+- [x] Delete `source_info_attr_empty` test at `inline.rs:1453`. Was already neutralised during Phase 6 sweep (assertion-pin fix), now structurally impossible after the signature change.
+- [x] Audit `AttrSourceInfo::empty()` call sites: confirmed they're scaffolding-only — the production-side `InlineAttr::new` no longer accepts empty input as a sentinel-triggering pattern, so `AttrSourceInfo::empty()` is honest about its meaning everywhere it appears. No site renamed.
+- [x] Decide whether `AttrSourceInfo::empty()` should be renamed: kept as-is — the name is honest and the rename would touch every Block-with-attr test fixture.
+- [x] Clean up the stale doc-comment at `crates/quarto-pandoc-types/src/attr.rs:45-46`: doc now reads "fall back to `None` (or whatever Option<SourceInfo>-aware behavior the consumer prefers)" and cross-references `theorem.rs` / `proof.rs` as canonical patterns.
+- [ ] Verify: `cargo xtask verify --skip-hub-build` clean after all sites are updated. **Promoted to full `cargo xtask verify` for Phase 8 (see below).**
+
+### Discovered production residue (deferred to Phase 7's `-D deprecated` audit)
+
+The Phase 6 sweep surfaced ~70 production `SourceInfo::default()`
+sites the plan didn't enumerate. They live in:
+
+- **pampa/src/** (33 sites): `citeproc_filter.rs` (3), `pandoc/meta.rs`
+  (3), `template/config_merge.rs` (5), `toc.rs` (2),
+  `writers/json.rs` (2), `lua/types.rs` (8), `lua/utils.rs` (10).
+  Plus `lua/readwrite.rs` (2) — Lua→ConfigValue conversion. Plus
+  `readers/json.rs` (7) — explicitly *legitimate* per
+  `provenance-contract.md` §10 (Pandoc-legacy-JSON backward compat),
+  these will need `#[allow(deprecated)]` when Phase 7 lands.
+- **quarto-analysis/src/transforms/shortcode.rs** (7).
+- **quarto-core/src/engine/** (12): `jupyter/output.rs` (11),
+  `context.rs` (1), `jupyter/transform.rs` (1).
+- **quarto-core/src/project/listing/** (5): `config.rs` (2),
+  `feed/{complete,stage}.rs` (2 each — `stage.rs` is enumerated
+  in the original plan but the additional sites are new),
+  `post_render_upgrade/substitute.rs` (1).
+- **quarto-core/src/transforms/** (28): `callout_resolve.rs` (3),
+  `categories_sidebar.rs` (3), `footer_render.rs` (1),
+  `listing_render.rs` (1), `navbar_render.rs` (1),
+  `navigation_enrich.rs` (1), `navigation_href.rs` (2 *non-line-382*
+  sites), `page_nav_render.rs` (1), `shortcode_resolve.rs` (9),
+  `sidebar_auto.rs` (4), `sidebar_generate.rs` (1),
+  `sidebar_render.rs` (2), `theorem.rs` (1), `toc_render.rs` (1).
+- **quarto-navigation/src/** (16): `footer.rs` (3), `item.rs` (4),
+  `navbar.rs` (2), `page_nav.rs` (1), `sidebar.rs` (6).
+- **quarto-pandoc-types/src/attr.rs** (1).
+- **quarto-yaml-validation/src/schema/{merge,mod}.rs** — already
+  fixed via the `Option<SourceInfo>` refactor.
+- **quarto-source-map/src/source_info.rs** (1) — the actual
+  `impl Default for SourceInfo` body; Phase 7 deprecates this.
+
+Per Plan 7f's "the -D deprecated strategy" section, these are
+intentionally left for the compiler-driven sweep: once Phase 7
+turns on `#![deny(deprecated)]`, each becomes either a per-site
+fix (preferred) or `#[allow(deprecated)]` with a clear rationale.
 
 ## Phase 7 — Deprecate `SourceInfo::default()`
 
