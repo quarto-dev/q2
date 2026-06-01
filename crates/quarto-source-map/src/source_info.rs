@@ -619,6 +619,22 @@ impl By {
         }
     }
 
+    /// "We don't know" placeholder used by `json::read_completing_source_info`
+    /// when a node arrives without an `s:` field from outside the q2
+    /// source-tracking world (qmd-syntax-helper Pandoc subprocess, CLI
+    /// `--from json`, external filter binaries, Lua AST handoff).
+    ///
+    /// Non-atomic by design — nodes carrying `By::unknown()` remain
+    /// editable in the preview; user edits re-stamp them as `user_edit`
+    /// on save. See Plan 7f Phase 4's per-caller table for placement
+    /// guidance.
+    pub fn unknown() -> Self {
+        Self {
+            kind: "unknown".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
     /// Escape-hatch constructor for any `kind` string — including built-in
     /// names and extension-defined kinds (`ext/<extension>/<kind>`).
     ///
@@ -846,7 +862,19 @@ mod tests {
         assert!(!By::include().is_atomic_kind());
         assert!(!By::footnotes().is_atomic_kind());
         assert!(!By::appendix().is_atomic_kind());
+        assert!(!By::unknown().is_atomic_kind());
         assert!(!By::raw("ext/anywhere/foo", serde_json::Value::Null).is_atomic_kind());
+    }
+
+    #[test]
+    fn test_by_unknown_constructor() {
+        let by = By::unknown();
+        assert_eq!(by.kind, "unknown");
+        assert!(by.data.is_null());
+        // Non-atomic — nodes carrying By::unknown() remain editable; the
+        // strict reader rejects missing `s:`, the completing reader stamps
+        // them with this kind only at the explicit call site.
+        assert!(!by.is_atomic_kind());
     }
 
     #[test]
