@@ -287,7 +287,13 @@ fn main() {
             }
         }
         "json" => {
-            let result = readers::json::read(&mut input.as_bytes());
+            // CLI `--from json`: user-supplied JSON from outside the q2
+            // source-tracking world. Route through the completing reader
+            // with `By::unknown()` (plan 7f Phase 4 per-caller table).
+            let result = readers::json::read_completing_source_info(
+                &mut input.as_bytes(),
+                quarto_source_map::By::unknown(),
+            );
             match result {
                 Ok((pandoc, context)) => {
                     // Apply div transforms (definition-list, list-table) to JSON input

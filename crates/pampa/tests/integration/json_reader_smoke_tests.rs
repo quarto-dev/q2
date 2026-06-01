@@ -31,7 +31,10 @@ fn test_read_all_json_files_in_tests_readers() {
         let mut file = fs::File::open(&json_file)
             .unwrap_or_else(|_| panic!("Failed to open file: {}", json_file.display()));
 
-        match json::read(&mut file) {
+        // Pandoc-format fixtures under tests/readers/json/ predate q2's
+        // `s:` extension. Route through the completing reader with
+        // `By::unknown()` (plan 7f Phase 4).
+        match json::read_completing_source_info(&mut file, By::unknown()) {
             Ok((pandoc, _context)) => {
                 println!("  ✓ Successfully read {}", json_file.display());
                 // Basic validation - ensure we got some content
@@ -72,7 +75,8 @@ fn test_manybullets_json_specifically() {
 
     let mut file = fs::File::open(&json_file).expect("Failed to open manybullets.json");
 
-    let (pandoc, _context) = json::read(&mut file).expect("Failed to read manybullets.json");
+    let (pandoc, _context) = json::read_completing_source_info(&mut file, By::unknown())
+        .expect("Failed to read manybullets.json");
 
     // Verify the content matches what we expect
     assert_eq!(pandoc.blocks.len(), 1, "Should have exactly one block");

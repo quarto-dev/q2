@@ -1212,6 +1212,13 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
                 "attrS".to_string(),
                 write_attr_source(&figure.attr_source, ctx),
             );
+            // Plan 7f Phase 4: emit `captionS` so the strict reader can
+            // recover the caption's source_info. Same shape as Table's
+            // `captionS` sibling.
+            obj.insert(
+                "captionS".to_string(),
+                write_caption_source(&figure.caption, ctx),
+            );
             Value::Object(obj)
         }
         Block::DefinitionList(deflist) => node_with_source(
@@ -1479,7 +1486,12 @@ fn write_custom_block(custom: &crate::pandoc::CustomNode, ctx: &mut JsonWriterCo
 
     let wrapper_attr = (custom.attr.0.clone(), classes, wrapper_attr_kvs);
 
-    // Build content: each slot wrapped in a Div with data-slot-name
+    // Build content: each slot wrapped in a Div with data-slot-name.
+    //
+    // The Plain and Div wrappers we synthesize here are wire-format
+    // machinery — they have no source bytes of their own. They reference
+    // the parent CustomNode's source_info so the strict reader (plan 7f
+    // Phase 4) sees a valid `s:` on every wire-format node.
     let mut content: Vec<Value> = Vec::new();
     for (name, slot) in &custom.slots {
         let slot_content = match slot {
@@ -1487,33 +1499,42 @@ fn write_custom_block(custom: &crate::pandoc::CustomNode, ctx: &mut JsonWriterCo
                 vec![write_block(block, ctx)]
             }
             crate::pandoc::Slot::Inline(inline) => {
-                // Wrap single inline in a Plain block
-                vec![json!({
-                    "t": "Plain",
-                    "c": [write_inline(inline, ctx)]
-                })]
+                // Wrap single inline in a Plain block, carrying the parent's `s:`.
+                let mut plain_obj = serde_json::Map::new();
+                plain_obj.insert("t".to_string(), json!("Plain"));
+                plain_obj.insert("c".to_string(), json!([write_inline(inline, ctx)]));
+                ctx.serializer
+                    .add_source_info(&mut plain_obj, &custom.source_info);
+                vec![Value::Object(plain_obj)]
             }
             crate::pandoc::Slot::Blocks(blocks) => {
                 blocks.iter().map(|b| write_block(b, ctx)).collect()
             }
             crate::pandoc::Slot::Inlines(inlines) => {
-                // Wrap inlines in a Plain block
-                vec![json!({
-                    "t": "Plain",
-                    "c": write_inlines(inlines, ctx)
-                })]
+                // Wrap inlines in a Plain block, carrying the parent's `s:`.
+                let mut plain_obj = serde_json::Map::new();
+                plain_obj.insert("t".to_string(), json!("Plain"));
+                plain_obj.insert("c".to_string(), json!(write_inlines(inlines, ctx)));
+                ctx.serializer
+                    .add_source_info(&mut plain_obj, &custom.source_info);
+                vec![Value::Object(plain_obj)]
             }
         };
 
-        // Each slot is wrapped in a Div with data-slot-name attribute
+        // Each slot is wrapped in a Div with data-slot-name attribute.
         let mut slot_attr_kvs = LinkedHashMap::new();
         slot_attr_kvs.insert("data-slot-name".to_string(), name.clone());
         let slot_wrapper_attr = (String::new(), vec![], slot_attr_kvs);
 
-        content.push(json!({
-            "t": "Div",
-            "c": [write_attr(&slot_wrapper_attr), slot_content]
-        }));
+        let mut slot_div = serde_json::Map::new();
+        slot_div.insert("t".to_string(), json!("Div"));
+        slot_div.insert(
+            "c".to_string(),
+            json!([write_attr(&slot_wrapper_attr), slot_content]),
+        );
+        ctx.serializer
+            .add_source_info(&mut slot_div, &custom.source_info);
+        content.push(Value::Object(slot_div));
     }
 
     let mut obj = serde_json::Map::new();
@@ -1588,19 +1609,33 @@ fn write_custom_inline(custom: &crate::pandoc::CustomNode, ctx: &mut JsonWriterC
                         .add_detail("Inline custom nodes should only have inline slots")
                         .build(),
                 );
-                vec![json!({"t": "Str", "c": "[block content]"})]
+                {
+                    let mut placeholder = serde_json::Map::new();
+                    placeholder.insert("t".to_string(), json!("Str"));
+                    placeholder.insert("c".to_string(), json!("[block content]"));
+                    ctx.serializer
+                        .add_source_info(&mut placeholder, &custom.source_info);
+                    vec![Value::Object(placeholder)]
+                }
             }
         };
 
-        // Each slot is wrapped in a Span with data-slot-name attribute
+        // Each slot is wrapped in a Span with data-slot-name attribute,
+        // carrying the parent CustomNode's `s:` (wire-format machinery,
+        // no source bytes of its own).
         let mut slot_attr_kvs = LinkedHashMap::new();
         slot_attr_kvs.insert("data-slot-name".to_string(), name.clone());
         let slot_wrapper_attr = (String::new(), vec![], slot_attr_kvs);
 
-        content.push(json!({
-            "t": "Span",
-            "c": [write_attr(&slot_wrapper_attr), slot_content]
-        }));
+        let mut slot_span = serde_json::Map::new();
+        slot_span.insert("t".to_string(), json!("Span"));
+        slot_span.insert(
+            "c".to_string(),
+            json!([write_attr(&slot_wrapper_attr), slot_content]),
+        );
+        ctx.serializer
+            .add_source_info(&mut slot_span, &custom.source_info);
+        content.push(Value::Object(slot_span));
     }
 
     let mut obj = serde_json::Map::new();
@@ -2921,21 +2956,35 @@ fn stream_write_block<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     match block {
-        Block::Figure(figure) => stream_write_attrs_node(
-            w,
-            "Figure",
-            &figure.source_info,
-            &figure.attr_source,
-            ctx,
-            |w, ctx| {
-                w.begin_array()?;
-                stream_write_attr(w, &figure.attr)?;
-                stream_write_caption(w, &figure.caption, ctx)?;
-                stream_write_blocks(w, &figure.content, ctx)?;
-                w.end_array()?;
-                Ok(())
-            },
-        ),
+        Block::Figure(figure) => {
+            // Inlined (rather than via `stream_write_attrs_node`) so we can
+            // emit `captionS` between `attrS` and `c` — wire-format key
+            // order is alphabetical. Plan 7f Phase 4: the strict reader
+            // needs `captionS` to recover the caption's source_info.
+            let s_id = ctx.serializer.intern(&figure.source_info);
+            ctx.maybe_record_attribution_for(&figure.source_info, s_id);
+            w.begin_object()?;
+            w.key("attrS")?;
+            stream_write_attr_source(w, &figure.attr_source, ctx)?;
+            w.key("c")?;
+            w.begin_array()?;
+            stream_write_attr(w, &figure.attr)?;
+            stream_write_caption(w, &figure.caption, ctx)?;
+            stream_write_blocks(w, &figure.content, ctx)?;
+            w.end_array()?;
+            w.key("captionS")?;
+            stream_write_caption_source(w, &figure.caption, ctx)?;
+            if ctx.serializer.config.include_inline_locations {
+                let ast_context = ctx.serializer.context;
+                stream_write_location_key_if_mapped(w, "l", &figure.source_info, ast_context)?;
+            }
+            w.key("s")?;
+            w.u64_value(s_id as u64)?;
+            w.key("t")?;
+            w.str_value("Figure")?;
+            w.end_object()?;
+            Ok(())
+        }
         Block::DefinitionList(deflist) => stream_write_simple_node(
             w,
             "DefinitionList",
@@ -3229,7 +3278,10 @@ fn stream_write_custom_block<W: io::Write>(
     w.key("c")?;
     w.begin_array()?;
     stream_write_attr(w, &wrapper_attr)?;
-    // content: list of Div-wrapped slots
+    // content: list of Div-wrapped slots. The Plain/Div wrappers we
+    // synthesize here are wire-format machinery — they reference the
+    // parent CustomNode's `s_id` so the strict reader (plan 7f Phase 4)
+    // sees a valid `s:` on every node.
     w.begin_array()?;
     for (name, slot) in &custom.slots {
         let mut slot_attr_kvs = LinkedHashMap::new();
@@ -3246,12 +3298,14 @@ fn stream_write_custom_block<W: io::Write>(
                 stream_write_block(w, block, ctx)?;
             }
             crate::pandoc::Slot::Inline(inline) => {
-                // Wrap in a Plain block: {"t": "Plain", "c": [<inline>]}
+                // Wrap in a Plain block: {"c": [<inline>], "s": s_id, "t": "Plain"}
                 w.begin_object()?;
                 w.key("c")?;
                 w.begin_array()?;
                 stream_write_inline(w, inline, ctx)?;
                 w.end_array()?;
+                w.key("s")?;
+                w.u64_value(s_id as u64)?;
                 w.key("t")?;
                 w.str_value("Plain")?;
                 w.end_object()?;
@@ -3262,10 +3316,12 @@ fn stream_write_custom_block<W: io::Write>(
                 }
             }
             crate::pandoc::Slot::Inlines(inlines) => {
-                // Wrap in a Plain block with c = [<inline>...]
+                // Wrap in a Plain block: {"c": [<inline>...], "s": s_id, "t": "Plain"}
                 w.begin_object()?;
                 w.key("c")?;
                 stream_write_inlines(w, inlines, ctx)?;
+                w.key("s")?;
+                w.u64_value(s_id as u64)?;
                 w.key("t")?;
                 w.str_value("Plain")?;
                 w.end_object()?;
@@ -3273,6 +3329,8 @@ fn stream_write_custom_block<W: io::Write>(
         }
         w.end_array()?;
         w.end_array()?;
+        w.key("s")?;
+        w.u64_value(s_id as u64)?;
         w.key("t")?;
         w.str_value("Div")?;
         w.end_object()?;
@@ -3361,10 +3419,12 @@ fn stream_write_custom_inline<W: io::Write>(
                         .add_detail("Inline custom nodes should only have inline slots")
                         .build(),
                 );
-                // Placeholder: {"t": "Str", "c": "[block content]"}
+                // Placeholder: {"c": "[block content]", "s": s_id, "t": "Str"}
                 w.begin_object()?;
                 w.key("c")?;
                 w.str_value("[block content]")?;
+                w.key("s")?;
+                w.u64_value(s_id as u64)?;
                 w.key("t")?;
                 w.str_value("Str")?;
                 w.end_object()?;
@@ -3372,6 +3432,8 @@ fn stream_write_custom_inline<W: io::Write>(
         }
         w.end_array()?;
         w.end_array()?;
+        w.key("s")?;
+        w.u64_value(s_id as u64)?;
         w.key("t")?;
         w.str_value("Span")?;
         w.end_object()?;

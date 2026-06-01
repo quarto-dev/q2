@@ -218,8 +218,17 @@ pub fn apply_json_filter(
     let json_output = String::from_utf8(output.stdout)
         .map_err(|_| JsonFilterError::InvalidUtf8Output(filter_path.to_owned()))?;
 
-    let (filtered_pandoc, filtered_context) = readers::json::read(&mut json_output.as_bytes())
-        .map_err(|e| JsonFilterError::JsonParseError(filter_path.to_owned(), e.to_string()))?;
+    // External JSON filter output: pass-through nodes carry their original
+    // `s:`, but filter-added nodes typically lack one. Route through the
+    // completing reader with `By::filter(filter_path, 0)` — atomic-kind
+    // semantics make filter-added subtrees non-editable in the preview;
+    // line is `0` because we don't know which filter line produced each
+    // node. (plan 7f Phase 4 per-caller table)
+    let (filtered_pandoc, filtered_context) = readers::json::read_completing_source_info(
+        &mut json_output.as_bytes(),
+        quarto_source_map::By::filter(filter_path.to_string_lossy(), 0),
+    )
+    .map_err(|e| JsonFilterError::JsonParseError(filter_path.to_owned(), e.to_string()))?;
 
     // JSON filters don't produce diagnostics through our system
     Ok((filtered_pandoc, filtered_context, vec![]))

@@ -442,9 +442,16 @@ fn pandoc_read(lua: &Lua, args: mlua::MultiValue) -> Result<Value> {
             }
         }
         "json" => {
-            // Use the JSON reader
+            // Lua-side `pandoc.read(json, "json")` — the JSON comes from the
+            // filter author and likely lacks q2's `s:` references. Route
+            // through the completing reader with `By::unknown()`: nodes
+            // without `s:` get stamped with a non-atomic placeholder so
+            // they remain editable downstream (plan 7f Phase 4).
             let mut cursor = std::io::Cursor::new(&content);
-            match crate::readers::json::read(&mut cursor) {
+            match crate::readers::json::read_completing_source_info(
+                &mut cursor,
+                quarto_source_map::By::unknown(),
+            ) {
                 Ok((pandoc, _context)) => rust_pandoc_to_lua_table(lua, &pandoc),
                 Err(e) => Err(Error::runtime(format!("pandoc.read (json) failed: {}", e))),
             }
