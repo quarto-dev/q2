@@ -21,6 +21,7 @@
 
 use quarto_pandoc_types::config_value::{ConfigValue, ConfigValueKind};
 use quarto_pandoc_types::inline::{Inline, Inlines};
+use quarto_source_map::{By, SourceInfo};
 
 use crate::footer::{FooterBorder, FooterRegion, PageFooter};
 use crate::item::NavigationItem;
@@ -825,7 +826,7 @@ fn inline_plain_fallback(inline: &Inline) -> Option<String> {
     let inlines = std::slice::from_ref(inline);
     let cv = ConfigValue {
         value: ConfigValueKind::PandocInlines(inlines.to_vec()),
-        source_info: Default::default(),
+        source_info: SourceInfo::generated(By::programmatic_config()),
         merge_op: Default::default(),
     };
     cv.as_plain_text()

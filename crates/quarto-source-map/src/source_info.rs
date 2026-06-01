@@ -147,6 +147,23 @@ impl Default for SourceInfo {
 }
 
 impl SourceInfo {
+    /// Deprecated: use `SourceInfo::for_test()` in tests or an explicit
+    /// `Generated{by: <kind>}` in production. See provenance-contract.md.
+    ///
+    /// This inherent method shadows `Default::default()` so that callers
+    /// writing `SourceInfo::default()` see a deprecation error under
+    /// `deny(deprecated)`. The trait impl is retained (and called by this
+    /// method) so that `unwrap_or_default()` and `#[derive(Default)]` still
+    /// compile; those are caught by separate grep tooling.
+    #[deprecated(
+        since = "0.x",
+        note = "Use SourceInfo::for_test() in tests, or the appropriate Generated{by: <kind>} in production. See provenance-contract.md."
+    )]
+    #[doc(hidden)]
+    pub fn default() -> Self {
+        <Self as Default>::default()
+    }
+
     /// Create source info for a position in an original file (from offsets)
     pub fn original(file_id: FileId, start_offset: usize, end_offset: usize) -> Self {
         SourceInfo::Original {

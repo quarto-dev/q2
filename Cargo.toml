@@ -190,6 +190,9 @@ path = "./crates/quarto-trace-server"
 [workspace.lints.rust]
 # coverage_nightly is used by pampa for code coverage instrumentation on nightly Rust
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+# Enforce the SourceInfo provenance contract — callers must use SourceInfo::for_test() or
+# an explicit Generated{by: <kind>}; SourceInfo::default() is forbidden.
+deprecated = "deny"
 
 [workspace.lints.clippy]
 # Architectural issues - fixing these requires significant refactoring

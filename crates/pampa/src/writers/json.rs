@@ -339,6 +339,10 @@ impl<'a> SourceInfoSerializer<'a> {
     /// deduplicated by content: two structurally-equal SourceInfo values
     /// arriving through different call sites will get different pool IDs. See
     /// `claude-notes/plans/2026-04-22-sourceinfo-eq-hotspot.md` for why.
+    ///
+    /// Corollary: user-edit and completing-reader nodes that round-trip through
+    /// read+write each get a fresh pool entry, duplicating the reserved slot 0
+    /// value. This is by design; see plan 7f Phase 4 research finding 2026-05-30.
     fn intern(&mut self, source_info: &SourceInfo) -> usize {
         self.stat_intern_calls += 1;
 

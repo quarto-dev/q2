@@ -3,6 +3,22 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+//! JSON reader with a strict/completing split.
+//!
+//! **`read`** (strict) — rejects nodes missing an `s:` field with
+//! [`JsonReadError::MissingSourceInfoRef`]. Used by the WASM bridge's
+//! `incremental_write_qmd` and all q2-internal JSON paths where every node
+//! is guaranteed to carry source info.
+//!
+//! **`read_completing_source_info(input, default_by)`** (completing) — fills
+//! missing `s:` with `Generated{by: default_by, from: []}` instead of
+//! erroring. Used by outside-world callers (Pandoc subprocess, Lua filter
+//! output, CLI `--from json`, qmd-syntax-helper) that produce JSON without
+//! q2's source-info extension. Each call site passes an explicit `default_by`
+//! declaring the provenance of the completing nodes.
+//!
+//! See plan 7f Phase 4 for the design rationale and per-caller table.
+
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::location::{Location, Range};
 use crate::pandoc::{
@@ -2169,6 +2185,9 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
 
 /// Phase 5: Read ConfigValue directly from JSON without MetaValueWithSourceInfo intermediate
 /// This function reads the top-level metadata from Pandoc JSON format.
+// SourceInfo::default() calls below are intentional backward-compatibility fallbacks for
+// legacy JSON that predates source tracking. See provenance-contract.md §10.
+#[allow(deprecated)]
 fn read_config_value_top_level(
     value: &Value,
     key_sources: Option<&Value>,
@@ -2220,6 +2239,9 @@ fn read_config_value_top_level(
 }
 
 /// Phase 5: Read ConfigValue directly from JSON without MetaValueWithSourceInfo intermediate
+// SourceInfo::default() calls below are intentional backward-compatibility fallbacks for
+// legacy JSON that predates source tracking. See provenance-contract.md §10.
+#[allow(deprecated)]
 fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<ConfigValue> {
     let obj = value
         .as_object()

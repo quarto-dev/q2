@@ -2020,7 +2020,7 @@ mod tests {
     ) -> ConfigValue {
         use quarto_pandoc_types::config_value::ConfigMapEntry;
         use quarto_source_map::SourceInfo;
-        let si = SourceInfo::default;
+        let si = SourceInfo::for_test;
         let to_array = |items: &[&str]| {
             ConfigValue::new_array(
                 items
