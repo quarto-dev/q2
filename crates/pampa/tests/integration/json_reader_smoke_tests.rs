@@ -265,3 +265,70 @@ fn streaming_writer_generated_round_trip_preserves_by_data() {
     let recovered = roundtrip_str_source_info(original.clone());
     assert_eq!(original, recovered);
 }
+
+// ----------------------------------------------------------------
+// Strict/completing reader split (plan 7f Phase 4)
+// ----------------------------------------------------------------
+
+/// Build a single-Str AST, serialize it to JSON, strip the `s:` field
+/// from the inner Str node, and return the mangled JSON bytes.
+fn json_with_missing_str_source_info() -> Vec<u8> {
+    let mut pandoc = Pandoc::default();
+    pandoc.blocks.push(Block::Plain(Plain {
+        content: vec![Inline::Str(Str {
+            text: "hello".to_string(),
+            source_info: SourceInfo::original(FileId(0), 0, 5),
+        })],
+        source_info: SourceInfo::original(FileId(0), 0, 5),
+    }));
+    let context = pampa::pandoc::ASTContext::anonymous();
+    let mut buf = Vec::new();
+    json_writer::write(&pandoc, &context, &mut buf).expect("write");
+
+    // Strip the `s:` field from the Str node in the serialized JSON.
+    let mut v: serde_json::Value = serde_json::from_slice(&buf).expect("parse");
+    if let Some(str_node) = v["blocks"][0]["c"][0].as_object_mut() {
+        str_node.remove("s");
+    }
+    serde_json::to_vec(&v).expect("re-serialize")
+}
+
+#[test]
+fn strict_reader_rejects_nodes_missing_source_info() {
+    let json = json_with_missing_str_source_info();
+    let mut cursor = Cursor::new(&json);
+    let result = json::read(&mut cursor);
+    match result {
+        Err(pampa::readers::json::JsonReadError::MissingSourceInfoRef { node_path }) => {
+            assert!(
+                !node_path.is_empty(),
+                "MissingSourceInfoRef should carry a non-empty node_path"
+            );
+        }
+        other => panic!(
+            "Expected Err(MissingSourceInfoRef), got {:?}",
+            other.map(|_| "(ok)")
+        ),
+    }
+}
+
+#[test]
+fn completing_reader_fills_missing_source_info_with_placeholder() {
+    let json = json_with_missing_str_source_info();
+    let mut cursor = Cursor::new(&json);
+    let (pandoc, _ctx) = json::read_completing_source_info(&mut cursor, By::unknown())
+        .expect("completing reader should succeed on JSON with missing s:");
+
+    let Block::Plain(plain) = &pandoc.blocks[0] else {
+        panic!("Expected Plain block")
+    };
+    let Inline::Str(str_node) = &plain.content[0] else {
+        panic!("Expected Str inline")
+    };
+    match &str_node.source_info {
+        SourceInfo::Generated { by, .. } => {
+            assert_eq!(by.kind, "unknown");
+        }
+        other => panic!("Expected Generated{{by: unknown}}, got {:?}", other),
+    }
+}

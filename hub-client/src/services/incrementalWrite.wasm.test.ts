@@ -154,3 +154,22 @@ describe('incremental_write_qmd wrapper contract', () => {
     expect(resp.error).toMatch(/baseline AST JSON/i);
   });
 });
+
+describe('reserved pool slot (plan 7f Phase 4)', () => {
+  it('pool[0] is always Generated{by: user-edit} regardless of document content', () => {
+    // The JSON writer pre-populates pool slot 0 with the user-edit reserved
+    // entry. This is the contract the TS framework relies on: stamping
+    // `s: USER_EDIT_SOURCE_INFO_ID` (= 0) on user-constructed nodes.
+    const ast = parseAst('# Heading\n\nA paragraph.\n') as {
+      astContext: { p: Array<{ t: number; d?: { by?: { kind: string } } }> };
+    };
+
+    const pool = ast.astContext?.p;
+    expect(Array.isArray(pool), 'astContext.p should be an array').toBe(true);
+    expect(pool.length, 'pool should have at least 1 entry').toBeGreaterThan(0);
+
+    const slot0 = pool[0];
+    expect(slot0.t, 'slot 0 type code should be 4 (Generated)').toBe(4);
+    expect(slot0.d?.by?.kind, 'slot 0 by.kind should be "user-edit"').toBe('user-edit');
+  });
+});
