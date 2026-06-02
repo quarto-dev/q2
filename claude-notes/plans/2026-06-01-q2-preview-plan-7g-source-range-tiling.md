@@ -355,11 +355,30 @@ InlineSplice on a Concat-led block.
   lane is a possible Phase 7 extension; the existing proptest generators in
   `inline_splice_property_tests.rs` never emit Concat-led inlines, so they miss
   this.)
-- [ ] Consider (separately) the latent `did_coalesce` function-scope bug in
-  `coalesce_abbreviations` (`postprocess.rs:599` — the flag is never reset per
-  iteration). Not the cause of *this* crash (the `Concat` here comes from
-  punctuation-token merge, not abbreviation coalescing), but flagged while
-  reading. Open a bead if it proves to mis-stamp provenance.
+**Sibling bug — `did_coalesce` function-scope provenance corruption — FIXED (TDD) 2026-06-02.**
+A second, independent bug found while pulling this thread (a background agent
+weaponized it; verified directly on this branch). `coalesce_abbreviations`
+(`postprocess.rs`) declared `did_coalesce` *outside* the `while` loop and never
+reset it, so every `Str` **after** the first abbreviation-coalesce took the
+`start_info.combine(&end_info)` branch — i.e. `combine(self, self)` on a Str that
+didn't coalesce — producing a **doubled-self `Concat`** (`start_offset()==0`,
+`end_offset()==2*len`, `preimage_in()==None`). Harm: provenance corruption on
+~13 corpus files → annotated-qmd substring-invariant violation, attribution
+drops provenance, and the incremental writer forced into lossy `Rewrite`
+fallback. On `origin/main` (no Phase 8 fix) it is additionally a **live crash +
+silent wrong-output** on edit; on this branch the Phase 8 `preimage_in` guards
+mitigate the writer crash but the provenance corruption remained until this fix.
+- [x] Failing unit test
+  `postprocess::did_coalesce_tests::non_coalesced_str_after_abbreviation_keeps_its_original_source_info`:
+  `["Dr.", Space, "Smith", Space, "wrote"]` → `"wrote"` must keep `Original[10..15]`.
+  Confirmed red (got `Concat` `(0,10)`, `preimage None`) before the fix; green after.
+- [x] Fix: declare `did_coalesce` **inside** the loop (reset per `Str`); accumulate
+  a separate `any_coalesce` for the function's return value (the caller's fixpoint
+  loop). The intended `Dr.+Smith` coalesce is preserved.
+- [x] Full pampa suite green (3914), **no snapshot churn**. (Open question left for
+  later, not blocking: whether the *legitimate* coalesce case should use `combine`
+  at all vs. an `Original` span over both words — its `Concat` is also
+  non-contiguous/`preimage None`, but that's the intended nbsp-join behavior.)
 
 ## Relationship to siblings
 

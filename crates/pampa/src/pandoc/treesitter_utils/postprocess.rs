@@ -596,7 +596,10 @@ fn ends_with_abbreviation(text: &str) -> bool {
 pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
     let mut result: Vec<Inline> = Vec::new();
     let mut i = 0;
-    let mut did_coalesce = false;
+    // Accumulates whether *any* Str coalesced (the function's return value,
+    // consumed by the fixpoint loop in the caller). The per-Str decision uses
+    // a separate flag reset each iteration — see below.
+    let mut any_coalesce = false;
 
     while i < inlines.len() {
         if let Inline::Str(ref str_inline) = inlines[i] {
@@ -604,6 +607,12 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
             let start_info = str_inline.source_info.clone();
             let mut end_info = str_inline.source_info.clone();
             let mut j = i + 1;
+            // MUST be reset per Str. Hoisting this out of the loop is a bug:
+            // once any Str coalesces, every *subsequent* Str would take the
+            // `combine` branch below — i.e. `combine(self, self)` on a Str that
+            // didn't coalesce — yielding a doubled-self Concat with
+            // start_offset()==0, end_offset()==2*len, preimage_in()==None.
+            let mut did_coalesce = false;
 
             // Check if current text ends with an abbreviation
             if ends_with_abbreviation(&current_text) {
@@ -650,6 +659,7 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
             } else {
                 start_info
             };
+            any_coalesce |= did_coalesce;
 
             result.push(Inline::Str(Str {
                 text: current_text,
@@ -662,7 +672,7 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
         }
     }
 
-    (result, did_coalesce)
+    (result, any_coalesce)
 }
 
 /// Validate that a div has the structure required for a definition list.
@@ -1654,4 +1664,69 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
         }),
         &mut ctx,
     )
+}
+
+#[cfg(test)]
+mod did_coalesce_tests {
+    //! Regression for the `did_coalesce` function-scope bug: the flag was
+    //! declared outside the `while` loop and never reset, so every `Str`
+    //! *after* the first abbreviation-coalesce took the
+    //! `start_info.combine(&end_info)` branch — i.e. `combine(self, self)`
+    //! for a Str that didn't actually coalesce — producing a doubled-self
+    //! `Concat` with `start_offset()==0`, `end_offset()==2*len`,
+    //! `preimage_in()==None`. That corrupts provenance (wire-format /
+    //! substring-invariant violations, attribution drops) and, on the
+    //! incremental-writer path, drove crashes / lossy fallbacks.
+    use super::*;
+    use quarto_pandoc_types::{Inline, Space, Str};
+    use quarto_source_map::{FileId, SourceInfo};
+
+    fn s(text: &str, start: usize, end: usize) -> Inline {
+        Inline::Str(Str {
+            text: text.to_string(),
+            source_info: SourceInfo::original(FileId(0), start, end),
+        })
+    }
+    fn sp(start: usize, end: usize) -> Inline {
+        Inline::Space(Space {
+            source_info: SourceInfo::original(FileId(0), start, end),
+        })
+    }
+
+    #[test]
+    fn non_coalesced_str_after_abbreviation_keeps_its_original_source_info() {
+        // "Dr. Smith wrote" — "Dr." coalesces with "Smith" (intended);
+        // "wrote" does NOT coalesce and must keep its Original[10..15].
+        let input = vec![
+            s("Dr.", 0, 3),
+            sp(3, 4),
+            s("Smith", 4, 9),
+            sp(9, 10),
+            s("wrote", 10, 15),
+        ];
+        let (out, did) = coalesce_abbreviations(input);
+        assert!(did, "the Dr.+Smith coalesce should be reported");
+
+        // Find the Str whose text is "wrote".
+        let wrote = out
+            .iter()
+            .find_map(|i| match i {
+                Inline::Str(st) if st.text == "wrote" => Some(&st.source_info),
+                _ => None,
+            })
+            .expect("'wrote' Str present in output");
+
+        // It must retain its real range, NOT a doubled-self Concat.
+        assert_eq!(
+            (wrote.start_offset(), wrote.end_offset()),
+            (10, 15),
+            "non-coalesced 'wrote' must keep Original[10..15]; got {:?} (doubled-Concat bug?)",
+            wrote
+        );
+        assert_eq!(
+            wrote.preimage_in(FileId(0)),
+            Some(10..15),
+            "non-coalesced 'wrote' must have a real preimage, not None"
+        );
+    }
 }
