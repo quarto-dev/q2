@@ -1,10 +1,23 @@
 # Plan 7g — Source-range tiling (the producer-side precondition BP assumes)
 
-**Date:** 2026-06-01
+**Date:** 2026-06-01 (research) → 2026-06-02 (converted to development plan)
 **Branch:** feature/provenance (sibling to 7d / 7e / 7f)
-**Status:** **Research draft.** The next agent should verify the empirical claims (especially the auditor census) and flesh out the implementation phases. Diagnosis and policy are well-grounded; phase-level implementation detail is deliberately light.
-**First goal — do this before anything else:** the BP audit (Phase 6) is a **go/no-go gate** for the whole incremental-writer direction. See *Sequencing*. The tiling implementation (the rest of this plan) is wasted effort if BP/completeness can't be proved.
-**Ships:** after 7f (complete), **before 7d** — new prerequisite.
+**Status:** **Development plan.** The go/no-go gate (Phase 6) is **PASSED** — BP and completeness are provable under `{P4, L2, L3}` (proof in `incremental-writer-bp-proof.md`). Two scope-adjacent writer/postprocess bugs found while pulling the gate's thread are **fixed and committed** (Phase 8). The tiling work proper — build the auditor, run the real census, fix the handlers, amend the producer contract, CI-enforce — is **not started**; that is the remaining development work, broken into checklists below.
+**Ships:** after 7f (complete), **before 7d** — new prerequisite. **Note:** the Phase 6 *gate* passing does **not** by itself unblock 7d. 7d's "BP holds" claim requires 7g's property test (Phase 1/7) green, which is still open work. See *Relationship to siblings*.
+
+## Phase status (development checklist)
+
+- [ ] **Phase 1** — Build the faithful tiling auditor (= the CI property test)
+- [ ] **Phase 2** — Census + Concat decision over a broad corpus
+- [ ] **Phase 3** — Fix the leading-whitespace family (handler-enforced, TDD)
+- [ ] **Phase 4** — Figure `Plain∩Plain` duplication
+- [ ] **Phase 5** — Amend the producer contract (P1–P4)
+- [x] **Phase 6** — Audit BP + completeness (THE GATE) — **PASSED (CONDITIONAL GO), 2026-06-01**
+- [ ] **Phase 7** — Wire the property test into CI
+- [x] **Phase 8** — Writer crash on Concat/Generated-led inline + `did_coalesce` sibling bug — **fixed & committed 2026-06-02**
+- [ ] **Closeout** — full `cargo xtask verify` (workspace + WASM leg) green; the Phase 8 commits touch `quarto-source-map`, so a pampa-only suite is **not** sufficient evidence under the push policy
+
+**Execution order:** Phase 6 was the gate and is done. Remaining order is **1 → 2 → 3 → 4 → 5 → 7**, with the Closeout verify before any push.
 
 ## Epic context
 
@@ -136,6 +149,10 @@ Phase 1.
 
 ## Sequencing
 
+**(Resolved — Phase 6 is done; verdict CONDITIONAL GO. The current execution
+order lives in *Phase status* at the top. This section is retained as the
+historical rationale for why the gate led.)**
+
 **Run Phase 6 first.** It is the gate: prove BP *and* completeness hold against
 our actual code/design (given the tiling precondition this plan establishes, and
 the already-named exceptions). The numbering below is *not* the execution order
@@ -144,16 +161,44 @@ build the auditor, fix the handlers, amend the producer contract, CI-enforce)
 become worth doing. The same agent may continue past the gate, or hand off; the
 gate's result is the decision point. (No renumbering — Phase 6 is simply first.)
 
-## Phases (research-level; next agent to flesh out)
+## Phases
 
 ### Phase 1 — Build the faithful tiling auditor (= the CI enforcement test)
-Resolve all three pool shapes (`Original` direct; `Substring` follows
-`d`=parent-pool-index + relative `r`; `Concat` unions its piece list), walk the
-full AST **including `attrS.kvs` key/value ranges**, and assert: (a) sibling
-non-overlap, (b) parent ⊇ child, (c) trailing-whitespace tightness. Reference
-implementations exist: Rust `preimage_in` and the TS wire-format reader — this
-is transcription, not invention. This artifact is *both* the measurement tool
-and the permanent CI property test (the thing whose absence let this hide).
+
+**Which representation.** Build the auditor **Rust-side, over the in-memory
+`Inline`/`Block` AST**, resolving each node's range with
+`SourceInfo::preimage_in(target)` (`crates/quarto-source-map/src/source_info.rs:435`)
+— one resolver that already handles all three shapes (`Original`, `Substring`,
+`Concat`), so you do **not** transcribe the pool-index arithmetic yourself. The
+`d`=parent-pool-index + relative-`r` / `Concat`-piece-union description is how the
+**TS wire-format reader** (`ts-packages/annotated-qmd/src/source-map.ts`) does the
+same resolution from the *serialized* pool; that file is the cross-check
+reference (auditor-fidelity risk below), **not** what we build here. CI runs the
+Rust side.
+
+**Home.** Land it alongside the existing corpus test in
+`crates/pampa/tests/integration/incremental_writer_tests.rs` (the
+`incremental_write_never_panics_on_pampa_corpus` neighbor from Phase 8), so the
+Phase 7 property test can call the same function.
+
+Walk the full AST **including `Attr` kvs key/value ranges**, and assert: (a)
+sibling non-overlap, (b) parent ⊇ child, (c) leading- and trailing-whitespace
+tightness. This artifact is *both* the measurement tool and the permanent CI
+property test (the thing whose absence let this hide).
+
+- [ ] Write the auditor as a Rust function over a parsed AST that, for each node,
+      resolves its `SourceInfo` to a concrete source range via the **same** path
+      as `preimage_in` (do not reimplement — call/share it) for all three shapes:
+      `Original`, `Substring`, `Concat` (union of pieces).
+- [ ] Walk the full AST including `Attr` kvs key **and** value ranges (the floor
+      audit never walked attributes, which is why `div-attrs.qmd` read "clean"
+      despite the known `custom-key` defect).
+- [ ] Assert (a) sibling non-overlap, (b) parent ⊇ child, (c) leading- **and**
+      trailing-whitespace tightness (P3 symmetry).
+- [ ] Emit, on violation, a structured report: file, node type, both ranges, the
+      overlapping bytes — usable both as a census row and as a test-failure message.
+- [ ] Cross-check the auditor's `Substring`/`Concat` resolution against `preimage_in`
+      on a handful of known cases before trusting the census (auditor-fidelity risk).
 
 ### Phase 2 — Census + Concat decision
 Run Phase 1's auditor over a broad corpus (annotated-qmd examples,
@@ -162,17 +207,69 @@ handler. Confirm the leading-whitespace family is the bulk; surface any
 `Substring`/`Concat`/attr violations the floor missed. Decide and document the
 `Concat` exception precisely.
 
+- [ ] Run the auditor over the corpora: `ts-packages/annotated-qmd/examples/*.qmd`
+      (20 files), `crates/pampa/tests/pandoc-match-corpus/`, and `docs/`.
+- [ ] Produce a violation census grouped by node type / originating handler; record
+      it in this plan (replaces the FLOOR numbers in *Empirical findings so far*).
+- [ ] Confirm the leading-whitespace family is the bulk and that the `Figure
+      Plain∩Plain` family (Phase 4) is distinct.
+- [ ] Surface any `Substring` (t==1) or `attrS` violations the floor audit could not
+      see — decide whether they need a new policy class (open risk: *Substring unknowns*).
+- [ ] Decide and document the `Concat` exception precisely (pieces tile; the node's
+      span is their hull; `preimage_in` returns `None` for non-contiguous). Confirm
+      against `preimage_in`'s actual contiguous/None behavior.
+- [ ] **Freeze the authoritative handler-fix list for Phase 3 from the census** (the
+      list in Phase 3 is a verified-by-inspection starting point, not the census).
+
 ### Phase 3 — Fix the leading-whitespace family (handler-enforced, TDD)
 A shared helper computes a node's tight range from its trimmed content and
-carves the leading/trailing whitespace into the `Space`. Rename or flag
-`node_source_info_with_context(node)` so its use for a whitespace-carrying node
-is a visible smell. Handlers to fix (verify list against Phase 2):
-`code_span_helpers`, `citation`, raw-inline (`raw_specifier`/`raw_attribute`),
-`quoted_span`, `key_value_specifier` (attr keys/values), `shortcode`,
-`uri_autolink`, plus the `node_source_info_with_context(node)` sites in
-`treesitter.rs`. Write byte-offset regression tests *first* (inline-code-in-
-prose, multi-kv attr, citation, doubled separator whitespace, trailing
-whitespace). **On the reversed-slice writer panics (resolved 2026-06-02):** the
+carves the leading/trailing whitespace into the `Space`.
+
+**Detection lever — two patterns, not one.** The overlap is produced by two
+distinct idioms, so a single grep for `node_source_info_with_context(node)` is
+**insufficient** (verified 2026-06-02):
+
+1. **Whole-node-helper sites** — peel a `Space`, trim the text, but build
+   `SourceInfo` from `node_source_info_with_context(node)` (the whole,
+   whitespace-inclusive range). `node_source_info_with_context` has 20+ call
+   sites across `treesitter_utils/`; flagging it is the lever for *these*.
+2. **Manual-offset sites** — compute ranges directly from `node.start_byte()`
+   (e.g. `uri_autolink.rs`, `shortcode.rs`); these never call the helper, so the
+   rename/flag lever does **not** surface them. They must be found from the
+   Phase 2 census, not from the helper grep.
+
+Rename or flag `node_source_info_with_context(node)` so pattern (1) is a visible
+smell, **and** let the Phase 1 auditor (run in Phase 2) be the backstop that
+catches pattern (2).
+
+**Handlers to fix — verified-by-inspection starting point (2026-06-02); the
+authoritative list is the Phase 2 census.** The earlier draft named three files
+that do not exist (`key_value_specifier.rs`, `quoted_span.rs`, `raw_specifier.rs`);
+corrected to the real tree:
+
+- `code_span_helpers.rs` — code spans **and** raw-inline (`raw_specifier`/
+  `raw_attribute` handling lives here, not in a separate file). Uses the helper. *(pattern 1)*
+- `citation.rs` — uses the helper. *(pattern 1)*
+- `commonmark_attribute.rs` (+ `span_link_helpers.rs`) — attribute keys/values
+  (this is where `key_value_specifier` work actually lives). *(verify pattern in Phase 2)*
+- `quote_helpers.rs` — quoted spans (not `quoted_span.rs`). *(pattern 1)*
+- `shortcode.rs` — computes `Space` ranges manually from `node.start_byte()`. *(pattern 2)*
+- `uri_autolink.rs` — manual offset computation, does **not** call the helper. *(pattern 2)*
+- the `node_source_info_with_context(node)` sites in `treesitter.rs`. *(pattern 1)*
+
+Write byte-offset regression tests *first* (inline-code-in-prose, multi-kv attr,
+citation, doubled separator whitespace, trailing whitespace).
+
+- [ ] Add a shared helper that derives a node's tight range from trimmed content and
+      carves leading **and** trailing whitespace into the adjacent `Space` (P3 symmetry).
+- [ ] Rename/flag `node_source_info_with_context(node)` so pattern-(1) use on a
+      whitespace-carrying node is a visible smell.
+- [ ] Write failing byte-offset regression tests first, then fix each handler in the
+      Phase-2-frozen list one at a time (TDD), re-running the Phase 1 auditor after each.
+- [ ] Re-run the Phase 1 auditor over the corpus to confirm the leading-whitespace
+      family is driven to zero (catches both pattern-1 and pattern-2 sites).
+
+**On the reversed-slice writer panics (resolved 2026-06-02):** the
 Phase 6 audit's `compute_separator` block-gap concern (slicing
 `qmd[prev_block.end .. curr_block.start]`) turned out to be **unreachable** from
 real input — an 802-file identity sweep through `incremental_write` fired that
@@ -191,11 +288,23 @@ Separate, contained: a Figure's caption `Plain` and content `Plain` share the
 whole figure range. Investigate the Figure synthesis path; give each its own
 range. Likely small.
 
+- [ ] Locate the Figure synthesis path that emits caption `Plain` + content `Plain`
+      (Figure handling lives in `crates/pampa/src/pandoc/treesitter_utils/postprocess.rs`).
+- [ ] Write a failing byte-offset test asserting the two `Plain` ranges are disjoint.
+- [ ] Give each `Plain` its own tight range; re-run the Phase 1 auditor to confirm.
+
 ### Phase 5 — Producer contract
 - Add P1–P4 to `provenance-contract.md` as a **stated BP precondition**, with
   the Concat exception and the explicit "non-overlap, not gap-free" boundary.
 - Cross-link from `incremental-writer-contract.md` ("the two are designed in
   pairs" — this is the third party that was never written down).
+
+- [ ] Add P1 (tight ranges), P2 (whitespace ownership), P3 (symmetry), P4 (tiling)
+      to `provenance-contract.md` as a stated BP precondition.
+- [ ] Document the Concat exception and the "non-overlap, not gap-free" scope boundary
+      (blank lines, `> ` gutters, list indentation are legitimately unowned).
+- [ ] Cross-link `provenance-contract.md` ↔ `incremental-writer-contract.md` so the
+      producer/consumer pairing is explicit (it currently is not written down).
 
 ### Phase 6 — Audit BP + completeness (THE GATE — do this first)
 
@@ -283,6 +392,17 @@ Land Phase 1's auditor as a `cargo nextest` test (and/or `cargo xtask verify`
 lane) so future range drift fails at the introducing PR. This is what would have
 caught bd-1d6io, A, B, and the citation case at introduction.
 
+- [ ] Land the Phase 1 auditor as a `cargo nextest` property test over a corpus
+      (extend the existing `incremental_write_never_panics_on_pampa_corpus` pattern
+      from Phase 8 — that one only catches panics, not tiling violations).
+- [ ] Decide whether it also belongs in a `cargo xtask verify` lane (repo-wide corpus).
+- [ ] Confirm the test fails on a reverted Phase 3 handler fix (proves it would have
+      caught the original drift) before declaring CI enforcement done.
+
+**Unblocks 7d:** this is the "7g's property test is green" precondition 7d's
+BP-holds claim depends on. The Phase 6 gate passing is necessary but not
+sufficient — 7d stays blocked until this lands.
+
 ### Phase 8 — Writer crash on `Concat`/`Generated`-led inline (degenerate-offset boundary)
 
 **Found during the Phase 6 audit (2026-06-02); confirmed live, reachable from
@@ -331,7 +451,9 @@ it depends on whether a real hub edit drives that block to `RecurseIntoContainer
 quarto-hub did *not* reproduce. Worth a follow-up to drive the WASM bridge into an
 InlineSplice on a Concat-led block.
 
-**Fix (TDD) — DONE 2026-06-02 (pending workspace verify + commit).**
+**Fix (TDD) — DONE 2026-06-02, committed `b43fadef`.** (Closeout caveat: the
+full-workspace `cargo xtask verify` — not just the pampa suite — is still owed,
+because this touches `quarto-source-map`/the WASM leg. Tracked in *Phase status*.)
 - [x] Failing regression test `inline_splice_concat_led_paragraph_does_not_panic`
   (`crates/pampa/tests/integration/incremental_writer_tests.rs`): real parse of
   `tests/smoke/table.qmd` (Concat-led `Str "Table:"`), mutate a `Str` to force
@@ -355,7 +477,7 @@ InlineSplice on a Concat-led block.
   lane is a possible Phase 7 extension; the existing proptest generators in
   `inline_splice_property_tests.rs` never emit Concat-led inlines, so they miss
   this.)
-**Sibling bug — `did_coalesce` function-scope provenance corruption — FIXED (TDD) 2026-06-02.**
+**Sibling bug — `did_coalesce` function-scope provenance corruption — FIXED (TDD) 2026-06-02, committed `018fb934`.**
 A second, independent bug found while pulling this thread (a background agent
 weaponized it; verified directly on this branch). `coalesce_abbreviations`
 (`postprocess.rs`) declared `did_coalesce` *outside* the `while` loop and never
@@ -414,6 +536,6 @@ mitigate the writer crash but the provenance corruption remained until this fix.
 - Consumer contract that needs this: [`incremental-writer-contract.md`](../designs/incremental-writer-contract.md) (the partition claim).
 - Producer contract to amend: [`provenance-contract.md`](../designs/provenance-contract.md).
 - Helper: `range_to_source_info_with_context` in `crates/pampa/src/pandoc/location.rs`.
-- Affected handlers: `crates/pampa/src/pandoc/treesitter_utils/{code_span_helpers,citation,key_value_specifier,quoted_span,uri_autolink,shortcode,raw_specifier}.rs`, `crates/pampa/src/pandoc/treesitter.rs`.
-- Prior art (peel-Space-but-not-range): k-296 (citation), `inline_note_reference`.
+- Affected handlers (corrected to the real tree, 2026-06-02; authoritative list = Phase 2 census): `crates/pampa/src/pandoc/treesitter_utils/{code_span_helpers,citation,commonmark_attribute,span_link_helpers,quote_helpers,uri_autolink,shortcode}.rs`, `crates/pampa/src/pandoc/treesitter.rs`. Note `raw_specifier`/`raw_attribute` handling lives **inside** `code_span_helpers.rs`; there is no `key_value_specifier.rs`/`quoted_span.rs`/`raw_specifier.rs`.
+- Prior art (peel-Space-but-not-range): k-296 (citation), `inline_note_reference` (in `postprocess.rs`).
 - Consumer: [`2026-05-26-q2-preview-plan-7d-algebraic-soundness.md`](2026-05-26-q2-preview-plan-7d-algebraic-soundness.md).
