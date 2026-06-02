@@ -8,6 +8,7 @@
 import {
   createSyncClient,
   exportProjectAsZip as exportZip,
+  parseProjectZip,
   type SyncClient,
   type SyncClientCallbacks,
   type Patch,
@@ -21,7 +22,7 @@ import {
   type FilePayload,
 } from '@quarto/quarto-sync-client';
 
-import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm } from './wasmRenderer';
+import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm, type ProjectFile } from './wasmRenderer';
 
 // Re-export types for use in other components
 export type { Patch, EditorContentChange, FileEntry, ActorIdentity, CaptureRef, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult };
@@ -303,6 +304,29 @@ export function getFilePaths(): string[] {
  */
 export function exportProjectAsZip(): Uint8Array {
   return exportZip(ensureClient());
+}
+
+/**
+ * Parse a ZIP archive into the scaffold-file shape used by the
+ * "create new project" flow.
+ *
+ * The inverse of {@link exportProjectAsZip}: it produces `ProjectFile[]`
+ * (the same snake_case shape `create_project` returns from WASM), so the
+ * result flows straight into the existing project-creation callback
+ * without any further mapping. Pure — does not need a connected client.
+ *
+ * @param zipBytes - Raw bytes of an uploaded `.zip`
+ * @returns Files ready to hand to the project-creation path
+ * @throws If the archive is corrupt, contains an unsafe path, or yields
+ *   no usable files.
+ */
+export function importProjectFromZip(zipBytes: Uint8Array): ProjectFile[] {
+  return parseProjectZip(zipBytes).map(f => ({
+    path: f.path,
+    content_type: f.contentType,
+    content: f.content,
+    mime_type: f.mimeType,
+  }));
 }
 
 // ============================================================================

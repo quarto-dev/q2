@@ -9,6 +9,7 @@ import * as userSettingsService from '../services/userSettings';
 import {
   getProjectChoices,
   createProject as wasmCreateProject,
+  importProjectFromZip,
   type ProjectChoice,
   type ProjectFile,
 } from '@quarto/preview-runtime';
@@ -81,6 +82,7 @@ export default function ProjectSelector({
   const [loading, setLoading] = useState(true);
   const [showConnectForm, setShowConnectForm] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showImportForm, setShowImportForm] = useState(false);
 
   // Connect form state
   const [indexDocId, setIndexDocId] = useState('');
@@ -94,6 +96,11 @@ export default function ProjectSelector({
   const [isCreating, setIsCreating] = useState(false);
   const [projectChoices, setProjectChoices] = useState<ProjectChoice[]>([]);
   const [loadingChoices, setLoadingChoices] = useState(false);
+
+  // Import-from-ZIP form state
+  const [importTitle, setImportTitle] = useState('');
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   // User identity state
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
@@ -398,6 +405,73 @@ export default function ProjectSelector({
     }
   };
 
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormError(null);
+    const file = e.target.files?.[0] ?? null;
+    setImportFile(file);
+    // Prefill the title from the ZIP filename (minus extension) if the
+    // user hasn't already typed one. Stays editable afterward.
+    if (file && !importTitle.trim()) {
+      setImportTitle(file.name.replace(/\.zip$/i, ''));
+    }
+  };
+
+  const handleCancelImport = () => {
+    setShowImportForm(false);
+    setImportFile(null);
+    setImportTitle('');
+    setFormError(null);
+  };
+
+  const handleImportZip = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    if (!importFile) {
+      setFormError('Please choose a ZIP file to import');
+      return;
+    }
+
+    if (!importTitle.trim()) {
+      setFormError('Project title is required');
+      return;
+    }
+
+    if (!syncServer.trim()) {
+      setFormError('Sync Server URL is required');
+      return;
+    }
+
+    setIsImporting(true);
+
+    try {
+      const bytes = new Uint8Array(await importFile.arrayBuffer());
+      const files = importProjectFromZip(bytes);
+
+      if (files.length === 0) {
+        setFormError('The archive contains no usable files');
+        return;
+      }
+
+      if (onProjectCreated) {
+        onProjectCreated(files, importTitle.trim(), 'imported', syncServer.trim());
+        // Reset the form; the parent handles navigation into the project.
+        setShowImportForm(false);
+        setImportFile(null);
+        setImportTitle('');
+      } else {
+        setFormError(`Imported ${files.length} file(s), but no handler is wired to create the project.`);
+      }
+    } catch (err) {
+      console.error('Failed to import project from ZIP:', err);
+      setFormError(
+        err instanceof Error ? `Failed to import ZIP: ${err.message}` : 'Failed to import ZIP.',
+      );
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const handleDeleteProject = async (e: React.MouseEvent, project: ProjectEntry) => {
     e.stopPropagation();
     if (confirm(`Delete "${project.description}"?`)) {
@@ -573,11 +647,11 @@ export default function ProjectSelector({
         </div>
 
         {/* Show buttons when no form is visible */}
-        {!showConnectForm && !showCreateForm && (
+        {!showConnectForm && !showCreateForm && !showImportForm && (
           <div className="action-buttons">
             <button
               className="action-btn create-btn"
-              onClick={() => { setShowCreateForm(true); setShowConnectForm(false); }}
+              onClick={() => { setShowCreateForm(true); setShowConnectForm(false); setShowImportForm(false); }}
             >
               <span className="action-btn-text">
                 <span className="action-btn-title">
@@ -589,7 +663,7 @@ export default function ProjectSelector({
             </button>
             <button
               className="action-btn connect-btn"
-              onClick={() => { setShowConnectForm(true); setShowCreateForm(false); }}
+              onClick={() => { setShowConnectForm(true); setShowCreateForm(false); setShowImportForm(false); }}
             >
               <span className="action-btn-text">
                 <span className="action-btn-title">
@@ -597,6 +671,18 @@ export default function ProjectSelector({
                   Connect to Project
                 </span>
                 <span className="action-btn-hint">Join an existing QH project</span>
+              </span>
+            </button>
+            <button
+              className="action-btn import-btn"
+              onClick={() => { setShowImportForm(true); setShowCreateForm(false); setShowConnectForm(false); }}
+            >
+              <span className="action-btn-text">
+                <span className="action-btn-title">
+                  <span className="action-btn-icon">⬆</span>
+                  Import from ZIP
+                </span>
+                <span className="action-btn-hint">Create a project from a .zip archive</span>
               </span>
             </button>
           </div>
@@ -656,6 +742,53 @@ export default function ProjectSelector({
                 disabled={isCreating || loadingChoices || projectChoices.length === 0}
               >
                 {isCreating ? 'Creating...' : 'Create Project'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Import from ZIP form */}
+        {showImportForm && (
+          <form className="add-form import-form" onSubmit={handleImportZip}>
+            <h2>Import from ZIP</h2>
+            <p className="form-hint">Create a new project from the contents of a .zip archive</p>
+            <div className="form-group">
+              <label htmlFor="importZipFile">ZIP File</label>
+              <input
+                id="importZipFile"
+                type="file"
+                accept=".zip,application/zip"
+                onChange={handleImportFileChange}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="importTitle">Project Title</label>
+              <input
+                id="importTitle"
+                type="text"
+                value={importTitle}
+                onChange={(e) => setImportTitle(e.target.value)}
+                placeholder="My Imported Project"
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="importSyncServer">Sync Server URL</label>
+              <input
+                id="importSyncServer"
+                type="text"
+                value={syncServer}
+                onChange={(e) => setSyncServer(e.target.value)}
+                placeholder="wss://sync.automerge.org"
+              />
+            </div>
+            <div className="form-actions">
+              <button type="button" onClick={handleCancelImport}>Cancel</button>
+              <button
+                type="submit"
+                className="primary"
+                disabled={isImporting || !importFile}
+              >
+                {isImporting ? 'Importing...' : 'Import Project'}
               </button>
             </div>
           </form>

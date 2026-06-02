@@ -62,6 +62,7 @@ export type {
 // Export utilities
 export { computeSHA256 } from './hash.js';
 export { exportProjectAsZip } from './export-zip.js';
+export { parseProjectZip } from './import-zip.js';
 
 // Export replay API
 export { createReplaySession } from './replay.js';

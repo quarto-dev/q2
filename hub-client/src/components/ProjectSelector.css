@@ -366,6 +366,14 @@
   border-color: var(--posit-blue-dark-1);
 }
 
+.action-btn.import-btn {
+  border-color: var(--posit-orange);
+}
+
+.action-btn.import-btn:hover {
+  border-color: var(--posit-orange);
+}
+
 .add-btn {
   width: 100%;
   padding: 16px;

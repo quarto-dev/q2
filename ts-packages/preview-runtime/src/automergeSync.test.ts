@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { zipSync, strToU8 } from 'fflate';
 import type { FileEntry, Patch } from '@quarto/quarto-sync-client';
 import {
   setSyncHandlers,
@@ -15,6 +16,7 @@ import {
   applyEditorOperations,
   isFileBinary,
   setImmediateFileChangeCallback,
+  importProjectFromZip,
   _resetForTesting,
   _setClientForTesting,
   _getCallbacksForTesting,
@@ -440,6 +442,41 @@ describe('automergeSync', () => {
       // WITHOUT the fix: if Monaco were stale ("aaa\n\nbbbx"), the user would
       // type 'z' at pos 9, and splice(9, 0, 'z') on "aaay\n\nbbbx" would
       // produce "aaay\n\nbbzx" — 'z' lands before 'x', not after.
+    });
+  });
+
+  describe('importProjectFromZip', () => {
+    it('converts parsed files into the snake_case ProjectFile shape', () => {
+      const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+      const zip = zipSync(
+        {
+          'index.qmd': strToU8('# Hello'),
+          'images/logo.png': pngBytes,
+        },
+        { level: 0 },
+      );
+
+      const files = importProjectFromZip(zip);
+      const byPath = Object.fromEntries(files.map(f => [f.path, f]));
+
+      // Text entry: snake_case keys, plain-string content.
+      expect(byPath['index.qmd']).toEqual({
+        path: 'index.qmd',
+        content_type: 'text',
+        content: '# Hello',
+        mime_type: undefined,
+      });
+
+      // Binary entry: base64 content + inferred mime_type.
+      const png = byPath['images/logo.png'];
+      expect(png.content_type).toBe('binary');
+      expect(png.mime_type).toBe('image/png');
+      expect(Uint8Array.from(atob(png.content), c => c.charCodeAt(0))).toEqual(pngBytes);
+    });
+
+    it('propagates parse errors (e.g. empty archive)', () => {
+      const empty = zipSync({}, { level: 0 });
+      expect(() => importProjectFromZip(empty)).toThrow(/no files/i);
     });
   });
 
