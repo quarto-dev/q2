@@ -172,14 +172,15 @@ is a visible smell. Handlers to fix (verify list against Phase 2):
 `uri_autolink`, plus the `node_source_info_with_context(node)` sites in
 `treesitter.rs`. Write byte-offset regression tests *first* (inline-code-in-
 prose, multi-kv attr, citation, doubled separator whitespace, trailing
-whitespace). **Also add a writer-level regression test** (from the Phase 6
-audit): drive the `Space`/`Code` `[1,9]` fixture through the incremental writer
-and confirm the `OriginalGap` separator does not produce a reversed slice
-(`gap.start <= gap.end`). This is the root-cause fix for the latent
-reversed-`OriginalGap` panic — once P4 holds the reversed gap is unreachable by
-construction. (Not yet confirmed to panic on today's writer; this test confirms
-or refutes it. A `debug_assert` + graceful fallback in the writer is optional
-defense-in-depth that lands in 7d.) **Open question:** code spans are a *scanner* regression — decide
+whitespace). **On the reversed-slice writer panics (resolved 2026-06-02):** the
+Phase 6 audit's `compute_separator` block-gap concern (slicing
+`qmd[prev_block.end .. curr_block.start]`) turned out to be **unreachable** from
+real input — an 802-file identity sweep through `incremental_write` fired that
+branch on every adjacent top-level block pair with **0 panics** (top-level blocks
+tile positionally). P4 closes it by construction; no dedicated test needed beyond
+the corpus sweep. The *reachable* reversed-slice bug was a different site —
+`assemble_inline_splice`'s prefix on a `Concat`-led inline — now fixed under
+**Phase 8** below. **Open question:** code spans are a *scanner* regression — decide
 whether handler-trim alone suffices (the policy says yes; the handler re-derives
 the right range regardless of the loose token) or whether to also restore the
 scanner's backtick-start boundary as defense-in-depth. Default to handler-only
@@ -281,6 +282,84 @@ exception or a fixable bug.
 Land Phase 1's auditor as a `cargo nextest` test (and/or `cargo xtask verify`
 lane) so future range drift fails at the introducing PR. This is what would have
 caught bd-1d6io, A, B, and the citation case at introduction.
+
+### Phase 8 — Writer crash on `Concat`/`Generated`-led inline (degenerate-offset boundary)
+
+**Found during the Phase 6 audit (2026-06-02); confirmed live, reachable from
+real corpus files.** A **distinct, writer-side bug** — *not* a tiling/producer
+defect — discovered while pulling the Phase 6 thread on the reversed-slice family.
+Adding it here because it belongs to the same "source ranges meet the writer"
+story, even though the fix is purely in the incremental writer.
+
+**Symptom.** `incremental_write` (the WASM/hub entry) panics with
+`byte range starts at N but ends at 0` when a top-level inline-content block
+(`Paragraph`/`Plain`/`Header`) whose **first or last inline carries a `Concat`
+or `Generated` source_info** is reconciled through the **InlineSplice** path
+(`RecurseIntoContainer` alignment).
+
+**Mechanism (verified).** `assemble_inline_splice`
+(`crates/pampa/src/writers/incremental.rs` ~1287) computes
+`prefix = original_qmd[block_span.start .. inline_start]` where
+`inline_start = inline_source_span(orig_inlines[0]).start`, and
+`inline_source_span` (~1599) reads `SourceInfo::start_offset()`. But
+`start_offset()`/`end_offset()` return the **sentinel `0`** for `Concat` and
+`Generated` (`crates/quarto-source-map/src/source_info.rs` ~350-371). So the
+prefix slice becomes `qmd[block.start .. 0]` — reversed — and panics. The suffix
+slice has the symmetric hazard on the last inline.
+
+**Root cause is NOT tiling.** The triggering `Concat` is *well-formed and
+contiguous*: e.g. `Str "Table:"` parses as
+`Concat[ Original[35..40] "Table" ++ Original[40..41] ":" ]` — the inline parser
+tokenizes the `:` separately and re-joins via `SourceInfo::combine`
+(`source_info.rs:317`, which builds a 2-piece `Concat`). The pieces tile, so
+`preimage_in(target)` returns the correct `Some(35..41)`; only the
+`start_offset()` *accessor* returns the degenerate `0`. 7g's P4 tiling work would
+not change this Concat (it is already P4-correct). **The writer simply reads the
+wrong accessor.**
+
+**Reachability.** A corpus scan on this branch found **10** top-level paragraphs
+whose first inline's `start_offset()` (0) is less than the block's start — all
+contiguous `Concat`s — spanning several constructs: literal punctuation text
+(`Table:`), links/images, anchor shorthands, math-with-attr, smart-punctuation /
+escaped text. Files: `04_links_images`, `04_simple_links`,
+`anchor_shorthand_variants` (×2), `smoke/018`, `smoke/table`, `math-with-attr`,
+`table-no-caption-table-prefix`, `ansi/colors-with-formatting`,
+`ansi/ordered-lists`. Each panics when its block is reconciled as an InlineSplice.
+Confirmed via a Rust-level repro. **Live-UI reachability is not yet confirmed** —
+it depends on whether a real hub edit drives that block to `RecurseIntoContainer`
+(InlineSplice) vs. whole-block replace/`KeepBefore`; a manual caption edit in
+quarto-hub did *not* reproduce. Worth a follow-up to drive the WASM bridge into an
+InlineSplice on a Concat-led block.
+
+**Fix (TDD) — DONE 2026-06-02 (pending workspace verify + commit).**
+- [x] Failing regression test `inline_splice_concat_led_paragraph_does_not_panic`
+  (`crates/pampa/tests/integration/incremental_writer_tests.rs`): real parse of
+  `tests/smoke/table.qmd` (Concat-led `Str "Table:"`), mutate a `Str` to force
+  InlineSplice. Confirmed red (`panicked … incremental.rs:1287 … starts at 35 but
+  ends at 0`) before the fix; green after.
+- [x] Splice boundaries now derived from `preimage_in(target_file_id)` (block,
+  first inline, last inline) instead of `start_offset()`/`end_offset()`. For the
+  `Table:` case this yields prefix `qmd[35..35]` = `""`. Localized to
+  `assemble_inline_splice` (the only caller of that helper); `inline_source_span`
+  semantics left unchanged. `assemble_inline_content` already used `preimage_in`
+  for the content bytes, so only the boundary computation was broken.
+- [x] When an edge inline (or the block) has **no preimage** (`None`), or the
+  ranges would be out of order, `assemble_inline_splice` returns `Ok(None)` and
+  the caller falls back to `Rewrite { write_block_to_string(new_block) }`. Slices
+  use `.get()` as belt-and-suspenders. (BP proof's None-preimage routing, Phase 6
+  check #4.)
+- [x] Corpus property test `incremental_write_never_panics_on_pampa_corpus`:
+  scans `git ls-files '*.qmd'` (pampa crate — covers every confirmed trigger:
+  captions, links/images, anchors, math-with-attr), drives identity + a
+  first-`Str` mutation through `catch_unwind`, asserts no panic. (Repo-wide xtask
+  lane is a possible Phase 7 extension; the existing proptest generators in
+  `inline_splice_property_tests.rs` never emit Concat-led inlines, so they miss
+  this.)
+- [ ] Consider (separately) the latent `did_coalesce` function-scope bug in
+  `coalesce_abbreviations` (`postprocess.rs:599` — the flag is never reset per
+  iteration). Not the cause of *this* crash (the `Concat` here comes from
+  punctuation-token merge, not abbreviation coalescing), but flagged while
+  reading. Open a bead if it proves to mis-stamp provenance.
 
 ## Relationship to siblings
 

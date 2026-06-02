@@ -515,8 +515,12 @@ fn coarsen_blocks(
                         && is_inline_splice_safe(new_inlines, inline_plan)
                         && block_attrs_eq(orig_block, new_block)
                     {
-                        // Safe to splice — assemble the patched block text
-                        let block_text = assemble_inline_splice(
+                        // Safe to splice — assemble the patched block text.
+                        // `assemble_inline_splice` returns `None` when the edge
+                        // inlines have no usable preimage to anchor the
+                        // prefix/suffix boundaries (Concat/Generated-led, etc.);
+                        // in that case fall back to full re-serialization.
+                        match assemble_inline_splice(
                             original_qmd,
                             orig_block,
                             orig_inlines,
@@ -524,10 +528,14 @@ fn coarsen_blocks(
                             inline_plan,
                             target_file_id,
                             warnings,
-                        )?;
-                        CoarsenedEntry::InlineSplice {
-                            block_text,
-                            orig_idx: Some(*before_idx),
+                        )? {
+                            Some(block_text) => CoarsenedEntry::InlineSplice {
+                                block_text,
+                                orig_idx: Some(*before_idx),
+                            },
+                            None => CoarsenedEntry::Rewrite {
+                                block_text: write_block_to_string(new_block)?,
+                            },
                         }
                     } else {
                         CoarsenedEntry::Rewrite {
@@ -1276,17 +1284,45 @@ fn assemble_inline_splice(
     plan: &InlineReconciliationPlan,
     target_file_id: quarto_source_map::FileId,
     warnings: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
-) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
-    let block_span = block_source_span(orig_block);
+) -> Result<Option<String>, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    // Boundaries must come from `preimage_in`, NOT `start_offset()`/`end_offset()`.
+    // A `Concat`/`Generated`-led inline reports the sentinel `0` for
+    // `start_offset()` — e.g. `Str "Table:"` parses as a contiguous
+    // `Concat[Original "Table" ++ Original ":"]` — which made the prefix slice
+    // `original_qmd[block.start .. 0]` reverse and panic (Plan 7g Phase 8).
+    // `preimage_in` resolves the real (hull) byte range. When any boundary is
+    // unavailable (non-contiguous `Concat`, anchorless `Generated`), we cannot
+    // splice safely: return `None` so the caller re-serializes the whole block.
+    let (Some(block_range), Some(first_range), Some(last_range)) = (
+        orig_block.source_info().preimage_in(target_file_id),
+        orig_inlines
+            .first()
+            .and_then(|i| i.source_info().preimage_in(target_file_id)),
+        orig_inlines
+            .last()
+            .and_then(|i| i.source_info().preimage_in(target_file_id)),
+    ) else {
+        return Ok(None);
+    };
 
-    // Compute the inline content region within the block
-    let inline_start = inline_source_span(&orig_inlines[0]).start;
-    let inline_end = inline_source_span(orig_inlines.last().unwrap()).end;
+    // Guard ordering so a stray provenance can never produce a reversed slice:
+    // block ⊇ [first.start, last.end] and first.start ≤ last.end.
+    if block_range.start > first_range.start
+        || last_range.end > block_range.end
+        || first_range.start > last_range.end
+    {
+        return Ok(None);
+    }
 
-    // Block prefix: bytes before the first inline (e.g., "## " for headers)
-    let prefix = &original_qmd[block_span.start..inline_start];
-    // Block suffix: bytes after the last inline (e.g., "\n")
-    let suffix = &original_qmd[inline_end..block_span.end];
+    // Block prefix: bytes before the first inline (e.g., "## " for headers).
+    // Block suffix: bytes after the last inline (e.g., "\n"). `.get()` keeps
+    // this structurally safe even if the guards above ever miss a case.
+    let (Some(prefix), Some(suffix)) = (
+        original_qmd.get(block_range.start..first_range.start),
+        original_qmd.get(last_range.end..block_range.end),
+    ) else {
+        return Ok(None);
+    };
 
     // Assemble the new inline content
     let inline_content = assemble_inline_content(
@@ -1298,7 +1334,7 @@ fn assemble_inline_splice(
         warnings,
     )?;
 
-    Ok(format!("{}{}{}", prefix, inline_content, suffix))
+    Ok(Some(format!("{}{}{}", prefix, inline_content, suffix)))
 }
 
 /// Assemble the inline content from a reconciliation plan.

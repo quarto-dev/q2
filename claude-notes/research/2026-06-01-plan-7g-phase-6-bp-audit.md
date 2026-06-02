@@ -82,7 +82,7 @@ Today's mechanism (consecutive-only) does **not** satisfy L3. **This is the one 
 
 ### Hole ε (LATENT CRASH under ¬P4) — reversed OriginalGap
 
-`SeparatorRule::OriginalGap` uses `qmd[child_i.end .. child_{i+1}.start]`. Under overlapping siblings (¬P4), `child_i.end > child_{i+1}.start` ⇒ a **reversed slice** ⇒ panic or corruption. So ¬P4 doesn't merely weaken (M) — it can crash the writer. Another reason P4 is load-bearing; also a hint that the *current* (pre-7g) writer has a latent panic on the very overlaps 7g fixes. Worth a defensive guard + a Phase 2/3 test.
+`SeparatorRule::OriginalGap` uses `qmd[child_i.end .. child_{i+1}.start]`. Under overlapping siblings (¬P4), `child_i.end > child_{i+1}.start` ⇒ a **reversed slice** ⇒ panic or corruption. So ¬P4 doesn't merely weaken (M) — it can crash the writer. Another reason P4 is load-bearing; also a hint that the *current* (pre-7g) writer has a latent panic on the very overlaps 7g fixes. **Update 2026-06-02:** an 802-file identity sweep proved this specific `compute_separator` block-gap path **unreachable** from real input (top-level blocks tile positionally). The reachable reversed-slice bug was the *inline-splice* analogue — see §8 and 7g Phase 8.
 
 ### Hole β (producer obligation) — unclamped Substring
 
@@ -125,15 +125,23 @@ Per Phase 6's "on pass" instructions:
 - **L3 / Hole α (atomic N-to-1 duplication):** *held by design, not tracked.*
   Unreachable through the front end (read-only region). See §5 and the proof
   file §6. No bead.
-- **Reversed-`OriginalGap` panic (Hole ε): goes to 7g, not a standalone bead.**
-  The reversed slice arises *only* from overlapping sibling ranges — exactly the
-  condition P4 eliminates. So 7g is the root-cause fix: once P4 holds the
-  reversed gap is unreachable by construction. Tracked as a **7g Phase 3
-  regression test** (drive the `Space`/`Code` `[1,9]` fixture through the writer;
-  confirm no reversed gap) and reinforced by the Phase 7 CI property test. A
-  `debug_assert!(gap.start <= gap.end)` + graceful fallback is optional
-  defense-in-depth that rides along in 7d's `SeparatorRule::OriginalGap`
-  reimplementation. **Not confirmed to panic on today's writer** — flagged from
-  the slice arithmetic; bd-1d6io's overlaps surfaced as TS test failures, not a
-  crash, so today's `compute_separator` may already sidestep it. Confirming is
-  the cheap first Phase 3 test.
+- **Reversed-slice writer panics — RESOLVED 2026-06-02.** There are *two* sites
+  in the writer that slice `original_qmd[a..b]` from source-range arithmetic:
+  - `compute_separator`'s block-gap (`qmd[prev_block.end .. curr_block.start]`,
+    Hole ε): an 802-file **identity sweep** through `incremental_write` fired
+    this on every adjacent top-level block pair — **0 panics, 0 real top-level
+    overlaps**. **Unreachable** from real input (top-level blocks tile
+    positionally); P4 closes it by construction. No dedicated fix/test beyond the
+    corpus sweep. The hand-built repro I'd written for it was deleted as it
+    guarded a dead path.
+  - `assemble_inline_splice`'s prefix/suffix (`qmd[block.start .. inline.start]`):
+    **the live bug.** An **edit sweep** + latent-surface scan found ~10 corpus
+    files whose first inline is a contiguous `Concat` (`start_offset()`→sentinel
+    0), e.g. `Str "Table:"` = `Concat[Original "Table" ++ Original ":"]`. Editing
+    such a paragraph reverses the prefix slice → panic
+    (`byte range starts at 35 but ends at 0`). **NOT a tiling bug** — the Concat
+    is P4-correct; `preimage_in` returns the right hull; the writer just read the
+    wrong accessor (`start_offset()` vs `preimage_in`). Fixed under **7g Phase 8**:
+    boundaries now from `preimage_in`, with a `Rewrite` fallback when None.
+    Regression tests: `inline_splice_concat_led_paragraph_does_not_panic` +
+    `incremental_write_never_panics_on_pampa_corpus`.
