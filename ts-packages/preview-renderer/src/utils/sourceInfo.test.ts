@@ -1,6 +1,7 @@
 import { describe, test, expect } from 'vitest';
 import { entryFor, isAtomicSourceInfo, ATOMIC_KINDS } from './sourceInfo';
 import type { SourceInfoPool } from '../types/sourceInfo';
+import { USER_EDIT_SOURCE_INFO_ID } from '../types/sourceInfo';
 
 // Build a representative pool covering each wire code shipped by the
 // Rust writer post-Plan-5. Code 5 is unassigned — no entry exists.
@@ -94,5 +95,41 @@ describe('ATOMIC_KINDS', () => {
         expect(ATOMIC_KINDS.has('sectionize')).toBe(false);
         expect(ATOMIC_KINDS.has('user-edit')).toBe(false);
         expect(ATOMIC_KINDS.has('include')).toBe(false);
+    });
+});
+
+// Plan 7f Phase 4 — atomic-gate sanity for the reserved user-edit slot.
+// Pool slot USER_EDIT_SOURCE_INFO_ID (= 0) is pre-populated by the Rust
+// writer with Generated{by: user_edit}. The TS framework stamps every
+// React-constructed node with s: USER_EDIT_SOURCE_INFO_ID. The atomic
+// gate must NOT block edits to those nodes.
+describe('USER_EDIT_SOURCE_INFO_ID atomic-gate sanity (plan 7f Phase 4)', () => {
+    // Construct the minimal pool that mirrors what the Rust writer
+    // pre-populates: slot 0 = Generated{by: user_edit}.
+    const poolWithReservedSlot: SourceInfoPool = [
+        { t: 4, r: [0, 0], d: { by: { kind: 'user-edit' } } }, // slot 0 = reserved
+    ];
+
+    test('pool slot USER_EDIT_SOURCE_INFO_ID is Generated{by: user_edit}', () => {
+        const entry = entryFor({ s: USER_EDIT_SOURCE_INFO_ID }, poolWithReservedSlot);
+        expect(entry?.t).toBe(4);
+        if (entry?.t === 4) {
+            expect(entry.d.by.kind).toBe('user-edit');
+        }
+    });
+
+    test('a node with s: USER_EDIT_SOURCE_INFO_ID is NOT atomic', () => {
+        // The atomic gate resolves s → pool entry → checks ATOMIC_KINDS.
+        // "user-edit" is not in ATOMIC_KINDS, so the gate must return false.
+        expect(
+            isAtomicSourceInfo({ s: USER_EDIT_SOURCE_INFO_ID }, poolWithReservedSlot, ATOMIC_KINDS),
+        ).toBe(false);
+    });
+
+    test('USER_EDIT_SOURCE_INFO_ID is 0 (reserved slot contract)', () => {
+        // The JS framework relies on this constant matching the Rust-side
+        // constant. The Rust CI test `test_user_edit_slot_id_matches_typescript_mirror`
+        // asserts the same value; this mirrors the check on the TS side.
+        expect(USER_EDIT_SOURCE_INFO_ID).toBe(0);
     });
 });

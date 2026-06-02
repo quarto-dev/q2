@@ -173,3 +173,76 @@ describe('reserved pool slot (plan 7f Phase 4)', () => {
     expect(slot0.d?.by?.kind, 'slot 0 by.kind should be "user-edit"').toBe('user-edit');
   });
 });
+
+// ----------------------------------------------------------------
+// MissingSourceInfoRef propagation through incremental_write_qmd
+// (plan 7f Phase 4 — WASM bridge strictness)
+// ----------------------------------------------------------------
+
+/**
+ * Walk the AST and remove the `s` field from the first `Str` node.
+ * Returns true if a Str was found and mutated.
+ */
+function stripFirstStrSourceInfo(ast: unknown): boolean {
+  let done = false;
+  const walk = (node: unknown): void => {
+    if (done) return;
+    if (Array.isArray(node)) {
+      for (const child of node) walk(child);
+      return;
+    }
+    if (node && typeof node === 'object') {
+      const obj = node as Record<string, unknown>;
+      if (obj.t === 'Str' && 's' in obj) {
+        delete obj.s;
+        done = true;
+        return;
+      }
+      for (const v of Object.values(obj)) walk(v);
+    }
+  };
+  walk(ast);
+  return done;
+}
+
+describe('MissingSourceInfoRef propagation (plan 7f Phase 4)', () => {
+  it('incremental_write_qmd rejects a baseline AST with a missing s: field', () => {
+    // Simulate what would happen if the TS framework produced a node
+    // without stamping `s:` — the strict json::read must reject it and
+    // surface a structured error so the developer can find the producer.
+    const original = '# Heading\n\nA paragraph.\n';
+    const baseline = JSON.parse(JSON.stringify(parseAst(original)));
+
+    const stripped = stripFirstStrSourceInfo(baseline);
+    expect(stripped, 'expected to find a Str node to strip').toBe(true);
+
+    const respJson = wasm.incremental_write_qmd(
+      original,
+      JSON.stringify(baseline),
+      JSON.stringify(parseAst(original)),
+    );
+    const resp: AstResponse = JSON.parse(respJson);
+    expect(resp.success).toBe(false);
+    // The error message comes from MissingSourceInfoRef's Display impl:
+    // "Missing source_info reference at <node_path>; use read_completing_source_info..."
+    expect(resp.error).toMatch(/Missing source_info reference/i);
+  });
+
+  it('incremental_write_qmd rejects a new AST with a missing s: field', () => {
+    const original = '# Heading\n\nA paragraph.\n';
+    const baseline = parseAst(original);
+    const newAst = JSON.parse(JSON.stringify(parseAst(original)));
+
+    const stripped = stripFirstStrSourceInfo(newAst);
+    expect(stripped, 'expected to find a Str node to strip').toBe(true);
+
+    const respJson = wasm.incremental_write_qmd(
+      original,
+      JSON.stringify(baseline),
+      JSON.stringify(newAst),
+    );
+    const resp: AstResponse = JSON.parse(respJson);
+    expect(resp.success).toBe(false);
+    expect(resp.error).toMatch(/Missing source_info reference/i);
+  });
+});
