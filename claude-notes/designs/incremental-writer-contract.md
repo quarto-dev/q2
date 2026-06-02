@@ -40,6 +40,19 @@ Recursion is what makes BP enforceable. BP is a property each byte must satisfy 
 
 ## The Byte Provenance Invariant — formal statement
 
+> **The verified formal statement and proofs live in
+> [`incremental-writer-bp-proof.md`](incremental-writer-bp-proof.md).** This
+> section is the *informal presentation*. The proof file carries the
+> **strengthened** statement: the per-output-byte (P1)/(P2) dichotomy below is
+> retained, plus a per-source-position **multiplicity** clause (M) — *each
+> source byte is copied at most once* — without which the partition claimed in
+> the next paragraph does not actually follow (two nodes may copy the same
+> source byte; see the `Space`/`Code` `[1,9]` case in
+> [Plan 7g](../plans/2026-06-01-q2-preview-plan-7g-source-range-tiling.md)). The
+> strengthened invariant holds under three premises — **P4** tiling (producer,
+> Plan 7g), **L2** dispatch terminality, **L3** Invocation-coalescing — verified
+> in the [Phase 6 audit](../research/2026-06-01-plan-7g-phase-6-bp-audit.md).
+
 Every AST node carries a `SourceInfo` value recording its byte-level origin. Four physical shapes encode that origin:
 
 - `Original{file, start, end}` — the node's bytes are `file[start..end]`.
@@ -78,6 +91,11 @@ The dispatch is total: every well-formed input lands at exactly one rule. No cat
 
 ## Soundness
 
+> The verified proof (with the multiplicity strengthening and lemmas L1/L2/L3)
+> is in [`incremental-writer-bp-proof.md`](incremental-writer-bp-proof.md) §4.
+> The per-byte argument below is correct as far as it goes; it is silent on
+> multiplicity, which the proof file discharges separately.
+
 **Claim.** For every input `(Source, AST_old, AST_new, Plan)` produced by a q2 pipeline run that satisfies the producer contract, and for every node `n` in `AST_new` at alignment context `α`, the bytes produced by `assemble(plan_user_writes(n, target, α))` satisfy BP.
 
 **Proof.** By structural induction on `n`.
@@ -95,6 +113,9 @@ The induction proceeds on AST size, which is finite, so termination is guarantee
 The argument depends on the producer contract: a producer that stamps non-atomic source_info on a node whose content is pipeline output will route that node to R5 or R1, and the writer will emit pipeline bytes as if user-authored — satisfying BP's letter but not its spirit. Producer hygiene is the substrate; the writer's dispatch and recursion are the structure built on it. With both contracts in force, BP holds throughout `Source'`. ∎
 
 ## Completeness
+
+> The verified proof (with (C1+) "exactly once") is in
+> [`incremental-writer-bp-proof.md`](incremental-writer-bp-proof.md) §5.
 
 Soundness rules out *leaks* — pipeline bytes appearing in `Source'`. Completeness rules out *drops* — user-authored bytes failing to appear when they should. Both are necessary: a writer that emits nothing is trivially sound but useless; a writer that emits everything is trivially complete but unsafe. The recursive `plan_user_writes` proves the dual of BP by the same structural induction.
 

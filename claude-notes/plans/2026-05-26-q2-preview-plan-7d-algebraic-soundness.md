@@ -329,6 +329,37 @@ Explicit non-changes, for clarity:
 - **Cost.** The Phase 4 benchmark is the verification mechanism; if cost regresses significantly, the benchmark catches it.
 - **Producer-contract drift.** The algebra leans on producer hygiene at R5's trust point. If a producer introduces a leaf with non-default source_info that doesn't fit the algebra's classifications, R5 may emit bytes the algebra trusts but shouldn't. Plan 7f's `SourceInfo::default()` audit + the producer contract's "new kinds default to non-atomic" rule are the mitigations.
 
+## Premises surfaced by the Plan 7g Phase 6 BP audit (2026-06-01)
+
+The BP/completeness proof was strengthened with a multiplicity clause (M) —
+*each source byte is copied at most once* — and re-verified in
+[`incremental-writer-bp-proof.md`](../designs/incremental-writer-bp-proof.md)
+(audit: [`../research/2026-06-01-plan-7g-phase-6-bp-audit.md`](../research/2026-06-01-plan-7g-phase-6-bp-audit.md)).
+It holds under three premises. **One is a live obligation on 7d's dispatch (L2);
+L3 is held by design and not an obligation:**
+
+- **L2 — dispatch terminality (LIVE OBLIGATION).** `R1`/`R1'`/`R2`/`R2'` must
+  emit and **not** recurse; only `R3`/`R4` recurse. Holds in the design as
+  written; the audit flags it as a property to preserve, not change. Property #5
+  (leaf-only serialization) and totality already imply it — keep them.
+- **L3 — Invocation-coalescing completeness: HELD BY DESIGN, NOT IMPLEMENTED
+  (2026-06-01 decision).** Property #9's consecutive-only coalescing does not
+  satisfy L3 in general, but the only producer of splittable N-to-1 output (block
+  shortcodes via `ShortcodeResult::Blocks`) renders as a **client read-only
+  region**, so no front-end edit can leave the survivors non-adjacent. The
+  premise's antecedent is unreachable; (M) holds. **7d need not generalize
+  Property #9.** Revisit only if a non-client edit path (programmatic, filter
+  block-reorder) is added — then coalesce by whole-walk `preimage_in`-equality or
+  structurally group N-to-1 output. See proof file §6.
+- **R4 shells / `OriginalGap` separators are P1 copies** and must be counted in
+  the (M) disjoint family. They are the byte-complement of children within a
+  container and are disjoint under P4; no code change beyond ensuring shell/gap
+  extraction stays complement-based (it is today: `assemble_inline_splice`).
+  **Optional defense-in-depth:** a `debug_assert!(gap.start <= gap.end)` +
+  graceful fallback when (re)implementing `SeparatorRule::OriginalGap`, guarding
+  the reversed-slice panic that overlapping siblings would cause. The root-cause
+  fix for that panic is P4 (7g), not 7d — see 7g Phase 3.
+
 ## References
 
 - Design doc / contract: [`claude-notes/designs/incremental-writer-contract.md`](../designs/incremental-writer-contract.md).

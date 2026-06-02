@@ -172,7 +172,14 @@ is a visible smell. Handlers to fix (verify list against Phase 2):
 `uri_autolink`, plus the `node_source_info_with_context(node)` sites in
 `treesitter.rs`. Write byte-offset regression tests *first* (inline-code-in-
 prose, multi-kv attr, citation, doubled separator whitespace, trailing
-whitespace). **Open question:** code spans are a *scanner* regression — decide
+whitespace). **Also add a writer-level regression test** (from the Phase 6
+audit): drive the `Space`/`Code` `[1,9]` fixture through the incremental writer
+and confirm the `OriginalGap` separator does not produce a reversed slice
+(`gap.start <= gap.end`). This is the root-cause fix for the latent
+reversed-`OriginalGap` panic — once P4 holds the reversed gap is unreachable by
+construction. (Not yet confirmed to panic on today's writer; this test confirms
+or refutes it. A `debug_assert` + graceful fallback in the writer is optional
+defense-in-depth that lands in 7d.) **Open question:** code spans are a *scanner* regression — decide
 whether handler-trim alone suffices (the policy says yes; the handler re-derives
 the right range regardless of the loose token) or whether to also restore the
 scanner's backtick-start boundary as defense-in-depth. Default to handler-only
@@ -190,6 +197,34 @@ range. Likely small.
   pairs" — this is the third party that was never written down).
 
 ### Phase 6 — Audit BP + completeness (THE GATE — do this first)
+
+**STATUS (2026-06-01): COMPLETE — verdict CONDITIONAL GO.** Full audit in
+[`claude-notes/research/2026-06-01-plan-7g-phase-6-bp-audit.md`](../research/2026-06-01-plan-7g-phase-6-bp-audit.md).
+BP (strengthened with multiplicity (M)) and completeness (strengthened to
+"exactly once" (C1+)) are *provable* under an explicit premise set:
+**{P4 tiling, L2 dispatch-terminality, L3 whole-walk Invocation-coalescing}**.
+(M) reduces cleanly to L1 (sibling-rooted disjointness ⇐ P4) ∧ L2 (no
+ancestor/descendant double-count ⇐ terminal R1/R1'). No unfixable obstruction.
+**One substantive reachable bug surfaced (Hole α):** atomic N-to-1 shortcode
+output (`ShortcodeResult::Blocks` → N independent sibling blocks sharing one
+`Invocation`) duplicates the token range when survivors are left non-adjacent,
+because today's coalescing (and Plan 7d Property #9) is *consecutive-only*.
+Fixable → acceptable gap, not a no-go. **L3 decision (2026-06-01): held by
+design, not implemented** — the only splittable N-to-1 producer (block
+shortcodes) renders read-only at the client, so no front-end edit reaches the
+non-adjacent split; (M) holds. Revisit only if a non-client edit path appears.
+Also surfaced: R4 shells / OriginalGap separators must be counted in the (M)
+disjoint family (P4-dependent); the latent reversed-`OriginalGap` panic under
+¬P4 is **fixed by P4 itself** — tracked as a Phase 3 writer regression test
+(above), not a separate fix.
+
+On-pass outputs (all done): (a) verified statement + proofs moved into
+[`incremental-writer-bp-proof.md`](../designs/incremental-writer-bp-proof.md);
+(b) `incremental-writer-contract.md` points at it; (c) premises recorded on 7d's
+tail (L2 live; L3 held-by-design; shell/separator multiplicity).
+
+---
+
 The duplication gap is a symptom: the formal statement does not entail the
 partition its prose asserts. **Before any implementation**, rigorously verify
 that BP **and** completeness hold against our actual code/design — assuming the
