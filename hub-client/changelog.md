@@ -15,6 +15,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-06-02
+
+- [`301ca456`](https://github.com/quarto-dev/q2/commits/301ca456): Add "Import from ZIP" to the project selector — create a new project from an uploaded .zip archive (the inverse of "Export to ZIP").
+
 ### 2026-05-27
 
 - [`9aa29ee1`](https://github.com/quarto-dev/q2/commits/9aa29ee1): View toggle buttons now order markup-left / preview-right (matching the editor-left / preview-right layout) instead of preview-left / markup-right.
