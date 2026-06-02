@@ -171,11 +171,14 @@ pick one (a spike, Phase 2 below). Current leaning is **Option A**.
 
 Monaco's classic `tokenize(line, state)` per-line state machine.
 
-- Synchronous, line-incremental, stateful per line. Tree-sitter is
-  whole-document, so we'd have to parse the whole doc up front, cache
-  spans bucketed by line, and have `tokenize` return cached results.
-  Workable but fights the API, and incremental editing semantics get
-  awkward. Lower priority unless Option A hits a blocker.
+- Synchronous, line-incremental, stateful per line, threading an opaque
+  per-line `state`. The awkwardness here is the **impedance mismatch
+  with Monaco's legacy line-tokenizer API**, *not* a tree-sitter
+  limitation (see "Incremental parsing" below — tree-sitter is fully
+  incremental). To bridge a whole-tree model into this pull-based,
+  per-line API you'd maintain a line→captures cache and re-derive it
+  after edits. Workable but fights the API. Lower priority unless
+  Option A hits a blocker.
 
 ### Option C — Manual decorations / model markers
 
@@ -191,14 +194,48 @@ Monaco's classic `tokenize(line, state)` per-line state machine.
 
 ### Loader strategy (independent of A/B/C)
 
-`loadUserGrammar` re-runs a query and likely reparses from scratch per
-call — fine for short code snippets, wrong for a live editor document.
-For the editor we want a **dedicated module** (working name
-`qmdEditorHighlight.ts`) that reuses `ensureParserInit` +
-`Language.load` but **holds a persistent `Parser` + `Tree`** and does
-incremental reparses via `tree.edit()` translated from Monaco model
-change events. Reuse, not fork, the init/cache primitives in
-`preview-runtime`.
+`loadUserGrammar` re-runs a query and reparses from scratch per call
+(`Highlight.ts:149` does `parser.parse(source)` then `tree.delete()`)
+— deliberately non-incremental, fine for short throwaway code snippets,
+wrong for a live editor document. For the editor we want a **dedicated
+module** (working name `qmdEditorHighlight.ts`) that reuses
+`ensureParserInit` + `Language.load` but **holds a persistent `Parser`
++ live `Tree`** per open `.qmd` model. Reuse, not fork, the init/cache
+primitives in `preview-runtime`.
+
+### Incremental parsing (verified against web-tree-sitter@0.26.8)
+
+Tree-sitter is **incremental**, and the installed `web-tree-sitter`
+exposes the whole surface (confirmed in
+`node_modules/web-tree-sitter/web-tree-sitter.d.ts`). The editor
+pipeline can be incremental end-to-end:
+
+1. **Translate the Monaco edit.** `onDidChangeModelContent` gives
+   `rangeOffset` / `rangeLength` / `text` plus line/column, which map
+   directly onto tree-sitter's `Edit`
+   (`{ startIndex, oldEndIndex, newEndIndex, startPosition,
+   oldEndPosition, newEndPosition }`, `.d.ts:41-61`).
+2. **`tree.edit(edit)`** (`.d.ts:341`) splices the edit into the live
+   tree.
+3. **`parser.parse(text, oldTree)`** (`.d.ts:193`) reparses reusing
+   unchanged subtrees — README: *"This will take less time than the
+   first parse."* Cost scales with the edit + affected region, not the
+   document length. The `(index, position) => string` callback form
+   (`.d.ts:30`) lets us feed Monaco's model chunk-by-chunk instead of
+   stringifying the whole buffer each keystroke.
+4. **`oldTree.getChangedRanges(newTree)`** (`.d.ts:355`) returns only
+   the ranges whose syntactic structure changed.
+5. **Scoped re-query.** `Query.captures(node, { startIndex, endIndex })`
+   (`.d.ts:743-767, 949`) re-runs the highlight query over just those
+   ranges.
+6. **Delta tokens.** Monaco's `DocumentSemanticTokensProvider` supports
+   `provideDocumentSemanticTokensEdits` (token deltas vs. a previous
+   result id), which pairs with step 4 so we push only changed tokens.
+
+This replaces the earlier (incorrect) framing that suggested a full
+whole-document reparse on every change. Q7 (performance) should still
+confirm the constants empirically on large docs, but the algorithmic
+story is incremental, not O(document) per keystroke.
 
 ---
 
