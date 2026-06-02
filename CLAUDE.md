@@ -266,7 +266,7 @@ When fixing ANY bug:
 - `quarto-citeproc`: citation processing engine using CSL styles
 
 **Tree-sitter grammars:**
-- `tree-sitter-qmd`: tree-sitter grammars for block and inline parsers
+- `tree-sitter-qmd`: tree-sitter grammar for qmd (a single unified grammar parsing both block structure and inline content)
 - `tree-sitter-doctemplate`: tree-sitter grammar for document templates
 - `quarto-treesitter-ast`: generic tree-sitter AST traversal utilities
 
@@ -483,7 +483,7 @@ This repository has Claude Code hooks configured in `.claude/settings.json`.
 - When a cd command fails for you, that means you're confused about the current directory. In this situations, ALWAYS run `pwd` before doing anything else.
 - use `jq` instead of `python3 -m json.tool` for pretty-printing. When processing JSON in a shell pipeline, prefer `jq` when possible.
 - Always create a plan. Always work on the plan one item at a time.
-- In the tree-sitter-markdown and tree-sitter-markdown-inline directories, you rebuild the parsers using "tree-sitter generate; tree-sitter build". Make sure the shell is in the correct directory before running those. Every time you change the tree-sitter parsers, rebuild them and run "tree-sitter test". If the tests fail, fix the code. Only change tree-sitter tests you've just added; do not touch any other tests. If you end up getting stuck there, stop and ask for my help.
+- The qmd grammar is unified: there is a single grammar directory, `crates/tree-sitter-qmd/tree-sitter-markdown` (there is no longer a separate `tree-sitter-markdown-inline` directory). In that directory you rebuild the parser using "tree-sitter generate; tree-sitter build". Make sure the shell is in the correct directory before running those. Every time you change the tree-sitter parser, rebuild it and run "tree-sitter test". If the tests fail, fix the code. Only change tree-sitter tests you've just added; do not touch any other tests. If you end up getting stuck there, stop and ask for my help.
 - When attempting to find binary differences between files, always use `xxd` instead of other tools.
 - .c only works in JSON formats. Inside Lua filters, you need to use Pandoc's Lua API. Study https://raw.githubusercontent.com/jgm/pandoc/refs/heads/main/doc/lua-filters.md and make notes to yourself as necessary (use claude-notes in this directory)
 - Sometimes you get confused by macOS's using many different /private/tmp directories linked to /tmp. Prefer to use temporary directories local to the project you're working on (which you can later clean)
