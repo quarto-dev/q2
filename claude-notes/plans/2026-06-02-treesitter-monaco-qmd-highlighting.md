@@ -3,6 +3,21 @@
 **Status:** drafting — pending user review (do NOT start implementing)
 **Beads:** bd-4v0vc
 **Date:** 2026-06-02
+**Integration branch:** `feature/monaco-tree-sitter-qmd` — all feature
+work for this epic accumulates here (sub-task topic branches merge in
+`--no-ff` per the integration-line convention).
+
+## Decisions so far
+
+- **Approach = Path 1** (standalone grammar wasm + web-tree-sitter).
+  Build `tree-sitter-qmd` to a standalone tree-sitter grammar `.wasm`,
+  load it in JS via the existing `preview-runtime` loader machinery,
+  hold a persistent `Tree`, and run `highlights.scm` + incremental
+  `tree.edit()` reparses in JS. Path 2 (a new wasm-bindgen export that
+  computes spans natively in the existing ~33 MB Rust blob) was
+  considered and rejected for the first cut — see the fork under Q1.
+- **Branching** = single integration branch `feature/monaco-tree-sitter-qmd`
+  in the main checkout (not a separate worktree).
 
 ## Goal
 
@@ -195,6 +210,22 @@ change events. Reuse, not fork, the init/cache primitives in
   `cargo xtask` target; (b) some other path. Where does the artifact
   live, and how do we avoid the External Sources / "fresh clone needs
   dist/" pitfalls? Must be reproducible in CI.
+
+  **Path 1 vs Path 2 (settled — Path 1).** Two ways to get qmd
+  highlight spans into the editor existed:
+  - **Path 1 (chosen):** build a standalone grammar `.wasm` and load
+    it via web-tree-sitter in JS. Trades the build/ship pipeline (this
+    Q1) for free JS-side incrementality and reuse of the proven
+    `preview-runtime` loader.
+  - **Path 2 (rejected for now):** add a wasm-bindgen export to
+    `wasm-quarto-hub-client` / `wasm-qmd-parser` that computes spans
+    natively against the grammar already compiled into the ~33 MB Rust
+    blob. No new artifact to build or ship, but a wasm-bindgen boundary
+    crossing per update and the incremental `Tree` + query layer would
+    have to be reimplemented and held in Rust.
+
+    If Q1's build tooling proves intractable (emscripten/CI friction),
+    Path 2 is the documented fallback.
 - **Q2 — Ship location.** Bundle the grammar wasm as a vite `?url`
   asset (mirroring how `web-tree-sitter.wasm?url` is handled in
   `preview-runtime`), or place it in hub-client `public/`? The
