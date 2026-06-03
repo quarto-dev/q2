@@ -1,6 +1,8 @@
 # Tree-sitter-driven Monaco syntax highlighting for `.qmd`
 
-**Status:** drafting — pending user review (do NOT start implementing)
+**Status:** decisions recorded (2026-06-03) — Q2–Q6, Q8 resolved by
+user; Q1 (build tooling) and Q7 (performance) remain open. Ready to
+start Phase 0.
 **Beads:** bd-4v0vc
 **Date:** 2026-06-02
 **Integration branch:** `feature/monaco-tree-sitter-qmd` — all feature
@@ -18,6 +20,36 @@ work for this epic accumulates here (sub-task topic branches merge in
   considered and rejected for the first cut — see the fork under Q1.
 - **Branching** = single integration branch `feature/monaco-tree-sitter-qmd`
   in the main checkout (not a separate worktree).
+- **Q2 resolved — ship as vite `?url` asset.** Bundle the grammar wasm
+  (and `highlights.scm` text) as vite assets, mirroring how
+  `web-tree-sitter.wasm?url` is handled in `preview-runtime`. Not
+  `public/`.
+- **Q3 resolved — expand the shared `highlights.scm` in place.**
+  Expand `tree-sitter-markdown/queries/highlights.scm` into a basic
+  set of captures for the typical nodes a markdown editor needs
+  (inline emphasis/strong/code/links, etc.). No editor-specific fork.
+  We make **no compatibility promises** about this file to current
+  consumers — no need to audit them before editing.
+- **Q4 resolved — Monaco semantic token types.** The capture-name →
+  token legend maps tree-sitter capture names to Monaco **semantic
+  token types** (not `hl-*` CSS classes). This also effectively
+  confirms **Option A** (semantic tokens provider) as the integration
+  mechanism, pending only the Phase 0 spike validating theme behavior.
+- **Q5 resolved — replace, don't augment.** Fully replace the
+  `markdown` base tokenizer for `.qmd`: register a distinct **`qmd`
+  language id** with a trivial/empty base tokenizer and drive all
+  color from semantic tokens. `getLanguageForFile` routes `.qmd` to
+  `qmd`; folding/symbol providers in `monacoProviders.ts` (bound to
+  `markdown` today) must also be registered for `qmd`.
+- **Q6 resolved — defer injections, but design for them.** First cut
+  scopes to qmd document structure only; fenced code bodies stay
+  uncolored. Follow-up: wire injection queries against the **other
+  tree-sitter grammars we already bundle** (the built-in grammar set
+  used by the render path), so editor code-block highlighting can
+  reuse those rather than Monaco's tokenizers.
+- **Q8 resolved — yes, feature flag.** Ship behind a setting so we
+  can A/B against the current `markdown` highlighting and fall back
+  if a parse regresses.
 
 ## Goal
 
@@ -241,6 +273,10 @@ story is incremental, not O(document) per keystroke.
 
 ## Open questions (resolve during/with the user before/while building)
 
+> **2026-06-03:** Q2, Q3, Q4, Q5, Q6, Q8 answered by the user — see
+> "Decisions so far" above. Only **Q1** (build tooling) and **Q7**
+> (performance validation) remain open.
+
 - **Q1 — Build tooling.** How do we produce the grammar wasm? Options:
   (a) `tree-sitter build --wasm` via `tree-sitter-cli` (needs emscripten
   or the CLI's docker/wasm path), wired into a new npm script or
@@ -263,39 +299,36 @@ story is incremental, not O(document) per keystroke.
 
     If Q1's build tooling proves intractable (emscripten/CI friction),
     Path 2 is the documented fallback.
-- **Q2 — Ship location.** Bundle the grammar wasm as a vite `?url`
-  asset (mirroring how `web-tree-sitter.wasm?url` is handled in
-  `preview-runtime`), or place it in hub-client `public/`? The
-  `highlights.scm` text also needs to ship alongside it.
-- **Q3 — highlights.scm scope.** The current query is too sparse for a
-  compelling editor experience (no inline emphasis/strong/code/link
-  captures). Do we expand the *shared* `highlights.scm` (also consumed
-  elsewhere?) or maintain an **editor-specific** query? Need to confirm
-  who else consumes `tree-sitter-markdown/queries/highlights.scm`
-  before editing it.
-- **Q4 — Capture-name → token mapping.** Define the legend mapping
-  tree-sitter capture names (`punctuation.special`, `text.title`,
-  `text.literal`, future `emphasis`/`strong`/`link`/…) to Monaco
-  semantic token types (or to `hl-*` CSS classes if Option C). Decide
-  the canonical set.
-- **Q5 — Replace vs. augment.** Do we fully replace the `markdown`
-  base tokenizer for `.qmd` (register a distinct `qmd` language id), or
-  layer tree-sitter semantic tokens on top of the existing `markdown`
-  base? Affects `getLanguageForFile`, folding/symbol provider
-  registration (those are bound to `markdown` today), and theming.
-- **Q6 — Code-block injections.** qmd embeds other languages in fenced
-  code blocks. The render path already highlights those via the built-in
-  grammar set. In the editor, do we (initially) leave fenced code
-  uncolored / monochrome, defer to Monaco, or wire injection queries?
-  Recommend deferring injections to a follow-up; scope the first cut to
-  qmd document structure only.
-- **Q7 — Performance.** Confirm incremental reparse + re-query stays
-  within budget on large docs; add debouncing. Follow
+- **Q2 — Ship location.** ✅ **Resolved: vite `?url` asset** (wasm +
+  `highlights.scm`), mirroring `web-tree-sitter.wasm?url` in
+  `preview-runtime`. Not `public/`.
+- **Q3 — highlights.scm scope.** ✅ **Resolved: expand the shared
+  query in place.** Grow `tree-sitter-markdown/queries/highlights.scm`
+  into a basic editor-grade capture set (inline emphasis/strong/code/
+  links + existing block captures). No editor-specific fork; no
+  compatibility promises to current consumers of the file.
+- **Q4 — Capture-name → token mapping.** ✅ **Resolved: Monaco
+  semantic token types.** Define a `SemanticTokensLegend` mapping
+  capture names (`punctuation.special`, `text.title`, `text.literal`,
+  new `emphasis`/`strong`/`link`/…) to Monaco semantic token types.
+  The canonical capture set falls out of the Q3 expansion (Phase 4).
+- **Q5 — Replace vs. augment.** ✅ **Resolved: replace.** Register a
+  distinct `qmd` language id with an empty/trivial base tokenizer;
+  all color comes from tree-sitter semantic tokens. Requires routing
+  `.qmd` in `getLanguageForFile` and re-registering the folding/
+  symbol providers (currently bound to `markdown`) for `qmd`.
+- **Q6 — Code-block injections.** ✅ **Resolved: defer, but plan for
+  bundled grammars.** First cut = qmd document structure only; fenced
+  code bodies uncolored. Follow-up issue: injection queries targeting
+  the other tree-sitter grammars we already bundle for the render
+  path, so editor and preview share code-block highlighting.
+- **Q7 — Performance.** *(open)* Confirm incremental reparse +
+  re-query stays within budget on large docs; add debouncing. Follow
   `claude-notes/instructions/performance-profiling.md` if a hotspot
   appears (native-proxy-first, `QUARTO_PERF_STATS=1`).
-- **Q8 — Feature flag / rollout.** Ship behind a setting so we can
-  A/B against the current `markdown` highlighting and fall back if a
-  parse regresses.
+- **Q8 — Feature flag / rollout.** ✅ **Resolved: yes.** Ship behind
+  a setting so we can A/B against the current `markdown` highlighting
+  and fall back if a parse regresses.
 
 ---
 
@@ -307,17 +340,20 @@ story is incremental, not O(document) per keystroke.
 > verification in a real browser session before any phase is declared
 > done.
 
-### Phase 0 — Decision spike (no production code)
+### Phase 0 — Validation spike (no production code)
 
 - [ ] Stand up a throwaway spike: register a `qmd` language, hardcode a
       tiny pre-built grammar wasm, prove we can color *something* in the
-      editor via Option A (semantic tokens).
+      editor via Option A (semantic tokens). (Option A is decided per
+      Q4/Q5; the spike *validates* it rather than choosing.)
 - [ ] Confirm theme behavior (`semanticHighlighting`, `vs`/`vs-dark`
-      color rules) and whether base tokenizer must be empty.
-- [ ] Decide Option A vs B vs C; record the decision and answers to
-      Q5/Q1/Q2 in this doc.
+      color rules) with an empty base tokenizer on the new `qmd`
+      language id.
+- [ ] Record spike findings and the answer to Q1 (build tooling) in
+      this doc. If Option A hits a blocker, surface it before falling
+      back to B/C.
 
-### Phase 1 — Grammar wasm build + ship pipeline (resolves Q1, Q2)
+### Phase 1 — Grammar wasm build + ship pipeline (resolves Q1; Q2 decided)
 
 - [ ] Test: a CI-runnable check that the grammar wasm artifact exists
       and `web-tree-sitter` `Language.load` accepts it (parse a known
@@ -326,8 +362,8 @@ story is incremental, not O(document) per keystroke.
       target) that produces `tree-sitter-qmd` grammar wasm from
       `crates/tree-sitter-qmd`, reproducibly, without referencing
       `external-sources/`.
-- [ ] Ship the wasm + `highlights.scm` to hub-client (asset location
-      per Q2). Update fresh-clone/build docs as needed.
+- [ ] Ship the wasm + `highlights.scm` to hub-client as vite `?url`
+      assets (per Q2). Update fresh-clone/build docs as needed.
 
 ### Phase 2 — Browser parser module (`qmdEditorHighlight.ts`)
 
@@ -340,26 +376,29 @@ story is incremental, not O(document) per keystroke.
       Reuse (do not fork) `ensureParserInit` / cache from
       `preview-runtime`.
 
-### Phase 3 — Monaco provider wiring (resolves Q5)
+### Phase 3 — Monaco provider wiring (implements Q5 decision)
 
-- [ ] Tests: provider returns the expected semantic-token array
-      (or decorations) for fixtures; legend mapping is correct; updates
-      fire on model change.
-- [ ] Register the provider (mirroring `monacoProviders.ts` patterns),
-      route `.qmd` to it, behind the Q8 feature flag.
+- [ ] Tests: provider returns the expected semantic-token array for
+      fixtures; legend mapping is correct; updates fire on model
+      change.
+- [ ] Register the `qmd` language id with an empty base tokenizer;
+      register the semantic tokens provider (mirroring
+      `monacoProviders.ts` patterns); route `.qmd` via
+      `getLanguageForFile`; re-register folding/symbol providers for
+      `qmd`; all behind the Q8 feature flag.
 
-### Phase 4 — highlights.scm expansion + theming (resolves Q3, Q4)
+### Phase 4 — highlights.scm expansion + theming (implements Q3, Q4 decisions)
 
-- [ ] Confirm consumers of the shared `highlights.scm`; decide shared
-      vs editor-specific query.
-- [ ] Expand captures (inline emphasis/strong/code/link, attributes,
-      divs/spans, shortcodes, math, frontmatter) with tests pinning the
-      new captures.
-- [ ] Define capture→token (or capture→`hl-*`) mapping and theme color
-      rules for light + dark; consider parity with preview `hl-*`
-      colors (Option C synergy).
+- [ ] Expand the shared `tree-sitter-markdown/queries/highlights.scm`
+      captures in place (inline emphasis/strong/code/link, attributes,
+      divs/spans, shortcodes, math, frontmatter) with tests pinning
+      the new captures. No compatibility audit of current consumers
+      required (per Q3), but run the existing test suites to catch
+      outright breakage.
+- [ ] Define the capture → Monaco semantic-token-type legend and theme
+      color rules for light + dark (`vs`/`vs-dark`).
 
-### Phase 5 — End-to-end verification + rollout (resolves Q7, Q8)
+### Phase 5 — End-to-end verification + rollout (resolves Q7; implements Q8)
 
 - [ ] Real browser session against a running hub: open a representative
       `.qmd`, confirm highlighting, edit live, confirm incremental
@@ -374,7 +413,11 @@ story is incremental, not O(document) per keystroke.
 ## Out of scope (at least for the first cut)
 
 - Language injection / embedded-code highlighting inside fenced code
-  blocks in the editor (Q6 — deferred to a follow-up issue).
+  blocks in the editor (Q6 — deferred to a follow-up issue). When
+  picked up, the injection targets should be the **tree-sitter
+  grammars we already bundle** for the render path, not Monaco's
+  built-in tokenizers — keeping editor and preview code-block
+  highlighting consistent.
 - Changing the render-side (preview) highlighting, which already uses
   tree-sitter.
 - LSP-grade features (diagnostics, completion) — separate subsystem.
