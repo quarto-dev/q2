@@ -2037,7 +2037,17 @@ fn audit_inline_siblings(
     }
 
     // (c) Tightness — inline level only.
+    // Space, SoftBreak, LineBreak are excluded: their ranges *correctly*
+    // contain whitespace by definition (a Space node IS a space character).
+    // Overlap check (a) already catches the case where a Space node wrongly
+    // absorbs non-whitespace bytes from a sibling.
     for inline in inlines {
+        if matches!(
+            inline,
+            Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_)
+        ) {
+            continue;
+        }
         if let Some(ref r) = inline.source_info().preimage_in(target) {
             check_tightness(inline_node_type(inline), r, src, findings);
         }

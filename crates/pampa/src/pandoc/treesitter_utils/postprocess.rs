@@ -49,7 +49,7 @@ use quarto_pandoc_types::AttrSourceInfo;
 use quarto_pandoc_types::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
-use quarto_source_map::{By, SourceInfo};
+use quarto_source_map::{By, FileId, SourceInfo};
 use smallvec::smallvec;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -294,6 +294,26 @@ fn empty_table_attr() -> Attr {
     (String::new(), Vec::new(), LinkedHashMap::new())
 }
 
+/// Compute a tight hull `SourceInfo` spanning from `first.start` to `last.end`.
+///
+/// Used for list-table cell source_info when a cell has multiple content blocks:
+/// the cell must contain all its children (P4 tiling / containment check (b)).
+fn hull_source_infos(first: &SourceInfo, last: &SourceInfo) -> SourceInfo {
+    let fid = first.root_file_id();
+    let last_fid = last.root_file_id();
+    match (fid, last_fid) {
+        (Some(f1), Some(f2)) if f1 == f2 => {
+            let start = first.preimage_in(f1).map(|r| r.start);
+            let end = last.preimage_in(f2).map(|r| r.end);
+            match (start, end) {
+                (Some(s), Some(e)) => SourceInfo::original(f1, s, e),
+                _ => first.combine(last),
+            }
+        }
+        _ => first.combine(last),
+    }
+}
+
 /// Create an empty AttrSourceInfo
 fn empty_attr_source() -> AttrSourceInfo {
     AttrSourceInfo::empty()
@@ -382,7 +402,12 @@ fn transform_list_table_div(div: Div) -> Block {
             let cell_source_info = if cell_blocks.is_empty() {
                 row_source_info.clone()
             } else {
-                cell_blocks[0].source_info().clone()
+                // Hull from first block start to last block end: a cell with
+                // multiple blocks must contain all of them (containment check b).
+                hull_source_infos(
+                    cell_blocks.first().unwrap().source_info(),
+                    cell_blocks.last().unwrap().source_info(),
+                )
             };
 
             cells.push(Cell {
@@ -1271,13 +1296,11 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                     inline_attr.attr.2.clone(),
                                 ),
                                 content: vec![Inline::Math(math.clone())],
-                                source_info: if let Some(attr_overall) =
-                                    inline_attr.attr_source.combine_all()
-                                {
-                                    math.source_info.combine(&attr_overall)
-                                } else {
-                                    math.source_info.clone()
-                                },
+                                source_info: math_with_attr_span_source_info(
+                                    &math.source_info,
+                                    &inline_attr.source_info,
+                                    &inline_attr.attr_source,
+                                ),
                                 attr_source: inline_attr.attr_source.clone(),
                             }));
 
@@ -1664,6 +1687,54 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
         }),
         &mut ctx,
     )
+}
+
+// =============================================================================
+// Plan 7g Phase 3 — math-with-attr Span source_info hull
+// =============================================================================
+
+/// Compute the tight source_info for a `quarto-math-with-attribute` Span.
+///
+/// The Span wraps a `$...$  {#id}` or `$$...$$ {#id}` expression and should
+/// carry a single tight `Original` range covering the whole expression,
+/// including the structural `{` space and `}` delimiters.
+///
+/// The old code called `math.source_info.combine(&attr_source.combine_all())`
+/// which created a non-contiguous `Concat` with a `' {'` gap (non-whitespace
+/// → `ScatteredConcat` in the tiling auditor). The correct hull is
+/// `[math_start .. attr_content_end + 1]` where `+1` accounts for `}`.
+///
+/// Falls back to `combine` when source infos don't resolve to the same file.
+fn math_with_attr_span_source_info(
+    math_si: &SourceInfo,
+    attr_inline_si: &SourceInfo,
+    attr_source: &quarto_pandoc_types::AttrSourceInfo,
+) -> SourceInfo {
+    let hull = math_si.root_file_id().and_then(|fid: FileId| {
+        let math_start = math_si.preimage_in(fid)?.start;
+        // Resolve the attr content's file-level end. For a simple Original
+        // (single id/class) preimage_in returns the range directly. For a
+        // non-contiguous Concat (multi-component attr), take the max piece end.
+        let attr_end =
+            attr_inline_si
+                .preimage_in(fid)
+                .map(|r| r.end)
+                .or_else(|| match attr_inline_si {
+                    SourceInfo::Concat { pieces } => pieces
+                        .iter()
+                        .filter_map(|p| p.source_info.preimage_in(fid).map(|r| r.end))
+                        .max(),
+                    _ => None,
+                })?;
+        // +1: the closing '}' sits immediately after the attr content.
+        Some(SourceInfo::original(fid, math_start, attr_end + 1))
+    });
+    hull.unwrap_or_else(|| {
+        attr_source
+            .combine_all()
+            .map(|a| math_si.combine(&a))
+            .unwrap_or_else(|| math_si.clone())
+    })
 }
 
 #[cfg(test)]

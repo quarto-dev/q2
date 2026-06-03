@@ -2333,3 +2333,168 @@ fn incremental_write_never_panics_on_pampa_corpus() {
         "scanned no qmd files — corpus enumeration broken"
     );
 }
+
+// =============================================================================
+// Plan 7g Phase 2 — corpus census (temporary; will be removed once Phase 3-4b
+// fixes drive the violation count to zero and Phase 7 replaces this with the
+// green-gate property test)
+// =============================================================================
+
+/// Run `audit_source_range_tiling` over the pampa qmd corpus,
+/// ts-packages/annotated-qmd/examples, docs/, and pandoc-match-corpus.
+/// Produces a grouped census of findings and panics with it so nextest
+/// shows the output. This is a deliberate exploratory test — NOT part of CI.
+#[test]
+#[ignore]
+fn tiling_auditor_corpus_census() {
+    use pampa::writers::incremental::{TilingFindingKind, audit_source_range_tiling};
+    use std::collections::HashMap;
+
+    struct FileFindings {
+        file: String,
+        findings: Vec<(TilingFindingKind, String)>,
+    }
+
+    let mut all: Vec<FileFindings> = Vec::new();
+
+    // Helper: parse a file and run the auditor.
+    let mut scan = |path: &str| {
+        let Ok(src) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let Ok((ast, _, _)) = pampa::readers::qmd::read(
+            src.as_bytes(),
+            false,
+            path,
+            &mut std::io::sink(),
+            true,
+            None,
+        ) else {
+            return;
+        };
+        let findings = audit_source_range_tiling(&ast, &src);
+        if !findings.is_empty() {
+            all.push(FileFindings {
+                file: path.to_string(),
+                findings: findings.into_iter().map(|f| (f.kind, f.message)).collect(),
+            });
+        }
+    };
+
+    // --- pampa corpus (git ls-files *.qmd from repo root) ---
+    let listed = std::process::Command::new("git")
+        .args(["ls-files", "*.qmd"])
+        .output()
+        .expect("git ls-files");
+    for f in String::from_utf8(listed.stdout).unwrap().lines() {
+        scan(f);
+    }
+
+    // --- ts-packages/annotated-qmd/examples ---
+    for entry in std::fs::read_dir("../../ts-packages/annotated-qmd/examples")
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "qmd") {
+            scan(&path.display().to_string());
+        }
+    }
+
+    // --- docs ---
+    fn walk(dir: &str, out: &mut Vec<String>) {
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                walk(&p.display().to_string(), out);
+            } else if p.extension().is_some_and(|x| x == "qmd") {
+                out.push(p.display().to_string());
+            }
+        }
+    }
+    let mut docs_files = Vec::new();
+    walk("../../docs", &mut docs_files);
+    for f in &docs_files {
+        scan(f);
+    }
+
+    // --- produce census ---
+    let mut by_kind: HashMap<String, usize> = HashMap::new();
+    let mut scattered: Vec<(String, String)> = Vec::new(); // (file, message)
+    let mut whitespace_gap: Vec<(String, String)> = Vec::new();
+    let mut overlap: Vec<(String, String)> = Vec::new();
+    let mut tightness: Vec<(String, String)> = Vec::new();
+    let mut containment: Vec<(String, String)> = Vec::new();
+
+    for ff in &all {
+        for (kind, msg) in &ff.findings {
+            *by_kind.entry(format!("{kind:?}")).or_default() += 1;
+            match kind {
+                TilingFindingKind::ScatteredConcat => {
+                    scattered.push((ff.file.clone(), msg.clone()));
+                }
+                TilingFindingKind::WhitespaceGapConcat => {
+                    whitespace_gap.push((ff.file.clone(), msg.clone()));
+                }
+                TilingFindingKind::SiblingOverlap => {
+                    overlap.push((ff.file.clone(), msg.clone()));
+                }
+                TilingFindingKind::TightnessViolation => {
+                    tightness.push((ff.file.clone(), msg.clone()));
+                }
+                TilingFindingKind::ContainmentViolation => {
+                    containment.push((ff.file.clone(), msg.clone()));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut report = String::new();
+    report.push_str("\n\n=== Plan 7g Phase 2 — Tiling Auditor Corpus Census ===\n\n");
+    report.push_str(&format!("Files with findings: {}\n\n", all.len()));
+
+    report.push_str("--- Finding counts by kind ---\n");
+    let mut kinds: Vec<_> = by_kind.iter().collect();
+    kinds.sort_by_key(|(k, _)| k.clone());
+    for (k, n) in &kinds {
+        report.push_str(&format!("  {k}: {n}\n"));
+    }
+
+    report.push_str("\n--- SiblingOverlap ---\n");
+    for (f, m) in &overlap {
+        report.push_str(&format!("  [{f}] {m}\n"));
+    }
+
+    report.push_str("\n--- TightnessViolation (first 50) ---\n");
+    for (f, m) in tightness.iter().take(50) {
+        report.push_str(&format!("  [{f}] {m}\n"));
+    }
+    if tightness.len() > 50 {
+        report.push_str(&format!("  ... and {} more\n", tightness.len() - 50));
+    }
+
+    report.push_str("\n--- WhitespaceGapConcat ---\n");
+    for (f, m) in &whitespace_gap {
+        report.push_str(&format!("  [{f}] {m}\n"));
+    }
+
+    report.push_str("\n--- ScatteredConcat (MANDATORY GATE) ---\n");
+    for (f, m) in &scattered {
+        report.push_str(&format!("  [{f}] {m}\n"));
+    }
+
+    report.push_str("\n--- ContainmentViolation ---\n");
+    for (f, m) in &containment {
+        report.push_str(&format!("  [{f}] {m}\n"));
+    }
+
+    // Write to /tmp so the output is visible regardless of nextest capture.
+    let out_path = "/tmp/tiling-census.txt";
+    std::fs::write(out_path, &report).unwrap_or_default();
+    panic!("Census written to {out_path}");
+}

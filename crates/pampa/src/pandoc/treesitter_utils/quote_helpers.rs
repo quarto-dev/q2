@@ -9,7 +9,7 @@
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Inline, QuoteType, Quoted, Space};
-use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::location::{node_source_info_with_context, tight_source_info_for_node};
 
 /// Process quoted text (single or double quotes)
 pub fn process_quoted(
@@ -101,7 +101,7 @@ pub fn process_quoted(
     let quoted_inline = Inline::Quoted(Quoted {
         quote_type,
         content: content_inlines,
-        source_info: node_source_info_with_context(node, context),
+        source_info: tight_source_info_for_node(node, context),
     });
 
     // Build result with injected Space nodes as needed
