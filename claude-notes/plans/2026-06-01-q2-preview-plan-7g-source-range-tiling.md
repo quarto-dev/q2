@@ -72,11 +72,13 @@ merged run**, which holds for any N by construction in `coalesce_abbreviations`.
 **Two threats to 7d resolved in the same review (these gate 7g, not beads).** 7g's
 *primary purpose is to resolve every threat to 7d's implementation* — CI
 enforcement is secondary — so neither of these may be deferred to a bead; each is
-either resolved autonomously or escalated to the user. (1) **`scattered-concat`
-disposition → World 1 / World 2 gate** (Phase 2): if classification shows *every*
-non-clean `None`-`Concat` is a fixable dropped-middle bug (World 1), the agent
-continues autonomously; if *any* is genuine scatter (World 2), **stop and escalate
-to the user** for review. (2) **Hull-guard completeness:** the source-contiguity
+either resolved with the user or, in World 1, resumed only on the user's go-ahead.
+(1) **`scattered-concat` disposition → World 1 / World 2 gate** (Phase 2): after
+classifying the rows the agent **always stops at a mandatory checkpoint and reports
+to the user** (unconditional — fires in both worlds, because the failure mode is
+the agent *mis*-declaring World 1). World 1 (every row a fixable bug) → resume only
+**after the user confirms**; World 2 (any genuine scatter) → remain stopped, user
+drives the review. (2) **Hull-guard completeness:** the source-contiguity
 guard is sound always and complete given input tiling (proven for
 `coalesce_abbreviations`); the general class is covered by the Phase 1 auditor
 backstop on the final AST — kept as-is, no premise-free guard pursued.
@@ -344,9 +346,9 @@ property test (the thing whose absence let this hide).
           bug*: `combine` keeps only the first/last token, so the 3-token
           `Dr. Smith Jr.` stores a 2-piece `Concat` whose gap holds the owned word
           "Smith" — a bug, not a genuine scatter. Only a *confirmed* genuine
-          scatter is blessed; the rest become Phase 4b-class fixes. (If *any* row is
-          genuine scatter, Phase 2's gate **stops and escalates to the user** — a
-          7d blocker, never a bead.)
+          scatter is blessed; the rest become Phase 4b-class fixes. (Phase 2's gate
+          **always stops and reports to the user** after classification — in *both*
+          worlds — and only resumes on the user's go-ahead; never a bead.)
       Keep **both** the `whitespace-gap-concat` and `scattered-concat` rows **out of
       the initial gate** (count unknown until Phase 2; treat like the
       leading-whitespace family — report first, gate after the fixes drive it to
@@ -424,23 +426,31 @@ handler. Confirm the leading-whitespace family is the bulk; surface any
       fraction of corpus attrs hit the misalignment, that is the signal to
       prioritize bd-3aolj/bd-1e6a5 *before* trusting the attr census numbers —
       surface it as a finding; do **not** absorb those fixes into 7g.
-- [ ] **`scattered-concat` triage — the World 1 / World 2 gate (decides whether 7g
-      can continue autonomously).** Classify every `scattered-concat` row as either a
-      **dropped-middle producer bug** (the node owns the gap — fixable by the
-      Phase 4b hull helper) or **genuine scatter** (the node truly maps to
-      non-adjacent source, e.g. a value spliced in from frontmatter). The *count*
-      does not decide anything; the *kinds present* do:
-      - **World 1 — every row is a fixable bug (zero genuine-scatter members).** The
-        rule collapses to "all `None`-`Concat`s are producer bugs." The agent
-        **continues autonomously, no further supervision**: apply the Phase 4b
-        helper to each, re-run the auditor, proceed to the next phase.
-      - **World 2 — *any* row is genuine scatter.** **STOP and escalate to the
-        user.** A genuine non-contiguous node is a thorny threat to 7d's BP/tiling
-        premise that needs careful human review, and the user wants to be involved
-        before any contract/fix decision. Do **not** proceed past this gate, and do
-        **not** file a bead: 7g exists to *resolve* every threat to 7d, not defer
-        one, and a bead would merely punt a hard blocker. 7d stays blocked until the
-        user resolves it directly.
+- [ ] **`scattered-concat` triage — classify every row.** Each `scattered-concat`
+      row is either a **dropped-middle producer bug** (the node owns the gap —
+      fixable by the Phase 4b hull helper) or **genuine scatter** (the node truly
+      maps to non-adjacent source, e.g. a value spliced in from frontmatter). Record
+      the classification for every row.
+- [ ] **MANDATORY STOP — checkpoint report (HARD GATE, no exceptions).** After
+      classifying, **always halt here and report to the user** before doing anything
+      else: the `scattered-concat` count, the kinds present, the per-row
+      classification, and the resulting **World determination**. **This stop is
+      unconditional — it fires in World 1 *and* World 2.** Do **not** proceed past
+      this point autonomously under any circumstance; this is a structural gate, not
+      a prose nudge. The reason the stop is unconditional: the one way 7g can
+      silently let a 7d blocker through is the agent *mis*-classifying a genuine
+      scatter as a fixable bug and self-declaring World 1 — so the human confirms the
+      determination *before* any fix or contract change, every time.
+      - **World 1 — every row is a fixable bug (zero genuine-scatter members).** Only
+        **after the user confirms** the determination and gives the go-ahead does the
+        agent resume: collapse the rule to "all `None`-`Concat`s are producer bugs,"
+        apply the Phase 4b helper to each, re-run the auditor, proceed.
+      - **World 2 — *any* row is genuine scatter.** Remain stopped; this is a thorny
+        threat to 7d's BP/tiling premise that needs careful human review, and the
+        user drives the contract/fix decision. 7d stays blocked until the user
+        resolves it directly.
+      - **No bead either way.** 7g exists to *resolve* every threat to 7d, not defer
+        one; a bead would merely punt a hard blocker.
 - [ ] Decide and document the `Concat` exception precisely (pieces tile; the node's
       span is their hull; `preimage_in` returns `None` for non-contiguous). Confirm
       against `preimage_in`'s actual contiguous/None behavior.
@@ -961,8 +971,10 @@ mitigate the writer crash but the provenance corruption remained until this fix.
     auto-blessed.** It is a `scattered-concat` row for **Phase 2's World 1 / World 2
     gate** — it may be a *dropped-middle producer bug* (the 3-token `Dr. Smith Jr.`
     case: `combine` keeps only first/last, so the gap holds the owned word "Smith")
-    or a *genuine* scatter. World 1 (all bugs) → autonomous continue; World 2 (any
-    genuine scatter) → stop and escalate to the user (a 7d blocker, never a bead).
+    or a *genuine* scatter. Either way Phase 2 **always stops at a mandatory
+    checkpoint and reports to the user**; World 1 (all bugs) resumes only on the
+    user's go-ahead, World 2 (any genuine scatter) stays stopped for user-led review
+    (a 7d blocker, never a bead).
   This is now mechanically detectable, so it is *not* left to blind triage: the
   Phase 1 auditor descends into the pieces and emits either a `whitespace-gap-concat`
   finding (R1, high-confidence bug) or a `scattered-concat` row (needs classify).
@@ -991,15 +1003,16 @@ mitigate the writer crash but the provenance corruption remained until this fix.
 
 - **`scattered-concat` disposition — World 1 / World 2 gate (decided 2026-06-03).**
   Phase 2 classifies each `scattered-concat` row as a dropped-middle producer bug
-  or genuine scatter. **World 1** (all fixable, no genuine scatter) → agent
-  **continues autonomously** (collapse to "all `None`-`Concat`s are bugs," apply the
-  Phase 4b helper). **World 2** (any genuine scatter) → **STOP and escalate to the
-  user** for careful review; do not proceed, do not file a bead. Rationale: 7g's
-  *primary purpose is to resolve every threat to 7d's implementation* (CI
-  enforcement is the secondary purpose) — so a thorny `Concat` disposition can be
-  resolved autonomously *only* when it is unambiguously a bug; anything genuinely
-  ambiguous is a 7d blocker the user must adjudicate, not a deferrable bead. (Full
-  gate in Phase 2's checklist.)
+  or genuine scatter, then **always stops at a mandatory checkpoint and reports to
+  the user — unconditionally, in both worlds.** The stop is unconditional because
+  the one way 7g can silently pass a 7d blocker is the agent mis-declaring World 1;
+  the human confirms the determination every time. **World 1** (all fixable) →
+  resume only on the user's go-ahead (collapse to "all `None`-`Concat`s are bugs,"
+  apply the Phase 4b helper). **World 2** (any genuine scatter) → remain stopped;
+  the user drives the review. **No bead either way** — 7g's *primary purpose is to
+  resolve every threat to 7d's implementation* (CI enforcement is secondary), so a
+  thorny `Concat` disposition is never a deferrable bead. (Full gate in Phase 2's
+  checklist.)
 - **Hull-guard completeness (decided 2026-06-03).** The Phase 4b source-contiguity
   guard is sound unconditionally and complete *given input tiling* (proven for
   `coalesce_abbreviations` by construction). For the general producer class the
