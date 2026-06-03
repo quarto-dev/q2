@@ -139,6 +139,59 @@ fn display_math_with_attr_no_scattered_concat() {
 }
 
 // =============================================================================
+// Phase 4b: coalesce_abbreviations — WhitespaceGapConcat
+// =============================================================================
+
+#[test]
+fn abbreviation_coalesce_hull_no_whitespace_gap_concat() {
+    // "(e.g. this fails)" — `coalesce_abbreviations` merges Str "e.g." + Space
+    // + Str "this" into a Str with source_info = Concat[Original[1..5), Original[5..6)].
+    // Non-contiguous Concat → WhitespaceGapConcat. After fix: contiguous Original hull.
+    let findings = audit("(e.g. this fails)\n");
+    let wgc: Vec<_> = findings
+        .iter()
+        .filter(|f| f.kind == TilingFindingKind::WhitespaceGapConcat)
+        .collect();
+    assert!(
+        wgc.is_empty(),
+        "WhitespaceGapConcat after abbreviation-coalesce fix: {wgc:#?}"
+    );
+}
+
+#[test]
+fn dr_smith_abbreviation_hull_correct() {
+    // "Dr. Smith wrote" — the 2-token coalesce case from the plan.
+    // merged Str should resolve to Some(hull) via preimage_in, not None.
+    let src = "Dr. Smith wrote.\n";
+    let ast = parse_qmd(src);
+    let findings = audit_source_range_tiling(&ast, src);
+    let wgc: Vec<_> = findings
+        .iter()
+        .filter(|f| f.kind == TilingFindingKind::WhitespaceGapConcat)
+        .collect();
+    assert!(
+        wgc.is_empty(),
+        "WhitespaceGapConcat in Dr. Smith case: {wgc:#?}"
+    );
+}
+
+// =============================================================================
+// Phase 4: postprocess.rs — Figure Plain∩Plain duplication
+// =============================================================================
+
+#[test]
+fn figure_plain_plain_no_overlap() {
+    // "![alt text](url)" — desugared into a Figure with two sibling Plain blocks.
+    // Both currently get image.source_info (the full ![]() range) → SiblingOverlap.
+    // After fix: caption Plain gets Generated source_info (no contiguous claim).
+    let overlaps = overlap_messages("![alt text](url)\n");
+    assert!(
+        overlaps.is_empty(),
+        "Plain∩Plain overlap after Figure fix: {overlaps:#?}"
+    );
+}
+
+// =============================================================================
 // list_table.rs — cell containment violation
 // =============================================================================
 

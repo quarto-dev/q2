@@ -10,8 +10,8 @@
 - [x] **Phase 1** — Build the faithful tiling auditor (= the CI property test) — **done 2026-06-03**
 - [x] **Phase 2** — Census + Concat decision over a broad corpus — **done 2026-06-03**
 - [x] **Phase 3** — Fix the leading-whitespace family + two additional census sites (handler-enforced, TDD) — **done 2026-06-03**
-- [ ] **Phase 4** — Figure `Plain∩Plain` duplication
-- [ ] **Phase 4b** — Faithful range for whitespace-gap `None`-Concats (abbreviation-coalesce is the first instance; resolves the Phase 8 open question)
+- [x] **Phase 4** — Figure `Plain∩Plain` duplication — **no-op 2026-06-03**: the two Plain blocks are in separate containers (`caption.long` vs `content`), not siblings in the same slice. The auditor does NOT flag them as SiblingOverlap. The plan's original analysis was incorrect about the AST structure. No code change needed.
+- [x] **Phase 4b** — Faithful range for whitespace-gap `None`-Concats — **done 2026-06-03**
 - [ ] **Phase 5** — Amend the producer contract (P1–P4)
 - [x] **Phase 6** — Audit BP + completeness (THE GATE) — **PASSED (CONDITIONAL GO), 2026-06-01**
 - [ ] **Phase 7** — Wire the property test into CI

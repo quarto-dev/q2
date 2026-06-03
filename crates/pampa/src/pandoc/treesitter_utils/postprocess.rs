@@ -617,6 +617,55 @@ fn ends_with_abbreviation(text: &str) -> bool {
 
 /// Coalesce Str nodes that end with abbreviations with following words
 /// This matches Pandoc's behavior of keeping abbreviations with the next word
+/// Compute a contiguous `SourceInfo` hull for a run of merged inlines.
+///
+/// `run` is the complete slice of consumed inlines (e.g. `inlines[i..j]`,
+/// including the starting Str and any intermediate Space/Str nodes). Each
+/// element's `source_info` is resolved via `resolve_byte_range()`; if all
+/// elements resolve to the same file AND consecutive ranges are byte-adjacent
+/// (`ranges[k].end == ranges[k+1].start`), the function returns a single tight
+/// `Original` range covering the whole run.
+///
+/// Falls back to `run[0].source_info().combine(run.last().source_info())` when
+/// the source-contiguity check fails (e.g. inlines from different files or with
+/// non-adjacent ranges — in those cases the Concat behavior is correct).
+///
+/// Safety guard (R2, Plan 7g Phase 4b): the contiguity check ensures the hull
+/// never swallows bytes that belong to other nodes.
+fn contiguous_hull_for_run(run: &[Inline]) -> SourceInfo {
+    if run.is_empty() {
+        return SourceInfo::generated(By::tree_sitter_postprocess());
+    }
+    if run.len() == 1 {
+        return run[0].source_info().clone();
+    }
+    // Use root_file_id() from the first element to get a target FileId, then
+    // resolve each element with preimage_in(fid). Unlike resolve_byte_range(),
+    // preimage_in() handles contiguous Concat correctly (returns Some(hull)).
+    let Some(fid) = run[0].source_info().root_file_id() else {
+        return run[0]
+            .source_info()
+            .combine(run.last().unwrap().source_info());
+    };
+    let ranges: Option<Vec<std::ops::Range<usize>>> = run
+        .iter()
+        .map(|il| il.source_info().preimage_in(fid))
+        .collect();
+    let Some(ranges) = ranges else {
+        return run[0]
+            .source_info()
+            .combine(run.last().unwrap().source_info());
+    };
+    // All consecutive ranges must be byte-adjacent.
+    if ranges.windows(2).all(|w| w[0].end == w[1].start) {
+        SourceInfo::original(fid, ranges[0].start, ranges.last().unwrap().end)
+    } else {
+        run[0]
+            .source_info()
+            .combine(run.last().unwrap().source_info())
+    }
+}
+
 /// Returns (result, did_coalesce) tuple
 pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
     let mut result: Vec<Inline> = Vec::new();
@@ -678,9 +727,11 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
                 }
             }
 
-            // Create the Str node (possibly coalesced)
+            // Create the Str node (possibly coalesced).
+            // Use a contiguous hull when all elements in the merged run are
+            // source-adjacent — avoids WhitespaceGapConcat (Plan 7g Phase 4b).
             let source_info = if did_coalesce {
-                start_info.combine(&end_info)
+                contiguous_hull_for_run(&inlines[i..j])
             } else {
                 start_info
             };
