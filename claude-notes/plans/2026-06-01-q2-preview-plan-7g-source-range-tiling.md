@@ -49,7 +49,7 @@ containment run at **all** AST levels, tightness (c) at **inline-leaf only**, an
 (#6) the **semantic-ownership rule** sorts `None`-Concats — whitespace-only
 inter-piece gap → producer bug to fix with a contiguous hull; **content/newline gap
 (or a piece that doesn't resolve) → not auto-blessed, but a `scattered-concat`
-census row for Phase 2's "stop and classify" protocol** (it may be a dropped-middle
+row for Phase 2's World 1 / World 2 triage gate** (it may be a dropped-middle
 producer bug, not genuine scatter — see below). Two repercussions fold back into
 the phases: the auditor now **flags** whitespace-gap `None`-Concats (R1, Phase 1)
 instead of silently tallying them, and hull-emission is guarded by a **source-
@@ -68,6 +68,18 @@ blessed" would false-negative it; "stored gap whitespace-only" would false-rejec
 the correct hull `[0,13)`. The rule above is the corrected form: content gaps go to
 classification (not auto-bless), and the fix guard is **source-contiguity of the
 merged run**, which holds for any N by construction in `coalesce_abbreviations`.
+
+**Two threats to 7d resolved in the same review (these gate 7g, not beads).** 7g's
+*primary purpose is to resolve every threat to 7d's implementation* — CI
+enforcement is secondary — so neither of these may be deferred to a bead; each is
+either resolved autonomously or escalated to the user. (1) **`scattered-concat`
+disposition → World 1 / World 2 gate** (Phase 2): if classification shows *every*
+non-clean `None`-`Concat` is a fixable dropped-middle bug (World 1), the agent
+continues autonomously; if *any* is genuine scatter (World 2), **stop and escalate
+to the user** for review. (2) **Hull-guard completeness:** the source-contiguity
+guard is sound always and complete given input tiling (proven for
+`coalesce_abbreviations`); the general class is covered by the Phase 1 auditor
+backstop on the final AST — kept as-is, no premise-free guard pursued.
 
 ## Epic context
 
@@ -328,11 +340,13 @@ property test (the thing whose absence let this hide).
         - **any gap holds non-whitespace/newline, OR any piece fails to resolve**
           (nested non-contiguous `Concat`, `Generated` piece) → **do NOT auto-bless
           as "scattered."** Emit a `scattered-concat` census row for **Phase 2's
-          "stop and classify" protocol.** A content gap can still be a *producer
+          World 1 / World 2 triage gate.** A content gap can still be a *producer
           bug*: `combine` keeps only the first/last token, so the 3-token
           `Dr. Smith Jr.` stores a 2-piece `Concat` whose gap holds the owned word
           "Smith" — a bug, not a genuine scatter. Only a *confirmed* genuine
-          scatter is blessed; the rest become Phase 4b-class fixes.
+          scatter is blessed; the rest become Phase 4b-class fixes. (If *any* row is
+          genuine scatter, Phase 2's gate **stops and escalates to the user** — a
+          7d blocker, never a bead.)
       Keep **both** the `whitespace-gap-concat` and `scattered-concat` rows **out of
       the initial gate** (count unknown until Phase 2; treat like the
       leading-whitespace family — report first, gate after the fixes drive it to
@@ -410,6 +424,23 @@ handler. Confirm the leading-whitespace family is the bulk; surface any
       fraction of corpus attrs hit the misalignment, that is the signal to
       prioritize bd-3aolj/bd-1e6a5 *before* trusting the attr census numbers —
       surface it as a finding; do **not** absorb those fixes into 7g.
+- [ ] **`scattered-concat` triage — the World 1 / World 2 gate (decides whether 7g
+      can continue autonomously).** Classify every `scattered-concat` row as either a
+      **dropped-middle producer bug** (the node owns the gap — fixable by the
+      Phase 4b hull helper) or **genuine scatter** (the node truly maps to
+      non-adjacent source, e.g. a value spliced in from frontmatter). The *count*
+      does not decide anything; the *kinds present* do:
+      - **World 1 — every row is a fixable bug (zero genuine-scatter members).** The
+        rule collapses to "all `None`-`Concat`s are producer bugs." The agent
+        **continues autonomously, no further supervision**: apply the Phase 4b
+        helper to each, re-run the auditor, proceed to the next phase.
+      - **World 2 — *any* row is genuine scatter.** **STOP and escalate to the
+        user.** A genuine non-contiguous node is a thorny threat to 7d's BP/tiling
+        premise that needs careful human review, and the user wants to be involved
+        before any contract/fix decision. Do **not** proceed past this gate, and do
+        **not** file a bead: 7g exists to *resolve* every threat to 7d, not defer
+        one, and a bead would merely punt a hard blocker. 7d stays blocked until the
+        user resolves it directly.
 - [ ] Decide and document the `Concat` exception precisely (pieces tile; the node's
       span is their hull; `preimage_in` returns `None` for non-contiguous). Confirm
       against `preimage_in`'s actual contiguous/None behavior.
@@ -587,6 +618,24 @@ gap heuristic is a *detection* signal for finding candidate sites — it is
 deliberately *not* the producer's emission guard, because the producer knows the
 full run and the auditor only sees `combine`'s lossy 2-piece residue.)
 
+**Soundness vs. completeness of the guard, and the backstop (state this; do not
+over-engineer past it).** The contiguity check is **sound unconditionally** — it
+emits a hull only when the merged ranges actually tile a span densely (modulo
+whitespace), so it can never *introduce* a new overlap. Its **completeness** ("the
+hull fully and exclusively owns its span") rests on a premise: that the merged
+inlines' inputs already **tile** (P4). `coalesce_abbreviations` gets this by
+construction (it merges *consecutive sibling* inlines, and siblings tile
+disjointly), so the guard is both sound and complete there. For the *general*
+class of producers Phase 2 may surface, input-tiling is not proven a priori —
+but note the dependency is mildly circular (the fix leans on the very P4 7g
+establishes) and is **covered by a backstop**: the Phase 1 auditor runs on the
+*final* AST, so if any producer's hull ever masked or relocated a violation, the
+auditor's overlap/containment check fails CI. Worst case is a red gate we then
+investigate, **never silent corruption**. So: keep the contiguity guard as the
+producer-side first line, rely on the auditor as the second; do **not** chase a
+guard that is provably complete without the input-tiling premise — the gate
+already provides defense-in-depth.
+
 The merged token then round-trips losslessly to the *original* source, is copyable
 by the writer, and is auditor-visible-and-clean (tight boundaries, no sibling
 claims the hull). **The hull copies *source bytes*, not node text** (R5): for
@@ -646,9 +695,9 @@ list indentation).
 - [ ] Document the **semantic-ownership rule** for `None`-resolving `Concat`s:
       whitespace-only inter-piece gap → producer bug, fix with a contiguous hull
       (Phase 4b); gap with other content/newline, or an unresolvable piece → a
-      `scattered-concat` row for "stop and classify" (a dropped-middle bug like the
-      3-token coalesce, or — only when confirmed — genuine scatter → blessed
-      `None`). State the **source-contiguity** guard on hull emission (NOT a
+      `scattered-concat` row for Phase 2's World 1 / World 2 gate (a dropped-middle
+      bug like the 3-token coalesce, or — only when confirmed — genuine scatter →
+      blessed `None`). State the **source-contiguity** guard on hull emission (NOT a
       stored-piece-gap check — they diverge for N≥3).
 - [ ] Document the "non-overlap, not gap-free" scope boundary (blank lines,
       `> ` gutters, list indentation are legitimately unowned) and note it is
@@ -909,11 +958,11 @@ mitigate the writer crash but the provenance corruption remained until this fix.
     consumed `Space`), so the `None` is an artifact of a lossy join → **producer
     bug**, fix with a contiguous hull (Phase 4b's template).
   - **a gap holds other content/newline, OR a piece fails to resolve** → **not
-    auto-blessed.** It is a `scattered-concat` census row for **Phase 2's "stop and
-    classify" protocol** — it may be a *dropped-middle producer bug* (the 3-token
-    `Dr. Smith Jr.` case: `combine` keeps only first/last, so the gap holds the
-    owned word "Smith") or a *genuine* scatter. Only a confirmed genuine scatter is
-    blessed `None`; the rest become Phase 4b-class fixes.
+    auto-blessed.** It is a `scattered-concat` row for **Phase 2's World 1 / World 2
+    gate** — it may be a *dropped-middle producer bug* (the 3-token `Dr. Smith Jr.`
+    case: `combine` keeps only first/last, so the gap holds the owned word "Smith")
+    or a *genuine* scatter. World 1 (all bugs) → autonomous continue; World 2 (any
+    genuine scatter) → stop and escalate to the user (a 7d blocker, never a bead).
   This is now mechanically detectable, so it is *not* left to blind triage: the
   Phase 1 auditor descends into the pieces and emits either a `whitespace-gap-concat`
   finding (R1, high-confidence bug) or a `scattered-concat` row (needs classify).
@@ -940,6 +989,24 @@ mitigate the writer crash but the provenance corruption remained until this fix.
 
 ### Open — but the *protocol* is now fixed (answers are data-dependent)
 
+- **`scattered-concat` disposition — World 1 / World 2 gate (decided 2026-06-03).**
+  Phase 2 classifies each `scattered-concat` row as a dropped-middle producer bug
+  or genuine scatter. **World 1** (all fixable, no genuine scatter) → agent
+  **continues autonomously** (collapse to "all `None`-`Concat`s are bugs," apply the
+  Phase 4b helper). **World 2** (any genuine scatter) → **STOP and escalate to the
+  user** for careful review; do not proceed, do not file a bead. Rationale: 7g's
+  *primary purpose is to resolve every threat to 7d's implementation* (CI
+  enforcement is the secondary purpose) — so a thorny `Concat` disposition can be
+  resolved autonomously *only* when it is unambiguously a bug; anything genuinely
+  ambiguous is a 7d blocker the user must adjudicate, not a deferrable bead. (Full
+  gate in Phase 2's checklist.)
+- **Hull-guard completeness (decided 2026-06-03).** The Phase 4b source-contiguity
+  guard is sound unconditionally and complete *given input tiling* (proven for
+  `coalesce_abbreviations` by construction). For the general producer class the
+  input-tiling premise is not proven a priori but is covered by the Phase 1 auditor
+  backstop on the final AST (a masked violation fails CI, never ships). Decision:
+  keep the guard as-is; do not pursue a premise-free guard. (Full reasoning in the
+  Phase 4b R2 guard.)
 - **Substring unknowns.** The floor audit skipped `Substring`; Phase 2 may surface
   a class the policy hasn't considered. **Protocol:** if a `Substring` violation
   appears that is *not* a leading/trailing-whitespace case, **stop and classify
