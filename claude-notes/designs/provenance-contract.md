@@ -393,6 +393,79 @@ shape onto content the user can edit directly.
 - **bd-3aolj** / **bd-1e6a5** — Parser-side `AttrSourceInfo` /
   `Attr.2` alignment bugs that the §6 guard works around.
 
+## Tiling precondition (Plan 7g — BP prerequisite)
+
+This section is the **producer-side precondition** required for
+[`incremental-writer-contract.md`](incremental-writer-contract.md)'s
+Byte Provenance (BP) guarantee to hold. The consumer doc now cross-links here;
+see its § "Tiling precondition (Plan 7g)".
+
+### P1 — Tight ranges
+
+A node's `source_info` covers **exactly the bytes that constitute it**: its
+own delimiters included (a code span includes its backticks), surrounding
+whitespace excluded.
+
+**Implemented** (2026-06-03, Plan 7g Phase 3): `code_span_helpers.rs`,
+`citation.rs`, `quote_helpers.rs`, `postprocess.rs` math-with-attr Span.
+Use `tight_source_info_for_node(node, ctx)` and
+`leading_whitespace_source_info(&whole, &tight)` from `location.rs` when
+peeling a leading `Space`.
+
+### P2 — Whitespace ownership (producer obligation, not auditor-checked)
+
+Inter-token ASCII whitespace belongs to a `Space` node (or block structure)
+with its own tight range. This is a *producer obligation* discharged by the
+Phase 3 shared helpers. The auditor enforces its observable consequence — P3.
+A direct coverage check ("every inter-token whitespace byte is owned by some
+`Space`") is deliberately not built; P3 + P4 pin down the load-bearing half.
+
+### P3 — Symmetry
+
+Trim **both** leading and trailing whitespace — not only leading. Today's
+handlers trimmed only leading; the Phase 3 helpers apply `trim_all`.
+
+### P4 — Tiling
+
+Sibling leaf ranges are disjoint, and a parent's range contains its children's.
+No source byte is claimed by two sibling nodes, qualified by two refinements:
+
+1. **(Intra-node — NOT a sibling-disjointness exception) the `Concat` hull.**
+   A `Concat`'s pieces tile internally and the node presents as one unit to its
+   siblings — exactly one claim, never two. A *contiguous* `Concat` presents
+   its hull; a *non-contiguous* one makes no contiguous claim (`preimage_in`
+   → `None`). Use `contiguous_hull_for_run` (in `postprocess.rs`) to produce
+   a tight `Original` hull when coalescing adjacent source-adjacent inlines.
+
+2. **(Inter-node — the only genuine overlap exception) atomic N-to-1
+   same-`Invocation` groups.** One source construct (e.g. a block shortcode
+   `{{< lipsum 3 >}}`) expands to N sibling nodes, each stamped `Generated`
+   with the same `Invocation` anchor. The writer coalesces same-`Invocation`
+   runs and emits `R` once; the auditor partitions siblings by `Invocation`
+   anchor identity before checking disjointness.
+
+**Scope boundary**: P4 is *non-overlap*, not *gap-free partition*. Blank lines
+between blocks, `> ` gutters, and list indentation are legitimately unowned;
+the BP proof tolerates them (Deleted/gap categories).
+
+### Semantic-ownership rule for `None`-resolving `Concat`
+
+A non-contiguous `Concat` (`preimage_in` → `None`) must be classified:
+
+- **All pieces resolve AND every inter-piece gap is space/tab only** → producer
+  bug; fix with `contiguous_hull_for_run` (Phase 4b template).
+- **Any gap has non-whitespace/newline, or a piece fails to resolve** → not
+  auto-blessed; requires Phase 2 World 1 / World 2 triage gate. The one way a
+  7d blocker can slip through is mis-classifying genuine scatter as a fixable
+  bug — always stop and report to the user.
+
+### CI enforcement
+
+The tiling auditor (`audit_source_range_tiling` in
+`crates/pampa/src/writers/incremental.rs`) runs as a property test in CI
+(Phase 7, Plan 7g). The gate asserts zero `SiblingOverlap`,
+`ContainmentViolation`, and `ScatteredConcat` findings across the pampa corpus.
+
 ## Change log
 
 - **2026-05-25 — v1.** Initial version, written after Plan 6 landed

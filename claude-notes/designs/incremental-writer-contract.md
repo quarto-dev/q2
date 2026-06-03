@@ -167,9 +167,27 @@ R5-special (let-user-win on atomic CustomNode wholesale replacement) is *not* a 
 
 - **Producer-side hygiene.** Both BP and completeness inherit the producer contract as a precondition. A producer that misclassifies source_info breaks both invariants — non-atomic stamping on pipeline output breaks soundness (the writer emits pipeline bytes as if user-authored); atomic-Generated stamping on user content breaks completeness (the writer refuses to emit content that was actually user-authored). The trust point is narrow (only at R5, where the algebra trusts that a node reaching it has authored content), but it is real, and it is the producer contract's job to honor it.
 
+## Tiling precondition (Plan 7g)
+
+Both BP and Completeness assume the **tiling precondition** established by
+[Plan 7g](../plans/2026-06-01-q2-preview-plan-7g-source-range-tiling.md)
+(implemented 2026-06-03, `feature/provenance`):
+
+- **P4** — sibling leaf ranges are disjoint (qualified by the `Concat` hull
+  and same-`Invocation` group exceptions) and every parent contains its
+  children. Without P4 the R3/R4 `assemble` steps would double-emit source
+  bytes that two siblings both claim.
+
+The full producer-side preconditions (P1–P4) are documented in
+[`provenance-contract.md § Tiling precondition`](provenance-contract.md#tiling-precondition-plan-7g--bp-prerequisite).
+The CI property test (`audit_source_range_tiling`) enforces P4 on every PR.
+
 ## References
 
-- Producer-side contract: [`provenance-contract.md`](provenance-contract.md).
+- Producer-side contract (including tiling precondition P1–P4):
+  [`provenance-contract.md`](provenance-contract.md).
+- Formal BP proof (premises, lemmas, holes): [`incremental-writer-bp-proof.md`](incremental-writer-bp-proof.md).
+- Tiling enforcement: Plan 7g [`plans/2026-06-01-q2-preview-plan-7g-source-range-tiling.md`](../plans/2026-06-01-q2-preview-plan-7g-source-range-tiling.md).
 - Implementation plan: [`plans/2026-05-26-q2-preview-plan-7d-algebraic-soundness.md`](../plans/2026-05-26-q2-preview-plan-7d-algebraic-soundness.md).
 - Prerequisite framework + test-hygiene work: [`plans/2026-05-29-q2-preview-plan-7f-prereqs.md`](../plans/2026-05-29-q2-preview-plan-7f-prereqs.md).
 - CustomNode qmd serialization (post-7d): [`plans/2026-05-29-q2-preview-plan-7e-customnode-qmd.md`](../plans/2026-05-29-q2-preview-plan-7e-customnode-qmd.md).
