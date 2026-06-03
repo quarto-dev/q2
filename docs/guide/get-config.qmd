@@ -1,0 +1,85 @@
+---
+title: "Reading configuration with `get-config`"
+---
+
+`quarto get-config` prints the configuration that applies to a document,
+*after* Quarto has merged every source of metadata. Use it when an external
+tool needs to know a document's effective settings without re-implementing
+Quarto's metadata rules.
+
+```bash
+quarto get-config <file> [path]
+```
+
+Quarto resolves configuration from several places — the project's
+`_quarto.yml`, `_metadata.yml` files in enclosing directories, the document's
+own YAML front matter, and format-specific blocks such as `format: html:`.
+`get-config` applies all of these in the same order a render would and reports
+the result as JSON.
+
+## Selecting a value
+
+With no path, the entire merged configuration is printed:
+
+```bash
+quarto get-config report.qmd
+```
+
+Pass a dot-separated path to select a single value. A numeric segment indexes
+into a list:
+
+```bash
+quarto get-config report.qmd title
+quarto get-config report.qmd authors.0.name
+```
+
+If the path does not exist, `get-config` prints `null` and exits successfully.
+Pass `--strict` to make a missing path an error instead.
+
+## Choosing a format
+
+Some settings depend on the output format (for example, `toc` may be enabled
+for HTML but not for PDF). By default `get-config` reports the configuration for
+HTML. Use `--to` to choose another format:
+
+```bash
+quarto get-config report.qmd toc --to html   # e.g. true
+quarto get-config report.qmd toc --to pdf    # e.g. false
+```
+
+## Text vs. Pandoc output
+
+Front-matter values like `title` may contain Markdown. By default these are
+returned as Markdown strings:
+
+```bash
+quarto get-config report.qmd title
+# "Hello *world*!"
+```
+
+Pass `--output pandoc` to get the parsed Pandoc abstract syntax tree instead,
+which is useful if your tool already works with Pandoc's JSON:
+
+```bash
+quarto get-config report.qmd title --output pandoc
+# [{"t":"Str","c":"Hello"},{"t":"Space"},
+#  {"t":"Emph","c":[{"t":"Str","c":"world"}]},{"t":"Str","c":"!"}]
+```
+
+## Options
+
+| Option | Description |
+|---|---|
+| `--to <format>` | Format whose settings are merged in (default: `html`). |
+| `--output <value\|pandoc>` | How Markdown values are rendered (default: `value`). |
+| `--strict` | Exit with an error if the requested path does not exist. |
+| `--compact` | Print single-line JSON instead of pretty-printed output. |
+
+## Piping to other tools
+
+The output is plain JSON, so it composes with tools like
+[`jq`](https://jqlang.github.io/jq/):
+
+```bash
+quarto get-config report.qmd --compact | jq '.authors[].name'
+```

@@ -9,6 +9,7 @@
 pub mod attribution;
 #[cfg(feature = "filters")]
 pub mod citeproc_filter;
+pub mod config_json;
 pub mod errors;
 pub mod filter_context;
 pub mod filters;

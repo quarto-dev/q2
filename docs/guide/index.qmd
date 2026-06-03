@@ -8,6 +8,8 @@ sidebar:
       href: ../authoring/markdown/index.qmd
     - text: "Brand themes (_brand.yml)"
       href: themes/brand.qmd
+    - text: "Reading configuration (get-config)"
+      href: get-config.qmd
 ---
 
 This is going to be our new guide. It will have an [intro](introduction.qmd).

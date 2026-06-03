@@ -386,6 +386,41 @@ enum Commands {
     /// Start the Quarto Language Server Protocol server
     Lsp,
 
+    /// Print a document's merged configuration as JSON.
+    ///
+    /// Resolves the effective configuration that applies to a document after
+    /// Quarto 2's full metadata-merge semantics (`_quarto.yml`, directory
+    /// `_metadata.yml` layers, frontmatter, and `format.<fmt>.*` flattening),
+    /// so external tools don't have to reimplement them.
+    ///
+    /// With no path, prints the entire merged metadata. A dot-separated path
+    /// (e.g. `format.html.toc` or `authors.0.name`) selects a value; a numeric
+    /// segment indexes into an array.
+    #[command(name = "get-config")]
+    GetConfig {
+        /// Document to inspect (.qmd/.md).
+        file: PathBuf,
+
+        /// Dot-separated key path. Omit for the entire merged metadata.
+        path: Option<String>,
+
+        /// Target format whose `format.<fmt>.*` overrides are flattened in.
+        #[arg(long, default_value = "html")]
+        to: String,
+
+        /// Prose representation: `value` (markdown string) or `pandoc` (AST).
+        #[arg(long, value_enum, default_value_t = commands::get_config::OutputMode::Value)]
+        output: commands::get_config::OutputMode,
+
+        /// Exit non-zero if the path does not exist (instead of printing null).
+        #[arg(long)]
+        strict: bool,
+
+        /// Emit compact single-line JSON instead of pretty-printed.
+        #[arg(long)]
+        compact: bool,
+    },
+
     /// Inspect pipeline execution traces under `.quarto/trace/`.
     ///
     /// Output is always JSON. Pipe to `jq`/`fx` for pretty filtering, or
@@ -640,6 +675,21 @@ fn main() -> Result<()> {
         Commands::Check { .. } => commands::check::execute(),
         Commands::Call { function, args } => commands::call::execute(function, args),
         Commands::Lsp => commands::lsp::execute(),
+        Commands::GetConfig {
+            file,
+            path,
+            to,
+            output,
+            strict,
+            compact,
+        } => commands::get_config::execute(commands::get_config::GetConfigArgs {
+            file,
+            path,
+            to,
+            output,
+            strict,
+            compact,
+        }),
         Commands::Hub {
             project,
             no_project,

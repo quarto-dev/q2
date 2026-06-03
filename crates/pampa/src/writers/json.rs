@@ -1772,6 +1772,48 @@ pub fn write<W: std::io::Write>(
     write_with_config(pandoc, context, writer, &JsonConfig::default())
 }
 
+/// Serialize inlines to a self-contained Pandoc-canonical JSON value with
+/// **all source-location information dropped** (no `s` pool ids, no resolved
+/// `l` locations, no `attrS` attribute-source sidecars).
+///
+/// This reuses the maintained [`write_inlines`] match logic and then strips
+/// the source-tracking keys, so the result is the same `{"t":…,"c":…}` Pandoc
+/// shape the hub-client wire format uses, minus the source noise. The
+/// `context` is only consulted for location resolution (which is off here), so
+/// any `ASTContext` — including [`ASTContext::default`] — is acceptable.
+///
+/// Used by `q2 get-config --output pandoc` (bd-xoaic, GH #256).
+pub fn inlines_to_source_free_json(inlines: &Inlines, context: &ASTContext) -> Value {
+    let config = JsonConfig::default();
+    let mut ctx = JsonWriterContext::new(context, &config);
+    strip_source_keys(write_inlines(inlines, &mut ctx))
+}
+
+/// Block-level counterpart of [`inlines_to_source_free_json`].
+pub fn blocks_to_source_free_json(blocks: &[Block], context: &ASTContext) -> Value {
+    let config = JsonConfig::default();
+    let mut ctx = JsonWriterContext::new(context, &config);
+    strip_source_keys(write_blocks(blocks, &mut ctx))
+}
+
+/// Recursively remove the source-tracking keys the JSON writer attaches to
+/// every Pandoc node: `s` (source-info pool id), `l` (resolved location), and
+/// `attrS` (attribute-source sidecar). Content lives under `c`/`t` and the
+/// real attribute triple is inside `c`, so dropping these keys yields a
+/// source-free Pandoc fragment without losing structure.
+fn strip_source_keys(value: Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .filter(|(k, _)| k != "s" && k != "l" && k != "attrS")
+                .map(|(k, v)| (k, strip_source_keys(v)))
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.into_iter().map(strip_source_keys).collect()),
+        other => other,
+    }
+}
+
 // =============================================================================
 // Streaming implementation (bd-wgup)
 //
