@@ -14,7 +14,7 @@
 - [x] **Phase 4b** — Faithful range for whitespace-gap `None`-Concats — **done 2026-06-03**
 - [x] **Phase 5** — Amend the producer contract (P1–P4) — **done 2026-06-03**
 - [x] **Phase 6** — Audit BP + completeness (THE GATE) — **PASSED (CONDITIONAL GO), 2026-06-01**
-- [ ] **Phase 7** — Wire the property test into CI
+- [x] **Phase 7** — Wire the property test into CI — **done 2026-06-03**
 - [x] **Phase 8** — Writer crash on Concat/Generated-led inline + `did_coalesce` sibling bug — **fixed & committed 2026-06-02**
 - [ ] **Closeout** — full `cargo xtask verify` (workspace + WASM leg) green; the Phase 8 commits touch `quarto-source-map`, so a pampa-only suite is **not** sufficient evidence under the push policy
 

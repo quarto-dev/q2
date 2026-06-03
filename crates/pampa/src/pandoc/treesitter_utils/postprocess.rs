@@ -1489,6 +1489,12 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                         }
 
                                         cite.content.extend(bracketed_content);
+                                        // Extend Cite's source_info to cover the suffix
+                                        // span (P4 containment: parent must contain its
+                                        // children). The suffix Strs carry the span's
+                                        // range which is outside the original cite range.
+                                        cite.source_info =
+                                            hull_source_infos(&cite.source_info, &span.source_info);
                                         result.push(Inline::Cite(cite));
                                     }
                                     state = 0;

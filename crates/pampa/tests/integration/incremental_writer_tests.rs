@@ -2335,9 +2335,80 @@ fn incremental_write_never_panics_on_pampa_corpus() {
 }
 
 // =============================================================================
-// Plan 7g Phase 2 — corpus census (temporary; will be removed once Phase 3-4b
-// fixes drive the violation count to zero and Phase 7 replaces this with the
-// green-gate property test)
+// Plan 7g Phase 7 — tiling property test (CI enforcement gate)
+// =============================================================================
+
+/// Property: `audit_source_range_tiling` must report zero hard tiling
+/// violations (`SiblingOverlap`, `ContainmentViolation`, `ScatteredConcat`)
+/// on every parseable qmd in the pampa corpus.
+///
+/// This is the CI gate that Phase 7 required: it fails on a reverted
+/// Phase 3 handler fix (proved before landing by reverting
+/// `code_span_helpers.rs` and confirming the test turns red).
+///
+/// Non-gating kinds (`TightnessViolation`, `WhitespaceGapConcat`,
+/// `AttrAlignmentSkipped`, `GeneratedNoInvocation`) are tallied in the error
+/// message for diagnosability but do not fail the gate.
+///
+/// See `claude-notes/plans/2026-06-01-q2-preview-plan-7g-source-range-tiling.md`,
+/// § Phase 7.
+#[test]
+fn tiling_auditor_no_hard_violations_on_pampa_corpus() {
+    use pampa::writers::incremental::{TilingFindingKind, audit_source_range_tiling};
+
+    let listed = std::process::Command::new("git")
+        .args(["ls-files", "*.qmd"])
+        .output()
+        .expect("git ls-files");
+    let files = String::from_utf8(listed.stdout).unwrap();
+
+    let mut violations: Vec<String> = Vec::new();
+    let mut scanned = 0usize;
+
+    for path in files.lines() {
+        let Ok(src) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let Ok((ast, _, _)) = pampa::readers::qmd::read(
+            src.as_bytes(),
+            false,
+            path,
+            &mut std::io::sink(),
+            true,
+            None,
+        ) else {
+            continue;
+        };
+        scanned += 1;
+
+        let findings = audit_source_range_tiling(&ast, &src);
+        for f in &findings {
+            match f.kind {
+                TilingFindingKind::SiblingOverlap
+                | TilingFindingKind::ContainmentViolation
+                | TilingFindingKind::ScatteredConcat => {
+                    violations.push(format!("[{path}] {}", f.message));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    assert!(
+        scanned > 0,
+        "scanned no qmd files — corpus enumeration broken"
+    );
+    assert!(
+        violations.is_empty(),
+        "{} hard tiling violation(s) in {} corpus files:\n{}",
+        violations.len(),
+        scanned,
+        violations.join("\n"),
+    );
+}
+
+// =============================================================================
+// Plan 7g Phase 2 — corpus census (exploratory; #[ignore] to keep out of CI)
 // =============================================================================
 
 /// Run `audit_source_range_tiling` over the pampa qmd corpus,
