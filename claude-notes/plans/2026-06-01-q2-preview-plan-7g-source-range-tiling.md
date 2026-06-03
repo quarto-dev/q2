@@ -282,14 +282,21 @@ same resolution from the *serialized* pool; that file is the cross-check
 reference (auditor-fidelity risk below), **not** what we build here. CI runs the
 Rust side.
 
-**Home.** Land it alongside the existing corpus test in
-`crates/pampa/tests/integration/incremental_writer_tests.rs` (the
-`incremental_write_never_panics_on_pampa_corpus` neighbor from Phase 8), so the
-Phase 7 property test can call the same function. (Mild discoverability quibble:
-this is a *producer*-range auditor living in a file named for the *writer*. That
-is deliberate — it shares the corpus harness and Phase 7 calls the same function —
-but give the function a producer-oriented name, e.g. `audit_source_range_tiling`,
-so a reader grepping for tiling finds it.)
+**Home.** Define the auditor as `pub fn audit_source_range_tiling` **inside
+`crates/pampa/src/writers/incremental.rs`**, not in the test file. The reason:
+the auditor needs `derive_target_file_id` and `block_block_children`, which are
+private to that module. Phase 7's property test imports and calls the pub
+function from `crates/pampa/tests/integration/incremental_writer_tests.rs`
+alongside `incremental_write_never_panics_on_pampa_corpus` — same corpus loop,
+same parse/mutate setup, but asserting tiling instead of no-panic.
+
+**`target` FileId.** Inside `audit_source_range_tiling`, derive the target the
+same way the writer does: `derive_target_file_id(&ast.blocks)` (already exists
+in the same module). Every `preimage_in(target)` call in the auditor uses this
+value. For the single-file corpus docs used in Phase 7, `target` is always
+`FileId(0)` by construction — but using `derive_target_file_id` keeps the
+auditor correct for synthesized-first-block documents and in sync with the
+writer's own editability logic.
 
 Walk the full AST **including `Attr` kvs key/value ranges**, and assert: (a)
 sibling non-overlap, (b) parent ⊇ child, (c) leading- and trailing-whitespace
@@ -362,7 +369,9 @@ property test (the thing whose absence let this hide).
       (`quarto-pandoc-types/src/attr.rs:55`), a **positionally-keyed sidecar** to
       the `kvs` map. **Apply the alignment guard the type's own doc prescribes
       (`attr.rs:44-48`):** before zipping, assert
-      `kvs.len() == attr_source.attributes.len()` (and the analogue for classes);
+      `kvs.len() == attr_source.attributes.len()` and `attr.1.len() ==
+      attr_source.classes.len()` (where `attr.1` is the `Vec<String>` classes
+      from the `Attr` tuple);
       on mismatch, **skip attr-range auditing for that node and emit a census row
       `attr-alignment-skipped (bd-3aolj/bd-1e6a5)`** rather than passing silently
       or fabricating an overlap. Treat a per-kv `None` `SourceInfo` as "no claim"
@@ -402,9 +411,17 @@ newlines/blank lines). State this matrix explicitly in the auditor's doc comment
       and for same-`Invocation` groups.
 - [ ] Emit, on violation, a structured report: file, node type, both ranges, the
       overlapping bytes — usable both as a census row and as a test-failure message.
-- [ ] Cross-check the auditor's `Substring`/`Concat`/`Generated` resolution against
-      `preimage_in` on a handful of known cases before trusting the census
-      (auditor-fidelity risk).
+- [ ] Before running the corpus census, verify the auditor's grouping and descent
+      logic on hand-crafted `SourceInfo` fixture cases: write a small test
+      exercising (a) a same-`Invocation` sibling pair (must be collapsed to one
+      unit — no false-positive overlap), (b) a whitespace-gap `None`-`Concat`
+      (must emit a `whitespace-gap-concat` finding), (c) a non-resolvable piece
+      `None`-`Concat` (must emit a `scattered-concat` row), and (d) a plain
+      `Original` sibling pair with a gap (must pass the non-overlap check). This
+      is a logic check on the grouping and None-Concat descent code paths — not a
+      cross-check against `preimage_in` itself (the auditor calls `preimage_in`
+      directly; there is nothing to cross-check on that axis). Fidelity risk is in
+      *how the auditor uses the output*, not in the preimage resolver.
 
 ### Phase 2 — Census + Concat decision
 Run Phase 1's auditor over a broad corpus (annotated-qmd examples,
@@ -540,14 +557,40 @@ Phase 2 shows the loose token causes harm *other than* ranges.** See the Resolve
 list under *Risks / open questions*.
 
 ### Phase 4 — Figure `Plain∩Plain` duplication
-Separate, contained: a Figure's caption `Plain` and content `Plain` share the
-whole figure range. Investigate the Figure synthesis path; give each its own
-range. Likely small.
 
-- [ ] Locate the Figure synthesis path that emits caption `Plain` + content `Plain`
-      (Figure handling lives in `crates/pampa/src/pandoc/treesitter_utils/postprocess.rs`).
-- [ ] Write a failing byte-offset test asserting the two `Plain` ranges are disjoint.
-- [ ] Give each `Plain` its own tight range; re-run the Phase 1 auditor to confirm.
+The synthesis is in `postprocess.rs:933-954` (already located). A single-image
+paragraph `![alt text](url)` is desugared into a `Figure` whose:
+- **caption `Plain`** (`image.content.clone()`) — the alt-text inlines
+- **content `Plain`** (`vec![Image(new_image)]`) — the image itself
+
+Both currently receive `image.source_info.clone()` — the full `![…](…)` range —
+as their `source_info`. They are siblings, so the auditor flags this as an
+overlap.
+
+**Why "give each its own tight range" does not work.** The alt-text bytes
+(`[alt text]`) are a substring of the image bytes (`![alt text](url)`). Any tight
+source range for the caption `Plain` would therefore overlap with the content
+`Plain`'s range — the overlap is intrinsic to the syntax and cannot be eliminated
+by range adjustment alone.
+
+**The correct fix: caption `Plain` → `Generated` (no contiguous source claim).**
+The caption is a *synthetic re-interpretation* of the alt text, not a distinct
+syntactic element. Give it `SourceInfo::generated(By::tree_sitter_postprocess())`
+with no `Invocation` anchor (empty `from`). The tiling auditor categorises such
+nodes as "Generated with no resolvable Invocation → skip" — they make no
+contiguous source claim, so they cannot violate sibling non-overlap with the
+content `Plain`. The alt-text **inlines** inside the caption retain their
+individual `Original` source info; only the wrapping `Plain` block changes.
+The content `Plain` keeps `image.source_info` unchanged.
+
+- [ ] Locate the Figure synthesis in `postprocess.rs:933-954`.
+- [ ] Write a failing tiling-auditor test: parse a single-image paragraph, run the
+      auditor, assert no overlap violation is reported. Confirm red before the fix.
+- [ ] In the synthesis: replace `source_info: image.source_info.clone()` on the
+      caption `Plain` (line ~940) with
+      `source_info: SourceInfo::generated(By::tree_sitter_postprocess())`. Leave
+      the content `Plain`'s `source_info` unchanged.
+- [ ] Re-run the auditor (and the failing test); confirm green.
 
 ### Phase 4b — Faithful range for whitespace-gap `None`-Concats (abbreviation-coalesce is the first instance)
 
@@ -665,11 +708,22 @@ list indentation).
       hulls to the full `Dr. Smith Jr.` span — this is the case the naive
       "stored-piece-gap whitespace-only" check would get wrong (the gap holds the
       owned word "Smith"), so it pins the source-contiguity guard.
-- [ ] Factor the hull computation as a **reusable helper** taking the **full run**
-      of merged inlines (resolve each via `preimage_in` → verify same-file →
-      **verify the run is source-contiguous** (consecutive ranges adjacent modulo
-      inter-token whitespace) → emit `[first.start .. last.end)`, else
-      `combine`/`None`). `coalesce_abbreviations` (`:656-661`) is its first caller.
+- [ ] Factor the hull computation as a **reusable helper**. Signature:
+      ```rust
+      // crates/pampa/src/pandoc/treesitter_utils/postprocess.rs (private)
+      fn contiguous_hull_for_run(run: &[Inline]) -> SourceInfo
+      ```
+      `run` is the full slice of merged inlines (e.g. `inlines[i..j]`), which
+      includes the intermediate `Space` nodes — not just the two endpoints.
+      Algorithm: call `inline.source_info().resolve_byte_range()` on each element
+      → (a) all must return `Some((file_id, start, end))` with the same `file_id`,
+      (b) consecutive ranges must be byte-adjacent (`ranges[k].end ==
+      ranges[k+1].start`) → on success return
+      `SourceInfo::Original { file_id: FileId(first_file_id), start_offset:
+      ranges[0].start, end_offset: ranges.last().end }`, else fall back to
+      `run[0].source_info().combine(run.last().unwrap().source_info())`.
+      `coalesce_abbreviations` (`:656-661`) is its first caller; replace
+      `start_info.combine(&end_info)` with `contiguous_hull_for_run(&inlines[i..j])`.
 - [ ] Add a failing test for the safety guard: a run that is **not** source-
       contiguous (another node's bytes between the coalesced inlines) must **not**
       be hulled (helper returns `combine`/`None`). Confirms the hull can never
