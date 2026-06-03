@@ -39,21 +39,35 @@ a producer obligation, not an auditor check. Phase 3 detection strategy made
 resolved the remaining ambiguities and one latent design question. Decided:
 (#1 / #6-gap) tightness and hull-gap "owned whitespace" are **space/tab only — a
 newline at a boundary or in a gap is *not* owned** (so a newline boundary is not a
-tightness violation, and a newline-spanning `Concat` gap makes the node
-genuinely-scattered → blessed `None`); (#2) the auditor groups same-`Invocation`
+tightness violation, and a newline in a `Concat` gap disqualifies the
+whitespace-only fast-path — its disposition then follows the #6 rule below);
+(#2) the auditor groups same-`Invocation`
 siblings with the **same `PartialEq`-on-anchor predicate the writer uses**
 (`incremental.rs` ~1357), sharing the helper; (#3) checks (a) non-overlap and (b)
 containment run at **all** AST levels, tightness (c) at **inline-leaf only**, and
 `⊆` is **non-strict** (a same-`Invocation` child range may equal its parent's);
 (#6) the **semantic-ownership rule** sorts `None`-Concats — whitespace-only
-inter-piece gap → producer bug to fix with a contiguous hull; gap containing other
-content → genuinely scattered → blessed `None`. Two repercussions fold back into
+inter-piece gap → producer bug to fix with a contiguous hull; **content/newline gap
+(or a piece that doesn't resolve) → not auto-blessed, but a `scattered-concat`
+census row for Phase 2's "stop and classify" protocol** (it may be a dropped-middle
+producer bug, not genuine scatter — see below). Two repercussions fold back into
 the phases: the auditor now **flags** whitespace-gap `None`-Concats (R1, Phase 1)
-instead of silently tallying them, and hull-emission **re-verifies the gap is
-whitespace-only before acting** (R2, Phase 3/4b) so it can never manufacture an
-overlap. P4's two qualifiers are also re-framed as *intra-node* (`Concat` hull —
+instead of silently tallying them, and hull-emission is guarded by a **source-
+contiguity precondition** (R2, Phase 3/4b) so it can never swallow another node's
+content. P4's two qualifiers are also re-framed as *intra-node* (`Concat` hull —
 not a sibling exception) vs *inter-node* (atomic N-to-1 — the only genuine
 overlap), so Phase 5 writes them as distinct categories.
+
+**Correction discovered in the same review (the multi-token coalesce hole).** An
+earlier wording of the rule said "content gap → blessed `None`" and "hull only when
+the *stored* piece-gap is whitespace-only." Both break on the 3-token case:
+`coalesce_abbreviations`' `combine` keeps only the *first* and *last* tokens, so
+`Dr. Smith Jr.` stores `Concat[Original[0,3) "Dr.", Original[10,13) "Jr."]` whose
+gap `[3,10)` = `" Smith "` holds real content the node *does* own. "Content gap →
+blessed" would false-negative it; "stored gap whitespace-only" would false-reject
+the correct hull `[0,13)`. The rule above is the corrected form: content gaps go to
+classification (not auto-bless), and the fix guard is **source-contiguity of the
+merged run**, which holds for any N by construction in `coalesce_abbreviations`.
 
 ## Epic context
 
@@ -301,24 +315,30 @@ property test (the thing whose absence let this hide).
       not monolithic; the auditor must sort it:
       - **`Generated` with no resolvable `Invocation`** → skip + low-severity
         census tally. No contiguous claim is recoverable.
-      - **Non-contiguous `Concat`** → **descend into `pieces`**, resolve each piece
-        via `preimage_in` (pieces are `Original`/`Substring`, so they *do*
-        resolve), sort the piece-ranges, and inspect the inter-piece gap bytes in
-        the source text (the auditor already holds the source bytes for the
-        tightness predicate):
-        - **gap is whitespace-only** (space/tab; a newline in the gap counts as
-          *not* owned → falls to the next bullet) → **flag as a distinct
-          `whitespace-gap-concat` finding** (a producer bug whose fix is a
-          contiguous hull — Phase 4b's template). This is the class that was
-          previously invisible to *both* the auditor and the violation census;
-          surfacing it here is the R1 repercussion of the semantic-ownership rule.
-        - **gap contains non-whitespace (another node's content) or a newline** →
-          genuinely scattered → blessed `None`-skip + census tally.
-      Keep the `whitespace-gap-concat` findings **out of the initial gate** (count
-      unknown until Phase 2; treat like the leading-whitespace family — report
-      first, gate after the fixes drive it to zero). (A node that *ought* to carry
-      a tight `Original`/`Substring` but resolves `None` is a missing-source-info
-      defect — Plan 7f's domain, not 7g's tiling gate.)
+      - **Non-contiguous `Concat`** → **descend into `pieces`** and resolve each
+        piece via `preimage_in`, then inspect the inter-piece gaps in the source
+        text (the auditor already holds the source bytes for the tightness
+        predicate). **All** pieces must resolve and **every** gap is examined (a
+        `Concat` can have >2 pieces). Two outcomes:
+        - **all pieces resolve AND every gap is whitespace-only** (space/tab; a
+          newline disqualifies → next bullet) → **flag as a `whitespace-gap-concat`
+          finding** (a producer bug whose fix is a contiguous hull — Phase 4b's
+          template). This is the class that was previously invisible to *both* the
+          auditor and the violation census; surfacing it is the R1 repercussion.
+        - **any gap holds non-whitespace/newline, OR any piece fails to resolve**
+          (nested non-contiguous `Concat`, `Generated` piece) → **do NOT auto-bless
+          as "scattered."** Emit a `scattered-concat` census row for **Phase 2's
+          "stop and classify" protocol.** A content gap can still be a *producer
+          bug*: `combine` keeps only the first/last token, so the 3-token
+          `Dr. Smith Jr.` stores a 2-piece `Concat` whose gap holds the owned word
+          "Smith" — a bug, not a genuine scatter. Only a *confirmed* genuine
+          scatter is blessed; the rest become Phase 4b-class fixes.
+      Keep **both** the `whitespace-gap-concat` and `scattered-concat` rows **out of
+      the initial gate** (count unknown until Phase 2; treat like the
+      leading-whitespace family — report first, gate after the fixes drive it to
+      zero). (A node that *ought* to carry a tight `Original`/`Substring` but
+      resolves `None` is a missing-source-info defect — Plan 7f's domain, not 7g's
+      tiling gate.)
 - [ ] Walk the full AST including `Attr` kvs key **and** value ranges (the floor
       audit never walked attributes, which is why `div-attrs.qmd` read "clean"
       despite the known `custom-key` defect). The per-kv ranges live in
@@ -332,6 +352,7 @@ property test (the thing whose absence let this hide).
       or fabricating an overlap. Treat a per-kv `None` `SourceInfo` as "no claim"
       (skip). Do **not** try to re-derive the kv→range mapping — that is
       bd-3aolj/bd-1e6a5's job, not the auditor's.
+
 **Per-level check matrix (which check runs at which AST level):** (a) and (b) run
 at **every** level (block siblings *and* inline siblings; block→inline and
 inline→inline containment) — the Figure `Plain∩Plain` defect (Phase 4) is a
@@ -490,15 +511,16 @@ range. Likely small.
 ### Phase 4b — Faithful range for whitespace-gap `None`-Concats (abbreviation-coalesce is the first instance)
 
 **Generalized (round-2 review, 2026-06-03).** This phase was originally scoped to
-abbreviation-coalesce alone. Under the semantic-ownership rule, abbreviation-
-coalesce is just the *first* member of a class: any producer that emits a
-`None`-resolving `Concat` whose inter-piece gap is **whitespace-only** (the
-`whitespace-gap-concat` finding the Phase 1 auditor now flags, R1). The fix
-technique below is the **template for the whole class** — factor it as a reusable
-helper, and apply it to every site Phase 2's census surfaces, abbreviation-
-coalesce being the worked example. Sites whose gap contains *other content* (or a
-newline) are genuinely scattered and stay blessed `None` — do **not** hull them
-(see the safety guard below).
+abbreviation-coalesce alone. Under the semantic-ownership rule it is the *first*
+member of a class: **any producer that emits a `None`-resolving `Concat` over a
+source-contiguous run it owns** (the `whitespace-gap-concat` findings the Phase 1
+auditor flags, R1, plus any `scattered-concat` rows Phase 2 classifies as
+dropped-middle bugs rather than genuine scatter). The fix technique below is the
+**template for the whole class** — factor it as a reusable helper, and apply it to
+every such site Phase 2's census surfaces, abbreviation-coalesce being the worked
+example. Sites that are *confirmed* genuine scatter (the node does not own the
+intervening bytes) stay blessed `None` — do **not** hull them (see the safety guard
+below).
 
 Separate, contained, same faithfulness thesis as the rest of 7g. Pandoc keeps an
 abbreviation glued to the following word with a **non-breaking space** (U+00A0);
@@ -534,21 +556,36 @@ hull over the whole coalesced run**: resolve `start_info`/`end_info` via
 `preimage_in`; if both land in the same file (they do — the run is a consecutive
 slice of the original inline sequence, so it maps to a contiguous source span),
 emit a single tight range `[start.start .. end.end)`. Fall back to today's
-`combine` only when the endpoints don't resolve into one file.
+`combine` when the endpoints don't resolve into one file **or the run isn't
+source-contiguous** (see the safety guard below).
 
-**Safety guard — hull only when the gap is whitespace-only (R2, NON-NEGOTIABLE).**
-Emitting `[start.start .. end.end)` swallows every byte between the pieces. That
-is correct *only* when those bytes are inter-token whitespace the node legitimately
-owns. If the gap ever contained another node's content (a genuinely-scattered
-`Concat`), the hull would swallow that node's source bytes and **manufacture a
-containment/overlap violation** — the exact failure 7g exists to prevent. So the
-hull helper must **independently re-verify the inter-piece gap bytes are
-whitespace-only (space/tab; a newline disqualifies)** before emitting, and fall
-back to `combine` (`None`) otherwise. The Phase 1 auditor *flags* candidates; the
-fix helper *re-checks* before acting — neither trusts the other. (For the
-abbreviation case the gap is always a single consumed `Space`, never a newline —
-`coalesce_abbreviations` matches `Str, Space, Str`, not `SoftBreak` — so the guard
-always passes there; it earns its keep on the general class.)
+**Safety guard — hull only over a source-contiguous run (R2, NON-NEGOTIABLE).**
+Emitting `[start.start .. end.end)` swallows every byte between the endpoints. That
+is correct *only* when the merged node legitimately owns all of them. If the run
+were *not* source-contiguous — i.e. some other node's content lives between the
+coalesced inlines — the hull would swallow that node's bytes and **manufacture a
+containment/overlap violation**, the exact failure 7g exists to prevent.
+
+**The guard is source-contiguity of the merged run, NOT "the stored piece-gap is
+whitespace-only."** Those differ for N≥3: `combine` keeps only the first and last
+token, so `Dr. Smith Jr.` stores `Concat[Original[0,3), Original[10,13)]` whose
+piece-gap `[3,10)` holds the owned word "Smith" — a whitespace-only-gap check would
+wrongly reject the correct hull `[0,13)`. The producer-side test that *is* correct:
+the inlines being coalesced are **consecutive elements of the original inline
+sequence**, separated only by inter-token `Space`s — so the run maps to a
+contiguous source span by construction, for any N. `coalesce_abbreviations`
+satisfies this inherently (it walks `i..j` over adjacent inlines). The helper emits
+the hull when (endpoints resolve to the same file) ∧ (the merged inlines were a
+contiguous source run); else it falls back to `combine`/`None`. **To make that
+second conjunct independently *re-verifiable* (not merely "trust the
+construction"), the helper takes the full run of merged inlines — not just the two
+endpoints — resolves each via `preimage_in`, and checks consecutive ranges are
+adjacent-modulo-inter-token-whitespace.** Endpoints alone suffice to *compute* the
+hull but not to *prove* it owns the interior; the intermediate ranges are what rule
+out a reordering/foreign-content producer. (The Phase 1 auditor's whitespace-only-
+gap heuristic is a *detection* signal for finding candidate sites — it is
+deliberately *not* the producer's emission guard, because the producer knows the
+full run and the auditor only sees `combine`'s lossy 2-piece residue.)
 
 The merged token then round-trips losslessly to the *original* source, is copyable
 by the writer, and is auditor-visible-and-clean (tight boundaries, no sibling
@@ -565,22 +602,29 @@ list indentation).
 - [ ] Write a failing byte-offset test first: real parse of `"Dr. Smith wrote…"`,
       assert the merged `Str`'s `preimage_in(file)` returns `Some(start..end)`
       (the full `Dr. Smith` hull), **not** `None`. Confirm red before the fix.
-- [ ] Factor the hull computation as a **reusable helper** (resolve endpoints →
-      verify same-file → **verify inter-piece gap is whitespace-only** → emit
-      `[start.start .. end.end)`, else `combine`/`None`). `coalesce_abbreviations`
-      (`:656-661`) is its first caller.
-- [ ] Add a failing test for the safety guard: a *synthetic* `None`-Concat whose
-      gap contains non-whitespace must **not** be hulled (helper returns the
-      `combine`/`None` fallback). Confirms the hull can never swallow other content.
+- [ ] Add a **3-token** test (`"Dr. Smith Jr. wrote…"`): assert the merged `Str`
+      hulls to the full `Dr. Smith Jr.` span — this is the case the naive
+      "stored-piece-gap whitespace-only" check would get wrong (the gap holds the
+      owned word "Smith"), so it pins the source-contiguity guard.
+- [ ] Factor the hull computation as a **reusable helper** taking the **full run**
+      of merged inlines (resolve each via `preimage_in` → verify same-file →
+      **verify the run is source-contiguous** (consecutive ranges adjacent modulo
+      inter-token whitespace) → emit `[first.start .. last.end)`, else
+      `combine`/`None`). `coalesce_abbreviations` (`:656-661`) is its first caller.
+- [ ] Add a failing test for the safety guard: a run that is **not** source-
+      contiguous (another node's bytes between the coalesced inlines) must **not**
+      be hulled (helper returns `combine`/`None`). Confirms the hull can never
+      swallow content the node does not own.
 - [ ] Add a round-trip test: editing a paragraph containing "Dr. Smith" no longer
       forces the `Rewrite` fallback (the token is Verbatim-copyable), and the
       emitted source contains the **original regular space**, not the nbsp.
 - [ ] Apply the helper to every other `whitespace-gap-concat` site the Phase 2
       census surfaces (abbreviation-coalesce is the worked example; the census is
       the authoritative list, exactly as for the Phase 3 leading-whitespace family).
-- [ ] Re-run the Phase 1 auditor over the corpus to confirm these tokens now pass
-      tightness/tiling (rather than being flagged as `whitespace-gap-concat`).
-      Expect snapshot churn; review as corrections.
+- [ ] Re-run the Phase 1 auditor over the corpus to confirm these tokens now
+      resolve to `Some(hull)` and pass tightness/tiling (rather than appearing as
+      `whitespace-gap-concat` or `scattered-concat` rows). Expect snapshot churn;
+      review as corrections.
 
 ### Phase 5 — Producer contract
 - Add P1–P4 to `provenance-contract.md` as a **stated BP precondition**, with
@@ -601,8 +645,11 @@ list indentation).
       enforces its consequence, P3).
 - [ ] Document the **semantic-ownership rule** for `None`-resolving `Concat`s:
       whitespace-only inter-piece gap → producer bug, fix with a contiguous hull
-      (Phase 4b); gap containing other content or a newline → genuinely scattered →
-      blessed `None`. State the whitespace-only **safety guard** on hull emission.
+      (Phase 4b); gap with other content/newline, or an unresolvable piece → a
+      `scattered-concat` row for "stop and classify" (a dropped-middle bug like the
+      3-token coalesce, or — only when confirmed — genuine scatter → blessed
+      `None`). State the **source-contiguity** guard on hull emission (NOT a
+      stored-piece-gap check — they diverge for N≥3).
 - [ ] Document the "non-overlap, not gap-free" scope boundary (blank lines,
       `> ` gutters, list indentation are legitimately unowned) and note it is
       **disjoint from** the hull-owned-whitespace population (a coalesce/merge can
@@ -857,17 +904,23 @@ mitigate the writer crash but the provenance corruption remained until this fix.
   **not** adjacent, yet it is plainly a bug to fix, not a blessing. The correct
   criterion is **semantic ownership**, applied by inspecting the inter-piece gap
   bytes in the source:
-  - **gap is whitespace-only** (space/tab; a newline disqualifies → next bullet) →
-    the node legitimately owns that inter-token whitespace (e.g. a consumed
-    `Space`), so the `None` is an artifact of a lossy join → **producer bug**, fix
-    with a contiguous hull (Phase 4b's template, with the whitespace-only safety
-    guard so a hull never swallows other content).
-  - **gap contains other nodes' content, or a newline** → the node is **genuinely
-    scattered** across source → **blessed `None`-skip.**
-  This is now mechanically detectable, so it is *not* left to human triage: the
-  Phase 1 auditor descends into the pieces and emits a `whitespace-gap-concat`
-  finding (R1). Which concrete `Concat`s are bugs is still a census output
-  (Phase 2); the **rule that sorts them is now settled and self-consistent.**
+  - **all pieces resolve AND every gap is whitespace-only** (space/tab; a newline
+    disqualifies → next bullet) → the node owns that inter-token whitespace (e.g. a
+    consumed `Space`), so the `None` is an artifact of a lossy join → **producer
+    bug**, fix with a contiguous hull (Phase 4b's template).
+  - **a gap holds other content/newline, OR a piece fails to resolve** → **not
+    auto-blessed.** It is a `scattered-concat` census row for **Phase 2's "stop and
+    classify" protocol** — it may be a *dropped-middle producer bug* (the 3-token
+    `Dr. Smith Jr.` case: `combine` keeps only first/last, so the gap holds the
+    owned word "Smith") or a *genuine* scatter. Only a confirmed genuine scatter is
+    blessed `None`; the rest become Phase 4b-class fixes.
+  This is now mechanically detectable, so it is *not* left to blind triage: the
+  Phase 1 auditor descends into the pieces and emits either a `whitespace-gap-concat`
+  finding (R1, high-confidence bug) or a `scattered-concat` row (needs classify).
+  The **producer's hull-emission guard is source-contiguity of the merged run**, not
+  the auditor's gap heuristic (the two differ for N≥3 — see Phase 4b's R2 guard).
+  Which concrete `Concat`s are bugs is still a census output (Phase 2); the **rule
+  that sorts them is now settled and self-consistent.**
 - **BP premise feeding back to 7d — RESOLVED.** Phase 6 already ran and surfaced
   the premise set {P4, L2, L3}; L3 (whole-walk same-`Invocation` coalescing) is
   recorded on 7d's tail as held-by-design, and the shell/OriginalGap multiplicity
