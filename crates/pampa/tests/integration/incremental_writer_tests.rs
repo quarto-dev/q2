@@ -2531,7 +2531,7 @@ fn tiling_auditor_corpus_census() {
 
     report.push_str("--- Finding counts by kind ---\n");
     let mut kinds: Vec<_> = by_kind.iter().collect();
-    kinds.sort_by_key(|(k, _)| k.clone());
+    kinds.sort_by_key(|(k, _)| (*k).clone());
     for (k, n) in &kinds {
         report.push_str(&format!("  {k}: {n}\n"));
     }

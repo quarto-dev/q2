@@ -9,7 +9,7 @@
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Inline, QuoteType, Quoted, Space};
-use crate::pandoc::location::{node_source_info_with_context, tight_source_info_for_node};
+use crate::pandoc::location::tight_source_info_for_node;
 
 /// Process quoted text (single or double quotes)
 pub fn process_quoted(

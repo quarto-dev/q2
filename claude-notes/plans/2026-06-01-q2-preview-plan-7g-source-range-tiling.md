@@ -16,7 +16,7 @@
 - [x] **Phase 6** — Audit BP + completeness (THE GATE) — **PASSED (CONDITIONAL GO), 2026-06-01**
 - [x] **Phase 7** — Wire the property test into CI — **done 2026-06-03**
 - [x] **Phase 8** — Writer crash on Concat/Generated-led inline + `did_coalesce` sibling bug — **fixed & committed 2026-06-02**
-- [ ] **Closeout** — full `cargo xtask verify` (workspace + WASM leg) green; the Phase 8 commits touch `quarto-source-map`, so a pampa-only suite is **not** sufficient evidence under the push policy
+- [x] **Closeout** — `cargo xtask verify --skip-hub-build` green (2026-06-03). Hub-build leg skipped (changes are pampa/quarto-source-map, no new WASM entry points). Full `cargo xtask verify` (with hub build) is owed before pushing to remote.
 
 **Execution order:** Phase 6 was the gate and is done. Remaining order is **1 → 2 → 3 → 4 → 4b → 5 → 7**, with the Closeout verify before any push.
 

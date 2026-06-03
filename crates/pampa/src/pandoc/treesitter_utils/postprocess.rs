@@ -679,7 +679,6 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
         if let Inline::Str(ref str_inline) = inlines[i] {
             let mut current_text = str_inline.text.clone();
             let start_info = str_inline.source_info.clone();
-            let mut end_info = str_inline.source_info.clone();
             let mut j = i + 1;
             // MUST be reset per Str. Hoisting this out of the loop is a bug:
             // once any Str coalesces, every *subsequent* Str would take the
@@ -699,7 +698,6 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
                         // Coalesce with non-breaking space (U+00A0) to match Pandoc
                         current_text.push('\u{00A0}');
                         current_text.push_str(&next_str.text);
-                        end_info = next_str.source_info.clone();
                         j += 2;
                         did_coalesce = true;
 
@@ -715,13 +713,8 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
 
                 // If we didn't coalesce with any Str nodes but have a Space following
                 // the abbreviation, include the space in the abbreviation to match Pandoc
-                if j == original_j
-                    && j < inlines.len()
-                    && matches!(inlines[j], Inline::Space(_))
-                    && let Inline::Space(space_info) = &inlines[j]
-                {
+                if j == original_j && j < inlines.len() && matches!(inlines[j], Inline::Space(_)) {
                     current_text.push('\u{00A0}');
-                    end_info = space_info.source_info.clone();
                     j += 1;
                     did_coalesce = true;
                 }
