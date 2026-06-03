@@ -7,7 +7,7 @@
 
 ## Phase status (development checklist)
 
-- [ ] **Phase 1** — Build the faithful tiling auditor (= the CI property test)
+- [x] **Phase 1** — Build the faithful tiling auditor (= the CI property test) — **done 2026-06-03**
 - [ ] **Phase 2** — Census + Concat decision over a broad corpus
 - [ ] **Phase 3** — Fix the leading-whitespace family (handler-enforced, TDD)
 - [ ] **Phase 4** — Figure `Plain∩Plain` duplication
