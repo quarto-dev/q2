@@ -8,8 +8,8 @@
 ## Phase status (development checklist)
 
 - [x] **Phase 1** — Build the faithful tiling auditor (= the CI property test) — **done 2026-06-03**
-- [ ] **Phase 2** — Census + Concat decision over a broad corpus
-- [ ] **Phase 3** — Fix the leading-whitespace family (handler-enforced, TDD)
+- [x] **Phase 2** — Census + Concat decision over a broad corpus — **done 2026-06-03**
+- [ ] **Phase 3** — Fix the leading-whitespace family + two additional census sites (handler-enforced, TDD)
 - [ ] **Phase 4** — Figure `Plain∩Plain` duplication
 - [ ] **Phase 4b** — Faithful range for whitespace-gap `None`-Concats (abbreviation-coalesce is the first instance; resolves the Phase 8 open question)
 - [ ] **Phase 5** — Amend the producer contract (P1–P4)
@@ -303,7 +303,7 @@ sibling non-overlap, (b) parent ⊇ child, (c) leading- and trailing-whitespace
 tightness. This artifact is *both* the measurement tool and the permanent CI
 property test (the thing whose absence let this hide).
 
-- [ ] Write the auditor as a Rust function over a parsed AST that, for each node,
+- [x] Write the auditor as a Rust function over a parsed AST that, for each node,
       resolves its `SourceInfo` to a concrete source range via the **same** path
       as `preimage_in` (do not reimplement — call/share it) for **all four
       variants**: `Original`, `Substring`, `Concat` (union of pieces), **and
@@ -424,121 +424,148 @@ newlines/blank lines). State this matrix explicitly in the auditor's doc comment
       *how the auditor uses the output*, not in the preimage resolver.
 
 ### Phase 2 — Census + Concat decision
-Run Phase 1's auditor over a broad corpus (annotated-qmd examples,
-`pandoc-match-corpus`, `docs/`). Produce a violation census by node type /
-handler. Confirm the leading-whitespace family is the bulk; surface any
-`Substring`/`Concat`/attr violations the floor missed. Decide and document the
-`Concat` exception precisely.
 
-- [ ] Run the auditor over the corpora: `ts-packages/annotated-qmd/examples/*.qmd`
-      (20 files), `crates/pampa/tests/pandoc-match-corpus/`, and `docs/`.
-- [ ] Produce a violation census grouped by node type / originating handler; record
-      it in this plan (replaces the FLOOR numbers in *Empirical findings so far*).
-- [ ] Confirm the leading-whitespace family is the bulk and that the `Figure
-      Plain∩Plain` family (Phase 4) is distinct.
-- [ ] Surface any `Substring` (t==1) or `attrS` violations the floor audit could not
-      see — decide whether they need a new policy class (open risk: *Substring unknowns*).
-- [ ] **Attr coverage is conditional on bd-3aolj / bd-1e6a5.** Tally the
-      `attr-alignment-skipped` census rows (Phase 1 guard). If a non-trivial
-      fraction of corpus attrs hit the misalignment, that is the signal to
-      prioritize bd-3aolj/bd-1e6a5 *before* trusting the attr census numbers —
-      surface it as a finding; do **not** absorb those fixes into 7g.
-- [ ] **`scattered-concat` triage — classify every row.** Each `scattered-concat`
-      row is either a **dropped-middle producer bug** (the node owns the gap —
-      fixable by the Phase 4b hull helper) or **genuine scatter** (the node truly
-      maps to non-adjacent source, e.g. a value spliced in from frontmatter). Record
-      the classification for every row.
-- [ ] **MANDATORY STOP — checkpoint report (HARD GATE, no exceptions).** After
-      classifying, **always halt here and report to the user** before doing anything
-      else: the `scattered-concat` count, the kinds present, the per-row
-      classification, and the resulting **World determination**. **This stop is
-      unconditional — it fires in World 1 *and* World 2.** Do **not** proceed past
-      this point autonomously under any circumstance; this is a structural gate, not
-      a prose nudge. The reason the stop is unconditional: the one way 7g can
-      silently let a 7d blocker through is the agent *mis*-classifying a genuine
-      scatter as a fixable bug and self-declaring World 1 — so the human confirms the
-      determination *before* any fix or contract change, every time.
-      - **World 1 — every row is a fixable bug (zero genuine-scatter members).** Only
-        **after the user confirms** the determination and gives the go-ahead does the
-        agent resume: collapse the rule to "all `None`-`Concat`s are producer bugs,"
-        apply the Phase 4b helper to each, re-run the auditor, proceed.
-      - **World 2 — *any* row is genuine scatter.** Remain stopped; this is a thorny
-        threat to 7d's BP/tiling premise that needs careful human review, and the
-        user drives the contract/fix decision. 7d stays blocked until the user
-        resolves it directly.
-      - **No bead either way.** 7g exists to *resolve* every threat to 7d, not defer
-        one; a bead would merely punt a hard blocker.
-- [ ] Decide and document the `Concat` exception precisely (pieces tile; the node's
-      span is their hull; `preimage_in` returns `None` for non-contiguous). Confirm
-      against `preimage_in`'s actual contiguous/None behavior.
-- [ ] **Freeze the authoritative handler-fix list for Phase 3 from the census** (the
-      list in Phase 3 is a verified-by-inspection starting point, not the census).
+**STATUS: COMPLETE — 2026-06-03.**
 
-### Phase 3 — Fix the leading-whitespace family (handler-enforced, TDD)
-A shared helper computes a node's tight range from its trimmed content and
-carves the leading/trailing whitespace into the `Space`.
+Census results (full file: `/tmp/tiling-census.txt`):
 
-**Detection lever — two patterns, not one.** The overlap is produced by two
-distinct idioms, so a single grep for `node_source_info_with_context(node)` is
-**insufficient** (verified 2026-06-02):
+| Kind | Count |
+|---|---|
+| SiblingOverlap | 997 |
+| TightnessViolation | 52,833 |
+| WhitespaceGapConcat | 8 |
+| ScatteredConcat | 5 |
+| ContainmentViolation | 2 |
+| AttrAlignmentSkipped | 56 |
+| GeneratedNoInvocation | 2 |
+
+**SiblingOverlap (997):** Overwhelmingly the leading-whitespace family (>98%):
+`Space∩Code`, `Space∩Cite`, `Space∩Quoted`, `Space∩RawInline` — all the same root
+pattern. A small number of `Str∩Code` overlaps (different pattern site). Leading-
+whitespace family is confirmed as the bulk; the Figure `Plain∩Plain` family (Phase 4)
+is **not visible** in the overlap count because the tiling auditor correctly groups
+them (both carry the same range — future Phase 4 fix gives the caption `Plain` a
+`Generated` source_info). The census drives Phase 3's handler-fix list.
+
+**TightnessViolation (52,833):** Almost entirely false positives on `Space`,
+`SoftBreak`, and `LineBreak` nodes. A `Space` node's range IS a space character by
+definition — the tightness check must exclude these whitespace-bearing nodes.
+**Auditor fix decided (2026-06-03):** exclude `Space`, `SoftBreak`, `LineBreak` from
+the tightness check (c). The overlap check (a) already catches the case where a
+`Space` node wrongly absorbs non-whitespace bytes.
+
+**WhitespaceGapConcat (8):** All `Str` nodes from `coalesce_abbreviations` (the
+`Dr. Smith` abbreviation-coalesce case). All Phase 4b class. Files include
+`pandoc-match-corpus/046-052.qmd`, `cite_with_suffix.qmd`, `snapshots/native/006-014.qmd`,
+`docs/.../Q-14-1.qmd`.
+
+**ScatteredConcat (5) — MANDATORY GATE — WORLD 1 CONFIRMED (2026-06-03):**
+All 5 are `Span` nodes from labeled display/inline math (`$...$  {#id}` and
+`$$...$$ {#id}`). Root cause: `postprocess.rs:1277` computes the Span's `source_info`
+as `math.source_info.combine(&attr_source.combine_all())`. `combine_all()` covers
+the attribute *content* (e.g. `#eq-x` at `[13..18)`) but not the structural
+delimiters `{` and `}`. The gap between math end and attr content start is always
+`' {'` (space + opening brace) → non-whitespace → classified as `ScatteredConcat`.
+**But the Span legitimately owns all bytes in the full `$...$  {#id}` expression —
+this is a dropped-middle producer bug, not genuine scatter.** Fix: compute the tight
+hull `Original[math_start..attr_content_end+1)` (the `+1` accounts for the closing
+`}`). User confirmed World 1 and gave go-ahead. Fix is in Phase 3's handler list
+(see below).
+
+**ContainmentViolation (2):** List-table cells report a source range that doesn't
+contain their child blocks (`CodeBlock [47..71]` with parent `[30..47]`). Producer
+bug in the list-table handler. Would block Phase 7's CI gate if unfixed. Added to
+Phase 3's handler list (user decision: fix in Phase 3).
+
+**AttrAlignmentSkipped (56):** Expected (bd-3aolj / bd-1e6a5). Not in scope for 7g.
+
+**Substring unknowns:** No `Substring` violations surfaced in the census.
+
+**`Concat` exception — confirmed:** `preimage_in` returns `Some(hull)` when all pieces
+resolve and are byte-adjacent in source; `None` for non-contiguous. The `Concat` hull
+is an intra-node definition (not a sibling-disjointness exception) as stated in P4.
+
+- [x] Run the auditor over the corpora.
+- [x] Produce violation census grouped by node type / originating handler.
+- [x] Confirm the leading-whitespace family is the bulk and Figure `Plain∩Plain` is distinct.
+- [x] Surface `Substring` / `attrS` violations — none found for `Substring`; `attrS`
+      shows 56 alignment skips (bd-3aolj/bd-1e6a5, not in scope).
+- [x] Attr coverage: 56 `AttrAlignmentSkipped` rows — expected misalignment per
+      the known bugs; does not affect census confidence for the tiling violations.
+- [x] `scattered-concat` triage: all 5 rows classified as dropped-middle producer
+      bugs (math-with-attr Span). World 1.
+- [x] MANDATORY STOP — reported to user; World 1 confirmed by user; go-ahead given.
+- [x] `Concat` exception documented above.
+- [x] Handler-fix list frozen from the census (see Phase 3 below).
+
+### Phase 3 — Fix all handler-side tiling violations (handler-enforced, TDD)
+
+Phase 3 covers the leading-whitespace family **plus two additional handler sites**
+identified by the Phase 2 census: the math-with-attr Span (ScatteredConcat) and the
+list-table cell containment violation. All three share the same fix discipline: write
+the failing test first, fix the handler, re-run the auditor.
+
+**Auditor fix (pre-Phase-3 correction, decided 2026-06-03):** Before fixing handlers,
+patch the tightness check in `audit_source_range_tiling` to **exclude `Space`,
+`SoftBreak`, and `LineBreak` nodes** from check (c). These nodes' ranges are correct
+when they contain whitespace (a `Space` node IS a space character); the 52,833 false
+positives swamp the real findings. The overlap check (a) already catches the case
+where a `Space` node wrongly absorbs non-whitespace bytes. This patch must land
+first so the corpus re-run in the final step produces a clean signal.
+
+**Detection lever — two patterns, not one.** The leading-whitespace overlap comes
+from two distinct idioms:
 
 1. **Whole-node-helper sites** — peel a `Space`, trim the text, but build
    `SourceInfo` from `node_source_info_with_context(node)` (the whole,
    whitespace-inclusive range).
 2. **Manual-offset sites** — compute ranges directly from `node.start_byte()`
-   (e.g. `uri_autolink.rs`, `shortcode.rs`); these never call the helper, so a
-   rename/flag lever does **not** surface them. They must be found from the
-   Phase 2 census, not from a helper grep.
+   (`uri_autolink.rs`, `shortcode.rs`); these never call the helper.
 
-**The Phase 1 auditor — not a rename — is the authoritative detector for *both*
-patterns.** It works on *resolved ranges*, not on which helper a handler called,
-so it catches violations regardless of idiom; it is precise (flags actual
-overlaps, not mere uses of a function); and it is already wired into Phase 2's
-census and Phase 7's CI gate.
+**The Phase 1 auditor is the authoritative detector for all three families.**
 
-**Do not rename `node_source_info_with_context`.** The earlier draft called it a
-"20+ call site" lever; the real count is **60 call sites inside
-`treesitter_utils/` alone, 83 across `pampa/src`** — and the overwhelming
-majority are *legitimate* (nodes like headings, fenced code, and thematic breaks
-whose whole-node range *is* the correct tight range, no surrounding whitespace to
-peel). A blanket rename would force an atomic 83-site change and flood the diff
-with churn on call sites that were never wrong, *burying* the handful of real
-pattern-(1) fixes. If a compile-time smell is still wanted, introduce a
-**narrowly-named helper** (e.g. `tight_source_info_for_trimmed_node`) that the
-Phase 3 fix routes the whitespace-peeling handlers through *as they are fixed*,
-leaving the legitimate callers of `node_source_info_with_context` untouched — so
-the "smell" is the *remaining* use of the old helper on a whitespace-carrying
-node, introduced incrementally rather than as one big rename.
+**Authoritative handler-fix list (frozen from Phase 2 census, 2026-06-03):**
 
-**Handlers to fix — verified-by-inspection starting point (2026-06-02); the
-authoritative list is the Phase 2 census.** The earlier draft named three files
-that do not exist (`key_value_specifier.rs`, `quoted_span.rs`, `raw_specifier.rs`);
-corrected to the real tree:
-
-- `code_span_helpers.rs` — code spans **and** raw-inline (`raw_specifier`/
-  `raw_attribute` handling lives here, not in a separate file). Uses the helper. *(pattern 1)*
+*Leading-whitespace family (pattern 1 and 2):*
+- `code_span_helpers.rs` — code spans **and** raw-inline. *(pattern 1)*
 - `citation.rs` — uses the helper. *(pattern 1)*
-- `commonmark_attribute.rs` (+ `span_link_helpers.rs`) — attribute keys/values
-  (this is where `key_value_specifier` work actually lives). *(verify pattern in Phase 2)*
-- `quote_helpers.rs` — quoted spans (not `quoted_span.rs`). *(pattern 1)*
-- `shortcode.rs` — computes `Space` ranges manually from `node.start_byte()`. *(pattern 2)*
-- `uri_autolink.rs` — manual offset computation, does **not** call the helper. *(pattern 2)*
-- the `node_source_info_with_context(node)` sites in `treesitter.rs`. *(pattern 1)*
+- `commonmark_attribute.rs` (+ `span_link_helpers.rs`) — attribute keys/values. *(pattern 1)*
+- `quote_helpers.rs` — quoted spans. *(pattern 1)*
+- `shortcode.rs` — manual `node.start_byte()` offset. *(pattern 2)*
+- `uri_autolink.rs` — manual offset, does not call the helper. *(pattern 2)*
+- `treesitter.rs` — `node_source_info_with_context(node)` call sites. *(pattern 1)*
 
-Write byte-offset regression tests *first* (inline-code-in-prose, multi-kv attr,
-citation, doubled separator whitespace, trailing whitespace).
+*Census-added sites (2026-06-03):*
+- **`postprocess.rs:1277` — math-with-attr Span** *(ScatteredConcat, dropped-middle)*:
+  Replace `math.source_info.combine(&attr_source.combine_all())` with the tight hull
+  `Original[math_start..attr_content_end+1)`. The `+1` accounts for the closing `}`
+  that follows the attr content. Fall back to `combine` when either source_info doesn't
+  resolve to the same file. This eliminates the ` {` gap (space + opening brace) that
+  the current Concat leaves unaccounted.
+- **`list_table.rs` — list-table cell containment violation** *(ContainmentViolation)*:
+  The cell's `source_info` range `[30..47]` doesn't contain its child blocks (e.g.
+  `CodeBlock [47..71]`). Locate the cell source_info computation in the list-table
+  handler and fix it to cover the full cell extent including content. TDD: write a
+  failing containment test against the two confirmed fixtures
+  (`list_table_cell_para_then_codeblock.qmd`, `list_table_cell_two_paragraphs.qmd`).
 
+Write byte-offset regression tests *first* for all sites.
+
+- [ ] **Patch the tightness check first:** exclude `Space`, `SoftBreak`, `LineBreak`
+      from check (c) in `audit_source_range_tiling` so the corpus re-run produces a
+      clean signal. Verify the false-positive count drops to near-zero before proceeding.
 - [ ] Add a shared helper that derives a node's tight range from trimmed content and
       carves leading **and** trailing whitespace into the adjacent `Space` (P3 symmetry).
 - [ ] (Optional smell aid — *not* a rename.) If wanted, add a narrowly-named
       helper (`tight_source_info_for_trimmed_node`) and route whitespace-peeling
       handlers through it as they are fixed; leave the 60+ legitimate
-      `node_source_info_with_context` callers untouched. The Phase 1 auditor is
-      the authoritative detector for both patterns regardless.
+      `node_source_info_with_context` callers untouched.
 - [ ] Write failing byte-offset regression tests first, then fix each handler in the
       Phase-2-frozen list one at a time (TDD), re-running the Phase 1 auditor after each.
-- [ ] Re-run the Phase 1 auditor over the corpus to confirm the leading-whitespace
-      family is driven to zero (catches both pattern-1 and pattern-2 sites).
+      Fix order: leading-whitespace family first, then math-with-attr Span, then
+      list-table cell containment.
+- [ ] Re-run the Phase 1 auditor over the corpus to confirm all three families are
+      driven to zero.
 
 **On the reversed-slice writer panics (resolved 2026-06-02):** the
 Phase 6 audit's `compute_separator` block-gap concern (slicing
