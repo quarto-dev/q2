@@ -107,6 +107,32 @@ cd hub-client && npx playwright test e2e/smoke-all.spec.ts
 ```
 ~12s. Full pipeline: Automerge sync → hub server → browser → WASM render → preview iframe. Tests the complete hub-client integration.
 
+**CRITICAL prerequisites for Playwright tests:**
+
+1. **Build with `VITE_E2E=1`** before running any Playwright test:
+   ```bash
+   cd hub-client
+   VITE_E2E=1 npm run build   # compiles test hooks into the bundle
+   ```
+   Without this flag, `window.__quartoTest` is tree-shaken out and every
+   `page.evaluate` call that reads it fails with "E2E test hooks not found".
+   `bootstrapProjectSet` checks for this and throws a clear error, but the
+   root cause is always a missing `VITE_E2E=1` build.
+
+2. **No conflicting hub server on port 3031**: `globalSetup` starts its own
+   `cargo run --bin hub` on port 3031. If a dev hub is already bound there,
+   the test hub fails to start. Dev hubs should use port 3030 (the default).
+   Stop any running hub before running Playwright tests.
+
+3. **No conflicting Vite server on port 5174**: `playwright.config.ts` serves
+   the built app via `npm run preview -- --port 5174`. Port 5173 is left for
+   the dev server (`npm run dev`). The two can coexist.
+
+The full e2e command handles the build automatically:
+```bash
+cd hub-client && npm run test:e2e   # build:wasm + VITE_E2E=1 build + playwright
+```
+
 ### Writing Fixtures
 
 Each fixture is a `.qmd` file with test assertions in frontmatter. The project must have a `_quarto.yml`.

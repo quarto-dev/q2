@@ -66,6 +66,7 @@ import {
     blocksToPlainText,
 } from '../framework';
 import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
+import type { PreviewNodeEditPayload } from '../types/diagnostic';
 import { Block, Inline, previewRegistry, PreviewContext } from '.';
 import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';
@@ -389,12 +390,18 @@ function PreviewRoot(props: PreviewRootProps) {
     // discriminated input — no second JSON.parse. On parse failure,
     // hand <Ast> the original astJson so its existing error pane
     // surfaces the message.
-    const { parsed, noteNumbers } = useMemo(() => {
+    const { parsed, noteNumbers, pool } = useMemo(() => {
         try {
-            const p = JSON.parse(props.astJson) as PandocAST;
-            return { parsed: p, noteNumbers: walkForNoteNumbers(p) };
+            const raw = JSON.parse(props.astJson) as PandocAST & {
+                astContext?: { p?: unknown[] };
+            };
+            return {
+                parsed: raw as PandocAST,
+                noteNumbers: walkForNoteNumbers(raw as PandocAST),
+                pool: raw.astContext?.p ?? ([] as unknown[]),
+            };
         } catch {
-            return { parsed: null, noteNumbers: new WeakMap<NoteInline, number>() };
+            return { parsed: null, noteNumbers: new WeakMap<NoteInline, number>(), pool: [] as unknown[] };
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [props.astJson]);
@@ -411,9 +418,25 @@ function PreviewRoot(props: PreviewRootProps) {
     const previewFormat = parsed ? extractMetaString(parsed.meta?.format) : undefined;
     const isSlides = previewFormat === 'q2-slides' || previewFormat === 'revealjs';
 
+    // commitEdit: resolve pool id → source_info value → send PreviewNodeEditPayload.
+    const commitEdit = (poolId: string | number, newText: string) => {
+        const sourceInfoValue = pool[Number(poolId)];
+        if (sourceInfoValue === undefined) {
+            console.warn('commitEdit: pool id not found', poolId);
+            return;
+        }
+        const payload: PreviewNodeEditPayload = {
+            __isPreviewNodeEdit: true,
+            destinationSourceInfoJson: JSON.stringify(sourceInfoValue),
+            newText,
+        };
+        // setAst is intercepted in entry.tsx's setAst prop; see below.
+        props.setAst(payload as unknown as PandocAST);
+    };
+
     return (
         <PreviewContext.Provider
-            value={{ currentFilePath: props.currentFilePath }}
+            value={{ currentFilePath: props.currentFilePath, pool, commitEdit }}
         >
             <AssetManifestContext.Provider value={props.assetManifest}>
                 <NoteNumberingContext.Provider value={noteNumbers}>
@@ -473,6 +496,12 @@ function updateAst(payload: UpdateAstPayload) {
                     );
                 }}
                 setAst={(newAst) => {
+                    // PreviewNodeEditPayload: pass through directly without
+                    // rewrapping custom nodes (it's not a PandocAST).
+                    if ((newAst as unknown as { __isPreviewNodeEdit?: boolean }).__isPreviewNodeEdit) {
+                        window.parent.postMessage({ type: 'SET_AST', ast: newAst }, '*');
+                        return;
+                    }
                     // Rewrap JS-native CustomNodes back to wire-format
                     // Div/Span before posting. Keeps the parent-side
                     // (and any downstream consumer reading `data-custom-*`

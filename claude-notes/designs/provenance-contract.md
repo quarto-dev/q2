@@ -1,24 +1,24 @@
 # Provenance contract — emitting `SourceInfo` from a transform
 
-**Status:** Active (Plan 6 landed 2026-05-22 on `feature/provenance`).
+**Status:** Active. Covers Plans 4–6 + 7f/7g provenance work on
+`feature/provenance` (last revised 2026-06-05; see change log).
 **Types:** `quarto_source_map::SourceInfo`, `By`, `Anchor`, `AnchorRole`
 ([`crates/quarto-source-map/src/source_info.rs`](../../crates/quarto-source-map/src/source_info.rs)).
 **Plans:**
-[Plan 4](../plans/2026-05-04-q2-preview-plan-4-sourceinfo-anchors.md)
+[Plan 4](../plans/2026-05-04-q2-preview-plan-4-source-info-types.md)
 (types) ·
 [Plan 5](../plans/2026-05-04-q2-preview-plan-5-wire-format.md)
 (wire format) ·
 [Plan 6](../plans/2026-05-04-q2-preview-plan-6-provenance-audit.md)
 (this audit) ·
-[Plan 7](../plans/2026-05-04-q2-preview-plan-7-incremental-writer.md)
-(writer / consumer) ·
-[Plan 8](../plans/2026-05-04-q2-preview-plan-8-include-wrapper.md)
-(include wrapper).
+[Plan 8](../plans/2026-05-04-q2-preview-plan-8-include-roundtrip.md)
+(include round-trip — abandoned; see tombstone).
 **Audit report:** [`claude-notes/research/2026-05-22-plan-6-audit.md`](../research/2026-05-22-plan-6-audit.md).
-**Companion doc:** [`incremental-writer-contract.md`](incremental-writer-contract.md)
-covers the *consumer* side — what the writer does with the `SourceInfo`
-shapes this doc tells producers to emit. The two are designed in pairs:
-if you change either contract, check the other.
+**Consumer side:** what the incremental writer does with the `SourceInfo`
+shapes this doc tells producers to emit — byte-copy boundaries, the
+`preimage_in` walk, and the tiling precondition — is documented in
+[Plan 7g](../plans/2026-06-01-q2-preview-plan-7g-source-range-tiling.md)
+and the §"Tiling precondition" section at the end of this doc.
 
 ## Summary
 
@@ -39,9 +39,7 @@ pool — `astContext.p` (renamed from `sourceInfoPool` in Plan 7f Phase
 fallback to `SourceInfo::default()` and no silent stamping; producers
 are responsible for populating `s:` on every node, and the reader's
 strictness keeps the contract honest by surfacing producer bugs at
-the JSON boundary rather than at the writer. The React framework's
-`stampUserEdits` walker (Plan 7f Phase 3) is the TS-side mechanism
-that satisfies this requirement for user-edit content.
+the JSON boundary rather than at the writer.
 
 **Pick the shape from where the emitted node's *bytes* come from, not
 from how it was constructed.** Four branches:
@@ -51,11 +49,11 @@ from how it was constructed.** Four branches:
 | Corresponds to source bytes             | `Original` — `ctx.source_info.clone()`, or clone the input node's `source_info` field. Never construct an `Original` by hand.  |
 | Pure synthesis with no preimage         | `Generated { by: By::<kind>(), from: smallvec![] }`                                                                            |
 | Resolution of a user-written construct  | `Generated { by: By::<kind>(name), from: smallvec![Anchor::invocation(Arc::new(token_si))] }`                                  |
-| **Mutation** of a node a filter received (e.g. `Str.text = upper(...)`) | Leave the input node's `Original` source_info untouched. Filter *mutations* are not classified atomic; do **not** rewrite to `Generated`. See [`incremental-writer-contract.md`](incremental-writer-contract.md) §"Filter mutations versus constructions" for the round-trip implications. |
+| **Mutation** of a node a filter received (e.g. `Str.text = upper(...)`) | Leave the input node's `Original` source_info untouched. Filter *mutations* are not classified atomic; do **not** rewrite to `Generated`. (The incremental writer then keeps the node's original bytes via the `Verbatim`/`InlineSplice` path rather than re-serializing.) |
 | **Construction** inside a user Lua filter (e.g. `pandoc.Str("...")`) | Leave it alone — `filter_source_info` ([`crates/pampa/src/lua/types.rs:1813`](../../crates/pampa/src/lua/types.rs)) auto-attaches `Generated { by: filter, ... }` on the way out. |
 
 If two branches feel equally applicable, pick the one with the longer
-chain to source: the writer (Plan 7) and attribution
+chain to source: the incremental writer and attribution
 (`resolve_byte_range`) both prefer `Original` over `Generated{from:[]}`
 and `Generated{from:[Invocation]}` over `Generated{from:[]}`.
 
@@ -68,9 +66,9 @@ The known producer kinds, defined in
 |------------------------------|------|---------------------------|-------------------------------------------------------------------------------|---------|
 | `By::filter(path, line)`     | 458  | `"filter"`                | Typed Inline/Block constructed inside a user Lua filter (auto-attached).      | yes     |
 | `By::sectionize()`           | 470  | `"sectionize"`            | `SectionizeTransform`'s synthesized section `Div`.                            | no      |
-| `By::user_edit()`            | 479  | `"user-edit"`             | React-constructed content reaching the AST through the q2-preview client.    | no      |
+| `By::user_edit()`            | 479  | `"user-edit"`             | **Dormant.** Was React-constructed edit content; the `stampUserEdits` stamping path was removed and the current write-back model (`target-incremental-writes.md`) does not stamp edits. Constructor retained, currently unused in production. | no      |
 | `By::shortcode(name)`        | 494  | `"shortcode"`             | Result of resolving a `{{< name … >}}` token. **Requires an `Invocation`.**   | yes     |
-| `By::include()`              | 505  | `"include"`               | `IncludeStage` expansion wrapper (Plan 8); most include children stay `Original`. | (Plan 8) |
+| `By::include()`              | 505  | `"include"`               | **Dormant.** Was for a planned `IncludeExpansion` wrapper; that design (Plan 8) is abandoned — `IncludeExpansionStage` splices flat and includes round-trip without a wrapper (see Plan 8 tombstone). Constructor retained, currently unused. | n/a |
 | `By::title_block()`          | 513  | `"title-block"`           | Title-block stage's synthesized title `h1`.                                   | yes     |
 | `By::footnotes()`            | 521  | `"footnotes"`             | Footnotes stage's container `Div` chrome.                                     | no      |
 | `By::appendix()`             | 529  | `"appendix"`              | Appendix-structure stage's wrapper `Div` and its helpers.                     | no      |
@@ -80,8 +78,6 @@ The known producer kinds, defined in
 | `By::programmatic_config()`  | (7f) | `"programmatic-config"`   | WASM-bridge programmatic construction of nested `ConfigValue` (`ConfigValue::from_path`).         | no      |
 | `By::unknown()`              | (7f) | `"unknown"`               | "We don't know" placeholder. Used by `json::read_completing_source_info` for nodes deserialized from JSON without `s:` (the call site is explicit about reading outside-world JSON; the placeholder is honest about not knowing). The completing reader takes a `default_by: By` parameter and allocates a fresh pool entry on each missing `s:` — no reserved pool slot. | no      |
 | `By::raw(kind, data)`        | 552  | open                      | Escape hatch for extension-defined kinds.                                     | no      |
-
-**On `By::user_edit`.** This is the **single** stamping kind for React-constructed content; q2 does not distinguish between different editor affordances (toggle-blockquote, add-list-item, wrap-in-callout, etc.) at the source_info level. The framework stamps `Generated{by: user_edit, …}` on every node a `setLocalAst` call creates, with no per-affordance specialization. This is intentional: Rust does not know about React render components, and a single kind keeps the producer contract simple and matches the framework's existing pattern.
 
 **Extension namespacing.** Third-party transforms going through
 `By::raw` must namespace their kind as `ext/<extension>/<kind>` (e.g.
@@ -147,13 +143,12 @@ path-or-range pair in `by.data`.
 
 ### Role-asymmetry — only `Invocation` drives byte-copy
 
-**The writer walks `Invocation` only.** `ValueSource`, `Dispatch`
-(when it lands), and `Other(...)` are diagnostic-only: attribution
-machinery may consult them, but the writer's `preimage_in` skips
-past them and they never produce verbatim-copy bytes. See
-[`incremental-writer-contract.md`](incremental-writer-contract.md)
-§"The role-asymmetry contract on `Generated.from`" for the rule
-and rationale.
+**The writer walks `Invocation` only.** `ValueSource` and `Other(...)`
+are diagnostic-only: attribution machinery may consult them, but the
+writer's `preimage_in` skips past them and they never produce
+verbatim-copy bytes. (`preimage_in` lives in
+[`source_info.rs`](../../crates/quarto-source-map/src/source_info.rs);
+the incremental writer consumes it in `pampa/src/writers/incremental.rs`.)
 
 The producer-side implication: attaching `ValueSource` to a synthesized
 node is fine for diagnostic richness (attribution will surface the
@@ -267,10 +262,7 @@ this footgun if they copy the wrong form from a draft plan.
 
 **`is_atomic_kind()` controls how downstream consumers treat the
 node, not whether the node carries an anchor.** The §2 catalog
-above marks which kinds are currently atomic; the canonical
-enumeration plus the shortcode-only debug-assert table lives in
-[`incremental-writer-contract.md`](incremental-writer-contract.md)
-§"Atomic-kind `Generated` and the shortcode-only invariant."
+above is the canonical enumeration of which kinds are atomic.
 
 For producer authors: the rule is "new kinds default to **non-atomic**."
 Promote to atomic only when the round-trip rule for nodes you emit
@@ -278,52 +270,34 @@ is "the entire subtree is one inseparable unit the user can't edit
 in-place." Extension kinds (`ext/<extension>/<kind>`) are never atomic
 in v1 — `is_atomic_kind` matches builtin kebab-case names only.
 
-Two consumers consult `is_atomic_kind` today: Plan 7's writer (round-
-trip / soft-drop) and Plan 2A's React framework gate (read-only DOM
-regions). The writer doc covers both behaviors; this contract just
-says "make the decision deliberately, default no."
-
-**Where the writer's internal shape is pinned:**
-[`incremental-writer-contract.md`](./incremental-writer-contract.md)
-§"`CoarsenedEntry` self-containment" documents the rule that
-every emitted entry must be self-contained, and how the atomic-kind
-decision flows into the choice of `Verbatim` (atomic with preimage)
-vs `Omit` (atomic without preimage) vs `Rewrite` (non-atomic
-catch-all) vs `Transparent` (non-atomic wrapper with source-bearing
-children) at coarsen time.
+The consumer of `is_atomic_kind` today is the React framework gate
+(`ATOMIC_KINDS` in `ts-packages/preview-renderer/src/framework/dispatch.tsx`),
+which marks atomic subtrees as read-only DOM regions. This contract
+just says "make the decision deliberately, default no."
 
 ## 8. Required-anchor invariants
 
 **`by.kind == "shortcode"` always carries at least one `Invocation`
-anchor.** The producer (the stamper in §5) enforces this; the writer
-adds a consumer-side `debug_assert!` so an extension that calls
-`By::raw("shortcode", …)` without the required anchor is caught. The
-writer-side table that distinguishes "missing `Invocation` is a bug"
-(shortcode) from "missing `Invocation` is the normal shape"
-(filter / title-block / tree-sitter-postprocess) lives in
-[`incremental-writer-contract.md`](incremental-writer-contract.md)
-§"Atomic-kind `Generated` and the shortcode-only invariant."
+anchor.** The producer (the stamper in §5) enforces this. On the
+consumer side, the writer (`pampa/src/writers/incremental.rs`) adds a
+`debug_assert!` that catches an extension calling `By::raw("shortcode", …)`
+without the anchor — distinguishing "missing `Invocation` is a bug"
+(shortcode) from "missing `Invocation` is the normal shape" (filter /
+title-block / tree-sitter-postprocess).
 
 The pattern generalizes: when a new kind always has a source-side
 preimage (e.g. a hypothetical `By::macro_expansion(name)`), declare
 the invariant here, enforce it at the producer, and add the
-corresponding consumer-side assert in the writer doc. Kinds that
+corresponding consumer-side assert in the writer. Kinds that
 *sometimes* have a preimage (sectionize wraps existing content; the
 inner `Header` carries the original `source_info`, but the wrapper
 `Div` doesn't) are not in this set — they emit `from: smallvec![]`
 and don't require any anchor.
 
-**Sibling contract for these "no source token of its own" wrappers:**
-see [`transparent-wrappers.md`](./transparent-wrappers.md). It names
-the shape (Generated, no Invocation, block-container with
-source-bearing children) and pins the *consumer* rule: any code
-that asks "where do the user's source bytes live?" must descend
-through transparent wrappers via `first_in_user_tree`, not read
-`blocks[0]` directly. The producer side of that — what wrapper
-kinds emit `from: []` — lives here in §2's catalog (`sectionize`,
-`appendix`, footnotes container, …); the descent invariant lives
-there. Adding a new `By::` kind that produces a block-container
-wrapper should cross-reference both docs.
+These "no source token of its own" wrappers (Generated, no
+Invocation, block-container with source-bearing children — `sectionize`,
+`appendix`, footnotes container, …) emit `from: []`; §2's catalog is
+the producer-side enumeration.
 
 ## 9. Outliers — call-site threading vs. the stamper
 
@@ -337,7 +311,7 @@ flow through the dispatch funnel:**
 
 Both branches consume their `shortcode_owned.source_info` directly
 and emit an `Original` (the user-visible bytes belong to the token,
-not to a synthesized replacement). Plan 7's `is_atomic_kind()` does
+not to a synthesized replacement). `is_atomic_kind()` does
 not fire on `Original`, so error/escaped regions round-trip
 verbatim-copy as plain user content.
 
@@ -366,10 +340,13 @@ shape onto content the user can edit directly.
   typed anchors instead of `CustomNode("ShortcodeResolution")`-style
   wrappers because the anchor carries the structural information
   cheaply without forcing a new HTML-pipeline resolve transform, a
-  React component, and a `qmd` writer arm. Wrappers remain
-  appropriate for the include case (Plan 8) because the cross-file
-  `FileId` problem genuinely needs anchoring at the parent-file
-  level. Do not re-litigate.
+  React component, and a `qmd` writer arm. (Includes were once the
+  one wrapper exception — Plan 8 — on cross-file `FileId` grounds;
+  that design is abandoned. The node-edit architecture round-trips
+  includes with no wrapper at all: the *untransformed* AST keeps the
+  raw `{{< include >}}` token, so edits outside it preserve it
+  verbatim and edits inside resolve to the included file and are
+  read-only. See the Plan 8 tombstone.) Do not re-litigate.
 - **Don't add a `test` arm to a `wasm32` cfg guard** when introducing
   new provenance code paths. See
   [`.claude/rules/wasm.md`](../../.claude/rules/wasm.md) — the
@@ -395,10 +372,10 @@ shape onto content the user can edit directly.
 
 ## Tiling precondition (Plan 7g — BP prerequisite)
 
-This section is the **producer-side precondition** required for
-[`incremental-writer-contract.md`](incremental-writer-contract.md)'s
-Byte Provenance (BP) guarantee to hold. The consumer doc now cross-links here;
-see its § "Tiling precondition (Plan 7g)".
+This section is the **producer-side precondition** required for the
+incremental writer's Byte Provenance (BP) guarantee to hold. The writer-side
+work — the tiling auditor, the census, and the b43fadef boundary fix — is in
+[Plan 7g](../plans/2026-06-01-q2-preview-plan-7g-source-range-tiling.md).
 
 ### P1 — Tight ranges
 
@@ -455,9 +432,9 @@ A non-contiguous `Concat` (`preimage_in` → `None`) must be classified:
 - **All pieces resolve AND every inter-piece gap is space/tab only** → producer
   bug; fix with `contiguous_hull_for_run` (Phase 4b template).
 - **Any gap has non-whitespace/newline, or a piece fails to resolve** → not
-  auto-blessed; requires Phase 2 World 1 / World 2 triage gate. The one way a
-  7d blocker can slip through is mis-classifying genuine scatter as a fixable
-  bug — always stop and report to the user.
+  auto-blessed; requires the Phase 2 World 1 / World 2 triage gate. The failure
+  mode is mis-classifying genuine scatter as a fixable bug, so stop and report
+  to the user before applying the auto-fix.
 
 ### CI enforcement
 
@@ -477,14 +454,15 @@ The tiling auditor (`audit_source_range_tiling` in
   outlier call-site threading, and a do-not list. Plan-6 audit
   report lives separately at
   [`claude-notes/research/2026-05-22-plan-6-audit.md`](../research/2026-05-22-plan-6-audit.md).
-- **2026-05-25 — v1.1.** Cross-linked the consumer-side
-  [`incremental-writer-contract.md`](incremental-writer-contract.md)
-  that landed in parallel on Plan 7's review branch. Three
-  substantive edits: §1 decision tree gains a row distinguishing
-  filter *mutations* (keep input's `Original`) from filter
-  *constructions* (auto-attached `Generated{by:filter}`); §4
-  documents the role-asymmetry — only `Invocation` drives the
-  writer's byte-copy, `ValueSource` / `Dispatch` / `Other` are
-  diagnostic-only; §7 / §8 now defer the canonical atomic-kind
-  enumeration and shortcode-only debug-assert table to the
-  writer-contract doc rather than duplicating them.
+- **2026-05-25 — v1.1.** Two substantive edits: §1 decision tree gains a
+  row distinguishing filter *mutations* (keep input's `Original`) from filter
+  *constructions* (auto-attached `Generated{by:filter}`); §4 documents the
+  role-asymmetry — only `Invocation` drives the writer's byte-copy,
+  `ValueSource` / `Other` are diagnostic-only.
+- **2026-06-05 — v1.2.** Pruned the withdrawn Plan-7 write-back model
+  (replacement: `target-incremental-writes.md`). Removed the cross-references to
+  the deleted `incremental-writer-contract.md`; the consumer side now points at
+  Plan 7g and §"Tiling precondition". Marked `By::user_edit()` dormant (its
+  `stampUserEdits` stamping path was reverted). Made §2's catalog the canonical
+  atomic-kind enumeration (§7/§8 no longer defer to a separate writer-contract
+  doc). Dropped the reverted `Transparent`/`Omit`/soft-drop dispatch language.

@@ -25,6 +25,10 @@ be in reverse chronological order (latest first).
 - [`57bc49cf`](https://github.com/quarto-dev/q2/commits/57bc49cf): Preview renders no longer re-copy unchanged artifacts (theme CSS, fonts, shared JS) into the virtual filesystem on every keystroke — byte-identical re-writes are now skipped.
 - [`749064d1`](https://github.com/quarto-dev/q2/commits/749064d1): Fix identity name defaulting to a random "Adjective Animal" instead of the authenticated user's name when a new project set is created.
 
+### 2026-06-04
+
+- [`d338251`](https://github.com/quarto-dev/q2/commits/d338251): q2-preview paragraphs and headings are now click-to-edit: clicking a block opens an inline editor, and committing the text writes the change back to the source QMD via apply_node_edit (target-incremental-writes Phases 0–5).
+
 ### 2026-06-02
 
 - [`301ca456`](https://github.com/quarto-dev/q2/commits/301ca456): Add "Import from ZIP" to the project selector — create a new project from an uploaded .zip archive (the inverse of "Export to ZIP").

@@ -44,10 +44,14 @@ import {
   setSyncHandlers,
   renderPageForPreview,
   getBinaryDocById,
+  applyNodeEdit,
+  parseQmdContentSync,
+  vfsAddFile,
+  vfsReadFile,
 } from '@quarto/preview-runtime';
 import { Q2PreviewIframe } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { extractMetaString } from '@quarto/preview-renderer/framework';
-import type { Diagnostic, Pass1Failure } from '@quarto/preview-renderer/types/diagnostic';
+import type { Diagnostic, Pass1Failure, PreviewNodeEditPayload } from '@quarto/preview-renderer/types/diagnostic';
 import type { CaptureRef, FileEntry } from '@quarto/quarto-automerge-schema';
 import { ForceRefreshButton } from './components/ForceRefreshButton';
 import { PreviewDiagnosticsOverlay } from './components/PreviewDiagnosticsOverlay';
@@ -109,6 +113,8 @@ interface PreviewAppState {
   pendingAnchor: string | null;
   pendingAnchorEpoch: number;
   astJson: string | null;
+  /** Pre-pipeline AST retained for apply_node_edit (Phase 1/4). */
+  untransformedAstJson: string | null;
   /**
    * Three-way value matching `Q2PreviewIframe`'s `themeFingerprint`
    * contract (see its docstring): a string means "post this theme to
@@ -204,6 +210,7 @@ const INITIAL_STATE: PreviewAppState = {
   pendingAnchor: null,
   pendingAnchorEpoch: 0,
   astJson: null,
+  untransformedAstJson: null,
   themeFingerprint: undefined,
   deps: null,
   error: null,
@@ -352,10 +359,6 @@ function deriveWsUrl(loc: Location = window.location): string {
   return `${wsScheme}//${loc.host}/ws`;
 }
 
-/** No-op `setAst` until WYSIWYG mode is wired (post-Phase-A). */
-const noopSetAst = () => {
-  /* deliberately empty */
-};
 
 export default function PreviewApp() {
   const [state, setState] = useState<PreviewAppState>(INITIAL_STATE);
@@ -369,6 +372,41 @@ export default function PreviewApp() {
   const handleRefresh = useCallback(() => {
     setState((s) => ({ ...s, contentTick: s.contentTick + 1 }));
   }, []);
+
+  // Phase 4 (target-incremental-writes): real setAst handler for
+  // q2-preview node edits.  Reads the current file's content from VFS,
+  // calls apply_node_edit with the retained untransformedAst, writes
+  // the result back to VFS, and bumps contentTick to trigger re-render.
+  // Note: does NOT yet write back to the Automerge document — a sync
+  // event will overwrite the local edit on the next change.  Full
+  // Automerge write-back is a Phase 5 follow-up.
+  const handleSetAst = useCallback(
+    (payload: any) => {
+      const edit = payload as PreviewNodeEditPayload;
+      if (!edit.__isPreviewNodeEdit) return;
+      if (!state.untransformedAstJson || !state.activeFile) return;
+      const vfsResult = vfsReadFile(state.activeFile);
+      if (!vfsResult.success || !vfsResult.content) return;
+      try {
+        const parseResult = parseQmdContentSync(edit.newText);
+        if (!parseResult.success || !parseResult.ast) {
+          console.error('parse_qmd_content failed in PreviewApp:', parseResult.error);
+          return;
+        }
+        const newQmd = applyNodeEdit(
+          vfsResult.content,
+          state.untransformedAstJson,
+          edit.destinationSourceInfoJson,
+          parseResult.ast,
+        );
+        vfsAddFile(state.activeFile, newQmd);
+        setState((s) => ({ ...s, contentTick: s.contentTick + 1 }));
+      } catch (err) {
+        console.error('apply_node_edit failed in PreviewApp:', err);
+      }
+    },
+    [state.untransformedAstJson, state.activeFile],
+  );
 
   // Phase F.1 (bd-kw93.14): the iframe posts NAVIGATE_TO_DOCUMENT
   // when the user clicks a cross-page artifact-rooted `.html` link.
@@ -688,6 +726,7 @@ export default function PreviewApp() {
           setState((s) => ({
             ...s,
             astJson: result.ast_json ?? null,
+            untransformedAstJson: result.untransformed_ast_json ?? null,
             themeFingerprint: result.theme_fingerprint ?? null,
             render: {
               failure: null,
@@ -856,7 +895,7 @@ export default function PreviewApp() {
         pendingAnchor={state.pendingAnchor}
         pendingAnchorEpoch={state.pendingAnchorEpoch}
         onNavigateToDocument={handleNavigate}
-        setAst={noopSetAst}
+        setAst={handleSetAst}
       />
       {showStaleOverlay && (
         <StaleCaptureOverlay

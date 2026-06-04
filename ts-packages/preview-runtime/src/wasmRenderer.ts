@@ -86,6 +86,13 @@ interface WasmModuleExtended {
   ) => Promise<string>;
   write_qmd: (astJson: string) => Promise<string>;
   incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
+  parse_qmd_content(content: string): string;
+  apply_node_edit(
+    content: string,
+    untransformed_ast_json: string,
+    destination_source_info_json: string,
+    modified_subtree_json: string,
+  ): string;
   convert: (document: string, inputFormat: string, outputFormat: string) => Promise<string>;
   lsp_analyze_document: (path: string) => string;
   lsp_get_symbols: (path: string) => string;
@@ -714,6 +721,57 @@ export function incrementalWriteQmd(originalQmd: string, newAst: RustQmdJson): s
 
   if (!response.success || !response.qmd) {
     throw new Error(`Incremental write failed: ${response.error}`)
+  }
+
+  return response.qmd
+}
+
+/**
+ * Splice a pure replacement subtree into the untransformed AST at the
+ * destination block and produce new QMD (target-incremental-writes Phase 3).
+ *
+ * @param content                      - original QMD source text
+ * @param untransformedAstJson         - the render's own pre-pipeline AST JSON
+ * @param destinationSourceInfoJson    - JSON-serialized SourceInfo VALUE of
+ *                                       the edited node (resolved from its pool id)
+ * @param modifiedSubtreeJson          - full Pandoc JSON of replacement block(s)
+ * @returns new QMD string
+ * @throws if WASM is not ready or apply_node_edit fails
+ */
+/**
+ * Parse a QMD text fragment synchronously and return the Pandoc JSON AST.
+ * Used by the parent frame to produce the `modifiedSubtreeJson` argument
+ * for `applyNodeEdit` when the iframe sends `PreviewNodeEditPayload.newText`.
+ *
+ * @throws if WASM is not ready or the response JSON cannot be parsed.
+ */
+export function parseQmdContentSync(qmdText: string): AstResponse {
+  if (!wasmModule) {
+    throw new Error('WASM not initialized. Call initWasm() first.')
+  }
+  return JSON.parse(wasmModule.parse_qmd_content(qmdText)) as AstResponse
+}
+
+export function applyNodeEdit(
+  content: string,
+  untransformedAstJson: string,
+  destinationSourceInfoJson: string,
+  modifiedSubtreeJson: string,
+): string {
+  if (!wasmModule) {
+    throw new Error('WASM not initialized. Call initWasm() first.')
+  }
+
+  const responseJson = wasmModule.apply_node_edit(
+    content,
+    untransformedAstJson,
+    destinationSourceInfoJson,
+    modifiedSubtreeJson,
+  )
+  const response: AstResponse = JSON.parse(responseJson)
+
+  if (!response.success || !response.qmd) {
+    throw new Error(`apply_node_edit failed: ${response.error}`)
   }
 
   return response.qmd

@@ -1,0 +1,39 @@
+[    5759ms] [WARNING] [Intercom] The App ID in your code snippet has not been set. Set it to your App ID found in settings to complete installation: https://app.intercom.com/a/apps/_/settings/web @ https://js.intercomcdn.com/frame-modern.b3e00a79.js:0
+[    6785ms] [ERROR] Not signed in with the identity provider. @ https://claude.ai/login:0
+[   14452ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   14452ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   22976ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   22976ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   63063ms] [ERROR] [GSI_LOGGER]: FedCM get() rejects with NetworkError: Error retrieving a token. @ https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/86864-1575408510195de2.js:13
+[   66094ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   66094ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   66595ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   66595ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   67096ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   67096ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   71608ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   71608ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   72109ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   72109ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   75620ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   75620ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:130
+[   76723ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://claude.ai/api/auth/verify_google:0
+[   76727ms] [ERROR] [REACT_QUERY_CLIENT] QueryClient error: r: Your organization requires SSO authentication
+    at o (https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/13934-18ed40537a0e72ac.js:1:9060)
+    at https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/13934-18ed40537a0e72ac.js:1:10937
+    at async Object.mutationFn (https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/13934-18ed40537a0e72ac.js:1:11755) @ https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/86864-1575408510195de2.js:13
+[   86604ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://posit.okta.com/idp/idx/introspect:0
+[   91622ms] Uncaught Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at rD (https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/87c73c54-6e6a0bed4271723d.js:0:35815)
+    at oq (https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/87c73c54-6e6a0bed4271723d.js:0:85319)
+    at ik (https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/87c73c54-6e6a0bed4271723d.js:0:115435)
+    at <anonymous> (https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/87c73c54-6e6a0bed4271723d.js:0:111483)
+    at iu (https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/87c73c54-6e6a0bed4271723d.js:0:111584)
+    at iX (https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/87c73c54-6e6a0bed4271723d.js:0:133687)
+    at j (https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/86864-1575408510195de2.js:17:87197)
+[   92685ms] [WARNING] [Intercom] The App ID in your code snippet has not been set. Set it to your App ID found in settings to complete installation: https://app.intercom.com/a/apps/_/settings/web @ https://js.intercomcdn.com/frame-modern.b3e00a79.js:0
+[   95467ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://claude.ai/api/auth/verify_google_mobile:0
+[   95469ms] [ERROR] [REACT_QUERY_CLIENT] QueryClient error: r: Your organization requires SSO authentication
+    at o (https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/13934-18ed40537a0e72ac.js:1:9060)
+    at https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/13934-18ed40537a0e72ac.js:1:10937
+    at async Object.mutationFn (https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/13934-18ed40537a0e72ac.js:1:11755) @ https://assets-proxy.anthropic.com/claude-ai/v1/_next/static/chunks/86864-1575408510195de2.js:13

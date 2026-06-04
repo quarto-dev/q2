@@ -8,7 +8,7 @@ attr_source question closed)
 
 ## Epic context
 
-Part of the **provenance epic** (Plans 3–8). Plan 6 is the audit pass
+Part of the **provenance epic** (Plans 3–6, 7f, 7g, 8). Plan 6 is the audit pass
 that converts every transform's `SourceInfo::default()` emission into
 the correct `Generated { by, from }` shape Plan 4 defines, and
 attaches `Invocation` anchors uniformly to all shortcode resolutions.
@@ -104,7 +104,7 @@ holds the design details; this list is the work-tracking surface.
   `resolve_byte_range` (Generated → Invocation → Original) and Plan 6
   doesn't change the chain. Open follow-up.
 - [ ] Error + escaped round-trip test (incremental writer
-  verbatim-copies). Deferred to Plan 7 (writer infrastructure).
+  verbatim-copies). Deferred (incremental-writer infrastructure).
 - [ ] Shortcode-inside-include composition test (Invocation anchor
   `file_id != 0`). Deferred to Plan 8 (include wrapper introduces the
   cross-file context).
@@ -155,7 +155,7 @@ patterns apply:
   from: smallvec![Anchor::invocation(token_si)] }` on every resolved
   node, regardless of whether the handler is Rust-built-in or
   Lua-implemented. The `Invocation` anchor's `source_info` is the
-  shortcode token's range; Plan 7's writer uses it for Verbatim-copy
+  shortcode token's range; the incremental writer uses it for Verbatim-copy
   on KeepBefore; attribution chains through it via `resolve_byte_range`.
 
 The earlier `Derived` variant proposal collapsed into `Generated` with
@@ -243,11 +243,12 @@ with the correct provenance:
       audit-completion test expects). **Atomicity intent**: the error
       region is treated as normal editable user-source content (NOT
       atomic). If the user edits `?meta:bad` in React, the bytes
-      change in the source qmd via the verbatim-copy path. Plan 7's
+      change in the source qmd via the verbatim-copy path.
       `is_atomic_kind()` does not fire because the source_info is
       Original, not Generated. The Strong-wraps-Str overlap (both
       layers carry the same range) is structurally parallel to the
-      footnote `<sup>` case Plan 7:261-267 already documents.
+      footnote `<sup>` multi-node-overlap case (round-trip-friendly
+      via block-level Verbatim).
     - `shortcode_to_literal` (lines 1043-1109): the literal-text Str
       produced for escaped `{{</ ... >}}` shortcodes. Today it emits
       `SourceInfo::default()`. Fix: pass `shortcode_owned.source_info`
@@ -271,9 +272,9 @@ with the correct provenance:
   `create_footnote_ref` cloning from the original `Note` inline (so
   they stay Original — no change needed). The four synthesized inline
   layers (Span/Superscript/Link/Str) all carry the same range,
-  producing a multi-node overlap; Plan 7:261-267 documents that this
-  is round-trip-friendly without extra writer work (block-level
-  Verbatim of the surrounding Para covers it). q2-preview pipeline
+  producing a multi-node overlap; this is round-trip-friendly without
+  extra writer work (block-level Verbatim of the surrounding Para
+  covers it). q2-preview pipeline
   runs this transform (per Plan 2B's audit); the audit applies to
   both pipelines.
 - **`AppendixStructureTransform`**: the synthetic appendix container Div.
@@ -345,9 +346,7 @@ comprehensive grep.
 ### Out of scope
 
 - The `is_atomic_kind()` predicate and `is_atomic_custom_node` registry
-  (Plan 7 owns the writer-side atomicity logic).
-- The writer's soft-drop / atomic-violation handling (Plan 7).
-- The writer's multi-inline shortcode dedupe rule (Plan 7).
+  (the atomicity logic lives in `quarto-source-map` + the React gate).
 - The `IncludeExpansion` CustomNode wrapper (Plan 8).
 - React component for shortcode-resolved inlines (Plan 2A's framework
   atomic gate already handles this via the `isAtomicSourceInfo`
@@ -389,7 +388,7 @@ comprehensive grep.
   Invocation anchor's `source_info` points into the included file
   (different `FileId` than the parent) — this is correct: the token's
   bytes live there. Plan 8's wrapper carries the parent-file anchor
-  independently; Plan 7's `preimage_in(parent_file)` returns `None`
+  independently; the writer's `preimage_in(parent_file)` returns `None`
   for the included children and the wrapper governs verbatim-copy.
 - **Enrichment, not override**. The Lua machinery's auto-attach
   produces `Generated { by: filter, from: [], by.data: { filter_path,
@@ -422,17 +421,17 @@ comprehensive grep.
   wrapper.** Each resolved Str/Inline/Block gets `Generated { by:
   shortcode(name), from: [Invocation -> Arc::new(ctx.source_info.clone())] }`.
   The anchor's source_info is the shortcode token's range (an Original
-  from `ctx.source_info`). Plan 7's writer uses it for Verbatim-copy
+  from `ctx.source_info`). The incremental writer uses it for Verbatim-copy
   on KeepBefore. Multi-inline resolutions: every resolved node shares
-  the same anchor's source_info, enabling Plan 7's dedupe rule.
+  the same anchor's source_info.
 - **Genuine synthesizers use `Generated` with empty anchors**.
   Sectionize, TitleBlock, Footnotes, Appendix containers — none of
   these correspond to source bytes, so they get
-  `Generated { by: By::<kind>(), from: smallvec![] }`. Plan 7's coarsen
-  treats their wrappers as Transparent (recurse into source-bearing
-  children) or Omit depending on `by.is_atomic_kind()`.
-- **No `atomic` flag needed**. Plan 7's atomic-violation logic detects
-  atomicity via `by.is_atomic_kind()` (per Plan 4's predicate) and via
+  `Generated { by: By::<kind>(), from: smallvec![] }`. The incremental
+  writer handles these synthesized wrappers via its standard coarsen
+  path (no special transparent-wrapper descent).
+- **No `atomic` flag needed**. Atomicity is detected
+  via `by.is_atomic_kind()` (per Plan 4's predicate) and via
   the `is_atomic_custom_node` registry for CustomNode types
   (`IncludeExpansion`, `CrossrefResolvedRef`). Shortcode atomicity
   falls into the first category (`shortcode` is in the atomic-kind
@@ -789,8 +788,8 @@ Lua-handler filter & shortcode").
   shortcode, from: [] }` remains. Every `by.kind == "shortcode"` node
   must carry at least one `Invocation` anchor pointing at the source
   token's bytes. Per Plan 4 §"Required-anchor invariant for shortcode",
-  this is the producer-side enforcement of the rule; Plan 7 adds a
-  `debug_assert!` on the consumer side as belt-and-suspenders. The
+  this is the producer-side enforcement of the rule; the incremental
+  writer adds a `debug_assert!` on the consumer side as belt-and-suspenders. The
   stamper is the only construction site for `by: shortcode` in v1, so
   the test exercises the full source of bad shapes.
 - **Per-transform fix tests**: for each fixed transform, a test that
@@ -814,7 +813,7 @@ Lua-handler filter & shortcode").
   (`title: "**Bold** Title"`). After ShortcodeResolveTransform, the
   resulting `[Strong[Str], Space, Str]` ALL have `Generated` with
   `Invocation` anchors whose `source_info` is the same shortcode
-  token's range. This is what Plan 7's dedupe rule detects.
+  token's range.
 - **Attribution interaction test**: render a doc with `{{< meta foo >}}`
   through two commits by different authors (author A wrote the line at
   T1; author B changed `foo` → `bar` at T2). With Plan 6 stamped and a
@@ -827,12 +826,12 @@ Lua-handler filter & shortcode").
 - **Error-inline regression test**: an unknown shortcode `{{< bogus >}}`
   resolves via `make_error_inline` to `Strong[Str("?bogus")]`. Both
   layers carry `Original` source_info pointing at the bogus
-  shortcode's token bytes (NOT `Default`, NOT `Generated`). Plan 7's
+  shortcode's token bytes (NOT `Default`, NOT `Generated`).
   `is_atomic_kind()` does not fire; round-trip through the
   incremental writer Verbatim-copies the original token bytes.
 - **Error / escaped round-trip test**: full incremental-writer
   round-trip on a fixture containing both `{{</ meta foo >}}` and
-  `{{< bogus >}}`. After Plan 6's stamping + Plan 7's writer, the
+  `{{< bogus >}}`. After Plan 6's stamping + the incremental writer, the
   output qmd should byte-equal the input for those regions
   (verbatim-copy via the Original anchor in both cases).
 - **Shortcode-inside-include composition test**: `parent.qmd`
@@ -888,7 +887,7 @@ Lua-handler filter & shortcode").
 
 ### Blocks
 
-- **Plan 7** — writer needs Plan 6's audit-fixed AST shape to walk
+- **The incremental writer** needs Plan 6's audit-fixed AST shape to walk
   preimages correctly and to detect atomic-kind for `is_atomic`
   enforcement.
 - Independent of Plan 8 (Plan 8 introduces its own wrapper for
@@ -896,7 +895,7 @@ Lua-handler filter & shortcode").
 
 ## Risk areas
 
-- **Audit completeness**: missing a site means a future Plan 7
+- **Audit completeness**: missing a site means a future incremental-writer
   round-trip silently corrupts that region. Mitigation: the
   audit-completion test scans for `SourceInfo::default()` AND for
   synthesized-but-not-Generated shapes in produced ASTs.
@@ -954,7 +953,7 @@ The conceptual surface is small; the file count is not.
 The earlier-draft "wrap shortcode resolutions in `CustomNode("ShortcodeResolution")`"
 approach was walked back. Per the user's reasoning: wrappers were heavy
 for what's fundamentally a provenance problem. The typed `Invocation`
-anchor in `Generated` gives Plan 7 atomic detection at the writer
+anchor in `Generated` gives atomic detection at the writer
 level (via `by.is_atomic_kind()` returning true for `shortcode`)
 without the structural cost of a new CustomNode type, the qmd writer
 arm, the HTML-pipeline-resolve transform, or the React component for
@@ -964,12 +963,11 @@ parent-file level.
 
 The shortcode-resolution provenance change propagates to: q2-preview
 rendering (Plan 2A's framework atomic gate in `dispatch.tsx`'s `Node`
-detects `shortcode` kind via `ATOMIC_GENERATED_KINDS` and the
-JS-side `isAtomicSourceInfo` accessor), writer round-trip (Plan 7's
-soft-drop logic detects `by.is_atomic_kind()` + UseAfter and emits
-Q-3-42; Plan 7's dedupe rule handles multi-inline shortcode
-resolutions via the shared anchor source_info), and possibly some
-existing tests that asserted on the flat Str's source_info shape.
+detects `shortcode` kind via `ATOMIC_KINDS` and the
+JS-side `isAtomicSourceInfo` accessor), writer round-trip (the
+incremental writer Verbatim-copies the shared shortcode token bytes via
+`preimage_in`), and possibly some existing tests that asserted on the
+flat Str's source_info shape.
 
 The post-walk's enrichment pattern (promote kind, preserve prior
 `by.data`, append anchor) is the canonical shape for any future

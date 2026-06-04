@@ -22,7 +22,10 @@ export interface ServerInfo {
   pid: number;
 }
 
-const HUB_PORT = 3030;
+// Port 3031 is reserved for the Playwright test hub. The dev hub uses 3030.
+// Keeping them separate means you can run `cargo run --bin hub` for local
+// development and `npx playwright test` at the same time without conflicts.
+const HUB_PORT = 3031;
 
 export default async function globalSetup() {
   console.log('\n--- E2E Global Setup ---');

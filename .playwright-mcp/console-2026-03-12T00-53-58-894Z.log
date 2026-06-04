@@ -1,0 +1,14 @@
+[      52ms] [WARNING] <meta name="apple-mobile-web-app-capable" content="yes"> is deprecated. Please include <meta name="mobile-web-app-capable" content="yes"> @ https://posit.okta.com/app/slack/exk3lc08q5knBD2Xz697/sso/saml?fromHome=true:0
+[    2964ms] [WARNING] Mar-11 20:54:01.857 TRACER (T02V9CHFH) (boot:time_to_mount_client) was forced closed and marked with the _flush=true tag. @ https://a.slack-edge.com/bv1-13-br/gantry-v2-shared.77a7449833910b104623.min.js?cacheKey=gantry-1773269855:0
+[    3024ms] [WARNING] Mar-11 20:54:01.917 DEVICE-PREFS Preferred audioinput device (default) not found. Resetting to OS default. @ https://a.slack-edge.com/bv1-13-br/gantry-v2-shared.77a7449833910b104623.min.js?cacheKey=gantry-1773269855:0
+[    3024ms] [WARNING] Mar-11 20:54:01.917 DEVICE-PREFS Preferred audiooutput device (default) not found. Resetting to OS default. @ https://a.slack-edge.com/bv1-13-br/gantry-v2-shared.77a7449833910b104623.min.js?cacheKey=gantry-1773269855:0
+[    3430ms] [WARNING] Mar-11 20:54:02.324 (?) preferred device for audiooutput does not exist skipping setting preferred device in huddle @ https://a.slack-edge.com/bv1-13-br/gantry-v2-shared.77a7449833910b104623.min.js?cacheKey=gantry-1773269855:0
+[    4154ms] [WARNING] Deleting IndexedDB database 'quip-test' @ https://a.slack-edge.com/canvas_blob/z4Q9Gl9bOgwrJCrtx6PbGg:1
+[    4154ms] [WARNING] Mar-11 20:54:03.047 TRACER (T02V9CHFH) (canvas:collab-init) was forced closed and marked with the _flush=true tag. @ https://a.slack-edge.com/bv1-13-br/gantry-v2-shared.77a7449833910b104623.min.js?cacheKey=gantry-1773269855:0
+[    4154ms] [WARNING] Mar-11 20:54:03.047 TRACER (T02V9CHFH) (canvas:await-callback) was forced closed and marked with the _flush=true tag. @ https://a.slack-edge.com/bv1-13-br/gantry-v2-shared.77a7449833910b104623.min.js?cacheKey=gantry-1773269855:0
+[    4157ms] [WARNING] Deleting IndexedDB database 'quip' @ https://a.slack-edge.com/canvas_blob/z4Q9Gl9bOgwrJCrtx6PbGg:1
+[    4169ms] [WARNING] Deleting IndexedDB database 'metrics' @ https://a.slack-edge.com/canvas_blob/z4Q9Gl9bOgwrJCrtx6PbGg:1
+[    4169ms] [WARNING] Deleting IndexedDB database 'local-storage' @ https://a.slack-edge.com/canvas_blob/z4Q9Gl9bOgwrJCrtx6PbGg:1
+[    4170ms] [WARNING] Deleting IndexedDB database 'canvas' @ https://a.slack-edge.com/canvas_blob/z4Q9Gl9bOgwrJCrtx6PbGg:1
+[    5798ms] [WARNING] Mar-11 20:54:04.691 Couldn't complete metrics measurement for start mark 'session_lifespan' @ https://a.slack-edge.com/bv1-13-br/gantry-v2-shared.77a7449833910b104623.min.js?cacheKey=gantry-1773269855:0
+[    5798ms] [WARNING] Mar-11 20:54:04.692 Couldn't complete metrics measurement for start mark 'session_lifespan' @ https://a.slack-edge.com/bv1-13-br/gantry-v2-shared.77a7449833910b104623.min.js?cacheKey=gantry-1773269855:0

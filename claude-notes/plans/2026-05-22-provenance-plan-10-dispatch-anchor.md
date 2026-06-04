@@ -2,13 +2,23 @@
 
 **Date:** 2026-05-22
 **Branch:** feature/provenance
-**Status:** Research plan (pre-implementation; API surface not yet pinned)
+**Status:** Research plan (pre-implementation; API surface not yet pinned).
 **Milestone:** none directly — improves source-pointing diagnostics
   and attribution for Lua-driven content; does not gate M3.
 
+> **Scope note (2026-06-05).** This plan is diagnostic-only — a `Dispatch`
+> anchor records *where a Lua handler ran* (e.g. `kbd.lua:14`) for attribution;
+> it is never walked by the writer's `preimage_in` (only `Invocation` is; see
+> `provenance-contract.md` §"Role-asymmetry"). It does **not** depend on the
+> write-back model, so it survived the withdrawal of the Plan-7 write-back epic.
+> References to the reverted Plan-7 machinery (soft-drop) and to deleted sibling
+> plans (7a, 7c) have been cleaned; Phase 7's cache-key work, formerly framed as
+> "reuses Plan 7a's field," now stands on its own. Its sibling is Plan 9
+> (`ValueSource` anchor for metadata-derived content).
+
 ## Epic context
 
-Part of the **provenance epic** (Plans 3–10). Lua filter files and
+Part of the **provenance epic** (Plans 3–6, 9, 10). Lua filter files and
 Lua-shortcode handler files contribute source-side bytes to
 `Generated` nodes (a filter constructed an `Str("HELLO")` somewhere
 in `upper.lua`; a `{{< kbd >}}` handler ran code at `kbd.lua:14`).
@@ -56,30 +66,22 @@ participate in the visual editor. If the filter emits a block
 container (Div / BlockQuote / Figure / NoteDefinitionFencedBlock)
 whose `source_info` is `Generated { by: filter(), from: [Dispatch
 -> lua_si] }` (no Invocation anchor) and whose children preserve
-their original source positions, the wrapper meets the structural
-definition of a *transparent wrapper* in
-[`claude-notes/designs/transparent-wrappers.md`](../designs/transparent-wrappers.md):
-
-1. Generated, no Invocation anchor — ✓ (Dispatch is anchor-only
-   for diagnostics; doesn't count as a source token).
-2. Block-container kind — ✓.
-3. Children carry `preimage_in(target)` — ✓ by construction
-   (the filter mutates rather than constructs).
-
-The writer's `first_in_user_tree` walker sees through it
-automatically; the React dispatcher's editability gate (Plan 7c
-Phase 2 — `isEditableInside`) treats its children as editable;
-edits inside the wrapped content round-trip cleanly. The filter
-author writes idiomatic Lua and gets working visual-editor
-support — no contract to satisfy beyond "don't strip
-source_info from the children you wrap."
+their original source positions, the wrapped content stays editable
+for free under the node-edit architecture. The filter runs in the
+pipeline, so the wrapper exists only in the *transformed* AST; the
+*untransformed* AST (`qmd_to_pandoc(content)`) still holds the
+pre-filter children with their original source positions. Editing a
+wrapped child therefore resolves to that child in the untransformed
+AST and round-trips cleanly — the Generated wrapper is diagnostic-only
+and never needs to be walked through. The filter author writes
+idiomatic Lua and gets working visual-editor support — no contract to
+satisfy beyond "don't strip source_info from the children you wrap."
 
 A Lua filter that **constructs** a fresh block container from
-metadata (no source-bearing children) is implicitly atomic via
-condition (3) — `first_in_user_tree` doesn't descend into it,
-editor treats it as a unit, edits inside soft-drop with Q-3-43.
-That's also the right behaviour: there are no source bytes to
-edit.
+metadata (no source-bearing children) is implicitly read-only: its
+synthesized content has no counterpart in the untransformed AST, so
+no edit can resolve to it. That's the right behaviour — there are no
+source bytes to edit.
 
 This works regardless of Plan 10's `Dispatch` migration: the
 predicate looks at the shape of the AST, not at the kind of
@@ -96,10 +98,10 @@ authors can rely on.
 - Add `Dispatch` variant to `AnchorRole` enum in
   `crates/quarto-source-map/src/source_info.rs:91-118` alongside the
   existing `Invocation`, `ValueSource`, `Other`.
-- Doc-comment on `Dispatch` references the
-  Plan-7-established / Plan-9-confirmed policy: `preimage_in` walks
+- Doc-comment on `Dispatch` references the role-asymmetry policy
+  (`provenance-contract.md` §"Role-asymmetry"): `preimage_in` walks
   `Invocation` only; `Dispatch` is diagnostic-only and never
-  consulted by the writer. Plan 7 documents the policy in terms of
+  consulted by the writer. That contract documents the policy in terms of
   "all non-`Invocation` roles, present and future, are skipped";
   Plan 10 names `Dispatch` in the exclusion list once the variant
   exists.
@@ -199,24 +201,18 @@ authors can rely on.
   `by.data: {name, lua_path, lua_line}` → `by.data: {name}` +
   Dispatch anchor). Same one-PR migration.
 
-#### Phase 7 — Cache-key surface (reuses Plan 7a's field)
+#### Phase 7 — Cache-key surface
 
-- Lua filter file content becomes Pass1 cache input. **Plan 7a
-  lands first** and introduces `filter_sources_hash` on
-  `Pass1KeyInputs` (SHA-256 over filter file bytes + opt-out flags).
-  Plan 10 **reuses** that field — no new field, no parallel hash.
-- Plan 10 Phase 7 reduces to:
-  - Confirm the existing `filter_sources_hash` semantics cover
-    Plan 10's needs (cache invalidates when a Lua filter file's
-    bytes change). They do — both plans hash the same files.
-  - Add a smoke test: register a Lua filter file in SourceContext,
-    edit its bytes, confirm `pass1_key` changes accordingly. Likely
-    Plan 7a's existing tests already cover this; verify during
-    implementation.
-- If Plan 7a hasn't landed when Plan 10 starts (reversed order),
-  Plan 10 introduces the field itself with Plan 7a's semantics, and
-  Plan 7a later reuses it. The structural answer is the same; the
-  PR that lands first owns the field.
+- Lua filter file content must become Pass1 cache input, so that
+  editing a Lua filter's bytes invalidates cached renders. Add a
+  `filter_sources_hash` on `Pass1KeyInputs` (SHA-256 over filter file
+  bytes), folded into `pass1_key`.
+- Add a smoke test: register a Lua filter file in SourceContext, edit
+  its bytes, confirm `pass1_key` changes accordingly.
+
+(If any other feature later needs the same filter-file hash, it can
+share this field — this is just standard cache-input hygiene, not a
+Plan-10-specific mechanism.)
 
 ### Out of scope
 
@@ -311,8 +307,7 @@ must be pinned:
    the obvious answer. Confirm during implementation.
 
 4. **`Pass1KeyInputs` field shape** — option (A) `lua_filter_files`
-   field vs. option (B) SourceContext-referenced. Recommend (A) for
-   v1; Plan 7a coordinates by reading the same field.
+   field vs. option (B) SourceContext-referenced. Recommend (A) for v1.
 
 5. **Wire-format migration window** — which release cycle the dual
    reader stays active. Stated in Plan 6's commit message;
@@ -335,12 +330,6 @@ must be pinned:
   runtime. Verify against a filter-heavy fixture during
   implementation; if it's expensive, batch source-info attachment to
   the post-walk helper (`enrich_or_create` in Plan 6's design).
-
-- **Coordination with Plan 7a's `filter_sources_hash`.** Plan 7a
-  proposes hashing filter files for idempotence verdicts; Plan 10
-  hashes them for cache invalidation. Recommend: settle on one hash
-  computation owned by Plan 10's Phase 7; Plan 7a reuses it. Confirm
-  during the Plan 7a → Plan 10 sequencing discussion.
 
 - **Lua-shortcode-handler file registration timing.** Extension
   loading (`_extension.yml` parsing) happens before filter pipeline
@@ -393,7 +382,6 @@ must be pinned:
   policy for Dispatch.
 - Plan 5 (wire format) — Phase 6's migration is on top of Plan 5's
   code-4 emission.
-- Plan 7a — coordinates on filter-source hashing (Phase 7).
 - bd-36fr9 (closes).
 
 ## Test plan
@@ -464,8 +452,8 @@ must be pinned:
   - Resolved inline carries Dispatch anchor pointing at the
     handler's Lua source.
   - Edit-back round-trip preserves the `{{< kbd Alt-X >}}` token
-    in the qmd source (Plan 7 Verbatim via the Invocation anchor;
-    Dispatch is not consulted).
+    in the qmd source (the writer copies it verbatim via the
+    Invocation anchor; Dispatch is not consulted).
 
 ## Dependencies
 
@@ -486,15 +474,11 @@ must be pinned:
   Dispatch inherits. Doesn't strictly block Plan 10 implementation
   (the policy is doc-only), but Plan 9 lands the policy in writing
   first.
-- **Plan 7a** — coordinates on filter file hashing (Phase 7).
-  Recommend Plan 10's Phase 7 lands the cache-input shape; Plan 7a's
-  idempotence cache reuses it.
 
 ### Does not block
 
-- **Plan 7 implementation** can ship without Plan 10. Plan 7's
-  writer consults `Invocation` only; Dispatch lands in the
-  diagnostic UX cycle.
+- **The incremental writer** works without Plan 10. It consults
+  `Invocation` only; Dispatch lands in the diagnostic UX cycle.
 
 ### Blocks
 
@@ -525,14 +509,6 @@ must be pinned:
   pattern (likely `Arc<Mutex<…>>` or `&mut` through the pipeline)
   must accommodate Lua-file additions mid-pipeline. Verify.
 
-- **Coordination friction with Plan 7a — resolved.** Both plans
-  touch `cache_key.rs` and want to hash filter files. Resolved by
-  agreement: Plan 7a lands first and owns `filter_sources_hash` on
-  `Pass1KeyInputs`; Plan 10 reuses it. The order is also the
-  natural one — Plan 7a is independent of Plan 10's Lua-source
-  registration; Plan 10 benefits from Plan 7a's hashing already
-  being in place.
-
 - **Migration tests that touch `By::filter("foo.lua", 42)`.** ~10
   unit tests in `source_info.rs` migrate mechanically; if any are
   missed during the signature change, the workspace fails to
@@ -549,7 +525,7 @@ must be pinned:
 | 4: `By::filter` signature shrinkage + call-site migration | ~120 |
 | 5: Lua-handler shortcode Dispatch attachment | ~80 |
 | 6: Wire-format clean break + tests | ~80 |
-| 7: Cache-key smoke test (reuses Plan 7a's `filter_sources_hash`) | ~30 |
+| 7: Cache-key surface (`filter_sources_hash`) + smoke test | ~40 |
 | Tests across phases | ~350 |
 | **Total** | **~980** |
 

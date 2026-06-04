@@ -1,13 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
-import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
+import type { Diagnostic, PreviewNodeEditPayload } from '@quarto/preview-renderer/types/diagnostic';
 import type { ActorIdentity } from '@quarto/preview-runtime';
 import {
   parseQmdToAstWithAttribution,
   renderPageInProjectWithAttribution,
   isWasmReady,
   incrementalWriteQmd,
+  applyNodeEdit,
+  parseQmdContentSync,
 } from '@quarto/preview-runtime';
 import { pipelineKindForFormat } from '@quarto/preview-runtime';
 import { useAttribution } from '../../hooks/useAttribution';
@@ -75,6 +77,8 @@ interface PreviewProps {
 type RenderResult = {
   success: true;
   astJson: string;
+  /** Pre-pipeline (untransformed) AST JSON for apply_node_edit (Phase 1). */
+  untransformedAstJson?: string;
   diagnostics: Diagnostic[];
   /**
    * Three-way theme fingerprint (Plan 2A item 11).
@@ -184,6 +188,7 @@ async function doRender(
       return {
         success: true,
         astJson,
+        untransformedAstJson: result.untransformed_ast_json,
         diagnostics: allDiagnostics,
         themeFingerprint,
       };
@@ -280,6 +285,13 @@ export default function ReactPreview({
     string | null | undefined
   >(undefined);
 
+  // Phase 1 (target-incremental-writes): the pre-pipeline AST captured
+  // by the last successful q2-preview render.  Passed to apply_node_edit
+  // as the baseline when the user commits an edit (Phase 4).
+  const [untransformedAst, setUntransformedAst] = useState<string | null>(
+    null,
+  );
+
   // Phase 5 — q2-debug attribution producer wiring.
   //
   // `useAttribution` returns the JSON payload (`{ runs, identities }`)
@@ -362,6 +374,8 @@ export default function ReactPreview({
       setPreviewState('GOOD');
       // Update rendered AST
       setAst(result.astJson);
+      // Phase 1: retain the untransformed AST for apply_node_edit (Phase 4).
+      setUntransformedAst(result.untransformedAstJson ?? null);
       // Apply theme fingerprint if the render produced one. Only the
       // success branch calls this — render failures preserve the
       // last-good fingerprint across transient errors (Plan 2A item
@@ -417,27 +431,57 @@ export default function ReactPreview({
 
   // Handler for AST modifications - converts AST back to QMD and updates content.
   //
-  // q2-preview is **read-only in v1** (Plan 1 §"Multi-plan contract:
-  // read-only mode lifts at Plan 7"). The post-pipeline AST diverges
-  // from source enough that a naive incrementalWriteQmd would
-  // corrupt the qmd; Plan 7 lifts this guard once the writer's
-  // round-trip machinery understands q2-preview's transform shapes
-  // (Synthetic / Derived / atomic CustomNodes). Component-driven
-  // edits (kanban drag, comment buttons in Plan 2) call this and
-  // silently no-op with a console.warn — that is the accepted
-  // post-Plan-2 UX gap until Plan 7 ships.
-  const handleSetAst = useCallback((newAst: any) => {
-    if (pipelineKindForFormat(format) === 'preview') {
-      console.warn('q2-preview is read-only in v1; AST edit dropped (Plan 7 lifts this guard)');
-      return;
-    }
-    try {
-      const newQmd = incrementalWriteQmd(content, newAst);
-      onContentRewrite(newQmd);
-    } catch (err) {
-      console.error('Failed to write AST back to QMD:', err);
-    }
-  }, [content, onContentRewrite, format]);
+  // For q2-preview: expects a PreviewNodeEditPayload carrying the
+  // destination SourceInfo value and modified subtree; routes through
+  // apply_node_edit using the retained untransformedAst (Phase 4).
+  //
+  // For other formats (q2-debug, q2-slides): expects a full PandocAST
+  // and calls incrementalWriteQmd as before.
+  const handleSetAst = useCallback(
+    (newAst: any) => {
+      if (pipelineKindForFormat(format) === 'preview') {
+        const edit = newAst as PreviewNodeEditPayload;
+        if (!edit.__isPreviewNodeEdit) {
+          console.warn(
+            'q2-preview setAst: expected PreviewNodeEditPayload; got',
+            newAst,
+          );
+          return;
+        }
+        if (!untransformedAst) {
+          console.warn(
+            'q2-preview setAst: no untransformedAst retained; render first',
+          );
+          return;
+        }
+        try {
+          // Parse the user's raw text into a replacement subtree.
+          const parseResult = parseQmdContentSync(edit.newText);
+          if (!parseResult.success || !parseResult.ast) {
+            console.error('parse_qmd_content failed:', parseResult.error);
+            return;
+          }
+          const newQmd = applyNodeEdit(
+            content,
+            untransformedAst,
+            edit.destinationSourceInfoJson,
+            parseResult.ast,
+          );
+          onContentRewrite(newQmd);
+        } catch (err) {
+          console.error('apply_node_edit failed:', err);
+        }
+        return;
+      }
+      try {
+        const newQmd = incrementalWriteQmd(content, newAst);
+        onContentRewrite(newQmd);
+      } catch (err) {
+        console.error('Failed to write AST back to QMD:', err);
+      }
+    },
+    [content, onContentRewrite, format, untransformedAst],
+  );
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>

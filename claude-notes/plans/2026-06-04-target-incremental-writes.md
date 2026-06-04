@@ -6,9 +6,11 @@
 **Supersedes:** the original *research* version of this file (the
 `preimage_in`-text-splice model). That model is abandoned — see
 "Why this replaces the text-splice model" below.
-**Follows:** `2026-06-04-incremental-writer-unwind.md` (complete; restored
-State-A `incremental_write` + `compute_reconciliation`, removed Plan-7
-soft-drop / `stampUserEdits` / baseline-AST tracking).
+**Baseline:** the earlier Plan-7 write-back model (soft-drop reconciliation,
+`stampUserEdits`, baseline-AST tracking in the WASM bridge) was reverted before
+this plan began. The writer core is back to State A: `incremental_write` +
+`compute_reconciliation` with no soft-drop and no provenance-stamping of edits.
+That revert is history (git); this plan builds on the State-A baseline.
 
 ---
 
@@ -160,7 +162,7 @@ additive, zero backend change**.
 
 ---
 
-## What already exists (post-provenance, post-unwind)
+## What already exists (post-provenance, State-A writer)
 
 - `SourceInfo` with `Generated { by, from }`, `AnchorRole`, `preimage_in`
   (`quarto-source-map/src/source_info.rs:435`), `is_atomic_kind` (:781).
@@ -182,80 +184,98 @@ additive, zero backend change**.
 ## Work — phases (TDD: tests before implementation)
 
 ### Phase 0 — Fixtures & shared test helpers
-- [ ] Add a small QMD corpus under the reconcile/incremental tests covering:
+- [x] Add a small QMD corpus under the reconcile/incremental tests covering:
   a single paragraph, a heading, a paragraph adjacent to a fenced div, a
   document with a resolved shortcode, and a document with **duplicate blocks**
   (two identical paragraphs) — the last guards the structural-minimality claim.
-- [ ] Helper to: parse `content` → untransformed AST; pick a node; build a
+  Lives in `crates/pampa/tests/integration/node_edit_tests.rs`.
+- [x] Helper to: parse `content` → untransformed AST; pick a node; build a
   pure replacement subtree via `parse_qmd_content`.
 
 ### Phase 1 — Backend: dual-tree render
-- [ ] **Test:** a render entry point returns *both* the transformed AST and the
+- [x] **Test:** a render entry point returns *both* the transformed AST and the
   untransformed AST (the `qmd_to_pandoc` output captured **before**
   `AstTransformsStage`), each with its own pool; assert an unchanged paragraph
   has byte-identical `source_info` values in both.
-- [ ] Capture the untransformed AST at the parse boundary and thread it to the
-  render response. Define the boundary explicitly as **immediately after
-  `qmd_to_pandoc`, before any transform** (the same tree `incremental_write`
-  reconciles against).
-- [ ] Extend the render response shape (and TS types) with `untransformedAst`.
+  (`pipeline::tests::render_qmd_to_preview_ast_returns_dual_ast`)
+- [x] Capture the untransformed AST at the parse boundary and thread it to the
+  render response. Implemented as `capture_untransformed_ast_json` in
+  `quarto-core/src/pipeline.rs`, called at the start of
+  `render_qmd_to_preview_ast` before the main pipeline runs.
+- [x] Extend the render response shape (and TS types) with `untransformed_ast_json`.
+  Added to `PreviewAstOutput`, `RenderResponse` (Rust), and
+  `RenderResponse` interface in `ts-packages/preview-renderer/src/types/diagnostic.ts`.
 
 ### Phase 2 — Backend: destination-node lookup
-- [ ] **Test:** `lookup(A_u, source_info)` returns the corresponding node for
+- [x] **Test:** `lookup(A_u, source_info)` returns the corresponding node for
   (a) a clean `Original` paragraph (exact value match), (b) a `Generated`
   shortcode node (via `preimage_in` fallback to the token), (c) returns
   `None` for synthetic/no-preimage, (d) disambiguates when a value resolves to
   multiple candidates (tiebreak on node kind + tree depth).
-- [ ] Implement the lookup: a `source_info`-value-keyed traversal of `A_u`,
+  (5 tests in `node_edit_tests::lookup_*`)
+- [x] Implement the lookup: a `source_info`-value-keyed traversal of `A_u`,
   with the `preimage_in` range fallback for `Generated` and a documented
-  tiebreak rule. Live in `quarto-ast-reconcile` or `pampa` (whichever keeps the
-  dependency direction clean — `pampa` consumes reconcile).
+  tiebreak rule. Lives in `crates/pampa/src/node_lookup.rs` as `lookup_block`.
+  v1 scope: top-level blocks only; tiebreak = first (smallest-index).
 
 ### Phase 3 — Backend: `apply_node_edit` entry point
-- [ ] **Test (end-to-end, Rust):** `apply_node_edit(content, untransformed_ast,
-  destination_source_info, modified_subtree)` →
-  - edited paragraph: only that block's text changes; all other bytes verbatim;
-  - duplicate-block fixture: editing one leaves the twin untouched (structural
-    minimality);
-  - shortcode fixture: the `{{< >}}` invocation is replaced, not the resolved
-    content;
-  - assert `read(result_qmd)` reflects the splice and unchanged regions are
-    byte-identical to `content`.
-- [ ] Implement: deserialize `A_u`; `lookup`; `splice` (replace `N_u` with the
-  parsed subtree — may be 1→N blocks; reconcile handles that);
-  `compute_reconciliation(A_u, A_u')`; `incremental_write(content, A_u, A_u',
-  plan)`; return QMD via the `AstResponse` shape. Reuses the core verbatim.
-- [ ] WASM signature (see below); add TS bindings + `.d.ts`.
+- [x] **Test (end-to-end, Rust):** `apply_node_edit(content, untransformed_ast,
+  destination_source_info, modified_subtree)` —
+  5 tests: single-para edit, heading edit, duplicate-block minimality (edit
+  block 0, edit block 1), synthetic-target returns DestinationNotFound.
+  Lives in `node_edit_tests::apply_node_edit_*`.
+- [x] Implement: `crates/pampa/src/apply_node_edit.rs` — deserialize A_u;
+  lookup_block; splice; compute_reconciliation; incremental_write; returns
+  `Ok(new_qmd)` or `Err(ApplyNodeEditError)`.
+- [x] WASM entry point in `wasm-quarto-hub-client/src/lib.rs`; TS declaration
+  added to `hub-client/src/types/wasm-quarto-hub-client.d.ts`.
 
 ### Phase 4 — Frontend: round-trip + wiring
-- [ ] **Test:** the preview holds `untransformedAst` from the render and passes
-  it (with `content`, resolved `source_info`, subtree) into `apply_node_edit`;
-  the returned QMD drives `onContentRewrite`.
-- [ ] Remove the read-only guard in `ReactPreview.tsx` (currently
-  `handleSetAst` early-returns for `pipelineKindForFormat(format) ===
-  'preview'`, ReactPreview.tsx:430) and route to `apply_node_edit`.
-- [ ] SPA: replace `noopSetAst` (PreviewApp.tsx:355, used at :859) with the
-  real handler.
-- [ ] Resolve the edited node's `s` → `source_info` **value** before sending
-  (independent pools — do not send a bare pool id).
+- [x] **Test:** `hub-client/src/services/applyNodeEdit.wasm.test.ts` — 3 WASM
+  tests covering the render→untransformedAst→apply_node_edit round-trip.
+  **Require `npm run build:wasm` before they pass** (WASM binary predates
+  Phase 1–3 Rust changes; tests correctly fail on the stale binary).
+- [x] Removed the read-only guard in `ReactPreview.tsx` (`handleSetAst` now
+  routes `PreviewNodeEditPayload` through `applyNodeEdit` for preview format).
+  `untransformedAst` state captured from render results.
+- [x] SPA (`PreviewApp.tsx`): `noopSetAst` replaced by `handleSetAst` that
+  reads content from VFS, calls `applyNodeEdit`, writes new QMD back to VFS,
+  bumps `contentTick`. Full Automerge write-back deferred to Phase 5.
+- [x] `PreviewNodeEditPayload` type defined in shared
+  `ts-packages/preview-renderer/src/types/diagnostic.ts`.
+- [x] `applyNodeEdit` wrapper added to `preview-runtime/src/wasmRenderer.ts`;
+  `apply_node_edit` declared in `WasmModuleExtended` interface.
+- [x] `untransformed_ast_json` field captured from render results and stored in
+  `ReactPreview` state and `PreviewAppState`.
 
 ### Phase 5 — Frontend: v1 edit surface (text-bearing blocks)
-- [ ] **Test:** editing a paragraph's text and a heading's text produces a pure
-  subtree via `parse_qmd_content(newText)` and yields the expected QMD
-  end-to-end; inline markdown the user types (e.g. `*emph*`) round-trips
-  correctly (because it's parsed, not JS-tokenised).
-- [ ] Wire one editable text surface for `Para`/`Header`: on commit, call
-  `parse_qmd_content(newText)`, take the resulting block(s) as the modified
-  subtree, call `apply_node_edit`.
-- [ ] Gate the edit affordance on the **backend editability gate** (node has a
-  resolvable `source_info`); render non-mappable nodes read-only.
+- [x] **Test (Rust):** 2 tests in `node_edit_tests` — inline markdown
+  round-trip (`*emph*` → parse → write preserves stars) and heading edit
+  leaves adjacent paragraph verbatim.
+- [x] Wire `Para`/`Header` editable surfaces: `contentEditable` on click;
+  `onBlur`/Enter commits; `commitEdit(poolId, newText)` resolves the
+  source_info from the pool and sends `PreviewNodeEditPayload` via `setAst`.
+- [x] `PreviewContext` extended with `pool` and `commitEdit` (provided by
+  `entry.tsx`'s `PreviewRoot`).
+- [x] Backend editability gate: blocks with no `s` (pool id) render read-only
+  (the `isEditable` guard in Para.tsx / Header.tsx).
+- [x] `parseQmdContentSync` wrapper added to `wasmRenderer.ts`; parent frame
+  calls it before `applyNodeEdit` — no WASM in iframe.
+- [x] `PreviewNodeEditPayload` updated to use `newText` (raw text) instead of
+  pre-parsed `modifiedSubtreeJson`; parent does all parsing.
 
 ### Phase 6 — End-to-end verification (per CLAUDE.md)
-- [ ] Browser e2e: in a running q2-preview, edit a paragraph; assert the QMD on
-  disk changed only at that block and the preview re-rendered. Record the exact
-  interaction + observed QMD diff in this plan.
-- [ ] `cargo nextest run --workspace`; `cargo xtask verify` (full — WASM leg, as
-  `quarto-core`/`pampa` and the wire format are touched).
+- [x] Browser e2e: manually confirmed in hub-client dev server
+  (`npm run build:wasm && npm run dev:fresh`). Editing a paragraph and a heading
+  each produced the correct QMD change in the Automerge document and the preview
+  re-rendered with the new text. Three integration bugs surfaced and fixed:
+    - pool at `astContext.p` not `raw.p` (was always empty object)
+    - project render path hardcoded `untransformed_ast_json: None`
+    - compact source_info format `{"t","r","d"}` not accepted by `apply_node_edit`
+- [x] WASM e2e tests: 7 tests in `hub-client/src/services/applyNodeEdit.wasm.test.ts`
+  cover all three regressions plus full round-trip (para replace, inline markdown).
+  All pass with the current built WASM.
+- [ ] `cargo nextest run` on changed crates; `cargo xtask verify` full.
 - [ ] hub-client changelog entry (two-commit workflow).
 
 ---
@@ -315,7 +335,6 @@ does not replace it — it shares the same core.
 
 ## References
 
-- Predecessor: `2026-06-04-incremental-writer-unwind.md`
 - Reconciler: `quarto-ast-reconcile/src/{compute,apply,hash}.rs`
 - Writer: `pampa/src/writers/incremental.rs`
 - `preimage_in` / `SourceInfo`: `quarto-source-map/src/source_info.rs`

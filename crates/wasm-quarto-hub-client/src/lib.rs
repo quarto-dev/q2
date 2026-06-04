@@ -602,6 +602,14 @@ struct RenderResponse {
     /// q2-preview html mirror. Absent (false) for ordinary q2-preview.
     #[serde(skip_serializing_if = "is_false")]
     is_slides: bool,
+    /// Untransformed Pandoc AST JSON — the `qmd_to_pandoc` output
+    /// captured immediately after `ParseDocumentStage`, before any
+    /// `AstTransformsStage`.  Populated alongside `ast_json` for
+    /// q2-preview renders; `None` for HTML / error responses.
+    /// Round-tripped to the frontend as the baseline for
+    /// `apply_node_edit` (target-incremental-writes Phase 1).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    untransformed_ast_json: Option<String>,
     /// Structured diagnostics (errors) with line/column information for Monaco.
     #[serde(skip_serializing_if = "Option::is_none")]
     diagnostics: Option<Vec<JsonDiagnostic>>,
@@ -1366,7 +1374,9 @@ async fn render_single_doc_to_response(
     // (RenderContext + resolver) and tail (VFS artifact flush +
     // RenderResponse construction with `skip_serializing_if = None`
     // on the unused payload field).
-    let (html, ast_json, diagnostics, source_context) = match format.pipeline_kind {
+    let (html, ast_json, untransformed_ast_json, diagnostics, source_context) = match format
+        .pipeline_kind
+    {
         Some("preview") => {
             match render_qmd_to_preview_ast(
                 content,
@@ -1381,6 +1391,7 @@ async fn render_single_doc_to_response(
                 Ok(out) => (
                     None,
                     Some(out.ast_json),
+                    out.untransformed_ast_json,
                     out.diagnostics,
                     out.source_context,
                 ),
@@ -1390,7 +1401,13 @@ async fn render_single_doc_to_response(
         _ => {
             let config = HtmlRenderConfig::with_resolver(resolver.clone());
             match render_qmd_to_html(content, &source_name, &mut ctx, &config, runtime_arc).await {
-                Ok(out) => (Some(out.html), None, out.diagnostics, out.source_context),
+                Ok(out) => (
+                    Some(out.html),
+                    None,
+                    None,
+                    out.diagnostics,
+                    out.source_context,
+                ),
                 Err(e) => return render_error_response(e),
             }
         }
@@ -1423,6 +1440,7 @@ async fn render_single_doc_to_response(
         html,
         ast_json,
         is_slides: format.target_format == "q2-slides",
+        untransformed_ast_json,
         diagnostics: None,
         warnings: if warnings.is_empty() {
             None
@@ -1463,7 +1481,7 @@ fn extract_theme_fingerprint(store: &quarto_core::ArtifactStore) -> Option<Strin
 /// transform).
 async fn render_project_active_page_to_response(
     active_path: &Path,
-    _content: &[u8],
+    content: &[u8],
     mut project: ProjectContext,
     user_grammars: Option<JsUserGrammars>,
     prefer_preview_format: bool,
@@ -1661,12 +1679,36 @@ async fn render_project_active_page_to_response(
         Pass2Payload::AstJson(s) => (None, Some(s)),
     };
 
+    // Capture the untransformed AST for the active page when this is a
+    // q2-preview render (ast_json is populated). Same logic as
+    // quarto_core::pipeline::capture_untransformed_ast_json.
+    let source_name = active_path.to_string_lossy();
+    let untransformed_ast_json = ast_json.as_ref().and_then(|_| {
+        use pampa::wasm_entry_points::qmd_to_pandoc;
+        use pampa::writers::json::{JsonConfig, write_with_config};
+        let (ast, context) = qmd_to_pandoc(content).ok()?;
+        let ast_ctx = pampa::pandoc::ASTContext {
+            filenames: vec![source_name.to_string()],
+            example_list_counter: std::cell::Cell::new(1),
+            source_context: context.source_context.clone(),
+            parent_source_info: None,
+        };
+        let json_config = JsonConfig {
+            include_inline_locations: true,
+            ..Default::default()
+        };
+        let mut buf = Vec::new();
+        write_with_config(&ast, &ast_ctx, &mut buf, &json_config).ok()?;
+        String::from_utf8(buf).ok()
+    });
+
     serde_json::to_string(&RenderResponse {
         success: true,
         error: None,
         html,
         ast_json,
         is_slides,
+        untransformed_ast_json,
         diagnostics: None,
         warnings: if warnings.is_empty() {
             None
@@ -1691,6 +1733,7 @@ fn error_response(msg: impl Into<String>) -> String {
         html: None,
         ast_json: None,
         is_slides: false,
+        untransformed_ast_json: None,
         diagnostics: None,
         warnings: None,
         pass1_failures: None,
@@ -1715,6 +1758,7 @@ fn render_error_response(e: QuartoError) -> String {
         html: None,
         ast_json: None,
         is_slides: false,
+        untransformed_ast_json: None,
         diagnostics,
         warnings: None,
         pass1_failures: None,
@@ -1752,6 +1796,7 @@ fn pass_failure_response(
         html: None,
         ast_json: None,
         is_slides: false,
+        untransformed_ast_json: None,
         diagnostics,
         warnings: None,
         pass1_failures: None,
@@ -2864,6 +2909,62 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
             })
             .unwrap()
         }
+    }
+}
+
+// ============================================================================
+// NODE EDIT (target-incremental-writes Phase 3)
+// ============================================================================
+
+/// Splice a pure replacement subtree into the untransformed AST at the
+/// destination block and produce new QMD.
+///
+/// This is the backend half of the editable-preview write-back path.  The
+/// frontend holds `untransformedAst` from the last render (Phase 1), resolves
+/// the edited node's pool-id to a `SourceInfo` value, calls
+/// `parse_qmd_content(newText)` to obtain a pure replacement subtree, and
+/// passes all three to this function.
+///
+/// # Arguments
+/// * `content`                       — original QMD source text
+/// * `untransformed_ast_json`        — the render's own pre-pipeline AST JSON
+/// * `destination_source_info_json`  — JSON-serialized `SourceInfo` VALUE of
+///                                     the edited node (not a bare pool id)
+/// * `modified_subtree_json`         — full Pandoc JSON of replacement block(s)
+///
+/// # Returns
+/// `{ "success": true, "qmd": "..." }` or `{ "success": false, "error": "..." }`
+#[wasm_bindgen]
+pub fn apply_node_edit(
+    content: &str,
+    untransformed_ast_json: &str,
+    destination_source_info_json: &str,
+    modified_subtree_json: &str,
+) -> String {
+    match pampa::apply_node_edit::apply_node_edit(
+        content,
+        untransformed_ast_json,
+        destination_source_info_json,
+        modified_subtree_json,
+    ) {
+        Ok(qmd) => serde_json::to_string(&AstResponse {
+            success: true,
+            ast: None,
+            qmd: Some(qmd),
+            error: None,
+            diagnostics: None,
+            warnings: None,
+        })
+        .unwrap(),
+        Err(e) => serde_json::to_string(&AstResponse {
+            success: false,
+            ast: None,
+            qmd: None,
+            error: Some(e.to_string()),
+            diagnostics: None,
+            warnings: None,
+        })
+        .unwrap(),
     }
 }
 

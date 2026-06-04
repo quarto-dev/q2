@@ -1,0 +1,2 @@
+[      99ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:5174/auth/me:0
+[     117ms] [WARNING] Module "fs" has been externalized for browser compatibility. Cannot access "fs.readFileSync" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details. @ http://localhost:5174/node_modules/.vite/deps/ejs.js?v=97d2bbdc:10

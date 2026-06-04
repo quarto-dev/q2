@@ -76,6 +76,15 @@ export interface RenderResponse {
    * `pipelineKindForFormat(format)` to decide which is expected).
    */
   ast_json?: string;
+  /**
+   * Untransformed Pandoc AST JSON — the `qmd_to_pandoc` output
+   * captured immediately after `ParseDocumentStage`, before any
+   * `AstTransformsStage`. Populated alongside `ast_json` for
+   * q2-preview renders; `undefined` for HTML / error responses.
+   * Round-tripped from the frontend as the baseline for
+   * `apply_node_edit` (target-incremental-writes Phase 1).
+   */
+  untransformed_ast_json?: string;
   /** Structured diagnostics (errors) with line/column information for Monaco. */
   diagnostics?: Diagnostic[];
   /** Structured warnings with line/column information for Monaco. */
@@ -90,4 +99,23 @@ export interface RenderResponse {
    * (errors, q2-debug, themeless single-doc).
    */
   theme_fingerprint?: string;
+}
+
+/**
+ * Payload sent via `setAst` for q2-preview node edits (Phase 4 of the
+ * target-incremental-writes plan). The iframe renderer resolves the
+ * edited node's pool id to a SourceInfo value and sends this payload;
+ * the host calls `apply_node_edit` with the retained `untransformedAst`.
+ */
+export interface PreviewNodeEditPayload {
+  __isPreviewNodeEdit: true;
+  /** JSON-serialized SourceInfo VALUE of the edited node (not a pool id). */
+  destinationSourceInfoJson: string;
+  /**
+   * Raw QMD text the user typed.  The parent frame (which has WASM access)
+   * calls `parse_qmd_content(newText)` to produce the replacement subtree
+   * JSON and passes that to `apply_node_edit`.  The iframe renderer never
+   * calls WASM directly.
+   */
+  newText: string;
 }

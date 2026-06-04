@@ -21,11 +21,11 @@ for the rationale.
 
 ## Epic context
 
-Part of the **provenance epic** (Plans 3–8). Plan 3 is the
+Part of the **provenance epic** (Plans 3–6, 7f, 7g, 8). Plan 3 is the
 verification-gate piece: it locks in the idempotence + structural-hash-
-stability contract the rest of the epic (typed provenance, incremental
-writer, soft-drop) rests on. The file name keeps its q2-preview-plan-N
-form for continuity with the earlier discussion notes.
+stability contract the typed-provenance and incremental-writer work
+rests on. The file name keeps its q2-preview-plan-N form for continuity
+with the earlier discussion notes.
 
 ## Goal
 
@@ -34,7 +34,7 @@ contract for the q2-preview pipeline. Every Rust transform in the
 q2-preview transform list **and** every built-in Lua filter shipped
 under `resources/extensions/` must produce the same structural AST when
 run twice on the same input. Without this, the incremental writer's
-reconciliation (Plan 7) cannot reliably preserve untouched regions.
+reconciliation cannot reliably preserve untouched regions.
 
 This plan ships:
 
@@ -49,7 +49,7 @@ This plan ships:
   authors.
 
 When this plan lands on `main` (after Phase 5's failure queue is
-drained), the q2-preview round-trip story (Plans 4-8) rests on a
+drained), the q2-preview round-trip story rests on a
 **CI-enforced** stable foundation: every push to `main` runs the
 idempotence suite and fails the build on regression. *Until* the
 plan lands on `main`, the integration branch
@@ -200,11 +200,11 @@ exercised via shortcode fixtures.)
 ### Out of scope
 
 - **Round-trip non-idempotence**
-  (`pipeline(write(pipeline(x))) ≠ pipeline(x)`). Plan 7a's runtime
-  check handles this. Plan 3 deliberately tests only pipeline
+  (`pipeline(write(pipeline(x))) ≠ pipeline(x)`). Out of scope and not
+  currently planned. Plan 3 deliberately tests only pipeline
   non-determinism — see §"Pipeline-determinism only" below.
-- **User-supplied filters**. Per-document, per-user; Plan 7a covers
-  these at runtime with an `idempotent: false` opt-out.
+- **User-supplied filters**. Per-document, per-user; runtime
+  user-filter idempotence is out of scope here and not currently planned.
 - **Rust-vs-React rendering parity**. Different contract; later plan.
 - **Performance / debouncing**. Idempotence verification doesn't
   measure runtime.
@@ -248,7 +248,7 @@ If a fixture happens to include an executable cell, the
 fall through to the markdown passthrough. Either way the test is
 unreliable. The fixture-format documentation enforces this.
 
-## Pipeline-determinism only — round-trip is Plan 7a's job
+## Pipeline-determinism only (round-trip is out of scope)
 
 Two distinct properties get loosely called "non-idempotence":
 
@@ -258,28 +258,19 @@ Two distinct properties get loosely called "non-idempotence":
 
 2. **Round-trip non-idempotence**:
    `pipeline(write(pipeline(x))) ≠ pipeline(x)`. The pipeline doesn't
-   re-parse its own output today; this becomes a concern only when
-   Plan 7's incremental writer lands. Plan 7a covers (2) at runtime
-   for **user-supplied** Lua filters, with per-filter attribution and
-   an `idempotent: false` opt-out. **Built-in** filter round-trip is
-   not covered by any plan in the epic (see Plan 7a's §"Notes" for
-   the accepted-gap reasoning).
+   re-parse its own output today; this would become a concern only for
+   a write-back/round-trip path. Runtime user-filter idempotence (the
+   complementary property for **user-supplied** Lua filters) is out of
+   scope here and not currently planned. **Built-in** filter round-trip
+   is likewise not covered.
 
 Plan 3 deliberately scopes to (1) because:
 
 - (2) isn't exercised by today's pipeline.
-- (2)'s test conflates writer-lossiness with filter-non-idempotence;
-  Plan 7's writer-lossless baseline test (planned for Plan 7's first
-  commit) and Plan 7a's per-filter isolation disambiguate the user
-  filter case.
+- (2)'s test conflates writer-lossiness with filter-non-idempotence.
 - For built-ins, the universe is small (one Lua filter +
-  ~36 Rust transforms, all under our control); if (2) bites us in
-  production after Plan 7 ships, the fix is to extend Plan 7a's
-  runtime check to also fire on `FilterSource::Extension` filters —
-  a small follow-up tracked in 7a's §"Out of scope."
-
-See Plan 7a's §"Two flavors of non-idempotence" for the full
-treatment.
+  ~36 Rust transforms, all under our control), so the accepted-gap
+  risk is low.
 
 ## Design decisions (settled in conversation)
 
@@ -319,7 +310,8 @@ treatment.
   resolves the prior "second-run pipeline starts fresh?" open
   question.
 - **Built-in scope = Rust transforms + ship-with-Quarto Lua filters**.
-  User filters are out of scope here (Plan 7a covers them).
+  User filters are out of scope here (runtime user-filter idempotence
+  is not currently planned).
 
 ## What gets tested concretely
 
@@ -552,8 +544,7 @@ mode would test a partial pipeline that doesn't exist in production.
   consistent — needs other testing).
 - A filter that's idempotent for one input but non-idempotent for
   another (need representative fixtures).
-- Round-trip non-idempotence — see §"Pipeline-determinism only" above
-  and Plan 7a.
+- Round-trip non-idempotence — see §"Pipeline-determinism only" above.
 - HTML-shape non-determinism inside `meta.rendered.*` (excluded from
   the hash).
 
@@ -1096,8 +1087,6 @@ the rationale; what follows is the operational loop.
   `rendered.*` exclusion, how to add a fixture when introducing a new
   transform, the engine-cells-forbidden rule.
 - [x] Cross-link from the README of the fixtures directory.
-- [x] Cross-link from Plan 7a (so authors looking at runtime user-filter
-  idempotence find the CI contract too).
 
 ### Phase 7 — Verification
 
@@ -1128,16 +1117,12 @@ via a follow-up).
 
 - Depends on: Plan 1 (`build_q2_preview_pipeline_stages` exists and
   runs).
-- Blocks: implicitly Plans 4-8 (round-trip work assumes this contract
-  holds — but for pipeline non-determinism only; round-trip itself is
-  7a's concern).
-- Related to Plan 7a (runtime user-filter idempotence check). Plan 3
-  is the **CI-time** half for built-ins (transforms + ship-with-Quarto
-  Lua filters); Plan 7a is the **runtime** half for user-supplied
-  filters. The two share `compute_blocks_hash_fresh` /
-  `compute_meta_hash_fresh` and the same flavor-1-vs-flavor-2
-  distinction. See Plan 7a's §"Two flavors of non-idempotence" for the
-  shared vocabulary.
+- Blocks: implicitly the round-trip work (Plans 4–6, 7f, 7g, 8), which
+  assumes this contract holds — but for pipeline non-determinism only;
+  round-trip idempotence itself is out of scope.
+- Plan 3 is the **CI-time** half for built-ins (transforms +
+  ship-with-Quarto Lua filters). The complementary **runtime** half for
+  user-supplied filters is out of scope and not currently planned.
 
 ### What happens when a fixture fails
 
@@ -1266,11 +1251,10 @@ timestamps; not what we do, but illustrative), the hash stays stable.
 Round-trip non-idempotence — the property
 `pipeline(write(pipeline(x))) ≠ pipeline(x)` — is deliberately not
 tested here. The pipeline doesn't re-parse its own output today, so
-there's nothing to break. When Plan 7's incremental writer lands,
-the property becomes load-bearing for blocks the writer rewrites.
-Plan 7a's runtime check is the natural home for round-trip detection
-**on user-supplied filters**: per-document, with per-filter attribution
-and an `idempotent: false` opt-out, none of which a CI fixture gate
-can provide. Round-trip on the built-in side (transforms + one Lua
-filter) is consciously left unverified — see Plan 7a's §"Notes" for
-the v1 acceptance reasoning.
+there's nothing to break. With the incremental writer, the property
+becomes load-bearing for blocks the writer rewrites. Runtime round-trip
+detection **on user-supplied filters** (per-document, with per-filter
+attribution and an `idempotent: false` opt-out, none of which a CI
+fixture gate can provide) is out of scope and not currently planned.
+Round-trip on the built-in side (transforms + one Lua filter) is
+consciously left unverified for v1.

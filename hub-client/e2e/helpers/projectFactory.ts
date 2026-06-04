@@ -16,7 +16,8 @@
  */
 
 import 'fake-indexeddb/auto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   createSyncClient,
   type SyncClientCallbacks,
@@ -130,16 +131,59 @@ async function waitForServerDocuments(
  * `connected` status rather than racing a hand-rolled createProjectSet call
  * against the migration check.
  */
+// Monaco loads from CDN (cdn.jsdelivr.net) by default in the production build.
+// Route those requests to local node_modules so tests work offline and in
+// headless Playwright without CDN latency. Added to bootstrapProjectSet so
+// every project-based test gets this automatically — no per-test call needed.
+const MONACO_VS = resolve(import.meta.dirname, '../../node_modules/monaco-editor/min/vs');
+
+async function interceptMonacoCdn(page: Page): Promise<void> {
+  await page.route(
+    '**/cdn.jsdelivr.net/npm/monaco-editor@*/min/vs/**',
+    async route => {
+      const match = route.request().url().match(/monaco-editor@[^/]+\/min\/vs\/(.+)$/);
+      if (match) {
+        const local = resolve(MONACO_VS, match[1]);
+        if (existsSync(local)) {
+          await route.fulfill({ path: local });
+          return;
+        }
+      }
+      await route.continue();
+    },
+  );
+}
+
 export async function bootstrapProjectSet(
   page: Page,
   syncServer: string,
 ): Promise<void> {
+  await interceptMonacoCdn(page);
   await page.goto('/');
   await expect(page.locator('body')).toBeVisible();
 
+  // Wait for React to render before checking test hooks — the `body` becomes
+  // visible before JS finishes executing, so checking window.__quartoTestReady
+  // at that point is a race. The "Quarto Hub" heading is React-rendered, so
+  // its presence proves JS has fully executed.
   await expect(
     page.getByRole('heading', { name: 'Quarto Hub' }),
   ).toBeVisible();
+
+  // Fail fast with a clear error if the app was not built with VITE_E2E=1.
+  // Without that flag the test hooks (window.__quartoTest) are tree-shaken
+  // out of the bundle, and every subsequent page.evaluate call fails with the
+  // cryptic "__quartoTest missing" message deep inside seedProjectInBrowser.
+  const hasTestHooks = await page.evaluate(() => '__quartoTestReady' in window);
+  if (!hasTestHooks) {
+    throw new Error(
+      '\n\nE2E test hooks not found (window.__quartoTestReady is absent).\n' +
+      'The app must be built with VITE_E2E=1 before running Playwright tests:\n\n' +
+      '  VITE_E2E=1 npm run build\n\n' +
+      'Or use the full e2e command, which handles the build automatically:\n\n' +
+      '  npm run test:e2e\n',
+    );
+  }
   await expect(
     page.getByText(/Get started by creating a new project set/i),
   ).toBeVisible();

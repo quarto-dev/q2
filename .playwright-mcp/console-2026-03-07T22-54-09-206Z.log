@@ -1,0 +1,66 @@
+[      87ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:5174/auth/me:0
+[      90ms] [WARNING] Module "fs" has been externalized for browser compatibility. Cannot access "fs.readFileSync" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details. @ http://localhost:5174/node_modules/.vite/deps/ejs.js?v=97d2bbdc:10
+[   17998ms] [WARNING] [renderToHtml] Theme CSS compilation failed, using default CSS: Error: SASS compilation failed: SASS compilation failed: SASS compilation error: SASS compilation failed: JsValue(TypeError: Cannot read properties of undefined (reading 'set$compile')
+TypeError: Cannot read properties of undefined (reading 'set$compile')
+    at Object.set$compile$x (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:5463:44)
+    at Object.main (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:32934:11)
+    at main2 (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:34935:11)
+    at http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130394:9
+    at http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130375:9
+    at dartProgram (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130388:7)
+    at _cliPkgExports.load (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130397:5)
+    at http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130404:16)
+    at Object.set$compile$x (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:5463:44)
+    at Object.main (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:32934:11)
+    at main2 (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:34935:11)
+    at http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130394:9
+    at http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130375:9
+    at dartProgram (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130388:7)
+    at _cliPkgExports.load (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130397:5)
+    at http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130404:16)
+    at compileDocumentCss (http://localhost:5174/src/services/wasmRenderer.ts?t=1772924001068:447:11)
+    at async compileAndInjectThemeCss (http://localhost:5174/src/services/wasmRenderer.ts?t=1772924001068:330:15)
+    at async renderToHtml (http://localhost:5174/src/services/wasmRenderer.ts?t=1772924001068:264:24)
+    at async doRender (http://localhost:5174/src/components/Preview.tsx?t=1772924001068:161:20)
+    at async http://localhost:5174/src/components/Preview.tsx?t=1772924001068:286:20 @ http://localhost:5174/src/services/wasmRenderer.ts?t=1772924001068:266
+[  135737ms] Error: WASM module not initialized. Call initWasm() first.
+    at getWasm (http://localhost:5174/src/services/wasmRenderer.ts?t=1772924184898:81:11)
+    at vfsReadFile (http://localhost:5174/src/services/wasmRenderer.ts?t=1772924184898:106:16)
+    at http://localhost:5174/src/utils/iframePreProcessor.ts?t=1772924184898:6:20
+    at String.replace (<anonymous>)
+    at preProcessIframe (http://localhost:5174/src/utils/iframePreProcessor.ts?t=1772924184898:3:21)
+    at http://localhost:5174/src/components/MorphIframe.tsx?t=1772924184898:168:12
+    at http://localhost:5174/src/components/MorphIframe.tsx?t=1772924184898:181:27
+    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=97d2bbdc:18567:20)
+    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=97d2bbdc:997:72)
+    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=97d2bbdc:9411:163)
+[  135737ms] [WARNING] %s
+
+%s
+ An error occurred in the <MorphIframe> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=97d2bbdc:6965
+[  135759ms] [WARNING] Failed to analyze document: Failed to read file: I/O error: Path not found: /project/index.qmd @ http://localhost:5174/src/services/intelligenceService.ts?t=1772924184898:20
+[  152808ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:5174/auth/me:0
+[  152901ms] [WARNING] [renderToHtml] Theme CSS compilation failed, using default CSS: Error: SASS compilation failed: SASS compilation failed: SASS compilation error: SASS compilation failed: JsValue(TypeError: Cannot read properties of undefined (reading 'set$compile')
+TypeError: Cannot read properties of undefined (reading 'set$compile')
+    at Object.set$compile$x (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:5463:44)
+    at Object.main (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:32934:11)
+    at main2 (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:34935:11)
+    at http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130394:9
+    at http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130375:9
+    at dartProgram (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130388:7)
+    at _cliPkgExports.load (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130397:5)
+    at http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130404:16)
+    at Object.set$compile$x (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:5463:44)
+    at Object.main (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:32934:11)
+    at main2 (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:34935:11)
+    at http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130394:9
+    at http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130375:9
+    at dartProgram (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130388:7)
+    at _cliPkgExports.load (http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130397:5)
+    at http://localhost:5174/node_modules/.vite/deps/sass.js?v=97d2bbdc:130404:16)
+    at compileDocumentCss (http://localhost:5174/src/services/wasmRenderer.ts?t=1772924201940:447:11)
+    at async compileAndInjectThemeCss (http://localhost:5174/src/services/wasmRenderer.ts?t=1772924201940:330:15)
+    at async renderToHtml (http://localhost:5174/src/services/wasmRenderer.ts?t=1772924201940:264:24)
+    at async doRender (http://localhost:5174/src/components/Preview.tsx?t=1772924201940:161:20)
+    at async http://localhost:5174/src/components/Preview.tsx?t=1772924201940:286:20 @ http://localhost:5174/src/services/wasmRenderer.ts?t=1772924201940:266

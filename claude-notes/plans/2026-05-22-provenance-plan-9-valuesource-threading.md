@@ -2,13 +2,22 @@
 
 **Date:** 2026-05-22
 **Branch:** feature/provenance
-**Status:** Research plan (pre-implementation; API surface not yet pinned)
+**Status:** Research plan (pre-implementation; API surface not yet pinned).
 **Milestone:** none directly — improves attribution / round-trip provenance
   reporting; does not gate M3.
 
+> **Scope note (2026-06-05).** This plan is diagnostic-only — `ValueSource`
+> anchors enrich attribution and never drive the writer's byte-copy (only
+> `Invocation` does; see `provenance-contract.md` §"Role-asymmetry"). It does
+> **not** depend on the write-back model, so it survived the withdrawal of the
+> Plan-7 write-back epic. References to the reverted Plan-7 machinery
+> (soft-drop, multi-inline dedupe) and to deleted sibling plans have been
+> cleaned; the durable work is the `ValueSource` threading in Phases 1–4. Its
+> sibling is Plan 10 (`Dispatch` anchor for Lua-generated content).
+
 ## Epic context
 
-Part of the **provenance epic** (Plans 3–10). Plan 6 stamps every
+Part of the **provenance epic** (Plans 3–6, 9, 10). Plan 6 stamps every
 pipeline-synthesized node with `Generated { by, from }`; for most
 synthesizers the `from` list is non-empty only when there's a
 body-source token to anchor at (shortcode resolutions → `Invocation`).
@@ -41,15 +50,11 @@ Thread per-value `SourceInfo` to where synthesizers can stamp it as
    citation each stamped with `ValueSource` pointing at
    `meta.license` / `meta.copyright` / `meta.citation`.
 
-Plus the **Plan 7 deferred invariant tests** that depend on at least
-one ValueSource consumer existing (the `preimage_in` role-asymmetry
-unit test and the appendix-license end-to-end round-trip test).
-
 When this plan lands, the `Invocation` vs `ValueSource` asymmetry
-contract Plan 7 documents has real exercise — there are producers,
-the writer correctly walks only the `Invocation` anchors, the
-attribution machinery can light up the `ValueSource` data without any
-writer changes.
+contract (`provenance-contract.md` §"Role-asymmetry") has real exercise —
+there are producers, the incremental writer correctly walks only the
+`Invocation` anchors, and the attribution machinery can light up the
+`ValueSource` data without any writer changes.
 
 ## Scope
 
@@ -89,16 +94,14 @@ writer changes.
   default; per document-profile-contract §"Serialization and
   versioning"). Update the contract's §Change log.
 
-  **Transparent-wrapper invariant.** `DocumentProfile::extract`
+  **Pre-sugar checkpoint invariant.** `DocumentProfile::extract`
   runs at the pre-sugar checkpoint, so it never sees the
   sectionize wrapper — `blocks[0]` here is the user's real first
   block. If the extractor is later moved past
   `SectionizeTransform`, or extended with a "fall back to the
-  first H1" rule, it MUST descend through transparent wrappers
-  via `first_in_user_tree`
-  (`crates/pampa/src/writers/incremental.rs`). See
-  [`claude-notes/designs/transparent-wrappers.md`](../designs/transparent-wrappers.md)
-  for the contract.
+  first H1" rule, it would need to descend through synthesized
+  block-container wrappers into their source-bearing children
+  rather than reading `blocks[0]` directly.
 
 - New typed enum `AppendixSection { License, Copyright, Citation }`
   in `crates/quarto-source-map/src/source_info.rs`, with serde
@@ -126,9 +129,8 @@ writer changes.
 - Belt-and-suspenders for `ConfigValueKind::PandocInlines`
   (markdown-rich metadata like `title: "**Bold**"`): the `ValueSource`
   is attached on the wrapping shape, **not** pushed into every leaf
-  — keeps Plan 7's multi-inline dedupe rule (which compares
-  `invocation_anchor()` source_info structurally) trivially correct
-  with no ValueSource cross-talk.
+  — so `Invocation`-based reconciliation/matching stays trivially
+  correct with no ValueSource cross-talk.
 
 #### Phase 3 — DocumentProfile.title → nav-text (closes bd-8pmq3)
 
@@ -173,29 +175,20 @@ writer changes.
 - Missing-key cases (no `license` in meta) gracefully skip — no
   ValueSource attempt, no synthesizer fires.
 
-#### Phase 5 — Plan-7 invariant tests (deferred from Plan 7)
+#### Phase 5 — ValueSource role-asymmetry tests
 
-Status: Plan 7 shipped on `feature/provenance` 2026-05-24 (phases
-1-7 + 9; Playwright e2e matrix carried separately in `bd-3izo3`).
-These tests are now unblocked — they need a real `ValueSource`
-consumer (Phase 4's appendix synthesizer) to exercise the
-`Invocation`-vs-`ValueSource` asymmetry that Plan 7's writer
-implements. Until Phase 4 stamps `ValueSource` anchors on the
-appendix synthesizer, the structural-only versions of these tests
-remain in Plan 7's `quarto-source-map` test module (the `preimage_in
-skips non-Invocation roles` unit test, lines 982-986 of Plan 7).
-
+These pin the load-bearing invariant: a `ValueSource` anchor enriches
+attribution but never drives byte-copy (only `Invocation` does). Phase 4's
+appendix synthesizer is the first real `ValueSource` producer, so it's the
+fixture these exercise.
 
 - **`preimage_in` appendix-specific role-asymmetry unit test**:
   build `Generated { by: By::appendix(AppendixSection::License), from: [ValueSource(meta_si)] }`
   where `meta_si` is `Original { file_id: 0, start: 10, end: 25 }`.
   Call `preimage_in(FileId(0))` and assert it returns `None` (NOT the
   byte range of the meta-key — that would copy YAML into the body).
-  Belt-and-suspenders companion to Plan 7's Phase 1 structural test
-  (which uses generic `By` + `value_source()` and ships without
-  Plan 9 types); this version pins the same invariant against the
-  real `By::appendix(...)` shape that Plan 9 introduces. Lives in
-  `quarto-source-map`'s test module.
+  Pins the invariant against the real `By::appendix(...)` shape that
+  Plan 9 introduces. Lives in `quarto-source-map`'s test module.
 
 - **Appendix-license end-to-end round-trip test**: build a project
   fixture with frontmatter `license: MIT` and a synthesized
@@ -211,27 +204,10 @@ skips non-Invocation roles` unit test, lines 982-986 of Plan 7).
   a future refactor that "leniently" tries `value_source_anchor()`
   when `invocation_anchor()` returns None.
 
-- **Multi-inline dedupe-by-Invocation test**: build a Para with
-  three inlines each carrying
-  `Generated { by: shortcode("meta"), from: [Invocation -> token_si, ValueSource -> value_si] }`
-  (Phase 2 shape). Reconcile against an identical Para. Assert
-  Plan 7's writer emits the shortcode token bytes ONCE — confirms
-  dedupe consults `Invocation` only, not the full anchor list, and
-  doesn't mis-fire if ValueSource source_infos differ.
-
 - **Inline-level role-asymmetry test**: similar to the unit test
   but at the inline level, e.g. a `Span` synthesized by some
   metadata-aware transform with `[ValueSource only]`. Assert
   `preimage_in` returns None at the inline level too.
-
-#### Phase 6 — Plan 7 cross-reference cleanup
-
-- Reword Plan 7's §`Invocation` vs `ValueSource` consumer asymmetry
-  subsection (added by commit `6a2797b6`) to point at Plan 9's
-  Phase 4 as the canonical example, rather than asserting that the
-  shape "is stamped today." Small docs change; closes the
-  wording-vs-reality gap.
-- Cross-link Plan 7's §Test plan to Phase 5's tests' new homes.
 
 ### Out of scope (rationale per item)
 
@@ -321,14 +297,14 @@ skips non-Invocation roles` unit test, lines 982-986 of Plan 7).
   existing or future, are not consulted by the writer.** Documents
   the intent so an extension introducing `AnchorRole::Other("preimage-source")`
   knows it'll be ignored. Stated in the doc-comment on
-  `preimage_in` and re-asserted in §`Invocation` vs `ValueSource`
-  consumer asymmetry in Plan 7.
+  `preimage_in` and re-asserted in `provenance-contract.md`
+  §"Role-asymmetry — only `Invocation` drives byte-copy".
 
 - **`ValueSource` is wrapper-level for `PandocInlines`-shaped
   metadata, not per-leaf.** Phase 2 attaches ValueSource on the
   surrounding `Generated` (one wrapping each resolved inline), not
   inside the rich-content inlines themselves. Two reasons:
-  (a) keeps Plan 7's multi-inline dedupe rule clean (it consults
+  (a) keeps `Invocation`-based matching clean (it consults
   Invocation, not anchors on inlines);
   (b) maps the user mental model: "this shortcode resolution came
   from there" — not "this individual Str came from there".
@@ -401,9 +377,11 @@ must be pinned:
   resolved inline gets a wrapping `Generated` with the ValueSource
   on the wrapper. The Bold's children (Str) themselves carry their
   own source_info (the parsed positions inside the YAML string).
-  Test: an edit to the resolved Bold inline goes through Plan 7's
-  soft-drop because the wrapper is atomic-kind (shortcode); the
-  user-edit is reverted with Q-3-42. Confirm.
+  Under the node-edit architecture, editing the resolved inline
+  resolves (via the wrapper's `Invocation` anchor) to the
+  `{{< meta … >}}` token, not the rendered value — the `ValueSource`
+  is ignored by the writer. Confirm the attribution surfaces the
+  value origin without affecting the edit target.
 
 ## References
 
@@ -428,9 +406,9 @@ must be pinned:
   constructor; Phase 4 modifies (signature change).
 - Plan 6 §"ValueSource follow-up" (line 509-547) — Plan 9's
   scope-pickup point.
-- Plan 7 §`Invocation` vs `ValueSource` consumer asymmetry
-  (added by commit `6a2797b6`, not yet on `feature/provenance`)
-  — Plan 9 Phase 5 lands the tests; Phase 6 cleans up wording.
+- `provenance-contract.md` §"Role-asymmetry — only `Invocation` drives
+  byte-copy" — the consumer-side contract Plan 9's `ValueSource`
+  producers exercise.
 - bd-129m3 (closes), bd-8pmq3 (closes).
 
 ## Test plan
@@ -475,9 +453,9 @@ integration tests by phase:
 
 ### Soft dependencies
 
-- **Plan 7** — Phase 5's appendix-license e2e round-trip test needs
-  Plan 7's writer + soft-drop infrastructure. The unit-level
-  asymmetry test (Phase 5 first bullet) doesn't.
+- **The incremental writer** — Phase 5's appendix-license e2e round-trip
+  test needs the writer (`incremental_write`). The unit-level asymmetry
+  test (Phase 5 first bullet) doesn't.
 - **bd-2mxo** — affects map/array container source_info; relevant
   only for nested metadata shapes (`license: {name: MIT, ...}`).
   Workaround in Phase 4 lets Plan 9 ship without bd-2mxo.
@@ -489,10 +467,9 @@ integration tests by phase:
 
 ### Does not block
 
-- **Plan 7 implementation** can start without Plan 9 — Plan 7 ships
-  without ValueSource anywhere; its `Invocation` vs `ValueSource`
-  asymmetry section is forward-looking. Plan 9 Phase 6 retroactively
-  cleans up Plan 7's wording.
+- **The incremental writer** works without Plan 9 — it ships without
+  `ValueSource` anywhere; the `Invocation`-vs-`ValueSource` asymmetry in
+  `provenance-contract.md` is forward-looking until Plan 9's producers land.
 
 ## Risk areas
 
@@ -527,10 +504,9 @@ integration tests by phase:
 | 2: Meta/var shortcode (bd-129m3) | ~80 |
 | 3: Nav-text ValueSource (bd-8pmq3) | ~60 |
 | 4: Appendix sub-Div ValueSource | ~180 |
-| 5: Plan-7 invariant tests | ~120 |
-| 6: Plan 7 docs reword | ~20 |
+| 5: ValueSource role-asymmetry tests | ~100 |
 | Tests across phases | ~250 |
-| **Total** | **~860** |
+| **Total** | **~820** |
 
 One focused session, possibly two if Phase 4's per-section
 discrimination surfaces unexpected interactions. Comparable scope to

@@ -75,6 +75,23 @@ declare module 'wasm-quarto-hub-client' {
    * `original_qmd`; mixing tiers will corrupt the write.
    */
   export function incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
+  /**
+   * Splice a pure replacement subtree into the untransformed AST and
+   * produce new QMD (target-incremental-writes Phase 3).
+   *
+   * @param content                      - original QMD source text
+   * @param untransformed_ast_json       - the render's own pre-pipeline AST JSON
+   * @param destination_source_info_json - JSON-serialized SourceInfo VALUE of
+   *                                       the edited node (not a bare pool id)
+   * @param modified_subtree_json        - full Pandoc JSON of replacement block(s)
+   * @returns AstResponse JSON with `qmd` on success, `error` on failure
+   */
+  export function apply_node_edit(
+    content: string,
+    untransformed_ast_json: string,
+    destination_source_info_json: string,
+    modified_subtree_json: string,
+  ): string;
 
   // Response type for parse/write operations
   export interface AstResponse {

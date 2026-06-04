@@ -1,9 +1,19 @@
-# Plan 7g — Source-range tiling (the producer-side precondition BP assumes)
+# Plan 7g — Source-range tiling
 
 **Date:** 2026-06-01 (research) → 2026-06-02 (converted to development plan)
-**Branch:** feature/provenance (sibling to 7d / 7e / 7f)
-**Status:** **Development plan.** The go/no-go gate (Phase 6) is **PASSED** — BP and completeness are provable under `{P4, L2, L3}` (proof in `incremental-writer-bp-proof.md`). Two scope-adjacent writer/postprocess bugs found while pulling the gate's thread are **fixed and committed** (Phase 8). The tiling work proper — build the auditor, run the real census, fix the handlers, amend the producer contract, CI-enforce — is **not started**; that is the remaining development work, broken into checklists below.
-**Ships:** after 7f (complete), **before 7d** — new prerequisite. **Note:** the Phase 6 *gate* passing does **not** by itself unblock 7d. 7d's "BP holds" claim requires 7g's property test (Phase 1/7) green, which is still open work. See *Relationship to siblings*.
+**Branch:** feature/provenance
+**Status:** Landed. The tiling auditor (CI property test), the handler fixes, and the producer contract (P1–P4) shipped on the provenance branch. Two scope-adjacent writer/postprocess bugs found while doing this work are fixed and committed (Phase 8, including the `b43fadef` incremental-writer crash fix on Concat/Generated-led inlines).
+
+> **Scope note (2026-06-05).** This plan was originally framed as the
+> producer-side precondition for the Plan-7 write-back model's Byte-Provenance
+> (BP) proof. That model was withdrawn (replacement: `target-incremental-writes.md`;
+> the revert is git history), and the formal BP proof doc was removed with it.
+> The tiling work itself is independent and live: the auditor, the handler
+> fixes, and the P1–P4 producer contract — now documented in
+> `provenance-contract.md` §"Tiling precondition" — all stand. References to the
+> removed proof/audit/contract docs and to the write-back consumer plan have been
+> stripped. "BP" still names the property (each output byte comes from exactly one
+> source position); only the formal proof artifact is gone.
 
 ## Phase status (development checklist)
 
@@ -69,9 +79,9 @@ the correct hull `[0,13)`. The rule above is the corrected form: content gaps go
 classification (not auto-bless), and the fix guard is **source-contiguity of the
 merged run**, which holds for any N by construction in `coalesce_abbreviations`.
 
-**Two threats to 7d resolved in the same review (these gate 7g, not beads).** 7g's
-*primary purpose is to resolve every threat to 7d's implementation* — CI
-enforcement is secondary — so neither of these may be deferred to a bead; each is
+**Two threats resolved in the same review (these gated 7g, not beads).** These
+were treated as in-scope for 7g rather than deferred to beads — CI
+enforcement is secondary — so neither was deferred; each is
 either resolved with the user or, in World 1, resumed only on the user's go-ahead.
 (1) **`scattered-concat` disposition → World 1 / World 2 gate** (Phase 2): after
 classifying the rows the agent **always stops at a mandatory checkpoint and reports
@@ -87,26 +97,26 @@ backstop on the final AST — kept as-is, no premise-free guard pursued.
 
 | Sibling | Axis | Status |
 |---|---|---|
-| Plan 7 | Incremental writer + soft-drop + bridge migration | shipped |
-| Plan 7a | Runtime user-filter idempotence | open |
-| Plan 7b | Test-coverage consolidation | open |
-| Plan 7c | Closure gaps in the denylist cascade | open |
-| Plan 7d | Algebraic soundness of coarsen/write | ready; **depends on 7g** |
-| Plan 7e | CustomNode qmd serialization | ships after 7d |
-| Plan 7f | Prereqs for 7d (framework + wire-format) | **complete** |
+| Plan 3 | Built-in filter idempotence | landed |
+| Plan 4 | SourceInfo types + anchors | landed |
+| Plan 5 | JSON wire format | landed |
+| Plan 6 | Provenance audit (shortcode stamping) | landed |
+| Plan 7f | Source-info prereqs (reader split + wire-format) | landed |
 | Plan 7g | Source-range tiling (producer-side precondition) | **this plan** |
+| Plan 8 | Include round-trip | open |
 
-## Why this is a prerequisite to 7d
+(The Plan-7 write-back epic — Plan 7 and siblings 7a–7e — was withdrawn; see the scope note at the top.)
 
-`incremental-writer-contract.md` states the Byte Provenance Invariant and proves
-it by structural induction. The proof — and the contract's own words — assert a
-**partition**:
+## Why source-range tiling matters
+
+The incremental writer's Byte Provenance (BP) property asserts a **partition**
+of the output bytes:
 
 > "The two clauses partition the bytes of `Source'`. The algebra never overlaps
 > them; **every byte traces to exactly one visited node.**"
 
 That partition is **tiling**: sibling node source ranges must be disjoint, and a
-parent's range must contain its children's. The proof's R3/R4 step
+parent's range must contain its children's. The writer's recursive assemble step
 (`shell_open ++ join(sep, [assemble(c) for c in children]) ++ shell_close`)
 relies on children's preimages being disjoint, so each source region is emitted
 once.
@@ -119,7 +129,7 @@ tiling. So producers can (and do) emit **overlapping** sibling ranges while
 satisfying the stated contract.
 
 Concrete failure: for `` a `x = 5` b `` the `Space` and the `Code` node *both*
-carry range `[1,9]`. Under 7d's recursive assemble, `assemble(Space)` copies
+carry range `[1,9]`. Under the writer's recursive assemble, `assemble(Space)` copies
 `Source[1..9]` and `assemble(Code)` copies `Source[1..9]` **again** — the code
 span is duplicated in `Source'`. The round-trip BP guarantee collapses.
 
@@ -134,8 +144,8 @@ audited from the tiling perspective**, and we should not assume this is the only
 gap. Phase 6 re-audits the BP statement and its proofs against the partition
 claim — treating the existing proof as *unverified* under tiling until checked.
 
-7g supplies the missing producer-side precondition. Until it lands, 7d's
-soundness proof rests on an assumption the producer violates.
+7g supplies the missing producer-side precondition: the P1–P4 contract now in
+`provenance-contract.md` §"Tiling precondition", enforced by the tiling auditor.
 
 ## Root cause (already diagnosed; see bd-1d6io investigation)
 
@@ -769,8 +779,6 @@ list indentation).
 ### Phase 5 — Producer contract
 - Add P1–P4 to `provenance-contract.md` as a **stated BP precondition**, with
   the Concat exception and the explicit "non-overlap, not gap-free" boundary.
-- Cross-link from `incremental-writer-contract.md` ("the two are designed in
-  pairs" — this is the third party that was never written down).
 
 - [ ] Add P1 (tight ranges), P2 (whitespace ownership), P3 (symmetry), P4 (tiling)
       to `provenance-contract.md` as a stated BP precondition. State P4's two
@@ -794,13 +802,13 @@ list indentation).
       `> ` gutters, list indentation are legitimately unowned) and note it is
       **disjoint from** the hull-owned-whitespace population (a coalesce/merge can
       only consume a `Space` *inline*, never structural whitespace).
-- [ ] Cross-link `provenance-contract.md` ↔ `incremental-writer-contract.md` so the
-      producer/consumer pairing is explicit (it currently is not written down).
 
 ### Phase 6 — Audit BP + completeness (THE GATE — do this first)
 
-**STATUS (2026-06-01): COMPLETE — verdict CONDITIONAL GO.** Full audit in
-[`claude-notes/research/2026-06-01-plan-7g-phase-6-bp-audit.md`](../research/2026-06-01-plan-7g-phase-6-bp-audit.md).
+**STATUS (2026-06-01): COMPLETE — verdict CONDITIONAL GO.** (The full audit
+report and the formal proof doc were removed with the write-back model; see git
+history. The durable outcome — P1–P4 + the auditor — lives in
+`provenance-contract.md` and the CI property test.)
 BP (strengthened with multiplicity (M)) and completeness (strengthened to
 "exactly once" (C1+)) are *provable* under an explicit premise set:
 **{P4 tiling, L2 dispatch-terminality, L3 whole-walk Invocation-coalescing}**.
@@ -809,7 +817,7 @@ ancestor/descendant double-count ⇐ terminal R1/R1'). No unfixable obstruction.
 **One substantive reachable bug surfaced (Hole α):** atomic N-to-1 shortcode
 output (`ShortcodeResult::Blocks` → N independent sibling blocks sharing one
 `Invocation`) duplicates the token range when survivors are left non-adjacent,
-because today's coalescing (and Plan 7d Property #9) is *consecutive-only*.
+because today's coalescing is *consecutive-only*.
 Fixable → acceptable gap, not a no-go. **L3 decision (2026-06-01): held by
 design, not implemented** — the only splittable N-to-1 producer (block
 shortcodes) renders read-only at the client, so no front-end edit reaches the
@@ -819,36 +827,9 @@ disjoint family (P4-dependent); the latent reversed-`OriginalGap` panic under
 ¬P4 is **fixed by P4 itself** — tracked as a Phase 3 writer regression test
 (above), not a separate fix.
 
-On-pass outputs (all done): (a) verified statement + proofs moved into
-[`incremental-writer-bp-proof.md`](../designs/incremental-writer-bp-proof.md);
-(b) `incremental-writer-contract.md` points at it; (c) premises recorded on 7d's
-tail (L2 live; L3 held-by-design; shell/separator multiplicity).
-
----
-
-The duplication gap is a symptom: the formal statement does not entail the
-partition its prose asserts. **Before any implementation**, rigorously verify
-that BP **and** completeness hold against our actual code/design — assuming the
-tiling precondition (P4) this plan would establish, and the already-named
-exceptions. Do **not** assume the one hole found is the only one.
-
-**Go / no-go.** This audit decides whether the incremental-writer direction is
-sound at all:
-- **Pass** → expand the now-verified formal statement + proofs into their **own
-  file** (e.g. `claude-notes/designs/incremental-writer-bp-proof.md`), and leave
-  the **informal presentation** in `incremental-writer-contract.md` (pointing at
-  the proof file). Then proceed with the plan proper (Phases 1–5, 7).
-- **No-go** → if BP/completeness genuinely break down — *not* reducible to an
-  already-named exception (e.g. list punctuation / ordered-list numbering) and
-  *not* a new bug we can fix — **stop and report.** A negative result here is a
-  sad but **acceptable** outcome: it saves the effort of building tiling
-  machinery for a guarantee that could never hold.
-
-**Acceptable gaps only:** (a) exceptions already named in the contract (list
-punctuation, numbering, synthetic/Generated nodes, the Concat hull), or (b) new
-bugs with a concrete fix. Any other failure is a no-go.
-
-Specific checks to verify or repair:
+The duplication gap the gate chased is a symptom: a per-output-byte dichotomy
+does not by itself entail the partition the property's prose asserts. The
+properties the tiling precondition must guarantee, which the gate verified:
 
 1. **Sibling disjointness as a stated lemma.** The R3/R4 step "concatenation
    preserves BP per byte" silently assumes children's emitted source regions are
@@ -868,15 +849,9 @@ Specific checks to verify or repair:
    (preimage `None`) route only to non-copying rules, and that a Concat's pieces
    don't double-count with anything that copies. Tie to the producer Concat
    exception.
-5. **Re-prove** soundness and completeness under the strengthened statement and
-   the now-explicit lemmas. "Preserves BP per byte" is true but insufficient
-   once the partition is part of the claim.
-
-Output on pass: the verified proof moved to its own file (informal presentation
-stays in `incremental-writer-contract.md`), the new lemmas/premises stated, and
-any premise 7d's dispatch must satisfy surfaced back to 7d. Output on no-go: a
-short write-up of exactly where the partition fails and why it is not a named
-exception or a fixable bug.
+5. **Soundness and completeness under the strengthened statement.** "Preserves
+   BP per byte" is true but insufficient once the partition is part of the
+   claim; the strengthened (M)/(C1+) form is what the gate verified.
 
 ### Phase 7 — Wire the property test into CI
 Land Phase 1's auditor as a `cargo nextest` test (and/or `cargo xtask verify`
@@ -892,9 +867,10 @@ caught bd-1d6io, A, B, and the citation case at introduction.
 - [ ] Confirm the test fails on a reverted Phase 3 handler fix (proves it would have
       caught the original drift) before declaring CI enforcement done.
 
-**Unblocks 7d:** this is the "7g's property test is green" precondition 7d's
-BP-holds claim depends on. The Phase 6 gate passing is necessary but not
-sufficient — 7d stays blocked until this lands.
+**Why CI enforcement matters:** the tiling property must stay green over time —
+the auditor is the producer-side guarantee the incremental writer's BP property
+depends on. The Phase 6 gate passing is necessary but not sufficient; the
+standing CI property test is what keeps the precondition from regressing.
 
 ### Phase 8 — Writer crash on `Concat`/`Generated`-led inline (degenerate-offset boundary)
 
@@ -1010,14 +986,10 @@ mitigate the writer crash but the provenance corruption remained until this fix.
 
 ## Relationship to siblings
 
-- **Plan 7d** depends on this: 7d's BP soundness proof assumes the tiling
-  precondition 7g establishes. 7d should not land claiming BP holds until 7g is
-  in (or 7g's property test is green).
-- **Plan 7f** (complete): provided framework source_info preservation and
-  user-edit stamping. 7g is the *producer-range* analogue — 7f made sure nodes
-  *carry* source_info; 7g makes sure the ranges *tile*.
-- **Plan 7e**: CustomNode serialization. CustomNode interior ranges should be
-  audited by Phase 1's tool too.
+- **Plan 7f** (landed): source-info prerequisites (strict/completing reader
+  split, wire-format renames). 7g is the *producer-range* analogue — 7f made
+  sure nodes *carry* source_info; 7g makes sure the ranges *tile*.
+- CustomNode interior ranges should be audited by Phase 1's tool too.
 
 ## Risks / open questions for the next agent
 
@@ -1055,7 +1027,7 @@ mitigate the writer crash but the provenance corruption remained until this fix.
     or a *genuine* scatter. Either way Phase 2 **always stops at a mandatory
     checkpoint and reports to the user**; World 1 (all bugs) resumes only on the
     user's go-ahead, World 2 (any genuine scatter) stays stopped for user-led review
-    (a 7d blocker, never a bead).
+    (in-scope for 7g, never a bead).
   This is now mechanically detectable, so it is *not* left to blind triage: the
   Phase 1 auditor descends into the pieces and emits either a `whitespace-gap-concat`
   finding (R1, high-confidence bug) or a `scattered-concat` row (needs classify).
@@ -1063,12 +1035,6 @@ mitigate the writer crash but the provenance corruption remained until this fix.
   the auditor's gap heuristic (the two differ for N≥3 — see Phase 4b's R2 guard).
   Which concrete `Concat`s are bugs is still a census output (Phase 2); the **rule
   that sorts them is now settled and self-consistent.**
-- **BP premise feeding back to 7d — RESOLVED.** Phase 6 already ran and surfaced
-  the premise set {P4, L2, L3}; L3 (whole-walk same-`Invocation` coalescing) is
-  recorded on 7d's tail as held-by-design, and the shell/OriginalGap multiplicity
-  accounting is in the proof file. Nothing further to discover here — see the
-  Phase 6 audit and `incremental-writer-bp-proof.md`. (Retained only as a pointer;
-  no longer an open item.)
 - **Code spans, scanner vs handler — DECIDED handler-only.** The handler
   re-derives the correct tight range regardless of the loose lexer token (the
   whole "decouple source-info from lexing" thesis), so **handler-only is the
@@ -1086,12 +1052,12 @@ mitigate the writer crash but the provenance corruption remained until this fix.
   Phase 2 classifies each `scattered-concat` row as a dropped-middle producer bug
   or genuine scatter, then **always stops at a mandatory checkpoint and reports to
   the user — unconditionally, in both worlds.** The stop is unconditional because
-  the one way 7g can silently pass a 7d blocker is the agent mis-declaring World 1;
-  the human confirms the determination every time. **World 1** (all fixable) →
+  the one way 7g can silently ship a tiling regression is the agent mis-declaring
+  World 1; the human confirms the determination every time. **World 1** (all fixable) →
   resume only on the user's go-ahead (collapse to "all `None`-`Concat`s are bugs,"
   apply the Phase 4b helper). **World 2** (any genuine scatter) → remain stopped;
   the user drives the review. **No bead either way** — 7g's *primary purpose is to
-  resolve every threat to 7d's implementation* (CI enforcement is secondary), so a
+  make the tiling precondition hold and stay held* (CI enforcement is part of that), so a
   thorny `Concat` disposition is never a deferrable bead. (Full gate in Phase 2's
   checklist.)
 - **Hull-guard completeness (decided 2026-06-03).** The Phase 4b source-contiguity
@@ -1121,9 +1087,7 @@ mitigate the writer crash but the provenance corruption remained until this fix.
 ## References
 
 - Investigation (annotated-qmd instances A/B + citation): beads `bd-1d6io`.
-- Consumer contract that needs this: [`incremental-writer-contract.md`](../designs/incremental-writer-contract.md) (the partition claim).
-- Producer contract to amend: [`provenance-contract.md`](../designs/provenance-contract.md).
+- Producer contract (P1–P4): [`provenance-contract.md`](../designs/provenance-contract.md) §"Tiling precondition".
 - Helper: `range_to_source_info_with_context` in `crates/pampa/src/pandoc/location.rs`.
 - Affected handlers (corrected to the real tree, 2026-06-02; authoritative list = Phase 2 census): `crates/pampa/src/pandoc/treesitter_utils/{code_span_helpers,citation,commonmark_attribute,span_link_helpers,quote_helpers,uri_autolink,shortcode}.rs`, `crates/pampa/src/pandoc/treesitter.rs`. Note `raw_specifier`/`raw_attribute` handling lives **inside** `code_span_helpers.rs`; there is no `key_value_specifier.rs`/`quoted_span.rs`/`raw_specifier.rs`.
 - Prior art (peel-Space-but-not-range): k-296 (citation), `inline_note_reference` (in `postprocess.rs`).
-- Consumer: [`2026-05-26-q2-preview-plan-7d-algebraic-soundness.md`](2026-05-26-q2-preview-plan-7d-algebraic-soundness.md).

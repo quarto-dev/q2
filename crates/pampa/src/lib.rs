@@ -6,6 +6,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+pub mod apply_node_edit;
 pub mod attribution;
 #[cfg(feature = "filters")]
 pub mod citeproc_filter;
@@ -17,6 +18,7 @@ pub mod filters;
 pub mod json_filter;
 #[cfg(feature = "lua-filter")]
 pub mod lua;
+pub mod node_lookup;
 pub mod options;
 pub mod pandoc;
 pub mod readers;

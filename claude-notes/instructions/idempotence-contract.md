@@ -137,13 +137,13 @@ drained.
 
 - `claude-notes/plans/2026-05-04-q2-preview-plan-3-builtin-filter-idempotence.md` —
   the plan that introduced this gate, with the design rationale.
-- `claude-notes/plans/2026-05-04-q2-preview-plan-7a-user-filter-idempotence.md` —
-  the runtime counterpart: per-user-filter idempotence detection at
-  render time, with `idempotent: false` opt-out. The contract this
-  file describes is the CI-time half for built-ins; Plan 7a is the
-  runtime half for user filters.
 - `crates/quarto-ast-reconcile/src/hash.rs` — the hash implementations
   and unit tests.
 - `crates/quarto-core/tests/idempotence.rs` — the gate.
 - `crates/quarto-core/tests/fixtures/idempotence/README.md` — the
   fixture-format rules.
+
+This contract is the CI-time half for built-ins. A runtime counterpart
+for user-supplied filters (per-filter idempotence detection at render
+time with an `idempotent: false` opt-out) is out of scope and not
+currently planned.

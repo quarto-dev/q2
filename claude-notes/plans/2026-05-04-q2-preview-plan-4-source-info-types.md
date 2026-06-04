@@ -8,8 +8,8 @@
 
 ## Epic context
 
-Plans 3–8 (filter idempotence, this plan, JSON wire format, provenance
-audit, incremental writer + soft-drop, runtime filter check, include
+Plans 3–6, 7f, 7g, 8 (filter idempotence, this plan, JSON wire format,
+provenance audit, source-info prereqs, source-range tiling, include
 round-trip) make up the **provenance epic** — the second wave of work
 on the q2-preview branch after Plans 1–2 landed. They share a common
 target: a typed, source-mapped notion of "where did this AST node come
@@ -99,11 +99,11 @@ The pre-existing `FilterProvenance` variant folds into `Generated`
   (Plan 6 does that). `Default for SourceInfo` itself is unchanged
   (stays `Original { FileId(0), 0, 0 }`); Plan 6 fixes incorrect
   emissions at transform sites without modifying the trait impl.
-- The `preimage_in` accessor (Plan 7 owns it). Plan 7's `preimage_in`
-  consumes `invocation_anchor()` defined here; the contiguity rule
-  for `Concat` lives with the implementation in Plan 7.
-- The `is_atomic_custom_node` registry for CustomNode types (Plan 7
-  owns it).
+- The `preimage_in` accessor (in `quarto-source-map/src/source_info.rs`).
+  `preimage_in` consumes `invocation_anchor()` defined here; the
+  contiguity rule for `Concat` lives with that implementation.
+- The `is_atomic_custom_node` registry for CustomNode types (in
+  `quarto-source-map`).
 - The metadata loader changes that would populate `ValueSource`
   anchors on `meta` / `var` shortcode resolutions — that's a separate
   follow-up (see "Deferred anchor role" and Plan 6's "ValueSource
@@ -361,8 +361,8 @@ Structural:
   `By::raw(kind, data)` accepts any `kind` string — including built-in
   names like `"shortcode"` or `"filter"`. Forgery (an extension calling
   `By::raw("shortcode", …)` without the required Invocation anchor)
-  is caught downstream by Plan 6's audit-completion test and Plan 7's
-  `debug_assert!`, so no constructor-level rejection is needed. The
+  is caught downstream by Plan 6's audit-completion test and the
+  incremental writer's `debug_assert!`, so no constructor-level rejection is needed. The
   convention is still `ext/<extension>/<kind>` for third-party kinds —
   collisions with built-ins are a misuse caught at audit time, not a
   type error.
@@ -519,10 +519,10 @@ impl SourceInfo {
 - **Substring**: a textual slice of another SourceInfo. Existing pattern.
 - **Concat**: concatenation of SourceInfos (e.g., from AttrSourceInfo's
   combine_all). Existing pattern. **Contiguity expectation**: writer
-  paths that need to Verbatim-copy a Concat (Plan 7's `preimage_in`)
+  paths that need to Verbatim-copy a Concat (the writer's `preimage_in`)
   return `Some(range)` only when all pieces resolve into the target
   file AND are byte-contiguous in source order. Non-contiguous Concats
-  return `None`, and Plan 7's coarsen falls through to Rewrite.
+  return `None`, and the writer's coarsen falls through to Rewrite.
 - **Generated**: produced by a pipeline transform. `by` records the
   producer; `from` records any source-side contributions. The
   variant subsumes the previous `Synthetic`/`Derived` distinction:
@@ -535,7 +535,7 @@ impl SourceInfo {
     (future, gated on metadata-loader changes).
   - `Other(...)` anchor present → extension-defined.
 
-  Writer behavior (Plan 7) consults `by.is_atomic_kind()` for
+  Writer behavior consults `by.is_atomic_kind()` for
   atomicity and `gen.invocation_anchor()` for the preimage byte range.
 
 ## Original vs Generated on synthesized nodes
@@ -623,14 +623,13 @@ source-side input.
 Atomicity is per-kind, orthogonal to `from`. A `Generated { by: shortcode,
 from: [Invocation -> token_si] }` is atomic; so is a
 `Generated { by: filter, from: [] }`. The writer's coarsen
-(Plan 7) consults `by.is_atomic_kind()` and `gen.invocation_anchor()`
+consults `by.is_atomic_kind()` and `gen.invocation_anchor()`
 independently.
 
 Extensions that contribute new `by.kind` values are not atomic by
 default. If an extension wants its kind to be atomic, the
 `is_atomic_kind()` predicate (or a follow-up extension-registration
-mechanism — see Plan 7 §Open questions) needs to recognize it. v1
-hardcodes the built-in set.
+mechanism) needs to recognize it. v1 hardcodes the built-in set.
 
 ### Required-anchor invariant for `shortcode`
 
@@ -638,7 +637,7 @@ A `Generated { by: shortcode(...), from: [] }` is **not a valid state**.
 Every shortcode-resolution node must carry at least one `Invocation`
 anchor pointing at the source token's byte range. The resolver
 (Plan 6) is responsible for maintaining this invariant; downstream
-consumers (Plan 7's writer, error-reporting) may assume it.
+consumers (the incremental writer, error-reporting) may assume it.
 
 Plan 4 documents the invariant; enforcement is split across the two
 producers/consumers of the shape:
@@ -647,11 +646,10 @@ producers/consumers of the shape:
   post-stamping AST and asserts no `Generated { by: shortcode, from: [] }`
   remains. The stamper is the only construction site for `by: shortcode`
   in v1; the test verifies it always attaches the `Invocation` anchor.
-- **Plan 7 (consumer)** adds a `debug_assert!` in `coarsen`'s
-  atomic-no-anchor branch. The writer routes "atomic + no invocation"
-  to `Omit` (drop the node, pipeline regenerates next run); for filter
-  that's correct, for shortcode it's silent data loss — the assertion
-  catches the bad shape before that branch fires, in dev / test builds.
+- **The incremental writer (consumer)** adds a `debug_assert!` for the
+  shortcode-no-anchor case: a `Generated { by: shortcode, from: [] }`
+  has no `Invocation` to resolve a preimage from, so the assertion
+  catches the bad shape in dev / test builds.
 
 No constructor-level enforcement in v1. The `By::shortcode(name)`
 builder stays symmetric with the other `By::xxx()` builders; the
@@ -670,7 +668,7 @@ so anyone reaching for the builder from a new call site reads:
 /// source token's byte range. Use only inside a `Generated` whose
 /// anchor list is populated; constructing the bare shape with empty
 /// `from` is rejected by Plan 6's audit-completion test and trips
-/// Plan 7's writer `debug_assert!`.
+/// the incremental writer's `debug_assert!`.
 pub fn shortcode(name: impl Into<String>) -> Self { ... }
 ```
 
@@ -818,7 +816,7 @@ A Lua-handler shortcode after registration carries **two** anchors —
 `Invocation` for the user-written token, `Dispatch` for the Lua
 handler that resolved it. The anchor list is what makes this clean:
 adding `Dispatch` doesn't disturb `Invocation`, and the writer's
-preimage walk (Plan 7) still looks at `invocation_anchor()` only.
+preimage walk still looks at `invocation_anchor()` only.
 
 Tracked as **bd-36fr9** ("Provenance follow-up: Dispatch anchor for
 Lua-handler filter & shortcode").
@@ -844,8 +842,9 @@ construction.
 ## Resolve-byte-range semantics
 
 `resolve_byte_range` is Plan 4's responsibility (existing accessor on
-`SourceInfo`, gains a `Generated` arm). `preimage_in` is Plan 7's —
-Plan 4 only ships the building block it depends on, `invocation_anchor()`.
+`SourceInfo`, gains a `Generated` arm). `preimage_in` lives in
+`quarto-source-map` — Plan 4 only ships the building block it depends
+on, `invocation_anchor()`.
 
 ```rust
 impl SourceInfo {
@@ -871,9 +870,9 @@ recurse into its source_info." Pure synthesis (empty `from`) returns
 `None`. Multi-anchor Generateds (when `ValueSource` lands) still only
 consult `Invocation` — `ValueSource` is diagnostic-only.
 
-Plan 7's `preimage_in` follows the same `Generated` pattern (it
-delegates to `invocation_anchor()`); see Plan 7 §"`preimage_in`
-semantics" for the full implementation including Concat contiguity.
+`preimage_in` follows the same `Generated` pattern (it delegates to
+`invocation_anchor()`); the full implementation, including Concat
+contiguity, lives in `quarto-source-map/src/source_info.rs`.
 
 ## References
 
@@ -938,8 +937,8 @@ semantics" for the full implementation including Concat contiguity.
   `Generated { from: [Invocation -> Substring{parent: Original{42, 100, 200}, 10, 20}] }`
   resolves to `(42, 110, 120)`. A `Generated` with empty `from` returns
   `None`. A `Generated` with only a `ValueSource` anchor (no
-  `Invocation`) returns `None`. (Plan 7 owns the matching `preimage_in`
-  tests.)
+  `Invocation`) returns `None`. (The matching `preimage_in` tests live
+  with that accessor in `quarto-source-map`.)
 - `remap_file_ids()` for `Generated`: build a
   `Generated { from: [Invocation -> Original{FileId(0), …}, ValueSource -> Original{FileId(3), …}] }`,
   apply `|id| FileId(id.0 + 10)`, assert both anchors' source_info
@@ -992,7 +991,7 @@ semantics" for the full implementation including Concat contiguity.
   `quarto-error-reporting` that all already depend on
   `quarto-source-map`).
 - Blocks: Plan 5 (wire format extension), Plan 6 (provenance audit),
-  Plan 7 (writer's preimage walk uses Generated and the
+  and the incremental writer (its preimage walk uses Generated and the
   `invocation_anchor` helper).
 
 ## Risk areas
@@ -1045,7 +1044,7 @@ semantics" for the full implementation including Concat contiguity.
   Test the cases. (Verified: no production call site relies on
   `SourceInfo == SourceInfo` today — the `PartialEq` derive is required
   by the wider `Block`/`Inline` derives but isn't itself load-bearing.
-  Plan 7's coarsen may compare structurally once it lands; the
+  the writer's coarsen may compare structurally; the
   `Value::PartialEq` semantics on small kebab-case objects are
   well-behaved.)
 - **Removing `FilterProvenance` is a breaking change for downstream
@@ -1101,7 +1100,7 @@ Plan 5+ readers can adjust expectations.
   `r#gen` works but is ugly). The plan's pseudocode used
   `gen.invocation_anchor()` / `gen.preimage_in()` etc. as shorthand;
   in real code use `generated`, `g`, or destructure the variant.
-  Plan 7's `preimage_in` sketches should be amended before
+  `preimage_in` sketches should be amended before
   implementation — the same trap applies.
 
 - **Phase 1's "compiles cleanly" holds only for `quarto-source-map`,

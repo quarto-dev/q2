@@ -846,8 +846,8 @@ starting Plan 5:
 - **Don't name a local `gen`.** Rust 2024 makes `gen` a reserved
   keyword. Plan 4's test code had to rename a `let gen = ...` to
   `let generated = ...`. None of Plan 5's code samples currently use
-  `gen` as an identifier — keep it that way. (Plan 7's prose still
-  uses `gen.invocation_anchor()` as shorthand; that's pseudocode, not
+  `gen` as an identifier — keep it that way. (Some writer prose uses
+  `gen.invocation_anchor()` as shorthand; that's pseudocode, not
   literal Rust to type.)
 
 - **Phase boundary "compiles cleanly" semantics.** Plan 4 found that
@@ -941,7 +941,7 @@ will shift these; refresh before implementing.)
   full before/after.
 - `ts-packages/preview-renderer/src/utils/sourceInfo.ts` — JS-side
   helpers (`isAtomicSourceInfo`, etc.); needs adjustment for the new
-  shape per Plan 4 / Plan 7.
+  shape per Plan 4.
 
 ## Test plan
 
@@ -1152,6 +1152,6 @@ Generated; use `resolve_byte_range` (via the Invocation anchor) for
 chain-resolved ranges. Any diagnostic UI (q2-debug, hub-client devtools)
 that reads `r` directly will see uninformative zeros for these entries.
 This is a long-lived integration branch and the same developer is
-implementing all of Plans 5–7, so the surprise window is local; once
-Plan 7's `preimage_in` lands, the standard accessor pattern reaches
-through Generated correctly. No external consumers need warning.
+implementing the provenance plans, so the surprise window is local;
+the writer's `preimage_in` accessor reaches through Generated
+correctly. No external consumers need warning.

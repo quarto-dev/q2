@@ -201,11 +201,9 @@ At the pre-engine checkpoint, `A2.blocks[0]` is a real user block.
 
 If a future variant ever moves the splice point past the sugar
 phase (or runs it on a post-pipeline AST for any other reason),
-the flat walk would miss every cell inside the wrapper. Route the
-walker through `first_in_user_tree` / a `visit_user_blocks`
-sibling per
-[`claude-notes/designs/transparent-wrappers.md`](../designs/transparent-wrappers.md)
-in that case.
+the flat walk would miss every cell inside any synthesized
+block-container wrapper; it would need to recurse into the wrapper's
+source-bearing children rather than reading `blocks[0]` directly.
 
 ## Where the splice lives in the pipeline
 

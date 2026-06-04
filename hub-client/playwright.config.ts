@@ -3,8 +3,23 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Playwright configuration for hub-client E2E tests
  *
- * Test architecture:
- * - globalSetup starts the Rust hub server (cargo run --bin hub)
+ * ## Prerequisites (must be satisfied before running tests)
+ *
+ * 1. **Production build with test hooks**:
+ *    ```
+ *    VITE_E2E=1 npm run build
+ *    ```
+ *    Without `VITE_E2E=1` the bundle tree-shakes out `window.__quartoTest`
+ *    and every test fails with "E2E test hooks not found". The full
+ *    `npm run test:e2e` command handles this automatically.
+ *
+ * 2. **Hub server not already running on port 3031**:
+ *    `globalSetup` starts its own hub on port 3031. A dev hub on that port
+ *    will cause a bind failure. Use a different port for dev (`--port 3030`).
+ *
+ * ## Architecture
+ *
+ * - globalSetup starts the Rust hub server (`cargo run --bin hub`)
  * - Tests create Automerge projects dynamically via quarto-sync-client
  * - Tests run in parallel against the same hub server (different documents)
  * - globalTeardown stops the hub server and cleans up
@@ -19,8 +34,9 @@ export default defineConfig({
   fullyParallel: true,
   // Fail on `test.only` in CI
   forbidOnly: !!process.env.CI,
-  // Retries for flaky tests in CI
-  retries: process.env.CI ? 2 : 0,
+  // 1 retry locally handles peer-connection timing races without requiring
+  // a manual re-run. CI gets 2 for its more variable network conditions.
+  retries: process.env.CI ? 2 : 1,
   // Parallel workers. Match the runner's CPU count: ubuntu-latest has
   // 2 cores. Running more workers than cores causes the WASM render
   // pipeline to stall under contention and individual tests miss the
@@ -35,7 +51,7 @@ export default defineConfig({
 
   use: {
     // Base URL for the dev server
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:5174',
     // Trace recording for debugging failures
     trace: 'on-first-retry',
     // Screenshot on failure
@@ -75,8 +91,8 @@ export default defineConfig({
   //     to get HMR back — HMR isn't used by tests and dev mode reintroduces
   //     the contention.
   webServer: {
-    command: 'npm run preview -- --port 5173',
-    url: 'http://localhost:5173',
+    command: 'npm run preview -- --port 5174',
+    url: 'http://localhost:5174',
     // Reuse existing server in dev mode for faster iteration
     reuseExistingServer: !process.env.CI,
     // Timeout for server to start (preview is near-instant; the bundle
@@ -87,7 +103,7 @@ export default defineConfig({
     // port 3030, so point preview at that port. The env is server-side
     // only — it isn't baked into the built client bundle.
     env: {
-      VITE_HUB_SERVER: 'http://localhost:3030',
+      VITE_HUB_SERVER: 'http://localhost:3031',
     },
   },
 });
