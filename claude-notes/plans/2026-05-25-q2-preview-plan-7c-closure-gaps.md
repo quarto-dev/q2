@@ -7,9 +7,32 @@ The contract docs the plan references — `provenance-contract.md` and
 `review/provenance-plan-7` and merge into `feature/provenance` as
 part of the review-pass merge that is the same prerequisite for this
 plan.
-**Status:** Implementation plan
+**Status:** Implementation plan — **partially superseded by Plan 7d (2026-06-03).**
 **Milestone:** none directly — closes correctness/coverage gaps in
 the writer surface Plan 7 already shipped.
+
+> **Impact of Plan 7d (ships before 7c).** Plan 7d replaces the
+> denylist cascade this plan tightens with an allowlist algebra whose
+> inline `UseAfter` dispatch keys on the **new** node's own
+> `source_info` (mirroring the block-level `e584428d` fix). As a
+> result:
+>
+> - **Phase 7 (`displaced_before_idx`) is OBSOLETE** — the algebra
+>   makes no original-side lookup, so there is nothing for
+>   `displaced_before_idx` to make precise. See the tombstone in the
+>   Phase 7 section.
+> - **Phase 7b (inline new-side atomicity check) is OBSOLETE** — it is
+>   exactly what 7d's rule R1' does by construction. See the Phase 7b
+>   tombstone.
+> - **Phases 4 and 5 (per-kind soft-drop tests; `#[should_panic]`
+>   debug-assert test)** remain valuable but target code 7d
+>   restructures (`coarsen_keep_before_block` disappears; the inline
+>   two-phase soft-drop collapses). When written, target them at 7d's
+>   **dispatch rows**, not the old cascade arms.
+> - **Phases 1, 2, 3, 6, 8, 9** (Q-3-41 catalog + first-edit gates,
+>   TS-side `hasPreimageIn`/`isEditableInside`, `Q343Reason` enum,
+>   `target_file_id` derivation, verification) are **orthogonal** to
+>   7d and unaffected.
 
 ## Epic context
 
@@ -947,9 +970,19 @@ If a future case grows wildly different message structure (e.g.
 a multi-paragraph body), peel it off into its own helper at that
 point.
 
-#### Phase 7 — Inline soft-drop carries the displaced original index
+#### Phase 7 — Inline soft-drop carries the displaced original index — ❌ OBSOLETE (superseded by Plan 7d)
 
-**Repo facts the implementer needs:**
+> **DO NOT IMPLEMENT.** Plan 7d ships before 7c and replaces the inline
+> cascade with an allowlist dispatch that keys on the **new** node's own
+> `source_info` (like the block-level `e584428d` fix). It makes **no**
+> original-side lookup, so the `result_idx` positional proxy is *removed*,
+> not made precise — there is nothing for `displaced_before_idx` to fix.
+> The checklist below is retained as historical analysis only; the
+> `InlineAlignment::UseAfter` struct-variant migration it proposes is no
+> longer needed. (`InlineAlignment` payload stays a tuple variant per 7d's
+> "What 7d does not change.")
+
+**Repo facts the implementer needs (historical):**
 
 - Soft-drop site:
   `crates/pampa/src/writers/incremental.rs:1069-1080`
@@ -1123,7 +1156,17 @@ inside WASM and never crosses the boundary as JSON. Confirm with
 `#[serde(default)]` semantics apply on the parsing side (new
 field absent ⇒ `null`/`undefined` ⇒ "don't soft-drop").
 
-#### Phase 7b — Inline `UseAfter` soft-drop checks the new-side inline's atomicity
+#### Phase 7b — Inline `UseAfter` soft-drop checks the new-side inline's atomicity — ❌ OBSOLETE (superseded by Plan 7d)
+
+> **DO NOT IMPLEMENT.** The new-side atomic-Generated-with-preimage check
+> this phase adds to the inline cascade *is* Plan 7d's rule **R1'** by
+> construction — 7d's inline `UseAfter` dispatches on the new node's own
+> `source_info` and emits `Verbatim` of its preimage + Q-3-42/Q-3-43. The
+> current-code soundness gap this phase documents (resolved bytes leaking
+> through the inline cascade) is real and unaddressed *today*; 7d closes
+> it, and since 7d ships first, this phase never needs to. Retained below
+> as historical analysis. (Note the original-side framing here predates
+> the 2026-06-03 decision; it does not change the conclusion.)
 
 **Discovered 2026-05-26** during the algebraic-soundness research
 that produced today's block-level UseAfter fix (commit

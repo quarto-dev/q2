@@ -1,7 +1,7 @@
 # Plan 7d — Algebraic soundness of plan_user_writes / incremental-writer
 
-**Date:** 2026-05-26 (revised 2026-05-29)
-**Branch:** feature/provenance (ships after 7f; before 7e)
+**Date:** 2026-05-26 (revised 2026-05-29; 2026-06-03)
+**Branch:** feature/provenance (ships after 7f and 7g; before 7e and 7c)
 **Status:** Implementation-ready. Phase 0 closed 2026-05-29. Design content moved to [`incremental-writer-contract.md`](../designs/incremental-writer-contract.md). This plan is the implementation roadmap.
 **Milestone:** none directly. Pre-condition for any future "minimal-edit diffing" work that would consume the user-write plan to derive per-region Monaco edits rather than full-document saves.
 
@@ -14,14 +14,15 @@ Fourth sibling follow-up to Plan 7 in the provenance epic:
 | Plan 7 | Incremental writer + soft-drop + bridge migration | shipped on `feature/provenance` |
 | Plan 7a | Runtime user-filter idempotence (input-side validation) | open |
 | Plan 7b | Test-coverage consolidation | open |
-| Plan 7c | Closure gaps in the existing soft-drop cascade | open (Phases 7 and 7b become defense-in-depth under 7d) |
+| Plan 7c | Closure gaps in the existing soft-drop cascade | open (Phases 7 and 7b **obsoleted** by 7d — see below) |
 | Plan 7d | Algebraic soundness of the coarsen/write step | **this plan** |
 | Plan 7e | CustomNode qmd serialization | sibling, ships after 7d |
 | Plan 7f | Prerequisites for 7d (framework + test hygiene + wire-format) | sibling, ships before 7d |
+| Plan 7g | Source-range tiling (producer precondition **P4**) | **complete** on `feature/provenance`; prerequisite for 7d's soundness proof |
 
-7d differs from 7c in *disposition*. Plan 7c tightens the existing denylist cascade — each phase adds a branch the cascade should have caught but didn't, or repairs a per-arm predicate that drifts from accuracy. Plan 7d replaces the cascade with an allowlist algebra: every emission is allowed by construction rather than by the absence of a denylist match. If 7c's Phases 7 / 7b haven't shipped by the time 7d lands, they become defense-in-depth — the algebra catches the cases they protect against, *provided* the producer contract is satisfied.
+7d differs from 7c in *disposition*. Plan 7c tightens the existing denylist cascade — each phase adds a branch the cascade should have caught but didn't, or repairs a per-arm predicate that drifts from accuracy. Plan 7d replaces the cascade with an allowlist algebra: every emission is allowed by construction rather than by the absence of a denylist match. **7d ships before 7c**, and the algebra obsoletes 7c's Phases 7 and 7b outright: the inline `UseAfter` dispatch keys on the *new* node's own `source_info` (mirroring the block-level `e584428d` fix), so it never makes the original-side lookup that 7c Phase 7's `displaced_before_idx` was meant to make precise, and R1' already does what 7c Phase 7b's new-side atomicity check does. Those two 7c phases are now marked obsolete in `2026-05-25-q2-preview-plan-7c-closure-gaps.md`; the remaining 7c phases (Q-3-41, TS gate parity, per-kind tests, `Q343Reason`) are orthogonal and unaffected.
 
-The implementation starts from the current HEAD of `feature/provenance` after 7f lands, so the framework's source_info preservation and user-edit stamping are in place, the wire format renames are done, and the `SourceInfo::default()` test-audit has bottomed out. The `CoarsenedEntry` self-containment property established by commit `e584428d` — every variant produces its emit bytes from its own payload without ambient context — is a precondition for the algebra to compose correctly. Plan 7d is the next step on top.
+The implementation starts from the current HEAD of `feature/provenance` after **7f and 7g** land, so the framework's source_info preservation and user-edit stamping are in place (7f), the wire format renames are done (7f), the `SourceInfo::default()` test-audit has bottomed out (7f), and the **source-range tiling precondition P4** holds (7g — sibling preimages disjoint, parents contain children; the BP/completeness proof depends on it). The `CoarsenedEntry` self-containment property established by commit `e584428d` — every variant produces its emit bytes from its own payload without ambient context — is a precondition for the algebra to compose correctly. Plan 7d is the next step on top.
 
 ## Goal
 
@@ -37,12 +38,12 @@ All seven validation items resolved through design review with Gordon. Outcomes:
 - (2) **CustomNode treatment.** Decomposed shell helpers are correct; current `Block::Custom` arms in the qmd writer are empty placeholders. Split to Plan 7e as a separate scope.
 - (3) **List shape.** `ShellOpen` becomes an enum: `Bytes(Bytes)` for fixed-prefix shells (Div, etc.) and `LineAware { marker, continuation_indent }` for per-line markers (lists, BlockQuote when modeled this way). The marker emits once per item; continuation lines get the indent via a `Write` adapter analogous to today's `BulletListContext`.
 - (4) **Separator state.** `SeparatorRule` per `Recurse` (variants: `StandardBlock { tight }`, `InlineConcat`, `ListItem { loose }`, `OriginalGap`). One cross-`Recurse` state, `TrailingState` (four variants: `None`, `EndsWithText`, `EndsWithNewline`, `EndsWithBlankLine`), threaded through `assemble` as a function parameter.
-- (5) **Plan 7c relationship.** Phases 7 and 7b of 7c become defense-in-depth under the algebra; can be dropped, kept, or shipped before/after 7d.
+- (5) **Plan 7c relationship.** 7d ships **before** 7c and **obsoletes** 7c's Phases 7 (`displaced_before_idx`) and 7b (inline new-side atomicity check): the allowlist dispatch keys on the new node's own `source_info`, so it neither makes the original-side lookup Phase 7 sharpened nor lacks the new-side check Phase 7b added (R1' is that check). Those two phases are marked obsolete in 7c. The other 7c phases are orthogonal. (Revised 2026-06-03 — earlier wording called them "defense-in-depth"; under the allowlist algebra they are simply redundant, not a second line of defense.)
 - (6) **Cost.** Phase 4 adds end-to-end benchmarking on a synthetic 500-block fixture with realistic content (sectionize wrappers, shortcodes, callouts). Both old `coarsen` and new `plan_user_writes` are O(n) on subtree size; the bench is a sanity check, not a hopeful negotiation.
 
 Property #9 added: **block-level Invocation coalescing.** Within any `Recurse`, a maximal run of consecutive children whose `preimage_in(target)` returns the same `Some(range)` collapses to a single `Verbatim` of that range. Block-level analogue of today's multi-inline dedupe.
 
-Phases 1–6 below proceed against `feature/provenance` HEAD after 7f has landed.
+Phases 1–6 below proceed against `feature/provenance` HEAD after 7f **and 7g** have landed (7g is complete).
 
 ---
 
@@ -127,6 +128,13 @@ This unifies today's five variants into four. Renames and consolidations:
 
 `assemble : (UserWrite, TrailingState) → (Bytes, TrailingState)` is the fold. `Verbatim` returns `Source[byte_range]`; `Omit` returns empty; `Recurse` returns `shell_open ++ join(separator, [assemble(c) for c in children]) ++ shell_close`, with the separator's emission consulting the trailing-state hint to suppress redundant blank lines; `Leaf` returns `block_text`.
 
+**Separator / coalescing / trailing-state composition.** These three mechanisms are deliberately staged so they never interleave:
+
+- **Property #9 coalescing is a *planner* step** — `plan_user_writes` collapses a maximal run of consecutive children sharing one `preimage_in(target)` into a single `Verbatim` *before* `assemble` runs. So `assemble` never computes a separator *inside* a coalesced run; coalescing and separation are sequential, not entangled.
+- **`SeparatorRule::OriginalGap` is an `assemble` per-adjacent-pair decision.** When two adjacent emitted entries both expose target preimages `r_prev`, `r_curr` with `r_prev.end <= r_curr.start` and a same-container-consecutive origin, emit `Source[r_prev.end .. r_curr.start]` (the user's original inter-block whitespace, a P1 copy). Guard with `debug_assert!(gap.start <= gap.end)` plus a graceful fallback to the canonical separator — this is the reversed-slice guard the Phase-6 BP audit flagged (see "Premises surfaced by the Plan 7g Phase 6 BP audit" below). This generalizes today's `compute_separator` "consecutive in original → use original gap" branch (`incremental.rs:1049-1056`).
+- **`TrailingState` is derived from the actually-emitted bytes' tail** after each entry (`None` / `EndsWithText` / `EndsWithNewline` / `EndsWithBlankLine`) — *not* tracked symbolically through the rule algebra (which would risk drift). The canonical `SeparatorRule` consults it: `StandardBlock{tight:false}` emits `""` after `EndsWithBlankLine`, `"\n"` after `EndsWithNewline`, `"\n\n"` after `EndsWithText`. This is the principled form of today's lone `prev_block_text.ends_with("\n\n")` special case (`incremental.rs:1059`).
+- **Precedence in `assemble`:** try `OriginalGap` first (most faithful — reproduces the user's whitespace as P1 bytes), else fall to the enclosing `Recurse`'s `SeparatorRule` resolved against `TrailingState` (P2 bytes).
+
 ### The dispatch table
 
 `plan_user_writes : (Node, target, align_ctx) → UserWrite`. Total recursive function over the AST, dispatched on the pair `(align_ctx.alignment_kind, node.source_info_shape)`. The table:
@@ -139,7 +147,7 @@ This unifies today's five variants into four. Renames and consolidations:
 | `KeepBefore(i)` | non-atomic, no preimage, no recursable children | R5 | `Leaf{ serialize_leaf(node) }` (rare; cross-file-rooted leaf, etc.) |
 | `UseAfter(j)` | atomic-kind Generated with preimage | R1' (soft-drop) | `Verbatim(preimage)` + Q-3-43 |
 | `UseAfter(j)` | atomic-kind Generated, no preimage | R2' (soft-drop) | `Omit` + Q-3-43 |
-| `UseAfter(j)` | atomic `Custom` | R5-special (let-user-win) | `Leaf{ serialize_leaf(node) }` via `plain_data`; no warning |
+| `UseAfter(j)` | atomic `Custom` | R5-special (let-user-win) — **deferred to 7e** | *Designed:* `Leaf{ serialize_leaf(node) }` via `plain_data`; no warning. *In 7d:* the qmd `Block::Custom` arm is empty, so `serialize_leaf` emits nothing — treat as **opaque** (R1' verbatim of preimage if present, else R2' Omit). 7e fills the arm and activates R5-special. |
 | `UseAfter(j)` | non-atomic, no preimage, container | R3 | `Recurse{ shell_open, children, shell_close, separator }` shells from qmd writer's per-container syntax helpers |
 | `UseAfter(j)` | non-atomic, no preimage, leaf | R5 | `Leaf{ serialize_leaf(node) }` |
 | `UseAfter(j)` | non-atomic with preimage | R1 | `Verbatim(preimage)` (paste-from-elsewhere; trust the producer's source_info) |
@@ -147,7 +155,9 @@ This unifies today's five variants into four. Renames and consolidations:
 | `RecurseIntoContainer{ before, after }` | editable inside, block container | R3 | `Recurse{ shell_open, children-coarsened-per-`block_container_plans`, shell_close, separator }` |
 | `RecurseIntoContainer{ before, after }` | editable inside, inline container | R4 | `Recurse{ shell_open-from-original-prefix, inlines-coarsened-per-`inline_plans`, shell_close-from-original-suffix, separator }` |
 
-The dispatch is total. R3 and R4 are structurally the same operation (recurse with shells); they're listed separately because R3 dispatches on `block_container_plans` while R4 dispatches on `inline_plans`, and the shell sources differ (R4 takes shells from the *original* block's source bytes for the inline-splice case; R3 takes shells from the new container's syntax helpers).
+The dispatch is total, and the rows are read as an **ordered match** (Phase 2 implements `dispatch()` as an explicit ordered match, not a set of mutually-exclusive predicates the reader must reconcile): for a given alignment kind, the first row whose source-info/structure condition holds wins. Totality (Property #2) and the "exactly one row" claim then read off the order. R3 and R4 are structurally the same operation (recurse with shells); they're listed separately because R3 dispatches on `block_container_plans` while R4 dispatches on `inline_plans`, and the shell sources differ (R4 takes shells from the *original* block's source bytes for the inline-splice case; R3 takes shells from the new container's syntax helpers).
+
+**CustomNodes are opaque in 7d (until 7e).** Every dispatch row above that would recurse into or serialize a `CustomNode` — R3 on a non-atomic `Custom` container, R5-special on an atomic `Custom` — is gated off until 7e, because (a) the qmd `Block::Custom` shell helper is empty and (b) the writer has **no `custom_node_plans` recursion** today (zero references in `crates/pampa/src/writers/`). So under 7d a `CustomNode` is treated as an **opaque block**: emit `Verbatim` of its original preimage if it has one (the common case — a callout parsed from `:::{.callout-note}…:::` in the source file), else `Omit` + `Q-3-43`. The writer never descends into it. This requires **no custom-specific code** — it reuses the soft-drop rules R1'/R2' — and gives a *better* interim behavior than today's `Rewrite`→empty vanish (the callout is preserved intact; only the edit is refused). 7e opens the box: it fills the `Block::Custom` shell helper **and** wires `custom_node_plans` recursion, after which CustomNodes match R3/R5-special naturally. Mechanism: the writer-side editability check treats non-atomic CustomNodes as not-editable-inside until 7e, so they route through the existing `RecurseIntoContainer → not-editable → R1'/R2'` path.
 
 Soundness proof: see [`incremental-writer-contract.md`](../designs/incremental-writer-contract.md) §"Soundness."
 
@@ -163,13 +173,13 @@ The algebra implies the following properties as theorems:
 6. **Termination.** Recursion only on strictly smaller substructures (children). The AST is finite. Termination is by structural induction on AST size.
 7. **Diagnostic determinism.** The set of warnings produced is a function of the input ASTs alone — the warning a `(alignment, source_info)` cell emits is fixed by the table; no order-dependence, no cascade-arm-dependence.
 8. **Reconciler-independence of rule choice.** The reconciler's `Plan` informs *which* node is coarsened at each position and *what alignment context* applies, but rule selection within a row is determined by source_info and structural shape alone.
-9. **Block-level Invocation coalescing.** Within any `Recurse`, no byte range in the target file is emitted more than once at adjacent child positions. AST nodes whose `preimage_in(target)` returns the same range — multi-inline shortcode resolution, multi-block shortcode resolution, any future N-to-1 producer — collapse to a single `Verbatim` of the shared range.
+9. **Block-level Invocation coalescing (consecutive runs).** Within any `Recurse`, a maximal run of *consecutive* children whose `preimage_in(target)` returns the same `Some(range)` collapses to a single `Verbatim` of that range — the block-level analogue of today's multi-inline dedupe. This is **consecutive-only**; it does *not* coalesce a same-preimage group whose survivors are non-adjacent. That weaker form is sufficient: the only producer of splittable N-to-1 output (block shortcodes via `ShortcodeResult::Blocks`) renders as a client read-only region, so no edit path can separate the survivors — premise **L3** in the [BP proof](../designs/incremental-writer-bp-proof.md) §6, held by design (2026-06-01), not implemented. 7d need not generalize Property #9; revisit only if a non-client edit path (programmatic, filter block-reorder) is added.
 
 ### What the refactor concretely changes
 
 **1. `write_block_to_string` decomposes into shell helpers + `serialize_leaf`.** The unified-pass version (`write_block_to_string` as it exists today) becomes a derived convenience function that the rest of the codebase can still call for native rendering — it just isn't used by the incremental writer's `plan_user_writes` step anymore.
 
-The decomposition covers the container kinds that have qmd writer arms today: BlockQuote, Div, Figure, NoteDefinitionFencedBlock, OrderedList, BulletList, DefinitionList, Table. **CustomNodes (Callout, Theorem, Proof, FloatRefTarget, labelled equations) do not have qmd writer arms today** — their `Block::Custom` arms in `qmd.rs:2354` are empty. CustomNode shell helpers land in Plan 7e, not in 7d Phase 1. Under 7d alone, custom-node editing remains broken (visible as a callout-disappears-on-edit bug); 7e closes that gap.
+The decomposition covers the container kinds that have qmd writer arms today: BlockQuote, Div, Figure, NoteDefinitionFencedBlock, OrderedList, BulletList, DefinitionList, Table. **CustomNodes (Callout, Theorem, Proof, FloatRefTarget, labelled equations) do not have qmd writer arms today** — their `Block::Custom` arms in `qmd.rs:2354` are empty. CustomNode shell helpers — **and the `custom_node_plans` recursion the writer lacks today** — land in Plan 7e, not in 7d Phase 1. Under 7d alone, custom nodes are **opaque** (verbatim-preserve or omit; see "CustomNodes are opaque in 7d" under the dispatch table): the user's interior edit is refused with `Q-3-43`, but the callout itself is preserved intact. 7e closes the gap by filling the shell helper and wiring the recursion, making interior edits round-trip.
 
 **2. `UserWrite::Rewrite` ceases to exist.** `Leaf { block_text }` replaces it for genuine leaves. `Recurse` replaces it for containers. No catch-all subtree serializer remains.
 
@@ -208,19 +218,19 @@ A single user edit typically produces bytes from *multiple* rules in combination
 - [ ] Identify every per-container arm in `crates/pampa/src/writers/qmd.rs` that produces output for a container block (Div, BlockQuote, Figure, NoteDefinitionFencedBlock, OrderedList, BulletList, DefinitionList, Table).
 - [ ] For each, extract `serialize_block_shell_open(block) → ShellOpen` and `serialize_block_shell_close(block) → Bytes`. For lists and BlockQuote (which need per-line marker semantics), the shell-open returns `ShellOpen::LineAware`; for everything else, `ShellOpen::Bytes`.
 - [ ] Do the same for inline containers (Emph, Strong, Link, Image, Span, Cite, Note, …): `serialize_inline_shell_open(inline) → ShellOpen` and `serialize_inline_shell_close(inline) → Bytes`.
-- [ ] Define `serialize_leaf(node) → Bytes` as `write_block_to_string` restricted to leaves. Type-enforce or runtime-assert that the function panics on non-leaf input.
+- [ ] Define `serialize_leaf(node) → Bytes` as `write_block_to_string` restricted to leaves. **Guard at runtime, not the type level:** `Block` (`block.rs:16`) and `Inline` (`inline.rs:13`) are each a single flat enum with no leaf/container split, so type-enforcement would require carving `LeafBlock`/`ContainerBlock` newtypes across the whole AST — too invasive. Instead, `serialize_leaf` is an exhaustive match over the leaf variants; container variants hit `debug_assert!(false, …)` and return a diagnostic error (a `Q-3-*` code) in release — **do not panic in the writer**. Property #5 + totality guarantee it's never reached in practice; the guard is belt-and-suspenders that yields a precise error if the dispatch regresses.
 - [ ] Preserve `write_block_to_string` as a public convenience function. Its implementation becomes `shell_open + assemble(children-coarsened) + shell_close` — but the incremental writer no longer calls it.
-- [ ] **CustomNode arms intentionally not in 7d's scope.** The current empty `Block::Custom(_)` arm stays empty under 7d; Plan 7e fills it. Under 7d, R3 on a non-atomic CustomNode (e.g. Callout) falls through to soft-drop semantics, not bytes-emission — custom-node editing remains visibly broken until 7e.
+- [ ] **CustomNode arms intentionally not in 7d's scope.** The current empty `Block::Custom(_)` arm (`qmd.rs:2354`) stays empty under 7d; Plan 7e fills it. Under 7d a CustomNode is **opaque** (see "CustomNodes are opaque in 7d" under the dispatch table): emit `Verbatim` of its original preimage if present, else `Omit` + `Q-3-43`; the writer never descends into it (no `custom_node_plans` recursion in 7d). The callout is preserved intact; only the interior edit is refused. 7e fills the shell helper and wires the recursion. The mechanism in 7d is one editability-gate line treating non-atomic CustomNodes as not-editable-inside — *not* any custom-content serialization code.
 - [ ] Tests: each shell-helper has a unit test that asserts its output for a known node.
 
 ### Phase 2 — Restructure `plan_user_writes` dispatch
 
 - [ ] Define the new `UserWrite` shape with `Verbatim`, `Omit`, `Recurse`, `Leaf` variants. Define `ShellOpen` and `SeparatorRule` enums. Delete `CoarsenedEntry::{Rewrite, Transparent, InlineSplice}` (their roles are absorbed).
 - [ ] Rename `coarsen` → `plan_user_writes`, `coarsen_blocks` → `plan_user_writes_blocks` (or absorb into `plan_user_writes`). The function-level renames cascade through `~23` in-file references and `~16` plan-7 references in this file (already done above). `coarsen_keep_before_block` disappears: its logic is absorbed into the dispatch table.
-- [ ] Implement the dispatch table from §"The dispatch table" as a single `dispatch(node, align, target) → Rule` function. Each rule has a small implementation: R1 packages `Verbatim`; R2 packages `Omit`; R3 / R4 package `Recurse` with shells from Phase 1's helpers and children recursed via `plan_user_writes`; R5 packages `Leaf { serialize_leaf(node) }`.
+- [ ] Implement the dispatch table from §"The dispatch table" as a single `dispatch(node, align, target) → Rule` function, written as an **explicit ordered match** (first matching row wins) so totality and "exactly one row" are structural, not left to the reader to reconcile predicates. Each rule has a small implementation: R1 packages `Verbatim`; R2 packages `Omit`; R3 / R4 package `Recurse` with shells from Phase 1's helpers and children recursed via `plan_user_writes`; R5 packages `Leaf { serialize_leaf(node) }`. CustomNodes are gated to the opaque (R1'/R2') path until 7e.
 - [ ] `plan_user_writes_blocks` becomes a thin wrapper that iterates the `block_alignments`, calls `dispatch` for each, threads separator context.
-- [ ] Implement Property #9 (block-level Invocation coalescing): within each `Recurse`, group consecutive children whose `preimage_in(target)` returns the same range; emit a single `Verbatim` for the run.
-- [ ] **Preserve document-boundary infrastructure.** The existing helpers `emit_metadata_prefix` (`incremental.rs:942`), `find_metadata_trailing_gap` (`:998`), and `ensure_trailing_newline` (`:1103`) handle the gap between YAML frontmatter and the first block, and the parser's input-padding convention (qmd reader pads input with `\n` when it doesn't end with one). The new `plan_user_writes` + `SeparatorRule` + `TrailingState` design must preserve their behavior. Specifically: `assemble` must still emit the metadata-prefix bytes before the first block's coarsened entry, and must still strip the synthesized trailing `\n` from output when the input qmd didn't have one. Add a regression test for both behaviors on a fixture that exercises them (a doc with YAML frontmatter, no trailing newline).
+- [ ] Implement Property #9 (block-level Invocation coalescing) **as a planner step inside `plan_user_writes`, before `assemble` runs**: within each `Recurse`, group *consecutive* children whose `preimage_in(target)` returns the same range; emit a single `Verbatim` for the run. Consecutive-only is sufficient (premise L3, held by design — see Property #9 above). Coalescing precedes separation; the two never interleave.
+- [ ] **Preserve document-boundary infrastructure.** The existing helpers `emit_metadata_prefix` (`incremental.rs:950`), `find_metadata_trailing_gap` (`:1006`), and `ensure_trailing_newline` (`:1111`) handle the gap between YAML frontmatter and the first block, and the parser's input-padding convention (qmd reader pads input with `\n` when it doesn't end with one). The new `plan_user_writes` + `SeparatorRule` + `TrailingState` design must preserve their behavior. Specifically: `assemble` must still emit the metadata-prefix bytes before the first block's coarsened entry, and must still strip the synthesized trailing `\n` from output when the input qmd didn't have one. Add a regression test for both behaviors on a fixture that exercises them (a doc with YAML frontmatter, no trailing newline).
 - [ ] Verify against today's regression tests: every existing test in `crates/pampa/tests/incremental_writer_tests.rs` must still pass byte-for-byte. The refactor doesn't change observable behavior on the inputs the tests cover (modulo CustomNodes, where current behavior is also broken).
 
 ### Phase 3 — Restructure `assemble_inline_content`
@@ -228,13 +238,14 @@ A single user edit typically produces bytes from *multiple* rules in combination
 - [ ] Define inline `Rule` dispatch analogous to block-level. R1-inline, R2-inline, R3-inline (inline `Recurse` for nested inline containers), R5-inline (leaf inline).
 - [ ] `assemble_inline_content` becomes a recursive plan over the inline cascade. Phase 1's two-phase shape (soft-drop substitution + emit-with-dedupe) collapses to a single pass.
 - [ ] Multi-inline dedupe (today's `compute_separator` shared-`Invocation`-anchor optimization) collapses into the block-level Property #9 mechanism; the rule keys on `preimage_in` equality rather than anchor `PartialEq` (slightly more general; catches cross-shape collisions).
+- [ ] **Inline `UseAfter` dispatches on the *new* node's own `source_info`** — mirroring the block-level `UseAfter` arm (`incremental.rs:392–439`, the `e584428d` fix), which reads `new_si.preimage_in(...)` and never consults the displaced original. This **removes** today's `result_idx` positional proxy (`incremental.rs:1376–1378`) rather than preserving it. Consequence: it **obsoletes 7c Phase 7** (`displaced_before_idx` — there is no original-side lookup left to make precise) and **subsumes 7c Phase 7b** (R1' on atomic-Generated-with-preimage *is* the new-side atomicity check). Do not assume `displaced_before_idx` exists; do not re-introduce the proxy.
 - [ ] Verify: every existing inline-cascade test passes byte-for-byte.
 
 ### Phase 4 — Property tests for BP + benchmarking
 
 The algebra is sound and complete by construction. Property tests pin both invariants against bugs in the implementation. Phase 4's testing strategy has four coordinated pieces:
 
-**Generator.** `gen_pandoc_with_atomic_descendants` produces random ASTs with atomic-Generated descendants (shortcode, filter, title-block, tree-sitter-postprocess) embedded at varying depths inside non-atomic containers, plus a random user-edit applied on top. The generator extends the existing `crates/quarto-ast-reconcile/src/generators.rs` infrastructure with two new capabilities: injecting atomic-Generated nodes at configurable depths with configurable density, and applying realistic user-edit transformations (paragraph rewrap, list-item insert, callout-class toggle, etc.). The generator's coverage of the case space is what determines how thoroughly the dispatch table is exercised — see the coverage instrumentation below.
+**Generator.** `gen_pandoc_with_atomic_descendants` produces random ASTs with atomic-Generated descendants (shortcode, filter, title-block, tree-sitter-postprocess) embedded at varying depths inside non-atomic containers, plus a random user-edit applied on top. The generator extends the existing `crates/quarto-ast-reconcile/src/generators.rs` infrastructure with two new capabilities: injecting atomic-Generated nodes at configurable depths with configurable density, and applying realistic user-edit transformations (paragraph rewrap, list-item insert, etc.). **Set `custom: false` in the generator's `GenConfig`** (the flag already exists at `generators.rs:167/225/328`, driving `gen_custom_block`/`gen_custom_inline` for `"Callout"`/`"CustomWidget"`). CustomNodes are opaque in 7d (empty `Block::Custom` arm), so a generated CustomNode serializes to empty/soft-drop and would fail `completeness_holds` (`parse(Source') ≢ AST_new`) — soundness `bp_holds` is unaffected. CustomNode property/completeness coverage moves to **Plan 7e**, where the arm is filled. Do not include callout-class-toggle as a generated edit in 7d for the same reason. The generator's coverage of the case space is what determines how thoroughly the dispatch table is exercised — see the coverage instrumentation below.
 
 **Marker-string convention (for soundness).** The soundness property `bp_holds` detects byte leaks via a recognizable marker string embedded in atomic-Generated nodes' resolved content. The generator chooses a fresh marker per iteration (e.g. `__BP_LEAK_e94f__` with a per-iteration UUID suffix), injects it into every atomic node's resolved text, runs the writer, and asserts the marker doesn't appear in `Source'`. The randomness avoids accidental collisions with legitimate document text; the recognizability makes any leak trivially detectable. One line of assertion per iteration; the property scales with proptest's iteration count.
 
@@ -265,22 +276,34 @@ The four pieces fit together: the generator drives input distribution; the marke
   }
   ```
 
-  Each property test runs proptest first, then asserts minimum coverage thresholds:
+  Each property test runs proptest first, then checks coverage. **Do not hardcode magic absolute floors** (`r1 >= 100`, …) — they are brittle and arbitrary before the generator has ever run. Instead:
+
+  1. **Primary gate = each reachable row ≥ 1.** This catches a row going *unreachable* (the real regression — a dispatch row that no input can hit, or that a refactor accidentally orphaned). `r5_special` is **excluded** from this gate in 7d (CustomNodes are opaque; it's exercised in 7e).
+  2. **Express any magnitude floor as a fraction of the proptest case count `N`** (e.g. `r1 >= N / 10`), so floors scale when someone changes the iteration count instead of silently passing/failing.
+  3. **Calibrate the fractions empirically:** run the generator once, record observed per-row counts, set each floor at ~⅓–½ of observed (headroom for run-to-run variance). Don't guess up front.
+  4. **Always print the observed per-row distribution** under the `dispatch-coverage` feature (a one-line report per run), so drift is visible even when the test passes.
 
   ```rust
-  assert!(counters.r1        >= 100, "R1 under-exercised: {}",        counters.r1);
-  assert!(counters.r1_prime  >= 50,  "R1' under-exercised: {}",       counters.r1_prime);
-  assert!(counters.r2_prime  >= 20,  "R2' under-exercised: {}",       counters.r2_prime);
-  assert!(counters.r3_helper >= 50,  "R3-helper under-exercised: {}", counters.r3_helper);
-  assert!(counters.r3_transparent >= 50, "R3-transparent under-exercised: {}", counters.r3_transparent);
-  assert!(counters.r4        >= 30,  "R4 under-exercised: {}",        counters.r4);
-  assert!(counters.r5        >= 50,  "R5 under-exercised: {}",        counters.r5);
-  assert!(counters.r5_special >= 20, "R5-special under-exercised: {}", counters.r5_special);
+  // reachability gate (primary)
+  for (name, count) in counters.rows_excluding_r5_special() {
+      assert!(count >= 1, "dispatch row {name} unreachable by generator");
+  }
+  // empirical magnitude floors (calibrated; fractions of N)
+  assert!(counters.r1 >= n_cases / 10, "R1 under-exercised: {} (< N/10)", counters.r1);
+  // … one per common row, floors derived from a calibration run …
+  eprintln!("dispatch-coverage: {counters:?}");   // visible distribution report
   ```
 
-  If a row's counter is below threshold, the generator's distribution isn't reaching it — the test fails with a specific message naming the under-exercised row. Coverage thresholds are tuned per row based on expected frequency; rare rows get lower thresholds, common rows get higher ones. This keeps the generator honest as the writer evolves: a future contributor adding a dispatch row must add a corresponding threshold; a future change that accidentally makes a row unreachable will surface as a coverage failure.
+  A future contributor adding a dispatch row adds its reachability check; a refactor that orphans a row surfaces as a reachability failure rather than as a silently-passing magic threshold.
 
 - [ ] Run under `cargo nextest run -p pampa --features dispatch-coverage` with high iteration counts. Save regression seeds if any property fails or any row falls below threshold.
+
+**End-to-end (Playwright) subtask — the R5 trust point.** R5 emits `serialize_leaf(n)` *trusting* the producer's source_info classification (nodes reaching R5 are attested user-authored; atomic-Generated routes to R1'/R2' instead). The strict form trusts the React framework to stamp `Generated{by: user_edit}` (7f Phase 3). The property tests above exercise the writer in isolation with synthetic source_info; they do **not** exercise the real framework→writer stamping path. That path *is* e2e-testable through the existing write harness `hub-client/e2e/q2-preview-render-components-write.spec.ts` (Automerge → hub → browser → WASM → `incremental_write_qmd`). The trust point's *consequences* are observable even though its *universal premise* (no producer ever mis-stamps) is an audit obligation, not a runtime test.
+
+- [ ] **No-leak (soundness).** Fixture containing `{{< lipsum 3 >}}`; in-browser, click into the resolved paragraph, type a word, trigger the write. Assert the written qmd still contains `{{< lipsum 3 >}}` and does **not** contain the resolved lorem-ipsum text or the typed word. (The contract's canonical example, finally tested end-to-end.)
+- [ ] **R5 authored-leaf (completeness).** Fixture with a plain paragraph; type a new word; assert the new word appears in the written qmd.
+- [ ] **Soft-drop signal.** Assert `Q-3-43` surfaces on the shortcode-paragraph edit.
+- [ ] (Honest-status note for the plan log: consequences e2e-tested via Playwright; the "no producer mis-stamps" premise is discharged by 7f's `SourceInfo::default()` audit + the "new kinds default to non-atomic" rule, not by a runtime assertion.)
 
 **Benchmarking subtask.** Synthetic fixture: ~500 top-level blocks with a mix of plain paragraphs, sectionize wrappers, shortcodes, callouts, and one nested list. Measure end-to-end `incremental_write_qmd` time on (a) a single-block edit and (b) a whole-document edit. Both old `coarsen` and new `plan_user_writes` are O(n); the bench is a sanity check.
 
@@ -288,10 +311,13 @@ The four pieces fit together: the generator drives input distribution; the marke
 - [ ] Add a benchmark harness that runs the same edit against both branches' implementations (the comparison is against the `feature/provenance` HEAD baseline before 7d).
 - [ ] Assert: new is within 2× of baseline for case (a); within 1.5× for case (b). If those bounds hold, performance is not a concern.
 
-### Phase 5 — Retire denylist branches obviated by the algebra
+### Phase 5 — Obsolete the denylist branches the algebra makes redundant
 
-- [ ] Audit Plan 7c's open phases. For each phase that becomes defense-in-depth under the algebra (Phase 7's `displaced_before_idx`, Phase 7b's inline atomic-Generated check), decide whether to retain or drop.
-- [ ] Remove obsolete branches from the codebase. Update tests to match.
+7d ships **before** 7c, so there are no shipped 7c Phase-7/7b branches to remove from the codebase — those phases were never implemented. This phase is therefore mostly bookkeeping (the code-level subsumption happens in Phase 3, where the inline `UseAfter` dispatch drops the positional proxy).
+
+- [x] Mark Plan 7c's Phases 7 (`displaced_before_idx`) and 7b (inline new-side atomicity check) **obsolete** in `2026-05-25-q2-preview-plan-7c-closure-gaps.md` — the allowlist dispatch keys on the new node's own `source_info`, so Phase 7's original-side lookup no longer exists and Phase 7b's check *is* R1'. (Done as part of the 2026-06-03 plan-edit pass.)
+- [ ] Confirm no *other* denylist branch survives in the new dispatch (the old cascade's `coarsen_keep_before_block` arms, the inline two-phase soft-drop) — they are absorbed into the ordered match, not retained alongside it. Update/retarget any test that asserted the old cascade's structure to the new dispatch rows.
+- [ ] Leave 7c's orthogonal phases (Q-3-41 catalog/gates, TS gate parity, per-kind soft-drop tests, `Q343Reason`) untouched; note in 7c that Phases 4/5's per-kind tests should target 7d's dispatch rows when written.
 
 ### Phase 6 — Update design docs
 
@@ -311,14 +337,15 @@ Explicit non-changes, for clarity:
 - **The diagnostic catalog.** Q-3-41, Q-3-42, Q-3-43 stay. The algebra reorganizes which dispatch row emits which code; the codes themselves don't change.
 - **The producer-side contract (`provenance-contract.md`).** The role-asymmetry rule, the `By::` catalog, the atomic-kind set — all stay. The algebra inherits these as preconditions on its input.
 - **Pre-existing list/blockquote marker fidelity gaps.** Bullet markers (`*` / `-` / `+`) collapse to `*`; ordered-list lazy numbering (e.g. `1. / 1. / 1.`) regenerates as `1. / 2. / 3.`. Blockquote `>` prefix variations normalize. 7d preserves this pre-existing behavior; fidelity requires a typed-AST extension (per-item source_info on list items) that's out of scope. Tracked as a separate follow-up.
-- **CustomNode qmd serialization.** The qmd writer's `Block::Custom` arm is currently empty; 7d does not fix this. The CustomNode shell helpers needed by R3 land in Plan 7e. Under 7d alone, custom-node edits remain broken; 7e closes that gap.
+- **CustomNode qmd serialization.** The qmd writer's `Block::Custom` arm is currently empty; 7d does not fix this. The CustomNode shell helpers needed by R3, and the `custom_node_plans` recursion the writer lacks, land in Plan 7e. Under 7d alone, custom nodes are **opaque** (verbatim-preserved or omitted; interior edits refused with `Q-3-43`) — a *better* interim state than today's vanish, but still not round-trippable; 7e closes that gap.
 
 ## Relationship to siblings
 
-- **Plan 7** (shipped): provides the existing writer the algebra refactors. 7d's implementation phases (1–6) start from `feature/provenance` HEAD after 7f has landed.
+- **Plan 7** (shipped): provides the existing writer the algebra refactors. 7d's implementation phases (1–6) start from `feature/provenance` HEAD after 7f **and 7g** have landed.
 - **Plan 7a** (open): runtime user-filter idempotence detection. Orthogonal.
 - **Plan 7b** (open): test-coverage consolidation. The property tests in 7d Phase 4 *complement* Plan 7b's per-shape regression tests.
-- **Plan 7c** (open): closure gaps in the denylist cascade. Phases 7 / 7b become defense-in-depth under 7d; Phases 1–6 stay useful as standalone bug fixes.
+- **Plan 7c** (open; ships **after** 7d): closure gaps in the denylist cascade. 7d **obsoletes** 7c's Phases 7 and 7b (the inline `UseAfter` dispatch keys on the new node's own `source_info`, so there is no original-side lookup for Phase 7 to sharpen, and R1' already does Phase 7b's job); they are marked obsolete in 7c. 7c's other phases (Q-3-41, TS gate parity, per-kind tests, `Q343Reason`) are orthogonal and stay useful as standalone bug fixes.
+- **Plan 7g** (complete): source-range tiling — establishes producer precondition **P4**, on which 7d's BP/completeness proof depends.
 - **Plan 7e** (sibling): CustomNode qmd serialization. Ships after 7d; closes the callout-disappears-on-edit bug that 7d does not address.
 - **Plan 7f** (sibling, ships before 7d): framework source_info preservation, user-edit stamping, wire-format renames, `SourceInfo::default()` audit. Prerequisite for 7d's strict R5 trust point.
 
