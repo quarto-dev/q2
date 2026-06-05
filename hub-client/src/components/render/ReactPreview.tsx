@@ -269,8 +269,16 @@ export default function ReactPreview({
     previewStateRef.current = previewState;
   }, [previewState]);
 
-  // Rendered AST JSON to display
-  const [ast, setAst] = useState<string>('');
+  // Compound render-result state: AST JSON, pre-pipeline AST, and the
+  // QMD content that was used to produce this render generation.
+  // Keeping them in one object guarantees they are always in sync —
+  // the byte offsets in astJson / untransformedAstJson belong to
+  // renderedContent and nowhere else.
+  const [rendered, setRendered] = useState<{
+    astJson: string | null;
+    untransformedAstJson: string | null;
+    renderedContent: string;
+  }>({ astJson: null, untransformedAstJson: null, renderedContent: '' });
 
   // Three-way theme fingerprint (Plan 2A item 11):
   //   `undefined` → pre-first-render or render failed; iframe keeps
@@ -284,13 +292,6 @@ export default function ReactPreview({
   const [themeFingerprint, setThemeFingerprint] = useState<
     string | null | undefined
   >(undefined);
-
-  // Phase 1 (target-incremental-writes): the pre-pipeline AST captured
-  // by the last successful q2-preview render.  Passed to apply_node_edit
-  // as the baseline when the user commits an edit (Phase 4).
-  const [untransformedAst, setUntransformedAst] = useState<string | null>(
-    null,
-  );
 
   // Phase 5 — q2-debug attribution producer wiring.
   //
@@ -372,10 +373,13 @@ export default function ReactPreview({
     if (result.success) {
       // Success: transition to GOOD state from any state
       setPreviewState('GOOD');
-      // Update rendered AST
-      setAst(result.astJson);
-      // Phase 1: retain the untransformed AST for apply_node_edit (Phase 4).
-      setUntransformedAst(result.untransformedAstJson ?? null);
+      // Update compound render-result state: AST, pre-pipeline AST, and
+      // the QMD content snapshot whose byte offsets match these ASTs.
+      setRendered({
+        astJson: result.astJson,
+        untransformedAstJson: result.untransformedAstJson ?? null,
+        renderedContent: qmdContent,
+      });
       // Apply theme fingerprint if the render produced one. Only the
       // success branch calls this — render failures preserve the
       // last-good fingerprint across transient errors (Plan 2A item
@@ -448,9 +452,9 @@ export default function ReactPreview({
           );
           return;
         }
-        if (!untransformedAst) {
+        if (!rendered.untransformedAstJson) {
           console.warn(
-            'q2-preview setAst: no untransformedAst retained; render first',
+            'q2-preview setAst: no untransformedAstJson retained; render first',
           );
           return;
         }
@@ -461,9 +465,11 @@ export default function ReactPreview({
             console.error('parse_qmd_content failed:', parseResult.error);
             return;
           }
+          // Use rendered.renderedContent so byte offsets match the AST's
+          // generation, not the live editor content (which may have changed).
           const newQmd = applyNodeEdit(
-            content,
-            untransformedAst,
+            rendered.renderedContent,
+            rendered.untransformedAstJson,
             edit.destinationSourceInfoJson,
             parseResult.ast,
           );
@@ -480,15 +486,15 @@ export default function ReactPreview({
         console.error('Failed to write AST back to QMD:', err);
       }
     },
-    [content, onContentRewrite, format, untransformedAst],
+    [content, onContentRewrite, format, rendered.untransformedAstJson, rendered.renderedContent],
   );
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {ast && (previewState === 'GOOD' || previewState === 'ERROR_FROM_GOOD') ? (
+        {rendered.astJson && (previewState === 'GOOD' || previewState === 'ERROR_FROM_GOOD') ? (
           <ReactRenderer
-            astJson={ast}
+            astJson={rendered.astJson}
             currentFilePath={currentFile?.path ?? ''}
             files={files}
             fileContents={fileContents}
@@ -498,6 +504,7 @@ export default function ReactPreview({
             onSlideChange={onSlideChange}
             format={format}
             themeFingerprint={themeFingerprint}
+            renderedContent={rendered.renderedContent}
           />
         ) : previewState === 'ERROR_AT_START' && currentError ? (
           <div style={{ padding: '20px', color: 'red' }}>

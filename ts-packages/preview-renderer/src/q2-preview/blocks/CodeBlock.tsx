@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
 import type { CodeBlock as CodeBlockType, NodeArgs } from '../../framework';
+import { sliceEncodedUtf8 } from '../../utils/sliceSource';
 
 /**
  * Attribute key the Rust `CodeHighlightStage` writes into a code
@@ -59,9 +60,6 @@ function captureToClass(capture: string): string {
   return capture.replace(/\./g, '-');
 }
 
-const utf8Encoder = new TextEncoder();
-const utf8Decoder = new TextDecoder();
-
 /**
  * Render the body of a code block as nested `<span class="hl-...">`
  * elements driven by the highlight spans. Walks the byte stream of
@@ -77,11 +75,12 @@ const utf8Decoder = new TextDecoder();
  * </span></span>`.
  *
  * Byte offsets index into the utf-8 representation. Sliced bytes are
- * decoded back to a string via `TextDecoder`; tree-sitter only emits
- * offsets on valid utf-8 boundaries, so the decode is always clean.
+ * decoded back to a string via `sliceEncodedUtf8`; tree-sitter only
+ * emits offsets on valid utf-8 boundaries, so the decode is always
+ * clean.
  */
 function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
-  const bytes = utf8Encoder.encode(text);
+  const bytes = new TextEncoder().encode(text);
 
   type Event =
     | { kind: 'open'; offset: number; capture: string; tie: number }
@@ -117,9 +116,9 @@ function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
   const stack: Frame[] = [];
   let key = 0;
 
-  function pushText(slice: Uint8Array) {
-    if (slice.length === 0) return;
-    const piece = utf8Decoder.decode(slice);
+  function pushText(start: number, end: number) {
+    if (start >= end) return;
+    const piece = sliceEncodedUtf8(bytes, start, end);
     const target = stack.length > 0 ? stack[stack.length - 1].children : children;
     target.push(piece);
   }
@@ -127,7 +126,7 @@ function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
   for (const ev of events) {
     const offset = Math.min(ev.offset, bytes.length);
     if (offset > cursor) {
-      pushText(bytes.subarray(cursor, offset));
+      pushText(cursor, offset);
       cursor = offset;
     }
     if (ev.kind === 'open') {
@@ -145,7 +144,7 @@ function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
   }
   // Any trailing bytes after the last event.
   if (cursor < bytes.length) {
-    pushText(bytes.subarray(cursor));
+    pushText(cursor, bytes.length);
   }
   // Any spans still open at end-of-text — emit them as if closed at
   // the boundary so we don't lose the text or the class. (Should not

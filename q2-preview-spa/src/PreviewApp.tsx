@@ -116,6 +116,14 @@ interface PreviewAppState {
   /** Pre-pipeline AST retained for apply_node_edit (Phase 1/4). */
   untransformedAstJson: string | null;
   /**
+   * The QMD source text that was used to produce the current render
+   * generation (Task 3 / block-editing plan). The byte offsets in
+   * `astJson` and `untransformedAstJson` belong to this snapshot.
+   * Using the live VFS content at edit time would produce skewed
+   * offsets when the user edits between renders.
+   */
+  renderedContent: string;
+  /**
    * Three-way value matching `Q2PreviewIframe`'s `themeFingerprint`
    * contract (see its docstring): a string means "post this theme to
    * the iframe"; `null` means "clear the theme"; `undefined` means
@@ -211,6 +219,7 @@ const INITIAL_STATE: PreviewAppState = {
   pendingAnchorEpoch: 0,
   astJson: null,
   untransformedAstJson: null,
+  renderedContent: '',
   themeFingerprint: undefined,
   deps: null,
   error: null,
@@ -385,8 +394,12 @@ export default function PreviewApp() {
       const edit = payload as PreviewNodeEditPayload;
       if (!edit.__isPreviewNodeEdit) return;
       if (!state.untransformedAstJson || !state.activeFile) return;
-      const vfsResult = vfsReadFile(state.activeFile);
-      if (!vfsResult.success || !vfsResult.content) return;
+      // Task 3 (block-editing): use the content snapshot captured at
+      // render time so byte offsets are guaranteed to match astJson.
+      // Using vfsReadFile(state.activeFile) here would give us the
+      // *current* live VFS content, which may have changed since the
+      // render — causing apply_node_edit to splice at the wrong bytes.
+      if (!state.renderedContent) return;
       try {
         const parseResult = parseQmdContentSync(edit.newText);
         if (!parseResult.success || !parseResult.ast) {
@@ -394,7 +407,7 @@ export default function PreviewApp() {
           return;
         }
         const newQmd = applyNodeEdit(
-          vfsResult.content,
+          state.renderedContent,
           state.untransformedAstJson,
           edit.destinationSourceInfoJson,
           parseResult.ast,
@@ -405,7 +418,7 @@ export default function PreviewApp() {
         console.error('apply_node_edit failed in PreviewApp:', err);
       }
     },
-    [state.untransformedAstJson, state.activeFile],
+    [state.untransformedAstJson, state.activeFile, state.renderedContent],
   );
 
   // Phase F.1 (bd-kw93.14): the iframe posts NAVIGATE_TO_DOCUMENT
@@ -693,6 +706,14 @@ export default function PreviewApp() {
           captureGzJson = binaryDoc?.content;
         }
 
+        // Task 3 (block-editing): snapshot the VFS content for the
+        // active file immediately before the render so the captured
+        // text is byte-for-byte what the WASM renderer reads. The byte
+        // offsets in the resulting astJson / untransformedAstJson
+        // belong to this snapshot, not to any later live-edit content.
+        const vfsSnap = vfsReadFile(state.activeFile!);
+        const capturedContent = vfsSnap.success && vfsSnap.content ? vfsSnap.content : '';
+
         const result = await renderPageForPreview(
           state.activeFile!,
           undefined,
@@ -727,6 +748,7 @@ export default function PreviewApp() {
             ...s,
             astJson: result.ast_json ?? null,
             untransformedAstJson: result.untransformed_ast_json ?? null,
+            renderedContent: capturedContent,
             themeFingerprint: result.theme_fingerprint ?? null,
             render: {
               failure: null,
@@ -896,6 +918,10 @@ export default function PreviewApp() {
         pendingAnchorEpoch={state.pendingAnchorEpoch}
         onNavigateToDocument={handleNavigate}
         setAst={handleSetAst}
+        // Task 3 (block-editing): QMD source snapshot whose byte
+        // offsets match astJson. Forwarded to the iframe so it can
+        // slice source bytes without skew.
+        renderedContent={state.renderedContent}
       />
       {showStaleOverlay && (
         <StaleCaptureOverlay

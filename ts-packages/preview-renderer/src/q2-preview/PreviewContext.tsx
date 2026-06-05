@@ -24,6 +24,12 @@ export interface PreviewContextValue {
     pool?: unknown[];
     /** Commit a text edit for a block identified by its pool id (Phase 5). */
     commitEdit?: (poolId: string | number, newText: string) => void;
+    /** The QMD source content that produced the current render (rendered-generation snapshot). Used by editable blocks to slice source bytes. */
+    content?: string;
+    /** Pool id of the block currently being edited, or null when no block is active. */
+    editTarget?: string | number | null;
+    /** Set the active edit target by pool id, or pass null to clear. */
+    setEditTarget?: (id: string | number | null) => void;
 }
 
 export const PreviewContext = createContext<PreviewContextValue | null>(null);

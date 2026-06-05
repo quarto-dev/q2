@@ -25,6 +25,15 @@ be in reverse chronological order (latest first).
 - [`57bc49cf`](https://github.com/quarto-dev/q2/commits/57bc49cf): Preview renders no longer re-copy unchanged artifacts (theme CSS, fonts, shared JS) into the virtual filesystem on every keystroke — byte-identical re-writes are now skipped.
 - [`749064d1`](https://github.com/quarto-dev/q2/commits/749064d1): Fix identity name defaulting to a random "Adjective Animal" instead of the authenticated user's name when a new project set is created.
 
+### 2026-06-07
+
+- [`698717e`](https://github.com/quarto-dev/q2/commits/698717e): Wire renderedContent and editTarget through UpdateAstPayload → PreviewRoot → PreviewContext so editable blocks can access source content and track the active edit target.
+- [`e8650aa`](https://github.com/quarto-dev/q2/commits/e8650aa): Add WASM integration tests for slice fidelity, surrounding-verbatim round-trips, inline markdown, heading, and no-trailing-newline parse.
+
+### 2026-06-06
+
+- [`6ec39be`](https://github.com/quarto-dev/q2/commits/6ec39be): Thread renderedContent (QMD snapshot at render time) from ReactPreview/PreviewApp through ReactRenderer and Q2PreviewIframe so apply_node_edit always receives byte-offset-aligned source text.
+
 ### 2026-06-04
 
 - [`d338251`](https://github.com/quarto-dev/q2/commits/d338251): q2-preview paragraphs and headings are now click-to-edit: clicking a block opens an inline editor, and committing the text writes the change back to the source QMD via apply_node_edit (target-incremental-writes Phases 0–5).

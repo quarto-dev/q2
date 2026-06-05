@@ -26,7 +26,7 @@
  */
 
 import { createRoot } from 'react-dom/client';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 // Phase F.1 (bd-kw93.14): Bootstrap 5 bundled JS, vendored at the
@@ -147,6 +147,7 @@ interface UpdateAstPayload {
      */
     pendingAnchor?: string | null;
     pendingAnchorEpoch?: number;
+    renderedContent?: string;
 }
 
 // Module-top message handler. Registered before `IFRAME_READY` is
@@ -265,6 +266,7 @@ interface PreviewRootProps {
     pendingAnchorEpoch?: number;
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
     setAst: (newAst: PandocAST) => void;
+    renderedContent?: string;
 }
 
 /**
@@ -303,6 +305,8 @@ function walkForNoteNumbers(ast: PandocAST): WeakMap<NoteInline, number> {
 }
 
 function PreviewRoot(props: PreviewRootProps) {
+    const [editTarget, setEditTarget] = useState<string | number | null>(null);
+
     // Refs so the link-handler closure (installed once at mount)
     // sees the *latest* currentFilePath / projectFilePaths instead
     // of the values captured at first install. Without these, every
@@ -436,7 +440,14 @@ function PreviewRoot(props: PreviewRootProps) {
 
     return (
         <PreviewContext.Provider
-            value={{ currentFilePath: props.currentFilePath, pool, commitEdit }}
+            value={{
+                currentFilePath: props.currentFilePath,
+                pool,
+                commitEdit,
+                content: props.renderedContent,
+                editTarget,
+                setEditTarget,
+            }}
         >
             <AssetManifestContext.Provider value={props.assetManifest}>
                 <NoteNumberingContext.Provider value={noteNumbers}>
@@ -470,6 +481,7 @@ function updateAst(payload: UpdateAstPayload) {
         projectFilePaths,
         pendingAnchor,
         pendingAnchorEpoch,
+        renderedContent,
     } = payload;
     const rootElement = document.getElementById('root');
     if (!rootElement) {
@@ -489,6 +501,7 @@ function updateAst(payload: UpdateAstPayload) {
                 projectFilePaths={projectFilePaths}
                 pendingAnchor={pendingAnchor}
                 pendingAnchorEpoch={pendingAnchorEpoch}
+                renderedContent={renderedContent}
                 onNavigateToDocument={(path, anchor) => {
                     window.parent.postMessage(
                         { type: 'NAVIGATE_TO_DOCUMENT', path, anchor },

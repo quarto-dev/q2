@@ -86,6 +86,14 @@ interface ReactRendererProps {
    * Forwarded to `Q2PreviewIframe` only; q2-debug ignores it.
    */
   themeFingerprint?: string | null;
+  /**
+   * The QMD source text that was used to produce the current render
+   * generation. The byte offsets in `astJson` belong to this content
+   * snapshot, not to the live editor text (which may have diverged).
+   * Forwarded to `Q2PreviewIframe` as `renderedContent` so the iframe
+   * can slice source bytes without skew.
+   */
+  renderedContent?: string;
 }
 
 /**
@@ -105,6 +113,7 @@ function ReactRenderer({
   onSlideChange,
   format,
   themeFingerprint,
+  renderedContent,
 }: ReactRendererProps) {
   // Extract component paths - only recompute when the list of paths
   // changes. The gate covers both q2-debug and q2-preview because both
@@ -232,6 +241,7 @@ function ReactRenderer({
             setAst={setAst}
             customComponentsCode={customComponentsCode}
             themeFingerprint={themeFingerprint}
+            renderedContent={renderedContent}
           />
         </div>
       </ErrorBoundary>

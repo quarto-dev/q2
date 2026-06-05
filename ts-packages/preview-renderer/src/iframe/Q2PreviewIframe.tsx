@@ -43,6 +43,17 @@ interface Q2PreviewIframeProps {
    */
   pendingAnchor?: string | null;
   pendingAnchorEpoch?: number;
+  /**
+   * The QMD source text that was used to produce the current render
+   * generation (Task 3 / block-editing plan). The byte offsets in
+   * `astJson` belong to this snapshot. Forwarded to the iframe in the
+   * UPDATE_AST payload as `content` so the iframe can slice source
+   * bytes without skew.
+   *
+   * Optional so the component degrades gracefully before entry.tsx is
+   * updated to consume it.
+   */
+  renderedContent?: string;
 }
 
 /**
@@ -73,6 +84,7 @@ export function Q2PreviewIframe({
   projectFilePaths,
   pendingAnchor,
   pendingAnchorEpoch,
+  renderedContent,
 }: Q2PreviewIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
@@ -179,6 +191,10 @@ export function Q2PreviewIframe({
           // iframe scrolls in a useEffect once the new DOM exists.
           pendingAnchor,
           pendingAnchorEpoch,
+          // Task 3 (block-editing): the QMD source snapshot whose byte
+          // offsets correspond to astJson. The iframe uses this to
+          // slice source ranges for inline editing without skew.
+          renderedContent,
         },
       },
       '*',
@@ -191,6 +207,7 @@ export function Q2PreviewIframe({
     projectFilePaths,
     pendingAnchor,
     pendingAnchorEpoch,
+    renderedContent,
   ]);
 
   // Send theme CSS when iframe is ready and fingerprint is known.
