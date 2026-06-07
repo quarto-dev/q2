@@ -26,7 +26,7 @@
  */
 
 import { createRoot } from 'react-dom/client';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 // Phase F.1 (bd-kw93.14): Bootstrap 5 bundled JS, vendored at the
@@ -66,8 +66,11 @@ import {
     blocksToPlainText,
 } from '../framework';
 import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
+import type { BlockNode } from '../framework/types';
 import type { PreviewNodeEditPayload } from '../types/diagnostic';
 import { Block, Inline, previewRegistry, PreviewContext } from '.';
+import { buildSourceIndex, serializeSourceEntry } from './sourceIndex';
+import type { ResolvedSource } from './sourceIndex';
 import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';
 import { renderSlot } from './utils';
@@ -119,6 +122,13 @@ let componentsLoading = false;
 interface UpdateAstPayload {
     astJson: string;
     currentFilePath: string;
+    /**
+     * Pre-pipeline (untransformed) AST JSON shipped in lockstep with
+     * `astJson` + `renderedContent` (same compound-state generation).
+     * Received by `PreviewRoot` to build `sourceIndex` for the
+     * structural editability gate (Plan 2a).
+     */
+    untransformedAstJson?: string | null;
     /**
      * Manifest of `{ origPath → blobUrl }` produced by the parent's
      * `assetWalker.ts`. Forwarded into `AssetManifestContext` so
@@ -267,6 +277,8 @@ interface PreviewRootProps {
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
     setAst: (newAst: PandocAST) => void;
     renderedContent?: string;
+    /** Pre-pipeline AST JSON for the structural editability gate (Plan 2a). */
+    untransformedAstJson?: string | null;
 }
 
 /**
@@ -422,6 +434,36 @@ function PreviewRoot(props: PreviewRootProps) {
     const previewFormat = parsed ? extractMetaString(parsed.meta?.format) : undefined;
     const isSlides = previewFormat === 'q2-slides' || previewFormat === 'revealjs';
 
+    // Build SourceInfo-value index from the untransformed AST (Plan 2a).
+    // Keyed by serializeSourceEntry(entry); used by resolveSource below.
+    const sourceIndex = useMemo(
+        () => buildSourceIndex(props.untransformedAstJson),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [props.untransformedAstJson],
+    );
+
+    // resolveSource: look up a transformed block's untransformed counterpart
+    // via the SourceInfo value (Plan 2a). Returns null when the block is
+    // Generated, from an included file, or has no source counterpart.
+    const resolveSource = useCallback(
+        (node: BlockNode): ResolvedSource | null => {
+            if (!sourceIndex || !pool || pool.length === 0) return null;
+            const s = (node as unknown as { s?: unknown }).s;
+            if (s === undefined) return null;
+            const sourceEntry = pool[Number(s)] as { t: 0; r: [number, number]; d: number } | undefined;
+            if (!sourceEntry || sourceEntry.t !== 0) return null;
+            const key = serializeSourceEntry(sourceEntry);
+            const indexEntry = sourceIndex.get(key);
+            if (!indexEntry) return null;
+            return {
+                sourceNode: indexEntry.sourceNode,
+                reachabilityClass: indexEntry.reachabilityClass,
+                sourceEntry,
+            };
+        },
+        [pool, sourceIndex],
+    );
+
     // commitEdit: resolve pool id → source_info value → send PreviewNodeEditPayload.
     const commitEdit = (poolId: string | number, newText: string) => {
         const sourceInfoValue = pool[Number(poolId)];
@@ -447,6 +489,8 @@ function PreviewRoot(props: PreviewRootProps) {
                 content: props.renderedContent,
                 editTarget,
                 setEditTarget,
+                sourceIndex,
+                resolveSource,
             }}
         >
             <AssetManifestContext.Provider value={props.assetManifest}>
@@ -482,6 +526,7 @@ function updateAst(payload: UpdateAstPayload) {
         pendingAnchor,
         pendingAnchorEpoch,
         renderedContent,
+        untransformedAstJson,
     } = payload;
     const rootElement = document.getElementById('root');
     if (!rootElement) {
@@ -502,6 +547,7 @@ function updateAst(payload: UpdateAstPayload) {
                 pendingAnchor={pendingAnchor}
                 pendingAnchorEpoch={pendingAnchorEpoch}
                 renderedContent={renderedContent}
+                untransformedAstJson={untransformedAstJson}
                 onNavigateToDocument={(path, anchor) => {
                     window.parent.postMessage(
                         { type: 'NAVIGATE_TO_DOCUMENT', path, anchor },

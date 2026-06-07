@@ -3,19 +3,31 @@
 **Date:** 2026-06-06
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)
 **Spec:** `claude-notes/designs/2026-06-06-block-editing-design.md`
-**Phase:** 3 of 4. Rust (`pampa`) + a thin frontend gate change.
-**Depends on:** Plans 1–2.
+**Phase:** 3. Rust (`pampa`) + a one-line frontend gate change.
+**Depends on:** Plans 1, 2a, 2b.
 
 ## Overview
 
-Let edits reach blocks **nested inside user-authored containers** (fenced `:::`
-divs, list items, block quotes). The frontend payload is **unchanged** — a
-nested block carries its own `Original` `source_info` — so the only real work is
-in Rust: `lookup_block` must **recurse** and return a *path*, and
-`apply_node_edit` must **splice at that path**. The frontend change is just
-dropping the `!insideContainer` gate from Plan 2 so nested pencils go live.
+Let edits reach blocks **nested inside descend-able containers** (fenced `:::`
+divs, list items, block quotes, definition-list bodies, figure bodies, **and
+callout/theorem/proof bodies** — those are plain `Div`s in the untransformed AST).
+The frontend payload is **unchanged** — a nested block carries its own `Original`
+`source_info` — so the only real work is in Rust: `lookup_block` must **recurse**
+and return a *path*, and `apply_node_edit` must **splice at that path**.
 
-**Win:** edit a paragraph inside a callout / fenced div / list item.
+The frontend change is **one line**: widen Plan 2a's structural gate from
+`allowed = {TopLevel}` to `{TopLevel, Descendable}`. Plan 2a already stores
+`reachabilityClass` in `PreviewContext.sourceIndex`, so Plan 3 just starts
+admitting `Descendable`. `Opaque` regions (`Table`
+cells/captions) stay gated off — a **selective** admission, **not** "drop a gate."
+
+**Win:** edit a paragraph inside a fenced div / list item / block quote / callout.
+
+**Note on whole-container editing.** A top-level container is editable *as a
+whole* in Plan 2 (e.g. to change a fenced div's attrs). Once Plan 3 makes its
+contents editable, the deepest-target hover resolves to the inner block, so the
+whole-container affordance is **shadowed**. Reaching the container as a single
+unit is the Plan 4 background-vs-text geometry; accepted.
 
 ## Investigation result (pre-coding)
 
@@ -71,6 +83,15 @@ they're inline, not because of nesting.
 Cell-level / caption-block descent (extra `Table`/`Caption` path steps) is a
 possible follow-up, explicitly out of this series.
 
+**Callout / theorem / proof bodies ARE covered here.** Although they *render*
+through `custom/` CustomNode components, in the **untransformed** AST they are
+plain `Div`s (`Div.callout-note`, `Div.theorem`, …) — the CustomNodes are
+transform products that don't exist pre-pipeline (verified 2026-06-08). So their
+`sourceNode` is a descendable `Div`, their bodies are `Descendable`, and editing a
+paragraph inside a callout is just nested-Div descent — no special writer support
+(this is why the former Plan 5 dissolved). Add a callout fixture to the tests
+below.
+
 ## TDD work items (tests first)
 
 ### Tests (`crates/pampa/tests/integration/node_edit_tests.rs`)
@@ -98,16 +119,26 @@ possible follow-up, explicitly out of this series.
 - [ ] `crates/pampa/src/node_lookup.rs` — recursive lookup returning a path
   (define a `NodePath` type, e.g. `Vec<PathStep>` where a step is a block
   index or a `(container_idx, block_idx)` / `(def_idx, body_idx, block_idx)`
-  for lists). Keep the existing top-level exact-match + `preimage_in` fallback
-  at each level.
+  for lists). Use exact-match only at each level — **no `preimage_in` fallback**
+  at any level (Plan 2b removed Pass-2 from the top-level lookup; the same
+  rationale applies recursively: a source-backed Descendable node always has an
+  exact Original match; a Generated node is not editable).
 - [ ] `crates/pampa/src/apply_node_edit.rs` — navigate `A_u` to the parent
   `Blocks` via the path and `splice` the replacement there (generalizing
   `blocks.splice(idx..=idx, …)`); then `compute_reconciliation` +
   `incremental_write` as today. A `&mut Blocks` "resolve path to container"
   helper.
-- [ ] No WASM signature change; the `PreviewNodeEditPayload` is unchanged.
-- [ ] Frontend: remove the `!insideContainer` clause from the Plan 2 gate so
-  nested blocks become editable.
+- [ ] No WASM signature change. `PreviewNodeEditPayload` is already a
+  `channel`-discriminated union from Plan 2b (`'text'` | `'subtree'`); Plan 3
+  adds no new variants — `Descendable` edits use the existing `'subtree'`
+  channel with a path-resolved target.
+- [ ] Frontend: widen Plan 2a's gate from `allowed = {TopLevel}` to
+  `{TopLevel, Descendable}` — change the predicate on `sourceIndex` lookup from
+  `reachabilityClass === 'TopLevel'` to `reachabilityClass !== 'Opaque'`. No
+  other frontend change — 2a already stores `reachabilityClass` in `PreviewContext
+  .sourceIndex` for every indexed block; `Opaque` stays gated. The 2b Pass-1
+  commit guard is `TopLevel`-scoped, so it does not reject `Descendable` edits
+  (those resolve by path, not by top-level exact match).
 
 ## End-to-end verification
 - [ ] `cargo nextest run -p pampa` (node_edit_tests) green.

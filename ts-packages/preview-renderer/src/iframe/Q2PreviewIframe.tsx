@@ -54,6 +54,12 @@ interface Q2PreviewIframeProps {
    * updated to consume it.
    */
   renderedContent?: string;
+  /**
+   * Pre-pipeline (untransformed) AST JSON shipped in lockstep with
+   * `astJson` + `renderedContent` (same compound-state generation).
+   * Forwarded to the iframe for the structural editability gate (Plan 2a).
+   */
+  untransformedAstJson?: string | null;
 }
 
 /**
@@ -85,6 +91,7 @@ export function Q2PreviewIframe({
   pendingAnchor,
   pendingAnchorEpoch,
   renderedContent,
+  untransformedAstJson,
 }: Q2PreviewIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
@@ -195,6 +202,10 @@ export function Q2PreviewIframe({
           // offsets correspond to astJson. The iframe uses this to
           // slice source ranges for inline editing without skew.
           renderedContent,
+          // Plan 2a: pre-pipeline AST for the structural editability
+          // gate. Shipped in lockstep with astJson + renderedContent
+          // (same compound-state generation) so they can never skew.
+          untransformedAstJson,
         },
       },
       '*',
@@ -208,6 +219,7 @@ export function Q2PreviewIframe({
     pendingAnchor,
     pendingAnchorEpoch,
     renderedContent,
+    untransformedAstJson,
   ]);
 
   // Send theme CSS when iframe is ready and fingerprint is known.

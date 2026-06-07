@@ -922,6 +922,9 @@ export default function PreviewApp() {
         // offsets match astJson. Forwarded to the iframe so it can
         // slice source bytes without skew.
         renderedContent={state.renderedContent}
+        // Plan 2a: pre-pipeline AST for the structural editability
+        // gate. In lockstep with astJson + renderedContent.
+        untransformedAstJson={state.untransformedAstJson}
       />
       {showStaleOverlay && (
         <StaleCaptureOverlay

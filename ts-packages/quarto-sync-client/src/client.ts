@@ -843,11 +843,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         storage: buildStorageAdapter(),
       });
 
-      // Try to connect to peer, but continue in offline mode if it fails
+      // Try to connect to peer, but continue in offline mode if it fails.
+      // The timeout defaults to 1 ms so the browser falls back to IDB
+      // quickly; callers that need guaranteed online creation (e.g. test
+      // helpers) should pass options.peerTimeoutMs to wait for the peer.
       let isOnline = false;
       try {
         console.log('Waiting for peer connection...');
-        await waitForPeer(state.repo, 1); // Quick check - auto-reconnects in background
+        await waitForPeer(state.repo, options.peerTimeoutMs ?? 1);
         console.log('Peer connected - online mode');
         isOnline = true;
       } catch (peerError) {

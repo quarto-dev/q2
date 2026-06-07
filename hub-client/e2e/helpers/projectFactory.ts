@@ -72,6 +72,14 @@ export async function createProjectOnServer(
   const result = await client.createNewProject({
     syncServer: serverUrl,
     files,
+    // Wait for the hub peer to connect before creating documents so they
+    // flush synchronously in online mode. Without this, createNewProject
+    // uses the default 1 ms timeout, falls into offline mode, and the
+    // background WebSocket sync races against waitForServerDocuments —
+    // a race that fails under parallel CI load (two workers syncing
+    // simultaneously through the same hub). 10 s is ample for the
+    // loopback connection (typically <100 ms).
+    peerTimeoutMs: 10000,
   });
 
   // Wait for the server to acknowledge all documents (index + every file).
@@ -137,6 +145,19 @@ async function waitForServerDocuments(
 // every project-based test gets this automatically — no per-test call needed.
 const MONACO_VS = resolve(import.meta.dirname, '../../node_modules/monaco-editor/min/vs');
 
+/**
+ * Stub /auth/me so the app's auth state settles immediately rather than
+ * waiting for the hub (which returns 401 in no-auth test mode). Without this
+ * stub, the delayed 401 from the hub keeps `authLoading` true slightly longer
+ * under parallel load, widening a window where two browsers' Monaco
+ * initialisation races can overlap and trigger an uncaught TypeError.
+ */
+async function mockAuthMe(page: Page): Promise<void> {
+  await page.route('/auth/me', route =>
+    route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"unauthorized"}' }),
+  );
+}
+
 async function interceptMonacoCdn(page: Page): Promise<void> {
   await page.route(
     '**/cdn.jsdelivr.net/npm/monaco-editor@*/min/vs/**',
@@ -158,7 +179,21 @@ export async function bootstrapProjectSet(
   page: Page,
   syncServer: string,
 ): Promise<void> {
+  await mockAuthMe(page);
   await interceptMonacoCdn(page);
+  // Monaco 0.55+ requires MonacoEnvironment.getWorkerUrl. Without it the
+  // workers AMD module throws and editor.main.js never finishes — Monaco
+  // stays on "Loading..." indefinitely. This initScript is injected before
+  // any page JS so the AMD loader sees it on first load.
+  //
+  // The URL is intercepted to local node_modules by interceptMonacoCdn.
+  await page.addInitScript(() => {
+    (window as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = {
+      getWorkerUrl(_workerId: string, _label: string): string {
+        return `https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/assets/editor.worker-Be8ye1pW.js`;
+      },
+    };
+  });
   await page.goto('/');
   await expect(page.locator('body')).toBeVisible();
 

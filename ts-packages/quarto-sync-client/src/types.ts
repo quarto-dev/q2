@@ -218,6 +218,18 @@ export interface CreateProjectOptions {
    * When unset, the browser adapter is used unchanged.
    */
   auth?: SyncClientAuthOptions;
+  /**
+   * How long to wait for the samod `peer` event before falling through
+   * to offline mode (ms). Defaults to 1 ms, which triggers offline mode
+   * immediately and lets documents sync to the server in the background.
+   *
+   * Test helpers like `createProjectOnServer` that need documents to be
+   * ONLINE on the hub before returning should pass a longer value (e.g.
+   * 10 000 ms) so documents are created while the WebSocket peer is
+   * already connected and flush to the server immediately — eliminating
+   * the background-sync race against `waitForServerDocuments`.
+   */
+  peerTimeoutMs?: number;
 }
 
 /**

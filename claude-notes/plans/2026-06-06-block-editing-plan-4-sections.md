@@ -3,13 +3,14 @@
 **Date:** 2026-06-06
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)
 **Spec:** `claude-notes/designs/2026-06-06-block-editing-design.md`
-**Phase:** 4 of 4. Rust (`pampa` + WASM) + frontend.
-**Depends on:** Plans 1–3.
+**Phase:** 4 (final). Rust (`pampa` + WASM) + frontend.
+**Depends on:** Plans 1, 2a, 2b, 3.
 
 ## Overview
 
-Make whole **sections** editable. A section is a sectionize-generated `Div`
-(`.section`) wrapping a heading + body blocks; its `source_info` is
+Make whole **sections** editable, and ship the **heading-vs-section geometry**
+that the no-pencil interaction model needs. A section is a sectionize-generated
+`Div` (`.section`) wrapping a heading + body blocks; its `source_info` is
 `Generated{by:sectionize, from:[]}` → **not sliceable**, and it spans **multiple**
 untransformed top-level blocks. So (D7): the **frontend** computes the section's
 source **envelope** `[min start, max end]` over its `Original` descendants and
@@ -20,6 +21,31 @@ spec).
 
 **Win:** edit a whole section (heading + body) at once; nested sections handled
 by the envelope.
+
+## Heading-vs-section by geometry (the interaction half)
+
+An `<h2>` is a **full-width block box**, so element hit-testing (`closest()`)
+can't tell "on the heading" from "in the blank space to its right." The split
+therefore uses **glyph-rect hit-testing**:
+
+- The heading's **inline text rectangle** (`Range.getClientRects()` over the
+  heading's text) is the **heading** target → edits the heading (Plan 1/2 path).
+- The **section** rectangle showing through everywhere else — notably to the
+  **right of the heading text** — is the **section** target → edits the section
+  by range.
+- **Nested sections** disambiguate naturally: each section's handle is at its own
+  heading's row (distinct y); deepest-section-wins for body whitespace.
+- **Keyboard** expresses the same split as adjacent **DOM pre-order** roving-
+  tabindex stops: the section stop precedes its heading stop
+  (`<section>` opens before `<h2>`), so `section → heading → first para → …` falls
+  straight out of pre-order. Both stops share the two outline shapes
+  (whole-section rect vs. heading-text rect), so keyboard and pointer match.
+
+This is the **first instance of the general "text selects / background activates"
+model**; the glyph-rect primitive built here is what later generalizes. The
+**whole-container-as-a-unit** edit for non-section `Div`/`BlockQuote`/lists
+(shadowed once Plan 3 made their contents editable) reuses this same
+background-vs-text mechanism — building it for sections sets it up for containers.
 
 ## TDD work items (tests first)
 
@@ -42,6 +68,13 @@ by the envelope.
 - [ ] `sectionEnvelope(sectionNode, pool)` util: min/max over `Original`
   descendants; excludes generated descendants; returns `null` when a section has
   no `Original` descendant (→ not editable).
+- [ ] **Glyph-rect hit-test:** a point over the heading text → heading target; a
+  point on the heading's row but **right of the text** → section target; a point
+  in section body whitespace → deepest section. Synthetic `getClientRects()`
+  rects (jsdom can't lay out text); true behavior in the browser E2E.
+- [ ] **Keyboard pre-order:** arrowing from a section stop reaches its heading
+  stop, then its first paragraph; the section and heading stops carry distinct
+  accessible names and outline shapes.
 
 ### Implementation
 - [ ] `crates/pampa/src/node_lookup.rs` — `lookup_range(ast, start, end) ->
@@ -53,12 +86,19 @@ by the envelope.
   `apply_node_edit_range(content, untransformed_ast_json, start, end,
   modified_subtree_json)`.
 - [ ] `ts-packages/preview-renderer/src/types/diagnostic.ts` —
-  `PreviewNodeEditPayload` gains an optional `range: [number, number]`
-  (discriminates a section edit from a single-target edit).
+  `PreviewNodeEditPayload` (already a `channel`-discriminated union from Plan 2b)
+  gains a third variant: `{ channel: 'range'; range: [number, number];
+  modifiedSubtreeJson: string }` for section edits (no `destinationSourceInfoJson`
+  — the range replaces a span of top-level blocks, not a single target).
 - [ ] `q2-preview/blocks/Div.tsx` — when `.section` and an envelope exists,
-  carry `data-section-range`; the editor uses the range payload; section pencils
-  go live (remove the Plan 2 suppression).
+  carry `data-section-range`; the editor uses the range payload.
 - [ ] `q2-preview/utils/sectionEnvelope.ts` (new).
+- [ ] **Glyph-rect hit-test in `useBlockEditHover`** — extend the Plan 2 hover so
+  that, on a heading row, it chooses the heading vs. the enclosing section by
+  whether the pointer is inside the heading's inline text rect
+  (`Range.getClientRects()`). Add the section as a roving-tabindex stop preceding
+  its heading (DOM pre-order). The section/heading outlines are the two shapes
+  (section rect / heading-text rect).
 - [ ] Parent branch: `ReactPreview.tsx` `handleSetAst` / the `applyNodeEdit`
   service routes a `range` payload to `apply_node_edit_range`; otherwise the
   existing single-target path. (Iframe slices the envelope locally for display.)
@@ -80,7 +120,7 @@ by the envelope.
   **outside** the section stay byte-verbatim.
 - **Boundary alignment:** the envelope must align to untransformed block
   boundaries; reject (read-only) if a range bisects a block.
-- **Section with only generated content:** no envelope → no pencil (acceptable).
+- **Section with only generated content:** no envelope → no affordance (acceptable).
 - **Re-sectionizing after edit:** adding/removing a heading re-shapes sections on
   the next render — handled by the normal round-trip; add a test if cheap.
 

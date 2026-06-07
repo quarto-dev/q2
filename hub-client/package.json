@@ -69,6 +69,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "fake-indexeddb": "^6.0.0",
+    "monaco-editor": "0.55.1",
     "globals": "^16.5.0",
     "jsdom": "^26.0.0",
     "monaco-editor": "^0.55.1",

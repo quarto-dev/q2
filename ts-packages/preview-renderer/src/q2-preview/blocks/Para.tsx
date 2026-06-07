@@ -8,16 +8,11 @@ export const Para = (args: NodeArgs<ParaBlock>) => {
     const ctx = useContext(PreviewContext);
     const poolId = (args.node as any).s as string | number | undefined;
 
-    // Resolve pool entry for this block
-    const pool = ctx?.pool as Array<{ t: number; r: [number, number]; d: number }> | undefined;
-    const entry = poolId !== undefined ? pool?.[Number(poolId)] : undefined;
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
 
-    // Editable if: context present, commitEdit available, content present, Original block in active file
-    const isEditable = ctx?.commitEdit !== undefined
-        && poolId !== undefined
-        && ctx.content != null
-        && entry?.t === 0
-        && entry?.d === 0;
+    const isEditable = resolved?.reachabilityClass === 'TopLevel'
+        && ctx?.commitEdit !== undefined
+        && ctx.content != null;
 
     const isEditTarget = isEditable && ctx!.editTarget === poolId;
 
@@ -26,7 +21,7 @@ export const Para = (args: NodeArgs<ParaBlock>) => {
     }
 
     if (isEditTarget) {
-        const initialText = sliceBytes(ctx!.content!, entry!.r[0], entry!.r[1]).trimEnd();
+        const initialText = sliceBytes(ctx!.content!, resolved!.sourceEntry.r[0], resolved!.sourceEntry.r[1]).trimEnd();
 
         const commit = (el: HTMLTextAreaElement) => {
             const text = el.value;

@@ -11,10 +11,22 @@
  *    typing. Verify via getFileContent() (Automerge layer) instead.
  *  - Blur (click outside) is more reliable than Enter for committing edits in
  *    Playwright automation.
- *  - serial mode avoids hub peer-connection timeouts when both tests compete
- *    for the same sync server concurrently.
- *  - Prerequisites: VITE_E2E=1 npm run build, no hub on port 3031 (test port),
- *    dev hub uses 3030.
+ *  - Tests run in parallel (serial mode removed). Three changes make this safe:
+ *    1. createProjectOnServer uses peerTimeoutMs=10000 so documents are created
+ *       in online mode and flush to the hub immediately (no background-sync race).
+ *    2. bootstrapProjectSet stubs /auth/me + sets MonacoEnvironment.getWorkerUrl
+ *       + serves monaco-editor from local devDep to prevent AMD init races.
+ *    3. beforeEach stagger: workerIndex>0 waits 1 s so both browsers don't enter
+ *       Monaco's AMD init window at exactly the same instant.
+ *  - Prerequisites: VITE_E2E=1 npm run build, no hub on port 3031 (test port).
+ *
+ * Preview-view test (monaco-absent path):
+ *  - bootstrapProjectSet registers a CDN→local-files Monaco intercept.
+ *    The preview-view test registers a CDN-abort route AFTER that; Playwright
+ *    evaluates routes LIFO, so the abort fires first and Monaco never loads.
+ *    This keeps editorRef.current === null throughout, exposing the silent
+ *    bail in handleContentRewrite that discards inline edits made before
+ *    Monaco mounts.
  */
 
 import { test, expect, type Page, type FrameLocator } from '@playwright/test';
@@ -76,10 +88,17 @@ async function assertAutomerge(
     }).toPass({ timeout: 10000 });
 }
 
-test.describe.configure({ mode: 'serial' });
-
 test.describe('q2-preview inline editing', () => {
     test.setTimeout(120000);
+
+    // Stagger worker start times so two parallel browser contexts don't
+    // race through Monaco's AMD initialisation at exactly the same instant.
+    // workerIndex 0 starts immediately; workerIndex 1 waits 1 s.
+    test.beforeEach(async ({ page }, testInfo) => {
+        if (testInfo.workerIndex > 0) {
+            await page.waitForTimeout(1000);
+        }
+    });
 
     test('editing a paragraph updates the Automerge document', async ({ page }) => {
         const serverUrl = getServerUrl();
@@ -117,6 +136,44 @@ test.describe('q2-preview inline editing', () => {
         await assertAutomerge(page, 'heading.qmd', {
             contains: ['New Heading'],
             lacks: ['My Heading'],
+        });
+    });
+
+    test('editing in Preview view before Monaco mounts updates the Automerge document', async ({ page }) => {
+        const serverUrl = getServerUrl();
+        const QMD =
+            '---\nformat: q2-preview\n---\n\n## Section\n\nOriginal text.\n\nOther paragraph.\n';
+        const docId = await createProjectOnServer(serverUrl, [
+            { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+            { path: 'preview-view.qmd', content: QMD, contentType: 'text' },
+        ]);
+
+        await bootstrapProjectSet(page, serverUrl);
+        const localId = await seedProjectInBrowser(page, docId, serverUrl);
+
+        // Abort all Monaco CDN requests so editorRef.current stays null.
+        // bootstrapProjectSet already registered a CDN→local-files route;
+        // this abort route is registered AFTER it, so Playwright's LIFO
+        // evaluation runs the abort first.
+        await page.route(
+            '**/cdn.jsdelivr.net/npm/monaco-editor@*/min/vs/**',
+            route => route.abort(),
+        );
+
+        await page.goto(`/#/p/${localId}/file/preview-view.qmd`);
+        // Switch to Preview view without waiting for Monaco — this is the
+        // scenario handleContentRewrite must handle: editorRef.current is null.
+        await page.getByRole('button', { name: 'Preview view' }).click();
+
+        await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30000 });
+        const iframe = page.frameLocator('iframe[src*="q2-preview.html"]');
+        await expect(iframe.locator('text=Original text.')).toBeVisible();
+
+        await editBlock(iframe, 'p', 'Edited text.', 'h2');
+
+        await assertAutomerge(page, 'preview-view.qmd', {
+            contains: ['Edited text.', 'Other paragraph.'],
+            lacks: ['Original text.'],
         });
     });
 });

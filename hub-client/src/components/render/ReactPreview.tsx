@@ -505,6 +505,7 @@ export default function ReactPreview({
             format={format}
             themeFingerprint={themeFingerprint}
             renderedContent={rendered.renderedContent}
+            untransformedAstJson={rendered.untransformedAstJson}
           />
         ) : previewState === 'ERROR_AT_START' && currentError ? (
           <div style={{ padding: '20px', color: 'red' }}>

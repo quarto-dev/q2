@@ -1,9 +1,10 @@
 # Block editing in q2-preview — design / master spec
 
-**Date:** 2026-06-06
+**Date:** 2026-06-06 (interaction model revised 2026-06-07; dual-node substrate +
+series re-split 2026-06-08)
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)
-**Status:** Design approved in brainstorming; spec under review. Expands into a
-four-plan series under `claude-notes/plans/`.
+**Status:** Design approved in brainstorming; revised through pre-implementation
+review. Series: **Plan 1, 2a, 2b, 3, 4** under `claude-notes/plans/`.
 **Builds on:** `claude-notes/plans/2026-06-04-target-incremental-writes.md`
 (the `apply_node_edit` / source-slice round-trip this feature extends).
 
@@ -11,234 +12,254 @@ four-plan series under `claude-notes/plans/`.
 
 ## Overview
 
-Two refinements to contentEditable in q2-preview, delivered as a progress-early
-series:
+Edit a Quarto document's **markdown source, block by block, inside the live
+preview**:
 
-1. **Edit the markdown, not the rendered text.** When editing starts, the box
-   shows the *markdown source* of the node (e.g. `## Heading`, `a *emph* word`),
-   obtained by **source-slicing** the node's original bytes out of the document
-   `content`. This makes the Header `#`-reprepend special case
-   (`Header.tsx:37-38`) obsolete. (Note: this makes the *edit buffer* faithful to
-   the source; it does **not** make re-submitting unchanged text a no-op — the
-   commit re-serializes the edited block. See "Submit is not a no-op" in Edge
-   cases.)
-2. **A pencil on every (source-backed) block.** In addition to the existing
-   click-to-edit on paragraphs/headings, a hover pencil appears in the top-right
-   of every source-backed block — including sections. Clicking it turns the whole
-   block into a same-sized markdown editor.
+1. **Edit the markdown, not the rendered text.** The editor shows the *markdown
+   source* of the node, source-sliced from the document `content`.
+2. **Every source-backed block is its own edit affordance.** No pencil, no
+   buttons: hovering (mouse), pressing (touch), or focusing (keyboard) a block
+   **outlines** it; activating turns it into a same-sized markdown editor. Uniform
+   across block types and input modalities.
+3. **The untransformed AST is a first-class dispatch input.** Every rendered node
+   carries both `transformedNode` (display) and `sourceNode` (the untransformed
+   counterpart, for editing). Authors and the built-in editor never map between
+   trees by hand.
 
-Both ride the existing write-back core: `parse_qmd_content → splice into the
-untransformed AST → compute_reconciliation → incremental_write` (see the
-target-incremental-writes plan). Nothing about the reconcile/writer core changes.
+All of it rides the existing write-back core: `parse_qmd_content → splice into the
+untransformed AST → compute_reconciliation → incremental_write`. The
+reconcile/writer core is unchanged.
 
-## Decisions (locked in brainstorming)
+## Interaction model (no pencil — revised 2026-06-07)
+
+The earlier draft used a floating pencil overlay; dropped in favor of **the block
+being its own affordance**, which removes overlay positioning/scroll-tracking and
+is keyboard- and tablet-friendly.
+
+- **Mouse:** hover outlines the deepest editable target; click activates.
+- **Touch (Pointer Events):** one progressive press — `pointerdown` outlines
+  (reveal); holding past `HOLD_MS` activates; early release / move-beyond-
+  threshold cancels. OS gestures suppressed (`touch-action: none`, `contextmenu`
+  preventDefault, `-webkit-touch-callout: none`).
+- **Keyboard (roving tabindex):** the edit layer is a single Tab stop; arrows move
+  the active region in **DOM pre-order** (section → heading → first para → …);
+  Enter/Space activates; Esc exits; `:focus-visible` reuses the outline; ARIA
+  role + name per region.
+
+**Heading vs. section by geometry (Plan 4).** An `<h2>` is a full-width block box,
+so the split uses **glyph-rect hit-testing**: the heading's inline text rectangle
+(`Range.getClientRects()`) is the heading target; the section rectangle showing
+through elsewhere (notably right of the heading) is the section target. Keyboard
+expresses the same split as adjacent pre-order stops. This is the first instance
+of a general **"text selects, background activates"** model the architecture is
+built to extend.
+
+**Editor sizing (Plan 2b prereq).** P1 no-reflow height match (textarea sized to
+the measured box); P2 body-sized monospace (≈0.9× computed body); P3 auto-fit font
+*considered, not implemented* (logical-vs-wrapped-line problem).
+
+## Decisions
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| D1 | **Source-slice only** for the edit buffer (option A). | The editor shows the exact original bytes; no WASM needed to fill the buffer. (Commit still re-serializes — submit is not a no-op; see Edge cases.) Non-sliceable nodes get no pencil. |
-| D2 | **No request/response postMessage.** Ship `content` on `UPDATE_AST`; the iframe slices locally. | The iframe has the pool ranges; it only lacked `content`. Slicing is pure JS. |
-| D3 | **Editable = `Original` (`t:0`) source-backed blocks + sections** (via source range). | `Substring`/`Concat`/`Generated` ranges aren't absolute in the pool (need `preimage_in`, which is Rust). User-authored blocks parse as `Original`. You edit source, not generated output. |
-| D4 | **Deepest block under the cursor.** Floating overlay pencil, no wrapper divs. | Theme CSS relies on `>`/`+`/`:nth-child` among block elements; a wrapper breaks it. Mirror the existing `useAttributionHover` mechanism. |
-| D5 | **Editor = `<textarea>`**, monospace, sized to the block. | Plain-text markdown source: preserves newlines, no `&nbsp;`/`<br>`/paste mangling; drops the nbsp-normalization + `viewKey` remount hacks. |
-| D6 | **Commit = ⌘/Ctrl+Enter; Enter = newline; Esc = cancel; blur = commit.** | Multi-line-safe (sections, code blocks); consistent across block types. |
-| D7 | **Sections: frontend envelope + backend range.** No sectionize change. | The generated section `Div` is `Generated{by:sectionize, from:[]}` → not sliceable; and a section spans multiple untransformed blocks → a range lookup is needed regardless. |
-| D8 | **Edit only the active file** (`file_id == 0`). | `apply_node_edit` hardcodes `FileId(0)`; the `INCLUDE_DOC` test already rejects cross-file edits. |
-| D9 | **Pencil is sticky to the active block.** Appears on hover, stays anchored until a different editable block is hovered (or editing starts / click elsewhere); anchored in the scrolling content so it tracks scroll. | The attribution badge clears on mouse-out (`attribution.txt:224-229`), so a corner pencil would vanish before it can be clicked. Sticky sidesteps the cursor-travel gap and stale `position:fixed` coords. |
-| D10 | **Empty commit = cancel** (block untouched); deletion is not a clear-to-delete gesture in v1. | Matches today's `if (newText)` guard; avoids accidental destruction without a clear preview undo story. |
+| D1 | **Source-slice** for the edit buffer; **`sourceNode`** for AST edits. | The textarea shows exact source bytes (no WASM); render components edit the untransformed subtree. |
+| D2 | **No request/response.** Ship `content` + `untransformedAst` on `UPDATE_AST`; the iframe slices and resolves `sourceNode` locally. | The iframe already has the pool; it only lacked `content` + the untransformed tree. |
+| D3 | **Editable = source-backed** (`sourceNode != null`), active-file. | You edit source, not generated output. |
+| D4 | **The block is the affordance — no pencil.** Hover/press/focus outlines; activate to edit. Heading-vs-section by glyph-rect (Plan 4). | Removes overlay positioning entirely; keyboard/touch-friendly; the block has the right geometry. The framework never wraps blocks. |
+| D5 | **Editor = in-place `<textarea>`**, monospace, sized to the block (no reflow). | Plain-text markdown source; drops nbsp/`viewKey` hacks. |
+| D6 | **Activate per modality** (click / progressive-press / Enter); commit = ⌘/Ctrl+Enter or blur; Esc/empty = cancel. | Uniform across types and inputs. |
+| D7 | **Sections: frontend envelope + backend range** (Plan 4). | The section `Div` is `Generated` (not source-backed); a section spans multiple untransformed blocks. |
+| D8 | **Edit only the active file** (`file_id == 0`). | `apply_node_edit` hardcodes `FileId(0)`. |
+| D9 | **Editability is a structural property of `sourceNode`** (Plan 2a), not a context-propagation gate. | Shipping the untransformed AST lets us read reachability directly; obviates the opt-out `InsideContainerContext` + closed-container audit entirely. |
+| D10 | **Empty commit = cancel.** | Avoids accidental destruction without an undo story. |
+
+## Editability gate — the structural (dual-node) model
+
+A node is editable iff the commit path can reach its untransformed counterpart.
+Plan 2a ships the untransformed AST to the iframe and builds a SourceInfo-**value**
+index in `PreviewContext` (the two trees have separate pools but shared values).
+q2-preview's leaf components look up their pool entry in this index. Then:
+
+```
+editable(node) = ctx.resolveSource(node)?.reachabilityClass ∈ allowed(plan)
+              && editableType(node)   // Plan 2b+
+```
+
+- **Present in `sourceIndex`** subsumes the old `t==0` (Original) **and** `d==0`
+  (active-file) conjuncts — a Generated/Substring/Concat or included-file node's
+  `s` value matches nothing in the active-file untransformed index.
+- `reachabilityClass` is assigned at index-build time from the node's untransformed
+  ancestry: **`TopLevel`** (top-level block), **`Descendable`** (nested only in
+  `Div`(non-section)/`BlockQuote`/lists/`DefinitionList`/`Figure`-body),
+  **`Opaque`** (reached by crossing a `Table` cell/caption or `Figure` caption;
+  absorbing). A small **structural classifier** computed once, not a per-component
+  context push.
+- `allowed`: Plan 2a/2b `{TopLevel}`; Plan 3 `{TopLevel, Descendable}`; `Opaque`
+  never editable in this series.
+- `editableType` (Para/Header/CodeBlock/…) is Plan 2b — not part of Plan 2a's gate.
+- Key format: `serializeSourceEntry(sourceEntry)` = `"${t}:${r[0]}-${r[1]}:${d}"` (compact, deterministic).
+- **`NodeArgs` (`framework/types.ts`) is unchanged.** The index lives entirely in
+  `PreviewContext`; q2-debug and q2-slides are unaffected.
+
+Correspondence is **by value**, so it survives transforms that *move* blocks
+(appendix-structure, footnotes) and *insert* structure (sectionize → section
+`Div` is Generated → `sourceNode = null`). And **`sourceNode` is always a plain
+primitive, never a CustomNode** (see "Plan 5 dissolved").
+
+This **replaces** the earlier opt-out `InsideContainerContext` design: no context,
+no default, no closed-container audit, no drift hazard.
+
+## Format routing (by design)
+
+**q2-preview** ships `untransformedAstJson`, builds `PreviewContext.sourceIndex`,
+uses the structural gate, and commits **targeted subtrees** (SourceInfo →
+`apply_node_edit`) — no copy-on-write bubble (the Rust reconcile rebuilds to root).
+
+**q2-debug / q2-slides** drive the display directly from the AST they receive,
+without a pipeline or transforms. They have their own registries and leaf components;
+they never receive `untransformedAstJson` and never consult `sourceIndex`. The shared
+framework (`Node`, `renderChildren`, `NodeArgs`) is unchanged by Plan 2a.
+
+The two routings differ because only q2-preview has a transform gap between the
+displayed AST and the source AST, and needs the targeted-subtree splice.
+
+## Two edit modalities, two channels
+
+- **Built-in editing → text channel.** The textarea shows source markdown (slice
+  `content` over `sourceNode`'s range); commit sends `newText`; the parent
+  `parse_qmd_content` → `apply_node_edit`. (The iframe can't run the writer, so
+  text is the right representation for a textarea.)
+- **Render-component editing → subtree channel.** A component calls
+  `ctx.commitSubtreeEdit(destinationSourceInfoJson, modifiedBlock)` with a clone
+  of `resolved.sourceNode`; `PreviewNodeEditPayload` is a `channel`-discriminated
+  union (`'text'` | `'subtree'`); the parent passes the subtree variant straight
+  to `apply_node_edit` (no parse step). Editing `sourceNode` (not the transformed
+  node) is what keeps shortcodes/refs/includes **inside** the edited region from
+  being baked in as their expansions.
+
+## Plan 5 dissolved (CustomNode writing/editability)
+
+We resurrected the old Plan-7e ("the empty `Block::Custom` writer arm deletes a
+callout on edit") and then dissolved it. **Reason (verified 2026-06-08):** a
+callout is a plain `Div.callout-note` in the *untransformed* AST — the
+Callout/Theorem/Proof/FloatRefTarget CustomNodes are all *transform* products and
+do not exist pre-pipeline. Since edits operate on `sourceNode` (untransformed),
+the writer is **never** asked to serialize a CustomNode on the edit path. So:
+- Writer arms (7e): **not needed** for this epic. (Optional hardening side-bead:
+  make the empty `Block::Custom` arm *error* rather than emit nothing, as a net
+  against a component that wrongly submits a transformed node.)
+- Callout/theorem **editability**: subsumed by **Plan 2b** — their `sourceNode` is
+  a writer-covered `Div`, editable-as-whole once the `custom/` components
+  participate in the affordance. Their **bodies** ride **Plan 3** (nested descent
+  into the untransformed `Div`).
+
+## Render-component / built-in boundary (Plan 2b)
+
+1. The framework never wraps a block (D4); an author *may* wrap but owns the
+   theme-CSS/hit-test consequences; the affordance keys off `data-block-pool-id`
+   on the block's own root (preserved by rendering through the dispatcher).
+2. An overridden block that renders the underlying block through the framework
+   still gets the built-in affordance (compose: comment *and* edit a paragraph).
+3. A component may **opt its subtree out** of the built-in affordance when it
+   deliberately hides source structure (e.g. `comment` strips spans for display).
 
 ## Key facts established by research (with refs)
 
-- **`AttributionWrap` is a passthrough in preview** — `attribution.tsx:153`
-  (`if (!attribution) return <>{children}</>`). Blocks are *not* wrapped in
-  q2-preview, which is why the theme CSS works. We must not wrap either.
-- **`useAttributionHover` is the affordance precedent** — `attribution.tsx:189`:
-  delegated `onMouseOver` on the document root,
-  `target.closest('.q2-attr-wrap[data-sid]')` (nearest ancestor = deepest),
-  `getBoundingClientRect()` for a floating overlay. `PreviewDocument` already
-  uses it.
-- **Wrappers break theme CSS** — e.g. `main.content > p:has(+ section)`,
-  `main.content > section:first-of-type > h2:nth-child(1)`,
-  callout `> .callout-header`, list `ul > li` selectors
-  (`resources/scss/bootstrap/_bootstrap-rules.scss:834,838,1794-1858`).
-- **Pool entry shape** (`types/sourceInfo.ts:69-77`):
-  `Original` = `{t:0, r:[start,end], d:file_id}`. `r` are **UTF-8 byte
-  offsets** (`source_info.rs:10`, `json.rs` `start_offset`/`end_offset`).
-  → slice via `TextEncoder`/`Uint8Array`/`TextDecoder`, not `String.slice`.
-- **All block components return a single root element** (Para/Header/Div/
-  CodeBlock — `q2-preview/blocks/*`), so each can spread an injected
-  `data-block-pool-id` onto its own root (no wrapper).
-- **`preimage_in`** (`source_info.rs:435-471`): `Some(range)` for `Original`
-  (if `file_id` matches), composed for `Substring`, contiguous-only for
-  `Concat`, and only via an `Invocation` anchor for `Generated` (→ `None` for
-  sectionize Divs, which have `from: []`).
-- **The writer already supports N→M block replacement** preserving bytes
-  outside the span — `compute_reconciliation` + `incremental_write` coarsen/
-  assembly (`incremental.rs`; `KeepBefore`→`Verbatim` copies original bytes,
-  changed blocks `Rewrite`/`InlineSplice`). Plan 4 needs only range
-  lookup+splice, not writer changes.
-- **Current splice** `a_u_prime.blocks.splice(idx..=idx, subtree.blocks)`
-  (`apply_node_edit.rs:154`) already does 1→N; range needs `i..=j`.
-- **Container shapes** (`quarto-pandoc-types/src/block.rs`): `Div/BlockQuote/
-  Figure` hold `Blocks`; `BulletList/OrderedList` hold `Vec<Blocks>`;
-  `DefinitionList` holds `Vec<(Inlines, Vec<Blocks>)>` → a path locator is a
-  sequence of indices.
+- **`AttributionWrap` is a passthrough in preview** (`attribution.tsx:153`); blocks
+  are not wrapped — the block's own root carries `data-block-pool-id`.
+- **`useAttributionHover` is the affordance precedent** (`attribution.tsx:189`):
+  delegated handler + `closest()`. The edit hover reuses that shape (no overlay).
+- **Pool entry shape** (`types/sourceInfo.ts:69-77`): `Original {t:0, r:[s,e],
+  d:file}`; `r` are UTF-8 byte offsets (slice via `TextEncoder`/`TextDecoder`).
+- **Every block carries `s`** uniformly (`writers/json.rs`). Verified: a fresh
+  parse of heading→para/list/table/quote/div/rawblock is all `t:0` Original,
+  whole-block ranges (a fenced `:::` div is one Original range → editable as a
+  whole, which is how you edit its attrs/classes). A callout parses to
+  `Div.callout-note` (no `type_name`).
+- **`preimage_in`** (`source_info.rs:435-471`): `Some` for Original; `None` for
+  sectionize Divs (Generated).
+- **The writer supports N→M block replacement** preserving outside bytes
+  (`incremental.rs`); it re-serializes block **containers wholesale** (Tier-2).
+- **Container shapes** (`block.rs`): `Div/BlockQuote/Figure` hold `Blocks`; lists
+  hold `Vec<Blocks>`; `DefinitionList` `Vec<(Inlines, Vec<Blocks>)>` → Plan 3 path.
+- **`lookup_block` is top-level only** today (`node_lookup.rs`), Pass-1 exact +
+  Pass-2 `preimage_in` covering. Pass-2 is unused on live paths and is **removed**
+  in 2b (it was target-incremental-writes' "property #2", retired with it).
 
-## Architecture
-
-### Frontend (TypeScript)
-
-- **`content` on `UPDATE_AST`** (`Q2PreviewIframe.tsx:166`): one new payload
-  field, threaded from the parent (`ReactPreview`/`PreviewApp` both hold the
-  rendered-generation `content`).
-- **`PreviewContext`** gains `content: string` and an `editTarget` /
-  `setEditTarget` pair. (Keeps `pool`, `commitEdit`.)
-- **Byte-slice util** (`utils/sliceSource.ts`, new):
-  `sliceBytes(content, start, end): string` via `TextEncoder`/`TextDecoder`.
-- **Editable-block mechanism**: a block component, when it is the `editTarget`,
-  renders a `<textarea>` **in place** (monospace, sized to the block's measured
-  box, auto-growing from that height) pre-filled with its sliced markdown;
-  commit (⌘/Ctrl+Enter or blur) calls the existing `commitEdit(poolId, newText)`
-  (or the range variant); Esc cancels; an empty value cancels (D10). The
-  in-place swap accepts a transient CSS reflow during the edit (D5/the element
-  is briefly a `<textarea>` rather than `<p>`/`<section>`).
-- **`useBlockEditHover`** (new, modeled on `useAttributionHover`): delegated
-  `onMouseOver` on the `PreviewDocument` root; `closest('[data-block-pool-id]')`
-  → deepest block → set as the **active** block. A single pencil button is
-  rendered as a root-level sibling, anchored to the active block within the
-  scrolling content (tracks scroll), and **stays until a different editable
-  block becomes active** (D9). Click sets `editTarget`.
-- **`data-block-pool-id`** spread onto each block component's root element
-  (CSS-safe, no wrapper). Sections instead carry `data-section-range` (the
-  envelope) since the section `Div` is not `Original` (Plan 4). The hover
-  hit-test matches either marker.
-- **Editability gate via context** (Plan 2): non-section containers
-  (`Div` without `.section`, lists, `BlockQuote`) push an "inside-container"
-  flag through a context; a block is editable iff `Original && file_id==0 &&
-  !insideContainer`. Sections are transparent (push nothing). Plan 3 removes the
-  `!insideContainer` restriction.
-
-### Backend (Rust / WASM)
-
-- **`apply_node_edit`** (single target) — unchanged for Plans 1–2.
-- **`lookup_block`** — Plan 3 extends to recurse into containers, returning a
-  **path** (`Vec<usize>` with list-item sub-indices); `apply_node_edit` splices
-  at the path.
-- **`lookup_range` + range splice** — Plan 4: given `[start,end]` (active-file
-  byte range), find the contiguous span of untransformed top-level blocks within
-  it and `splice(i..=j, new_blocks)`. New WASM entry / payload `range` variant.
-
-### Data flow (edit)
+## Data flow (edit)
 
 ```
-render → parent sends UPDATE_AST { astJson, content, … } → iframe
-hover  → useBlockEditHover → pencil over deepest [data-block-pool-id] block
-click  → setEditTarget(poolId | sectionRange)
-edit   → target block renders <textarea> filled by sliceBytes(content, start,end)
-commit → commitEdit → SET_AST { PreviewNodeEditPayload }  (one-way, existing)
-parent → parseQmdContentSync(newText) → applyNodeEdit | applyRangeNodeEdit (WASM)
+render → parent sends UPDATE_AST { astJson, untransformedAstJson, content, … } → iframe
+dispatch → each node gets { transformedNode, sourceNode, reachabilityClass }
+input  → useBlockEditHover → outline deepest editable block
+activate → built-in: textarea(sourceNode range slice)   |  component: edit sourceNode
+commit → { channel:'text',    destinationSourceInfoJson, newText }
+      OR { channel:'subtree', destinationSourceInfoJson, modifiedSubtreeJson }
+parent → channel=text: parse_qmd_content(newText) → apply_node_edit
+      OR channel=subtree: apply_node_edit directly
        → onContentRewrite(newQmd) → re-render → fresh UPDATE_AST
 ```
 
-## Phase breakdown (the four-plan series)
+## Phase breakdown (the series)
 
-Each phase ships an end-to-end-verifiable increment (TDD-first per repo rules).
+- **Plan 1 — Markdown-faithful editing on Para/Header** *(frontend; done)*.
+  `content` plumbing; `sliceBytes`; `PreviewContext` `content` + `editTarget`;
+  Para/Header textarea showing sliced markdown (click activates — the seed).
+- **Plan 2a — SourceInfo-value index + structural gate** *(frontend substrate;
+  no Rust changes)*. Ship `untransformedAstJson` through the iframe chain;
+  build `sourceIndex` in `PreviewContext` (`useMemo`); refactor Plan 1's
+  Para/Header gate onto `sourceIndex` lookup; `NodeArgs` unchanged; q2-debug
+  and q2-slides unaffected.
+- **Plan 2b — Interaction + editing (built-in + render-component)** *(frontend +
+  Rust cleanup)*. Hover/touch/keyboard → outline → activate; generalized textarea
+  editor + sizing; affordance on all editable types incl. `custom/` components;
+  subtree channel; fix the three render-component demos; the override boundary;
+  Pass-1 guard + remove Pass-2.
+- **Plan 3 — Nested-block descent** *(Rust + thin frontend)*. Recursive
+  `lookup_block` (returns a path) + path splice; the gate admits `Descendable`
+  (one predicate change). Enables editing inside fenced divs / list items /
+  blockquotes / **callout bodies**. Container reformat is Tier-2/snapshotted.
+- **Plan 4 — Section editing + heading/section geometry** *(Rust + frontend)*.
+  Source-envelope range payload; `lookup_range` + range splice; glyph-rect
+  heading-vs-section hit-test; keyboard section stop; whole-container-as-unit via
+  the same geometry.
 
-### Plan 1 — Markdown-faithful editing on today's surfaces *(frontend only)*
-Establishes the core mechanism. `content` on `UPDATE_AST`; `sliceBytes` util;
-`PreviewContext.content` + `editTarget`; convert Para/Header click-to-edit to a
-`<textarea>` showing sliced markdown; delete the `#` hack. Uses the **existing**
-single-block `apply_node_edit`.
-**Win:** editing a paragraph shows `*emph*`, a heading shows `## X`; an edit
-replaces only the target block and the rest of the document stays verbatim.
-**Tests:** `sliceBytes` (multibyte); slice-fidelity + surrounding-verbatim WASM
-round-trip (**not** global byte-identity — see Edge cases); existing
-`applyNodeEdit.wasm.test` still green; browser check.
+## Known limitations (v1 — start safe, more affordances later)
 
-### Plan 2 — Hover pencil + generalized block editor *(frontend only)*
-`useBlockEditHover` + floating pencil; `data-block-pool-id` spread on block
-roots; generalize the textarea editor to all editable blocks. **Editability
-gate:** `Original` + `file_id==0` + **no non-section container ancestor** (so it
-commits via the existing top-level `lookup_block`). Section pencils suppressed
-(pending Plan 4). **Win:** pencils everywhere applicable; click-edit any
-top-level block type (code, quote, list, para, heading). **Tests:** deepest-
-block hit-testing; gate logic (container-ancestor); pencil render/position;
-browser check editing a code block + blockquote.
+- **LineBlock** not editable (`| line` parses as `Para`).
+- **Inline-span editing** out of scope (only `Cite`/`Note` carry `s`) → def-list
+  terms, short captions, `CaptionBlock` not editable.
+- **Table cells/captions, figure captions** not block-editable (`Opaque`).
+- **Generated-container regions** (e.g. `appendix-structure`'s synthesized Div)
+  gated off (no `sourceNode`) — safe, silently uneditable.
+- **Cross-file edits** out of scope.
+- **Selection/link vs click-to-edit** accepted for the demo (a future "background
+  activates / text selects" model or an edit mode resolves it).
 
-### Plan 3 — Nested-block descent *(Rust + thin frontend)*
-`lookup_block` recurses into `Div/BlockQuote/list/DefinitionList`, returning a
-path; `apply_node_edit` splices at the path. Frontend: drop the
-"no container ancestor" gate so nested pencils go live (payload unchanged).
-**Win:** edit a paragraph inside a callout / fenced div / list item.
-**Investigate first (done):** the writer always re-serializes the whole
-container wholesale — `RecurseIntoContainer` alignment falls back to `Rewrite`
-for every block container in `coarsen_plan_phase5` (`incremental.rs:218-220`).
-Sibling list items renumber / re-bullet, `>` reflows, tables re-pad. Accepted
-for v1: the guarantee is that bytes **outside** the container stay verbatim.
-Extending the writer to recurse block-by-block is a possible follow-up.
-**Tests (Rust `node_edit_tests`):** nested lookup for each container; path
-splice; sibling fidelity — **byte-verbatim if the writer recurses, else snapshot
-the reformatted container** (do not assert sibling byte-identity
-unconditionally); 1→N nested. Browser e2e.
+## Risks / watch-items
 
-### Plan 4 — Section editing *(Rust + frontend)*
-Frontend computes a section's source envelope `[min start, max end]` over its
-`Original` descendants; payload gains a `range` variant; `lookup_range` +
-range-splice (`i..=j`) in Rust; section pencils go live. Writer unchanged.
-**Win:** edit a whole section (heading + body) at once; nested sections handled
-by the envelope. **Tests (Rust):** `lookup_range`; N→M range replace (e.g.
-heading+3 paras → 2 blocks) with byte preservation; nested-section envelope;
-boundary-alignment rejection. Frontend envelope util test. Browser e2e.
-
-## Edge cases & notes
-
-- **Submit is not a no-op.** Committing the same sliced text does **not**
-  round-trip byte-identical: the commit re-serializes the edited block through
-  the writer, which reformats in the area of the change — bullet chars,
-  ordered-list markers/renumbering, blockquote `>` reflow, **table** padding,
-  **definition lists**. Para/heading are stable today but not pinned. The only
-  guaranteed no-op is **cancel** (Esc / empty-clear, D10); we do **not** enforce
-  client-side "unchanged → skip" (Plan 1, likely never). The guarantee we keep is
-  that blocks **outside** the edited one stay byte-verbatim.
-- **Slice/trailing-newline convention:** slice exactly `[start,end]`; do **not**
-  append `\n` (avoids a spurious blank line in the buffer and at the commit
-  boundary). Round-trip formatting of the edited block is the Rust writer's
-  concern, not the slice util's.
-- **Active-file gate:** editable iff `Original` and `file_id==0`; assumes the
-  active page is `file_id 0` (consistent with `apply_node_edit`'s `FileId(0)`).
-  Verify in Plan 1.
-- **Section with no `Original` descendant** (only generated content) ⇒ no
-  envelope ⇒ no pencil. Acceptable.
-- **Generated block inside an edited range/section:** its invocation source is
-  within the sliced span and is an untransformed block in range, so it
-  round-trips; the envelope is bounded by surrounding `Original` blocks.
-- **Concurrency:** edits are pinned to the rendered `untransformedAst`
-  generation (existing contract). v1 is single-user; drift ⇒ re-render first.
-
-## Out of scope (v1)
-
-- Inline-span editing (only `Cite`/`Note` inlines carry `s`; blocks only here).
-  This also means definition-list **terms**, short captions (`Caption.short`),
-  and `CaptionBlock` (all `Inlines`) are not editable.
-- Block-by-block editing **inside table cells, table captions, and figure
-  captions** (`Cell.content`, `Table.caption.long`, `Figure.caption.long`).
-  Plan 3 descends `Div`/`BlockQuote`/figure-**body**/lists/definition-**bodies**
-  only; these regions stay whole-block Tier-2 edits (Plan 2). See Plan 3's
-  Limitations section.
-- Editing transform-generated blocks as their *rendered* form.
-- Cross-file edits (includes).
-- Resolving non-`Original` pool ranges in the iframe (would need a round-trip).
+- **Submit is not a no-op.** Commit re-serializes the edited block; Tier-2
+  (containers/tables) reformats. Only **cancel** is a guaranteed no-op; the kept
+  guarantee is that blocks **outside** the edit stay byte-verbatim.
+- **Value-equality invariant** (Plan 2a): `sourceNode` correspondence relies on a
+  transformed Original node's SourceInfo value equaling its untransformed
+  counterpart's; a mismatch degrades **safe** (`sourceNode = null` → not editable),
+  never a wrong commit. The Pass-1 commit guard is the second line of defense.
+- **Attribution + edit-hover coexistence:** when attribution lights up (inert in
+  preview today), two pointer-driven hover systems share `#quarto-content`;
+  undesigned — human-in-the-loop will observe.
+- **Touch long-press** co-opts the OS selection/context-menu gesture.
+- **Shared dispatcher / debug-slides degradation** must be preserved + tested.
 
 ## References
 
 - Round-trip core: `claude-notes/plans/2026-06-04-target-incremental-writes.md`
-- `apply_node_edit.rs`, `node_lookup.rs`, `writers/incremental.rs`,
-  `writers/qmd.rs` (`write_single_block`), `writers/json.rs`
+- `apply_node_edit.rs`, `node_lookup.rs`, `writers/{incremental,qmd,json}.rs`
 - `quarto-source-map/src/source_info.rs` (`preimage_in`)
-- `transforms/sectionize.rs`
-- `ts-packages/preview-renderer/src/framework/attribution.tsx`
-  (`AttributionWrap`, `useAttributionHover`)
-- `q2-preview/{dispatchers,entry}.tsx`, `q2-preview/blocks/*`,
-  `q2-preview/PreviewContext.tsx`, `iframe/Q2PreviewIframe.tsx`
-- `hub-client/src/components/render/ReactPreview.tsx`,
-  `hub-client/src/services/applyNodeEdit*`
-- `types/{sourceInfo,diagnostic}.ts`
+- `framework/attribution.tsx`; `q2-preview/{dispatchers,entry,PreviewContext,
+  PreviewDocument}.tsx`, `q2-preview/blocks/*`, `q2-preview/custom/*`,
+  `iframe/Q2PreviewIframe.tsx`
+- `hub-client/src/components/render/ReactPreview.tsx`, `…/applyNodeEdit*`
+- Render-component demos: `~/docs/demo-playground/gordon/render-components2/`
+- Plan 5 origin (dissolved): `2026-05-29-q2-preview-plan-7e-customnode-qmd.md`
+  (`git show bf375258^:…`)

@@ -4,7 +4,7 @@
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)
 **Spec:** `claude-notes/designs/2026-06-06-block-editing-design.md`
 **Builds on:** `claude-notes/plans/2026-06-04-target-incremental-writes.md`
-**Phase:** 1 of 4. Frontend only. No Rust changes.
+**Phase:** 1 (series: 1, 2a, 2b, 3, 4). Frontend only. No Rust changes.
 
 ## Overview
 
@@ -27,8 +27,11 @@ the document is preserved verbatim. (Note: committing **unchanged** text is
 gains `content` + `editTarget`; Para/Header switch to a `<textarea>` showing
 sliced markdown; remove the `#` hack; commit/cancel keys (D6); empty=cancel (D10).
 
-**Out:** the hover pencil (Plan 2); block types beyond Para/Header; nested
-blocks (Plan 3); sections (Plan 4).
+**Out:** the dual-node substrate + structural gate (Plan 2a); the generalized
+interaction model — hover/press/keyboard affordance, render-component editing
+(Plan 2b); nested blocks incl. callout bodies (Plan 3); sections (Plan 4).
+*(Plan 1's click-to-edit is retained as the seed of Plan 2b's model, not removed;
+Plan 2a refactors Plan 1's interim `t==0 && d==0` gate onto `sourceNode`.)*
 
 ## TDD work items (tests first)
 
