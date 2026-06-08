@@ -1,7 +1,9 @@
 # `format: revealjs` — Presentation Support for Quarto 2
 
-**Status:** Planning (not yet approved for implementation)
+**Status:** Phase 1 (render-side Tier-1 vertical slice) **complete** — `q2 render`
+produces standalone reveal.js 6 decks. Next: Phase 1P (preview parity, GA gate).
 **Created:** 2026-06-08
+**Branch:** `feature/revealjs` (integration line; not yet pushed)
 **Epic strand:** bd-67yja58s
 **Phase 1 strand:** bd-2m4wanyd — sub-tasks:
 bd-n8mopfqc (1.1+1.8 tests/e2e),
