@@ -431,11 +431,64 @@ These are two different axes and were briefly conflated in an earlier draft:
 
 ---
 
-## Later phases (sketch — expand when reached)
+## Phase 2 — Authoring features (in progress)
 
-**Phase 2 — Authoring:** `.incremental`/`.nonincremental` list handling,
-`.fragment` (+ fade/grow/highlight variants), columns layout filter, `::: notes`
-→ reveal notes, footnote/aside coalescing (`reference-location`).
+**Goal:** the common presentation authoring constructs work in **both** `q2
+render` and `q2 preview`, with a parity check each (standing obligation). Q1
+parity target catalogued from `external-sources/quarto-cli/` (2026-06-08).
+
+**Architecture — three classes of feature** (discovered 2026-06-08 by testing
+the current pass-through + reading Q1):
+
+1. **Pure class pass-through** — the AST already carries the class and *both*
+   paths emit it (render via the HTML writer, preview via `previewRegistry`).
+   reveal.js interprets it. **Works for free; needs only tests.**
+2. **Element / CSS change** — the DOM element or styling must change
+   (`Div(.notes)` → `<aside>`, columns flexbox). The AST→DOM step is
+   implemented twice (Rust HTML writer + `previewRegistry`), so **both need the
+   rule**, kept in parity by a golden test. CSS must be inlined for render and
+   imported for preview.
+3. **Structural generation** — markup not expressible as a pass-through class
+   (incremental `<li class="fragment">` — Pandoc list items have no attr). Needs
+   **writer-level** support.
+
+**Current pass-through baseline (q2 render today):**
+- `.fragment` / `.fragment .fade-out` → `<div class="fragment …">` ✅ (class 1)
+- `.incremental` → class lands on the section/div but **no `<li class="fragment">`** ❌ (class 3)
+- `.columns`/`.column` → classes present, **no flexbox CSS** ⚠️ (class 2)
+- `.notes` → `<div class="notes">`, needs `<aside class="notes">` ❌ (class 2)
+
+**Sequence (by value/effort, each = render + preview + parity test):**
+
+- **2a — Fragments** (class 1). Verify `.fragment` + variant classes
+  (`fade-in/out/up/down`, `grow`, `shrink`, `highlight-*`, `semi-fade-out`,
+  `current-visible`) + `data-fragment-index` pass through in both paths. Lock
+  with tests. Establishes the parity-test pattern.
+- **2b — Speaker notes** (class 2). `Div(.notes)` → `<aside class="notes">`:
+  add the rule to the Rust HTML writer (parallel to `.section`→`<section>`) and
+  a `previewRegistry`/`RevealDeck` rule. Load the reveal **notes plugin**
+  (render scaffold + `RevealDeck` plugins) for S-key speaker view. Parity test.
+- **2c — Columns** (class 2). Transform `.column[width=X%]` →
+  `style="flex-basis:X%"` (Q1 markup); inline a small reveal-quarto CSS
+  (`.reveal .columns{display:flex…}`) for render and import it in `RevealDeck`
+  for preview. Parity test.
+- **2d — Incremental lists** (class 3). `.incremental` (on a list, an enclosing
+  Div, or a slide) → each `<li class="fragment">`; global `incremental: true`;
+  `.nonincremental` opt-out. Needs HTML-writer list support (list items carry
+  no attr) — design the cleanest mechanism (writer flag vs. AST marker) when we
+  reach it. The hardest feature.
+- **2e — Asides + footnote coalescing** (class 2/3, most complex). `::: aside`
+  → `<aside>`; per-slide footnote coalescing keyed on `reference-location`
+  (Q1 `coalesceAsides`/`handleSlideFootnotes`, `format-reveal.ts:702-793`).
+  Likely its own mini-phase; may be deferred.
+
+**Phase 2 strands:** bd-bea550b0 (epic-child) — 2a bd-f8dpxwle (fragments),
+2b bd-o5sg45fb (notes), 2c bd-34rd2y86 (columns), 2d bd-fy793w6i (incremental),
+2e bd-0zosmiq8 (asides).
+
+---
+
+## Later phases (sketch — expand when reached)
 
 **Phase 3 — Media/backgrounds:** per-slide `background-*` from heading attrs →
 `data-background-*`, `.absolute` positioning, `.r-stretch` + `auto-stretch`,
