@@ -460,14 +460,19 @@ the current pass-through + reading Q1):
 
 **Sequence (by value/effort, each = render + preview + parity test):**
 
-- **2a — Fragments** (class 1). Verify `.fragment` + variant classes
-  (`fade-in/out/up/down`, `grow`, `shrink`, `highlight-*`, `semi-fade-out`,
-  `current-visible`) + `data-fragment-index` pass through in both paths. Lock
-  with tests. Establishes the parity-test pattern.
-- **2b — Speaker notes** (class 2). `Div(.notes)` → `<aside class="notes">`:
-  add the rule to the Rust HTML writer (parallel to `.section`→`<section>`) and
-  a `previewRegistry`/`RevealDeck` rule. Load the reveal **notes plugin**
-  (render scaffold + `RevealDeck` plugins) for S-key speaker view. Parity test.
+- **2a — Fragments** (class 1). ✅ **DONE + browser-verified (2026-06-08).**
+  `.fragment` + variant classes (`fade-out/up`, `grow`, `shrink`,
+  `highlight-*`, `semi-fade-out`, `current-visible`) + `fragment-index` →
+  `data-fragment-index` pass through in both paths. 3 render tests
+  (`revealjs_features.rs`); preview inherits class pass-through (verified live:
+  2 fragment divs `fragment` / `fragment fade-out`).
+- **2b — Speaker notes** (class 2). ✅ **DONE + browser-verified (2026-06-08).**
+  `Div(.notes)` → `<aside class="notes">` in the Rust HTML writer (parallel to
+  `.section`→`<section>`) **and** `previewRegistry` `Div.tsx` (+ `NOTES` class
+  const). reveal.css hides `aside.notes` on the slide — verified live
+  (`display:none`, "These are speaker notes."). Render test + preview
+  integration test. **Follow-up bd-0qaarvzx:** load the reveal **notes plugin**
+  (S-key speaker view) in render scaffold + `RevealDeck` (both paths).
 - **2c — Columns** (class 2). Transform `.column[width=X%]` →
   `style="flex-basis:X%"` (Q1 markup); inline a small reveal-quarto CSS
   (`.reveal .columns{display:flex…}`) for render and import it in `RevealDeck`
