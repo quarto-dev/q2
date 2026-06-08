@@ -485,11 +485,18 @@ the current pass-through + reading Q1):
   **Gotcha hit:** preview features needing a Rust transform require the *full*
   WASM rebuild chain (`npm run build:wasm` → `build-q2-preview-spa` → `cargo
   build --bin q2`); a SPA-only rebuild leaves the preview on stale WASM.
-- **2d — Incremental lists** (class 3). `.incremental` (on a list, an enclosing
-  Div, or a slide) → each `<li class="fragment">`; global `incremental: true`;
-  `.nonincremental` opt-out. Needs HTML-writer list support (list items carry
-  no attr) — design the cleanest mechanism (writer flag vs. AST marker) when we
-  reach it. The hardest feature.
+- **2d — Incremental lists** (class 3). ✅ **DONE + browser-verified (2026-06-08).**
+  Ported Pandoc's `writerIncremental` (confirmed via `external-sources/pandoc`
+  HTML.hs:493-496 + quarto-cli that a filter *cannot* do this — list items have
+  no `Attr`, in Pandoc and pampa alike). **Render:** `HtmlConfig.incremental_lists`
+  (gated to revealjs) + `incremental_default`; `HtmlWriterContext.incremental`
+  traversal state flipped by `.incremental`/`.nonincremental` Divs (forced off
+  in note asides); list writers emit `<li class="fragment">`. **Preview:**
+  `IncrementalContext` (enabled only in `RevealDeck`) flipped by Div classes +
+  the section-class on `## Slide {.incremental}` (handled in `RevealDeck`/
+  `SlideBody`); `BulletList`/`OrderedList` emit `<li class="fragment">` when
+  enabled, html-preview path unchanged (editing preserved). 6 render + 4 preview
+  tests. Verified live: the `.incremental` slide shows 3 `<li class="fragment">`.
 - **2e — Asides + footnote coalescing** (class 2/3, most complex). `::: aside`
   → `<aside>`; per-slide footnote coalescing keyed on `reference-location`
   (Q1 `coalesceAsides`/`handleSlideFootnotes`, `format-reveal.ts:702-793`).
