@@ -66,9 +66,11 @@
   "dependencies": {
     "@quarto/preview-runtime": "*",
     "@quarto/quarto-automerge-schema": "*",
+    "@revealjs/react": "^0.2.0",
     "morphdom": "^2.7.8",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "reveal.js": "^6.0.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

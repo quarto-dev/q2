@@ -71,6 +71,7 @@ import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';
 import { renderSlot } from './utils';
 import { PreviewTitleBlock } from './custom/PreviewTitleBlock';
+import { RevealDeck } from './RevealDeck';
 import {
     buildCustomRegistry,
     type ComponentExports,
@@ -402,19 +403,36 @@ function PreviewRoot(props: PreviewRootProps) {
         ? { ast: parsed }
         : { astJson: props.astJson };
 
+    // `format: revealjs` previews as the `q2-slides` pseudo-format
+    // (MetadataMergeStage writes the target format into `meta.format`). When
+    // the AST is a slide deck, render it with the reveal shell
+    // (`RevealDeck`) instead of the flowing html mirror. Slide *content*
+    // still renders via the same `previewRegistry`.
+    const previewFormat = parsed ? extractMetaString(parsed.meta?.format) : undefined;
+    const isSlides = previewFormat === 'q2-slides' || previewFormat === 'revealjs';
+
     return (
         <PreviewContext.Provider
             value={{ currentFilePath: props.currentFilePath }}
         >
             <AssetManifestContext.Provider value={props.assetManifest}>
                 <NoteNumberingContext.Provider value={noteNumbers}>
-                    <Ast
-                        {...astProps}
-                        currentFilePath={props.currentFilePath}
-                        onNavigateToDocument={props.onNavigateToDocument}
-                        setAst={props.setAst}
-                        registry={mergedPreviewRegistry}
-                    />
+                    {isSlides && parsed ? (
+                        <RevealDeck
+                            ast={parsed}
+                            registry={mergedPreviewRegistry}
+                            currentFilePath={props.currentFilePath}
+                            onNavigateToDocument={props.onNavigateToDocument}
+                        />
+                    ) : (
+                        <Ast
+                            {...astProps}
+                            currentFilePath={props.currentFilePath}
+                            onNavigateToDocument={props.onNavigateToDocument}
+                            setAst={props.setAst}
+                            registry={mergedPreviewRegistry}
+                        />
+                    )}
                 </NoteNumberingContext.Provider>
             </AssetManifestContext.Provider>
         </PreviewContext.Provider>

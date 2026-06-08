@@ -1537,6 +1537,9 @@ async fn render_project_active_page_to_response(
     // `ProjectRenderSummary<WasmPassTwoOutput>` unifies across
     // arms and the downstream summary-handling code is shared.
     let kind = format.pipeline_kind;
+    // Captured before `format` is moved into the pipeline below; signals the
+    // SPA to render the AST with a reveal shell (Phase 1P).
+    let is_slides = format.target_format == "q2-slides";
     let summary = match kind {
         Some("preview") => {
             let mut renderer = RenderToPreviewAstRenderer::new("/.quarto/project-artifacts");
@@ -1677,7 +1680,7 @@ async fn render_project_active_page_to_response(
         error: None,
         html,
         ast_json,
-        is_slides: format.target_format == "q2-slides",
+        is_slides,
         diagnostics: None,
         warnings: if warnings.is_empty() {
             None
