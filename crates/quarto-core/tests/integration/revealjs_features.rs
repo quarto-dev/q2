@@ -93,6 +93,59 @@ fn fragment_variant_classes_pass_through() {
     }
 }
 
+// ── 2c: columns ──────────────────────────────────────────────────────────
+
+const COLUMNS_DECK: &str = "\
+---
+format: revealjs
+---
+
+## Columns
+
+:::: {.columns}
+
+::: {.column width=\"40%\"}
+Left column.
+:::
+
+::: {.column width=\"60%\"}
+Right column.
+:::
+
+::::
+";
+
+#[test]
+fn column_width_becomes_flex_basis_style() {
+    let html = render_revealjs(COLUMNS_DECK);
+    let c = compact(&html);
+    // Each column's `width=X%` becomes an inline `flex-basis` style…
+    assert!(
+        c.contains("flex-basis:40%"),
+        "column width=40% must become `flex-basis: 40%`; html:\n{}",
+        &html[..html.len().min(2500)]
+    );
+    assert!(
+        c.contains("flex-basis:60%"),
+        "column width=60% → flex-basis"
+    );
+    // …and the bare `width=` attribute must be gone (invalid on a div).
+    assert!(
+        !c.contains("class=\"column\"width=") && !html.contains("<div class=\"column\" width="),
+        "the raw `width` attribute must be removed from columns"
+    );
+}
+
+#[test]
+fn columns_container_present() {
+    let html = render_revealjs(COLUMNS_DECK);
+    assert!(
+        html.contains("class=\"columns\""),
+        "columns container present"
+    );
+    assert!(html.contains("Left column.") && html.contains("Right column."));
+}
+
 // ── 2b: speaker notes ────────────────────────────────────────────────────
 
 #[test]

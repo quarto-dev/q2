@@ -18,9 +18,11 @@
 //! See `claude-notes/plans/2026-06-08-revealjs-presentations.md` (Phase 1).
 
 mod assemble;
+mod columns;
 mod slides;
 mod transform;
 
 pub use assemble::render_revealjs_document;
+pub use columns::RevealColumnsTransform;
 pub use slides::{DEFAULT_SLIDE_LEVEL, build_reveal_slides};
 pub use transform::RevealSlidesTransform;

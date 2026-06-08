@@ -1,0 +1,22 @@
+/*
+ * quarto-reveal.css — Quarto's reveal.js layer.
+ *
+ * Layout/styling Quarto adds on top of reveal.js core + theme. Single source
+ * of truth for both render and preview:
+ *   - q2 render inlines this via include_str! (crates/quarto-core/src/revealjs/assemble.rs)
+ *   - q2 preview imports it (ts-packages/preview-renderer .../RevealDeck.tsx)
+ * Keep it minimal and reveal-scoped. Extended per authoring phase.
+ */
+
+/* Columns (Phase 2c) — a flex row of `.column`s. Each column's `width=X%`
+   becomes an inline `flex-basis: X%` (RevealColumnsTransform). Mirrors Quarto 1
+   (`div.columns{display:flex; gap:min(4vw,1.5em)}`, `div.column{flex:auto}`). */
+.reveal .columns {
+  display: flex;
+  gap: min(4vw, 1.5em);
+}
+
+.reveal .column {
+  flex: auto;
+  overflow-x: auto;
+}

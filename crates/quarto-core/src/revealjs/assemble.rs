@@ -26,6 +26,9 @@ const REVEAL_RESET_CSS: &str = include_str!("../../../../resources/revealjs/rese
 const REVEAL_CSS: &str = include_str!("../../../../resources/revealjs/reveal.css");
 const REVEAL_JS: &str = include_str!("../../../../resources/revealjs/reveal.js");
 const THEME_WHITE_CSS: &str = include_str!("../../../../resources/revealjs/theme/white.css");
+/// Quarto's reveal layer (columns, …) — shared with the preview, which imports
+/// the same file. Keep render/preview in sync by editing only the one file.
+const QUARTO_REVEAL_CSS: &str = include_str!("../../../../resources/revealjs/quarto-reveal.css");
 
 const DEFAULT_THEME: &str = "white";
 
@@ -140,6 +143,9 @@ pub fn render_revealjs_document(body: &str, meta: &ConfigValue) -> String {
 <style id="theme">
 {theme_css}
 </style>
+<style id="quarto-reveal">
+{quarto_css}
+</style>
 </head>
 <body>
 <div class="reveal">
@@ -160,6 +166,7 @@ Reveal.initialize({config});
         reset = REVEAL_RESET_CSS,
         reveal = REVEAL_CSS,
         theme_css = theme_css(&theme),
+        quarto_css = QUARTO_REVEAL_CSS,
         body = body,
         reveal_js = REVEAL_JS,
         config = config,

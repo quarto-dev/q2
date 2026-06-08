@@ -1033,6 +1033,9 @@ pub fn build_transform_pipeline(
     // separate from its `--section-divs` machinery; so do we). See
     // claude-notes/plans/2026-06-08-revealjs-presentations.md.
     if is_revealjs {
+        // Columns: rewrite `.column width=X` → `flex-basis` before slide
+        // construction (the column Divs are still flat at this point).
+        pipeline.push(Box::new(crate::revealjs::RevealColumnsTransform::new()));
         pipeline.push(Box::new(crate::revealjs::RevealSlidesTransform::new()));
     } else {
         pipeline.push(Box::new(TitleBlockTransform::new()));

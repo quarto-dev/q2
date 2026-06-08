@@ -21,6 +21,9 @@ import React from 'react';
 import { Deck, Slide, Stack } from '@revealjs/react';
 import 'reveal.js/reveal.css';
 import 'reveal.js/theme/white.css';
+// Quarto's reveal layer (columns, …) — the SAME file `q2 render` inlines, so
+// render and preview stay in parity. Single source: resources/revealjs/.
+import '../../../../resources/revealjs/quarto-reveal.css';
 
 import { Node, RegistryContext } from '../framework';
 import type { BlockNode, DivBlock, FormatRegistry, PandocAST } from '../framework';

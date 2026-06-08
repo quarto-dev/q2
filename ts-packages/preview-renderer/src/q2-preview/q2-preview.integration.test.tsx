@@ -505,6 +505,23 @@ describe('q2-preview Pandoc base-type gap-fill components', () => {
         expect(container.querySelector('div.notes')).toBeNull();
     });
 
+    // Columns — RevealColumnsTransform rewrites `.column width=X` to an inline
+    // `style="flex-basis: X"`; the preview Div must pass that style through (as
+    // a React style object) so columns lay out identically to `q2 render`.
+    it('Div with inline style renders the style (column flex-basis)', () => {
+        const ast = [{
+            t: 'Div',
+            c: [
+                ['', ['column'], [['style', 'flex-basis: 40%;']]],
+                [PARA(STR('Left'))],
+            ],
+        }];
+        const { container } = mount(ast);
+        const col = container.querySelector('div.column') as HTMLElement;
+        expect(col).not.toBeNull();
+        expect(col.style.flexBasis).toBe('40%');
+    });
+
     it('Div without "section" class still renders as <div>', () => {
         const ast = [{
             t: 'Div',
