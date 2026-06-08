@@ -473,10 +473,18 @@ the current pass-through + reading Q1):
   (`display:none`, "These are speaker notes."). Render test + preview
   integration test. **Follow-up bd-0qaarvzx:** load the reveal **notes plugin**
   (S-key speaker view) in render scaffold + `RevealDeck` (both paths).
-- **2c — Columns** (class 2). Transform `.column[width=X%]` →
-  `style="flex-basis:X%"` (Q1 markup); inline a small reveal-quarto CSS
-  (`.reveal .columns{display:flex…}`) for render and import it in `RevealDeck`
-  for preview. Parity test.
+- **2c — Columns** (class 2). ✅ **DONE + browser-verified (2026-06-08).**
+  `RevealColumnsTransform` rewrites `.column[width=X%]` → inline
+  `style="flex-basis:X%"` (drops the bare `width`); runs in the `is_revealjs`
+  branch (render + preview). **Single-source** `resources/revealjs/quarto-reveal.css`
+  (`.reveal .columns{display:flex;gap}`, `.reveal .column{flex:auto}`) — inlined
+  for render (`assemble.rs`), imported by `RevealDeck.tsx` for preview. `Div.tsx`
+  passes the AST inline `style` through (CSS-string→React-object). 4 transform
+  unit + 2 render + 1 preview tests. Verified live: both paths emit
+  `style="flex-basis:40%/60%"`, `display:flex`, columns on the same row.
+  **Gotcha hit:** preview features needing a Rust transform require the *full*
+  WASM rebuild chain (`npm run build:wasm` → `build-q2-preview-spa` → `cargo
+  build --bin q2`); a SPA-only rebuild leaves the preview on stale WASM.
 - **2d — Incremental lists** (class 3). `.incremental` (on a list, an enclosing
   Div, or a slide) → each `<li class="fragment">`; global `incremental: true`;
   `.nonincremental` opt-out. Needs HTML-writer list support (list items carry
