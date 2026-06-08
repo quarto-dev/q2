@@ -476,44 +476,56 @@ slide-split AST + React-mirror render via `@revealjs/react`.
 increments may merge to the integration branch render-only; GA is blocked until
 this is in parity.
 
-### Phase 1P work items
+### Phase 1P work items — core WORKING (verified in Chrome 2026-06-08)
 
-- [ ] **Shared split, single source.** Make the preview consume the Phase-1.3
-      Rust/WASM `RevealSlidesStage` output (the split AST), and **delete the TS
-      `parseSlides`** in `ReactAstSlideRenderer.tsx`. Confirm `RevealSlidesStage`
-      runs in the WASM preview pipeline, not only native render.
-- [ ] **Preview routing.** Wire `render_page_for_preview` /
-      `crates/wasm-quarto-hub-client/src/lib.rs` + `q2-preview-spa` to detect
-      `format: revealjs` and route to a slides preview (a `q2-slides`-style
-      pseudo-format), instead of the `q2-preview` html iframe. Today the reveal
-      React renderer is wired into the collaborative editor, *not* the
-      `q2-preview-spa` path — this is net-new.
-- [ ] **Reveal renderer = previewRegistry + thin shell (B1a, decided
-      2026-06-08).** Render slide *content* with the **existing
-      `previewRegistry`** React mirror (the same one the html preview uses —
-      already parity-maintained with the Rust writer via `/preview-render-parity`).
-      Add only a thin reveal layer in the iframe entry: map the shared-split
-      `Div.section` → `<section>`, wrap in `.reveal/.slides`, and drive with
-      **reveal.js core** (`Reveal.initialize`, same library as render) in a
-      `useEffect`. This **retires** the hub-client's separate
-      `parseSlides`/`renderBlock` (inferior duplicate mirror) and gives slide
-      content (math, code highlighting, attribution) for free. Reasoning: the
-      investigation showed preview content is already the previewRegistry
-      mirror, so reusing it is more DRY + parity-faithful than the original
-      `@revealjs/react`+ported-renderer sketch.
-- [ ] WASM foundation: `q2-slides` pseudo-format (`format.rs` → `("html",
-      Some("preview"))`) carries the AST path + preview transform list;
-      generalize the reveal transform check to `target_format ∈ {revealjs,
-      q2-slides}`; `map_format_for_preview` maps `revealjs → q2-slides`;
-      `RenderResponse` gains an `is_slides` flag so the SPA branches to the
-      reveal shell.
-- [ ] **Parity tests.** Golden render↔preview parity tests for the Tier-1 set
-      (slide boundaries, title slide, section slides, vertical slides, the
-      core `Reveal.initialize` options). Establish the slides analogue of the
-      `/preview-render-parity` mechanism so later phases extend it per feature.
-- [ ] **E2E both paths.** Verify `q2 render` (browser-open the static deck) and
-      `q2 preview` (live slideshow in the running preview) on the same fixture;
-      record both invocations + inspected notes here.
+- [x] **WASM foundation.** `q2-slides` pseudo-format (`format.rs` → `("html",
+      Some("preview"))`) carries the AST/preview path; `is_revealjs_target()`
+      generalizes the reveal transform check to `{revealjs, q2-slides}` (so the
+      shared `RevealSlidesTransform` fires in the preview AST pipeline, which is
+      `build_transform_pipeline` minus exclusions); `map_format_for_preview`
+      maps `revealjs → q2-slides`; `RenderResponse.is_slides` flag added. Native
+      test `render_qmd_to_preview_ast_builds_reveal_slides_for_q2_slides`.
+- [x] **Shared split, single source.** The q2-preview AST path consumes the
+      **same Rust `RevealSlidesTransform`** as `q2 render` — slide construction
+      lives once, in Rust. (The hub-client *editor*'s old TS `parseSlides`
+      still exists but is no longer used by the `q2 preview` path; fully
+      deleting it from the editor is a separable cleanup — see follow-ups.)
+- [x] **Preview routing.** `entry.tsx` `PreviewRoot` branches to `RevealDeck`
+      when `meta.format` is `q2-slides`/`revealjs` (the target format is written
+      into `meta.format` by `MetadataMergeStage`) — so **no cross-package
+      `is_slides` postMessage plumbing** was needed for the render branch.
+- [x] **Reveal renderer = previewRegistry + reveal shell (B1a).** New
+      `ts-packages/preview-renderer/src/q2-preview/RevealDeck.tsx`: maps the
+      shared-split `Div.section` AST onto `@revealjs/react`
+      `<Deck>/<Slide>/<Stack>` (chosen over raw `Reveal.initialize` for robust
+      live-edit lifecycle — the wrapper is a thin layer over reveal.js core),
+      and renders slide **content** via the framework `<Node>` dispatcher (the
+      shared `previewRegistry` mirror → code highlighting, KaTeX, etc. for
+      free). `@revealjs/react` + `reveal.js` added to the package.
+- [ ] **Parity tests.** _Follow-up._ Verified manually (Chrome) + the Rust
+      foundation test, but no automated TS golden render↔preview parity test
+      yet. Establish the slides analogue of `/preview-render-parity`.
+- [x] **E2E both paths.** `q2 render` verified (Phase 1 record above). `q2
+      preview /tmp/.../talk.qmd` verified live in Chrome (DevTools MCP):
+      `.reveal/.slides` present, **4 top-level sections matching render**
+      (title, Why Quarto 2?, Some Code, and `Section: Details` as a **stack with
+      2 vertical sub-slides**), reveal root `…has-vertical-slides
+      has-horizontal-slides ready`, controls+progress, syntax-highlighted code +
+      KaTeX in slides, keyboard/control nav advances slides, **no console
+      errors**. Screenshot of the title slide inspected.
+
+### Phase 1P follow-ups (tracked, not GA-blocking for the basic experience)
+
+- Section `id`s not yet passed onto `<Slide>` (hash nav is off in preview; ids
+  matter for cross-doc anchors — wire when needed).
+- Reveal **config-option parity**: preview uses default `Deck` config; render
+  reads `format.revealjs.*` (transition/slide-number/…). For `q2-slides` those
+  keys aren't flattened (base format is `html`), so the preview would need to
+  read `meta.format.revealjs.*` (or flatten for `q2-slides`) to match. Minor;
+  defaults align for the common case.
+- Automated TS golden render↔preview parity test (above).
+- Retire the hub-client *editor*'s `parseSlides`/`RevealjsReactAstSlideRenderer`
+  in favor of `RevealDeck` (separable from the `q2 preview` path).
 
 ## References
 

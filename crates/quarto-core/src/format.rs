@@ -683,9 +683,12 @@ mod tests {
         assert_eq!(f.extension_name, None);
         assert_eq!(f.output_extension, "html");
         assert!(f.native_pipeline);
-        // q2-slides has no pipeline_kind today; future plan migrates
-        // it to the q2-preview pipeline (Plan 1 Decision A).
-        assert_eq!(f.pipeline_kind, None);
+        // revealjs epic Phase 1P: q2-slides is now the preview
+        // pseudo-format for `format: revealjs` — it uses the q2-preview
+        // pipeline_kind (AST path) so the SPA renders the reveal-section
+        // AST with a reveal shell. The reveal slide construction fires
+        // because `is_revealjs_target("q2-slides")` is true.
+        assert_eq!(f.pipeline_kind, Some("preview"));
     }
 
     #[test]
