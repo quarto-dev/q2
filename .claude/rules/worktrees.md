@@ -3,12 +3,12 @@
 ## Two patterns, two commands
 
 Worktrees and sub-task branches are separate concerns. Pick based on
-the *shape* of the work, not on the beads-issue boundary.
+the *shape* of the work, not on the strand boundary.
 
 - **`cargo xtask create-worktree`** — spin up a *new* worktree at
   `.worktrees/<id>-<slug>/`. Right for **parallel** or
   **investigation** work that benefits from isolation:
-  - `/investigate-beads` digs into a single issue without touching
+  - `/investigate-beads` digs into a single strand without touching
     the main checkout.
   - `/triage` records context on a GH issue without committing on
     top of in-flight work.
@@ -30,16 +30,16 @@ the *shape* of the work, not on the beads-issue boundary.
   Usage at sub-task hand-off:
 
   ```bash
-  # finish the previous sub-task (commit, close beads issue, etc.)
+  # finish the previous sub-task (commit, close the braid strand, etc.)
   cargo xtask switch-task bd-yxqt --from feature/q2-preview-command
   ```
 
   That switches the current worktree to `feature/q2-preview-command`,
   fast-forward-pulls (so any sibling sub-tasks that merged in the
   meantime show up), creates a fresh `beads/bd-yxqt-<slug>` topic
-  branch off the new tip, marks the beads issue `in_progress`, and
-  rewrites the `CLAUDE.local.md` context block. Omit `--from` to
-  branch off the current HEAD.
+  branch off the new tip, marks the braid strand `in_progress` (via
+  `braid update`), and rewrites the `CLAUDE.local.md` context block.
+  Omit `--from` to branch off the current HEAD.
 
 The two commands are siblings — `create-worktree` does *more* (it
 adds a worktree); `switch-task` does *less* (it stays in place). Use
@@ -70,15 +70,22 @@ All worktrees live in `.worktrees/` at the project root. This directory is git-i
 ## Branch naming
 
 - **GH issue triage worktree** → branch `issue-<N>` at `.worktrees/issue-<N>/`. Local branch stays bare; only the remote uses a prefix (see § Pushing for PR).
-- **Beads issue investigation worktree** → branch `beads/<id>-<slug>` at `.worktrees/<id>-<slug>/`, where `<slug>` is a short kebab-case form of the issue title (3–5 words, lowercase).
+- **Braid strand investigation worktree** → branch `beads/<id>-<slug>` at `.worktrees/<id>-<slug>/`, where `<slug>` is a short kebab-case form of the strand title (3–5 words, lowercase).
 - **In-place sub-task branch (via `switch-task`)** → branch `beads/<id>-<slug>` *without* a corresponding `.worktrees/` directory; the branch lives wherever the caller's worktree is checked out.
 
 The directory mirrors the leaf of the branch name. The conventions are stable so colleagues and tooling can recognize a worktree's origin from the path alone.
 
+> **Note on the `beads/` branch prefix.** It is a *historical* git
+> namespace, kept after the braid migration because the xtask code emits
+> it and tooling/muscle-memory recognize it. It does not imply beads is
+> involved — the strand lives in the braid skein. Renaming the prefix to
+> `braid/` is a separable future cleanup (it would touch
+> `create_worktree.rs`, `switch_task.rs`, and this convention together).
+
 ## Fresh worktree bootstrap
 
 Use `cargo xtask create-worktree <bd-id>` (or `--issue N` / `--upgrade`) for new worktrees —
-it handles `git worktree add`, `.beads/redirect`, and the CLAUDE.local.md context stub in
+it handles `git worktree add` and the CLAUDE.local.md context stub in
 one shot. After it finishes, run `npm install` from the new worktree if hub-client is in scope:
 
 ```bash
@@ -88,7 +95,7 @@ npm install                              # only if hub-client work is in scope
 cargo xtask verify --skip-hub-build      # confirm green at branch HEAD
 ```
 
-`--base` defaults to `main` when omitted. **If the beads issue has an
+`--base` defaults to `main` when omitted. **If the strand has an
 open parent epic, the command prints a warning** nudging you toward
 the epic's integration branch (e.g. `feature/<name>`). Pass
 `--base <branch>` to branch off the integration line, or `--base main`
@@ -104,31 +111,42 @@ not run), see § Manual bootstrap below.
 `cargo xtask dev-setup` exists for Rust dev tools (cargo-nextest, wasm-bindgen-cli) but
 does not currently run `npm install`. bd-7giz tracks extending it.
 
-## Beads Redirect
+## Braid skein resolution in worktrees (no redirect needed)
 
-This project uses `br` for issue tracking. After creating any worktree, add a redirect file so `br` uses the main project's database. The `.beads/` directory already exists in the worktree (tracked by git) — just add the `redirect` file alongside the existing files. Do NOT delete or overwrite tracked `.beads/` content.
+Unlike beads — which needed a per-worktree `.beads/redirect` file pointing
+at the main repo's database — **braid worktrees need zero setup.** The skein
+is a synced CRDT identified by the doc id, and braid resolves it via, in order:
 
-```bash
-# .beads/ already exists from git — just add the redirect
-# 3 levels up from .worktrees/<name>/.beads/ to reach project root
-echo "../../../.beads" > .worktrees/<name>/.beads/redirect
-```
+1. `BRAID_DOC_ID` / `BRAID_SYNC_URL` env vars (rarely used here);
+2. a `.braid.toml` in the current directory **or any parent** — a worktree
+   under `.worktrees/<leaf>/` walks up to the repo-root `.braid.toml` (which
+   is gitignored, so it is present in the main checkout the worktree shares a
+   filesystem with);
+3. `~/.config/braid/projects.toml`, selected by the committed, non-secret
+   `.braid-project` marker (contents: `q2`) — this is what makes *fresh
+   clones* and out-of-tree worktrees resolve with no per-worktree setup.
 
-The `redirect` file is already in `.beads/.gitignore`, so it won't show as a git change. Verify with `br where` from inside the worktree.
+The local braid cache is shared by all worktrees (keyed by a hash of the doc
+id), so there is no database to redirect. Verify resolution from inside a
+worktree with `braid list` (it should print the project's strands).
+
+> **The doc id is a secret.** `.braid.toml` holds a read/write bearer token;
+> it is gitignored and must never be committed. The committed `.braid-project`
+> marker only names the project, never the secret.
 
 ## CLAUDE.local.md
 
 `cargo xtask create-worktree` prepends a worktree context section to `CLAUDE.local.md`.
-Claude Code loads it automatically — no need to run `br show` to orient at session start.
+Claude Code loads it automatically — no need to run `braid show` to orient at session start.
 
-The section contains: worktree declaration, main repo path (`../..`), beads ID
-(or `**GitHub issue:** #N` in `--issue` mode), GitHub URL when available, an
-italic-prose placeholder for the plan file path, and a `**Skill:**` line
-naming the slash-command that continues the work (`/investigate-beads`,
-`/triage`, or `/upgrade-cargo-deps`). Placeholders are self-documenting —
-they say exactly what to replace them with.
+The section contains: worktree declaration, main repo path (`../..`), the braid
+strand id (or `**GitHub issue:** #N` in `--issue` mode), GitHub URL when
+available, an italic-prose placeholder for the plan file path, and a
+`**Skill:**` line naming the slash-command that continues the work
+(`/investigate-beads`, `/triage`, or `/upgrade-cargo-deps`). Placeholders are
+self-documenting — they say exactly what to replace them with.
 
-Status lives in beads, not in this file. Run `br show <id>` for current status + notes.
+Status lives in the braid skein, not in this file. Run `braid show <id>` for current status + notes.
 
 The section is delimited by `<!-- BEGIN/END WORKTREE CONTEXT -->` markers so it can be
 refreshed in place (e.g. when a worktree is recreated, or by hand-editing the file).
@@ -140,9 +158,15 @@ and preserves any user content below.
 fails fast if the directory already exists. To refresh a worktree's CLAUDE.local.md,
 either edit it by hand (the markers make this safe) or remove the worktree and recreate.
 
-## Committing beads changes
+## Committing strand changes (there are none)
 
-With a redirect active, all beads data lives physically in the main repo's `.beads/`. JSONL changes from worktree work are only visible in `git status` from the main repo. All beads git commits must happen from the main repo, not from a worktree branch.
+braid stores strands in the synced skein, **not** in git. Strand
+create/update/close operations produce **nothing to commit** — they converge
+through the CRDT on every command, from any worktree, automatically. (This is
+the big simplification over beads' "edit in the worktree, but commit `.beads/`
+from the main repo" rule.) The only git-tracked braid artifact is the
+backup-only `.braid/snapshot.jsonl` (see the snapshot policy in `CLAUDE.md`),
+which is regenerated from the skein and never hand-edited or re-imported.
 
 ## Pushing for PR
 
@@ -152,7 +176,7 @@ Local branch names stay bare (`issue-<N>`, `beads/<id>-<slug>`). The remote bran
 # GH issue, bug fix
 git push -u origin issue-<N>:bugfix/issue-<N>
 
-# Beads issue, feature work
+# Braid strand, feature work
 git push -u origin beads/<id>-<slug>:feature/<id>-<slug>
 ```
 
@@ -165,11 +189,12 @@ the xtask binary is broken on the current branch), fall back to manual setup:
 
 ```bash
 git worktree add -b beads/<id>-<slug> .worktrees/<id>-<slug> main
-echo "../../../.beads" > .worktrees/<id>-<slug>/.beads/redirect
 ```
 
-Verify with `br where` from inside the worktree. CLAUDE.local.md is not part
-of the manual bootstrap — once the xtask binary is built, re-running
-`cargo xtask create-worktree` is not safe on the existing worktree (see
-above), but the template lives in `crates/xtask/src/create_worktree.rs`
-(`build_section`) for hand-copying if needed.
+No redirect step is needed (see § Braid skein resolution above). Verify with
+`braid list` from inside the worktree — if it prints strands, the skein
+resolved. CLAUDE.local.md is not part of the manual bootstrap — once the xtask
+binary is built, re-running `cargo xtask create-worktree` is not safe on the
+existing worktree (see above), but the template lives in
+`crates/xtask/src/create_worktree.rs` (`build_section`) for hand-copying if
+needed.

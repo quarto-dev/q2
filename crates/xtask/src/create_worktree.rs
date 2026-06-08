@@ -1,12 +1,15 @@
-//! `cargo xtask create-worktree` — set up a git worktree with beads redirect
-//! and a marker-delimited CLAUDE.local.md context section.
+//! `cargo xtask create-worktree` — set up a git worktree with a
+//! marker-delimited CLAUDE.local.md context section.
 //!
 //! Three modes (exactly one required):
-//!   - positional `<bd-id>` — beads issue (reads `br show`)
+//!   - positional `<bd-id>` — braid strand (reads `braid show`)
 //!   - `--issue <N>` — GitHub issue triage (reads `gh issue view`)
 //!   - `--upgrade` — cargo dependency upgrade (date-based branch)
 //!
-//! Filesystem-only: never touches beads state. Skills own beads lifecycle.
+//! Filesystem-only: never touches braid state. Skills own the strand
+//! lifecycle. (braid needs no per-worktree redirect: a worktree under
+//! `.worktrees/` resolves the skein via the repo-root `.braid.toml`
+//! walk-up, or the committed `.braid-project` marker + user config.)
 
 use anyhow::Context;
 use anyhow::Result;
@@ -41,7 +44,7 @@ const _: () = {
 };
 
 pub enum SectionKind {
-    Beads {
+    Braid {
         id: String,
         title: String,
         github_url: Option<String>,
@@ -107,7 +110,7 @@ pub fn validate_slug(slug: &str) -> Result<()> {
 #[derive(clap::Args)]
 #[command(group(clap::ArgGroup::new("mode").required(true).multiple(false)))]
 pub struct Args {
-    /// Beads issue ID, e.g. `bd-1d3e`. Reads `br show <id>` for title and external_ref.
+    /// Braid strand ID, e.g. `bd-1d3e`. Reads `braid show <id>` for title and external_ref.
     #[arg(group = "mode")]
     pub beads_id: Option<String>,
 
@@ -119,13 +122,13 @@ pub struct Args {
     #[arg(long, group = "mode")]
     pub upgrade: bool,
 
-    /// Override auto-derived slug. In beads mode replaces the derived slug;
+    /// Override auto-derived slug. In braid mode replaces the derived slug;
     /// in issue/upgrade modes appended as a suffix (for parallel-worktree workflows).
     #[arg(long)]
     pub slug: Option<String>,
 
-    /// Base branch. When omitted, falls back to `main` — but in beads
-    /// mode, if the issue has an open parent epic, a warning is
+    /// Base branch. When omitted, falls back to `main` — but in braid
+    /// mode, if the strand has an open parent epic, a warning is
     /// printed nudging you toward the epic's integration branch.
     /// Pass `--base main` explicitly to silence that warning.
     #[arg(long)]
@@ -143,7 +146,7 @@ pub fn parse_external_ref_to_github_url(ext: Option<&str>) -> Option<String> {
 }
 
 /// Neutralize any occurrences of BEGIN/END marker substrings inside
-/// externally-sourced text (titles from `br`/`gh`). Without this, a title
+/// externally-sourced text (titles from `braid`/`gh`). Without this, a title
 /// containing `<!-- END WORKTREE CONTEXT -->` would terminate the section
 /// prematurely on the next idempotent strip pass.
 fn marker_safe(s: &str) -> String {
@@ -196,7 +199,7 @@ pub fn strip_managed_section(content: &str) -> Result<String> {
 
 pub fn build_section(kind: &SectionKind) -> String {
     let body = match kind {
-        SectionKind::Beads {
+        SectionKind::Braid {
             id,
             title,
             github_url,
@@ -205,7 +208,7 @@ pub fn build_section(kind: &SectionKind) -> String {
             let mut s = String::new();
             s.push_str("# Worktree Context\n\n");
             s.push_str("This is a **worktree** of the q2 repository. Main repo: `../..`\n\n");
-            s.push_str(&format!("**Beads:** {id} \u{2014} {title}\n"));
+            s.push_str(&format!("**Braid:** {id} \u{2014} {title}\n"));
             if let Some(url) = github_url {
                 s.push_str(&format!("**GitHub:** {url}\n"));
             }
@@ -213,7 +216,7 @@ pub fn build_section(kind: &SectionKind) -> String {
             s.push_str("**Skill:** `/investigate-beads` continues this worktree's work.\n");
             s.push('\n');
             s.push_str(&format!(
-                "Run `br show {id}` for current status and notes.\n"
+                "Run `braid show {id}` for current status and notes.\n"
             ));
             s
         }
@@ -225,7 +228,7 @@ pub fn build_section(kind: &SectionKind) -> String {
             s.push_str(&format!("**GitHub issue:** #{number} \u{2014} {title}\n"));
             s.push_str(&format!("**URL:** {url}\n"));
             s.push_str(&format!(
-                "**Beads:** _none yet \u{2014} run `br search {number}` to find an existing issue, or `br create` to file one, then replace this line with the bd-XXXX._\n"
+                "**Braid:** _none yet \u{2014} run `braid search {number}` to find an existing strand, or `braid create` to file one, then replace this line with the bd- id._\n"
             ));
             s.push_str("**Plan:** _none yet \u{2014} replace this with `claude-notes/plans/YYYY-MM-DD-<name>.md` once you create the plan file._\n");
             s.push_str("**Skill:** `/triage` continues the investigation; file a beads issue once concrete work surfaces.\n");
@@ -303,14 +306,17 @@ pub fn update_claude_local_md(path: &Path, new_section: &str) -> Result<()> {
     Ok(())
 }
 
-pub struct BeadsMetadata {
+pub struct IssueMetadata {
     pub title: String,
     pub external_ref: Option<String>,
-    /// The issue's parent epic, when this is a sub-task. Read from
-    /// the first `dependency_type: "parent-child"` entry in `br
-    /// show --json`'s `dependencies` array. Used by the
-    /// default-base warning (bd-ojtq) — if the parent epic is
-    /// open, the user probably meant to branch off an integration
+    /// The strand's parent epic, when this is a sub-task. Resolved in
+    /// two steps because braid's `show --json` does not enrich
+    /// dependency entries with the target's title/status: first the
+    /// child's `dependencies` map yields the parent's id (the first
+    /// entry whose `type` is `parent-child`), then a second
+    /// `braid show <parent>` supplies the parent's title and status.
+    /// Used by the default-base warning (bd-ojtq) — if the parent epic
+    /// is open, the user probably meant to branch off an integration
     /// branch rather than `main`.
     pub parent_epic: Option<ParentEpic>,
 }
@@ -322,78 +328,126 @@ pub struct ParentEpic {
     pub status: String,
 }
 
-pub fn fetch_beads_metadata(id: &str) -> Result<BeadsMetadata> {
-    let output = Command::new("br")
+/// Spawn `braid show <id> --json` and return its stdout. Shared by the
+/// child-strand fetch and the follow-up parent-epic fetch.
+fn braid_show_json(id: &str) -> Result<String> {
+    let output = Command::new("braid")
         .args(["show", id, "--json"])
         .output()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 anyhow::anyhow!(
-                    "br is required \u{2014} install via `cargo install beads-rust` or see project README"
+                    "braid is required \u{2014} install from https://github.com/cscheid/braid (or `curl -fsSL .../install.sh | bash`); see project README"
                 )
             } else {
-                anyhow::Error::new(e).context("spawning `br show`")
+                anyhow::Error::new(e).context("spawning `braid show`")
             }
         })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("br show {id} failed:\n{stderr}");
+        anyhow::bail!("braid show {id} failed:\n{stderr}");
     }
 
-    let stdout = std::str::from_utf8(&output.stdout)
-        .with_context(|| format!("`br show {id} --json` produced non-UTF-8 output"))?;
-
-    parse_beads_metadata(id, stdout)
+    String::from_utf8(output.stdout)
+        .with_context(|| format!("`braid show {id} --json` produced non-UTF-8 output"))
 }
 
-/// Parse `br show --json` output into [`BeadsMetadata`]. Split from
-/// [`fetch_beads_metadata`] so unit tests can drive it with fixture
-/// JSON without spawning the real `br` binary.
-pub fn parse_beads_metadata(id: &str, stdout: &str) -> Result<BeadsMetadata> {
-    // `br show --json` returns an array; take the first element.
-    let arr: Vec<serde_json::Value> = serde_json::from_str(stdout)
-        .with_context(|| format!("parsing JSON from `br show {id} --json`"))?;
-    let first = arr
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("`br show {id} --json` returned an empty array"))?;
+pub fn fetch_issue_metadata(id: &str) -> Result<IssueMetadata> {
+    let parsed = parse_strand(id, &braid_show_json(id)?)?;
 
-    let title = first
+    // braid's dependency entries don't carry the target's title/status,
+    // so resolve the parent epic with a second `braid show`. This is
+    // best-effort: the parent-epic warning is informational, so a
+    // failed/garbled parent fetch degrades to "no parent" rather than
+    // aborting worktree creation.
+    let parent_epic = match parsed.parent_id {
+        Some(parent_id) => {
+            match braid_show_json(&parent_id).and_then(|s| parse_strand(&parent_id, &s)) {
+                Ok(parent) => Some(ParentEpic {
+                    id: parent_id,
+                    title: parent.title,
+                    status: parent.status,
+                }),
+                Err(e) => {
+                    eprintln!("note: could not resolve parent epic {parent_id}: {e:#}");
+                    None
+                }
+            }
+        }
+        None => None,
+    };
+
+    Ok(IssueMetadata {
+        title: parsed.title,
+        external_ref: parsed.external_ref,
+        parent_epic,
+    })
+}
+
+/// The fields of one `braid show --json` object that the worktree
+/// tooling cares about. `parent_id` is the target of the first
+/// `parent-child` dependency, if any — the parent's title/status are
+/// fetched separately (braid does not enrich dependency entries).
+pub struct ParsedStrand {
+    pub title: String,
+    pub status: String,
+    pub external_ref: Option<String>,
+    pub parent_id: Option<String>,
+}
+
+/// Parse a single `braid show --json` object. Split from
+/// [`fetch_issue_metadata`] so unit tests can drive it with fixture
+/// JSON without spawning the real `braid` binary.
+///
+/// braid's `show --json` is a single object (not an array, as beads'
+/// was) whose `dependencies` is a **keyed map** —
+/// `{"<target>:<type>": {"depends_on_id": ..., "type": ...}}` — rather
+/// than an enriched array.
+pub fn parse_strand(id: &str, stdout: &str) -> Result<ParsedStrand> {
+    let v: serde_json::Value = serde_json::from_str(stdout)
+        .with_context(|| format!("parsing JSON from `braid show {id} --json`"))?;
+
+    let title = v
         .get("title")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow::anyhow!("`br show {id}` JSON missing `title` field"))?
+        .ok_or_else(|| anyhow::anyhow!("`braid show {id}` JSON missing `title` field"))?
         .to_string();
 
-    let external_ref = first
+    let status = v
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    let external_ref = v
         .get("external_ref")
         .and_then(|v| v.as_str())
         .map(str::to_string);
 
-    // First `parent-child` edge in `dependencies` is the parent epic.
-    // Multiple parents are unusual but if present we just take the
-    // first — the warning is informational, not load-bearing.
-    let parent_epic = first
+    // First `parent-child` edge in the `dependencies` map gives the
+    // parent epic's id. Multiple parents are unusual; if present we
+    // just take one (map order is unspecified) — the warning is
+    // informational, not load-bearing.
+    let parent_id = v
         .get("dependencies")
-        .and_then(|v| v.as_array())
+        .and_then(|v| v.as_object())
         .into_iter()
         .flatten()
-        .find_map(|dep| {
-            let kind = dep.get("dependency_type").and_then(|v| v.as_str())?;
-            if kind != "parent-child" {
+        .find_map(|(_key, dep)| {
+            if dep.get("type").and_then(|v| v.as_str())? != "parent-child" {
                 return None;
             }
-            Some(ParentEpic {
-                id: dep.get("id").and_then(|v| v.as_str())?.to_string(),
-                title: dep.get("title").and_then(|v| v.as_str())?.to_string(),
-                status: dep.get("status").and_then(|v| v.as_str())?.to_string(),
-            })
+            dep.get("depends_on_id")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
         });
 
-    Ok(BeadsMetadata {
+    Ok(ParsedStrand {
         title,
+        status,
         external_ref,
-        parent_epic,
+        parent_id,
     })
 }
 
@@ -541,21 +595,6 @@ pub fn git_worktree_add(branch: &str, dir: &Path, base: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn write_beads_redirect(dir: &Path) -> Result<()> {
-    let redirect = dir.join(".beads").join("redirect");
-    // `.beads/` is tracked in the new worktree — directory should exist.
-    if !redirect.parent().map(Path::is_dir).unwrap_or(false) {
-        anyhow::bail!(
-            ".beads/ directory missing in new worktree: {} \u{2014} was the base branch correct?",
-            redirect.parent().unwrap().display()
-        );
-    }
-    // LF line ending intentionally, even on Windows.
-    fs::write(&redirect, "../../../.beads\n")
-        .with_context(|| format!("writing {}", redirect.display()))?;
-    Ok(())
-}
-
 pub fn run(args: Args) -> Result<()> {
     // Always anchor new worktrees to the main repo root so the command works
     // identically from main, from another worktree, or from any subdirectory.
@@ -570,7 +609,7 @@ pub fn run(args: Args) -> Result<()> {
 
     // Mode is enforced by clap::ArgGroup(required, single).
     let plan = if let Some(id) = args.beads_id.as_deref() {
-        plan_beads(id, args.slug.as_deref(), &base, &root)?
+        plan_braid(id, args.slug.as_deref(), &base, &root)?
     } else if let Some(n) = args.issue {
         plan_issue(n, args.slug.as_deref(), &base, &root)?
     } else if args.upgrade {
@@ -602,7 +641,9 @@ pub fn run(args: Args) -> Result<()> {
         if std::env::var("Q2_CREATE_WORKTREE_INJECT_FAIL").as_deref() == Ok("after_worktree_add") {
             anyhow::bail!("Q2_CREATE_WORKTREE_INJECT_FAIL=after_worktree_add (test hook)");
         }
-        write_beads_redirect(&plan.dir)?;
+        // No beads redirect: braid worktrees under `.worktrees/` resolve
+        // the skein via the repo-root `.braid.toml` walk-up (or the
+        // committed `.braid-project` marker + user config).
         let section = build_section(&plan.kind);
         let claude_local = plan.dir.join("CLAUDE.local.md");
         update_claude_local_md(&claude_local, &section)?;
@@ -677,14 +718,14 @@ struct Plan {
     dir: PathBuf,
     base: String,
     kind: SectionKind,
-    /// bd-ojtq: when in beads mode, the issue's parent epic (if any),
+    /// bd-ojtq: when in braid mode, the strand's parent epic (if any),
     /// passed up so `run` can emit the default-base warning. `None`
     /// for issue / upgrade modes — those don't have epic structure.
     parent_epic: Option<ParentEpic>,
 }
 
-fn plan_beads(id: &str, slug_override: Option<&str>, base: &str, repo_root: &Path) -> Result<Plan> {
-    let meta = fetch_beads_metadata(id)?;
+fn plan_braid(id: &str, slug_override: Option<&str>, base: &str, repo_root: &Path) -> Result<Plan> {
+    let meta = fetch_issue_metadata(id)?;
     let slug = match slug_override {
         Some(s) => {
             validate_slug(s)?;
@@ -709,7 +750,7 @@ fn plan_beads(id: &str, slug_override: Option<&str>, base: &str, repo_root: &Pat
         branch: format!("beads/{leaf}"),
         dir: repo_root.join(".worktrees").join(&leaf),
         base: base.to_string(),
-        kind: SectionKind::Beads {
+        kind: SectionKind::Braid {
             id: id.to_string(),
             title: meta.title,
             github_url,
@@ -769,12 +810,12 @@ fn print_summary(plan: &Plan) {
     println!("Created worktree: {}/", plan.dir.display());
     println!("  Branch:  {}", plan.branch);
     match &plan.kind {
-        SectionKind::Beads {
+        SectionKind::Braid {
             id,
             title,
             github_url,
         } => {
-            println!("  Beads:   {id} \u{2014} {title}");
+            println!("  Braid:   {id} \u{2014} {title}");
             if let Some(url) = github_url {
                 println!("  GitHub:  {url}");
             }
@@ -792,7 +833,7 @@ fn print_summary(plan: &Plan) {
     println!("  cd {}", plan.dir.display());
     println!();
     println!("  Open a Claude Code session there \u{2014} CLAUDE.local.md gives it the");
-    println!("  worktree context (branch, beads/GitHub link, base). Copy whichever of");
+    println!("  worktree context (branch, braid/GitHub link, base). Copy whichever of");
     println!("  the prep commands below apply:");
     println!();
     println!("  # Once per machine (skip if already done)");
@@ -804,15 +845,15 @@ fn print_summary(plan: &Plan) {
     println!("  cargo xtask verify --skip-hub-build         # confirm HEAD is green (Rust only)");
     println!("  npm install                                 # only if hub-client work is in scope");
     match &plan.kind {
-        SectionKind::Beads { id, .. } => {
+        SectionKind::Braid { id, .. } => {
             println!();
-            println!("  # Per beads issue (this worktree)");
-            println!("  br update {id} --status in_progress      # claim it");
+            println!("  # Per braid strand (this worktree)");
+            println!("  braid update {id} --status in_progress   # claim it");
             println!("  # `/investigate-beads` reloads context if you need it.");
         }
         SectionKind::Issue { .. } => {
             println!();
-            println!("  # `/triage` continues the investigation \u{2014} it files a beads issue");
+            println!("  # `/triage` continues the investigation \u{2014} it files a braid strand");
             println!("  # when concrete work surfaces.");
         }
         SectionKind::Upgrade { .. } => {
@@ -855,104 +896,117 @@ mod tests {
     use tempfile::TempDir;
 
     // ──────────────────────────────────────────────────────────────
-    // bd-ojtq: parent-epic detection in beads JSON +
+    // bd-ojtq: parent-epic detection in braid JSON +
     //          default-base warning text
     // ──────────────────────────────────────────────────────────────
 
-    /// Helper: synthesize a `br show --json` payload. The real
-    /// command emits many more fields; the parser only reads
-    /// title / external_ref / dependencies, so the fixtures stay
-    /// tight.
-    fn beads_json(title: &str, dependencies: serde_json::Value) -> String {
-        serde_json::to_string(&serde_json::json!([{
+    /// Helper: synthesize a `braid show --json` payload. braid returns
+    /// a single object (not an array) whose `dependencies` is a keyed
+    /// map `{"<target>:<type>": {depends_on_id, type, ...}}`. The real
+    /// command emits more fields; the parser only reads title / status
+    /// / external_ref / dependencies, so the fixtures stay tight.
+    fn braid_json(title: &str, dependencies: serde_json::Value) -> String {
+        serde_json::to_string(&serde_json::json!({
             "id": "bd-test",
             "title": title,
+            "status": "open",
             "dependencies": dependencies,
-        }]))
+        }))
         .unwrap()
     }
 
-    #[test]
-    fn parse_beads_metadata_reads_title_and_no_parent_when_no_dependencies() {
-        let json = beads_json("standalone task", serde_json::json!([]));
-        let meta = parse_beads_metadata("bd-test", &json).unwrap();
-        assert_eq!(meta.title, "standalone task");
-        assert!(meta.parent_epic.is_none());
-        assert!(meta.external_ref.is_none());
+    /// Build a braid dependency map entry under the canonical
+    /// `"<target>:<type>"` key.
+    fn dep(target: &str, dep_type: &str) -> (String, serde_json::Value) {
+        (
+            format!("{target}:{dep_type}"),
+            serde_json::json!({ "depends_on_id": target, "type": dep_type }),
+        )
     }
 
     #[test]
-    fn parse_beads_metadata_extracts_parent_child_dep() {
-        // Mirrors the real shape we saw in `br show bd-kw93.5 --json`:
-        // one parent-child entry alongside non-parent blocks edges.
-        let json = beads_json(
-            "Phase C.5 sub-task",
-            serde_json::json!([
-                {
-                    "id": "bd-sibling",
-                    "title": "Sibling",
-                    "status": "closed",
-                    "dependency_type": "blocks",
-                },
-                {
-                    "id": "bd-parent",
-                    "title": "Parent epic title",
-                    "status": "open",
-                    "dependency_type": "parent-child",
-                },
-            ]),
-        );
-        let meta = parse_beads_metadata("bd-test", &json).unwrap();
-        let parent = meta.parent_epic.expect("parent extracted");
-        assert_eq!(parent.id, "bd-parent");
-        assert_eq!(parent.title, "Parent epic title");
-        assert_eq!(parent.status, "open");
+    fn parse_strand_reads_title_and_no_parent_when_no_dependencies() {
+        let json = braid_json("standalone task", serde_json::json!({}));
+        let parsed = parse_strand("bd-test", &json).unwrap();
+        assert_eq!(parsed.title, "standalone task");
+        assert!(parsed.parent_id.is_none());
+        assert!(parsed.external_ref.is_none());
+        assert_eq!(parsed.status, "open");
     }
 
     #[test]
-    fn parse_beads_metadata_ignores_non_parent_edges() {
-        // Issues with only `blocks` / `related` / `discovered-from`
-        // edges should NOT report a parent epic.
-        let json = beads_json(
+    fn parse_strand_extracts_parent_child_dep() {
+        // Mirrors the real shape from `braid show bd-068k --json`: one
+        // parent-child entry alongside a non-parent blocks edge. The
+        // parent's title/status are NOT on the dependency entry (braid
+        // does not enrich) — only the id is recovered here.
+        let mut deps = serde_json::Map::new();
+        for (k, v) in [
+            dep("bd-sibling", "blocks"),
+            dep("bd-parent", "parent-child"),
+        ] {
+            deps.insert(k, v);
+        }
+        let json = braid_json("Phase C.5 sub-task", serde_json::Value::Object(deps));
+        let parsed = parse_strand("bd-test", &json).unwrap();
+        assert_eq!(parsed.parent_id.as_deref(), Some("bd-parent"));
+    }
+
+    #[test]
+    fn parse_strand_ignores_non_parent_edges() {
+        // Strands with only `blocks` / `related` / `discovered-from`
+        // edges should NOT report a parent.
+        let mut deps = serde_json::Map::new();
+        for (k, v) in [
+            dep("bd-other", "discovered-from"),
+            dep("bd-blocker", "blocks"),
+        ] {
+            deps.insert(k, v);
+        }
+        let json = braid_json(
             "task with non-parent edges",
-            serde_json::json!([
-                {
-                    "id": "bd-other",
-                    "title": "Other",
-                    "status": "open",
-                    "dependency_type": "discovered-from",
-                },
-                {
-                    "id": "bd-blocker",
-                    "title": "Blocker",
-                    "status": "closed",
-                    "dependency_type": "blocks",
-                },
-            ]),
+            serde_json::Value::Object(deps),
         );
-        let meta = parse_beads_metadata("bd-test", &json).unwrap();
+        let parsed = parse_strand("bd-test", &json).unwrap();
         assert!(
-            meta.parent_epic.is_none(),
-            "non-parent-child edges must not surface as parent_epic; got: {:?}",
-            meta.parent_epic
+            parsed.parent_id.is_none(),
+            "non-parent-child edges must not surface as a parent; got: {:?}",
+            parsed.parent_id
         );
     }
 
     #[test]
-    fn parse_beads_metadata_takes_first_parent_when_multiple_present() {
+    fn parse_strand_takes_some_parent_when_multiple_present() {
         // Defensive: if a sub-task has multiple parent-child edges
-        // (unusual but legal), take the first. The warning is
-        // informational, not load-bearing.
-        let json = beads_json(
-            "doubly parented",
-            serde_json::json!([
-                {"id": "bd-p1", "title": "P1", "status": "open", "dependency_type": "parent-child"},
-                {"id": "bd-p2", "title": "P2", "status": "open", "dependency_type": "parent-child"},
-            ]),
+        // (unusual but legal), we surface one. braid's dependency map
+        // has unspecified order, so we only assert that a real parent
+        // is chosen — the warning is informational, not load-bearing.
+        let mut deps = serde_json::Map::new();
+        for (k, v) in [dep("bd-p1", "parent-child"), dep("bd-p2", "parent-child")] {
+            deps.insert(k, v);
+        }
+        let json = braid_json("doubly parented", serde_json::Value::Object(deps));
+        let parsed = parse_strand("bd-test", &json).unwrap();
+        let parent = parsed.parent_id.expect("a parent id");
+        assert!(
+            parent == "bd-p1" || parent == "bd-p2",
+            "chose a real parent-child target; got {parent}"
         );
-        let meta = parse_beads_metadata("bd-test", &json).unwrap();
-        let parent = meta.parent_epic.expect("parent");
-        assert_eq!(parent.id, "bd-p1");
+    }
+
+    #[test]
+    fn parse_strand_reads_external_ref() {
+        let json = serde_json::to_string(&serde_json::json!({
+            "id": "bd-test",
+            "title": "with external ref",
+            "status": "in_progress",
+            "external_ref": "gh-123",
+            "dependencies": {},
+        }))
+        .unwrap();
+        let parsed = parse_strand("bd-test", &json).unwrap();
+        assert_eq!(parsed.external_ref.as_deref(), Some("gh-123"));
+        assert_eq!(parsed.status, "in_progress");
     }
 
     #[test]
@@ -1010,7 +1064,7 @@ mod tests {
     }
 
     fn make_dummy_section() -> String {
-        build_section(&SectionKind::Beads {
+        build_section(&SectionKind::Braid {
             id: "bd-xxxx".into(),
             title: "Demo".into(),
             github_url: None,
@@ -1261,29 +1315,29 @@ mod tests {
 
     #[test]
     fn section_beads_with_github() {
-        let s = build_section(&SectionKind::Beads {
+        let s = build_section(&SectionKind::Braid {
             id: "bd-1d3e".into(),
             title: "Fix X".into(),
             github_url: Some("https://github.com/quarto-dev/q2/issues/42".into()),
         });
         assert!(s.starts_with(BEGIN_MARKER));
         assert!(s.trim_end().ends_with(END_MARKER));
-        assert!(s.contains("**Beads:** bd-1d3e — Fix X"));
+        assert!(s.contains("**Braid:** bd-1d3e — Fix X"));
         assert!(s.contains("**GitHub:** https://github.com/quarto-dev/q2/issues/42"));
         assert!(s.contains("**Skill:** `/investigate-beads`"));
-        assert!(s.contains("Run `br show bd-1d3e`"));
+        assert!(s.contains("Run `braid show bd-1d3e`"));
         assert!(s.contains("Main repo: `../..`"));
     }
 
     #[test]
     fn section_beads_without_github_omits_line() {
-        let s = build_section(&SectionKind::Beads {
+        let s = build_section(&SectionKind::Braid {
             id: "bd-zzzz".into(),
             title: "T".into(),
             github_url: None,
         });
         assert!(!s.contains("**GitHub:**"));
-        assert!(s.contains("**Beads:** bd-zzzz — T"));
+        assert!(s.contains("**Braid:** bd-zzzz — T"));
         assert!(s.contains("**Skill:** `/investigate-beads`"));
     }
 
@@ -1296,10 +1350,10 @@ mod tests {
         });
         assert!(s.contains("**GitHub issue:** #157 — An issue"));
         assert!(s.contains("**URL:** https://github.com/quarto-dev/q2/issues/157"));
-        assert!(s.contains("**Beads:** _none yet"));
-        assert!(s.contains("br search 157"));
+        assert!(s.contains("**Braid:** _none yet"));
+        assert!(s.contains("braid search 157"));
         assert!(s.contains("**Skill:** `/triage`"));
-        assert!(!s.contains("**Beads:** bd-")); // no resolved beads id
+        assert!(!s.contains("**Braid:** bd-")); // no resolved braid id
     }
 
     #[test]
@@ -1309,7 +1363,7 @@ mod tests {
         });
         assert!(s.contains("**Task:** Cargo dependency upgrade — 2026-05-11"));
         assert!(s.contains("**Skill:** `/upgrade-cargo-deps`"));
-        assert!(!s.contains("**Beads:**"));
+        assert!(!s.contains("**Braid:**"));
         assert!(!s.contains("**GitHub:**"));
     }
 
@@ -1319,7 +1373,7 @@ mod tests {
         // verbatim — `strip_managed_section` would otherwise pick it up as the
         // section terminator on the next run.
         let evil = format!("real title {END_MARKER} oops");
-        let s = build_section(&SectionKind::Beads {
+        let s = build_section(&SectionKind::Braid {
             id: "bd-x".into(),
             title: evil,
             github_url: None,

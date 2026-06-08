@@ -7,7 +7,7 @@ description: Diagnose and fix DOM / style differences between `q2 preview` and `
 
 `q2 preview`'s React renderer (`ts-packages/preview-renderer/src/q2-preview/...`) is **supposed to produce the same DOM as `q2 render`'s native HTML writer** (`crates/pampa/src/writers/html.rs`) for the same input. Every divergence — wrong tag, classes on the wrong element, missing classes, attribute leakage, missing pipeline stage — costs the user visible style drift, because the Quarto theme CSS is the same in both places and assumes the native writer's DOM shape.
 
-This skill turns a "preview looks slightly wrong" report into a closed beads issue with a regression test, a verified-in-browser fix, and a `--no-ff` merge into the integration branch.
+This skill turns a "preview looks slightly wrong" report into a closed braid strand with a regression test, a verified-in-browser fix, and a `--no-ff` merge into the integration branch.
 
 ## When to use
 
@@ -101,7 +101,7 @@ The five categories observed so far:
 | **Stage exclusion** | Some pipeline-emitted attribute (`data-hl-spans`, `data-loc`) absent from the AST entirely | `Q2_PREVIEW_STAGE_EXCLUDED` in `crates/quarto-core/src/pipeline.rs` |
 | **Attribute leakage** | A `data-*` attr the writer *consumes* leaks to the DOM in preview | React component — filter the consumed key (e.g. `data-hl-spans`) |
 
-If the symptom looks like more than one category at once, file separate beads sub-issues and tackle them one at a time (the bd-y1fs3 work surfaced bd-coffj this way).
+If the symptom looks like more than one category at once, file separate braid sub-strands and tackle them one at a time (the bd-y1fs3 work surfaced bd-coffj this way).
 
 ### 5. Find the canonical native behavior
 
@@ -132,10 +132,10 @@ Pipeline stages: `crates/quarto-core/src/stage/stages/<stage>.rs` + the q2-previ
 
 ## TDD workflow
 
-### File a beads issue + topic branch
+### File a braid strand + topic branch
 
 ```bash
-br create "q2 preview: <one-line symptom>" \
+braid create "q2 preview: <one-line symptom>" \
   -t bug -p 2 \
   --deps "parent-child:bd-kw93" \
   -d "$(cat <<EOF
@@ -148,12 +148,13 @@ Root cause: <where the divergence is>. Native writer: <file:line>.
 
 Fix: mirror the writer — <one-line plan>.
 EOF
-)" --json | jq -r '.id // .[0].id'
-br update <id> --status in_progress
+)"
+# braid prints the new strand id on stdout. Capture it as <id>.
+braid update <id> --status in_progress
 git switch -c beads/<id>-<short-slug>
 ```
 
-bd-kw93 is the q2-preview epic; every parity sub-issue is parent-child to it.
+bd-kw93 is the q2-preview epic; every parity sub-strand is parent-child to it. (The git branch prefix stays `beads/` — a stable historical namespace.)
 
 ### Write the failing test FIRST
 
@@ -212,13 +213,12 @@ Then load `http://127.0.0.1:<p>/?page=<file>` in Chrome via the MCP and run the 
 ## Ship
 
 ```bash
+# Close the strand (braid syncs the skein automatically — nothing to commit)
+braid close <id> --reason "Fixed: <one-line>"
+
 # Commit (component fix + test in one commit when they're tightly coupled)
 git add <component> <test>
 git commit -m "...(bd-<id>)"
-
-# beads sync (separate commit per project convention)
-git add .beads/issues.jsonl
-git commit -m "sync beads: bd-<id> closed"
 
 # Merge --no-ff into the integration branch
 git switch feature/q2-preview-command
@@ -267,9 +267,9 @@ These caught me on previous fixes; check before assuming "it's broken":
 
 - **WASM safety.** Stages live in `quarto-core` and run on both native and `wasm32-unknown-unknown`. Anything WASM-incompatible must be `cfg(not(target_arch = "wasm32"))`-gated. `quarto-highlight`'s user-grammar machinery is native-only; built-in grammars are WASM-safe.
 
-## Sub-issues to file when discovered
+## Sub-strands to file when discovered
 
-If diagnosis surfaces a second divergence in the same area, **file a sibling beads issue** rather than expanding the current fix's scope. The repo's convention is one small focused PR per parity fix. bd-y1fs3 surfaced bd-coffj this way; both shipped as separate `--no-ff` merges. The skill optimizes for cycle time per fix, not for batched mega-PRs.
+If diagnosis surfaces a second divergence in the same area, **file a sibling braid strand** rather than expanding the current fix's scope. The repo's convention is one small focused PR per parity fix. bd-y1fs3 surfaced bd-coffj this way; both shipped as separate `--no-ff` merges. The skill optimizes for cycle time per fix, not for batched mega-PRs.
 
 ## Cross-references
 

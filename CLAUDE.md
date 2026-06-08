@@ -51,10 +51,27 @@ When a commit includes updated or new snapshot files (`.snap` files under `snaps
 
 ## **WORK TRACKING**
 
-We use br (beads_rust) for issue tracking instead of Markdown TODOs or external tools.
+We use **braid** for issue tracking instead of Markdown TODOs or external tools.
+braid stores all issues for the project in a **skein** (a single
+[automerge](https://automerge.org) CRDT document); a single issue is a
+**strand**. The skein — synced through a sync server — is the **source of
+truth**. There is no git involvement and no `.beads/`-style JSONL to commit:
+edits converge through the CRDT, not through merge tooling. (We migrated off
+beads_rust on 2026-06-08; see `claude-notes/plans/2026-06-08-braid-migration.md`.)
 
-**Note:** `br` is non-invasive and never executes git commands. After `br sync --flush-only`, you must manually run `git add .beads/ && git commit`.
-We use plans for additional context and bookkeeping. Write plans to `claude-notes/plans/YYYY-MM-DD-<description>.md`, and reference the plan file in the issues.
+**`braid` is non-invasive and never executes git commands.** Unlike the old
+`br sync --flush-only; git add .beads/` dance, there is **nothing to commit**
+after issue work — the skein syncs itself. (A `.braid/snapshot.jsonl` backup
+*is* committed periodically, but it is **backup-only and one-directional** —
+see the snapshot policy below. Never `braid import` it back.)
+
+For the authoritative, version-matched command guide, run `braid agents-info`
+(or invoke the `/braid` skill). The quick reference below is a convenience
+summary, not the contract.
+
+We use plans for additional context and bookkeeping. Write plans to
+`claude-notes/plans/YYYY-MM-DD-<description>.md`, and reference the plan file
+in the strands.
 
 ### File Structure
 Plan files should include:
@@ -96,70 +113,70 @@ Complex plans can have phases, and work items are then split into multiple lists
 
 For simple tasks (single file changes, bug fixes), the TodoWrite tool is sufficient.
 
-### Beads Quick Reference
+### Braid Quick Reference
 
 ```bash
-# Find ready work (no blockers)
-br ready --json
+# Find ready work (active + unblocked)
+braid ready --json
 
-# Create new issue
-br create "Issue title" -t bug|feature|task -p 0-4 -d "Description" --json
-
-# Create with explicit ID (for parallel workers)
-br create "Issue title" --id worker1-100 -p 1 --json
+# Create new strand (prints its id; braid assigns a bd-<random> id)
+braid create "Strand title" -t bug|feature|task -p 0-4 -d "Description" --json
 
 # Create with labels
-br create "Issue title" -t bug -p 1 -l bug,critical --json
+braid create "Strand title" -t bug -p 1 -l bug -l critical --json
 
-# Create multiple issues from markdown file
-br create -f feature-plan.md --json
+# Create and link discovered work in one shot
+braid create "Found bug in auth" -t bug -p 1 --deps discovered-from:<current-id> --json
 
-# Update issue status
-br update <id> --status in_progress --json
+# Update status
+braid update <id> --status in_progress --json
 
-# Link discovered work (old way)
-br dep add <discovered-id> <parent-id> --type discovered-from
-
-# Create and link in one command (new way)
-br create "Issue title" -t bug -p 1 --deps discovered-from:<parent-id> --json
+# Link existing strands (id depends on target)
+braid dep add <discovered-id> <parent-id> --type discovered-from
 
 # Complete work
-br close <id> --reason "Done" --json
+braid close <id> --reason "Done"
 
-# Show dependency tree
-br dep tree <id>
+# Show an epic's descendant tree / one strand's details
+braid dep tree <id>
+braid show <id> --json
 
-# Get issue details
-br show <id> --json
-
-# Import with collision detection
-br import -i .beads/issues.jsonl --dry-run             # Preview only
-br import -i .beads/issues.jsonl --resolve-collisions  # Auto-resolve
+# Backup snapshot (one-directional — see snapshot policy; NEVER import it back)
+braid export > .braid/snapshot.jsonl
 ```
+
+Notes on the move from beads:
+- **No explicit `--id`.** braid assigns collision-free ids; with a CRDT,
+  parallel workers never need to pre-agree on ids. (The migration *preserved*
+  every existing `bd-XXXX` id via `braid import`, so source references stay
+  valid.)
+- **No `br create -f <file>` bulk create.** Use `braid import <jsonl>` for bulk.
+- **No `br sync --flush-only` / `git add .beads/`.** The skein is the source of
+  truth; there is nothing to commit after issue work.
 
 ### Workflow
 
-1. **Check for ready work**: Run `br ready` to see what's unblocked
-2. **Claim your task**: `br update <id> --status in_progress`
-3. **Work on it**: Implement, test, document
-4. **Discover new work**: If you find bugs or TODOs, create issues:
-   - Old way (two commands): `br create "Found bug in auth" -t bug -p 1 --json` then `br dep add <new-id> <current-id> --type discovered-from`
-   - New way (one command): `br create "Found bug in auth" -t bug -p 1 --deps discovered-from:<current-id> --json`
-5. **Complete**: `br close <id> --reason "Implemented"`
-6. **Sync and commit**:
-   ```bash
-   br sync --flush-only
-   git add .beads/
-   git commit -m "sync beads"
-   ```
+1. **Check for ready work**: `braid ready` to see what's unblocked
+2. **Claim your task**: `braid update <id> --status in_progress`
+3. **Work on it**: implement, test, document; leave a trail with
+   `braid comment <id> "..."`
+4. **Discover new work**: file it and link it in one shot:
+   `braid create "Found bug in auth" -t bug -p 1 --deps discovered-from:<current-id> --json`
+5. **Complete**: `braid close <id> --reason "Implemented"`
+
+That's the whole loop — **no sync-and-commit step.** braid syncs the skein to
+the server on every command. (`braid sync` forces a round trip if you want to
+confirm convergence.)
 
 ### Issue Types
 
 - `bug` - Something broken that needs fixing
 - `feature` - New functionality
 - `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature composed of multiple issues
+- `epic` - Large feature composed of multiple strands
 - `chore` - Maintenance work (dependencies, tooling)
+- `docs` - Documentation work (braid adds this type)
+- `question` - Open question to resolve (braid adds this type)
 
 ### Priorities
 
@@ -171,12 +188,41 @@ br import -i .beads/issues.jsonl --resolve-collisions  # Auto-resolve
 
 ### Dependency Types
 
-- `blocks` - Hard dependency (issue X blocks issue Y)
-- `related` - Soft relationship (issues are connected)
+- `blocks` - Hard dependency (X depends on / is blocked by Y)
 - `parent-child` - Epic/subtask relationship
-- `discovered-from` - Track issues discovered during work
+- `related` - Soft relationship (strands are connected)
+- `discovered-from` - Track strands discovered during work
+- braid also accepts `conditional-blocks`, `waits-for`, `replies-to`,
+  `duplicates`, `supersedes`, `caused-by`.
 
-Only `blocks` dependencies affect the ready work queue.
+**What gates `ready`:** `blocks`, `conditional-blocks`, and `waits-for` make a
+strand unready while their target is active. `parent-child` does **not** block
+the child (children stay workable); instead an open child blocks the *parent's*
+close. `related`/`discovered-from` and the rest are informational.
+
+> Note: this differs subtly from beads, where `parent-child` could make a child
+> read as blocked. In braid the child is always workable and the parent refuses
+> to close while children are open — the intended epic semantics.
+
+### Snapshot backup policy (READ THIS)
+
+The skein (automerge CRDT) is the **single source of truth**. We additionally
+commit a `.braid/snapshot.jsonl` (`braid export`) to the repo so issues stay
+greppable in PRs, diffable in git history, and recoverable. This snapshot is
+**backup-only and strictly one-directional**:
+
+- It flows **automerge → file only** (`cargo xtask braid-snapshot`, or
+  `braid export > .braid/snapshot.jsonl`). It is **never** an import or sync
+  source back into the skein. **Never run `braid import .braid/snapshot.jsonl`.**
+- On any git **conflict** in `.braid/snapshot.jsonl`, do **not** hand-merge:
+  resolve by regenerating from the live skein (`braid export`). The CRDT is
+  authoritative; the file is a photograph. (Yes, this means the snapshot on one
+  branch may show strand state created on another — "cross-branch
+  contamination" is expected and fine, because the snapshot is not the truth.)
+- The snapshot lives on whatever work branch you're on; it is not special.
+
+The only time JSONL is ever imported is the **one-time migration** (beads'
+`.beads/issues.jsonl` → braid), which is already done.
 
 ## Where information lives (memory vs. repo)
 
@@ -198,7 +244,7 @@ Where project-wide information should live instead:
 - **`claude-notes/plans/`** — decisions, rationale, in-progress work.
 - **`claude-notes/research/`** — findings, audits, reference material.
 - **Code comments** — invariants local to specific code.
-- **Commit messages + `br`** — temporal context, who did what when.
+- **Commit messages + `braid`** — temporal context, who did what when.
 
 What memory is *actually* appropriate for:
 
@@ -234,7 +280,7 @@ When fixing ANY bug:
 
 **This is non-negotiable. Never implement a fix before verifying the test fails. Stop and ask the user if you cannot think of a way to mechanically test the bad behavior. Only deviate if writing new features.**
 
-**Do NOT close a beads test suite item unless all tests pass. If you feel you're low on tokens, report that and open subtasks to work on new sessions.**
+**Do NOT close a braid test-suite strand unless all tests pass. If you feel you're low on tokens, report that and open subtasks to work on new sessions.**
 
 ## Workspace structure
 

@@ -1,11 +1,15 @@
 ---
 name: investigate-beads
-description: Investigate a beads issue in the current checkout, gather context from its dependency graph, and produce a plan-skeleton + triage verdict (ready / needs-info / blocked). Use when the user provides a beads issue ID (bd-XXXX) and asks to investigate, scope, or understand the work needed.
+description: Investigate a braid strand (bd-XXXX issue) in the current checkout, gather context from its dependency graph, and produce a plan-skeleton + triage verdict (ready / needs-info / blocked). Use when the user provides a strand ID (bd-XXXX) and asks to investigate, scope, or understand the work needed.
 ---
 
 # Investigate-Beads Skill
 
-Takes a beads issue from "user pointed at it" to "a plan skeleton and a triage verdict committed to the current branch." It works in whatever checkout you invoke it in and does **not** create or switch worktrees or branches — you choose where the work lands. It is the beads-issue counterpart to `triage` (which handles GitHub issues, where no branch exists yet and one must be created).
+> Naming note: this skill keeps the `investigate-beads` name (and `/investigate-beads`
+> invocation) for stability, but the project now tracks work in **braid** — a strand
+> is one issue in the braid skein. Commands below use `braid`.
+
+Takes a braid strand from "user pointed at it" to "a plan skeleton and a triage verdict committed to the current branch." It works in whatever checkout you invoke it in and does **not** create or switch worktrees or branches — you choose where the work lands. It is the strand counterpart to `triage` (which handles GitHub issues, where no branch exists yet and one must be created).
 
 Does **not** implement the fix or finalize the design. Produces enough context to start a focused design session — or to recommend that the issue isn't ready yet.
 
@@ -17,9 +21,9 @@ User says any of:
 - pastes a beads ID and asks for context / scoping
 
 **Do not** use for:
-- Beads issues you've already scoped (just edit on `main` or an existing branch)
-- GitHub-originated issues — use `triage` instead, which handles the GH side and files a beads issue if needed
-- Issues you're about to implement immediately in the current session — `br update <id> --status in_progress` and start working; this skill's overhead only earns its keep when the issue needs context-gathering before scoping
+- Strands you've already scoped (just edit on `main` or an existing branch)
+- GitHub-originated issues — use `triage` instead, which handles the GH side and files a braid strand if needed
+- Strands you're about to implement immediately in the current session — `braid update <id> --status in_progress` and start working; this skill's overhead only earns its keep when the strand needs context-gathering before scoping
 
 ## Outcome: two durable artifacts
 
@@ -44,20 +48,21 @@ Same rationale as `triage`: catches "the issue is already broken at HEAD" vs. "y
 ### 2. Read the issue
 
 ```bash
-br show <id> --json
+braid show <id> --json
 ```
 
-Read the description, status, type, priority, dates. Note who created it and when — old issues often have stale assumptions worth flagging.
+(braid's `show --json` is a single object, not an array — read the description, status, type, priority, dates. Note who created it and when — old strands often have stale assumptions worth flagging.)
 
 ### 3. Walk the dependency graph
 
-This is the step that earns the skill its keep. A beads issue's *meaning* is usually richer than its description; the graph carries why-it-was-filed and what-blocks-what.
+This is the step that earns the skill its keep. A strand's *meaning* is usually richer than its description; the graph carries why-it-was-filed and what-blocks-what.
 
 ```bash
-br dep tree <id>           # blocks / parent-child / discovered-from edges
+braid dep tree <id>        # parent-child descendant tree (epic → subtasks)
+braid dep list <id>        # all edges, both directions (blocks / related / discovered-from / ...)
 ```
 
-For each linked issue, read it the same way. In particular:
+For each linked strand, read it the same way. In particular:
 
 - **`discovered-from` chain**: trace it. The originating issue (or session) usually has the context that explains *why* this one was filed — what the parent was trying to do when it surfaced this. Often the most informative single piece of context.
 - **`blocks` edges (incoming)**: things that depend on this one. If the dependents are open, they pin the urgency. If they're closed, this issue may already have been addressed differently.
@@ -67,7 +72,7 @@ For each linked issue, read it the same way. In particular:
 
 If the description references a plan file (`claude-notes/plans/...`), read it. If it points at code paths (`crates/foo/src/bar.rs:line`), read those.
 
-Spot-check the area: does the code the issue points at still exist with the same shape? Beads issues age — a six-month-old issue may have been overtaken by a refactor.
+Spot-check the area: does the code the strand points at still exist with the same shape? Strands age — a six-month-old strand may have been overtaken by a refactor.
 
 ### 5. Write the plan skeleton
 
@@ -86,21 +91,22 @@ git commit -m "Investigate bd-XXXX: <one-line summary>"
 
 Commits to the current branch — whichever checkout you were invoked in. Captures the plan skeleton + any investigative artifacts. Do not leave investigative files uncommitted — they are part of the record.
 
-### 7. Beads issue: update status, do NOT close
+### 7. Strand: update status, do NOT close
 
 ```bash
-br update <id> --status in_progress
+braid update <id> --status in_progress
 ```
 
-Even if the verdict is "not ready / blocked," leave the issue in `in_progress` — it has a plan now, which is *progress*. Closing should only happen when the plan recommends close (overtaken / not reproducible) AND the user agrees.
+Even if the verdict is "not ready / blocked," leave the strand in `in_progress` — it has a plan now, which is *progress*. Closing should only happen when the plan recommends close (overtaken / not reproducible) AND the user agrees.
 
-If you discovered any incidental work, file each as its own bd issue and link with `--deps related:<this-id>` or `--deps discovered-from:<this-id>`.
+If you discovered any incidental work, file each as its own strand and link with `--deps related:<this-id>` or `--deps discovered-from:<this-id>` on `braid create` (one shot), e.g.
+`braid create "..." -t task -p 2 --deps discovered-from:<this-id>`.
 
-### 8. Beads JSONL changes go on `main`
+braid syncs the skein automatically — **there is nothing to commit** for strand
+changes (no more `br sync --flush-only; git add .beads/`). The plan-skeleton
+commit in step 6 covers the durable artifacts.
 
-See `.claude/rules/worktrees.md` § Committing beads changes.
-
-### 9. Hand back to the user
+### 8. Hand back to the user
 
 Report:
 - the branch the work landed on
@@ -118,5 +124,5 @@ The user takes it from there: answers the questions to turn the skeleton into a 
 - **Skipping pre-flight verify.** Same trap as `triage`: hides bootstrap problems inside the investigation.
 - **Forwarded TODOs in the open-questions section.** Each question should be specific and answerable. "Figure out the design" is not a design question.
 - **Putting investigative artifacts in `/tmp`.** They are part of the durable record; commit them under `claude-notes/plans/<slug>-investigation/`.
-- **Running the full skill for a 5-minute lookup.** If the user just wants to know what an issue *is*, summarize from `br show` and stop. The skill's overhead (plan skeleton + commit) earns its keep when the investigation needs to write code (repros, fixtures), not when it's purely descriptive.
+- **Running the full skill for a 5-minute lookup.** If the user just wants to know what a strand *is*, summarize from `braid show` and stop. The skill's overhead (plan skeleton + commit) earns its keep when the investigation needs to write code (repros, fixtures), not when it's purely descriptive.
 - **Creating or switching a worktree/branch on the user's behalf.** This skill works in the checkout it was invoked in. If isolation seems warranted, recommend it and let the user set up the worktree/branch — do not run `cargo xtask create-worktree` / `switch-task` / `git switch` yourself.

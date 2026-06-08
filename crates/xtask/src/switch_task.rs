@@ -19,20 +19,20 @@
 //!      and runs `git pull --ff-only` so it picks up siblings' merges,
 //!   2. creates a new topic branch `beads/<id>-<slug>` off the new
 //!      tip,
-//!   3. marks the beads issue `in_progress`,
+//!   3. marks the braid strand `in_progress`,
 //!   4. rewrites the `<!-- BEGIN/END WORKTREE CONTEXT -->` block in
 //!      `CLAUDE.local.md` so the next Claude Code session knows what
 //!      it's working on.
 //!
 //! Omit `--from` to branch off the current HEAD without changing
-//! branches first. `--no-claim` skips the beads status update.
+//! branches first. `--no-claim` skips the braid status update.
 
 use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::create_worktree::{
-    BeadsMetadata, SectionKind, build_section, derive_slug, fetch_beads_metadata,
+    IssueMetadata, SectionKind, build_section, derive_slug, fetch_issue_metadata,
     parse_external_ref_to_github_url, update_claude_local_md, validate_slug,
 };
 
@@ -61,22 +61,22 @@ fn current_worktree_root() -> Result<PathBuf> {
 
 /// Arguments for `cargo xtask switch-task`.
 pub struct Args {
-    /// Beads issue ID to switch to (e.g. `bd-yxqt`).
+    /// Braid strand ID to switch to (e.g. `bd-yxqt`).
     pub beads_id: String,
     /// Integration branch to switch+pull to before creating the topic
     /// branch. Omit to branch off the current HEAD.
     pub from: Option<String>,
     /// Optional slug override (kebab-case). Default: derived from the
-    /// issue title via `derive_slug`.
+    /// strand title via `derive_slug`.
     pub slug: Option<String>,
-    /// Don't mark the issue `in_progress` in beads.
+    /// Don't mark the strand `in_progress` in braid.
     pub no_claim: bool,
 }
 
 pub fn run(args: Args) -> Result<()> {
     let root = current_worktree_root()?;
 
-    let meta = fetch_beads_metadata(&args.beads_id)?;
+    let meta = fetch_issue_metadata(&args.beads_id)?;
     let slug = match args.slug.as_deref() {
         Some(s) => {
             validate_slug(s)?;
@@ -149,20 +149,20 @@ fn git_switch_create(branch: &str) -> Result<()> {
 }
 
 fn claim_issue(id: &str) -> Result<()> {
-    eprintln!("→ br update {id} --status in_progress");
-    let status = Command::new("br")
+    eprintln!("→ braid update {id} --status in_progress");
+    let status = Command::new("braid")
         .args(["update", id, "--status", "in_progress"])
         .status()
-        .context("spawning `br update`")?;
+        .context("spawning `braid update`")?;
     if !status.success() {
-        bail!("`br update {id} --status in_progress` failed");
+        bail!("`braid update {id} --status in_progress` failed");
     }
     Ok(())
 }
 
-fn update_worktree_context(root: &Path, id: &str, meta: &BeadsMetadata) -> Result<()> {
+fn update_worktree_context(root: &Path, id: &str, meta: &IssueMetadata) -> Result<()> {
     let github_url = parse_external_ref_to_github_url(meta.external_ref.as_deref());
-    let kind = SectionKind::Beads {
+    let kind = SectionKind::Braid {
         id: id.to_string(),
         title: meta.title.clone(),
         github_url,
@@ -180,7 +180,7 @@ fn print_summary(id: &str, branch: &str, from: Option<&str>) {
     if let Some(from) = from {
         println!("  (branched off {from} after pull)");
     }
-    println!("  beads issue marked in_progress");
+    println!("  braid strand marked in_progress");
     println!();
     println!("Next: implement, commit, then promote with:");
     println!("  git switch {}", from.unwrap_or("<epic-branch>"));

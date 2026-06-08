@@ -8,12 +8,14 @@
 //! Available commands:
 //! - `dev-setup`: Install required development tools (cargo-nextest, wasm-bindgen-cli)
 //! - `lint`: Run custom lint checks on the codebase
-//! - `create-worktree`: Create git worktree with beads redirect and CLAUDE.local.md
+//! - `create-worktree`: Create git worktree with CLAUDE.local.md context stub
+//! - `braid-snapshot`: Write a backup-only `braid export` to `.braid/snapshot.jsonl`
 //! - `test`: Run workspace tests with platform-appropriate crate exclusions
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
 //! - `build-all`: Fresh-clone build orchestration (npm install + hub-client + Rust workspace)
 //! - `build-trace-viewer`: Build just the trace-viewer SPA
 
+mod braid_snapshot;
 mod build_all;
 mod build_q2_preview_spa;
 mod build_trace_viewer;
@@ -61,10 +63,10 @@ enum Command {
         quiet: bool,
     },
 
-    /// Create a new git worktree with beads redirect and CLAUDE.local.md context stub.
+    /// Create a new git worktree with a CLAUDE.local.md context stub.
     ///
     /// Modes (exactly one required):
-    ///   <bd-id>      — beads issue (positional)
+    ///   <bd-id>      — braid strand (positional)
     ///   --issue N    — GitHub issue triage
     ///   --upgrade    — cargo dependency upgrade (date-based branch)
     #[command(verbatim_doc_comment)]
@@ -72,6 +74,14 @@ enum Command {
         #[command(flatten)]
         args: create_worktree::Args,
     },
+
+    /// Write a backup-only `braid export` snapshot to `.braid/snapshot.jsonl`.
+    ///
+    /// The braid skein (CRDT) is the source of truth; this committed snapshot
+    /// is for grep/diff/recovery only. It is STRICTLY ONE-DIRECTIONAL —
+    /// never `braid import` it back, and on a git conflict regenerate rather
+    /// than hand-merge. See CLAUDE.md § Snapshot backup policy.
+    BraidSnapshot {},
 
     /// Switch the current worktree to a new sub-task branch (no new worktree).
     ///
@@ -83,9 +93,9 @@ enum Command {
     /// With `--from <branch>`, switches to that branch and fast-forward-
     /// pulls before creating the topic branch. Without `--from`,
     /// branches off the current HEAD. Updates CLAUDE.local.md and marks
-    /// the beads issue `in_progress`.
+    /// the braid strand `in_progress`.
     SwitchTask {
-        /// Beads issue ID to switch to (e.g. `bd-yxqt`).
+        /// Braid strand ID to switch to (e.g. `bd-yxqt`).
         beads_id: String,
 
         /// Integration / epic branch to switch+pull before branching.
@@ -97,7 +107,7 @@ enum Command {
         #[arg(long)]
         slug: Option<String>,
 
-        /// Don't mark the issue `in_progress` in beads.
+        /// Don't mark the strand `in_progress` in braid.
         #[arg(long)]
         no_claim: bool,
     },
@@ -241,6 +251,7 @@ fn main() -> Result<()> {
             lint::run(&config)
         }
         Command::CreateWorktree { args } => create_worktree::run(args),
+        Command::BraidSnapshot {} => braid_snapshot::run(),
         Command::SwitchTask {
             beads_id,
             from,

@@ -16,13 +16,13 @@ User says any of:
 
 **Do not** use for:
 - Fixes the user already has scoped (just edit on `main` or an existing branch)
-- Internal beads issues without an upstream GH issue (no triage doc needed; the beads description is the record)
+- Internal braid strands without an upstream GH issue (no triage doc needed; the strand description is the record)
 
 ## Outcome: three durable artifacts
 
 1. A worktree branch `issue-<N>` at `.worktrees/issue-<N>/`, with one commit containing the triage record (and any investigative fixtures).
 2. A triage document at `claude-notes/issue-reports/<N>/triage.md` on that branch.
-3. A beads issue (only if the triage concludes there is real work to do — see § Outcomes that don't get a beads issue).
+3. A braid strand (only if the triage concludes there is real work to do — see § Outcomes that don't get a braid strand).
 
 Investigative artifacts (minimal repros, side-by-side fixtures, comparison outputs) live alongside the triage doc under `claude-notes/issue-reports/<N>/` and are committed with it. They are part of the record, not throwaways.
 
@@ -52,21 +52,19 @@ If you're in the main checkout or a different worktree, create it now:
 
 ```bash
 cargo xtask create-worktree --issue <N>
-# Creates the worktree, .beads/redirect, and CLAUDE.local.md context stub.
-# This step runs BEFORE the beads issue is created (step 6). The `--issue`
-# template's `**Beads:**` line is a self-documenting placeholder pointing
-# at `br search <N>` / `br create`. After step 6 creates the bd-XXXX,
+# Creates the worktree and CLAUDE.local.md context stub.
+# This step runs BEFORE the braid strand is created (step 6). The `--issue`
+# template's `**Strand:**` line is a self-documenting placeholder pointing
+# at `braid search <N>` / `braid create`. After step 6 creates the bd-XXXX,
 # edit that line in CLAUDE.local.md manually to point at the new ID.
 # Do NOT re-run the xtask with `<bd-id>` to "refresh" — that creates a
-# separate beads worktree at `.worktrees/<bd-id>-<slug>` rather than
+# separate worktree at `.worktrees/<bd-id>-<slug>` rather than
 # updating this one.
 # Fallback for fresh clones where the xtask is not yet built:
 # see .claude/rules/worktrees.md § Manual bootstrap.
 ```
 
-Branch + directory naming follows `.claude/rules/worktrees.md` § Branch naming (`issue-<N>` for triage). Beads redirect setup follows § Beads Redirect.
-
-Verify with `br where` from inside the worktree.
+Branch + directory naming follows `.claude/rules/worktrees.md` § Branch naming (`issue-<N>` for triage). The worktree resolves the braid skein automatically (repo-root `.braid.toml` walk-up / committed `.braid-project` marker) — no per-worktree setup.
 
 ### 4. Bootstrap the worktree
 
@@ -82,22 +80,22 @@ Create `claude-notes/issue-reports/<N>/` and put inside it:
 
 For diagnosing the actual bug (root cause, code locations, fix scope), this skill defers to the per-crate `CLAUDE.md` files (e.g. `crates/pampa/CLAUDE.md` for the TDD round-trip workflow). Do whatever investigation the issue calls for and capture the conclusions in the triage doc — but the skill itself is silent on *how* to diagnose.
 
-### 6. Outcomes that don't get a beads issue
+### 6. Outcomes that don't get a braid strand
 
-A beads issue is only created when the triage concludes there is concrete work to do in this repo. Skip the beads issue when:
+A braid strand is only created when the triage concludes there is concrete work to do in this repo. Skip the strand when:
 
 - **Working as intended.** Triage doc explains why, and you (or the user) responds on the GH issue with the explanation.
 - **Duplicate.** Triage doc points at the existing bd-XXXX. Optionally comment on the duplicate GH issue.
-- **Pure documentation update** small enough to do in the same triage session — just do it and skip beads.
+- **Pure documentation update** small enough to do in the same triage session — just do it and skip the strand.
 - **Need more info from the reporter.** Triage doc captures what you don't yet know; you (or the user) ask the reporter on GH. Revisit when they respond.
 
-When you do file a beads issue:
+When you do file a braid strand:
 
 ```bash
-br create "<headline> (issue #<N>)" -t bug|task|feature -p <0-4> -d "<description>" --json
+braid create "<headline> (issue #<N>)" -t bug|task|feature -p <0-4> -d "<description>"
 ```
 
-The description should reference the triage doc path and the worktree branch. If you discovered any incidental work during triage, file each as its own issue and link with `--deps related:<main-bd-id>`.
+braid prints the new strand id on stdout. The description should reference the triage doc path and the worktree branch. If you discovered any incidental work during triage, file each as its own strand and link with `--deps related:<main-bd-id>`.
 
 ### 7. Commit the triage record on the worktree branch
 
@@ -109,11 +107,9 @@ git commit -m "Triage issue #<N>: <one-line summary> (bd-XXXX)"
 
 Captures the triage doc plus all investigative artifacts. Do not leave investigative files uncommitted — they are part of the record. If a fix follows in the same session, that fix is a separate commit on the same branch.
 
-### 8. Beads JSONL changes go on `main`
+braid syncs the skein automatically on every command — there is **nothing to commit** for the strand created in step 6 (no `.beads/` directory, no JSONL to stage). The branch commit above covers the durable code/doc artifacts.
 
-See `.claude/rules/worktrees.md` § Committing beads changes.
-
-### 9. Pushing for PR
+### 8. Pushing for PR
 
 See `.claude/rules/worktrees.md` § Pushing for PR. Local branch stays bare (`issue-<N>`); remote uses a prefix reflecting the work type.
 
@@ -121,6 +117,5 @@ See `.claude/rules/worktrees.md` § Pushing for PR. Local branch stays bare (`is
 
 - **Skipping pre-flight verify.** Hides bootstrap problems and pre-existing failures inside the triage.
 - **Putting investigative artifacts in `/tmp` or untracked paths.** They are part of the durable record.
-- **Forcing a beads issue when the outcome is "working as intended" or "duplicate".** A triage doc is enough; a stub beads issue is noise.
-- **Committing `.beads/issues.jsonl` from a worktree branch.** It belongs on `main`.
+- **Forcing a braid strand when the outcome is "working as intended" or "duplicate".** A triage doc is enough; a stub strand is noise.
 - **Silent investigations.** If you spend more than a few minutes exploring without finding the answer, surface what you've tried in the triage doc as evidence — even unanswered. The doc is a record of effort, not just conclusions.

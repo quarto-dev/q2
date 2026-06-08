@@ -1,3 +1,22 @@
+> # ⛔ FROZEN — migrated to braid (2026-06-08)
+>
+> **This project no longer uses beads.** Issue tracking moved to **braid** on
+> 2026-06-08. `.beads/` is kept only as a **read-only historical archive** (and
+> the rollback source of last resort). Every `bd-XXXX` id was preserved in the
+> migration, so source references stay valid.
+>
+> **Do NOT run `br` write commands here** (`br create`/`update`/`close`/`sync`).
+> Use **braid** instead — run `braid agents-info` or the `/braid` skill for
+> usage, and see `CLAUDE.md` § WORK TRACKING.
+>
+> Migration record: `claude-notes/plans/2026-06-08-braid-migration.md`.
+> The `.beads/issues.jsonl` in this directory is the frozen final beads state;
+> the live tracker is the braid skein (backup snapshot at `.braid/snapshot.jsonl`).
+>
+> *(The original beads boilerplate below is retained for historical context.)*
+
+---
+
 # Beads - AI-Native Issue Tracking
 
 Welcome to Beads! This repository uses **Beads** for issue tracking - a modern, AI-native tool designed to live directly in your codebase alongside your code.
