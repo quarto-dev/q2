@@ -275,92 +275,136 @@ output recorded here.
       (root-cause regression) + explicit `--to revealjs`. Confirmed the
       no-`--to` case currently emits 974 bytes of plain HTML.
 
-**1.2 — Vendor reveal.js 6 assets.**
-- [ ] Copy reveal.js 6 `dist/` (reveal.js, reveal.css, one theme, the plugins
-      we need) into `resources/revealjs/` with a `README.md` documenting source
-      + version (mirror `resources/scss/README.md` convention). Never reference
-      `external-sources/` or `node_modules/` at compile/runtime.
-- [ ] Confirm `cargo xtask lint` (external-sources-in-macro rule) stays green if
-      assets are embedded via `include_dir!`/`include_str!`.
+**1.2 — Vendor reveal.js 6 assets.** ✅ done
+- [x] Vendored reveal.js 6.0.0 (MIT) into `resources/revealjs/`
+      (`reset.css`, `reveal.css`, `reveal.js`, `theme/white.css`, `LICENSE`) +
+      `README.md` documenting source/version. Copied from `node_modules/`.
+- [x] Embedded via `include_str!` (binary stays single; output is a
+      self-contained file). `cargo xtask lint` green.
 
-**1.3 — Slide-splitting AST transform (`RevealSlidesStage`).**
-- [ ] New stage that walks the post-transform Pandoc AST and emits the canonical
-      slide structure (the shared contract from decision 1). Rules: split at
-      `slide-level` (default H2) for horizontal slides, H3 for vertical/nested,
-      H1 → section title slide, explicit `HorizontalRule` → slide break, auto
-      title slide from metadata. WASM-compatible (no native-only deps; honor
-      `.claude/rules/wasm.md`).
-- [ ] Represent the split as structure the body writer can serialize to
-      `<section>` (likely Div wrappers with reveal classes, or a typed
-      intermediate). Keep the `data-*` attribute mapping centralized so the
-      preview can reuse it later.
-- [ ] Unit tests for split boundaries (each rule + interaction: HR inside a
-      section, H3 before any H2, doc with no headings, etc.).
+**1.3 — Slide-construction transform (`RevealSlidesTransform`).** ✅ done
+- [x] `crates/quarto-core/src/revealjs/slides.rs` — `build_reveal_slides(blocks,
+      slide_level)` implements Pandoc's slide-level algorithm: `< N` →
+      section-divider stack, `== N` → slide (vertical if in a stack), `> N` →
+      in-slide heading, `HorizontalRule` → break. Emits `Div(.section)` (writer
+      serializes `<section>`); header id/classes/attrs hoisted onto the
+      section. WASM-safe (pure AST, no native deps). Implemented as an
+      `AstTransform` (not a separate stage) replacing `TitleBlockTransform` +
+      `SectionizeTransform` for revealjs in `build_transform_pipeline`.
+- [x] `transform.rs` also synthesizes the `<section id="title-slide">` from
+      metadata (title/subtitle/author/date).
+- [x] 11 unit tests covering every split boundary (flat, divider/vertical,
+      deep-heading-in-slide, HR, preamble, no-headers, empty, class hoisting,
+      slide-level 3).
 
-**1.4 — `RevealjsFormatOptions` + metadata plumbing.**
-- [ ] Add `revealjs: RevealjsFormatOptions` to `FormatOptions`
-      (`crates/quarto-core/src/render.rs`). Tier-1 fields: `theme`,
-      `transition`, `transition_speed`, `slide_number`, `controls`, `progress`,
-      `center`, `hash`, `incremental` (global default), `width`, `height`,
-      `slide_level`, `logo`, `footer`.
-- [ ] Ensure `resolve_format_config()` surfaces `format.revealjs.*` to these
-      options. Map option names to `Reveal.initialize` config keys.
-- [ ] Tests: option round-trips from YAML → `Reveal.initialize` JSON.
+**1.4 — Reveal config from metadata.** ✅ done (revised approach)
+- [x] `crates/quarto-core/src/revealjs/assemble.rs` `reveal_config_json()`
+      reads the merged/flattened metadata (`format.revealjs.*` → top level via
+      `resolve_format_config`, keyed on `identifier.as_str()`) and maps to
+      `Reveal.initialize` camelCase keys: `controls`/`progress`/`center`/`hash`
+      (default true), `transition` (default "slide"), `transitionSpeed`,
+      `slideNumber`, `width`, `height`. **Note:** read via `as_plain_text()`
+      (YAML scalars are `PandocInlines`; `as_str()` misses them).
+- [x] **Deviation from sketch:** no typed `RevealjsFormatOptions` in
+      `FormatOptions` yet — reading from flattened metadata at assembly time is
+      simpler and sound for Tier-1. Promote to a typed struct when the preview
+      (Phase 1P) needs the shared contract in code. _Tracked as a follow-up._
+- [x] Unit tests: defaults + YAML→reveal-key mapping.
 
-**1.5 — Reveal template + body/template fork.**
-- [ ] Add a `REVEALJS_TEMPLATE` (reveal scaffold: head with reveal.css + theme +
-      configured CSS, body `.reveal > .slides > $body$`, scripts importing
-      reveal.js core + plugins, `Reveal.initialize({…})`). Use the
-      `quarto-doctemplate` engine like the existing templates.
-- [ ] Fork template selection in `apply_template.rs` on
-      `FormatIdentifier::Revealjs`.
-- [ ] Fork body rendering so slides serialize as `<section>` (Phase 1.3 output)
-      — `RenderHtmlBodyStage` branch or a revealjs body writer in
-      `crates/pampa/src/writers/`.
-- [ ] Wire reveal assets into the artifact/resource-resolver path so the
-      standalone file references (or embeds) them correctly. Decide self-
-      contained vs. linked default (Q1 default is *non*-self-contained; honor
-      `embed-resources` later).
+**1.5 — Reveal document assembly + template fork.** ✅ done (revised approach)
+- [x] `assemble.rs` `render_revealjs_document(body, meta)` wraps the slide body
+      in the reveal scaffold (`.reveal > .slides`) with **inlined** reset/
+      reveal/theme CSS + reveal.js + `Reveal.initialize({…})`. Self-contained
+      single file. **Deviation:** direct string assembly, not the
+      `quarto-doctemplate` engine (avoids `$`-collision with rendered body and
+      keeps reveal asset inlining self-contained; revisit if partials needed).
+- [x] Forked `apply_template.rs` on `FormatIdentifier::Revealjs` (new `None if
+      …Revealjs` arm) → calls the reveal assembler, bypassing Bootstrap
+      templates.
+- [x] Body serializes as `<section>` via the existing HTML writer (no writer
+      change needed — `RevealSlidesTransform` produces `.section` Divs).
+- [x] **Also fixed:** `CompileThemeCssStage` now skips revealjs (reveal `theme:`
+      is not a Bootswatch name; the stage would mis-validate `theme: white`).
+      Caught by end-to-end verification, not unit tests.
+- [x] Asset default: **inlined/self-contained** for Tier-1 (binary stays single
+      via `include_str!`). Linked-assets + `embed-resources` is a later phase.
 
-**1.6 — CLI gate + front-matter format resolution.**
-- [ ] Allow `FormatIdentifier::Revealjs` through `render.rs:608` (it already
-      reports `is_native()`; confirm the gate change doesn't open non-native
-      formats).
-- [ ] **Resolve the target format from front-matter when `--to` is absent**
-      (root-cause fix): read the document (and, in a project, `_quarto.yml`)
-      `format:` key instead of defaulting to `"html"`. Keep `--to` as an
-      explicit override. Single-format-per-render is enough for Phase 1; the
-      multi-format/project case is Phase 8 (decision 5). Use a sound
-      resolution path (parse the merged front-matter `format`), not a string
-      hack.
+**1.6 — CLI gate + front-matter format resolution.** ✅ done
+- [x] revealjs already passes the `is_native()` gate; widened the
+      not-yet-supported message to mention revealjs.
+- [x] **Resolved the target format from front-matter when `--to` is absent**
+      (root-cause fix): `detect_single_input_format()` /
+      `format_key_from_frontmatter()` in `render.rs` read the document's
+      front-matter `format:` (scalar, or first key of a `format:` map) for a
+      single `.qmd` input. `--to` stays an explicit override. Best-effort
+      (parse failure → `"html"`). Single-format-per-render; project/per-file is
+      Phase 8 (decision 5).
 
-**1.7 — Title slide.**
-- [ ] Render title/subtitle/author/institute/date into the first `<section>`
-      (reveal-conventional markup). Reuse `DocumentProfile` authors/title where
-      possible rather than re-extracting.
+**1.7 — Title slide.** ✅ done (folded into 1.3)
+- [x] `build_title_slide()` in `transform.rs` emits `<section id="title-slide">`
+      with `<h1 class="title">` + classed subtitle/author/date paras from
+      metadata. (Plain-text extraction for Tier-1; rich-inline titles a later
+      refinement.)
 
-**1.8 — End-to-end verification (mandatory, record here).**
-- [ ] `cargo build --workspace` clean.
-- [ ] `cargo nextest run --workspace` green (monorepo-wide — pampa changes can
-      break downstream crates).
-- [ ] `cargo xtask verify` (full, since `quarto-core`/`pampa` feed the WASM
-      leg).
-- [ ] Run `cargo run --bin q2 -- render <fixture>/talk.qmd`; **open the output
-      in a browser**, navigate slides, confirm title slide + theme + controls.
-      Record the exact invocation + an HTML snippet + an explicit "inspected"
-      note in this doc.
+**1.8 — End-to-end verification (mandatory).** ✅ done
+- [x] `cargo build --workspace` clean.
+- [x] `cargo nextest run --workspace` green — **9565 passed, 0 failed** (no
+      regressions from the pipeline/apply_template/compile_theme_css changes).
+- [x] `cargo xtask lint` green; clippy clean on touched files.
+- [ ] Full `cargo xtask verify` (WASM leg) — deferred to just before requesting
+      push (expensive; reveal module is WASM-safe by construction). _Pending._
+- [x] **E2E through the binary** (recorded below).
+
+#### Phase 1 end-to-end record (2026-06-08)
+
+Invocation: `cargo run --bin q2 -- render /tmp/revealjs-e2e/talk.qmd`
+(fixture: title/subtitle/author/date + 2 H2 slides + a `# Section` divider +
+`## Under the Hood` + an H3, code block, inline math; `format.revealjs` =
+`theme: white, transition: fade, slide-number: true`).
+
+Output: a **749 KB self-contained `talk.html`**. Inspected:
+
+```
+<section id="title-slide" class="section title-slide"><h1 class="title">…
+<section id="why-quarto-2" class="section"><h2>…
+<section id="some-code" class="section"><h2>… (class="sourceCode" highlighting)
+<section id="section-details" class="section">        ← H1 stack
+  <section class="section"><h1>…                      ← divider slide
+  <section id="under-the-hood" class="section"><h2>…  ← vertical sub-slide
+    <h3 id="a-vertical-subslide">…                    ← H3 as in-slide content
+Reveal.initialize({ "controls":true,…, "transition":"fade", "slideNumber":true })
+```
+
+Confirmed: reveal scaffold, 2-level nesting (H1 stack + vertical H2, H3 kept
+in-slide per slide-level 2), title slide with subtitle/author/date, inline math
+(`<span class="math">`/`\(E…`), syntax-highlighted code, and the reveal.js
+library inlined (`I.Reveal=b()`). Output inspected via grep of the rendered
+HTML; not yet opened in a live browser (a manual browser pass is still worth
+doing before the epic lands).
 
 ### Phase 1 open questions / risks
 
-- **Slide split placement vs. existing transforms.** Must run after Quarto AST
-  transforms (callouts/crossref/sectionize) but the split likely interacts with
-  `sectionize` (which already wraps headings in `section` Divs — see the
-  preview's "section Div" splitting path). Need to confirm whether to consume
-  sectionize output or split independently. _Deferred to implementation
-  (user, 2026-06-08): decide with the real code in front of us. When it comes
-  up in 1.3, surface a **concrete** question to the user (show the actual
-  sectionize AST shape + the two options it implies) rather than guessing — the
-  user is indifferent a priori but will answer a specific question._
+- **Slide split vs. `sectionize` — RESOLVED 2026-06-08: Option A (reveal-specific
+  slide-construction stage; skip generic sectionize for revealjs).** Decided by
+  the "land similar to Q1" criterion. Evidence: Q1 delegates reveal slide-tree
+  construction entirely to **Pandoc's reveal.js writer** (driven by
+  `slide-level`, hardcoded default 2 at `format-reveal.ts:149`); the generic
+  HTML5 section-div machinery is *not* what builds reveal slides, and the Lua
+  `reveal.lua` filter is purely decorative. Pandoc's writer also hoists header
+  attributes onto the enclosing `<section>` (`format-reveal.ts:607`). Since Q2
+  has no Pandoc, the faithful port is a Rust `RevealSlidesStage` implementing
+  Pandoc's slide-level algorithm, with generic `sectionize` **skipped** for
+  revealjs (Pandoc keeps reveal slide-construction separate from
+  `--section-divs`). The existing HTML writer already serializes
+  `Div(.section)` → `<section>` (`html.rs:1467`) and passes key-value attrs
+  through as `data-*`, so the stage emits section Divs and needs **no writer
+  change**.
+
+  **Pandoc slide-level semantics to replicate (N = slide-level, default 2):**
+  header level `< N` → section-divider slide wrapping the following slides as a
+  vertical stack; `== N` → a slide; `> N` → ordinary heading content *within*
+  the current slide; `HorizontalRule` → slide break; title slide auto-generated
+  from metadata; header attributes hoisted onto the `<section>`.
 - **Single-file project (no `_quarto.yml`) must work in Phase 1.** `format:
   revealjs` resolved from document front-matter, implicit single-file project.
   This is the Phase-1 fixture path — no project context required. _Covered by

@@ -601,14 +601,23 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         .cwd()
         .map_err(|e| anyhow::anyhow!("Failed to get current directory: {}", e))?;
 
-    // Determine format
-    let format_str = args.to.as_deref().unwrap_or("html");
-    let format = resolve_format(format_str)?;
+    // Determine the target format. An explicit `--to` always wins; otherwise
+    // resolve from the document's front-matter `format:` (matching Quarto 1,
+    // which reads the front-matter to choose output formats). Falling back to
+    // `"html"` only when neither is present. Single-format-per-render for now;
+    // multi-format/project resolution is a later phase
+    // (claude-notes/plans/2026-06-08-revealjs-presentations.md, decision 5).
+    let format_str: String = match args.to.as_deref() {
+        Some(to) => to.to_string(),
+        None => detect_single_input_format(&args.inputs).unwrap_or_else(|| "html".to_string()),
+    };
+    let format = resolve_format(&format_str)?;
 
-    // Only HTML is supported in MVP
+    // Native formats (HTML, revealjs) render in-process; non-native formats
+    // still need Pandoc and are not yet supported.
     if !format.identifier.is_native() {
         anyhow::bail!(
-            "Format '{}' is not yet supported. Only HTML is available in this version.",
+            "Format '{}' is not yet supported. Only HTML and revealjs are available in this version.",
             format.identifier
         );
     }
@@ -650,7 +659,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     match target {
         RenderTarget::SingleDoc(input) => execute_single_doc(input, &args, &options, format),
         RenderTarget::FullProject { project_dir } => {
-            execute_project(project_dir, None, &args, &options, format, format_str)
+            execute_project(project_dir, None, &args, &options, format, &format_str)
         }
         RenderTarget::Subset {
             project_dir,
@@ -661,7 +670,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             &args,
             &options,
             format,
-            format_str,
+            &format_str,
         ),
     }
 }
@@ -937,6 +946,51 @@ fn print_render_diagnostics_text(
 /// Resolve format string to Format (without metadata)
 fn resolve_format(format_str: &str) -> Result<Format> {
     Format::from_format_string(format_str).map_err(|e| anyhow::anyhow!("{}", e))
+}
+
+/// When `--to` is absent, detect the target format from a single `.qmd`
+/// input's front-matter `format:` key. Returns `None` for project renders
+/// (multiple inputs or a directory) — per-file format inside a project is a
+/// later phase. Best-effort: any read/parse failure yields `None` (caller
+/// falls back to `"html"`).
+fn detect_single_input_format(inputs: &[String]) -> Option<String> {
+    if inputs.len() != 1 {
+        return None;
+    }
+    let path = std::path::Path::new(&inputs[0]);
+    if path.extension().and_then(|e| e.to_str()) != Some("qmd") || !path.is_file() {
+        return None;
+    }
+    let content = std::fs::read_to_string(path).ok()?;
+    format_key_from_frontmatter(&content)
+}
+
+/// Extract the leading YAML front-matter block and return the chosen output
+/// format: the `format:` scalar, or the first key when `format:` is a map
+/// (e.g. `format: {revealjs: {...}}`).
+fn format_key_from_frontmatter(content: &str) -> Option<String> {
+    let yaml = extract_yaml_frontmatter(content)?;
+    let value: serde_yaml::Value = serde_yaml::from_str(&yaml).ok()?;
+    match value.get("format")? {
+        serde_yaml::Value::String(s) => Some(s.clone()),
+        serde_yaml::Value::Mapping(m) => m.keys().find_map(|k| k.as_str().map(str::to_string)),
+        _ => None,
+    }
+}
+
+/// Return the text of the leading YAML front-matter block (between the opening
+/// `---` and the closing `---` / `...` line), if present.
+fn extract_yaml_frontmatter(content: &str) -> Option<String> {
+    let s = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let after_open = s
+        .strip_prefix("---\n")
+        .or_else(|| s.strip_prefix("---\r\n"))?;
+    for terminator in ["\n---", "\n..."] {
+        if let Some(idx) = after_open.find(terminator) {
+            return Some(after_open[..idx].to_string());
+        }
+    }
+    None
 }
 
 // ====================================================================

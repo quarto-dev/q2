@@ -282,6 +282,14 @@ impl PipelineStage for ApplyTemplateStage {
                 )
                 .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?
             }
+            None if ctx.format.identifier == crate::format::FormatIdentifier::Revealjs => {
+                // revealjs uses its own self-contained scaffold (inlined
+                // reveal.js assets + Reveal.initialize), bypassing the
+                // Bootstrap HTML templates. The body is already a sequence of
+                // `<section>` slides from RevealSlidesTransform.
+                let html = crate::revealjs::render_revealjs_document(&rendered.content, &metadata);
+                (html, Vec::new())
+            }
             None => {
                 // No custom template, no partials: select built-in template based on format
                 let minimal = crate::format::is_minimal_html(&metadata);

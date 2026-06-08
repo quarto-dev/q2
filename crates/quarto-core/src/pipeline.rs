@@ -995,6 +995,9 @@ pub fn build_transform_pipeline(
 ) -> TransformPipeline {
     let mut pipeline: TransformPipeline = TransformPipeline::new();
 
+    // Computed before `target_format` is moved into the shortcode transform.
+    let is_revealjs = target_format == "revealjs";
+
     // === NORMALIZATION PHASE ===
     pipeline.push(Box::new(CalloutTransform::new()));
     pipeline.push(Box::new(CalloutResolveTransform::new()));
@@ -1023,8 +1026,17 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(WebsiteFaviconTransform::new()));
     pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
     pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
-    pipeline.push(Box::new(TitleBlockTransform::new()));
-    pipeline.push(Box::new(SectionizeTransform::new()));
+    // Slide construction for `format: revealjs` replaces the generic
+    // title-block + sectionize pair: reveal needs an exactly-two-level slide
+    // tree built from `slide-level` (Pandoc keeps reveal slide-construction
+    // separate from its `--section-divs` machinery; so do we). See
+    // claude-notes/plans/2026-06-08-revealjs-presentations.md.
+    if is_revealjs {
+        pipeline.push(Box::new(crate::revealjs::RevealSlidesTransform::new()));
+    } else {
+        pipeline.push(Box::new(TitleBlockTransform::new()));
+        pipeline.push(Box::new(SectionizeTransform::new()));
+    }
     pipeline.push(Box::new(FootnotesTransform::new()));
     // TheoremSugarTransform / ProofSugarTransform run before
     // FloatRefTargetSugarTransform so `Div(#thm-foo .theorem)` and

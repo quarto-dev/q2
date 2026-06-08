@@ -258,6 +258,15 @@ impl PipelineStage for CompileThemeCssStage {
             ));
         };
 
+        // `format: revealjs` inlines its own reveal.js CSS + theme in the
+        // reveal assembler (see `crate::revealjs`). Bootstrap theme
+        // compilation does not apply, and a reveal theme name like `white`
+        // is not a Bootswatch theme — running this stage would mis-validate
+        // it. Skip entirely.
+        if ctx.format.identifier == crate::format::FormatIdentifier::Revealjs {
+            return Ok(PipelineData::DocumentAst(doc));
+        }
+
         // Extract theme config from merged metadata.
         //
         // Any error here is a **user-facing configuration error**

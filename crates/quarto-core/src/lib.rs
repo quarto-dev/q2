@@ -56,6 +56,7 @@ pub mod render;
 pub mod render_to_file;
 pub mod resource_resolver;
 pub mod resources;
+pub mod revealjs;
 pub mod stage;
 pub mod template;
 pub mod theme_diagnostic;
