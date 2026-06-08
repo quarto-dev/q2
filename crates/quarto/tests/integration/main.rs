@@ -7,6 +7,7 @@ pub mod json_errors;
 pub mod preview_cli;
 pub mod render_cli_e2e;
 pub mod render_integration;
+pub mod revealjs_cli;
 pub mod smoke_all;
 pub mod trace_cli;
 

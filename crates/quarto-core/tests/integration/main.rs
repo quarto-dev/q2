@@ -35,6 +35,7 @@ pub mod render_page_in_project;
 pub mod render_preserves_source_files;
 pub mod render_to_html_user_grammars;
 pub mod replay_engine;
+pub mod revealjs_format;
 pub mod sidebar_pipeline;
 pub mod website_post_render;
 
