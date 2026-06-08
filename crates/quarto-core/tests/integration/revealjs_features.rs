@@ -93,6 +93,81 @@ fn fragment_variant_classes_pass_through() {
     }
 }
 
+// ── 2d: incremental lists ────────────────────────────────────────────────
+
+/// Count `<li class="fragment">` openings.
+fn fragment_li_count(html: &str) -> usize {
+    html.matches("<li class=\"fragment\">").count()
+}
+
+#[test]
+fn incremental_div_makes_list_items_fragments() {
+    let html = render_revealjs(
+        "---\nformat: revealjs\n---\n\n## S\n\n::: {.incremental}\n\n- a\n- b\n- c\n\n:::\n",
+    );
+    assert_eq!(
+        fragment_li_count(&html),
+        3,
+        "each item of an `.incremental` list must be `<li class=\"fragment\">`; html:\n{}",
+        &html[..html.len().min(2500)]
+    );
+}
+
+#[test]
+fn incremental_slide_heading_makes_lists_fragments() {
+    // `.incremental` on the slide heading (hoisted to the section) applies to
+    // all lists on the slide.
+    let html =
+        render_revealjs("---\nformat: revealjs\n---\n\n## Slide {.incremental}\n\n- one\n- two\n");
+    assert_eq!(fragment_li_count(&html), 2);
+}
+
+#[test]
+fn plain_list_is_not_incremental() {
+    let html = render_revealjs("---\nformat: revealjs\n---\n\n## S\n\n- a\n- b\n");
+    assert_eq!(
+        fragment_li_count(&html),
+        0,
+        "non-incremental list must stay plain `<li>`"
+    );
+    assert!(html.contains("<li>"));
+}
+
+#[test]
+fn global_incremental_makes_all_lists_fragments() {
+    let html =
+        render_revealjs("---\nformat: revealjs\nincremental: true\n---\n\n## S\n\n- a\n- b\n");
+    assert_eq!(
+        fragment_li_count(&html),
+        2,
+        "global `incremental: true` applies to every list"
+    );
+}
+
+#[test]
+fn nonincremental_opts_out_under_global_incremental() {
+    let html = render_revealjs(
+        "---\nformat: revealjs\nincremental: true\n---\n\n## S\n\n::: {.nonincremental}\n\n- a\n- b\n\n:::\n",
+    );
+    assert_eq!(
+        fragment_li_count(&html),
+        0,
+        "`.nonincremental` must opt out even under global `incremental: true`"
+    );
+}
+
+#[test]
+fn ordered_incremental_list_items_are_fragments() {
+    let html = render_revealjs(
+        "---\nformat: revealjs\n---\n\n## S\n\n::: {.incremental}\n\n1. first\n2. second\n\n:::\n",
+    );
+    assert_eq!(
+        fragment_li_count(&html),
+        2,
+        "ordered lists honor `.incremental` too"
+    );
+}
+
 // ── 2c: columns ──────────────────────────────────────────────────────────
 
 const COLUMNS_DECK: &str = "\

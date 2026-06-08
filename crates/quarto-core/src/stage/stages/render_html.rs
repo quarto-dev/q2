@@ -30,6 +30,7 @@ fn build_html_config_from_options(opts: &HtmlFormatOptions) -> HtmlConfig {
     HtmlConfig {
         include_source_locations: false,
         attribution_by_node: html_attribution_fields(opts),
+        ..HtmlConfig::default()
     }
 }
 
@@ -105,7 +106,21 @@ impl PipelineStage for RenderHtmlBodyStage {
         // so the writer can emit `data-attr-*` attributes. When
         // attribution is off, both fields stay `None` and the writer
         // takes its existing byte-identical path.
-        let html_config = build_html_config_from_options(&ctx.format_options.html);
+        let mut html_config = build_html_config_from_options(&ctx.format_options.html);
+        // Revealjs: enable Pandoc-style incremental lists (`<li class="fragment">`).
+        // The writer attaches the class because list items have no AST attr.
+        // Gated to revealjs so plain HTML is unaffected. The global
+        // `incremental: true` sets the starting state; `.incremental` /
+        // `.nonincremental` flip it per subtree.
+        if ctx.format.identifier == crate::format::FormatIdentifier::Revealjs {
+            html_config.incremental_lists = true;
+            html_config.incremental_default = doc
+                .ast
+                .meta
+                .get("incremental")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+        }
         let mut body_buf = Vec::new();
         pampa::writers::html::write_with_options(
             &doc.ast,

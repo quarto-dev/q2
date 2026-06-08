@@ -45,6 +45,17 @@ pub struct HtmlConfig {
     /// is off for this render — same code path as the unflagged HTML
     /// default.
     pub attribution_by_node: Option<Arc<HashMap<usize, HtmlAttributionRecord>>>,
+
+    /// Emit `class="fragment"` on list items inside an incremental context
+    /// (revealjs). This is the render side of Pandoc's `writerIncremental`
+    /// behavior — list items have no AST `Attr`, so the class is attached by
+    /// the writer. `false` (default) for plain HTML: `.incremental` is a no-op,
+    /// matching Pandoc's slide-only gating. The reveal render path sets it.
+    pub incremental_lists: bool,
+
+    /// Initial incremental state — the global `incremental: true` default.
+    /// `.incremental` / `.nonincremental` Divs flip it per subtree.
+    pub incremental_default: bool,
 }
 
 /// Extract HTML configuration from document metadata.
@@ -109,6 +120,10 @@ pub struct HtmlWriterContext<'ast, W: Write> {
     source_map: HashMap<*const (), SourceNodeInfo>,
     /// Configuration
     config: HtmlConfig,
+    /// Current incremental state (Pandoc's `writerIncremental`). Flipped by
+    /// `.incremental` / `.nonincremental` Divs during traversal; when true (and
+    /// `config.incremental_lists`), list items get `class="fragment"`.
+    incremental: bool,
     /// Lifetime marker
     _phantom: PhantomData<&'ast ()>,
 }
@@ -130,16 +145,19 @@ impl<'ast, W: Write> HtmlWriterContext<'ast, W> {
             writer,
             source_map: HashMap::new(),
             config: HtmlConfig::default(),
+            incremental: false,
             _phantom: PhantomData,
         }
     }
 
     /// Create a new context with config
     pub fn with_config(writer: W, config: HtmlConfig) -> Self {
+        let incremental = config.incremental_default;
         Self {
             writer,
             source_map: HashMap::new(),
             config,
+            incremental,
             _phantom: PhantomData,
         }
     }
@@ -1248,6 +1266,17 @@ fn write_inlines_as_text<W: Write>(
 }
 
 /// Write block elements
+/// The opening `<li>` tag for the current incremental state — gains
+/// `class="fragment"` inside an incremental context (revealjs), since Pandoc
+/// list items have no per-item `Attr` to carry it. See Pandoc HTML.hs:493-496.
+fn list_item_open<W: Write>(ctx: &HtmlWriterContext<'_, W>) -> &'static str {
+    if ctx.incremental && ctx.config.incremental_lists {
+        "<li class=\"fragment\">"
+    } else {
+        "<li>"
+    }
+}
+
 fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> std::io::Result<()> {
     match block {
         Block::Plain(plain) => {
@@ -1317,8 +1346,9 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             write!(ctx, " type=\"{}\"", list_type)?;
             write_block_source_attrs(block, ctx)?;
             writeln!(ctx, ">")?;
+            let li_open = list_item_open(ctx);
             for item in &list.content {
-                write!(ctx, "<li>")?;
+                write!(ctx, "{}", li_open)?;
                 write_blocks_inline(item, ctx)?;
                 writeln!(ctx, "</li>")?;
             }
@@ -1328,8 +1358,9 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             write!(ctx, "<ul")?;
             write_block_source_attrs(block, ctx)?;
             writeln!(ctx, ">")?;
+            let li_open = list_item_open(ctx);
             for item in &list.content {
-                write!(ctx, "<li>")?;
+                write!(ctx, "{}", li_open)?;
                 write_blocks_inline(item, ctx)?;
                 writeln!(ctx, "</li>")?;
             }
@@ -1479,7 +1510,21 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             write_attr(&div.attr, ctx)?;
             write_block_source_attrs(block, ctx)?;
             writeln!(ctx, ">")?;
+            // Incremental scope (Pandoc `writerIncremental`): `.incremental` /
+            // `.nonincremental` flip the state for this subtree; speaker notes
+            // are never incremental (Pandoc #1394). Saved/restored so siblings
+            // are unaffected.
+            let saved_incremental = ctx.incremental;
+            if div.attr.1.iter().any(|c| c == "incremental") {
+                ctx.incremental = true;
+            } else if div.attr.1.iter().any(|c| c == "nonincremental") {
+                ctx.incremental = false;
+            }
+            if tag == "aside" {
+                ctx.incremental = false;
+            }
             write_blocks(&div.content, ctx)?;
+            ctx.incremental = saved_incremental;
             writeln!(ctx, "</{}>", tag)?;
         }
         // Quarto extensions

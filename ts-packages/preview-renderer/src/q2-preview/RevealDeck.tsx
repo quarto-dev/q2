@@ -17,7 +17,7 @@
  * See claude-notes/plans/2026-06-08-revealjs-presentations.md (Phase 1P).
  */
 
-import React from 'react';
+import React, { useContext } from 'react';
 import { Deck, Slide, Stack } from '@revealjs/react';
 import 'reveal.js/reveal.css';
 import 'reveal.js/theme/white.css';
@@ -25,8 +25,9 @@ import 'reveal.js/theme/white.css';
 // render and preview stay in parity. Single source: resources/revealjs/.
 import '../../../../resources/revealjs/quarto-reveal.css';
 
-import { Node, RegistryContext } from '../framework';
+import { extractMetaBool, Node, RegistryContext } from '../framework';
 import type { BlockNode, DivBlock, FormatRegistry, PandocAST } from '../framework';
+import { IncrementalContext } from './IncrementalContext';
 
 interface RevealDeckProps {
     ast: PandocAST;
@@ -42,12 +43,28 @@ function isSectionDiv(block: BlockNode): block is DivBlock {
 
 const NOOP = () => {};
 
-/** Render a slide's content blocks via the shared previewRegistry. */
+/**
+ * Render a slide's content blocks via the shared previewRegistry.
+ *
+ * `sectionClasses` are the enclosing slide section's classes. A slide heading's
+ * `.incremental` / `.nonincremental` (hoisted onto the section) must flip the
+ * incremental scope for the slide's lists — but `RevealDeck` renders the
+ * section's children directly (bypassing `Div.tsx`), so that override is
+ * applied here. Mirrors the native writer flipping `writerIncremental` on a
+ * `.incremental` section.
+ */
 function SlideBody(props: {
     blocks: BlockNode[];
+    sectionClasses?: string[];
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
 }) {
-    return (
+    const parent = useContext(IncrementalContext);
+    const classes = props.sectionClasses ?? [];
+    let incremental = parent.incremental;
+    if (classes.includes('incremental')) incremental = true;
+    else if (classes.includes('nonincremental')) incremental = false;
+
+    const body = (
         <>
             {props.blocks.map((block, i) => (
                 <Node
@@ -58,6 +75,13 @@ function SlideBody(props: {
                 />
             ))}
         </>
+    );
+
+    if (incremental === parent.incremental) return body;
+    return (
+        <IncrementalContext.Provider value={{ enabled: parent.enabled, incremental }}>
+            {body}
+        </IncrementalContext.Provider>
     );
 }
 
@@ -82,6 +106,7 @@ function renderTopSection(
                     <Slide key={j}>
                         <SlideBody
                             blocks={(slide as DivBlock).c[1]}
+                            sectionClasses={(slide as DivBlock).c[0][1]}
                             onNavigateToDocument={onNavigateToDocument}
                         />
                     </Slide>
@@ -92,7 +117,11 @@ function renderTopSection(
 
     return (
         <Slide key={key}>
-            <SlideBody blocks={children} onNavigateToDocument={onNavigateToDocument} />
+            <SlideBody
+                blocks={children}
+                sectionClasses={div.c[0][1]}
+                onNavigateToDocument={onNavigateToDocument}
+            />
         </Slide>
     );
 }
@@ -110,26 +139,33 @@ export function RevealDeck(props: RevealDeckProps) {
         );
     });
 
+    // Enable incremental-list handling for the whole deck; the global
+    // `incremental: true` sets the starting state (`.incremental` /
+    // `.nonincremental` Divs flip it per subtree). Mirrors the native writer.
+    const globalIncremental = extractMetaBool(props.ast.meta?.incremental) === true;
+
     return (
         <RegistryContext.Provider value={{ registry: props.registry }}>
-            <Deck
-                config={{
-                    width: 1050,
-                    height: 700,
-                    margin: 0.04,
-                    minScale: 0.2,
-                    maxScale: 2.0,
-                    controls: true,
-                    progress: true,
-                    center: true,
-                    // Preview re-renders on every edit; URL-hash navigation
-                    // would fight that. Keep nav purely in-deck.
-                    hash: false,
-                    transition: 'slide',
-                }}
-            >
-                {slides}
-            </Deck>
+            <IncrementalContext.Provider value={{ enabled: true, incremental: globalIncremental }}>
+                <Deck
+                    config={{
+                        width: 1050,
+                        height: 700,
+                        margin: 0.04,
+                        minScale: 0.2,
+                        maxScale: 2.0,
+                        controls: true,
+                        progress: true,
+                        center: true,
+                        // Preview re-renders on every edit; URL-hash navigation
+                        // would fight that. Keep nav purely in-deck.
+                        hash: false,
+                        transition: 'slide',
+                    }}
+                >
+                    {slides}
+                </Deck>
+            </IncrementalContext.Provider>
         </RegistryContext.Provider>
     );
 }

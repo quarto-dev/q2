@@ -1,6 +1,7 @@
-import type { CSSProperties } from 'react';
+import { useContext, type CSSProperties, type ReactNode } from 'react';
 import { renderChildren } from '../../framework';
 import type { DivBlock, NodeArgs } from '../../framework';
+import { IncrementalContext } from '../IncrementalContext';
 import { NOTES, SECTION } from '../quartoClasses';
 
 /**
@@ -37,6 +38,27 @@ export const Div = (args: NodeArgs<DivBlock>) => {
     // must too for layout parity. React needs a style *object*, not a string.
     const styleStr = kvs.find(([k]) => k === 'style')?.[1];
     if (styleStr) props.style = cssStringToObject(styleStr);
+
+    // Incremental scope (revealjs): `.incremental` / `.nonincremental` flip the
+    // state for this subtree; speaker notes are never incremental. Mirrors the
+    // native writer's `writerIncremental` threading. No-op when not in a deck
+    // (IncrementalContext.enabled === false).
+    const parentIncremental = useContext(IncrementalContext);
+    let childIncremental = parentIncremental.incremental;
+    if (classes.includes('incremental')) childIncremental = true;
+    else if (classes.includes('nonincremental')) childIncremental = false;
+    if (classes.includes(NOTES)) childIncremental = false;
+    const wrap = (children: ReactNode): ReactNode =>
+        childIncremental === parentIncremental.incremental ? (
+            children
+        ) : (
+            <IncrementalContext.Provider
+                value={{ enabled: parentIncremental.enabled, incremental: childIncremental }}
+            >
+                {children}
+            </IncrementalContext.Provider>
+        );
+
     // bd-coffj: mirror the native HTML writer
     // (`crates/pampa/src/writers/html.rs::Block::Div`) — a Pandoc Div
     // whose class list contains "section" (output of the sectionize
@@ -46,12 +68,12 @@ export const Div = (args: NodeArgs<DivBlock>) => {
     // emitting `<div>` here causes visible spacing drift between
     // `q2 render` and `q2 preview`.
     if (classes.includes(SECTION)) {
-        return <section {...props}>{renderChildren(args)}</section>;
+        return <section {...props}>{wrap(renderChildren(args))}</section>;
     }
     // Revealjs speaker notes — mirror the native writer's `.notes` → <aside>
     // so `q2 preview` and `q2 render` agree (reveal.css hides `aside.notes`).
     if (classes.includes(NOTES)) {
-        return <aside {...props}>{renderChildren(args)}</aside>;
+        return <aside {...props}>{wrap(renderChildren(args))}</aside>;
     }
-    return <div {...props}>{renderChildren(args)}</div>;
+    return <div {...props}>{wrap(renderChildren(args))}</div>;
 };

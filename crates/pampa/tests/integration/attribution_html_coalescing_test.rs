@@ -137,6 +137,7 @@ fn contiguous_same_attribution_prose_coalesces_into_one_outer_wrapper() {
     let config = HtmlConfig {
         include_source_locations: false,
         attribution_by_node: Some(Arc::new(by_node)),
+        ..Default::default()
     };
 
     let body = render_body(&pandoc, config);
@@ -213,6 +214,7 @@ fn coalescing_breaks_on_actor_change() {
     let config = HtmlConfig {
         include_source_locations: false,
         attribution_by_node: Some(Arc::new(by_node)),
+        ..Default::default()
     };
 
     let body = render_body(&pandoc, config);
@@ -278,6 +280,7 @@ fn structured_inline_breaks_prose_coalescing() {
     let config = HtmlConfig {
         include_source_locations: false,
         attribution_by_node: Some(Arc::new(by_node)),
+        ..Default::default()
     };
 
     let body = render_body(&pandoc, config);
@@ -359,6 +362,7 @@ fn attribution_on_source_locations_off_produces_outer_wrapper_no_inner_span() {
     let config = HtmlConfig {
         include_source_locations: false,
         attribution_by_node: Some(Arc::new(by_node)),
+        ..Default::default()
     };
 
     let body = render_body(&pandoc, config);
