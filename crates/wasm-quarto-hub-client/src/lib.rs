@@ -574,6 +574,11 @@ fn diagnostics_to_json(diags: &[DiagnosticMessage], ctx: &SourceContext) -> Vec<
 // RENDERING API
 // ============================================================================
 
+/// `skip_serializing_if` predicate for the default-false `is_slides` flag.
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
 #[derive(Serialize, Default)]
 struct RenderResponse {
     success: bool,
@@ -591,6 +596,12 @@ struct RenderResponse {
     /// present.
     #[serde(skip_serializing_if = "Option::is_none")]
     ast_json: Option<String>,
+    /// True when `ast_json` is a `format: revealjs` deck (preview
+    /// pseudo-format `q2-slides`). The SPA renders the section AST with a
+    /// reveal shell (`.reveal/.slides` + reveal.js) instead of the plain
+    /// q2-preview html mirror. Absent (false) for ordinary q2-preview.
+    #[serde(skip_serializing_if = "is_false")]
+    is_slides: bool,
     /// Structured diagnostics (errors) with line/column information for Monaco.
     #[serde(skip_serializing_if = "Option::is_none")]
     diagnostics: Option<Vec<JsonDiagnostic>>,
@@ -641,10 +652,13 @@ fn create_wasm_project_context(path: &Path) -> ProjectContext {
 /// dispatch in `render_*_to_response` sees a stable format string and
 /// doesn't need a parallel preview-mode branch.
 fn map_format_for_preview(format_str: &str) -> &str {
-    if format_str == "html" {
-        "q2-preview"
-    } else {
-        format_str
+    match format_str {
+        "html" => "q2-preview",
+        // `format: revealjs` previews as `q2-slides`: same AST/preview
+        // pipeline_kind (so the response carries `ast_json`), but the reveal
+        // slide tree is built and the SPA renders it with a reveal shell.
+        "revealjs" => "q2-slides",
+        other => other,
     }
 }
 
@@ -1417,6 +1431,7 @@ async fn render_single_doc_to_response(
         error: None,
         html,
         ast_json,
+        is_slides: format.target_format == "q2-slides",
         diagnostics: None,
         warnings: if warnings.is_empty() {
             None
@@ -1662,6 +1677,7 @@ async fn render_project_active_page_to_response(
         error: None,
         html,
         ast_json,
+        is_slides: format.target_format == "q2-slides",
         diagnostics: None,
         warnings: if warnings.is_empty() {
             None
@@ -1685,6 +1701,7 @@ fn error_response(msg: impl Into<String>) -> String {
         error: Some(msg.into()),
         html: None,
         ast_json: None,
+        is_slides: false,
         diagnostics: None,
         warnings: None,
         pass1_failures: None,
@@ -1708,6 +1725,7 @@ fn render_error_response(e: QuartoError) -> String {
         error: Some(error_msg),
         html: None,
         ast_json: None,
+        is_slides: false,
         diagnostics,
         warnings: None,
         pass1_failures: None,
@@ -1744,6 +1762,7 @@ fn pass_failure_response(
         )),
         html: None,
         ast_json: None,
+        is_slides: false,
         diagnostics,
         warnings: None,
         pass1_failures: None,

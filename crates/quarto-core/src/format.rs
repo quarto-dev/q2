@@ -114,11 +114,27 @@ impl TryFrom<&str> for FormatIdentifier {
 /// lands.
 fn builtin_pseudo_format(name: &str) -> Option<(&'static str, Option<&'static str>)> {
     match name {
-        "q2-slides" => Some(("html", None)),
+        // `q2-slides` is the preview pseudo-format for `format: revealjs`
+        // (analogous to `q2-preview` for `html`). It uses the same AST/preview
+        // pipeline_kind so `render_page_for_preview` returns AST JSON; the
+        // reveal slide construction fires because `build_transform_pipeline`
+        // treats `target_format == "q2-slides"` as revealjs (see
+        // `is_revealjs_target`). The SPA renders the section AST with a reveal
+        // shell. See claude-notes/plans/2026-06-08-revealjs-presentations.md
+        // Phase 1P.
+        "q2-slides" => Some(("html", Some("preview"))),
         "q2-debug" => Some(("html", None)),
         "q2-preview" => Some(("html", Some("preview"))),
         _ => None,
     }
+}
+
+/// Whether a `target_format` string should build the reveal.js slide tree
+/// (`RevealSlidesTransform` replacing the generic title-block + sectionize).
+/// True for the native render format (`revealjs`) and its preview
+/// pseudo-format (`q2-slides`).
+pub fn is_revealjs_target(target_format: &str) -> bool {
+    matches!(target_format, "revealjs" | "q2-slides")
 }
 
 /// Map a FormatIdentifier to its output file extension.

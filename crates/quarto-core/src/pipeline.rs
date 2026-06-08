@@ -996,7 +996,8 @@ pub fn build_transform_pipeline(
     let mut pipeline: TransformPipeline = TransformPipeline::new();
 
     // Computed before `target_format` is moved into the shortcode transform.
-    let is_revealjs = target_format == "revealjs";
+    // True for `revealjs` (native render) and `q2-slides` (preview).
+    let is_revealjs = crate::format::is_revealjs_target(&target_format);
 
     // === NORMALIZATION PHASE ===
     pipeline.push(Box::new(CalloutTransform::new()));
@@ -2244,6 +2245,49 @@ mod tests {
         assert!(
             output.ast_json.contains("Callout"),
             "expected Callout type-name in JSON; got:\n{}",
+            snippet()
+        );
+    }
+
+    /// Phase 1P: the `q2-slides` preview pseudo-format must run the reveal
+    /// slide construction (`RevealSlidesTransform`) and return the
+    /// section-structured AST — the shared contract the SPA renders with a
+    /// reveal shell. Confirms the preview AST path produces the same slide
+    /// structure as the native `revealjs` render.
+    #[test]
+    fn render_qmd_to_preview_ast_builds_reveal_slides_for_q2_slides() {
+        let content = b"---\ntitle: Slides Test\nformat: revealjs\n---\n\n\
+                        ## First\n\n- a\n- b\n\n## Second\n\nBody.\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-slides").unwrap();
+        assert_eq!(format.pipeline_kind, Some("preview"));
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content,
+            "test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            Vec::new(),
+        ))
+        .expect("q2-slides render");
+
+        let snippet = || &output.ast_json[..output.ast_json.len().min(1200)];
+        // The synthesized title slide and section-class Divs prove
+        // RevealSlidesTransform ran (vs. the generic sectionize/title-block).
+        assert!(
+            output.ast_json.contains("title-slide"),
+            "expected a title-slide section in q2-slides AST; got:\n{}",
+            snippet()
+        );
+        assert!(
+            output.ast_json.contains("\"section\""),
+            "expected section-class Divs (reveal slides); got:\n{}",
             snippet()
         );
     }

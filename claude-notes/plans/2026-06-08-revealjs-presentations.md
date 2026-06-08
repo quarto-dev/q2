@@ -488,11 +488,25 @@ this is in parity.
       pseudo-format), instead of the `q2-preview` html iframe. Today the reveal
       React renderer is wired into the collaborative editor, *not* the
       `q2-preview-spa` path — this is net-new.
-- [ ] **React-mirror renderer (B1).** Render the shared-split AST with
-      `@revealjs/react` `<Deck>/<Slide>`, mapping the canonical `data-*`
-      attributes from the split. Reuse `useCursorToSlide` + `useSlideThumbnails`;
-      enable live-incremental updates. Un-hardcode the theme to follow the
-      configured `theme`.
+- [ ] **Reveal renderer = previewRegistry + thin shell (B1a, decided
+      2026-06-08).** Render slide *content* with the **existing
+      `previewRegistry`** React mirror (the same one the html preview uses —
+      already parity-maintained with the Rust writer via `/preview-render-parity`).
+      Add only a thin reveal layer in the iframe entry: map the shared-split
+      `Div.section` → `<section>`, wrap in `.reveal/.slides`, and drive with
+      **reveal.js core** (`Reveal.initialize`, same library as render) in a
+      `useEffect`. This **retires** the hub-client's separate
+      `parseSlides`/`renderBlock` (inferior duplicate mirror) and gives slide
+      content (math, code highlighting, attribution) for free. Reasoning: the
+      investigation showed preview content is already the previewRegistry
+      mirror, so reusing it is more DRY + parity-faithful than the original
+      `@revealjs/react`+ported-renderer sketch.
+- [ ] WASM foundation: `q2-slides` pseudo-format (`format.rs` → `("html",
+      Some("preview"))`) carries the AST path + preview transform list;
+      generalize the reveal transform check to `target_format ∈ {revealjs,
+      q2-slides}`; `map_format_for_preview` maps `revealjs → q2-slides`;
+      `RenderResponse` gains an `is_slides` flag so the SPA branches to the
+      reveal shell.
 - [ ] **Parity tests.** Golden render↔preview parity tests for the Tier-1 set
       (slide boundaries, title slide, section slides, vertical slides, the
       core `Reveal.initialize` options). Establish the slides analogue of the
