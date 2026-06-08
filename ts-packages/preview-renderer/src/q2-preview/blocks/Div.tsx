@@ -1,6 +1,6 @@
 import { renderChildren } from '../../framework';
 import type { DivBlock, NodeArgs } from '../../framework';
-import { SECTION } from '../quartoClasses';
+import { NOTES, SECTION } from '../quartoClasses';
 
 export const Div = (args: NodeArgs<DivBlock>) => {
     const [[id, classes, kvs]] = args.node.c;
@@ -20,6 +20,11 @@ export const Div = (args: NodeArgs<DivBlock>) => {
     // `q2 render` and `q2 preview`.
     if (classes.includes(SECTION)) {
         return <section {...props}>{renderChildren(args)}</section>;
+    }
+    // Revealjs speaker notes — mirror the native writer's `.notes` → <aside>
+    // so `q2 preview` and `q2 render` agree (reveal.css hides `aside.notes`).
+    if (classes.includes(NOTES)) {
+        return <aside {...props}>{renderChildren(args)}</aside>;
     }
     return <div {...props}>{renderChildren(args)}</div>;
 };

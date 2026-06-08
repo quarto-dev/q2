@@ -19,6 +19,12 @@
 export const SECTION = 'section';
 export const SECTION_LEVEL_PREFIX = 'level'; // level1, level2, ..., level6
 
+// Revealjs speaker notes — `::: {.notes}`. The native HTML writer
+// (crates/pampa/src/writers/html.rs::Block::Div) renders a `.notes` Div as
+// `<aside class="notes">`; reveal.css hides `aside.notes` on the slide.
+// Div.tsx mirrors that for `q2 preview` parity.
+export const NOTES = 'notes';
+
 // Footnotes — emitted by FootnotesTransform (now included in q2-preview's
 // pipeline; see plan §"Pipeline change: include FootnotesTransform").
 // Source: crates/quarto-core/src/transforms/footnotes.rs:26-35,440-460

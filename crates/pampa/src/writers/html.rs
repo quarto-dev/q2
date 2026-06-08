@@ -1463,9 +1463,15 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             writeln!(ctx, "</figure>")?;
         }
         Block::Div(div) => {
-            // Use <section> tag for Divs with "section" class (from sectionize transform)
+            // Semantic HTML5 sectioning by class:
+            // - "section" (from the sectionize / reveal-slides transforms) → <section>
+            // - "notes" (revealjs speaker notes, `::: {.notes}`) → <aside>;
+            //   reveal.css hides `aside.notes` on the slide, and the notes
+            //   plugin surfaces it in speaker view. Harmless for other formats.
             let tag = if div.attr.1.contains(&"section".to_string()) {
                 "section"
+            } else if div.attr.1.contains(&"notes".to_string()) {
+                "aside"
             } else {
                 "div"
             };

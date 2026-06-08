@@ -93,6 +93,24 @@ fn fragment_variant_classes_pass_through() {
     }
 }
 
+// ── 2b: speaker notes ────────────────────────────────────────────────────
+
+#[test]
+fn notes_div_renders_as_aside() {
+    let html = render_revealjs(
+        "---\nformat: revealjs\n---\n\n## S\n\nVisible.\n\n::: {.notes}\nSpeaker note.\n:::\n",
+    );
+    assert!(
+        html.contains("<aside class=\"notes\">"),
+        "a `.notes` Div must render as `<aside class=\"notes\">` (reveal speaker \
+         notes; hidden on the slide by reveal.css); html:\n{}",
+        &html[..html.len().min(2000)]
+    );
+    assert!(html.contains("Speaker note."));
+    // The visible slide content must remain.
+    assert!(html.contains("Visible."));
+}
+
 #[test]
 fn fragment_data_index_passes_through() {
     let html = render_revealjs(

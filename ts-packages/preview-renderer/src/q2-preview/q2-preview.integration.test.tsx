@@ -486,6 +486,25 @@ describe('q2-preview Pandoc base-type gap-fill components', () => {
         expect(divWithSection).toBeNull();
     });
 
+    // Revealjs speaker notes — Div(.notes) → <aside class="notes">, mirroring
+    // the native writer (crates/pampa/src/writers/html.rs::Block::Div). reveal.css
+    // hides `aside.notes` on the slide; a `<div class="notes">` would not be
+    // hidden, so render/preview must agree on the element.
+    it('Div with class="notes" renders as <aside> (revealjs speaker notes)', () => {
+        const ast = [{
+            t: 'Div',
+            c: [
+                ['', ['notes'], []],
+                [PARA(STR('Speaker note.'))],
+            ],
+        }];
+        const { container } = mount(ast);
+        const aside = container.querySelector('aside.notes');
+        expect(aside).not.toBeNull();
+        expect(aside!.textContent).toContain('Speaker note.');
+        expect(container.querySelector('div.notes')).toBeNull();
+    });
+
     it('Div without "section" class still renders as <div>', () => {
         const ast = [{
             t: 'Div',
