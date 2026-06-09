@@ -591,6 +591,54 @@ Hello world.
         assert!(html.contains("<title>"));
     }
 
+    /// bd-po3gn41h: end-to-end check that a named/reference-style
+    /// footnote (`[^id]` reference + a `::: ^id … :::` block definition)
+    /// resolves through the real `q2 render` file path. This drives
+    /// `render_to_file`, the exact entry point the native CLI pass-2
+    /// renderer uses (`project/pass2_renderer.rs` -> `render_document_to_file`).
+    ///
+    /// Before the fix, the body kept an empty
+    /// `<span class="quarto-note-reference" data-reference-id="bk">` and
+    /// the definition's text ("Note.") was dropped with no footnotes
+    /// section emitted.
+    #[test]
+    fn test_render_to_file_resolves_named_footnote_reference() {
+        let temp = TempDir::new().unwrap();
+        let input_path = temp.path().join("named-fn.qmd");
+
+        fs::write(
+            &input_path,
+            "---\nformat: html\n---\nRef.[^bk]\n\n::: ^bk\nNote.\n:::\n",
+        )
+        .unwrap();
+
+        let runtime = Arc::new(NativeRuntime::new());
+        let options = RenderToFileOptions::default();
+
+        let result = render_to_file(&input_path, "html", &options, runtime).unwrap();
+        let html = fs::read_to_string(&result.output_path).unwrap();
+
+        // The footnote reference must resolve to the standard fnref link...
+        assert!(
+            html.contains("footnote-ref"),
+            "expected a footnote-ref link for the resolved [^bk] reference; got:\n{html}"
+        );
+        // ...and a footnotes section must be emitted carrying the body.
+        assert!(
+            html.contains("doc-endnotes"),
+            "expected a doc-endnotes footnotes section; got:\n{html}"
+        );
+        assert!(
+            html.contains("Note."),
+            "expected the definition's text (\"Note.\") in the footnotes section; got:\n{html}"
+        );
+        // The unresolved lowering span must be gone.
+        assert!(
+            !html.contains("quarto-note-reference"),
+            "the empty quarto-note-reference span should have been resolved away; got:\n{html}"
+        );
+    }
+
     #[test]
     fn test_render_to_file_with_theme() {
         let temp = TempDir::new().unwrap();

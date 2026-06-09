@@ -414,7 +414,31 @@ fn process_inline(inline: &mut Inline, collector: &mut FootnoteCollector) {
             process_inlines(&mut link.content, collector);
         }
         Inline::Span(span) => {
-            process_inlines(&mut span.content, collector);
+            // bd-po3gn41h: pampa's postprocess lowers a named footnote
+            // reference `[^id]` into an *empty* Span with class
+            // `quarto-note-reference` and a `reference-id` kv, before any
+            // quarto-core transform runs (see
+            // `crates/pampa/src/pandoc/treesitter_utils/postprocess.rs`,
+            // the `.with_note_reference` filter). The typed
+            // `Inline::NoteReference` is already gone by this point, so we
+            // resolve the Span form here exactly like the NoteReference arm
+            // above: look up the definition, replace with the standard
+            // `fnref` superscript, or leave the span untouched if the
+            // reference is undefined (broken reference).
+            let reference_id = if span.attr.1.iter().any(|c| c == "quarto-note-reference") {
+                span.attr.2.get("reference-id").cloned()
+            } else {
+                None
+            };
+            if let Some(ref_id) = reference_id {
+                let source_info = span.source_info.clone();
+                if let Some(number) = collector.resolve_reference(&ref_id, source_info.clone()) {
+                    *inline = create_footnote_ref(number, &source_info, collector.is_margin);
+                }
+                // If not resolved, leave as-is (broken reference).
+            } else {
+                process_inlines(&mut span.content, collector);
+            }
         }
         Inline::Underline(u) => {
             process_inlines(&mut u.content, collector);
@@ -827,6 +851,99 @@ mod tests {
 
         // Footnotes section should exist
         assert!(matches!(ast.blocks[1], Block::Div(_)));
+    }
+
+    /// bd-po3gn41h: a named/reference-style footnote `[^id]` is lowered by
+    /// pampa's postprocess into an *empty* `Inline::Span` with class
+    /// `quarto-note-reference` and a `reference-id` kv (NOT an
+    /// `Inline::NoteReference` — that variant is already gone by the time this
+    /// transform runs). `FootnotesTransform` must resolve that Span form the
+    /// same way it resolves `Inline::NoteReference`: replace it with the
+    /// standard `fnref` superscript link and emit a footnotes section that
+    /// carries the definition's content.
+    #[tokio::test]
+    async fn test_span_note_reference_resolves() {
+        let mut reference_kv = LinkedHashMap::new();
+        reference_kv.insert("reference-id".to_string(), "bk".to_string());
+
+        let mut ast = Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks: vec![
+                // Paragraph with the lowered reference span (empty content).
+                Block::Paragraph(Paragraph {
+                    content: vec![
+                        make_str("Ref."),
+                        Inline::Span(Span {
+                            attr: (
+                                String::new(),
+                                vec!["quarto-note-reference".to_string()],
+                                reference_kv,
+                            ),
+                            content: vec![],
+                            source_info: dummy_source_info(),
+                            attr_source: AttrSourceInfo::empty(),
+                        }),
+                    ],
+                    source_info: dummy_source_info(),
+                }),
+                // Block definition `::: ^bk … :::`.
+                Block::NoteDefinitionFencedBlock(quarto_pandoc_types::NoteDefinitionFencedBlock {
+                    id: "bk".to_string(),
+                    content: vec![Block::Paragraph(Paragraph {
+                        content: vec![make_str("Note.")],
+                        source_info: dummy_source_info(),
+                    })],
+                    source_info: dummy_source_info(),
+                }),
+            ],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let transform = FootnotesTransform::new();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
+
+        // Definition block removed; paragraph + footnotes section remain.
+        assert_eq!(ast.blocks.len(), 2, "blocks: {:#?}", ast.blocks);
+
+        // The reference span must be replaced by the standard fnref superscript.
+        if let Block::Paragraph(para) = &ast.blocks[0] {
+            assert_eq!(para.content.len(), 2);
+            match &para.content[1] {
+                Inline::Span(span) => {
+                    assert_eq!(span.attr.0, "fnref1", "expected fnref id on resolved ref");
+                    match &span.content[0] {
+                        Inline::Superscript(sup) => match &sup.content[0] {
+                            Inline::Link(link) => {
+                                assert_eq!(link.target.0, "#fn1");
+                                assert!(link.attr.1.contains(&"footnote-ref".to_string()));
+                            }
+                            other => panic!("expected Link inside Superscript, got {other:?}"),
+                        },
+                        other => panic!("expected Superscript inside Span, got {other:?}"),
+                    }
+                }
+                other => panic!("expected resolved footnote ref Span, got {other:?}"),
+            }
+        } else {
+            panic!("expected Paragraph as first block");
+        }
+
+        // Footnotes section exists and carries the definition's text.
+        if let Block::Div(div) = &ast.blocks[1] {
+            assert_eq!(div.attr.0, "footnotes");
+            let rendered = format!("{:?}", div);
+            assert!(
+                rendered.contains("Note."),
+                "footnotes section should carry the definition content; got:\n{rendered}"
+            );
+        } else {
+            panic!("expected footnotes Div as second block");
+        }
     }
 
     #[tokio::test]
