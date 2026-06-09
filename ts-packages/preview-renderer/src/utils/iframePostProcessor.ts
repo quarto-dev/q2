@@ -147,6 +147,30 @@ function parseLink(href: string): ParsedLink {
 }
 
 /**
+ * Read a `/.quarto/project-artifacts/X` resource from the VFS, falling
+ * back to the **source** path `X` when the artifact path misses.
+ *
+ * Static project assets (embedded example decks, etc.) are referenced by
+ * their artifact-rooted URL — `page_url_for` roots every output href there
+ * in VFS-root mode — but a *static* asset is stored at its source path,
+ * not the rendered-artifact path (nothing copies a `resources:` asset
+ * under the artifact root in the WASM render). So the artifact-path read
+ * misses and we retry at the `ARTIFACT_ROOT`-stripped source path. This is
+ * the VFS-native counterpart to how `q2 render` copies the resource into
+ * `_site/`. (bd-kjrpya2d)
+ */
+function readArtifactOrSource(src: string): ReturnType<typeof vfsReadFile> {
+  const atArtifact = vfsReadFile(src);
+  if (atArtifact.success && atArtifact.content) return atArtifact;
+  if (src.startsWith(ARTIFACT_ROOT)) {
+    const sourcePath = src.slice(ARTIFACT_ROOT.length);
+    const atSource = vfsReadFile(sourcePath);
+    if (atSource.success && atSource.content) return atSource;
+  }
+  return { success: false };
+}
+
+/**
  * Post-process iframe content after render.
  * - Replaces /.quarto/ resource links with data URIs
  * - Converts .qmd links to click handlers
@@ -231,6 +255,22 @@ export function postProcessIframe(
       // vfsReadBinaryFile returns base64-encoded content
       const dataUri = `data:${mimeType};base64,${result.content}`;
       img.setAttribute('src', dataUri);
+    }
+  });
+
+  // Inline embedded-resource <iframe> sources (e.g. `.embed-example-iframe`
+  // decks) from the VFS via `srcdoc`, so the sandboxed preview never issues
+  // a network request for them (there is no server to answer it — the page
+  // is rendered in-browser). The website renderer emits an artifact-rooted
+  // src (`/.quarto/project-artifacts/X`); `readArtifactOrSource` falls back
+  // to the source path `X` where a static asset actually lives. (bd-kjrpya2d)
+  doc.querySelectorAll('iframe').forEach((frame) => {
+    const src = frame.getAttribute('src');
+    if (!src || !src.startsWith('/.quarto/')) return;
+    const result = readArtifactOrSource(src);
+    if (result.success && result.content) {
+      frame.removeAttribute('src');
+      frame.setAttribute('srcdoc', result.content);
     }
   });
 
