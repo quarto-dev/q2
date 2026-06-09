@@ -1,7 +1,7 @@
 # Block editing in q2-preview — design / master spec
 
 **Date:** 2026-06-06 (interaction model revised 2026-06-07; dual-node substrate +
-series re-split 2026-06-08)
+series re-split 2026-06-08; render-component API + boundary section revised 2026-06-09)
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)
 **Status:** Design approved in brainstorming; revised through pre-implementation
 review. Series: **Plan 1, 2a, 2b, 3, 4** under `claude-notes/plans/`.
@@ -130,12 +130,19 @@ displayed AST and the source AST, and needs the targeted-subtree splice.
   `parse_qmd_content` → `apply_node_edit`. (The iframe can't run the writer, so
   text is the right representation for a textarea.)
 - **Render-component editing → subtree channel.** A component calls
-  `ctx.commitSubtreeEdit(destinationSourceInfoJson, modifiedBlock)` with a clone
+  `edit.commitSubtreeEdit(destinationSourceInfoJson, modifiedBlock)` with a clone
   of `resolved.sourceNode`; `PreviewNodeEditPayload` is a `channel`-discriminated
   union (`'text'` | `'subtree'`); the parent passes the subtree variant straight
   to `apply_node_edit` (no parse step). Editing `sourceNode` (not the transformed
   node) is what keeps shortcodes/refs/includes **inside** the edited region from
   being baked in as their expansions.
+
+Render-component authors access `resolveSource` and `commitSubtreeEdit` via
+**`usePreviewEdit()`** from `window.__Q2_PREVIEW_RENDERER__` — a hook that wraps
+`useContext(PreviewContext)` and returns nullish functions when the context is
+absent (q2-debug, q2-slides). `NodeArgs` and `PreviewContext` are not changed or
+exposed for this purpose; `usePreviewEdit` is the public surface. See Plan 2b for
+the full API and migration example.
 
 ## Plan 5 dissolved (CustomNode writing/editability)
 
@@ -146,22 +153,29 @@ Callout/Theorem/Proof/FloatRefTarget CustomNodes are all *transform* products an
 do not exist pre-pipeline. Since edits operate on `sourceNode` (untransformed),
 the writer is **never** asked to serialize a CustomNode on the edit path. So:
 - Writer arms (7e): **not needed** for this epic. (Optional hardening side-bead:
-  make the empty `Block::Custom` arm *error* rather than emit nothing, as a net
-  against a component that wrongly submits a transformed node.)
+  make the empty `Block::Custom` arm *error* rather than silently emit nothing,
+  as a guard against a component that wrongly submits a transformed node.)
 - Callout/theorem **editability**: subsumed by **Plan 2b** — their `sourceNode` is
-  a writer-covered `Div`, editable-as-whole once the `custom/` components
-  participate in the affordance. Their **bodies** ride **Plan 3** (nested descent
-  into the untransformed `Div`).
+  a writer-covered `Div`, editable-as-whole once the `custom/` components spread
+  `data-block-pool-id` and participate in the affordance. Their **bodies** ride
+  **Plan 3** (nested descent into the untransformed `Div`).
 
-## Render-component / built-in boundary (Plan 2b)
+## `data-block-pool-id` placement and composition (Plan 2b)
 
-1. The framework never wraps a block (D4); an author *may* wrap but owns the
-   theme-CSS/hit-test consequences; the affordance keys off `data-block-pool-id`
-   on the block's own root (preserved by rendering through the dispatcher).
-2. An overridden block that renders the underlying block through the framework
-   still gets the built-in affordance (compose: comment *and* edit a paragraph).
-3. A component may **opt its subtree out** of the built-in affordance when it
-   deliberately hides source structure (e.g. `comment` strips spans for display).
+The affordance attribute lives on the block's **own root element**, never on a
+framework-added wrapper — because the framework never wraps (D4).
+`useBlockEditHover`'s `closest('[data-block-pool-id]')` finds it there.
+
+Custom components that render the block through `<B>` or `renderChildren`
+preserve the attribute automatically. A component that wraps the block output
+(e.g. `comment`'s `position:relative` div) gets both its overlay UI **and** the
+built-in text-edit affordance on the inner element — no extra work needed.
+
+A component that replaces the rendered block entirely (no `<B>` delegation,
+fully custom HTML) emits no `data-block-pool-id` and gets no built-in affordance
+— a natural consequence of not delegating, not a distinct mechanism. If such a
+component wants the affordance it spreads `data-block-pool-id={poolId}` on its
+own root.
 
 ## Key facts established by research (with refs)
 

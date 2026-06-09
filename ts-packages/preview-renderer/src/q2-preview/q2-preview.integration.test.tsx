@@ -41,6 +41,9 @@ import type {
 import { previewRegistry } from './registry';
 import { AssetManifestContext } from './AssetManifestContext';
 import { IncrementalContext } from './IncrementalContext';
+import { PreviewContext } from './PreviewContext';
+import type { PreviewContextValue } from './PreviewContext';
+import type { ResolvedSource } from './sourceIndex';
 import {
     SECTION,
     SECTION_LEVEL_PREFIX,
@@ -99,7 +102,9 @@ describe('q2-preview registry — Pandoc base types render as real HTML', () => 
 
     it('renders Str inlines as text content (no placeholder)', () => {
         const { container } = mount([PARA(STR('hello'))]);
-        expect(container.textContent).toBe('hello');
+        // Use querySelector('p') to avoid picking up CSS text from useBlockEditHover's
+        // <style> tag that PreviewDocument injects (Plan 2b stylesheet regression fix).
+        expect(container.querySelector('p')!.textContent).toBe('hello');
         expect(container.textContent).not.toContain('not yet implemented');
     });
 
@@ -237,7 +242,7 @@ describe('q2-preview Pandoc base-type gap-fill components', () => {
             ],
         })];
         const { container } = mount(ast);
-        expect(container.textContent).toBe('@citekey');
+        expect(container.querySelector('p')!.textContent).toBe('@citekey');
     });
 
     it('Quoted (DoubleQuote / SingleQuote) wraps inlines in curly quotes', () => {
@@ -247,7 +252,7 @@ describe('q2-preview Pandoc base-type gap-fill components', () => {
             { t: 'Quoted', c: [{ t: 'SingleQuote' }, [STR('world')]] },
         )];
         const { container } = mount(ast);
-        expect(container.textContent).toBe('“hello” ‘world’');
+        expect(container.querySelector('p')!.textContent).toBe('“hello” ‘world’');
     });
 
     it('Header renders the correct hN tag based on level', () => {
@@ -972,5 +977,98 @@ describe('Class-compatibility (stub constants)', () => {
         const sup = container.querySelector('sup');
         expect(sup).not.toBeNull();
         expect(sup!.className).toBe('footnote-ref');
+    });
+});
+
+/* ── Affordance gate: data-block-pool-id placement (Plan 2b) ──────────
+ *
+ * Helper: mount blocks with a PreviewContext that provides resolveSource.
+ * The context also provides commitTextEdit + content, which Para requires
+ * to consider itself editable (data-block-pool-id gated on all three).
+ */
+function mountWithSource(
+    blocks: any[],
+    resolveSource: (node: BlockNode) => ResolvedSource | null,
+) {
+    const ctx: PreviewContextValue = {
+        currentFilePath: '/project/test.qmd',
+        content: 'test qmd content',
+        commitTextEdit: vi.fn(),
+        resolveSource,
+    };
+    return render(
+        <PreviewContext.Provider value={ctx}>
+            <Ast
+                astJson={astJson(blocks)}
+                currentFilePath="/project/test.qmd"
+                onNavigateToDocument={noopNav}
+                setAst={noopSet}
+                registry={previewRegistry}
+            />
+        </PreviewContext.Provider>,
+    );
+}
+
+const TOP_LEVEL_SOURCE: ResolvedSource = {
+    sourceNode: { t: 'Para', c: [] } as BlockNode,
+    reachabilityClass: 'TopLevel',
+    sourceEntry: { t: 0, r: [0, 10], d: 0 },
+};
+
+describe('Affordance gate — data-block-pool-id placement (Plan 2b)', () => {
+    it('TopLevel Para (t=0 Original) receives data-block-pool-id', () => {
+        const blocks = [{ t: 'Para', s: 0, c: [STR('hello')] }];
+        const { container } = mountWithSource(blocks, (node) =>
+            (node as any).s === 0 ? TOP_LEVEL_SOURCE : null,
+        );
+        const p = container.querySelector('p')!;
+        expect(p).not.toBeNull();
+        expect(p.hasAttribute('data-block-pool-id')).toBe(true);
+    });
+
+    it('Generated Para (t=4, resolveSource returns null) has NO data-block-pool-id', () => {
+        const blocks = [{ t: 'Para', s: 1, c: [STR('generated')] }];
+        const { container } = mountWithSource(blocks, () => null);
+        const p = container.querySelector('p')!;
+        expect(p).not.toBeNull();
+        expect(p.hasAttribute('data-block-pool-id')).toBe(false);
+    });
+
+    it('Para without source index context (no resolveSource) has NO data-block-pool-id', () => {
+        const { container } = mount([{ t: 'Para', s: 0, c: [STR('no ctx')] }]);
+        const p = container.querySelector('p')!;
+        expect(p.hasAttribute('data-block-pool-id')).toBe(false);
+    });
+});
+
+describe('Affordance gate — Plan 4 boundary: sections excluded', () => {
+    it('Div with class="section" renders as <section> with NO data-block-pool-id', () => {
+        // A section Div that would otherwise be TopLevel must NOT receive the
+        // affordance attribute — section editing is deferred to Plan 4.
+        // The Div component returns early as <section> before checking resolveSource.
+        const blocks = [{
+            t: 'Div',
+            s: 0,
+            c: [
+                ['sec-1', ['section', 'level1'], []],
+                [{ t: 'Header', c: [1, ['', [], []], [STR('A heading')]] }],
+            ],
+        }];
+        const { container } = mountWithSource(blocks, () => TOP_LEVEL_SOURCE);
+        const section = container.querySelector('section')!;
+        expect(section).not.toBeNull();
+        expect(section.hasAttribute('data-block-pool-id')).toBe(false);
+    });
+
+    it('non-section Div with TopLevel source DOES receive data-block-pool-id', () => {
+        const blocks = [{
+            t: 'Div',
+            s: 0,
+            c: [['callout-1', ['callout-note'], []], [PARA(STR('body'))]],
+        }];
+        const { container } = mountWithSource(blocks, () => TOP_LEVEL_SOURCE);
+        const div = container.querySelector('div.callout-note')!;
+        expect(div).not.toBeNull();
+        expect(div.hasAttribute('data-block-pool-id')).toBe(true);
     });
 });

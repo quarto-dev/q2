@@ -136,9 +136,10 @@ below.
   `{TopLevel, Descendable}` — change the predicate on `sourceIndex` lookup from
   `reachabilityClass === 'TopLevel'` to `reachabilityClass !== 'Opaque'`. No
   other frontend change — 2a already stores `reachabilityClass` in `PreviewContext
-  .sourceIndex` for every indexed block; `Opaque` stays gated. The 2b Pass-1
-  commit guard is `TopLevel`-scoped, so it does not reject `Descendable` edits
-  (those resolve by path, not by top-level exact match).
+  .sourceIndex` for every indexed block; `Opaque` stays gated. Plan 2b's backend
+  miss-guard (no-op + `eprintln!` when `lookup_block` returns `None`) is not
+  triggered by `Descendable` edits — Plan 3's recursive lookup finds source-backed
+  nested blocks by path and does not return `None` for them.
 
 ## End-to-end verification
 - [ ] `cargo nextest run -p pampa` (node_edit_tests) green.

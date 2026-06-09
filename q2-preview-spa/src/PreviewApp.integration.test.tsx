@@ -58,6 +58,13 @@ vi.mock('@quarto/preview-runtime', () => ({
   ),
   getBinaryDocById: vi.fn(async (_docId: string) => null),
   getFilePaths: vi.fn(() => runtimeMockState.files.map((f) => f.path)),
+  // VFS functions used in the render path (Plan 2b — vfsReadFile snapshots
+  // content before render; vfsAddFile writes back after an edit).
+  vfsReadFile: vi.fn(() => ({ success: true, content: 'test qmd content\n' })),
+  vfsAddFile: vi.fn(() => ({ success: true })),
+  // Channel-routing functions (Plan 2b two-channel edit API).
+  parseQmdContentSync: vi.fn(() => ({ success: true, ast: '{"blocks":[]}' })),
+  applyNodeEdit: vi.fn(() => 'updated qmd content\n'),
 }));
 
 // Imported after vi.mock so the mocks are in place.

@@ -459,11 +459,18 @@ export default function ReactPreview({
           return;
         }
         try {
-          // Parse the user's raw text into a replacement subtree.
-          const parseResult = parseQmdContentSync(edit.newText);
-          if (!parseResult.success || !parseResult.ast) {
-            console.error('parse_qmd_content failed:', parseResult.error);
-            return;
+          let modifiedSubtreeJson: string;
+          if (edit.channel === 'text') {
+            // Text channel: parse raw QMD → Pandoc JSON → apply_node_edit.
+            const parseResult = parseQmdContentSync(edit.newText);
+            if (!parseResult.success || !parseResult.ast) {
+              console.error('parse_qmd_content failed:', parseResult.error);
+              return;
+            }
+            modifiedSubtreeJson = parseResult.ast;
+          } else {
+            // Subtree channel: render-component already produced Pandoc JSON.
+            modifiedSubtreeJson = edit.modifiedSubtreeJson;
           }
           // Use rendered.renderedContent so byte offsets match the AST's
           // generation, not the live editor content (which may have changed).
@@ -471,7 +478,7 @@ export default function ReactPreview({
             rendered.renderedContent,
             rendered.untransformedAstJson,
             edit.destinationSourceInfoJson,
-            parseResult.ast,
+            modifiedSubtreeJson,
           );
           onContentRewrite(newQmd);
         } catch (err) {

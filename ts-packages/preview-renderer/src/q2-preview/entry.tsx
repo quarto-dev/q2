@@ -68,7 +68,7 @@ import {
 import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
 import type { BlockNode } from '../framework/types';
 import type { PreviewNodeEditPayload } from '../types/diagnostic';
-import { Block, Inline, previewRegistry, PreviewContext } from '.';
+import { Block, Inline, previewRegistry, PreviewContext, usePreviewEdit } from '.';
 import { buildSourceIndex, serializeSourceEntry } from './sourceIndex';
 import type { ResolvedSource } from './sourceIndex';
 import { AssetManifestContext } from './AssetManifestContext';
@@ -113,6 +113,7 @@ import { installLinkHandlers } from '../utils/iframeLinkHandlers';
     inlinesToPlainText,
     blocksToPlainText,
     PreviewTitleBlock,
+    usePreviewEdit,
 };
 
 let root: ReturnType<typeof createRoot> | null = null;
@@ -317,7 +318,7 @@ function walkForNoteNumbers(ast: PandocAST): WeakMap<NoteInline, number> {
 }
 
 function PreviewRoot(props: PreviewRootProps) {
-    const [editTarget, setEditTarget] = useState<string | number | null>(null);
+    const [editTarget, setEditTarget] = useState<{ poolId: string | number; rect: DOMRect } | null>(null);
 
     // Refs so the link-handler closure (installed once at mount)
     // sees the *latest* currentFilePath / projectFilePaths instead
@@ -464,19 +465,28 @@ function PreviewRoot(props: PreviewRootProps) {
         [pool, sourceIndex],
     );
 
-    // commitEdit: resolve pool id → source_info value → send PreviewNodeEditPayload.
-    const commitEdit = (poolId: string | number, newText: string) => {
-        const sourceInfoValue = pool[Number(poolId)];
-        if (sourceInfoValue === undefined) {
-            console.warn('commitEdit: pool id not found', poolId);
-            return;
-        }
+    // commitTextEdit: send a text-channel PreviewNodeEditPayload (Plan 2b).
+    // `destinationSourceInfoJson` is already resolved by the caller (Para/Header
+    // pass JSON.stringify(resolved.sourceEntry) directly).
+    const commitTextEdit = (destinationSourceInfoJson: string, newText: string) => {
         const payload: PreviewNodeEditPayload = {
             __isPreviewNodeEdit: true,
-            destinationSourceInfoJson: JSON.stringify(sourceInfoValue),
+            channel: 'text',
+            destinationSourceInfoJson,
             newText,
         };
-        // setAst is intercepted in entry.tsx's setAst prop; see below.
+        props.setAst(payload as unknown as PandocAST);
+    };
+
+    // commitSubtreeEdit: send a subtree-channel PreviewNodeEditPayload (Plan 2b).
+    // Used by render-component authors via usePreviewEdit().
+    const commitSubtreeEdit = (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => {
+        const payload: PreviewNodeEditPayload = {
+            __isPreviewNodeEdit: true,
+            channel: 'subtree',
+            destinationSourceInfoJson,
+            modifiedSubtreeJson: JSON.stringify(modifiedBlock),
+        };
         props.setAst(payload as unknown as PandocAST);
     };
 
@@ -485,7 +495,8 @@ function PreviewRoot(props: PreviewRootProps) {
             value={{
                 currentFilePath: props.currentFilePath,
                 pool,
-                commitEdit,
+                commitTextEdit,
+                commitSubtreeEdit,
                 content: props.renderedContent,
                 editTarget,
                 setEditTarget,

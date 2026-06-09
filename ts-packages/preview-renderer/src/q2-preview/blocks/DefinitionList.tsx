@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { Node } from '../../framework';
 import type {
     BlockNode,
@@ -6,6 +6,7 @@ import type {
     InlineNode,
     NodeArgs,
 } from '../../framework';
+import { PreviewContext } from '../PreviewContext';
 
 /**
  * DefinitionList → `<dl><dt>term</dt><dd>def</dd>...</dl>`. Pandoc
@@ -18,9 +19,14 @@ import type {
  * arrays (each block array is one definition).
  */
 export const DefinitionList = (args: NodeArgs<DefinitionListBlock>) => {
+    const ctx = useContext(PreviewContext);
+    const poolId = (args.node as any).s as string | number | undefined;
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
+    const isEditable = resolved?.reachabilityClass === 'TopLevel' && poolId !== undefined;
+    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
     const { node, setLocalAst, onNavigateToDocument } = args;
     return (
-        <dl>
+        <dl {...affordanceAttr}>
             {node.c.flatMap(([term, defs], i) => {
                 const dt = (
                     <dt key={`dt-${i}`}>

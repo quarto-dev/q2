@@ -394,23 +394,28 @@ export default function PreviewApp() {
       const edit = payload as PreviewNodeEditPayload;
       if (!edit.__isPreviewNodeEdit) return;
       if (!state.untransformedAstJson || !state.activeFile) return;
-      // Task 3 (block-editing): use the content snapshot captured at
-      // render time so byte offsets are guaranteed to match astJson.
-      // Using vfsReadFile(state.activeFile) here would give us the
-      // *current* live VFS content, which may have changed since the
-      // render — causing apply_node_edit to splice at the wrong bytes.
+      // Use the content snapshot captured at render time so byte offsets are
+      // guaranteed to match astJson (live VFS content may have drifted).
       if (!state.renderedContent) return;
       try {
-        const parseResult = parseQmdContentSync(edit.newText);
-        if (!parseResult.success || !parseResult.ast) {
-          console.error('parse_qmd_content failed in PreviewApp:', parseResult.error);
-          return;
+        let modifiedSubtreeJson: string;
+        if (edit.channel === 'text') {
+          // Text channel: parse raw QMD → Pandoc JSON → apply_node_edit.
+          const parseResult = parseQmdContentSync(edit.newText);
+          if (!parseResult.success || !parseResult.ast) {
+            console.error('parse_qmd_content failed in PreviewApp:', parseResult.error);
+            return;
+          }
+          modifiedSubtreeJson = parseResult.ast;
+        } else {
+          // Subtree channel: render-component already produced Pandoc JSON.
+          modifiedSubtreeJson = edit.modifiedSubtreeJson;
         }
         const newQmd = applyNodeEdit(
           state.renderedContent,
           state.untransformedAstJson,
           edit.destinationSourceInfoJson,
-          parseResult.ast,
+          modifiedSubtreeJson,
         );
         vfsAddFile(state.activeFile, newQmd);
         setState((s) => ({ ...s, contentTick: s.contentTick + 1 }));

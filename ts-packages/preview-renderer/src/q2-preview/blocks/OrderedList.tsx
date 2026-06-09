@@ -2,6 +2,7 @@ import { useContext } from 'react';
 import { Node, renderChildren } from '../../framework';
 import type { NodeArgs, OrderedListBlock } from '../../framework';
 import { IncrementalContext } from '../IncrementalContext';
+import { PreviewContext } from '../PreviewContext';
 
 const NOOP = () => {};
 
@@ -30,6 +31,11 @@ const styleToType: Record<string, string | undefined> = {
 
 export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
     const { enabled, incremental } = useContext(IncrementalContext);
+    const ctx = useContext(PreviewContext);
+    const poolId = (args.node as any).s as string | number | undefined;
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
+    const isEditable = resolved?.reachabilityClass === 'TopLevel' && poolId !== undefined;
+
     const [[start, style]] = args.node.c;
     const props: Record<string, string | number> = {};
     if (start && start !== 1) props.start = start;
@@ -38,6 +44,7 @@ export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
     const olProps = props as React.OlHTMLAttributes<HTMLOListElement>;
 
     if (!enabled) {
+        if (isEditable) props['data-block-pool-id'] = poolId!;
         return <ol {...olProps}>{renderChildren(args)}</ol>;
     }
     const liClass = incremental ? 'fragment' : undefined;

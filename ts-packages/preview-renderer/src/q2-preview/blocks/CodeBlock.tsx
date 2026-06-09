@@ -1,5 +1,6 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useContext, type ReactNode } from 'react';
 import type { CodeBlock as CodeBlockType, NodeArgs } from '../../framework';
+import { PreviewContext } from '../PreviewContext';
 import { sliceEncodedUtf8 } from '../../utils/sliceSource';
 
 /**
@@ -161,6 +162,12 @@ function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
 }
 
 export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
+    const ctx = useContext(PreviewContext);
+    const poolId = (node as any).s as string | number | undefined;
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(node) : null;
+    const isEditable = resolved?.reachabilityClass === 'TopLevel' && poolId !== undefined;
+    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
+
     const [[id, classes, kvs], code] = node.c;
 
     // bd-nxslt: `data-hl-spans` is consumed by the renderer (we emit
@@ -181,23 +188,14 @@ export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
 
     // bd-s3z1g: highlighted code blocks emit Pandoc's nested
     // structure to match the native writer in
-    // `crates/pampa/src/writers/html.rs::write_highlighted_codeblock`:
-    //
-    //   <div class="sourceCode [non-language classes]" id="...">
-    //     <pre class="sourceCode [lang]"><code class="sourceCode [lang]">…</code></pre>
-    //   </div>
-    //
-    // The first class is the language; remaining classes (e.g.
-    // `cell-code`) and the id move to the outer div. The div wrapper
-    // is what Quarto's theme CSS keys off for the rounded background.
-    // Un-highlighted code blocks stay as a bare `<pre><code>` — the
-    // native side does the same.
+    // `crates/pampa/src/writers/html.rs::write_highlighted_codeblock`.
+    // The affordance attribute goes on the outer div (the root element).
     if (spans !== null) {
         const [language, ...extras] = classes;
         const divClassName = ['sourceCode', ...extras].join(' ');
         const codeContainerClass = language ? `sourceCode ${language}` : 'sourceCode';
         return (
-            <div className={divClassName} {...(id ? { id } : {})}>
+            <div className={divClassName} {...(id ? { id } : {})} {...affordanceAttr}>
                 <pre className={codeContainerClass} {...preDataAttrs}>
                     <code className={codeContainerClass}>{renderHighlighted(code, spans)}</code>
                 </pre>
@@ -206,10 +204,11 @@ export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
     }
 
     // bd-y1fs3: un-highlighted path — `<pre>` carries the `Attr` (id,
-    // classes, non-hl-spans kvs); `<code>` is bare. Matches the
-    // native writer's un-highlighted branch in
-    // `crates/pampa/src/writers/html.rs::Block::CodeBlock`.
-    const preProps: Record<string, string> = { ...preDataAttrs };
+    // classes, non-hl-spans kvs); `<code>` is bare.
+    const affordanceStr: Record<string, string> = isEditable
+        ? { 'data-block-pool-id': String(poolId) }
+        : {};
+    const preProps: Record<string, string> = { ...preDataAttrs, ...affordanceStr };
     if (id) preProps.id = id;
     if (classes.length) preProps.className = classes.join(' ');
     return (

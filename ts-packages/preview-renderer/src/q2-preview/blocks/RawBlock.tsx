@@ -1,4 +1,6 @@
+import { useContext } from 'react';
 import type { NodeArgs, RawBlock as RawBlockType } from '../../framework';
+import { PreviewContext } from '../PreviewContext';
 
 /**
  * RawBlock semantics:
@@ -11,9 +13,15 @@ import type { NodeArgs, RawBlock as RawBlockType } from '../../framework';
  * the author." The iframe sandbox limits the blast radius.
  */
 export const RawBlock = ({ node }: NodeArgs<RawBlockType>) => {
+    const ctx = useContext(PreviewContext);
+    const poolId = (node as any).s as string | number | undefined;
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(node) : null;
+    const isEditable = resolved?.reachabilityClass === 'TopLevel' && poolId !== undefined;
+    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
+
     const [format, content] = node.c;
     if (format === 'html' || format === 'html5') {
-        return <div dangerouslySetInnerHTML={{ __html: content }} />;
+        return <div {...affordanceAttr} dangerouslySetInnerHTML={{ __html: content }} />;
     }
-    return <pre>{content}</pre>;
+    return <pre {...affordanceAttr}>{content}</pre>;
 };

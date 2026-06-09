@@ -420,3 +420,78 @@ describe('heading round-trip', () => {
         expect(editResult.qmd).toContain('## My Heading');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Tier-1 round-trips — CodeBlock and RawBlock (Plan 2b checklist item 12).
+// Surrounding blocks must appear byte-verbatim after editing.
+// ---------------------------------------------------------------------------
+
+describe('CodeBlock round-trip', () => {
+    it('editing a fenced code block preserves surrounding paragraphs byte-verbatim', async () => {
+        const content =
+            '---\nformat: q2-preview\n---\n\nFirst para.\n\n```python\nprint("hi")\n```\n\nSecond para.\n';
+        vfsAddFile(PATH, content);
+
+        const result: RenderResponse = JSON.parse(
+            await wasm.render_page_in_project_with_attribution(PATH, undefined, null),
+        );
+        expect(result.success, result.error).toBe(true);
+
+        const a_u = JSON.parse(result.untransformed_ast_json!);
+        const pool: any[] = a_u.astContext.p;
+        const codeBlock = a_u.blocks.find((b: any) => b.t === 'CodeBlock');
+        expect(codeBlock, 'untransformed AST must contain a CodeBlock').toBeTruthy();
+        const destSiJson = JSON.stringify(pool[codeBlock.s]);
+
+        const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content('```python\nprint("hello world")\n```\n'));
+        expect(subtree.success, `parse failed: ${subtree.error}`).toBe(true);
+
+        const editResult: AstResponse = JSON.parse(
+            wasm.apply_node_edit(content, result.untransformed_ast_json!, destSiJson, subtree.ast!),
+        );
+        expect(editResult.success, `apply_node_edit failed: ${editResult.error}`).toBe(true);
+
+        // Edited content present; original code absent.
+        expect(editResult.qmd).toContain('print("hello world")');
+        expect(editResult.qmd).not.toContain('print("hi")');
+        // Surrounding paragraphs must be byte-verbatim.
+        expect(editResult.qmd).toContain('First para.\n\n');
+        expect(editResult.qmd).toContain('\n\nSecond para.\n');
+    });
+});
+
+describe('RawBlock round-trip', () => {
+    it('editing a raw HTML block preserves surrounding paragraphs byte-verbatim', async () => {
+        const content =
+            '---\nformat: q2-preview\n---\n\nBefore raw.\n\n```{=html}\n<div>original html</div>\n```\n\nAfter raw.\n';
+        vfsAddFile(PATH, content);
+
+        const result: RenderResponse = JSON.parse(
+            await wasm.render_page_in_project_with_attribution(PATH, undefined, null),
+        );
+        expect(result.success, result.error).toBe(true);
+
+        const a_u = JSON.parse(result.untransformed_ast_json!);
+        const pool: any[] = a_u.astContext.p;
+        const rawBlock = a_u.blocks.find((b: any) => b.t === 'RawBlock');
+        expect(rawBlock, 'untransformed AST must contain a RawBlock').toBeTruthy();
+        const destSiJson = JSON.stringify(pool[rawBlock.s]);
+
+        const subtree: AstResponse = JSON.parse(
+            wasm.parse_qmd_content('```{=html}\n<div>updated html</div>\n```\n'),
+        );
+        expect(subtree.success, `parse failed: ${subtree.error}`).toBe(true);
+
+        const editResult: AstResponse = JSON.parse(
+            wasm.apply_node_edit(content, result.untransformed_ast_json!, destSiJson, subtree.ast!),
+        );
+        expect(editResult.success, `apply_node_edit failed: ${editResult.error}`).toBe(true);
+
+        // Edited raw block present; original absent.
+        expect(editResult.qmd).toContain('<div>updated html</div>');
+        expect(editResult.qmd).not.toContain('<div>original html</div>');
+        // Surrounding paragraphs must be byte-verbatim.
+        expect(editResult.qmd).toContain('Before raw.\n\n');
+        expect(editResult.qmd).toContain('\n\nAfter raw.\n');
+    });
+});

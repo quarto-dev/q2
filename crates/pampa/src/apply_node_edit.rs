@@ -71,7 +71,6 @@ pub enum ApplyNodeEditError {
     DeserializeUntransformedAst(String),
     DeserializeSourceInfo(String),
     DeserializeModifiedSubtree(String),
-    DestinationNotFound,
     IncrementalWrite(String),
 }
 
@@ -86,9 +85,6 @@ impl std::fmt::Display for ApplyNodeEditError {
             }
             Self::DeserializeModifiedSubtree(e) => {
                 write!(f, "failed to deserialize modified subtree: {e}")
-            }
-            Self::DestinationNotFound => {
-                write!(f, "destination block not found in untransformed AST")
             }
             Self::IncrementalWrite(e) => write!(f, "incremental_write failed: {e}"),
         }
@@ -139,8 +135,16 @@ pub fn apply_node_edit(
 
     // Step 3: Locate the destination block in A_u.
     // v1 assumption: single-file document → FileId(0).
-    let idx =
-        lookup_block(&a_u, &target_si, FileId(0)).ok_or(ApplyNodeEditError::DestinationNotFound)?;
+    // A None result means a stale-AST race (the block was removed between
+    // the last render and this edit); degrade gracefully by returning the
+    // original content unchanged rather than surfacing an error.
+    let Some(idx) = lookup_block(&a_u, &target_si, FileId(0)) else {
+        eprintln!(
+            "[apply_node_edit] destination block not found in untransformed AST; \
+             returning original content unchanged (stale-AST race)"
+        );
+        return Ok(content.to_string());
+    };
 
     // Step 4: Deserialize the modified subtree (metadata is ignored; only
     //         blocks are used as the replacement).

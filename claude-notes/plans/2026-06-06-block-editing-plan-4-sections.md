@@ -96,9 +96,12 @@ background-vs-text mechanism — building it for sections sets it up for contain
 - [ ] **Glyph-rect hit-test in `useBlockEditHover`** — extend the Plan 2 hover so
   that, on a heading row, it chooses the heading vs. the enclosing section by
   whether the pointer is inside the heading's inline text rect
-  (`Range.getClientRects()`). Add the section as a roving-tabindex stop preceding
-  its heading (DOM pre-order). The section/heading outlines are the two shapes
-  (section rect / heading-text rect).
+  (`Range.getClientRects()`). Also extend the `closest()` query from
+  `'[data-block-pool-id]'` to `'[data-block-pool-id], [data-section-range]'` so
+  that pointer events over section regions (which carry `data-section-range`, not
+  `data-block-pool-id`) are found by the delegated handler. Add the section as a
+  roving-tabindex stop preceding its heading (DOM pre-order). The section/heading
+  outlines are the two shapes (section rect / heading-text rect).
 - [ ] Parent branch: `ReactPreview.tsx` `handleSetAst` / the `applyNodeEdit`
   service routes a `range` payload to `apply_node_edit_range`; otherwise the
   existing single-target path. (Iframe slices the envelope locally for display.)

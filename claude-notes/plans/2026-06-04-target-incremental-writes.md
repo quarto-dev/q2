@@ -94,8 +94,8 @@ EDIT (user edits node N in the rendered view)
         S)
   3. backend:
         A_u  = deserialize(untransformedAst)
-        N_u  = lookup(A_u, sourceInfo(N))     // value-equality + tiebreak
-                                              // + preimage_in fallback (Generated)
+        N_u  = lookup(A_u, sourceInfo(N))     // value-equality only (Plan 2b:
+                                              // preimage_in fallback retired)
         A_u' = splice(A_u, N_u → S)
         plan = compute_reconciliation(A_u, A_u')   // KeepBefore everywhere but N_u
         qmd  = incremental_write(content, A_u, A_u', plan)
@@ -140,12 +140,13 @@ A rendered node is editable in v1 iff **both** hold. Neither is "node type."
 
 1. **Backend gate — is the node source-mappable?**
    - clean `Original`/`Substring` `source_info` → exact value match in `A_u`.
-   - `Generated` (e.g. resolved shortcode) → no equal `Original` exists in
-     `A_u`; fall back to `preimage_in(node)` → token byte range → match the
-     `A_u` node covering that range. (This is property #2: editing a rendered
-     shortcode edits the `{{< >}}` invocation.)
-   - synthetic / no preimage / non-contiguous `Concat` → not mappable →
-     not editable. Surface as read-only.
+   - `Generated` (e.g. resolved shortcode) → `decode_compact_source_info`
+     rejects non-`t=0` SourceInfo before `lookup_block` is called, so
+     `Generated` targets never reach the lookup. Property #2 (editing a
+     rendered shortcode edits the invocation via `preimage_in`) is retired
+     in Plan 2b — a miss now returns the original content unchanged (no-op).
+   - synthetic / non-contiguous `Concat` → rejected by type check →
+     no-op. Surface as read-only.
 
 2. **Frontend gate — can we produce a pure subtree for the edit?**
    A difficulty gradient, the only place type matters:
@@ -208,25 +209,28 @@ additive, zero backend change**.
 
 ### Phase 2 — Backend: destination-node lookup
 - [x] **Test:** `lookup(A_u, source_info)` returns the corresponding node for
-  (a) a clean `Original` paragraph (exact value match), (b) a `Generated`
-  shortcode node (via `preimage_in` fallback to the token), (c) returns
-  `None` for synthetic/no-preimage, (d) disambiguates when a value resolves to
-  multiple candidates (tiebreak on node kind + tree depth).
-  (5 tests in `node_edit_tests::lookup_*`)
-- [x] Implement the lookup: a `source_info`-value-keyed traversal of `A_u`,
-  with the `preimage_in` range fallback for `Generated` and a documented
-  tiebreak rule. Lives in `crates/pampa/src/node_lookup.rs` as `lookup_block`.
-  v1 scope: top-level blocks only; tiebreak = first (smallest-index).
+  (a) a clean `Original` paragraph (exact value match), (b) ~~a `Generated`
+  shortcode node (via `preimage_in` fallback to the token)~~ — property #2
+  retired in Plan 2b; test `lookup_finds_block_via_generated_preimage_fallback`
+  deleted, (c) returns `None` for synthetic/no-preimage, (d) disambiguates when
+  a value resolves to multiple candidates (tiebreak on first occurrence).
+  (4 tests in `node_edit_tests::lookup_*`)
+- [x] Implement the lookup: exact `source_info`-value match only. Lives in
+  `crates/pampa/src/node_lookup.rs` as `lookup_block`. Plan 2b removed the
+  `preimage_in` covering fallback — a miss is now a no-op at the `apply_node_edit`
+  level. v1 scope: top-level blocks only; tiebreak = first (smallest-index).
 
 ### Phase 3 — Backend: `apply_node_edit` entry point
 - [x] **Test (end-to-end, Rust):** `apply_node_edit(content, untransformed_ast,
   destination_source_info, modified_subtree)` —
   5 tests: single-para edit, heading edit, duplicate-block minimality (edit
-  block 0, edit block 1), synthetic-target returns DestinationNotFound.
-  Lives in `node_edit_tests::apply_node_edit_*`.
+  block 0, edit block 1), synthetic-target/include-target → no-op + return
+  original (Plan 2b: `DestinationNotFound` removed; `ApplyNodeEditError` no
+  longer has that variant). Lives in `node_edit_tests::apply_node_edit_*`.
 - [x] Implement: `crates/pampa/src/apply_node_edit.rs` — deserialize A_u;
-  lookup_block; splice; compute_reconciliation; incremental_write; returns
-  `Ok(new_qmd)` or `Err(ApplyNodeEditError)`.
+  lookup_block; on miss: `eprintln!` + `return Ok(content.to_string())`; on
+  hit: splice; compute_reconciliation; incremental_write; returns `Ok(new_qmd)`
+  or `Err(ApplyNodeEditError)` (deserialization / write errors only).
 - [x] WASM entry point in `wasm-quarto-hub-client/src/lib.rs`; TS declaration
   added to `hub-client/src/types/wasm-quarto-hub-client.d.ts`.
 

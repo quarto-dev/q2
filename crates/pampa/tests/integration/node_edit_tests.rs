@@ -172,32 +172,7 @@ fn lookup_finds_heading_by_exact_source_info() {
     assert_eq!(result, Some(0), "exact match must find block 0");
 }
 
-/// (b) Generated source_info with Invocation anchor: preimage_in fallback finds
-/// the block whose byte range covers the invocation site.
-#[test]
-fn lookup_finds_block_via_generated_preimage_fallback() {
-    use quarto_source_map::{AnchorRole, By};
-    use std::sync::Arc;
-
-    let ast = parse_qmd(SINGLE_PARA);
-    // Get the actual byte range of block 0 from its source_info.
-    let block_si = ast.blocks[0].source_info().clone();
-    // Wrap it in a Generated with an Invocation anchor.
-    let mut generated_si = SourceInfo::generated(By {
-        kind: "shortcode".to_string(),
-        data: serde_json::Value::Null,
-    });
-    generated_si.append_anchor(AnchorRole::Invocation, Arc::new(block_si));
-
-    let result = lookup_block(&ast, &generated_si, FileId(0));
-    assert_eq!(
-        result,
-        Some(0),
-        "preimage_in fallback must find the block covering the invocation byte range"
-    );
-}
-
-/// (c) Synthetic Generated with no Invocation anchor → None.
+/// (b) Synthetic Generated with no Invocation anchor → None.
 #[test]
 fn lookup_returns_none_for_synthetic_no_preimage() {
     let ast = parse_qmd(SINGLE_PARA);
@@ -307,10 +282,10 @@ fn apply_node_edit_duplicate_blocks_edit_second() {
     assert_eq!(result.matches("Hello world.").count(), 1, "got: {result:?}");
 }
 
-/// apply_node_edit returns DestinationNotFound for a synthetic source_info.
+/// apply_node_edit no-ops and returns original content for a synthetic source_info
+/// (lookup miss → stale-AST graceful degrade, Plan 2b).
 #[test]
-fn apply_node_edit_returns_error_for_synthetic_target() {
-    use pampa::apply_node_edit::ApplyNodeEditError;
+fn apply_node_edit_noops_for_synthetic_target() {
     let a_u = parse_qmd(SINGLE_PARA);
     let a_u_json = ast_to_json(&a_u);
     let synthetic = SourceInfo::for_test();
@@ -318,8 +293,8 @@ fn apply_node_edit_returns_error_for_synthetic_target() {
     let subtree_json = ast_to_json(&parse_qmd("New text.\n"));
     let result = apply_node_edit(SINGLE_PARA, &a_u_json, &si_json, &subtree_json);
     assert!(
-        matches!(result, Err(ApplyNodeEditError::DestinationNotFound)),
-        "expected DestinationNotFound, got: {result:?}"
+        matches!(&result, Ok(s) if s == SINGLE_PARA),
+        "expected original content unchanged, got: {result:?}"
     );
 }
 
@@ -403,8 +378,8 @@ fn apply_node_edit_heading_leaves_paragraph_unchanged() {
 //     KeepBefore block, copied verbatim; and
 //   - editing a node *inside* the include is impossible from the parent: that
 //     node's source_info is rooted in the included file, so it does not
-//     resolve in the parent's AST and `apply_node_edit` returns
-//     DestinationNotFound (i.e. included content is read-only from the parent).
+//     resolve in the parent's AST and `apply_node_edit` returns the original
+//     content unchanged (no-op; included content is read-only from the parent).
 //
 // These two tests pin that behavior. (They replace the former
 // "Plan 8 — IncludeExpansion CustomNode" design, whose wrapper / soft-drop
@@ -442,11 +417,10 @@ fn apply_node_edit_preserves_include_token_on_outside_edit() {
 
 /// Content that originated *inside* an include carries source_info rooted in
 /// the included file (a different FileId). It does not resolve in the parent's
-/// untransformed AST, so the edit is rejected — included content is read-only
-/// from the parent document, with no include-specific code path involved.
+/// untransformed AST, so the edit is a no-op — included content is read-only
+/// from the parent document. The original content is returned unchanged (Plan 2b).
 #[test]
-fn apply_node_edit_rejects_edit_inside_include() {
-    use pampa::apply_node_edit::ApplyNodeEditError;
+fn apply_node_edit_noops_for_edit_inside_include() {
     let a_u = parse_qmd(INCLUDE_DOC);
     let a_u_json = ast_to_json(&a_u);
     // A node from the included file (FileId(1)), not the parent (FileId(0)).
@@ -455,7 +429,35 @@ fn apply_node_edit_rejects_edit_inside_include() {
     let subtree_json = ast_to_json(&parse_qmd("Edited included content.\n"));
     let result = apply_node_edit(INCLUDE_DOC, &a_u_json, &si_json, &subtree_json);
     assert!(
-        matches!(result, Err(ApplyNodeEditError::DestinationNotFound)),
-        "editing included content must be rejected; got: {result:?}"
+        matches!(&result, Ok(s) if s == INCLUDE_DOC),
+        "editing included content must no-op and return original; got: {result:?}"
+    );
+}
+
+// =============================================================================
+// Plan 2b — stale-AST miss guard: lookup miss → no-op, return original content
+// =============================================================================
+
+/// When `lookup_block` returns `None` (stale-AST race: the target block was
+/// removed between the last render and this edit), `apply_node_edit` must
+/// silently no-op and return the original `content` string unchanged rather
+/// than surfacing an error to the caller.
+///
+/// TDD: this test was written to be RED before the fix (old code returned
+/// `Err(DestinationNotFound)`); it goes GREEN once the miss path returns
+/// `Ok(content.to_string())`.
+#[test]
+fn stale_ast_miss_noops_and_returns_original_content() {
+    let a_u = parse_qmd(SINGLE_PARA);
+    let a_u_json = ast_to_json(&a_u);
+    // A synthetic SourceInfo that will never match any block → lookup miss.
+    let synthetic = SourceInfo::for_test();
+    let si_json = source_info_to_json(&synthetic);
+    let subtree_json = ast_to_json(&parse_qmd("New text.\n"));
+
+    let result = apply_node_edit(SINGLE_PARA, &a_u_json, &si_json, &subtree_json);
+    assert!(
+        matches!(&result, Ok(s) if s == SINGLE_PARA),
+        "stale-AST miss must return original content unchanged; got: {result:?}"
     );
 }

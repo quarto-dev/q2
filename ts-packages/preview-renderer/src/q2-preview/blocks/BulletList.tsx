@@ -2,6 +2,7 @@ import { useContext } from 'react';
 import { Node, renderChildren } from '../../framework';
 import type { BulletListBlock, NodeArgs } from '../../framework';
 import { IncrementalContext } from '../IncrementalContext';
+import { PreviewContext } from '../PreviewContext';
 
 const NOOP = () => {};
 
@@ -13,24 +14,32 @@ const NOOP = () => {};
  * writer). */
 export const BulletList = (args: NodeArgs<BulletListBlock>) => {
     const { enabled, incremental } = useContext(IncrementalContext);
-    if (!enabled) {
-        return <ul>{renderChildren(args)}</ul>;
+    const ctx = useContext(PreviewContext);
+    const poolId = (args.node as any).s as string | number | undefined;
+    if (enabled) {
+        const liClass = incremental ? 'fragment' : undefined;
+        return (
+            <ul>
+                {args.node.c.map((item, i) => (
+                    <li key={i} className={liClass}>
+                        {item.map((block, j) => (
+                            <Node
+                                key={`${i}:${j}`}
+                                node={block}
+                                onNavigateToDocument={args.onNavigateToDocument}
+                                setLocalAst={NOOP}
+                            />
+                        ))}
+                    </li>
+                ))}
+            </ul>
+        );
     }
-    const liClass = incremental ? 'fragment' : undefined;
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
+    const isEditable = resolved?.reachabilityClass === 'TopLevel' && poolId !== undefined;
     return (
-        <ul>
-            {args.node.c.map((item, i) => (
-                <li key={i} className={liClass}>
-                    {item.map((block, j) => (
-                        <Node
-                            key={`${i}:${j}`}
-                            node={block}
-                            onNavigateToDocument={args.onNavigateToDocument}
-                            setLocalAst={NOOP}
-                        />
-                    ))}
-                </li>
-            ))}
+        <ul {...(isEditable ? { 'data-block-pool-id': poolId } : {})}>
+            {renderChildren(args)}
         </ul>
     );
 };

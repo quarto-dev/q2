@@ -2,7 +2,8 @@
 
 **Date:** 2026-06-06 (revised 2026-06-08: built on Plan 2a's dual-node substrate;
 absorbed the former Plan 5 editability + Plan 6 render-component work;
-revised 2026-06-08b: two-channel API, discriminated payload, editTarget rect, test environments, Pass-2 exact deletions)
+revised 2026-06-08b: two-channel API, discriminated payload, editTarget rect, test environments, Pass-2 exact deletions;
+revised 2026-06-09: usePreviewEdit hook for render-component authors; boundary section rewrite; backend guard clarification; isEditTarget + setEditTarget type fixes; hostProps note)
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)
 **Spec:** `claude-notes/designs/2026-06-06-block-editing-design.md`
 **Phase:** 2b. Frontend (+ one Rust cleanup: remove `lookup_block` Pass-2).
@@ -142,111 +143,205 @@ bubble→whole-AST→`incrementalWriteQmd` path (Plan 2a, Format routing).
 `kanban`) previously committed via `setLocalAst` which routed through the
 incremental write pipeline using the *transformed* node directly. They are broken
 since the pipeline changed. Plan 2b migrates them to use `sourceNode` (the
-untransformed counterpart from `resolveSource`) + `commitSubtreeEdit`.
+untransformed counterpart from `resolveSource`) + `commitSubtreeEdit`, accessed
+via the new `usePreviewEdit()` hook (see below).
 
-## Render-component / built-in boundary (the one design decision)
+**Demo file convention:** The canonical copies live at
+`~/docs/demo-playground/gordon/render-components2/` (outside the repo — updated
+during dev sessions). Playwright fixtures for the RTL + edit-survival tests are
+copies placed inside the repo under `q2-preview-spa/e2e/helpers/` or a
+`crates/quarto/tests/smoke-all/` fixture directory.
 
-1. **Wrapping:** the framework never wraps a block (D4). A component author *may*
-   wrap (e.g. `comment`'s `position:relative` div) but **owns** the theme-CSS /
-   hit-test consequences; the affordance keys off `data-block-pool-id` on the
-   block's **own root**, which authors preserve by rendering the block through the
-   framework dispatcher (`<B>`/`renderChildren`).
-2. **Composition:** an overridden block that renders the underlying block through
-   the framework still gets the built-in affordance (so a paragraph can be both
-   commented on *and* text-edited); the component's UI layers around it.
-3. **Opt-out:** a component may mark its subtree **not-built-in-editable** (skip
-   `data-block-pool-id`) when it deliberately hides source structure (e.g.
-   `comment` renders with comment-spans stripped, while the real source still
-   contains them — acceptable for v1; opt-out is the escape hatch).
+## Render-component API (`usePreviewEdit`)
 
-## Backend: require Pass-1 exact match; remove `lookup_block` Pass-2
+Render-component authors access `resolveSource` and `commitSubtreeEdit` through a
+**hook on the renderer global surface** — no need to know about `PreviewContext`
+or React context directly.
 
-`lookup_block` Pass-2 (the `preimage_in` covering fallback) is unused on every
-live path; for a gate-emitted `TopLevel` `Original` commit, Pass-1 must succeed,
-and a covering hit could only mean a mis-gated sub-range that would silently
-replace a container.
+`window.__Q2_PREVIEW_RENDERER__.usePreviewEdit` returns:
 
-- [ ] Scope the commit guard to **`TopLevel`** edits: require a Pass-1 exact
-  match, **no-op + warn** otherwise. (Plan 3's `Descendable` edits resolve by
-  path, not this guard.)
-- [ ] **Remove `lookup_block` Pass-2.** Concrete deletions:
+```typescript
+{
+  resolveSource:    (node: BlockNode) => ResolvedSource | null;
+  commitSubtreeEdit:(destinationSourceInfoJson: string, modifiedBlock: BlockNode) => void;
+  commitTextEdit:   (destinationSourceInfoJson: string, newText: string) => void;
+}
+```
+
+The hook is a thin wrapper over `useContext(PreviewContext)`. When the context is
+absent (q2-debug, q2-slides — where `PreviewContext` is never provided) it returns
+nullish functions, so components that call `commitSubtreeEdit?.()` degrade
+silently. q2-debug components continue to use `args.setLocalAst` on their own path;
+the q2-preview path uses `usePreviewEdit`.
+
+A migrated `drag.tsx` looks like:
+
+```tsx
+const { renderChildren, usePreviewEdit } = window.__Q2_PREVIEW_RENDERER__;
+export const Div = (args) => {
+  const edit = usePreviewEdit();
+  // ...on drag end:
+  const resolved = edit.resolveSource(args.node);
+  if (resolved) {
+    const modified = structuredClone(resolved.sourceNode);
+    modified.c[0][2] = [['x', newX + ''], ['y', newY + '']];
+    edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), modified);
+  }
+};
+```
+
+`NodeArgs` (`framework/types.ts`) remains unchanged. `PreviewContext` is not
+exposed on the global — `usePreviewEdit` is the public surface.
+
+## `data-block-pool-id` placement and composition
+
+The affordance attribute lives on the block's **own root element**, never on a
+framework-added wrapper — because the framework never wraps (D4).
+`useBlockEditHover`'s `closest('[data-block-pool-id]')` finds it there.
+
+Custom components that render the block through `<B>` or `renderChildren`
+preserve the attribute automatically. A component that wraps the block output
+(e.g. `comment`'s `position:relative` div) gets both its overlay UI **and** the
+built-in text-edit affordance on the inner element — no extra work needed.
+
+A component that replaces the rendered block entirely (no `<B>` delegation,
+fully custom HTML) emits no `data-block-pool-id` and gets no built-in affordance
+— a natural consequence of not delegating, not a distinct mechanism. If such a
+component wants the affordance it spreads `data-block-pool-id={poolId}` on its
+own root.
+
+## Backend: remove `lookup_block` Pass-2; no-op on stale-AST miss
+
+`lookup_block` Pass-2 (the `preimage_in` covering fallback) is already unreachable
+on every live path: `decode_compact_source_info` in `apply_node_edit` rejects any
+non-`t=0` SourceInfo before `lookup_block` is called, so a `Generated` target
+never arrives. Pass-2 is dead code. For an `Original` (`t=0`) commit that
+passes the frontend gate, Pass-1 must succeed under the value-equality invariant;
+a covering hit could only mean a mis-gated sub-range that would silently replace
+a container.
+
+The behavior change for `lookup_block → None` is: instead of surfacing
+`DestinationNotFound` as an error, **no-op + warn** (log the miss, return the
+original `content` unchanged). This degrades gracefully on a stale-AST race
+(render N+1 fires before the edit from render N lands) rather than showing the
+user an error. `DestinationNotFound` is removed from the error enum entirely.
+(Plan 3's `Descendable` edits will resolve by path, not this guard.)
+
+- [x] **Remove `lookup_block` Pass-2.** Concrete deletions:
   - `crates/pampa/src/node_lookup.rs` lines 55–72 (the Pass-2 block); the
     function then falls through to `None` after the Pass-1 check.
   - `crates/pampa/tests/integration/node_edit_tests.rs`: delete test
-    `lookup_finds_block_via_generated_preimage_fallback` (lines 175–198).
+    `lookup_finds_block_via_generated_preimage_fallback` (lines 178–200; find
+    by function name — line numbers may drift).
   - `claude-notes/plans/2026-06-04-target-incremental-writes.md`: update three
-    spots — data-flow diagram comment (line 98), editability gate prose
-    (lines 144–146), and Phase 2 checklist part (b) (lines 210–219) — to
+    spots — data-flow diagram comment (~line 98), editability gate prose
+    (~lines 144–147), and Phase 2 checklist part (b) (~lines 211–218) — to
     document that property #2 is retired and `Generated` nodes now return `None`.
+    Find by content rather than exact line number.
+- [x] **Change `apply_node_edit` step 3** from `.ok_or(DestinationNotFound)?`
+  to: `eprintln!` the miss (pampa uses `eprintln!` directly; no `log`/`tracing`
+  crate in scope) + `return Ok(content.to_string())`.
+- [x] **Remove `ApplyNodeEditError::DestinationNotFound`** from the error enum
+  and its `Display` arm (it has no other callers).
 
 ## TDD work items (tests first)
 
 ### Tests
 - [ ] **Editor sizing P1 — Playwright** (`q2-preview-spa/`): activate an edit on
   a heading and a paragraph; assert the following sibling's
-  `getBoundingClientRect().top` is unchanged (±1px).
-- [ ] **Editor sizing P1 — RTL logic**: given a mocked `rect` stored in
+  `getBoundingClientRect().top` is unchanged (±1px). *TDD note: this test is
+  writable before implementation — the `waitForFunction` pattern gives a
+  deterministic red (`querySelector('[data-block-pool-id]')` returns null) rather
+  than a timeout. jsdom 26.0.0 (in use) supports `DOMRect` natively — no
+  polyfill needed.*
+- [ ] **Editor sizing P1 — Playwright** (`q2-preview-spa/`): activate an edit on
+  a heading and a paragraph; assert the following sibling's
+  `getBoundingClientRect().top` is unchanged (±1px). *Deferred: requires browser.*
+- [x] **Editor sizing P1 — RTL logic**: given a mocked `rect` stored in
   `editTarget`, `useEditableBlock` renders a textarea whose `width`, `height`, and
-  `margin` match the rect. RTL with mocked `getBoundingClientRect`.
-- [ ] **Editor sizing P2 — RTL**: textarea `fontFamily` is monospace and computed
-  `fontSize` ≈ 0.9× body for a heading and a paragraph.
-- [ ] `useBlockEditHover` mouse: deepest editable block via `closest`; outline
-  clears on edit-start; `editTarget.rect` is populated from the element's
-  `getBoundingClientRect()` at activation.
-- [ ] Touch progressive-press (Pointer Events): `pointerdown` outlines; hold past
-  `HOLD_MS` activates; early up / move cancels; `pointerType` branch.
-- [ ] Keyboard roving tabindex: one Tab stop; arrows move in DOM pre-order;
-  Enter activates; Esc exits; only active region `tabindex=0`.
-- [ ] Affordance honors Plan 2a's gate: generated (`t:4`), included (`d≠0`), and
-  container-nested blocks show **no** affordance; a paragraph at top level or only
-  inside a section does; a callout (`Div.callout-*`) shows the affordance.
-- [ ] Pass-1 guard: a synthetic `TopLevel` edit that only *covers* no-ops + warns.
-- [ ] Tier-1 round-trip (CodeBlock/RawBlock; re-confirm Para/Heading): edit lands,
-  surrounding blocks byte-verbatim.
+  `margin` match the rect.
+  *Test: `ts-packages/preview-renderer/src/q2-preview/useEditableBlock.integration.test.tsx`*
+- [x] **Editor sizing P2 — RTL**: textarea `fontFamily` is monospace and computed
+  `fontSize` ≈ 0.9× body.
+  *Same test file as P1.*
+- [x] `useBlockEditHover` mouse: mouse activation fires `setEditTarget` with numeric
+  poolId + DOMRect; outline clears on activation.
+  *Test: `ts-packages/preview-renderer/src/q2-preview/useBlockEditHover.integration.test.tsx`*
+- [x] Touch progressive-press: hold past HOLD_MS activates; early up / move cancels.
+  *Same test file.*
+- [x] Keyboard: Enter activates hovered element; Esc calls `setEditTarget(null)`.
+  *Same test file.*
+- [x] Affordance honors Plan 2a's gate: generated (resolveSource returns null) → no
+  `data-block-pool-id`; TopLevel Para → has it; section Div → no attribute; non-section
+  Div with TopLevel source → has it.
+  *Tests: `ts-packages/preview-renderer/src/q2-preview/q2-preview.integration.test.tsx`*
+- [x] Stale-AST miss guard: a `lookup_block`-returns-None scenario no-ops + emits
+  `eprintln!`; the original `content` is returned unchanged (not an error).
+  *Test: `node_edit_tests::stale_ast_miss_noops_and_returns_original_content`.*
+- [x] Tier-1 round-trip (CodeBlock/RawBlock): edit lands, surrounding blocks
+  byte-verbatim. (Para/Header covered by pre-existing tests.)
+  *Tests: `hub-client/src/services/applyNodeEdit.wasm.test.ts`* (run with `npm run test:wasm`)
 - [ ] Tier-2 round-trip (snapshotted): `Table` + each whole-container — outside
   byte-verbatim, edited block matches a snapshot; **no byte-identity** assertion.
-- [ ] **Text channel routing:** a `channel: 'text'` payload triggers
-  `parseQmdContentSync` then `apply_node_edit`; blocks outside the target stay
-  byte-verbatim.
-- [ ] **Subtree channel routing:** a `channel: 'subtree'` payload routes straight
-  to `apply_node_edit` (no parse); blocks outside the target stay byte-verbatim.
-- [ ] **Render-component demos (RTL + edit-survival):** `drag` commits Div attrs;
-  `comment` appends a span to the block's `sourceNode`; `kanban` reorders the
-  `Div`'s untransformed children. Each uses `commitSubtreeEdit` with
-  `resolved.sourceNode`; surrounding content intact.
-- [ ] *(Plan 4 boundary)* a section shows **no** affordance yet
-  (`data-section-range` not emitted until Plan 4).
+- [x] **Text channel routing:** a `channel: 'text'` payload triggers
+  `parseQmdContentSync` then `apply_node_edit`.
+  *Tests: `q2-preview-spa/src/channelRouting.integration.test.tsx`*
+- [x] **Subtree channel routing:** a `channel: 'subtree'` payload routes straight
+  to `apply_node_edit` (no parse); `modifiedSubtreeJson` passed as 4th arg.
+  *Same test file.*
+- [ ] **Render-component demos (RTL + edit-survival):** deferred (demo migration
+  required first — see plan §"Demo file convention").
+- [x] *(Plan 4 boundary)* section Div with TopLevel source shows **no** `data-block-pool-id`
+  (`section` class check fires before `resolveSource`).
+  *Test: `ts-packages/preview-renderer/src/q2-preview/q2-preview.integration.test.tsx`*
 
 ### Implementation
-- [ ] `q2-preview/useEditableBlock.tsx` — shared editor (P1 sizing from
+- [x] `q2-preview/useEditableBlock.tsx` — shared editor (P1 sizing from
   `editTarget.rect`, P2 font); activation comes from the hover/press/keyboard
   layer (no `onClick`-only path).
-- [ ] `q2-preview/useBlockEditHover.tsx` — delegated pointer handler; outline;
+- [x] `q2-preview/useBlockEditHover.tsx` — delegated pointer handler; outline;
   Pointer-Events progressive press; roving-tabindex keyboard; ARIA; measures
   `DOMRect` at activation and writes `setEditTarget({ poolId, rect })`.
-- [ ] `PreviewDocument.tsx` — spread the hook's `hostProps` on the root host
-  (`~:263` main / `~:238` minimal); render `stylesheet` node from hook.
-- [ ] **`PreviewContext`** — replace `commitEdit(poolId, newText)` with
+- [x] `PreviewDocument.tsx` — spread the hook's `hostProps` on the root host
+  after `attr.hostProps` (lines ~263 main / ~238 minimal); render `stylesheet`
+  node from hook. The two `hostProps` sets are disjoint today (`useAttributionHover`
+  uses `onMouseOver`/`onMouseOut`; `useBlockEditHover` uses pointer events) so a
+  second spread is correct. If a future handler introduces a key overlap, a
+  compose helper will be needed at that point.
+- [x] **`PreviewContext`** — replace `commitEdit(poolId, newText)` with
   `commitTextEdit(destinationSourceInfoJson, newText)` and
   `commitSubtreeEdit(destinationSourceInfoJson, modifiedBlock: BlockNode)`; change
-  `editTarget` type to `{ poolId: string | number; rect: DOMRect } | null`.
-- [ ] **`types/diagnostic.ts`** — replace `PreviewNodeEditPayload` with the
+  `editTarget` type to `{ poolId: string | number; rect: DOMRect } | null`;
+  change `setEditTarget` type to
+  `(target: { poolId: string | number; rect: DOMRect } | null) => void`.
+- [x] **`types/diagnostic.ts`** — replace `PreviewNodeEditPayload` with the
   `channel`-discriminated union (see "Two edit modalities" above).
-- [ ] **`entry.tsx`** — update `commitTextEdit`/`commitSubtreeEdit` implementations
-  to build the appropriate payload variant; parent routes on `channel`.
-- [ ] **Para.tsx, Header.tsx** — remove `onClick`/`setEditTarget(poolId)`;
-  add `data-block-pool-id={poolId}` (iff editable); update commit call to
-  `commitTextEdit(JSON.stringify(resolved.sourceEntry), text)`; read sizing from
-  `editTarget.rect`.
-- [ ] Spread `data-block-pool-id` (iff `editable`) on all other editable-type
+- [x] **`entry.tsx`** — update `commitTextEdit`/`commitSubtreeEdit` implementations
+  to build the appropriate payload variant; parent routes on `channel`; add
+  `usePreviewEdit` to `window.__Q2_PREVIEW_RENDERER__` surface.
+- [x] **`usePreviewEdit` hook** — thin wrapper: `useContext(PreviewContext)` →
+  return `{ resolveSource, commitSubtreeEdit, commitTextEdit }` (nullish when
+  context absent). Lives in `q2-preview/usePreviewEdit.ts`; exported from
+  `q2-preview/index.ts`.
+- [x] **Para.tsx, Header.tsx** — remove `onClick`/`setEditTarget(poolId)`;
+  add `data-block-pool-id={poolId}` (iff editable); change `isEditTarget` check
+  from `ctx!.editTarget === poolId` to `ctx!.editTarget?.poolId === poolId`;
+  update commit call to `commitTextEdit(JSON.stringify(resolved.sourceEntry), text)`;
+  read sizing from `editTarget.rect`. (Shared logic extracted into `useEditableBlock`.)
+- [x] Spread `data-block-pool-id` (iff `editable`) on all other editable-type
   components, **including the `custom/` ones** (Callout/Theorem/Proof/
-  FloatRefTarget).
+  FloatRefTarget). Also: CodeBlock, RawBlock, BlockQuote, BulletList, OrderedList,
+  DefinitionList, Div (non-section), Table.
 - [ ] Fix `drag`/`comment`/`kanban` in
   `~/docs/demo-playground/gordon/render-components2/` onto the
-  `resolveSource` + `commitSubtreeEdit` model (replacing `setLocalAst` calls with
-  subtree-channel commits targeting `resolved.sourceNode`).
-- [ ] Rust: Pass-1 guard (TopLevel-scoped) + remove `lookup_block` Pass-2 (see
-  "Backend" section for exact lines).
+  `usePreviewEdit()` + `commitSubtreeEdit` model (replacing `setLocalAst` calls
+  with subtree-channel commits targeting `resolved.sourceNode`). Copy updated
+  fixtures into the repo for Playwright tests. *`comment.tsx` note:* it overrides
+  the generic `Block` dispatcher and runs on every block; for Generated blocks
+  (e.g. section Divs) `resolveSource` returns `null` — the comment overlay UI
+  must still render in that case; only the commit path is skipped.
+- [x] Rust: remove `lookup_block` Pass-2; change `apply_node_edit` miss to
+  no-op + warn; remove `DestinationNotFound` (see "Backend" section for exact lines).
 
 ## End-to-end verification
 - [ ] `npm run build:wasm` + dev server: outline-on-hover + edit for

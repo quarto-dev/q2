@@ -102,20 +102,34 @@ export interface RenderResponse {
 }
 
 /**
- * Payload sent via `setAst` for q2-preview node edits (Phase 4 of the
- * target-incremental-writes plan). The iframe renderer resolves the
- * edited node's pool id to a SourceInfo value and sends this payload;
- * the host calls `apply_node_edit` with the retained `untransformedAst`.
+ * Payload sent via `setAst` for q2-preview node edits (Plan 2b).
+ *
+ * Two channels — the parent routes on `channel`:
+ *
+ * - `'text'`: raw QMD the user typed.  Parent calls `parse_qmd_content(newText)`
+ *   then `apply_node_edit`.  Used by built-in editing (Para, Header textarea).
+ *
+ * - `'subtree'`: replacement block already in Pandoc JSON form.  Parent passes
+ *   it straight to `apply_node_edit` (no re-parse).  Used by render-component
+ *   editing (drag, comment, kanban) via `commitSubtreeEdit`.
+ *
+ * `destinationSourceInfoJson` is `JSON.stringify(resolved.sourceEntry)` in
+ * both channels.
  */
-export interface PreviewNodeEditPayload {
-  __isPreviewNodeEdit: true;
-  /** JSON-serialized SourceInfo VALUE of the edited node (not a pool id). */
-  destinationSourceInfoJson: string;
-  /**
-   * Raw QMD text the user typed.  The parent frame (which has WASM access)
-   * calls `parse_qmd_content(newText)` to produce the replacement subtree
-   * JSON and passes that to `apply_node_edit`.  The iframe renderer never
-   * calls WASM directly.
-   */
-  newText: string;
-}
+export type PreviewNodeEditPayload =
+  | {
+      __isPreviewNodeEdit: true;
+      channel: 'text';
+      /** JSON-serialized SourceInfo VALUE of the edited node (not a pool id). */
+      destinationSourceInfoJson: string;
+      /** Raw QMD text the user typed. */
+      newText: string;
+    }
+  | {
+      __isPreviewNodeEdit: true;
+      channel: 'subtree';
+      /** JSON-serialized SourceInfo VALUE of the edited node (not a pool id). */
+      destinationSourceInfoJson: string;
+      /** Pandoc JSON of the replacement block (full Pandoc document; only `blocks[0]` is used). */
+      modifiedSubtreeJson: string;
+    };
