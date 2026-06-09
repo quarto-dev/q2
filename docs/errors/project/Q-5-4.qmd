@@ -1,0 +1,44 @@
+---
+title: "Example Embed Missing `file=`"
+description: "An `.embed-example-iframe` placeholder has no `file=` attribute, so there is no asset to embed."
+code: Q-5-4
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-4` — Example Embed Missing `file=`
+
+> An `.embed-example-iframe` placeholder has no `file=`
+> attribute, so there is no asset to embed.
+
+## What this means
+
+A fenced div with the class `.embed-example-iframe` asks
+Quarto to embed a rendered example in an `<iframe>`. The div
+must name the asset to embed with a `file=` attribute. This
+warning fires when the attribute is absent, so Quarto has
+nothing to point the frame at. The placeholder degrades to
+just its fallback link, and the page still builds.
+
+## How to fix
+
+Add a `file=` attribute naming a project-relative static
+asset:
+
+```markdown
+::: {.embed-example-iframe file="examples/presentations/03-fragments/slides.html"}
+[View source](https://github.com/quarto-dev/q2/tree/main/examples/presentations/03-fragments)
+:::
+```
+
+The `file=` value is resolved like any other project link, so
+it can be project-root-relative (a leading `/`) or relative to
+the page.
+
+## Related
+
+- `Q-5-5` — the `file=` target points at a source document
+  rather than a static asset.

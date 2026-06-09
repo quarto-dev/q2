@@ -185,6 +185,8 @@ website:
             - errors/project/Q-5-1.qmd
             - errors/project/Q-5-2.qmd
             - errors/project/Q-5-3.qmd
+            - errors/project/Q-5-4.qmd
+            - errors/project/Q-5-5.qmd
         - section: "internal"
           contents:
             - errors/internal/Q-0-1.qmd

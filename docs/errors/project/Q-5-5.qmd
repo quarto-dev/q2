@@ -1,0 +1,58 @@
+---
+title: "Example Embed Target Is Not a Static Asset"
+description: "An `.embed-example-iframe` `file=` points at a source document that would need rendering; the target must be a pre-rendered static asset."
+code: Q-5-5
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-5` — Example Embed Target Is Not a Static Asset
+
+> An `.embed-example-iframe` `file=` points at a source
+> document (e.g. a `.qmd`) that would need rendering. The embed
+> target must be a pre-rendered static asset, such as a `.html`
+> file.
+
+## What this means
+
+An `.embed-example-iframe` embeds its `file=` target in an
+`<iframe>`, resolving the path like any other project link.
+The target must already exist as a **static asset** — Quarto
+copies it into the rendered site and the browser loads it
+directly. A `.qmd` (or other source document) is *not* static:
+it would need to be rendered first, and an iframe cannot render
+it on demand.
+
+Requiring a static target also rules out a footgun: an iframe
+whose target re-embeds the page that contains it would recurse.
+
+## Why this happens
+
+The most common cause is pointing `file=` at the example's
+**source** instead of its **rendered output**:
+
+```markdown
+::: {.embed-example-iframe file="examples/presentations/03-fragments/slides.qmd"}
+```
+
+## How to fix
+
+Point `file=` at the rendered output of the example, not its
+source:
+
+```markdown
+::: {.embed-example-iframe file="examples/presentations/03-fragments/slides.html"}
+[View source](https://github.com/quarto-dev/q2/tree/main/examples/presentations/03-fragments)
+:::
+```
+
+Make sure the rendered asset actually exists in the project
+(render the example and stage its output) so the copied site
+can resolve the frame.
+
+## Related
+
+- `Q-5-4` — the placeholder has no `file=` attribute at all.

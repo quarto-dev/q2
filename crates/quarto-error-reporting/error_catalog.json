@@ -748,6 +748,20 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-3",
     "since_version": "99.9.9"
   },
+  "Q-5-4": {
+    "subsystem": "project",
+    "title": "Example Embed Missing `file=`",
+    "message_template": "An `.embed-example-iframe` placeholder has no `file=` attribute, so there is no asset to embed. Add `file=\"path/to/asset.html\"` naming a project-relative static asset.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-4",
+    "since_version": "99.9.9"
+  },
+  "Q-5-5": {
+    "subsystem": "project",
+    "title": "Example Embed Target Is Not a Static Asset",
+    "message_template": "An `.embed-example-iframe` `file=` points at a source document (e.g. a `.qmd`) that would need rendering. The embed target must be a pre-rendered static asset, such as a `.html` file.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-5",
+    "since_version": "99.9.9"
+  },
   "Q-7-1": {
     "subsystem": "cli",
     "title": "Missing Newline at End of File",
