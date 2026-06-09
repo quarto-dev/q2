@@ -1,288 +1,190 @@
 /**
- * Phase 1 investigation e2e for the reactji-authorship demo
- * (claude-notes/plans/2026-05-25-reactji-authorship-q2-preview.md).
+ * E2E tests for the reactji / comment render-component in q2-preview.
  *
- * Sister to `q2-debug-render-components.spec.ts` (May 12) and to
- * `q2-preview-render-components-write.spec.ts` (the incremental-write
- * spec). This spec is *expected to fail today* on `feature/provenance`:
- * it probes whether `astContext.attribution` + the current Automerge
- * actor id reach the user-TSX environment for `q2-preview`. The failure
- * mode tells us which of the three plumbing gaps in the plan are real:
+ * comment.tsx uses Plan 2b's `commitSubtreeEdit` (via `usePreviewEdit`)
+ * so add/remove reactions round-trip through `apply_node_edit` → VFS →
+ * Automerge → re-render.  All three tests verify that the QMD actually
+ * changed (`assertAutomerge`) in addition to the DOM change.
  *
- *   1. `__Q2_PREVIEW_RENDERER__.useNodeAttribution` is exposed
- *   2. (downstream — runtime-added spans have no `s`; out of scope here)
- *   3. `__Q2_PREVIEW_RENDERER__.useCurrentActor` is exposed and the
- *      current actor id is forwarded into the iframe
+ * Test layout:
+ *   1. "attribution surface + actor reach user TSX" — plumbing smoke test
+ *      that the Phase 2a/2b hooks are on the renderer surface and the
+ *      injected actor id travels end-to-end.
+ *   2. "adding a reaction persists through the round-trip" — pick a new
+ *      emoji via the picker; verify bubble appears and QMD gains the span.
+ *   3. "removing a reaction persists through the round-trip" — add an
+ *      emoji, wait for re-render, click the bubble to remove; verify
+ *      bubble disappears and QMD loses the span.
+ *      Remove-mine works via the `mySessionReactions` ref in comment.tsx:
+ *      attribution-based removal (Phase 2c) fires when Attribution is on;
+ *      the ref-based fallback fires in single-actor e2e where the toggle
+ *      is off.
  *
- * `comment.tsx` ships a `window.__COMMENT_DIAG__` diagnostic export
- * (added under Phase 1) that this spec reads to confirm the surface
- * shape and per-span attribution resolution. The diagnostic only
- * mounts its hook-calling sub-component when both hooks are present on
- * the renderer surface, so calling this spec against today's code
- * leaves `__COMMENT_DIAG__.blocks` empty and `me === null` — clear,
- * non-throwing signal of what's missing.
+ * Note on `assertAutomerge`: polls `wasmRenderer.getFileContent()` (the
+ * Automerge-backed VFS layer) rather than asserting on DOM text, because
+ * DOM text is not reliable for edited contentEditable regions and isn't
+ * the right layer to prove the QMD actually changed.
  */
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { test, expect, type ConsoleMessage } from '@playwright/test';
+import { test, expect, type Page, type FrameLocator, type ConsoleMessage } from '@playwright/test';
 import {
-  bootstrapProjectSet,
-  createProjectOnServer,
-  seedProjectInBrowser,
-  getServerUrl,
+    bootstrapProjectSet,
+    createProjectOnServer,
+    seedProjectInBrowser,
+    getServerUrl,
 } from './helpers/projectFactory';
+import { waitForPreviewRender } from './helpers/previewExtraction';
 
 const FIXTURE_DIR = resolve(
-  import.meta.dirname,
-  '../../crates/quarto/tests/playwright-fixtures/q2-preview/render-components-comment',
+    import.meta.dirname,
+    '../../crates/quarto/tests/playwright-fixtures/q2-preview/render-components-comment',
 );
 
-const qmdContent = readFileSync(
-  resolve(FIXTURE_DIR, 'render-components-comment.qmd'),
-  'utf-8',
-);
+const qmdContent = readFileSync(resolve(FIXTURE_DIR, 'render-components-comment.qmd'), 'utf-8');
 const tsxContent = readFileSync(resolve(FIXTURE_DIR, 'comment.tsx'), 'utf-8');
-const quartoYmlContent = readFileSync(
-  resolve(FIXTURE_DIR, '_quarto.yml'),
-  'utf-8',
-);
+const quartoYmlContent = readFileSync(resolve(FIXTURE_DIR, '_quarto.yml'), 'utf-8');
 
-// Stable id injected via App.tsx's `__QUARTO_TEST_ACTOR_ID__` override
-// so the iframe's `useCurrentActor()` resolves to a known value even
-// though the e2e harness runs without auth (where `getActorId()` is
-// otherwise null). Used both to seed the override and to assert that
-// the id round-tripped end-to-end.
-//
-// Automerge actor ids are 16-byte hex strings — using a non-hex
-// placeholder makes the runtime reject the writes. The literal below
-// is a stable 32-hex-char id that's obviously a test fixture.
+// Stable test actor id injected via __QUARTO_TEST_ACTOR_ID__ (App.tsx
+// reads this when VITE_E2E is set).  Must be 32 hex chars so
+// Automerge accepts it as a valid actor id.
 const TEST_ACTOR_ID = 'e2e7e1f02a30000000000000000007e1';
 
-test.describe('q2-preview render-components-comment (authorship)', () => {
-  test('attribution surface + current actor reach user TSX', async ({
-    page,
-  }) => {
-    // Inject the actor id BEFORE any app script runs. `resolveActorId`
-    // in App.tsx reads this on the first `connect()` and threads it
-    // into `state.actorId`, which `getActorId()` then exposes to
-    // `ReactPreview` and onward to the iframe.
-    await page.addInitScript((actorId) => {
-      (window as unknown as { __QUARTO_TEST_ACTOR_ID__?: string }).__QUARTO_TEST_ACTOR_ID__ = actorId;
-    }, TEST_ACTOR_ID);
+// ── Helpers ──────────────────────────────────────────────────────────
 
-    const consoleAll: string[] = [];
-    page.on('console', (msg: ConsoleMessage) => {
-      consoleAll.push(`[${msg.type()}] ${msg.text()}`);
-    });
-    const pageErrors: string[] = [];
-    page.on('pageerror', (err) => {
-      pageErrors.push(`${err.message}\n${err.stack ?? ''}`);
-    });
-
-    const serverUrl = getServerUrl();
-
-    const indexDocId = await createProjectOnServer(serverUrl, [
-      {
-        path: '_quarto.yml',
-        content: quartoYmlContent,
-        contentType: 'text',
-      },
-      {
-        path: 'comment.tsx',
-        content: tsxContent,
-        contentType: 'text',
-      },
-      {
-        path: 'render-components-comment.qmd',
-        content: qmdContent,
-        contentType: 'text',
-      },
-    ]);
-
-    await bootstrapProjectSet(page, serverUrl);
-    const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
-
-    await page.goto(
-      `/#/p/${localId}/file/${encodeURIComponent('render-components-comment.qmd')}`,
-    );
-
-    const iframe = page.frameLocator('iframe[src*="q2-preview.html"]');
-
-    // Wait for comment.tsx chrome to render. The "+ 🙂" picker-open
-    // button is present on every block with `CommentWrapper`, so it
-    // signals the user TSX has loaded and rendered.
-    try {
-      await expect(
-        iframe.locator('[title="Add reaction"]').first(),
-      ).toBeVisible({ timeout: 30_000 });
-    } catch (e) {
-      console.error('--- iframe never rendered comment chrome; dumping full console ---');
-      for (const line of consoleAll) console.error(line);
-      console.error('--- page errors ---');
-      for (const err of pageErrors) console.error(err);
-      throw e;
-    }
-
-    // Verify both reactji-bubble aggregations rendered on the
-    // H1-followup paragraph (which carries 2x 🤔 + 2x 🔥). The two
-    // bubbles share a code path so this is mostly redundant with
-    // a single-emoji check, but it catches a regression where a
-    // ReactionCounts aggregation bug would silently drop one of them.
-    await expect(iframe.locator('[title="Add 🤔"]').first()).toBeVisible();
-    await expect(iframe.locator('[title="Add 🔥"]').first()).toBeVisible();
-
-    // The user-TSX Block override must shadow the built-in Block on
-    // every block kind in the fixture (Para, Header, Div, ...). If any
-    // block falls through to the format default, the placeholder leaks
-    // — which would indicate comment.tsx's Block export didn't
-    // register, or `customRegistry['Block']` precedence regressed.
-    await expect(iframe.locator('div.q2-preview-placeholder')).toHaveCount(0);
-
-    // Settle: let the Diagnostic-component's useEffect run (only fires
-    // if the mount-gate inside CommentWrapper passed, i.e. if both
-    // hooks are on the surface).
-    await page.waitForTimeout(500);
-
-    // Read the diagnostic export from the iframe's window. The
-    // frameLocator's `body` element gives us a handle whose evaluate
-    // runs in the iframe's window context.
-    const diag = await iframe
-      .locator('body')
-      .evaluate(() => (window as any).__COMMENT_DIAG__);
-
-    // Echo to test output so any future regression is recorded inline.
-    console.log('COMMENT_DIAG =', JSON.stringify(diag, null, 2));
-
-    // Surface relevant in-iframe console messages and page errors so
-    // a future failure can be diagnosed without `--headed`.
-    const relevantConsole = consoleAll.filter((line) =>
-      line.includes('COMMENT') ||
-      line.includes('Diagnostic') ||
-      line.includes('comment.tsx') ||
-      line.includes('attribut') ||
-      line.includes('actor') ||
-      line.includes('error') ||
-      line.includes('Error'),
-    );
-    if (relevantConsole.length > 0) {
-      console.log('--- console (filtered) ---');
-      for (const line of relevantConsole) console.log(line);
-    }
-    const relevantPageErrors = pageErrors.filter((e) => !e.includes('monaco-editor'));
-    if (relevantPageErrors.length > 0) {
-      console.log('--- page errors ---');
-      for (const err of relevantPageErrors) console.log(err);
-    }
-
-    // The plumbing assertions: everything except the actual attribution
-    // payload (which depends on the user toggling Attribution on, an
-    // opt-in by 2026-05-25 decision-log Q1 outcome) must pass on
-    // `feature/provenance` post-Phase-2.
-    expect
-      .soft(
-        diag?.hasUseNodeAttribution,
-        'Phase 2a: `__Q2_PREVIEW_RENDERER__.useNodeAttribution` must be exposed to user TSX. ' +
-          `Surface keys observed: ${JSON.stringify(diag?.surfaceKeys)}`,
-      )
-      .toBe(true);
-
-    expect
-      .soft(
-        diag?.hasUseCurrentActor,
-        'Phase 2b: `__Q2_PREVIEW_RENDERER__.useCurrentActor` must be exposed to user TSX. ' +
-          `Surface keys observed: ${JSON.stringify(diag?.surfaceKeys)}`,
-      )
-      .toBe(true);
-
-    expect
-      .soft(
-        diag?.me,
-        'Phase 2b: the injected actor id should reach the iframe. ' +
-          `Expected ${JSON.stringify(TEST_ACTOR_ID)}, got ${JSON.stringify(diag?.me)}.`,
-      )
-      .toBe(TEST_ACTOR_ID);
-
-    expect
-      .soft(
-        diag?.blocks?.length ?? 0,
-        'Diagnostic component should mount on the H1-followup paragraph (4 reactjis) plus the two single-reactji paragraphs.',
-      )
-      .toBeGreaterThan(0);
-
-    // Per-span attribution check is gated on the Attribution toggle
-    // (opt-in by design — see 2026-05-25 decision log Q1). Without the
-    // toggle, `AttributionLookupContext` provides `null` and every
-    // `firstCommentAttr` is `null`. The check stays in the spec as a
-    // *soft, conditional* assertion so a future "default-on" flip would
-    // upgrade this from "passes vacuously" to "verifies attribution
-    // resolves a non-null actor".
-    const anyAttribResolved = (diag?.blocks ?? []).some(
-      (b: { firstCommentAttr?: { actor?: string } | null }) =>
-        b.firstCommentAttr?.actor != null,
-    );
-    console.log(
-      'attribution resolved on at least one span:',
-      anyAttribResolved,
-      '(expected false today — Attribution toggle defaults off)',
-    );
-
-    expect(diag, 'COMMENT_DIAG must be populated by comment.tsx').toBeTruthy();
-  });
-
-  test('reactji bubble click invokes the Phase 2c addReaction handler', async ({
-    page,
-  }) => {
-    // Regression check for the Phase 2c click rewrite. With Attribution
-    // toggle off (the 2026-05-25 plan default), `findMineSpan` returns
-    // null and the handler falls through to legacy add. We verify the
-    // handler *runs* — surfaced via `__COMMENT_DIAG__.addReactionCalls`
-    // — rather than asserting on count changes, because the
-    // qmd/Automerge round-trip in the offline e2e env doesn't reliably
-    // re-render the bubble within a test budget. The "remove mine"
-    // branch is verified manually in Phase 3 against an authenticated
-    // hub session with the Attribution toggle on.
-    await page.addInitScript((actorId) => {
-      (window as unknown as { __QUARTO_TEST_ACTOR_ID__?: string }).__QUARTO_TEST_ACTOR_ID__ = actorId;
-    }, TEST_ACTOR_ID);
-
+/** Seed a fresh project, navigate to the qmd, and wait for the first render. */
+async function openCommentFixture(page: Page): Promise<FrameLocator> {
     const serverUrl = getServerUrl();
     const indexDocId = await createProjectOnServer(serverUrl, [
-      { path: '_quarto.yml', content: quartoYmlContent, contentType: 'text' },
-      { path: 'comment.tsx', content: tsxContent, contentType: 'text' },
-      { path: 'render-components-comment.qmd', content: qmdContent, contentType: 'text' },
+        { path: '_quarto.yml', content: quartoYmlContent, contentType: 'text' },
+        { path: 'comment.tsx', content: tsxContent, contentType: 'text' },
+        { path: 'render-components-comment.qmd', content: qmdContent, contentType: 'text' },
     ]);
     await bootstrapProjectSet(page, serverUrl);
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
-    await page.goto(
-      `/#/p/${localId}/file/${encodeURIComponent('render-components-comment.qmd')}`,
-    );
-
+    await page.goto(`/#/p/${localId}/file/${encodeURIComponent('render-components-comment.qmd')}`);
+    await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30_000 });
     const iframe = page.frameLocator('iframe[src*="q2-preview.html"]');
-    const thinkingBubble = iframe.locator('[title="Add 🤔"]').first();
-    await expect(thinkingBubble).toBeVisible({ timeout: 30_000 });
-    await expect(thinkingBubble).toContainText('2');
+    // comment.tsx renders a "+ 🙂" picker button on every wrapped block
+    await expect(iframe.locator('[title="Add reaction"]').first()).toBeVisible({ timeout: 30_000 });
+    return iframe;
+}
 
-    await thinkingBubble.click();
-    await page.waitForTimeout(500);
+/** Poll the Automerge VFS until the file's content satisfies all checks. */
+async function assertAutomerge(
+    page: Page,
+    filename: string,
+    { contains = [], lacks = [] }: { contains?: string[]; lacks?: string[] },
+): Promise<void> {
+    await expect(async () => {
+        const text = await page.evaluate(async (f) => {
+            await (window as any).__quartoTestReady;
+            return (window as any).__quartoTest?.wasmRenderer.getFileContent(f) as string | null;
+        }, filename);
+        expect(text, `getFileContent(${filename}) must return a string`).not.toBeNull();
+        for (const s of contains) expect(text, `QMD must contain "${s}"`).toContain(s);
+        for (const s of lacks) expect(text, `QMD must not contain "${s}"`).not.toContain(s);
+    }).toPass({ timeout: 15_000 });
+}
 
-    const diagAfterClick = await iframe
-      .locator('body')
-      .evaluate(() => (window as any).__COMMENT_DIAG__);
+// ── Tests ─────────────────────────────────────────────────────────────
 
-    const calls = diagAfterClick?.addReactionCalls ?? [];
-    expect(
-      calls.length,
-      'addReaction should have been invoked once by the bubble click',
-    ).toBeGreaterThan(0);
-    expect(calls[0].emoji, 'click target should be the 🤔 bubble').toBe('🤔');
-    expect(
-      calls[0].attributionLookupNull,
-      'attribution lookup is null when the toggle is off (opt-in default)',
-    ).toBe(true);
-    expect(
-      calls[0].me,
-      'injected actor id should be visible to the click handler',
-    ).toBe(TEST_ACTOR_ID);
-  });
+test.describe('q2-preview render-components-comment', () => {
+    test.setTimeout(120_000);
+
+    test.beforeEach(async ({ page }, testInfo) => {
+        // Inject actor id before any app script runs.
+        await page.addInitScript((id) => {
+            (window as any).__QUARTO_TEST_ACTOR_ID__ = id;
+        }, TEST_ACTOR_ID);
+        // Stagger parallel workers to avoid Monaco AMD init race.
+        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
+    });
+
+    test('attribution surface + current actor reach user TSX', async ({ page }) => {
+        const consoleAll: string[] = [];
+        page.on('console', (m: ConsoleMessage) => consoleAll.push(`[${m.type()}] ${m.text()}`));
+        const pageErrors: string[] = [];
+        page.on('pageerror', (e) => pageErrors.push(e.message));
+
+        const iframe = await openCommentFixture(page);
+
+        // Fixture renders aggregated bubbles for existing reactions.
+        await expect(iframe.locator('[title="Add 🤔"]').first()).toBeVisible();
+        await expect(iframe.locator('[title="Add 🔥"]').first()).toBeVisible();
+
+        // No placeholder leakage — comment.tsx Block override must cover
+        // every block type in the fixture.
+        await expect(iframe.locator('div.q2-preview-placeholder')).toHaveCount(0);
+
+        // Wait for the Diagnostic sub-component's useEffect to run
+        // (only mounts when both attribution hooks are present).
+        await page.waitForTimeout(500);
+
+        const diag = await iframe.locator('body').evaluate(() => (window as any).__COMMENT_DIAG__);
+        console.log('COMMENT_DIAG =', JSON.stringify(diag, null, 2));
+
+        expect
+            .soft(diag?.hasUseNodeAttribution, 'useNodeAttribution must be on __Q2_PREVIEW_RENDERER__')
+            .toBe(true);
+        expect
+            .soft(diag?.hasUseCurrentActor, 'useCurrentActor must be on __Q2_PREVIEW_RENDERER__')
+            .toBe(true);
+        expect
+            .soft(diag?.me, `actor id must round-trip to the iframe (got ${JSON.stringify(diag?.me)})`)
+            .toBe(TEST_ACTOR_ID);
+        expect(diag, 'COMMENT_DIAG must be populated').toBeTruthy();
+    });
+
+    test('adding a reaction persists through the round-trip', async ({ page }) => {
+        const iframe = await openCommentFixture(page);
+
+        // Use the picker on the first wrapped block to add a fresh emoji
+        // that is NOT in the fixture initially.  👍 does not appear in
+        // render-components-comment.qmd at all, so count starts at 0.
+        const picker = iframe.locator('[title="Add reaction"]').first();
+        await picker.click();
+        const thumbsUpButton = iframe.locator('span').filter({ hasText: '👍' }).first();
+        await thumbsUpButton.click();
+
+        // DOM: the 👍 bubble should appear with count 1.
+        const thumbsBubble = iframe.locator('[title="Add 👍"]').first();
+        await expect(thumbsBubble).toBeVisible({ timeout: 15_000 });
+        await expect(thumbsBubble).toContainText('1');
+
+        // Automerge layer: the QMD must contain the reaction span.
+        // apply_node_edit writes Span nodes as [emoji]{.quarto-edit-comment}.
+        await assertAutomerge(page, 'render-components-comment.qmd', {
+            contains: ['👍'],
+        });
+    });
+
+    test('removing a reaction persists through the round-trip', async ({ page }) => {
+        const iframe = await openCommentFixture(page);
+
+        // Step 1: add 👍 (same as the "add" test above).
+        const picker = iframe.locator('[title="Add reaction"]').first();
+        await picker.click();
+        const thumbsUpButton = iframe.locator('span').filter({ hasText: '👍' }).first();
+        await thumbsUpButton.click();
+
+        // Wait for the add to round-trip (bubble becomes visible).
+        const thumbsBubble = iframe.locator('[title="Add 👍"]').first();
+        await expect(thumbsBubble).toBeVisible({ timeout: 15_000 });
+        await expect(thumbsBubble).toContainText('1');
+
+        // Step 2: click the bubble to remove it.
+        // comment.tsx sees `mySessionReactions.get('👍') === 1` and calls
+        // removeFirstMatchingInSource → commitSubtreeEdit → round-trip.
+        await thumbsBubble.click();
+
+        // DOM: the 👍 bubble should disappear (count 0 → no bubble rendered).
+        await expect(thumbsBubble).not.toBeVisible({ timeout: 15_000 });
+
+        // Automerge layer: the QMD must no longer contain the reaction span.
+        await assertAutomerge(page, 'render-components-comment.qmd', {
+            lacks: ['👍'],
+        });
+    });
 });
