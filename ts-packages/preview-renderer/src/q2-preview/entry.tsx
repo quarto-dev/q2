@@ -506,12 +506,29 @@ function PreviewRoot(props: PreviewRootProps) {
 
     // commitSubtreeEdit: send a subtree-channel PreviewNodeEditPayload (Plan 2b).
     // Used by render-component authors via usePreviewEdit().
+    //
+    // apply_node_edit (Rust) expects `modifiedSubtreeJson` to be a full Pandoc
+    // document (`{"pandoc-api-version":…,"meta":{},"blocks":[…]}`), not a bare
+    // block.  Wrap the single block here so callers can work with BlockNode
+    // values directly without knowing the wire-format requirement.
     const commitSubtreeEdit = (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => {
+        // Strip all `s` (pool-index) fields from the block tree before sending.
+        // The source block carries `s` references from the current render's pool;
+        // `apply_node_edit` (Rust) rejects them as `InvalidSourceInfoRef` when
+        // deserialising the replacement subtree, because that doc has no pool.
+        const stripped = JSON.parse(JSON.stringify(modifiedBlock, (key, value) =>
+            key === 's' ? undefined : value,
+        )) as BlockNode;
+        const wrappedDoc = {
+            'pandoc-api-version': [1, 23, 0],
+            meta: {},
+            blocks: [stripped],
+        };
         const payload: PreviewNodeEditPayload = {
             __isPreviewNodeEdit: true,
             channel: 'subtree',
             destinationSourceInfoJson,
-            modifiedSubtreeJson: JSON.stringify(modifiedBlock),
+            modifiedSubtreeJson: JSON.stringify(wrappedDoc),
         };
         props.setAst(payload as unknown as PandocAST);
     };

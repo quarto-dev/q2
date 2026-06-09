@@ -12,10 +12,10 @@
  */
 
 use crate::node_lookup::lookup_block;
-use crate::readers::json::read as json_read;
+use crate::readers::json::{read as json_read, read_completing_source_info};
 use crate::writers::incremental::incremental_write;
 use quarto_ast_reconcile::compute_reconciliation;
-use quarto_source_map::{FileId, SourceInfo};
+use quarto_source_map::{By, FileId, SourceInfo};
 use std::io::Cursor;
 
 /// Convert a compact pool-entry value `{"t":N,"r":[s,e],"d":...}` to a `SourceInfo`.
@@ -148,8 +148,17 @@ pub fn apply_node_edit(
 
     // Step 4: Deserialize the modified subtree (metadata is ignored; only
     //         blocks are used as the replacement).
+    // Use read_completing_source_info (lenient) instead of strict json_read so
+    // render-component edits can pass blocks cloned from the untransformed AST
+    // without having to carry a valid pool.  Any missing or stale `s:` field is
+    // filled with Generated(by=DirectWrite) — the incremental writer then
+    // assigns fresh SourceInfo on the next render.
     let mut cursor = Cursor::new(modified_subtree_json.as_bytes());
-    let (subtree, _) = json_read(&mut cursor)
+    let completing_by = By {
+        kind: "direct-write".to_string(),
+        data: serde_json::Value::Null,
+    };
+    let (subtree, _) = read_completing_source_info(&mut cursor, completing_by)
         .map_err(|e| ApplyNodeEditError::DeserializeModifiedSubtree(format!("{e:?}")))?;
 
     // Step 5: Splice → A_u'.  Replaces the single block at `idx` with the
