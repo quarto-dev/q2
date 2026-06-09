@@ -115,8 +115,12 @@ pub fn resolve_default_copy_mode(meta: &quarto_pandoc_types::ConfigValue) -> Cop
     if let Some(b) = value.as_bool() {
         return if b { CopyMode::Always } else { CopyMode::Off };
     }
-    if let Some(s) = value.as_str() {
-        return match s {
+    // `as_plain_text` (not `as_str`): a bare `code-copy: always` (or `hover`)
+    // front-matter string is stored as `ConfigValueKind::PandocInlines`, for
+    // which `as_str` returns `None`, silently downgrading `always` to the
+    // `hover` fallback. (bd-y89ihf0i)
+    if let Some(s) = value.as_plain_text() {
+        return match s.as_str() {
             "hover" => CopyMode::Hover,
             "false" => CopyMode::Off,
             "true" | "always" => CopyMode::Always,
@@ -405,6 +409,16 @@ mod tests {
         quarto_pandoc_types::ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s.to_string()))
     }
 
+    /// A `code-copy` value as it is actually stored after a bare front-matter
+    /// string is parsed as markdown: `PandocInlines`, not `Scalar(String)`.
+    fn yaml_inlines(s: &str) -> quarto_pandoc_types::ConfigValueKind {
+        use quarto_pandoc_types::inline::{Inline, Str};
+        quarto_pandoc_types::ConfigValueKind::PandocInlines(vec![Inline::Str(Str {
+            text: s.to_string(),
+            source_info: quarto_source_map::SourceInfo::default(),
+        })])
+    }
+
     #[tokio::test]
     async fn generate_decorates_bare_codeblock_under_default_copy_hover() {
         // Phase 2: with `code-copy` unset, the doc default is Hover.
@@ -590,6 +604,24 @@ mod tests {
     #[test]
     fn resolve_default_copy_always_string_is_always() {
         let meta = meta_with_code_copy(yaml_str("always"));
+        assert_eq!(resolve_default_copy_mode(&meta), CopyMode::Always);
+    }
+
+    /// bd-y89ihf0i: in real document-metadata context a bare
+    /// `code-copy: always` is parsed as markdown and stored as
+    /// `PandocInlines`, NOT `Scalar(String)`. With `as_str()` this resolved to
+    /// `None` and silently fell through to the `hover` default; `as_plain_text`
+    /// resolves it to `always`.
+    ///
+    /// NOTE: the Hover→Always distinction has no end-to-end HTML observable
+    /// today — both emit identical markup and Q2 hardcodes the hover
+    /// `$code-copy-selector` in SCSS (see `resources/scss/bootstrap/
+    /// _bootstrap-rules.scss`). This unit test is therefore the mechanical
+    /// regression for the accessor fix; an e2e test cannot distinguish the
+    /// modes until the selector is wired from the document option.
+    #[test]
+    fn resolve_default_copy_always_inlines_is_always() {
+        let meta = meta_with_code_copy(yaml_inlines("always"));
         assert_eq!(resolve_default_copy_mode(&meta), CopyMode::Always);
     }
 

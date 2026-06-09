@@ -77,8 +77,11 @@ impl AppendixStructureTransform {
             .map(|v| {
                 if let Some(b) = v.as_bool() {
                     AppendixStyle::from_bool(b)
-                } else if let Some(s) = v.as_str() {
-                    AppendixStyle::from_str(s)
+                } else if let Some(s) = v.as_plain_text() {
+                    // `as_plain_text` (not `as_str`): a bare front-matter string
+                    // is stored as `ConfigValueKind::PandocInlines`, for which
+                    // `as_str` returns `None`. (bd-y89ihf0i)
+                    AppendixStyle::from_str(&s)
                 } else {
                     AppendixStyle::default()
                 }
@@ -274,16 +277,18 @@ fn create_appendix_container(sections: Blocks, style_class: &str) -> Block {
 fn create_license_section(meta: &ConfigValue) -> Option<Block> {
     let license = meta.get("license")?;
 
-    // License can be a string (e.g., "CC BY") or an object with more details
-    let license_text = if let Some(s) = license.as_str() {
-        s.to_string()
+    // License can be a string (e.g., "CC BY") or an object with more details.
+    // `as_plain_text` (not `as_str`): bare front-matter strings are stored as
+    // `ConfigValueKind::PandocInlines`, for which `as_str` returns `None`,
+    // silently dropping the section. (bd-y89ihf0i)
+    let license_text = if let Some(s) = license.as_plain_text() {
+        s
     } else {
         // Try to get "text" or "type" field
         license
             .get("text")
             .or_else(|| license.get("type"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())?
+            .and_then(|v| v.as_plain_text())?
     };
 
     let source_info = SourceInfo::default();
@@ -323,16 +328,18 @@ fn create_license_section(meta: &ConfigValue) -> Option<Block> {
 fn create_copyright_section(meta: &ConfigValue) -> Option<Block> {
     let copyright = meta.get("copyright")?;
 
-    // Copyright can be a string or an object
-    let copyright_text = if let Some(s) = copyright.as_str() {
-        s.to_string()
+    // Copyright can be a string or an object. `as_plain_text` (not `as_str`):
+    // bare front-matter strings are stored as `ConfigValueKind::PandocInlines`,
+    // for which `as_str` returns `None`, silently dropping the section.
+    // (bd-y89ihf0i)
+    let copyright_text = if let Some(s) = copyright.as_plain_text() {
+        s
     } else {
         // Try to get "holder" or "statement" field
         copyright
             .get("statement")
             .or_else(|| copyright.get("holder"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())?
+            .and_then(|v| v.as_plain_text())?
     };
 
     let source_info = SourceInfo::default();
@@ -373,8 +380,11 @@ fn create_citation_section(meta: &ConfigValue) -> Option<Block> {
     let citation = meta.get("citation")?;
 
     // Citation metadata typically includes how to cite this document
-    // It can have various formats - for now, look for a "url" or create a simple reference
-    let citation_url = citation.get("url").and_then(|v| v.as_str());
+    // It can have various formats - for now, look for a "url" or create a simple reference.
+    // `as_plain_text` (not `as_str`): a bare front-matter URL string is stored
+    // as `ConfigValueKind::PandocInlines`, for which `as_str` returns `None`.
+    // (bd-y89ihf0i)
+    let citation_url = citation.get("url").and_then(|v| v.as_plain_text());
 
     let source_info = SourceInfo::default();
 

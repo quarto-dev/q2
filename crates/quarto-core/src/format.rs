@@ -430,7 +430,12 @@ pub fn is_minimal_html(meta: &ConfigValue) -> bool {
         return true;
     }
 
-    if let Some(theme) = meta.get("theme").and_then(|v| v.as_str()) {
+    // `as_plain_text` (not `as_str`): a bare `theme: none` / `theme: pandoc`
+    // front-matter string is stored as `ConfigValueKind::PandocInlines`, for
+    // which `as_str` returns `None`, so minimal mode was silently not applied.
+    // A theme *list* or *map* still yields `None` (correct — not "none"/"pandoc").
+    // (bd-y89ihf0i)
+    if let Some(theme) = meta.get("theme").and_then(|v| v.as_plain_text()) {
         if theme == "none" || theme == "pandoc" {
             return true;
         }
@@ -927,6 +932,24 @@ mod tests {
     fn test_is_minimal_html_theme_bootstrap() {
         let meta = meta_with(vec![entry("theme", ConfigValue::new_string("cosmo", si()))]);
         assert!(!is_minimal_html(&meta));
+    }
+
+    /// bd-y89ihf0i: a bare `theme: none` front-matter string is stored as
+    /// `PandocInlines`, not `Scalar(String)`. With `as_str()` this resolved to
+    /// `None`, so minimal mode was silently NOT applied; `as_plain_text` fixes
+    /// it. (Surfaced by the `metadata-as-str` lint, not the original seed.)
+    #[test]
+    fn test_is_minimal_html_theme_none_as_inlines() {
+        use quarto_pandoc_types::inline::{Inline, Str};
+        let theme = ConfigValue::new_inlines(
+            vec![Inline::Str(Str {
+                text: "none".to_string(),
+                source_info: si(),
+            })],
+            si(),
+        );
+        let meta = meta_with(vec![entry("theme", theme)]);
+        assert!(is_minimal_html(&meta));
     }
 
     #[test]

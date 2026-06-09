@@ -4,6 +4,7 @@
 //! Each lint rule is implemented as a separate submodule.
 
 mod external_sources;
+mod metadata_as_str;
 
 use std::path::{Path, PathBuf};
 
@@ -200,6 +201,7 @@ fn check_file(path: &Path) -> Result<Vec<Violation>> {
 
     // Run each lint rule
     violations.extend(external_sources::check(path, &content)?);
+    violations.extend(metadata_as_str::check(path, &content)?);
 
     Ok(violations)
 }

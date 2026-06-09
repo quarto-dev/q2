@@ -618,6 +618,236 @@ mod tests {
         );
     }
 
+    // ── bd-y89ihf0i: front-matter string options must resolve through
+    //    `as_plain_text()` ───────────────────────────────────────────────
+    //
+    // Each option below is a user-authored metadata string that, in
+    // document-metadata context, is parsed as markdown and stored as
+    // `ConfigValueKind::PandocInlines`. Reading it with `as_str()` returns
+    // `None`, so the feature is silently dropped. These end-to-end tests write
+    // the option as a bare front-matter string and assert the rendered HTML
+    // reflects it. They FAIL on `as_str()` and PASS on `as_plain_text()`.
+
+    /// `license: <string>` (bare) must produce the appendix "Reuse" section.
+    /// With `as_str()` the bare value is `PandocInlines`, so
+    /// `create_license_section` drops the section entirely.
+    #[test]
+    fn test_render_to_file_honors_license_string() {
+        let temp = TempDir::new().unwrap();
+        let input_path = temp.path().join("license.qmd");
+        fs::write(
+            &input_path,
+            "---\nformat: html\nlicense: CC BY-SA 4.0\n---\nBody.\n",
+        )
+        .unwrap();
+
+        let runtime = Arc::new(NativeRuntime::new());
+        let result = render_to_file(
+            &input_path,
+            "html",
+            &RenderToFileOptions::default(),
+            runtime,
+        )
+        .unwrap();
+        let html = fs::read_to_string(&result.output_path).unwrap();
+
+        assert!(
+            html.contains("quarto-reuse"),
+            "expected a quarto-reuse license section for bare `license:` string; got:\n{html}"
+        );
+        assert!(
+            html.contains("CC BY-SA 4.0"),
+            "expected the license text in output; got:\n{html}"
+        );
+    }
+
+    /// `license:` with a nested `text:` bare string must resolve.
+    #[test]
+    fn test_render_to_file_honors_license_nested_text() {
+        let temp = TempDir::new().unwrap();
+        let input_path = temp.path().join("license_nested.qmd");
+        fs::write(
+            &input_path,
+            "---\nformat: html\nlicense:\n  text: My Custom Reuse Terms\n---\nBody.\n",
+        )
+        .unwrap();
+
+        let runtime = Arc::new(NativeRuntime::new());
+        let result = render_to_file(
+            &input_path,
+            "html",
+            &RenderToFileOptions::default(),
+            runtime,
+        )
+        .unwrap();
+        let html = fs::read_to_string(&result.output_path).unwrap();
+
+        assert!(
+            html.contains("My Custom Reuse Terms"),
+            "expected nested license.text in output; got:\n{html}"
+        );
+    }
+
+    /// `copyright: <string>` (bare) must produce the appendix "Copyright" section.
+    #[test]
+    fn test_render_to_file_honors_copyright_string() {
+        let temp = TempDir::new().unwrap();
+        let input_path = temp.path().join("copyright.qmd");
+        fs::write(
+            &input_path,
+            "---\nformat: html\ncopyright: Copyright 2026 ACME Corp\n---\nBody.\n",
+        )
+        .unwrap();
+
+        let runtime = Arc::new(NativeRuntime::new());
+        let result = render_to_file(
+            &input_path,
+            "html",
+            &RenderToFileOptions::default(),
+            runtime,
+        )
+        .unwrap();
+        let html = fs::read_to_string(&result.output_path).unwrap();
+
+        assert!(
+            html.contains("quarto-copyright"),
+            "expected a quarto-copyright section for bare `copyright:` string; got:\n{html}"
+        );
+        assert!(
+            html.contains("Copyright 2026 ACME Corp"),
+            "expected the copyright text in output; got:\n{html}"
+        );
+    }
+
+    /// `citation:` with a nested `url:` bare string must produce the
+    /// "For attribution" citation link.
+    #[test]
+    fn test_render_to_file_honors_citation_url() {
+        let temp = TempDir::new().unwrap();
+        let input_path = temp.path().join("citation.qmd");
+        fs::write(
+            &input_path,
+            "---\nformat: html\ncitation:\n  url: https://example.com/cite\n---\nBody.\n",
+        )
+        .unwrap();
+
+        let runtime = Arc::new(NativeRuntime::new());
+        let result = render_to_file(
+            &input_path,
+            "html",
+            &RenderToFileOptions::default(),
+            runtime,
+        )
+        .unwrap();
+        let html = fs::read_to_string(&result.output_path).unwrap();
+
+        assert!(
+            html.contains("For attribution"),
+            "expected the citation-url attribution text; got:\n{html}"
+        );
+        assert!(
+            html.contains("example.com/cite"),
+            "expected the citation url in output; got:\n{html}"
+        );
+    }
+
+    /// `appendix-style: plain` (bare) must set the appendix container class to
+    /// `plain`. A user `::: {.appendix}` div forces a container regardless of
+    /// other metadata. With `as_str()` the bare value falls back to the
+    /// `default` style.
+    #[test]
+    fn test_render_to_file_honors_appendix_style_plain() {
+        let temp = TempDir::new().unwrap();
+        let input_path = temp.path().join("appendix_style.qmd");
+        fs::write(
+            &input_path,
+            "---\nformat: html\nappendix-style: plain\n---\nBody.\n\n::: {.appendix}\nExtra material.\n:::\n",
+        )
+        .unwrap();
+
+        let runtime = Arc::new(NativeRuntime::new());
+        let result = render_to_file(
+            &input_path,
+            "html",
+            &RenderToFileOptions::default(),
+            runtime,
+        )
+        .unwrap();
+        let html = fs::read_to_string(&result.output_path).unwrap();
+
+        assert!(
+            html.contains("quarto-appendix"),
+            "expected an appendix container; got:\n{html}"
+        );
+        assert!(
+            html.contains(r#"id="quarto-appendix" class="plain""#)
+                || html.contains(r#"class="plain" id="quarto-appendix""#),
+            "expected appendix container with class `plain` for bare `appendix-style: plain`; got:\n{html}"
+        );
+    }
+
+    /// `toc: auto` (bare string) must trigger TOC generation. With `as_str()`
+    /// the bare value is `PandocInlines`, so the `== Some("auto")` comparison
+    /// fails and no TOC is generated.
+    #[test]
+    fn test_render_to_file_honors_toc_auto_string() {
+        let temp = TempDir::new().unwrap();
+        let input_path = temp.path().join("toc_auto.qmd");
+        fs::write(
+            &input_path,
+            "---\nformat: html\ntoc: auto\n---\nIntro.\n\n## A Section\n\nText.\n",
+        )
+        .unwrap();
+
+        let runtime = Arc::new(NativeRuntime::new());
+        let result = render_to_file(
+            &input_path,
+            "html",
+            &RenderToFileOptions::default(),
+            runtime,
+        )
+        .unwrap();
+        let html = fs::read_to_string(&result.output_path).unwrap();
+
+        assert!(
+            html.contains("nav-link"),
+            "expected a generated TOC (nav-link) for `toc: auto`; got:\n{html}"
+        );
+    }
+
+    /// `toc-title: <string>` (bare) must appear as the TOC heading. With
+    /// `as_str()` the bare value is `PandocInlines`, so it falls back to the
+    /// default "Table of Contents".
+    #[test]
+    fn test_render_to_file_honors_toc_title() {
+        let temp = TempDir::new().unwrap();
+        let input_path = temp.path().join("toc_title.qmd");
+        fs::write(
+            &input_path,
+            "---\nformat: html\ntoc: true\ntoc-title: My Custom Contents\n---\nIntro.\n\n## A Section\n\nText.\n",
+        )
+        .unwrap();
+
+        let runtime = Arc::new(NativeRuntime::new());
+        let result = render_to_file(
+            &input_path,
+            "html",
+            &RenderToFileOptions::default(),
+            runtime,
+        )
+        .unwrap();
+        let html = fs::read_to_string(&result.output_path).unwrap();
+
+        assert!(
+            html.contains("My Custom Contents"),
+            "expected the custom toc-title in output; got:\n{html}"
+        );
+        assert!(
+            !html.contains("Table of Contents"),
+            "custom toc-title must replace the default; got:\n{html}"
+        );
+    }
+
     #[test]
     fn test_render_to_file_creates_output() {
         let temp = TempDir::new().unwrap();

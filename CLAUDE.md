@@ -486,6 +486,7 @@ cargo xtask lint --quiet   # Only show errors
 ### Current Lint Rules
 
 - **external-sources-in-macro**: Detects references to `external-sources/` in compile-time macros like `include_dir!`, `include_str!`, `include_bytes!`. These break builds because `external-sources/` is not version-controlled.
+- **metadata-as-str**: Detects `meta.get("key")…as_str()` reads of document metadata. A bare YAML string in front-matter context is stored as `ConfigValueKind::PandocInlines`, for which `ConfigValue::as_str()` returns `None` — silently dropping the option. Use `as_plain_text()` instead (handles both `Scalar(String)` and `PandocInlines`). Only flags chains whose `.get(<string literal>)` receiver is a metadata expression (final identifier `meta`/`metadata`); internal map reads and test code are skipped. Suppress a deliberate scalar-only read with a `// lint:allow(metadata-as-str)` comment on the line or the line above. Introduced with bd-y89ihf0i.
 
 ### Adding New Lint Rules
 

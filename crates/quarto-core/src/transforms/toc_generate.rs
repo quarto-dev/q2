@@ -86,9 +86,13 @@ impl AstTransform for TocGenerateTransform {
 
         // Check if TOC auto-generation is requested.
         // Read from ast.meta which contains merged project + document metadata.
+        // `as_plain_text` (not `as_str`): a bare `toc: auto` front-matter string
+        // is stored as `ConfigValueKind::PandocInlines`, for which `as_str`
+        // returns `None`, so the `== "auto"` comparison silently failed.
+        // (bd-y89ihf0i)
         let should_generate = match ast.meta.get("toc") {
             Some(v) if v.as_bool() == Some(true) => true,
-            Some(v) if v.as_str() == Some("auto") => true,
+            Some(v) if v.as_plain_text().as_deref() == Some("auto") => true,
             _ => false,
         };
 
@@ -110,12 +114,13 @@ impl AstTransform for TocGenerateTransform {
             .and_then(|v| v.as_int())
             .unwrap_or(3) as i32;
 
-        // Default title is "Table of Contents" if not specified
+        // Default title is "Table of Contents" if not specified.
+        // `as_plain_text` (not `as_str`): a bare `toc-title` front-matter string
+        // is stored as `ConfigValueKind::PandocInlines`. (bd-y89ihf0i)
         let title = ast
             .meta
             .get("toc-title")
-            .and_then(|v| v.as_str())
-            .map(String::from)
+            .and_then(|v| v.as_plain_text())
             .or_else(|| Some("Table of Contents".to_string()));
 
         let config = TocConfig { depth, title };
