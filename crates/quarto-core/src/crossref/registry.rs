@@ -96,6 +96,12 @@ const BUILTINS: &[(&str, &str)] = &[
     ("tip", "Tip"),
     ("imp", "Important"),
     ("cau", "Caution"),
+    // Embedded runnable-example blocks (bd-t3cert81). Distinct from the
+    // theorem-like `exm`/"Example" above: `demo`/"Demo" numbers the
+    // `.embed-example-iframe` blocks that embed a full runnable project,
+    // so prose can `@demo-…`-reference them. See
+    // `claude-notes/plans/2026-06-09-crossreferenceable-examples.md`.
+    ("demo", "Demo"),
 ];
 
 impl RefTypeRegistry {
@@ -271,6 +277,20 @@ mod tests {
         let reg = RefTypeRegistry::builtin();
         assert_eq!(reg.classify_cite_id("fig-myplot").unwrap().kind, "Figure");
         assert_eq!(reg.classify_cite_id("tbl-x").unwrap().kind, "Table");
+    }
+
+    /// bd-t3cert81: `demo` is a built-in ref-type for embedded runnable
+    /// examples, distinct from the theorem-like `exm`/"Example".
+    #[test]
+    fn builtin_has_demo_distinct_from_exm() {
+        let reg = RefTypeRegistry::builtin();
+        assert_eq!(
+            reg.classify_cite_id("demo-03-fragments").unwrap().kind,
+            "Demo"
+        );
+        assert_eq!(reg.get("demo").unwrap().source, RefTypeSource::BuiltIn);
+        // The theorem-like Example stays its own type.
+        assert_eq!(reg.get("exm").unwrap().kind, "Example");
     }
 
     #[test]

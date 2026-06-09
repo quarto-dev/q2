@@ -74,7 +74,29 @@ and `TheoremSugarTransform` already claims `#exm-…` ids (its `match_theorem_id
 — a `.embed-example-iframe #exm-foo` div would be grabbed as a *Theorem* before
 our transform could see it. **The runnable-demo Example needs its own prefix.**
 
-### Decision 1 (OPEN — user's call): prefix + kind
+### Decision 1 — RESOLVED (user, 2026-06-09): prefix `demo`, kind `Demo`
+
+Locked: **prefix `demo`, kind `Demo`**, caption template **"Demo N: …"**. The
+user explicitly rejected having both `xmp` and `exm` as built-ins ("not good
+enough"), and confirmed the 3-letter-prefix convention is an artificial Q1 limit
+we need not keep. "Demo 1: …" reads slightly peculiarly but conveys the right
+message and emphasizes the full runnable demo project. Constants:
+`EXAMPLE_REF_TYPE = "demo"`, `EXAMPLE_KIND = "Demo"`.
+
+**Integration confirmed (no crossref-core changes needed):**
+- `CrossrefIndexTransform` numbers any CustomNode whose `plain_data` carries the
+  triple — it keys off `has_crossref_plain_data` (crossref_index.rs:241), not a
+  type-name list. A new `CustomNode("ExampleEmbed")` is numbered automatically.
+- `CrossrefRenderTransform` dispatches on specific type-names
+  (crossref_render.rs:143–149); `"ExampleEmbed"` falls through untouched, so our
+  own render step owns it. `@demo-…` refs render via the generic
+  `render_resolved_ref` once `demo` is in the registry.
+- Ordering: the sugar must run **before** `FloatRefTargetSugarTransform`
+  (pipeline.rs:1058) — once `demo` is registered, that transform would otherwise
+  claim a `#demo-…` Div as a generic float. We move the embed sugar to just
+  before `TheoremSugarTransform` (1056) and consume the Div there.
+
+### (Historical) prefix options considered
 
 Two sub-questions:
 
@@ -184,34 +206,47 @@ numbering too). Decide during execution.
 4. Should the rendered caption hyperlink the example (anchor target for the
    `@ref` jump), and where does the `#xmp-…` anchor live in the DOM?
 
-## Phasing (TDD-first, once Decision 1 is locked)
+## Phasing (TDD-first) — Decision 1 = `demo`/"Demo"
 
-### Phase A — registry + ref-type plumbing
-- [ ] Add the chosen prefix to the built-in ref-type table; unit test that
-  `classify_cite_id("xmp-foo")` resolves and `@xmp-foo` is treated as a crossref.
+### Phase A — registry + ref-type plumbing ✅
+- [x] Added `("demo", "Demo")` to the built-in ref-type table
+  (`crossref/registry.rs`); unit test `builtin_has_demo_distinct_from_exm`
+  asserts `classify_cite_id("demo-…")` resolves and stays distinct from `exm`.
 
-### Phase B — sugar transform (crossref-aware CustomNode)
-- [ ] TDD: `Div.embed-example-iframe #xmp-foo` → `CustomNode("ExampleEmbed")`
-  with the triple populated; no-id div → empty triple (skipped by indexer);
-  ensure `TheoremSugarTransform` does **not** claim it (ordering / class guard).
-- [ ] Move the Phase-1 `file=` validation (Q-5-4/Q-5-5) into the sugar step.
+### Phase B — sugar transform (crossref-aware CustomNode) ✅
+- [x] `ExampleEmbedTransform` rewritten as a **sugar** step:
+  `Div.embed-example-iframe` → `CustomNode("ExampleEmbed")`; triple populated
+  only when `file=` validates **and** the id is `demo-…`; no/foreign id → no
+  triple (indexer skips). Registered **before** the theorem/float sugar so a
+  `#demo-…` div is consumed here (never claimed as a generic float).
+- [x] Moved the `file=` validation (Q-5-4/Q-5-5) into the sugar step.
+- [x] Unit tests: sugar produces the node; demo-id → triple; non-demo id → no
+  triple; missing/`.qmd` file → diagnostic + unnumbered.
 
-### Phase C — numbering + reference resolution
-- [ ] Integration test: two numbered examples → "Example 1", "Example 2";
-  `@xmp-foo` in prose → `Link(#xmp-foo, "Example\u{a0}1")`; a dangling
-  `@xmp-missing` emits the standard crossref miss diagnostic.
+### Phase C — numbering + reference resolution ✅
+- [x] **No crossref-core changes** — `CrossrefIndex`/`Resolve`/`Render` handle
+  `ExampleEmbed` via the generic triple path. Integration fixtures
+  (`crossref_fixtures.rs`): two demos → order 1 & 2; `@demo-frag` resolves (no
+  miss diagnostic); `demo` counter independent of theorem `exm`; an embed with
+  no `demo-` id is not indexed.
 
-### Phase D — render step
-- [ ] `ExampleEmbedRenderTransform`: numbered "Example N: caption" + iframe
-  (page-relative src) + source link; no-id → plain container (Phase-1 parity).
-- [ ] End-to-end through `q2 render docs/` (HTML **and** revealjs): a doc with
-  `#xmp-…` ids + `@xmp-…` refs renders numbered examples and working ref links;
-  inspect the HTML / browser.
+### Phase D — render step ✅
+- [x] `ExampleEmbedRenderTransform` (finalization, after `CrossrefRender`):
+  numbered "Demo N: caption" + iframe (page-relative src) + source link; no
+  order → plain container (Phase-1 parity); container carries the `#demo-…`
+  anchor. Unit tests cover numbered/unnumbered/bad-file/nested.
+- [x] End-to-end through `q2 render` (HTML **and** `--to revealjs`): `#demo-…`
+  examples render `Demo N:` captions and `@demo-…` → `quarto-xref` "Demo N"
+  links to the anchor. Full `quarto-core` suite green (2252) + 36 crossref
+  fixtures.
 
-### Phase E — docs + wrap
-- [ ] Opt one or two revealjs-doc examples into ids and reference them in prose
-  as a live demonstration; document the `.embed-example-iframe` + `#xmp-` +
-  `@xmp-` usage on the feature page.
+### Phase E — docs demonstration ✅
+- [x] Opted the fragments example in `docs/presentations/revealjs/index.qmd`
+  into `#demo-fragments` with a caption, and referenced it in prose
+  (`@demo-fragments`). `q2 render docs/` verified: `@demo-fragments` →
+  "Demo 1" xref link, caption "Demo 1: …", `id="demo-fragments"` anchor; the
+  other 7 examples stay unnumbered. (Numbering all examples / a usage section on
+  the feature page is a docs-content follow-up.)
 
 ## Out of scope
 

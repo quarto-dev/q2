@@ -133,8 +133,10 @@ Shown first.
 :::
 ```
 
-::: {.embed-example-iframe file="/examples/presentations/03-fragments/slides.html"}
-[Example: 03-fragments](https://github.com/quarto-dev/q2/tree/main/examples/presentations/03-fragments)
+@demo-fragments puts these together in a runnable deck.
+
+::: {#demo-fragments .embed-example-iframe file="/examples/presentations/03-fragments/slides.html"}
+Fragments revealing content one step at a time. [View source](https://github.com/quarto-dev/q2/tree/main/examples/presentations/03-fragments)
 :::
 
 ## Incremental lists

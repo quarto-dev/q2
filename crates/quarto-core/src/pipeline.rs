@@ -71,15 +71,15 @@ use crate::transforms::{
     CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
     CodeBlockGenerateTransform, CodeBlockRenderTransform, CrossrefIndexTransform,
     CrossrefRenderTransform, CrossrefResolveTransform, EquationLabelTransform,
-    ExampleEmbedTransform, FloatRefTargetSugarTransform, FooterGenerateTransform,
-    FooterRenderTransform, FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform,
-    ListingRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
-    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
-    ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
-    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
-    TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
-    WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
-    WebsiteTitlePrefixTransform,
+    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
+    FooterGenerateTransform, FooterRenderTransform, FootnotesTransform, LinkRewriteTransform,
+    ListingGenerateTransform, ListingRenderTransform, MetadataNormalizeTransform,
+    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
+    PageNavRenderTransform, ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
+    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
+    TableBootstrapClassTransform, TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform,
+    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
+    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -1009,16 +1009,6 @@ pub fn build_transform_pipeline(
         target_format,
     )));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
-    // Example-iframe embeds (bd-z1smhvuo). Rewrites
-    // `Div.embed-example-iframe[file=…]` placeholders into live
-    // `<iframe>` embeds of a project-relative static asset, keeping the
-    // human source link as a caption. Runs in the common normalization
-    // phase (before the revealjs/HTML split) so decks and pages alike
-    // get the rewrite, and after shortcode resolution so any shortcodes
-    // in the placeholder body are already expanded. Pure AST → applies
-    // to render and q2-preview identically. See
-    // `claude-notes/plans/2026-06-09-website-example-iframe-embed.md`.
-    pipeline.push(Box::new(ExampleEmbedTransform::new()));
     // bd-1tl09 Phase 0: code-block decoration Generate runs after
     // metadata-normalize so document-level defaults (e.g.
     // `code-copy: true`) are visible when computing per-block
@@ -1059,6 +1049,16 @@ pub fn build_transform_pipeline(
         // render and preview alike. See `revealjs::footnotes`.
         pipeline.push(Box::new(crate::revealjs::RevealFootnotesTransform::new()));
     }
+    // Example-iframe embeds (bd-z1smhvuo / bd-t3cert81). Sugars
+    // `Div.embed-example-iframe[file=…]` into a `CustomNode("ExampleEmbed")`.
+    // Runs *before* the theorem/float sugar so a `#demo-…` example div is
+    // consumed here and never claimed as a generic float (`demo` is a
+    // registered ref-type, so `FloatRefTargetSugarTransform` would otherwise
+    // grab it). When the id is `demo-…` the node carries the crossref triple,
+    // so the CROSSREF PHASE below numbers it; the matching render step runs in
+    // the Finalization Phase, after `CrossrefRenderTransform`. See
+    // `claude-notes/plans/2026-06-09-crossreferenceable-examples.md`.
+    pipeline.push(Box::new(ExampleEmbedTransform::new()));
     // TheoremSugarTransform / ProofSugarTransform run before
     // FloatRefTargetSugarTransform so `Div(#thm-foo .theorem)` and
     // `Div(.proof)` become Theorem / Proof custom nodes first; the
@@ -1152,6 +1152,14 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(LinkRewriteTransform::new()));
     pipeline.push(Box::new(AppendixStructureTransform::new()));
     pipeline.push(Box::new(CrossrefRenderTransform::new()));
+    // Example-embed render (bd-t3cert81). Runs right after
+    // `CrossrefRenderTransform` so the per-`demo` `order` the index assigned
+    // is available: turns each `CustomNode("ExampleEmbed")` into the final
+    // container — the `<iframe>` (page-relative src), a "Demo N: …" caption
+    // when numbered, and the source link. Unknown to crossref-render (which
+    // dispatches on FloatRefTarget/Theorem/Proof), so the node survives to
+    // here untouched.
+    pipeline.push(Box::new(ExampleEmbedRenderTransform::new()));
     // bd-1tl09 Phase 0: code-block decoration Render. Consumes the
     // typed payload produced by `code-block-generate` in the
     // Normalization Phase and emits the outer wrapping markup

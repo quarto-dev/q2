@@ -92,7 +92,7 @@ pub use crossref_index::CrossrefIndexTransform;
 pub use crossref_render::CrossrefRenderTransform;
 pub use crossref_resolve::CrossrefResolveTransform;
 pub use equation_label::EquationLabelTransform;
-pub use example_embed::ExampleEmbedTransform;
+pub use example_embed::{ExampleEmbedRenderTransform, ExampleEmbedTransform};
 pub use float_ref_target::FloatRefTargetSugarTransform;
 pub use footer_generate::FooterGenerateTransform;
 pub use footer_render::FooterRenderTransform;

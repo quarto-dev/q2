@@ -15,8 +15,8 @@ use quarto_core::crossref::{CrossrefEntry, CrossrefIndex, RefTypeRegistry, metad
 use quarto_core::transform::AstTransform;
 use quarto_core::transforms::{
     CalloutTransform, CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform,
-    EquationLabelTransform, FloatRefTargetSugarTransform, ProofSugarTransform,
-    TheoremSugarTransform,
+    EquationLabelTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
+    ProofSugarTransform, TheoremSugarTransform,
 };
 use quarto_pandoc_types::pandoc::Pandoc;
 
@@ -86,6 +86,13 @@ async fn run_crossref(
         .transform(&mut ast, &mut ctx)
         .await
         .expect("callout");
+    // ExampleEmbed sugar runs before the theorem/float sugar (bd-t3cert81),
+    // mirroring build_transform_pipeline, so a `#demo-…` embed becomes an
+    // ExampleEmbed CustomNode and is never claimed as a generic float.
+    ExampleEmbedTransform::new()
+        .transform(&mut ast, &mut ctx)
+        .await
+        .expect("example-embed sugar");
     TheoremSugarTransform::new()
         .transform(&mut ast, &mut ctx)
         .await
@@ -1132,4 +1139,84 @@ async fn rendered_all_theorem_flavors_classes_and_labels() {
             "{rt}: wrong label text"
         );
     }
+}
+
+// ---- Example embeds (bd-t3cert81) ----
+//
+// `.embed-example-iframe` blocks with a `#demo-…` id are numbered "Demo N"
+// through the same index/resolve machinery as figures/theorems, but on a
+// counter distinct from the theorem-like `exm`/"Example".
+
+#[tokio::test]
+async fn fixture_example_embed_indexed_and_resolved() {
+    let qmd = r#"---
+title: t
+---
+
+As @demo-frag shows, fragments reveal content.
+
+::: {#demo-frag .embed-example-iframe file="/examples/x/slides.html"}
+Fragments — [src](https://github.com/q/x)
+:::
+
+::: {#demo-cols .embed-example-iframe file="/examples/y/slides.html"}
+Columns — [src](https://github.com/q/y)
+:::
+"#;
+    let (_, idx, diags) = run_crossref(qmd).await;
+    // No diagnostics => the `@demo-frag` reference resolved (an unresolved
+    // ref would emit one) and both files passed the static-asset contract.
+    assert!(diags.is_empty(), "diagnostics: {:?}", diags);
+    let frag = idx.get("demo-frag").expect("demo-frag indexed");
+    assert_eq!(frag.ref_type, "demo");
+    assert_eq!(frag.order.order, 1);
+    assert_eq!(
+        idx.get("demo-cols").expect("demo-cols indexed").order.order,
+        2
+    );
+}
+
+#[tokio::test]
+async fn fixture_example_embed_counter_distinct_from_theorem_example() {
+    // A theorem-like `.example` (#exm-) and an embed `.embed-example-iframe`
+    // (#demo-) must number on independent counters — both start at 1.
+    let qmd = r#"---
+title: t
+---
+
+::: {#exm-prose .example}
+A prose example.
+:::
+
+::: {#demo-run .embed-example-iframe file="/examples/x/slides.html"}
+A runnable demo — [src](https://github.com/q/x)
+:::
+"#;
+    let (_, idx, _) = run_crossref(qmd).await;
+    let exm = idx.get("exm-prose").expect("exm-prose indexed");
+    assert_eq!(exm.ref_type, "exm");
+    assert_eq!(exm.order.order, 1);
+    let demo = idx.get("demo-run").expect("demo-run indexed");
+    assert_eq!(demo.ref_type, "demo");
+    assert_eq!(demo.order.order, 1, "demo counter is independent of exm");
+}
+
+#[tokio::test]
+async fn fixture_example_embed_without_demo_id_not_indexed() {
+    // An embed with no `#demo-` id is an unnumbered plain embed: it must
+    // not appear in the crossref index.
+    let qmd = r#"---
+title: t
+---
+
+::: {.embed-example-iframe file="/examples/x/slides.html"}
+[src](https://github.com/q/x)
+:::
+"#;
+    let (_, idx, diags) = run_crossref(qmd).await;
+    assert!(diags.is_empty(), "diagnostics: {:?}", diags);
+    assert!(
+        idx.entries.is_empty(),
+        "unnumbered embed must not be indexed"
+    );
 }
