@@ -734,6 +734,20 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
             RenderToFileRenderer::new(options),
         )
     }
+
+    /// Set the CLI `--to` override (bd-l6itt34u minimal slice). When `Some`,
+    /// it is merged as a top-priority `format: !prefer <to>` layer in every
+    /// document's format resolution (an explicit `--to` wins for all docs).
+    /// When `None`, each document's own front-matter `format:` — or a
+    /// project-level `format:` — is honored, so a `format: revealjs` deck in
+    /// an otherwise-HTML `type: default` project renders as a real deck.
+    /// Defined on the concrete `RenderToFileRenderer` pipeline because only
+    /// the disk renderer resolves per-document format; the WASM/preview
+    /// renderers are unaffected.
+    pub fn with_format_override(mut self, to: Option<String>) -> Self {
+        self.renderer.format_override = to;
+        self
+    }
 }
 
 impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {

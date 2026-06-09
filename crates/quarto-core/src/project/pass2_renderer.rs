@@ -237,14 +237,24 @@ pub struct RenderToFileRenderer<'a> {
     /// renderer can be threaded through `ProjectPipeline` without
     /// re-cloning the options on every per-doc call.
     pub options: &'a crate::render_to_file::RenderToFileOptions,
+    /// The CLI `--to` value, if the user forced one (bd-l6itt34u minimal
+    /// slice). It is merged as a top-priority `format: !prefer <to>` layer
+    /// in each document's format resolution; `None` lets per-file / project
+    /// `format:` declarations win. Set via
+    /// `ProjectPipeline::with_format_override`.
+    pub format_override: Option<String>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl<'a> RenderToFileRenderer<'a> {
     /// Build a renderer borrowing the given options for its
-    /// lifetime.
+    /// lifetime. No `--to` override by default; the project pipeline sets
+    /// one when the user forced `--to`.
     pub fn new(options: &'a crate::render_to_file::RenderToFileOptions) -> Self {
-        Self { options }
+        Self {
+            options,
+            format_override: None,
+        }
     }
 }
 
@@ -275,6 +285,7 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
             runtime,
             Some(index),
             Some(project_artifacts),
+            self.format_override.as_deref(),
         )
     }
 
@@ -312,6 +323,7 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
                 &runtime,
                 project_artifacts,
                 fail_fast,
+                self.format_override.as_deref(),
             );
         }
         render_batch_parallel(
@@ -324,6 +336,7 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
             project_artifacts,
             workers,
             fail_fast,
+            self.format_override.as_deref(),
         )
     }
 
@@ -367,6 +380,7 @@ fn render_batch_serial(
     runtime: &Arc<dyn SystemRuntime>,
     project_artifacts: &mut ArtifactStore,
     fail_fast: bool,
+    format_override: Option<&str>,
 ) -> (
     Vec<crate::render_to_file::RenderToFileResult>,
     Vec<FileFailure>,
@@ -384,6 +398,7 @@ fn render_batch_serial(
             runtime.clone(),
             Some(index.clone()),
             Some(project_artifacts),
+            format_override,
         ) {
             Ok(result) => outputs.push(result),
             Err(e) => {
@@ -424,6 +439,7 @@ fn render_batch_parallel(
     project_artifacts: &mut ArtifactStore,
     workers: usize,
     fail_fast: bool,
+    format_override: Option<&str>,
 ) -> (
     Vec<crate::render_to_file::RenderToFileResult>,
     Vec<FileFailure>,
@@ -461,6 +477,7 @@ fn render_batch_parallel(
                 runtime,
                 project_artifacts,
                 fail_fast,
+                format_override,
             );
         }
     };
@@ -488,6 +505,7 @@ fn render_batch_parallel(
                         runtime.clone(),
                         Some(index.clone()),
                         Some(&mut doc_store),
+                        format_override,
                     )
                 }));
                 match rendered {

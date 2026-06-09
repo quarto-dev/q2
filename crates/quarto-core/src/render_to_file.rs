@@ -166,7 +166,9 @@ pub fn render_to_file(
 ) -> Result<RenderToFileResult> {
     // Standalone: pass `None` for project_artifacts so the
     // function flushes Project-scoped artifacts via the resolver.
-    render_document_to_file(input_path, format, options, None, runtime, None, None)
+    // `format_override = None`: the caller passed an explicit format string,
+    // which is authoritative for this entry point.
+    render_document_to_file(input_path, format, options, None, runtime, None, None, None)
 }
 
 /// Render a QMD document to a file (advanced API).
@@ -204,6 +206,7 @@ pub fn render_document_to_file(
     runtime: Arc<dyn SystemRuntime>,
     project_index: Option<Arc<ProjectIndex>>,
     project_artifacts: Option<&mut ArtifactStore>,
+    format_override: Option<&str>,
 ) -> Result<RenderToFileResult> {
     debug!("Rendering: {}", input_path.display());
 
@@ -225,6 +228,32 @@ pub fn render_document_to_file(
             &discovered_project
         }
     };
+
+    // Per-document format resolution (bd-l6itt34u minimal slice). The
+    // effective format key is a prefer-merge of the `format:` declarations:
+    // project config → this document's front matter → `--to` (synthesized as
+    // `format: !prefer`). So a `format: revealjs` deck inside an otherwise-HTML
+    // `type: default` project — or a project-level `format: revealjs` — renders
+    // as a real deck, while an explicit `--to` still wins for every document.
+    // The result drives BOTH the transform pipeline (reveal assembly) and the
+    // output paths/extension, so it must be resolved here, before the pipeline
+    // is built. `format` is the caller's fallback default (e.g. "html").
+    let project_format = project
+        .config
+        .metadata
+        .as_ref()
+        .and_then(|m| m.get("format"))
+        .and_then(crate::format::format_key_from_config_value);
+    let document_format = std::str::from_utf8(&input_bytes)
+        .ok()
+        .and_then(crate::format::format_key_from_frontmatter);
+    let resolved_format = crate::format::resolve_format_key(
+        project_format.as_deref(),
+        document_format.as_deref(),
+        format_override,
+        format,
+    );
+    let format: &str = &resolved_format;
 
     // Determine output paths. If the options don't specify an
     // explicit output path / dir, fall back to the project's
@@ -659,6 +688,7 @@ Content.
             &options,
             Some(&project),
             runtime,
+            None,
             None,
             None,
         )

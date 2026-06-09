@@ -675,3 +675,131 @@ fn pass_two_parallel_renders_all_pages() {
         "all 20 pages should render under parallel Pass-2",
     );
 }
+
+// === Phase 0: per-document format override (bd-l6itt34u minimal slice) =====
+
+/// A `type: default` project containing a single `format: revealjs` document
+/// must render a real reveal.js deck — not plain HTML — when the project
+/// format is the (default) `html` and `--to` was not forced. This is the
+/// minimal per-file-format slice the docs example projects depend on.
+#[test]
+fn default_project_honors_per_file_revealjs_format() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: default\n",
+    );
+    write(
+        &project_dir.join("slides.qmd"),
+        "---\ntitle: Deck\nformat: revealjs\n---\n\n## Slide A\n\n- one\n- two\n",
+    );
+
+    let runtime = runtime_arc();
+    let mut project = ProjectContext::discover(&project_dir, runtime.as_ref()).unwrap();
+    let options = RenderToFileOptions::default();
+    let project_type = project_type_for(&project);
+
+    // Project-wide default is `html`; the doc's front-matter `format: revealjs`
+    // must win because `--to` was not forced (no override).
+    let mut pipeline = ProjectPipeline::new(
+        &mut project,
+        project_type,
+        html_format(),
+        "html",
+        &options,
+        runtime.clone(),
+    )
+    .with_format_override(None);
+    let summary = pollster::block_on(pipeline.run()).expect("run");
+
+    assert_eq!(summary.outputs.len(), 1);
+    assert!(summary.pass2_failures.is_empty(), "{summary:?}");
+    let html = std::fs::read_to_string(&summary.outputs[0].output_path).unwrap();
+    assert!(
+        html.contains("class=\"reveal\"") && html.contains("Reveal.initialize"),
+        "per-file `format: revealjs` must render a reveal deck; got:\n{}",
+        &html[..html.len().min(1200)]
+    );
+}
+
+/// The prefer-merge also honors a **project-level** `format: revealjs` in
+/// `_quarto.yml` when the document declares no format of its own — the project
+/// config's `format:` participates in the merge. (A document-front-matter-only
+/// approach would miss this.)
+#[test]
+fn project_level_revealjs_format_renders_deck() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: default\nformat: revealjs\n",
+    );
+    write(
+        &project_dir.join("slides.qmd"),
+        "---\ntitle: Deck\n---\n\n## Slide A\n\n- one\n- two\n",
+    );
+
+    let runtime = runtime_arc();
+    let mut project = ProjectContext::discover(&project_dir, runtime.as_ref()).unwrap();
+    let options = RenderToFileOptions::default();
+    let project_type = project_type_for(&project);
+
+    let mut pipeline = ProjectPipeline::new(
+        &mut project,
+        project_type,
+        html_format(),
+        "html",
+        &options,
+        runtime.clone(),
+    )
+    .with_format_override(None);
+    let summary = pollster::block_on(pipeline.run()).expect("run");
+
+    let html = std::fs::read_to_string(&summary.outputs[0].output_path).unwrap();
+    assert!(
+        html.contains("class=\"reveal\"") && html.contains("Reveal.initialize"),
+        "project-level `format: revealjs` must render a reveal deck; got:\n{}",
+        &html[..html.len().min(1200)]
+    );
+}
+
+/// Regression: an explicit `--to` (the synthesized `format: !prefer` top
+/// layer) must win over a per-file front-matter `format:`. The same revealjs
+/// document rendered with the project format forced to `html` comes out plain.
+#[test]
+fn explicit_to_overrides_per_file_format() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: default\n",
+    );
+    write(
+        &project_dir.join("slides.qmd"),
+        "---\ntitle: Deck\nformat: revealjs\n---\n\n## Slide A\n\n- one\n- two\n",
+    );
+
+    let runtime = runtime_arc();
+    let mut project = ProjectContext::discover(&project_dir, runtime.as_ref()).unwrap();
+    let options = RenderToFileOptions::default();
+    let project_type = project_type_for(&project);
+
+    // `--to html` forces html for every doc; the front-matter override loses.
+    let mut pipeline = ProjectPipeline::new(
+        &mut project,
+        project_type,
+        html_format(),
+        "html",
+        &options,
+        runtime.clone(),
+    )
+    .with_format_override(Some("html".to_string()));
+    let summary = pollster::block_on(pipeline.run()).expect("run");
+
+    let html = std::fs::read_to_string(&summary.outputs[0].output_path).unwrap();
+    assert!(
+        !html.contains("class=\"reveal\""),
+        "explicit --to html must win over front-matter format: revealjs"
+    );
+}

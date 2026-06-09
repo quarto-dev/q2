@@ -697,6 +697,7 @@ fn execute_single_doc(
         options,
         runtime_arc.clone(),
     )
+    .with_format_override(args.to.clone())
     .with_fail_fast(args.fail_fast);
 
     let summary = match pollster::block_on(pipeline.run()) {
@@ -770,6 +771,7 @@ fn execute_project(
         options,
         runtime_arc.clone(),
     )
+    .with_format_override(args.to.clone())
     .with_fail_fast(args.fail_fast);
 
     if let Some(target_set) = targets {
@@ -962,35 +964,9 @@ fn detect_single_input_format(inputs: &[String]) -> Option<String> {
         return None;
     }
     let content = std::fs::read_to_string(path).ok()?;
-    format_key_from_frontmatter(&content)
-}
-
-/// Extract the leading YAML front-matter block and return the chosen output
-/// format: the `format:` scalar, or the first key when `format:` is a map
-/// (e.g. `format: {revealjs: {...}}`).
-fn format_key_from_frontmatter(content: &str) -> Option<String> {
-    let yaml = extract_yaml_frontmatter(content)?;
-    let value: serde_yaml::Value = serde_yaml::from_str(&yaml).ok()?;
-    match value.get("format")? {
-        serde_yaml::Value::String(s) => Some(s.clone()),
-        serde_yaml::Value::Mapping(m) => m.keys().find_map(|k| k.as_str().map(str::to_string)),
-        _ => None,
-    }
-}
-
-/// Return the text of the leading YAML front-matter block (between the opening
-/// `---` and the closing `---` / `...` line), if present.
-fn extract_yaml_frontmatter(content: &str) -> Option<String> {
-    let s = content.strip_prefix('\u{feff}').unwrap_or(content);
-    let after_open = s
-        .strip_prefix("---\n")
-        .or_else(|| s.strip_prefix("---\r\n"))?;
-    for terminator in ["\n---", "\n..."] {
-        if let Some(idx) = after_open.find(terminator) {
-            return Some(after_open[..idx].to_string());
-        }
-    }
-    None
+    // Shared with the project pipeline's per-document format resolution so the
+    // single-file and project paths agree on how `format:` is read.
+    quarto_core::format::format_key_from_frontmatter(&content)
 }
 
 // ====================================================================

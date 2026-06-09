@@ -137,6 +137,112 @@ pub fn is_revealjs_target(target_format: &str) -> bool {
     matches!(target_format, "revealjs" | "q2-slides")
 }
 
+/// Extract the chosen output format from a document's leading YAML
+/// front-matter: the `format:` scalar, or the first key when `format:` is a
+/// map (e.g. `format: {revealjs: {...}}`). Returns `None` when there is no
+/// front matter or no `format:` key.
+///
+/// This is the lightweight, pre-pipeline peek used to resolve a per-document
+/// format (e.g. a `format: revealjs` deck inside an otherwise-HTML project)
+/// before the render context — and thus the transform pipeline / output
+/// extension — is chosen. The CLI's single-input detection delegates here so
+/// the two paths agree.
+pub fn format_key_from_frontmatter(content: &str) -> Option<String> {
+    let yaml = extract_yaml_frontmatter(content)?;
+    let value: serde_yaml::Value = serde_yaml::from_str(&yaml).ok()?;
+    match value.get("format")? {
+        serde_yaml::Value::String(s) => Some(s.clone()),
+        serde_yaml::Value::Mapping(m) => m.keys().find_map(|k| k.as_str().map(str::to_string)),
+        _ => None,
+    }
+}
+
+/// Return the text of the leading YAML front-matter block (between the opening
+/// `---` and the closing `---` / `...` line), if present.
+pub fn extract_yaml_frontmatter(content: &str) -> Option<String> {
+    let s = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let after_open = s
+        .strip_prefix("---\n")
+        .or_else(|| s.strip_prefix("---\r\n"))?;
+    for terminator in ["\n---", "\n..."] {
+        if let Some(idx) = after_open.find(terminator) {
+            return Some(after_open[..idx].to_string());
+        }
+    }
+    None
+}
+
+/// Extract the format key from a `format:` [`ConfigValue`]: the scalar string,
+/// or the first key when it is a map (`format: {revealjs: {...}}`).
+pub fn format_key_from_config_value(value: &ConfigValue) -> Option<String> {
+    if let Some(s) = value.as_str() {
+        return Some(s.to_string());
+    }
+    value
+        .as_map_entries()
+        .and_then(|entries| entries.first().map(|e| e.key.clone()))
+}
+
+/// Resolve a document's effective output format key by prefer-merging the
+/// `format:` declarations, lowest precedence to highest:
+///
+/// ```text
+///   project config   →   document front matter   →   `--to` override
+/// ```
+///
+/// The `--to` override is modeled as a synthesized `format: !prefer <to>`
+/// layer merged on top — uniform with a document that had written that
+/// instruction itself — so an explicit `--to` wins over every in-document
+/// declaration, while in its absence a per-file or project-level `format:` is
+/// honored (the per-file one winning over the project default). Returns
+/// `default` when no layer declares a format.
+///
+/// This runs *before* the render pipeline is built because the format key
+/// selects both the transform pipeline (reveal vs. generic) and the output
+/// file extension; the full format-specific config flattening still happens
+/// later in `MetadataMergeStage`.
+pub fn resolve_format_key(
+    project_format: Option<&str>,
+    document_format: Option<&str>,
+    cli_to: Option<&str>,
+    default: &str,
+) -> String {
+    use quarto_config::MergedConfig;
+    use quarto_pandoc_types::{ConfigMapEntry, MergeOp};
+    use quarto_source_map::SourceInfo;
+
+    // One `{format: !prefer <key>}` layer. All layers use `Prefer` (last
+    // wins); ordering project → document → `--to` encodes the precedence.
+    let format_layer = |key: &str| -> ConfigValue {
+        let si = SourceInfo::default();
+        ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "format".to_string(),
+                key_source: si.clone(),
+                value: ConfigValue::new_string(key, si.clone()).with_merge_op(MergeOp::Prefer),
+            }],
+            si,
+        )
+    };
+
+    let owned: Vec<ConfigValue> = [project_format, document_format, cli_to]
+        .into_iter()
+        .flatten()
+        .map(format_layer)
+        .collect();
+    if owned.is_empty() {
+        return default.to_string();
+    }
+    let layers: Vec<&ConfigValue> = owned.iter().collect();
+    MergedConfig::new(layers)
+        .materialize()
+        .ok()
+        .as_ref()
+        .and_then(|merged| merged.get("format"))
+        .and_then(format_key_from_config_value)
+        .unwrap_or_else(|| default.to_string())
+}
+
 /// Map a FormatIdentifier to its output file extension.
 fn output_extension_for(id: FormatIdentifier) -> String {
     match id {
