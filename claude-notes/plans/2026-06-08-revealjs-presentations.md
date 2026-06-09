@@ -497,10 +497,23 @@ the current pass-through + reading Q1):
   `SlideBody`); `BulletList`/`OrderedList` emit `<li class="fragment">` when
   enabled, html-preview path unchanged (editing preserved). 6 render + 4 preview
   tests. Verified live: the `.incremental` slide shows 3 `<li class="fragment">`.
-- **2e — Asides + footnote coalescing** (class 2/3, most complex). `::: aside`
-  → `<aside>`; per-slide footnote coalescing keyed on `reference-location`
-  (Q1 `coalesceAsides`/`handleSlideFootnotes`, `format-reveal.ts:702-793`).
-  Likely its own mini-phase; may be deferred.
+- **2e-i — Asides** (class 2). ✅ **DONE + browser-verified (2026-06-08).**
+  `::: {.aside}` → `<aside class="aside">` in the Rust writer + previewRegistry
+  `Div.tsx` (alongside `.notes`); styled small/muted at the slide bottom via the
+  single-source `quarto-reveal.css` (`.reveal .slides aside.aside{position:absolute;
+  bottom:20px;font-size:0.6em;color:#6c757d}`). Render + preview tests; verified
+  live. _(strand bd-0zosmiq8 closed.)_
+- **2e-ii — Per-slide footnote coalescing** (class 3, most complex). _strand
+  bd-9aknlx1j._ Collect each slide's footnotes into an `<aside><ol
+  class="aside-footnotes">` at the slide bottom (noteref → `<sup>N</sup>`,
+  per-slide numbering) and **suppress the trailing footnotes slide**; coalesce
+  multiple `.aside`s per slide. Q1 ref: `format-reveal.ts:702-793`. **Current
+  Q2:** footnotes form a trailing `section[role=doc-endnotes]` that
+  `RevealSlidesTransform` turns into a final slide (functional, not Q1-faithful).
+  **Approach:** a reveal-aware AST transform — *pure AST*, so it benefits **both**
+  render and preview at once (like `RevealColumnsTransform`); runs after
+  `FootnotesTransform` (which runs after slide construction, so the slide
+  structure exists). _Not yet started._
 
 **Phase 2 strands:** bd-bea550b0 (epic-child) — 2a bd-f8dpxwle (fragments),
 2b bd-o5sg45fb (notes), 2c bd-34rd2y86 (columns), 2d bd-fy793w6i (incremental),
