@@ -24,6 +24,7 @@ be in reverse chronological order (latest first).
 
 - [`57bc49cf`](https://github.com/quarto-dev/q2/commits/57bc49cf): Preview renders no longer re-copy unchanged artifacts (theme CSS, fonts, shared JS) into the virtual filesystem on every keystroke — byte-identical re-writes are now skipped.
 - [`749064d1`](https://github.com/quarto-dev/q2/commits/749064d1): Fix identity name defaulting to a random "Adjective Animal" instead of the authenticated user's name when a new project set is created.
+- [`69ab125e`](https://github.com/quarto-dev/q2/commits/69ab125e): Add `?test_actor=<32-hex>` query-param override for dev un-reactji testing (DEV/VITE_E2E builds only, tree-shaken from production).
 - [`e3f9188e`](https://github.com/quarto-dev/q2/commits/e3f9188e): Fix `commitSubtreeEdit` round-trip: wrap single block in a Pandoc document and use lenient reader in `apply_node_edit` so render-component edits (reactji add/remove) persist through Automerge.
 - [`ac179a17`](https://github.com/quarto-dev/q2/commits/ac179a17): Fix `__QUARTO_TEST_ACTOR_ID__` override to work in VITE_E2E builds (was DEV-only, blocking e2e currentActor tests).
 - [`0b986554`](https://github.com/quarto-dev/q2/commits/0b986554): Plan 2b — two-channel edit API (text/subtree), `useBlockEditHover` delegated affordance, `useEditableBlock` shared editor, `usePreviewEdit` for render-component authors, `data-block-pool-id` affordance on all editable block types.
