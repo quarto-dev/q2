@@ -18,6 +18,13 @@
  *  - Ctrl+Enter commit is more reliable than blur in Playwright automation,
  *    because clicking a blur target activates edit on it (Plan 2b's
  *    delegated pointer handler runs on any [data-block-pool-id] click).
+ *  - Tests run in parallel (serial mode removed). Three changes make this safe:
+ *    1. createProjectOnServer uses peerTimeoutMs=10000 so documents are created
+ *       in online mode and flush to the hub immediately (no background-sync race).
+ *    2. bootstrapProjectSet stubs /auth/me + sets MonacoEnvironment.getWorkerUrl
+ *       + serves monaco-editor from local devDep to prevent AMD init races.
+ *    3. beforeEach stagger: workerIndex>0 waits 1 s so both browsers don't enter
+ *       Monaco's AMD init window at exactly the same instant.
  *  - Prerequisites: VITE_E2E=1 npm run build, no hub on port 3031 (test port).
  *
  * Preview-view test (monaco-absent path):
@@ -99,6 +106,7 @@ test.describe('q2-preview inline editing', () => {
 
     // Stagger worker start times so two parallel browser contexts don't
     // race through Monaco's AMD initialisation at exactly the same instant.
+    // workerIndex 0 starts immediately; workerIndex 1 waits 1 s.
     test.beforeEach(async ({ page }, testInfo) => {
         if (testInfo.workerIndex > 0) {
             await page.waitForTimeout(1000);

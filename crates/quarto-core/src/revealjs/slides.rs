@@ -35,7 +35,7 @@
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::{Block, Div, Header};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 type Attr = (String, Vec<String>, LinkedHashMap<String, String>);
 
@@ -57,7 +57,7 @@ fn make_section(attr: Attr, content: Vec<Block>) -> Block {
     Block::Div(Div {
         attr,
         content,
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
     })
 }
@@ -182,9 +182,9 @@ mod tests {
             attr: (id.to_string(), vec![], LinkedHashMap::new()),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::generated(By::revealjs()),
             })],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
         })
     }
@@ -199,9 +199,9 @@ mod tests {
             ),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::generated(By::revealjs()),
             })],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
         })
     }
@@ -210,15 +210,15 @@ mod tests {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::generated(By::revealjs()),
             })],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::revealjs()),
         })
     }
 
     fn hr() -> Block {
         Block::HorizontalRule(HorizontalRule {
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::revealjs()),
         })
     }
 

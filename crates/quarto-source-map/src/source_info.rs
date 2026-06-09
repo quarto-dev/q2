@@ -631,6 +631,18 @@ impl By {
         }
     }
 
+    /// Producer kind for `RevealSlidesTransform`'s synthesized slide
+    /// structure — title-slide Div, section wrappers, speaker-notes Div,
+    /// and any other chrome built from the slide-level heading tree.
+    /// Non-atomic: the slide container is structural chrome; the content
+    /// inside (headings, paragraphs) retains its own source_info.
+    pub fn revealjs() -> Self {
+        Self {
+            kind: "revealjs".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
     /// Producer kind for the appendix-structure stage's wrapper Div.
     pub fn appendix() -> Self {
         Self {

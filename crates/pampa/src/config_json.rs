@@ -172,7 +172,7 @@ mod tests {
     use serde_json::json;
 
     fn si() -> SourceInfo {
-        SourceInfo::default()
+        SourceInfo::for_test()
     }
 
     fn s(text: &str) -> Inline {

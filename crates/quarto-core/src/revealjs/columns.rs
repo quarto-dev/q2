@@ -86,7 +86,7 @@ mod tests {
     use super::*;
     use hashlink::LinkedHashMap;
     use quarto_pandoc_types::attr::AttrSourceInfo;
-    use quarto_source_map::SourceInfo;
+    use quarto_source_map::{By, SourceInfo};
 
     fn column_div(width: Option<&str>, style: Option<&str>) -> Div {
         let mut kvs = LinkedHashMap::new();
@@ -99,7 +99,7 @@ mod tests {
         Div {
             attr: ("".to_string(), vec!["column".to_string()], kvs),
             content: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
         }
     }
@@ -132,7 +132,7 @@ mod tests {
         let mut div = Div {
             attr: ("".to_string(), vec!["notcolumn".to_string()], kvs),
             content: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
         };
         convert_column(&mut div);

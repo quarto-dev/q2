@@ -16,17 +16,19 @@ vi.mock('@quarto/preview-runtime', () => ({
 // Mock diffToMonacoEdits
 vi.mock('../utils/diffToMonacoEdits', () => ({
   diffToMonacoEdits: vi.fn(),
+  diffToEditorChanges: vi.fn(),
 }));
 
 import { useAutomergeSync } from './useAutomergeSync';
 import { getFileContent, setImmediateFileChangeCallback } from '@quarto/preview-runtime';
-import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
+import { diffToMonacoEdits, diffToEditorChanges } from '../utils/diffToMonacoEdits';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { setVisibility, resetVisibility, fireWindowFocus } from '../test-utils/visibility';
 
 const mockGetFileContent = vi.mocked(getFileContent);
 const mockSetImmediateFileChangeCallback = vi.mocked(setImmediateFileChangeCallback);
 const mockDiffToMonacoEdits = vi.mocked(diffToMonacoEdits);
+const mockDiffToEditorChanges = vi.mocked(diffToEditorChanges);
 
 // Mock Monaco editor
 function createMockEditor(initialContent = '') {
@@ -64,6 +66,7 @@ describe('useAutomergeSync', () => {
     vi.clearAllMocks();
     mockGetFileContent.mockReturnValue('# Hello');
     mockDiffToMonacoEdits.mockReturnValue([]);
+    mockDiffToEditorChanges.mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -384,51 +387,45 @@ describe('useAutomergeSync', () => {
   });
 
   describe('handleContentRewrite', () => {
-    it('should compute diff and apply edits via executeEdits', () => {
-      const mockEditor = createMockEditor('# Old Content');
-      const fakeEdits = [{ range: {}, text: '# New Content', forceMoveMarkers: true }];
-      mockDiffToMonacoEdits.mockReturnValue(fakeEdits as never);
+    it('should compute diff and apply operations via onContentOperations', () => {
+      const options = defaultOptions();
+      const fakeChanges = [{ offset: 0, length: 7, text: '# New Content' }];
+      mockDiffToEditorChanges.mockReturnValue(fakeChanges as never);
 
-      const { result } = renderHook(() => useAutomergeSync(defaultOptions()));
-
-      act(() => {
-        result.current.onEditorMount(mockEditor as never);
-      });
+      const { result } = renderHook(() => useAutomergeSync(options));
 
       act(() => {
         result.current.handleContentRewrite('# New Content');
       });
 
-      expect(mockDiffToMonacoEdits).toHaveBeenCalledWith('# Old Content', '# New Content');
-      expect(mockEditor.executeEdits).toHaveBeenCalledWith('ast-rewrite', fakeEdits);
+      expect(mockDiffToEditorChanges).toHaveBeenCalledWith('# Hello', '# New Content');
+      expect(options.onContentOperations).toHaveBeenCalledWith('test.qmd', fakeChanges);
     });
 
-    it('should be a no-op when no editor is mounted', () => {
-      const { result } = renderHook(() => useAutomergeSync(defaultOptions()));
+    it('should be a no-op when diff produces no changes', () => {
+      const options = defaultOptions();
+      mockDiffToEditorChanges.mockReturnValue([]);
 
-      // Should not throw
+      const { result } = renderHook(() => useAutomergeSync(options));
+
       act(() => {
-        result.current.handleContentRewrite('# New Content');
+        result.current.handleContentRewrite('# Hello');
       });
 
-      expect(mockDiffToMonacoEdits).not.toHaveBeenCalled();
+      expect(options.onContentOperations).not.toHaveBeenCalled();
     });
 
     it('should skip when diff produces no edits', () => {
-      const mockEditor = createMockEditor('# Same');
-      mockDiffToMonacoEdits.mockReturnValue([]);
+      const options = defaultOptions();
+      mockDiffToEditorChanges.mockReturnValue([]);
 
-      const { result } = renderHook(() => useAutomergeSync(defaultOptions()));
-
-      act(() => {
-        result.current.onEditorMount(mockEditor as never);
-      });
+      const { result } = renderHook(() => useAutomergeSync(options));
 
       act(() => {
         result.current.handleContentRewrite('# Same');
       });
 
-      expect(mockEditor.executeEdits).not.toHaveBeenCalled();
+      expect(options.onContentOperations).not.toHaveBeenCalled();
     });
   });
 

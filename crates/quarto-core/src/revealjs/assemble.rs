@@ -177,7 +177,7 @@ Reveal.initialize({config});
 mod tests {
     use super::*;
     use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
-    use quarto_source_map::SourceInfo;
+    use quarto_source_map::{By, SourceInfo};
 
     fn meta(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
         ConfigValue::new_map(
@@ -185,19 +185,19 @@ mod tests {
                 .into_iter()
                 .map(|(k, v)| ConfigMapEntry {
                     key: k.to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::generated(By::revealjs()),
                     value: v,
                 })
                 .collect(),
-            SourceInfo::default(),
+            SourceInfo::generated(By::revealjs()),
         )
     }
 
     fn s(v: &str) -> ConfigValue {
-        ConfigValue::new_string(v, SourceInfo::default())
+        ConfigValue::new_string(v, SourceInfo::generated(By::revealjs()))
     }
     fn b(v: bool) -> ConfigValue {
-        ConfigValue::new_bool(v, SourceInfo::default())
+        ConfigValue::new_bool(v, SourceInfo::generated(By::revealjs()))
     }
 
     #[test]

@@ -60,7 +60,7 @@ use quarto_pandoc_types::block::{Block, Div, OrderedList};
 use quarto_pandoc_types::inline::{Inline, Str, Superscript};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::{Blocks, ListNumberDelim, ListNumberStyle};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::render::RenderContext;
@@ -214,7 +214,7 @@ fn coalesce_one_slide(slide: &mut Div, defs: &HashMap<String, Blocks>) {
         let ol = Block::OrderedList(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: items,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::revealjs()),
         });
         aside_content.push(classed_div("aside-footnotes", vec![ol]));
     }
@@ -226,7 +226,7 @@ fn plain_div(content: Blocks) -> Block {
     Block::Div(Div {
         attr: (String::new(), Vec::new(), LinkedHashMap::new()),
         content,
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
     })
 }
@@ -236,7 +236,7 @@ fn classed_div(class: &str, content: Blocks) -> Block {
     Block::Div(Div {
         attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()),
         content,
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
     })
 }
