@@ -340,6 +340,7 @@ impl TestHub {
             image_domains: vec!["lh3.googleusercontent.com".to_string()],
             allowed_emails: None,
             allowed_domains: None,
+            provider: auth::OidcProvider::Generic,
         };
 
         // Standalone HubContext so we don't need a project on disk.
@@ -461,6 +462,7 @@ async fn allowlist_setup() -> &'static (MockOidcProvider, TestHub) {
                 image_domains: vec!["lh3.googleusercontent.com".to_string()],
                 allowed_emails: None,
                 allowed_domains: Some(vec!["posit.co".to_string()]),
+                provider: auth::OidcProvider::Generic,
             };
 
             let temp = tempfile::TempDir::new().unwrap();
@@ -922,6 +924,7 @@ async fn secure_setup() -> &'static (MockOidcProvider, TestHub) {
                 image_domains: vec!["lh3.googleusercontent.com".to_string()],
                 allowed_emails: None,
                 allowed_domains: None,
+                provider: auth::OidcProvider::Generic,
             };
 
             let temp = tempfile::TempDir::new().unwrap();

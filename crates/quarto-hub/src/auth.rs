@@ -23,6 +23,18 @@ use tokio_util::sync::CancellationToken;
 /// Default image domain for Google profile pictures.
 const DEFAULT_IMAGE_DOMAIN: &str = "lh3.googleusercontent.com";
 
+/// The identity provider behind an [`AuthConfig`].
+///
+/// Derived from the issuer URL at construction time. Add a new variant here
+/// when wiring up a new provider — the compiler will enforce handling it in
+/// every `match` that dispatches on provider-specific behaviour.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OidcProvider {
+    Google,
+    /// Any other OIDC-compliant provider.
+    Generic,
+}
+
 /// Authentication configuration.
 ///
 /// Construct via [`AuthConfig::new()`] which validates the issuer URL
@@ -43,6 +55,8 @@ pub struct AuthConfig {
     pub image_domains: Vec<String>,
     pub allowed_emails: Option<Vec<String>>,
     pub allowed_domains: Option<Vec<String>>,
+    /// Identity provider, derived from `issuer` at construction time.
+    pub provider: OidcProvider,
 }
 
 impl AuthConfig {
@@ -50,7 +64,8 @@ impl AuthConfig {
     ///
     /// - `issuer` must be a well-formed HTTPS URL.
     /// - Each image domain must be a bare hostname (no scheme, no path).
-    /// - If `image_domains` is empty, defaults to Google's profile picture CDN.
+    /// - If `image_domains` is empty and the issuer is Google, defaults to
+    ///   Google's profile picture CDN. For other providers, empty means empty.
     pub fn new(
         client_id: String,
         additional_audiences: Vec<String>,
@@ -69,8 +84,14 @@ impl AuthConfig {
             ));
         }
 
+        let provider = if issuer.trim_end_matches('/') == "https://accounts.google.com" {
+            OidcProvider::Google
+        } else {
+            OidcProvider::Generic
+        };
+
         // Apply default and validate image domains.
-        let image_domains = if image_domains.is_empty() {
+        let image_domains = if image_domains.is_empty() && provider == OidcProvider::Google {
             vec![DEFAULT_IMAGE_DOMAIN.to_string()]
         } else {
             for domain in &image_domains {
@@ -86,6 +107,7 @@ impl AuthConfig {
             image_domains,
             allowed_emails,
             allowed_domains,
+            provider,
         })
     }
 
@@ -95,11 +117,31 @@ impl AuthConfig {
         std::iter::once(&self.client_id).chain(self.additional_audiences.iter())
     }
 
-    /// Whether the configured issuer is Google (`https://accounts.google.com`).
+    /// Whether to register the `POST /auth/callback` route for this provider.
     ///
-    /// Used to gate Google-specific endpoints like `/auth/callback`.
-    pub fn is_google_issuer(&self) -> bool {
-        self.issuer.trim_end_matches('/') == "https://accounts.google.com"
+    /// Returns `true` for providers that deliver credentials via an
+    /// auto-submitting HTML form POST (`response_mode=form_post` or equivalent).
+    /// Add new form-POST providers here as they are implemented.
+    pub fn uses_form_post_callback(&self) -> bool {
+        match self.provider {
+            OidcProvider::Google => true,
+            OidcProvider::Generic => false,
+        }
+    }
+
+    /// CSRF validation strategy for `POST /auth/callback`.
+    ///
+    /// Each provider uses a different mechanism to bind the callback to the
+    /// originating browser session. See [`CallbackCsrfMode`].
+    pub fn callback_csrf_mode(&self) -> CallbackCsrfMode {
+        match self.provider {
+            OidcProvider::Google => CallbackCsrfMode::GoogleDoubleSubmit,
+            // Non-Google form_post providers need a hub-set signed cookie on
+            // the pre-flight endpoint. Not yet implemented; fails safe.
+            OidcProvider::Generic => CallbackCsrfMode::OidcState {
+                cookie_name: "oidc_state",
+            },
+        }
     }
 
     /// Extract the CSP origin (`scheme://host[:port]`) from the validated issuer URL.
@@ -550,6 +592,34 @@ pub async fn build_auth_state_from_parts(
         _refresh_handle: refresh_handle,
         _cancellation_token: cancellation_token,
     })
+}
+
+/// CSRF validation strategy for `POST /auth/callback`.
+///
+/// Returned by [`AuthConfig::callback_csrf_mode()`]. The handler dispatches on
+/// this value so adding a new provider only requires a new variant here and a
+/// match arm in `validate_callback_csrf` — the callback handler itself is
+/// unchanged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CallbackCsrfMode {
+    /// Google's double-submit cookie pattern: the `g_csrf_token` value in the
+    /// POST form body must equal the `g_csrf_token` cookie set by GIS on the
+    /// hub origin before navigation.
+    GoogleDoubleSubmit,
+    /// Standard OIDC `state` parameter checked against a hub-set signed cookie.
+    ///
+    /// The hub must set a signed `SameSite=Strict; HttpOnly` cookie named
+    /// `cookie_name` on the pre-flight redirect endpoint, containing the
+    /// expected `state` value. The callback verifies the cookie signature and
+    /// compares it to the `state` form field.
+    ///
+    /// **Not yet implemented.** The pre-flight endpoint and signing key are
+    /// deferred; the callback handler returns an error for this variant until
+    /// they are in place.
+    OidcState {
+        /// Name of the hub-set signed cookie carrying the expected state value.
+        cookie_name: &'static str,
+    },
 }
 
 /// Validate that TLS is accounted for when auth is enabled.
@@ -1063,6 +1133,20 @@ mod tests {
     }
 
     #[test]
+    fn auth_config_non_google_empty_image_domains_stays_empty() {
+        let config = AuthConfig::new(
+            "client-id".to_string(),
+            Vec::new(),
+            "https://login.microsoftonline.com/tenant/v2.0".to_string(),
+            vec![],
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(config.image_domains.is_empty());
+    }
+
+    #[test]
     fn auth_config_rejects_invalid_image_domain() {
         let result = AuthConfig::new(
             "client-id".to_string(),
@@ -1121,16 +1205,16 @@ mod tests {
         assert_eq!(audiences[2], "another");
     }
 
-    // ── is_google_issuer ──────────────────────────────────────────
+    // ── OidcProvider detection ────────────────────────────────────
 
     #[test]
-    fn is_google_issuer_true() {
+    fn provider_google_for_google_issuer() {
         let config = make_config(None, None);
-        assert!(config.is_google_issuer());
+        assert_eq!(config.provider, OidcProvider::Google);
     }
 
     #[test]
-    fn is_google_issuer_with_trailing_slash() {
+    fn provider_google_with_trailing_slash() {
         let config = AuthConfig::new(
             "client-id".to_string(),
             Vec::new(),
@@ -1140,11 +1224,11 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(config.is_google_issuer());
+        assert_eq!(config.provider, OidcProvider::Google);
     }
 
     #[test]
-    fn is_google_issuer_false_for_azure() {
+    fn provider_generic_for_non_google_issuer() {
         let config = AuthConfig::new(
             "client-id".to_string(),
             Vec::new(),
@@ -1154,7 +1238,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(!config.is_google_issuer());
+        assert_eq!(config.provider, OidcProvider::Generic);
     }
 
     // ── signing_algorithm ─────────────────────────────────────────
@@ -1391,6 +1475,59 @@ mod tests {
         let id1 = sub_to_actor_id_for_project(&[1u8; 32], "user123", "automerge:abc");
         let id2 = sub_to_actor_id_for_project(&[2u8; 32], "user123", "automerge:abc");
         assert_ne!(id1, id2);
+    }
+
+    // ── callback_csrf_mode / uses_form_post_callback ──────────────
+
+    fn make_config_with_issuer(issuer: &str) -> AuthConfig {
+        AuthConfig::new(
+            "client-id".to_string(),
+            Vec::new(),
+            issuer.to_string(),
+            Vec::new(),
+            None,
+            None,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn google_issuer_uses_double_submit_csrf() {
+        let config = make_config_with_issuer("https://accounts.google.com");
+        assert_eq!(
+            config.callback_csrf_mode(),
+            CallbackCsrfMode::GoogleDoubleSubmit
+        );
+    }
+
+    #[test]
+    fn google_issuer_trailing_slash_uses_double_submit_csrf() {
+        let config = make_config_with_issuer("https://accounts.google.com/");
+        assert_eq!(
+            config.callback_csrf_mode(),
+            CallbackCsrfMode::GoogleDoubleSubmit
+        );
+    }
+
+    #[test]
+    fn non_google_issuer_uses_oidc_state_csrf() {
+        let config = make_config_with_issuer("https://login.example.com");
+        assert!(matches!(
+            config.callback_csrf_mode(),
+            CallbackCsrfMode::OidcState { .. }
+        ));
+    }
+
+    #[test]
+    fn google_issuer_uses_form_post_callback() {
+        let config = make_config_with_issuer("https://accounts.google.com");
+        assert!(config.uses_form_post_callback());
+    }
+
+    #[test]
+    fn non_google_issuer_does_not_use_form_post_callback() {
+        let config = make_config_with_issuer("https://login.example.com");
+        assert!(!config.uses_form_post_callback());
     }
 
     #[test]

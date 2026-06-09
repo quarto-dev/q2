@@ -70,7 +70,7 @@ export async function logout(): Promise<void> {
 }
 
 /**
- * Send a fresh Google JWT to the server for validation and cookie refresh.
+ * Send a fresh OIDC ID token to the server for validation and cookie refresh.
  * Returns the updated user info on success, null on auth failure.
  */
 export async function refreshToken(credential: string): Promise<AuthState | null> {

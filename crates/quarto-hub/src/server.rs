@@ -637,55 +637,78 @@ async fn update_document(
     }
 }
 
-/// Google-frontend-specific OAuth2 redirect callback form data.
+/// Form data for `POST /auth/callback`.
 ///
-/// When `GoogleLogin` uses `ux_mode="redirect"`, Google POSTs the credential
-/// JWT and a CSRF token to the `login_uri` after the user authenticates.
-///
-/// This form structure is specific to Google's Sign-In library. Non-Google
-/// OIDC frontends should use `POST /auth/refresh` instead.
+/// Providers that use `response_mode=form_post` (or equivalent) POST a
+/// credential JWT plus a provider-specific CSRF field. Fields are optional at
+/// the struct level; `validate_callback_csrf` enforces which ones are required
+/// for the active provider.
 #[derive(Deserialize)]
 struct AuthCallbackForm {
     credential: String,
-    g_csrf_token: String,
+    /// Google double-submit CSRF token (GIS `ux_mode=redirect`). Present only
+    /// for Google providers.
+    g_csrf_token: Option<String>,
 }
 
-/// Handle Google-frontend-specific OAuth2 redirect callback.
+/// Validate the CSRF token for `POST /auth/callback`.
 ///
-/// Receives the credential JWT from Google's POST, validates the CSRF token
-/// and the JWT itself, then sets an HttpOnly cookie and redirects to `/`.
+/// Dispatches to the provider-specific check determined by `mode`:
 ///
-/// Validating the JWT here (not just in subsequent API calls) prevents
-/// setting a cookie with a bogus credential.
+/// - `GoogleDoubleSubmit`: the `g_csrf_token` form value must equal the
+///   `g_csrf_token` cookie set by GIS on the hub origin before navigation.
+/// - `OidcState`: not yet implemented; returns `false` so the callback fails
+///   safe until the pre-flight endpoint and signing key are in place.
+fn validate_callback_csrf(
+    mode: &auth::CallbackCsrfMode,
+    form: &AuthCallbackForm,
+    headers: &HeaderMap,
+) -> bool {
+    match mode {
+        auth::CallbackCsrfMode::GoogleDoubleSubmit => {
+            let Some(token) = form.g_csrf_token.as_deref().filter(|t| !t.is_empty()) else {
+                return false;
+            };
+            let cookie_csrf = headers
+                .get("cookie")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|cookies| {
+                    cookies
+                        .split(';')
+                        .filter_map(|s| cookie::Cookie::parse(s.trim()).ok())
+                        .find(|c| c.name() == "g_csrf_token")
+                        .map(|c| c.value().to_owned())
+                });
+            cookie_csrf.as_deref() == Some(token)
+        }
+        auth::CallbackCsrfMode::OidcState { .. } => {
+            // Stateful validation requires a hub-set signed cookie from a
+            // pre-flight endpoint that does not yet exist. Fail safe.
+            false
+        }
+    }
+}
+
+/// Handle `POST /auth/callback` — credential delivery via form POST.
 ///
-/// **Google-specific**: This endpoint is tightly coupled to Google's Sign-In
-/// library (which controls the POST body and `g_csrf_token` cookie). Non-Google
-/// OIDC frontends should use `POST /auth/refresh` instead — it accepts a JWT
-/// via JSON POST, validates through the full JWKS/issuer/allowlist pipeline,
-/// and is protected by the standard `X-Requested-With` CSRF check.
+/// Registered for providers where [`AuthConfig::uses_form_post_callback()`]
+/// returns `true`. Validates the provider-specific CSRF token, then validates
+/// the credential JWT and sets an HttpOnly cookie.
 ///
-/// **CSRF**: This endpoint is excluded from the `X-Requested-With` CSRF
-/// check because it receives a cross-origin POST from Google's servers.
-/// Google's own `g_csrf_token` cookie provides CSRF protection instead.
+/// **CSRF**: excluded from the `X-Requested-With` check because the POST
+/// originates from the IdP (cross-origin). Provider-specific CSRF is handled
+/// by [`validate_callback_csrf`] instead.
 async fn auth_callback(
     State(ctx): State<SharedContext>,
     headers: HeaderMap,
     Form(form): Form<AuthCallbackForm>,
 ) -> impl IntoResponse {
-    // Validate CSRF: g_csrf_token cookie must match the form value.
-    // Google sets this cookie and includes the same value in the POST body.
-    let cookie_csrf = headers
-        .get("cookie")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|cookies| {
-            cookies
-                .split(';')
-                .filter_map(|s| cookie::Cookie::parse(s.trim()).ok())
-                .find(|c| c.name() == "g_csrf_token")
-                .map(|c| c.value().to_owned())
-        });
+    let mode = ctx
+        .auth_config()
+        .map(|c| c.callback_csrf_mode())
+        .unwrap_or(auth::CallbackCsrfMode::GoogleDoubleSubmit);
 
-    if form.g_csrf_token.is_empty() || cookie_csrf.as_deref() != Some(form.g_csrf_token.as_str()) {
+    if !validate_callback_csrf(&mode, &form, &headers) {
         return Redirect::to("/?auth_error").into_response();
     }
 
@@ -1041,9 +1064,12 @@ pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<Shared
         router = router.route("/", get(ws_handler));
     }
 
-    // Google-specific redirect callback: only registered when the issuer is Google.
-    // Non-Google OIDC frontends should use POST /auth/refresh instead.
-    if ctx.auth_config().is_some_and(|c| c.is_google_issuer()) {
+    // Register the form-POST callback route for providers that use it.
+    // Add new providers by returning true from AuthConfig::uses_form_post_callback().
+    if ctx
+        .auth_config()
+        .is_some_and(|c| c.uses_form_post_callback())
+    {
         router = router.route("/auth/callback", post(auth_callback));
     }
 
@@ -1662,17 +1688,117 @@ mod tests {
     // ── AuthCallbackForm ──────────────────────────────────────────
 
     #[test]
-    fn auth_callback_form_deserializes() {
-        // AuthCallbackForm is used by axum's Form extractor which parses
-        // URL-encoded POST bodies. Verify it has the expected fields by
-        // deserializing from JSON (same serde derive).
+    fn auth_callback_form_google_deserializes() {
         let form: AuthCallbackForm = serde_json::from_value(serde_json::json!({
             "credential": "eyJhbGciOiJSUzI1NiJ9.test",
             "g_csrf_token": "abc123"
         }))
         .unwrap();
         assert_eq!(form.credential, "eyJhbGciOiJSUzI1NiJ9.test");
-        assert_eq!(form.g_csrf_token, "abc123");
+        assert_eq!(form.g_csrf_token.as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn auth_callback_form_oidc_deserializes() {
+        // `state` is an extra field serde ignores — the struct only holds fields
+        // it actually uses. Verify credential and absent g_csrf_token.
+        let form: AuthCallbackForm = serde_json::from_value(serde_json::json!({
+            "credential": "eyJhbGciOiJSUzI1NiJ9.test",
+            "state": "random-state-value"
+        }))
+        .unwrap();
+        assert_eq!(form.credential, "eyJhbGciOiJSUzI1NiJ9.test");
+        assert!(form.g_csrf_token.is_none());
+    }
+
+    // ── validate_callback_csrf ────────────────────────────────────
+
+    fn google_csrf_form(token: &str) -> AuthCallbackForm {
+        AuthCallbackForm {
+            credential: "cred".to_string(),
+            g_csrf_token: Some(token.to_string()),
+        }
+    }
+
+    fn oidc_state_form(_state: &str) -> AuthCallbackForm {
+        AuthCallbackForm {
+            credential: "cred".to_string(),
+            g_csrf_token: None,
+        }
+    }
+
+    #[test]
+    fn google_double_submit_accepts_matching_token() {
+        let form = google_csrf_form("tok123");
+        let headers = headers_with(&[("cookie", "g_csrf_token=tok123")]);
+        assert!(validate_callback_csrf(
+            &auth::CallbackCsrfMode::GoogleDoubleSubmit,
+            &form,
+            &headers
+        ));
+    }
+
+    #[test]
+    fn google_double_submit_rejects_mismatched_token() {
+        let form = google_csrf_form("tok123");
+        let headers = headers_with(&[("cookie", "g_csrf_token=other")]);
+        assert!(!validate_callback_csrf(
+            &auth::CallbackCsrfMode::GoogleDoubleSubmit,
+            &form,
+            &headers
+        ));
+    }
+
+    #[test]
+    fn google_double_submit_rejects_missing_form_token() {
+        let form = AuthCallbackForm {
+            credential: "cred".to_string(),
+            g_csrf_token: None,
+        };
+        let headers = headers_with(&[("cookie", "g_csrf_token=tok123")]);
+        assert!(!validate_callback_csrf(
+            &auth::CallbackCsrfMode::GoogleDoubleSubmit,
+            &form,
+            &headers
+        ));
+    }
+
+    #[test]
+    fn google_double_submit_rejects_empty_form_token() {
+        let form = google_csrf_form("");
+        let headers = headers_with(&[("cookie", "g_csrf_token=tok123")]);
+        assert!(!validate_callback_csrf(
+            &auth::CallbackCsrfMode::GoogleDoubleSubmit,
+            &form,
+            &headers
+        ));
+    }
+
+    #[test]
+    fn google_double_submit_rejects_missing_cookie() {
+        let form = google_csrf_form("tok123");
+        let headers = HeaderMap::new();
+        assert!(!validate_callback_csrf(
+            &auth::CallbackCsrfMode::GoogleDoubleSubmit,
+            &form,
+            &headers
+        ));
+    }
+
+    #[test]
+    fn oidc_state_fails_safe_until_implemented() {
+        // OidcState is a placeholder: the pre-flight endpoint and signed cookie
+        // that would make this check stateful do not exist yet. Validate that
+        // the callback always rejects rather than silently passing.
+        let form = oidc_state_form("any-state");
+        let headers = headers_with(&[("cookie", "oidc_state=any-state")]);
+        assert!(!validate_callback_csrf(
+            &auth::CallbackCsrfMode::OidcState {
+                cookie_name: "oidc_state"
+            },
+            &form,
+            &headers
+        ));
     }
 
     // ── format_peer_info ──────────────────────────────────────────
