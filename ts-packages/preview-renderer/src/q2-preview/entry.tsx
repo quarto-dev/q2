@@ -512,23 +512,26 @@ function PreviewRoot(props: PreviewRootProps) {
     // block.  Wrap the single block here so callers can work with BlockNode
     // values directly without knowing the wire-format requirement.
     const commitSubtreeEdit = (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => {
-        // Strip all `s` (pool-index) fields from the block tree before sending.
-        // The source block carries `s` references from the current render's pool;
-        // `apply_node_edit` (Rust) rejects them as `InvalidSourceInfoRef` when
-        // deserialising the replacement subtree, because that doc has no pool.
+        // Strip all `s` (block/inline SourceInfo pool-index) and `a`
+        // (AttrSourceInfo object whose id/classes/kvs are also pool indices)
+        // fields from the block tree before sending.  The source block carries
+        // references into the current render's pool; `apply_node_edit` (Rust)
+        // rejects them as `InvalidSourceInfoRef` when deserialising the
+        // replacement subtree, because that doc carries no pool.
         const stripped = JSON.parse(JSON.stringify(modifiedBlock, (key, value) =>
-            key === 's' ? undefined : value,
+            key === 's' || key === 'a' ? undefined : value,
         )) as BlockNode;
         const wrappedDoc = {
             'pandoc-api-version': [1, 23, 0],
             meta: {},
             blocks: [stripped],
         };
+        const modifiedSubtreeJson = JSON.stringify(wrappedDoc);
         const payload: PreviewNodeEditPayload = {
             __isPreviewNodeEdit: true,
             channel: 'subtree',
             destinationSourceInfoJson,
-            modifiedSubtreeJson: JSON.stringify(wrappedDoc),
+            modifiedSubtreeJson,
         };
         props.setAst(payload as unknown as PandocAST);
     };

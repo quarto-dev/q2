@@ -36,6 +36,7 @@ import {
     getServerUrl,
 } from './helpers/projectFactory';
 import { waitForPreviewRender } from './helpers/previewExtraction';
+import { assertAutomerge } from './helpers/assertAutomerge';
 
 const FIXTURE_DIR = resolve(
     import.meta.dirname,
@@ -69,23 +70,6 @@ async function openCommentFixture(page: Page): Promise<FrameLocator> {
     // comment.tsx renders a "+ 🙂" picker button on every wrapped block
     await expect(iframe.locator('[title="Add reaction"]').first()).toBeVisible({ timeout: 30_000 });
     return iframe;
-}
-
-/** Poll the Automerge VFS until the file's content satisfies all checks. */
-async function assertAutomerge(
-    page: Page,
-    filename: string,
-    { contains = [], lacks = [] }: { contains?: string[]; lacks?: string[] },
-): Promise<void> {
-    await expect(async () => {
-        const text = await page.evaluate(async (f) => {
-            await (window as any).__quartoTestReady;
-            return (window as any).__quartoTest?.wasmRenderer.getFileContent(f) as string | null;
-        }, filename);
-        expect(text, `getFileContent(${filename}) must return a string`).not.toBeNull();
-        for (const s of contains) expect(text, `QMD must contain "${s}"`).toContain(s);
-        for (const s of lacks) expect(text, `QMD must not contain "${s}"`).not.toContain(s);
-    }).toPass({ timeout: 15_000 });
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────

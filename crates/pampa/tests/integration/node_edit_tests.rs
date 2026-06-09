@@ -45,6 +45,24 @@ pub(crate) const SHORTCODE_DOC: &str = "\
 Paragraph with {{< kbd Enter >}} shortcode.
 ";
 
+/// A kanban-style div with two columns.  Used to test apply_node_edit
+/// with a stripped subtree (no `s:` fields, no pool) — the scenario that
+/// render-component authors produce via commitSubtreeEdit.
+pub(crate) const KANBAN_DOC: &str = "\
+::: {.kanban}
+
+## backlog
+
+* item one
+* item two
+
+## doing
+
+* item three
+
+:::
+";
+
 /// Two identical paragraphs — guards the structural-minimality claim:
 /// editing one must leave the twin untouched (Phase 3).
 pub(crate) const DUPLICATE_BLOCKS: &str = "\
@@ -437,6 +455,62 @@ fn apply_node_edit_noops_for_edit_inside_include() {
 // =============================================================================
 // Plan 2b — stale-AST miss guard: lookup miss → no-op, return original content
 // =============================================================================
+
+/// apply_node_edit must accept a replacement subtree that has no `s:` fields
+/// and no pool — the wire format that render-components produce via
+/// `commitSubtreeEdit` in TypeScript (which strips all `s:` fields before
+/// sending).  The lenient `read_completing_source_info` path must fill in
+/// the missing SourceInfo with Generated(by="direct-write") instead of
+/// throwing InvalidSourceInfoRef.
+///
+/// Scenario: a kanban div whose children are reordered.  The subtree JSON
+/// is built manually to match what TypeScript sends:
+///   { "pandoc-api-version": [1,23,0], "meta": {}, "blocks": [stripped_div] }
+/// where `stripped_div` has NO `s:` field and its children have no `s:` fields.
+///
+/// TDD: written RED before the fix; goes GREEN once read_completing_source_info
+/// handles a pool-less subtree whose `s:` fields are entirely absent.
+#[test]
+fn apply_node_edit_accepts_stripped_subtree_no_s_fields() {
+    let a_u = parse_qmd(KANBAN_DOC);
+    let a_u_json = ast_to_json(&a_u);
+
+    // Find the kanban Div (index 0 of top-level blocks).
+    let kanban_block = block_at(&a_u, 0);
+    let target_si = kanban_block.source_info().clone();
+    let si_json = source_info_to_json(&target_si);
+
+    // Build a replacement subtree manually — no `s:` fields, no pool.
+    // Mirrors what kanban.tsx produces after commitSubtreeEdit strips s:.
+    // The replacement moves "item one" from backlog to doing.
+    let stripped_subtree_json = r#"{
+        "pandoc-api-version": [1, 23, 0],
+        "meta": {},
+        "blocks": [{
+            "t": "Div",
+            "c": [["", ["kanban"], []], [
+                {"t": "Header", "c": [2, ["", [], []], [{"t": "Str", "c": "backlog"}]]},
+                {"t": "BulletList", "c": [[{"t": "Plain", "c": [{"t": "Str", "c": "item two"}]}]]},
+                {"t": "Header", "c": [2, ["", [], []], [{"t": "Str", "c": "doing"}]]},
+                {"t": "BulletList", "c": [
+                    [{"t": "Plain", "c": [{"t": "Str", "c": "item three"}]}],
+                    [{"t": "Plain", "c": [{"t": "Str", "c": "item one"}]}]
+                ]}
+            ]]
+        }]
+    }"#;
+
+    let result = apply_node_edit(KANBAN_DOC, &a_u_json, &si_json, stripped_subtree_json);
+    let new_qmd = result.expect("apply_node_edit must succeed with a stripped subtree");
+    assert!(
+        new_qmd.contains("item one"),
+        "moved item must appear in result; got: {new_qmd:?}"
+    );
+    assert!(
+        new_qmd.contains("item two"),
+        "remaining backlog item must appear; got: {new_qmd:?}"
+    );
+}
 
 /// When `lookup_block` returns `None` (stale-AST race: the target block was
 /// removed between the last render and this edit), `apply_node_edit` must
