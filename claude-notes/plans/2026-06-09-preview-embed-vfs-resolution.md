@@ -98,15 +98,27 @@ on.
   path first, then the `ARTIFACT_ROOT`-stripped source path. 4 jsdom tests
   (`iframePostProcessor.embed.test.ts`); existing 7 tests green; typecheck clean.
 - [ ] **B — VFS source availability (the gate for e2e).** The staged deck must
-  be present in the preview VFS source — it currently is **not**:
-  `is_preview_relevant` (`crates/quarto-hub/src/watch.rs:207`,
-  `WatchFilter::PreviewBroad`) accepts qmd/config/png|jpg|…|tsx|css but **not
-  `.html`**. Multi-layer: (a) broaden the preview VFS inclusion to the
-  `resources:` set / static `.html`; (b) confirm the hub discovery/storage
-  indexes them into the VFS (not just the watch filter); (c) confirm the SPA's
-  initial VFS population adds them. **Design Q:** sync all `.html` vs only
-  declared `resources:`. (The decks are self-contained, so likely just the
-  `.html`, no `slides_files/`.)
+  be present in the preview VFS source — it currently is **not**.
+  - **Scope decided (user, 2026-06-09):** sync the `.html` files **visible via
+    `resources:`** (resources-scoped, not all project `.html`). Flagged as a
+    trust-boundary footgun — `resources:` is a *publish* control, not an
+    *upload* control — and split into a hardening strand **bd-teh4hbli**
+    (decouple "what may upload to the sync server" from `resources:`; safe
+    defaults; the local/remote sync-server seam). This resources-scoped sync is
+    the interim that strand tightens.
+  - **Integration point found:** `ProjectFiles::discover`
+    (`crates/quarto-hub/src/discovery.rs`) classifies qmd/config/binary(images,
+    PDFs)/extension/`.tsx`. `.html` is **not a binary extension**, so it falls
+    through and is never discovered → never synced. Add a resources-scoped
+    `.html` category: resolve the project's `resources:` (via
+    `quarto-core::project_resources` + `ProjectConfig`) and include matched
+    `.html` files. (Watch filter `is_preview_relevant` is a *separate* event
+    gate — discovery is the load path.)
+  - Remaining cross-layer wiring: (a) hub discovery emits the resource `.html`
+    set; (b) the sync/storage carries it into the VFS at the **source** path
+    (binary resources already flow this way — mirror that); (c) the SPA's VFS
+    population `vfsAddFile`s them. Verify needs a full hub+WASM+q2 rebuild +
+    browser e2e (+ a hub-client/Automerge-only test).
 - [ ] **C — End-to-end.** Rebuild WASM+q2; `q2 preview docs/` in a browser: the
   `#demo-fragments` iframe inlines the real deck via `srcdoc`; crossref
   ("Demo 1") already works.
