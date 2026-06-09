@@ -555,6 +555,40 @@ mod tests {
         assert_eq!(stem, "doc");
     }
 
+    /// bd-9ez3ngt1: `reference-location` set in YAML front matter must be
+    /// honored end-to-end. In document-metadata context a bare YAML string is
+    /// parsed as markdown and stored as `ConfigValueKind::PandocInlines`, so
+    /// the transform's `meta.get("reference-location").as_str()` returned
+    /// `None` and silently fell back to the `document` default. With
+    /// `as_plain_text()` the value resolves, so `reference-location: margin`
+    /// produces a `margin-note` reference and NO document footnotes section.
+    #[test]
+    fn test_render_to_file_honors_margin_reference_location() {
+        let temp = TempDir::new().unwrap();
+        let input_path = temp.path().join("margin.qmd");
+
+        fs::write(
+            &input_path,
+            "---\nformat: html\nreference-location: margin\n---\nRef.^[the body]\n",
+        )
+        .unwrap();
+
+        let runtime = Arc::new(NativeRuntime::new());
+        let options = RenderToFileOptions::default();
+
+        let result = render_to_file(&input_path, "html", &options, runtime).unwrap();
+        let html = fs::read_to_string(&result.output_path).unwrap();
+
+        assert!(
+            html.contains("margin-note"),
+            "expected margin-note class for reference-location: margin; got:\n{html}"
+        );
+        assert!(
+            !html.contains("doc-endnotes"),
+            "margin mode must NOT emit a document footnotes section; got:\n{html}"
+        );
+    }
+
     #[test]
     fn test_render_to_file_creates_output() {
         let temp = TempDir::new().unwrap();

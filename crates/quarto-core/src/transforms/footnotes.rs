@@ -74,9 +74,13 @@ impl FootnotesTransform {
 
     /// Get the reference-location configuration from merged metadata.
     fn get_reference_location(meta: &ConfigValue) -> ReferenceLocation {
+        // Use `as_plain_text` (not `as_str`): in document-metadata context a
+        // bare YAML string value is parsed as markdown and stored as
+        // `ConfigValueKind::PandocInlines`, for which `as_str` returns `None`.
+        // `as_plain_text` handles both the inline and scalar forms. (bd-9ez3ngt1)
         meta.get("reference-location")
-            .and_then(|v| v.as_str())
-            .map(ReferenceLocation::from_str)
+            .and_then(|v| v.as_plain_text())
+            .map(|s| ReferenceLocation::from_str(&s))
             .unwrap_or_default()
     }
 }

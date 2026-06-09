@@ -88,9 +88,12 @@ impl AppendixStructureTransform {
 
     /// Get the reference-location configuration.
     fn get_reference_location(meta: &ConfigValue) -> ReferenceLocation {
+        // Use `as_plain_text` (not `as_str`): front-matter string values are
+        // stored as `ConfigValueKind::PandocInlines` in document-metadata
+        // context, for which `as_str` returns `None`. (bd-9ez3ngt1)
         meta.get("reference-location")
-            .and_then(|v| v.as_str())
-            .map(ReferenceLocation::from_str)
+            .and_then(|v| v.as_plain_text())
+            .map(|s| ReferenceLocation::from_str(&s))
             .unwrap_or_default()
     }
 
