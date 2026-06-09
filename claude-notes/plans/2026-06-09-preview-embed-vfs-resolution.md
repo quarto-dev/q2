@@ -91,15 +91,25 @@ on.
 
 ## Phasing (TDD-first)
 
-- [ ] **A — Post-processor fallback (TS).** Extend
-  `iframePostProcessor.integration.test.ts`: an artifact-rooted `src` whose
-  artifact path misses but whose source path hits resolves to the source bytes.
-  Implement the fallback.
-- [ ] **B — VFS source availability (CLI).** Confirm/extend the `q2 preview` VFS
-  population so the staged decks are present at their source path. Test through
-  the hub VFS layer.
-- [ ] **C — End-to-end.** `q2 preview docs/` in a browser: the `#demo-fragments`
-  iframe loads the real deck from the VFS; crossref ("Demo 1") already works.
+- [x] **A — Post-processor fallback (TS).** DONE (commit `bfff2d3e`). The
+  post-processor had **no `<iframe>` handling at all** (only `link`/`img`/`a`);
+  added it. `iframePostProcessor.ts` now inlines an artifact-rooted iframe
+  `src` via `srcdoc`, reading the VFS with `readArtifactOrSource` — artifact
+  path first, then the `ARTIFACT_ROOT`-stripped source path. 4 jsdom tests
+  (`iframePostProcessor.embed.test.ts`); existing 7 tests green; typecheck clean.
+- [ ] **B — VFS source availability (the gate for e2e).** The staged deck must
+  be present in the preview VFS source — it currently is **not**:
+  `is_preview_relevant` (`crates/quarto-hub/src/watch.rs:207`,
+  `WatchFilter::PreviewBroad`) accepts qmd/config/png|jpg|…|tsx|css but **not
+  `.html`**. Multi-layer: (a) broaden the preview VFS inclusion to the
+  `resources:` set / static `.html`; (b) confirm the hub discovery/storage
+  indexes them into the VFS (not just the watch filter); (c) confirm the SPA's
+  initial VFS population adds them. **Design Q:** sync all `.html` vs only
+  declared `resources:`. (The decks are self-contained, so likely just the
+  `.html`, no `slides_files/`.)
+- [ ] **C — End-to-end.** Rebuild WASM+q2; `q2 preview docs/` in a browser: the
+  `#demo-fragments` iframe inlines the real deck via `srcdoc`; crossref
+  ("Demo 1") already works.
 - [ ] **D — Hub-client parity.** A test (or manual) where `/examples/` is
   populated only in the VFS/Automerge (no disk) and the iframe still resolves —
   the case the reverted disk route could never handle.
