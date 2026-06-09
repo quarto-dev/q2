@@ -255,11 +255,20 @@ Tasks:
   `../../examples/...` (depth-2 relative, no host-absolute `/examples`); staged
   decks (+ `slides_files/`) land under `_site/examples/`; source links work.
   2327 workspace tests green.
-- [ ] End-to-end (preview): `q2 preview docs/` → in a browser, confirm each
-  iframe loads the static deck from the VFS (Decision 4's narrow case). **Needs
-  the WASM rebuilt** (the new transform lives in `quarto-core`, which the
-  preview WASM embeds) — `npm run build:wasm` → `cargo xtask build-q2-preview-spa`
-  → `cargo build --bin q2`.
+- [ ] **Preview (Decision 4) — moved to its own strand: bd-kjrpya2d.**
+  - A CLI-only disk approach was prototyped (a `vfs_root`-mode resolver branch
+    emitting `/examples/…` + a `project_or_spa_handler` disk route in
+    `quarto-preview`) and **browser-verified working for `q2 preview docs/`** —
+    but then **reverted**: it's disk-bound and can never work in a real
+    hub-client project where `/examples/` lives only in Automerge (no disk, no
+    native server). See the strand for why.
+  - Chosen instead: the **VFS-native** fix — teach the TS iframe post-processor
+    to fall back to the VFS **source** path when the artifact path misses (and
+    ensure the deck is in the VFS source). Avoids per-render Automerge
+    duplication. Tracked in
+    `claude-notes/plans/2026-06-09-preview-embed-vfs-resolution.md`.
+  - Crossref ("Demo 1" caption + `@demo` xref) already works in preview
+    (verified in-browser).
 
 ### Phase 3 — Pre-render staging script (separate deliverable)
 - [ ] Script that renders `examples/**` and stages static output into the
