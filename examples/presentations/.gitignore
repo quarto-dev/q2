@@ -2,3 +2,5 @@
 _site/
 .quarto/
 *_files/
+# type: default projects render the deck in place beside the source
+slides.html

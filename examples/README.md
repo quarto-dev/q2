@@ -47,7 +47,14 @@ Examples that exercise the website-projects feature surface
 | [`websites/07-incremental`](websites/07-incremental/) | Full-project vs subset rendering, profile cache, `--clean-cache` |
 | [`websites/08-hub-preview`](websites/08-hub-preview/) | Hub-client live preview against a website project (manual browser recipe) |
 
+## Presentation examples
+
+Minimal `format: revealjs` decks, one per authoring feature, under
+[`presentations/`](presentations/). Each is a `type: default` project
+with a single `slides.qmd`. They back the reveal.js documentation page
+(`docs/presentations/revealjs/index.qmd`).
+
 ## Other example categories
 
-Future categories (books, manuscripts, single-document projects) will
-get their own subdirectories alongside `websites/`.
+Future categories (books, manuscripts) will get their own
+subdirectories alongside `websites/` and `presentations/`.

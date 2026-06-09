@@ -1,0 +1,21 @@
+---
+title: "Columns"
+format: revealjs
+---
+
+## Side by side
+
+Put content in side-by-side columns with a `.columns` container holding two
+or more `.column` divs. Each `width` becomes the column's share of the row.
+
+:::: {.columns}
+
+::: {.column width="40%"}
+The left column is 40% wide.
+:::
+
+::: {.column width="60%"}
+The right column takes the remaining 60%.
+:::
+
+::::

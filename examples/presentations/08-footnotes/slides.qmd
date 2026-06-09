@@ -1,0 +1,19 @@
+---
+title: "Footnotes"
+format: revealjs
+---
+
+## Per-slide footnotes
+
+Quarto gathers a slide's footnotes into an aside at the bottom of that
+slide.^[The first footnote.] Each slide numbers its own footnotes from
+one.^[The second footnote.]
+
+::: {.aside}
+An aside and the slide's footnotes share a single block at the bottom.
+:::
+
+## A fresh slide
+
+Footnote numbering restarts on every slide.^[This is footnote 1 on this
+slide, even though earlier slides also had footnotes.]

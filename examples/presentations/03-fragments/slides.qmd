@@ -1,0 +1,32 @@
+---
+title: "Fragments"
+format: revealjs
+---
+
+## Reveal on click
+
+Wrap content in a `.fragment` div to reveal it one step at a time.
+
+::: {.fragment}
+Appears on the first click.
+:::
+
+::: {.fragment .fade-up}
+Then this one fades up.
+:::
+
+::: {.fragment .highlight-red}
+Then this one turns red.
+:::
+
+## Controlling the order
+
+`fragment-index` sets the order explicitly, regardless of source position.
+
+::: {.fragment fragment-index="2"}
+Shown second.
+:::
+
+::: {.fragment fragment-index="1"}
+Shown first.
+:::

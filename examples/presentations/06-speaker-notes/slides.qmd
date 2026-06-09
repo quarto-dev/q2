@@ -1,0 +1,14 @@
+---
+title: "Speaker Notes"
+format: revealjs
+---
+
+## A slide with notes
+
+This is the content the audience sees on the slide.
+
+::: {.notes}
+These are speaker notes. They are rendered as a hidden `<aside class="notes">`
+and do not appear on the slide itself. (Displaying them in a live speaker
+view — the reveal.js notes plugin, the `S` key — is not wired up yet.)
+:::

@@ -1,0 +1,35 @@
+---
+title: "Incremental Lists"
+format: revealjs
+incremental: true
+---
+
+## Revealed one at a time
+
+With `incremental: true` in the front matter, every list steps through its
+items one click at a time:
+
+- First this,
+- then this,
+- and finally this.
+
+## Opting a list out
+
+A `.nonincremental` list shows all its items at once, even under global
+`incremental: true`:
+
+::: {.nonincremental}
+- All three
+- appear
+- together.
+:::
+
+## Opting a single list in
+
+Without the global option you can still make one list incremental by
+wrapping it in `.incremental`:
+
+::: {.incremental}
+- Step one
+- Step two
+:::

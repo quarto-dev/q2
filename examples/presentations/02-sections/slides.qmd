@@ -1,0 +1,28 @@
+---
+title: "Sections & Breaks"
+author: "Quarto"
+format: revealjs
+---
+
+# Part One
+
+## First topic
+
+- Point A
+- Point B
+
+## Second topic
+
+A level-1 heading (`# Part One`) starts a new section. Its level-2 slides
+become vertical children beneath it.
+
+# Part Two
+
+## Another topic
+
+Content for the second section.
+
+---
+
+A horizontal rule (`---`) starts a new, untitled slide — handy when a slide
+has no heading of its own.

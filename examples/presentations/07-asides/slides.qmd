@@ -1,0 +1,13 @@
+---
+title: "Asides"
+format: revealjs
+---
+
+## A slide with an aside
+
+The main point goes here, front and center.
+
+::: {.aside}
+An aside holds peripheral commentary. It is shown small and muted at the
+bottom of the slide.
+:::

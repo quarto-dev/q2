@@ -1,0 +1,265 @@
+---
+title: "Reveal.js presentations"
+---
+
+## Overview
+
+You write a reveal.js presentation the same way you write any Quarto
+document — as Markdown — and choose the slide format in the front matter:
+
+```yaml
+---
+format: revealjs
+---
+```
+
+From there, headings become slides and the document metadata becomes a
+title slide. The rest of this page walks through the slide-authoring
+features Quarto 2 supports today. Each feature is paired with a small,
+self-contained example project you can render and adapt; the example
+projects live under
+[`examples/presentations/`](https://github.com/quarto-dev/q2/tree/main/examples/presentations).
+
+::: {.callout-note}
+Quarto 2's reveal.js support is still growing. This page documents only
+what is implemented now; features such as slide backgrounds, code-line
+highlighting, transitions, themes, and the speaker-view UI are not yet
+available.
+:::
+
+## Creating slides
+
+Slide boundaries follow heading levels. A level-2 heading (`##`) starts a
+slide; a level-1 heading (`#`) starts a *section*, gathering the slides
+beneath it into a vertical stack; and a horizontal rule (`---`) starts a
+new slide where you have no heading to give it.
+
+```markdown
+---
+title: "Habits"
+author: "Jane Doe"
+format: revealjs
+---
+
+## Getting up
+
+- Turn off alarm
+- Get out of bed
+
+## Going to sleep
+
+- Get in bed
+- Count sheep
+```
+
+::: {.q2-website-example-iframe example="presentations/01-creating-slides"}
+[Example: 01-creating-slides](https://github.com/quarto-dev/q2/tree/main/examples/presentations/01-creating-slides)
+:::
+
+Sections and rule-delimited slides follow the same heading logic:
+
+```markdown
+# Part One
+
+## First topic
+
+Content.
+
+# Part Two
+
+## Another topic
+
+Content.
+
+---
+
+An untitled slide, created with a horizontal rule.
+```
+
+::: {.q2-website-example-iframe example="presentations/02-sections"}
+[Example: 02-sections](https://github.com/quarto-dev/q2/tree/main/examples/presentations/02-sections)
+:::
+
+### The title slide
+
+When the front matter carries a `title` — and, optionally, an `author` or
+`date` — Quarto opens the deck with a generated title slide. Omit those
+fields and the deck starts directly on your first content slide.
+
+### Slide level
+
+By default, level-2 headings make slides and level-1 headings make
+sections. The `slide-level` option moves that boundary: with
+`slide-level: 1`, level-1 headings become slides and there are no section
+stacks.
+
+```yaml
+---
+format:
+  revealjs:
+    slide-level: 1
+---
+```
+
+## Fragments
+
+A fragment reveals part of a slide on a later click instead of all at once.
+Wrap the content in a `.fragment` div, and reveal.js holds it back until you
+advance.
+
+```markdown
+## Reveal on click
+
+::: {.fragment}
+Appears on the first click.
+:::
+
+::: {.fragment .fade-up}
+Then this one fades up.
+:::
+```
+
+Variant classes such as `.fade-up`, `.fade-out`, `.grow`, and
+`.highlight-red` change how a fragment animates in. To control the reveal
+order independently of source order, set `fragment-index`:
+
+```markdown
+::: {.fragment fragment-index="2"}
+Shown second.
+:::
+
+::: {.fragment fragment-index="1"}
+Shown first.
+:::
+```
+
+::: {.q2-website-example-iframe example="presentations/03-fragments"}
+[Example: 03-fragments](https://github.com/quarto-dev/q2/tree/main/examples/presentations/03-fragments)
+:::
+
+## Incremental lists
+
+Lists are a special case of fragments. To reveal every list in the deck one
+item at a time, set `incremental` globally:
+
+```yaml
+---
+format: revealjs
+incremental: true
+---
+```
+
+To override that choice for a single list, wrap it. A `.nonincremental` list
+shows all its items at once even under the global setting, and an
+`.incremental` list steps through its items even when the global setting is
+off:
+
+```markdown
+::: {.nonincremental}
+- All three
+- appear
+- together.
+:::
+```
+
+::: {.q2-website-example-iframe example="presentations/04-incremental-lists"}
+[Example: 04-incremental-lists](https://github.com/quarto-dev/q2/tree/main/examples/presentations/04-incremental-lists)
+:::
+
+## Multiple columns
+
+To place content side by side, use a `.columns` container holding two or more
+`.column` divs. Each column's `width` sets its share of the row.
+
+```markdown
+:::: {.columns}
+
+::: {.column width="40%"}
+Left column.
+:::
+
+::: {.column width="60%"}
+Right column.
+:::
+
+::::
+```
+
+::: {.q2-website-example-iframe example="presentations/05-columns"}
+[Example: 05-columns](https://github.com/quarto-dev/q2/tree/main/examples/presentations/05-columns)
+:::
+
+## Speaker notes
+
+A `.notes` div holds commentary for the presenter. The note does not appear
+on the slide.
+
+```markdown
+## A slide with notes
+
+Slide content the audience sees.
+
+::: {.notes}
+Speaker notes go here.
+:::
+```
+
+::: {.q2-website-example-iframe example="presentations/06-speaker-notes"}
+[Example: 06-speaker-notes](https://github.com/quarto-dev/q2/tree/main/examples/presentations/06-speaker-notes)
+:::
+
+::: {.callout-note}
+Speaker notes render today as a hidden `aside`; the live speaker view that
+displays them while presenting is not yet available.
+:::
+
+## Asides
+
+An aside holds content of more peripheral interest — a caveat, a citation, a
+side remark. Quarto shows it small and muted at the bottom of the slide.
+
+```markdown
+## A slide with an aside
+
+The main point, front and center.
+
+::: {.aside}
+Some commentary of more peripheral interest.
+:::
+```
+
+::: {.q2-website-example-iframe example="presentations/07-asides"}
+[Example: 07-asides](https://github.com/quarto-dev/q2/tree/main/examples/presentations/07-asides)
+:::
+
+## Footnotes
+
+Footnotes on a slide are gathered into an aside at the bottom of *that*
+slide, rather than into a single list at the end of the deck. Each slide
+numbers its own footnotes from one, and when a slide carries both an aside
+and footnotes, they share a single block at the bottom.
+
+```markdown
+## Per-slide footnotes
+
+A claim that needs a citation.^[The footnote text.]
+
+::: {.aside}
+An aside and the footnotes share the bottom of the slide.
+:::
+```
+
+::: {.q2-website-example-iframe example="presentations/08-footnotes"}
+[Example: 08-footnotes](https://github.com/quarto-dev/q2/tree/main/examples/presentations/08-footnotes)
+:::
+
+To keep footnotes at the end of the deck instead — as a final slide —
+set `reference-location: document`:
+
+```yaml
+---
+format:
+  revealjs:
+    reference-location: document
+---
+```

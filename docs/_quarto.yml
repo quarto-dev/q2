@@ -10,6 +10,8 @@ website:
         text: Home
       - about.qmd
       - guide/index.qmd
+      - href: presentations/revealjs/index.qmd
+        text: Presentations
       - href: errors/index.qmd
         text: Errors
   sidebar:
@@ -18,6 +20,13 @@ website:
       contents:
         - section: "Guide"
           href: docs/guide/index.qmd
+    - id: presentations
+      title: "Presentations"
+      contents:
+        - section: "Reveal.js"
+          href: presentations/revealjs/index.qmd
+          contents:
+            - presentations/revealjs/index.qmd
     - id: errors
       title: "Error reference"
       contents:

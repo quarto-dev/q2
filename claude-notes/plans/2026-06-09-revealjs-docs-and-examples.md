@@ -57,6 +57,12 @@ will serve every Q2 example category (websites, presentations, books,
 - Greppable: `grep -rn 'q2-website-example-iframe' docs/` finds every
   embed site when the mechanism is wired.
 
+**As rendered (verified):** the HTML writer emits
+`<div class="q2-website-example-iframe" data-example="presentations/NN-...">`
+with the fallback `<a>` inside — i.e. a Lua filter reading the **AST** sees the
+`example` Div attribute; JS/CSS reading the **DOM** sees `data-example` (a valid
+HTML5 data attribute). Both target the same payload.
+
 > Open point to confirm with the user during review: exact attribute
 > name (`example=` vs `path=`) and whether the fallback link should
 > point at GitHub or a future rendered-example URL.
@@ -245,23 +251,27 @@ directory) emits a 750 KB reveal deck (`class="reveal"` ×3); `… slides.qmd
 - [x] CLI sets `with_format_override(args.to.clone())` (single-doc + project)
 - [x] TDD tests (per-file + project-level + `--to` regression) + workspace green
 
-### Phase A — example projects
-- [ ] `examples/presentations/.gitignore` (category-level)
-- [ ] `examples/presentations/README.md` (linking table)
-- [ ] 01-creating-slides … 08-footnotes (project + qmd + README each)
-- [ ] Render every example; confirm feature markup
+### Phase A — example projects ✅
+- [x] `examples/presentations/.gitignore` (+ ignore in-place `slides.html`)
+- [x] `examples/presentations/README.md` (linking table)
+- [x] 01-creating-slides … 08-footnotes (project + qmd + README each)
+- [x] Rendered every example; confirmed feature markup (fragments,
+  `data-fragment-index`, `<li class="fragment">` incl. `.nonincremental`
+  opt-out, `flex-basis`, `aside.notes`, `aside.aside`, per-slide
+  `aside-footnotes` + `<sup>1</sup>`)
 
-### Phase B — docs page
-- [ ] Draft `docs/presentations/revealjs/index.qmd` (apply
-  reader-expectations-prose)
-- [ ] One section per implemented feature, each with placeholder
-- [ ] Render `docs/`; inspect the page
+### Phase B — docs page ✅
+- [x] `docs/presentations/revealjs/index.qmd` (reader-expectations prose;
+  Gopen & Swan 1990)
+- [x] One section per implemented feature, each with a
+  `.q2-website-example-iframe` placeholder + not-yet callouts
+- [x] Rendered `docs/` (150/150; only pre-existing warnings); page emits 8
+  placeholders w/ `data-example`, all sections, working fallback links
 
-### Phase C — navigation
-- [ ] Navbar + sidebar wiring in `docs/_quarto.yml`
-- [ ] Re-render `docs/`; confirm nav
+### Phase C — navigation ✅
+- [x] Navbar "Presentations" + `id: presentations` sidebar in `docs/_quarto.yml`
+- [x] Nav link verified from home page (`presentations/revealjs/index.html`)
 
-### Phase D — wrap
-- [ ] Update `examples/README.md` "Other example categories" to mention
-  `presentations/`
-- [ ] Commit; report; (push on request)
+### Phase D — wrap ✅
+- [x] `examples/README.md` registers the `presentations/` category
+- [x] Commit (Phase 0 already committed separately); report; push on request
