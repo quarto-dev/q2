@@ -587,6 +587,21 @@ describe('q2-preview Pandoc base-type gap-fill components', () => {
         expect(container.querySelectorAll('li.fragment').length).toBe(0);
     });
 
+    it('Div with class="aside" renders as <aside> (revealjs aside)', () => {
+        const ast = [{
+            t: 'Div',
+            c: [
+                ['', ['aside'], []],
+                [PARA(STR('An aside.'))],
+            ],
+        }];
+        const { container } = mount(ast);
+        const aside = container.querySelector('aside.aside');
+        expect(aside).not.toBeNull();
+        expect(aside!.textContent).toContain('An aside.');
+        expect(container.querySelector('div.aside')).toBeNull();
+    });
+
     it('Div without "section" class still renders as <div>', () => {
         const ast = [{
             t: 'Div',

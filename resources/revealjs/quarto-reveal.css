@@ -20,3 +20,17 @@
   flex: auto;
   overflow-x: auto;
 }
+
+/* Asides (Phase 2e) — `::: {.aside}` → `<aside class="aside">`, shown small
+   and muted at the bottom of the slide. (`aside.notes` is hidden by reveal.css.)
+   Mirrors Quarto 1's `.reveal .slide aside` rule. */
+.reveal .slides aside.aside {
+  position: absolute;
+  bottom: 20px;
+  font-size: 0.6em;
+  color: #6c757d;
+}
+
+.reveal .slides aside .aside-footnotes {
+  margin-bottom: 0;
+}

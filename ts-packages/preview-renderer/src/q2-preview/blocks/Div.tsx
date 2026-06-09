@@ -2,7 +2,7 @@ import { useContext, type CSSProperties, type ReactNode } from 'react';
 import { renderChildren } from '../../framework';
 import type { DivBlock, NodeArgs } from '../../framework';
 import { IncrementalContext } from '../IncrementalContext';
-import { NOTES, SECTION } from '../quartoClasses';
+import { ASIDE, NOTES, SECTION } from '../quartoClasses';
 
 /**
  * Convert a CSS declaration string (`"flex-basis: 40%; color: red"`) to the
@@ -70,9 +70,10 @@ export const Div = (args: NodeArgs<DivBlock>) => {
     if (classes.includes(SECTION)) {
         return <section {...props}>{wrap(renderChildren(args))}</section>;
     }
-    // Revealjs speaker notes — mirror the native writer's `.notes` → <aside>
-    // so `q2 preview` and `q2 render` agree (reveal.css hides `aside.notes`).
-    if (classes.includes(NOTES)) {
+    // Revealjs speaker notes / asides — mirror the native writer's
+    // `.notes` / `.aside` → <aside>. reveal.css hides `aside.notes`;
+    // quarto-reveal.css styles `aside.aside` (bottom of slide, muted).
+    if (classes.includes(NOTES) || classes.includes(ASIDE)) {
         return <aside {...props}>{wrap(renderChildren(args))}</aside>;
     }
     return <div {...props}>{wrap(renderChildren(args))}</div>;

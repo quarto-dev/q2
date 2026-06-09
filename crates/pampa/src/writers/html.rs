@@ -1498,10 +1498,14 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             // - "section" (from the sectionize / reveal-slides transforms) → <section>
             // - "notes" (revealjs speaker notes, `::: {.notes}`) → <aside>;
             //   reveal.css hides `aside.notes` on the slide, and the notes
-            //   plugin surfaces it in speaker view. Harmless for other formats.
+            //   plugin surfaces it in speaker view.
+            // - "aside" (revealjs `::: {.aside}`) → <aside>; rendered small/muted
+            //   at the slide bottom by quarto-reveal.css. Harmless elsewhere.
             let tag = if div.attr.1.contains(&"section".to_string()) {
                 "section"
-            } else if div.attr.1.contains(&"notes".to_string()) {
+            } else if div.attr.1.contains(&"notes".to_string())
+                || div.attr.1.contains(&"aside".to_string())
+            {
                 "aside"
             } else {
                 "div"

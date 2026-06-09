@@ -239,6 +239,21 @@ fn notes_div_renders_as_aside() {
     assert!(html.contains("Visible."));
 }
 
+// ── 2e: asides ───────────────────────────────────────────────────────────
+
+#[test]
+fn aside_div_renders_as_aside_element() {
+    let html = render_revealjs(
+        "---\nformat: revealjs\n---\n\n## S\n\nBody.\n\n::: {.aside}\nAn aside note.\n:::\n",
+    );
+    assert!(
+        html.contains("<aside class=\"aside\">"),
+        "a `.aside` Div must render as `<aside class=\"aside\">`; html:\n{}",
+        &html[..html.len().min(2000)]
+    );
+    assert!(html.contains("An aside note."));
+}
+
 #[test]
 fn fragment_data_index_passes_through() {
     let html = render_revealjs(

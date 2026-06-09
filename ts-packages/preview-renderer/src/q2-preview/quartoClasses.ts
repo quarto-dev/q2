@@ -25,6 +25,11 @@ export const SECTION_LEVEL_PREFIX = 'level'; // level1, level2, ..., level6
 // Div.tsx mirrors that for `q2 preview` parity.
 export const NOTES = 'notes';
 
+// Revealjs aside — `::: {.aside}`. Renders as `<aside class="aside">`
+// (native writer + Div.tsx), styled small/muted at the slide bottom by
+// quarto-reveal.css.
+export const ASIDE = 'aside';
+
 // Footnotes — emitted by FootnotesTransform (now included in q2-preview's
 // pipeline; see plan §"Pipeline change: include FootnotesTransform").
 // Source: crates/quarto-core/src/transforms/footnotes.rs:26-35,440-460
