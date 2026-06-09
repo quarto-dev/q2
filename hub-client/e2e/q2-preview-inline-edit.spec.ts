@@ -1,32 +1,31 @@
 /**
- * E2E tests for q2-preview inline editing (target-incremental-writes Phase 6).
+ * E2E tests for q2-preview inline editing (Plan 2b).
  *
- * Round-trip verified: click block → type → blur → Automerge updated.
+ * Round-trip verified: click block → textarea → Ctrl+Enter commit →
+ * Automerge updated.
+ *
+ * Updated from Plan 1 (contenteditable) to Plan 2b (data-block-pool-id
+ * + textarea + commitTextEdit channel). The DOM interaction is now:
+ *   1. Click `<tag>[data-block-pool-id]` to activate the textarea.
+ *   2. `fill()` the new text (clears + sets the textarea value).
+ *   3. Press Ctrl+Enter to commit (keyboard shortcut in useEditableBlock).
  *
  * Implementation notes for future tests in this area:
  *  - Monaco CDN interception is handled automatically by bootstrapProjectSet;
  *    no per-test setup needed.
- *  - DOM assertions on edited contentEditable elements are unreliable: React
- *    doesn't always reconcile their innerHTML, leaving artefacts from user
- *    typing. Verify via getFileContent() (Automerge layer) instead.
- *  - Blur (click outside) is more reliable than Enter for committing edits in
- *    Playwright automation.
- *  - Tests run in parallel (serial mode removed). Three changes make this safe:
- *    1. createProjectOnServer uses peerTimeoutMs=10000 so documents are created
- *       in online mode and flush to the hub immediately (no background-sync race).
- *    2. bootstrapProjectSet stubs /auth/me + sets MonacoEnvironment.getWorkerUrl
- *       + serves monaco-editor from local devDep to prevent AMD init races.
- *    3. beforeEach stagger: workerIndex>0 waits 1 s so both browsers don't enter
- *       Monaco's AMD init window at exactly the same instant.
+ *  - Verify via getFileContent() (Automerge layer) rather than DOM text,
+ *    since the DOM may lag the Automerge update by a render tick.
+ *  - Ctrl+Enter commit is more reliable than blur in Playwright automation,
+ *    because clicking a blur target activates edit on it (Plan 2b's
+ *    delegated pointer handler runs on any [data-block-pool-id] click).
  *  - Prerequisites: VITE_E2E=1 npm run build, no hub on port 3031 (test port).
  *
  * Preview-view test (monaco-absent path):
  *  - bootstrapProjectSet registers a CDN→local-files Monaco intercept.
  *    The preview-view test registers a CDN-abort route AFTER that; Playwright
  *    evaluates routes LIFO, so the abort fires first and Monaco never loads.
- *    This keeps editorRef.current === null throughout, exposing the silent
- *    bail in handleContentRewrite that discards inline edits made before
- *    Monaco mounts.
+ *    This exercises the inline-edit path where the hub-client editor is absent
+ *    but the preview-iframe textarea still works.
  */
 
 import { test, expect, type Page, type FrameLocator } from '@playwright/test';
@@ -39,7 +38,7 @@ import {
 } from './helpers/projectFactory';
 import { waitForPreviewRender } from './helpers/previewExtraction';
 
-/** Set up the project, navigate, and wait for Monaco + preview to be ready. */
+/** Set up the project, navigate, and wait for Monaco + preview (+ edit affordances) to be ready. */
 async function openFile(
     page: Page,
     serverUrl: string,
@@ -49,26 +48,33 @@ async function openFile(
     await bootstrapProjectSet(page, serverUrl);
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/${filename}`);
-    // Monaco must be ready for the write-back path (handleContentRewrite needs editorRef).
+    // Monaco must be ready for the write-back path.
     await expect(page.locator('.view-lines').first()).toBeVisible({ timeout: 30000 });
     await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30000 });
-    return page.frameLocator('iframe[src*="q2-preview.html"]');
+    const iframe = page.frameLocator('iframe[src*="q2-preview.html"]');
+    // Wait for Plan 2b edit affordances (sourceIndex built → data-block-pool-id set).
+    await iframe.locator('[data-block-pool-id]').first().waitFor({ timeout: 15_000 });
+    return iframe;
 }
 
-/** Click an editable block, replace its text, then blur to commit. */
+/**
+ * Activate the first matching block for editing, replace its text, then
+ * commit with Ctrl+Enter.
+ *
+ * Plan 2b mechanism: click [data-block-pool-id] → textarea → fill + Ctrl+Enter.
+ * This avoids clicking a blur target (which would activate edit on it via the
+ * delegated pointer handler).
+ */
 async function editBlock(
     iframe: FrameLocator,
     tag: string,
     newText: string,
-    blurTarget: string,
 ): Promise<void> {
-    await iframe.locator(`${tag}[title="Click to edit"]`).first().click();
-    const el = iframe.locator(`${tag}[contenteditable="true"]`).first();
-    await el.waitFor({ timeout: 5000 });
-    await el.click();
-    await el.press('Meta+a');
-    await el.pressSequentially(newText);
-    await iframe.locator(blurTarget).click();
+    await iframe.locator(`${tag}[data-block-pool-id]`).first().click();
+    const ta = iframe.locator('textarea').first();
+    await ta.waitFor({ timeout: 5000 });
+    await ta.fill(newText);
+    await ta.press('Control+Enter');
 }
 
 /** Poll Automerge until the file satisfies all content checks. */
@@ -93,7 +99,6 @@ test.describe('q2-preview inline editing', () => {
 
     // Stagger worker start times so two parallel browser contexts don't
     // race through Monaco's AMD initialisation at exactly the same instant.
-    // workerIndex 0 starts immediately; workerIndex 1 waits 1 s.
     test.beforeEach(async ({ page }, testInfo) => {
         if (testInfo.workerIndex > 0) {
             await page.waitForTimeout(1000);
@@ -112,7 +117,7 @@ test.describe('q2-preview inline editing', () => {
         const iframe = await openFile(page, serverUrl, docId, 'doc.qmd');
         await expect(iframe.locator('text=First paragraph.')).toBeVisible();
 
-        await editBlock(iframe, 'p', 'Edited paragraph.', 'h2');
+        await editBlock(iframe, 'p', 'Edited paragraph.');
 
         await assertAutomerge(page, 'doc.qmd', {
             contains: ['Edited paragraph.', 'Second paragraph.'],
@@ -131,7 +136,7 @@ test.describe('q2-preview inline editing', () => {
         const iframe = await openFile(page, serverUrl, docId, 'heading.qmd');
         await expect(iframe.locator('text=My Heading')).toBeVisible();
 
-        await editBlock(iframe, 'h2', 'New Heading', 'p');
+        await editBlock(iframe, 'h2', 'New Heading');
 
         await assertAutomerge(page, 'heading.qmd', {
             contains: ['New Heading'],
@@ -161,15 +166,15 @@ test.describe('q2-preview inline editing', () => {
         );
 
         await page.goto(`/#/p/${localId}/file/preview-view.qmd`);
-        // Switch to Preview view without waiting for Monaco — this is the
-        // scenario handleContentRewrite must handle: editorRef.current is null.
+        // Switch to Preview view without waiting for Monaco.
         await page.getByRole('button', { name: 'Preview view' }).click();
 
         await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30000 });
         const iframe = page.frameLocator('iframe[src*="q2-preview.html"]');
+        await iframe.locator('[data-block-pool-id]').first().waitFor({ timeout: 15_000 });
         await expect(iframe.locator('text=Original text.')).toBeVisible();
 
-        await editBlock(iframe, 'p', 'Edited text.', 'h2');
+        await editBlock(iframe, 'p', 'Edited text.');
 
         await assertAutomerge(page, 'preview-view.qmd', {
             contains: ['Edited text.', 'Other paragraph.'],

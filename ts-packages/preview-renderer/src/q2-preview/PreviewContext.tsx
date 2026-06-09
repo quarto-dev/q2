@@ -33,10 +33,16 @@ export interface PreviewContextValue {
     commitSubtreeEdit?: (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => void;
     /** The QMD source content that produced the current render. Used by editable blocks to slice source bytes. */
     content?: string;
-    /** The block currently being edited (poolId + measured DOMRect for P1 no-reflow sizing), or null. */
-    editTarget?: { poolId: string | number; rect: DOMRect } | null;
-    /** Activate a block for editing (pass its poolId + measured DOMRect), or pass null to clear. */
-    setEditTarget?: (target: { poolId: string | number; rect: DOMRect } | null) => void;
+    /**
+     * The block currently being edited. `rect` is the border-box from
+     * getBoundingClientRect; `contentHeight` is the element's content-area
+     * height (rect.height minus padding and border), so the textarea fills
+     * the content area exactly even when the wrapper element has padding or
+     * a border (e.g. Bootstrap's `h2 { padding-bottom: 0.5rem; border-bottom }`).
+     */
+    editTarget?: { poolId: string | number; rect: DOMRect; contentHeight: number } | null;
+    /** Activate a block for editing, or pass null to clear. */
+    setEditTarget?: (target: { poolId: string | number; rect: DOMRect; contentHeight: number } | null) => void;
     /** SourceInfo-value index from the untransformed AST (Plan 2a). Built once per render. */
     sourceIndex?: Map<string, SourceIndexEntry> | null;
     /** Resolve a transformed block to its source counterpart + reachability class (Plan 2a). */

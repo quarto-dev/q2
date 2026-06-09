@@ -26,7 +26,6 @@ export const Header = (args: NodeArgs<HeaderBlock>) => {
     const Tag = headerTags[Math.min(Math.max(level, 1), 6) - 1];
 
     const editor = useEditableBlock({ poolId, resolved });
-    if (editor) return <>{editor}</>;
 
-    return <Tag {...domProps}>{renderChildren(args)}</Tag>;
+    return <Tag {...domProps}>{editor ?? renderChildren(args)}</Tag>;
 };

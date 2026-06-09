@@ -38,7 +38,7 @@ export function useEditableBlock({
 
     if (!isEditTarget || !ctx || !resolved || poolId === undefined) return null;
 
-    const rect = ctx.editTarget!.rect;
+    const { contentHeight } = ctx.editTarget!;
     const initialText = sliceBytes(
         ctx.content!,
         resolved.sourceEntry.r[0],
@@ -60,10 +60,11 @@ export function useEditableBlock({
             autoFocus
             defaultValue={initialText}
             style={{
+                display: 'block',
                 fontFamily: 'monospace',
                 fontSize: '0.9em',
-                width: rect.width,
-                height: rect.height,
+                width: '100%',
+                height: contentHeight,
                 boxSizing: 'border-box',
                 resize: 'vertical',
             }}

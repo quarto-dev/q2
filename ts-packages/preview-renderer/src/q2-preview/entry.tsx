@@ -344,7 +344,7 @@ function walkForNoteNumbers(ast: PandocAST): WeakMap<NoteInline, number> {
 }
 
 function PreviewRoot(props: PreviewRootProps) {
-    const [editTarget, setEditTarget] = useState<{ poolId: string | number; rect: DOMRect } | null>(null);
+    const [editTarget, setEditTarget] = useState<{ poolId: string | number; rect: DOMRect; contentHeight: number } | null>(null);
 
     // Refs so the link-handler closure (installed once at mount)
     // sees the *latest* currentFilePath / projectFilePaths instead

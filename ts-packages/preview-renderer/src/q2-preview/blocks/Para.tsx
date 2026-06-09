@@ -14,11 +14,10 @@ export const Para = (args: NodeArgs<ParaBlock>) => {
         && ctx.content != null;
 
     const editor = useEditableBlock({ poolId, resolved });
-    if (editor) return <>{editor}</>;
 
     return (
         <p {...(isEditable && poolId !== undefined ? { 'data-block-pool-id': poolId } : {})}>
-            {renderChildren(args)}
+            {editor ?? renderChildren(args)}
         </p>
     );
 };

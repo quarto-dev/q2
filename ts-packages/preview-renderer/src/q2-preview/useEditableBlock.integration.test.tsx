@@ -1,8 +1,9 @@
 /**
  * RTL tests for useEditableBlock (Plan 2b).
  *
- * P1: given a mocked `editTarget.rect`, the textarea renders with
- *     matching `width` and `height` (zero-reflow sizing).
+ * P1: given a mocked `editTarget`, the textarea renders with:
+ *     - `width: 100%` (inherits from wrapper element, not rect.width)
+ *     - `height: contentHeight` (content-area height, not rect.height)
  * P2: textarea font is `fontFamily: 'monospace'` and `fontSize: '0.9em'`.
  *
  * jsdom 26 supports DOMRect natively. Em units are NOT resolved to px
@@ -50,7 +51,7 @@ function mountEditor(
     const ctx: PreviewContextValue = {
         currentFilePath: '/project/test.qmd',
         content: 'test content',
-        editTarget: { poolId: editTargetPoolId, rect: MOCK_RECT },
+        editTarget: { poolId: editTargetPoolId, rect: MOCK_RECT, contentHeight: 72 },
         setEditTarget: vi.fn(),
         commitTextEdit: vi.fn(),
     };
@@ -62,17 +63,17 @@ function mountEditor(
 }
 
 describe('useEditableBlock — P1 sizing', () => {
-    it('renders <textarea> with width matching editTarget.rect.width', () => {
+    it('renders <textarea> with width: 100% (inherits from wrapper element)', () => {
         const { container } = mountEditor(1);
         const ta = container.querySelector('textarea')!;
         expect(ta).not.toBeNull();
-        expect(ta.style.width).toBe('400px');
+        expect(ta.style.width).toBe('100%');
     });
 
-    it('renders <textarea> with height matching editTarget.rect.height', () => {
+    it('renders <textarea> with height matching editTarget.contentHeight', () => {
         const { container } = mountEditor(1);
         const ta = container.querySelector('textarea')!;
-        expect(ta.style.height).toBe('80px');
+        expect(ta.style.height).toBe('72px');
     });
 
     it('renders no <textarea> when poolId does not match editTarget.poolId', () => {

@@ -53,9 +53,13 @@ export function useBlockEditHover(): {
         const poolId = el.getAttribute('data-block-pool-id');
         if (poolId === null || !ctx?.setEditTarget) return;
         const rect = el.getBoundingClientRect();
+        const cs = getComputedStyle(el);
+        const contentHeight = rect.height
+            - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
+            - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth);
         outlineElement(null);
         const id: string | number = /^\d+$/.test(poolId) ? Number(poolId) : poolId;
-        ctx.setEditTarget({ poolId: id, rect });
+        ctx.setEditTarget({ poolId: id, rect, contentHeight });
     }, [ctx]);
 
     const findEditTarget = (e: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>) => {
