@@ -254,6 +254,185 @@ fn aside_div_renders_as_aside_element() {
     assert!(html.contains("An aside note."));
 }
 
+// ── 2e-ii: per-slide footnote coalescing ─────────────────────────────────
+
+/// Strip `<style>…</style>` and `<script>…</script>` blocks so assertions see
+/// only the slide *markup*, not the inlined reveal.js library or the
+/// `quarto-reveal.css` text (whose comments/selectors mention `aside`,
+/// `aside-footnotes`, etc. and would otherwise pollute substring counts).
+fn body_markup(html: &str) -> String {
+    fn drop_blocks(mut s: String, open: &str, close: &str) -> String {
+        loop {
+            let Some(start) = s.find(open) else { break };
+            let Some(rel_end) = s[start..].find(close) else {
+                break;
+            };
+            let end = start + rel_end + close.len();
+            s.replace_range(start..end, "");
+        }
+        s
+    }
+    let s = drop_blocks(html.to_string(), "<style", "</style>");
+    drop_blocks(s, "<script", "</script>")
+}
+
+/// Count occurrences of a (whitespace-insensitive) needle in the slide markup.
+fn count(haystack: &str, needle: &str) -> usize {
+    compact(haystack).matches(&compact(needle)).count()
+}
+
+#[test]
+fn footnotes_coalesce_into_per_slide_aside() {
+    // A single slide with an inline footnote: the footnote must land in an
+    // `<aside>` carrying an `<ol class="aside-footnotes">` on *that* slide, and
+    // there must be NO trailing `role="doc-endnotes"` footnotes slide.
+    let html = body_markup(&render_revealjs(
+        "---\nformat: revealjs\n---\n\n## S\n\nBody text.^[A footnote.]\n",
+    ));
+    assert!(
+        count(&html, "class=\"aside-footnotes\"") >= 1,
+        "footnote must be coalesced into an `<ol class=\"aside-footnotes\">`; html:\n{}",
+        &html[..html.len().min(3000)]
+    );
+    assert!(html.contains("A footnote."), "footnote content preserved");
+    assert!(
+        !html.contains("role=\"doc-endnotes\""),
+        "the trailing footnotes slide must be suppressed when coalescing; html:\n{}",
+        &html[..html.len().min(3000)]
+    );
+    assert!(
+        !html.contains("id=\"footnotes\""),
+        "no document-level footnotes section should remain"
+    );
+}
+
+#[test]
+fn coalesced_footnote_ref_is_plain_superscript() {
+    // The in-text reference becomes a plain `<sup>1</sup>` (per-slide number),
+    // not a link to the (now-removed) footnotes section.
+    let html = body_markup(&render_revealjs(
+        "---\nformat: revealjs\n---\n\n## S\n\nText.^[note]\n",
+    ));
+    assert!(
+        compact(&html).contains("<sup>1</sup>"),
+        "first footnote ref on a slide must render as `<sup>1</sup>`; html:\n{}",
+        &html[..html.len().min(3000)]
+    );
+    // No dangling doc-noteref link should survive coalescing.
+    assert!(
+        !html.contains("role=\"doc-noteref\""),
+        "coalesced refs must not keep the doc-noteref link"
+    );
+    // The per-slide footnote list must drop the backlink.
+    assert!(
+        !html.contains("footnote-back"),
+        "per-slide footnote items must drop the backlink"
+    );
+}
+
+#[test]
+fn footnotes_renumber_per_slide() {
+    // Two slides, each with its own footnote: each slide numbers from 1.
+    let html = body_markup(&render_revealjs(
+        "---\nformat: revealjs\n---\n\n## One\n\nA.^[first]\n\n## Two\n\nB.^[second]\n",
+    ));
+    let c = compact(&html);
+    assert_eq!(
+        c.matches("<sup>1</sup>").count(),
+        2,
+        "each slide's footnote is numbered 1 (per-slide numbering); html:\n{}",
+        &html[..html.len().min(3500)]
+    );
+    assert_eq!(
+        count(&html, "class=\"aside-footnotes\""),
+        2,
+        "one per-slide footnotes list per slide"
+    );
+    assert!(html.contains("first") && html.contains("second"));
+}
+
+#[test]
+fn reference_location_document_keeps_trailing_slide() {
+    // Opt out of coalescing: `reference-location: document` restores the
+    // trailing footnotes section and does NOT coalesce onto the slide.
+    let html = body_markup(&render_revealjs(
+        "---\nformat: revealjs\nreference-location: document\n---\n\n## S\n\nText.^[note]\n",
+    ));
+    assert!(
+        html.contains("role=\"doc-endnotes\"") || html.contains("id=\"footnotes\""),
+        "reference-location: document must keep the trailing footnotes section; html:\n{}",
+        &html[..html.len().min(3000)]
+    );
+    assert!(
+        !html.contains("class=\"aside-footnotes\""),
+        "no per-slide coalescing under reference-location: document"
+    );
+}
+
+#[test]
+fn aside_and_footnote_share_one_coalesced_aside() {
+    // A slide with BOTH an authored `.aside` and a footnote must end up with a
+    // single coalesced `<aside>` (so the two don't overlap as separately
+    // absolutely-positioned elements). The footnotes list lives inside it.
+    let html = body_markup(&render_revealjs(
+        "---\nformat: revealjs\n---\n\n## S\n\nText.^[fn]\n\n::: {.aside}\nAn aside.\n:::\n",
+    ));
+    assert_eq!(
+        count(&html, "<aside"),
+        1,
+        "asides + footnotes coalesce into exactly one `<aside>`; html:\n{}",
+        &html[..html.len().min(3500)]
+    );
+    assert!(
+        html.contains("An aside."),
+        "authored aside content preserved"
+    );
+    assert!(
+        count(&html, "class=\"aside-footnotes\"") >= 1,
+        "the coalesced aside still carries the footnotes list"
+    );
+}
+
+#[test]
+fn slide_without_footnotes_or_asides_gets_no_aside() {
+    let html = body_markup(&render_revealjs(
+        "---\nformat: revealjs\n---\n\n## S\n\nJust text.\n",
+    ));
+    assert!(
+        !html.contains("<aside"),
+        "a slide with no asides/footnotes must not gain an empty aside"
+    );
+}
+
+#[test]
+fn footnotes_coalesce_inside_vertical_stack_slides() {
+    // A `#` section divider builds a horizontal *stack* whose `##` children are
+    // vertical leaf slides. Footnotes must coalesce onto the inner *leaf*
+    // slide, not the enclosing stack section.
+    let html = body_markup(&render_revealjs(
+        "---\nformat: revealjs\n---\n\n# Part\n\n## Sub A\n\nA.^[note a]\n\n## Sub B\n\nB.^[note b]\n",
+    ));
+    let c = compact(&html);
+    // Two leaf slides, each with its own coalesced footnotes list, each
+    // numbered from 1.
+    assert_eq!(
+        count(&html, "class=\"aside-footnotes\""),
+        2,
+        "each vertical leaf slide gets its own footnotes list; html:\n{}",
+        &html[..html.len().min(3500)]
+    );
+    assert_eq!(
+        c.matches("<sup>1</sup>").count(),
+        2,
+        "per-slide numbering resets inside the stack"
+    );
+    assert!(html.contains("note a") && html.contains("note b"));
+    assert!(
+        !html.contains("role=\"doc-endnotes\""),
+        "no trailing footnotes slide"
+    );
+}
+
 #[test]
 fn fragment_data_index_passes_through() {
     let html = render_revealjs(

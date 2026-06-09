@@ -31,6 +31,14 @@
   color: #6c757d;
 }
 
+/* Per-slide footnotes (Phase 2e-ii) — RevealFootnotesTransform coalesces each
+   slide's footnotes into a `<div class="aside-footnotes"><ol>` inside the
+   bottom aside. (`OrderedList` carries no class, so the class rides a wrapping
+   div.) Mirrors Quarto 1's `.reveal .slide aside .aside-footnotes` rules. */
 .reveal .slides aside .aside-footnotes {
   margin-bottom: 0;
+}
+
+.reveal .slides aside .aside-footnotes li:first-of-type {
+  margin-top: 0;
 }

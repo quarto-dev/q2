@@ -1042,6 +1042,13 @@ pub fn build_transform_pipeline(
         pipeline.push(Box::new(SectionizeTransform::new()));
     }
     pipeline.push(Box::new(FootnotesTransform::new()));
+    if is_revealjs {
+        // Per-slide footnote/aside coalescing consumes FootnotesTransform's
+        // resolved output (refs = `Span#fnrefN`, defs in the trailing
+        // `Div#footnotes`), so it must run *after* it. Pure AST → benefits
+        // render and preview alike. See `revealjs::footnotes`.
+        pipeline.push(Box::new(crate::revealjs::RevealFootnotesTransform::new()));
+    }
     // TheoremSugarTransform / ProofSugarTransform run before
     // FloatRefTargetSugarTransform so `Div(#thm-foo .theorem)` and
     // `Div(.proof)` become Theorem / Proof custom nodes first; the

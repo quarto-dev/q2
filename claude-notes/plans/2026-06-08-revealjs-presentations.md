@@ -503,17 +503,39 @@ the current pass-through + reading Q1):
   single-source `quarto-reveal.css` (`.reveal .slides aside.aside{position:absolute;
   bottom:20px;font-size:0.6em;color:#6c757d}`). Render + preview tests; verified
   live. _(strand bd-0zosmiq8 closed.)_
-- **2e-ii — Per-slide footnote coalescing** (class 3, most complex). _strand
-  bd-9aknlx1j._ Collect each slide's footnotes into an `<aside><ol
-  class="aside-footnotes">` at the slide bottom (noteref → `<sup>N</sup>`,
-  per-slide numbering) and **suppress the trailing footnotes slide**; coalesce
-  multiple `.aside`s per slide. Q1 ref: `format-reveal.ts:702-793`. **Current
-  Q2:** footnotes form a trailing `section[role=doc-endnotes]` that
-  `RevealSlidesTransform` turns into a final slide (functional, not Q1-faithful).
-  **Approach:** a reveal-aware AST transform — *pure AST*, so it benefits **both**
-  render and preview at once (like `RevealColumnsTransform`); runs after
-  `FootnotesTransform` (which runs after slide construction, so the slide
-  structure exists). _Not yet started._
+- **2e-ii — Per-slide footnote coalescing** (class 3, most complex). ✅ **DONE +
+  render↔preview browser-verified (2026-06-09).** _strand bd-9aknlx1j._
+  `RevealFootnotesTransform` (`crates/quarto-core/src/revealjs/footnotes.rs`) — a
+  *pure AST* transform that runs **after** `FootnotesTransform` and
+  **redistributes its resolved output**: refs are `Span#fnrefN`, defs are
+  `Div#fnN` in the trailing `Div#footnotes`. Per leaf slide it gathers `.aside`
+  Divs + refs (document order), appends one `Div.aside` holding a `<div>` per
+  authored aside plus a `Div.aside-footnotes > OrderedList` of the referenced
+  defs (backlinks stripped), replaces each ref with a plain
+  `Superscript([Str(perSlideN)])`, and deletes the trailing `Div#footnotes`.
+  Stacks recurse to the inner leaf (leaf = section Div with no child section
+  Divs). **Gating (Q1-faithful):** coalesce by default; `reference-location:
+  document` opts back into the trailing slide (read via `as_plain_text`, since
+  real frontmatter scalars are `PandocInlines`; the same quirk means
+  `FootnotesTransform` always builds its Document-mode section in real renders —
+  exactly the material we redistribute). **Pure AST ⇒ zero new TypeScript:** the
+  coalesced output is plain `Div`/`OrderedList`/`Superscript` the previewRegistry
+  already renders — browser-verified identical structure in `q2 preview`
+  (per-slide `<sup>` 1,2 then fresh 1; one `aside.aside` per slide;
+  `position:absolute` bottom muted; 0 endnotes/backlinks/noterefs). 7 render
+  integration tests (single slide, plain-sup, per-slide renumber, document
+  opt-out, aside+footnote merge, empty slide, **vertical-stack**). Chosen over a
+  pre-`FootnotesTransform` "reveal-native" design because the post-resolution
+  chokepoint is robust to **every** footnote source (inline `^[…]`, `[^id]`,
+  citeproc note-style). _CSS: `aside.aside` (from 2e-i) styles the coalesced
+  aside; added the Q1 `.aside-footnotes li:first-of-type` margin tweak._
+  **⚠ Discovered:** named `[^id]` refs (with `::: ^id` block defs) never resolve
+  in **any** format incl. plain `format: html` — pampa parses them to an empty
+  `Span.quarto-note-reference`, which `FootnotesTransform` (typed
+  `Inline::NoteReference` only) never resolves. Pre-existing, orthogonal; filed
+  **bd-po3gn41h** (discovered-from bd-9aknlx1j). Once it lands, `[^id]`
+  footnotes coalesce automatically (this transform consumes the resolved form
+  regardless of source). Inline `^[…]` already works end-to-end.
 
 **Phase 2 strands:** bd-bea550b0 (epic-child) — 2a bd-f8dpxwle (fragments),
 2b bd-o5sg45fb (notes), 2c bd-34rd2y86 (columns), 2d bd-fy793w6i (incremental),
