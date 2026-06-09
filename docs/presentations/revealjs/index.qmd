@@ -52,7 +52,7 @@ format: revealjs
 - Count sheep
 ```
 
-::: {.q2-website-example-iframe example="presentations/01-creating-slides"}
+::: {.embed-example-iframe file="/examples/presentations/01-creating-slides/slides.html"}
 [Example: 01-creating-slides](https://github.com/quarto-dev/q2/tree/main/examples/presentations/01-creating-slides)
 :::
 
@@ -76,7 +76,7 @@ Content.
 An untitled slide, created with a horizontal rule.
 ```
 
-::: {.q2-website-example-iframe example="presentations/02-sections"}
+::: {.embed-example-iframe file="/examples/presentations/02-sections/slides.html"}
 [Example: 02-sections](https://github.com/quarto-dev/q2/tree/main/examples/presentations/02-sections)
 :::
 
@@ -133,7 +133,7 @@ Shown first.
 :::
 ```
 
-::: {.q2-website-example-iframe example="presentations/03-fragments"}
+::: {.embed-example-iframe file="/examples/presentations/03-fragments/slides.html"}
 [Example: 03-fragments](https://github.com/quarto-dev/q2/tree/main/examples/presentations/03-fragments)
 :::
 
@@ -162,7 +162,7 @@ off:
 :::
 ```
 
-::: {.q2-website-example-iframe example="presentations/04-incremental-lists"}
+::: {.embed-example-iframe file="/examples/presentations/04-incremental-lists/slides.html"}
 [Example: 04-incremental-lists](https://github.com/quarto-dev/q2/tree/main/examples/presentations/04-incremental-lists)
 :::
 
@@ -185,7 +185,7 @@ Right column.
 ::::
 ```
 
-::: {.q2-website-example-iframe example="presentations/05-columns"}
+::: {.embed-example-iframe file="/examples/presentations/05-columns/slides.html"}
 [Example: 05-columns](https://github.com/quarto-dev/q2/tree/main/examples/presentations/05-columns)
 :::
 
@@ -204,7 +204,7 @@ Speaker notes go here.
 :::
 ```
 
-::: {.q2-website-example-iframe example="presentations/06-speaker-notes"}
+::: {.embed-example-iframe file="/examples/presentations/06-speaker-notes/slides.html"}
 [Example: 06-speaker-notes](https://github.com/quarto-dev/q2/tree/main/examples/presentations/06-speaker-notes)
 :::
 
@@ -228,7 +228,7 @@ Some commentary of more peripheral interest.
 :::
 ```
 
-::: {.q2-website-example-iframe example="presentations/07-asides"}
+::: {.embed-example-iframe file="/examples/presentations/07-asides/slides.html"}
 [Example: 07-asides](https://github.com/quarto-dev/q2/tree/main/examples/presentations/07-asides)
 :::
 
@@ -249,7 +249,7 @@ An aside and the footnotes share the bottom of the slide.
 :::
 ```
 
-::: {.q2-website-example-iframe example="presentations/08-footnotes"}
+::: {.embed-example-iframe file="/examples/presentations/08-footnotes/slides.html"}
 [Example: 08-footnotes](https://github.com/quarto-dev/q2/tree/main/examples/presentations/08-footnotes)
 :::
 

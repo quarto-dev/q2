@@ -14,6 +14,7 @@
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
 //! - `build-all`: Fresh-clone build orchestration (npm install + hub-client + Rust workspace)
 //! - `build-trace-viewer`: Build just the trace-viewer SPA
+//! - `stage-doc-examples`: Render `examples/manifest.yml` projects into `docs/examples/`
 
 mod braid_snapshot;
 mod build_all;
@@ -22,6 +23,7 @@ mod build_trace_viewer;
 mod create_worktree;
 mod dev_setup;
 mod lint;
+mod stage_doc_examples;
 mod switch_task;
 mod test;
 mod treesitter_crlf;
@@ -190,6 +192,15 @@ enum Command {
         no_deny_warnings: bool,
     },
 
+    /// Stage doc-example projects into the docs site for `.embed-example-iframe`.
+    ///
+    /// Renders each project listed in `examples/manifest.yml` with `q2` and
+    /// copies its static output (`*.html` + `*_files/`) into
+    /// `docs/examples/<entry>/`, where the docs `.embed-example-iframe`
+    /// placeholders point. The staged output is generated and gitignored —
+    /// regenerate with this command; never commit it. See bd-z1smhvuo.
+    StageDocExamples {},
+
     /// Build just the trace-viewer SPA.
     ///
     /// Faster than `build-all` when only the SPA source has changed. The
@@ -304,6 +315,7 @@ fn main() -> Result<()> {
             };
             verify::run(&config)
         }
+        Command::StageDocExamples {} => stage_doc_examples::run(),
         Command::BuildTraceViewer {} => build_trace_viewer::run(),
         Command::BuildQ2PreviewSpa {} => build_q2_preview_spa::run(),
         Command::BuildAll {

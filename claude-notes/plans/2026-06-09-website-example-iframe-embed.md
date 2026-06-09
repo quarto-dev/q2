@@ -227,20 +227,39 @@ cross-platform rule) vs. a plain shell script in `scripts/` (simplest, matches
 the user's "just a regular script" phrasing, but not Windows-friendly). Leaning
 xtask.
 
+**Resolved (user, 2026-06-09):** staging form = `cargo xtask`; gated by an
+explicit `examples/manifest.yml` allow-list (no globs) so a stray project is
+never rendered/published by accident.
+
+**Relativization (user, 2026-06-09):** the emitted iframe `src` must NOT be the
+naked project-absolute `/examples/...` — it must be rewritten to a
+**page-relative** URL based on the page's depth, exactly like other Quarto
+links, so the site is portable under any deploy subpath. Implemented via a new
+`resolve_static_resource_href` (sibling of `resolve_doc_relative_href`, but no
+index lookup / no `.qmd` diagnostic — just normalize + `page_url_for`). The
+transform threads the page source + resolver and routes `file=` through it.
+
 Tasks:
-- [ ] Staging mechanism (form per the open question): render each
-  `examples/presentations/*` and copy `slides.html` + `slides_files/` into
-  `docs/examples/presentations/<name>/`.
-- [ ] `docs/.gitignore`: ignore the generated `examples/` staging tree.
-- [ ] `docs/_quarto.yml`: `project.resources: [examples]`.
-- [ ] Migrate the 8 placeholders in `docs/presentations/revealjs/index.qmd`
-  from `.q2-website-example-iframe`/`example=` to `.embed-example-iframe`/`file=`.
-- [ ] End-to-end (render): stage, then `q2 render docs/` → open
-  `_site/presentations/revealjs/index.html`, confirm each iframe loads the
-  staged deck, the staged asset (+ `slides_files/`) is under `_site/examples/`,
-  and the GitHub links work.
+- [x] `examples/manifest.yml` allow-list (8 presentation projects).
+- [x] `cargo xtask stage-doc-examples`: render each manifest project with `q2`
+  and copy its `*.html` + `*_files/` output into `docs/examples/<entry>/`.
+- [x] `docs/.gitignore`: ignore the generated `/examples/` staging tree.
+- [x] `docs/_quarto.yml`: `project.resources: [examples]`.
+- [x] Migrate the 8 placeholders in `docs/presentations/revealjs/index.qmd`
+  to `.embed-example-iframe`/`file="/examples/presentations/<name>/slides.html"`.
+- [x] `resolve_static_resource_href` helper + transform threads source/resolver
+  so the iframe `src` is page-relative (`../../examples/...`). Unit tests on
+  both the helper and the transform (depth-2 page → `../../`).
+- [x] End-to-end (render): staged, `q2 render docs/`, served `_site/`, and
+  **browser-verified** all 8 iframes load real reveal decks; iframe `src` is
+  `../../examples/...` (depth-2 relative, no host-absolute `/examples`); staged
+  decks (+ `slides_files/`) land under `_site/examples/`; source links work.
+  2327 workspace tests green.
 - [ ] End-to-end (preview): `q2 preview docs/` → in a browser, confirm each
-  iframe loads the static deck from the VFS (Decision 4's narrow case).
+  iframe loads the static deck from the VFS (Decision 4's narrow case). **Needs
+  the WASM rebuilt** (the new transform lives in `quarto-core`, which the
+  preview WASM embeds) — `npm run build:wasm` → `cargo xtask build-q2-preview-spa`
+  → `cargo build --bin q2`.
 
 ### Phase 3 — Pre-render staging script (separate deliverable)
 - [ ] Script that renders `examples/**` and stages static output into the

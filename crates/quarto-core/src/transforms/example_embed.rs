@@ -52,7 +52,24 @@ use quarto_source_map::SourceInfo;
 
 use crate::Result;
 use crate::render::RenderContext;
+use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::AstTransform;
+use crate::transforms::navigation_active::page_relative_source;
+use crate::transforms::navigation_href::resolve_static_resource_href;
+
+/// Page context needed to relativize the iframe `src`: the page's
+/// project-relative source path and the optional per-page resolver.
+/// Copy so it threads cheaply through the recursive walk.
+#[derive(Clone, Copy)]
+struct Resolve<'a> {
+    /// Project-relative source path of the page being rendered, e.g.
+    /// `presentations/revealjs/index.qmd`. Anchors `..`/leading-`/`
+    /// normalization of the `file=` target.
+    source: &'a str,
+    /// Per-page resolver. `None` for standalone renders / unit tests —
+    /// the `file=` value is then emitted verbatim.
+    resolver: Option<&'a ResourceResolverContext>,
+}
 
 /// Class a doc author writes to request an example embed. Deliberately
 /// verbose so it is never typed by accident — a built-in filter silently
@@ -94,43 +111,51 @@ impl AstTransform for ExampleEmbedTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        let mut diagnostics = Vec::new();
-        transform_blocks(&mut ast.blocks, &mut diagnostics);
-        ctx.diagnostics.extend(diagnostics);
+        // Compute the page anchor + borrow the resolver before taking
+        // diagnostics out, so we never hold a `&mut ctx` and a `&ctx`
+        // at once (mirrors `LinkRewriteTransform`).
+        let source = page_relative_source(ctx);
+        let mut diagnostics = std::mem::take(&mut ctx.diagnostics);
+        let resolve = Resolve {
+            source: &source,
+            resolver: ctx.resource_resolver.as_ref(),
+        };
+        transform_blocks(&mut ast.blocks, resolve, &mut diagnostics);
+        ctx.diagnostics = diagnostics;
         Ok(())
     }
 }
 
 /// Walk a block vector, rewriting any matching Divs in place.
-fn transform_blocks(blocks: &mut Vec<Block>, diags: &mut Vec<DiagnosticMessage>) {
+fn transform_blocks(blocks: &mut Vec<Block>, resolve: Resolve, diags: &mut Vec<DiagnosticMessage>) {
     for block in blocks.iter_mut() {
-        transform_block(block, diags);
+        transform_block(block, resolve, diags);
     }
 }
 
 /// Recurse into a block's children, then rewrite the block itself if it
 /// is a matching embed placeholder.
-fn transform_block(block: &mut Block, diags: &mut Vec<DiagnosticMessage>) {
+fn transform_block(block: &mut Block, resolve: Resolve, diags: &mut Vec<DiagnosticMessage>) {
     // Recurse into nested blocks first (an embed can live inside a
     // section Div, blockquote, list item, etc.).
     match block {
-        Block::BlockQuote(bq) => transform_blocks(&mut bq.content, diags),
-        Block::Div(div) => transform_blocks(&mut div.content, diags),
-        Block::Figure(fig) => transform_blocks(&mut fig.content, diags),
+        Block::BlockQuote(bq) => transform_blocks(&mut bq.content, resolve, diags),
+        Block::Div(div) => transform_blocks(&mut div.content, resolve, diags),
+        Block::Figure(fig) => transform_blocks(&mut fig.content, resolve, diags),
         Block::OrderedList(ol) => {
             for item in &mut ol.content {
-                transform_blocks(item, diags);
+                transform_blocks(item, resolve, diags);
             }
         }
         Block::BulletList(bl) => {
             for item in &mut bl.content {
-                transform_blocks(item, diags);
+                transform_blocks(item, resolve, diags);
             }
         }
         Block::DefinitionList(dl) => {
             for (_term, defs) in &mut dl.content {
                 for def in defs {
-                    transform_blocks(def, diags);
+                    transform_blocks(def, resolve, diags);
                 }
             }
         }
@@ -138,18 +163,18 @@ fn transform_block(block: &mut Block, diags: &mut Vec<DiagnosticMessage>) {
             for body in &mut table.bodies {
                 for row in &mut body.body {
                     for cell in &mut row.cells {
-                        transform_blocks(&mut cell.content, diags);
+                        transform_blocks(&mut cell.content, resolve, diags);
                     }
                 }
             }
             for row in &mut table.head.rows {
                 for cell in &mut row.cells {
-                    transform_blocks(&mut cell.content, diags);
+                    transform_blocks(&mut cell.content, resolve, diags);
                 }
             }
             for row in &mut table.foot.rows {
                 for cell in &mut row.cells {
-                    transform_blocks(&mut cell.content, diags);
+                    transform_blocks(&mut cell.content, resolve, diags);
                 }
             }
         }
@@ -160,7 +185,7 @@ fn transform_block(block: &mut Block, diags: &mut Vec<DiagnosticMessage>) {
     if let Block::Div(div) = block
         && div.attr.1.iter().any(|c| c == MATCH_CLASS)
     {
-        let rewritten = rewrite_embed(div, diags);
+        let rewritten = rewrite_embed(div, resolve, diags);
         *block = Block::Div(rewritten);
     }
 }
@@ -168,7 +193,7 @@ fn transform_block(block: &mut Block, diags: &mut Vec<DiagnosticMessage>) {
 /// Rewrite a matched placeholder Div into the container + iframe + source
 /// structure. On a missing/invalid `file=`, emits a diagnostic and
 /// degrades to just the fallback link (no iframe).
-fn rewrite_embed(div: &Div, diags: &mut Vec<DiagnosticMessage>) -> Div {
+fn rewrite_embed(div: &Div, resolve: Resolve, diags: &mut Vec<DiagnosticMessage>) -> Div {
     let file = div
         .attr
         .2
@@ -211,17 +236,25 @@ fn rewrite_embed(div: &Div, diags: &mut Vec<DiagnosticMessage>) -> Div {
         return container(div, vec![fallback]);
     }
 
-    let iframe = iframe_block(&file, div, &div.source_info);
+    let iframe = iframe_block(&file, div, &div.source_info, resolve);
     container(div, vec![iframe, fallback])
 }
 
 /// Build the `<iframe>` RawBlock for a validated static `file` target.
 ///
+/// The `src` is the `file=` value run through
+/// [`resolve_static_resource_href`] so it is **page-relative** (e.g.
+/// `../../examples/x/slides.html` from a depth-2 page), not a
+/// host-absolute `/examples/...` that breaks under a deploy subpath. In
+/// the hub-client preview the same call yields a VFS-root URL; in a
+/// standalone render (no resolver) the value is emitted verbatim.
+///
 /// Sizing: an optional `height=` attribute on the placeholder overrides
 /// the default; otherwise the frame fills its width at a 16:9 aspect
 /// ratio (the common deck shape). Both are inline styles so the feature
 /// is usable before any SCSS lands.
-fn iframe_block(file: &str, div: &Div, source_info: &SourceInfo) -> Block {
+fn iframe_block(file: &str, div: &Div, source_info: &SourceInfo, resolve: Resolve) -> Block {
+    let src = resolve_static_resource_href(file, resolve.source, resolve.resolver);
     let style = match div
         .attr
         .2
@@ -243,7 +276,7 @@ fn iframe_block(file: &str, div: &Div, source_info: &SourceInfo) -> Block {
     let html = format!(
         "<iframe class=\"{MATCH_CLASS}\" src=\"{src}\"{title} \
          style=\"{style}\" loading=\"lazy\" allowfullscreen></iframe>",
-        src = attr_escape(file),
+        src = attr_escape(&src),
         title = title,
         style = attr_escape_style(&style),
     );
@@ -407,6 +440,42 @@ mod tests {
         (ast, ctx.diagnostics)
     }
 
+    /// Run the transform with a website resolver pinned at a given page,
+    /// so the iframe `src` is relativized against the page's depth.
+    async fn run_at_page(blocks: Vec<Block>, doc_path: &str, output_href: &str) -> Pandoc {
+        let project = ProjectContext {
+            dir: std::path::PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: false,
+            files: vec![DocumentInfo::from_path(doc_path)],
+            output_dir: std::path::PathBuf::from("/project/_site"),
+        };
+        let doc = DocumentInfo::from_path(doc_path);
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let page_output = format!("/project/_site/{}", output_href);
+        let stem = std::path::Path::new(output_href)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("index");
+        ctx.resource_resolver = Some(crate::resource_resolver::ResourceResolverContext::website(
+            "/project/_site",
+            page_output,
+            "site_libs",
+            stem,
+        ));
+        let mut ast = Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks,
+        };
+        ExampleEmbedTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        ast
+    }
+
     /// Recursively collect all RawBlock html text under a block.
     fn collect_raw_html(block: &Block) -> String {
         let mut out = String::new();
@@ -488,6 +557,29 @@ mod tests {
         assert!(
             html.contains(&format!("class=\"{MATCH_CLASS}\"")),
             "iframe should carry the `{MATCH_CLASS}` class; got: {html}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_src_relativized_with_resolver_at_nested_page() {
+        let ast = run_at_page(
+            vec![placeholder(&[(
+                "file",
+                "/examples/presentations/03-fragments/slides.html",
+            )])],
+            "/project/presentations/revealjs/index.qmd",
+            "presentations/revealjs/index.html",
+        )
+        .await;
+        let html = collect_raw_html(&ast.blocks[0]);
+        assert!(
+            html.contains("src=\"../../examples/presentations/03-fragments/slides.html\""),
+            "iframe src must be page-relative (../../) for a depth-2 page, not host-absolute; \
+             got: {html}"
+        );
+        assert!(
+            !html.contains("src=\"/examples"),
+            "must not emit a host-absolute /examples src; got: {html}"
         );
     }
 

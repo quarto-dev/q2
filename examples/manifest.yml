@@ -1,0 +1,30 @@
+# examples/manifest.yml
+#
+# Allow-list of example projects whose RENDERED output is staged into the
+# docs site for `.embed-example-iframe` embeds (bd-z1smhvuo). This is an
+# explicit list, NOT a glob: a stray directory under `examples/` is never
+# rendered or published by accident.
+#
+# Each entry is a path relative to this `examples/` directory. Running
+#
+#     cargo xtask stage-doc-examples
+#
+# renders each listed project with `q2` and copies its static output (the
+# top-level `*.html` files and `*_files/` directories) into
+# `docs/examples/<entry>/`. The docs pages then embed it with, e.g.:
+#
+#     ::: {.embed-example-iframe file="/examples/presentations/03-fragments/slides.html"}
+#     [View source](https://github.com/quarto-dev/q2/tree/main/examples/presentations/03-fragments)
+#     :::
+#
+# The staged output under `docs/examples/` is generated and gitignored —
+# regenerate it with the command above; never commit it.
+projects:
+  - presentations/01-creating-slides
+  - presentations/02-sections
+  - presentations/03-fragments
+  - presentations/04-incremental-lists
+  - presentations/05-columns
+  - presentations/06-speaker-notes
+  - presentations/07-asides
+  - presentations/08-footnotes

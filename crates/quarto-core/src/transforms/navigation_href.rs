@@ -341,6 +341,59 @@ pub fn resolve_doc_relative_href(
     raw.to_string()
 }
 
+/// Resolve a **static-resource** href to a page-relative URL.
+///
+/// Companion to [`resolve_doc_relative_href`] for targets that are
+/// *not* project documents — a pre-rendered `.html`, an image, any
+/// static asset copied into the site. Unlike the doc helper there is
+/// **no [`ProjectIndex`] lookup and no `.qmd` miss diagnostic**: the
+/// target is a concrete file path, so we just normalize it to a
+/// project-root-relative path and ask the resolver for the
+/// page-relative URL.
+///
+/// | Helper | Target | Index lookup | Output (with resolver) |
+/// |--------|--------|--------------|------------------------|
+/// | `resolve_doc_relative_href` | project `.qmd` | yes | page-relative |
+/// | `resolve_static_resource_href` | static asset | no | page-relative |
+///
+/// Algorithm:
+/// 1. External URLs and fragment-only anchors pass through unchanged.
+/// 2. Split off any `?query` / `#fragment` tail; re-append at the end.
+/// 3. Normalize `path_part` against `dirname(source_relative)` with
+///    [`resolve_to_project_root`] (handles leading `/`, `..`, `.`).
+/// 4. With a resolver, return [`ResourceResolverContext::page_url_for`]
+///    of the normalized path (page-relative in website mode; VFS-root
+///    URL in the hub-client preview; verbatim in single-doc mode),
+///    plus the tail.
+/// 5. Without a resolver (standalone render / out-of-band callers),
+///    return the raw href verbatim — there's no page to relativize
+///    against.
+///
+/// This is what keeps an iframe `src` (or any embedded static path)
+/// portable: a page two directories deep emits `../../assets/x.html`
+/// rather than a host-absolute `/assets/x.html` that breaks under a
+/// deploy subpath.
+pub fn resolve_static_resource_href(
+    raw: &str,
+    source_relative: &str,
+    resolver: Option<&ResourceResolverContext>,
+) -> String {
+    if is_external(raw) || raw.starts_with('#') {
+        return raw.to_string();
+    }
+    let (path_part, tail) = match raw.find(|c| c == '#' || c == '?') {
+        Some(i) => (&raw[..i], &raw[i..]),
+        None => (raw, ""),
+    };
+    match resolver {
+        Some(r) => {
+            let project_relative = resolve_to_project_root(source_relative, path_part);
+            format!("{}{}", r.page_url_for(&project_relative), tail)
+        }
+        None => raw.to_string(),
+    }
+}
+
 /// Resolve a navigation href to its project-root-relative form using
 /// the source location of the YAML scalar that produced it.
 ///
@@ -1446,5 +1499,70 @@ mod tests {
             "../about.html?x=1#bio"
         );
         assert!(diags.is_empty());
+    }
+
+    // ---- resolve_static_resource_href (bd-z1smhvuo) ----
+    //
+    // Static-asset relativization: no index, no .qmd diagnostic — just
+    // normalize + page_url_for. Used by ExampleEmbedTransform for the
+    // iframe `src`.
+
+    /// External URL and fragment-only anchor pass through unchanged.
+    #[test]
+    fn static_href_external_and_fragment_pass_through() {
+        let r = website_resolver("index.html");
+        assert_eq!(
+            resolve_static_resource_href("https://example.com/x.html", "index.qmd", Some(&r)),
+            "https://example.com/x.html"
+        );
+        assert_eq!(
+            resolve_static_resource_href("#sec", "index.qmd", Some(&r)),
+            "#sec"
+        );
+    }
+
+    /// No resolver (standalone render) → raw verbatim.
+    #[test]
+    fn static_href_no_resolver_passes_raw() {
+        assert_eq!(
+            resolve_static_resource_href("/examples/x/slides.html", "index.qmd", None),
+            "/examples/x/slides.html"
+        );
+    }
+
+    /// Project-absolute target from a depth-2 page relativizes with the
+    /// right number of `../` segments — this is the core portability
+    /// guarantee (no host-absolute `/examples/...`).
+    #[test]
+    fn static_href_absolute_relativizes_for_nested_page() {
+        let r = website_resolver("presentations/revealjs/index.html");
+        assert_eq!(
+            resolve_static_resource_href(
+                "/examples/presentations/03-fragments/slides.html",
+                "presentations/revealjs/index.qmd",
+                Some(&r)
+            ),
+            "../../examples/presentations/03-fragments/slides.html"
+        );
+    }
+
+    /// Root-level page relativizes to a bare relative path (no `../`).
+    #[test]
+    fn static_href_absolute_relativizes_for_root_page() {
+        let r = website_resolver("index.html");
+        assert_eq!(
+            resolve_static_resource_href("/examples/x/slides.html", "index.qmd", Some(&r)),
+            "examples/x/slides.html"
+        );
+    }
+
+    /// Query / fragment tail is preserved across the rewrite.
+    #[test]
+    fn static_href_preserves_tail() {
+        let r = website_resolver("docs/api.html");
+        assert_eq!(
+            resolve_static_resource_href("/assets/app.html#top", "docs/api.qmd", Some(&r)),
+            "../assets/app.html#top"
+        );
     }
 }
