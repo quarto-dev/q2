@@ -199,19 +199,46 @@ but the page would render a 404 frame). Coupling the migration to staging keeps
 the docs build honest.
 
 ### Phase 2 — Stage example output + resource-copy + migrate docs (Axis 2)
-An example's output is a **directory** (`slides.html` + `slides_files/…`), not a
-single file — confirmed by rendering `examples/presentations/03-fragments`. So
-copying must be **directory-level** (project `resources:`), not the single-file
-resource collector.
-- [ ] Decide the in-project staging location (lean: `docs/examples/<cat>/<name>/`)
-  and the `file=` spelling (lean: project-absolute `/examples/<cat>/<name>/slides.html`).
-- [ ] Make the staged dir reach `_site/` (project `resources:` declaration, or
-  teach the transform/orchestrator to register the embed target's dir).
+
+**Investigation results (2026-06-09):**
+- An example's output is a **directory** (`slides.html` + `slides_files/…`), not
+  a single self-contained file — so copying must be **directory-level**.
+- Q2 copies static (non-input) files into `_site/` **only** via an explicit
+  `project.resources:` declaration (`project_resources.rs`); there is no blanket
+  auto-copy. → Phase 2 needs a `resources:` entry.
+- Repo convention is **commit source, never commit rendered output**: `docs/_site/`
+  is untracked and example projects commit only `slides.qmd`/`_quarto.yml`/`README.md`
+  (the rendered `slides.html`/`slides_files/` are `.gitignore`d). → Staged assets
+  are **regenerated, not committed** (matches the user's "a script we'll have to
+  remember to run").
+- Project resources must live **inside the project root** (that's error `Q-5-1`),
+  and `examples/` sits at the *repo* root, outside `docs/`. → Staged output must
+  land **under `docs/`** (e.g. `docs/examples/<cat>/<name>/`); the root `examples/`
+  *sources* stay where they are.
+
+**Settled design:**
+- Staging location: `docs/examples/presentations/<name>/` (gitignored).
+- `file=` spelling: project-absolute `/examples/presentations/<name>/slides.html`.
+- Copy surface: `project.resources: [examples]` in `docs/_quarto.yml`.
+
+**OPEN (user's call): the staging-script form** — a `cargo xtask` subcommand
+(cross-platform Rust, discoverable, fits repo tooling; repo has a hard
+cross-platform rule) vs. a plain shell script in `scripts/` (simplest, matches
+the user's "just a regular script" phrasing, but not Windows-friendly). Leaning
+xtask.
+
+Tasks:
+- [ ] Staging mechanism (form per the open question): render each
+  `examples/presentations/*` and copy `slides.html` + `slides_files/` into
+  `docs/examples/presentations/<name>/`.
+- [ ] `docs/.gitignore`: ignore the generated `examples/` staging tree.
+- [ ] `docs/_quarto.yml`: `project.resources: [examples]`.
 - [ ] Migrate the 8 placeholders in `docs/presentations/revealjs/index.qmd`
   from `.q2-website-example-iframe`/`example=` to `.embed-example-iframe`/`file=`.
-- [ ] End-to-end (render): `q2 render docs/` → open
+- [ ] End-to-end (render): stage, then `q2 render docs/` → open
   `_site/presentations/revealjs/index.html`, confirm each iframe loads the
-  staged deck and the GitHub links work; confirm the staged asset is in `_site/`.
+  staged deck, the staged asset (+ `slides_files/`) is under `_site/examples/`,
+  and the GitHub links work.
 - [ ] End-to-end (preview): `q2 preview docs/` → in a browser, confirm each
   iframe loads the static deck from the VFS (Decision 4's narrow case).
 
