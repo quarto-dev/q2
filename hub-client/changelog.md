@@ -19,30 +19,13 @@ be in reverse chronological order (latest first).
 
 - [`fa2cf019`](https://github.com/quarto-dev/q2/commits/fa2cf019): Opening a document after the sign-in session has expired now cleanly aborts and triggers a silent renewal, instead of opening the document with a randomized collaboration identity.
 - [`465de01f`](https://github.com/quarto-dev/q2/commits/465de01f): An expired sign-in no longer presents as a permanent "working offline" state — the client now detects the rejected session, attempts silent renewal, and returns to the login screen with a "session expired" message; genuine network outages keep offline editing intact.
-- [`b9094c23`](https://github.com/quarto-dev/q2/commits/b9094c23): Add Plan 3 gate and e2e tests (Descendable affordance, Opaque exclusion, nested-div edit round-trip).
-- [`d73a454d`](https://github.com/quarto-dev/q2/commits/d73a454d): Enable in-place editing for nested blocks (inside fenced divs, list items, blockquotes, callouts); extend hover ring to Figure and LineBlock.
+- [`6b8fb166`](https://github.com/quarto-dev/q2/commits/6b8fb166): Paragraphs, headings, and nested content blocks (inside callouts, fenced divs, list items, and blockquotes) in q2-preview are now click-to-edit — click any block to open an inline editor, make changes, and they save back to the QMD source automatically.
+- [`13380eb8`](https://github.com/quarto-dev/q2/commits/13380eb8): Render-component authors can now access authorship data via `useNodeAttribution` and `useCurrentActor` on `__Q2_PREVIEW_RENDERER__`, enabling components that respond to who wrote each node (e.g. toggling a reactji the current user added, per-author accent colours). Requires auth + Attribution toggle on.
 
 ### 2026-06-09
 
 - [`57bc49cf`](https://github.com/quarto-dev/q2/commits/57bc49cf): Preview renders no longer re-copy unchanged artifacts (theme CSS, fonts, shared JS) into the virtual filesystem on every keystroke — byte-identical re-writes are now skipped.
 - [`749064d1`](https://github.com/quarto-dev/q2/commits/749064d1): Fix identity name defaulting to a random "Adjective Animal" instead of the authenticated user's name when a new project set is created.
-- [`69ab125e`](https://github.com/quarto-dev/q2/commits/69ab125e): Add `?test_actor=<32-hex>` query-param override for dev un-reactji testing (DEV/VITE_E2E builds only, tree-shaken from production).
-- [`e3f9188e`](https://github.com/quarto-dev/q2/commits/e3f9188e): Fix `commitSubtreeEdit` round-trip: wrap single block in a Pandoc document and use lenient reader in `apply_node_edit` so render-component edits (reactji add/remove) persist through Automerge.
-- [`ac179a17`](https://github.com/quarto-dev/q2/commits/ac179a17): Fix `__QUARTO_TEST_ACTOR_ID__` override to work in VITE_E2E builds (was DEV-only, blocking e2e currentActor tests).
-- [`0b986554`](https://github.com/quarto-dev/q2/commits/0b986554): Plan 2b — two-channel edit API (text/subtree), `useBlockEditHover` delegated affordance, `useEditableBlock` shared editor, `usePreviewEdit` for render-component authors, `data-block-pool-id` affordance on all editable block types.
-
-### 2026-06-07
-
-- [`698717e`](https://github.com/quarto-dev/q2/commits/698717e): Wire renderedContent and editTarget through UpdateAstPayload → PreviewRoot → PreviewContext so editable blocks can access source content and track the active edit target.
-- [`e8650aa`](https://github.com/quarto-dev/q2/commits/e8650aa): Add WASM integration tests for slice fidelity, surrounding-verbatim round-trips, inline markdown, heading, and no-trailing-newline parse.
-
-### 2026-06-06
-
-- [`816c16b`](https://github.com/quarto-dev/q2/commits/816c16b): Inline edits in q2-preview now write back correctly when Monaco has not yet mounted (e.g. switching to Preview view before Monaco's CDN scripts load).
-
-### 2026-06-04
-
-- [`d338251`](https://github.com/quarto-dev/q2/commits/d338251): q2-preview paragraphs and headings are now click-to-edit: clicking a block opens an inline editor and commits the text back to the source QMD.
 
 ### 2026-06-02
 
@@ -50,7 +33,6 @@ be in reverse chronological order (latest first).
 
 ### 2026-05-27
 
-- [`75a136bc`](https://github.com/quarto-dev/q2/commits/75a136bc): Expose `useNodeAttribution` and `useCurrentActor` on `__Q2_PREVIEW_RENDERER__` so user TSX render-components overrides can drive authorship-aware UI (e.g. reactji "remove mine" toggling and per-actor accent colours). Behaviour is opt-in: requires auth + Attribution toggle on. See the reactji-authorship demo at `crates/quarto/tests/smoke-all/q2-preview/render-components-comment/`.
 - [`9aa29ee1`](https://github.com/quarto-dev/q2/commits/9aa29ee1): View toggle buttons now order markup-left / preview-right (matching the editor-left / preview-right layout) instead of preview-left / markup-right.
 
 ### 2026-05-26
