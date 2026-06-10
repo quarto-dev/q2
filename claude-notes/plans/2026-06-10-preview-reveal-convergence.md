@@ -3,7 +3,9 @@
 **Strand:** bd-ibqkf9ry
 **Related:** bd-jij5gge2 (render-side linked assets — done), bd-kw93 (q2-preview epic)
 **Date:** 2026-06-10
-**Status:** DRAFT — iterating. **Do not implement until the user gives the go-ahead.**
+**Status:** DONE — all prongs (A–D) implemented + browser-verified; full
+`cargo xtask verify` green. Not pushed (awaiting review). Sibling follow-up
+[Q-E1] (HTML-preview CSS-codepath drift) remains a candidate strand.
 
 ## Why preview reveal is React (and stays React)
 
