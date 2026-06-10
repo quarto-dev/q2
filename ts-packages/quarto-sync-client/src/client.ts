@@ -110,6 +110,24 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   // Resolved file filter
   const astFileFilter = astOptions?.fileFilter ?? defaultFileFilter;
 
+  // Set up browser online/offline event listeners once at client creation.
+  // These persist across connect/disconnect cycles and are NOT added to
+  // state.cleanupFns (which runs on disconnect). They'll be cleaned up
+  // naturally when the page unloads or the window is destroyed.
+  if (typeof window !== 'undefined') {
+    const onBrowserOffline = () => {
+      console.log('Browser offline event fired');
+      callbacks.onConnectionChange?.(false);
+    };
+    const onBrowserOnline = () => {
+      console.log('Browser online event fired');
+      callbacks.onConnectionChange?.(true);
+    };
+
+    window.addEventListener('offline', onBrowserOffline);
+    window.addEventListener('online', onBrowserOnline);
+  }
+
   /**
    * Try parsing a text file and fire onASTChanged if successful.
    * Parse failures (null return) are logged. Exceptions from the parser
@@ -782,10 +800,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
-   * Check if connected.
+   * Check if connected to the sync server and browser is online.
    */
   function isConnected(): boolean {
-    return state.repo !== null && state.indexHandle !== null;
+    return (
+      state.repo !== null &&
+      state.indexHandle !== null &&
+      (typeof navigator === 'undefined' || navigator.onLine)
+    );
   }
 
   /**

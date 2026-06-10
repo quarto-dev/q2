@@ -13,6 +13,8 @@ export interface AuthState {
   email: string;
   name: string | null;
   picture: string | null;
+  /** Token expiry in ms-epoch (from the server's `exp`). Absent on older servers. */
+  expiresAt?: number;
 }
 
 /** Raw JSON shape from GET /auth/me (snake_case). */
@@ -20,6 +22,8 @@ interface AuthMeResponse {
   email: string;
   name: string | null;
   picture: string | null;
+  /** Token expiry in epoch seconds. */
+  exp?: number;
 }
 
 /** Fetch user info from the server. Returns null on 401 (not authenticated). */
@@ -32,6 +36,7 @@ export async function fetchAuthMe(): Promise<AuthState | null> {
     email: data.email,
     name: data.name,
     picture: data.picture,
+    expiresAt: data.exp ? data.exp * 1000 : undefined,
   };
 }
 
@@ -58,6 +63,32 @@ export async function fetchActorId(projectId: string): Promise<string | null> {
   if (!res.ok) throw new Error(`/auth/actor failed: ${res.status}`);
   const data = await res.json() as AuthActorResponse;
   return data.actor_id;
+}
+
+/**
+ * Resolve the per-project actor ID for a document open. Three-valued contract
+ * the callers depend on:
+ *   - string    → actor ID resolved; open with it
+ *   - undefined → auth disabled; open with no (random) actor ID
+ *   - null      → auth failure (401/403); abandon the open
+ *
+ * On auth failure we fire `onSessionExpired` (a silent refresh) and return
+ * `null` so callers' `=== null` guard abandons this attempt; One Tap either
+ * restores the session in place or eventually clears auth via its onError path.
+ * Throws propagate (e.g. 500) so callers' try/catch surfaces a connection error.
+ */
+export async function resolveActorId(
+  indexDocId: string,
+  authEnabled: boolean,
+  onSessionExpired: () => void,
+): Promise<string | undefined | null> {
+  if (!authEnabled) return undefined;
+  const id = await fetchActorId(indexDocId);
+  if (id === null) {
+    onSessionExpired();
+    return null;
+  }
+  return id;
 }
 
 /** Clear the auth cookie server-side. */

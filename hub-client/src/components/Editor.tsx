@@ -913,6 +913,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onShare={handleShare}
             onToggleFullscreenPreview={handleToggleFullscreenPreview}
             isFullscreenPreview={isFullscreenPreview}
+            isOnline={isOnline}
           />
           {replayState.isActive && (
             <div className="replay-mode-banner">REPLAY MODE</div>

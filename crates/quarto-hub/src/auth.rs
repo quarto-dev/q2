@@ -195,6 +195,13 @@ pub struct OidcClaims {
     /// [`validate_azp_and_iat`]).
     #[serde(default)]
     pub iat: Option<i64>,
+
+    /// Expiry (epoch seconds). Required by the validator
+    /// (`set_required_spec_claims`), so always present in accepted
+    /// tokens; surfaced on `/auth/me` so the client can schedule
+    /// refresh from the real expiry (bd-3o8zmz46).
+    #[serde(default)]
+    pub exp: i64,
 }
 
 /// Accept either a single-string `aud` or a `["a", "b"]` array.
@@ -709,6 +716,7 @@ mod tests {
             aud: vec!["test-client-id".to_string()],
             azp: None,
             iat: None,
+            exp: 0,
         }
     }
 
@@ -947,6 +955,7 @@ mod tests {
             aud: vec!["spa-client".into()],
             azp: None,
             iat: None,
+            exp: 0,
         };
         let allowed = allowed_list();
         assert!(validate_azp_and_iat(&claims, allowed.iter(), 1_000_000, 60).is_ok());
@@ -963,6 +972,7 @@ mod tests {
             aud: vec!["spa-client".into(), "mcp-client".into()],
             azp: None,
             iat: None,
+            exp: 0,
         };
         let allowed = allowed_list();
         assert_eq!(
@@ -982,6 +992,7 @@ mod tests {
             aud: vec!["spa-client".into()],
             azp: Some("attacker-client".into()),
             iat: None,
+            exp: 0,
         };
         let allowed = allowed_list();
         assert_eq!(
@@ -1001,6 +1012,7 @@ mod tests {
             aud: vec!["spa-client".into(), "mcp-client".into()],
             azp: Some("spa-client".into()),
             iat: None,
+            exp: 0,
         };
         let allowed = allowed_list();
         assert!(validate_azp_and_iat(&claims, allowed.iter(), 1_000_000, 60).is_ok());
@@ -1017,6 +1029,7 @@ mod tests {
             aud: vec!["spa-client".into()],
             azp: None,
             iat: Some(1_000_000 + 3600),
+            exp: 0,
         };
         let allowed = allowed_list();
         assert_eq!(
@@ -1036,6 +1049,7 @@ mod tests {
             aud: vec!["spa-client".into()],
             azp: None,
             iat: Some(1_000_000 + 30),
+            exp: 0,
         };
         let allowed = allowed_list();
         assert!(validate_azp_and_iat(&claims, allowed.iter(), 1_000_000, 60).is_ok());

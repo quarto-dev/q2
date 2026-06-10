@@ -349,6 +349,146 @@ describe('useAuth', () => {
     });
   });
 
+  // ── Expiry from server-reported exp (bd-3o8zmz46) ─────────
+
+  describe('expiry from server exp', () => {
+    beforeEach(() => {
+      cleanup();
+      // Full reset (not just clear) so queued mockResolvedValueOnce values
+      // from a failed sibling test can't leak into the next one.
+      mockFetchAuthMe.mockReset();
+      mockRefreshToken.mockReset();
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('schedules silent refresh from server-reported expiresAt, not a fixed lifetime', async () => {
+      const user = {
+        email: 'a@b.com',
+        name: 'A',
+        picture: null,
+        expiresAt: Date.now() + 30 * 60 * 1000,
+      };
+      mockFetchAuthMe.mockResolvedValue(user);
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+      expect(mockProvider.lastSilentRenewalOpts?.enabled).toBe(false);
+
+      // Refresh should fire at expiresAt − 15 min = +15 min, well before
+      // the legacy fixed-1h schedule would (at +45 min).
+      await act(async () => {
+        vi.advanceTimersByTime(15 * 60 * 1000 + 1000);
+      });
+      expect(mockProvider.lastSilentRenewalOpts?.enabled).toBe(true);
+    });
+
+    it('does not extend assumed expiry on refocus without a fresh cookie (drift bug)', async () => {
+      const expiresAt = Date.now() + 40 * 60 * 1000;
+      const user = { email: 'a@b.com', name: 'A', picture: null, expiresAt };
+      mockFetchAuthMe
+        .mockResolvedValueOnce(user) // mount
+        .mockResolvedValueOnce({ ...user }) // refocus: same expiry, fresh object
+        .mockResolvedValueOnce(null); // expiry re-check: token now rejected
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+
+      // Refocus at +10 min — server confirms the cookie but its expiry is
+      // unchanged. This must NOT push the schedule out to +70 min.
+      await act(async () => {
+        vi.advanceTimersByTime(10 * 60 * 1000);
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Refresh fires at expiresAt − 15 min (+25 min); renewal fails.
+      await act(async () => {
+        vi.advanceTimersByTime(15 * 60 * 1000 + 1000);
+      });
+      await act(async () => {
+        mockProvider.lastSilentRenewalOpts?.onError();
+      });
+
+      // At the REAL expiry (+40 min) the server's 401 must clear auth.
+      await act(async () => {
+        vi.advanceTimersByTime(15 * 60 * 1000 + 2000);
+      });
+      await vi.waitFor(() => expect(result.current.auth).toBeNull());
+      expect(result.current.sessionExpired).toBe(true);
+    });
+
+    it('keeps auth when refocus /auth/me fails with a network error (offline)', async () => {
+      const user = { email: 'a@b.com', name: 'A', picture: null };
+      mockFetchAuthMe.mockResolvedValueOnce(user); // mount
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+
+      mockFetchAuthMe.mockRejectedValueOnce(new Error('network'));
+      document.dispatchEvent(new Event('visibilitychange'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Offline must never log the user out.
+      expect(result.current.auth).toEqual(user);
+    });
+
+    it('keeps auth on expiry-time network error and re-checks later', async () => {
+      const expiresAt = Date.now() + 20 * 60 * 1000;
+      const user = { email: 'a@b.com', name: 'A', picture: null, expiresAt };
+      mockFetchAuthMe.mockResolvedValueOnce(user); // mount
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+
+      // Refresh fires at +5 min; renewal fails (session not lapsed → keep).
+      await act(async () => {
+        vi.advanceTimersByTime(5 * 60 * 1000 + 1000);
+      });
+      await act(async () => {
+        mockProvider.lastSilentRenewalOpts?.onError();
+      });
+
+      // Expiry re-check at +20 min hits a network error → stay logged in.
+      mockFetchAuthMe.mockRejectedValueOnce(new Error('network'));
+      await act(async () => {
+        vi.advanceTimersByTime(15 * 60 * 1000 + 2000);
+      });
+      expect(result.current.auth).toEqual(user);
+      expect(result.current.sessionExpired).toBe(false);
+
+      // The next re-check gets a definitive 401 → evidence-based logout.
+      mockFetchAuthMe.mockResolvedValueOnce(null);
+      await act(async () => {
+        vi.advanceTimersByTime(60 * 1000 + 1000);
+      });
+      await vi.waitFor(() => expect(result.current.auth).toBeNull());
+      expect(result.current.sessionExpired).toBe(true);
+    });
+
+    it('does not flag sessionExpired on deliberate logout', async () => {
+      const user = { email: 'a@b.com', name: 'A', picture: null };
+      mockFetchAuthMe.mockResolvedValue(user);
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+
+      act(() => {
+        result.current.logout();
+      });
+
+      expect(result.current.auth).toBeNull();
+      expect(result.current.sessionExpired).toBe(false);
+    });
+  });
+
   // ── 401-triggered refresh (fake timers) ───────────────────
 
   describe('triggerRefresh', () => {

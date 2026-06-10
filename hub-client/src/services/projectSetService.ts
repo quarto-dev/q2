@@ -111,6 +111,9 @@ function waitForPeer(r: Repo, timeoutMs: number = 5000): Promise<void> {
 /**
  * Connect to an existing project set document.
  *
+ * Resolves immediately if the document is available in local storage,
+ * then syncs with the server in the background.
+ *
  * @returns The current list of projects, sorted by lastAccessed (most recent first).
  * @throws If the document cannot be loaded (e.g., first load on a new browser
  *         while offline — the document hasn't been cached locally yet).
@@ -127,6 +130,28 @@ export async function connect(
     storage: new IndexedDBStorageAdapter(),
   });
 
+  const docId = projectSetDocId as DocumentId;
+  const foundHandle = await repo.find<ProjectSetDocument>(docId);
+  handle = foundHandle;
+
+  // Check if we have a cached document locally
+  const doc = handle.doc();
+  if (doc) {
+    // Have local data — resolve immediately
+    // Subscribe to changes (from remote browsers)
+    const onChange = () => notifyProjectsChange();
+    handle.on('change', onChange);
+    cleanupFn = () => handle?.off('change', onChange);
+
+    // Start background sync (but don't wait for it)
+    waitForPeer(repo, 5000)
+      .then(() => onConnectionChange?.(true))
+      .catch(() => onConnectionChange?.(false));
+
+    return getProjectsList(doc);
+  }
+
+  // No local data — need to sync from server first
   let isOnline = false;
   try {
     await waitForPeer(repo, 5000);
@@ -137,13 +162,10 @@ export async function connect(
 
   onConnectionChange?.(isOnline);
 
-  const docId = projectSetDocId as DocumentId;
-  const foundHandle = await repo.find<ProjectSetDocument>(docId);
   await foundHandle.whenReady();
-  handle = foundHandle;
 
-  const doc = handle.doc();
-  if (!doc) {
+  const syncedDoc = handle.doc();
+  if (!syncedDoc) {
     throw new Error(
       isOnline
         ? 'Failed to load project set document'
@@ -156,7 +178,7 @@ export async function connect(
   handle.on('change', onChange);
   cleanupFn = () => handle?.off('change', onChange);
 
-  return getProjectsList(doc);
+  return getProjectsList(syncedDoc);
 }
 
 /**

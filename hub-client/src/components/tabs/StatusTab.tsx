@@ -24,25 +24,9 @@ export default function StatusTab({
   wasmError,
   userCount,
   remoteUsers,
-  isOnline,
 }: StatusTabProps) {
   return (
     <div className="status-tab">
-      <div className="status-tab-section">
-        <label className="section-label">Connection</label>
-        <div className={`status-indicator ${isOnline ? 'ready' : 'loading'}`}>
-          <span className="status-dot" />
-          <span className="status-text">
-            {isOnline ? 'Online' : 'Offline'}
-          </span>
-        </div>
-        {!isOnline && (
-          <div style={{ marginTop: '8px', fontSize: '12px', color: 'white' }}>
-            Working offline. Changes are saved locally and will sync when connection is restored.
-          </div>
-        )}
-      </div>
-
       <div className="status-tab-section">
         <label className="section-label">Renderer</label>
         <div className={`status-indicator ${wasmStatus}`}>

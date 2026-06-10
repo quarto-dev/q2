@@ -13,7 +13,7 @@
 
 import { useAuthProvider } from '../../auth/AuthProvider';
 
-export function LoginScreen({ error }: { error?: boolean }) {
+export function LoginScreen({ error, message }: { error?: boolean; message?: string }) {
   const provider = useAuthProvider();
 
   return (
@@ -24,6 +24,10 @@ export function LoginScreen({ error }: { error?: boolean }) {
         {error ? (
           <p style={{ color: 'var(--posit-red)', fontSize: '14px', margin: '0 0 16px' }}>
             Sign-in failed. Your account is not authorized to access this hub.
+          </p>
+        ) : message ? (
+          <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 16px' }}>
+            {message}
           </p>
         ) : (
           <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 16px' }}>

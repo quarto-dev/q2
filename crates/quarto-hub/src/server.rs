@@ -733,6 +733,9 @@ struct AuthMeResponse {
     email: String,
     name: Option<String>,
     picture: Option<String>,
+    /// Token expiry (epoch seconds) so the client can schedule silent
+    /// refresh from the real expiry instead of assuming a fixed lifetime.
+    exp: i64,
 }
 
 /// Query parameters for GET /auth/actor.
@@ -770,6 +773,7 @@ async fn auth_me(
         email: claims.email,
         name: claims.name,
         picture: claims.picture,
+        exp: claims.exp,
     }))
 }
 

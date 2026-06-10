@@ -15,9 +15,8 @@
 #![cfg(target_arch = "wasm32")]
 
 use async_trait::async_trait;
-use std::collections::{HashMap, HashSet};
-use std::io;
-use std::path::{Component, Path, PathBuf};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -28,6 +27,7 @@ use crate::traits::{
     CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
     XdgDirKind,
 };
+use crate::vfs::{VirtualFileSystem, not_found_error};
 
 // =============================================================================
 // JavaScript Interop for Template Rendering
@@ -203,292 +203,6 @@ extern "C" {
 /// SystemTime::now() is not available in WASM, so we use a simple counter.
 static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// Helper function to create a "not found" error.
-fn not_found_error(path: &Path) -> RuntimeError {
-    RuntimeError::Io(io::Error::new(
-        io::ErrorKind::NotFound,
-        format!("Path not found: {}", path.display()),
-    ))
-}
-
-/// Virtual filesystem for WASM environments.
-///
-/// This provides an in-memory filesystem that can be pre-populated with
-/// project files from automerge documents or other sources.
-///
-/// The VFS supports:
-/// - Files with arbitrary byte content
-/// - Directory structure (automatically created when files are added)
-/// - Standard operations: read, write, remove, list, copy
-///
-/// Thread safety: Uses RwLock to satisfy Send + Sync trait bounds.
-/// In practice, WASM is single-threaded so this is never contended.
-#[derive(Debug, Default)]
-pub struct VirtualFileSystem {
-    /// File contents, keyed by normalized absolute path
-    files: HashMap<PathBuf, Vec<u8>>,
-    /// Directory entries (automatically includes parents of all files)
-    directories: HashSet<PathBuf>,
-    /// Project root directory (default working directory)
-    project_root: PathBuf,
-}
-
-impl VirtualFileSystem {
-    /// Create a new empty virtual filesystem.
-    pub fn new() -> Self {
-        let mut vfs = Self {
-            files: HashMap::new(),
-            directories: HashSet::new(),
-            project_root: PathBuf::from("/project"),
-        };
-        // Create the root directory
-        vfs.directories.insert(PathBuf::from("/"));
-        vfs.directories.insert(PathBuf::from("/project"));
-        vfs
-    }
-
-    /// Create VFS with a custom project root.
-    pub fn with_project_root(project_root: PathBuf) -> Self {
-        let mut vfs = Self {
-            files: HashMap::new(),
-            directories: HashSet::new(),
-            project_root: project_root.clone(),
-        };
-        // Create the root directory and project root
-        vfs.directories.insert(PathBuf::from("/"));
-        vfs.add_directory_and_parents(&project_root);
-        vfs
-    }
-
-    /// Add a file to the virtual filesystem.
-    ///
-    /// This will automatically create all parent directories.
-    pub fn add_file(&mut self, path: &Path, contents: Vec<u8>) {
-        let normalized = self.normalize_path(path);
-        // Create parent directories
-        if let Some(parent) = normalized.parent() {
-            self.add_directory_and_parents(parent);
-        }
-        self.files.insert(normalized, contents);
-    }
-
-    /// Update an existing file (same as add_file, but semantically clearer).
-    pub fn update_file(&mut self, path: &Path, contents: Vec<u8>) {
-        self.add_file(path, contents);
-    }
-
-    /// Remove a file from the virtual filesystem.
-    ///
-    /// Returns true if the file existed and was removed.
-    pub fn remove_file(&mut self, path: &Path) -> bool {
-        let normalized = self.normalize_path(path);
-        self.files.remove(&normalized).is_some()
-    }
-
-    /// Add a directory (and all parent directories).
-    pub fn add_directory(&mut self, path: &Path) {
-        let normalized = self.normalize_path(path);
-        self.add_directory_and_parents(&normalized);
-    }
-
-    /// Remove a directory.
-    ///
-    /// If recursive is false, only removes empty directories.
-    /// If recursive is true, removes the directory and all contents.
-    pub fn remove_directory(&mut self, path: &Path, recursive: bool) -> RuntimeResult<()> {
-        let normalized = self.normalize_path(path);
-
-        if !self.directories.contains(&normalized) {
-            return Err(not_found_error(&normalized));
-        }
-
-        // Find all files and subdirectories under this path
-        let files_under: Vec<PathBuf> = self
-            .files
-            .keys()
-            .filter(|p| p.starts_with(&normalized) && *p != &normalized)
-            .cloned()
-            .collect();
-
-        let dirs_under: Vec<PathBuf> = self
-            .directories
-            .iter()
-            .filter(|p| p.starts_with(&normalized) && *p != &normalized)
-            .cloned()
-            .collect();
-
-        if !recursive && (!files_under.is_empty() || !dirs_under.is_empty()) {
-            return Err(RuntimeError::Io(io::Error::new(
-                io::ErrorKind::DirectoryNotEmpty,
-                "Directory is not empty",
-            )));
-        }
-
-        // Remove all files and directories under this path
-        for file in files_under {
-            self.files.remove(&file);
-        }
-        for dir in dirs_under {
-            self.directories.remove(&dir);
-        }
-        self.directories.remove(&normalized);
-
-        Ok(())
-    }
-
-    /// List all files in the virtual filesystem.
-    pub fn list_files(&self) -> Vec<PathBuf> {
-        self.files.keys().cloned().collect()
-    }
-
-    /// List contents of a directory.
-    pub fn list_directory(&self, path: &Path) -> RuntimeResult<Vec<PathBuf>> {
-        let normalized = self.normalize_path(path);
-
-        if !self.directories.contains(&normalized) {
-            return Err(not_found_error(&normalized));
-        }
-
-        let mut entries: HashSet<PathBuf> = HashSet::new();
-
-        // Find direct children (files)
-        for file_path in self.files.keys() {
-            if let Some(parent) = file_path.parent() {
-                if parent == normalized {
-                    entries.insert(file_path.clone());
-                }
-            }
-        }
-
-        // Find direct children (directories)
-        for dir_path in &self.directories {
-            if let Some(parent) = dir_path.parent() {
-                if parent == normalized && dir_path != &normalized {
-                    entries.insert(dir_path.clone());
-                }
-            }
-        }
-
-        Ok(entries.into_iter().collect())
-    }
-
-    /// Clear all files from the virtual filesystem.
-    pub fn clear(&mut self) {
-        self.files.clear();
-        self.directories.clear();
-        // Re-add root
-        self.directories.insert(PathBuf::from("/"));
-        self.directories.insert(self.project_root.clone());
-    }
-
-    /// Clear user files from the virtual filesystem, preserving files under the given prefix.
-    ///
-    /// This is used to clear project files while preserving embedded resources
-    /// (like Bootstrap SCSS files under `/__quarto_resources__/`).
-    pub fn clear_preserving_prefix(&mut self, preserved_prefix: &str) {
-        // Retain files that start with the preserved prefix
-        self.files
-            .retain(|path, _| path.to_string_lossy().starts_with(preserved_prefix));
-
-        // Retain directories that start with the preserved prefix
-        // Also always keep root "/" and project root
-        let project_root = self.project_root.clone();
-        self.directories.retain(|path| {
-            path == Path::new("/")
-                || path == &project_root
-                || path.to_string_lossy().starts_with(preserved_prefix)
-        });
-
-        // Re-add root and project root in case they were removed
-        self.directories.insert(PathBuf::from("/"));
-        self.directories.insert(self.project_root.clone());
-    }
-
-    /// Check if a path exists (as file or directory).
-    pub fn exists(&self, path: &Path) -> bool {
-        let normalized = self.normalize_path(path);
-        self.files.contains_key(&normalized) || self.directories.contains(&normalized)
-    }
-
-    /// Check if a path is a file.
-    pub fn is_file(&self, path: &Path) -> bool {
-        let normalized = self.normalize_path(path);
-        self.files.contains_key(&normalized)
-    }
-
-    /// Check if a path is a directory.
-    pub fn is_directory(&self, path: &Path) -> bool {
-        let normalized = self.normalize_path(path);
-        self.directories.contains(&normalized)
-    }
-
-    /// Read file contents.
-    pub fn read_file(&self, path: &Path) -> RuntimeResult<Vec<u8>> {
-        let normalized = self.normalize_path(path);
-        self.files
-            .get(&normalized)
-            .cloned()
-            .ok_or_else(|| not_found_error(&normalized))
-    }
-
-    /// Get the size of a file.
-    pub fn file_size(&self, path: &Path) -> Option<u64> {
-        let normalized = self.normalize_path(path);
-        self.files.get(&normalized).map(|c| c.len() as u64)
-    }
-
-    /// Get the project root directory.
-    pub fn project_root(&self) -> &Path {
-        &self.project_root
-    }
-
-    /// Normalize a path to an absolute path.
-    pub fn normalize_path(&self, path: &Path) -> PathBuf {
-        // If already absolute, just normalize
-        if path.is_absolute() {
-            return self.normalize_components(path);
-        }
-        // Otherwise, make it relative to project root
-        let absolute = self.project_root.join(path);
-        self.normalize_components(&absolute)
-    }
-
-    /// Normalize path components (remove . and resolve ..)
-    fn normalize_components(&self, path: &Path) -> PathBuf {
-        let mut normalized = PathBuf::new();
-        for component in path.components() {
-            match component {
-                Component::ParentDir => {
-                    if !normalized.pop() {
-                        // Can't go above root
-                        normalized.push("/");
-                    }
-                }
-                Component::CurDir => {
-                    // Skip . components
-                }
-                other => {
-                    normalized.push(other);
-                }
-            }
-        }
-        // Ensure we always have at least root
-        if normalized.as_os_str().is_empty() {
-            normalized.push("/");
-        }
-        normalized
-    }
-
-    /// Add a directory and all its parent directories.
-    fn add_directory_and_parents(&mut self, path: &Path) {
-        let mut current = PathBuf::new();
-        for component in path.components() {
-            current.push(component);
-            self.directories.insert(current.clone());
-        }
-    }
-}
-
 /// Runtime for WASM/browser environments.
 ///
 /// This runtime operates within browser sandbox constraints:
@@ -531,6 +245,15 @@ impl WasmRuntime {
     /// Convenience method that locks the VFS.
     pub fn add_file(&self, path: &Path, contents: Vec<u8>) {
         self.vfs.write().unwrap().add_file(path, contents);
+    }
+
+    /// Run `f` with mutable access to the VFS (single write-lock
+    /// acquisition). Lets callers drive multi-file VFS operations —
+    /// e.g. quarto-core's `flush_artifacts_to_vfs` (bd-q3bxnq2e) —
+    /// through one code path shared with native tests and perf
+    /// drivers.
+    pub fn with_vfs_mut<R>(&self, f: impl FnOnce(&mut VirtualFileSystem) -> R) -> R {
+        f(&mut self.vfs.write().unwrap())
     }
 
     /// Update a file in the virtual filesystem.
@@ -594,7 +317,16 @@ impl SystemRuntime for WasmRuntime {
     }
 
     fn file_write(&self, path: &Path, contents: &[u8]) -> RuntimeResult<()> {
-        self.vfs.write().unwrap().add_file(path, contents.to_vec());
+        // Change-detection in the in-memory VFS layer (bd-q3bxnq2e
+        // decision 3): byte-identical re-writes are skipped — this is
+        // what makes `flush_site_libs`'s per-render re-flush of
+        // unchanged project artifacts (theme CSS, fonts, shared JS)
+        // cheap. Native disk writes are intentionally not change-aware
+        // (a compare there would cost a disk read per artifact).
+        self.vfs
+            .write()
+            .unwrap()
+            .add_file_if_changed(path, contents);
         Ok(())
     }
 
@@ -991,127 +723,6 @@ impl SystemRuntime for WasmRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_vfs_add_and_read_file() {
-        let mut vfs = VirtualFileSystem::new();
-        let path = Path::new("/project/test.txt");
-        vfs.add_file(path, b"hello world".to_vec());
-
-        assert!(vfs.is_file(path));
-        assert_eq!(vfs.read_file(path).unwrap(), b"hello world");
-    }
-
-    #[test]
-    fn test_vfs_creates_parent_directories() {
-        let mut vfs = VirtualFileSystem::new();
-        let path = Path::new("/project/deep/nested/dir/file.txt");
-        vfs.add_file(path, b"content".to_vec());
-
-        assert!(vfs.is_directory(Path::new("/project/deep")));
-        assert!(vfs.is_directory(Path::new("/project/deep/nested")));
-        assert!(vfs.is_directory(Path::new("/project/deep/nested/dir")));
-    }
-
-    #[test]
-    fn test_vfs_remove_file() {
-        let mut vfs = VirtualFileSystem::new();
-        let path = Path::new("/project/test.txt");
-        vfs.add_file(path, b"hello".to_vec());
-
-        assert!(vfs.is_file(path));
-        assert!(vfs.remove_file(path));
-        assert!(!vfs.is_file(path));
-        assert!(!vfs.remove_file(path)); // Second remove returns false
-    }
-
-    #[test]
-    fn test_vfs_list_directory() {
-        let mut vfs = VirtualFileSystem::new();
-        vfs.add_file(Path::new("/project/file1.txt"), b"1".to_vec());
-        vfs.add_file(Path::new("/project/file2.txt"), b"2".to_vec());
-        vfs.add_file(Path::new("/project/subdir/file3.txt"), b"3".to_vec());
-
-        let entries = vfs.list_directory(Path::new("/project")).unwrap();
-        assert_eq!(entries.len(), 3); // file1, file2, subdir
-    }
-
-    #[test]
-    fn test_vfs_relative_paths() {
-        let mut vfs = VirtualFileSystem::new();
-        // Add with relative path
-        vfs.add_file(Path::new("test.txt"), b"hello".to_vec());
-
-        // Should be accessible via both relative and absolute
-        assert!(vfs.is_file(Path::new("test.txt")));
-        assert!(vfs.is_file(Path::new("/project/test.txt")));
-    }
-
-    #[test]
-    fn test_vfs_clear() {
-        let mut vfs = VirtualFileSystem::new();
-        vfs.add_file(Path::new("/project/test.txt"), b"hello".to_vec());
-
-        assert!(vfs.is_file(Path::new("/project/test.txt")));
-        vfs.clear();
-        assert!(!vfs.is_file(Path::new("/project/test.txt")));
-        // Root directories should still exist
-        assert!(vfs.is_directory(Path::new("/")));
-        assert!(vfs.is_directory(Path::new("/project")));
-    }
-
-    #[test]
-    fn test_vfs_clear_preserving_prefix() {
-        let mut vfs = VirtualFileSystem::new();
-
-        // Add embedded resource files (should be preserved)
-        vfs.add_file(
-            Path::new("/__quarto_resources__/bootstrap/scss/_variables.scss"),
-            b"$primary: blue;".to_vec(),
-        );
-        vfs.add_file(
-            Path::new("/__quarto_resources__/bootstrap/scss/_mixins.scss"),
-            b"@mixin foo {}".to_vec(),
-        );
-
-        // Add project files (should be cleared)
-        vfs.add_file(Path::new("/project/index.qmd"), b"# Hello".to_vec());
-        vfs.add_file(Path::new("/project/styles.scss"), b"body {}".to_vec());
-
-        // Verify all files exist before clear
-        assert!(vfs.is_file(Path::new(
-            "/__quarto_resources__/bootstrap/scss/_variables.scss"
-        )));
-        assert!(vfs.is_file(Path::new(
-            "/__quarto_resources__/bootstrap/scss/_mixins.scss"
-        )));
-        assert!(vfs.is_file(Path::new("/project/index.qmd")));
-        assert!(vfs.is_file(Path::new("/project/styles.scss")));
-
-        // Clear user files, preserving embedded resources
-        vfs.clear_preserving_prefix("/__quarto_resources__");
-
-        // Embedded resources should still exist
-        assert!(vfs.is_file(Path::new(
-            "/__quarto_resources__/bootstrap/scss/_variables.scss"
-        )));
-        assert!(vfs.is_file(Path::new(
-            "/__quarto_resources__/bootstrap/scss/_mixins.scss"
-        )));
-
-        // Project files should be cleared
-        assert!(!vfs.is_file(Path::new("/project/index.qmd")));
-        assert!(!vfs.is_file(Path::new("/project/styles.scss")));
-
-        // Root directories should still exist
-        assert!(vfs.is_directory(Path::new("/")));
-        assert!(vfs.is_directory(Path::new("/project")));
-
-        // Embedded resource directories should still exist
-        assert!(vfs.is_directory(Path::new("/__quarto_resources__")));
-        assert!(vfs.is_directory(Path::new("/__quarto_resources__/bootstrap")));
-        assert!(vfs.is_directory(Path::new("/__quarto_resources__/bootstrap/scss")));
-    }
 
     #[test]
     fn test_wasm_runtime_file_operations() {

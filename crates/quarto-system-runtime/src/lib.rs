@@ -21,6 +21,11 @@ pub mod cache_versioning;
 mod sandbox;
 mod traits;
 
+// In-memory virtual filesystem. Compiled on every target: WASM uses it
+// as WasmRuntime's backing store; native builds use it in tests and in
+// perf-harness drivers that exercise the WASM flush path (bd-q3bxnq2e).
+mod vfs;
+
 // Native runtime is only compiled for non-WASM targets
 #[cfg(not(target_arch = "wasm32"))]
 mod native;
@@ -48,13 +53,14 @@ pub use traits::{
     CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
     XdgDirKind, validate_cache_key, validate_cache_namespace,
 };
+pub use vfs::{VfsWriteStats, VirtualFileSystem};
 
 // Re-export runtime implementations based on target
 #[cfg(not(target_arch = "wasm32"))]
 pub use native::NativeRuntime;
 
 #[cfg(target_arch = "wasm32")]
-pub use wasm::{VirtualFileSystem, WasmRuntime};
+pub use wasm::WasmRuntime;
 
 // Re-export sandboxing types
 pub use sandbox::{PathPattern, SandboxedRuntime, SecurityPolicy, SharedRuntime};

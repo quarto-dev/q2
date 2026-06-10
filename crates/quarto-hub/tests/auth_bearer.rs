@@ -1005,6 +1005,33 @@ async fn cookie_still_authenticates() {
     assert_eq!(resp.status(), 200);
 }
 
+// ── /auth/me reports token expiry (bd-3o8zmz46) ──────────────────
+
+#[tokio::test]
+async fn auth_me_returns_token_exp() {
+    let (provider, hub) = shared_setup().await;
+    let exp = chrono::Utc::now().timestamp() + 600;
+    let token = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("auth-me-exp")
+            .exp(exp)
+            .to_value(),
+    );
+
+    let resp = hub
+        .get_auth_me()
+        .header("cookie", format!("quarto_hub_token={token}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(
+        body["exp"], exp,
+        "client schedules refresh from the real token expiry"
+    );
+}
+
 // ── Dual-credential 400 (bd-wzhsf CVE) ───────────────────────────
 
 #[tokio::test]

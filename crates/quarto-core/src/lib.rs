@@ -37,6 +37,7 @@
 //! ```
 
 pub mod artifact;
+pub mod artifact_flush;
 pub mod attribution;
 pub mod crossref;
 pub mod dependency;
@@ -65,6 +66,7 @@ pub mod transforms;
 
 // Re-export commonly used types
 pub use artifact::{Artifact, ArtifactMergeConflict, ArtifactScope, ArtifactStore, MergeStats};
+pub use artifact_flush::flush_artifacts_to_vfs;
 pub use error::{ParseError, QuartoError, Result};
 pub use format::{Format, FormatIdentifier};
 pub use pipeline::{

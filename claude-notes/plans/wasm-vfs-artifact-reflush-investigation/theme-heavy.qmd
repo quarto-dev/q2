@@ -1,0 +1,22 @@
+---
+title: "Theme-heavy flush fixture (bd-q3bxnq2e)"
+theme: cosmo
+---
+
+# Section
+
+Representative single-doc preview render: a themed document whose
+dominant artifact is the compiled Bootstrap theme CSS (about 390 KB).
+Used by the `vfs-flush` perf-harness driver.
+
+```python
+print("a code block so code-related stages have something to do")
+```
+
+Some *inline* **formatting**, a [link](https://example.com), and `code`.
+
+## Another section
+
+| a | b |
+|---|---|
+| 1 | 2 |

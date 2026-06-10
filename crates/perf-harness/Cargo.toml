@@ -13,6 +13,10 @@ path = "src/bin/parse_qmd_to_ast.rs"
 name = "parse-corpus"
 path = "src/bin/parse_corpus.rs"
 
+[[bin]]
+name = "vfs-flush"
+path = "src/bin/vfs_flush.rs"
+
 [dependencies]
 pampa = { path = "../pampa" }
 quarto-core = { path = "../quarto-core" }

@@ -35,6 +35,49 @@
   flex-shrink: 0;
 }
 
+.header-right .connection-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--editor-header-bg);
+  border: 1px solid var(--editor-disconnected-border);
+  border-radius: 4px;
+  font-size: 12px;
+  user-select: none;
+}
+
+.header-right .connection-indicator.online {
+  border-color: #4caf50;
+}
+
+.header-right .connection-indicator.offline {
+  border-color: #ff9800;
+}
+
+.header-right .connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--editor-text-muted);
+  flex-shrink: 0;
+}
+
+.header-right .connection-indicator.online .connection-dot {
+  background-color: #4caf50;
+  box-shadow: 0 0 4px rgba(76, 175, 80, 0.6);
+}
+
+.header-right .connection-indicator.offline .connection-dot {
+  background-color: #ff9800;
+  box-shadow: 0 0 4px rgba(255, 152, 0, 0.6);
+}
+
+.header-right .connection-text {
+  color: var(--editor-text-dim);
+  font-weight: 500;
+}
+
 .header-right .project-name {
   font-size: 13px;
   font-weight: 500;

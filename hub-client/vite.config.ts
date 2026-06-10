@@ -3,6 +3,7 @@ import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import wasm from 'vite-plugin-wasm'
 import compression from 'compression'
+import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 import { readFileSync } from 'fs'
 import { execSync } from 'child_process'
@@ -52,6 +53,9 @@ function attributionViewerCssPlugin(): Plugin {
 /** Hub server URL. Override with VITE_HUB_SERVER env var. */
 const hubTarget = process.env.VITE_HUB_SERVER || 'http://localhost:3000';
 
+/** Disable service worker in E2E tests to avoid caching interference */
+const isE2E = process.env.VITE_E2E === '1';
+
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
@@ -88,6 +92,62 @@ export default defineConfig({
         server.middlewares.use(middleware as any);
       },
     },
+    // Disable PWA service worker in E2E tests to avoid caching interference
+    ...(!isE2E ? [VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['quarto-icon.svg'],
+      manifest: {
+        name: 'Quarto Hub',
+        short_name: 'Quarto Hub',
+        description: 'Collaborative editing for Quarto projects',
+        theme_color: '#447099',
+        icons: [
+          {
+            src: 'quarto-icon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml'
+          }
+        ]
+      },
+      workbox: {
+        // Precache all static assets including JS/CSS bundles and WASM
+        globPatterns: ['**/*.{html,js,css,svg,woff,woff2,wasm}'],
+        // Increase limit to 35MB to include WASM files (largest is ~32MB)
+        maximumFileSizeToCacheInBytes: 35 * 1024 * 1024,
+        // Don't warn about large files - we know they're big
+        dontCacheBustURLsMatching: /\.[0-9a-f]{8}\./,
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-static',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          }
+        ]
+      }
+    })] : [])
   ],
   define: {
     __GIT_COMMIT_HASH__: JSON.stringify(gitInfo.commitHash),

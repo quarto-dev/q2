@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { fetchAuthMe, fetchActorId, logout, refreshToken } from './authService';
+import { fetchAuthMe, fetchActorId, resolveActorId, logout, refreshToken } from './authService';
 
 describe('authService', () => {
   beforeEach(() => {
@@ -210,6 +210,79 @@ describe('authService', () => {
       const id1 = await fetchActorId('automerge:proj1');
       const id2 = await fetchActorId('automerge:proj2');
       expect(id1).not.toBe(id2);
+    });
+  });
+
+  // ── resolveActorId ───────────────────────────────────────────
+  //
+  // Three-valued contract the document-open callers depend on:
+  //   string    → open with this actor ID
+  //   undefined → auth disabled; open with no (random) actor ID
+  //   null      → auth failure; abandon the open (callers guard `=== null`)
+
+  describe('resolveActorId', () => {
+    it('returns undefined and skips the network when auth is disabled', async () => {
+      const onSessionExpired = vi.fn();
+      const result = await resolveActorId('automerge:abc', false, onSessionExpired);
+
+      expect(result).toBeUndefined();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(onSessionExpired).not.toHaveBeenCalled();
+    });
+
+    it('returns the actor ID on success without triggering refresh', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ actor_id: 'abcd1234' }),
+      } as Response);
+      const onSessionExpired = vi.fn();
+
+      const result = await resolveActorId('automerge:abc', true, onSessionExpired);
+
+      expect(result).toBe('abcd1234');
+      expect(onSessionExpired).not.toHaveBeenCalled();
+    });
+
+    it('returns null (abandon) and triggers refresh on 401', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 401,
+      } as Response);
+      const onSessionExpired = vi.fn();
+
+      const result = await resolveActorId('automerge:abc', true, onSessionExpired);
+
+      // null, NOT undefined: callers' `if (id === null) return` must fire so
+      // the document open is abandoned while the refresh races in the background.
+      expect(result).toBeNull();
+      expect(onSessionExpired).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns null (abandon) and triggers refresh on 403', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 403,
+      } as Response);
+      const onSessionExpired = vi.fn();
+
+      const result = await resolveActorId('automerge:abc', true, onSessionExpired);
+
+      expect(result).toBeNull();
+      expect(onSessionExpired).toHaveBeenCalledTimes(1);
+    });
+
+    it('propagates non-401/403 errors without triggering refresh', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 500,
+      } as Response);
+      const onSessionExpired = vi.fn();
+
+      await expect(
+        resolveActorId('automerge:abc', true, onSessionExpired),
+      ).rejects.toThrow('/auth/actor failed: 500');
+      expect(onSessionExpired).not.toHaveBeenCalled();
     });
   });
 });

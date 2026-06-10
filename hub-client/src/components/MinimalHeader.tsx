@@ -16,6 +16,8 @@ interface MinimalHeaderProps {
   onShare?: () => void;
   onToggleFullscreenPreview?: () => void;
   isFullscreenPreview?: boolean;
+  /** Whether the project is connected to the sync server */
+  isOnline?: boolean;
 }
 
 export default function MinimalHeader({
@@ -25,6 +27,7 @@ export default function MinimalHeader({
   onShare,
   onToggleFullscreenPreview,
   isFullscreenPreview = false,
+  isOnline = true,
 }: MinimalHeaderProps) {
   return (
     <header className="minimal-header">
@@ -37,6 +40,17 @@ export default function MinimalHeader({
         )}
       </div>
       <div className="header-right">
+        <div
+          className={`connection-indicator ${isOnline ? 'online' : 'offline'}`}
+          title={
+            isOnline
+              ? 'Online'
+              : 'Working offline. Changes are saved locally and will sync when connection is restored.'
+          }
+        >
+          <span className="connection-dot" />
+          <span className="connection-text">{isOnline ? 'Online' : 'Offline'}</span>
+        </div>
         <span className="project-name">{projectName}</span>
         {onShare && (
           <button className="share-btn" onClick={onShare} title="Share this project">

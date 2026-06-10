@@ -49,4 +49,16 @@ describe('LoginScreen', () => {
     expect(screen.getByText(/Sign-in failed/i)).toBeTruthy();
     expect(screen.queryByText(/Sign in with Google to continue/i)).toBeNull();
   });
+
+  it('renders a custom message (session expiry) instead of the default copy', () => {
+    render(withProvider(<LoginScreen message="Your session expired — please sign in again." />));
+    expect(screen.getByText(/session expired/i)).toBeTruthy();
+    expect(screen.queryByText(/Sign in with Google to continue/i)).toBeNull();
+  });
+
+  it('error copy wins over a custom message', () => {
+    render(withProvider(<LoginScreen error message="Your session expired — please sign in again." />));
+    expect(screen.getByText(/Sign-in failed/i)).toBeTruthy();
+    expect(screen.queryByText(/session expired/i)).toBeNull();
+  });
 });
