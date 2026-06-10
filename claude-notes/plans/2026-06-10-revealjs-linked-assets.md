@@ -221,12 +221,21 @@ docs feature, not resource-embedding.
   **Preview/WASM ([Q-6]) not yet exercised** — same Project-scoped artifact
   path flushes to the VFS, but confirm with a WASM build + a directly-previewed
   deck (separate from the embed/served work).
-- [ ] **4 — Re-stage examples + verify** `q2 render docs/`: decks link shared
-  `site_libs/revealjs/…`, one copy; deck still renders standalone. Update
-  `cargo xtask stage-doc-examples` expectations (decks now ship `_files/libs`).
-  Run full `cargo xtask verify` (incl. WASM).
+- [x] **4 — Re-stage examples + verify.** DONE. `cargo xtask stage-doc-examples`
+  re-rendered the 8 decks (each now ~1.5 KB + a `slides_files/revealjs/`
+  sidecar; `copy_static_output` already copies `*.html` + `*_files/`, no change
+  needed). `q2 render docs/` → 152 files; the deck is in
+  `_site/examples/…/03-fragments/` (linked, libs copied) and the revealjs page
+  embeds it via `<iframe src="../../examples/…/slides.html">`. Browser-verified
+  on a static server: the deck initializes reveal.js (`.reveal.ready`, 3 slides,
+  `window.Reveal` is a function, zero console errors). Full `cargo xtask verify`
+  (incl. WASM build + hub-client) passed.
 - [ ] **5 — Hand back to bd-kjrpya2d** for the served-iframe preview rework
-  (now that decks reference `site_libs/revealjs/…`, the embed must *serve*).
+  (now that decks reference `slides_files/revealjs/…`, the embed must *serve*).
+  Also still open: **[Q-6] direct-deck preview** — a deck opened *directly* in
+  `q2 preview` (not embedded). The WASM build compiles and uses the same
+  artifact path, but the q2-preview SPA's reveal-deck rendering + VFS lib
+  loading is not yet browser-verified.
 
 ## Out of scope (tracked elsewhere)
 
