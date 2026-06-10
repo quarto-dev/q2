@@ -1,5 +1,7 @@
+import { useContext } from 'react';
 import { Node } from '../../framework';
 import type { BlockNode, InlineNode, NodeArgs, TableBlock } from '../../framework';
+import { PreviewContext } from '../PreviewContext';
 
 /**
  * Table → `<table>` with optional `<caption>` / `<thead>` / `<tbody>` /
@@ -122,6 +124,12 @@ function RowNode({
 }
 
 export const Table = (args: NodeArgs<TableBlock>) => {
+    const ctx = useContext(PreviewContext);
+    const poolId = (args.node as any).s as string | number | undefined;
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
+    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
+
     const { node, onNavigateToDocument } = args;
     const c = node.c as unknown as [
         Attr,
@@ -134,7 +142,7 @@ export const Table = (args: NodeArgs<TableBlock>) => {
     const [attr, [, captionBlocks], , [, headRows], bodies, [, footRows]] = c;
 
     return (
-        <table {...attrToProps(attr)}>
+        <table {...attrToProps(attr)} {...affordanceAttr}>
             {captionBlocks && captionBlocks.length > 0 && (
                 <caption>
                     {captionBlocks.map((b, i) => (

@@ -178,7 +178,7 @@ mod tests {
         let mut extra = BTreeMap::new();
         extra.insert(
             "status".to_string(),
-            ConfigValue::new_string("draft", SourceInfo::default()),
+            ConfigValue::new_string("draft", SourceInfo::for_test()),
         );
         let li = ListingItemInfo {
             extra,

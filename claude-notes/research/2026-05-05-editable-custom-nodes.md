@@ -1,5 +1,7 @@
 # Research: Editable CustomNode slots in q2-preview
 
+> **Superseded:** by Plans 7d / 7e (2026-05-29). The `CoarsenedEntry::CustomNodeSplice` variant proposed here is not needed under the algebraic dispatch — R3 with the CustomNode shell helpers added in Plan 7e covers the same case structurally. This note is preserved as historical context for the slot-editing design discussion.
+
 **Date:** 2026-05-05
 **Status:** Research / design sketch — out of scope for the current
 q2-preview epic (Plans 1-8); captured here for findability if pursued.

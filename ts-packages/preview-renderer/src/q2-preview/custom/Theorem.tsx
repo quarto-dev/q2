@@ -1,3 +1,4 @@
+import { useContext } from 'react';
 import type {
     BlockNode,
     CustomBlockNode,
@@ -6,6 +7,7 @@ import type {
     ParaBlock,
 } from '../../framework';
 import { Node } from '../../framework';
+import { PreviewContext } from '../PreviewContext';
 import { THEOREM, THEOREM_TITLE } from '../quartoClasses';
 import { theoremEnvFor } from '../theoremEnvs';
 import { makeSlotSetter } from '../utils';
@@ -55,6 +57,12 @@ interface TheoremPlainData {
 }
 
 export const Theorem = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<CustomBlockNode>) => {
+    const ctx = useContext(PreviewContext);
+    const poolId = (node as any).s as string | number | undefined;
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(node) : null;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
+    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
+
     const plain = (node.plain_data ?? {}) as TheoremPlainData;
     const refType = plain.ref_type ?? '';
     const kind = plain.kind ?? '';
@@ -128,7 +136,7 @@ export const Theorem = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<Cu
     }
 
     return (
-        <div className={classList.join(' ')} id={id || undefined}>
+        <div className={classList.join(' ')} id={id || undefined} {...affordanceAttr}>
             <p>
                 <span className={THEOREM_TITLE}>
                     <strong>

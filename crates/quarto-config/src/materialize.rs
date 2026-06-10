@@ -28,7 +28,7 @@
 use crate::merged::{MergedConfig, MergedCursor, MergedValue};
 use crate::types::{ConfigError, ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp};
 use quarto_error_reporting::DiagnosticMessage;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 /// Options for materialization.
 #[derive(Debug, Clone)]
@@ -129,7 +129,10 @@ fn materialize_cursor(
                 path.pop();
                 entries.push(ConfigMapEntry {
                     key: key.to_string(),
-                    key_source: SourceInfo::default(), // We lose key source info during materialization
+                    // Materialization across layers loses per-key source
+                    // info; the programmatic-config sentinel is honest
+                    // about that.
+                    key_source: SourceInfo::generated(By::programmatic_config()),
                     value: child_value,
                 });
             }
@@ -149,7 +152,7 @@ fn materialize_cursor(
                                 .first()
                                 .map(|i| i.value.source_info.clone())
                                 .unwrap_or_default(),
-                            MergedValue::Map(_) => SourceInfo::default(),
+                            MergedValue::Map(_) => SourceInfo::generated(By::programmatic_config()),
                         })
                 })
                 .unwrap_or_default();
@@ -161,8 +164,9 @@ fn materialize_cursor(
             })
         }
         None => {
-            // Path doesn't exist - return null
-            Ok(ConfigValue::null(SourceInfo::default()))
+            // Path doesn't exist - return null with the "no real source"
+            // sentinel.
+            Ok(ConfigValue::null(SourceInfo::generated(By::unknown())))
         }
     }
 }
@@ -246,11 +250,11 @@ mod tests {
 
     // Helpers
     fn scalar(s: &str) -> ConfigValue {
-        ConfigValue::new_scalar(Yaml::String(s.into()), SourceInfo::default())
+        ConfigValue::new_scalar(Yaml::String(s.into()), SourceInfo::for_test())
     }
 
     fn array(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
@@ -258,11 +262,11 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     #[test]

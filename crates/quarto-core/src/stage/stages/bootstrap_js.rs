@@ -238,7 +238,7 @@ mod tests {
     fn empty_meta() -> ConfigValue {
         ConfigValue {
             value: ConfigValueKind::Map(vec![]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         }
     }
@@ -246,16 +246,16 @@ mod tests {
     fn meta_with_theme(theme: &str) -> ConfigValue {
         let theme_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String(theme.to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         ConfigValue {
             value: ConfigValueKind::Map(vec![ConfigMapEntry {
                 key: "theme".to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: theme_value,
             }]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         }
     }
@@ -263,16 +263,16 @@ mod tests {
     fn meta_with_minimal(value: bool) -> ConfigValue {
         let v = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::Boolean(value)),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         ConfigValue {
             value: ConfigValueKind::Map(vec![ConfigMapEntry {
                 key: "minimal".to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             }]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         }
     }

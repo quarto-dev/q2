@@ -1,0 +1,18 @@
+---
+format: q2-preview
+render-components:
+  - kanban.tsx
+---
+
+::: {.kanban}
+
+## backlog
+
+* item one
+* item two
+
+## doing
+
+* item three
+
+:::

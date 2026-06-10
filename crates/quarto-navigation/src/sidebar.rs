@@ -41,7 +41,7 @@
 
 use quarto_pandoc_types::ConfigMapEntry;
 use quarto_pandoc_types::config_value::ConfigValue;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use yaml_rust2::Yaml;
 
 use crate::item::NavigationItem;
@@ -133,14 +133,16 @@ impl AutoSpec {
     }
 
     pub fn to_config_value(&self) -> ConfigValue {
-        let info = SourceInfo::default();
+        let info = SourceInfo::generated(By::programmatic_config());
         match self {
             AutoSpec::All => ConfigValue::new_bool(true, info),
             AutoSpec::Path(p) => ConfigValue::new_string(p, info),
             AutoSpec::Paths(ps) => {
                 let values: Vec<ConfigValue> = ps
                     .iter()
-                    .map(|p| ConfigValue::new_string(p, SourceInfo::default()))
+                    .map(|p| {
+                        ConfigValue::new_string(p, SourceInfo::generated(By::programmatic_config()))
+                    })
                     .collect();
                 ConfigValue::new_array(values, info)
             }
@@ -167,7 +169,7 @@ pub enum SidebarEntry {
         href: Option<String>,
         /// `SourceInfo` of the YAML scalar that produced `href`.
         /// bd-qor9a — paired with `href` so the resolver knows which
-        /// YAML file the path was authored in. `SourceInfo::default()`
+        /// YAML file the path was authored in. `SourceInfo::generated(By::programmatic_config())`
         /// for programmatically-constructed sections.
         href_source: SourceInfo,
         /// Stable anchor id for the collapsible group. Auto-generated
@@ -227,7 +229,7 @@ impl SidebarEntry {
                         .and_then(|v| v.as_plain_text().map(|s| (s, v.source_info.clone())))
                 })
                 .map(|(s, info)| (Some(s), info))
-                .unwrap_or_else(|| (None, SourceInfo::default()));
+                .unwrap_or_else(|| (None, SourceInfo::generated(By::programmatic_config())));
             let id = cv.get("id").and_then(|v| v.as_plain_text());
             let contents = parse_contents(cv.get("contents"));
             let expanded = cv
@@ -283,7 +285,7 @@ impl SidebarEntry {
 
     /// Serialize back to a `ConfigValue` — round-trips the parse.
     pub fn to_config_value(&self) -> ConfigValue {
-        let info = SourceInfo::default();
+        let info = SourceInfo::generated(By::programmatic_config());
         match self {
             SidebarEntry::Link { item } => item.to_config_value(),
             SidebarEntry::Section {
@@ -454,7 +456,7 @@ impl Sidebar {
     }
 
     pub fn to_config_value(&self) -> ConfigValue {
-        let info = SourceInfo::default();
+        let info = SourceInfo::generated(By::programmatic_config());
         let mut entries: Vec<ConfigMapEntry> = Vec::new();
 
         if let Some(ref id) = self.id {
@@ -823,7 +825,7 @@ mod tests {
     use super::*;
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
-        let info = SourceInfo::default();
+        let info = SourceInfo::for_test();
         let map_entries: Vec<ConfigMapEntry> = entries
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
@@ -836,19 +838,19 @@ mod tests {
     }
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     fn b(x: bool) -> ConfigValue {
-        ConfigValue::new_bool(x, SourceInfo::default())
+        ConfigValue::new_bool(x, SourceInfo::for_test())
     }
 
     fn i(x: i64) -> ConfigValue {
-        ConfigValue::new_scalar(Yaml::Integer(x), SourceInfo::default())
+        ConfigValue::new_scalar(Yaml::Integer(x), SourceInfo::for_test())
     }
 
     fn arr(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     /// Test 1 — single object form with leaf links.
@@ -1003,7 +1005,7 @@ mod tests {
                 SidebarEntry::Section {
                     text: Some(s("Advanced")),
                     href: None,
-                    href_source: SourceInfo::default(),
+                    href_source: SourceInfo::for_test(),
                     id: Some("adv".to_string()),
                     expanded: true,
                     contents: vec![SidebarEntry::Link {

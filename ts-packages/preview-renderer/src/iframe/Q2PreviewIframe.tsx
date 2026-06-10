@@ -43,6 +43,34 @@ interface Q2PreviewIframeProps {
    */
   pendingAnchor?: string | null;
   pendingAnchorEpoch?: number;
+  /**
+   * The QMD source text that was used to produce the current render
+   * generation (Task 3 / block-editing plan). The byte offsets in
+   * `astJson` belong to this snapshot. Forwarded to the iframe in the
+   * UPDATE_AST payload as `content` so the iframe can slice source
+   * bytes without skew.
+   *
+   * Optional so the component degrades gracefully before entry.tsx is
+   * updated to consume it.
+   */
+  renderedContent?: string;
+  /**
+   * Pre-pipeline (untransformed) AST JSON shipped in lockstep with
+   * `astJson` + `renderedContent` (same compound-state generation).
+   * Forwarded to the iframe for the structural editability gate (Plan 2a).
+   */
+  untransformedAstJson?: string | null;
+  /**
+   * Reactji-authorship demo (2026-05-25 plan): current viewer's
+   * Automerge actor id, forwarded into the iframe so user TSX can
+   * compare `actor === me` against `useNodeAttribution(node).actor`.
+   * `null` when the producer has no actor yet (project initialising,
+   * non-Automerge document). Piggybacks on the `UPDATE_AST` payload
+   * because the value is stable per device — coupling to AST cadence
+   * is fine. Long-term home is `astContext.currentActor` (Plan 5
+   * follow-up).
+   */
+  currentActor?: string | null;
 }
 
 /**
@@ -73,6 +101,9 @@ export function Q2PreviewIframe({
   projectFilePaths,
   pendingAnchor,
   pendingAnchorEpoch,
+  renderedContent,
+  untransformedAstJson,
+  currentActor,
 }: Q2PreviewIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
@@ -179,6 +210,17 @@ export function Q2PreviewIframe({
           // iframe scrolls in a useEffect once the new DOM exists.
           pendingAnchor,
           pendingAnchorEpoch,
+          // Task 3 (block-editing): the QMD source snapshot whose byte
+          // offsets correspond to astJson. The iframe uses this to
+          // slice source ranges for inline editing without skew.
+          renderedContent,
+          // Plan 2a: pre-pipeline AST for the structural editability
+          // gate. Shipped in lockstep with astJson + renderedContent
+          // (same compound-state generation) so they can never skew.
+          untransformedAstJson,
+          // Reactji-authorship demo (2026-05-25 plan): viewer's
+          // Automerge actor id, threaded through to user TSX.
+          currentActor,
         },
       },
       '*',
@@ -191,6 +233,9 @@ export function Q2PreviewIframe({
     projectFilePaths,
     pendingAnchor,
     pendingAnchorEpoch,
+    renderedContent,
+    untransformedAstJson,
+    currentActor,
   ]);
 
   // Send theme CSS when iframe is ready and fingerprint is known.

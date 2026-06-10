@@ -1,0 +1,88 @@
+---
+format: q2-preview
+render-components:
+  - comment.tsx
+---
+# Gordon's render-components demo
+
+This page renders under **q2-preview**, the new format that ships
+real-HTML built-in components for every Pandoc base type and the
+Quarto custom-node taxonomy (callouts, theorems, proofs, figures,
+equations, cross-references). The TSX files loaded above only need
+to declare the components that go *beyond* the built-ins.[>> 🤔][>> 🤔][>> 🔥][>> 🔥]
+
+## What's built-in
+
+After q2-preview Plan 2B + 2C, the iframe ships native renderers for
+every Pandoc Block (Para, Header, Code, BlockQuote, Div, Figure,
+LineBlock, DefinitionList, Table, ...) and Inline (Str, Emph, Strong,
+Code, Link, Image, Math, Span, Cite, Note, ...) plus all six core
+Quarto custom-nodes (Callout, Theorem, Proof, FloatRefTarget,
+Equation, CrossrefResolvedRef). You no longer need to fork
+`html.tsx` to get a real-HTML render.
+
+Examples that just work without an override file:
+
+::: {.callout-note}
+A built-in callout — no TSX needed.
+:::
+
+::: {#thm-pythagoras .theorem}
+For a right triangle with legs of length $a$ and $b$ and hypotenuse $c$,
+$a^2 + b^2 = c^2$.
+:::
+
+@thm-pythagoras states the Pythagorean identity.
+
+$$e = mc^2$$ {#eq-einstein}
+
+## What's worth overriding
+
+Override TSX files declare components that aren't covered by the
+built-ins — domain-specific UIs that take advantage of the AST
+shape Quarto's parser emits:
+
+* **comment.tsx** — Slack-like commenting UI keyed off
+  `[>> body]{.quarto-edit-comment}` inline syntax.
+* **kanban.tsx** — drag-and-droppable columns keyed off
+  `::: {.kanban}` divs (uses `drag.tsx` as a helper).
+
+These layer onto the built-in registry via the `render-components:`
+frontmatter list above. User exports of the same name as a built-in
+shadow it (e.g. an export named `Callout` would replace the
+built-in callout component).
+
+::: {.kanban}
+
+## todo
+
+* Pull comments + reactions through Automerge so they sync between
+  collaborators.
+* Add a slide-deck override demo (q2-preview + Reveal).
+
+## doing
+
+* Render-components demo polish.
+
+## done
+
+* Fork from elliot/ and rebase for q2-preview.
+
+:::
+
+### Stable html and math
+
+```{=html}
+<iframe
+  src="https://www.tldraw.com/f/eSwsuq7vXe7ZpFZ4Dq88L?d=v0.0.1261.965.page"
+  style="height: 600px !important; border: 1px solid black; border-radius: 10px; margin-top: 10px;"
+></iframe>
+```
+
+[>> 😸]
+
+$$
+y = mx + b
+\newline
+G(a_n;x)=\sum_{n=0}^\infty a_n x^{n+1}.
+$$[>> 👀]

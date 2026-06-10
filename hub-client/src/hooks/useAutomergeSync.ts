@@ -30,7 +30,7 @@ import {
   setImmediateFileChangeCallback,
   type EditorContentChange,
 } from '@quarto/preview-runtime';
-import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
+import { diffToMonacoEdits, diffToEditorChanges } from '../utils/diffToMonacoEdits';
 
 interface UseAutomergeSyncOptions {
   /** Current file being edited (null if none selected) */
@@ -225,19 +225,43 @@ export function useAutomergeSync({
     }
   }, [onContentOperations]);
 
-  // ── AST rewrite (through Monaco → onChange → splice path) ────────────
+  // ── AST rewrite ────────────────────────────────────────────────────────
+  //
+  // Always write directly to Automerge, then optionally sync Monaco.
+  //
+  // Routing the write through Monaco's executeEdits → onChange used to work
+  // when Monaco was visible, but fails silently when Monaco is hidden
+  // (display:none in Preview view) because the hidden editor does not
+  // reliably fire onChange.  Writing to Automerge directly is always safe:
+  // the setImmediateFileChangeCallback in the real-time path will update
+  // Monaco (with applyingRemoteRef guarding against echo) if it is ready.
+  // If Monaco is not yet mounted, setContent keeps the preview in sync.
   const handleContentRewrite = useCallback((newContent: string) => {
-    if (!editorRef.current || !currentFile) return;
-    const model = editorRef.current.getModel();
-    if (!model) return;
+    if (!currentFile) return;
 
-    const oldContent = model.getValue();
-    const edits = diffToMonacoEdits(oldContent, newContent);
-    if (edits.length > 0) {
-      editorRef.current.executeEdits('ast-rewrite', edits);
+    const oldContent = getFileContent(currentFile.path) ?? '';
+    const changes = diffToEditorChanges(oldContent, newContent);
+    if (changes.length > 0) {
+      onContentOperations(currentFile.path, changes);
+      // onContentOperations fires setImmediateFileChangeCallback synchronously;
+      // handleImmediateSync updates Monaco (if mounted) and calls setContent.
     }
-    // onChange fires synchronously → handleEditorChange → setContent + onContentOperations
-  }, [currentFile]);
+    setContent(newContent);
+
+    // Sync Monaco model if it's mounted and not already up-to-date.
+    // Treat this as a remote edit (applyingRemoteRef) so handleEditorChange
+    // does not echo the change back to Automerge.
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (editor && model && model.getValue() !== newContent) {
+      const edits = diffToMonacoEdits(model.getValue(), newContent);
+      if (edits.length > 0) {
+        applyingRemoteRef.current = true;
+        editor.executeEdits('ast-rewrite', edits);
+        applyingRemoteRef.current = false;
+      }
+    }
+  }, [currentFile, onContentOperations]);
 
   return {
     content,

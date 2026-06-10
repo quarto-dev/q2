@@ -151,19 +151,19 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     fn arr(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     fn make_index_with(paths: &[&str]) -> ProjectIndex {
@@ -234,7 +234,7 @@ mod tests {
         let mut meta = ConfigValue::default();
         let auto_entry = config_map(vec![(
             "auto",
-            ConfigValue::new_bool(true, SourceInfo::default()),
+            ConfigValue::new_bool(true, SourceInfo::for_test()),
         )]);
         let sidebar = config_map(vec![("contents", arr(vec![auto_entry]))]);
         meta.insert_path(&["website", "sidebar"], sidebar);

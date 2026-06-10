@@ -19,6 +19,8 @@ be in reverse chronological order (latest first).
 
 - [`fa2cf019`](https://github.com/quarto-dev/q2/commits/fa2cf019): Opening a document after the sign-in session has expired now cleanly aborts and triggers a silent renewal, instead of opening the document with a randomized collaboration identity.
 - [`465de01f`](https://github.com/quarto-dev/q2/commits/465de01f): An expired sign-in no longer presents as a permanent "working offline" state — the client now detects the rejected session, attempts silent renewal, and returns to the login screen with a "session expired" message; genuine network outages keep offline editing intact.
+- [`6b8fb166`](https://github.com/quarto-dev/q2/commits/6b8fb166): Paragraphs, headings, and nested content blocks (inside callouts, fenced divs, list items, and blockquotes) in q2-preview are now click-to-edit — click any block to open an inline editor, make changes, and they save back to the QMD source automatically.
+- [`13380eb8`](https://github.com/quarto-dev/q2/commits/13380eb8): Render-component authors can now access authorship data via `useNodeAttribution` and `useCurrentActor` on `__Q2_PREVIEW_RENDERER__`, enabling components that respond to who wrote each node (e.g. toggling a reactji the current user added, per-author accent colours). Requires auth + Attribution toggle on.
 
 ### 2026-06-09
 

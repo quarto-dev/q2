@@ -12,6 +12,7 @@ declare module 'wasm-quarto-hub-client' {
     ast?: string;
     qmd?: string;
     error?: string;
+    warnings?: unknown[];
   }
 
   export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;

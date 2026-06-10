@@ -3,6 +3,22 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+//! JSON reader with a strict/completing split.
+//!
+//! **`read`** (strict) — rejects nodes missing an `s:` field with
+//! [`JsonReadError::MissingSourceInfoRef`]. Used by the WASM bridge's
+//! `incremental_write_qmd` and all q2-internal JSON paths where every node
+//! is guaranteed to carry source info.
+//!
+//! **`read_completing_source_info(input, default_by)`** (completing) — fills
+//! missing `s:` with `Generated{by: default_by, from: []}` instead of
+//! erroring. Used by outside-world callers (Pandoc subprocess, Lua filter
+//! output, CLI `--from json`, qmd-syntax-helper) that produce JSON without
+//! q2's source-info extension. Each call site passes an explicit `default_by`
+//! declaring the provenance of the completing nodes.
+//!
+//! See plan 7f Phase 4 for the design rationale and per-caller table.
+
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::location::{Location, Range};
 use crate::pandoc::{
@@ -16,8 +32,9 @@ use crate::pandoc::{
 };
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
-use quarto_source_map::FileId;
+use quarto_source_map::{Anchor, AnchorRole, By, FileId};
 use serde_json::Value;
+use smallvec::SmallVec;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -28,6 +45,16 @@ pub enum JsonReadError {
     UnsupportedVariant(String),
     InvalidSourceInfoRef(usize),
     ExpectedSourceInfoRef,
+    /// Strict reader (`json::read`) hit a node missing its `s:` reference.
+    /// `node_path` is a best-effort hint about where in the JSON tree the
+    /// offending node lives (e.g. `"Block.Para"`, `"Inline.Str"`).
+    /// Callers consuming JSON from outside the q2 source-tracking world
+    /// (Pandoc subprocess, CLI `--from json`, etc.) should use
+    /// [`read_completing_source_info`] with an explicit `default_by`
+    /// instead — see plan 7f Phase 4.
+    MissingSourceInfoRef {
+        node_path: String,
+    },
     MalformedSourceInfoPool,
     CircularSourceInfoReference(usize),
 }
@@ -47,13 +74,20 @@ impl std::fmt::Display for JsonReadError {
             JsonReadError::ExpectedSourceInfoRef => {
                 write!(f, "Expected SourceInfo $ref, got inline SourceInfo")
             }
+            JsonReadError::MissingSourceInfoRef { node_path } => {
+                write!(
+                    f,
+                    "Missing source_info reference at {}; use read_completing_source_info for JSON without `s:`",
+                    node_path
+                )
+            }
             JsonReadError::MalformedSourceInfoPool => {
-                write!(f, "Malformed sourceInfoPool in astContext")
+                write!(f, "Malformed source-info pool (`p`) in astContext")
             }
             JsonReadError::CircularSourceInfoReference(id) => {
                 write!(
                     f,
-                    "Circular or forward reference in sourceInfoPool: ID {} references a parent that doesn't exist yet",
+                    "Circular or forward reference in source-info pool (`p`): ID {} references a parent that doesn't exist yet",
                     id
                 )
             }
@@ -67,7 +101,7 @@ type Result<T> = std::result::Result<T, JsonReadError>;
 
 /// Deserializer that reconstructs SourceInfo objects from a pool.
 ///
-/// During JSON deserialization, the sourceInfoPool from astContext is parsed
+/// During JSON deserialization, the source-info pool (`p`) from astContext is parsed
 /// into a Vec<SourceInfo>. References in the AST ({"$ref": id}) are resolved
 /// by looking up the ID in this pool.
 ///
@@ -81,15 +115,60 @@ type Result<T> = std::result::Result<T, JsonReadError>;
 #[derive(Debug)]
 struct SourceInfoDeserializer {
     pool: Vec<quarto_source_map::SourceInfo>,
+    /// When `Some(by)`, missing `s:` references are filled with a fresh
+    /// `Generated { by: <by>, from: [] }` instead of raising
+    /// [`JsonReadError::MissingSourceInfoRef`]. Used by
+    /// [`read_completing_source_info`] for outside-world JSON consumers
+    /// (Pandoc subprocess, CLI `--from json`, Lua AST handoff,
+    /// qmd-syntax-helper) — see plan 7f Phase 4.
+    ///
+    /// When `None`, the deserializer is in strict mode and missing `s:`
+    /// is an error. This is the contract for q2-internal JSON.
+    completing_default_by: Option<By>,
 }
 
 impl SourceInfoDeserializer {
     /// Create a new empty deserializer (for documents without SourceInfo)
     fn empty() -> Self {
-        SourceInfoDeserializer { pool: Vec::new() }
+        SourceInfoDeserializer {
+            pool: Vec::new(),
+            completing_default_by: None,
+        }
     }
 
-    /// Build the pool from the sourceInfoPool JSON array (compact format)
+    /// Resolve a node's `s:` field to a `SourceInfo`.
+    ///
+    /// In strict mode (`completing_default_by == None`), missing `s:`
+    /// fails with [`JsonReadError::MissingSourceInfoRef`] carrying
+    /// `node_path` so a JS-side debugger seeing the error in an
+    /// `incremental_write_qmd` response can find the responsible
+    /// producer site.
+    ///
+    /// In completing mode, missing `s:` is filled with a fresh
+    /// `Generated { by: <default_by>, from: [] }`. The fresh value is
+    /// constructed in-place; the pool isn't grown on read (the writer
+    /// allocates a new pool entry on re-serialize per the design in
+    /// [`incremental-writer-contract.md`]).
+    fn resolve_source_info(
+        &self,
+        s_val: Option<&Value>,
+        node_path: &str,
+    ) -> Result<quarto_source_map::SourceInfo> {
+        match s_val {
+            Some(v) => self.from_json_ref(v),
+            None => match &self.completing_default_by {
+                Some(by) => Ok(quarto_source_map::SourceInfo::Generated {
+                    by: by.clone(),
+                    from: SmallVec::new(),
+                }),
+                None => Err(JsonReadError::MissingSourceInfoRef {
+                    node_path: node_path.to_string(),
+                }),
+            },
+        }
+    }
+
+    /// Build the pool from the `p` (source-info pool) JSON array (compact format)
     ///
     /// New format: {"r": [start_offset, end_offset], "t": type_code, "d": data}
     /// Old format: {"r": [start_off, start_row, start_col, end_off, end_row, end_col], "t": type_code, "d": data}
@@ -250,36 +329,132 @@ impl SourceInfoDeserializer {
                     quarto_source_map::SourceInfo::Concat { pieces: pieces? }
                 }
                 3 => {
-                    // Transformed variant no longer exists in SourceInfo
-                    // Convert to approximate Substring pointing to parent
-                    // This loses the transformation mapping but preserves the parent relationship
+                    // Legacy reader for code 3 — accepts both old Transformed
+                    // numeric-array and buggy FilterProvenance string-array; new
+                    // writers (post-Plan-5) never emit code 3. Two shapes are
+                    // possible and dispatch is by `data[0]`'s JSON type, which
+                    // is unambiguous:
+                    //   - Numeric-headed `[parent_id, ...]` → legacy Transformed,
+                    //     approximated as Substring pointing to that parent
+                    //     (preserves today's back-compat).
+                    //   - String-headed `[filter_path, line]` → latent
+                    //     FilterProvenance, recovered as
+                    //     `Generated { by: filter, from: [] }` (closes bd-3odjm).
+                    // Strict on every other shape — same convention as the
+                    // Substring / Concat arms above (no `unwrap_or(0)`).
                     let data_array = data
                         .as_array()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?;
                     if data_array.is_empty() {
                         return Err(JsonReadError::MalformedSourceInfoPool);
                     }
-                    let parent_id = data_array[0]
-                        .as_u64()
+
+                    if let Some(parent_id) = data_array[0].as_u64() {
+                        // Legacy Transformed path.
+                        let parent_id = parent_id as usize;
+
+                        // Check for circular/forward references
+                        if parent_id >= current_index {
+                            return Err(JsonReadError::CircularSourceInfoReference(parent_id));
+                        }
+
+                        let parent = pool
+                            .get(parent_id)
+                            .ok_or(JsonReadError::InvalidSourceInfoRef(parent_id))?
+                            .clone();
+
+                        // Approximate with Substring
+                        quarto_source_map::SourceInfo::Substring {
+                            parent: Arc::new(parent),
+                            start_offset,
+                            end_offset,
+                        }
+                    } else if let Some(filter_path) = data_array[0].as_str() {
+                        // Latent FilterProvenance shape: must be exactly
+                        // [path, line]; no `unwrap_or(0)` on the line.
+                        if data_array.len() != 2 {
+                            return Err(JsonReadError::MalformedSourceInfoPool);
+                        }
+                        let line = data_array[1]
+                            .as_u64()
+                            .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                            as usize;
+                        quarto_source_map::SourceInfo::Generated {
+                            by: By::filter(filter_path.to_string(), line),
+                            from: SmallVec::new(),
+                        }
+                    } else {
+                        return Err(JsonReadError::MalformedSourceInfoPool);
+                    }
+                }
+                4 => {
+                    // Generated { by, from }. The outer `r` field is parsed
+                    // by the caller and *ignored here* — Generated entries
+                    // don't carry their own offsets; ranges come from
+                    // chain-walking the Invocation anchor via
+                    // `resolve_byte_range`. The writer hard-codes
+                    // `r: [0, 0]` for code-4 entries, but `r != [0, 0]` from
+                    // an older/future writer is silently accepted (precedent:
+                    // today's Concat arm also parses `r` but doesn't use it).
+                    //
+                    // Strict on every other shape: missing `by`, missing
+                    // `by.kind`, `from` not an array, `from` entry not an
+                    // object, `from` entry missing `role`/`si_id`,
+                    // unrecognized role string, `Other("")` role with empty
+                    // suffix → `MalformedSourceInfoPool`. Same convention as
+                    // the Substring / Concat arms above.
+                    let obj = data
+                        .as_object()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+                    let by_obj = obj
+                        .get("by")
+                        .and_then(|v| v.as_object())
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+                    let kind = by_obj
+                        .get("kind")
+                        .and_then(|v| v.as_str())
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize;
+                        .to_string();
+                    let by_data = by_obj.get("data").cloned().unwrap_or(Value::Null);
+                    let by = By {
+                        kind,
+                        data: by_data,
+                    };
 
-                    // Check for circular/forward references
-                    if parent_id >= current_index {
-                        return Err(JsonReadError::CircularSourceInfoReference(parent_id));
+                    let mut from: SmallVec<[Anchor; 2]> = SmallVec::new();
+                    if let Some(from_val) = obj.get("from") {
+                        let from_arr = from_val
+                            .as_array()
+                            .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+                        for entry in from_arr {
+                            let entry_obj = entry
+                                .as_object()
+                                .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+                            let role_str = entry_obj
+                                .get("role")
+                                .and_then(|v| v.as_str())
+                                .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+                            let role = parse_anchor_role(role_str)?;
+                            let si_id = entry_obj
+                                .get("si_id")
+                                .and_then(|v| v.as_u64())
+                                .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                as usize;
+                            if si_id >= current_index {
+                                return Err(JsonReadError::CircularSourceInfoReference(si_id));
+                            }
+                            let target = pool
+                                .get(si_id)
+                                .cloned()
+                                .ok_or(JsonReadError::InvalidSourceInfoRef(si_id))?;
+                            from.push(Anchor {
+                                role,
+                                source_info: Arc::new(target),
+                            });
+                        }
                     }
 
-                    let parent = pool
-                        .get(parent_id)
-                        .ok_or(JsonReadError::InvalidSourceInfoRef(parent_id))?
-                        .clone();
-
-                    // Approximate with Substring
-                    quarto_source_map::SourceInfo::Substring {
-                        parent: Arc::new(parent),
-                        start_offset,
-                        end_offset,
-                    }
+                    quarto_source_map::SourceInfo::Generated { by, from }
                 }
                 _ => {
                     return Err(JsonReadError::MalformedSourceInfoPool);
@@ -289,7 +464,10 @@ impl SourceInfoDeserializer {
             pool.push(source_info);
         }
 
-        Ok(SourceInfoDeserializer { pool })
+        Ok(SourceInfoDeserializer {
+            pool,
+            completing_default_by: None,
+        })
     }
 
     /// Resolve a numeric reference to a SourceInfo
@@ -302,6 +480,33 @@ impl SourceInfoDeserializer {
                 .ok_or(JsonReadError::InvalidSourceInfoRef(id))
         } else {
             Err(JsonReadError::ExpectedSourceInfoRef)
+        }
+    }
+}
+
+/// Decode a wire-format anchor role string into its typed `AnchorRole`.
+///
+/// Recognized strings:
+///   - `"invocation"` → [`AnchorRole::Invocation`]
+///   - `"value-source"` → [`AnchorRole::ValueSource`]
+///   - `"other:<name>"` → [`AnchorRole::Other(<name>)`], where `<name>` must
+///     be non-empty.
+///
+/// Anything else — including the bare `"other:"` with an empty suffix —
+/// is rejected as `MalformedSourceInfoPool`.
+#[allow(dead_code)] // Used by the Phase 2 code-4 reader.
+fn parse_anchor_role(s: &str) -> Result<AnchorRole> {
+    match s {
+        "invocation" => Ok(AnchorRole::Invocation),
+        "value-source" => Ok(AnchorRole::ValueSource),
+        _ => {
+            let name = s
+                .strip_prefix("other:")
+                .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+            if name.is_empty() {
+                return Err(JsonReadError::MalformedSourceInfoPool);
+            }
+            Ok(AnchorRole::Other(name.to_string()))
         }
     }
 }
@@ -431,7 +636,7 @@ fn read_attr_source(
     value: Option<&Value>,
     deserializer: &SourceInfoDeserializer,
 ) -> Result<AttrSourceInfo> {
-    // If attrS field is missing or null, return empty
+    // If `a` (attr_source) field is missing or null, return empty
     let Some(obj) = value.and_then(|v| v.as_object()) else {
         return Ok(AttrSourceInfo::empty());
     };
@@ -536,18 +741,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
         .and_then(|v| v.as_str())
         .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
 
-    // Extract source information - try new format ("s" field) first, fall back to old format ("l" field)
-    let source_info = if let Some(s_val) = obj.get("s") {
-        // New format: source info reference to pool
-        deserializer.from_json_ref(s_val)?
-    } else {
-        // Old format: inline location
-        let (filename_index, range) = obj
-            .get("l")
-            .and_then(read_location)
-            .unwrap_or_else(|| (None, empty_range()));
-        make_source_info(filename_index, range)
-    };
+    let source_info = deserializer.resolve_source_info(obj.get("s"), &format!("Inline.{}", t))?;
 
     match t {
         "Str" => {
@@ -604,7 +798,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .as_str()
                 .ok_or_else(|| JsonReadError::InvalidType("Code text must be string".to_string()))?
                 .to_string();
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Inline::Code(Code {
                 attr,
                 text,
@@ -774,7 +968,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .ok_or_else(|| JsonReadError::InvalidType("Link title must be string".to_string()))?
                 .to_string();
             let target = (url, title);
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
 
             Ok(Inline::Link(Link {
                 attr,
@@ -850,7 +1044,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 })?
                 .to_string();
             let target = (url, title);
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
 
             Ok(Inline::Image(Image {
                 attr,
@@ -882,7 +1076,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             }
 
             let content = read_inlines(&arr[1], deserializer)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Inline::Span(Span {
                 attr,
                 content,
@@ -1060,16 +1254,55 @@ fn read_ast_context(value: &Value) -> Result<ASTContext> {
     })
 }
 
+/// Strict JSON reader for q2-internal JSON.
+///
+/// Every wire-format node with an `s:` field (Block, Inline, Cell, Row,
+/// TableHead, TableBody, TableFoot, ConfigValue, Caption) must carry a
+/// valid pool reference. Missing-`s:` fails with
+/// [`JsonReadError::MissingSourceInfoRef`].
+///
+/// For JSON from outside the q2 source-tracking world — Pandoc subprocess
+/// output, CLI `--from json`, Lua AST handoff, qmd-syntax-helper — use
+/// [`read_completing_source_info`] with an explicit `default_by`.
 pub fn read<R: std::io::Read>(reader: &mut R) -> Result<(Pandoc, ASTContext)> {
     let mut buffer = String::new();
     reader
         .read_to_string(&mut buffer)
         .map_err(|e| JsonReadError::InvalidJson(serde_json::Error::io(e)))?;
     let json: Value = serde_json::from_str(&buffer).map_err(JsonReadError::InvalidJson)?;
-    read_pandoc(&json)
+    read_pandoc(&json, None)
 }
 
-fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
+/// Lenient JSON reader for outside-world JSON.
+///
+/// Behaves like [`read`] except that any wire-format node missing its
+/// `s:` field is filled with a fresh `Generated { by: default_by, from: [] }`
+/// instead of returning [`JsonReadError::MissingSourceInfoRef`]. Used by:
+///
+/// - `json_filter.rs` → Lua filter subprocess output, with
+///   `By::filter(filter_path, 0)`.
+/// - `qmd-syntax-helper/conversions/{definition_lists,grid_tables}.rs`
+///   → Pandoc subprocess output, with `By::unknown()`.
+/// - `pampa/src/main.rs` → CLI `--from json`, with `By::unknown()`.
+/// - `pampa/src/lua/readwrite.rs` → Lua AST handoff, with `By::unknown()`.
+///
+/// Per the design, no pool entries are allocated on read; the fresh
+/// `SourceInfo` value is constructed in-place and the writer assigns it a
+/// pool ID on re-serialize. See `claude-notes/designs/provenance-contract.md`
+/// and plan 7f Phase 4 for the per-caller rationale.
+pub fn read_completing_source_info<R: std::io::Read>(
+    reader: &mut R,
+    default_by: By,
+) -> Result<(Pandoc, ASTContext)> {
+    let mut buffer = String::new();
+    reader
+        .read_to_string(&mut buffer)
+        .map_err(|e| JsonReadError::InvalidJson(serde_json::Error::io(e)))?;
+    let json: Value = serde_json::from_str(&buffer).map_err(JsonReadError::InvalidJson)?;
+    read_pandoc(&json, Some(default_by))
+}
+
+fn read_pandoc(value: &Value, completing_default_by: Option<By>) -> Result<(Pandoc, ASTContext)> {
     let obj = value
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for Pandoc".to_string()))?;
@@ -1085,10 +1318,10 @@ fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
         ASTContext::new()
     };
 
-    // Extract sourceInfoPool and create deserializer
-    let deserializer = if let Some(ast_context_val) = obj.get("astContext") {
+    // Extract `p` (source-info pool) and create deserializer
+    let mut deserializer = if let Some(ast_context_val) = obj.get("astContext") {
         if let Some(ast_context_obj) = ast_context_val.as_object() {
-            if let Some(pool_json) = ast_context_obj.get("sourceInfoPool") {
+            if let Some(pool_json) = ast_context_obj.get("p") {
                 SourceInfoDeserializer::new(pool_json)?
             } else {
                 SourceInfoDeserializer::empty()
@@ -1099,6 +1332,7 @@ fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
     } else {
         SourceInfoDeserializer::empty()
     };
+    deserializer.completing_default_by = completing_default_by;
 
     // Extract metaTopLevelKeySources if present
     let key_sources = if let Some(ast_context_val) = obj.get("astContext") {
@@ -1225,16 +1459,10 @@ fn read_caption(
         Some(read_blocks(&arr[1], deserializer)?)
     };
 
-    // Read source info from parallel source value if provided
-    let source_info = if let Some(s_val) = source_val {
-        if s_val.is_number() {
-            deserializer.from_json_ref(s_val)?
-        } else {
-            quarto_source_map::SourceInfo::default()
-        }
-    } else {
-        quarto_source_map::SourceInfo::default()
-    };
+    // Caption's source_val is the entry from the parent struct's parallel
+    // source field; it's the `s:` value directly, not an object containing
+    // an `s:` field. Pass it through to the helper.
+    let source_info = deserializer.resolve_source_info(source_val, "Caption")?;
 
     Ok(Caption {
         short,
@@ -1343,21 +1571,11 @@ fn read_cell(
         as usize;
     let content = read_blocks(&arr[4], deserializer)?;
 
-    // Read source info from parallel source structure if provided
-    let (source_info, attr_source) = if let Some(s_obj) = source_val {
-        let source_info = if let Some(s_val) = s_obj.get("s") {
-            deserializer.from_json_ref(s_val)?
-        } else {
-            quarto_source_map::SourceInfo::default()
-        };
-        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
-        (source_info, attr_source)
-    } else {
-        (
-            quarto_source_map::SourceInfo::default(),
-            AttrSourceInfo::empty(),
-        )
-    };
+    // Read source info from parallel source structure
+    let s_obj_map = source_val.and_then(|v| v.as_object());
+    let source_info =
+        deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "Cell")?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
 
     Ok(Cell {
         attr,
@@ -1392,23 +1610,14 @@ fn read_row(
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Row cells must be array".to_string()))?;
 
-    // Read source info from parallel source structure if provided
-    let (source_info, attr_source, cells_source) = if let Some(s_obj) = source_val {
-        let source_info = if let Some(s_val) = s_obj.get("s") {
-            deserializer.from_json_ref(s_val)?
-        } else {
-            quarto_source_map::SourceInfo::default()
-        };
-        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
-        let cells_source = s_obj.get("cellsS").and_then(|v| v.as_array());
-        (source_info, attr_source, cells_source)
-    } else {
-        (
-            quarto_source_map::SourceInfo::default(),
-            AttrSourceInfo::empty(),
-            None,
-        )
-    };
+    // Read source info from parallel source structure
+    let s_obj_map = source_val.and_then(|v| v.as_object());
+    let source_info =
+        deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "Row")?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
+    let cells_source = s_obj_map
+        .and_then(|o| o.get("cellsS"))
+        .and_then(|v| v.as_array());
 
     // Read cells with their source info
     let cells = cells_arr
@@ -1450,23 +1659,14 @@ fn read_table_head(
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableHead rows must be array".to_string()))?;
 
-    // Read source info from parallel source structure if provided
-    let (source_info, attr_source, rows_source) = if let Some(s_obj) = source_val {
-        let source_info = if let Some(s_val) = s_obj.get("s") {
-            deserializer.from_json_ref(s_val)?
-        } else {
-            quarto_source_map::SourceInfo::default()
-        };
-        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
-        let rows_source = s_obj.get("rowsS").and_then(|v| v.as_array());
-        (source_info, attr_source, rows_source)
-    } else {
-        (
-            quarto_source_map::SourceInfo::default(),
-            AttrSourceInfo::empty(),
-            None,
-        )
-    };
+    // Read source info from parallel source structure
+    let s_obj_map = source_val.and_then(|v| v.as_object());
+    let source_info =
+        deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "TableHead")?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
+    let rows_source = s_obj_map
+        .and_then(|o| o.get("rowsS"))
+        .and_then(|v| v.as_array());
 
     // Read rows with their source info
     let rows = rows_arr
@@ -1514,25 +1714,17 @@ fn read_table_body(
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableBody body must be array".to_string()))?;
 
-    // Read source info from parallel source structure if provided
-    let (source_info, attr_source, head_source, body_source) = if let Some(s_obj) = source_val {
-        let source_info = if let Some(s_val) = s_obj.get("s") {
-            deserializer.from_json_ref(s_val)?
-        } else {
-            quarto_source_map::SourceInfo::default()
-        };
-        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
-        let head_source = s_obj.get("headS").and_then(|v| v.as_array());
-        let body_source = s_obj.get("bodyS").and_then(|v| v.as_array());
-        (source_info, attr_source, head_source, body_source)
-    } else {
-        (
-            quarto_source_map::SourceInfo::default(),
-            AttrSourceInfo::empty(),
-            None,
-            None,
-        )
-    };
+    // Read source info from parallel source structure
+    let s_obj_map = source_val.and_then(|v| v.as_object());
+    let source_info =
+        deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "TableBody")?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
+    let head_source = s_obj_map
+        .and_then(|o| o.get("headS"))
+        .and_then(|v| v.as_array());
+    let body_source = s_obj_map
+        .and_then(|o| o.get("bodyS"))
+        .and_then(|v| v.as_array());
 
     // Read head rows with their source info
     let head = head_arr
@@ -1586,23 +1778,14 @@ fn read_table_foot(
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableFoot rows must be array".to_string()))?;
 
-    // Read source info from parallel source structure if provided
-    let (source_info, attr_source, rows_source) = if let Some(s_obj) = source_val {
-        let source_info = if let Some(s_val) = s_obj.get("s") {
-            deserializer.from_json_ref(s_val)?
-        } else {
-            quarto_source_map::SourceInfo::default()
-        };
-        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
-        let rows_source = s_obj.get("rowsS").and_then(|v| v.as_array());
-        (source_info, attr_source, rows_source)
-    } else {
-        (
-            quarto_source_map::SourceInfo::default(),
-            AttrSourceInfo::empty(),
-            None,
-        )
-    };
+    // Read source info from parallel source structure
+    let s_obj_map = source_val.and_then(|v| v.as_object());
+    let source_info =
+        deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "TableFoot")?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
+    let rows_source = s_obj_map
+        .and_then(|o| o.get("rowsS"))
+        .and_then(|v| v.as_array());
 
     // Read rows with their source info
     let rows = rows_arr
@@ -1631,18 +1814,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
         .and_then(|v| v.as_str())
         .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
 
-    // Extract source information - try new format ("s" field) first, fall back to old format ("l" field)
-    let source_info = if let Some(s_val) = obj.get("s") {
-        // New format: source info reference to pool
-        deserializer.from_json_ref(s_val)?
-    } else {
-        // Old format: inline location
-        let (filename_index, range) = obj
-            .get("l")
-            .and_then(read_location)
-            .unwrap_or_else(|| (None, empty_range()));
-        make_source_info(filename_index, range)
-    };
+    let source_info = deserializer.resolve_source_info(obj.get("s"), &format!("Block.{}", t))?;
 
     match t {
         "Para" => {
@@ -1700,7 +1872,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                     JsonReadError::InvalidType("CodeBlock text must be string".to_string())
                 })?
                 .to_string();
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::CodeBlock(CodeBlock {
                 attr,
                 text,
@@ -1823,7 +1995,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             })? as usize;
             let attr = read_attr(&arr[1])?;
             let content = read_inlines(&arr[2], deserializer)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::Header(Header {
                 level,
                 attr,
@@ -1846,10 +2018,12 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 ));
             }
             let attr = read_attr(&arr[0])?;
-            // Figure caption uses old format (object), not parallel source fields yet
-            let caption = read_caption(&arr[1], deserializer, None)?;
+            // Plan 7f Phase 4: Figure now emits `captionS` (sibling source
+            // info for the caption) — same shape as Table.
+            let caption_source = obj.get("captionS");
+            let caption = read_caption(&arr[1], deserializer, caption_source)?;
             let content = read_blocks(&arr[2], deserializer)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::Figure(Figure {
                 attr,
                 caption,
@@ -1899,7 +2073,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 })
                 .collect::<Result<Vec<_>>>()?;
             let foot = read_table_foot(&arr[5], deserializer, foot_source)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::Table(Table {
                 attr,
                 caption,
@@ -1931,7 +2105,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             }
 
             let content = read_blocks(&arr[1], deserializer)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::Div(Div {
                 attr,
                 content,
@@ -2011,6 +2185,9 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
 
 /// Phase 5: Read ConfigValue directly from JSON without MetaValueWithSourceInfo intermediate
 /// This function reads the top-level metadata from Pandoc JSON format.
+// SourceInfo::default() calls below are intentional backward-compatibility fallbacks for
+// legacy JSON that predates source tracking. See provenance-contract.md §10.
+#[allow(deprecated)]
 fn read_config_value_top_level(
     value: &Value,
     key_sources: Option<&Value>,
@@ -2050,13 +2227,21 @@ fn read_config_value_top_level(
 
     Ok(ConfigValue {
         value: ConfigValueKind::Map(entries),
-        // Legitimate default: top-level meta doesn't have source tracking in JSON
-        source_info: quarto_source_map::SourceInfo::default(),
+        // Top-level meta doesn't have a JSON-level source_info field, so we
+        // stamp it with the same `config_default` provenance the writer uses
+        // for `ConfigValue::default()`. Plan 7f Phase 6.5: matches the
+        // `By::config_default()` kind landing in `quarto-pandoc-types`.
+        source_info: quarto_source_map::SourceInfo::generated(
+            quarto_source_map::By::config_default(),
+        ),
         merge_op: quarto_pandoc_types::MergeOp::default(),
     })
 }
 
 /// Phase 5: Read ConfigValue directly from JSON without MetaValueWithSourceInfo intermediate
+// SourceInfo::default() calls below are intentional backward-compatibility fallbacks for
+// legacy JSON that predates source tracking. See provenance-contract.md §10.
+#[allow(deprecated)]
 fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<ConfigValue> {
     let obj = value
         .as_object()
@@ -2066,13 +2251,8 @@ fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Re
         .and_then(|v| v.as_str())
         .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
 
-    // Read source_info using deserializer (new format), or use default (old format for backwards compatibility)
-    let source_info = if let Some(s) = obj.get("s") {
-        deserializer.from_json_ref(s)?
-    } else {
-        // Legitimate default: Old JSON format doesn't have "s" field (backward compatibility)
-        quarto_source_map::SourceInfo::default()
-    };
+    let source_info =
+        deserializer.resolve_source_info(obj.get("s"), &format!("ConfigValue.{}", t))?;
 
     let merge_op = quarto_pandoc_types::MergeOp::default();
 
@@ -2629,6 +2809,523 @@ mod tests {
                 assert_eq!(id, 2);
             }
             _ => panic!("Expected CircularSourceInfoReference error"),
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Plan 5 Phase 1 — Legacy code-3 dual-shape reader
+    // ----------------------------------------------------------------
+
+    /// Filter-provenance recovery: code-3 with `[filter_path, line]` payload
+    /// must decode to `Generated { by: By::filter(path, line), from: [] }`.
+    /// Closes bd-3odjm — this is the latent FilterProvenance shape that
+    /// today's reader misinterprets as a legacy Transformed parent_id.
+    #[test]
+    fn test_deserialize_code3_filter_provenance_recovery() {
+        let pool_json = json!([
+            {
+                "r": [0, 0],
+                "t": 3,
+                "d": ["/path/to/filter.lua", 42]
+            }
+        ]);
+
+        let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
+        assert_eq!(deserializer.pool.len(), 1);
+        match &deserializer.pool[0] {
+            SourceInfo::Generated { by, from } => {
+                assert!(from.is_empty());
+                let (path, line) = by.as_filter().expect("expected filter By");
+                assert_eq!(path, "/path/to/filter.lua");
+                assert_eq!(line, 42);
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
+    }
+
+    /// Legacy Transformed back-compat: code-3 with `[parent_id, ...]`
+    /// numeric payload must continue to decode as a Substring approximation.
+    #[test]
+    fn test_deserialize_code3_legacy_transformed_back_compat() {
+        let pool_json = json!([
+            {
+                "r": [0, 100],
+                "t": 0,
+                "d": 0  // Original
+            },
+            {
+                "r": [10, 20],
+                "t": 3,
+                "d": [0]  // Legacy Transformed -> Substring(parent_id=0)
+            }
+        ]);
+
+        let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
+        assert_eq!(deserializer.pool.len(), 2);
+        match &deserializer.pool[1] {
+            SourceInfo::Substring {
+                parent,
+                start_offset,
+                end_offset,
+            } => {
+                assert_eq!(*start_offset, 10);
+                assert_eq!(*end_offset, 20);
+                assert!(matches!(&**parent, SourceInfo::Original { .. }));
+            }
+            other => panic!("Expected Substring, got {:?}", other),
+        }
+    }
+
+    /// Strict rejection: code-3 with `[path]` (missing line) is malformed.
+    /// Guards the no-`unwrap_or(0)` rule.
+    #[test]
+    fn test_deserialize_code3_filter_missing_line_rejected() {
+        let pool_json = json!([
+            {
+                "r": [0, 0],
+                "t": 3,
+                "d": ["/path/to/filter.lua"]
+            }
+        ]);
+
+        let result = SourceInfoDeserializer::new(&pool_json);
+        assert!(matches!(
+            result,
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    /// Strict rejection: code-3 with `[path, "not-a-number"]` is malformed.
+    /// Guards the no-`unwrap_or(0)` rule.
+    #[test]
+    fn test_deserialize_code3_filter_non_numeric_line_rejected() {
+        let pool_json = json!([
+            {
+                "r": [0, 0],
+                "t": 3,
+                "d": ["/path/to/filter.lua", "oops"]
+            }
+        ]);
+
+        let result = SourceInfoDeserializer::new(&pool_json);
+        assert!(matches!(
+            result,
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    /// Strict rejection: code-3 with `[path, line, extra]` (too many items)
+    /// is malformed — the filter shape must be exactly two elements.
+    #[test]
+    fn test_deserialize_code3_filter_too_many_elements_rejected() {
+        let pool_json = json!([
+            {
+                "r": [0, 0],
+                "t": 3,
+                "d": ["/path/to/filter.lua", 42, "extra"]
+            }
+        ]);
+
+        let result = SourceInfoDeserializer::new(&pool_json);
+        assert!(matches!(
+            result,
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    /// Strict rejection: code-3 with empty array is malformed.
+    #[test]
+    fn test_deserialize_code3_empty_array_rejected() {
+        let pool_json = json!([
+            {
+                "r": [0, 0],
+                "t": 3,
+                "d": []
+            }
+        ]);
+
+        let result = SourceInfoDeserializer::new(&pool_json);
+        assert!(matches!(
+            result,
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    /// Strict rejection: code-3 with a non-array payload is malformed.
+    #[test]
+    fn test_deserialize_code3_non_array_payload_rejected() {
+        let pool_json = json!([
+            {
+                "r": [0, 0],
+                "t": 3,
+                "d": 7
+            }
+        ]);
+
+        let result = SourceInfoDeserializer::new(&pool_json);
+        assert!(matches!(
+            result,
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    // ----------------------------------------------------------------
+    // Plan 5 Phase 2 — Code-4 (Generated) reader
+    // ----------------------------------------------------------------
+
+    /// Forward-compat: code-4 with no `from` array decodes as
+    /// `Generated { by: <kind>, from: [] }`. Pure synthesis.
+    #[test]
+    fn test_deserialize_code4_generated_no_anchors() {
+        let pool_json = json!([
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": { "by": { "kind": "sectionize" } }
+            }
+        ]);
+
+        let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
+        match &deserializer.pool[0] {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "sectionize");
+                assert!(by.data.is_null());
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
+    }
+
+    /// Forward-compat: code-4 with `by.data` round-trips arbitrary JSON.
+    #[test]
+    fn test_deserialize_code4_generated_with_by_data() {
+        let pool_json = json!([
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": {
+                    "by": {
+                        "kind": "filter",
+                        "data": { "filter_path": "/x.lua", "line": 7 }
+                    }
+                }
+            }
+        ]);
+
+        let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
+        match &deserializer.pool[0] {
+            SourceInfo::Generated { by, from } => {
+                let (path, line) = by.as_filter().expect("expected filter By");
+                assert_eq!(path, "/x.lua");
+                assert_eq!(line, 7);
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
+    }
+
+    /// Code-4 with a single Invocation anchor — every known role is
+    /// recoverable.
+    #[test]
+    fn test_deserialize_code4_with_invocation_anchor() {
+        let pool_json = json!([
+            {
+                "r": [0, 5],
+                "t": 0,
+                "d": 0  // Original (target of the anchor)
+            },
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": {
+                    "by": { "kind": "shortcode", "data": { "name": "meta" } },
+                    "from": [
+                        { "role": "invocation", "si_id": 0 }
+                    ]
+                }
+            }
+        ]);
+
+        let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
+        match &deserializer.pool[1] {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "shortcode");
+                assert_eq!(from.len(), 1);
+                assert!(matches!(from[0].role, AnchorRole::Invocation));
+                assert!(matches!(&*from[0].source_info, SourceInfo::Original { .. }));
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
+    }
+
+    /// Code-4 with multiple anchors — invocation + value-source + an
+    /// extension-defined Other role.
+    #[test]
+    fn test_deserialize_code4_with_multiple_anchors() {
+        let pool_json = json!([
+            { "r": [0, 5], "t": 0, "d": 0 },   // Original 0
+            { "r": [5, 10], "t": 0, "d": 0 },  // Original 1
+            { "r": [10, 15], "t": 0, "d": 0 }, // Original 2
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": {
+                    "by": { "kind": "shortcode", "data": { "name": "x" } },
+                    "from": [
+                        { "role": "invocation",   "si_id": 0 },
+                        { "role": "value-source", "si_id": 1 },
+                        { "role": "other:ext/foo/bar", "si_id": 2 }
+                    ]
+                }
+            }
+        ]);
+
+        let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
+        match &deserializer.pool[3] {
+            SourceInfo::Generated { from, .. } => {
+                assert_eq!(from.len(), 3);
+                assert!(matches!(from[0].role, AnchorRole::Invocation));
+                assert!(matches!(from[1].role, AnchorRole::ValueSource));
+                match &from[2].role {
+                    AnchorRole::Other(name) => assert_eq!(name, "ext/foo/bar"),
+                    other => panic!("Expected Other(ext/foo/bar), got {:?}", other),
+                }
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
+    }
+
+    /// Silently accept code-4 entries with `r != [0, 0]` (precedent: the
+    /// Concat arm parses `r` but doesn't use it). Future writers will
+    /// emit `r: [0, 0]`; older/divergent writers might not.
+    #[test]
+    fn test_deserialize_code4_nonzero_r_accepted() {
+        let pool_json = json!([
+            {
+                "r": [42, 99],
+                "t": 4,
+                "d": { "by": { "kind": "sectionize" } }
+            }
+        ]);
+
+        let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
+        assert!(matches!(deserializer.pool[0], SourceInfo::Generated { .. }));
+    }
+
+    /// Forward-compat: unknown `by.kind` decodes opaquely — the wire
+    /// format does not constrain `kind` to known values.
+    #[test]
+    fn test_deserialize_code4_unknown_kind_is_forward_compat() {
+        let pool_json = json!([
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": {
+                    "by": {
+                        "kind": "ext/future/foo",
+                        "data": { "anything": [1, 2, 3] }
+                    }
+                }
+            }
+        ]);
+
+        let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
+        match &deserializer.pool[0] {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "ext/future/foo");
+                assert_eq!(by.data["anything"], json!([1, 2, 3]));
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
+    }
+
+    // --- Strict code-4 rejection tests ------------------------------
+
+    #[test]
+    fn test_deserialize_code4_missing_by_rejected() {
+        let pool_json = json!([
+            { "r": [0, 0], "t": 4, "d": {} }
+        ]);
+        assert!(matches!(
+            SourceInfoDeserializer::new(&pool_json),
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_code4_missing_by_kind_rejected() {
+        let pool_json = json!([
+            { "r": [0, 0], "t": 4, "d": { "by": {} } }
+        ]);
+        assert!(matches!(
+            SourceInfoDeserializer::new(&pool_json),
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_code4_by_not_object_rejected() {
+        let pool_json = json!([
+            { "r": [0, 0], "t": 4, "d": { "by": "filter" } }
+        ]);
+        assert!(matches!(
+            SourceInfoDeserializer::new(&pool_json),
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_code4_from_not_array_rejected() {
+        let pool_json = json!([
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": {
+                    "by": { "kind": "sectionize" },
+                    "from": "not-an-array"
+                }
+            }
+        ]);
+        assert!(matches!(
+            SourceInfoDeserializer::new(&pool_json),
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_code4_from_entry_not_object_rejected() {
+        let pool_json = json!([
+            { "r": [0, 5], "t": 0, "d": 0 },
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": {
+                    "by": { "kind": "shortcode" },
+                    "from": [ "bad-entry" ]
+                }
+            }
+        ]);
+        assert!(matches!(
+            SourceInfoDeserializer::new(&pool_json),
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_code4_from_entry_missing_role_rejected() {
+        let pool_json = json!([
+            { "r": [0, 5], "t": 0, "d": 0 },
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": {
+                    "by": { "kind": "shortcode" },
+                    "from": [ { "si_id": 0 } ]
+                }
+            }
+        ]);
+        assert!(matches!(
+            SourceInfoDeserializer::new(&pool_json),
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_code4_from_entry_missing_si_id_rejected() {
+        let pool_json = json!([
+            { "r": [0, 5], "t": 0, "d": 0 },
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": {
+                    "by": { "kind": "shortcode" },
+                    "from": [ { "role": "invocation" } ]
+                }
+            }
+        ]);
+        assert!(matches!(
+            SourceInfoDeserializer::new(&pool_json),
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_code4_unknown_role_rejected() {
+        let pool_json = json!([
+            { "r": [0, 5], "t": 0, "d": 0 },
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": {
+                    "by": { "kind": "shortcode" },
+                    "from": [ { "role": "bogus", "si_id": 0 } ]
+                }
+            }
+        ]);
+        assert!(matches!(
+            SourceInfoDeserializer::new(&pool_json),
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_code4_empty_other_role_rejected() {
+        let pool_json = json!([
+            { "r": [0, 5], "t": 0, "d": 0 },
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": {
+                    "by": { "kind": "shortcode" },
+                    "from": [ { "role": "other:", "si_id": 0 } ]
+                }
+            }
+        ]);
+        assert!(matches!(
+            SourceInfoDeserializer::new(&pool_json),
+            Err(JsonReadError::MalformedSourceInfoPool)
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_code4_si_id_forward_reference_rejected() {
+        // si_id must be < current_index — Generated is at index 0 and
+        // points to index 5 (nonexistent and forward-referencing).
+        let pool_json = json!([
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": {
+                    "by": { "kind": "shortcode" },
+                    "from": [ { "role": "invocation", "si_id": 5 } ]
+                }
+            }
+        ]);
+        let result = SourceInfoDeserializer::new(&pool_json);
+        assert!(matches!(
+            result,
+            Err(JsonReadError::CircularSourceInfoReference(5))
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_code4_by_data_omitted_is_null() {
+        // The serializer skips `data` when it's null; the reader must
+        // accept the omitted shape and produce `data: Value::Null`.
+        let pool_json = json!([
+            {
+                "r": [0, 0],
+                "t": 4,
+                "d": { "by": { "kind": "sectionize" } }
+            }
+        ]);
+        let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
+        match &deserializer.pool[0] {
+            SourceInfo::Generated { by, .. } => {
+                assert!(by.data.is_null());
+            }
+            _ => panic!("Expected Generated"),
         }
     }
 }

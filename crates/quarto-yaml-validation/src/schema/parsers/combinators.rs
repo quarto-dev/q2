@@ -31,7 +31,7 @@ pub(in crate::schema) fn parse_anyof_schema(yaml: &YamlWithSourceInfo) -> Schema
             .as_array()
             .ok_or_else(|| SchemaError::InvalidStructure {
                 message: "anyOf schemas must be an array".to_string(),
-                location: schemas_yaml.source_info.clone(),
+                location: Some(schemas_yaml.source_info.clone()),
             })?;
 
         let result: SchemaResult<Vec<_>> = items.iter().map(from_yaml).collect();
@@ -42,7 +42,7 @@ pub(in crate::schema) fn parse_anyof_schema(yaml: &YamlWithSourceInfo) -> Schema
             .as_array()
             .ok_or_else(|| SchemaError::InvalidStructure {
                 message: "Expected array for anyOf".to_string(),
-                location: yaml.source_info.clone(),
+                location: Some(yaml.source_info.clone()),
             })?;
 
         let result: SchemaResult<Vec<_>> = items.iter().map(from_yaml).collect();
@@ -63,7 +63,7 @@ mod tests {
     use yaml_rust2::yaml::Hash;
 
     fn source_info() -> quarto_yaml::SourceInfo {
-        quarto_yaml::SourceInfo::default()
+        quarto_yaml::SourceInfo::for_test()
     }
 
     // ==================== parse_anyof_schema tests ====================
@@ -402,7 +402,7 @@ pub(in crate::schema) fn parse_allof_schema(yaml: &YamlWithSourceInfo) -> Schema
             .as_array()
             .ok_or_else(|| SchemaError::InvalidStructure {
                 message: "allOf schemas must be an array".to_string(),
-                location: schemas_yaml.source_info.clone(),
+                location: Some(schemas_yaml.source_info.clone()),
             })?;
 
         let result: SchemaResult<Vec<_>> = items.iter().map(from_yaml).collect();
@@ -412,7 +412,7 @@ pub(in crate::schema) fn parse_allof_schema(yaml: &YamlWithSourceInfo) -> Schema
             .as_array()
             .ok_or_else(|| SchemaError::InvalidStructure {
                 message: "Expected array for allOf".to_string(),
-                location: yaml.source_info.clone(),
+                location: Some(yaml.source_info.clone()),
             })?;
 
         let result: SchemaResult<Vec<_>> = items.iter().map(from_yaml).collect();

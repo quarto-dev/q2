@@ -160,23 +160,23 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     fn bool_value(b: bool) -> ConfigValue {
-        ConfigValue::new_bool(b, SourceInfo::default())
+        ConfigValue::new_bool(b, SourceInfo::for_test())
     }
 
     fn str_value(s: &str) -> ConfigValue {
-        ConfigValue::new_string(s, SourceInfo::default())
+        ConfigValue::new_string(s, SourceInfo::for_test())
     }
 
     fn array_value(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     fn make_profile(source: &str, output_href: &str, title: &str) -> DocumentProfile {

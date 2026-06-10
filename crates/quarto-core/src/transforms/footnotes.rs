@@ -50,7 +50,8 @@ use quarto_pandoc_types::block::{Block, Div, OrderedList, Paragraph};
 use quarto_pandoc_types::inline::{Inline, Link, Span, Str, Superscript};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::{Blocks, Inlines, ListNumberDelim, ListNumberStyle};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
+use smallvec::smallvec;
 
 use quarto_pandoc_types::ConfigValue;
 
@@ -520,7 +521,14 @@ fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool)
 /// </section>
 /// ```
 fn create_footnotes_section(footnotes: &[CollectedFootnote]) -> Block {
-    let source_info = SourceInfo::default();
+    // The synthesized container chrome (section Div, embedded <hr>, and the
+    // OrderedList wrapping the footnote items) is pure synthesis: it
+    // corresponds to no source bytes. The footnote content inside (created
+    // by `create_footnote_item`) retains the original Note's source_info.
+    let source_info = SourceInfo::Generated {
+        by: By::footnotes(),
+        from: smallvec![],
+    };
 
     // Create list items for each footnote
     let list_items: Vec<Blocks> = footnotes
@@ -1181,5 +1189,32 @@ mod tests {
 
         // Check footnotes section exists
         assert!(matches!(ast.blocks[1], Block::Div(_)));
+    }
+
+    #[test]
+    fn test_create_footnotes_section_has_generated_provenance() {
+        // Plan 6: the synthesized footnotes container Div (and its embedded
+        // chrome — HorizontalRule, OrderedList) carry
+        // Generated { by: footnotes(), from: [] }. The footnote *items*
+        // inside retain the original Note's source_info via
+        // create_footnote_item.
+        let block = create_footnotes_section(&[]);
+        let Block::Div(div) = &block else {
+            panic!("Expected Div");
+        };
+        match &div.source_info {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "footnotes");
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
+        // The embedded HorizontalRule chrome carries the same shape.
+        let Block::HorizontalRule(hr) = &div.content[0] else {
+            panic!("Expected HorizontalRule");
+        };
+        assert!(
+            matches!(&hr.source_info, SourceInfo::Generated { by, .. } if by.kind == "footnotes")
+        );
     }
 }

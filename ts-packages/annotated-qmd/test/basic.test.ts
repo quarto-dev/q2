@@ -42,7 +42,7 @@ test('can convert complete JSON to AnnotatedParse', async () => {
     },
     blocks: [],
     astContext: {
-      sourceInfoPool: [
+      p: [
         { r: [11, 22], t: 0, d: 0 },  // "Hello World"
         { r: [31, 36], t: 0, d: 0 }   // "Alice"
       ],

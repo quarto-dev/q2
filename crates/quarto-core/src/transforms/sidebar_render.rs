@@ -38,7 +38,7 @@ use quarto_error_reporting::DiagnosticMessage;
 use quarto_navigation::{Sidebar, SidebarEntry, render_html::sidebar_to_html};
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::project::index::ProjectIndex;
@@ -92,7 +92,10 @@ impl AstTransform for SidebarRenderTransform {
             let body_classes = format!("nav-sidebar {}", sidebar.style.as_str());
             ast.meta.insert_path(
                 &["rendered", "navigation", "body-classes"],
-                ConfigValue::new_string(&body_classes, SourceInfo::default()),
+                ConfigValue::new_string(
+                    &body_classes,
+                    SourceInfo::generated(By::programmatic_config()),
+                ),
             );
         }
 
@@ -135,7 +138,7 @@ impl AstTransform for SidebarRenderTransform {
 
         ast.meta.insert_path(
             &["rendered", "navigation", "sidebar"],
-            ConfigValue::new_string(&html, SourceInfo::default()),
+            ConfigValue::new_string(&html, SourceInfo::generated(By::programmatic_config())),
         );
 
         Ok(())
@@ -215,19 +218,19 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     fn b(x: bool) -> ConfigValue {
-        ConfigValue::new_bool(x, SourceInfo::default())
+        ConfigValue::new_bool(x, SourceInfo::for_test())
     }
 
     fn make_profile(source: &str, output_href: &str, title: &str) -> DocumentProfile {
@@ -256,7 +259,7 @@ mod tests {
         let entries: Vec<ConfigValue> = hrefs.iter().map(|h| s(h)).collect();
         config_map(vec![(
             "contents",
-            ConfigValue::new_array(entries, SourceInfo::default()),
+            ConfigValue::new_array(entries, SourceInfo::for_test()),
         )])
     }
 

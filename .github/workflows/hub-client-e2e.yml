@@ -1,21 +1,22 @@
 name: Hub-Client E2E Tests
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'hub-client/**'
-      - '.github/workflows/hub-client-e2e.yml'
-  pull_request:
-    paths:
-      - 'hub-client/**'
-      - '.github/workflows/hub-client-e2e.yml'
   workflow_dispatch:
     inputs:
       recreate-all-snapshots:
         description: 'Delete and recreate ALL visual regression baselines'
         type: boolean
         default: false
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   e2e-tests:

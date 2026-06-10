@@ -89,4 +89,29 @@ pub const EQUATION: &str = "Equation";
 /// Produced by `CrossrefResolveTransform` when it rewrites a `Cite` whose id
 /// classifies as a crossref (per [`RefTypeRegistry`]). Back-end renderers
 /// convert this into a format-specific link or reference.
+///
+/// Kept in lockstep with
+/// [`quarto_pandoc_types::ATOMIC_CUSTOM_NODES`] — the q2-preview incremental
+/// writer treats this type_name as atomic. A cross-check test below pins
+/// the two literals together.
 pub const CROSSREF_RESOLVED_REF: &str = "CrossrefResolvedRef";
+
+#[cfg(test)]
+mod atomic_lockstep_tests {
+    use super::CROSSREF_RESOLVED_REF;
+
+    /// Pin that the `CROSSREF_RESOLVED_REF` literal here matches the entry
+    /// in `quarto_pandoc_types::ATOMIC_CUSTOM_NODES`. If either string
+    /// changes, the writer's atomicity gate silently mis-fires; this test
+    /// fails noisily.
+    #[test]
+    fn crossref_resolved_ref_is_in_atomic_registry() {
+        assert!(
+            quarto_pandoc_types::ATOMIC_CUSTOM_NODES.contains(&CROSSREF_RESOLVED_REF),
+            "CROSSREF_RESOLVED_REF (`{}`) must appear in \
+             quarto_pandoc_types::ATOMIC_CUSTOM_NODES; the q2-preview \
+             writer relies on the lockstep.",
+            CROSSREF_RESOLVED_REF
+        );
+    }
+}

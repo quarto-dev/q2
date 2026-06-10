@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use quarto_system_runtime::{RuntimeError, SystemRuntime};
 use regex::RegexBuilder;
 
@@ -411,7 +411,7 @@ fn make_q_12_13(href: &str) -> DiagnosticMessage {
         "Listing item from {href} produced no preview content; using static fallback description."
     ))
     .with_code("Q-12-13")
-    .with_location(SourceInfo::default())
+    .with_location(SourceInfo::generated(By::unknown()))
     .build()
 }
 

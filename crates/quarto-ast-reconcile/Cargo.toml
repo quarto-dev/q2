@@ -21,6 +21,7 @@ rustc-hash = "2.1"
 
 [dev-dependencies]
 proptest = "1.10"
+yaml-rust2 = { workspace = true }
 
 [lints]
 workspace = true

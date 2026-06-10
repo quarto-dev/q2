@@ -2,6 +2,7 @@ import { useContext, type CSSProperties, type ReactNode } from 'react';
 import { renderChildren } from '../../framework';
 import type { DivBlock, NodeArgs } from '../../framework';
 import { IncrementalContext } from '../IncrementalContext';
+import { PreviewContext } from '../PreviewContext';
 import { ASIDE, NOTES, SECTION } from '../quartoClasses';
 
 /**
@@ -26,6 +27,9 @@ function cssStringToObject(css: string): CSSProperties {
 }
 
 export const Div = (args: NodeArgs<DivBlock>) => {
+    const ctx = useContext(PreviewContext);
+    const poolId = (args.node as any).s as string | number | undefined;
+
     const [[id, classes, kvs]] = args.node.c;
     const props: Record<string, unknown> = {};
     if (id) props.id = id;
@@ -62,11 +66,9 @@ export const Div = (args: NodeArgs<DivBlock>) => {
     // bd-coffj: mirror the native HTML writer
     // (`crates/pampa/src/writers/html.rs::Block::Div`) — a Pandoc Div
     // whose class list contains "section" (output of the sectionize
-    // transform) renders as `<section>`, not `<div>`. Quarto theme
-    // CSS keys off the `<section>` tag (e.g.
-    // `main.content > p:has(+ section) { margin-bottom: 2rem }`), so
-    // emitting `<div>` here causes visible spacing drift between
-    // `q2 render` and `q2 preview`.
+    // transform) renders as `<section>`, not `<div>`. Sections are
+    // not editable at this phase (Plan 4); non-section divs get the
+    // affordance attribute.
     if (classes.includes(SECTION)) {
         return <section {...props}>{wrap(renderChildren(args))}</section>;
     }
@@ -76,5 +78,8 @@ export const Div = (args: NodeArgs<DivBlock>) => {
     if (classes.includes(NOTES) || classes.includes(ASIDE)) {
         return <aside {...props}>{wrap(renderChildren(args))}</aside>;
     }
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
+    if (isEditable) props['data-block-pool-id'] = String(poolId);
     return <div {...props}>{wrap(renderChildren(args))}</div>;
 };

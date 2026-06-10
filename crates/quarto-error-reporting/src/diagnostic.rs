@@ -552,28 +552,6 @@ impl DiagnosticMessage {
         obj
     }
 
-    /// Extract the original file_id from a SourceInfo by traversing the mapping chain
-    fn extract_file_id(
-        source_info: &quarto_source_map::SourceInfo,
-    ) -> Option<quarto_source_map::FileId> {
-        match source_info {
-            quarto_source_map::SourceInfo::Original { file_id, .. } => Some(*file_id),
-            quarto_source_map::SourceInfo::Substring { parent, .. } => {
-                Self::extract_file_id(parent)
-            }
-            quarto_source_map::SourceInfo::Concat { pieces } => {
-                // For concatenated sources, use the first piece's file_id
-                pieces
-                    .first()
-                    .and_then(|p| Self::extract_file_id(&p.source_info))
-            }
-            quarto_source_map::SourceInfo::FilterProvenance { .. } => {
-                // Filter provenance doesn't have a traditional file_id
-                None
-            }
-        }
-    }
-
     /// Wrap a file path with OSC 8 ANSI hyperlink codes for clickable terminal links.
     ///
     /// OSC 8 is a terminal escape sequence that creates clickable hyperlinks:
@@ -671,18 +649,21 @@ impl DiagnosticMessage {
         const ARIADNE_UNIMPORTANT_COLOR: Color = Color::Fixed(249);
 
         // Extract file_id from the source mapping by traversing the chain
-        let file_id = Self::extract_file_id(main_location)?;
+        let file_id = main_location.root_file_id()?;
 
         let file = ctx.get_file(file_id)?;
 
-        // Get file content: use stored content for ephemeral files, or read from disk
+        // Get file content: use stored content for ephemeral files, or read from disk.
+        // In WASM (and any host with no real filesystem) the disk read fails with
+        // "operation not supported on this platform"; the only graceful response is
+        // to drop the source-context snippet. The diagnostic's code, message, and
+        // hints still surface — only the Ariadne visual is unavailable.
         let content = match &file.content {
-            Some(c) => c.clone(), // Ephemeral file: use stored content
-            None => {
-                // Disk-backed file: read from disk
-                std::fs::read_to_string(&file.path)
-                    .unwrap_or_else(|e| panic!("Failed to read file '{}': {}", file.path, e))
-            }
+            Some(c) => c.clone(),
+            None => match std::fs::read_to_string(&file.path) {
+                Ok(s) => s,
+                Err(_) => return None,
+            },
         };
 
         // Map the location offsets back to original file positions
@@ -770,7 +751,7 @@ impl DiagnosticMessage {
         for detail in &self.details {
             if let Some(detail_loc) = &detail.location {
                 // Extract file_id from detail location
-                let detail_file_id = match Self::extract_file_id(detail_loc) {
+                let detail_file_id = match detail_loc.root_file_id() {
                     Some(fid) => fid,
                     None => continue, // Skip if we can't extract file_id
                 };

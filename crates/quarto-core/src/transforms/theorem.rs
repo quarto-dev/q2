@@ -46,6 +46,7 @@ use quarto_pandoc_types::block::{Block, Blocks, Div, Header};
 use quarto_pandoc_types::custom::{CustomNode, Slot};
 use quarto_pandoc_types::inline::Inlines;
 use quarto_pandoc_types::pandoc::Pandoc;
+use quarto_source_map::{By, SourceInfo};
 use serde_json::json;
 
 use crate::Result;
@@ -268,8 +269,8 @@ fn convert_div(mut div: Div, ref_type: &str, kind: &str) -> CustomNode {
     // Extract title:
     //   1. `name=` attribute on the Div (Q1 convention).
     //   2. First Header child, if present.
-    let title: Option<Inlines> =
-        extract_name_attr(&mut div.attr).or_else(|| extract_first_header_title(&mut div.content));
+    let title: Option<Inlines> = extract_name_attr(&mut div.attr, &div.attr_source)
+        .or_else(|| extract_first_header_title(&mut div.content));
 
     // Strip the theorem class so downstream transforms don't re-match.
     div.attr
@@ -301,8 +302,41 @@ fn convert_div(mut div: Div, ref_type: &str, kind: &str) -> CustomNode {
 /// `vec![Str("Pythagoras")]`. Inline markup inside the title (bold,
 /// italic, etc.) isn't supported today because attribute values are
 /// bare strings in Pandoc's data model — matching Q1's behavior.
-fn extract_name_attr(attr: &mut Attr) -> Option<Inlines> {
+///
+/// The returned `Str` carries the attribute value's parser-recorded
+/// source range (an `Original` covering the bytes between the `=` and
+/// the matching quote / whitespace) so attribution and the incremental
+/// writer can resolve the title back to user-editable bytes.
+///
+/// Uses `AttrSourceInfo`'s positional-alignment invariant (see
+/// `crates/quarto-pandoc-types/src/attr.rs`) to find the value's
+/// `SourceInfo`; falls back to `None` if alignment fails (bd-3aolj
+/// / bd-1e6a5) so production never panics.
+fn extract_name_attr(attr: &mut Attr, attr_source: &AttrSourceInfo) -> Option<Inlines> {
     let (_id, _classes, kvs) = attr;
+
+    // Find the positional index of "name" before removing it so we can
+    // index into attr_source.attributes (which is parallel to kvs in
+    // insertion order).
+    let name_idx = kvs.keys().position(|k| k == "name")?;
+
+    // Validate the positional-alignment invariant. An empty `attr_source`
+    // signals "no provenance available" (common pattern in tests that
+    // construct theorem divs by hand) — that case isn't a bug, so don't
+    // assert. Only assert when `attr_source.attributes` is populated but
+    // misaligned with `kvs` (the bd-3aolj / bd-1e6a5 parser bugs).
+    debug_assert!(
+        attr_source.attributes.is_empty() || kvs.len() == attr_source.attributes.len(),
+        "AttrSourceInfo.attributes is out of sync with Attr.2 (bd-3aolj / bd-1e6a5): kvs={}, attr_source={}",
+        kvs.len(),
+        attr_source.attributes.len(),
+    );
+    let value_source = if kvs.len() == attr_source.attributes.len() {
+        attr_source.attributes[name_idx].1.clone()
+    } else {
+        None
+    };
+
     let name = kvs.remove("name")?;
     if name.is_empty() {
         return None;
@@ -310,7 +344,8 @@ fn extract_name_attr(attr: &mut Attr) -> Option<Inlines> {
     Some(vec![quarto_pandoc_types::inline::Inline::Str(
         quarto_pandoc_types::inline::Str {
             text: name,
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: value_source
+                .unwrap_or_else(|| SourceInfo::generated(By::programmatic_config())),
         },
     )])
 }

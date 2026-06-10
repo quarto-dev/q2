@@ -20,7 +20,7 @@ fn create_test_doc(content: Vec<Inline>) -> Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Paragraph(Paragraph {
             content,
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     }
 }
@@ -90,7 +90,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -132,7 +132,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -167,7 +167,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -203,7 +203,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -240,7 +240,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -283,7 +283,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -323,7 +323,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -348,7 +348,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -373,7 +373,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -398,7 +398,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -423,7 +423,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -468,7 +468,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -504,7 +504,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;
@@ -532,7 +532,7 @@ end
 
     let doc = create_test_doc(vec![Inline::Str(Str {
         text: "test".to_string(),
-        source_info: quarto_source_map::SourceInfo::default(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
     run_filter(filter_code, doc).await;

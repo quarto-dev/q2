@@ -66,7 +66,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn dummy_source_info() -> SourceInfo {
-        SourceInfo::default()
+        SourceInfo::for_test()
     }
 
     fn make_test_project() -> ProjectContext {

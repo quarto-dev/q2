@@ -76,6 +76,15 @@ export interface RenderResponse {
    * `pipelineKindForFormat(format)` to decide which is expected).
    */
   ast_json?: string;
+  /**
+   * Untransformed Pandoc AST JSON — the `qmd_to_pandoc` output
+   * captured immediately after `ParseDocumentStage`, before any
+   * `AstTransformsStage`. Populated alongside `ast_json` for
+   * q2-preview renders; `undefined` for HTML / error responses.
+   * Round-tripped from the frontend as the baseline for
+   * `apply_node_edit` (target-incremental-writes Phase 1).
+   */
+  untransformed_ast_json?: string;
   /** Structured diagnostics (errors) with line/column information for Monaco. */
   diagnostics?: Diagnostic[];
   /** Structured warnings with line/column information for Monaco. */
@@ -91,3 +100,36 @@ export interface RenderResponse {
    */
   theme_fingerprint?: string;
 }
+
+/**
+ * Payload sent via `setAst` for q2-preview node edits (Plan 2b).
+ *
+ * Two channels — the parent routes on `channel`:
+ *
+ * - `'text'`: raw QMD the user typed.  Parent calls `parse_qmd_content(newText)`
+ *   then `apply_node_edit`.  Used by built-in editing (Para, Header textarea).
+ *
+ * - `'subtree'`: replacement block already in Pandoc JSON form.  Parent passes
+ *   it straight to `apply_node_edit` (no re-parse).  Used by render-component
+ *   editing (drag, comment, kanban) via `commitSubtreeEdit`.
+ *
+ * `destinationSourceInfoJson` is `JSON.stringify(resolved.sourceEntry)` in
+ * both channels.
+ */
+export type PreviewNodeEditPayload =
+  | {
+      __isPreviewNodeEdit: true;
+      channel: 'text';
+      /** JSON-serialized SourceInfo VALUE of the edited node (not a pool id). */
+      destinationSourceInfoJson: string;
+      /** Raw QMD text the user typed. */
+      newText: string;
+    }
+  | {
+      __isPreviewNodeEdit: true;
+      channel: 'subtree';
+      /** JSON-serialized SourceInfo VALUE of the edited node (not a pool id). */
+      destinationSourceInfoJson: string;
+      /** Pandoc JSON of the replacement block (full Pandoc document; only `blocks[0]` is used). */
+      modifiedSubtreeJson: string;
+    };

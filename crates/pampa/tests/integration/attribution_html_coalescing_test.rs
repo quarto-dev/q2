@@ -38,7 +38,7 @@ fn si(start: usize, end: usize) -> SourceInfo {
 }
 
 fn empty_meta() -> ConfigValue {
-    ConfigValue::new_map(Vec::new(), SourceInfo::default())
+    ConfigValue::new_map(Vec::new(), SourceInfo::for_test())
 }
 
 fn make_str(text: &str, start: usize, end: usize) -> Inline {

@@ -25,6 +25,6 @@ test.describe('Smoke Tests', () => {
     const info = readServerInfo();
     expect(info.url).toBeTruthy();
     expect(info.url).toMatch(/^ws:\/\/127\.0\.0\.1:\d+$/);
-    expect(info.port).toBe(3030);
+    expect(info.port).toBe(3031);
   });
 });

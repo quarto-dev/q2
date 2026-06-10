@@ -156,13 +156,13 @@ export class InlineConverter {
           end
         };
 
-      // Code (has Attr and string content + attrS)
+      // Code (has Attr and string content + `a` (attr source))
       case 'Code':
         return {
           result: inline.c as unknown as import('./types.js').JSONValue,
           kind: 'Code',
           source,
-          components: this.convertAttr(inline.c[0], inline.attrS),
+          components: this.convertAttr(inline.c[0], inline.a),
           start,
           end
         };
@@ -189,7 +189,7 @@ export class InlineConverter {
           end
         };
 
-      // Link (has Attr, Inlines, Target + attrS + targetS)
+      // Link (has Attr, Inlines, Target + `a` (attr source) + targetS)
       // Components in source order: content, target, attr
       case 'Link':
         return {
@@ -199,13 +199,13 @@ export class InlineConverter {
           components: [
             ...inline.c[1].map(child => this.convertInline(child)),
             ...this.convertTarget(inline.c[2], inline.targetS),
-            ...this.convertAttr(inline.c[0], inline.attrS)
+            ...this.convertAttr(inline.c[0], inline.a)
           ],
           start,
           end
         };
 
-      // Image (has Attr, Inlines, Target + attrS + targetS)
+      // Image (has Attr, Inlines, Target + `a` (attr source) + targetS)
       // Components in source order: content, target, attr
       case 'Image':
         return {
@@ -215,13 +215,13 @@ export class InlineConverter {
           components: [
             ...inline.c[1].map(child => this.convertInline(child)),
             ...this.convertTarget(inline.c[2], inline.targetS),
-            ...this.convertAttr(inline.c[0], inline.attrS)
+            ...this.convertAttr(inline.c[0], inline.a)
           ],
           start,
           end
         };
 
-      // Span (has Attr and Inlines + attrS)
+      // Span (has Attr and Inlines + `a` (attr source))
       // Components in source order: content first, then attr (attr comes after in source)
       case 'Span':
         return {
@@ -230,7 +230,7 @@ export class InlineConverter {
           source,
           components: [
             ...inline.c[1].map(child => this.convertInline(child)),
-            ...this.convertAttr(inline.c[0], inline.attrS)
+            ...this.convertAttr(inline.c[0], inline.a)
           ],
           start,
           end
@@ -278,14 +278,14 @@ export class InlineConverter {
    */
   private convertAttr(
     attr: [string, string[], [string, string][]],
-    attrS: { id: number | null; classes: (number | null)[]; kvs: [number | null, number | null][] }
+    attrSource: { id: number | null; classes: (number | null)[]; kvs: [number | null, number | null][] }
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 
     // ID
-    if (attr[0] && attrS.id !== null) {
+    if (attr[0] && attrSource.id !== null) {
       const { source, start, end } =
-        this.sourceReconstructor.getAnnotatedParseSourceFields(attrS.id);
+        this.sourceReconstructor.getAnnotatedParseSourceFields(attrSource.id);
       components.push({
         result: attr[0],
         kind: 'attr-id',
@@ -299,7 +299,7 @@ export class InlineConverter {
     // Classes
     for (let i = 0; i < attr[1].length; i++) {
       const className = attr[1][i];
-      const classSourceId = attrS.classes[i];
+      const classSourceId = attrSource.classes[i];
       // Only add source info if the ID exists and is not null
       // (some classes may be programmatically added without source locations)
       if (classSourceId !== null && classSourceId !== undefined) {
@@ -319,7 +319,7 @@ export class InlineConverter {
     // Key-value pairs
     for (let i = 0; i < attr[2].length; i++) {
       const [key, value] = attr[2][i];
-      const kvPair = attrS.kvs[i];
+      const kvPair = attrSource.kvs[i];
 
       // Skip if no source info for this kv pair
       // (some attributes may be programmatically added without source locations)

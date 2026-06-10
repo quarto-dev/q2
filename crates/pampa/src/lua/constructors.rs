@@ -1641,7 +1641,7 @@ mod tests {
 
     // Helper to create default source info
     fn si() -> quarto_source_map::SourceInfo {
-        quarto_source_map::SourceInfo::default()
+        quarto_source_map::SourceInfo::for_test()
     }
 
     // ========== LuaCaption UserData tests ==========

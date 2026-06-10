@@ -660,7 +660,7 @@ mod tests {
     fn empty_meta() -> ConfigValue {
         ConfigValue {
             value: ConfigValueKind::Map(vec![]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         }
     }
@@ -668,19 +668,19 @@ mod tests {
     fn meta_with_theme(theme: &str) -> ConfigValue {
         let theme_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String(theme.to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
 
         ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         }
     }
@@ -1186,17 +1186,17 @@ mod tests {
         // theme: null
         let theme_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::Null),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
         let meta = ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
@@ -1220,26 +1220,26 @@ mod tests {
             .iter()
             .map(|s| ConfigValue {
                 value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             })
             .collect();
 
         let theme_value = ConfigValue {
             value: ConfigValueKind::Array(items),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
 
         ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         }
     }
@@ -1633,34 +1633,34 @@ mod tests {
         // Inner sidebar object: { id: "guide", style: "<style>" }
         let style_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String(style.to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let id_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String("guide".to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let sidebar_obj = ConfigValue {
             value: ConfigValueKind::Map(vec![
                 ConfigMapEntry {
                     key: "id".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: id_value,
                 },
                 ConfigMapEntry {
                     key: "style".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: style_value,
                 },
             ]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         // website.sidebar = [ sidebar_obj ]
         let sidebar_array = ConfigValue {
             value: ConfigValueKind::Array(vec![sidebar_obj]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let mut meta = empty_meta();
@@ -1712,43 +1712,43 @@ mod tests {
     fn meta_with_website_sidebar_style_and_border(style: &str, border: bool) -> ConfigValue {
         let style_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String(style.to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let border_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::Boolean(border)),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let id_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String("guide".to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let sidebar_obj = ConfigValue {
             value: ConfigValueKind::Map(vec![
                 ConfigMapEntry {
                     key: "id".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: id_value,
                 },
                 ConfigMapEntry {
                     key: "style".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: style_value,
                 },
                 ConfigMapEntry {
                     key: "border".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: border_value,
                 },
             ]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let sidebar_array = ConfigValue {
             value: ConfigValueKind::Array(vec![sidebar_obj]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let mut meta = empty_meta();
@@ -1792,21 +1792,21 @@ mod tests {
         // but stored at the top level instead of under `website:`.
         let style_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String("docked".to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let sidebar_obj = ConfigValue {
             value: ConfigValueKind::Map(vec![ConfigMapEntry {
                 key: "style".to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: style_value,
             }]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let sidebar_array = ConfigValue {
             value: ConfigValueKind::Array(vec![sidebar_obj]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let mut meta = empty_meta();

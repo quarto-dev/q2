@@ -92,16 +92,16 @@ fn test_json_roundtrip_complex_document() {
         meta: ConfigValue {
             value: ConfigValueKind::Map(vec![ConfigMapEntry {
                 key: "title".to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: ConfigValue {
                     value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(
                         "Test Document".to_string(),
                     )),
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::for_test(),
                     merge_op: MergeOp::default(),
                 },
             }]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         },
         blocks: vec![

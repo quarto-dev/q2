@@ -85,6 +85,31 @@ For any WASM feature, the test should verify:
 - Assume TypeScript type declarations match actual WASM exports
 - Test only in the browser when a Node.js test would be faster and more reliable
 
+## Fixture organisation: smoke-all vs playwright-fixtures
+
+Quarto has two parallel fixture homes under `crates/quarto/tests/`:
+
+| Directory | Driven by | Test surface |
+|-----------|-----------|--------------|
+| `smoke-all/` | declarative `_quarto.tests` frontmatter | Three runners (Rust native, WASM Vitest, Playwright smoke-all sweep) walk the directory and apply each fixture's embedded assertions. |
+| `playwright-fixtures/` | dedicated `hub-client/e2e/*.spec.ts` scripts | One spec per fixture, full Playwright API available. Fixtures here have **no `_quarto.tests` block** — the spec IS the test. |
+
+**Pick based on what you need to assert.** If the verification is "the rendered output contains this selector / matches this regex / produces no errors", use `smoke-all/` — declarative, multi-runner, cheap. If the verification needs click-event handling, multi-step interactions, state-machine inspection (`page.evaluate`), console-error capture, or anything that requires holding live browser state, write a Playwright spec and put the fixture in `playwright-fixtures/`. Playwright is strictly more powerful; the smoke-all entry would just duplicate the script's first assertion.
+
+**Don't mix.** A fixture in `smoke-all/` with `requires_js: true` AND a sibling Playwright spec is a smell — at that point the smoke entry is a subset of what the script already covers, and the fixture should move to `playwright-fixtures/`.
+
+When moving a fixture:
+
+1. `git mv` to `playwright-fixtures/<format>/<fixture-name>/`.
+2. Strip the entire `_quarto.tests` block (no longer relevant — `playwright-fixtures/` isn't discovered by smoke-all runners).
+3. Port any *unique* smoke-all assertions into the dedicated spec as `expect(iframe.locator(...))` checks. Most will already be redundant with the spec's existing `.toBeVisible()` / `.toContainText()` checks.
+4. Update the spec's `FIXTURE_DIR` (typically `'../../crates/quarto/tests/playwright-fixtures/<format>/<fixture-name>'`).
+
+Examples in this repo:
+- `playwright-fixtures/q2-debug/render-components-reactji.qmd` ↔ `q2-debug-render-components.spec.ts`
+- `playwright-fixtures/q2-preview/render-components-comment/` ↔ `q2-preview-render-components-comment.spec.ts`
+- `playwright-fixtures/q2-preview/render-components-write/` ↔ `q2-preview-render-components-write.spec.ts`
+
 ## Smoke-All Tests
 
 Smoke-all test fixtures live in `crates/quarto/tests/smoke-all/`. Each `.qmd` file embeds assertions in `_quarto.tests` frontmatter. There are **three independent runners** that exercise the same fixtures through different pipelines:
@@ -106,6 +131,32 @@ cd hub-client && npm run test:wasm
 cd hub-client && npx playwright test e2e/smoke-all.spec.ts
 ```
 ~12s. Full pipeline: Automerge sync → hub server → browser → WASM render → preview iframe. Tests the complete hub-client integration.
+
+**CRITICAL prerequisites for Playwright tests:**
+
+1. **Build with `VITE_E2E=1`** before running any Playwright test:
+   ```bash
+   cd hub-client
+   VITE_E2E=1 npm run build   # compiles test hooks into the bundle
+   ```
+   Without this flag, `window.__quartoTest` is tree-shaken out and every
+   `page.evaluate` call that reads it fails with "E2E test hooks not found".
+   `bootstrapProjectSet` checks for this and throws a clear error, but the
+   root cause is always a missing `VITE_E2E=1` build.
+
+2. **No conflicting hub server on port 3031**: `globalSetup` starts its own
+   `cargo run --bin hub` on port 3031. If a dev hub is already bound there,
+   the test hub fails to start. Dev hubs should use port 3030 (the default).
+   Stop any running hub before running Playwright tests.
+
+3. **No conflicting Vite server on port 5174**: `playwright.config.ts` serves
+   the built app via `npm run preview -- --port 5174`. Port 5173 is left for
+   the dev server (`npm run dev`). The two can coexist.
+
+The full e2e command handles the build automatically:
+```bash
+cd hub-client && npm run test:e2e   # build:wasm + VITE_E2E=1 build + playwright
+```
 
 ### Writing Fixtures
 

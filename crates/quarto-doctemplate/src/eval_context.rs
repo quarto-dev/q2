@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn test_diagnostic_collector_error() {
         let mut collector = DiagnosticCollector::new();
-        let location = SourceInfo::default();
+        let location = SourceInfo::for_test();
         collector.error_at("Test error", location);
 
         assert!(!collector.is_empty());
@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn test_diagnostic_collector_warning() {
         let mut collector = DiagnosticCollector::new();
-        let location = SourceInfo::default();
+        let location = SourceInfo::for_test();
         collector.warn_at("Test warning", location);
 
         assert!(!collector.is_empty());
@@ -302,7 +302,7 @@ mod tests {
     #[test]
     fn test_eval_context_warn_or_error() {
         let vars = TemplateContext::new();
-        let location = SourceInfo::default();
+        let location = SourceInfo::for_test();
 
         // Normal mode: warning
         let mut ctx = EvalContext::new(&vars);
@@ -335,7 +335,7 @@ mod tests {
     #[test]
     fn test_eval_context_merge_diagnostics() {
         let vars = TemplateContext::new();
-        let location = SourceInfo::default();
+        let location = SourceInfo::for_test();
 
         let mut parent = EvalContext::new(&vars);
         parent.warn_at("Parent warning", &location);
@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn test_diagnostic_collector_error_with_code() {
         let mut collector = DiagnosticCollector::new();
-        let location = SourceInfo::default();
+        let location = SourceInfo::for_test();
         collector.error_with_code("Q-10-2", "Undefined variable: foo", location);
 
         assert!(!collector.is_empty());
@@ -366,7 +366,7 @@ mod tests {
     #[test]
     fn test_diagnostic_collector_warn_with_code() {
         let mut collector = DiagnosticCollector::new();
-        let location = SourceInfo::default();
+        let location = SourceInfo::for_test();
         collector.warn_with_code("Q-10-2", "Undefined variable: foo", location);
 
         assert!(!collector.is_empty());
@@ -378,7 +378,7 @@ mod tests {
     #[test]
     fn test_eval_context_warn_or_error_with_code() {
         let vars = TemplateContext::new();
-        let location = SourceInfo::default();
+        let location = SourceInfo::for_test();
 
         // Normal mode: warning with code
         let mut ctx = EvalContext::new(&vars);

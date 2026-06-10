@@ -23,7 +23,7 @@ use quarto_pandoc_types::ConfigValue;
 use quarto_source_map::SourceInfo;
 
 fn empty_meta() -> ConfigValue {
-    ConfigValue::new_map(Vec::new(), SourceInfo::default())
+    ConfigValue::new_map(Vec::new(), SourceInfo::for_test())
 }
 
 /// Build a one-paragraph Pandoc AST with two `Str` inlines: "hello"

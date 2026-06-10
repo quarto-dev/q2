@@ -26,7 +26,7 @@ pub(in crate::schema) fn parse_enum_schema(yaml: &YamlWithSourceInfo) -> SchemaR
             .as_array()
             .ok_or_else(|| SchemaError::InvalidStructure {
                 message: "enum values must be an array".to_string(),
-                location: values_yaml.source_info.clone(),
+                location: Some(values_yaml.source_info.clone()),
             })?;
 
         let result: SchemaResult<Vec<_>> = items
@@ -40,7 +40,7 @@ pub(in crate::schema) fn parse_enum_schema(yaml: &YamlWithSourceInfo) -> SchemaR
             .as_array()
             .ok_or_else(|| SchemaError::InvalidStructure {
                 message: "Expected array for inline enum".to_string(),
-                location: yaml.source_info.clone(),
+                location: Some(yaml.source_info.clone()),
             })?;
 
         let result: SchemaResult<Vec<_>> = items

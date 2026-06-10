@@ -41,7 +41,7 @@ pub(in crate::schema) fn parse_schema_wrapper(yaml: &YamlWithSourceInfo) -> Sche
     let schema_yaml = yaml.get_hash_value("schema").ok_or_else(|| {
         crate::error::SchemaError::InvalidStructure {
             message: "schema wrapper requires 'schema' key".to_string(),
-            location: yaml.source_info.clone(),
+            location: Some(yaml.source_info.clone()),
         }
     })?;
 

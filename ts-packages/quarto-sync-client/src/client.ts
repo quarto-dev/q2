@@ -114,7 +114,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   // These persist across connect/disconnect cycles and are NOT added to
   // state.cleanupFns (which runs on disconnect). They'll be cleaned up
   // naturally when the page unloads or the window is destroyed.
-  if (typeof window !== 'undefined') {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const g = globalThis as any;
+  if (typeof g.addEventListener === 'function') {
     const onBrowserOffline = () => {
       console.log('Browser offline event fired');
       callbacks.onConnectionChange?.(false);
@@ -124,8 +126,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       callbacks.onConnectionChange?.(true);
     };
 
-    window.addEventListener('offline', onBrowserOffline);
-    window.addEventListener('online', onBrowserOnline);
+    g.addEventListener('offline', onBrowserOffline);
+    g.addEventListener('online', onBrowserOnline);
   }
 
   /**
@@ -806,7 +808,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     return (
       state.repo !== null &&
       state.indexHandle !== null &&
-      (typeof navigator === 'undefined' || navigator.onLine)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (typeof navigator === 'undefined' || (navigator as any).onLine !== false)
     );
   }
 
@@ -843,11 +846,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         storage: buildStorageAdapter(),
       });
 
-      // Try to connect to peer, but continue in offline mode if it fails
+      // Try to connect to peer, but continue in offline mode if it fails.
+      // The timeout defaults to 1 ms so the browser falls back to IDB
+      // quickly; callers that need guaranteed online creation (e.g. test
+      // helpers) should pass options.peerTimeoutMs to wait for the peer.
       let isOnline = false;
       try {
         console.log('Waiting for peer connection...');
-        await waitForPeer(state.repo, 1); // Quick check - auto-reconnects in background
+        await waitForPeer(state.repo, options.peerTimeoutMs ?? 1);
         console.log('Peer connected - online mode');
         isOnline = true;
       } catch (peerError) {

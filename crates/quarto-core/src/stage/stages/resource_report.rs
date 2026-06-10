@@ -163,16 +163,16 @@ mod tests {
     fn make_meta_with_resources(items: &[&str]) -> ConfigValue {
         let entries: Vec<ConfigValue> = items
             .iter()
-            .map(|s| ConfigValue::new_string(*s, SourceInfo::default()))
+            .map(|s| ConfigValue::new_string(*s, SourceInfo::for_test()))
             .collect();
-        let resources = ConfigValue::new_array(entries, SourceInfo::default());
+        let resources = ConfigValue::new_array(entries, SourceInfo::for_test());
         ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "resources".into(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: resources,
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         )
     }
 

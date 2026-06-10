@@ -129,8 +129,12 @@ impl GridTableConverter {
 
         // Step 2: Use library to convert JSON to markdown
         let mut json_reader = std::io::Cursor::new(&pandoc_output.stdout);
+        // Same shape as definition_lists.rs: Pandoc subprocess output lacks
+        // q2's `s:` references. Completing reader with `By::unknown()`;
+        // qmd writer dispatch shifts to R5-synthesize for these nodes.
         let (pandoc_ast, _ctx) =
-            json::read(&mut json_reader).context("Failed to parse JSON output from pandoc")?;
+            json::read_completing_source_info(&mut json_reader, quarto_source_map::By::unknown())
+                .context("Failed to parse JSON output from pandoc")?;
 
         let mut output = Vec::new();
         qmd::write(&pandoc_ast, &mut output).map_err(|diagnostics| {

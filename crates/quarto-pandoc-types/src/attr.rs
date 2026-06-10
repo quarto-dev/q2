@@ -24,6 +24,30 @@ pub fn is_empty_attr(attr: &Attr) -> bool {
 /// - id: Source location of the id string (None if id is empty "")
 /// - classes: Source locations for each class string
 /// - attributes: Source locations for each key-value pair (both key and value)
+///
+/// **Positional-alignment invariant** (added 2026-05-22, Plan 6):
+/// `attributes[i]` is the `(key_src, val_src)` for the i-th entry in
+/// `Attr.2` (`LinkedHashMap<String,String>`) in **insertion order**.
+/// Consumers that index into `attributes` by key position (e.g. to
+/// recover the source range of a value before `kvs.remove(key)`) rely
+/// on this lockstep.
+///
+/// This invariant holds in the parser's main path but is **broken by
+/// two preexisting code paths** (tracked separately):
+/// - **bd-3aolj** — `commonmark_attribute.rs:41-49` (duplicate-key
+///   handling: `LinkedHashMap::insert` updates in place while
+///   `attr_source.attributes.push` always appends).
+/// - **bd-1e6a5** — caption-attr-into-table merge in `section.rs` and
+///   `postprocess.rs` (same root cause when caption + table keys
+///   overlap).
+///
+/// Until those fix-ups land, indexing consumers should guard with a
+/// runtime length check (`kvs.len() == attr_source.attributes.len()`)
+/// plus a `debug_assert_eq!` and fall back to `None` (or whatever
+/// `Option<SourceInfo>`-aware behavior the consumer prefers) on
+/// mismatch so production never panics on misaligned input. See
+/// `quarto-core/src/transforms/theorem.rs` and `proof.rs` for the
+/// canonical fall-back-to-`None` pattern.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AttrSourceInfo {
     pub id: Option<SourceInfo>,

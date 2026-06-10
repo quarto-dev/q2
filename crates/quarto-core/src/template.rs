@@ -2020,7 +2020,7 @@ mod tests {
     ) -> ConfigValue {
         use quarto_pandoc_types::config_value::ConfigMapEntry;
         use quarto_source_map::SourceInfo;
-        let si = SourceInfo::default;
+        let si = SourceInfo::for_test;
         let to_array = |items: &[&str]| {
             ConfigValue::new_array(
                 items
@@ -2058,7 +2058,7 @@ mod tests {
     #[test]
     fn test_template_renders_scripts() {
         let template = minimal_html_template().unwrap();
-        let meta = ConfigValue::null(quarto_source_map::SourceInfo::default());
+        let meta = ConfigValue::null(quarto_source_map::SourceInfo::for_test());
 
         let (html, _diags) = render_with_compiled_template(
             &template,
@@ -2194,7 +2194,7 @@ mod tests {
     #[test]
     fn test_template_empty_includes_produce_no_tags() {
         let template = minimal_html_template().unwrap();
-        let meta = ConfigValue::null(quarto_source_map::SourceInfo::default());
+        let meta = ConfigValue::null(quarto_source_map::SourceInfo::for_test());
 
         let (html, _diags) =
             render_with_compiled_template(&template, "<p>body</p>", &meta, &[], &[]).unwrap();
@@ -2225,7 +2225,7 @@ mod tests {
         let template_src = "<header>by $author-greeting$</header>$body$";
         let template =
             quarto_doctemplate::Template::compile(template_src).expect("template should compile");
-        let meta = ConfigValue::null(quarto_source_map::SourceInfo::default());
+        let meta = ConfigValue::null(quarto_source_map::SourceInfo::for_test());
 
         let (html, diagnostics) =
             render_with_compiled_template(&template, "<p>body</p>", &meta, &[], &[]).unwrap();

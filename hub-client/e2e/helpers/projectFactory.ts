@@ -16,7 +16,8 @@
  */
 
 import 'fake-indexeddb/auto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   createSyncClient,
   type SyncClientCallbacks,
@@ -71,6 +72,14 @@ export async function createProjectOnServer(
   const result = await client.createNewProject({
     syncServer: serverUrl,
     files,
+    // Wait for the hub peer to connect before creating documents so they
+    // flush synchronously in online mode. Without this, createNewProject
+    // uses the default 1 ms timeout, falls into offline mode, and the
+    // background WebSocket sync races against waitForServerDocuments —
+    // a race that fails under parallel CI load (two workers syncing
+    // simultaneously through the same hub). 10 s is ample for the
+    // loopback connection (typically <100 ms).
+    peerTimeoutMs: 10000,
   });
 
   // Wait for the server to acknowledge all documents (index + every file).
@@ -130,16 +139,86 @@ async function waitForServerDocuments(
  * `connected` status rather than racing a hand-rolled createProjectSet call
  * against the migration check.
  */
+// Monaco loads from CDN (cdn.jsdelivr.net) by default in the production build.
+// Route those requests to local node_modules so tests work offline and in
+// headless Playwright without CDN latency. Added to bootstrapProjectSet so
+// every project-based test gets this automatically — no per-test call needed.
+const MONACO_VS = resolve(import.meta.dirname, '../../node_modules/monaco-editor/min/vs');
+
+/**
+ * Stub /auth/me so the app's auth state settles immediately rather than
+ * waiting for the hub (which returns 401 in no-auth test mode). Without this
+ * stub, the delayed 401 from the hub keeps `authLoading` true slightly longer
+ * under parallel load, widening a window where two browsers' Monaco
+ * initialisation races can overlap and trigger an uncaught TypeError.
+ */
+async function mockAuthMe(page: Page): Promise<void> {
+  await page.route('/auth/me', route =>
+    route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"unauthorized"}' }),
+  );
+}
+
+async function interceptMonacoCdn(page: Page): Promise<void> {
+  await page.route(
+    '**/cdn.jsdelivr.net/npm/monaco-editor@*/min/vs/**',
+    async route => {
+      const match = route.request().url().match(/monaco-editor@[^/]+\/min\/vs\/(.+)$/);
+      if (match) {
+        const local = resolve(MONACO_VS, match[1]);
+        if (existsSync(local)) {
+          await route.fulfill({ path: local });
+          return;
+        }
+      }
+      await route.continue();
+    },
+  );
+}
+
 export async function bootstrapProjectSet(
   page: Page,
   syncServer: string,
 ): Promise<void> {
+  await mockAuthMe(page);
+  await interceptMonacoCdn(page);
+  // Monaco 0.55+ requires MonacoEnvironment.getWorkerUrl. Without it the
+  // workers AMD module throws and editor.main.js never finishes — Monaco
+  // stays on "Loading..." indefinitely. This initScript is injected before
+  // any page JS so the AMD loader sees it on first load.
+  //
+  // The URL is intercepted to local node_modules by interceptMonacoCdn.
+  await page.addInitScript(() => {
+    (window as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = {
+      getWorkerUrl(_workerId: string, _label: string): string {
+        return `https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/assets/editor.worker-Be8ye1pW.js`;
+      },
+    };
+  });
   await page.goto('/');
   await expect(page.locator('body')).toBeVisible();
 
+  // Wait for React to render before checking test hooks — the `body` becomes
+  // visible before JS finishes executing, so checking window.__quartoTestReady
+  // at that point is a race. The "Quarto Hub" heading is React-rendered, so
+  // its presence proves JS has fully executed.
   await expect(
     page.getByRole('heading', { name: 'Quarto Hub' }),
   ).toBeVisible();
+
+  // Fail fast with a clear error if the app was not built with VITE_E2E=1.
+  // Without that flag the test hooks (window.__quartoTest) are tree-shaken
+  // out of the bundle, and every subsequent page.evaluate call fails with the
+  // cryptic "__quartoTest missing" message deep inside seedProjectInBrowser.
+  const hasTestHooks = await page.evaluate(() => '__quartoTestReady' in window);
+  if (!hasTestHooks) {
+    throw new Error(
+      '\n\nE2E test hooks not found (window.__quartoTestReady is absent).\n' +
+      'The app must be built with VITE_E2E=1 before running Playwright tests:\n\n' +
+      '  VITE_E2E=1 npm run build\n\n' +
+      'Or use the full e2e command, which handles the build automatically:\n\n' +
+      '  npm run test:e2e\n',
+    );
+  }
   await expect(
     page.getByText(/Get started by creating a new project set/i),
   ).toBeVisible();
@@ -161,17 +240,6 @@ export async function bootstrapProjectSet(
  * synced project set is initialized; otherwise the App lands on the
  * needs-migration screen.
  *
- * Before returning, this waits until the seeded project is actually present
- * in the *connected, synced* project set — not just written to IDB. That
- * closes the race behind the smoke-all flakiness (bd-3nzyd): `addProject`
- * only writes IDB, and the app reconciles IDB→set on the status→connected
- * transition, which does NOT re-fire for a project seeded *after* the set is
- * already connected. So we wait for the real peer connection, run the
- * idempotent reconciler ourselves, and wait for the project to appear. The
- * full Automerge sync path stays exercised end-to-end — the test just stops
- * racing it. Waits are bounded so a genuinely unreachable sync server fails
- * loudly here instead of surfacing 75s later as a preview-render timeout.
- *
  * Returns the local project ID (UUID) used in URL navigation.
  */
 export async function seedProjectInBrowser(
@@ -186,34 +254,6 @@ export async function seedProjectInBrowser(
       const hooks = window.__quartoTest;
       if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
       const entry = await hooks.projectStorage.addProject(indexDocId, syncServer, name);
-
-      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-      const deadline = Date.now() + 30000;
-
-      // 1) Wait for the real project-set peer connection (the app's implicit
-      //    5s waitForPeer is too tight in CI; give it a generous window).
-      while (!hooks.projectSet.isConnected() && Date.now() < deadline) {
-        await sleep(100);
-      }
-      if (!hooks.projectSet.isConnected()) {
-        throw new Error(
-          'Project set did not reach connected state within 30s — sync server unreachable?',
-        );
-      }
-
-      // 2) Land the seeded IDB entry into the synced set (idempotent), then
-      //    wait until it is observably present before the caller navigates.
-      while (!hooks.projectSet.getProject(indexDocId) && Date.now() < deadline) {
-        await hooks.reconcileProjectSet();
-        if (hooks.projectSet.getProject(indexDocId)) break;
-        await sleep(100);
-      }
-      if (!hooks.projectSet.getProject(indexDocId)) {
-        throw new Error(
-          `Seeded project ${indexDocId} never appeared in the connected project set within 30s`,
-        );
-      }
-
       return entry.id;
     },
     { indexDocId, syncServer, name },

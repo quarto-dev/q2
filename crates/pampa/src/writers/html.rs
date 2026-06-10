@@ -1813,7 +1813,7 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn dummy_source_info() -> SourceInfo {
-        SourceInfo::default()
+        SourceInfo::for_test()
     }
 
     #[test]

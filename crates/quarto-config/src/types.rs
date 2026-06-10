@@ -45,7 +45,7 @@ mod tests {
 
     #[test]
     fn test_config_value_scalar() {
-        let value = ConfigValue::new_scalar(Yaml::String("test".into()), SourceInfo::default());
+        let value = ConfigValue::new_scalar(Yaml::String("test".into()), SourceInfo::for_test());
 
         assert!(value.is_scalar());
         assert!(!value.is_array());
@@ -56,10 +56,10 @@ mod tests {
     #[test]
     fn test_config_value_array() {
         let items = vec![
-            ConfigValue::new_scalar(Yaml::String("a".into()), SourceInfo::default()),
-            ConfigValue::new_scalar(Yaml::String("b".into()), SourceInfo::default()),
+            ConfigValue::new_scalar(Yaml::String("a".into()), SourceInfo::for_test()),
+            ConfigValue::new_scalar(Yaml::String("b".into()), SourceInfo::for_test()),
         ];
-        let value = ConfigValue::new_array(items, SourceInfo::default());
+        let value = ConfigValue::new_array(items, SourceInfo::for_test());
 
         assert!(value.is_array());
         assert_eq!(value.as_array().unwrap().len(), 2);
@@ -70,10 +70,10 @@ mod tests {
     fn test_config_value_map() {
         let entries = vec![ConfigMapEntry {
             key: "key".to_string(),
-            key_source: SourceInfo::default(),
-            value: ConfigValue::new_scalar(Yaml::String("value".into()), SourceInfo::default()),
+            key_source: SourceInfo::for_test(),
+            value: ConfigValue::new_scalar(Yaml::String("value".into()), SourceInfo::for_test()),
         }];
-        let value = ConfigValue::new_map(entries, SourceInfo::default());
+        let value = ConfigValue::new_map(entries, SourceInfo::for_test());
 
         assert!(value.is_map());
         assert_eq!(value.as_map_entries().unwrap().len(), 1);
@@ -82,7 +82,7 @@ mod tests {
 
     #[test]
     fn test_config_value_with_merge_op() {
-        let value = ConfigValue::new_scalar(Yaml::String("test".into()), SourceInfo::default())
+        let value = ConfigValue::new_scalar(Yaml::String("test".into()), SourceInfo::for_test())
             .with_merge_op(MergeOp::Prefer);
 
         assert_eq!(value.merge_op, MergeOp::Prefer);
@@ -90,13 +90,13 @@ mod tests {
 
     #[test]
     fn test_pandoc_inlines_default_prefer() {
-        let value = ConfigValue::new_inlines(vec![], SourceInfo::default());
+        let value = ConfigValue::new_inlines(vec![], SourceInfo::for_test());
         assert_eq!(value.merge_op, MergeOp::Prefer);
     }
 
     #[test]
     fn test_pandoc_blocks_default_prefer() {
-        let value = ConfigValue::new_blocks(vec![], SourceInfo::default());
+        let value = ConfigValue::new_blocks(vec![], SourceInfo::for_test());
         assert_eq!(value.merge_op, MergeOp::Prefer);
     }
 }

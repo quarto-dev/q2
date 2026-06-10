@@ -19,7 +19,7 @@ pub(super) fn get_hash_string(
         }
         return Err(SchemaError::InvalidStructure {
             message: format!("Field '{}' must be a string", key),
-            location: value.source_info.clone(),
+            location: Some(value.source_info.clone()),
         });
     }
     Ok(None)
@@ -39,7 +39,7 @@ pub(super) fn get_hash_number(yaml: &YamlWithSourceInfo, key: &str) -> SchemaRes
         }
         return Err(SchemaError::InvalidStructure {
             message: format!("Field '{}' must be a number", key),
-            location: value.source_info.clone(),
+            location: Some(value.source_info.clone()),
         });
     }
     Ok(None)
@@ -55,7 +55,7 @@ pub(super) fn get_hash_usize(yaml: &YamlWithSourceInfo, key: &str) -> SchemaResu
         }
         return Err(SchemaError::InvalidStructure {
             message: format!("Field '{}' must be a non-negative integer", key),
-            location: value.source_info.clone(),
+            location: Some(value.source_info.clone()),
         });
     }
     Ok(None)
@@ -69,7 +69,7 @@ pub(super) fn get_hash_bool(yaml: &YamlWithSourceInfo, key: &str) -> SchemaResul
         }
         return Err(SchemaError::InvalidStructure {
             message: format!("Field '{}' must be a boolean", key),
-            location: value.source_info.clone(),
+            location: Some(value.source_info.clone()),
         });
     }
     Ok(None)
@@ -85,7 +85,7 @@ pub(super) fn get_hash_string_array(
             .as_array()
             .ok_or_else(|| SchemaError::InvalidStructure {
                 message: format!("Field '{}' must be an array", key),
-                location: value.source_info.clone(),
+                location: Some(value.source_info.clone()),
             })?;
 
         let result: SchemaResult<Vec<_>> = items
@@ -94,7 +94,7 @@ pub(super) fn get_hash_string_array(
                 item.yaml.as_str().map(|s| s.to_string()).ok_or_else(|| {
                     SchemaError::InvalidStructure {
                         message: format!("Field '{}' items must be strings", key),
-                        location: item.source_info.clone(),
+                        location: Some(item.source_info.clone()),
                     }
                 })
             })
@@ -113,7 +113,7 @@ pub(super) fn get_hash_tags(
             .as_hash()
             .ok_or_else(|| SchemaError::InvalidStructure {
                 message: "tags must be an object".to_string(),
-                location: value.source_info.clone(),
+                location: Some(value.source_info.clone()),
             })?;
 
         let mut tags = HashMap::new();
@@ -124,7 +124,7 @@ pub(super) fn get_hash_tags(
                 .as_str()
                 .ok_or_else(|| SchemaError::InvalidStructure {
                     message: "tag key must be a string".to_string(),
-                    location: entry.key.source_info.clone(),
+                    location: Some(entry.key.source_info.clone()),
                 })?;
             let value = yaml_to_json_value(&entry.value.yaml, &entry.value.source_info)?;
             tags.insert(key.to_string(), value);
@@ -150,14 +150,14 @@ pub(super) fn yaml_to_json_value(
             }
             Err(SchemaError::InvalidStructure {
                 message: format!("Invalid number: {}", r),
-                location: location.clone(),
+                location: Some(location.clone()),
             })
         }
         Yaml::Boolean(b) => Ok(serde_json::Value::Bool(*b)),
         Yaml::Null => Ok(serde_json::Value::Null),
         _ => Err(SchemaError::InvalidStructure {
             message: "Unsupported YAML type for JSON conversion".to_string(),
-            location: location.clone(),
+            location: Some(location.clone()),
         }),
     }
 }
@@ -169,7 +169,7 @@ mod tests {
     use yaml_rust2::yaml::Hash;
 
     fn source_info() -> SourceInfo {
-        SourceInfo::default()
+        SourceInfo::for_test()
     }
 
     /// Create a YamlWithSourceInfo hash with a single key-value pair

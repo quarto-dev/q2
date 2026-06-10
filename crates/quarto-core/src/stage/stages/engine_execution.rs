@@ -860,39 +860,25 @@ mod tests {
         pandoc: &quarto_pandoc_types::pandoc::Pandoc,
     ) -> std::collections::HashSet<quarto_source_map::FileId> {
         use quarto_pandoc_types::{Block, Inline};
-        use quarto_source_map::{FileId, SourceInfo};
+        use quarto_source_map::FileId;
 
-        fn walk_source_info(si: &SourceInfo, out: &mut std::collections::HashSet<FileId>) {
-            match si {
-                SourceInfo::Original { file_id, .. } => {
-                    out.insert(*file_id);
-                }
-                SourceInfo::Substring { parent, .. } => walk_source_info(parent, out),
-                SourceInfo::Concat { pieces } => {
-                    for p in pieces {
-                        walk_source_info(&p.source_info, out);
-                    }
-                }
-                SourceInfo::FilterProvenance { .. } => {}
-            }
-        }
         fn walk_inline(i: &Inline, out: &mut std::collections::HashSet<FileId>) {
             match i {
-                Inline::Str(x) => walk_source_info(&x.source_info, out),
+                Inline::Str(x) => x.source_info.collect_file_ids(out),
                 Inline::Emph(x) => {
                     for c in &x.content {
                         walk_inline(c, out);
                     }
-                    walk_source_info(&x.source_info, out);
+                    x.source_info.collect_file_ids(out);
                 }
                 Inline::Strong(x) => {
                     for c in &x.content {
                         walk_inline(c, out);
                     }
-                    walk_source_info(&x.source_info, out);
+                    x.source_info.collect_file_ids(out);
                 }
-                Inline::Space(x) => walk_source_info(&x.source_info, out),
-                Inline::SoftBreak(x) => walk_source_info(&x.source_info, out),
+                Inline::Space(x) => x.source_info.collect_file_ids(out),
+                Inline::SoftBreak(x) => x.source_info.collect_file_ids(out),
                 _ => {
                     // Other variants not needed for this test. Add as needed.
                 }
@@ -904,19 +890,19 @@ mod tests {
                     for i in &p.content {
                         walk_inline(i, out);
                     }
-                    walk_source_info(&p.source_info, out);
+                    p.source_info.collect_file_ids(out);
                 }
                 Block::Header(h) => {
                     for i in &h.content {
                         walk_inline(i, out);
                     }
-                    walk_source_info(&h.source_info, out);
+                    h.source_info.collect_file_ids(out);
                 }
                 Block::Div(d) => {
                     for b in &d.content {
                         walk_block(b, out);
                     }
-                    walk_source_info(&d.source_info, out);
+                    d.source_info.collect_file_ids(out);
                 }
                 _ => {
                     // Other block types not needed for this test.
@@ -1392,8 +1378,13 @@ mod tests {
             PathBuf::from("/project/doc.qmd"),
             "html",
         );
-        // Default source_info should be SourceInfo::default()
-        assert_eq!(ctx.source_info, quarto_source_map::SourceInfo::default());
+        // ExecutionContext::new stamps the "no source location known
+        // yet" sentinel; `with_source_info` overwrites it with the
+        // real qmd serialization range before any consumer reads it.
+        assert_eq!(
+            ctx.source_info,
+            quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
+        );
     }
 
     #[test]

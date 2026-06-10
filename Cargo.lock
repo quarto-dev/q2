@@ -3384,6 +3384,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha1 0.11.0",
+ "smallvec",
  "supports-hyperlinks",
  "tempfile",
  "tokio",
@@ -3814,6 +3815,7 @@ dependencies = [
  "include_dir",
  "pampa",
  "quarto-error-reporting",
+ "quarto-source-map",
  "regex",
  "serde",
  "serde_json",
@@ -3877,6 +3879,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
+ "yaml-rust2",
 ]
 
 [[package]]
@@ -3963,6 +3966,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2 0.11.0",
+ "smallvec",
  "tempfile",
  "thiserror 2.0.18",
  "time",
@@ -4277,6 +4281,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "smallvec",
 ]
 
 [[package]]

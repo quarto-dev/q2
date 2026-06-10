@@ -11,7 +11,7 @@ use crate::pandoc::{
 use hashlink::LinkedHashMap;
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
-use quarto_source_map::{FileId, SourceInfo};
+use quarto_source_map::{AnchorRole, By, FileId, SourceInfo};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -91,7 +91,7 @@ struct AstContextJson {
     files: Vec<FileEntryJson>,
     #[serde(skip_serializing_if = "Option::is_none")]
     meta_top_level_key_sources: Option<Value>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(rename = "p", skip_serializing_if = "Vec::is_empty")]
     source_info_pool: Vec<SourceInfoJson>,
 }
 
@@ -110,9 +110,15 @@ struct FileEntryJson {
 /// Fields ordered alphabetically: d, r, t
 #[derive(Serialize)]
 struct SourceInfoJson {
-    d: Value,      // data (file_id, parent_id, pieces, or filter info)
+    d: Value,      // data (file_id, parent_id, pieces, or Generated { by, from })
     r: [usize; 2], // range [start, end]
-    t: u8,         // type code (0=Original, 1=Substring, 2=Concat, 3=FilterProvenance)
+    // type code:
+    //   0 = Original
+    //   1 = Substring
+    //   2 = Concat
+    //   3 = Legacy (read-only — old Transformed + buggy FilterProvenance)
+    //   4 = Generated { by, from }
+    t: u8,
 }
 
 /// Generic node with type, optional content, and source info.
@@ -135,10 +141,11 @@ struct AttrSourceJson {
 }
 
 /// Node with attribute source info.
-/// Fields ordered alphabetically: attrS, c, s, t
+/// Fields ordered alphabetically: a, c, s, t
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct NodeWithAttrJson {
+    #[serde(rename = "a")]
     attr_s: AttrSourceJson,
     #[serde(skip_serializing_if = "Option::is_none")]
     c: Option<Value>,
@@ -177,8 +184,26 @@ impl SerializableSourceInfo {
                     .collect();
                 (2, json!(piece_arrays))
             }
-            SerializableSourceMapping::FilterProvenance { filter_path, line } => {
-                (3, json!((filter_path, line)))
+            SerializableSourceMapping::Generated { by, from } => {
+                let mut by_json = json!({ "kind": by.kind });
+                if !by.data.is_null() {
+                    by_json["data"] = by.data.clone();
+                }
+                let mut d_obj = serde_json::Map::new();
+                d_obj.insert("by".to_string(), by_json);
+                if !from.is_empty() {
+                    let arr: Vec<Value> = from
+                        .iter()
+                        .map(|(role, si_id)| {
+                            json!({
+                                "role": serialize_anchor_role(role),
+                                "si_id": si_id,
+                            })
+                        })
+                        .collect();
+                    d_obj.insert("from".to_string(), Value::Array(arr));
+                }
+                (4, Value::Object(d_obj))
             }
         };
         SourceInfoJson {
@@ -186,6 +211,19 @@ impl SerializableSourceInfo {
             r: [self.start_offset, self.end_offset],
             t,
         }
+    }
+}
+
+/// Serialize an [`AnchorRole`] to its wire-format string.
+///
+/// Inverse of `parse_anchor_role` in `crates/pampa/src/readers/json.rs`.
+/// The two must agree on the string forms — see also the TS mirror at
+/// `ts-packages/preview-renderer/src/types/sourceInfo.ts`.
+fn serialize_anchor_role(role: &AnchorRole) -> String {
+    match role {
+        AnchorRole::Invocation => "invocation".to_string(),
+        AnchorRole::ValueSource => "value-source".to_string(),
+        AnchorRole::Other(s) => format!("other:{}", s),
     }
 }
 
@@ -200,9 +238,15 @@ enum SerializableSourceMapping {
     Concat {
         pieces: Vec<SerializableSourcePiece>,
     },
-    FilterProvenance {
-        filter_path: String,
-        line: usize,
+    /// Wire-code 4: a pipeline transform's output.
+    ///
+    /// `by` carries the producer identity (kebab-case `kind` + optional
+    /// JSON `data`). `from` is an ordered list of `(role, si_id)`
+    /// pairs — each `si_id` points to another pool entry that already
+    /// exists (interned strictly before this entry).
+    Generated {
+        by: By,
+        from: Vec<(AnchorRole, usize)>,
     },
 }
 
@@ -213,6 +257,8 @@ struct SerializableSourcePiece {
     length: usize,
 }
 
+/// Reserved source-info pool slot for React-constructed (user-edit) content.
+///
 /// Serializer that builds a pool of unique SourceInfo objects and assigns IDs.
 ///
 /// During AST traversal, each SourceInfo is interned into the pool. Rc-shared
@@ -221,6 +267,7 @@ struct SerializableSourcePiece {
 ///
 /// This approach reduces JSON size by ~93% for documents with many nodes sharing
 /// the same parent chains (e.g., YAML metadata with siblings).
+///
 struct SourceInfoSerializer<'a> {
     pool: Vec<SerializableSourceInfo>,
     // Dedup cache for `Substring` parent edges, keyed by `Arc::as_ptr(parent)`.
@@ -257,6 +304,7 @@ impl<'a> SourceInfoSerializer<'a> {
     /// deduplicated by content: two structurally-equal SourceInfo values
     /// arriving through different call sites will get different pool IDs. See
     /// `claude-notes/plans/2026-04-22-sourceinfo-eq-hotspot.md` for why.
+    ///
     fn intern(&mut self, source_info: &SourceInfo) -> usize {
         self.stat_intern_calls += 1;
 
@@ -311,14 +359,42 @@ impl<'a> SourceInfoSerializer<'a> {
                     },
                 )
             }
-            SourceInfo::FilterProvenance { filter_path, line } => (
-                0,
-                0,
-                SerializableSourceMapping::FilterProvenance {
-                    filter_path: filter_path.clone(),
-                    line: *line,
-                },
-            ),
+            SourceInfo::Generated { by, from } => {
+                // Anchors are interned *before* this Generated entry so that
+                // every si_id is strictly less than the resulting pool index
+                // — the reader's `si_id < current_index` guard depends on it.
+                //
+                // Dedup keyed by `Arc::as_ptr(&anchor.source_info)`, sharing
+                // the same `arc_parent_ids` cache used for `Substring.parent`.
+                // Multi-inline shortcode resolutions whose anchors point at a
+                // shared `Arc` collapse to a single pool entry on the write
+                // side; deserialization rebuilds each anchor with a fresh
+                // Arc, so this is a write-time optimization only (see Plan 5
+                // §"Risk areas" → anchor-dedup-invariant).
+                let from_ids: Vec<(AnchorRole, usize)> = from
+                    .iter()
+                    .map(|anchor| {
+                        let arc_ptr = std::sync::Arc::as_ptr(&anchor.source_info);
+                        let id = if let Some(&id) = self.arc_parent_ids.get(&arc_ptr) {
+                            self.stat_arc_parent_hits += 1;
+                            id
+                        } else {
+                            let id = self.intern(&anchor.source_info);
+                            self.arc_parent_ids.insert(arc_ptr, id);
+                            id
+                        };
+                        (anchor.role.clone(), id)
+                    })
+                    .collect();
+                (
+                    0,
+                    0,
+                    SerializableSourceMapping::Generated {
+                        by: by.clone(),
+                        from: from_ids,
+                    },
+                )
+            }
         };
 
         let id = self.pool.len();
@@ -491,7 +567,9 @@ fn build_glob_inlines(glob: &str, source_info: &SourceInfo) -> Inlines {
             text: glob.to_string(),
             source_info: source_info.clone(),
         })],
-        source_info: SourceInfo::default(),
+        // Wrapper around the glob scalar — reuse the value's range
+        // so attribution points at the YAML.
+        source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
     })]
 }
@@ -512,7 +590,9 @@ fn build_expr_inlines(expr: &str, source_info: &SourceInfo) -> Inlines {
             text: expr.to_string(),
             source_info: source_info.clone(),
         })],
-        source_info: SourceInfo::default(),
+        // Wrapper around the expr scalar — same reasoning as the
+        // glob branch above.
+        source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
     })]
 }
@@ -555,7 +635,7 @@ fn node_with_source(
 // to map offsets to row/column positions. Commenting out for now.
 // fn write_location(source_info: &quarto_source_map::SourceInfo, ctx: &SourceContext) -> Value {
 //     // Extract filename index by walking to the Original mapping
-//     let filename_index = crate::pandoc::location::extract_filename_index(source_info);
+//     let filename_index = source_info.root_file_id().map(|fid| fid.0);
 //
 //     // Map start and end offsets to locations with row/column
 //     let start_mapped = source_info.map_offset(0, ctx).unwrap();
@@ -687,7 +767,7 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
             obj.insert("t".to_string(), json!("Code"));
             obj.insert("c".to_string(), json!([write_attr(&c.attr), c.text]));
             ctx.serializer.add_source_info(&mut obj, &c.source_info);
-            obj.insert("attrS".to_string(), write_attr_source(&c.attr_source, ctx));
+            obj.insert("a".to_string(), write_attr_source(&c.attr_source, ctx));
             Value::Object(obj)
         }
         Inline::Math(m) => {
@@ -753,7 +833,7 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
                 [link.target.0, link.target.1]
             ]));
             ctx.serializer.add_source_info(&mut obj, &link.source_info);
-            obj.insert("attrS".to_string(), write_attr_source(&link.attr_source, ctx));
+            obj.insert("a".to_string(), write_attr_source(&link.attr_source, ctx));
             obj.insert("targetS".to_string(), write_target_source(&link.target_source, ctx));
             Value::Object(obj)
         }
@@ -772,7 +852,7 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
                 [image.target.0, image.target.1]
             ]));
             ctx.serializer.add_source_info(&mut obj, &image.source_info);
-            obj.insert("attrS".to_string(), write_attr_source(&image.attr_source, ctx));
+            obj.insert("a".to_string(), write_attr_source(&image.attr_source, ctx));
             obj.insert("targetS".to_string(), write_target_source(&image.target_source, ctx));
             Value::Object(obj)
         }
@@ -784,7 +864,7 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
                 write_inlines(&span.content, ctx)
             ]));
             ctx.serializer.add_source_info(&mut obj, &span.source_info);
-            obj.insert("attrS".to_string(), write_attr_source(&span.attr_source, ctx));
+            obj.insert("a".to_string(), write_attr_source(&span.attr_source, ctx));
             Value::Object(obj)
         }
         Inline::Note(note) => node_with_source(
@@ -1008,7 +1088,7 @@ fn write_cell(cell: &crate::pandoc::table::Cell, ctx: &mut JsonWriterContext) ->
 fn write_cell_source(cell: &crate::pandoc::table::Cell, ctx: &mut JsonWriterContext) -> Value {
     json!({
         "s": ctx.serializer.to_json_ref(&cell.source_info),
-        "attrS": write_attr_source(&cell.attr_source, ctx)
+        "a": write_attr_source(&cell.attr_source, ctx)
     })
 }
 
@@ -1027,7 +1107,7 @@ fn write_row(row: &crate::pandoc::table::Row, ctx: &mut JsonWriterContext) -> Va
 fn write_row_source(row: &crate::pandoc::table::Row, ctx: &mut JsonWriterContext) -> Value {
     json!({
         "s": ctx.serializer.to_json_ref(&row.source_info),
-        "attrS": write_attr_source(&row.attr_source, ctx),
+        "a": write_attr_source(&row.attr_source, ctx),
         "cellsS": row.cells
             .iter()
             .map(|cell| write_cell_source(cell, ctx))
@@ -1053,7 +1133,7 @@ fn write_table_head_source(
 ) -> Value {
     json!({
         "s": ctx.serializer.to_json_ref(&head.source_info),
-        "attrS": write_attr_source(&head.attr_source, ctx),
+        "a": write_attr_source(&head.attr_source, ctx),
         "rowsS": head.rows
             .iter()
             .map(|row| write_row_source(row, ctx))
@@ -1084,7 +1164,7 @@ fn write_table_body_source(
 ) -> Value {
     json!({
         "s": ctx.serializer.to_json_ref(&body.source_info),
-        "attrS": write_attr_source(&body.attr_source, ctx),
+        "a": write_attr_source(&body.attr_source, ctx),
         "headS": body.head
             .iter()
             .map(|row| write_row_source(row, ctx))
@@ -1114,7 +1194,7 @@ fn write_table_foot_source(
 ) -> Value {
     json!({
         "s": ctx.serializer.to_json_ref(&foot.source_info),
-        "attrS": write_attr_source(&foot.attr_source, ctx),
+        "a": write_attr_source(&foot.attr_source, ctx),
         "rowsS": foot.rows
             .iter()
             .map(|row| write_row_source(row, ctx))
@@ -1137,9 +1217,13 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
             );
             ctx.serializer
                 .add_source_info(&mut obj, &figure.source_info);
+            obj.insert("a".to_string(), write_attr_source(&figure.attr_source, ctx));
+            // Plan 7f Phase 4: emit `captionS` so the strict reader can
+            // recover the caption's source_info. Same shape as Table's
+            // `captionS` sibling.
             obj.insert(
-                "attrS".to_string(),
-                write_attr_source(&figure.attr_source, ctx),
+                "captionS".to_string(),
+                write_caption_source(&figure.caption, ctx),
             );
             Value::Object(obj)
         }
@@ -1194,10 +1278,7 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
                 ]),
             );
             ctx.serializer.add_source_info(&mut obj, &table.source_info);
-            obj.insert(
-                "attrS".to_string(),
-                write_attr_source(&table.attr_source, ctx),
-            );
+            obj.insert("a".to_string(), write_attr_source(&table.attr_source, ctx));
             obj.insert(
                 "captionS".to_string(),
                 write_caption_source(&table.caption, ctx),
@@ -1224,12 +1305,9 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
         }
 
         Block::Div(div) => {
-            // Insert fields in alphabetical order: attrS, c, s, t
+            // Insert fields in alphabetical order: a, c, s, t
             let mut obj = serde_json::Map::new();
-            obj.insert(
-                "attrS".to_string(),
-                write_attr_source(&div.attr_source, ctx),
-            );
+            obj.insert("a".to_string(), write_attr_source(&div.attr_source, ctx));
             obj.insert(
                 "c".to_string(),
                 json!([write_attr(&div.attr), write_blocks(&div.content, ctx)]),
@@ -1275,10 +1353,7 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
             );
             ctx.serializer
                 .add_source_info(&mut obj, &header.source_info);
-            obj.insert(
-                "attrS".to_string(),
-                write_attr_source(&header.attr_source, ctx),
-            );
+            obj.insert("a".to_string(), write_attr_source(&header.attr_source, ctx));
             Value::Object(obj)
         }
         Block::CodeBlock(codeblock) => {
@@ -1291,7 +1366,7 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
             ctx.serializer
                 .add_source_info(&mut obj, &codeblock.source_info);
             obj.insert(
-                "attrS".to_string(),
+                "a".to_string(),
                 write_attr_source(&codeblock.attr_source, ctx),
             );
             Value::Object(obj)
@@ -1408,7 +1483,12 @@ fn write_custom_block(custom: &crate::pandoc::CustomNode, ctx: &mut JsonWriterCo
 
     let wrapper_attr = (custom.attr.0.clone(), classes, wrapper_attr_kvs);
 
-    // Build content: each slot wrapped in a Div with data-slot-name
+    // Build content: each slot wrapped in a Div with data-slot-name.
+    //
+    // The Plain and Div wrappers we synthesize here are wire-format
+    // machinery — they have no source bytes of their own. They reference
+    // the parent CustomNode's source_info so the strict reader (plan 7f
+    // Phase 4) sees a valid `s:` on every wire-format node.
     let mut content: Vec<Value> = Vec::new();
     for (name, slot) in &custom.slots {
         let slot_content = match slot {
@@ -1416,33 +1496,42 @@ fn write_custom_block(custom: &crate::pandoc::CustomNode, ctx: &mut JsonWriterCo
                 vec![write_block(block, ctx)]
             }
             crate::pandoc::Slot::Inline(inline) => {
-                // Wrap single inline in a Plain block
-                vec![json!({
-                    "t": "Plain",
-                    "c": [write_inline(inline, ctx)]
-                })]
+                // Wrap single inline in a Plain block, carrying the parent's `s:`.
+                let mut plain_obj = serde_json::Map::new();
+                plain_obj.insert("t".to_string(), json!("Plain"));
+                plain_obj.insert("c".to_string(), json!([write_inline(inline, ctx)]));
+                ctx.serializer
+                    .add_source_info(&mut plain_obj, &custom.source_info);
+                vec![Value::Object(plain_obj)]
             }
             crate::pandoc::Slot::Blocks(blocks) => {
                 blocks.iter().map(|b| write_block(b, ctx)).collect()
             }
             crate::pandoc::Slot::Inlines(inlines) => {
-                // Wrap inlines in a Plain block
-                vec![json!({
-                    "t": "Plain",
-                    "c": write_inlines(inlines, ctx)
-                })]
+                // Wrap inlines in a Plain block, carrying the parent's `s:`.
+                let mut plain_obj = serde_json::Map::new();
+                plain_obj.insert("t".to_string(), json!("Plain"));
+                plain_obj.insert("c".to_string(), json!(write_inlines(inlines, ctx)));
+                ctx.serializer
+                    .add_source_info(&mut plain_obj, &custom.source_info);
+                vec![Value::Object(plain_obj)]
             }
         };
 
-        // Each slot is wrapped in a Div with data-slot-name attribute
+        // Each slot is wrapped in a Div with data-slot-name attribute.
         let mut slot_attr_kvs = LinkedHashMap::new();
         slot_attr_kvs.insert("data-slot-name".to_string(), name.clone());
         let slot_wrapper_attr = (String::new(), vec![], slot_attr_kvs);
 
-        content.push(json!({
-            "t": "Div",
-            "c": [write_attr(&slot_wrapper_attr), slot_content]
-        }));
+        let mut slot_div = serde_json::Map::new();
+        slot_div.insert("t".to_string(), json!("Div"));
+        slot_div.insert(
+            "c".to_string(),
+            json!([write_attr(&slot_wrapper_attr), slot_content]),
+        );
+        ctx.serializer
+            .add_source_info(&mut slot_div, &custom.source_info);
+        content.push(Value::Object(slot_div));
     }
 
     let mut obj = serde_json::Map::new();
@@ -1517,19 +1606,33 @@ fn write_custom_inline(custom: &crate::pandoc::CustomNode, ctx: &mut JsonWriterC
                         .add_detail("Inline custom nodes should only have inline slots")
                         .build(),
                 );
-                vec![json!({"t": "Str", "c": "[block content]"})]
+                {
+                    let mut placeholder = serde_json::Map::new();
+                    placeholder.insert("t".to_string(), json!("Str"));
+                    placeholder.insert("c".to_string(), json!("[block content]"));
+                    ctx.serializer
+                        .add_source_info(&mut placeholder, &custom.source_info);
+                    vec![Value::Object(placeholder)]
+                }
             }
         };
 
-        // Each slot is wrapped in a Span with data-slot-name attribute
+        // Each slot is wrapped in a Span with data-slot-name attribute,
+        // carrying the parent CustomNode's `s:` (wire-format machinery,
+        // no source bytes of its own).
         let mut slot_attr_kvs = LinkedHashMap::new();
         slot_attr_kvs.insert("data-slot-name".to_string(), name.clone());
         let slot_wrapper_attr = (String::new(), vec![], slot_attr_kvs);
 
-        content.push(json!({
-            "t": "Span",
-            "c": [write_attr(&slot_wrapper_attr), slot_content]
-        }));
+        let mut slot_span = serde_json::Map::new();
+        slot_span.insert("t".to_string(), json!("Span"));
+        slot_span.insert(
+            "c".to_string(),
+            json!([write_attr(&slot_wrapper_attr), slot_content]),
+        );
+        ctx.serializer
+            .add_source_info(&mut slot_span, &custom.source_info);
+        content.push(Value::Object(slot_span));
     }
 
     let mut obj = serde_json::Map::new();
@@ -2147,7 +2250,7 @@ fn stream_write_location_key_if_mapped<W: io::Write>(
     Ok(true)
 }
 
-/// Emit a node with attrS: `{attrS, c, l?, s, t}`. Alphabetical.
+/// Emit a node with attr_source: `{a, c, l?, s, t}`. Alphabetical.
 fn stream_write_attrs_node<W: io::Write, FC>(
     w: &mut JsonStreamWriter<W>,
     type_name: &str,
@@ -2162,7 +2265,7 @@ where
     let s_id = ctx.serializer.intern(source_info);
     ctx.maybe_record_attribution_for(source_info, s_id);
     w.begin_object()?;
-    w.key("attrS")?;
+    w.key("a")?;
     stream_write_attr_source(w, attr_source, ctx)?;
     w.key("c")?;
     content(w, ctx)?;
@@ -2271,7 +2374,7 @@ fn stream_write_cell_source<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     w.begin_object()?;
-    w.key("attrS")?;
+    w.key("a")?;
     stream_write_attr_source(w, &cell.attr_source, ctx)?;
     w.key("s")?;
     stream_source_ref(w, ctx, &cell.source_info)?;
@@ -2301,7 +2404,7 @@ fn stream_write_row_source<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     w.begin_object()?;
-    w.key("attrS")?;
+    w.key("a")?;
     stream_write_attr_source(w, &row.attr_source, ctx)?;
     w.key("cellsS")?;
     w.begin_array()?;
@@ -2337,7 +2440,7 @@ fn stream_write_table_head_source<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     w.begin_object()?;
-    w.key("attrS")?;
+    w.key("a")?;
     stream_write_attr_source(w, &head.attr_source, ctx)?;
     w.key("rowsS")?;
     w.begin_array()?;
@@ -2379,7 +2482,7 @@ fn stream_write_table_body_source<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     w.begin_object()?;
-    w.key("attrS")?;
+    w.key("a")?;
     stream_write_attr_source(w, &body.attr_source, ctx)?;
     w.key("bodyS")?;
     w.begin_array()?;
@@ -2421,7 +2524,7 @@ fn stream_write_table_foot_source<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     w.begin_object()?;
-    w.key("attrS")?;
+    w.key("a")?;
     stream_write_attr_source(w, &foot.attr_source, ctx)?;
     w.key("rowsS")?;
     w.begin_array()?;
@@ -2570,7 +2673,7 @@ fn stream_write_inline<W: io::Write>(
             let s_id = ctx.serializer.intern(&link.source_info);
             ctx.maybe_record_attribution_for(&link.source_info, s_id);
             w.begin_object()?;
-            w.key("attrS")?;
+            w.key("a")?;
             stream_write_attr_source(w, &link.attr_source, ctx)?;
             w.key("c")?;
             w.begin_array()?;
@@ -2611,7 +2714,7 @@ fn stream_write_inline<W: io::Write>(
             let s_id = ctx.serializer.intern(&image.source_info);
             ctx.maybe_record_attribution_for(&image.source_info, s_id);
             w.begin_object()?;
-            w.key("attrS")?;
+            w.key("a")?;
             stream_write_attr_source(w, &image.attr_source, ctx)?;
             w.key("c")?;
             w.begin_array()?;
@@ -2892,21 +2995,36 @@ fn stream_write_block<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     match block {
-        Block::Figure(figure) => stream_write_attrs_node(
-            w,
-            "Figure",
-            &figure.source_info,
-            &figure.attr_source,
-            ctx,
-            |w, ctx| {
-                w.begin_array()?;
-                stream_write_attr(w, &figure.attr)?;
-                stream_write_caption(w, &figure.caption, ctx)?;
-                stream_write_blocks(w, &figure.content, ctx)?;
-                w.end_array()?;
-                Ok(())
-            },
-        ),
+        Block::Figure(figure) => {
+            // Inlined (rather than via `stream_write_attrs_node`) so we can
+            // emit `captionS` after `c` — wire-format key order is
+            // alphabetical (a, c, captionS, s, t). Plan 7f Phase 4: the
+            // strict reader needs `captionS` to recover the caption's
+            // source_info.
+            let s_id = ctx.serializer.intern(&figure.source_info);
+            ctx.maybe_record_attribution_for(&figure.source_info, s_id);
+            w.begin_object()?;
+            w.key("a")?;
+            stream_write_attr_source(w, &figure.attr_source, ctx)?;
+            w.key("c")?;
+            w.begin_array()?;
+            stream_write_attr(w, &figure.attr)?;
+            stream_write_caption(w, &figure.caption, ctx)?;
+            stream_write_blocks(w, &figure.content, ctx)?;
+            w.end_array()?;
+            w.key("captionS")?;
+            stream_write_caption_source(w, &figure.caption, ctx)?;
+            if ctx.serializer.config.include_inline_locations {
+                let ast_context = ctx.serializer.context;
+                stream_write_location_key_if_mapped(w, "l", &figure.source_info, ast_context)?;
+            }
+            w.key("s")?;
+            w.u64_value(s_id as u64)?;
+            w.key("t")?;
+            w.str_value("Figure")?;
+            w.end_object()?;
+            Ok(())
+        }
         Block::DefinitionList(deflist) => stream_write_simple_node(
             w,
             "DefinitionList",
@@ -2957,7 +3075,7 @@ fn stream_write_block<W: io::Write>(
             let s_id = ctx.serializer.intern(&table.source_info);
             ctx.maybe_record_attribution_for(&table.source_info, s_id);
             w.begin_object()?;
-            w.key("attrS")?;
+            w.key("a")?;
             stream_write_attr_source(w, &table.attr_source, ctx)?;
             w.key("bodiesS")?;
             w.begin_array()?;
@@ -3200,7 +3318,10 @@ fn stream_write_custom_block<W: io::Write>(
     w.key("c")?;
     w.begin_array()?;
     stream_write_attr(w, &wrapper_attr)?;
-    // content: list of Div-wrapped slots
+    // content: list of Div-wrapped slots. The Plain/Div wrappers we
+    // synthesize here are wire-format machinery — they reference the
+    // parent CustomNode's `s_id` so the strict reader (plan 7f Phase 4)
+    // sees a valid `s:` on every node.
     w.begin_array()?;
     for (name, slot) in &custom.slots {
         let mut slot_attr_kvs = LinkedHashMap::new();
@@ -3217,12 +3338,14 @@ fn stream_write_custom_block<W: io::Write>(
                 stream_write_block(w, block, ctx)?;
             }
             crate::pandoc::Slot::Inline(inline) => {
-                // Wrap in a Plain block: {"t": "Plain", "c": [<inline>]}
+                // Wrap in a Plain block: {"c": [<inline>], "s": s_id, "t": "Plain"}
                 w.begin_object()?;
                 w.key("c")?;
                 w.begin_array()?;
                 stream_write_inline(w, inline, ctx)?;
                 w.end_array()?;
+                w.key("s")?;
+                w.u64_value(s_id as u64)?;
                 w.key("t")?;
                 w.str_value("Plain")?;
                 w.end_object()?;
@@ -3233,10 +3356,12 @@ fn stream_write_custom_block<W: io::Write>(
                 }
             }
             crate::pandoc::Slot::Inlines(inlines) => {
-                // Wrap in a Plain block with c = [<inline>...]
+                // Wrap in a Plain block: {"c": [<inline>...], "s": s_id, "t": "Plain"}
                 w.begin_object()?;
                 w.key("c")?;
                 stream_write_inlines(w, inlines, ctx)?;
+                w.key("s")?;
+                w.u64_value(s_id as u64)?;
                 w.key("t")?;
                 w.str_value("Plain")?;
                 w.end_object()?;
@@ -3244,6 +3369,8 @@ fn stream_write_custom_block<W: io::Write>(
         }
         w.end_array()?;
         w.end_array()?;
+        w.key("s")?;
+        w.u64_value(s_id as u64)?;
         w.key("t")?;
         w.str_value("Div")?;
         w.end_object()?;
@@ -3332,10 +3459,12 @@ fn stream_write_custom_inline<W: io::Write>(
                         .add_detail("Inline custom nodes should only have inline slots")
                         .build(),
                 );
-                // Placeholder: {"t": "Str", "c": "[block content]"}
+                // Placeholder: {"c": "[block content]", "s": s_id, "t": "Str"}
                 w.begin_object()?;
                 w.key("c")?;
                 w.str_value("[block content]")?;
+                w.key("s")?;
+                w.u64_value(s_id as u64)?;
                 w.key("t")?;
                 w.str_value("Str")?;
                 w.end_object()?;
@@ -3343,6 +3472,8 @@ fn stream_write_custom_inline<W: io::Write>(
         }
         w.end_array()?;
         w.end_array()?;
+        w.key("s")?;
+        w.u64_value(s_id as u64)?;
         w.key("t")?;
         w.str_value("Span")?;
         w.end_object()?;
@@ -3510,7 +3641,7 @@ fn stream_write_config_value_as_meta<W: io::Write>(
     }
 }
 
-/// Emit the pool as the `sourceInfoPool` array.
+/// Emit the pool as the `p` (sourceInfoPool) array.
 fn stream_write_source_info_pool<W: io::Write>(
     w: &mut JsonStreamWriter<W>,
     ctx: &JsonWriterContext,
@@ -3538,11 +3669,35 @@ fn stream_write_source_info_pool<W: io::Write>(
                 }
                 w.end_array()?;
             }
-            SerializableSourceMapping::FilterProvenance { filter_path, line } => {
-                w.begin_array()?;
-                w.str_value(filter_path)?;
-                w.u64_value(*line as u64)?;
-                w.end_array()?;
+            SerializableSourceMapping::Generated { by, from } => {
+                // Mirror SerializableSourceInfo::to_json byte-for-byte.
+                // Object shape: { "by": { "kind": ..., "data": ... },
+                //                 "from": [ { "role": ..., "si_id": N }, ... ] }
+                // `data` is skipped when null; `from` is skipped when empty.
+                w.begin_object()?;
+                w.key("by")?;
+                w.begin_object()?;
+                w.key("kind")?;
+                w.str_value(&by.kind)?;
+                if !by.data.is_null() {
+                    w.key("data")?;
+                    stream_write_json_value(w, &by.data)?;
+                }
+                w.end_object()?;
+                if !from.is_empty() {
+                    w.key("from")?;
+                    w.begin_array()?;
+                    for (role, si_id) in from {
+                        w.begin_object()?;
+                        w.key("role")?;
+                        w.str_value(&serialize_anchor_role(role))?;
+                        w.key("si_id")?;
+                        w.u64_value(*si_id as u64)?;
+                        w.end_object()?;
+                    }
+                    w.end_array()?;
+                }
+                w.end_object()?;
             }
         }
         w.key("r")?;
@@ -3555,7 +3710,7 @@ fn stream_write_source_info_pool<W: io::Write>(
             SerializableSourceMapping::Original { .. } => 0,
             SerializableSourceMapping::Substring { .. } => 1,
             SerializableSourceMapping::Concat { .. } => 2,
-            SerializableSourceMapping::FilterProvenance { .. } => 3,
+            SerializableSourceMapping::Generated { .. } => 4,
         })?;
         w.end_object()?;
     }
@@ -3563,12 +3718,51 @@ fn stream_write_source_info_pool<W: io::Write>(
     Ok(())
 }
 
+/// Recursively stream-write an arbitrary `serde_json::Value` via the
+/// `JsonStreamWriter`. Used to emit the `By.data` payload inside a
+/// `Generated` pool entry without materializing a serialized buffer.
+fn stream_write_json_value<W: io::Write>(w: &mut JsonStreamWriter<W>, v: &Value) -> io::Result<()> {
+    match v {
+        Value::Null => w.null_value(),
+        Value::Bool(b) => w.bool_value(*b),
+        Value::Number(n) => {
+            if let Some(u) = n.as_u64() {
+                w.u64_value(u)
+            } else if let Some(i) = n.as_i64() {
+                w.i64_value(i)
+            } else if let Some(f) = n.as_f64() {
+                w.f64_value(f)
+            } else {
+                // Unreachable: serde_json::Number always converts to one of
+                // the three numeric forms above. Emit null defensively.
+                w.null_value()
+            }
+        }
+        Value::String(s) => w.str_value(s),
+        Value::Array(arr) => {
+            w.begin_array()?;
+            for item in arr {
+                stream_write_json_value(w, item)?;
+            }
+            w.end_array()
+        }
+        Value::Object(obj) => {
+            w.begin_object()?;
+            for (k, val) in obj {
+                w.key(k)?;
+                stream_write_json_value(w, val)?;
+            }
+            w.end_object()
+        }
+    }
+}
+
 /// Emit the whole document. Streaming order:
 /// `{blocks, meta, pandoc-api-version, astContext}` — alphabetical-friendly
-/// except astContext last (it carries `sourceInfoPool` which is only complete
-/// after we've walked `blocks` and `meta`). Object keys are unordered in the
-/// JSON specification, so any consumer that does property lookup gets the
-/// same data.
+/// except astContext last (it carries `p` (the sourceInfoPool) which is only
+/// complete after we've walked `blocks` and `meta`). Object keys are unordered
+/// in the JSON specification, so any consumer that does property lookup gets
+/// the same data.
 fn stream_write_pandoc<W: io::Write>(
     w: &mut JsonStreamWriter<W>,
     pandoc: &Pandoc,
@@ -3591,7 +3785,7 @@ fn stream_write_pandoc<W: io::Write>(
         w.end_array()?;
         w.key("astContext")?;
         w.begin_object()?;
-        // files (alphabetical: files, metaTopLevelKeySources?, sourceInfoPool)
+        // files (alphabetical: files, metaTopLevelKeySources?, p)
         w.key("files")?;
         w.begin_array()?;
         for idx in 0..ast_context.filenames.len() {
@@ -3635,9 +3829,9 @@ fn stream_write_pandoc<W: io::Write>(
             }
         }
 
-        // sourceInfoPool
+        // p (sourceInfoPool)
         if !ctx.serializer.pool.is_empty() {
-            w.key("sourceInfoPool")?;
+            w.key("p")?;
             stream_write_source_info_pool(w, &ctx)?;
         }
 
@@ -3715,7 +3909,8 @@ fn stream_write_pandoc<W: io::Write>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quarto_source_map::{FileId, SourceInfo};
+    use quarto_source_map::{Anchor, AnchorRole, By, FileId, SourceInfo};
+    use smallvec::SmallVec;
     use std::sync::Arc;
 
     fn make_test_context() -> ASTContext {
@@ -3748,12 +3943,14 @@ mod tests {
 
         let id = serializer.intern(&source_info);
 
-        // Should get ID 0 for the first entry
-        assert_eq!(id, 0);
-        assert_eq!(serializer.pool.len(), 1);
+        // Pool starts at slot 0; the first intern
+        // lands at slot 1.
+        let first_user_id = 0;
+        assert_eq!(id, first_user_id);
+        assert_eq!(serializer.pool.len(), first_user_id + 1);
 
         // Verify the pool entry
-        let entry = &serializer.pool[0];
+        let entry = &serializer.pool[first_user_id];
         assert_eq!(entry.start_offset, 0);
         assert_eq!(entry.end_offset, 10);
         match &entry.mapping {
@@ -3765,16 +3962,22 @@ mod tests {
 
         // Interning the same SourceInfo again produces a fresh pool entry.
         let id2 = serializer.intern(&source_info);
-        assert_eq!(id2, 1);
-        assert_eq!(serializer.pool.len(), 2);
+        assert_eq!(id2, first_user_id + 1);
+        assert_eq!(serializer.pool.len(), first_user_id + 2);
 
         // Both entries resolve to structurally-equal pool values.
         assert_eq!(
-            serializer.pool[0].start_offset,
-            serializer.pool[1].start_offset
+            serializer.pool[first_user_id].start_offset,
+            serializer.pool[first_user_id + 1].start_offset
         );
-        assert_eq!(serializer.pool[0].end_offset, serializer.pool[1].end_offset);
-        match (&serializer.pool[0].mapping, &serializer.pool[1].mapping) {
+        assert_eq!(
+            serializer.pool[first_user_id].end_offset,
+            serializer.pool[first_user_id + 1].end_offset
+        );
+        match (
+            &serializer.pool[first_user_id].mapping,
+            &serializer.pool[first_user_id + 1].mapping,
+        ) {
             (
                 SerializableSourceMapping::Original { file_id: a },
                 SerializableSourceMapping::Original { file_id: b },
@@ -3804,12 +4007,14 @@ mod tests {
 
         let child_id = serializer.intern(&child);
 
-        // Parent should be interned first (ID 0), child second (ID 1)
-        assert_eq!(child_id, 1);
-        assert_eq!(serializer.pool.len(), 2);
+        // Parent is interned
+        // first at slot 1, child second at slot 2.
+        let parent_id = 0;
+        assert_eq!(child_id, parent_id + 1);
+        assert_eq!(serializer.pool.len(), parent_id + 2);
 
         // Verify parent entry
-        let parent_entry = &serializer.pool[0];
+        let parent_entry = &serializer.pool[parent_id];
         assert_eq!(parent_entry.start_offset, 0);
         assert_eq!(parent_entry.end_offset, 100);
         match &parent_entry.mapping {
@@ -3820,12 +4025,14 @@ mod tests {
         }
 
         // Verify child entry
-        let child_entry = &serializer.pool[1];
+        let child_entry = &serializer.pool[parent_id + 1];
         assert_eq!(child_entry.start_offset, 10);
         assert_eq!(child_entry.end_offset, 20);
         match &child_entry.mapping {
-            SerializableSourceMapping::Substring { parent_id } => {
-                assert_eq!(*parent_id, 0); // References parent
+            SerializableSourceMapping::Substring {
+                parent_id: parent_ref,
+            } => {
+                assert_eq!(*parent_ref, parent_id); // References parent
             }
             _ => panic!("Expected Substring mapping"),
         }
@@ -3866,18 +4073,21 @@ mod tests {
         let id2 = serializer.intern(&child2);
         let id3 = serializer.intern(&child3);
 
-        // Parent should be ID 0, children should be 1, 2, 3
-        assert_eq!(id1, 1);
-        assert_eq!(id2, 2);
-        assert_eq!(id3, 3);
-        assert_eq!(serializer.pool.len(), 4); // 1 parent + 3 children
+        // Parent at slot 0, children at slots 1/2/3.
+        let parent_id = 0;
+        assert_eq!(id1, parent_id + 1);
+        assert_eq!(id2, parent_id + 2);
+        assert_eq!(id3, parent_id + 3);
+        assert_eq!(serializer.pool.len(), parent_id + 4); // reserved + parent + 3 children
 
-        // All children should reference the same parent (ID 0)
-        for child_id in [1, 2, 3] {
+        // All children should reference the same parent
+        for child_id in [id1, id2, id3] {
             let child_entry = &serializer.pool[child_id];
             match &child_entry.mapping {
-                SerializableSourceMapping::Substring { parent_id } => {
-                    assert_eq!(*parent_id, 0);
+                SerializableSourceMapping::Substring {
+                    parent_id: parent_ref,
+                } => {
+                    assert_eq!(*parent_ref, parent_id);
                 }
                 _ => panic!("Expected Substring mapping"),
             }
@@ -3930,12 +4140,14 @@ mod tests {
 
         let deepest_id = serializer.intern(&level5);
 
-        // Should have 6 entries total (0-5)
-        assert_eq!(deepest_id, 5);
-        assert_eq!(serializer.pool.len(), 6);
+        // level0..level5 interned at slots 0..5.
+        let level0_id = 0;
+        assert_eq!(deepest_id, level0_id + 5);
+        assert_eq!(serializer.pool.len(), level0_id + 6);
 
         // Verify the chain: each level should reference its parent
-        for i in 1..=5 {
+        for offset in 1..=5 {
+            let i = level0_id + offset;
             let entry = &serializer.pool[i];
             match &entry.mapping {
                 SerializableSourceMapping::Substring { parent_id } => {
@@ -3988,19 +4200,20 @@ mod tests {
 
         let concat_id = serializer.intern(&concat);
 
-        // Should have 3 entries: piece1, piece2, concat
-        assert_eq!(concat_id, 2);
-        assert_eq!(serializer.pool.len(), 3);
+        // piece1, piece2, concat interned at slots 0, 1, 2.
+        let piece1_id = 0;
+        assert_eq!(concat_id, piece1_id + 2);
+        assert_eq!(serializer.pool.len(), piece1_id + 3);
 
         // Verify concat entry
-        let concat_entry = &serializer.pool[2];
+        let concat_entry = &serializer.pool[concat_id];
         match &concat_entry.mapping {
             SerializableSourceMapping::Concat { pieces } => {
                 assert_eq!(pieces.len(), 2);
-                assert_eq!(pieces[0].source_info_id, 0); // References piece1
+                assert_eq!(pieces[0].source_info_id, piece1_id); // References piece1
                 assert_eq!(pieces[0].offset_in_concat, 0);
                 assert_eq!(pieces[0].length, 10);
-                assert_eq!(pieces[1].source_info_id, 1); // References piece2
+                assert_eq!(pieces[1].source_info_id, piece1_id + 1); // References piece2
                 assert_eq!(pieces[1].offset_in_concat, 10);
                 assert_eq!(pieces[1].length, 10);
             }
@@ -4037,20 +4250,25 @@ mod tests {
         serializer.intern(&child1);
         serializer.intern(&child2);
 
-        // Should have 3 entries: parent (once), child1, child2
-        assert_eq!(serializer.pool.len(), 3);
+        // parent at slot 0, child1 at 1, child2 at 2.
+        let parent_id = 0;
+        assert_eq!(serializer.pool.len(), parent_id + 3);
 
         // Both children should reference the same parent ID
-        match &serializer.pool[1].mapping {
-            SerializableSourceMapping::Substring { parent_id } => {
-                assert_eq!(*parent_id, 0);
+        match &serializer.pool[parent_id + 1].mapping {
+            SerializableSourceMapping::Substring {
+                parent_id: parent_ref,
+            } => {
+                assert_eq!(*parent_ref, parent_id);
             }
             _ => panic!("Expected Substring"),
         }
 
-        match &serializer.pool[2].mapping {
-            SerializableSourceMapping::Substring { parent_id } => {
-                assert_eq!(*parent_id, 0); // Same parent ID as child1
+        match &serializer.pool[parent_id + 2].mapping {
+            SerializableSourceMapping::Substring {
+                parent_id: parent_ref,
+            } => {
+                assert_eq!(*parent_ref, parent_id); // Same parent ID as child1
             }
             _ => panic!("Expected Substring"),
         }
@@ -4079,7 +4297,7 @@ mod tests {
                     "title".to_string(),
                     Slot::Inlines(vec![crate::pandoc::Inline::Str(Str {
                         text: "Warning".to_string(),
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                     })]),
                 );
                 slots.insert(
@@ -4087,16 +4305,16 @@ mod tests {
                     Slot::Blocks(vec![Block::Paragraph(Paragraph {
                         content: vec![crate::pandoc::Inline::Str(Str {
                             text: "Be careful!".to_string(),
-                            source_info: SourceInfo::default(),
+                            source_info: SourceInfo::for_test(),
                         })],
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                     })]),
                 );
                 slots
             },
             plain_data: serde_json::json!({"type": "warning", "appearance": "simple"}),
             attr: empty_attr(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         };
 
         let block = Block::Custom(custom);
@@ -4146,14 +4364,14 @@ mod tests {
                     "text".to_string(),
                     Slot::Inlines(vec![Inline::Str(Str {
                         text: "hover me".to_string(),
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                     })]),
                 );
                 slots
             },
             plain_data: serde_json::json!({"tip": "This is a tooltip"}),
             attr: empty_attr(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         };
 
         let inline = Inline::Custom(custom);
@@ -4163,7 +4381,7 @@ mod tests {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![inline],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
         };
 
@@ -4216,7 +4434,7 @@ mod tests {
             slots: hashlink::LinkedHashMap::new(),
             plain_data: serde_json::Value::Null,
             attr,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         };
 
         let block = Block::Custom(custom);
@@ -4246,5 +4464,287 @@ mod tests {
             }
             _ => panic!("Expected Custom block"),
         }
+    }
+
+    // ----------------------------------------------------------------
+    // Plan 5 Phase 3+4 — writer-side Generated emission
+    // ----------------------------------------------------------------
+
+    /// `Generated { by, from: [] }` interns as a single code-4 pool entry
+    /// with `r = (0, 0)` and the right `by` shape.
+    #[test]
+    fn test_source_info_pool_generated_no_anchors() {
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let gen_info = SourceInfo::Generated {
+            by: By::sectionize(),
+            from: SmallVec::new(),
+        };
+        let id = serializer.intern(&gen_info);
+
+        // Pool starts at 0; this intern lands
+        // at slot 1.
+        let first_user_id = 0;
+        assert_eq!(id, first_user_id);
+        assert_eq!(serializer.pool.len(), first_user_id + 1);
+        let entry = &serializer.pool[id];
+        assert_eq!(entry.start_offset, 0);
+        assert_eq!(entry.end_offset, 0);
+        match &entry.mapping {
+            SerializableSourceMapping::Generated { by, from } => {
+                assert_eq!(by.kind, "sectionize");
+                assert!(by.data.is_null());
+                assert!(from.is_empty());
+            }
+            _ => panic!("Expected Generated mapping"),
+        }
+    }
+
+    /// `Generated { by: filter, from: [] }` carries `by.data` through.
+    #[test]
+    fn test_source_info_pool_generated_filter_with_data() {
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let gen_info = SourceInfo::generated(By::filter("/x.lua", 42));
+        let id = serializer.intern(&gen_info);
+
+        let entry = &serializer.pool[id];
+        match &entry.mapping {
+            SerializableSourceMapping::Generated { by, .. } => {
+                assert_eq!(by.kind, "filter");
+                assert_eq!(by.as_filter(), Some(("/x.lua", 42)));
+            }
+            _ => panic!("Expected Generated mapping"),
+        }
+    }
+
+    /// Anchors must be interned strictly *before* their owning Generated
+    /// entry — the reader's `si_id < current_index` guard requires it.
+    #[test]
+    fn test_source_info_pool_generated_with_invocation_anchor() {
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let target = Arc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 5,
+            end_offset: 12,
+        });
+        let mut from = SmallVec::<[Anchor; 2]>::new();
+        from.push(Anchor::invocation(Arc::clone(&target)));
+        let gen_info = SourceInfo::Generated {
+            by: By::shortcode("meta"),
+            from,
+        };
+
+        let id = serializer.intern(&gen_info);
+        // anchor target interned at slot 0, Generated at 1.
+        let target_id = 0;
+        assert_eq!(id, target_id + 1);
+        assert!(matches!(
+            serializer.pool[target_id].mapping,
+            SerializableSourceMapping::Original { .. }
+        ));
+        match &serializer.pool[id].mapping {
+            SerializableSourceMapping::Generated { by, from } => {
+                assert_eq!(by.kind, "shortcode");
+                assert_eq!(from.len(), 1);
+                assert!(matches!(from[0].0, AnchorRole::Invocation));
+                assert_eq!(from[0].1, target_id); // si_id points to the target
+            }
+            _ => panic!("Expected Generated mapping"),
+        }
+    }
+
+    /// Multi-inline shortcode resolution: N Generated nodes sharing one
+    /// `Arc<SourceInfo>` anchor target collapse to a single pool entry on
+    /// the write side. The dedup is keyed by `Arc::as_ptr`.
+    #[test]
+    fn test_source_info_pool_generated_anchor_dedup() {
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let shared = Arc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 10,
+        });
+
+        // Three sibling Generated entries each pointing at `shared`.
+        let make = || {
+            let mut from = SmallVec::<[Anchor; 2]>::new();
+            from.push(Anchor::invocation(Arc::clone(&shared)));
+            SourceInfo::Generated {
+                by: By::shortcode("meta"),
+                from,
+            }
+        };
+        let id1 = serializer.intern(&make());
+        let id2 = serializer.intern(&make());
+        let id3 = serializer.intern(&make());
+
+        // shared(0), gen1(1), gen2(2), gen3(3) — shared
+        // interned once.
+        let shared_id = 0;
+        assert_eq!(serializer.pool.len(), shared_id + 4);
+        let original_count = serializer
+            .pool
+            .iter()
+            .filter(|e| matches!(e.mapping, SerializableSourceMapping::Original { .. }))
+            .count();
+        assert_eq!(original_count, 1, "shared target must intern exactly once");
+
+        for id in [id1, id2, id3] {
+            match &serializer.pool[id].mapping {
+                SerializableSourceMapping::Generated { from, .. } => {
+                    assert_eq!(from.len(), 1);
+                    assert_eq!(from[0].1, shared_id); // all reference the same si_id
+                }
+                _ => panic!("Expected Generated"),
+            }
+        }
+    }
+
+    /// `Concat { pieces: [Generated, ...] }` round-trips: each piece's
+    /// Generated source_info interns through the new code-4 path; the
+    /// outer Concat references those IDs.
+    #[test]
+    fn test_source_info_pool_concat_of_generated() {
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let g1 = SourceInfo::generated(By::filter("/a.lua", 1));
+        let g2 = SourceInfo::generated(By::filter("/b.lua", 2));
+        let concat = SourceInfo::concat(vec![(g1, 5), (g2, 7)]);
+
+        let id = serializer.intern(&concat);
+        // two Generated entries at 0, 1; Concat at 2.
+        let g1_id = 0;
+        assert_eq!(id, g1_id + 2);
+        assert!(matches!(
+            serializer.pool[g1_id].mapping,
+            SerializableSourceMapping::Generated { .. }
+        ));
+        assert!(matches!(
+            serializer.pool[g1_id + 1].mapping,
+            SerializableSourceMapping::Generated { .. }
+        ));
+        match &serializer.pool[id].mapping {
+            SerializableSourceMapping::Concat { pieces } => {
+                assert_eq!(pieces.len(), 2);
+                assert_eq!(pieces[0].source_info_id, g1_id);
+                assert_eq!(pieces[1].source_info_id, g1_id + 1);
+            }
+            _ => panic!("Expected Concat"),
+        }
+    }
+
+    /// `Substring { parent: Arc<Generated>, ... }` interns the Generated
+    /// parent first; the Substring references it by ID.
+    #[test]
+    fn test_source_info_pool_substring_of_generated() {
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let parent = Arc::new(SourceInfo::generated(By::filter("/x.lua", 1)));
+        let child = SourceInfo::Substring {
+            parent: Arc::clone(&parent),
+            start_offset: 0,
+            end_offset: 4,
+        };
+        let id = serializer.intern(&child);
+
+        // Generated parent at 0, Substring at 1.
+        let parent_id = 0;
+        assert_eq!(id, parent_id + 1);
+        assert!(matches!(
+            serializer.pool[parent_id].mapping,
+            SerializableSourceMapping::Generated { .. }
+        ));
+        match &serializer.pool[id].mapping {
+            SerializableSourceMapping::Substring {
+                parent_id: parent_ref,
+            } => {
+                assert_eq!(*parent_ref, parent_id);
+            }
+            _ => panic!("Expected Substring"),
+        }
+    }
+
+    /// `to_json` emits the Generated entry as `{"t":4, "r":[0,0], "d": ...}`
+    /// with the expected `by`/`from` shape.
+    #[test]
+    fn test_to_json_generated_emits_code_4() {
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let target = Arc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 5,
+            end_offset: 12,
+        });
+        let mut from = SmallVec::<[Anchor; 2]>::new();
+        from.push(Anchor::invocation(Arc::clone(&target)));
+        let gen_info = SourceInfo::Generated {
+            by: By::shortcode("meta"),
+            from,
+        };
+        let _ = serializer.intern(&gen_info);
+
+        // anchor target at 0, Generated at 1.
+        let target_id = 0;
+        let gen_entry_json = serializer.pool[target_id + 1].to_json();
+        assert_eq!(gen_entry_json.t, 4);
+        assert_eq!(gen_entry_json.r, [0, 0]);
+
+        // Expected wire shape:
+        //   { "by": { "kind": "shortcode", "data": { "name": "meta" } },
+        //     "from": [ { "role": "invocation", "si_id": <target_id> } ] }
+        let expected = json!({
+            "by": { "kind": "shortcode", "data": { "name": "meta" } },
+            "from": [ { "role": "invocation", "si_id": target_id } ]
+        });
+        assert_eq!(gen_entry_json.d, expected);
+    }
+
+    /// `to_json` skips `"data"` when `by.data` is null and skips `"from"`
+    /// when the anchor list is empty.
+    #[test]
+    fn test_to_json_generated_skips_null_data_and_empty_from() {
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let gen_info = SourceInfo::generated(By::sectionize());
+        let id = serializer.intern(&gen_info);
+        let entry_json = serializer.pool[id].to_json();
+        assert_eq!(entry_json.t, 4);
+        // Exactly: { "by": { "kind": "sectionize" } } — no data, no from.
+        let expected = json!({ "by": { "kind": "sectionize" } });
+        assert_eq!(entry_json.d, expected);
+    }
+
+    /// AnchorRole round-trip via the writer's `serialize_anchor_role` —
+    /// every known role plus an extension-defined `Other` survives.
+    #[test]
+    fn test_serialize_anchor_role_all_roles() {
+        assert_eq!(serialize_anchor_role(&AnchorRole::Invocation), "invocation");
+        assert_eq!(
+            serialize_anchor_role(&AnchorRole::ValueSource),
+            "value-source"
+        );
+        assert_eq!(
+            serialize_anchor_role(&AnchorRole::Other("ext/foo/bar".to_string())),
+            "other:ext/foo/bar"
+        );
     }
 }

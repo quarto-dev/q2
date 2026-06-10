@@ -727,17 +727,17 @@ mod tests {
 
     // Helper to create a simple YAML scalar
     fn yaml_scalar(yaml: Yaml) -> YamlWithSourceInfo {
-        YamlWithSourceInfo::new_scalar(yaml, SourceInfo::default())
+        YamlWithSourceInfo::new_scalar(yaml, SourceInfo::for_test())
     }
 
     // Helper to create a YAML array
     fn yaml_array(items: Vec<Yaml>) -> YamlWithSourceInfo {
         let children: Vec<YamlWithSourceInfo> = items
             .into_iter()
-            .map(|y| YamlWithSourceInfo::new_scalar(y, SourceInfo::default()))
+            .map(|y| YamlWithSourceInfo::new_scalar(y, SourceInfo::for_test()))
             .collect();
         let yaml_items: Vec<Yaml> = children.iter().map(|c| c.yaml.clone()).collect();
-        YamlWithSourceInfo::new_array(Yaml::Array(yaml_items), SourceInfo::default(), children)
+        YamlWithSourceInfo::new_array(Yaml::Array(yaml_items), SourceInfo::for_test(), children)
     }
 
     // Helper to create a YAML object
@@ -747,12 +747,12 @@ mod tests {
             .map(|(k, v)| YamlHashEntry {
                 key: YamlWithSourceInfo::new_scalar(
                     Yaml::String(k.to_string()),
-                    SourceInfo::default(),
+                    SourceInfo::for_test(),
                 ),
-                value: YamlWithSourceInfo::new_scalar(v, SourceInfo::default()),
-                key_span: SourceInfo::default(),
-                value_span: SourceInfo::default(),
-                entry_span: SourceInfo::default(),
+                value: YamlWithSourceInfo::new_scalar(v, SourceInfo::for_test()),
+                key_span: SourceInfo::for_test(),
+                value_span: SourceInfo::for_test(),
+                entry_span: SourceInfo::for_test(),
             })
             .collect();
         let mut yaml_hash = yaml_rust2::yaml::Hash::new();
@@ -761,7 +761,7 @@ mod tests {
                 yaml_hash.insert(Yaml::String(k.clone()), entry.value.yaml.clone());
             }
         }
-        YamlWithSourceInfo::new_hash(Yaml::Hash(yaml_hash), SourceInfo::default(), hash_entries)
+        YamlWithSourceInfo::new_hash(Yaml::Hash(yaml_hash), SourceInfo::for_test(), hash_entries)
     }
 
     // ==================== Boolean Tests ====================
@@ -1759,12 +1759,12 @@ mod tests {
         let hash_entries = vec![YamlHashEntry {
             key: YamlWithSourceInfo::new_scalar(
                 Yaml::String("items".to_string()),
-                SourceInfo::default(),
+                SourceInfo::for_test(),
             ),
             value: items_array,
-            key_span: SourceInfo::default(),
-            value_span: SourceInfo::default(),
-            entry_span: SourceInfo::default(),
+            key_span: SourceInfo::for_test(),
+            value_span: SourceInfo::for_test(),
+            entry_span: SourceInfo::for_test(),
         }];
         let mut yaml_hash = yaml_rust2::yaml::Hash::new();
         yaml_hash.insert(
@@ -1773,7 +1773,7 @@ mod tests {
         );
         let yaml = YamlWithSourceInfo::new_hash(
             Yaml::Hash(yaml_hash),
-            SourceInfo::default(),
+            SourceInfo::for_test(),
             hash_entries,
         );
 

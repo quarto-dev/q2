@@ -18,6 +18,7 @@ import {
     TocSlot,
     HeaderIncludesEffect,
 } from './chromeSlots';
+import { useBlockEditHover } from './useBlockEditHover';
 
 /**
  * bd-elgxx (D6 react): mirror of Rust
@@ -201,6 +202,7 @@ export const PreviewDocument = ({
     // to pre-attribution). When the producer-side gap is closed the
     // consumer wiring lights up automatically with no React changes.
     const attr = useAttributionHover();
+    const blockEdit = useBlockEditHover();
 
     const children = renderChildren({
         node: ast as any,
@@ -235,7 +237,8 @@ export const PreviewDocument = ({
             return (
                 <>
                     {attr.stylesheet}
-                    <div {...attr.hostProps}>{minimalInner}</div>
+                    {blockEdit.stylesheet}
+                    <div {...attr.hostProps} {...blockEdit.hostProps}>{minimalInner}</div>
                     {attr.overlay}
                 </>
             );
@@ -249,6 +252,8 @@ export const PreviewDocument = ({
                 attribution context is empty. Lives next to header-
                 includes since both are document-head-adjacent. */}
             {attr.stylesheet}
+            {/* Block-edit hover outline CSS (Plan 2b). */}
+            {blockEdit.stylesheet}
 
             {/* Phase F.2: header-includes (favicon, RSS links, user
                 includes) appended imperatively to `document.head`. */}
@@ -261,6 +266,7 @@ export const PreviewDocument = ({
                 id="quarto-content"
                 className={`quarto-container page-columns page-rows-contents page-layout-${pageLayout}`}
                 {...attr.hostProps}
+                {...blockEdit.hostProps}
             >
                 {/* Sidebar — INSIDE quarto-content, before TOC + main
                     (template.rs:186-188). */}

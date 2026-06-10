@@ -16,7 +16,7 @@ use hashlink::LinkedHashMap;
 use quarto_pandoc_types::{
     AttrSourceInfo, Block, CodeBlock as CodeBlockStruct, Div, Inline, Paragraph, RawBlock, Str,
 };
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use super::execute::{CellOutput, MimeBundle};
 
@@ -70,7 +70,7 @@ pub fn outputs_to_blocks(outputs: &[CellOutput], _options: &OutputOptions) -> Ve
                 let block = Block::CodeBlock(CodeBlockStruct {
                     attr: make_attr("", vec![class]),
                     text: text.clone(),
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::generated(By::jupyter_output()),
                     attr_source: AttrSourceInfo::empty(),
                 });
                 blocks.push(block);
@@ -91,7 +91,7 @@ pub fn outputs_to_blocks(outputs: &[CellOutput], _options: &OutputOptions) -> Ve
                 let block = Block::CodeBlock(CodeBlockStruct {
                     attr: make_attr("", vec!["cell-output-error".to_string()]),
                     text: error_text,
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::generated(By::jupyter_output()),
                     attr_source: AttrSourceInfo::empty(),
                 });
                 blocks.push(block);
@@ -132,7 +132,7 @@ fn convert_mime_content(mime_type: &str, content: &serde_json::Value) -> Option<
             Some(Block::CodeBlock(CodeBlockStruct {
                 attr: make_attr("", vec!["cell-output".to_string()]),
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::generated(By::jupyter_output()),
                 attr_source: AttrSourceInfo::empty(),
             }))
         }
@@ -141,7 +141,7 @@ fn convert_mime_content(mime_type: &str, content: &serde_json::Value) -> Option<
             Some(Block::RawBlock(RawBlock {
                 format: "html".to_string(),
                 text: html,
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::generated(By::jupyter_output()),
             }))
         }
         "text/markdown" => {
@@ -153,11 +153,11 @@ fn convert_mime_content(mime_type: &str, content: &serde_json::Value) -> Option<
                 content: vec![Block::Paragraph(Paragraph {
                     content: vec![Inline::Str(Str {
                         text: md,
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::generated(By::jupyter_output()),
                     })],
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::generated(By::jupyter_output()),
                 })],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::generated(By::jupyter_output()),
                 attr_source: AttrSourceInfo::empty(),
             }))
         }
@@ -166,7 +166,7 @@ fn convert_mime_content(mime_type: &str, content: &serde_json::Value) -> Option<
             Some(Block::RawBlock(RawBlock {
                 format: "latex".to_string(),
                 text: latex,
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::generated(By::jupyter_output()),
             }))
         }
         "image/png" | "image/jpeg" | "image/svg+xml" => {
@@ -187,11 +187,11 @@ fn convert_mime_content(mime_type: &str, content: &serde_json::Value) -> Option<
                 content: vec![Block::Paragraph(Paragraph {
                     content: vec![Inline::Str(Str {
                         text: placeholder,
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::generated(By::jupyter_output()),
                     })],
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::generated(By::jupyter_output()),
                 })],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::generated(By::jupyter_output()),
                 attr_source: AttrSourceInfo::empty(),
             }))
         }

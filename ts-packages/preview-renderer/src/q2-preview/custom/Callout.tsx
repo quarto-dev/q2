@@ -1,9 +1,10 @@
-import { useId } from 'react';
+import { useContext, useId } from 'react';
 import type {
     CustomBlockNode,
     NodeArgs,
     Slot,
 } from '../../framework';
+import { PreviewContext } from '../PreviewContext';
 import {
     BS_ALIGN_CONTENT_CENTER,
     BS_COLLAPSE,
@@ -108,6 +109,12 @@ function hasUserTitle(titleSlot: Slot | undefined): boolean {
 }
 
 export const Callout = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<CustomBlockNode>) => {
+    const previewCtx = useContext(PreviewContext);
+    const poolId = (node as any).s as string | number | undefined;
+    const resolved = previewCtx?.resolveSource ? previewCtx.resolveSource(node) : null;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
+    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
+
     // Q1-parity collapse-wrapper id naming (callouts.lua:281, 307,
     // 310, 316-317): the wrapper's `id` attribute is `callout-N`
     // (the bare counter); its `callout-N-contents` class is what
@@ -210,7 +217,7 @@ export const Callout = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<Cu
         ) : bodyDiv;
 
         return (
-            <div className={classList.join(' ')} id={id || undefined}>
+            <div className={classList.join(' ')} id={id || undefined} {...affordanceAttr}>
                 <div className={headerClass}>
                     {iconContainer}
                     <div className={`${CALLOUT_TITLE_CONTAINER} ${CALLOUT_FLEX_FILL}`}>
@@ -224,7 +231,7 @@ export const Callout = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<Cu
 
     // Untitled path: single `.callout-body.d-flex` wrapping icon + body-container.
     return (
-        <div className={classList.join(' ')} id={id || undefined}>
+        <div className={classList.join(' ')} id={id || undefined} {...affordanceAttr}>
             <div className={`${CALLOUT_BODY} ${BS_D_FLEX}`}>
                 {iconContainer}
                 <div className={CALLOUT_BODY_CONTAINER}>

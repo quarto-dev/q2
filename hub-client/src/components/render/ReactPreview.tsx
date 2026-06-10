@@ -1,15 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
-import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
+import type { Diagnostic, PreviewNodeEditPayload } from '@quarto/preview-renderer/types/diagnostic';
 import type { ActorIdentity } from '@quarto/preview-runtime';
 import {
   parseQmdToAstWithAttribution,
   renderPageInProjectWithAttribution,
   isWasmReady,
   incrementalWriteQmd,
+  applyNodeEdit,
+  parseQmdContentSync,
+  getActorId,
 } from '@quarto/preview-runtime';
-import { pipelineKindForFormat } from '../../utils/pipelineKind';
+import { pipelineKindForFormat } from '@quarto/preview-runtime';
 import { useAttribution } from '../../hooks/useAttribution';
 import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
 import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
@@ -75,6 +78,8 @@ interface PreviewProps {
 type RenderResult = {
   success: true;
   astJson: string;
+  /** Pre-pipeline (untransformed) AST JSON for apply_node_edit (Phase 1). */
+  untransformedAstJson?: string;
   diagnostics: Diagnostic[];
   /**
    * Three-way theme fingerprint (Plan 2A item 11).
@@ -184,6 +189,7 @@ async function doRender(
       return {
         success: true,
         astJson,
+        untransformedAstJson: result.untransformed_ast_json,
         diagnostics: allDiagnostics,
         themeFingerprint,
       };
@@ -264,8 +270,16 @@ export default function ReactPreview({
     previewStateRef.current = previewState;
   }, [previewState]);
 
-  // Rendered AST JSON to display
-  const [ast, setAst] = useState<string>('');
+  // Compound render-result state: AST JSON, pre-pipeline AST, and the
+  // QMD content that was used to produce this render generation.
+  // Keeping them in one object guarantees they are always in sync —
+  // the byte offsets in astJson / untransformedAstJson belong to
+  // renderedContent and nowhere else.
+  const [rendered, setRendered] = useState<{
+    astJson: string | null;
+    untransformedAstJson: string | null;
+    renderedContent: string;
+  }>({ astJson: null, untransformedAstJson: null, renderedContent: '' });
 
   // Three-way theme fingerprint (Plan 2A item 11):
   //   `undefined` → pre-first-render or render failed; iframe keeps
@@ -360,8 +374,13 @@ export default function ReactPreview({
     if (result.success) {
       // Success: transition to GOOD state from any state
       setPreviewState('GOOD');
-      // Update rendered AST
-      setAst(result.astJson);
+      // Update compound render-result state: AST, pre-pipeline AST, and
+      // the QMD content snapshot whose byte offsets match these ASTs.
+      setRendered({
+        astJson: result.astJson,
+        untransformedAstJson: result.untransformedAstJson ?? null,
+        renderedContent: qmdContent,
+      });
       // Apply theme fingerprint if the render produced one. Only the
       // success branch calls this — render failures preserve the
       // last-good fingerprint across transient errors (Plan 2A item
@@ -417,34 +436,73 @@ export default function ReactPreview({
 
   // Handler for AST modifications - converts AST back to QMD and updates content.
   //
-  // q2-preview is **read-only in v1** (Plan 1 §"Multi-plan contract:
-  // read-only mode lifts at Plan 7"). The post-pipeline AST diverges
-  // from source enough that a naive incrementalWriteQmd would
-  // corrupt the qmd; Plan 7 lifts this guard once the writer's
-  // round-trip machinery understands q2-preview's transform shapes
-  // (Synthetic / Derived / atomic CustomNodes). Component-driven
-  // edits (kanban drag, comment buttons in Plan 2) call this and
-  // silently no-op with a console.warn — that is the accepted
-  // post-Plan-2 UX gap until Plan 7 ships.
-  const handleSetAst = useCallback((newAst: any) => {
-    if (pipelineKindForFormat(format) === 'preview') {
-      console.warn('q2-preview is read-only in v1; AST edit dropped (Plan 7 lifts this guard)');
-      return;
-    }
-    try {
-      const newQmd = incrementalWriteQmd(content, newAst);
-      onContentRewrite(newQmd);
-    } catch (err) {
-      console.error('Failed to write AST back to QMD:', err);
-    }
-  }, [content, onContentRewrite, format]);
+  // For q2-preview: expects a PreviewNodeEditPayload carrying the
+  // destination SourceInfo value and modified subtree; routes through
+  // apply_node_edit using the retained untransformedAst (Phase 4).
+  //
+  // For other formats (q2-debug, q2-slides): expects a full PandocAST
+  // and calls incrementalWriteQmd as before.
+  const handleSetAst = useCallback(
+    (newAst: any) => {
+      if (pipelineKindForFormat(format) === 'preview') {
+        const edit = newAst as PreviewNodeEditPayload;
+        if (!edit.__isPreviewNodeEdit) {
+          console.warn(
+            'q2-preview setAst: expected PreviewNodeEditPayload; got',
+            newAst,
+          );
+          return;
+        }
+        if (!rendered.untransformedAstJson) {
+          console.warn(
+            'q2-preview setAst: no untransformedAstJson retained; render first',
+          );
+          return;
+        }
+        try {
+          let modifiedSubtreeJson: string;
+          if (edit.channel === 'text') {
+            // Text channel: parse raw QMD → Pandoc JSON → apply_node_edit.
+            const parseResult = parseQmdContentSync(edit.newText);
+            if (!parseResult.success || !parseResult.ast) {
+              console.error('parse_qmd_content failed:', parseResult.error);
+              return;
+            }
+            modifiedSubtreeJson = parseResult.ast;
+          } else {
+            // Subtree channel: render-component already produced Pandoc JSON.
+            modifiedSubtreeJson = edit.modifiedSubtreeJson;
+          }
+          // Use rendered.renderedContent so byte offsets match the AST's
+          // generation, not the live editor content (which may have changed).
+          const newQmd = applyNodeEdit(
+            rendered.renderedContent,
+            rendered.untransformedAstJson,
+            edit.destinationSourceInfoJson,
+            modifiedSubtreeJson,
+          );
+          onContentRewrite(newQmd);
+        } catch (err) {
+          console.error('apply_node_edit failed:', err);
+        }
+        return;
+      }
+      try {
+        const newQmd = incrementalWriteQmd(content, newAst);
+        onContentRewrite(newQmd);
+      } catch (err) {
+        console.error('Failed to write AST back to QMD:', err);
+      }
+    },
+    [content, onContentRewrite, format, rendered.untransformedAstJson, rendered.renderedContent],
+  );
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {ast && (previewState === 'GOOD' || previewState === 'ERROR_FROM_GOOD') ? (
+        {rendered.astJson && (previewState === 'GOOD' || previewState === 'ERROR_FROM_GOOD') ? (
           <ReactRenderer
-            astJson={ast}
+            astJson={rendered.astJson}
             currentFilePath={currentFile?.path ?? ''}
             files={files}
             fileContents={fileContents}
@@ -454,6 +512,9 @@ export default function ReactPreview({
             onSlideChange={onSlideChange}
             format={format}
             themeFingerprint={themeFingerprint}
+            renderedContent={rendered.renderedContent}
+            untransformedAstJson={rendered.untransformedAstJson}
+            currentActor={getActorId()}
           />
         ) : previewState === 'ERROR_AT_START' && currentError ? (
           <div style={{ padding: '20px', color: 'red' }}>

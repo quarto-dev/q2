@@ -210,12 +210,12 @@ pub fn resolve_format_key(
 ) -> String {
     use quarto_config::MergedConfig;
     use quarto_pandoc_types::{ConfigMapEntry, MergeOp};
-    use quarto_source_map::SourceInfo;
+    use quarto_source_map::{By, SourceInfo};
 
     // One `{format: !prefer <key>}` layer. All layers use `Prefer` (last
     // wins); ordering project → document → `--to` encodes the precedence.
     let format_layer = |key: &str| -> ConfigValue {
-        let si = SourceInfo::default();
+        let si = SourceInfo::generated(By::unknown());
         ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "format".to_string(),
@@ -881,7 +881,7 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn si() -> SourceInfo {
-        SourceInfo::default()
+        SourceInfo::for_test()
     }
 
     fn meta_with(entries: Vec<ConfigMapEntry>) -> ConfigValue {

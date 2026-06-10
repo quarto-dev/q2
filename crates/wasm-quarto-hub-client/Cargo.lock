@@ -2284,6 +2284,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha1",
+ "smallvec",
  "tokio",
  "tree-sitter",
  "tree-sitter-qmd",
@@ -2650,6 +2651,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2 0.11.0",
+ "smallvec",
  "tempfile",
  "thiserror 2.0.18",
  "time",
@@ -2832,6 +2834,8 @@ name = "quarto-source-map"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
+ "smallvec",
 ]
 
 [[package]]

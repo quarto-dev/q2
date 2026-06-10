@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import React, { useContext } from 'react';
 import { RegistryContext, AttributionWrap, renderChildren } from '../framework';
 import type {
     BlockNode,
@@ -7,6 +7,9 @@ import type {
     InlineNode,
     NodeArgs,
 } from '../framework';
+import { PreviewContext } from './PreviewContext';
+import type { PreviewContextValue, ResolvedSource } from './PreviewContext';
+import { sliceBytes } from '../utils/sliceSource';
 
 const placeholderStyle: React.CSSProperties = {
     color: '#888',
@@ -15,11 +18,94 @@ const placeholderStyle: React.CSSProperties = {
 
 const PLACEHOLDER_CLASS = 'q2-preview-placeholder';
 
+// ---------------------------------------------------------------------------
+// Block editing helpers (Plan 3: centralized textarea substitution)
+// ---------------------------------------------------------------------------
+
+/**
+ * C2-safe gate: true when this block is the active edit target.
+ *
+ * The `resolved != null` check is explicit — `null?.reachabilityClass !== 'Opaque'`
+ * would evaluate true (undefined !== 'Opaque'), silently making Generated /
+ * included-file blocks editable.  The widened gate includes both `TopLevel` and
+ * `Descendable` (all non-Opaque, non-null classes).
+ */
+function isBlockEditTarget(
+    ctx: PreviewContextValue | null,
+    poolId: string | number | undefined,
+    resolved: ResolvedSource | null,
+): boolean {
+    return (
+        resolved != null &&
+        resolved.reachabilityClass !== 'Opaque' &&
+        poolId !== undefined &&
+        ctx?.commitTextEdit !== undefined &&
+        ctx?.content != null &&
+        ctx?.editTarget?.poolId === poolId
+    );
+}
+
+/** Render an in-place editing textarea for the matched block. */
+function renderBlockTextarea(
+    ctx: PreviewContextValue,
+    resolved: ResolvedSource,
+): React.ReactNode {
+    const { contentHeight } = ctx.editTarget!;
+    const initialText = sliceBytes(
+        ctx.content!,
+        resolved.sourceEntry.r[0],
+        resolved.sourceEntry.r[1],
+    ).trimEnd();
+
+    const commit = (el: HTMLTextAreaElement) => {
+        const text = el.value;
+        if (!text.trim()) {
+            ctx.setEditTarget!(null);
+            return;
+        }
+        ctx.commitTextEdit!(JSON.stringify(resolved.sourceEntry), text);
+        ctx.setEditTarget!(null);
+    };
+
+    return (
+        <textarea
+            autoFocus
+            defaultValue={initialText}
+            style={{
+                display: 'block',
+                fontFamily: 'monospace',
+                fontSize: '0.9em',
+                width: '100%',
+                height: contentHeight,
+                boxSizing: 'border-box',
+                resize: 'vertical',
+            }}
+            onBlur={(e) => commit(e.currentTarget)}
+            onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    commit(e.currentTarget);
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    ctx.setEditTarget!(null);
+                }
+            }}
+        />
+    );
+}
+
+// ---------------------------------------------------------------------------
+
 /**
  * q2-preview's Block dispatcher. Looks up the format registry by Pandoc
  * tag and renders the corresponding leaf component, falling back to a
  * muted-gray "(not yet implemented)" placeholder when no component is
  * registered.
+ *
+ * **Textarea substitution (Plan 3):** when the C2-safe gate passes and this
+ * block is the active edit target, renders a `<textarea>` instead of the leaf
+ * component.  Centralizing here means all 16+ block components get editing
+ * automatically without per-component textarea logic.
  *
  * The miss path **recurses into children via `renderChildren`** so
  * nested nodes also surface their own placeholders. Without recursion,
@@ -42,6 +128,18 @@ const PLACEHOLDER_CLASS = 'q2-preview-placeholder';
  */
 export const Block = (args: NodeArgs<BlockNode>) => {
     const { registry } = useContext(RegistryContext);
+    const ctx = useContext(PreviewContext);
+    const poolId = (args.node as any).s as string | number | undefined;
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
+
+    if (isBlockEditTarget(ctx, poolId, resolved) && ctx) {
+        return (
+            <AttributionWrap node={args.node} as="div">
+                {renderBlockTextarea(ctx, resolved!)}
+            </AttributionWrap>
+        );
+    }
+
     const Component = registry[args.node.t];
     const inner = Component ? (
         <Component {...args} />
@@ -93,6 +191,18 @@ export const Inline = (args: NodeArgs<InlineNode>) => {
  */
 export const CustomBlock = (args: NodeArgs<CustomBlockNode>) => {
     const { registry } = useContext(RegistryContext);
+    const ctx = useContext(PreviewContext);
+    const poolId = (args.node as any).s as string | number | undefined;
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
+
+    if (isBlockEditTarget(ctx, poolId, resolved) && ctx) {
+        return (
+            <AttributionWrap node={args.node} as="div">
+                {renderBlockTextarea(ctx, resolved!)}
+            </AttributionWrap>
+        );
+    }
+
     const Component =
         registry[args.node.type_name] ?? registry['__fallback__'];
     const inner = <Component {...args} />;

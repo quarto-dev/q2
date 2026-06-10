@@ -25,7 +25,7 @@ use quarto_source_map::SourceInfo;
 // =============================================================================
 
 fn si() -> SourceInfo {
-    SourceInfo::default()
+    SourceInfo::for_test()
 }
 
 fn make_str(text: &str) -> Inline {

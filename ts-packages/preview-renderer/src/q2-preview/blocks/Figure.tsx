@@ -1,5 +1,7 @@
+import { useContext } from 'react';
 import { Node } from '../../framework';
 import type { BlockNode, FigureBlock, InlineNode, NodeArgs } from '../../framework';
+import { PreviewContext } from '../PreviewContext';
 
 /**
  * Figure → <figure> + optional <figcaption>. Reads `c[1][1]`
@@ -15,11 +17,17 @@ import type { BlockNode, FigureBlock, InlineNode, NodeArgs } from '../../framewo
  * via `<Node>`.
  */
 export const Figure = (args: NodeArgs<FigureBlock>) => {
+    const ctx = useContext(PreviewContext);
+    const poolId = (args.node as any).s as string | number | undefined;
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
+
     const { node, setLocalAst, onNavigateToDocument } = args;
     const [[id, classes], [shortCaption, captionBlocks], bodyBlocks] = node.c;
     const props: Record<string, string> = {};
     if (id) props.id = id;
     if (classes.length) props.className = classes.join(' ');
+    if (isEditable) props['data-block-pool-id'] = String(poolId);
 
     return (
         <figure {...props}>

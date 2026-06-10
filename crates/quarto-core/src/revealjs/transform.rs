@@ -22,7 +22,7 @@ use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::{Block, Div, Header, Paragraph};
 use quarto_pandoc_types::inline::{Inline, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::render::RenderContext;
@@ -76,7 +76,7 @@ impl AstTransform for RevealSlidesTransform {
 fn str_inline(text: String) -> Inline {
     Inline::Str(Str {
         text,
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::generated(By::revealjs()),
     })
 }
 
@@ -85,12 +85,12 @@ fn str_inline(text: String) -> Inline {
 fn classed_para(class: &str, text: String) -> Block {
     let para = Block::Paragraph(Paragraph {
         content: vec![str_inline(text)],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::generated(By::revealjs()),
     });
     Block::Div(Div {
         attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()),
         content: vec![para],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
     })
 }
@@ -132,7 +132,7 @@ fn build_title_slide(meta: &quarto_pandoc_types::ConfigValue) -> Option<Block> {
                 LinkedHashMap::new(),
             ),
             content: vec![str_inline(title)],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
         }));
     }
@@ -153,7 +153,7 @@ fn build_title_slide(meta: &quarto_pandoc_types::ConfigValue) -> Option<Block> {
             LinkedHashMap::new(),
         ),
         content,
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
     }))
 }

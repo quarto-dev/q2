@@ -486,7 +486,7 @@ mod tests {
     fn empty_config() -> ConfigValue {
         ConfigValue {
             value: ConfigValueKind::Map(vec![]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         }
     }
@@ -575,19 +575,19 @@ mod tests {
     fn test_from_config_value_null_theme() {
         let theme_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::Null),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
 
         let config = ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
@@ -612,19 +612,19 @@ mod tests {
         // Create config with theme as a map (invalid)
         let theme_value = ConfigValue {
             value: ConfigValueKind::Map(vec![]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
 
         let config = ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
@@ -643,31 +643,31 @@ mod tests {
         let items = vec![
             ConfigValue {
                 value: ConfigValueKind::Scalar(Yaml::String("cosmo".to_string())),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
             ConfigValue {
                 value: ConfigValueKind::Scalar(Yaml::Integer(42)),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
         ];
 
         let theme_value = ConfigValue {
             value: ConfigValueKind::Array(items),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
 
         let config = ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
@@ -703,19 +703,19 @@ mod tests {
         // Simulate pampa parsing `theme: cosmo` as PandocInlines
         let str_node = Inline::Str(Str {
             text: "cosmo".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
-        let theme_value = ConfigValue::new_inlines(vec![str_node], SourceInfo::default());
+        let theme_value = ConfigValue::new_inlines(vec![str_node], SourceInfo::for_test());
 
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
 
         let config = ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
@@ -735,19 +735,19 @@ mod tests {
     fn flattened_config_with_theme_string(theme: &str) -> ConfigValue {
         let theme_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String(theme.to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
 
         ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         }
     }
@@ -759,26 +759,26 @@ mod tests {
             .iter()
             .map(|s| ConfigValue {
                 value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             })
             .collect();
 
         let theme_value = ConfigValue {
             value: ConfigValueKind::Array(items),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
 
         ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         }
     }
@@ -862,19 +862,19 @@ mod tests {
     fn test_from_flattened_config_null_theme() {
         let theme_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::Null),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
 
         let config = ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
@@ -907,13 +907,13 @@ mod tests {
 
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
 
         let config = ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
@@ -939,12 +939,12 @@ mod tests {
         let items = vec![
             ConfigValue {
                 value: ConfigValueKind::Scalar(Yaml::String("cosmo".to_string())),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
             ConfigValue {
                 value: ConfigValueKind::Scalar(Yaml::Integer(42)),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
         ];
@@ -957,13 +957,13 @@ mod tests {
 
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
 
         let config = ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
@@ -993,12 +993,12 @@ mod tests {
         };
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
         let config = ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
@@ -1031,23 +1031,23 @@ mod tests {
             },
             ConfigValue {
                 value: ConfigValueKind::Scalar(Yaml::String("cosmo".to_string())),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
         ];
         let theme_value = ConfigValue {
             value: ConfigValueKind::Array(items),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
         let config = ConfigValue {
             value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 

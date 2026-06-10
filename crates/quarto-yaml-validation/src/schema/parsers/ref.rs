@@ -27,7 +27,7 @@ pub(in crate::schema) fn parse_ref_schema(
             .map(|s| s.to_string())
             .ok_or_else(|| SchemaError::InvalidStructure {
                 message: "ref must be a string".to_string(),
-                location: yaml.source_info.clone(),
+                location: Some(yaml.source_info.clone()),
             })?;
 
     Ok(Schema::Ref(RefSchema {

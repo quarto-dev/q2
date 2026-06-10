@@ -44,7 +44,7 @@ pub fn process_language_specifier(
             let range = crate::pandoc::location::node_location(node);
             PandocNativeIntermediate::IntermediateBaseText(text, range)
         }
-        Some(PandocNativeIntermediate::IntermediateAttr(attr, attr_source)) => {
+        Some(PandocNativeIntermediate::IntermediateAttr(attr, attr_source, _inner_si)) => {
             // We have a commonmark_specifier with attributes
             // Need to extract just the language portion from the node text
 
@@ -116,6 +116,7 @@ pub fn process_language_specifier(
             PandocNativeIntermediate::IntermediateAttr(
                 (cm_id, classes, cm_attrs),
                 combined_attr_source,
+                crate::pandoc::location::node_source_info_with_context(node, context),
             )
         }
         Some(other) => {
@@ -148,7 +149,9 @@ fn find_named_child<'a>(node: &'a tree_sitter::Node, name: &str) -> Option<tree_
 /// Process a language_specifier that contains a nested language_specifier (the `{{python}}` case).
 /// This handles the recursive grammar rule: `seq('{', $.language_specifier, '}')`
 pub fn process_nested_language_specifier(
+    node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     // Look for the inner language_specifier child
     for (name, child) in children {
@@ -161,6 +164,7 @@ pub fn process_nested_language_specifier(
     PandocNativeIntermediate::IntermediateAttr(
         (String::new(), vec![], LinkedHashMap::new()),
         AttrSourceInfo::empty(),
+        crate::pandoc::location::node_source_info_with_context(node, context),
     )
 }
 

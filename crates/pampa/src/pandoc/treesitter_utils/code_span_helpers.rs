@@ -10,7 +10,9 @@ use super::pandocnativeintermediate::PandocNativeIntermediate;
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::{Attr, AttrSourceInfo, empty_attr};
 use crate::pandoc::inline::{Code, Inline, Space};
-use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::location::{
+    leading_whitespace_source_info, node_source_info_with_context, tight_source_info_for_node,
+};
 
 /// Extract the code-span text from a `content` tree-sitter node.
 ///
@@ -132,7 +134,7 @@ pub fn process_pandoc_code_span(
             "attribute_specifier" => {
                 // Process attributes, raw format, or language specifier if present
                 match child {
-                    PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src) => {
+                    PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src, _) => {
                         attr = attrs.clone();
                         attr_source = attrs_src.clone();
                     }
@@ -160,18 +162,23 @@ pub fn process_pandoc_code_span(
         trimmed_code_text = format!("{} {}", lang, trimmed_code_text);
     }
 
+    // Compute tight (trimmed) source_info for the content node, and the
+    // leading-whitespace source_info for the injected Space (P1/P3 tightness).
+    let whole_si = node_source_info_with_context(node, context);
+    let tight_si = tight_source_info_for_node(node, context);
+
     // Create Code or RawInline based on presence of raw format
     let code = if let Some(format) = raw_format {
         Inline::RawInline(crate::pandoc::inline::RawInline {
             format,
             text: trimmed_code_text,
-            source_info: node_source_info_with_context(node, context),
+            source_info: tight_si.clone(),
         })
     } else {
         Inline::Code(Code {
             attr,
             text: trimmed_code_text,
-            source_info: node_source_info_with_context(node, context),
+            source_info: tight_si.clone(),
             attr_source,
         })
     };
@@ -180,8 +187,10 @@ pub fn process_pandoc_code_span(
     let mut result = Vec::new();
 
     if has_leading_space {
+        // Give the peeled Space just the leading whitespace bytes, not the whole node.
+        let space_si = leading_whitespace_source_info(&whole_si, &tight_si).unwrap_or(whole_si);
         result.push(Inline::Space(Space {
-            source_info: node_source_info_with_context(node, context),
+            source_info: space_si,
         }));
     }
 

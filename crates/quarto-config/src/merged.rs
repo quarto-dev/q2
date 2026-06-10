@@ -444,12 +444,12 @@ mod tests {
 
     // Helper to create a scalar ConfigValue
     fn scalar(s: &str) -> ConfigValue {
-        ConfigValue::new_scalar(Yaml::String(s.into()), SourceInfo::default())
+        ConfigValue::new_scalar(Yaml::String(s.into()), SourceInfo::for_test())
     }
 
     // Helper to create an array ConfigValue
     fn array(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     // Helper to create a map ConfigValue
@@ -458,11 +458,11 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     // Helper to create a map with prefer semantics

@@ -78,7 +78,11 @@ fn render_active_page(project_dir: &Path, active: &Path) -> WasmPassTwoOutput {
 
     let project_type = project_type_for(&project);
     let vfs_root = project.dir.join(".quarto/project-artifacts");
-    let renderer = RenderToHtmlRenderer::new(&vfs_root);
+    // bd-rz2we: keep rendered HTML URLs path-independent. Disk
+    // writes still go to the tempdir at `vfs_root`; only the URLs
+    // embedded in the HTML use the synthetic VFS prefix. See the
+    // matching helper in `tests/idempotence.rs`.
+    let renderer = RenderToHtmlRenderer::new(&vfs_root).with_url_root("/.quarto/project-artifacts");
 
     let mut pipeline = ProjectPipeline::with_renderer(
         &mut project,
@@ -561,35 +565,42 @@ fn default_project_theme_artifact_lands_in_vfs() {
     let output = render_active_page(&project_dir, &active);
 
     // The HTML should embed a `<link>` to a quarto theme CSS file
-    // under the synthetic vfs root.
-    let vfs_root = project_dir.join(".quarto/project-artifacts");
-    let vfs_root_str = vfs_root.to_string_lossy().to_string();
-    let needle_prefix = format!("{}/quarto/quarto-theme-", vfs_root_str);
+    // under the synthetic vfs URL root. bd-rz2we: native test
+    // helpers pass `with_url_root("/.quarto/project-artifacts")`,
+    // so URLs use that synthetic prefix regardless of where the
+    // bytes actually land on disk.
+    let url_root = "/.quarto/project-artifacts";
+    let url_needle_prefix = format!("{}/quarto/quarto-theme-", url_root);
     let theme_link = output
         .html()
         .lines()
-        .filter(|line| line.contains(&needle_prefix) && line.contains(".css"))
-        .next()
+        .find(|line| line.contains(&url_needle_prefix) && line.contains(".css"))
         .unwrap_or_else(|| {
             panic!(
-                "expected a theme <link> under {}quarto/quarto-theme-…; html: {}",
-                vfs_root_str,
+                "expected a theme <link> under {}/quarto/quarto-theme-…; html: {}",
+                url_root,
                 snippet(&output.html()),
             )
         });
 
-    // Extract the actual CSS path from the href attribute and
-    // confirm the bytes landed at that path.
+    // Extract the URL fragment from the href attribute and translate
+    // it back to the on-disk path. bd-rz2we: the URL embeds the
+    // synthetic prefix; bytes land under the tempdir `vfs_root`.
     let href_start = theme_link
-        .find(&needle_prefix)
+        .find(&url_needle_prefix)
         .expect("needle present (filter just confirmed it)");
     let after_prefix = &theme_link[href_start..];
     let css_end = after_prefix
         .find(".css")
         .map(|i| href_start + i + ".css".len())
         .expect("href ends with .css");
-    let css_path_str = &theme_link[href_start..css_end];
-    let css_path = PathBuf::from(css_path_str);
+    let url_str = &theme_link[href_start..css_end];
+    let suffix = url_str
+        .strip_prefix(url_root)
+        .expect("URL starts with the synthetic prefix")
+        .trim_start_matches('/');
+    let vfs_root = project_dir.join(".quarto/project-artifacts");
+    let css_path = vfs_root.join(suffix);
 
     let runtime = NativeRuntime::new();
     let bytes = runtime.file_read(&css_path).unwrap_or_else(|e| {

@@ -7,12 +7,18 @@ use crate::pandoc::{
     Alignment, Attr, AttrSourceInfo, Block, Blocks, Cell, Inline, Inlines, ListAttributes, Pandoc,
     Row, ShortcodeArg,
 };
-use quarto_source_map::Range;
+use quarto_source_map::{Range, SourceInfo};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PandocNativeIntermediate {
     IntermediatePandoc(Pandoc),
-    IntermediateAttr(Attr, AttrSourceInfo),
+    /// Attribute intermediate carrying the parsed `Attr`, its
+    /// per-field `AttrSourceInfo`, *and* an explicit `SourceInfo`
+    /// covering the whole attribute span. The third field exists so
+    /// consumers can hand it straight to
+    /// [`crate::pandoc::inline::InlineAttr::new`] (Plan 7f Phase 6.5)
+    /// rather than recomputing the union at every call site.
+    IntermediateAttr(Attr, AttrSourceInfo, SourceInfo),
     IntermediateSection(Vec<Block>),
     IntermediateBlock(Block),
     IntermediateInline(Inline),

@@ -44,6 +44,7 @@ proc-macro2 = { version = "1.0.106", features = ["span-locations"] }
 schemars = "1.2.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+smallvec = { version = "1.13", features = ["serde"] }
 serde_yaml = "0.9"
 thiserror = "2.0"
 toml = "0.9.11"
@@ -189,6 +190,9 @@ path = "./crates/quarto-trace-server"
 [workspace.lints.rust]
 # coverage_nightly is used by pampa for code coverage instrumentation on nightly Rust
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+# Enforce the SourceInfo provenance contract — callers must use SourceInfo::for_test() or
+# an explicit Generated{by: <kind>}; SourceInfo::default() is forbidden.
+deprecated = "deny"
 
 [workspace.lints.clippy]
 # Architectural issues - fixing these requires significant refactoring

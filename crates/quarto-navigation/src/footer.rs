@@ -17,7 +17,7 @@
 use quarto_config::resolve_website_value;
 use quarto_pandoc_types::ConfigMapEntry;
 use quarto_pandoc_types::config_value::ConfigValue;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::item::NavigationItem;
 
@@ -72,7 +72,10 @@ impl FooterRegion {
             FooterRegion::Items(items) => {
                 let values: Vec<ConfigValue> =
                     items.iter().map(NavigationItem::to_config_value).collect();
-                Some(ConfigValue::new_array(values, SourceInfo::default()))
+                Some(ConfigValue::new_array(
+                    values,
+                    SourceInfo::generated(By::programmatic_config()),
+                ))
             }
         }
     }
@@ -110,7 +113,7 @@ impl FooterBorder {
     }
 
     pub fn to_config_value(&self) -> Option<ConfigValue> {
-        let info = SourceInfo::default();
+        let info = SourceInfo::generated(By::programmatic_config());
         match self {
             FooterBorder::Default => None,
             FooterBorder::Enabled => Some(ConfigValue::new_bool(true, info)),
@@ -165,7 +168,7 @@ impl PageFooter {
 
     /// Serialise back to a map suitable for storage at `navigation.footer`.
     pub fn to_config_value(&self) -> ConfigValue {
-        let info = SourceInfo::default();
+        let info = SourceInfo::generated(By::programmatic_config());
         let mut entries: Vec<ConfigMapEntry> = Vec::new();
 
         if let Some(v) = self.left.to_config_value() {
@@ -239,7 +242,7 @@ mod tests {
     use super::*;
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
-        let info = SourceInfo::default();
+        let info = SourceInfo::for_test();
         let map_entries: Vec<ConfigMapEntry> = entries
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
@@ -252,15 +255,15 @@ mod tests {
     }
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     fn b(x: bool) -> ConfigValue {
-        ConfigValue::new_bool(x, SourceInfo::default())
+        ConfigValue::new_bool(x, SourceInfo::for_test())
     }
 
     fn arr(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     #[test]

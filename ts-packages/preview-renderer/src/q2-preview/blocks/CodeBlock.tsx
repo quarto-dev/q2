@@ -1,5 +1,7 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useContext, type ReactNode } from 'react';
 import type { CodeBlock as CodeBlockType, NodeArgs } from '../../framework';
+import { PreviewContext } from '../PreviewContext';
+import { sliceEncodedUtf8 } from '../../utils/sliceSource';
 
 /**
  * Attribute key the Rust `CodeHighlightStage` writes into a code
@@ -59,9 +61,6 @@ function captureToClass(capture: string): string {
   return capture.replace(/\./g, '-');
 }
 
-const utf8Encoder = new TextEncoder();
-const utf8Decoder = new TextDecoder();
-
 /**
  * Render the body of a code block as nested `<span class="hl-...">`
  * elements driven by the highlight spans. Walks the byte stream of
@@ -77,11 +76,12 @@ const utf8Decoder = new TextDecoder();
  * </span></span>`.
  *
  * Byte offsets index into the utf-8 representation. Sliced bytes are
- * decoded back to a string via `TextDecoder`; tree-sitter only emits
- * offsets on valid utf-8 boundaries, so the decode is always clean.
+ * decoded back to a string via `sliceEncodedUtf8`; tree-sitter only
+ * emits offsets on valid utf-8 boundaries, so the decode is always
+ * clean.
  */
 function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
-  const bytes = utf8Encoder.encode(text);
+  const bytes = new TextEncoder().encode(text);
 
   type Event =
     | { kind: 'open'; offset: number; capture: string; tie: number }
@@ -117,9 +117,9 @@ function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
   const stack: Frame[] = [];
   let key = 0;
 
-  function pushText(slice: Uint8Array) {
-    if (slice.length === 0) return;
-    const piece = utf8Decoder.decode(slice);
+  function pushText(start: number, end: number) {
+    if (start >= end) return;
+    const piece = sliceEncodedUtf8(bytes, start, end);
     const target = stack.length > 0 ? stack[stack.length - 1].children : children;
     target.push(piece);
   }
@@ -127,7 +127,7 @@ function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
   for (const ev of events) {
     const offset = Math.min(ev.offset, bytes.length);
     if (offset > cursor) {
-      pushText(bytes.subarray(cursor, offset));
+      pushText(cursor, offset);
       cursor = offset;
     }
     if (ev.kind === 'open') {
@@ -145,7 +145,7 @@ function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
   }
   // Any trailing bytes after the last event.
   if (cursor < bytes.length) {
-    pushText(bytes.subarray(cursor));
+    pushText(cursor, bytes.length);
   }
   // Any spans still open at end-of-text — emit them as if closed at
   // the boundary so we don't lose the text or the class. (Should not
@@ -162,6 +162,12 @@ function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
 }
 
 export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
+    const ctx = useContext(PreviewContext);
+    const poolId = (node as any).s as string | number | undefined;
+    const resolved = ctx?.resolveSource ? ctx.resolveSource(node) : null;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
+    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
+
     const [[id, classes, kvs], code] = node.c;
 
     // bd-nxslt: `data-hl-spans` is consumed by the renderer (we emit
@@ -182,23 +188,14 @@ export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
 
     // bd-s3z1g: highlighted code blocks emit Pandoc's nested
     // structure to match the native writer in
-    // `crates/pampa/src/writers/html.rs::write_highlighted_codeblock`:
-    //
-    //   <div class="sourceCode [non-language classes]" id="...">
-    //     <pre class="sourceCode [lang]"><code class="sourceCode [lang]">…</code></pre>
-    //   </div>
-    //
-    // The first class is the language; remaining classes (e.g.
-    // `cell-code`) and the id move to the outer div. The div wrapper
-    // is what Quarto's theme CSS keys off for the rounded background.
-    // Un-highlighted code blocks stay as a bare `<pre><code>` — the
-    // native side does the same.
+    // `crates/pampa/src/writers/html.rs::write_highlighted_codeblock`.
+    // The affordance attribute goes on the outer div (the root element).
     if (spans !== null) {
         const [language, ...extras] = classes;
         const divClassName = ['sourceCode', ...extras].join(' ');
         const codeContainerClass = language ? `sourceCode ${language}` : 'sourceCode';
         return (
-            <div className={divClassName} {...(id ? { id } : {})}>
+            <div className={divClassName} {...(id ? { id } : {})} {...affordanceAttr}>
                 <pre className={codeContainerClass} {...preDataAttrs}>
                     <code className={codeContainerClass}>{renderHighlighted(code, spans)}</code>
                 </pre>
@@ -207,10 +204,11 @@ export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
     }
 
     // bd-y1fs3: un-highlighted path — `<pre>` carries the `Attr` (id,
-    // classes, non-hl-spans kvs); `<code>` is bare. Matches the
-    // native writer's un-highlighted branch in
-    // `crates/pampa/src/writers/html.rs::Block::CodeBlock`.
-    const preProps: Record<string, string> = { ...preDataAttrs };
+    // classes, non-hl-spans kvs); `<code>` is bare.
+    const affordanceStr: Record<string, string> = isEditable
+        ? { 'data-block-pool-id': String(poolId) }
+        : {};
+    const preProps: Record<string, string> = { ...preDataAttrs, ...affordanceStr };
     if (id) preProps.id = id;
     if (classes.length) preProps.className = classes.join(' ');
     return (

@@ -242,10 +242,13 @@ fn config_value_to_lua(lua: &Lua, config: &ConfigValue) -> Result<Value> {
 /// Phase 5: Convert a Lua table to ConfigValue.
 fn lua_to_config_value(lua: &Lua, val: Value) -> Result<ConfigValue> {
     use quarto_pandoc_types::MergeOp;
-    use quarto_source_map::SourceInfo;
+    use quarto_source_map::{By, SourceInfo};
 
     let merge_op = MergeOp::default();
-    let source_info = SourceInfo::default();
+    // Lua-side ConfigValue conversion — no YAML source bytes exist.
+    // `filter_source_info` may later overwrite if this flows through
+    // a Lua filter return path.
+    let source_info = SourceInfo::generated(By::unknown());
 
     match val {
         Value::Nil => Ok(ConfigValue {
@@ -295,7 +298,7 @@ fn lua_to_config_value(lua: &Lua, val: Value) -> Result<ConfigValue> {
                     let (k, v) = pair?;
                     entries.push(ConfigMapEntry {
                         key: k,
-                        key_source: SourceInfo::default(),
+                        key_source: source_info.clone(),
                         value: lua_to_config_value(lua, v)?,
                     });
                 }
@@ -442,9 +445,16 @@ fn pandoc_read(lua: &Lua, args: mlua::MultiValue) -> Result<Value> {
             }
         }
         "json" => {
-            // Use the JSON reader
+            // Lua-side `pandoc.read(json, "json")` — the JSON comes from the
+            // filter author and likely lacks q2's `s:` references. Route
+            // through the completing reader with `By::unknown()`: nodes
+            // without `s:` get stamped with a non-atomic placeholder so
+            // they remain editable downstream (plan 7f Phase 4).
             let mut cursor = std::io::Cursor::new(&content);
-            match crate::readers::json::read(&mut cursor) {
+            match crate::readers::json::read_completing_source_info(
+                &mut cursor,
+                quarto_source_map::By::unknown(),
+            ) {
                 Ok((pandoc, _context)) => rust_pandoc_to_lua_table(lua, &pandoc),
                 Err(e) => Err(Error::runtime(format!("pandoc.read (json) failed: {}", e))),
             }
@@ -1096,7 +1106,7 @@ mod tests {
         // String
         let config = ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("hello".to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1108,7 +1118,7 @@ mod tests {
         // Boolean
         let config = ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(true)),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1117,7 +1127,7 @@ mod tests {
         // Integer
         let config = ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(42)),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1126,7 +1136,7 @@ mod tests {
         // Real
         let config = ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Real("3.14".to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1135,7 +1145,7 @@ mod tests {
         // Null
         let config = ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Null),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1152,19 +1162,19 @@ mod tests {
         let items = vec![
             ConfigValue {
                 value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("a".to_string())),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: MergeOp::default(),
             },
             ConfigValue {
                 value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("b".to_string())),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: MergeOp::default(),
             },
         ];
 
         let config = ConfigValue {
             value: ConfigValueKind::Array(items),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
 
@@ -1182,17 +1192,17 @@ mod tests {
 
         let entries = vec![ConfigMapEntry {
             key: "key1".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: ConfigValue {
                 value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("value1".to_string())),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: MergeOp::default(),
             },
         }];
 
         let config = ConfigValue {
             value: ConfigValueKind::Map(entries),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
 
@@ -1212,7 +1222,7 @@ mod tests {
         // Path
         let config = ConfigValue {
             value: ConfigValueKind::Path("/some/path".to_string()),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1224,7 +1234,7 @@ mod tests {
         // Glob
         let config = ConfigValue {
             value: ConfigValueKind::Glob("*.md".to_string()),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1236,7 +1246,7 @@ mod tests {
         // Expr
         let config = ConfigValue {
             value: ConfigValueKind::Expr("1 + 2".to_string()),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();

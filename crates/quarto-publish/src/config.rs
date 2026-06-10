@@ -64,19 +64,19 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(entries, SourceInfo::default())
+        ConfigValue::new_map(entries, SourceInfo::for_test())
     }
 
     fn boolean(b: bool) -> ConfigValue {
-        ConfigValue::new_bool(b, SourceInfo::default())
+        ConfigValue::new_bool(b, SourceInfo::for_test())
     }
 
     fn string(s: &str) -> ConfigValue {
-        ConfigValue::new_string(s.to_string(), SourceInfo::default())
+        ConfigValue::new_string(s.to_string(), SourceInfo::for_test())
     }
 
     #[test]

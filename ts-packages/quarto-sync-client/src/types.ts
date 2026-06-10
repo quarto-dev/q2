@@ -157,15 +157,7 @@ export interface ASTOptions {
    */
   writeQmd: (ast: unknown) => string;
 
-  /**
-   * Incrementally write a modified AST back to QMD text, preserving unchanged
-   * portions of the original source text verbatim. Falls back to `writeQmd`
-   * if not provided or if the original source is not cached.
-   *
-   * @param originalQmd - The original QMD source text
-   * @param newAst - The modified AST to write
-   * @returns The new QMD text with unchanged portions preserved
-   */
+  /** Incrementally write a modified AST back to QMD, preserving unchanged source text. */
   incrementalWriteQmd?: (originalQmd: string, newAst: unknown) => string;
 
   /**
@@ -226,6 +218,18 @@ export interface CreateProjectOptions {
    * When unset, the browser adapter is used unchanged.
    */
   auth?: SyncClientAuthOptions;
+  /**
+   * How long to wait for the samod `peer` event before falling through
+   * to offline mode (ms). Defaults to 1 ms, which triggers offline mode
+   * immediately and lets documents sync to the server in the background.
+   *
+   * Test helpers like `createProjectOnServer` that need documents to be
+   * ONLINE on the hub before returning should pass a longer value (e.g.
+   * 10 000 ms) so documents are created while the WebSocket peer is
+   * already connected and flush to the server immediately — eliminating
+   * the background-sync race against `waitForServerDocuments`.
+   */
+  peerTimeoutMs?: number;
 }
 
 /**

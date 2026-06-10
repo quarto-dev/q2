@@ -1,7 +1,8 @@
 import React, { useContext } from 'react';
 import { RegistryContext } from './RegistryContext';
-import { isAtomicSourceInfo, ATOMIC_SYNTHETIC_KINDS } from '../utils/sourceInfo';
+import { isAtomicSourceInfo, ATOMIC_KINDS } from '../utils/sourceInfo';
 import { isAtomicCustomNode } from '../utils/atomicCustomNodes';
+
 import type {
     BlockNode,
     InlineNode,
@@ -405,7 +406,7 @@ export function Node({
 
     const isCustom = node.t === 'CustomBlock' || node.t === 'CustomInline';
     const isAtomic =
-        isAtomicSourceInfo(node as { s?: number }, sourceInfoPool, ATOMIC_SYNTHETIC_KINDS)
+        isAtomicSourceInfo(node as { s?: number }, sourceInfoPool, ATOMIC_KINDS)
         || (isCustom && isAtomicCustomNode((node as CustomBlockNode | CustomInlineNode).type_name));
 
     const effectiveSetLocalAst = isAtomic ? NOOP_SET_LOCAL_AST : setLocalAst;

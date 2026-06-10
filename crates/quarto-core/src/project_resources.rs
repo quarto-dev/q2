@@ -27,7 +27,7 @@
 
 use std::path::{Path, PathBuf};
 
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -120,7 +120,7 @@ impl RawResourcePattern {
     pub fn without_source(pattern: impl Into<String>) -> Self {
         Self {
             pattern: pattern.into(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::unknown()),
         }
     }
 }
@@ -536,9 +536,15 @@ pub fn resolve_reported_resources(
             doc_dir.join(&entry.raw_path)
         };
         // Engine/Lua-filter entries don't have a YAML source location;
-        // diagnostics degrade to a span-less message.
-        let canonical =
-            canonicalize_within_project(project_root, &absolute, &raw_str, &SourceInfo::default())?;
+        // diagnostics degrade to a span-less message. Plan 7f follow-up
+        // beads issue: refactor `canonicalize_within_project` to take
+        // `Option<&SourceInfo>` so this site doesn't need a sentinel.
+        let canonical = canonicalize_within_project(
+            project_root,
+            &absolute,
+            &raw_str,
+            &SourceInfo::generated(By::unknown()),
+        )?;
         let rel = canonical
             .strip_prefix(project_root)
             .expect("canonicalize_within_project verified containment")
@@ -1397,15 +1403,15 @@ mod tests {
                 ConfigValue::new_string("first.txt", si_first.clone()),
                 ConfigValue::new_string("second.txt", si_second.clone()),
             ],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         let outer = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "resources".into(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: array,
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
 
         let extracted = extract_resource_patterns(&outer, &["resources"]);
@@ -1428,10 +1434,10 @@ mod tests {
         let outer = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "resources".into(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: scalar,
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
 
         let extracted = extract_resource_patterns(&outer, &["resources"]);

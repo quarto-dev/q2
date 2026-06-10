@@ -1,0 +1,60 @@
+[      35ms] [WARNING] <meta name="apple-mobile-web-app-capable" content="yes"> is deprecated. Please include <meta name="mobile-web-app-capable" content="yes"> @ https://posit.okta.com/plugin/bookmark?fromURI=%2Fapp%2Fwexonline%2F0oaddrqqyeobatX9r697%2Fwexonline_link&appInstanceId=0oaddrqqyeobatX9r697&fromHome=true:0
+[    1167ms] [WARNING] <meta name="apple-mobile-web-app-capable" content="yes"> is deprecated. Please include <meta name="mobile-web-app-capable" content="yes"> @ https://posit.okta.com/app/wexonline/0oaddrqqyeobatX9r697/wexonline_link:0
+[    3148ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/regular.d102575708e6b151.woff2?v=3.19 @ https://go.wexonline.com/:0
+[    3148ms] [WARNING] OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed size @ https://go.wexonline.com/:0
+[    3202ms] Cannot use import statement outside a module
+[    3525ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/regular.d102575708e6b151.woff2?v=3.19 @ https://go.wexonline.com/:0
+[    3525ms] [WARNING] OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed size @ https://go.wexonline.com/:0
+[    3768ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/regular.d102575708e6b151.woff2?v=3.19 @ https://go.wexonline.com/:0
+[    3768ms] [WARNING] OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed size @ https://go.wexonline.com/:0
+[    3769ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/regular.d102575708e6b151.woff2?v=3.19 @ https://go.wexonline.com/:0
+[    3769ms] [WARNING] OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed size @ https://go.wexonline.com/:0
+[    3769ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/regular.d102575708e6b151.woff2?v=3.19 @ https://go.wexonline.com/:0
+[    3769ms] [WARNING] OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed size @ https://go.wexonline.com/:0
+[    4585ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/regular.d102575708e6b151.woff2?v=3.19 @ https://go.wexonline.com/:0
+[    4585ms] [WARNING] OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed size @ https://go.wexonline.com/:0
+[    4585ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/regular.d102575708e6b151.woff2?v=3.19 @ https://go.wexonline.com/:0
+[    4585ms] [WARNING] OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed size @ https://go.wexonline.com/:0
+[    4585ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/regular.d102575708e6b151.woff2?v=3.19 @ https://go.wexonline.com/:0
+[    4585ms] [WARNING] OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed size @ https://go.wexonline.com/:0
+[    5183ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/regular.d102575708e6b151.woff2?v=3.19 @ https://go.wexonline.com/:0
+[    5183ms] [WARNING] OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed size @ https://go.wexonline.com/:0
+[    5183ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/regular.d102575708e6b151.woff2?v=3.19 @ https://go.wexonline.com/:0
+[    5183ms] [WARNING] OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed size @ https://go.wexonline.com/:0
+[    6687ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/bold.74eb748799e935eb.woff2?v=3.19 @ https://go.wexonline.com/login:0
+[    6687ms] [WARNING] OTS parsing error: Failed to convert WOFF 2.0 font to SFNT @ https://go.wexonline.com/login:0
+[    6687ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/bold.74eb748799e935eb.woff2?v=3.19 @ https://go.wexonline.com/login:0
+[    6687ms] [WARNING] OTS parsing error: Failed to convert WOFF 2.0 font to SFNT @ https://go.wexonline.com/login:0
+[    6687ms] [WARNING] Failed to decode downloaded font: https://go.wexonline.com/bold.74eb748799e935eb.woff2?v=3.19 @ https://go.wexonline.com/login:0
+[    6687ms] [WARNING] OTS parsing error: Failed to convert WOFF 2.0 font to SFNT @ https://go.wexonline.com/login:0
+[    7156ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://nafleet-wex.okta.com/api/v1/sessions/me:0
+[163257068ms] [ERROR] Failed to load resource: net::ERR_EMPTY_RESPONSE @ https://faro-collector-prod-us-east-2.grafana.net/collect/940c75571df826759f7c7801ae201626:0
+[163257069ms] [ERROR] Faro
+ @grafana/faro-web-sdk:transport-fetch
+ Failed sending payload to the receiver
+ {meta: Object, events: Array(1)} TypeError: Failed to fetch
+    at https://go.wexonline.com/polyfills.39f1d27971c7c219.js:1:21819
+    at Ke.f.<computed> (https://go.wexonline.com/polyfills.39f1d27971c7c219.js:1:15226)
+    at https://go.wexonline.com/2035.54cb720fa76704ef.js:1:198554
+    at https://go.wexonline.com/2035.54cb720fa76704ef.js:1:107540
+    at tt (https://go.wexonline.com/2035.54cb720fa76704ef.js:1:106031)
+    at https://go.wexonline.com/2035.54cb720fa76704ef.js:1:106234
+    at new N (https://go.wexonline.com/polyfills.39f1d27971c7c219.js:1:18917)
+    at Object.add (https://go.wexonline.com/2035.54cb720fa76704ef.js:1:106168)
+    at Zn.<anonymous> (https://go.wexonline.com/2035.54cb720fa76704ef.js:1:106603)
+    at Generator.next (<anonymous>) @ https://go.wexonline.com/2035.54cb720fa76704ef.js:0
+[163258214ms] [ERROR] Failed to load resource: net::ERR_EMPTY_RESPONSE @ https://faro-collector-prod-us-east-2.grafana.net/collect/940c75571df826759f7c7801ae201626:0
+[163258214ms] [ERROR] Faro
+ @grafana/faro-web-sdk:transport-fetch
+ Failed sending payload to the receiver
+ {meta: Object, traces: Object, events: Array(1)} TypeError: Failed to fetch
+    at https://go.wexonline.com/polyfills.39f1d27971c7c219.js:1:21819
+    at Ke.f.<computed> (https://go.wexonline.com/polyfills.39f1d27971c7c219.js:1:15226)
+    at https://go.wexonline.com/2035.54cb720fa76704ef.js:1:198554
+    at https://go.wexonline.com/2035.54cb720fa76704ef.js:1:107540
+    at tt (https://go.wexonline.com/2035.54cb720fa76704ef.js:1:106031)
+    at https://go.wexonline.com/2035.54cb720fa76704ef.js:1:106234
+    at new N (https://go.wexonline.com/polyfills.39f1d27971c7c219.js:1:18917)
+    at Object.add (https://go.wexonline.com/2035.54cb720fa76704ef.js:1:106168)
+    at Zn.<anonymous> (https://go.wexonline.com/2035.54cb720fa76704ef.js:1:106603)
+    at Generator.next (<anonymous>) @ https://go.wexonline.com/2035.54cb720fa76704ef.js:0

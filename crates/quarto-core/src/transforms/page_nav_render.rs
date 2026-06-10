@@ -28,7 +28,7 @@ use quarto_navigation::page_nav::PageNavigation;
 use quarto_navigation::render_html::page_navigation_to_html;
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::render::RenderContext;
@@ -108,7 +108,7 @@ impl AstTransform for PageNavRenderTransform {
         let html = page_navigation_to_html(&page_nav);
         ast.meta.insert_path(
             &["rendered", "navigation", "page_navigation"],
-            ConfigValue::new_string(&html, SourceInfo::default()),
+            ConfigValue::new_string(&html, SourceInfo::generated(By::programmatic_config())),
         );
 
         Ok(())
@@ -135,19 +135,19 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     fn b(x: bool) -> ConfigValue {
-        ConfigValue::new_bool(x, SourceInfo::default())
+        ConfigValue::new_bool(x, SourceInfo::for_test())
     }
 
     fn make_profile(source: &str, title: &str) -> DocumentProfile {

@@ -1,0 +1,11 @@
+---
+format: q2-preview
+render-components:
+  - drag.tsx
+---
+
+::: {x=0 y=0}
+
+Drag me.
+
+:::

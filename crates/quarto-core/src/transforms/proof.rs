@@ -27,6 +27,7 @@ use quarto_pandoc_types::block::{Block, Blocks, Div, Header};
 use quarto_pandoc_types::custom::{CustomNode, Slot};
 use quarto_pandoc_types::inline::Inlines;
 use quarto_pandoc_types::pandoc::Pandoc;
+use quarto_source_map::{By, SourceInfo};
 use serde_json::json;
 
 use crate::Result;
@@ -132,8 +133,8 @@ fn empty_attr() -> Attr {
 fn convert_div(mut div: Div) -> CustomNode {
     // Extract title: `name=` attribute, then first Header. Same rule as
     // theorem sugar.
-    let title: Option<Inlines> =
-        extract_name_attr(&mut div.attr).or_else(|| extract_first_header_title(&mut div.content));
+    let title: Option<Inlines> = extract_name_attr(&mut div.attr, &div.attr_source)
+        .or_else(|| extract_first_header_title(&mut div.content));
 
     // Strip the `.proof` class so a later "match div.proof" filter
     // doesn't double-apply (same pattern as theorem sugar).
@@ -155,8 +156,30 @@ fn convert_div(mut div: Div) -> CustomNode {
     node
 }
 
-fn extract_name_attr(attr: &mut Attr) -> Option<Inlines> {
+/// Read and remove the `name` attribute from `attr`. See
+/// `crate::transforms::theorem::extract_name_attr` for the
+/// positional-alignment rationale (this is the parallel implementation
+/// for `.proof` Divs).
+fn extract_name_attr(attr: &mut Attr, attr_source: &AttrSourceInfo) -> Option<Inlines> {
     let (_id, _classes, kvs) = attr;
+
+    let name_idx = kvs.keys().position(|k| k == "name")?;
+
+    // See `theorem::extract_name_attr` — empty attr_source signals
+    // "no provenance available" (common in tests); only assert on
+    // populated-but-misaligned input.
+    debug_assert!(
+        attr_source.attributes.is_empty() || kvs.len() == attr_source.attributes.len(),
+        "AttrSourceInfo.attributes is out of sync with Attr.2 (bd-3aolj / bd-1e6a5): kvs={}, attr_source={}",
+        kvs.len(),
+        attr_source.attributes.len(),
+    );
+    let value_source = if kvs.len() == attr_source.attributes.len() {
+        attr_source.attributes[name_idx].1.clone()
+    } else {
+        None
+    };
+
     let name = kvs.remove("name")?;
     if name.is_empty() {
         return None;
@@ -164,7 +187,8 @@ fn extract_name_attr(attr: &mut Attr) -> Option<Inlines> {
     Some(vec![quarto_pandoc_types::inline::Inline::Str(
         quarto_pandoc_types::inline::Str {
             text: name,
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: value_source
+                .unwrap_or_else(|| SourceInfo::generated(By::programmatic_config())),
         },
     )])
 }

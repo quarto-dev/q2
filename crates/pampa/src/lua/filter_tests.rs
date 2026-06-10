@@ -62,11 +62,11 @@ end
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -125,11 +125,11 @@ end
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -174,9 +174,9 @@ async fn test_uppercase_filter() {
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "hello world".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -214,9 +214,9 @@ async fn test_identity_filter() {
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "hello".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -267,24 +267,24 @@ end
             content: vec![
                 Inline::Str(crate::pandoc::Str {
                     text: "keep".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
                     text: "delete".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
                     text: "also_keep".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -340,9 +340,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "expand".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -406,9 +406,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "hello".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -479,18 +479,18 @@ end
             content: vec![
                 Inline::Str(crate::pandoc::Str {
                     text: "hello".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
                     text: "world".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
         })],
     };
@@ -550,9 +550,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "test".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -604,22 +604,22 @@ end
                 content: vec![
                     Inline::Str(crate::pandoc::Str {
                         text: "emphasized".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                     Inline::Space(crate::pandoc::Space {
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                     Inline::Strong(crate::pandoc::Strong {
                         content: vec![Inline::Str(crate::pandoc::Str {
                             text: "bold".to_string(),
-                            source_info: quarto_source_map::SourceInfo::default(),
+                            source_info: quarto_source_map::SourceInfo::for_test(),
                         })],
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                 ],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -701,11 +701,11 @@ end
             content: vec![Inline::Emph(crate::pandoc::Emph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "should_not_see_this".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -737,7 +737,7 @@ end
 }
 
 #[tokio::test]
-async fn test_filter_provenance_tracking() {
+async fn test_filter_generated_tracking() {
     // Test that elements created by filters capture their source location
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("provenance_test.lua");
@@ -758,9 +758,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "original".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -777,17 +777,23 @@ end
     .unwrap()
     .pandoc;
 
-    // The filtered Str should have FilterProvenance source info
+    // The filtered Str should have filter-kind Generated source info
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
                 assert_eq!(s.text, "created-by-filter");
-                // Check that the source_info is FilterProvenance
+                // Check that the source_info is Generated { by: filter, .. }
                 match &s.source_info {
-                    quarto_source_map::SourceInfo::FilterProvenance {
-                        filter_path: path,
-                        line,
-                    } => {
+                    quarto_source_map::SourceInfo::Generated { by, from }
+                        if by.is_kind("filter") =>
+                    {
+                        assert!(
+                            from.is_empty(),
+                            "Filter-constructed Generated nodes carry no anchors yet"
+                        );
+                        let (path, line) = by
+                            .as_filter()
+                            .expect("filter-kind Generated should expose path/line");
                         // The filter_path should contain our filter file name
                         assert!(
                             path.contains("provenance_test.lua"),
@@ -796,13 +802,16 @@ end
                         );
                         // The line should be around line 5 where pandoc.Str is called
                         assert!(
-                            *line >= 4 && *line <= 7,
+                            (4..=7).contains(&line),
                             "Expected line to be between 4-7, got: {}",
                             line
                         );
                     }
                     other => {
-                        panic!("Expected FilterProvenance source info, got: {:?}", other)
+                        panic!(
+                            "Expected filter-kind Generated source info, got: {:?}",
+                            other
+                        )
                     }
                 }
             }
@@ -836,17 +845,17 @@ end
             content: vec![
                 Inline::Str(crate::pandoc::Str {
                     text: "hello".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
                     text: "world".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -897,22 +906,22 @@ end
                 content: vec![
                     Inline::Str(crate::pandoc::Str {
                         text: "emphasized".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                     Inline::Space(crate::pandoc::Space {
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                     Inline::Strong(crate::pandoc::Strong {
                         content: vec![Inline::Str(crate::pandoc::Str {
                             text: "bold".to_string(),
-                            source_info: quarto_source_map::SourceInfo::default(),
+                            source_info: quarto_source_map::SourceInfo::for_test(),
                         })],
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                 ],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -995,16 +1004,16 @@ end
             Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "a".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             }),
             Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "b".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             }),
         ],
     };
@@ -1067,9 +1076,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "hello".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -1125,15 +1134,15 @@ end
             Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "a".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             }),
             Block::CodeBlock(crate::pandoc::CodeBlock {
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 text: "code".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             }),
         ],
     };
@@ -1193,13 +1202,13 @@ end
             content: vec![
                 Inline::Str(crate::pandoc::Str {
                     text: "hello".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -1263,17 +1272,17 @@ end
             content: vec![
                 Inline::Str(crate::pandoc::Str {
                     text: "a".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
                     text: "b".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -1350,20 +1359,20 @@ end
                 content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
                         text: "inside".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             }),
             Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "outside".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             }),
         ],
     };
@@ -1431,16 +1440,16 @@ end
             Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "a".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             }),
             Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "b".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             }),
         ],
     };
@@ -1524,19 +1533,19 @@ end
                 Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
                         text: "a".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
                         text: "b".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -1609,11 +1618,11 @@ end
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "hello".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -1691,17 +1700,17 @@ end
             content: vec![
                 Inline::Str(crate::pandoc::Str {
                     text: "a".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
                     text: "b".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -1755,9 +1764,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "hello".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -1799,13 +1808,13 @@ end
     );
 
     // Check source location
-    if let Some(quarto_source_map::SourceInfo::FilterProvenance { filter_path, line }) =
-        &diagnostics[0].location
+    if let Some(quarto_source_map::SourceInfo::Generated { by, .. }) = &diagnostics[0].location
+        && let Some((filter_path, line)) = by.as_filter()
     {
         assert!(filter_path.contains("warn_test.lua"));
-        assert!(*line > 0, "Line should be positive");
+        assert!(line > 0, "Line should be positive");
     } else {
-        panic!("Expected FilterProvenance source info");
+        panic!("Expected filter-kind Generated source info");
     }
 }
 
@@ -1830,9 +1839,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "test".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -1885,9 +1894,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "test".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -1954,9 +1963,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "test".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -2036,11 +2045,11 @@ end
             content: vec![Inline::Strong(crate::pandoc::Strong {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "bold".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -2070,11 +2079,11 @@ end
             content: vec![Inline::Underline(crate::pandoc::Underline {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "underlined".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -2103,11 +2112,11 @@ end
             content: vec![Inline::Strikeout(crate::pandoc::Strikeout {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "crossed".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -2136,11 +2145,11 @@ end
             content: vec![Inline::Superscript(crate::pandoc::Superscript {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "2".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -2169,11 +2178,11 @@ end
             content: vec![Inline::Subscript(crate::pandoc::Subscript {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "n".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -2202,11 +2211,11 @@ end
             content: vec![Inline::SmallCaps(crate::pandoc::SmallCaps {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "small".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -2254,11 +2263,11 @@ end
                 quote_type: crate::pandoc::QuoteType::SingleQuote,
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "quoted".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -2289,11 +2298,11 @@ end
                 quote_type: crate::pandoc::QuoteType::DoubleQuote,
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "double".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -2344,9 +2353,9 @@ end
                 attr: ("my-code".to_string(), vec!["python".to_string()], attrs),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 text: "print(1)".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -2396,9 +2405,9 @@ end
             content: vec![Inline::Math(crate::pandoc::Math {
                 math_type: crate::pandoc::MathType::InlineMath,
                 text: "x^2".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -2428,9 +2437,9 @@ end
             content: vec![Inline::Math(crate::pandoc::Math {
                 math_type: crate::pandoc::MathType::DisplayMath,
                 text: "E=mc^2".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -2476,9 +2485,9 @@ end
             content: vec![Inline::RawInline(crate::pandoc::RawInline {
                 format: "html".to_string(),
                 text: "<b>bold</b>".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -2533,13 +2542,13 @@ end
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "Click here".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 target: ("https://example.com".to_string(), "Example".to_string()),
                 target_source: crate::pandoc::TargetSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -2595,13 +2604,13 @@ end
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "Alt text".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 target: ("image.png".to_string(), "Title".to_string()),
                 target_source: crate::pandoc::TargetSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -2653,13 +2662,13 @@ end
                 content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
                         text: "footnote content".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -2718,11 +2727,11 @@ end
                 }],
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "[@smith2020]".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -2788,11 +2797,11 @@ end
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "added".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -2823,11 +2832,11 @@ end
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "removed".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -2858,11 +2867,11 @@ end
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "important".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -2906,9 +2915,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::NoteReference(crate::pandoc::NoteReference {
                 id: "fn1".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -2957,9 +2966,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "original".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -3032,11 +3041,11 @@ end
             content: vec![Inline::Emph(crate::pandoc::Emph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "original".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -3068,11 +3077,11 @@ end
             content: vec![Inline::Strong(crate::pandoc::Strong {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "original".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -3104,11 +3113,11 @@ end
             content: vec![Inline::Underline(crate::pandoc::Underline {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "original".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -3140,11 +3149,11 @@ end
             content: vec![Inline::Strikeout(crate::pandoc::Strikeout {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "original".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -3193,13 +3202,13 @@ end
             content: vec![Inline::Span(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "original".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: ("old-id".to_string(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -3254,15 +3263,15 @@ end
             content: vec![Inline::Link(crate::pandoc::Link {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "old text".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 target: ("http://old.url".to_string(), "old title".to_string()),
                 attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 target_source: crate::pandoc::TargetSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -3319,15 +3328,15 @@ end
             content: vec![Inline::Image(crate::pandoc::Image {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "old_alt".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 target: ("old_image.png".to_string(), "old title".to_string()),
                 attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 target_source: crate::pandoc::TargetSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -3383,9 +3392,9 @@ end
                 text: "old_code()".to_string(),
                 attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -3435,9 +3444,9 @@ end
             content: vec![Inline::RawInline(crate::pandoc::RawInline {
                 text: "<i>old</i>".to_string(),
                 format: "html".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -3486,9 +3495,9 @@ end
             content: vec![Inline::Math(crate::pandoc::Math {
                 text: "x = a + b".to_string(),
                 math_type: crate::pandoc::MathType::InlineMath,
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -3536,12 +3545,12 @@ end
             content: vec![Inline::Quoted(crate::pandoc::Quoted {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "old_quote".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 quote_type: crate::pandoc::QuoteType::DoubleQuote,
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -3591,13 +3600,13 @@ end
                 content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
                         text: "old_note".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -3660,13 +3669,13 @@ end
             content: vec![Inline::Insert(crate::pandoc::Insert {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "original".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -3698,13 +3707,13 @@ end
             content: vec![Inline::Delete(crate::pandoc::Delete {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "original".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -3736,13 +3745,13 @@ end
             content: vec![Inline::Highlight(crate::pandoc::Highlight {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "original".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -3789,9 +3798,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::NoteReference(crate::pandoc::NoteReference {
                 id: "fn1".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -3840,7 +3849,7 @@ end
             content: vec![Inline::Span(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
                     "old-id".to_string(),
@@ -3848,9 +3857,9 @@ end
                     hashlink::LinkedHashMap::new(),
                 ),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -3911,9 +3920,9 @@ end
         blocks: vec![Block::Plain(crate::pandoc::Plain {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "test".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -3941,9 +3950,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "hello".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -3991,7 +4000,7 @@ end
             level: 2,
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "Title".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             attr: (
                 "my-header".to_string(),
@@ -3999,7 +4008,7 @@ end
                 hashlink::LinkedHashMap::new(),
             ),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4051,7 +4060,7 @@ end
                 hashlink::LinkedHashMap::new(),
             ),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4097,7 +4106,7 @@ end
         blocks: vec![Block::RawBlock(crate::pandoc::RawBlock {
             text: "<div>html</div>".to_string(),
             format: "html".to_string(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4147,11 +4156,11 @@ end
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "quoted".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4198,9 +4207,9 @@ end
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "inside".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             attr: (
                 "div-id".to_string(),
@@ -4208,7 +4217,7 @@ end
                 hashlink::LinkedHashMap::new(),
             ),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4255,19 +4264,19 @@ end
                 vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
                         text: "item1".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
                         text: "item2".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
             ],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4314,16 +4323,16 @@ end
             content: vec![vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "first".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })]],
             attr: (
                 5,
                 crate::pandoc::ListNumberStyle::Decimal,
                 crate::pandoc::ListNumberDelim::Period,
             ),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4379,9 +4388,9 @@ end
         blocks: vec![Block::Plain(crate::pandoc::Plain {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "original".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -4409,9 +4418,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "original".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let filtered = apply_lua_filter(
@@ -4458,11 +4467,11 @@ end
             level: 1,
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "Old Title".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             attr: ("old-id".to_string(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4517,7 +4526,7 @@ end
                 hashlink::LinkedHashMap::new(),
             ),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4565,7 +4574,7 @@ end
         blocks: vec![Block::RawBlock(crate::pandoc::RawBlock {
             text: "<div>old</div>".to_string(),
             format: "html".to_string(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4611,11 +4620,11 @@ end
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "old_quote".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4665,9 +4674,9 @@ end
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "old_content".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             attr: (
                 "old-id".to_string(),
@@ -4675,7 +4684,7 @@ end
                 hashlink::LinkedHashMap::new(),
             ),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4737,7 +4746,7 @@ end
             content: vec![Inline::Span(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
                     "test-id".to_string(),
@@ -4745,9 +4754,9 @@ end
                     hashlink::LinkedHashMap::new(),
                 ),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4798,7 +4807,7 @@ end
             content: vec![Inline::Span(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
                     "named-test-id".to_string(),
@@ -4806,9 +4815,9 @@ end
                     hashlink::LinkedHashMap::new(),
                 ),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4857,7 +4866,7 @@ end
             content: vec![Inline::Span(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
                     "old-id".to_string(),
@@ -4865,9 +4874,9 @@ end
                     hashlink::LinkedHashMap::new(),
                 ),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4921,7 +4930,7 @@ end
             content: vec![Inline::Span(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
                     "original-id".to_string(),
@@ -4929,9 +4938,9 @@ end
                     hashlink::LinkedHashMap::new(),
                 ),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -4984,7 +4993,7 @@ end
             content: vec![Inline::Span(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
                     "test-id".to_string(),
@@ -4992,9 +5001,9 @@ end
                     hashlink::LinkedHashMap::new(),
                 ),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5055,11 +5064,11 @@ end
                 }],
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "Smith (2021)".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5115,24 +5124,24 @@ end
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "figure content".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             caption: crate::pandoc::Caption {
                 short: None,
                 long: Some(vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
                         text: "My Caption".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })]),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             },
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5181,13 +5190,13 @@ end
             content: vec![Inline::Span(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: ("old-id".to_string(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5246,23 +5255,23 @@ end
             caption: crate::pandoc::Caption {
                 short: None,
                 long: None,
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             },
             colspec: vec![],
             head: TableHead {
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 rows: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             },
             bodies: vec![],
             foot: TableFoot {
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 rows: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             },
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5313,14 +5322,14 @@ end
             content: vec![
                 vec![Inline::Str(crate::pandoc::Str {
                     text: "Line one".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 vec![Inline::Str(crate::pandoc::Str {
                     text: "Line two".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
             ],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5373,18 +5382,18 @@ end
                 // Term: list of inlines
                 vec![Inline::Str(crate::pandoc::Str {
                     text: "Term1".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 // Definitions: list of list of blocks
                 vec![vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
                         text: "Definition1".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })]],
             )],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5433,16 +5442,16 @@ end
             content: vec![vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "item".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })]],
             attr: (
                 3,
                 crate::pandoc::ListNumberStyle::UpperAlpha,
                 crate::pandoc::ListNumberDelim::OneParen,
             ),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5498,7 +5507,7 @@ end
             content: vec![Inline::Span(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
                     "id".to_string(),
@@ -5506,9 +5515,9 @@ end
                     hashlink::LinkedHashMap::new(),
                 ),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5563,11 +5572,11 @@ end
             level: 1,
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "Heading".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             attr: ("hdr-id".to_string(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5625,21 +5634,21 @@ end
                 content: vec![
                     Inline::Str(crate::pandoc::Str {
                         text: "one".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                     Inline::Space(crate::pandoc::Space {
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                     Inline::Str(crate::pandoc::Str {
                         text: "two".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                 ],
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5694,21 +5703,21 @@ end
                 Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
                         text: "para1".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
                         text: "para2".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5758,24 +5767,24 @@ end
             content: vec![
                 Inline::Str(crate::pandoc::Str {
                     text: "a".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::SoftBreak(crate::pandoc::SoftBreak {
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
                     text: "b".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::LineBreak(crate::pandoc::LineBreak {
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
                     text: "c".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5823,7 +5832,7 @@ end
     let pandoc = Pandoc {
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::HorizontalRule(crate::pandoc::HorizontalRule {
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5884,9 +5893,9 @@ end
         blocks: vec![Block::Plain(crate::pandoc::Plain {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "hello".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5941,9 +5950,9 @@ end
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "title".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -5996,11 +6005,11 @@ end
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "quoted".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6056,11 +6065,11 @@ end
             content: vec![vec![Block::Plain(crate::pandoc::Plain {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "item".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })]],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6121,11 +6130,11 @@ end
             content: vec![vec![Block::Plain(crate::pandoc::Plain {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "numbered".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })]],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6185,20 +6194,20 @@ end
                 long: Some(vec![Block::Plain(crate::pandoc::Plain {
                     content: vec![Inline::Str(crate::pandoc::Str {
                         text: "caption".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })]),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             },
             content: vec![Block::Plain(crate::pandoc::Plain {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "figure".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6253,9 +6262,9 @@ end
         blocks: vec![Block::LineBlock(crate::pandoc::LineBlock {
             content: vec![vec![Inline::Str(crate::pandoc::Str {
                 text: "line".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })]],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6310,11 +6319,11 @@ end
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "inside".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6367,9 +6376,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "x".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6425,9 +6434,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "original".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6480,11 +6489,11 @@ end
             content: vec![Inline::Emph(crate::pandoc::Emph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6547,11 +6556,11 @@ end
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "inner".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6603,9 +6612,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "input".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6650,9 +6659,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "input".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6722,7 +6731,7 @@ end
                     7,
                 ),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6770,7 +6779,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "orig".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::original(
                 quarto_source_map::FileId(3),
@@ -6826,9 +6835,11 @@ end
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![],
-                source_info: quarto_source_map::SourceInfo::filter_provenance("test.lua", 1),
+                source_info: quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::filter("test.lua", 1),
+                ),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6946,9 +6957,9 @@ end
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -6999,9 +7010,9 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "original".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -7054,9 +7065,9 @@ end
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -7119,7 +7130,7 @@ end
                     5,
                 ),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -7186,7 +7197,7 @@ end
                     5,
                 ),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();

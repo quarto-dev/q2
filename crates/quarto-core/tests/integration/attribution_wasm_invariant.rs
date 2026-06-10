@@ -44,7 +44,7 @@ fn make_project(dir: &std::path::Path) -> ProjectContext {
 fn empty_pandoc() -> Pandoc {
     Pandoc {
         blocks: Vec::new(),
-        meta: ConfigValue::new_map(Vec::new(), SourceInfo::default()),
+        meta: ConfigValue::new_map(Vec::new(), SourceInfo::for_test()),
     }
 }
 

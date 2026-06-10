@@ -25,7 +25,7 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use quarto_config::{MergedConfig, resolve_format_config};
 use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::extension::Extension;
 use crate::extension::discover::{find_extension, parse_format_descriptor};
@@ -45,7 +45,7 @@ use crate::trace_event;
 fn json_to_config_value(value: &serde_json::Value) -> ConfigValue {
     use yaml_rust2::Yaml;
 
-    let source_info = SourceInfo::default();
+    let source_info = SourceInfo::generated(By::programmatic_config());
     let kind = match value {
         serde_json::Value::Null => ConfigValueKind::Scalar(Yaml::Null),
         serde_json::Value::Bool(b) => ConfigValueKind::Scalar(Yaml::Boolean(*b)),
@@ -68,7 +68,7 @@ fn json_to_config_value(value: &serde_json::Value) -> ConfigValue {
                 .iter()
                 .map(|(k, v)| ConfigMapEntry {
                     key: k.clone(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::generated(By::programmatic_config()),
                     value: json_to_config_value(v),
                 })
                 .collect();
@@ -285,8 +285,11 @@ impl PipelineStage for MetadataMergeStage {
             entries.retain(|e| e.key != "format");
             entries.push(ConfigMapEntry {
                 key: "format".to_string(),
-                key_source: SourceInfo::default(),
-                value: ConfigValue::new_string(&ctx.format.target_format, SourceInfo::default()),
+                key_source: SourceInfo::generated(By::programmatic_config()),
+                value: ConfigValue::new_string(
+                    &ctx.format.target_format,
+                    SourceInfo::generated(By::programmatic_config()),
+                ),
             });
         }
 
@@ -536,21 +539,21 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     /// Helper to create a scalar string ConfigValue
     fn config_str(s: &str) -> ConfigValue {
-        ConfigValue::new_string(s, SourceInfo::default())
+        ConfigValue::new_string(s, SourceInfo::for_test())
     }
 
     /// Helper to create a scalar bool ConfigValue
     fn config_bool(b: bool) -> ConfigValue {
-        ConfigValue::new_bool(b, SourceInfo::default())
+        ConfigValue::new_bool(b, SourceInfo::for_test())
     }
 
     // ============================================================================
@@ -1778,10 +1781,10 @@ mod tests {
         let shortcodes_array = ConfigValue {
             value: ConfigValueKind::Array(vec![ConfigValue {
                 value: ConfigValueKind::Path("handler.lua".to_string()),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: Default::default(),
             }]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: Default::default(),
         };
 

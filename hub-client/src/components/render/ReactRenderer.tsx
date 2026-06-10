@@ -1,4 +1,4 @@
-import { useMemo, Component } from 'react';
+import { useMemo, useRef, useCallback, Component } from 'react';
 import type { ReactNode } from 'react';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { Q2DebugIframe } from './q2-debug/Q2DebugIframe';
@@ -86,6 +86,28 @@ interface ReactRendererProps {
    * Forwarded to `Q2PreviewIframe` only; q2-debug ignores it.
    */
   themeFingerprint?: string | null;
+  /**
+   * The QMD source text that was used to produce the current render
+   * generation. The byte offsets in `astJson` belong to this content
+   * snapshot, not to the live editor text (which may have diverged).
+   * Forwarded to `Q2PreviewIframe` as `renderedContent` so the iframe
+   * can slice source bytes without skew.
+   */
+  renderedContent?: string;
+  /**
+   * Pre-pipeline (untransformed) AST JSON shipped in lockstep with
+   * `astJson` + `renderedContent` (same compound-state generation).
+   * Forwarded to `Q2PreviewIframe` for the structural editability
+   * gate (Plan 2a).
+   */
+  untransformedAstJson?: string | null;
+  /**
+   * Reactji-authorship demo (2026-05-25 plan): current viewer's
+   * Automerge actor id, forwarded only to `Q2PreviewIframe` so user
+   * TSX can do `actor === me` checks. `null` is a valid "unknown"
+   * value. Sourced from `getActorId()` in `ReactPreview`.
+   */
+  currentActor?: string | null;
 }
 
 /**
@@ -105,7 +127,31 @@ function ReactRenderer({
   onSlideChange,
   format,
   themeFingerprint,
+  renderedContent,
+  untransformedAstJson,
+  currentActor,
 }: ReactRendererProps) {
+  // Stable wrappers for Q2PreviewIframe props that are useEffect dependencies.
+  //
+  // Q2PreviewIframe's message listener re-registers when either setAst or
+  // onNavigateToDocument changes identity.  setAst changes on every content
+  // update (handleSetAst closes over `content`); onNavigateToDocument changes
+  // when the files list syncs from Automerge.  A listener swap that races with
+  // the iframe's SET_AST postMessage silently drops the message.
+  //
+  // Using refs keeps the listener registered exactly once from mount to unmount,
+  // while still dispatching to the latest callback on each invocation.
+  const setAstRef = useRef(setAst);
+  setAstRef.current = setAst;
+  const stableSetAst = useCallback((ast: unknown) => setAstRef.current(ast as any), []);
+
+  const onNavigateRef = useRef(onNavigateToDocument);
+  onNavigateRef.current = onNavigateToDocument;
+  const stableNavigate = useCallback(
+    (targetPath: string, anchor: string | null) => onNavigateRef.current(targetPath, anchor),
+    [],
+  );
+
   // Extract component paths - only recompute when the list of paths
   // changes. The gate covers both q2-debug and q2-preview because both
   // load user TSX overrides via the iframe's
@@ -205,8 +251,8 @@ function ReactRenderer({
           <Q2DebugIframe
             astJson={astJson}
             currentFilePath={currentFilePath}
-            onNavigateToDocument={onNavigateToDocument}
-            setAst={setAst}
+            onNavigateToDocument={stableNavigate}
+            setAst={stableSetAst}
             customComponentsCode={customComponentsCode}
           />
         </div>
@@ -228,10 +274,13 @@ function ReactRenderer({
           <Q2PreviewIframe
             astJson={astJson}
             currentFilePath={currentFilePath}
-            onNavigateToDocument={onNavigateToDocument}
-            setAst={setAst}
+            onNavigateToDocument={stableNavigate}
+            setAst={stableSetAst}
             customComponentsCode={customComponentsCode}
             themeFingerprint={themeFingerprint}
+            renderedContent={renderedContent}
+            untransformedAstJson={untransformedAstJson}
+            currentActor={currentActor}
           />
         </div>
       </ErrorBoundary>

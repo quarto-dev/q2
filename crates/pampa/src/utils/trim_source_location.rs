@@ -96,8 +96,8 @@ pub fn trim_whitespace(
                 // For concat, just return as-is for now (edge case)
                 source_info.clone()
             }
-            SourceInfo::FilterProvenance { .. } => {
-                // For filter provenance, just return as-is
+            SourceInfo::Generated { .. } => {
+                // No characteristic local-text range to trim against.
                 source_info.clone()
             }
         };
@@ -128,8 +128,8 @@ pub fn trim_whitespace(
             // Proper handling would require splitting/adjusting pieces
             source_info.clone()
         }
-        SourceInfo::FilterProvenance { .. } => {
-            // For filter provenance, just return as-is
+        SourceInfo::Generated { .. } => {
+            // No characteristic local-text range to trim against.
             source_info.clone()
         }
     }

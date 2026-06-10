@@ -12,7 +12,8 @@
  *
  * - Annotated_Inline extends Inline by adding `s: number` field
  * - Annotated_Block extends Block by adding `s: number` field
- * - Elements with attributes add `attrS: AttrSourceInfo` for attribute source tracking
+ * - Elements with attributes add `a: AttrSourceInfo` for attribute source tracking
+ *   (renamed from `attrS` in Plan 7f Phase 5)
  * - Elements with targets add `targetS: TargetSourceInfo` for target source tracking
  *
  * This design ensures that quarto-markdown-pandoc JSON output is valid Pandoc JSON
@@ -273,7 +274,7 @@ export interface PandocDocument {
  * Mirrors the structure with source IDs (or null if empty/missing)
  *
  * Example for attr ["my-id", ["class1", "class2"], [["key1", "value1"]]]
- * attrS would be: {id: 1, classes: [2, 3], kvs: [[4, 5]]}
+ * `a` would be: {id: 1, classes: [2, 3], kvs: [[4, 5]]}
  */
 export interface AttrSourceInfo {
   id: number | null;                     // Source ID for id string (null if "")
@@ -298,31 +299,31 @@ export type TargetSourceInfo = [
  */
 export interface CellSourceInfo {
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
 }
 
 export interface RowSourceInfo {
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
   cellsS: CellSourceInfo[];
 }
 
 export interface TableHeadSourceInfo {
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
   rowsS: RowSourceInfo[];
 }
 
 export interface TableBodySourceInfo {
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
   headS: RowSourceInfo[];
   bodyS: RowSourceInfo[];
 }
 
 export interface TableFootSourceInfo {
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
   rowsS: RowSourceInfo[];
 }
 
@@ -454,7 +455,7 @@ export interface Annotated_Inline_Code {
   t: "Code";
   c: [Attr, string];
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
 }
 
 export interface Annotated_Inline_Math {
@@ -469,12 +470,12 @@ export interface Annotated_Inline_RawInline {
   s: number;
 }
 
-// Links and images (with attrS and targetS)
+// Links and images (with `a` (attr source) and targetS)
 export interface Annotated_Inline_Link {
   t: "Link";
   c: [Attr, Annotated_Inline[], Target];
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
   targetS: TargetSourceInfo;
 }
 
@@ -482,16 +483,16 @@ export interface Annotated_Inline_Image {
   t: "Image";
   c: [Attr, Annotated_Inline[], Target];
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
   targetS: TargetSourceInfo;
 }
 
-// Span (with attrS)
+// Span (with `a` (attr source))
 export interface Annotated_Inline_Span {
   t: "Span";
   c: [Attr, Annotated_Inline[]];
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
 }
 
 // Citations (with annotated Citation and citationIdS)
@@ -551,20 +552,20 @@ export interface Annotated_Block_Para {
   s: number;
 }
 
-// Headers (with attrS)
+// Headers (with `a` (attr source))
 export interface Annotated_Block_Header {
   t: "Header";
   c: [number, Attr, Annotated_Inline[]];
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
 }
 
-// Code blocks (with attrS)
+// Code blocks (with `a` (attr source))
 export interface Annotated_Block_CodeBlock {
   t: "CodeBlock";
   c: [Attr, string];
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
 }
 
 export interface Annotated_Block_RawBlock {
@@ -599,12 +600,12 @@ export interface Annotated_Block_DefinitionList {
   s: number;
 }
 
-// Structural (with attrS)
+// Structural (with `a` (attr source))
 export interface Annotated_Block_Div {
   t: "Div";
   c: [Attr, Annotated_Block[]];
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
 }
 
 export interface Annotated_Block_HorizontalRule {
@@ -636,19 +637,19 @@ export interface Annotated_Block_Table {
   t: "Table";
   c: [Attr, Annotated_CaptionArray, ColSpec[], Annotated_TableHead_Array, Annotated_TableBody_Array[], Annotated_TableFoot_Array];
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
   captionS: number; // Source info ref for caption
   headS: TableHeadSourceInfo;
   bodiesS: TableBodySourceInfo[];
   footS: TableFootSourceInfo;
 }
 
-// Figures (with attrS)
+// Figures (with `a` (attr source))
 export interface Annotated_Block_Figure {
   t: "Figure";
   c: [Attr, Annotated_CaptionArray, Annotated_Block[]];
   s: number;
-  attrS: AttrSourceInfo;
+  a: AttrSourceInfo;
 }
 
 // =============================================================================
@@ -782,7 +783,8 @@ export interface RustQmdJson {
 
   /** Source location tracking data */
   astContext: {
-    sourceInfoPool: SerializableSourceInfo[];
+    /** Source-info pool (renamed from `sourceInfoPool` in Plan 7f Phase 5). */
+    p: SerializableSourceInfo[];
     files: RustFileInfo[];
     metaTopLevelKeySources?: Record<string, number>;
   };

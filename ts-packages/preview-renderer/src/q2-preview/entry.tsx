@@ -26,7 +26,7 @@
  */
 
 import { createRoot } from 'react-dom/client';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 // Phase F.1 (bd-kw93.14): Bootstrap 5 bundled JS, vendored at the
@@ -64,9 +64,17 @@ import {
     extractMetaStringList,
     inlinesToPlainText,
     blocksToPlainText,
+    AttributionLookupContext,
+    useNodeAttribution,
+    CurrentActorContext,
+    useCurrentActor,
 } from '../framework';
 import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
-import { Block, Inline, previewRegistry, PreviewContext } from '.';
+import type { BlockNode } from '../framework/types';
+import type { PreviewNodeEditPayload } from '../types/diagnostic';
+import { Block, Inline, previewRegistry, PreviewContext, usePreviewEdit } from '.';
+import { buildSourceIndex, serializeSourceEntry } from './sourceIndex';
+import type { ResolvedSource } from './sourceIndex';
 import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';
 import { renderSlot } from './utils';
@@ -95,6 +103,13 @@ import { installLinkHandlers } from '../utils/iframeLinkHandlers';
 // Plan 2D (7.3.1) exposes `PreviewTitleBlock` so a user override
 // can compose the built-in chrome (e.g. wrap it and add a DOI line)
 // instead of re-implementing it from scratch.
+//
+// Reactji-authorship demo (2026-05-25) exposes `useNodeAttribution`
+// + `AttributionLookupContext` (Plan 5 wire surfaces) so user TSX can
+// resolve per-node authorship from the attribution lookup map that
+// `framework/Ast.tsx` provides. `useCurrentActor` is added below in
+// the `CurrentActorContext` block once the iframe payload carries the
+// actor id.
 (window as any).__Q2_PREVIEW_RENDERER__ = {
     renderChildren,
     renderNode,
@@ -109,6 +124,11 @@ import { installLinkHandlers } from '../utils/iframeLinkHandlers';
     inlinesToPlainText,
     blocksToPlainText,
     PreviewTitleBlock,
+    usePreviewEdit,
+    useNodeAttribution,
+    AttributionLookupContext,
+    useCurrentActor,
+    CurrentActorContext,
 };
 
 let root: ReturnType<typeof createRoot> | null = null;
@@ -118,6 +138,13 @@ let componentsLoading = false;
 interface UpdateAstPayload {
     astJson: string;
     currentFilePath: string;
+    /**
+     * Pre-pipeline (untransformed) AST JSON shipped in lockstep with
+     * `astJson` + `renderedContent` (same compound-state generation).
+     * Received by `PreviewRoot` to build `sourceIndex` for the
+     * structural editability gate (Plan 2a).
+     */
+    untransformedAstJson?: string | null;
     /**
      * Manifest of `{ origPath → blobUrl }` produced by the parent's
      * `assetWalker.ts`. Forwarded into `AssetManifestContext` so
@@ -146,6 +173,13 @@ interface UpdateAstPayload {
      */
     pendingAnchor?: string | null;
     pendingAnchorEpoch?: number;
+    renderedContent?: string;
+    /**
+     * Reactji-authorship demo (2026-05-25 plan): current viewer's
+     * Automerge actor id. Provided via `CurrentActorContext` to user
+     * TSX so `useCurrentActor()` can drive `actor === me` checks.
+     */
+    currentActor?: string | null;
 }
 
 // Module-top message handler. Registered before `IFRAME_READY` is
@@ -288,8 +322,16 @@ interface PreviewRootProps {
     pendingAnchor?: string | null;
     /** Phase F.1: monotonic epoch — scroll fires when this advances. */
     pendingAnchorEpoch?: number;
+    /**
+     * Reactji-authorship demo (2026-05-25 plan): viewer's Automerge
+     * actor id, provided via `CurrentActorContext` to user TSX.
+     */
+    currentActor?: string | null;
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
     setAst: (newAst: PandocAST) => void;
+    renderedContent?: string;
+    /** Pre-pipeline AST JSON for the structural editability gate (Plan 2a). */
+    untransformedAstJson?: string | null;
 }
 
 /**
@@ -328,6 +370,8 @@ function walkForNoteNumbers(ast: PandocAST): WeakMap<NoteInline, number> {
 }
 
 function PreviewRoot(props: PreviewRootProps) {
+    const [editTarget, setEditTarget] = useState<{ poolId: string | number; rect: DOMRect; contentHeight: number } | null>(null);
+
     // Refs so the link-handler closure (installed once at mount)
     // sees the *latest* currentFilePath / projectFilePaths instead
     // of the values captured at first install. Without these, every
@@ -415,12 +459,18 @@ function PreviewRoot(props: PreviewRootProps) {
     // discriminated input — no second JSON.parse. On parse failure,
     // hand <Ast> the original astJson so its existing error pane
     // surfaces the message.
-    const { parsed, noteNumbers } = useMemo(() => {
+    const { parsed, noteNumbers, pool } = useMemo(() => {
         try {
-            const p = JSON.parse(props.astJson) as PandocAST;
-            return { parsed: p, noteNumbers: walkForNoteNumbers(p) };
+            const raw = JSON.parse(props.astJson) as PandocAST & {
+                astContext?: { p?: unknown[] };
+            };
+            return {
+                parsed: raw as PandocAST,
+                noteNumbers: walkForNoteNumbers(raw as PandocAST),
+                pool: raw.astContext?.p ?? ([] as unknown[]),
+            };
         } catch {
-            return { parsed: null, noteNumbers: new WeakMap<NoteInline, number>() };
+            return { parsed: null, noteNumbers: new WeakMap<NoteInline, number>(), pool: [] as unknown[] };
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [props.astJson]);
@@ -445,20 +495,106 @@ function PreviewRoot(props: PreviewRootProps) {
         setDocIsSlides(isSlides);
     }, [isSlides]);
 
+    // Build SourceInfo-value index from the untransformed AST (Plan 2a).
+    // Keyed by serializeSourceEntry(entry); used by resolveSource below.
+    const sourceIndex = useMemo(
+        () => buildSourceIndex(props.untransformedAstJson),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [props.untransformedAstJson],
+    );
+
+    // resolveSource: look up a transformed block's untransformed counterpart
+    // via the SourceInfo value (Plan 2a). Returns null when the block is
+    // Generated, from an included file, or has no source counterpart.
+    const resolveSource = useCallback(
+        (node: BlockNode): ResolvedSource | null => {
+            if (!sourceIndex || !pool || pool.length === 0) return null;
+            const s = (node as unknown as { s?: unknown }).s;
+            if (s === undefined) return null;
+            const sourceEntry = pool[Number(s)] as { t: 0; r: [number, number]; d: number } | undefined;
+            if (!sourceEntry || sourceEntry.t !== 0) return null;
+            const key = serializeSourceEntry(sourceEntry);
+            const indexEntry = sourceIndex.get(key);
+            if (!indexEntry) return null;
+            return {
+                sourceNode: indexEntry.sourceNode,
+                reachabilityClass: indexEntry.reachabilityClass,
+                sourceEntry,
+            };
+        },
+        [pool, sourceIndex],
+    );
+
+    // commitTextEdit: send a text-channel PreviewNodeEditPayload (Plan 2b).
+    // `destinationSourceInfoJson` is already resolved by the caller (Para/Header
+    // pass JSON.stringify(resolved.sourceEntry) directly).
+    const commitTextEdit = (destinationSourceInfoJson: string, newText: string) => {
+        const payload: PreviewNodeEditPayload = {
+            __isPreviewNodeEdit: true,
+            channel: 'text',
+            destinationSourceInfoJson,
+            newText,
+        };
+        props.setAst(payload as unknown as PandocAST);
+    };
+
+    // commitSubtreeEdit: send a subtree-channel PreviewNodeEditPayload (Plan 2b).
+    // Used by render-component authors via usePreviewEdit().
+    //
+    // apply_node_edit (Rust) expects `modifiedSubtreeJson` to be a full Pandoc
+    // document (`{"pandoc-api-version":…,"meta":{},"blocks":[…]}`), not a bare
+    // block.  Wrap the single block here so callers can work with BlockNode
+    // values directly without knowing the wire-format requirement.
+    const commitSubtreeEdit = (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => {
+        // Strip all `s` (block/inline SourceInfo pool-index) and `a`
+        // (AttrSourceInfo object whose id/classes/kvs are also pool indices)
+        // fields from the block tree before sending.  The source block carries
+        // references into the current render's pool; `apply_node_edit` (Rust)
+        // rejects them as `InvalidSourceInfoRef` when deserialising the
+        // replacement subtree, because that doc carries no pool.
+        const stripped = JSON.parse(JSON.stringify(modifiedBlock, (key, value) =>
+            key === 's' || key === 'a' ? undefined : value,
+        )) as BlockNode;
+        const wrappedDoc = {
+            'pandoc-api-version': [1, 23, 0],
+            meta: {},
+            blocks: [stripped],
+        };
+        const modifiedSubtreeJson = JSON.stringify(wrappedDoc);
+        const payload: PreviewNodeEditPayload = {
+            __isPreviewNodeEdit: true,
+            channel: 'subtree',
+            destinationSourceInfoJson,
+            modifiedSubtreeJson,
+        };
+        props.setAst(payload as unknown as PandocAST);
+    };
+
     return (
         <PreviewContext.Provider
-            value={{ currentFilePath: props.currentFilePath }}
+            value={{
+                currentFilePath: props.currentFilePath,
+                pool,
+                commitTextEdit,
+                commitSubtreeEdit,
+                content: props.renderedContent,
+                editTarget,
+                setEditTarget,
+                sourceIndex,
+                resolveSource,
+            }}
         >
-            <AssetManifestContext.Provider value={props.assetManifest}>
-                <NoteNumberingContext.Provider value={noteNumbers}>
-                    {isSlides && parsed ? (
-                        <RevealDeck
-                            ast={parsed}
-                            registry={mergedPreviewRegistry}
-                            currentFilePath={props.currentFilePath}
-                            onNavigateToDocument={props.onNavigateToDocument}
-                        />
-                    ) : (
+            <CurrentActorContext.Provider value={props.currentActor ?? null}>
+                <AssetManifestContext.Provider value={props.assetManifest}>
+                    <NoteNumberingContext.Provider value={noteNumbers}>
+                        {isSlides && parsed ? (
+                            <RevealDeck
+                                ast={parsed}
+                                registry={mergedPreviewRegistry}
+                                currentFilePath={props.currentFilePath}
+                                onNavigateToDocument={props.onNavigateToDocument}
+                            />
+                        ) : (
                         <Ast
                             {...astProps}
                             currentFilePath={props.currentFilePath}
@@ -466,9 +602,10 @@ function PreviewRoot(props: PreviewRootProps) {
                             setAst={props.setAst}
                             registry={mergedPreviewRegistry}
                         />
-                    )}
-                </NoteNumberingContext.Provider>
-            </AssetManifestContext.Provider>
+                        )}
+                    </NoteNumberingContext.Provider>
+                </AssetManifestContext.Provider>
+            </CurrentActorContext.Provider>
         </PreviewContext.Provider>
     );
 }
@@ -481,6 +618,9 @@ function updateAst(payload: UpdateAstPayload) {
         projectFilePaths,
         pendingAnchor,
         pendingAnchorEpoch,
+        renderedContent,
+        untransformedAstJson,
+        currentActor,
     } = payload;
     const rootElement = document.getElementById('root');
     if (!rootElement) {
@@ -500,6 +640,9 @@ function updateAst(payload: UpdateAstPayload) {
                 projectFilePaths={projectFilePaths}
                 pendingAnchor={pendingAnchor}
                 pendingAnchorEpoch={pendingAnchorEpoch}
+                renderedContent={renderedContent}
+                untransformedAstJson={untransformedAstJson}
+                currentActor={currentActor ?? null}
                 onNavigateToDocument={(path, anchor) => {
                     window.parent.postMessage(
                         { type: 'NAVIGATE_TO_DOCUMENT', path, anchor },
@@ -507,6 +650,12 @@ function updateAst(payload: UpdateAstPayload) {
                     );
                 }}
                 setAst={(newAst) => {
+                    // PreviewNodeEditPayload: pass through directly without
+                    // rewrapping custom nodes (it's not a PandocAST).
+                    if ((newAst as unknown as { __isPreviewNodeEdit?: boolean }).__isPreviewNodeEdit) {
+                        window.parent.postMessage({ type: 'SET_AST', ast: newAst }, '*');
+                        return;
+                    }
                     // Rewrap JS-native CustomNodes back to wire-format
                     // Div/Span before posting. Keeps the parent-side
                     // (and any downstream consumer reading `data-custom-*`

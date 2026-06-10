@@ -49,7 +49,8 @@ use quarto_pandoc_types::AttrSourceInfo;
 use quarto_pandoc_types::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, FileId, SourceInfo};
+use smallvec::smallvec;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -293,6 +294,26 @@ fn empty_table_attr() -> Attr {
     (String::new(), Vec::new(), LinkedHashMap::new())
 }
 
+/// Compute a tight hull `SourceInfo` spanning from `first.start` to `last.end`.
+///
+/// Used for list-table cell source_info when a cell has multiple content blocks:
+/// the cell must contain all its children (P4 tiling / containment check (b)).
+fn hull_source_infos(first: &SourceInfo, last: &SourceInfo) -> SourceInfo {
+    let fid = first.root_file_id();
+    let last_fid = last.root_file_id();
+    match (fid, last_fid) {
+        (Some(f1), Some(f2)) if f1 == f2 => {
+            let start = first.preimage_in(f1).map(|r| r.start);
+            let end = last.preimage_in(f2).map(|r| r.end);
+            match (start, end) {
+                (Some(s), Some(e)) => SourceInfo::original(f1, s, e),
+                _ => first.combine(last),
+            }
+        }
+        _ => first.combine(last),
+    }
+}
+
 /// Create an empty AttrSourceInfo
 fn empty_attr_source() -> AttrSourceInfo {
     AttrSourceInfo::empty()
@@ -381,7 +402,12 @@ fn transform_list_table_div(div: Div) -> Block {
             let cell_source_info = if cell_blocks.is_empty() {
                 row_source_info.clone()
             } else {
-                cell_blocks[0].source_info().clone()
+                // Hull from first block start to last block end: a cell with
+                // multiple blocks must contain all of them (containment check b).
+                hull_source_infos(
+                    cell_blocks.first().unwrap().source_info(),
+                    cell_blocks.last().unwrap().source_info(),
+                )
             };
 
             cells.push(Cell {
@@ -591,18 +617,75 @@ fn ends_with_abbreviation(text: &str) -> bool {
 
 /// Coalesce Str nodes that end with abbreviations with following words
 /// This matches Pandoc's behavior of keeping abbreviations with the next word
+/// Compute a contiguous `SourceInfo` hull for a run of merged inlines.
+///
+/// `run` is the complete slice of consumed inlines (e.g. `inlines[i..j]`,
+/// including the starting Str and any intermediate Space/Str nodes). Each
+/// element's `source_info` is resolved via `resolve_byte_range()`; if all
+/// elements resolve to the same file AND consecutive ranges are byte-adjacent
+/// (`ranges[k].end == ranges[k+1].start`), the function returns a single tight
+/// `Original` range covering the whole run.
+///
+/// Falls back to `run[0].source_info().combine(run.last().source_info())` when
+/// the source-contiguity check fails (e.g. inlines from different files or with
+/// non-adjacent ranges — in those cases the Concat behavior is correct).
+///
+/// Safety guard (R2, Plan 7g Phase 4b): the contiguity check ensures the hull
+/// never swallows bytes that belong to other nodes.
+fn contiguous_hull_for_run(run: &[Inline]) -> SourceInfo {
+    if run.is_empty() {
+        return SourceInfo::generated(By::tree_sitter_postprocess());
+    }
+    if run.len() == 1 {
+        return run[0].source_info().clone();
+    }
+    // Use root_file_id() from the first element to get a target FileId, then
+    // resolve each element with preimage_in(fid). Unlike resolve_byte_range(),
+    // preimage_in() handles contiguous Concat correctly (returns Some(hull)).
+    let Some(fid) = run[0].source_info().root_file_id() else {
+        return run[0]
+            .source_info()
+            .combine(run.last().unwrap().source_info());
+    };
+    let ranges: Option<Vec<std::ops::Range<usize>>> = run
+        .iter()
+        .map(|il| il.source_info().preimage_in(fid))
+        .collect();
+    let Some(ranges) = ranges else {
+        return run[0]
+            .source_info()
+            .combine(run.last().unwrap().source_info());
+    };
+    // All consecutive ranges must be byte-adjacent.
+    if ranges.windows(2).all(|w| w[0].end == w[1].start) {
+        SourceInfo::original(fid, ranges[0].start, ranges.last().unwrap().end)
+    } else {
+        run[0]
+            .source_info()
+            .combine(run.last().unwrap().source_info())
+    }
+}
+
 /// Returns (result, did_coalesce) tuple
 pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
     let mut result: Vec<Inline> = Vec::new();
     let mut i = 0;
-    let mut did_coalesce = false;
+    // Accumulates whether *any* Str coalesced (the function's return value,
+    // consumed by the fixpoint loop in the caller). The per-Str decision uses
+    // a separate flag reset each iteration — see below.
+    let mut any_coalesce = false;
 
     while i < inlines.len() {
         if let Inline::Str(ref str_inline) = inlines[i] {
             let mut current_text = str_inline.text.clone();
             let start_info = str_inline.source_info.clone();
-            let mut end_info = str_inline.source_info.clone();
             let mut j = i + 1;
+            // MUST be reset per Str. Hoisting this out of the loop is a bug:
+            // once any Str coalesces, every *subsequent* Str would take the
+            // `combine` branch below — i.e. `combine(self, self)` on a Str that
+            // didn't coalesce — yielding a doubled-self Concat with
+            // start_offset()==0, end_offset()==2*len, preimage_in()==None.
+            let mut did_coalesce = false;
 
             // Check if current text ends with an abbreviation
             if ends_with_abbreviation(&current_text) {
@@ -615,7 +698,6 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
                         // Coalesce with non-breaking space (U+00A0) to match Pandoc
                         current_text.push('\u{00A0}');
                         current_text.push_str(&next_str.text);
-                        end_info = next_str.source_info.clone();
                         j += 2;
                         did_coalesce = true;
 
@@ -631,24 +713,22 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
 
                 // If we didn't coalesce with any Str nodes but have a Space following
                 // the abbreviation, include the space in the abbreviation to match Pandoc
-                if j == original_j
-                    && j < inlines.len()
-                    && matches!(inlines[j], Inline::Space(_))
-                    && let Inline::Space(space_info) = &inlines[j]
-                {
+                if j == original_j && j < inlines.len() && matches!(inlines[j], Inline::Space(_)) {
                     current_text.push('\u{00A0}');
-                    end_info = space_info.source_info.clone();
                     j += 1;
                     did_coalesce = true;
                 }
             }
 
-            // Create the Str node (possibly coalesced)
+            // Create the Str node (possibly coalesced).
+            // Use a contiguous hull when all elements in the merged run are
+            // source-adjacent — avoids WhitespaceGapConcat (Plan 7g Phase 4b).
             let source_info = if did_coalesce {
-                start_info.combine(&end_info)
+                contiguous_hull_for_run(&inlines[i..j])
             } else {
                 start_info
             };
+            any_coalesce |= did_coalesce;
 
             result.push(Inline::Str(Str {
                 text: current_text,
@@ -661,7 +741,7 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
         }
     }
 
-    (result, did_coalesce)
+    (result, any_coalesce)
 }
 
 /// Validate that a div has the structure required for a definition list.
@@ -1269,13 +1349,11 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                     inline_attr.attr.2.clone(),
                                 ),
                                 content: vec![Inline::Math(math.clone())],
-                                source_info: if let Some(attr_overall) =
-                                    inline_attr.attr_source.combine_all()
-                                {
-                                    math.source_info.combine(&attr_overall)
-                                } else {
-                                    math.source_info.clone()
-                                },
+                                source_info: math_with_attr_span_source_info(
+                                    &math.source_info,
+                                    &inline_attr.source_info,
+                                    &inline_attr.attr_source,
+                                ),
                                 attr_source: inline_attr.attr_source.clone(),
                             }));
 
@@ -1358,8 +1436,12 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                         // bracket attached to the first word and closing bracket to the last word
                                         // e.g., "@knuth [p. 33]" becomes: Str("@knuth"), Space, Str("[p."), Space, Str("33]")
                                         cite.content.push(Inline::Space(Space {
-                                            // Synthetic Space: inserted to separate citation from suffix
-                                            source_info: quarto_source_map::SourceInfo::default(),
+                                            // Synthetic Space: inserted to separate citation from suffix.
+                                            // Plan 6 §"tree-sitter postprocess" — Generated, no preimage.
+                                            source_info: SourceInfo::Generated {
+                                                by: By::tree_sitter_postprocess(),
+                                                from: smallvec![],
+                                            },
                                         }));
 
                                         // The span content may have been merged into a single string, so we need to
@@ -1409,6 +1491,12 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                         }
 
                                         cite.content.extend(bracketed_content);
+                                        // Extend Cite's source_info to cover the suffix
+                                        // span (P4 containment: parent must contain its
+                                        // children). The suffix Strs carry the span's
+                                        // range which is outside the original cite range.
+                                        cite.source_info =
+                                            hull_source_infos(&cite.source_info, &span.source_info);
                                         result.push(Inline::Cite(cite));
                                     }
                                     state = 0;
@@ -1658,4 +1746,117 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
         }),
         &mut ctx,
     )
+}
+
+// =============================================================================
+// Plan 7g Phase 3 — math-with-attr Span source_info hull
+// =============================================================================
+
+/// Compute the tight source_info for a `quarto-math-with-attribute` Span.
+///
+/// The Span wraps a `$...$  {#id}` or `$$...$$ {#id}` expression and should
+/// carry a single tight `Original` range covering the whole expression,
+/// including the structural `{` space and `}` delimiters.
+///
+/// The old code called `math.source_info.combine(&attr_source.combine_all())`
+/// which created a non-contiguous `Concat` with a `' {'` gap (non-whitespace
+/// → `ScatteredConcat` in the tiling auditor). The correct hull is
+/// `[math_start .. attr_content_end + 1]` where `+1` accounts for `}`.
+///
+/// Falls back to `combine` when source infos don't resolve to the same file.
+fn math_with_attr_span_source_info(
+    math_si: &SourceInfo,
+    attr_inline_si: &SourceInfo,
+    attr_source: &quarto_pandoc_types::AttrSourceInfo,
+) -> SourceInfo {
+    let hull = math_si.root_file_id().and_then(|fid: FileId| {
+        let math_start = math_si.preimage_in(fid)?.start;
+        // Resolve the attr content's file-level end. For a simple Original
+        // (single id/class) preimage_in returns the range directly. For a
+        // non-contiguous Concat (multi-component attr), take the max piece end.
+        let attr_end =
+            attr_inline_si
+                .preimage_in(fid)
+                .map(|r| r.end)
+                .or_else(|| match attr_inline_si {
+                    SourceInfo::Concat { pieces } => pieces
+                        .iter()
+                        .filter_map(|p| p.source_info.preimage_in(fid).map(|r| r.end))
+                        .max(),
+                    _ => None,
+                })?;
+        // +1: the closing '}' sits immediately after the attr content.
+        Some(SourceInfo::original(fid, math_start, attr_end + 1))
+    });
+    hull.unwrap_or_else(|| {
+        attr_source
+            .combine_all()
+            .map(|a| math_si.combine(&a))
+            .unwrap_or_else(|| math_si.clone())
+    })
+}
+
+#[cfg(test)]
+mod did_coalesce_tests {
+    //! Regression for the `did_coalesce` function-scope bug: the flag was
+    //! declared outside the `while` loop and never reset, so every `Str`
+    //! *after* the first abbreviation-coalesce took the
+    //! `start_info.combine(&end_info)` branch — i.e. `combine(self, self)`
+    //! for a Str that didn't actually coalesce — producing a doubled-self
+    //! `Concat` with `start_offset()==0`, `end_offset()==2*len`,
+    //! `preimage_in()==None`. That corrupts provenance (wire-format /
+    //! substring-invariant violations, attribution drops) and, on the
+    //! incremental-writer path, drove crashes / lossy fallbacks.
+    use super::*;
+    use quarto_pandoc_types::{Inline, Space, Str};
+    use quarto_source_map::{FileId, SourceInfo};
+
+    fn s(text: &str, start: usize, end: usize) -> Inline {
+        Inline::Str(Str {
+            text: text.to_string(),
+            source_info: SourceInfo::original(FileId(0), start, end),
+        })
+    }
+    fn sp(start: usize, end: usize) -> Inline {
+        Inline::Space(Space {
+            source_info: SourceInfo::original(FileId(0), start, end),
+        })
+    }
+
+    #[test]
+    fn non_coalesced_str_after_abbreviation_keeps_its_original_source_info() {
+        // "Dr. Smith wrote" — "Dr." coalesces with "Smith" (intended);
+        // "wrote" does NOT coalesce and must keep its Original[10..15].
+        let input = vec![
+            s("Dr.", 0, 3),
+            sp(3, 4),
+            s("Smith", 4, 9),
+            sp(9, 10),
+            s("wrote", 10, 15),
+        ];
+        let (out, did) = coalesce_abbreviations(input);
+        assert!(did, "the Dr.+Smith coalesce should be reported");
+
+        // Find the Str whose text is "wrote".
+        let wrote = out
+            .iter()
+            .find_map(|i| match i {
+                Inline::Str(st) if st.text == "wrote" => Some(&st.source_info),
+                _ => None,
+            })
+            .expect("'wrote' Str present in output");
+
+        // It must retain its real range, NOT a doubled-self Concat.
+        assert_eq!(
+            (wrote.start_offset(), wrote.end_offset()),
+            (10, 15),
+            "non-coalesced 'wrote' must keep Original[10..15]; got {:?} (doubled-Concat bug?)",
+            wrote
+        );
+        assert_eq!(
+            wrote.preimage_in(FileId(0)),
+            Some(10..15),
+            "non-coalesced 'wrote' must have a real preimage, not None"
+        );
+    }
 }

@@ -231,7 +231,7 @@ mod tests {
     #[test]
     fn test_parse_prefer() {
         let mut diagnostics = Vec::new();
-        let result = parse_tag("prefer", &SourceInfo::default(), &mut diagnostics);
+        let result = parse_tag("prefer", &SourceInfo::for_test(), &mut diagnostics);
 
         assert!(!result.had_errors);
         assert!(diagnostics.is_empty());
@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn test_parse_concat() {
         let mut diagnostics = Vec::new();
-        let result = parse_tag("concat", &SourceInfo::default(), &mut diagnostics);
+        let result = parse_tag("concat", &SourceInfo::for_test(), &mut diagnostics);
 
         assert!(!result.had_errors);
         assert!(diagnostics.is_empty());
@@ -252,7 +252,7 @@ mod tests {
     #[test]
     fn test_parse_md() {
         let mut diagnostics = Vec::new();
-        let result = parse_tag("md", &SourceInfo::default(), &mut diagnostics);
+        let result = parse_tag("md", &SourceInfo::for_test(), &mut diagnostics);
 
         assert!(!result.had_errors);
         assert!(diagnostics.is_empty());
@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn test_parse_prefer_md_combined() {
         let mut diagnostics = Vec::new();
-        let result = parse_tag("prefer_md", &SourceInfo::default(), &mut diagnostics);
+        let result = parse_tag("prefer_md", &SourceInfo::for_test(), &mut diagnostics);
 
         assert!(!result.had_errors);
         assert!(diagnostics.is_empty());
@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn test_parse_concat_path() {
         let mut diagnostics = Vec::new();
-        let result = parse_tag("concat_path", &SourceInfo::default(), &mut diagnostics);
+        let result = parse_tag("concat_path", &SourceInfo::for_test(), &mut diagnostics);
 
         assert!(!result.had_errors);
         assert!(diagnostics.is_empty());
@@ -292,7 +292,7 @@ mod tests {
             ("expr", Interpretation::Expr),
         ] {
             let mut diagnostics = Vec::new();
-            let result = parse_tag(tag, &SourceInfo::default(), &mut diagnostics);
+            let result = parse_tag(tag, &SourceInfo::for_test(), &mut diagnostics);
 
             assert!(!result.had_errors, "Failed for tag: {}", tag);
             assert!(
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn test_unknown_component_warning() {
         let mut diagnostics = Vec::new();
-        let result = parse_tag("prefre", &SourceInfo::default(), &mut diagnostics);
+        let result = parse_tag("prefre", &SourceInfo::for_test(), &mut diagnostics);
 
         assert!(!result.had_errors); // Warnings don't set had_errors
         assert_eq!(diagnostics.len(), 1);
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_empty_component_error() {
         let mut diagnostics = Vec::new();
-        let result = parse_tag("prefer_", &SourceInfo::default(), &mut diagnostics);
+        let result = parse_tag("prefer_", &SourceInfo::for_test(), &mut diagnostics);
 
         assert!(result.had_errors);
         assert_eq!(diagnostics.len(), 1);
@@ -332,7 +332,7 @@ mod tests {
     #[test]
     fn test_leading_underscore_error() {
         let mut diagnostics = Vec::new();
-        let result = parse_tag("_md", &SourceInfo::default(), &mut diagnostics);
+        let result = parse_tag("_md", &SourceInfo::for_test(), &mut diagnostics);
 
         assert!(result.had_errors);
         assert!(diagnostics[0].code.as_deref() == Some("Q-1-24"));
@@ -341,7 +341,7 @@ mod tests {
     #[test]
     fn test_invalid_character_error() {
         let mut diagnostics = Vec::new();
-        let result = parse_tag("prefer@md", &SourceInfo::default(), &mut diagnostics);
+        let result = parse_tag("prefer@md", &SourceInfo::for_test(), &mut diagnostics);
 
         assert!(result.had_errors);
         assert_eq!(diagnostics.len(), 1);
@@ -351,7 +351,7 @@ mod tests {
     #[test]
     fn test_conflicting_merge_ops_error() {
         let mut diagnostics = Vec::new();
-        let result = parse_tag("prefer_concat", &SourceInfo::default(), &mut diagnostics);
+        let result = parse_tag("prefer_concat", &SourceInfo::for_test(), &mut diagnostics);
 
         assert!(result.had_errors);
         assert_eq!(diagnostics.len(), 1);

@@ -1182,7 +1182,7 @@ Body.
     use quarto_source_map::SourceInfo;
 
     fn make_string_config_value(s: &str) -> ConfigValue {
-        ConfigValue::new_string(s.to_string(), SourceInfo::default())
+        ConfigValue::new_string(s.to_string(), SourceInfo::for_test())
     }
 
     #[test]
@@ -1286,7 +1286,7 @@ Body.
                     make_string_config_value("Foo"),
                     make_string_config_value("Bar"),
                 ]),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: MergeOp::Concat,
             },
         );

@@ -389,14 +389,14 @@ mod tests {
         ConfigValue {
             value: ConfigValueKind::Map(vec![ConfigMapEntry {
                 key: "code-copy".to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: ConfigValue {
                     value,
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::for_test(),
                     merge_op: MergeOp::Concat,
                 },
             }]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::Concat,
         }
     }
@@ -415,7 +415,7 @@ mod tests {
         use quarto_pandoc_types::inline::{Inline, Str};
         quarto_pandoc_types::ConfigValueKind::PandocInlines(vec![Inline::Str(Str {
             text: s.to_string(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::revealjs()),
         })])
     }
 
@@ -815,10 +815,7 @@ mod tests {
         let concat = SourceInfo::Concat { pieces: vec![] };
         assert!(CodeBlockDecorationKey::from_source_info(&concat).is_none());
 
-        let filter = SourceInfo::FilterProvenance {
-            filter_path: "fixture.lua".into(),
-            line: 1,
-        };
+        let filter = SourceInfo::generated(quarto_source_map::By::filter("fixture.lua", 1));
         assert!(CodeBlockDecorationKey::from_source_info(&filter).is_none());
     }
 

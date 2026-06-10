@@ -156,7 +156,7 @@ mod tests {
     use quarto_pandoc_types::ConfigMapEntry;
 
     fn s(value: &str) -> ConfigValue {
-        ConfigValue::new_string(value.to_string(), SourceInfo::default())
+        ConfigValue::new_string(value.to_string(), SourceInfo::for_test())
     }
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
@@ -164,11 +164,11 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(entries, SourceInfo::default())
+        ConfigValue::new_map(entries, SourceInfo::for_test())
     }
 
     fn pagetitle_of(meta: &ConfigValue) -> Option<String> {
@@ -267,7 +267,7 @@ mod tests {
     /// Defensive: a non-map metadata is left alone.
     #[test]
     fn title_prefix_no_op_on_non_map_meta() {
-        let mut meta = ConfigValue::null(SourceInfo::default());
+        let mut meta = ConfigValue::null(SourceInfo::for_test());
         apply_title_prefix(&mut meta);
         // Just shouldn't panic; nothing to assert on the structure.
     }

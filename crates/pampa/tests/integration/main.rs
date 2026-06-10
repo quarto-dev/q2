@@ -21,6 +21,7 @@ pub mod inline_splice_property_tests;
 pub mod inline_splice_safety_tests;
 pub mod json_location_test;
 pub mod json_reader_smoke_tests;
+pub mod node_edit_tests;
 pub mod qmd_writer_source_info;
 pub mod test;
 pub mod test_ansi_writer;
@@ -69,5 +70,6 @@ pub mod test_wasm_entrypoints;
 pub mod test_whitespace_re_compile_once;
 pub mod test_yaml_tag_regression;
 pub mod test_yaml_to_config_value;
+pub mod tiling_phase3_tests;
 
 fn main() {}

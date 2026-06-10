@@ -171,6 +171,13 @@ pub struct PreviewAstOutput {
     /// `include_inline_locations: true`. Ready to ship to the
     /// React iframe.
     pub ast_json: String,
+    /// The **untransformed** Pandoc AST — the `qmd_to_pandoc` output
+    /// captured immediately after `ParseDocumentStage`, before
+    /// `AstTransformsStage`. Serialized with the same JSON config as
+    /// `ast_json`. Round-tripped to the frontend and used as the
+    /// baseline in `apply_node_edit` (Phase 1 of the target-incremental-
+    /// writes plan).
+    pub untransformed_ast_json: Option<String>,
     /// Diagnostics emitted by the head pipeline plus every Pass-2
     /// stage that ran. Pipe to `RenderResponse.warnings` after
     /// translation via `diagnostics_to_json`.
@@ -868,6 +875,14 @@ pub async fn render_qmd_to_preview_ast(
     engine_registry: Option<crate::engine::EngineRegistry>,
     captures: Vec<quarto_trace::EngineCapture>,
 ) -> Result<PreviewAstOutput> {
+    // Capture the untransformed AST before any pipeline stage runs.
+    // This is the baseline `incremental_write` reconciles against (plan:
+    // 2026-06-04-target-incremental-writes.md, Phase 1).  We parse the
+    // content a second time rather than intercepting the pipeline's own
+    // parse so that the returned JSON is wholly self-contained (its own
+    // source-info pool) and independent of the main pipeline's run.
+    let untransformed_ast_json = capture_untransformed_ast_json(content, source_name);
+
     // The q2-preview stage list excludes `CodeHighlightStage` /
     // `RenderHtmlBodyStage` / `ApplyTemplateStage`, so the
     // pipeline returns `DocumentAst`, not `RenderedOutput`.
@@ -934,9 +949,38 @@ pub async fn render_qmd_to_preview_ast(
 
     Ok(PreviewAstOutput {
         ast_json,
+        untransformed_ast_json,
         diagnostics,
         source_context,
     })
+}
+
+/// Parse `content` with `qmd_to_pandoc` and serialize the result to JSON.
+///
+/// Returns `Some(json)` on success, `None` if parsing or serialization fails
+/// (the main pipeline will surface those errors through its own path; we
+/// silently degrade to `None` here so a parse error does not prevent the
+/// transformed AST from being returned).
+///
+/// The resulting JSON is independent of the main pipeline's source-info pool —
+/// it has its own pool with the same values, so `source_info` equality holds
+/// by value (which is all the lookup in `apply_node_edit` requires).
+fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<String> {
+    let (ast, context) = pampa::wasm_entry_points::qmd_to_pandoc(content).ok()?;
+
+    let ast_context = pampa::pandoc::ASTContext {
+        filenames: vec![source_name.to_string()],
+        example_list_counter: std::cell::Cell::new(1),
+        source_context: context.source_context.clone(),
+        parent_source_info: None,
+    };
+    let json_config = pampa::writers::json::JsonConfig {
+        include_inline_locations: true,
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    pampa::writers::json::write_with_config(&ast, &ast_context, &mut buf, &json_config).ok()?;
+    String::from_utf8(buf).ok()
 }
 
 /// Build the standard transform pipeline.
@@ -1821,17 +1865,17 @@ mod tests {
     fn project_with_theme(theme: &str) -> ProjectContext {
         let theme_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String(theme.to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
         let metadata = ConfigValue {
             value: ConfigValueKind::Map(vec![entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         ProjectContext {
@@ -2317,6 +2361,70 @@ mod tests {
             output.ast_json.contains("\"section\""),
             "expected section-class Divs (reveal slides); got:\n{}",
             snippet()
+        );
+    }
+
+    /// Phase 1 (target-incremental-writes): `render_qmd_to_preview_ast` must
+    /// return *both* the transformed AST (`ast_json`) and the untransformed
+    /// AST (`untransformed_ast_json`).  An unchanged paragraph must have
+    /// byte-identical `source_info` values in both trees.
+    #[test]
+    fn render_qmd_to_preview_ast_returns_dual_ast() {
+        let content = b"---\nformat: q2-preview\n---\n\nHello world.\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content,
+            "/project/test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            Vec::new(),
+        ))
+        .expect("q2-preview render");
+
+        // Phase 1: untransformed_ast_json must be present.
+        let untransformed_json = output
+            .untransformed_ast_json
+            .expect("render_qmd_to_preview_ast must return untransformed_ast_json");
+
+        // Deserialize both ASTs.
+        let transformed_ast = {
+            let mut cursor = std::io::Cursor::new(output.ast_json.as_bytes());
+            pampa::readers::json::read(&mut cursor)
+                .expect("parse transformed AST JSON")
+                .0
+        };
+        let untransformed_ast = {
+            let mut cursor = std::io::Cursor::new(untransformed_json.as_bytes());
+            pampa::readers::json::read(&mut cursor)
+                .expect("parse untransformed AST JSON")
+                .0
+        };
+
+        // Both trees must contain a paragraph.
+        let t_para = transformed_ast
+            .blocks
+            .iter()
+            .find(|b| matches!(b, pampa::pandoc::Block::Paragraph(_)))
+            .expect("transformed AST must contain a paragraph block");
+        let u_para = untransformed_ast
+            .blocks
+            .iter()
+            .find(|b| matches!(b, pampa::pandoc::Block::Paragraph(_)))
+            .expect("untransformed AST must contain a paragraph block");
+
+        // An unchanged paragraph preserves its source_info through transforms.
+        assert_eq!(
+            u_para.source_info(),
+            t_para.source_info(),
+            "unchanged paragraph must have byte-identical source_info in both ASTs"
         );
     }
 

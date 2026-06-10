@@ -62,7 +62,7 @@ use quarto_pandoc_types::block::{Block, Div, Plain};
 use quarto_pandoc_types::custom::{CustomNode, Slot};
 use quarto_pandoc_types::inline::{Inline, RawInline, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use serde_json::Value;
 
 use crate::Result;
@@ -244,7 +244,7 @@ fn resolve_callout(custom: &mut CustomNode, counter: &mut u32) -> Div {
         _ if appearance == "default" => (
             Some(vec![Inline::Str(Str {
                 text: capitalize(&callout_type),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::generated(By::callout()),
             })]),
             false,
         ),
@@ -266,9 +266,9 @@ fn resolve_callout(custom: &mut CustomNode, counter: &mut u32) -> Div {
                     attr: make_attr(&["screen-reader-only"]),
                     content: vec![Inline::Str(Str {
                         text: capitalize(&callout_type),
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::generated(By::callout()),
                     })],
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::generated(By::callout()),
                     attr_source: AttrSourceInfo::empty(),
                 }),
             );
