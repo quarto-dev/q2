@@ -365,6 +365,44 @@ mod tests {
         vec!["site_libs/revealjs/reveal.js".to_string()]
     }
 
+    /// bd-ibqkf9ry: `q2 render` embeds the **vendored** `resources/revealjs/`
+    /// copy (via `include_str!`, the constants below); `q2 preview` renders via
+    /// `@revealjs/react`, which peer-depends on the **npm** `reveal.js` package
+    /// (`node_modules/reveal.js/dist`). These MUST be the same bytes or the two
+    /// pipelines drift on reveal version/CSS. This test compares the embedded
+    /// constants to the npm dist and fails if the vendored copy is stale —
+    /// re-sync `resources/revealjs/` from `node_modules/reveal.js/dist/` (see
+    /// `resources/revealjs/README.md`). Skips when node_modules is absent
+    /// (fresh checkout before `npm install`).
+    #[test]
+    fn vendored_reveal_assets_match_npm_package() {
+        let npm_dist = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../node_modules/reveal.js/dist"
+        );
+        if !std::path::Path::new(npm_dist).exists() {
+            eprintln!(
+                "skipping reveal vendoring check: {npm_dist} absent (run `npm install` from repo root)"
+            );
+            return;
+        }
+        let check = |embedded: &str, rel: &str| {
+            let path = format!("{npm_dist}/{rel}");
+            let npm =
+                std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("reading {path}: {e}"));
+            assert_eq!(
+                embedded, npm,
+                "vendored resources/revealjs/{rel} has drifted from \
+                 node_modules/reveal.js/dist/{rel} — re-sync the vendored copy \
+                 (q2 render and q2 preview must use identical reveal assets)"
+            );
+        };
+        check(REVEAL_RESET_CSS, "reset.css");
+        check(REVEAL_CSS, "reveal.css");
+        check(REVEAL_JS, "reveal.js");
+        check(THEME_WHITE_CSS, "theme/white.css");
+    }
+
     #[test]
     fn register_reveal_assets_stores_linkable_project_artifacts() {
         use crate::artifact::{ArtifactScope, ArtifactStore};

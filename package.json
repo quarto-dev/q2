@@ -18,14 +18,14 @@
   },
   "dependencies": {
     "@react-oauth/google": "^0.13.4",
-    "@revealjs/react": "^0.2.0",
+    "@revealjs/react": "0.2.0",
     "@types/babel__standalone": "^7.1.9",
     "@types/katex": "^0.16.8",
     "@types/morphdom": "^2.3.0",
     "html2canvas": "^1.4.1",
     "katex": "^0.16.28",
     "morphdom": "^2.7.8",
-    "reveal.js": "^6.0.0",
+    "reveal.js": "6.0.0",
     "reveal.js-menu": "^2.1.0"
   },
   "devDependencies": {
