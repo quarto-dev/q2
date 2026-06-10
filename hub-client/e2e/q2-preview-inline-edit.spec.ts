@@ -55,8 +55,8 @@ async function openFile(
     await bootstrapProjectSet(page, serverUrl);
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/${filename}`);
-    // Monaco must be ready for the write-back path.
-    await expect(page.locator('.view-lines').first()).toBeVisible({ timeout: 30000 });
+    // Wait for the preview iframe to render (the edit round-trip goes through
+    // the iframe, not Monaco — Monaco is not required for these tests).
     await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30000 });
     const iframe = page.frameLocator('iframe[src*="q2-preview.html"]');
     // Wait for Plan 2b edit affordances (sourceIndex built → data-block-pool-id set).
