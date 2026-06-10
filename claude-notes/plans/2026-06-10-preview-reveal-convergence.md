@@ -115,22 +115,37 @@ re-render lifecycle, not config. This prong may be independent of A–C.
   different code path than render's `CompileThemeCssStage`? Out of scope here
   (reveal-only), but worth a sibling strand if so — it's the same class of bug.
 
-## Phasing (TDD-first) — DRAFT
+## Phasing (TDD-first)
 
-- [ ] **0 — Tests first.** (a) A sync-check test/xtask (RED if vendored ≠ npm).
-  (b) A preview DOM/CSS test: a reveal deck's `h2` has **no** Bootstrap
-  border-bottom (the grey-line regression) — surface TBD (jsdom component test
-  asserting the deck subtree doesn't load/inherit the theme link, or an e2e
-  computed-style check). (c) RevealDeck imports assertion (vendored paths).
-- [ ] **1 — Prong A:** pin versions + add the sync check; wire into verify.
-- [ ] **2 — Prong B:** repoint `RevealDeck.tsx` CSS imports to vendored + add
-  `reset.css`.
-- [ ] **3 — Prong C:** gate the HTML-theme injection off for `format: revealjs`;
-  verify the grey line is gone and the deck matches render.
-- [ ] **4 — Prong D:** diagnose + fix transitions (or split to a sub-strand).
-- [ ] **5 — E2E parity check** (chrome/Playwright): preview deck vs render deck —
-  same stylesheets set, no Bootstrap on `.reveal`, transitions animate. Record
-  the before/after. Full `cargo xtask verify`.
+- [x] **1 — Prong A:** DONE (commit `6c30e7db`). Pinned `reveal.js` → `6.0.0` +
+  `@revealjs/react` → `0.2.0` (exact) in the 3 package.json; added the
+  `vendored_reveal_assets_match_npm_package` test in `assemble.rs` (compares the
+  `include_str!` constants to `node_modules/reveal.js/dist/*`; skips w/o
+  node_modules). Runs in `cargo nextest` (part of verify).
+- [x] **2 — Prong B:** DONE (commit `d366924d`). `RevealDeck.tsx` imports the
+  vendored `resources/revealjs/{reset,reveal,theme/white,quarto-reveal}.css`
+  (added the missing `reset.css`) instead of npm `reveal.js/*.css`. tsc clean,
+  181 preview-renderer tests pass.
+- [x] **3 — Prong C:** DONE (commit `d366924d`). `entry.tsx` reconciles the
+  `data-q2-theme` HTML-theme link against the active format — attaches it only
+  for non-slide docs (remembers last theme URL + `isSlides`, driven by a
+  `useEffect`). Browser-verified: every slide `h2` `borderBottom` is now
+  `0px none` (was `1px solid #dedede`), no `data-q2-theme` link in the deck.
+- [x] **4 — Prong D (transitions): RESOLVED BY PRONG C.** Root cause found: the
+  leaked Bootstrap reboot carries
+  `@media (prefers-reduced-motion: reduce) { *,::before,::after {
+  transition-duration: .01ms !important; … } }`. For a user with reduced-motion
+  enabled, that `!important` override killed reveal's `0.8s` slide transition in
+  preview (render, never having Bootstrap, always animated; headless defaults to
+  no-preference, which is why it didn't reproduce there). Removing the Bootstrap
+  leak (Prong C) restores transitions. Verified: under emulated
+  `reduced-motion: reduce`, the preview deck section `transition-duration` is
+  `0.8s` (animates) with no reduced-motion rule present. **One leak, two
+  symptoms (grey line + dead transitions); one fix (C).**
+- [ ] **5 — E2E parity + full verify.** Browser parity done (preview vs render:
+  identical `slide` class + section transition, navigation works, no Bootstrap
+  on `.reveal`, no grey line). Remaining: full `cargo xtask verify` (WASM + SPA
+  + hub tests) as the gate.
 
 ## Out of scope
 
