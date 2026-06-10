@@ -142,10 +142,10 @@ re-render lifecycle, not config. This prong may be independent of A–C.
   `reduced-motion: reduce`, the preview deck section `transition-duration` is
   `0.8s` (animates) with no reduced-motion rule present. **One leak, two
   symptoms (grey line + dead transitions); one fix (C).**
-- [ ] **5 — E2E parity + full verify.** Browser parity done (preview vs render:
-  identical `slide` class + section transition, navigation works, no Bootstrap
-  on `.reveal`, no grey line). Remaining: full `cargo xtask verify` (WASM + SPA
-  + hub tests) as the gate.
+- [x] **5 — E2E parity + full verify.** DONE. Browser parity verified (preview
+  vs render: identical `slide` class + section transition, navigation works, no
+  Bootstrap on `.reveal`, no grey line, transitions animate under reduced-motion).
+  Full `cargo xtask verify` (WASM + SPA + hub tests) **green**.
 
 ## Out of scope
 
