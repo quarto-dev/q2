@@ -258,12 +258,20 @@ impl PipelineStage for CompileThemeCssStage {
             ));
         };
 
-        // `format: revealjs` inlines its own reveal.js CSS + theme in the
-        // reveal assembler (see `crate::revealjs`). Bootstrap theme
-        // compilation does not apply, and a reveal theme name like `white`
-        // is not a Bootswatch theme — running this stage would mis-validate
-        // it. Skip entirely.
+        // `format: revealjs` uses its own reveal.js CSS + theme, not Bootstrap.
+        // A reveal theme name like `white` is not a Bootswatch theme — running
+        // the Bootstrap path would mis-validate it. Instead, register reveal's
+        // vendored assets as linkable `Project`-scoped artifacts so they share
+        // one copy across decks via `site_libs` (bd-jij5gge2), then skip the
+        // Bootstrap compilation.
         if ctx.format.identifier == crate::format::FormatIdentifier::Revealjs {
+            let theme = doc
+                .ast
+                .meta
+                .get("theme")
+                .and_then(|v| v.as_plain_text())
+                .unwrap_or_else(|| crate::revealjs::DEFAULT_THEME.to_string());
+            crate::revealjs::register_reveal_assets(&mut ctx.artifacts, &theme);
             return Ok(PipelineData::DocumentAst(doc));
         }
 

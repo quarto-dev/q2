@@ -356,3 +356,72 @@ fn extract_theme_stylesheet_href(html: &str) -> String {
     }
     panic!("no theme stylesheet <link> in HTML");
 }
+
+// === reveal.js shared-lib dedup (bd-jij5gge2) ===============================
+
+fn two_deck_website_fixture(project_dir: &Path) {
+    write_file(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n",
+    );
+    write_file(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nWelcome.\n",
+    );
+    write_file(
+        &project_dir.join("talk-a.qmd"),
+        "---\ntitle: A\nformat: revealjs\n---\n\n## S1\n\nx\n",
+    );
+    write_file(
+        &project_dir.join("talk-b.qmd"),
+        "---\ntitle: B\nformat: revealjs\n---\n\n## S1\n\ny\n",
+    );
+}
+
+/// bd-jij5gge2: two reveal decks on one website must SHARE a single copy
+/// of the vendored reveal assets under `_site/site_libs/revealjs/`, not
+/// duplicate ~700KB into each page's `_files/` dir. This is the whole
+/// point of linking instead of inlining.
+#[test]
+fn website_with_two_decks_shares_one_revealjs_lib() {
+    let project_dir = render_website(two_deck_website_fixture);
+    let site = project_dir.join("_site");
+
+    // Vendored assets written ONCE under the shared lib dir.
+    let shared = site.join("site_libs").join("revealjs");
+    for f in [
+        "reset.css",
+        "reveal.css",
+        "theme-white.css",
+        "quarto-reveal.css",
+        "reveal.js",
+    ] {
+        assert!(
+            shared.join(f).is_file(),
+            "expected shared asset {}",
+            shared.join(f).display()
+        );
+    }
+
+    // NOT duplicated per-deck.
+    assert!(
+        !site.join("talk-a_files").join("revealjs").exists(),
+        "deck A must not carry its own copy of the reveal lib"
+    );
+    assert!(
+        !site.join("talk-b_files").join("revealjs").exists(),
+        "deck B must not carry its own copy of the reveal lib"
+    );
+
+    // Both decks reference the shared lib.
+    let a = std::fs::read_to_string(site.join("talk-a.html")).unwrap();
+    let b = std::fs::read_to_string(site.join("talk-b.html")).unwrap();
+    assert!(
+        a.contains("site_libs/revealjs/reveal.js"),
+        "deck A must link the shared reveal.js"
+    );
+    assert!(
+        b.contains("site_libs/revealjs/reveal.js"),
+        "deck B must link the shared reveal.js"
+    );
+}

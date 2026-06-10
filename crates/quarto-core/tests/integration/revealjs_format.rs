@@ -179,13 +179,85 @@ fn revealjs_initialize_carries_options() {
 }
 
 #[test]
-fn revealjs_links_theme_stylesheet() {
+fn revealjs_links_assets_instead_of_inlining() {
+    // bd-jij5gge2: vendored reveal assets are LINKED (shared lib dir), not
+    // inlined into every deck. Pin the <link>/<script src> tags + cascade
+    // order, and assert the ~700KB core does NOT appear inline.
     let html = render_revealjs(FLAT_DECK);
-    // Default theme stylesheet must be referenced (reveal theme CSS).
+
+    for href in [
+        "talk_files/revealjs/reset.css",
+        "talk_files/revealjs/reveal.css",
+        "talk_files/revealjs/theme-white.css",
+        "talk_files/revealjs/quarto-reveal.css",
+    ] {
+        assert!(
+            html.contains(&format!(r#"<link rel="stylesheet" href="{href}">"#)),
+            "expected a <link> to {href}; head was:\n{}",
+            &html[..html.len().min(1200)]
+        );
+    }
     assert!(
-        html.contains("reveal") && html.to_lowercase().contains("theme"),
-        "expected a reveal theme stylesheet reference"
+        html.contains(r#"<script src="talk_files/revealjs/reveal.js"></script>"#),
+        "expected a <script src> for reveal.js"
     );
+
+    // Cascade order: reset → reveal → theme → quarto overrides.
+    let at = |s: &str| html.find(s).unwrap_or_else(|| panic!("missing {s}"));
+    assert!(at("reset.css") < at("revealjs/reveal.css"));
+    assert!(at("revealjs/reveal.css") < at("theme-white.css"));
+    assert!(at("theme-white.css") < at("quarto-reveal.css"));
+    // reveal.js loads before the per-doc initialize().
+    assert!(at("revealjs/reveal.js") < at("Reveal.initialize"));
+
+    // The inlined-core markers from the OLD self-contained scaffold must
+    // be gone, and the document is tiny (no ~700KB of inlined assets).
+    assert!(
+        !html.contains(r#"<style id="quarto-reveal">"#),
+        "reveal CSS must not be inlined as <style>"
+    );
+    assert!(
+        !html.contains(r#"<style id="theme">"#),
+        "theme CSS must not be inlined as <style>"
+    );
+    assert!(
+        html.len() < 50_000,
+        "linked deck should be small; got {} bytes (core inlined?)",
+        html.len()
+    );
+}
+
+#[test]
+fn revealjs_flushes_linked_assets_to_disk() {
+    // The linked assets must actually be written to the page's `_files`
+    // dir, or the <link>/<script> tags 404.
+    let temp = tempfile::TempDir::new().unwrap();
+    let qmd_path = temp.path().join("talk.qmd");
+    write_file(&qmd_path, FLAT_DECK);
+    let options = RenderToFileOptions {
+        quiet: true,
+        ..Default::default()
+    };
+    let result = render_to_file(&qmd_path, "revealjs", &options, runtime_arc())
+        .expect("revealjs render failed");
+
+    let out_dir = result.output_path.parent().unwrap();
+    let libs = out_dir.join("talk_files").join("revealjs");
+    for f in [
+        "reset.css",
+        "reveal.css",
+        "theme-white.css",
+        "quarto-reveal.css",
+        "reveal.js",
+    ] {
+        let p = libs.join(f);
+        assert!(p.is_file(), "expected flushed asset {}", p.display());
+        assert!(
+            std::fs::metadata(&p).unwrap().len() > 0,
+            "flushed asset {} is empty",
+            p.display()
+        );
+    }
 }
 
 #[test]

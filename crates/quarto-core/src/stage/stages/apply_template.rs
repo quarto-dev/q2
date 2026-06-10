@@ -283,11 +283,24 @@ impl PipelineStage for ApplyTemplateStage {
                 .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?
             }
             None if ctx.format.identifier == crate::format::FormatIdentifier::Revealjs => {
-                // revealjs uses its own self-contained scaffold (inlined
-                // reveal.js assets + Reveal.initialize), bypassing the
-                // Bootstrap HTML templates. The body is already a sequence of
-                // `<section>` slides from RevealSlidesTransform.
-                let html = crate::revealjs::render_revealjs_document(&rendered.content, &metadata);
+                // revealjs uses its own scaffold (reveal.js + Reveal.initialize),
+                // bypassing the Bootstrap HTML templates. The body is already a
+                // sequence of `<section>` slides from RevealSlidesTransform.
+                // bd-jij5gge2: the deck's vendored assets are LINKED, not
+                // inlined — `RevealAssetsStage` registered them as
+                // `css:revealjs:*` / `js:revealjs:*` artifacts; we collect just
+                // those (a reveal deck never wants the Bootstrap `css:theme:*`)
+                // and the resolver gives the right per-context URLs.
+                let reveal_css =
+                    collect_artifact_urls(ctx, "css:revealjs:", self.config.resolver.as_ref());
+                let reveal_js =
+                    collect_artifact_urls(ctx, "js:revealjs:", self.config.resolver.as_ref());
+                let html = crate::revealjs::render_revealjs_document(
+                    &rendered.content,
+                    &metadata,
+                    &reveal_css,
+                    &reveal_js,
+                );
                 (html, Vec::new())
             }
             None => {

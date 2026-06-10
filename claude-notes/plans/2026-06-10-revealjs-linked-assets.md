@@ -189,27 +189,42 @@ docs feature, not resource-embedding.
 
 ## Phasing (TDD-first) — DRAFT
 
-- [ ] **R — Revert inline-embedding behavior** (§"Revert scope"). Independent of
-  the rest; do up front so the branch is back to a clean state. Restore the TS
-  files to `main`; resolve [Q-R1] (Rust VFS-sync keep/revert) first. Verify the
-  preview-renderer + hub-client builds/tests are green after restore.
-- [ ] **0 — Tests first.** Snapshot/integration tests asserting a rendered deck
-  contains `<link href="…/libs/revealjs/reveal.css">` + `<script src="…/libs/
-  revealjs/reveal.js">` and **no** inlined reveal core; a website render with
-  two decks writes `site_libs/libs/revealjs/reveal.js` **once**; single-doc
-  writes `<doc>_files/libs/revealjs/…`.
-- [ ] **1 — Register reveal assets as artifacts** (in-binary bytes →
-  `Artifact::from_bytes`, correct keys/scope per [Q-1]). Helper alongside
-  `store_html_dependencies`.
-- [ ] **2 — Link emission.** Rework `render_revealjs_document` (or replace the
-  apply_template reveal branch) to emit `<link>`/`<script src>` from the
-  resolver URLs; keep `Reveal.initialize` inline. No `embed-resources` path —
-  linked is the only mode.
-- [ ] **3 — Flush wiring.** Confirm website `flush_site_libs` + single-doc +
-  preview VFS flush all carry the new artifacts; add tests per context.
+- [x] **R — Revert inline-embedding behavior** (§"Revert scope"). DONE
+  (commits `c4e192e3` plan, `b6e025be` revert). Restored the 4 main-tracked TS
+  files to `main` + deleted the 4 branch-only files; kept the Rust VFS-sync
+  (Q-R1). preview-renderer: `tsc` clean, 181 tests pass. (`package-lock.json`
+  had unrelated external churn — `@revealjs/react`/`reveal.js` deps — left
+  unstaged.)
+- [x] **0 — Tests first.** DONE. `assemble.rs` unit tests (`render_revealjs_document`
+  emits `<link>`/`<script src>`, no inlined core; `register_reveal_assets`
+  stores the right keys/paths/scope; unknown-theme fallback). Integration:
+  `revealjs_format::revealjs_links_assets_instead_of_inlining` +
+  `…_flushes_linked_assets_to_disk`; `artifact_scoping_pipeline::
+  website_with_two_decks_shares_one_revealjs_lib`.
+- [x] **1 — Register reveal assets as artifacts.** DONE. `reveal_assets(theme)`
+  + `register_reveal_assets(&mut ArtifactStore, theme)` in `revealjs/assemble.rs`:
+  in-binary `include_str!` bytes → `Artifact::from_string` with keys
+  `css:revealjs:<order>` / `js:revealjs:reveal` (order encoded for the CSS
+  cascade), paths `revealjs/<file>`, **`Project` scope** ([Q-1]: Project for
+  dedup; resolver handles single-doc vs website). Registered from
+  `CompileThemeCssStage`'s reveal branch (the point that already establishes a
+  doc's CSS-framework artifacts, where the Bootstrap path is skipped).
+- [x] **2 — Link emission.** DONE. `render_revealjs_document(body, meta,
+  css_urls, js_urls)` emits `<link>`/`<script src>` in cascade order; only
+  `Reveal.initialize` stays inline. `apply_template.rs` reveal branch collects
+  `css:revealjs:` / `js:revealjs:` via the resolver (NOT the Bootstrap
+  `css:theme:`). No `embed-resources` path.
+- [x] **3 — Flush wiring.** DONE — rides the existing machinery. Verified via
+  the real binary (`q2 render talk.qmd`): 1016-byte HTML, 4 links + reveal.js
+  script, assets at `talk_files/revealjs/*`. Website dedup verified
+  (`site_libs/revealjs/*` written once, no per-deck `_files/revealjs/`).
+  **Preview/WASM ([Q-6]) not yet exercised** — same Project-scoped artifact
+  path flushes to the VFS, but confirm with a WASM build + a directly-previewed
+  deck (separate from the embed/served work).
 - [ ] **4 — Re-stage examples + verify** `q2 render docs/`: decks link shared
   `site_libs/revealjs/…`, one copy; deck still renders standalone. Update
   `cargo xtask stage-doc-examples` expectations (decks now ship `_files/libs`).
+  Run full `cargo xtask verify` (incl. WASM).
 - [ ] **5 — Hand back to bd-kjrpya2d** for the served-iframe preview rework
   (now that decks reference `site_libs/revealjs/…`, the embed must *serve*).
 
