@@ -34,7 +34,7 @@ export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
     const ctx = useContext(PreviewContext);
     const poolId = (args.node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
-    const isEditable = resolved?.reachabilityClass === 'TopLevel' && poolId !== undefined;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
 
     const [[start, style]] = args.node.c;
     const props: Record<string, string | number> = {};

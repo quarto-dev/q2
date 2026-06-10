@@ -127,7 +127,7 @@ export const Table = (args: NodeArgs<TableBlock>) => {
     const ctx = useContext(PreviewContext);
     const poolId = (args.node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
-    const isEditable = resolved?.reachabilityClass === 'TopLevel' && poolId !== undefined;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
     const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
 
     const { node, onNavigateToDocument } = args;

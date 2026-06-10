@@ -55,7 +55,7 @@ export const FloatRefTarget = ({
     const ctx = useContext(PreviewContext);
     const poolId = (node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(node) : null;
-    const isEditable = resolved?.reachabilityClass === 'TopLevel' && poolId !== undefined;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
     const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
 
     const plain = (node.plain_data ?? {}) as FloatRefTargetPlainData;

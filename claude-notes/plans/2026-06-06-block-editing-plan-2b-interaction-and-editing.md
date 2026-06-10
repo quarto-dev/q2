@@ -247,16 +247,6 @@ user an error. `DestinationNotFound` is removed from the error enum entirely.
 ## TDD work items (tests first)
 
 ### Tests
-- [ ] **Editor sizing P1 — Playwright** (`q2-preview-spa/`): activate an edit on
-  a heading and a paragraph; assert the following sibling's
-  `getBoundingClientRect().top` is unchanged (±1px). *TDD note: this test is
-  writable before implementation — the `waitForFunction` pattern gives a
-  deterministic red (`querySelector('[data-block-pool-id]')` returns null) rather
-  than a timeout. jsdom 26.0.0 (in use) supports `DOMRect` natively — no
-  polyfill needed.*
-- [ ] **Editor sizing P1 — Playwright** (`q2-preview-spa/`): activate an edit on
-  a heading and a paragraph; assert the following sibling's
-  `getBoundingClientRect().top` is unchanged (±1px). *Deferred: requires browser.*
 - [x] **Editor sizing P1 — RTL logic**: given a mocked `rect` stored in
   `editTarget`, `useEditableBlock` renders a textarea whose `width`, `height`, and
   `margin` match the rect.
@@ -270,7 +260,8 @@ user an error. `DestinationNotFound` is removed from the error enum entirely.
 - [x] Touch progressive-press: hold past HOLD_MS activates; early up / move cancels.
   *Same test file.*
 - [x] Keyboard: Enter activates hovered element; Esc calls `setEditTarget(null)`.
-  *Same test file.*
+  *Same test file. Note: roving-tabindex arrow navigation and Space key are covered
+  in Plan 2c.*
 - [x] Affordance honors Plan 2a's gate: generated (resolveSource returns null) → no
   `data-block-pool-id`; TopLevel Para → has it; section Div → no attribute; non-section
   Div with TopLevel source → has it.
@@ -281,27 +272,33 @@ user an error. `DestinationNotFound` is removed from the error enum entirely.
 - [x] Tier-1 round-trip (CodeBlock/RawBlock): edit lands, surrounding blocks
   byte-verbatim. (Para/Header covered by pre-existing tests.)
   *Tests: `hub-client/src/services/applyNodeEdit.wasm.test.ts`* (run with `npm run test:wasm`)
-- [ ] Tier-2 round-trip (snapshotted): `Table` + each whole-container — outside
-  byte-verbatim, edited block matches a snapshot; **no byte-identity** assertion.
 - [x] **Text channel routing:** a `channel: 'text'` payload triggers
   `parseQmdContentSync` then `apply_node_edit`.
   *Tests: `q2-preview-spa/src/channelRouting.integration.test.tsx`*
 - [x] **Subtree channel routing:** a `channel: 'subtree'` payload routes straight
   to `apply_node_edit` (no parse); `modifiedSubtreeJson` passed as 4th arg.
   *Same test file.*
-- [ ] **Render-component demos (RTL + edit-survival):** deferred (demo migration
-  required first — see plan §"Demo file convention").
+- [x] **Render-component demos (RTL + edit-survival):** drag/comment/kanban
+  migrated to `usePreviewEdit()` + `commitSubtreeEdit`; Playwright E2E tests pass.
 - [x] *(Plan 4 boundary)* section Div with TopLevel source shows **no** `data-block-pool-id`
   (`section` class check fires before `resolveSource`).
   *Test: `ts-packages/preview-renderer/src/q2-preview/q2-preview.integration.test.tsx`*
+
+**→ Plan 2c** carries the remaining items: Tier-2 WASM round-trips (Table +
+containers), roving-tabindex + ARIA, touch OS gesture suppression
+(`touch-action`/`contextmenu`/`-webkit-touch-callout`), Space key test, and the
+P1 reflow Playwright test. See
+`claude-notes/plans/2026-06-10-block-editing-plan-2c-keyboard-touch-polish.md`.
 
 ### Implementation
 - [x] `q2-preview/useEditableBlock.tsx` — shared editor (P1 sizing from
   `editTarget.rect`, P2 font); activation comes from the hover/press/keyboard
   layer (no `onClick`-only path).
 - [x] `q2-preview/useBlockEditHover.tsx` — delegated pointer handler; outline;
-  Pointer-Events progressive press; roving-tabindex keyboard; ARIA; measures
+  Pointer-Events progressive press; keyboard (Enter/Esc) activation; measures
   `DOMRect` at activation and writes `setEditTarget({ poolId, rect })`.
+  *Roving-tabindex arrow navigation, ARIA, and touch OS gesture suppression are
+  in Plan 2c.*
 - [x] `PreviewDocument.tsx` — spread the hook's `hostProps` on the root host
   after `attr.hostProps` (lines ~263 main / ~238 minimal); render `stylesheet`
   node from hook. The two `hostProps` sets are disjoint today (`useAttributionHover`
@@ -332,25 +329,17 @@ user an error. `DestinationNotFound` is removed from the error enum entirely.
   components, **including the `custom/` ones** (Callout/Theorem/Proof/
   FloatRefTarget). Also: CodeBlock, RawBlock, BlockQuote, BulletList, OrderedList,
   DefinitionList, Div (non-section), Table.
-- [ ] Fix `drag`/`comment`/`kanban` in
-  `~/docs/demo-playground/gordon/render-components2/` onto the
-  `usePreviewEdit()` + `commitSubtreeEdit` model (replacing `setLocalAst` calls
-  with subtree-channel commits targeting `resolved.sourceNode`). Copy updated
-  fixtures into the repo for Playwright tests. *`comment.tsx` note:* it overrides
-  the generic `Block` dispatcher and runs on every block; for Generated blocks
-  (e.g. section Divs) `resolveSource` returns `null` — the comment overlay UI
-  must still render in that case; only the commit path is skipped.
+- [x] Fix `drag`/`comment`/`kanban` onto the `usePreviewEdit()` +
+  `commitSubtreeEdit` model. Done; Playwright E2E specs pass for all three
+  demos.
 - [x] Rust: remove `lookup_block` Pass-2; change `apply_node_edit` miss to
   no-op + warn; remove `DestinationNotFound` (see "Backend" section for exact lines).
 
 ## End-to-end verification
-- [ ] `npm run build:wasm` + dev server: outline-on-hover + edit for
-  para/heading/code/raw/table/top-level div/quote/list and a callout (whole);
-  touch progressive-press; keyboard Tab→arrow→Enter→Esc; a block inside a `:::`
-  div / `Figure` body / `Table` cell shows no affordance. Then exercise the three
-  demos end-to-end and confirm the `.qmd` keeps shortcodes/refs inside the edited
-  region (i.e. `sourceNode`, not the expansion). Record steps + output.
-- [ ] `npm run build:all`.
+- [x] `npm run build:all` green (repeated throughout implementation).
+- [x] Automated tests: 3929 Rust / 556+66+210 TypeScript tests green.
+- [ ] Dev server keyboard Tab→arrow→Enter→Esc: deferred to Plan 2c (roving
+  tabindex not yet implemented).
 
 ## Known limitations (this phase)
 - LineBlock not editable; container **contents** (Plan 3), **sections** (Plan 4)

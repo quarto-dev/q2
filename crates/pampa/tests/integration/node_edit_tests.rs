@@ -12,7 +12,7 @@
  */
 
 use pampa::apply_node_edit::apply_node_edit;
-use pampa::node_lookup::lookup_block;
+use pampa::node_lookup::{ContainerStep, NodePath, lookup_block};
 use pampa::pandoc::{ASTContext, Block, Pandoc};
 use pampa::wasm_entry_points::qmd_to_pandoc;
 use pampa::writers;
@@ -178,7 +178,11 @@ fn lookup_finds_para_by_exact_source_info() {
     let ast = parse_qmd(SINGLE_PARA);
     let target = ast.blocks[0].source_info().clone();
     let result = lookup_block(&ast, &target, FileId(0));
-    assert_eq!(result, Some(0), "exact match must find block 0");
+    assert_eq!(
+        result,
+        Some(NodePath::top_level(0)),
+        "exact match must find block 0"
+    );
 }
 
 /// (a) Exact value match for a heading.
@@ -187,7 +191,11 @@ fn lookup_finds_heading_by_exact_source_info() {
     let ast = parse_qmd(SINGLE_HEADING);
     let target = ast.blocks[0].source_info().clone();
     let result = lookup_block(&ast, &target, FileId(0));
-    assert_eq!(result, Some(0), "exact match must find block 0");
+    assert_eq!(
+        result,
+        Some(NodePath::top_level(0)),
+        "exact match must find block 0"
+    );
 }
 
 /// (b) Synthetic Generated with no Invocation anchor → None.
@@ -209,8 +217,14 @@ fn lookup_disambiguates_duplicate_text_blocks() {
     assert_eq!(ast.blocks.len(), 2);
     let si0 = ast.blocks[0].source_info().clone();
     let si1 = ast.blocks[1].source_info().clone();
-    assert_eq!(lookup_block(&ast, &si0, FileId(0)), Some(0));
-    assert_eq!(lookup_block(&ast, &si1, FileId(0)), Some(1));
+    assert_eq!(
+        lookup_block(&ast, &si0, FileId(0)),
+        Some(NodePath::top_level(0))
+    );
+    assert_eq!(
+        lookup_block(&ast, &si1, FileId(0)),
+        Some(NodePath::top_level(1))
+    );
 }
 
 // =============================================================================
@@ -533,5 +547,602 @@ fn stale_ast_miss_noops_and_returns_original_content() {
     assert!(
         matches!(&result, Ok(s) if s == SINGLE_PARA),
         "stale-AST miss must return original content unchanged; got: {result:?}"
+    );
+}
+
+// =============================================================================
+// Plan 3 — Fixtures: nested-block containers
+// =============================================================================
+
+/// A paragraph and then a fenced Div (index 1) containing one Para (index 0
+/// in the Div's content), then a trailing Para.
+pub(crate) const PARA_IN_DIV: &str = "\
+Before div.
+
+::: {.my-div}
+Hello inside div.
+:::
+
+After div.
+";
+
+/// A paragraph and then a BlockQuote (index 1) containing one Para, then a
+/// trailing Para.
+pub(crate) const PARA_IN_BLOCKQUOTE: &str = "\
+Before quote.
+
+> Hello inside quote.
+
+After quote.
+";
+
+/// A loose BulletList (index 1, two items each containing a Para) bookended
+/// by paragraphs.
+pub(crate) const PARA_IN_BULLET_LIST: &str = "\
+Before list.
+
+- Hello in item one.
+
+- Hello in item two.
+
+After list.
+";
+
+/// A loose OrderedList (index 1, two items each containing a Para) bookended
+/// by paragraphs.
+pub(crate) const PARA_IN_ORDERED_LIST: &str = "\
+Before list.
+
+1. First ordered item.
+
+2. Second ordered item.
+
+After list.
+";
+
+/// A Div nested inside another Div.  Root contains one block: the outer Div
+/// (index 0).  The outer Div's content contains one block: the inner Div
+/// (index 0).  The inner Div's content contains one Para (index 0).
+pub(crate) const DIV_IN_DIV: &str = "\
+::: {.outer}
+::: {.inner}
+Deepest paragraph.
+:::
+:::
+";
+
+/// A DefinitionList desugared from a `.definition-list` div.
+/// Two terms, each with one body item, then a trailing Para.
+/// Exercises the four-coordinate path: DefBody(list_idx, def_idx, body_idx) + leaf_idx.
+pub(crate) const PARA_IN_DEFLIST: &str = "\
+::: {.definition-list}
+
+* Term One
+
+  * Body item one.
+
+* Term Two
+
+  * Body item two.
+
+:::
+
+After deflist.
+";
+
+/// A standalone image that produces a Figure block (index 0) whose content is
+/// a Plain block (index 0) wrapping the Image inline.
+pub(crate) const FIGURE_WITH_CONTENT: &str = "![alt text](image.png)\n";
+
+/// A callout-note div (plain Div with class `callout-note`) containing one Para.
+/// In the untransformed AST this is just a regular Div — no CustomNode yet.
+pub(crate) const PARA_IN_CALLOUT: &str = "\
+::: {.callout-note}
+A paragraph inside callout.
+:::
+";
+
+// =============================================================================
+// Plan 3 — Helpers: nested-target traversal
+// =============================================================================
+
+/// Return the block at `inner_idx` inside the Div at `div_idx` in the root.
+pub(crate) fn div_inner_block(ast: &Pandoc, div_idx: usize, inner_idx: usize) -> &Block {
+    let Block::Div(d) = &ast.blocks[div_idx] else {
+        panic!(
+            "Expected Div at blocks[{div_idx}], got {:?}",
+            ast.blocks[div_idx]
+        );
+    };
+    &d.content[inner_idx]
+}
+
+/// Return the block at `inner_idx` inside the BlockQuote at `bq_idx`.
+pub(crate) fn blockquote_inner_block(ast: &Pandoc, bq_idx: usize, inner_idx: usize) -> &Block {
+    let Block::BlockQuote(bq) = &ast.blocks[bq_idx] else {
+        panic!(
+            "Expected BlockQuote at blocks[{bq_idx}], got {:?}",
+            ast.blocks[bq_idx]
+        );
+    };
+    &bq.content[inner_idx]
+}
+
+/// Return the block at `inner_idx` inside item `item_idx` of the list
+/// (BulletList or OrderedList) at `list_idx`.
+pub(crate) fn list_item_block(
+    ast: &Pandoc,
+    list_idx: usize,
+    item_idx: usize,
+    inner_idx: usize,
+) -> &Block {
+    match &ast.blocks[list_idx] {
+        Block::BulletList(bl) => &bl.content[item_idx][inner_idx],
+        Block::OrderedList(ol) => &ol.content[item_idx][inner_idx],
+        b => panic!("Expected BulletList or OrderedList at blocks[{list_idx}], got {b:?}"),
+    }
+}
+
+/// Return the block at `block_idx` inside body `body_idx` of definition
+/// `def_idx` in the DefinitionList at `list_idx`.
+pub(crate) fn deflist_body_block(
+    ast: &Pandoc,
+    list_idx: usize,
+    def_idx: usize,
+    body_idx: usize,
+    block_idx: usize,
+) -> &Block {
+    let Block::DefinitionList(dl) = &ast.blocks[list_idx] else {
+        panic!(
+            "Expected DefinitionList at blocks[{list_idx}], got {:?}",
+            ast.blocks[list_idx]
+        );
+    };
+    &dl.content[def_idx].1[body_idx][block_idx]
+}
+
+/// Return the block at `block_idx` inside Figure.content at `fig_idx`.
+pub(crate) fn figure_content_block(ast: &Pandoc, fig_idx: usize, block_idx: usize) -> &Block {
+    let Block::Figure(f) = &ast.blocks[fig_idx] else {
+        panic!(
+            "Expected Figure at blocks[{fig_idx}], got {:?}",
+            ast.blocks[fig_idx]
+        );
+    };
+    &f.content[block_idx]
+}
+
+/// High-level helper: parse `content`, edit the block whose source_info is
+/// `target_si` (which may be nested) to `replacement_text`, return the
+/// resulting QMD.
+pub(crate) fn edit_nested_block(
+    content: &str,
+    target_si: SourceInfo,
+    replacement_text: &str,
+) -> String {
+    let a_u = parse_qmd(content);
+    let a_u_json = ast_to_json(&a_u);
+    let si_json = source_info_to_json(&target_si);
+    let subtree = parse_qmd(replacement_text);
+    let subtree_json = ast_to_json(&subtree);
+    apply_node_edit(content, &a_u_json, &si_json, &subtree_json).expect("apply_node_edit failed")
+}
+
+/// High-level helper: delete a nested block (N→0 splice) by passing an empty
+/// replacement blocks list.
+pub(crate) fn delete_nested_block(content: &str, target_si: SourceInfo) -> String {
+    let a_u = parse_qmd(content);
+    let a_u_json = ast_to_json(&a_u);
+    let si_json = source_info_to_json(&target_si);
+    let empty_subtree_json = r#"{"pandoc-api-version":[1,23,0],"meta":{},"blocks":[]}"#;
+    apply_node_edit(content, &a_u_json, &si_json, empty_subtree_json)
+        .expect("apply_node_edit failed")
+}
+
+// =============================================================================
+// Plan 3 — Lookup tests: recursive path discovery
+// =============================================================================
+
+/// lookup_block finds a Para nested inside a fenced Div.
+#[test]
+fn lookup_finds_block_inside_div() {
+    let ast = parse_qmd(PARA_IN_DIV);
+    // Div is at root index 1; its content[0] is the inner Para.
+    let target = div_inner_block(&ast, 1, 0).source_info().clone();
+    let result = lookup_block(&ast, &target, FileId(0));
+    let expected = NodePath {
+        steps: vec![ContainerStep::Blocks(1)],
+        leaf_idx: 0,
+    };
+    assert_eq!(
+        result,
+        Some(expected),
+        "nested Para inside Div must be found"
+    );
+}
+
+/// lookup_block finds a Para nested inside a BlockQuote.
+#[test]
+fn lookup_finds_block_inside_blockquote() {
+    let ast = parse_qmd(PARA_IN_BLOCKQUOTE);
+    // BlockQuote is at root index 1.
+    let target = blockquote_inner_block(&ast, 1, 0).source_info().clone();
+    let result = lookup_block(&ast, &target, FileId(0));
+    let expected = NodePath {
+        steps: vec![ContainerStep::Blocks(1)],
+        leaf_idx: 0,
+    };
+    assert_eq!(
+        result,
+        Some(expected),
+        "nested Para inside BlockQuote must be found"
+    );
+}
+
+/// lookup_block finds a block inside a BulletList item.
+#[test]
+fn lookup_finds_block_inside_bullet_list_item() {
+    let ast = parse_qmd(PARA_IN_BULLET_LIST);
+    // BulletList is at root index 1; item 0, inner block 0.
+    let target = list_item_block(&ast, 1, 0, 0).source_info().clone();
+    let result = lookup_block(&ast, &target, FileId(0));
+    let expected = NodePath {
+        steps: vec![ContainerStep::ListItem(1, 0)],
+        leaf_idx: 0,
+    };
+    assert_eq!(
+        result,
+        Some(expected),
+        "nested block inside BulletList item must be found"
+    );
+}
+
+/// lookup_block finds a block inside an OrderedList item.
+#[test]
+fn lookup_finds_block_inside_ordered_list_item() {
+    let ast = parse_qmd(PARA_IN_ORDERED_LIST);
+    // OrderedList is at root index 1; item 1, inner block 0 (second item).
+    let target = list_item_block(&ast, 1, 1, 0).source_info().clone();
+    let result = lookup_block(&ast, &target, FileId(0));
+    let expected = NodePath {
+        steps: vec![ContainerStep::ListItem(1, 1)],
+        leaf_idx: 0,
+    };
+    assert_eq!(
+        result,
+        Some(expected),
+        "nested block inside OrderedList item 1 must be found"
+    );
+}
+
+/// lookup_block navigates two levels deep: Para inside inner Div inside outer Div.
+#[test]
+fn lookup_finds_block_in_nested_div() {
+    let ast = parse_qmd(DIV_IN_DIV);
+    // Root[0] = outer Div; outer.content[0] = inner Div; inner.content[0] = Para.
+    let inner_para = div_inner_block(&div_inner_block_as_ast(&ast, 0, 0), 0, 0)
+        .source_info()
+        .clone();
+    let result = lookup_block(&ast, &inner_para, FileId(0));
+    let expected = NodePath {
+        steps: vec![ContainerStep::Blocks(0), ContainerStep::Blocks(0)],
+        leaf_idx: 0,
+    };
+    assert_eq!(
+        result,
+        Some(expected),
+        "two-level nested Para must be found with two-step path"
+    );
+}
+
+/// lookup_block finds a block in a DefinitionList body (four-coordinate path).
+#[test]
+fn lookup_finds_block_in_deflist_body() {
+    let ast = parse_qmd(PARA_IN_DEFLIST);
+    // The DefinitionList is at root index 0 (before "After deflist." at index 1).
+    // def 0, body 0, block 0.
+    let target = deflist_body_block(&ast, 0, 0, 0, 0).source_info().clone();
+    let result = lookup_block(&ast, &target, FileId(0));
+    let expected = NodePath {
+        steps: vec![ContainerStep::DefBody(0, 0, 0)],
+        leaf_idx: 0,
+    };
+    assert_eq!(
+        result,
+        Some(expected),
+        "block inside DefinitionList body must be found with four-coordinate path"
+    );
+}
+
+/// lookup_block finds a block in Figure.content (not Figure.caption).
+#[test]
+fn lookup_finds_block_in_figure_content() {
+    let ast = parse_qmd(FIGURE_WITH_CONTENT);
+    // Figure is at root index 0; its content[0] is a Plain block.
+    let target = figure_content_block(&ast, 0, 0).source_info().clone();
+    let result = lookup_block(&ast, &target, FileId(0));
+    let expected = NodePath {
+        steps: vec![ContainerStep::Blocks(0)],
+        leaf_idx: 0,
+    };
+    assert_eq!(
+        result,
+        Some(expected),
+        "block inside Figure.content must be found"
+    );
+}
+
+/// lookup_block finds a Para inside a callout-note Div (plain Div in the
+/// untransformed AST, before CustomNode transforms run).
+#[test]
+fn lookup_finds_block_in_callout_div() {
+    let ast = parse_qmd(PARA_IN_CALLOUT);
+    // The callout-note Div is at root index 0.
+    let target = div_inner_block(&ast, 0, 0).source_info().clone();
+    let result = lookup_block(&ast, &target, FileId(0));
+    let expected = NodePath {
+        steps: vec![ContainerStep::Blocks(0)],
+        leaf_idx: 0,
+    };
+    assert_eq!(
+        result,
+        Some(expected),
+        "nested Para inside callout-note Div must be found"
+    );
+}
+
+/// A target not present in the tree returns None.
+#[test]
+fn lookup_nested_none_for_absent_target() {
+    let ast = parse_qmd(PARA_IN_DIV);
+    let synthetic = SourceInfo::for_test();
+    assert_eq!(
+        lookup_block(&ast, &synthetic, FileId(0)),
+        None,
+        "absent target must return None from recursive lookup"
+    );
+}
+
+/// Uniqueness: a container's own source_info does not also match its nested child.
+#[test]
+fn lookup_nested_container_and_child_are_distinct() {
+    let ast = parse_qmd(PARA_IN_DIV);
+    // The Div at root[1] has its own source_info (the whole div range).
+    let div_si = ast.blocks[1].source_info().clone();
+    // The Para inside the Div has a different source_info (the inner para range).
+    let inner_si = div_inner_block(&ast, 1, 0).source_info().clone();
+    assert_ne!(
+        div_si, inner_si,
+        "container and nested child must have different source_info"
+    );
+    // The container resolves to its own top-level path, not the child's path.
+    assert_eq!(
+        lookup_block(&ast, &div_si, FileId(0)),
+        Some(NodePath::top_level(1)),
+        "container source_info must resolve to the container's top-level path"
+    );
+    // The child resolves to the nested path, not the container's path.
+    assert_eq!(
+        lookup_block(&ast, &inner_si, FileId(0)),
+        Some(NodePath {
+            steps: vec![ContainerStep::Blocks(1)],
+            leaf_idx: 0
+        }),
+        "child source_info must resolve to the nested path"
+    );
+}
+
+// Helper for two-level DIV_IN_DIV test: build a synthetic Pandoc whose
+// blocks slice holds the block at `outer[div_idx].content[inner_idx]`.
+// This lets `div_inner_block` be called recursively on the result.
+fn div_inner_block_as_ast(ast: &Pandoc, div_idx: usize, inner_idx: usize) -> Pandoc {
+    let Block::Div(outer) = &ast.blocks[div_idx] else {
+        panic!("Expected outer Div at blocks[{div_idx}]");
+    };
+    let inner_block = &outer.content[inner_idx];
+    // Verify it is a Div before cloning (panics early with a clear message).
+    assert!(
+        matches!(inner_block, Block::Div(_)),
+        "Expected inner Div at outer.content[{inner_idx}]"
+    );
+    let mut p = parse_qmd("");
+    p.blocks = vec![inner_block.clone()];
+    p
+}
+
+// =============================================================================
+// Plan 3 — Apply tests: nested block editing
+// =============================================================================
+
+/// Edit a Para inside a fenced Div: result has new text, outer content intact.
+#[test]
+fn apply_node_edit_nested_para_in_div() {
+    let ast = parse_qmd(PARA_IN_DIV);
+    let target_si = div_inner_block(&ast, 1, 0).source_info().clone();
+    let result = edit_nested_block(PARA_IN_DIV, target_si, "Edited inside div.\n");
+    assert!(result.contains("Edited inside div."), "got: {result:?}");
+    assert!(!result.contains("Hello inside div."), "got: {result:?}");
+    // Text outside the container must be verbatim.
+    assert!(result.contains("Before div."), "got: {result:?}");
+    assert!(result.contains("After div."), "got: {result:?}");
+}
+
+/// Edit a Para inside a BlockQuote.
+#[test]
+fn apply_node_edit_nested_para_in_blockquote() {
+    let ast = parse_qmd(PARA_IN_BLOCKQUOTE);
+    let target_si = blockquote_inner_block(&ast, 1, 0).source_info().clone();
+    let result = edit_nested_block(PARA_IN_BLOCKQUOTE, target_si, "Edited inside quote.\n");
+    assert!(result.contains("Edited inside quote."), "got: {result:?}");
+    assert!(!result.contains("Hello inside quote."), "got: {result:?}");
+    assert!(result.contains("Before quote."), "got: {result:?}");
+    assert!(result.contains("After quote."), "got: {result:?}");
+}
+
+/// Edit a block inside a BulletList item; sibling item is preserved.
+#[test]
+fn apply_node_edit_nested_para_in_bullet_list() {
+    let ast = parse_qmd(PARA_IN_BULLET_LIST);
+    // Edit item 0 (first item).
+    let target_si = list_item_block(&ast, 1, 0, 0).source_info().clone();
+    let result = edit_nested_block(PARA_IN_BULLET_LIST, target_si, "Edited item one.\n");
+    assert!(result.contains("Edited item one."), "got: {result:?}");
+    assert!(!result.contains("Hello in item one."), "got: {result:?}");
+    // Text outside the list must be verbatim.
+    assert!(result.contains("Before list."), "got: {result:?}");
+    assert!(result.contains("After list."), "got: {result:?}");
+    // The second item must still appear (wholesale rewrite preserves its content).
+    assert!(
+        result.contains("Hello in item two."),
+        "sibling must survive; got: {result:?}"
+    );
+}
+
+/// Edit a block inside an OrderedList item.
+#[test]
+fn apply_node_edit_nested_para_in_ordered_list() {
+    let ast = parse_qmd(PARA_IN_ORDERED_LIST);
+    let target_si = list_item_block(&ast, 1, 0, 0).source_info().clone();
+    let result = edit_nested_block(PARA_IN_ORDERED_LIST, target_si, "Edited first item.\n");
+    assert!(result.contains("Edited first item."), "got: {result:?}");
+    assert!(!result.contains("First ordered item."), "got: {result:?}");
+    assert!(result.contains("Before list."), "got: {result:?}");
+    assert!(result.contains("After list."), "got: {result:?}");
+    assert!(
+        result.contains("Second ordered item."),
+        "sibling must survive; got: {result:?}"
+    );
+}
+
+/// Edit a Para two levels deep (inner Div inside outer Div).
+#[test]
+fn apply_node_edit_nested_div_in_div() {
+    let ast = parse_qmd(DIV_IN_DIV);
+    // Navigate to the innermost Para's source_info.
+    let outer_div_ast = div_inner_block_as_ast(&ast, 0, 0);
+    let inner_para_si = div_inner_block(&outer_div_ast, 0, 0).source_info().clone();
+    let result = edit_nested_block(DIV_IN_DIV, inner_para_si, "Edited deepest.\n");
+    assert!(result.contains("Edited deepest."), "got: {result:?}");
+    assert!(!result.contains("Deepest paragraph."), "got: {result:?}");
+}
+
+/// Edit a block inside a DefinitionList body (four-coordinate path).
+#[test]
+fn apply_node_edit_nested_para_in_deflist() {
+    let ast = parse_qmd(PARA_IN_DEFLIST);
+    let target_si = deflist_body_block(&ast, 0, 0, 0, 0).source_info().clone();
+    let result = edit_nested_block(PARA_IN_DEFLIST, target_si, "Edited body one.\n");
+    assert!(result.contains("Edited body one."), "got: {result:?}");
+    assert!(!result.contains("Body item one."), "got: {result:?}");
+    // Text outside the list must be verbatim.
+    assert!(result.contains("After deflist."), "got: {result:?}");
+}
+
+/// Edit a Para inside a callout-note Div.
+#[test]
+fn apply_node_edit_nested_callout_div() {
+    let ast = parse_qmd(PARA_IN_CALLOUT);
+    let target_si = div_inner_block(&ast, 0, 0).source_info().clone();
+    let result = edit_nested_block(PARA_IN_CALLOUT, target_si, "Edited callout content.\n");
+    assert!(
+        result.contains("Edited callout content."),
+        "got: {result:?}"
+    );
+    assert!(
+        !result.contains("A paragraph inside callout."),
+        "got: {result:?}"
+    );
+}
+
+/// 1→N nested edit: replace one Para inside a Div with two Paras.
+#[test]
+fn apply_node_edit_nested_one_to_n_splice() {
+    let ast = parse_qmd(PARA_IN_DIV);
+    let target_si = div_inner_block(&ast, 1, 0).source_info().clone();
+    let result = edit_nested_block(
+        PARA_IN_DIV,
+        target_si,
+        "First replacement.\n\nSecond replacement.\n",
+    );
+    assert!(result.contains("First replacement."), "got: {result:?}");
+    assert!(result.contains("Second replacement."), "got: {result:?}");
+    assert!(!result.contains("Hello inside div."), "got: {result:?}");
+    assert!(
+        result.contains("Before div."),
+        "outer text must survive; got: {result:?}"
+    );
+    assert!(
+        result.contains("After div."),
+        "outer text must survive; got: {result:?}"
+    );
+}
+
+/// N→0 nested deletion: remove a Para inside a Div; container remains with zero blocks.
+#[test]
+fn apply_node_edit_nested_deletion_n_to_0() {
+    let ast = parse_qmd(PARA_IN_DIV);
+    let target_si = div_inner_block(&ast, 1, 0).source_info().clone();
+    let result = delete_nested_block(PARA_IN_DIV, target_si);
+    assert!(
+        !result.contains("Hello inside div."),
+        "deleted block must be gone; got: {result:?}"
+    );
+    // The enclosing div must still be present (container stays, just empty).
+    assert!(
+        result.contains(":::"),
+        "enclosing div fences must remain; got: {result:?}"
+    );
+    assert!(result.contains("Before div."), "got: {result:?}");
+    assert!(result.contains("After div."), "got: {result:?}");
+}
+
+/// Attr-strip at depth: a nested Div replacement with no `s`/`a` fields is
+/// accepted via the lenient reader and written cleanly.
+#[test]
+fn apply_node_edit_nested_attr_strip_round_trips() {
+    // A Div with an inner Div (attr-bearing).
+    let content = "::: {.outer}\n\n::: {.inner}\nContent.\n:::\n\n:::\n";
+    let a_u = parse_qmd(content);
+    let a_u_json = ast_to_json(&a_u);
+    // Target: the inner Div at outer.content[0] (root index 0, inner index 0).
+    let inner_div_si = div_inner_block(&a_u, 0, 0).source_info().clone();
+    let si_json = source_info_to_json(&inner_div_si);
+    // Replacement: stripped subtree (no `s:` or `a:` fields) — simulates
+    // commitSubtreeEdit in TypeScript.
+    let stripped_replacement = r#"{
+        "pandoc-api-version":[1,23,0],
+        "meta":{},
+        "blocks":[{"t":"Div","c":[["",["inner-modified"],[]],[{"t":"Para","c":[{"t":"Str","c":"Modified."}]}]]}]
+    }"#;
+    let result = apply_node_edit(content, &a_u_json, &si_json, stripped_replacement);
+    let new_qmd = result.expect("attr-strip at depth must succeed");
+    assert!(new_qmd.contains("Modified."), "got: {new_qmd:?}");
+    assert!(!new_qmd.contains("Content."), "got: {new_qmd:?}");
+}
+
+/// Sibling fidelity: bytes OUTSIDE the enclosing container and its boundary
+/// separators are verbatim; the container body may be reformatted (wholesale
+/// rewrite).  We snapshot the expected reformatted form.
+#[test]
+fn apply_node_edit_nested_sibling_fidelity() {
+    // Edit the first BulletList item; "Before list." and "After list." must be
+    // byte-identical to their occurrences in the original source.
+    let ast = parse_qmd(PARA_IN_BULLET_LIST);
+    let target_si = list_item_block(&ast, 1, 0, 0).source_info().clone();
+    let result = edit_nested_block(PARA_IN_BULLET_LIST, target_si, "Edited.\n");
+
+    // Check outer bytes are verbatim (contains the exact substring).
+    assert!(
+        result.contains("Before list."),
+        "pre-list bytes must be verbatim; got: {result:?}"
+    );
+    assert!(
+        result.contains("After list."),
+        "post-list bytes must be verbatim; got: {result:?}"
+    );
+    // Sibling item content survives (may be re-bulleted by wholesale rewrite).
+    assert!(
+        result.contains("Hello in item two."),
+        "sibling item content must survive; got: {result:?}"
     );
 }

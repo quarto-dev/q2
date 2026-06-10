@@ -36,7 +36,7 @@ export const BulletList = (args: NodeArgs<BulletListBlock>) => {
         );
     }
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
-    const isEditable = resolved?.reachabilityClass === 'TopLevel' && poolId !== undefined;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
     return (
         <ul {...(isEditable ? { 'data-block-pool-id': poolId } : {})}>
             {renderChildren(args)}

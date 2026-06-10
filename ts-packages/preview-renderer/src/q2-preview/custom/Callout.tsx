@@ -112,7 +112,7 @@ export const Callout = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<Cu
     const previewCtx = useContext(PreviewContext);
     const poolId = (node as any).s as string | number | undefined;
     const resolved = previewCtx?.resolveSource ? previewCtx.resolveSource(node) : null;
-    const isEditable = resolved?.reachabilityClass === 'TopLevel' && poolId !== undefined;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
     const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
 
     // Q1-parity collapse-wrapper id naming (callouts.lua:281, 307,

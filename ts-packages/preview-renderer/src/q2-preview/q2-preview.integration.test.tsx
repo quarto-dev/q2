@@ -1041,6 +1041,36 @@ describe('Affordance gate — data-block-pool-id placement (Plan 2b)', () => {
     });
 });
 
+describe('Affordance gate — Plan 3 widening: Descendable + Opaque', () => {
+    it('Descendable Para receives data-block-pool-id (nested editing unlocked)', () => {
+        const DESCENDABLE_SOURCE: ResolvedSource = {
+            ...TOP_LEVEL_SOURCE,
+            reachabilityClass: 'Descendable',
+        };
+        const blocks = [{ t: 'Para', s: 0, c: [STR('nested')] }];
+        const { container } = mountWithSource(blocks, (node) =>
+            (node as any).s === 0 ? DESCENDABLE_SOURCE : null,
+        );
+        const p = container.querySelector('p')!;
+        expect(p).not.toBeNull();
+        expect(p.hasAttribute('data-block-pool-id')).toBe(true);
+    });
+
+    it('Opaque block does NOT receive data-block-pool-id', () => {
+        const OPAQUE_SOURCE: ResolvedSource = {
+            ...TOP_LEVEL_SOURCE,
+            reachabilityClass: 'Opaque',
+        };
+        const blocks = [{ t: 'Para', s: 0, c: [STR('opaque')] }];
+        const { container } = mountWithSource(blocks, (node) =>
+            (node as any).s === 0 ? OPAQUE_SOURCE : null,
+        );
+        const p = container.querySelector('p')!;
+        expect(p).not.toBeNull();
+        expect(p.hasAttribute('data-block-pool-id')).toBe(false);
+    });
+});
+
 describe('Affordance gate — Plan 4 boundary: sections excluded', () => {
     it('Div with class="section" renders as <section> with NO data-block-pool-id', () => {
         // A section Div that would otherwise be TopLevel must NOT receive the

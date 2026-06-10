@@ -11,7 +11,8 @@
  * Copyright (c) 2026 Posit, PBC
  */
 
-use crate::node_lookup::lookup_block;
+use crate::node_lookup::{ContainerStep, NodePath, lookup_block};
+use crate::pandoc::block::{Block, Blocks};
 use crate::readers::json::{read as json_read, read_completing_source_info};
 use crate::writers::incremental::incremental_write;
 use quarto_ast_reconcile::compute_reconciliation;
@@ -138,7 +139,7 @@ pub fn apply_node_edit(
     // A None result means a stale-AST race (the block was removed between
     // the last render and this edit); degrade gracefully by returning the
     // original content unchanged rather than surfacing an error.
-    let Some(idx) = lookup_block(&a_u, &target_si, FileId(0)) else {
+    let Some(path) = lookup_block(&a_u, &target_si, FileId(0)) else {
         eprintln!(
             "[apply_node_edit] destination block not found in untransformed AST; \
              returning original content unchanged (stale-AST race)"
@@ -161,10 +162,12 @@ pub fn apply_node_edit(
     let (subtree, _) = read_completing_source_info(&mut cursor, completing_by)
         .map_err(|e| ApplyNodeEditError::DeserializeModifiedSubtree(format!("{e:?}")))?;
 
-    // Step 5: Splice → A_u'.  Replaces the single block at `idx` with the
-    //         (potentially multi-block) replacement.
+    // Step 5: Splice → A_u'.  Navigate via the path and replace the single
+    //         block at leaf_idx with the (potentially multi-block) replacement.
+    //         For top-level blocks (path.steps = []) this is the same as the
+    //         old direct splice; for nested blocks the path guides descent.
     let mut a_u_prime = a_u.clone();
-    a_u_prime.blocks.splice(idx..=idx, subtree.blocks);
+    splice_at_path(&mut a_u_prime.blocks, &path, subtree.blocks);
 
     // Step 6: Reconcile and write.
     let plan = compute_reconciliation(&a_u, &a_u_prime);
@@ -172,4 +175,62 @@ pub fn apply_node_edit(
         .map_err(|e| ApplyNodeEditError::IncrementalWrite(format!("{e:?}")))?;
 
     Ok(new_qmd)
+}
+
+/// Splice `replacement` into the block tree at the position described by
+/// `path`.  Walks `steps` to reach the parent `Blocks` slice, then calls
+/// `Vec::splice` at `leaf_idx`.
+///
+/// `unreachable!` on a step/variant mismatch — the invariant is guaranteed
+/// by `lookup_block`, which only produces valid paths; a panic here indicates
+/// a logic bug, not a runtime condition.
+fn splice_at_path(root: &mut Blocks, path: &NodePath, replacement: Vec<Block>) {
+    splice_in_blocks(root, &path.steps, path.leaf_idx, replacement);
+}
+
+fn splice_in_blocks(
+    current: &mut Blocks,
+    steps: &[ContainerStep],
+    leaf_idx: usize,
+    replacement: Vec<Block>,
+) {
+    let Some((head, tail)) = steps.split_first() else {
+        current.splice(leaf_idx..=leaf_idx, replacement);
+        return;
+    };
+    match head {
+        ContainerStep::Blocks(i) => {
+            let child = match &mut current[*i] {
+                Block::Div(d) => &mut d.content,
+                Block::BlockQuote(bq) => &mut bq.content,
+                Block::Figure(f) => &mut f.content,
+                b => unreachable!(
+                    "splice_in_blocks: Blocks step at index {i} but got {:?}",
+                    std::mem::discriminant(b)
+                ),
+            };
+            splice_in_blocks(child, tail, leaf_idx, replacement);
+        }
+        ContainerStep::ListItem(i, item_idx) => {
+            let child = match &mut current[*i] {
+                Block::BulletList(bl) => &mut bl.content[*item_idx],
+                Block::OrderedList(ol) => &mut ol.content[*item_idx],
+                b => unreachable!(
+                    "splice_in_blocks: ListItem step at index {i} but got {:?}",
+                    std::mem::discriminant(b)
+                ),
+            };
+            splice_in_blocks(child, tail, leaf_idx, replacement);
+        }
+        ContainerStep::DefBody(i, def_idx, body_idx) => {
+            let child = match &mut current[*i] {
+                Block::DefinitionList(dl) => &mut dl.content[*def_idx].1[*body_idx],
+                b => unreachable!(
+                    "splice_in_blocks: DefBody step at index {i} but got {:?}",
+                    std::mem::discriminant(b)
+                ),
+            };
+            splice_in_blocks(child, tail, leaf_idx, replacement);
+        }
+    }
 }

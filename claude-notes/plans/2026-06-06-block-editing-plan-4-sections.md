@@ -6,6 +6,15 @@
 **Phase:** 4 (final). Rust (`pampa` + WASM) + frontend.
 **Depends on:** Plans 1, 2a, 2b, 3.
 
+> **Review-applied (2026-06-09), as a follow-on to the Plan 3 review.** Three
+> changes: (1) the **whole-container-as-a-unit** affordance for non-section
+> containers — which Plan 3 *shadows* — is now an explicit deliverable here, not
+> just prose (it was promised in §geometry but had no work item); (2) the new
+> `apply_node_edit_range` path must carry the post-2b contract (lenient subtree
+> reader + `s`/`a` stripping); (3) the "outside the section" guarantee is
+> qualified with "and its boundary separators" (OQ2). See
+> `2026-06-08-plan-3-review.md` → "Follow-on effects".
+
 ## Overview
 
 Make whole **sections** editable, and ship the **heading-vs-section geometry**
@@ -20,7 +29,10 @@ blocks with M blocks while preserving bytes outside the span (verified in the
 spec).
 
 **Win:** edit a whole section (heading + body) at once; nested sections handled
-by the envelope.
+by the envelope. **Also closes the Plan 3 shadow:** the same geometry makes a
+non-section `Div`/`BlockQuote`/list/callout reachable *as a unit* again (e.g. to
+edit a fenced div's attributes), which Plan 3 shadowed by making the contents the
+deepest target.
 
 ## Heading-vs-section by geometry (the interaction half)
 
@@ -42,10 +54,28 @@ therefore uses **glyph-rect hit-testing**:
   (whole-section rect vs. heading-text rect), so keyboard and pointer match.
 
 This is the **first instance of the general "text selects / background activates"
-model**; the glyph-rect primitive built here is what later generalizes. The
-**whole-container-as-a-unit** edit for non-section `Div`/`BlockQuote`/lists
-(shadowed once Plan 3 made their contents editable) reuses this same
-background-vs-text mechanism — building it for sections sets it up for containers.
+model**; the glyph-rect primitive built here is what later generalizes.
+
+### Whole-container-as-a-unit (un-shadowing Plan 3) — delivered here
+
+Plan 3 made a container's *contents* editable, so `closest('[data-block-pool-id]')`
+now resolves to the **inner** block and the container-as-a-whole affordance is
+**shadowed**. This phase un-shadows it with the **same** background-vs-text rule:
+when the pointer (or roving-tabindex focus) is over a container's own box but
+**not** over any child block's box — the padding/margin gutter, the bullet
+column, the `>` quote rail — the **container** wins; over a child block, the
+child wins.
+
+**Crucially this needs no new backend.** A non-section `Div`/`BlockQuote`/list/
+callout is a single source-backed block that already carries its own
+`data-block-pool-id` (editable-as-whole since Plan 2b) and commits through the
+existing single-target `text`/`subtree` channel — nested ones via Plan 3's
+path-resolved lookup. So the container case is **purely the affordance geometry**:
+the hit-test must stop preferring the deepest `data-block-pool-id` when the point
+falls in container background. (Contrast sections, which *do* need the new
+`range` payload because a section is a `Generated` Div spanning multiple
+untransformed blocks.) Building the section geometry first sets this up; the
+container case is then a small generalization of the same hit-test.
 
 ## TDD work items (tests first)
 
@@ -75,13 +105,28 @@ background-vs-text mechanism — building it for sections sets it up for contain
 - [ ] **Keyboard pre-order:** arrowing from a section stop reaches its heading
   stop, then its first paragraph; the section and heading stops carry distinct
   accessible names and outline shapes.
+- [ ] **Whole-container-as-a-unit hit-test (un-shadowing Plan 3):** a point over a
+  fenced div's padding gutter (not over any child block) resolves to the
+  **container's** `data-block-pool-id`; a point over the inner paragraph resolves
+  to the **inner** block. Same for a `BlockQuote` rail and a list's bullet column.
+  Synthetic rects in RTL; true layout in the browser E2E. (No backend change —
+  the container commits through the existing single-target channel.)
 
 ### Implementation
 - [ ] `crates/pampa/src/node_lookup.rs` — `lookup_range(ast, start, end) ->
-  Option<(usize, usize)>` over top-level blocks (first/last whose ranges fall
-  within `[start,end]`; reject partial overlap).
+  Option<(usize, usize)>` over **top-level** blocks (first/last whose ranges fall
+  within `[start,end]`; reject partial overlap). Top-level is correct and
+  sufficient: `A_u` is the *pre-pipeline* AST, so it contains **no** section Divs
+  (sectionize is a transform) — a section's envelope always maps to a contiguous
+  run of top-level untransformed blocks, even for nested `h2 → h3` sections (flat
+  `h2, p, h3, p …` in `A_u`). This is disjoint from Plan 3's `NodePath` (nested
+  *single* block); the two share only the reconcile+write tail.
 - [ ] `crates/pampa/src/apply_node_edit.rs` — range splice `blocks.splice(
-  i..=j, new_blocks)`; share the reconcile+write tail.
+  i..=j, new_blocks)`; share the reconcile+write tail. **Mirror the post-2b
+  contract:** read the replacement subtree with the lenient
+  `read_completing_source_info(.., By{kind:"direct-write"})` (as the single-target
+  path does since `f6448afe`), and use typed `By::` constructors — **not**
+  deprecated `SourceInfo::default()`.
 - [ ] `crates/wasm-quarto-hub-client/src/lib.rs` — new entry
   `apply_node_edit_range(content, untransformed_ast_json, start, end,
   modified_subtree_json)`.
@@ -89,7 +134,10 @@ background-vs-text mechanism — building it for sections sets it up for contain
   `PreviewNodeEditPayload` (already a `channel`-discriminated union from Plan 2b)
   gains a third variant: `{ channel: 'range'; range: [number, number];
   modifiedSubtreeJson: string }` for section edits (no `destinationSourceInfoJson`
-  — the range replaces a span of top-level blocks, not a single target).
+  — the range replaces a span of top-level blocks, not a single target). Build
+  `modifiedSubtreeJson` through the **same `stripSourceInfoFields` (`s` + `a`)**
+  helper the `subtree` channel uses, so the lenient backend reader backfills
+  `DirectWrite` provenance.
 - [ ] `q2-preview/blocks/Div.tsx` — when `.section` and an envelope exists,
   carry `data-section-range`; the editor uses the range payload.
 - [ ] `q2-preview/utils/sectionEnvelope.ts` (new).
@@ -102,6 +150,16 @@ background-vs-text mechanism — building it for sections sets it up for contain
   `data-block-pool-id`) are found by the delegated handler. Add the section as a
   roving-tabindex stop preceding its heading (DOM pre-order). The section/heading
   outlines are the two shapes (section rect / heading-text rect).
+- [ ] **Whole-container-as-a-unit hit-test (un-shadowing Plan 3)** — generalize the
+  same background-vs-text rule to non-section containers: when the deepest
+  `data-block-pool-id` under the pointer is a child *but the point lies in the
+  enclosing container's own box outside every child block's box* (padding gutter /
+  bullet column / `>` rail), resolve to the **container's** `data-block-pool-id`
+  instead. No new attribute and no backend change — the container already carries
+  `data-block-pool-id` (editable-as-whole since 2b; nested ones resolve via Plan
+  3's path) and commits on the existing single-target channel. Add the container as
+  a roving-tabindex stop preceding its first child (DOM pre-order), mirroring the
+  section/heading split.
 - [ ] Parent branch: `ReactPreview.tsx` `handleSetAst` / the `applyNodeEdit`
   service routes a `range` payload to `apply_node_edit_range`; otherwise the
   existing single-target path. (Iframe slices the envelope locally for display.)
@@ -119,8 +177,11 @@ background-vs-text mechanism — building it for sections sets it up for contain
   the section body — any list / table / blockquote inside reformats (renumber,
   re-pad, `>` reflow), even parts the user didn't touch, and an unchanged
   resubmit is **not** a no-op. This is the accepted "submit is not a no-op"
-  contract (design Edge cases) at section scale. The guarantee that holds: blocks
-  **outside** the section stay byte-verbatim.
+  contract (design Edge cases) at section scale. The guarantee that holds: bytes
+  **outside the section and its boundary separators** stay byte-verbatim. (OQ2: the
+  section becomes a `Rewrite` span with no `orig_idx`, so `compute_separator` falls
+  back to the standard `"\n"` for the gaps adjacent to the range — a blank-line gap
+  next to the section can normalize, same as any Tier-2 container rewrite.)
 - **Boundary alignment:** the envelope must align to untransformed block
   boundaries; reject (read-only) if a range bisects a block.
 - **Section with only generated content:** no envelope → no affordance (acceptable).

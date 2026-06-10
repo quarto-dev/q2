@@ -152,6 +152,43 @@ test.describe('q2-preview inline editing', () => {
         });
     });
 
+    test('editing a paragraph inside a fenced div updates only that block (Plan 3)', async ({ page }) => {
+        const serverUrl = getServerUrl();
+        const QMD = [
+            '---',
+            'format: q2-preview',
+            '---',
+            '',
+            'Outer paragraph.',
+            '',
+            '::: {.edit-test-div}',
+            'Inner paragraph.',
+            ':::',
+            '',
+        ].join('\n');
+        const docId = await createProjectOnServer(serverUrl, [
+            { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+            { path: 'nested.qmd', content: QMD, contentType: 'text' },
+        ]);
+
+        const iframe = await openFile(page, serverUrl, docId, 'nested.qmd');
+        await expect(iframe.locator('text=Inner paragraph.')).toBeVisible();
+
+        // Target the Para *inside* the fenced div — a Descendable block.
+        // After Plan 3 the widened gate gives it data-block-pool-id; clicking
+        // it activates the textarea via the Block dispatcher.
+        await iframe.locator('div.edit-test-div p[data-block-pool-id]').first().click();
+        const ta = iframe.locator('textarea').first();
+        await ta.waitFor({ timeout: 5000 });
+        await ta.fill('Edited inner paragraph.');
+        await ta.press('Control+Enter');
+
+        await assertAutomerge(page, 'nested.qmd', {
+            contains: ['Edited inner paragraph.', 'Outer paragraph.'],
+            lacks: ['Inner paragraph.'],
+        });
+    });
+
     test('editing in Preview view before Monaco mounts updates the Automerge document', async ({ page }) => {
         const serverUrl = getServerUrl();
         const QMD =

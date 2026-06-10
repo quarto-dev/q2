@@ -19,6 +19,8 @@ be in reverse chronological order (latest first).
 
 - [`fa2cf019`](https://github.com/quarto-dev/q2/commits/fa2cf019): Opening a document after the sign-in session has expired now cleanly aborts and triggers a silent renewal, instead of opening the document with a randomized collaboration identity.
 - [`465de01f`](https://github.com/quarto-dev/q2/commits/465de01f): An expired sign-in no longer presents as a permanent "working offline" state — the client now detects the rejected session, attempts silent renewal, and returns to the login screen with a "session expired" message; genuine network outages keep offline editing intact.
+- [`b9094c23`](https://github.com/quarto-dev/q2/commits/b9094c23): Add Plan 3 gate and e2e tests (Descendable affordance, Opaque exclusion, nested-div edit round-trip).
+- [`d73a454d`](https://github.com/quarto-dev/q2/commits/d73a454d): Enable in-place editing for nested blocks (inside fenced divs, list items, blockquotes, callouts); extend hover ring to Figure and LineBlock.
 
 ### 2026-06-09
 

@@ -7,7 +7,7 @@ export const BlockQuote = (args: NodeArgs<BlockQuoteBlock>) => {
     const ctx = useContext(PreviewContext);
     const poolId = (args.node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
-    const isEditable = resolved?.reachabilityClass === 'TopLevel' && poolId !== undefined;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
     return (
         <blockquote {...(isEditable ? { 'data-block-pool-id': poolId } : {})}>
             {renderChildren(args)}

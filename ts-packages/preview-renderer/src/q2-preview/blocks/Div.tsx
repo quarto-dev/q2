@@ -79,7 +79,7 @@ export const Div = (args: NodeArgs<DivBlock>) => {
         return <aside {...props}>{wrap(renderChildren(args))}</aside>;
     }
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
-    const isEditable = resolved?.reachabilityClass === 'TopLevel' && poolId !== undefined;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
     if (isEditable) props['data-block-pool-id'] = String(poolId);
     return <div {...props}>{wrap(renderChildren(args))}</div>;
 };
