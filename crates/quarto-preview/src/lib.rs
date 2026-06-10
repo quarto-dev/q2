@@ -44,6 +44,15 @@ static EMBEDDED_SPA: Dir<'_> = include_dir!("$QUARTO_PREVIEW_EMBED_DIR");
 /// so adding handler state would require nested routers).
 static SPA_DIR_OVERRIDE: OnceLock<Option<PathBuf>> = OnceLock::new();
 
+/// Map of `resources:`-declared output-relative paths → their absolute source
+/// file on disk, used by [`artifact_resource_handler`] to SERVE embedded-example
+/// decks (and their `slides_files/…` sidecars) at the artifact-rooted path the
+/// preview iframe requests. Resolved once at `run()` from the project's
+/// `resources:` set (the publish trust boundary, bd-teh4hbli); empty when there
+/// is no project / no resources. CLI/disk-only — diskless hub-client embeds are
+/// the service-worker workstream. (bd-kjrpya2d)
+static RESOURCE_DISK_MAP: OnceLock<std::collections::HashMap<String, PathBuf>> = OnceLock::new();
+
 /// Runtime configuration for the preview server.
 #[derive(Clone)]
 pub struct PreviewConfig {
@@ -122,6 +131,22 @@ where
     // same process (uncommon but possible in tests) is harmless: the
     // first call's override wins.
     let _ = SPA_DIR_OVERRIDE.set(config.spa_dir_override.clone());
+
+    // bd-kjrpya2d: resolve the project's `resources:` set to (output-relative
+    // → disk path) so the artifact route can SERVE embedded-example decks +
+    // their `slides_files/…` from disk. Best-effort; empty for single-file /
+    // no-resources / no-project. Resolved once here (the resources are static
+    // for the session).
+    let resource_map: std::collections::HashMap<String, PathBuf> = config
+        .project_root
+        .as_deref()
+        .map(|root| {
+            config::resolve_project_resource_files(root, &NativeRuntime::new())
+                .into_iter()
+                .collect()
+        })
+        .unwrap_or_default();
+    let _ = RESOURCE_DISK_MAP.set(resource_map);
 
     // Phase C.7: tell the re-execute HTTP handler where the per-doc
     // capture cache lives. Same OnceLock-first-wins pattern; in
@@ -302,6 +327,14 @@ pub fn extend_with_preview(
     router: Router<quarto_hub::context::SharedContext>,
 ) -> Router<quarto_hub::context::SharedContext> {
     router
+        // bd-kjrpya2d: serve `resources:`-declared embedded-example decks (+
+        // their `slides_files/…`) from disk at the artifact-rooted path the
+        // embed iframe requests. Takes precedence over the SPA fallback for
+        // this prefix; non-resource paths fall through to the SPA index.
+        .route(
+            "/.quarto/project-artifacts/{*rest}",
+            get(artifact_resource_handler),
+        )
         .route(
             "/api/preview/re-execute",
             post(re_execute::re_execute_handler),
@@ -338,6 +371,41 @@ async fn spa_handler(req: axum::http::Request<axum::body::Body>) -> Response {
     }
     // SPA fallback: any non-asset path gets `index.html` for client-
     // side routing.
+    if let Some(index) = EMBEDDED_SPA.get_file("index.html") {
+        return asset_response("index.html", index.contents().to_vec());
+    }
+    (StatusCode::NOT_FOUND, "no spa").into_response()
+}
+
+/// Serve a `resources:`-declared file from disk at the artifact-rooted path the
+/// preview iframe requests (`/.quarto/project-artifacts/<output-relative>`), so
+/// embedded-example decks (+ their linked `slides_files/…`) load like a real
+/// served page — relative asset resolution and all. (bd-kjrpya2d)
+///
+/// `rest` is the axum-decoded wildcard (the `<output-relative>` suffix). Only
+/// paths in [`RESOURCE_DISK_MAP`] (the declared `resources:` set) are served —
+/// the publish trust boundary (bd-teh4hbli); any other `/.quarto/…` path falls
+/// through to the SPA index, exactly as before this route existed.
+async fn artifact_resource_handler(
+    axum::extract::Path(rest): axum::extract::Path<String>,
+) -> Response {
+    if let Some(map) = RESOURCE_DISK_MAP.get()
+        && let Some(disk) = map.get(&rest)
+        && let Ok(bytes) = tokio::fs::read(disk).await
+    {
+        return asset_response(&rest, bytes);
+    }
+    serve_spa_index().await
+}
+
+/// Serve the SPA `index.html` (override dir if set, else the embedded bundle).
+/// The index branch of [`spa_handler`], shared with the artifact route's
+/// fall-through (a non-resource `/.quarto/…` path got `index.html` before this
+/// route existed, so preserve that).
+async fn serve_spa_index() -> Response {
+    if let Some(Some(override_dir)) = SPA_DIR_OVERRIDE.get() {
+        return serve_from_disk(override_dir, "index.html").await;
+    }
     if let Some(index) = EMBEDDED_SPA.get_file("index.html") {
         return asset_response("index.html", index.contents().to_vec());
     }

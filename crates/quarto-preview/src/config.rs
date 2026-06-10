@@ -166,6 +166,54 @@ pub fn resolve_project_resource_html(
     html
 }
 
+/// Resolve the project's **full** `resources:` set to `(output-relative URL
+/// path, absolute source path on disk)` pairs. (bd-kjrpya2d)
+///
+/// Unlike [`resolve_project_resource_html`] (which filters to `.html` for the
+/// VFS-source text sync), this returns *every* declared resource file — the
+/// deck HTML **and** its `slides_files/…` sidecar assets — so the preview hub
+/// can SERVE them on disk at the artifact-rooted path the embed iframe requests
+/// (`/.quarto/project-artifacts/<output-relative>`). Decks now LINK their
+/// assets (reveal.js linked-assets, bd-jij5gge2), so they must be served, not
+/// inlined.
+///
+/// Best-effort + scoped to the declared `resources:` set — the same publish
+/// trust boundary as `resolve_project_resource_html` (bd-teh4hbli). The
+/// `output_relative` is project-relative + forward-slash separated, matching
+/// both the artifact URL suffix and `expand_patterns`' containment guarantee.
+/// This serving is CLI/disk-only; diskless hub-client needs the service-worker
+/// over the VFS (separate workstream).
+pub fn resolve_project_resource_files(
+    project_root: &std::path::Path,
+    runtime: &dyn SystemRuntime,
+) -> Vec<(String, std::path::PathBuf)> {
+    use quarto_core::project_resources::{ResourceOrigin, ResourceScope, expand_patterns};
+
+    let Ok(project) = quarto_core::project::ProjectContext::discover(project_root, runtime) else {
+        return Vec::new();
+    };
+    let patterns = &project.config.resources;
+    if patterns.is_empty() {
+        return Vec::new();
+    }
+
+    let root = project.dir.as_path();
+    let Ok(resolved) = expand_patterns(
+        root,
+        root,
+        patterns,
+        || ResourceOrigin::ProjectMetadata,
+        ResourceScope::Project,
+    ) else {
+        return Vec::new();
+    };
+
+    resolved
+        .into_iter()
+        .map(|r| (r.output_relative, r.source))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,5 +386,61 @@ mod tests {
                 std::path::PathBuf::from("decks/b.html"),
             ]
         );
+    }
+
+    #[test]
+    fn resource_files_resolves_full_set_with_disk_paths() {
+        // The disk-serve route needs EVERY declared resource file (the deck
+        // HTML *and* its slides_files/ sidecars), mapped to its absolute
+        // source path — not just the .html.
+        let temp = TempDir::with_prefix("kj-res-files-").unwrap();
+        std::fs::write(
+            temp.path().join("_quarto.yml"),
+            "project:\n  type: website\n  resources:\n    - examples\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(temp.path().join("examples/d/slides_files/revealjs")).unwrap();
+        std::fs::write(temp.path().join("examples/d/slides.html"), "<html></html>").unwrap();
+        std::fs::write(
+            temp.path()
+                .join("examples/d/slides_files/revealjs/reveal.js"),
+            "/*js*/",
+        )
+        .unwrap();
+        std::fs::write(
+            temp.path()
+                .join("examples/d/slides_files/revealjs/reveal.css"),
+            "/*css*/",
+        )
+        .unwrap();
+
+        let runtime = NativeRuntime::new();
+        let mut files = resolve_project_resource_files(temp.path(), &runtime);
+        files.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let rels: Vec<&str> = files.iter().map(|(r, _)| r.as_str()).collect();
+        assert_eq!(
+            rels,
+            vec![
+                "examples/d/slides.html",
+                "examples/d/slides_files/revealjs/reveal.css",
+                "examples/d/slides_files/revealjs/reveal.js",
+            ],
+            "must include the deck HTML AND its slides_files sidecars"
+        );
+        // Each maps to a real, readable absolute source path.
+        for (rel, disk) in &files {
+            assert!(
+                disk.is_absolute(),
+                "{rel} → non-absolute disk path {disk:?}"
+            );
+            assert!(disk.is_file(), "{rel} → {disk:?} is not a file");
+        }
+        // Spot-check one maps to the right on-disk file.
+        let js = files
+            .iter()
+            .find(|(r, _)| r == "examples/d/slides_files/revealjs/reveal.js")
+            .unwrap();
+        assert_eq!(std::fs::read_to_string(&js.1).unwrap(), "/*js*/");
     }
 }
