@@ -12,10 +12,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const vfsMock = vi.fn();
-const vfsTextMock = vi.fn();
 vi.mock('@quarto/preview-runtime', () => ({
     vfsReadBinaryFile: (path: string) => vfsMock(path),
-    vfsReadFile: (path: string) => vfsTextMock(path),
 }));
 
 import { buildAssetManifest, type ManifestCacheEntry } from './assetWalker';
@@ -29,8 +27,6 @@ beforeEach(() => {
     minted.length = 0;
     revoked.length = 0;
     vfsMock.mockReset();
-    vfsTextMock.mockReset();
-    vfsTextMock.mockReturnValue({ success: false });
     // jsdom does not implement URL.createObjectURL / revokeObjectURL.
     // Stub for deterministic minting.
     (globalThis.URL.createObjectURL as unknown) = vi.fn(() => {
@@ -205,74 +201,6 @@ describe('buildAssetManifest', () => {
         const result = buildAssetManifest('{ not json', '/project/index.qmd', cache);
         expect(result.manifest).toEqual({});
         expect(result.revoked).toEqual([]);
-    });
-
-    // ── embedded-example deck iframes (bd-kjrpya2d) ──────────────────
-
-    const DECK_SRC = '/examples/presentations/03-fragments/slides.html';
-    const DECK_HTML = '<!doctype html><html><body><div class="reveal">deck</div></body></html>';
-
-    function embedRawBlock(src: string) {
-        return {
-            t: 'RawBlock',
-            c: [
-                'html',
-                `<iframe class="embed-example-iframe" src="${src}" loading="lazy" allowfullscreen></iframe>`,
-            ],
-        };
-    }
-
-    it('mints a text/html blob URL for an embed-example-iframe deck', () => {
-        vfsTextMock.mockImplementation((p: string) =>
-            p === 'examples/presentations/03-fragments/slides.html'
-                ? { success: true, content: DECK_HTML }
-                : { success: false },
-        );
-        const cache = new Map<string, ManifestCacheEntry>();
-        const json = ast([embedRawBlock(DECK_SRC)]);
-
-        const { manifest } = buildAssetManifest(
-            json,
-            '/project/presentations/revealjs/index.qmd',
-            cache,
-        );
-
-        // Manifest key is the literal iframe src (what RawBlock looks up).
-        expect(manifest[DECK_SRC]).toBe('blob:test-0');
-        // The absolute src resolves to the bare VFS key (no /project/, no slash).
-        expect(vfsTextMock).toHaveBeenCalledWith(
-            'examples/presentations/03-fragments/slides.html',
-        );
-        // Text decks are read via vfsReadFile, NOT the binary image path.
-        expect(vfsMock).not.toHaveBeenCalled();
-        expect(minted).toEqual(['blob:test-0']);
-    });
-
-    it('omits the deck from the manifest on a VFS miss', () => {
-        vfsTextMock.mockReturnValue({ success: false });
-        const cache = new Map<string, ManifestCacheEntry>();
-        const result = buildAssetManifest(
-            ast([embedRawBlock(DECK_SRC)]),
-            '/project/index.qmd',
-            cache,
-        );
-        expect(result.manifest).toEqual({});
-        expect(minted).toEqual([]);
-    });
-
-    it('caches the deck blob across renders and evicts when it disappears', () => {
-        vfsTextMock.mockReturnValue({ success: true, content: DECK_HTML });
-        const cache = new Map<string, ManifestCacheEntry>();
-        const json = ast([embedRawBlock(DECK_SRC)]);
-
-        buildAssetManifest(json, '/project/index.qmd', cache);
-        buildAssetManifest(json, '/project/index.qmd', cache);
-        expect(minted).toEqual(['blob:test-0']); // one mint across both runs
-
-        // Deck removed from the AST → blob revoked.
-        const result = buildAssetManifest(ast([]), '/project/index.qmd', cache);
-        expect(revoked).toEqual(['blob:test-0']);
-        expect(result.manifest).toEqual({});
     });
 
     it('finds Images nested inside Figure / BulletList / Div', () => {

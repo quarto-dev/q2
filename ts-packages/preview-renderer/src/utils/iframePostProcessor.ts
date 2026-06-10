@@ -147,51 +147,6 @@ function parseLink(href: string): ParsedLink {
 }
 
 /**
- * Read an embeddable iframe resource from the VFS for inlining as
- * `srcdoc`, mapping a root-relative output URL to its VFS **source**
- * path. (bd-kjrpya2d)
- *
- * `q2 render` resolves the deck `src` against `_site/` on disk; in
- * `q2 preview` the page renders in-browser with no server, so we read
- * the bytes from the VFS instead. A static `resources:` asset (an
- * embedded `.embed-example-iframe` deck) lives at its VFS **source**
- * path — nothing copies it under the artifact root in the WASM render —
- * so after trying the literal `src` we retry at the source path. Two
- * src shapes occur in practice:
- *
- *   - **page/site-relative `/X`** — the embed feature's chosen output
- *     form (bd-z1smhvuo commit 867aa7c1 "page-relative iframe src",
- *     e.g. `/examples/presentations/03-fragments/slides.html`). Strip
- *     the leading `/` and read the source path `X`.
- *   - **artifact-rooted `/.quarto/project-artifacts/X`** — the
- *     cross-doc href form `page_url_for` emits in VFS-root mode. Strip
- *     `ARTIFACT_ROOT` and read `X`.
- *
- * Returns the first successful read, or `{ success: false }` so the
- * caller leaves the iframe untouched — external URLs and any path not
- * in the VFS genuinely need a network load and must not be clobbered.
- */
-function readArtifactOrSource(src: string): ReturnType<typeof vfsReadFile> {
-  const direct = vfsReadFile(src);
-  if (direct.success && direct.content) return direct;
-
-  // Map the output URL to its VFS source key. ARTIFACT_ROOT is a more
-  // specific prefix than a bare `/`, so test it first.
-  let sourcePath: string | null = null;
-  if (src.startsWith(ARTIFACT_ROOT)) {
-    sourcePath = src.slice(ARTIFACT_ROOT.length);
-  } else if (src.startsWith('/')) {
-    sourcePath = src.slice(1);
-  }
-
-  if (sourcePath) {
-    const atSource = vfsReadFile(sourcePath);
-    if (atSource.success && atSource.content) return atSource;
-  }
-  return { success: false };
-}
-
-/**
  * Post-process iframe content after render.
  * - Replaces /.quarto/ resource links with data URIs
  * - Converts .qmd links to click handlers
@@ -276,25 +231,6 @@ export function postProcessIframe(
       // vfsReadBinaryFile returns base64-encoded content
       const dataUri = `data:${mimeType};base64,${result.content}`;
       img.setAttribute('src', dataUri);
-    }
-  });
-
-  // Inline embedded-resource <iframe> sources (e.g. `.embed-example-iframe`
-  // decks) from the VFS via `srcdoc`, so the sandboxed preview never issues
-  // a network request for them (there is no server to answer it — the page
-  // is rendered in-browser). The embed feature emits a page/site-relative
-  // src (`/examples/.../slides.html`; bd-z1smhvuo); `readArtifactOrSource`
-  // maps any root-relative src to its VFS source path. We process every
-  // root-relative src and inline ONLY on a successful VFS read, so external
-  // (`http(s)://`, protocol-relative `//`) and not-in-VFS iframes that
-  // genuinely need a network load are left untouched. (bd-kjrpya2d)
-  doc.querySelectorAll('iframe').forEach((frame) => {
-    const src = frame.getAttribute('src');
-    if (!src || !src.startsWith('/') || src.startsWith('//')) return;
-    const result = readArtifactOrSource(src);
-    if (result.success && result.content) {
-      frame.removeAttribute('src');
-      frame.setAttribute('srcdoc', result.content);
     }
   });
 
