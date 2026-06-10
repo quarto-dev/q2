@@ -169,7 +169,8 @@ window.addEventListener('message', async (event) => {
         }
         updateAst(event.data.payload);
     } else if (event.data.type === 'UPDATE_THEME') {
-        applyTheme(event.data.cssUrl);
+        lastThemeCssUrl = event.data.cssUrl;
+        reconcileThemeLink();
     }
 });
 
@@ -199,6 +200,31 @@ function applyTheme(cssUrl: string | null): void {
         document.head.appendChild(link);
     }
     link.setAttribute('href', cssUrl);
+}
+
+// bd-ibqkf9ry: the HTML-theme (Bootstrap) CSS must NOT reach a reveal deck.
+// A deck ships its own complete CSS (`resources/revealjs/…`, imported by
+// `RevealDeck`), exactly like `q2 render`'s standalone deck — so leaking the
+// HTML theme (e.g. Bootstrap's `h2 { border-bottom }`) onto slides is a render/
+// preview divergence. `UPDATE_THEME` (theme bytes) and `UPDATE_AST` (which
+// reveals the format) arrive on separate messages in either order, so we
+// remember the last theme URL + whether the active doc is a slide deck and
+// reconcile: attach the `data-q2-theme` link only for non-slide documents.
+let lastThemeCssUrl: string | null = null;
+let currentDocIsSlides = false;
+
+function reconcileThemeLink(): void {
+    applyTheme(currentDocIsSlides ? null : lastThemeCssUrl);
+}
+
+/**
+ * Record whether the active document is a reveal deck and re-reconcile the
+ * HTML-theme link. Driven by the render component's `isSlides` effect, so a
+ * format switch (html ⇄ revealjs) re-applies or removes the theme correctly.
+ */
+function setDocIsSlides(isSlides: boolean): void {
+    currentDocIsSlides = isSlides;
+    reconcileThemeLink();
 }
 
 /**
@@ -410,6 +436,14 @@ function PreviewRoot(props: PreviewRootProps) {
     // still renders via the same `previewRegistry`.
     const previewFormat = parsed ? extractMetaString(parsed.meta?.format) : undefined;
     const isSlides = previewFormat === 'q2-slides' || previewFormat === 'revealjs';
+
+    // bd-ibqkf9ry: keep the HTML-theme (Bootstrap) link off reveal decks. A
+    // deck supplies its own CSS; the app theme leaking onto slides (e.g. the
+    // grey `h2` border-bottom) is a render-parity bug. Reconcile after commit
+    // so a format switch re-applies or removes the theme link accordingly.
+    useEffect(() => {
+        setDocIsSlides(isSlides);
+    }, [isSlides]);
 
     return (
         <PreviewContext.Provider

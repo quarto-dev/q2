@@ -19,10 +19,17 @@
 
 import React, { useContext } from 'react';
 import { Deck, Slide, Stack } from '@revealjs/react';
-import 'reveal.js/reveal.css';
-import 'reveal.js/theme/white.css';
-// Quarto's reveal layer (columns, …) — the SAME file `q2 render` inlines, so
-// render and preview stay in parity. Single source: resources/revealjs/.
+// Reveal CSS from the SAME vendored copy `q2 render` links — `resources/
+// revealjs/` — in the SAME cascade order (reset → reveal → theme → quarto
+// overrides), so render and preview cannot disagree on reveal styling
+// (bd-ibqkf9ry). The `vendored_reveal_assets_match_npm_package` test keeps
+// that copy byte-identical to the npm `reveal.js` `@revealjs/react` drives;
+// importing the vendored files (not `reveal.js/*.css`) makes `resources/
+// revealjs/` the single source of truth. `@revealjs/react` injects no CSS of
+// its own — styling is entirely these imports.
+import '../../../../resources/revealjs/reset.css';
+import '../../../../resources/revealjs/reveal.css';
+import '../../../../resources/revealjs/theme/white.css';
 import '../../../../resources/revealjs/quarto-reveal.css';
 
 import { extractMetaBool, Node, RegistryContext } from '../framework';
