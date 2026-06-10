@@ -53,7 +53,7 @@
   "devDependencies": {
     "@automerge/automerge-repo-storage-nodefs": "^2.5.6",
     "@eslint/js": "^9.39.1",
-    "@playwright/test": "^1.50.0",
+    "@playwright/test": "^1.60.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/compression": "^1.8.1",
