@@ -119,12 +119,38 @@ on.
     (binary resources already flow this way — mirror that); (c) the SPA's VFS
     population `vfsAddFile`s them. Verify needs a full hub+WASM+q2 rebuild +
     browser e2e (+ a hub-client/Automerge-only test).
-- [ ] **C — End-to-end.** Rebuild WASM+q2; `q2 preview docs/` in a browser: the
-  `#demo-fragments` iframe inlines the real deck via `srcdoc`; crossref
-  ("Demo 1") already works.
-- [ ] **D — Hub-client parity.** A test (or manual) where `/examples/` is
-  populated only in the VFS/Automerge (no disk) and the iframe still resolves —
-  the case the reverted disk route could never handle.
+- [x] **B — VFS source availability.** DONE. Resolved in `quarto-preview`
+  (option chosen with user 2026-06-09: keep `quarto-hub` lean rather than add a
+  `quarto-core` dep there). `config::resolve_project_resource_html` resolves the
+  `resources:`-scoped `.html` via `ProjectContext::discover` + `expand_patterns`;
+  `PreviewConfig.resource_html_files` → `HubConfig.resource_files` →
+  `ProjectFiles::with_resource_files` (new text-synced category in
+  `crates/quarto-hub/src/discovery.rs`). Verified through the real binary:
+  `q2 preview docs/` logs `resource_count=8` and `Reconciled … count=163`.
+- [x] **C — End-to-end.** DONE + browser-verified. **Plan correction:** the
+  `q2 preview` SPA does **not** use `iframePostProcessor.ts` (that is the
+  *hub-client* preview pane — `MorphIframe`/`DoubleBufferedIframe`). q2-preview
+  renders via `Q2PreviewIframe` + React `<Ast>`; the embed `<iframe>` is a
+  `RawBlock(html)` and asset resolution is the parent-side **`assetWalker.ts`**
+  (which previously only walked `Image` nodes → blob URLs). Fix: `assetWalker`
+  now also collects `.embed-example-iframe` srcs from `RawBlock(html)`, reads the
+  deck text from the VFS, and mints a `text/html` blob URL into the asset
+  manifest; `blocks/RawBlock.tsx` rewrites the deck `<iframe src>` to that blob
+  URL (shared scan/rewrite helpers in `q2-preview/embedIframe.ts`). Playwright
+  e2e against `q2 preview docs/`: all **8/8** `.embed-example-iframe` decks
+  resolve to `blob:` srcs, `#demo-fragments` loads the real Fragments deck
+  (reveal "FRAGMENTS" slide rendered), the "Demo 1:" caption + `@demo-fragments`
+  xref work, and **zero console errors** (the 8 prior `/examples/…` MIME errors
+  are gone). VFS key note: `vfs_add_file`/`vfs_read_file` use the path verbatim
+  (no `/project/` prefix), so the absolute `/examples/…` src strips to the bare
+  index key it was synced under.
+  - The part-1 `iframePostProcessor.ts` generalization (page-relative `/X` →
+    VFS source) was **kept** — it is correct for the *hub-client* preview pane,
+    just not the renderer `q2 preview` uses (19 post-processor tests pass).
+- [ ] **D — Hub-client parity.** Not yet exercised: a hub-client/Automerge run
+  where `/examples/` is populated only in the VFS (no disk). The q2-preview fix
+  is VFS-native (no disk assumption), so it should carry, but this path is
+  unverified. Tracked as remaining work.
 
 ## Out of scope / unaffected
 

@@ -360,6 +360,7 @@ impl TestHub {
             watch_debounce_ms: 500,
             watch_filter: Default::default(),
             single_file: None,
+            resource_files: Vec::new(),
             auth_config: Some(auth_config),
             allow_insecure_auth: true,
             register_root_ws: false,
@@ -478,6 +479,7 @@ async fn allowlist_setup() -> &'static (MockOidcProvider, TestHub) {
                 watch_debounce_ms: 500,
                 watch_filter: Default::default(),
                 single_file: None,
+                resource_files: Vec::new(),
                 auth_config: Some(auth_config),
                 allow_insecure_auth: true,
                 register_root_ws: false,
@@ -940,6 +942,7 @@ async fn secure_setup() -> &'static (MockOidcProvider, TestHub) {
                 watch_debounce_ms: 500,
                 watch_filter: Default::default(),
                 single_file: None,
+                resource_files: Vec::new(),
                 auth_config: Some(auth_config),
                 allow_insecure_auth: false, // <-- the key difference
                 register_root_ws: false,

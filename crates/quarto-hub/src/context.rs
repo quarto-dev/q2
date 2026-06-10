@@ -69,6 +69,18 @@ pub struct HubConfig {
     /// resolves to an existing `.qmd` file under `project_root`.
     pub single_file: Option<PathBuf>,
 
+    /// Resources-scoped `.html` files to sync into the VFS as text
+    /// (project-root-relative paths). (bd-kjrpya2d)
+    ///
+    /// `q2 preview` populates this with the `.html` files made visible
+    /// by `project.resources:` (resolved upstream in `quarto-preview`,
+    /// which has `quarto-core`), so embedded example decks land in the
+    /// VFS source and the preview iframe post-processor can inline them.
+    /// The bare `discover` walk can't find `.html` on its own; this is
+    /// how the resolved set reaches [`ProjectFiles::with_resource_files`].
+    /// Empty for the standalone `quarto hub` server.
+    pub resource_files: Vec<PathBuf>,
+
     /// OAuth2 auth configuration. None = auth disabled.
     pub auth_config: Option<AuthConfig>,
 
@@ -98,6 +110,7 @@ impl Default for HubConfig {
             watch_debounce_ms: 500,
             watch_filter: WatchFilter::default(),
             single_file: None,
+            resource_files: Vec::new(),
             auth_config: None,
             allow_insecure_auth: false,
             register_root_ws: true,
@@ -182,7 +195,12 @@ impl HubContext {
         let project_files = if let Some(ref project_root) = project_root {
             let files = match config.single_file.as_ref() {
                 Some(rel) => ProjectFiles::single_file(rel.clone()),
-                None => ProjectFiles::discover(project_root),
+                // bd-kjrpya2d: the bare walk can't see resources-scoped
+                // `.html` (it falls through every category), so the
+                // caller-resolved set is injected here to ride the text
+                // sync path into the VFS.
+                None => ProjectFiles::discover(project_root)
+                    .with_resource_files(config.resource_files.clone()),
             };
             info!(
                 qmd_count = files.qmd_files.len(),
@@ -190,6 +208,7 @@ impl HubContext {
                 binary_count = files.binary_files.len(),
                 extension_count = files.extension_files.len(),
                 source_count = files.source_files.len(),
+                resource_count = files.resource_files.len(),
                 "Discovered project files"
             );
             Some(files)

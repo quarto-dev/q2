@@ -26,6 +26,21 @@ pub struct ProjectFiles {
 
     /// Other text source files (currently `.tsx`, paths relative to project root)
     pub source_files: Vec<PathBuf>,
+
+    /// Resources-scoped `.html` files — e.g. embedded example decks
+    /// declared via `project.resources:` — to be carried into the VFS
+    /// as **text** (paths relative to project root). (bd-kjrpya2d)
+    ///
+    /// The bare [`discover`](Self::discover) walk never populates this:
+    /// `.html` is neither a binary extension nor `.qmd`/`.tsx`/config,
+    /// so it falls through and is invisible to discovery. The set is
+    /// injected by [`with_resource_files`](Self::with_resource_files)
+    /// from a caller that *can* resolve `resources:` (quarto-preview,
+    /// which has `quarto-core`). They flow through the text sync path
+    /// ([`text_files`](Self::text_files)) so the preview iframe
+    /// post-processor can read them via `vfsReadFile` and inline them
+    /// as `srcdoc` — see `iframePostProcessor.ts`'s `readArtifactOrSource`.
+    pub resource_files: Vec<PathBuf>,
 }
 
 impl ProjectFiles {
@@ -143,6 +158,17 @@ impl ProjectFiles {
         }
     }
 
+    /// Attach resources-scoped `.html` files (resolved by the caller
+    /// from `project.resources:`) to be synced into the VFS as text.
+    /// Deduplicates and sorts for deterministic ordering. See
+    /// [`ProjectFiles::resource_files`]. (bd-kjrpya2d)
+    pub fn with_resource_files(mut self, mut resource_files: Vec<PathBuf>) -> Self {
+        resource_files.sort();
+        resource_files.dedup();
+        self.resource_files = resource_files;
+        self
+    }
+
     /// Returns the total number of discovered files.
     pub fn total_count(&self) -> usize {
         self.qmd_files.len()
@@ -150,14 +176,17 @@ impl ProjectFiles {
             + self.binary_files.len()
             + self.extension_files.len()
             + self.source_files.len()
+            + self.resource_files.len()
     }
 
-    /// Returns the count of text files (config + qmd + extension text + source files).
+    /// Returns the count of text files (config + qmd + extension text +
+    /// source files + resources-scoped `.html`).
     pub fn text_file_count(&self) -> usize {
         self.qmd_files.len()
             + self.config_files.len()
             + self.extension_files.len()
             + self.source_files.len()
+            + self.resource_files.len()
     }
 
     /// Returns an iterator over all discovered file paths.
@@ -167,16 +196,21 @@ impl ProjectFiles {
             .chain(self.qmd_files.iter())
             .chain(self.extension_files.iter())
             .chain(self.source_files.iter())
+            .chain(self.resource_files.iter())
             .chain(self.binary_files.iter())
     }
 
-    /// Returns an iterator over text files only (config + qmd + extension text + source files).
+    /// Returns an iterator over text files only (config + qmd +
+    /// extension text + source files + resources-scoped `.html`).
+    /// Resources-scoped `.html` is text so the reconcile loop stores it
+    /// as an automerge Text doc readable by the SPA's `vfsReadFile`.
     pub fn text_files(&self) -> impl Iterator<Item = &PathBuf> {
         self.config_files
             .iter()
             .chain(self.qmd_files.iter())
             .chain(self.extension_files.iter())
             .chain(self.source_files.iter())
+            .chain(self.resource_files.iter())
     }
 }
 
@@ -471,6 +505,88 @@ mod tests {
         assert!(files.source_files.is_empty());
         // Critically: the relative path is non-empty.
         assert!(!files.qmd_files[0].as_os_str().is_empty());
+    }
+
+    /// bd-kjrpya2d (part 2): resources-scoped `.html` files (embedded
+    /// example decks declared via `project.resources:`) are NOT found
+    /// by the plain walk — `.html` is neither a binary extension nor
+    /// `.qmd`/`.tsx`/config, so it falls through. The caller
+    /// (quarto-preview, which can resolve `resources:`) injects the
+    /// matched set via `with_resource_files`, which routes them through
+    /// the **text** sync path so the preview iframe post-processor can
+    /// read them via `vfsReadFile` and inline them as `srcdoc`.
+    #[test]
+    fn test_resource_files_default_empty_and_html_not_auto_discovered() {
+        let temp = TempDir::new().unwrap();
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+        // A static deck on disk — must NOT be auto-discovered into any
+        // category by the bare walk.
+        fs::create_dir(temp.path().join("examples")).unwrap();
+        fs::write(
+            temp.path().join("examples/slides.html"),
+            "<html><body>deck</body></html>",
+        )
+        .unwrap();
+
+        let files = ProjectFiles::discover(temp.path());
+
+        assert!(
+            files.resource_files.is_empty(),
+            "bare discover must not populate resource_files"
+        );
+        // The .html is invisible to every other category too.
+        assert!(
+            !files
+                .binary_files
+                .iter()
+                .any(|p| p.ends_with("slides.html"))
+        );
+        assert!(!files.qmd_files.iter().any(|p| p.ends_with("slides.html")));
+        assert!(
+            !files
+                .source_files
+                .iter()
+                .any(|p| p.ends_with("slides.html"))
+        );
+    }
+
+    #[test]
+    fn test_with_resource_files_injects_html_as_text() {
+        let temp = TempDir::new().unwrap();
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+        fs::create_dir(temp.path().join("examples")).unwrap();
+        fs::write(temp.path().join("examples/slides.html"), "<html></html>").unwrap();
+
+        let files = ProjectFiles::discover(temp.path())
+            .with_resource_files(vec![PathBuf::from("examples/slides.html")]);
+
+        // Lands in resource_files...
+        assert_eq!(
+            files.resource_files,
+            vec![PathBuf::from("examples/slides.html")]
+        );
+        // ...and flows through the TEXT sync path (text_files + all_files),
+        // so reconcile creates an automerge Text doc readable by vfsReadFile.
+        let text: Vec<_> = files.text_files().collect();
+        assert!(text.contains(&&PathBuf::from("examples/slides.html")));
+        let all: Vec<_> = files.all_files().collect();
+        assert!(all.contains(&&PathBuf::from("examples/slides.html")));
+        // Counted in both totals.
+        assert_eq!(files.total_count(), 2); // index.qmd + slides.html
+        assert_eq!(files.text_file_count(), 2);
+    }
+
+    #[test]
+    fn test_with_resource_files_dedups_and_sorts() {
+        let files = ProjectFiles::default().with_resource_files(vec![
+            PathBuf::from("b/two.html"),
+            PathBuf::from("a/one.html"),
+            PathBuf::from("b/two.html"), // duplicate (glob overlap)
+        ]);
+        assert_eq!(
+            files.resource_files,
+            vec![PathBuf::from("a/one.html"), PathBuf::from("b/two.html")]
+        );
     }
 
     #[test]

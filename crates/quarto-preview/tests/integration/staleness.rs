@@ -109,6 +109,7 @@ async fn cell_edit_flips_staleness_in_sidecar() {
         spa_dir_override: None,
         engine_registry: Some(registry),
         engine_policy: Default::default(),
+        resource_html_files: Vec::new(),
         cache_dir: None,
     };
 

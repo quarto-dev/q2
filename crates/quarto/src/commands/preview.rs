@@ -12,7 +12,10 @@ use std::net::TcpListener as StdTcpListener;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use quarto_preview::{EnginePolicy, PreviewConfig, config::read_engine_policy_from_project};
+use quarto_preview::{
+    EnginePolicy, PreviewConfig,
+    config::{read_engine_policy_from_project, resolve_project_resource_html},
+};
 use quarto_system_runtime::NativeRuntime;
 use tempfile::TempDir;
 use tracing::info;
@@ -147,6 +150,21 @@ async fn run(args: PreviewArgs) -> Result<()> {
     };
     info!(?engine_policy, "resolved preview engine policy");
 
+    // bd-kjrpya2d (part 2): resolve the `.html` files made visible by
+    // `project.resources:` so the hub carries them into the VFS source
+    // tree. The preview iframe post-processor reads them there and
+    // inlines embedded example decks via `srcdoc` (there is no disk
+    // server to answer the iframe's request in preview). Single-file
+    // mode has no `_quarto.yml`, hence no project resources.
+    let resource_html_files = match project_root.as_deref() {
+        Some(root) => resolve_project_resource_html(root, &NativeRuntime::new()),
+        None => Vec::new(),
+    };
+    info!(
+        resource_html_count = resource_html_files.len(),
+        "resolved resources-scoped .html for VFS sync"
+    );
+
     let config = PreviewConfig {
         host,
         port,
@@ -158,6 +176,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
         // passthrough engine via the integration-test surface.
         engine_registry: None,
         engine_policy,
+        resource_html_files,
         // Phase C.7: derive the capture cache dir from `data_dir`
         // (per-session; tracked as a follow-up for per-project reuse).
         cache_dir: None,

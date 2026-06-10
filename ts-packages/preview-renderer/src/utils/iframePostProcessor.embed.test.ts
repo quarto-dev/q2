@@ -78,7 +78,48 @@ describe('postProcessIframe: embedded-example iframe inlining (bd-kjrpya2d)', ()
     iframe.remove();
   });
 
-  it('leaves a non-/.quarto/ iframe src untouched', () => {
+  it('inlines a page-relative `/examples/...` src from the VFS source path', () => {
+    // The embed feature (bd-z1smhvuo, commit 867aa7c1 "page-relative
+    // iframe src") emits the deck `src` as a site-root-relative path,
+    // NOT artifact-rooted. In preview there is no server to answer
+    // `/examples/...`, so we strip the leading slash and read the deck
+    // from its VFS source path (synced in by bd-kjrpya2d part 2).
+    const DECK = '<!doctype html><html><body><div class="reveal">deck</div></body></html>';
+    mockRead.mockImplementation((path: string) =>
+      path === 'examples/presentations/03-fragments/slides.html'
+        ? { success: true, content: DECK }
+        : { success: false },
+    );
+
+    const iframe = makeIframe(
+      `<iframe id="f" class="embed-example-iframe" src="/examples/presentations/03-fragments/slides.html"></iframe>`,
+    );
+    postProcessIframe(iframe, { currentFilePath: 'presentations/revealjs/index.qmd' });
+
+    const inner = iframe.contentDocument!.querySelector('#f') as HTMLIFrameElement;
+    expect(inner.getAttribute('src')).toBeNull();
+    expect(inner.getAttribute('srcdoc')).toBe(DECK);
+    // Literal path tried first (misses), then leading-slash-stripped source.
+    expect(mockRead).toHaveBeenCalledWith('/examples/presentations/03-fragments/slides.html');
+    expect(mockRead).toHaveBeenCalledWith('examples/presentations/03-fragments/slides.html');
+    iframe.remove();
+  });
+
+  it('leaves a page-relative src untouched when it is not in the VFS', () => {
+    // Read-success is the safety gate: a root-relative iframe that does
+    // NOT resolve in the VFS genuinely needs a network load and must
+    // not be clobbered.
+    mockRead.mockReturnValue({ success: false });
+    const iframe = makeIframe(`<iframe id="f" src="/not/in/vfs.html"></iframe>`);
+    postProcessIframe(iframe, { currentFilePath: 'index.qmd' });
+
+    const inner = iframe.contentDocument!.querySelector('#f') as HTMLIFrameElement;
+    expect(inner.getAttribute('srcdoc')).toBeNull();
+    expect(inner.getAttribute('src')).toBe('/not/in/vfs.html');
+    iframe.remove();
+  });
+
+  it('leaves an external (http/https) iframe src untouched', () => {
     mockRead.mockReturnValue({ success: false });
     const iframe = makeIframe(`<iframe id="f" src="https://example.com/x.html"></iframe>`);
     postProcessIframe(iframe, { currentFilePath: 'index.qmd' });
@@ -86,6 +127,8 @@ describe('postProcessIframe: embedded-example iframe inlining (bd-kjrpya2d)', ()
     const inner = iframe.contentDocument!.querySelector('#f') as HTMLIFrameElement;
     expect(inner.getAttribute('src')).toBe('https://example.com/x.html');
     expect(inner.getAttribute('srcdoc')).toBeNull();
+    // A non-root-relative src is never read from the VFS at all.
+    expect(mockRead).not.toHaveBeenCalledWith('https://example.com/x.html');
     iframe.remove();
   });
 

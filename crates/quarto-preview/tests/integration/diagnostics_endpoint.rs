@@ -58,6 +58,7 @@ async fn boot_server_for_test() -> (
         spa_dir_override: None,
         engine_registry: None,
         engine_policy: Default::default(),
+        resource_html_files: Vec::new(),
         cache_dir: None,
     };
 

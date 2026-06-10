@@ -82,6 +82,13 @@ pub struct PreviewConfig {
     /// start via [`config::read_engine_policy_from_project`]; tests
     /// substitute directly.
     pub engine_policy: EnginePolicy,
+    /// Resources-scoped `.html` files (project-root-relative) to carry
+    /// into the VFS as text, so the preview iframe post-processor can
+    /// inline embedded example decks via `srcdoc` (bd-kjrpya2d). The CLI
+    /// resolves this once at session start via
+    /// [`config::resolve_project_resource_html`]; tests leave it empty.
+    /// Empty for single-file mode (no `_quarto.yml`, so no `resources:`).
+    pub resource_html_files: Vec<PathBuf>,
     /// Directory for the Phase C.7 capture filesystem cache. When
     /// `None`, the cache lives at `<data_dir>/captures/` — same
     /// per-session lifetime as `data_dir` itself. Tests substitute a
@@ -256,6 +263,10 @@ fn build_hub_config(config: &PreviewConfig) -> HubConfig {
         // bd-tnm3k: forward single-file mode to the hub so discovery
         // and the watcher stay scoped to the one file the user named.
         single_file: config.single_file.clone(),
+        // bd-kjrpya2d: resources-scoped `.html` (embedded example decks)
+        // resolved at session start, carried into the VFS as text so the
+        // preview iframe post-processor can inline them via `srcdoc`.
+        resource_files: config.resource_html_files.clone(),
         // Light periodic sync — the user can Ctrl-C any time, and
         // shutdown does a final sync anyway. 5 seconds is a reasonable
         // crash-resilience window for a *preview* invocation.

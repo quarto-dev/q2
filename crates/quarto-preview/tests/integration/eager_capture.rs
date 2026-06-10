@@ -78,6 +78,7 @@ async fn eager_capture_populates_index_sidecar() {
         spa_dir_override: None,
         engine_registry: Some(registry),
         engine_policy: Default::default(),
+        resource_html_files: Vec::new(),
         cache_dir: None,
     };
 
@@ -171,6 +172,7 @@ async fn prose_only_doc_leaves_sidecar_empty() {
         spa_dir_override: None,
         engine_registry: None,
         engine_policy: Default::default(),
+        resource_html_files: Vec::new(),
         cache_dir: None,
     };
 

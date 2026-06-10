@@ -218,6 +218,9 @@ async fn main() -> anyhow::Result<()> {
         watch_debounce_ms: args.watch_debounce,
         watch_filter: Default::default(),
         single_file: None,
+        // Standalone `hub` server: resources-scoped `.html` sync is a
+        // preview-only concern (bd-kjrpya2d).
+        resource_files: Vec::new(),
         auth_config,
         allow_insecure_auth: args.allow_insecure_auth,
         register_root_ws: true,

@@ -76,6 +76,7 @@ async fn capture_failure_lands_in_sink() {
         spa_dir_override: None,
         engine_registry: Some(registry),
         engine_policy: Default::default(),
+        resource_html_files: Vec::new(),
         cache_dir: None,
     };
 
