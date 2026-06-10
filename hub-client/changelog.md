@@ -22,6 +22,7 @@ be in reverse chronological order (latest first).
 ### 2026-06-10
 
 - [`a7bb7a08`](https://github.com/quarto-dev/q2/commits/a7bb7a08): Upgrade Automerge to 3.2.6, substantially reducing memory usage when loading documents.
+- [`106ea65c`](https://github.com/quarto-dev/q2/commits/106ea65c): Upgrade @playwright/test to 1.60.0 and drop the Node 24.15.0 CI pin (fixes yauzl hang with Node >=24.16).
 - [`867bebaa`](https://github.com/quarto-dev/q2/commits/867bebaa): The q2-debug and editor reveal-deck renderers now draw their reveal.js CSS from the same vendored copy `q2 render` embeds, so deck styling cannot drift between the preview surfaces and rendered output.
 - [`8146aa35`](https://github.com/quarto-dev/q2/commits/8146aa35): KaTeX is now pinned to one exact version (0.16.28) across rendered output (CDN link) and the preview's bundled copy, so math renders identically in both and no longer changes when the CDN's `latest` advances.
 - [`fa2cf019`](https://github.com/quarto-dev/q2/commits/fa2cf019): Opening a document after the sign-in session has expired now cleanly aborts and triggers a silent renewal, instead of opening the document with a randomized collaboration identity.

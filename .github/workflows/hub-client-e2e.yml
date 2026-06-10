@@ -83,24 +83,10 @@ jobs:
           chmod +x tree-sitter-linux-x86
           sudo mv tree-sitter-linux-x86 /usr/local/bin/tree-sitter
 
-      # Node.js and dependencies.
-      #
-      # PINNED to 24.15.0 — do NOT bump to a bare '24' (which floats to
-      # >=24.16). Node 24.16.0 introduced a yauzl stream-destruction
-      # regression that hangs `for await` over `openReadStream`, which
-      # makes `playwright install chromium` hang FOREVER right after the
-      # browser download hits 100% (extraction deadlocks; the job then
-      # burns the full 6h cap). It is fixed in Playwright >= 1.60.0, but
-      # we pin @playwright/test at ^1.50.0 -> 1.58.0. 24.15.0 is the last
-      # Node release before the regression, so it keeps Playwright 1.58 /
-      # Chromium 145 and leaves the visual-regression baselines unchanged.
-      # Refs: microsoft/playwright#40724, fixed by #40747 (PW 1.60.0).
-      # REMOVE this pin once @playwright/test is bumped to >= 1.60.0 (and
-      # regenerate the visual baselines for the newer Chromium then).
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '24.15.0'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install npm dependencies
