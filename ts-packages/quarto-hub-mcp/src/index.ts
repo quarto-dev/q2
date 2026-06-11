@@ -40,6 +40,13 @@ import { RefreshManager } from './auth/refresh-manager.js';
 
 const GOOGLE_ISSUER = 'https://accounts.google.com';
 
+/**
+ * Canonical Quarto Hub sync server — the default when neither
+ * `--server` nor `QUARTO_HUB_SERVER` is given (bd-81cfshmw plan,
+ * resolved question 3: the "easy path" for `q2 mcp` / npx users).
+ */
+export const DEFAULT_SERVER_URL = 'wss://quarto-hub.com/ws';
+
 interface ParsedArgs {
   serverUrl: string;
   readOnly: boolean;
@@ -70,8 +77,11 @@ export function parseRedirectPort(raw: string): number {
   return port;
 }
 
-function parseArgs(argv: string[]): ParsedArgs {
-  let serverUrl = process.env['QUARTO_HUB_SERVER'] ?? '';
+export function parseArgs(
+  argv: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): ParsedArgs {
+  let serverUrl = env['QUARTO_HUB_SERVER'] ?? '';
   let readOnly = false;
   let redirectPort: number | undefined;
 
@@ -89,10 +99,11 @@ function parseArgs(argv: string[]): ParsedArgs {
         process.exit(1);
       }
     } else if (arg === '--help' || arg === '-h') {
-      console.error(`Usage: quarto-hub-mcp --server <url> [--read-only] [--redirect-port <N>]
+      console.error(`Usage: quarto-hub-mcp [--server <url>] [--read-only] [--redirect-port <N>]
 
 Options:
-  --server <url>        Automerge sync server URL (or set QUARTO_HUB_SERVER)
+  --server <url>        Automerge sync server URL (or set QUARTO_HUB_SERVER).
+                        Default: wss://quarto-hub.com/ws
   --read-only           Only expose read tools (no write/create/delete)
   --redirect-port <N>   Fixed loopback port for the sign-in redirect
                         (1024-65535). Omit to let the OS pick one. Set a
@@ -107,8 +118,7 @@ Options:
   }
 
   if (!serverUrl) {
-    console.error('Error: --server <url> or QUARTO_HUB_SERVER is required');
-    process.exit(1);
+    serverUrl = DEFAULT_SERVER_URL;
   }
 
   return { serverUrl, readOnly, redirectPort };
