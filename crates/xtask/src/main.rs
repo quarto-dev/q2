@@ -14,10 +14,12 @@
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
 //! - `build-all`: Fresh-clone build orchestration (npm install + hub-client + Rust workspace)
 //! - `build-trace-viewer`: Build just the trace-viewer SPA
+//! - `build-hub-mcp-bundle`: Build the self-contained hub MCP server bundle
 //! - `stage-doc-examples`: Render `examples/manifest.yml` projects into `docs/examples/`
 
 mod braid_snapshot;
 mod build_all;
+mod build_hub_mcp_bundle;
 mod build_q2_preview_spa;
 mod build_trace_viewer;
 mod create_worktree;
@@ -183,6 +185,10 @@ enum Command {
         #[arg(long)]
         skip_q2_preview_spa_build: bool,
 
+        /// Skip the quarto-sync-client + quarto-hub-mcp package tests.
+        #[arg(long)]
+        skip_hub_mcp_tests: bool,
+
         /// Include hub-client e2e tests (slower, requires browser).
         #[arg(long)]
         e2e: bool,
@@ -215,6 +221,14 @@ enum Command {
     /// build -p quarto-preview` (via `include_dir!`).
     BuildQ2PreviewSpa {},
 
+    /// Build the self-contained hub MCP server bundle.
+    ///
+    /// Produces `ts-packages/quarto-hub-mcp/dist-bundle/` (esbuild) —
+    /// the artifact `q2 mcp` embeds (bd-81cfshmw). A plain `cargo
+    /// build` does NOT refresh it; run this after changing
+    /// quarto-hub-mcp / quarto-sync-client / quarto-automerge-schema.
+    BuildHubMcpBundle {},
+
     /// Fresh-clone build orchestration.
     ///
     /// Runs the full build sequence in dependency order, serving as the source
@@ -224,7 +238,8 @@ enum Command {
     /// 2. hub-client build (includes WASM)
     /// 3. trace-viewer build (if present; Phase 4.3+)
     /// 4. q2-preview-spa build (if present; q2-preview Phase A.4)
-    /// 5. cargo build --workspace
+    /// 5. hub MCP bundle (q2-mcp embed artifact; bd-81cfshmw)
+    /// 6. cargo build --workspace
     BuildAll {
         /// Skip `npm install`.
         #[arg(long)]
@@ -241,6 +256,10 @@ enum Command {
         /// Skip the q2-preview-spa build.
         #[arg(long)]
         skip_q2_preview_spa_build: bool,
+
+        /// Skip the hub MCP bundle build.
+        #[arg(long)]
+        skip_hub_mcp_bundle: bool,
 
         /// Skip the Rust workspace build.
         #[arg(long)]
@@ -296,6 +315,7 @@ fn main() -> Result<()> {
             skip_treesitter_crlf_tests,
             skip_shared_package_tests,
             skip_q2_preview_spa_build,
+            skip_hub_mcp_tests,
             e2e,
             no_deny_warnings,
         } => {
@@ -310,6 +330,7 @@ fn main() -> Result<()> {
                 skip_treesitter_crlf_tests,
                 skip_shared_package_tests,
                 skip_q2_preview_spa_build,
+                skip_hub_mcp_tests,
                 include_e2e: e2e,
                 no_deny_warnings,
             };
@@ -318,11 +339,13 @@ fn main() -> Result<()> {
         Command::StageDocExamples {} => stage_doc_examples::run(),
         Command::BuildTraceViewer {} => build_trace_viewer::run(),
         Command::BuildQ2PreviewSpa {} => build_q2_preview_spa::run(),
+        Command::BuildHubMcpBundle {} => build_hub_mcp_bundle::run(),
         Command::BuildAll {
             skip_npm_install,
             skip_hub_build,
             skip_trace_viewer_build,
             skip_q2_preview_spa_build,
+            skip_hub_mcp_bundle,
             skip_rust_build,
             release,
         } => {
@@ -331,6 +354,7 @@ fn main() -> Result<()> {
                 skip_hub_build,
                 skip_trace_viewer_build,
                 skip_q2_preview_spa_build,
+                skip_hub_mcp_bundle,
                 skip_rust_build,
                 release,
             };

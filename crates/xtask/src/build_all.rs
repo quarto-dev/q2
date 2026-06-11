@@ -27,6 +27,8 @@ pub struct BuildAllConfig {
     pub skip_hub_build: bool,
     /// Skip the trace-viewer build step. No-op until Phase 4.3 lands.
     pub skip_trace_viewer_build: bool,
+    /// Skip the hub MCP bundle build step (q2-mcp embed artifact).
+    pub skip_hub_mcp_bundle: bool,
     /// Skip the q2-preview-spa build step. No-op when the SPA dir is
     /// absent (e.g. branches before bd-hfjj Phase 6).
     pub skip_q2_preview_spa_build: bool,
@@ -42,6 +44,7 @@ impl Default for BuildAllConfig {
             skip_npm_install: false,
             skip_hub_build: false,
             skip_trace_viewer_build: false,
+            skip_hub_mcp_bundle: false,
             skip_q2_preview_spa_build: false,
             skip_rust_build: false,
             release: false,
@@ -63,6 +66,10 @@ pub fn run(config: &BuildAllConfig) -> Result<()> {
         (
             "q2-preview-spa build",
             !config.skip_q2_preview_spa_build && q2_preview_spa_exists(&project_root),
+        ),
+        (
+            "hub MCP bundle build",
+            !config.skip_hub_mcp_bundle && hub_mcp_exists(&project_root),
         ),
         ("Rust workspace build", !config.skip_rust_build),
     ];
@@ -130,6 +137,22 @@ pub fn run(config: &BuildAllConfig) -> Result<()> {
         println!("✓ q2-preview-spa build complete");
     }
 
+    // Step: hub MCP bundle (bd-81cfshmw) — the artifact `q2 mcp`
+    // embeds; must exist before the Rust build that `include_dir!`s it.
+    if !config.skip_hub_mcp_bundle && hub_mcp_exists(&project_root) {
+        step_idx += 1;
+        banner(step_idx, total, "Building hub MCP bundle");
+        let pkg_dir = project_root.join("ts-packages/quarto-hub-mcp");
+        run_command(
+            "npm",
+            &["run", "bundle"],
+            &pkg_dir,
+            None,
+            "hub MCP bundle build failed",
+        )?;
+        println!("✓ hub MCP bundle complete");
+    }
+
     // Step: Rust workspace build
     if !config.skip_rust_build {
         step_idx += 1;
@@ -168,6 +191,13 @@ fn trace_viewer_exists(project_root: &Path) -> bool {
 fn q2_preview_spa_exists(project_root: &Path) -> bool {
     project_root
         .join("q2-preview-spa")
+        .join("package.json")
+        .is_file()
+}
+
+fn hub_mcp_exists(project_root: &Path) -> bool {
+    project_root
+        .join("ts-packages/quarto-hub-mcp")
         .join("package.json")
         .is_file()
 }
