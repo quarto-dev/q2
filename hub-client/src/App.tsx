@@ -50,6 +50,11 @@ async function connectAndLoadContents(
   screenName?: string,
   color?: string,
 ): Promise<{ files: FileEntry[]; contents: Map<string, string> }> {
+  // E2E builds: honour __QUARTO_TEST_ACTOR_ID__ so getActorId() returns a
+  // stable, known value inside the preview iframe. Tree-shaken in production.
+  if (import.meta.env.VITE_E2E === '1') {
+    actorId = (window as any).__QUARTO_TEST_ACTOR_ID__ as string | undefined ?? actorId;
+  }
   const files = await connect(syncServer, indexDocId, actorId, screenName, color);
   const contents = new Map<string, string>();
   for (const file of files) {

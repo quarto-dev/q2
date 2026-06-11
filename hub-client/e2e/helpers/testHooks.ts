@@ -24,10 +24,14 @@
  * ```
  */
 import type * as projectStorage from '../../src/services/projectStorage';
+import type * as projectSet from '../../src/services/projectSetService';
+import type { reconcileIntoConnectedProjectSet } from '../../src/services/projectSetReconciler';
 import type * as wasmRenderer from '../../src/services/wasmRenderer';
 
 export interface QuartoTestHooks {
   projectStorage: typeof projectStorage;
+  projectSet: typeof projectSet;
+  reconcileProjectSet: typeof reconcileIntoConnectedProjectSet;
   wasmRenderer: typeof wasmRenderer;
 }
 
