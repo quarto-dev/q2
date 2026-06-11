@@ -35,9 +35,13 @@ export class McpTestClient {
 
   /**
    * Start the MCP server process with the given arguments.
+   *
+   * `entry` overrides the server entry point (default: the tsc build
+   * at dist/index.js) — used by bundle tests to drive the esbuild
+   * artifact from outside the repo tree.
    */
-  async start(args: string[]): Promise<void> {
-    this.proc = spawn('node', [SERVER_ENTRY, ...args], {
+  async start(args: string[], opts?: { entry?: string }): Promise<void> {
+    this.proc = spawn('node', [opts?.entry ?? SERVER_ENTRY, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
