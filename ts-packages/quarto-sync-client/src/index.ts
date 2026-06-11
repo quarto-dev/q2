@@ -46,7 +46,7 @@ export type {
 } from './types.js';
 
 // Export sync client
-export { createSyncClient } from './client.js';
+export { createSyncClient, PeerUnavailableError } from './client.js';
 export type { SyncClient } from './client.js';
 
 // Injectable diagnostic-log sink (bd-sl4o01y0): stdio hosts (hub-mcp)

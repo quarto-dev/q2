@@ -25,7 +25,17 @@ export interface TestHub {
   stop(): Promise<void>;
 }
 
-export async function startTestHub(): Promise<TestHub> {
+export interface TestHubOptions {
+  /**
+   * When false, `/health` still answers but every websocket upgrade is
+   * destroyed — models a hub whose sync endpoint is unreachable, for
+   * requireOnline tests (bd-xnmd5ni1).
+   */
+  acceptWs?: boolean;
+}
+
+export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> {
+  const acceptWs = opts.acceptWs ?? true;
   const httpServer = http.createServer((req, res) => {
     if (req.url === '/health') {
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -38,7 +48,7 @@ export async function startTestHub(): Promise<TestHub> {
 
   const wss = new WebSocketServer({ noServer: true });
   httpServer.on('upgrade', (req, socket, head) => {
-    if (req.url === '/ws') {
+    if (acceptWs && req.url === '/ws') {
       wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
     } else {
       socket.destroy();

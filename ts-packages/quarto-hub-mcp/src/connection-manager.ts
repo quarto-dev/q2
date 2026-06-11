@@ -120,6 +120,13 @@ function toHttpUrl(wsUrl: URL): URL {
 // ConnectionManager
 // ---------------------------------------------------------------------------
 
+/**
+ * Peer-wait budget for connect/create (bd-xnmd5ni1). Generous because
+ * the authenticated path runs several HTTP round-trips (health probe,
+ * /auth/actor, possibly a token refresh) before the websocket joins.
+ */
+const PEER_TIMEOUT_MS = 15_000;
+
 export class ConnectionManager {
   private readonly serverUrl: string;
   private readonly serverUrlParsed: URL;
@@ -196,15 +203,16 @@ export class ConnectionManager {
     const client = this.syncClientFactory(callbacks);
     // Pass auth iff we resolved a Bearer; otherwise the sync-client
     // uses the browser adapter (no header).
-    await client.connect(
-      this.serverUrl,
-      indexDocId,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
+    await client.connect(this.serverUrl, indexDocId, undefined, undefined, undefined, {
       auth,
-    );
+      // Server-backed client with memory storage: offline mode would
+      // be a silent data black hole — demand a live peer or fail
+      // loudly (bd-xnmd5ni1). The budget covers the auth round-trips
+      // (health probe, actor fetch, token refresh) that made the old
+      // 1 ms default lose deterministically.
+      requireOnline: true,
+      peerTimeoutMs: PEER_TIMEOUT_MS,
+    });
 
     const state: ProjectState = { client, files };
     this.projects.set(indexDocId, state);
@@ -246,6 +254,10 @@ export class ConnectionManager {
         contentType: 'text' as const,
       })),
       auth,
+      // See connect(): online-or-error, never a silent offline project
+      // that dies with the process (bd-xnmd5ni1).
+      requireOnline: true,
+      peerTimeoutMs: PEER_TIMEOUT_MS,
     });
 
     const state: ProjectState = { client, files: tempFiles };

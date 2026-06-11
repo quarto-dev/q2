@@ -227,6 +227,15 @@ export interface ConnectOptions {
    * handshake queue cannot stall).
    */
   peerTimeoutMs?: number;
+  /**
+   * Fail instead of falling back to offline mode when the peer wait
+   * times out (bd-xnmd5ni1): `connect` then rejects with
+   * `PeerUnavailableError`. For server-backed callers with memory
+   * storage (the hub MCP server), offline mode persists nothing —
+   * silent fallback is a data black hole. Default false (browser
+   * offline-first behavior unchanged).
+   */
+  requireOnline?: boolean;
   /** Storage backing for this connection. Default `'indexeddb'`. */
   storage?: StorageKind;
   /**
@@ -291,6 +300,12 @@ export interface CreateProjectOptions {
    * the background-sync race against `waitForServerDocuments`.
    */
   peerTimeoutMs?: number;
+  /**
+   * Fail instead of creating the project in offline mode when the
+   * peer wait times out — rejects with `PeerUnavailableError`. See
+   * {@link ConnectOptions.requireOnline} (bd-xnmd5ni1).
+   */
+  requireOnline?: boolean;
   /** Storage backing for this connection. Default `'indexeddb'`. */
   storage?: StorageKind;
   /** WebSocket adapter retry interval (ms). See {@link ConnectOptions}. */

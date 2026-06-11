@@ -48,6 +48,22 @@ import { computeSHA256 } from './hash.js';
 import { syncLog } from './log.js';
 
 /**
+ * The sync server could not be reached within the peer-wait budget
+ * and the caller demanded a live connection (`requireOnline: true`).
+ * See bd-xnmd5ni1.
+ */
+export class PeerUnavailableError extends Error {
+  override readonly name = 'PeerUnavailableError';
+  constructor(serverUrl: string, timeoutMs: number, cause?: unknown) {
+    super(
+      `no peer connection to ${serverUrl} within ${timeoutMs} ms; ` +
+        'refusing to continue offline (requireOnline is set)',
+    );
+    if (cause !== undefined) (this as { cause?: unknown }).cause = cause;
+  }
+}
+
+/**
  * Build the WebSocket adapter for a sync connection. With `auth` set,
  * we lazily import the Node adapter (which depends on `ws`) so browser
  * bundles never pull it in. Without `auth`, the upstream browser
@@ -510,6 +526,13 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         syncLog('Peer connected - online mode');
         isOnline = true;
       } catch (peerError) {
+        if (options.requireOnline) {
+          // Tear down the adapter's reconnect loop before failing —
+          // the caller asked for online-or-error, not a background
+          // retry it can't observe.
+          await disconnect();
+          throw new PeerUnavailableError(syncServerUrl, peerTimeoutMs, peerError);
+        }
         console.warn('Peer connection failed, continuing in offline mode:', peerError);
         isOnline = false;
       }
@@ -957,6 +980,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         syncLog('Peer connected - online mode');
         isOnline = true;
       } catch (peerError) {
+        if (options.requireOnline) {
+          await disconnect();
+          throw new PeerUnavailableError(
+            options.syncServer,
+            options.peerTimeoutMs ?? 1,
+            peerError,
+          );
+        }
         console.warn('Peer connection failed, creating project in offline mode:', peerError);
         isOnline = false;
       }
