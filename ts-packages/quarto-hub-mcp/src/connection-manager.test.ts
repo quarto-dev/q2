@@ -106,7 +106,12 @@ function seededAuth(opts?: { initialToken?: string }): SeededAuth {
 
 interface SyncClientCallSpy {
   factory: (cbs: SyncClientCallbacks) => SyncClient;
-  connectCalls: Array<{ url: string; indexDocId: string; auth: unknown }>;
+  connectCalls: Array<{
+    url: string;
+    indexDocId: string;
+    auth: unknown;
+    options: Record<string, unknown>;
+  }>;
   createCalls: Array<{ url: string; auth: unknown }>;
 }
 
@@ -122,10 +127,22 @@ function spySyncClientFactory(): SyncClientCallSpy {
           _actorId?: string,
           _screenName?: string,
           _color?: string,
-          _peerTimeoutMs?: number,
-          auth?: unknown,
+          peerTimeoutMsOrOptions?: number | Record<string, unknown>,
+          positionalAuth?: unknown,
         ) => {
-          connectCalls.push({ url: syncServerUrl, indexDocId, auth });
+          // The manager passes the ConnectOptions bag (auth +
+          // requireOnline + peerTimeoutMs, bd-xnmd5ni1); the legacy
+          // positional auth is still captured for contract coverage.
+          const options =
+            typeof peerTimeoutMsOrOptions === 'object' && peerTimeoutMsOrOptions !== null
+              ? peerTimeoutMsOrOptions
+              : {};
+          connectCalls.push({
+            url: syncServerUrl,
+            indexDocId,
+            auth: (options as { auth?: unknown }).auth ?? positionalAuth,
+            options,
+          });
           // Pretend a file came in so callbacks don't choke.
           cbs.onFileAdded?.('test.qmd', { type: 'text', text: '' });
           return [];
@@ -277,6 +294,9 @@ describe('ConnectionManager with creds', () => {
     await expect(passed!.getBearer()).resolves.toBe('initial-id-token');
     expect(auth.getValid).toHaveBeenCalled();
     expect(mgr.lastObservedAuthMode()).toBe('requires-auth');
+    // Server-backed clients demand a live peer (bd-xnmd5ni1).
+    expect(sync.connectCalls[0]!.options['requireOnline']).toBe(true);
+    expect(sync.connectCalls[0]!.options['peerTimeoutMs']).toBeGreaterThan(1000);
   });
 
   it('handles 401-then-refresh-then-200 with one extra probe', async () => {
