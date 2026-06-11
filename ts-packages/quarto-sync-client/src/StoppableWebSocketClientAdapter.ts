@@ -26,8 +26,25 @@
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 import type { PeerId, PeerMetadata } from '@automerge/automerge-repo/slim';
 
+import { syncLog } from './log.js';
+
 export class StoppableWebSocketClientAdapter extends BrowserWebSocketClientAdapter {
   #stopped = false;
+
+  /**
+   * Upstream's `onError` rethrows any node error that isn't
+   * ECONNREFUSED — but a throw inside an event callback can't reach a
+   * caller; it becomes an uncaughtException and kills the host
+   * process (bd-xzspx4r9: the hub MCP server died on a mid-handshake
+   * 'socket hang up'). Recovery is the close/retry machinery's job;
+   * here we only record the diagnostic.
+   */
+  override onError = (event: unknown): void => {
+    const err = (event as { error?: { code?: string; message?: string } }).error;
+    syncLog(
+      `WebSocket error (will retry): ${err?.code ?? 'unknown'} ${err?.message ?? ''}`.trim(),
+    );
+  };
 
   override connect(peerId: PeerId, peerMetadata?: PeerMetadata): void {
     if (this.#stopped) return;

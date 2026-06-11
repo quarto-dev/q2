@@ -29,6 +29,7 @@ import type {
 // to the same module, but the headers option is not portable to a
 // browser `WebSocket`. This adapter is Node-only by design.
 import WebSocket from 'ws';
+import { syncLog } from './log.js';
 
 const ProtocolV1 = '1';
 const READY_TIMEOUT_MS = 1000;
@@ -229,13 +230,17 @@ export class NodeWebSocketClientAdapter extends NetworkAdapter {
   };
 
   private readonly onError = (event: unknown): void => {
+    // Never throw here: an exception inside an event callback cannot
+    // reach any caller — it becomes an uncaughtException and kills the
+    // host process (bd-xzspx4r9). Log (redacted — defensive, `ws`
+    // doesn't currently put Authorization material here) and let the
+    // close/retry machinery recover.
     const ev = event as { error?: { code?: string; message?: string } };
-    if (ev.error && ev.error.code !== 'ECONNREFUSED') {
-      // Re-throw with redacted message so an Authorization-bearing
-      // string (defensive — `ws` doesn't currently put one here) does
-      // not propagate to user log sinks.
-      throw new Error(redactAuthorization(ev.error.message ?? 'WebSocket error'));
-    }
+    syncLog(
+      `WebSocket error (will retry): ${ev.error?.code ?? 'unknown'} ${redactAuthorization(
+        ev.error?.message ?? '',
+      )}`.trim(),
+    );
   };
 
   private removeListeners(socket: WebSocketLike): void {
