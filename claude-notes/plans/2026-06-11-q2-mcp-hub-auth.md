@@ -402,11 +402,55 @@ behavior) when driving sessions by hand.
 
 ### Phase 3 — auth + hub e2e through the launcher
 
-- [ ] Tests: against a local auth-enabled hub (reusing
-      `crates/quarto-hub/tests/auth_bearer.rs` setup patterns):
-      `authenticate` round-trip through `q2 mcp`, keyring reuse across
-      launcher/npx channels (same credential visible to both), 401 →
-      refresh path unaffected by the launcher.
+Shape (settled 2026-06-11 after reading the existing infra): the TS
+auth tests are unit-level with injected seams (mock keyring, mock
+oauth4webapi, no MCP server) and `auth_bearer.rs` shows the hub
+accepts a plain-http in-process mock OIDC issuer. The missing piece is
+a full-stack e2e: real hub binary + real `q2` launcher + real loopback
+listener + real OS keyring + mock IdP minting real RS256 JWTs. Two
+production gaps block it, both sound changes in their own right:
+
+- [x] `QUARTO_HUB_MCP_ISSUER` env override (default stays Google);
+      http issuers loopback-only + `QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH=1`;
+      7 unit tests for the resolution matrix.
+- [x] `allowInsecureRequests` threaded through discovery, code
+      exchange, refresh (derived from the discovered issuer).
+- [x] Hub-side counterpart (not in the original list — discovered
+      necessary): `AuthConfig::new` gains `allow_insecure_issuer`
+      (wired to `--allow-insecure-auth`, loopback-only); discovery's
+      `jwks_uri` allowance derives from the gated issuer. 5 unit
+      tests; all 267 quarto-hub tests pass.
+- [x] E2E (`src/e2e-auth.test.ts` + `src/test-idp.ts`): full stack —
+      mock IdP minting real RS256 JWTs, real hub binary, real loopback
+      (test scrapes the stderr sign-in URL and plays the browser; fake
+      `open` shim), real OS keyring, both channels. Asserts the
+      sign-in-required gate, authenticate round-trip (1 code
+      exchange), Bearer-ws create/read, forced refresh grants (45s
+      TTL), cross-process keyring reuse WITHOUT re-auth, clear+revoke.
+      Channel B uses the real `q2 mcp` launcher when its embed's
+      gitCommit == HEAD (else dist fallback + loud notice — `builtAt`
+      nondeterminism makes byte-equality gating flaky). Verified both
+      ways on 2026-06-11: dist fallback, then real launcher after
+      `cargo xtask build-hub-mcp-bundle && cargo build --bin q2`.
+
+**Phase 3 discoveries — the e2e caught two product bugs no seam-mocked
+unit test could reach (both fixed TDD, strands closed):**
+
+- **bd-xnmd5ni1**: the MCP server silently created projects in
+  *offline mode with in-memory storage* — `create_project` returned an
+  indexDocId for documents that existed only in process memory
+  (sync-client's 1 ms peer-wait default + silent offline fallback;
+  auth's HTTP round-trips lose that race deterministically; hub audit
+  log showed ws `auth_ok` while the client logged "creating project in
+  offline mode"). Fix: `requireOnline` option in sync-client (typed
+  `PeerUnavailableError`, adapter teardown, browser defaults locked by
+  test) + hub-mcp passes it with a 15 s budget on connect/create.
+- **bd-xzspx4r9**: any ws socket error except ECONNREFUSED (e.g.
+  mid-handshake `socket hang up`) crashed the whole MCP server —
+  upstream automerge-repo's `onError` *rethrows* inside the event
+  callback → uncaughtException → exit(1); both our adapters inherited/
+  copied the pattern. Fix: log-and-let-retry, never throw. Upstream
+  issue still to file (Phase 4 item).
 - [x] Default `--server` URL (`wss://quarto-hub.com/ws`, resolved
       open question 3) added in the TS server: flag > env > default
       resolution, the "--server is required" error removed, parseArgs
