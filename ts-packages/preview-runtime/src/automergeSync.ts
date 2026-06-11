@@ -22,7 +22,7 @@ import {
   type FilePayload,
 } from '@quarto/quarto-sync-client';
 
-import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm, type ProjectFile } from './wasmRenderer';
+import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClearAsync, initWasm, type ProjectFile } from './wasmRenderer';
 
 // Re-export types for use in other components
 export type { Patch, EditorContentChange, FileEntry, ActorIdentity, CaptureRef, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult };
@@ -150,7 +150,7 @@ function ensureClient(): SyncClient {
  */
 export async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string, peerTimeoutMs?: number): Promise<FileEntry[]> {
   await initWasm();
-  vfsClear();
+  await vfsClearAsync();
 
   return ensureClient().connect(syncServerUrl, indexDocId, actorId, screenName, color, peerTimeoutMs);
 }
@@ -159,7 +159,7 @@ export async function connect(syncServerUrl: string, indexDocId: string, actorId
  * Disconnect from the sync server.
  */
 export async function disconnect(): Promise<void> {
-  vfsClear();
+  await vfsClearAsync();
   if (client) {
     await client.disconnect();
   }
@@ -271,7 +271,7 @@ export async function createNewProject(
   resolveActorId?: (indexDocId: string) => Promise<string | null | undefined>,
 ): Promise<CreateProjectResult> {
   await initWasm();
-  vfsClear();
+  await vfsClearAsync();
 
   return ensureClient().createNewProject(options, actorId, screenName, color, resolveActorId);
 }

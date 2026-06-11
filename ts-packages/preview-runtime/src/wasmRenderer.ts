@@ -281,11 +281,25 @@ export function vfsListFiles(): VfsResponse {
 }
 
 /**
- * Clear all files from the virtual filesystem
+ * Clear all files from the virtual filesystem.
+ *
+ * Prefer {@link vfsClearAsync} at call sites that may race with an
+ * in-flight render (connect, disconnect, project switch). Direct
+ * `vfsClear()` is fine in synchronous teardown / test setup where no
+ * render can be running.
  */
 export function vfsClear(): VfsResponse {
   const wasm = getWasm();
   return JSON.parse(wasm.vfs_clear());
+}
+
+/**
+ * Queue-safe vfsClear. Waits for any in-flight render to complete
+ * before clearing so a project switch or reconnect never wipes VFS
+ * state from underneath an active render.
+ */
+export function vfsClearAsync(): Promise<void> {
+  return enqueueRender(async () => { vfsClear(); });
 }
 
 /**
@@ -401,6 +415,23 @@ let renderListener: RenderListener | null = null;
 
 export function setRenderListener(listener: RenderListener | null): void {
   renderListener = listener;
+}
+
+// Serial queue — ensures renders and VFS clears are never concurrent.
+// The WASM render pipeline is non-reentrant w.r.t. VFS state: it reads
+// project files and writes artifact files (styles.css, etc.) during a
+// single async call. Because render_page_in_project_with_attribution is
+// a Rust `async fn`, it yields the JS event loop at internal await points,
+// so two overlapping render calls share VFS state in undefined ways.
+// Serialising here is the minimal correct fix: each call waits for the
+// previous one to finish before it starts. The tail swallows errors so a
+// failed render does not permanently jam the queue.
+let _renderSerial: Promise<void> = Promise.resolve();
+
+function enqueueRender<T>(fn: () => Promise<T>): Promise<T> {
+  const next = _renderSerial.then(fn);
+  _renderSerial = next.then(() => {}, () => {});
+  return next;
 }
 
 /**
@@ -1095,18 +1126,20 @@ export function _resetUserGrammarCacheForTest(): void {
  *
  * @param options - Render options with required documentPath
  */
-export async function renderToHtml(
+export function renderToHtml(
   options: RenderToHtmlOptions
 ): Promise<RenderResult> {
-  const result = await renderToHtmlInner(options);
-  if (renderListener) {
-    try {
-      renderListener(result, options);
-    } catch (err) {
-      console.warn('[renderToHtml] render listener threw; ignoring:', err);
+  return enqueueRender(async () => {
+    const result = await renderToHtmlInner(options);
+    if (renderListener) {
+      try {
+        renderListener(result, options);
+      } catch (err) {
+        console.warn('[renderToHtml] render listener threw; ignoring:', err);
+      }
     }
-  }
-  return result;
+    return result;
+  });
 }
 
 async function renderToHtmlInner(

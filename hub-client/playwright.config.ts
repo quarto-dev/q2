@@ -36,7 +36,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   // 1 retry locally handles peer-connection timing races without requiring
   // a manual re-run. CI gets 2 for its more variable network conditions.
-  retries: process.env.CI ? 3 : 1,
+  retries: process.env.CI ? 2 : 1,
   // Parallel workers. Match the runner's CPU count: ubuntu-latest has
   // 2 cores. Running more workers than cores causes the WASM render
   // pipeline to stall under contention and individual tests miss the
