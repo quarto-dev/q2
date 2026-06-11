@@ -82,8 +82,8 @@ impl AuthConfig {
         // IdP is never acceptable.
         let parsed = url::Url::parse(&issuer)
             .map_err(|e| format!("Malformed OIDC issuer URL '{issuer}': {e}"))?;
-        let http_loopback = parsed.scheme() == "http"
-            && parsed.host_str().is_some_and(is_loopback_host);
+        let http_loopback =
+            parsed.scheme() == "http" && parsed.host_str().is_some_and(is_loopback_host);
         if !(parsed.scheme() == "https" || (http_loopback && allow_insecure_issuer)) {
             if parsed.scheme() == "http" && !http_loopback && allow_insecure_issuer {
                 return Err(format!(
@@ -1214,21 +1214,33 @@ mod tests {
             issuer: "http://127.0.0.1:9001".to_string(),
             jwks_uri: "http://127.0.0.1:9001/jwks".to_string(),
         };
-        let ok = validate_discovery_document(&doc, "http://127.0.0.1:9001", "http://127.0.0.1:9001/.well-known/openid-configuration");
+        let ok = validate_discovery_document(
+            &doc,
+            "http://127.0.0.1:9001",
+            "http://127.0.0.1:9001/.well-known/openid-configuration",
+        );
         assert!(ok.is_ok(), "{ok:?}");
 
         let doc_https_issuer = OidcDiscoveryDocument {
             issuer: "https://idp.example.com".to_string(),
             jwks_uri: "http://127.0.0.1:9001/jwks".to_string(),
         };
-        let bad = validate_discovery_document(&doc_https_issuer, "https://idp.example.com", "https://idp.example.com/.well-known/openid-configuration");
+        let bad = validate_discovery_document(
+            &doc_https_issuer,
+            "https://idp.example.com",
+            "https://idp.example.com/.well-known/openid-configuration",
+        );
         assert!(bad.is_err());
 
         let doc_remote_jwks = OidcDiscoveryDocument {
             issuer: "http://127.0.0.1:9001".to_string(),
             jwks_uri: "http://jwks.example.com/jwks".to_string(),
         };
-        let bad2 = validate_discovery_document(&doc_remote_jwks, "http://127.0.0.1:9001", "http://127.0.0.1:9001/.well-known/openid-configuration");
+        let bad2 = validate_discovery_document(
+            &doc_remote_jwks,
+            "http://127.0.0.1:9001",
+            "http://127.0.0.1:9001/.well-known/openid-configuration",
+        );
         assert!(bad2.is_err());
     }
 
