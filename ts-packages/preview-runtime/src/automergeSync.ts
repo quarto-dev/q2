@@ -150,7 +150,10 @@ function ensureClient(): SyncClient {
  */
 export async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string, peerTimeoutMs?: number): Promise<FileEntry[]> {
   await initWasm();
+  const t0 = Date.now();
   await vfsClearAsync();
+  const waited = Date.now() - t0;
+  if (waited > 10) console.warn(`[exp/connect] vfsClearAsync waited ${waited}ms`);
 
   return ensureClient().connect(syncServerUrl, indexDocId, actorId, screenName, color, peerTimeoutMs);
 }
@@ -159,7 +162,10 @@ export async function connect(syncServerUrl: string, indexDocId: string, actorId
  * Disconnect from the sync server.
  */
 export async function disconnect(): Promise<void> {
+  const t0 = Date.now();
   await vfsClearAsync();
+  const waited = Date.now() - t0;
+  if (waited > 10) console.warn(`[exp/disconnect] vfsClearAsync waited ${waited}ms`);
   if (client) {
     await client.disconnect();
   }
@@ -271,7 +277,10 @@ export async function createNewProject(
   resolveActorId?: (indexDocId: string) => Promise<string | null | undefined>,
 ): Promise<CreateProjectResult> {
   await initWasm();
+  const t0 = Date.now();
   await vfsClearAsync();
+  const waited = Date.now() - t0;
+  if (waited > 10) console.warn(`[exp/createNewProject] vfsClearAsync waited ${waited}ms`);
 
   return ensureClient().createNewProject(options, actorId, screenName, color, resolveActorId);
 }

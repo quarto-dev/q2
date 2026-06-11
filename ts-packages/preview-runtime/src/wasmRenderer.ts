@@ -427,9 +427,21 @@ export function setRenderListener(listener: RenderListener | null): void {
 // previous one to finish before it starts. The tail swallows errors so a
 // failed render does not permanently jam the queue.
 let _renderSerial: Promise<void> = Promise.resolve();
+let _renderQueueDepth = 0;
 
 function enqueueRender<T>(fn: () => Promise<T>): Promise<T> {
-  const next = _renderSerial.then(fn);
+  const enqueuedAt = Date.now();
+  const depthAtEnqueue = _renderQueueDepth++;
+  const next = _renderSerial.then(() => {
+    const waited = Date.now() - enqueuedAt;
+    if (depthAtEnqueue > 0) {
+      console.warn(`[exp/renderQueue] render queued behind ${depthAtEnqueue}, waited ${waited}ms`);
+    } else if (waited > 5) {
+      console.warn(`[exp/renderQueue] render started after ${waited}ms (no queue depth but some wait)`);
+    }
+    _renderQueueDepth--;
+    return fn();
+  });
   _renderSerial = next.then(() => {}, () => {});
   return next;
 }
