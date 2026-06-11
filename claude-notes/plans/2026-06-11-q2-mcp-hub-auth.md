@@ -407,8 +407,10 @@ behavior) when driving sessions by hand.
       `authenticate` round-trip through `q2 mcp`, keyring reuse across
       launcher/npx channels (same credential visible to both), 401 →
       refresh path unaffected by the launcher.
-- [ ] Default `--server` URL (`wss://quarto-hub.com/ws`, resolved
-      open question 3) added in the TS server with its own test.
+- [x] Default `--server` URL (`wss://quarto-hub.com/ws`, resolved
+      open question 3) added in the TS server: flag > env > default
+      resolution, the "--server is required" error removed, parseArgs
+      env-injectable, 4 unit tests, usage text updated.
 
 ### Phase 4 — docs, publishing, verification
 
