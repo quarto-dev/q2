@@ -118,6 +118,7 @@ async fn run_hub(args: HubArgs) -> Result<()> {
                 args.oidc_image_domains,
                 args.allowed_emails,
                 args.allowed_domains,
+                args.allow_insecure_auth,
             )
         })
         .transpose()

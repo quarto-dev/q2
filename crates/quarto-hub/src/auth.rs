@@ -73,11 +73,24 @@ impl AuthConfig {
         image_domains: Vec<String>,
         allowed_emails: Option<Vec<String>>,
         allowed_domains: Option<Vec<String>>,
+        allow_insecure_issuer: bool,
     ) -> Result<Self, String> {
-        // Validate issuer is a well-formed HTTPS URL.
+        // Validate issuer is a well-formed HTTPS URL. Plain http is
+        // accepted only for loopback hosts AND under
+        // `--allow-insecure-auth` (mock IdPs in dev/test — mirrors the
+        // TS client's QUARTO_HUB_MCP_ISSUER gate); a plaintext remote
+        // IdP is never acceptable.
         let parsed = url::Url::parse(&issuer)
             .map_err(|e| format!("Malformed OIDC issuer URL '{issuer}': {e}"))?;
-        if parsed.scheme() != "https" {
+        let http_loopback = parsed.scheme() == "http"
+            && parsed.host_str().is_some_and(is_loopback_host);
+        if !(parsed.scheme() == "https" || (http_loopback && allow_insecure_issuer)) {
+            if parsed.scheme() == "http" && !http_loopback && allow_insecure_issuer {
+                return Err(format!(
+                    "OIDC issuer over plain http is allowed only for loopback hosts \
+                     (got '{issuer}'); use https for remote IdPs"
+                ));
+            }
             return Err(format!(
                 "OIDC issuer must use HTTPS, got '{}'",
                 parsed.scheme()
@@ -367,6 +380,14 @@ struct OidcDiscoveryDocument {
     jwks_uri: String,
 }
 
+/// True for hostnames that resolve to loopback per RFC 6761 — the only
+/// hosts for which a plaintext-http OIDC issuer or JWKS endpoint is
+/// ever acceptable (dev/test mock IdPs under `--allow-insecure-auth`).
+fn is_loopback_host(host: &str) -> bool {
+    let h = host.to_ascii_lowercase();
+    h == "localhost" || h == "127.0.0.1" || h == "::1" || h == "[::1]" || h.ends_with(".localhost")
+}
+
 /// Discover the JWKS URL from the issuer's `/.well-known/openid-configuration`.
 ///
 /// The `issuer` must be a validated HTTPS URL (guaranteed by [`AuthConfig::new()`]).
@@ -407,7 +428,10 @@ pub async fn discover_jwks_url(
 /// Validate an OIDC discovery document against the configured issuer.
 ///
 /// - The document's `issuer` field must match the configured issuer (prevents spoofing).
-/// - The `jwks_uri` must be a well-formed HTTPS URL.
+/// - The `jwks_uri` must be a well-formed HTTPS URL — except when the
+///   configured issuer is itself a (gated, see [`AuthConfig::new()`])
+///   http-loopback URL, in which case an http-loopback `jwks_uri` is
+///   allowed too.
 ///
 /// Returns the `jwks_uri` on success.
 fn validate_discovery_document(
@@ -425,6 +449,17 @@ fn validate_discovery_document(
 
     let jwks_url = url::Url::parse(&doc.jwks_uri)
         .map_err(|e| format!("Malformed JWKS URI '{}': {e}", doc.jwks_uri))?;
+    // The allowance derives from the issuer: it already passed the
+    // loopback + --allow-insecure-auth gate in AuthConfig::new(), so an
+    // http issuer here is evidence of an explicitly-insecure dev setup.
+    let issuer_is_http_loopback = url::Url::parse(configured_issuer)
+        .ok()
+        .is_some_and(|u| u.scheme() == "http" && u.host_str().is_some_and(is_loopback_host));
+    let jwks_is_http_loopback =
+        jwks_url.scheme() == "http" && jwks_url.host_str().is_some_and(is_loopback_host);
+    if issuer_is_http_loopback && jwks_is_http_loopback {
+        return Ok(doc.jwks_uri.clone());
+    }
     if jwks_url.scheme() != "https" {
         return Err(format!(
             "JWKS URI must use HTTPS, got '{}' from {}",
@@ -728,6 +763,7 @@ mod tests {
             vec!["lh3.googleusercontent.com".to_string()],
             emails.map(|v| v.into_iter().map(String::from).collect()),
             domains.map(|v| v.into_iter().map(String::from).collect()),
+            false,
         )
         .unwrap()
     }
@@ -1113,9 +1149,87 @@ mod tests {
             vec![],
             None,
             None,
+            false,
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("OIDC issuer must use HTTPS"));
+    }
+
+    #[test]
+    fn auth_config_rejects_http_non_loopback_issuer_even_with_allowance() {
+        // --allow-insecure-auth never opens the door to a plaintext
+        // *remote* IdP: tokens and JWKS over the open network in http
+        // are not a dev convenience, they are a MITM.
+        let result = AuthConfig::new(
+            "client-id".to_string(),
+            Vec::new(),
+            "http://idp.example.com".to_string(),
+            vec![],
+            None,
+            None,
+            true,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("loopback"));
+    }
+
+    #[test]
+    fn auth_config_rejects_http_loopback_issuer_without_allowance() {
+        let result = AuthConfig::new(
+            "client-id".to_string(),
+            Vec::new(),
+            "http://127.0.0.1:9001".to_string(),
+            vec![],
+            None,
+            None,
+            false,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("OIDC issuer must use HTTPS"));
+    }
+
+    #[test]
+    fn auth_config_accepts_http_loopback_issuer_with_allowance() {
+        // Dev/test parity with the TS client's QUARTO_HUB_MCP_ISSUER
+        // gate: loopback http IdPs (mock issuers) are usable only
+        // under --allow-insecure-auth.
+        let config = AuthConfig::new(
+            "client-id".to_string(),
+            Vec::new(),
+            "http://127.0.0.1:9001".to_string(),
+            vec![],
+            None,
+            None,
+            true,
+        );
+        assert!(config.is_ok());
+    }
+
+    #[test]
+    fn discovery_doc_allows_http_loopback_jwks_only_for_http_loopback_issuer() {
+        // jwks_uri allowance derives from the (already gated) issuer:
+        // an http-loopback issuer may serve an http-loopback jwks_uri;
+        // an https issuer may not smuggle in an http jwks_uri.
+        let doc = OidcDiscoveryDocument {
+            issuer: "http://127.0.0.1:9001".to_string(),
+            jwks_uri: "http://127.0.0.1:9001/jwks".to_string(),
+        };
+        let ok = validate_discovery_document(&doc, "http://127.0.0.1:9001", "http://127.0.0.1:9001/.well-known/openid-configuration");
+        assert!(ok.is_ok(), "{ok:?}");
+
+        let doc_https_issuer = OidcDiscoveryDocument {
+            issuer: "https://idp.example.com".to_string(),
+            jwks_uri: "http://127.0.0.1:9001/jwks".to_string(),
+        };
+        let bad = validate_discovery_document(&doc_https_issuer, "https://idp.example.com", "https://idp.example.com/.well-known/openid-configuration");
+        assert!(bad.is_err());
+
+        let doc_remote_jwks = OidcDiscoveryDocument {
+            issuer: "http://127.0.0.1:9001".to_string(),
+            jwks_uri: "http://jwks.example.com/jwks".to_string(),
+        };
+        let bad2 = validate_discovery_document(&doc_remote_jwks, "http://127.0.0.1:9001", "http://127.0.0.1:9001/.well-known/openid-configuration");
+        assert!(bad2.is_err());
     }
 
     #[test]
@@ -1127,6 +1241,7 @@ mod tests {
             vec![],
             None,
             None,
+            false,
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Malformed"));
@@ -1141,6 +1256,7 @@ mod tests {
             vec![],
             None,
             None,
+            false,
         )
         .unwrap();
         assert_eq!(config.image_domains, vec!["lh3.googleusercontent.com"]);
@@ -1155,6 +1271,7 @@ mod tests {
             vec![],
             None,
             None,
+            false,
         )
         .unwrap();
         assert!(config.image_domains.is_empty());
@@ -1169,6 +1286,7 @@ mod tests {
             vec!["evil.com; script-src 'unsafe-inline'".to_string()],
             None,
             None,
+            false,
         );
         assert!(result.is_err());
     }
@@ -1182,6 +1300,7 @@ mod tests {
             vec![],
             None,
             None,
+            false,
         )
         .unwrap();
         assert_eq!(config.issuer_origin(), "https://login.microsoftonline.com");
@@ -1196,6 +1315,7 @@ mod tests {
             vec![],
             None,
             None,
+            false,
         )
         .unwrap();
         assert_eq!(config.issuer_origin(), "https://auth.example.com:8443");
@@ -1210,6 +1330,7 @@ mod tests {
             vec![],
             None,
             None,
+            false,
         )
         .unwrap();
         let audiences: Vec<&String> = config.audiences().collect();
@@ -1236,6 +1357,7 @@ mod tests {
             vec![],
             None,
             None,
+            false,
         )
         .unwrap();
         assert_eq!(config.provider, OidcProvider::Google);
@@ -1250,6 +1372,7 @@ mod tests {
             vec![],
             None,
             None,
+            false,
         )
         .unwrap();
         assert_eq!(config.provider, OidcProvider::Generic);
@@ -1501,6 +1624,7 @@ mod tests {
             Vec::new(),
             None,
             None,
+            false,
         )
         .unwrap()
     }

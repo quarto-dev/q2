@@ -1597,6 +1597,7 @@ mod tests {
             vec!["lh3.googleusercontent.com".to_string()],
             None,
             None,
+            false,
         )
         .unwrap()
     }
@@ -1618,6 +1619,7 @@ mod tests {
             vec!["graph.microsoft.com".to_string()],
             None,
             None,
+            false,
         )
         .unwrap();
         let csp = build_csp(&config);
@@ -1638,6 +1640,7 @@ mod tests {
             ],
             None,
             None,
+            false,
         )
         .unwrap();
         let csp = build_csp(&config);
@@ -1654,6 +1657,7 @@ mod tests {
             vec![],
             None,
             None,
+            false,
         )
         .unwrap();
         let csp = build_csp(&config);
