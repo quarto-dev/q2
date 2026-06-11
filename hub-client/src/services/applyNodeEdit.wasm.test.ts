@@ -495,3 +495,183 @@ describe('RawBlock round-trip', () => {
         expect(editResult.qmd).toContain('\n\nAfter raw.\n');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Tier-2 round-trips (Plan 2c §3) — container blocks edited as whole-block
+// text-channel replacements. Surrounding paragraphs must be byte-verbatim;
+// the edited block itself may be reformatted by the writer (no byte-identity
+// assertion on the edited block — only content presence).
+//
+// Plan 3's Rust node_edit_tests.rs covers nested-descent correctness; these
+// exercise the complete WASM pipeline (render → pool → edit → apply) for the
+// top-level container types not previously covered.
+// ---------------------------------------------------------------------------
+
+/** Render a content fixture, locate the first block of `blockType`, replace it
+ *  via apply_node_edit with `newQmd`, and return the resulting QMD. */
+async function editFirstBlock(
+    content: string,
+    blockType: string,
+    newQmd: string,
+): Promise<AstResponse> {
+    vfsAddFile(PATH, content);
+    const result: RenderResponse = JSON.parse(
+        await wasm.render_page_in_project_with_attribution(PATH, undefined, null),
+    );
+    expect(result.success, result.error).toBe(true);
+
+    const a_u = JSON.parse(result.untransformed_ast_json!);
+    const pool: any[] = a_u.astContext.p;
+    const block = a_u.blocks.find((b: any) => b.t === blockType);
+    expect(block, `untransformed AST must contain a ${blockType} block`).toBeTruthy();
+    const destSiJson = JSON.stringify(pool[block.s]);
+
+    const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content(newQmd));
+    expect(subtree.success, `parse failed: ${subtree.error}`).toBe(true);
+
+    const editResult: AstResponse = JSON.parse(
+        wasm.apply_node_edit(content, result.untransformed_ast_json!, destSiJson, subtree.ast!),
+    );
+    expect(editResult.success, `apply_node_edit failed: ${editResult.error}`).toBe(true);
+    return editResult;
+}
+
+describe('Div round-trip', () => {
+    it('editing a fenced div preserves surrounding paragraphs byte-verbatim', async () => {
+        const content =
+            '---\nformat: q2-preview\n---\n\nFirst para.\n\n::: {.note}\nDiv body.\n:::\n\nSecond para.\n';
+        const editResult = await editFirstBlock(content, 'Div', '::: {.note}\nEdited div body.\n:::\n');
+        expect(editResult.qmd).toContain('Edited div body.');
+        expect(editResult.qmd).not.toContain('Div body.');
+        expect(editResult.qmd).toContain('First para.\n\n');
+        expect(editResult.qmd).toContain('\n\nSecond para.\n');
+    });
+});
+
+describe('BlockQuote round-trip', () => {
+    it('editing a block quote preserves surrounding paragraphs byte-verbatim', async () => {
+        const content =
+            '---\nformat: q2-preview\n---\n\nFirst para.\n\n> Quoted text.\n\nSecond para.\n';
+        const editResult = await editFirstBlock(content, 'BlockQuote', '> Edited quote.\n');
+        expect(editResult.qmd).toContain('Edited quote.');
+        expect(editResult.qmd).not.toContain('Quoted text.');
+        expect(editResult.qmd).toContain('First para.\n\n');
+        expect(editResult.qmd).toContain('\n\nSecond para.\n');
+    });
+});
+
+describe('BulletList round-trip', () => {
+    it('editing a bullet list preserves surrounding paragraphs byte-verbatim', async () => {
+        const content =
+            '---\nformat: q2-preview\n---\n\nFirst para.\n\n- item one\n- item two\n\nSecond para.\n';
+        // Sibling items may be reformatted — assert only the edited content +
+        // surrounding-paragraph verbatim, per the plan.
+        const editResult = await editFirstBlock(
+            content,
+            'BulletList',
+            '- edited one\n- edited two\n',
+        );
+        expect(editResult.qmd).toContain('edited one');
+        expect(editResult.qmd).toContain('edited two');
+        expect(editResult.qmd).not.toContain('item one');
+        expect(editResult.qmd).toContain('First para.\n\n');
+        expect(editResult.qmd).toContain('\n\nSecond para.\n');
+    });
+});
+
+describe('OrderedList round-trip', () => {
+    it('editing an ordered list preserves surrounding paragraphs byte-verbatim', async () => {
+        const content =
+            '---\nformat: q2-preview\n---\n\nFirst para.\n\n1. item one\n2. item two\n\nSecond para.\n';
+        const editResult = await editFirstBlock(
+            content,
+            'OrderedList',
+            '1. edited one\n2. edited two\n',
+        );
+        expect(editResult.qmd).toContain('edited one');
+        expect(editResult.qmd).toContain('edited two');
+        expect(editResult.qmd).not.toContain('item one');
+        expect(editResult.qmd).toContain('First para.\n\n');
+        expect(editResult.qmd).toContain('\n\nSecond para.\n');
+    });
+});
+
+describe('DefinitionList round-trip', () => {
+    // postprocess.rs always fully rewrites DefinitionList (a desugared form of
+    // Div(.definition-list)), so no byte-identity assertion on the edited block.
+    it('editing a definition list preserves surrounding paragraphs byte-verbatim', async () => {
+        const content =
+            '---\nformat: q2-preview\n---\n\nFirst para.\n\n::: {.definition-list}\n* term 1\n  - definition body\n:::\n\nSecond para.\n';
+        const editResult = await editFirstBlock(
+            content,
+            'DefinitionList',
+            '::: {.definition-list}\n* term 1\n  - edited definition\n:::\n',
+        );
+        expect(editResult.qmd).toContain('edited definition');
+        expect(editResult.qmd).not.toContain('definition body');
+        expect(editResult.qmd).toContain('First para.\n\n');
+        expect(editResult.qmd).toContain('\n\nSecond para.\n');
+    });
+});
+
+describe('Table round-trip', () => {
+    it('editing a GFM table preserves surrounding paragraphs byte-verbatim', async () => {
+        const content =
+            '---\nformat: q2-preview\n---\n\nFirst para.\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\nSecond para.\n';
+        const editResult = await editFirstBlock(
+            content,
+            'Table',
+            '| A | B |\n|---|---|\n| 9 | 8 |\n',
+        );
+        expect(editResult.qmd).toContain('9');
+        expect(editResult.qmd).toContain('8');
+        expect(editResult.qmd).toContain('First para.\n\n');
+        expect(editResult.qmd).toContain('\n\nSecond para.\n');
+    });
+});
+
+describe('Figure round-trip', () => {
+    it('editing a crossref figure preserves surrounding paragraphs byte-verbatim', async () => {
+        const content =
+            '---\nformat: q2-preview\n---\n\nFirst para.\n\n![A caption.](img.png){#fig-foo}\n\nSecond para.\n';
+        const editResult = await editFirstBlock(
+            content,
+            'Figure',
+            '![An edited caption.](img.png){#fig-foo}\n',
+        );
+        expect(editResult.qmd).toContain('An edited caption.');
+        expect(editResult.qmd).not.toContain('A caption.');
+        expect(editResult.qmd).toContain('First para.\n\n');
+        expect(editResult.qmd).toContain('\n\nSecond para.\n');
+    });
+
+    // Exploratory (per plan): record what happens to an id-less image — is the
+    // AST node still a first-class `Figure`, and does it carry a pool ref
+    // (data-block-pool-id, i.e. `.s`)? We don't require either; the test just
+    // documents the observed behavior for future readers.
+    it('records whether an id-less image renders as an editable Figure', async () => {
+        const content =
+            '---\nformat: q2-preview\n---\n\nFirst para.\n\n![A caption.](img.png)\n\nSecond para.\n';
+        vfsAddFile(PATH, content);
+        const result: RenderResponse = JSON.parse(
+            await wasm.render_page_in_project_with_attribution(PATH, undefined, null),
+        );
+        expect(result.success, result.error).toBe(true);
+        const a_u = JSON.parse(result.untransformed_ast_json!);
+        const figure = a_u.blocks.find((b: any) => b.t === 'Figure');
+        const para = a_u.blocks.find(
+            (b: any) => b.t === 'Para' && JSON.stringify(b).includes('img.png'),
+        );
+        // Observed (2026-06-11): an id-less single-image paragraph IS promoted
+        // to a first-class `Figure` AST node (implicit-figure behavior) — the
+        // console line below logs `Figure node present: true`. So the `{#fig-foo}`
+        // id is not required to get a Figure node here; it governs crossref
+        // numbering, not figure-promotion. (If this ever flips, update the note.)
+        // eslint-disable-next-line no-console
+        console.log(
+            `[Figure exploratory] id-less image → Figure node present: ${!!figure}, ` +
+                `Para-with-image present: ${!!para}`,
+        );
+        expect(figure ?? para, 'id-less image must appear somewhere in the AST').toBeTruthy();
+    });
+});

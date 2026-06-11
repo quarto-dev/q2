@@ -24,10 +24,13 @@ export const Figure = (args: NodeArgs<FigureBlock>) => {
 
     const { node, setLocalAst, onNavigateToDocument } = args;
     const [[id, classes], [shortCaption, captionBlocks], bodyBlocks] = node.c;
-    const props: Record<string, string> = {};
+    const props: Record<string, string | number> = {};
     if (id) props.id = id;
     if (classes.length) props.className = classes.join(' ');
-    if (isEditable) props['data-block-pool-id'] = String(poolId);
+    if (isEditable) {
+        props['data-block-pool-id'] = String(poolId);
+        props.tabIndex = -1;
+    }
 
     return (
         <figure {...props}>

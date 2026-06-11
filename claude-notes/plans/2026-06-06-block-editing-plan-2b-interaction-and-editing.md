@@ -3,7 +3,8 @@
 **Date:** 2026-06-06 (revised 2026-06-08: built on Plan 2a's dual-node substrate;
 absorbed the former Plan 5 editability + Plan 6 render-component work;
 revised 2026-06-08b: two-channel API, discriminated payload, editTarget rect, test environments, Pass-2 exact deletions;
-revised 2026-06-09: usePreviewEdit hook for render-component authors; boundary section rewrite; backend guard clarification; isEditTarget + setEditTarget type fixes; hostProps note)
+revised 2026-06-09: usePreviewEdit hook for render-component authors; boundary section rewrite; backend guard clarification; isEditTarget + setEditTarget type fixes; hostProps note;
+**post-execution accuracy note 2026-06-10:** `editTarget` gained `contentHeight` field (see P1); `useEditableBlock.tsx` was created then deleted in Plan 3, which moved all textarea logic to `Block`/`CustomBlock` dispatchers; `reachabilityClass` gate widened to `!== 'Opaque'` in Plan 3; LineBlock and Figure got `data-block-pool-id` in Plan 3.)
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)
 **Spec:** `claude-notes/designs/2026-06-06-block-editing-design.md`
 **Phase:** 2b. Frontend (+ one Rust cleanup: remove `lookup_block` Pass-2).
@@ -31,7 +32,11 @@ is unchanged (±1px). (Overflow scrolls internally; accepted.)
 
 **Sizing mechanism:** `useBlockEditHover` measures the activated element's
 `DOMRect` synchronously in the event handler (before state update) and stores it
-in `editTarget.rect`. `useEditableBlock` reads `editTarget.rect` to size the textarea.
+in `editTarget.rect` (plus a `contentHeight` field — `rect.height` minus padding
+and border — so the textarea fills the content area exactly without reflow even
+when the element has padding/border, e.g. Bootstrap `h2`). `useEditableBlock`
+(later: the `Block` dispatcher — see Plan 3) reads `editTarget.rect` and
+`editTarget.contentHeight` to size the textarea.
 
 **Test environments:** The reflow criterion (sibling top ±1px) requires real
 layout — it is a **Playwright** test in `q2-preview-spa/`. The sizing *logic*
@@ -77,16 +82,23 @@ A node is editable iff `editable(node)` (Plan 2a's structural gate:
 the affordance keys off that. **Editable types** (all `TopLevel`): `Para`,
 `Header`, `CodeBlock`, `RawBlock`, `Table` (Tier-2), and **as a whole**
 `Div`(non-section), `BlockQuote`, `BulletList`, `OrderedList`, `DefinitionList`
-(Tier-2). Container *contents* are gated off until Plan 3. **LineBlock excluded**
-(parses as `Para`). **Custom-rendered nodes** (`Callout`/`Theorem`/`Proof`/
-`FloatRefTarget`) are editable-as-whole too: their `sourceNode` is a plain `Div`
-(writer-covered), so the `custom/` components must also spread
-`data-block-pool-id` and participate — this is the former Plan 5 "editability
-wiring," now just part of 2b.
+(Tier-2). Container *contents* are gated off until Plan 3. **Custom-rendered nodes**
+(`Callout`/`Theorem`/`Proof`/`FloatRefTarget`) are editable-as-whole too: their
+`sourceNode` is a plain `Div` (writer-covered), so the `custom/` components must
+also spread `data-block-pool-id` and participate — this is the former Plan 5
+"editability wiring," now just part of 2b.
+
+**(Plan 3 post-execution update)** The gate was widened from `=== 'TopLevel'` to
+`!== 'Opaque'` in Plan 3, unlocking `Descendable` blocks (nested content). `Figure`
+and `LineBlock` also received `data-block-pool-id` in Plan 3 (Figure was omitted from
+the editable-type list here; LineBlock was incorrectly listed as excluded — note that
+LineBlock is unreachable in the pampa parser currently and would be editable if it
+existed). All textarea substitution was centralized in `Block`/`CustomBlock`
+dispatchers; `useEditableBlock.tsx` was created for Plan 2b then deleted in Plan 3.
 
 **Activation model change:** The per-block `onClick` handlers on Para and Header
 (Plan 1's seed mechanism) are **removed**. `useBlockEditHover` becomes the sole
-activation path — it calls `setEditTarget({ poolId, rect })` on click/press/Enter.
+activation path — it calls `setEditTarget({ poolId, rect, contentHeight })` on click/press/Enter.
 Editable components keep their `editTarget.poolId === myPoolId` check to decide
 when to render the textarea; only the trigger changes.
 
@@ -116,11 +128,13 @@ commitTextEdit:    (destinationSourceInfoJson: string, newText: string) => void;
 commitSubtreeEdit: (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => void;
 ```
 
-**`editTarget` changes type** to carry the measured rect for P1 sizing:
+**`editTarget` changes type** to carry the measured rect and content-area height for P1 sizing:
 
 ```typescript
-editTarget?: { poolId: string | number; rect: DOMRect } | null;
+editTarget?: { poolId: string | number; rect: DOMRect; contentHeight: number } | null;
 ```
+
+(`contentHeight` = `rect.height` minus computed padding and border; the textarea uses this so it fills the content area without reflow even on elements with padding or border.)
 
 **`PreviewNodeEditPayload` becomes a discriminated union** on the wire
 (`types/diagnostic.ts`):
@@ -296,7 +310,7 @@ P1 reflow Playwright test. See
   layer (no `onClick`-only path).
 - [x] `q2-preview/useBlockEditHover.tsx` — delegated pointer handler; outline;
   Pointer-Events progressive press; keyboard (Enter/Esc) activation; measures
-  `DOMRect` at activation and writes `setEditTarget({ poolId, rect })`.
+  `DOMRect` at activation and writes `setEditTarget({ poolId, rect, contentHeight })`.
   *Roving-tabindex arrow navigation, ARIA, and touch OS gesture suppression are
   in Plan 2c.*
 - [x] `PreviewDocument.tsx` — spread the hook's `hostProps` on the root host
@@ -308,9 +322,9 @@ P1 reflow Playwright test. See
 - [x] **`PreviewContext`** — replace `commitEdit(poolId, newText)` with
   `commitTextEdit(destinationSourceInfoJson, newText)` and
   `commitSubtreeEdit(destinationSourceInfoJson, modifiedBlock: BlockNode)`; change
-  `editTarget` type to `{ poolId: string | number; rect: DOMRect } | null`;
+  `editTarget` type to `{ poolId: string | number; rect: DOMRect; contentHeight: number } | null`;
   change `setEditTarget` type to
-  `(target: { poolId: string | number; rect: DOMRect } | null) => void`.
+  `(target: { poolId: string | number; rect: DOMRect; contentHeight: number } | null) => void`.
 - [x] **`types/diagnostic.ts`** — replace `PreviewNodeEditPayload` with the
   `channel`-discriminated union (see "Two edit modalities" above).
 - [x] **`entry.tsx`** — update `commitTextEdit`/`commitSubtreeEdit` implementations

@@ -41,7 +41,7 @@ export const Proof = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<Cust
     const poolId = (node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(node) : null;
     const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
-    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
+    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {};
 
     const titleSlot = node.slots.title;
     const titleInlines: InlineNode[] | undefined =
@@ -54,6 +54,7 @@ export const Proof = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<Cust
     if (!classList.includes(PROOF)) classList.push(PROOF);
 
     const id = node.attr[0];
+
     const setSlot = makeSlotSetter(node, setLocalAst);
 
     const contentSlot = node.slots.content;

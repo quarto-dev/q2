@@ -11,6 +11,57 @@ import { PreviewContext } from './PreviewContext';
 import type { PreviewContextValue, ResolvedSource } from './PreviewContext';
 import { sliceBytes } from '../utils/sliceSource';
 
+/**
+ * Block types whose left inset (the marker gutter: `<ul>`/`<ol>`/`<dl>`
+ * padding-left) must NOT indent the editing textarea — their source markdown
+ * starts at column 0. We drop only the *horizontal-left* box on these; the
+ * vertical box (margins/padding/border top+bottom) is still replicated so
+ * spacing around the block is preserved.
+ */
+const LEFT_INSET_STRIPPED_TYPES = new Set<string>([
+    'BulletList', 'OrderedList', 'DefinitionList',
+]);
+
+/**
+ * Measure-and-set edit wrapper — the single edit-mode rendering for every
+ * editable block type.
+ *
+ * Reproduces the original element's full computed box — margin + padding +
+ * per-side border — on a plain `<div>` so the textarea occupies exactly the
+ * space (and shows the same decorations, e.g. an h2's Bootstrap `border-bottom`
+ * rule) the replaced element did. `box-sizing: content-box` keeps the
+ * textarea's `contentHeight` the content-area height, so the wrapper's total
+ * border-box height equals the element's original height → zero reflow.
+ *
+ * (This replaced an earlier "wrap the original element and inject the textarea
+ * inside it" hybrid. Reproducing the box on a synthetic div proved both
+ * simpler and more faithful — it works uniformly for `<ul>`/`<table>` that
+ * cannot legally contain a `<textarea>` and for `<p>`/`<h2>` alike.)
+ */
+function renderMeasuredEdit(
+    node: BlockNode | CustomBlockNode,
+    textarea: React.ReactNode,
+    editTarget: NonNullable<PreviewContextValue['editTarget']>,
+): React.ReactNode {
+    const wrapperStyle: React.CSSProperties = {
+        ...(editTarget.boxStyle as React.CSSProperties),
+        boxSizing: 'content-box',
+    };
+    // Lists carry a large left padding (the bullet/number gutter). Replicating
+    // it would indent the textarea away from column 0 where the source begins;
+    // drop the left inset for those types (vertical box is untouched).
+    if (LEFT_INSET_STRIPPED_TYPES.has(node.t)) {
+        wrapperStyle.paddingLeft = '0px';
+        wrapperStyle.marginLeft = '0px';
+        wrapperStyle.borderLeftWidth = '0px';
+    }
+    return (
+        <AttributionWrap node={node} as="div">
+            <div style={wrapperStyle}>{textarea}</div>
+        </AttributionWrap>
+    );
+}
+
 const placeholderStyle: React.CSSProperties = {
     color: '#888',
     fontStyle: 'italic',
@@ -133,11 +184,10 @@ export const Block = (args: NodeArgs<BlockNode>) => {
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
 
     if (isBlockEditTarget(ctx, poolId, resolved) && ctx) {
-        return (
-            <AttributionWrap node={args.node} as="div">
-                {renderBlockTextarea(ctx, resolved!)}
-            </AttributionWrap>
-        );
+        // Editing: replace the block with a measure-and-set textarea wrapper
+        // that reproduces the element's exact box (see renderMeasuredEdit).
+        const textarea = renderBlockTextarea(ctx, resolved!);
+        return renderMeasuredEdit(args.node, textarea, ctx.editTarget!);
     }
 
     const Component = registry[args.node.t];
@@ -196,18 +246,17 @@ export const CustomBlock = (args: NodeArgs<CustomBlockNode>) => {
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
 
     if (isBlockEditTarget(ctx, poolId, resolved) && ctx) {
-        return (
-            <AttributionWrap node={args.node} as="div">
-                {renderBlockTextarea(ctx, resolved!)}
-            </AttributionWrap>
-        );
+        const textarea = renderBlockTextarea(ctx, resolved!);
+        return renderMeasuredEdit(args.node, textarea, ctx.editTarget!);
     }
 
     const Component =
         registry[args.node.type_name] ?? registry['__fallback__'];
-    const inner = <Component {...args} />;
-
-    return <AttributionWrap node={args.node} as="div">{inner}</AttributionWrap>;
+    return (
+        <AttributionWrap node={args.node} as="div">
+            <Component {...args} />
+        </AttributionWrap>
+    );
 };
 
 /**

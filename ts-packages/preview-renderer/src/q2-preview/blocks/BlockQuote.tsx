@@ -9,7 +9,7 @@ export const BlockQuote = (args: NodeArgs<BlockQuoteBlock>) => {
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
     const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
     return (
-        <blockquote {...(isEditable ? { 'data-block-pool-id': poolId } : {})}>
+        <blockquote {...(isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {})}>
             {renderChildren(args)}
         </blockquote>
     );

@@ -166,7 +166,7 @@ export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
     const poolId = (node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(node) : null;
     const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
-    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
+    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {};
 
     const [[id, classes, kvs], code] = node.c;
 
@@ -204,15 +204,14 @@ export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
     }
 
     // bd-y1fs3: un-highlighted path — `<pre>` carries the `Attr` (id,
-    // classes, non-hl-spans kvs); `<code>` is bare.
-    const affordanceStr: Record<string, string> = isEditable
-        ? { 'data-block-pool-id': String(poolId) }
-        : {};
-    const preProps: Record<string, string> = { ...preDataAttrs, ...affordanceStr };
+    // classes, non-hl-spans kvs); `<code>` is bare. The affordance
+    // attribute (+ roving tabindex) is spread separately so its
+    // number-valued `tabIndex` keeps its precise type.
+    const preProps: Record<string, string> = { ...preDataAttrs };
     if (id) preProps.id = id;
     if (classes.length) preProps.className = classes.join(' ');
     return (
-        <pre {...preProps}>
+        <pre {...preProps} {...affordanceAttr}>
             <code>{code}</code>
         </pre>
     );

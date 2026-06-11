@@ -44,7 +44,10 @@ export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
     const olProps = props as React.OlHTMLAttributes<HTMLOListElement>;
 
     if (!enabled) {
-        if (isEditable) props['data-block-pool-id'] = poolId!;
+        if (isEditable) {
+            props['data-block-pool-id'] = poolId!;
+            props.tabIndex = -1;
+        }
         return <ol {...olProps}>{renderChildren(args)}</ol>;
     }
     return (

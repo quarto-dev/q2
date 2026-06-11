@@ -370,7 +370,29 @@ function walkForNoteNumbers(ast: PandocAST): WeakMap<NoteInline, number> {
 }
 
 function PreviewRoot(props: PreviewRootProps) {
-    const [editTarget, setEditTarget] = useState<{ poolId: string | number; rect: DOMRect; contentHeight: number } | null>(null);
+    const [editTarget, setEditTargetRaw] = useState<{
+        poolId: string | number; contentHeight: number;
+        boxStyle: Record<string, string>;
+    } | null>(null);
+    const lastEditPoolIdRef = useRef<string | number | null>(null);
+    const setEditTarget = useCallback((target: typeof editTarget | null) => {
+        if (target !== null) {
+            lastEditPoolIdRef.current = target.poolId;
+            setEditTargetRaw(target);
+        } else {
+            const poolId = lastEditPoolIdRef.current;
+            lastEditPoolIdRef.current = null;
+            setEditTargetRaw(null);
+            if (poolId !== null) {
+                setTimeout(() => {
+                    if (lastEditPoolIdRef.current !== null) return;
+                    document.querySelector<HTMLElement>(
+                        `[data-block-pool-id="${poolId}"]`,
+                    )?.focus();
+                }, 0);
+            }
+        }
+    }, []);
 
     // Refs so the link-handler closure (installed once at mount)
     // sees the *latest* currentFilePath / projectFilePaths instead

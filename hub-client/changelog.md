@@ -31,6 +31,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-06-11
 
+- [`5f381cfa`](https://github.com/quarto-dev/q2/commits/5f381cfa): Inline block editing in the q2-preview pane no longer shifts surrounding content or drops decorations when you start editing — activating a block now reproduces its exact box (margins, padding, and borders such as a heading's underline rule), so the page layout stays put.
 - [`1ecc1d8c`](https://github.com/quarto-dev/q2/commits/1ecc1d8c): Sessions whose silent sign-in renewal never completes (e.g. Google One Tap blocked) now correctly reach the login screen at token expiry, instead of silently losing both the expiry logout and all future renewal attempts.
 
 ### 2026-06-10

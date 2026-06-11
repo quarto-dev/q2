@@ -16,13 +16,16 @@ export const Header = (args: NodeArgs<HeaderBlock>) => {
         && poolId !== undefined
         && !ctx?.editingDisabled;
 
-    const domProps: Record<string, string> = {};
+    const domProps: Record<string, string | number> = {};
     if (id) domProps.id = id;
     if (classes.length) domProps.className = classes.join(' ');
     for (const [k, v] of kvs) {
         if (k.startsWith('data-') || k === 'role') domProps[k] = v;
     }
-    if (isEditable) domProps['data-block-pool-id'] = String(poolId);
+    if (isEditable) {
+        domProps['data-block-pool-id'] = String(poolId);
+        domProps.tabIndex = -1;
+    }
     const Tag = headerTags[Math.min(Math.max(level, 1), 6) - 1];
 
     return <Tag {...domProps}>{renderChildren(args)}</Tag>;

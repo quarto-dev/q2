@@ -16,7 +16,7 @@ export const LineBlock = (args: NodeArgs<LineBlockBlock>) => {
 
     const { node, setLocalAst, onNavigateToDocument } = args;
     return (
-        <div className="line-block" {...(isEditable ? { 'data-block-pool-id': poolId } : {})}>
+        <div className="line-block" {...(isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {})}>
             {node.c.map((line, i) => (
                 <div key={i}>
                     {line.map((inl, j) => (

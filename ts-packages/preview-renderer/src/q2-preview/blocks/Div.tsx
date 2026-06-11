@@ -80,6 +80,9 @@ export const Div = (args: NodeArgs<DivBlock>) => {
     }
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
     const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
-    if (isEditable) props['data-block-pool-id'] = String(poolId);
+    if (isEditable) {
+        props['data-block-pool-id'] = String(poolId);
+        props.tabIndex = -1;
+    }
     return <div {...props}>{wrap(renderChildren(args))}</div>;
 };

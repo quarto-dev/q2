@@ -26,8 +26,11 @@ export const Para = (args: NodeArgs<ParaBlock>) => {
             if (k.startsWith('data-') || k === 'role') domProps[k] = v;
         }
     }
+    // be3bd132: an editable Para carries the pool id plus tabIndex=-1 so the
+    // keyboard-a11y / layout-stable edit wrapper can focus it.
     if (isEditable && poolId !== undefined) {
         domProps['data-block-pool-id'] = poolId;
+        domProps.tabIndex = -1;
     }
 
     return <p {...domProps}>{renderChildren(args)}</p>;

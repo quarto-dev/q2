@@ -351,7 +351,7 @@ below.
   known rough edges (hover ring on a `<span>` inside `<li>`, span-in-li HTML).
   If the span approach causes layout problems, fall back to no affordance on Plain
   for v1 and document explicitly.
-- [ ] **U1 (resolved — no work, just don't regress it).** The backend miss-guard
+- [x] **U1 (resolved — no work, just don't regress it).** The backend miss-guard
   is `lookup_block` → `None` ⇒ no-op + original content (tested:
   `stale_ast_miss_noops_and_returns_original_content`,
   `apply_node_edit_noops_for_synthetic_target`, `..._inside_include`). It is *not*
@@ -364,7 +364,7 @@ below.
 - [x] `cargo xtask verify --skip-hub-build` — Rust-only compile + tests green (exit code 0).
 - [x] From `hub-client/`: `npm run test:ci` — vitest suite: 556 unit + 66 integration tests pass; `useEditableBlock.integration.test.tsx` updated to test via `Block` dispatcher.
 - [x] From `hub-client/`: `npm run build:all` — TypeScript type-check + WASM + production bundle green.
-- [ ] Dev server: verify the hover ring now appears on nested Descendable blocks
+- [x] Dev server: verify the hover ring now appears on nested Descendable blocks
   (Para inside fenced div, list items, blockquote) — intended but a visible UX
   change. Then edit a paragraph inside a callout / fenced div end-to-end; confirm
   only that paragraph changed in the resulting `.qmd`. Also verify whole-block

@@ -101,6 +101,77 @@ async function assertAutomerge(
     }).toPass({ timeout: 10000 });
 }
 
+/**
+ * Layout snapshot for the zero-reflow invariant: the viewport `top` of every
+ * editable block (keyed by its stable pool id) plus the document's total
+ * scrollHeight. Activating a block for editing must not move ANY other block
+ * and must not change the document's total height (no "space crunch").
+ */
+type Layout = { tops: Record<string, number>; scrollHeight: number };
+
+async function measureLayout(iframe: FrameLocator): Promise<Layout> {
+    // Settle before reading geometry: wait for web fonts to finish loading
+    // (font swaps change line heights) and two animation frames so any pending
+    // reflow has flushed. Without this, parallel workers can snapshot `before`
+    // mid-font-load and see spurious sub-block shifts.
+    await iframe.locator('body').evaluate(async () => {
+        await (document as Document & { fonts?: FontFaceSet }).fonts?.ready;
+        await new Promise<void>(r =>
+            requestAnimationFrame(() => requestAnimationFrame(() => r())),
+        );
+    });
+    const tops = await iframe.locator('[data-block-pool-id]').evaluateAll(els =>
+        Object.fromEntries(
+            els.map(el => [
+                el.getAttribute('data-block-pool-id')!,
+                el.getBoundingClientRect().top,
+            ]),
+        ),
+    );
+    const scrollHeight = await iframe
+        .locator('body')
+        .evaluate(() => document.documentElement.scrollHeight);
+    return { tops, scrollHeight };
+}
+
+/**
+ * Assert that going `before → after` (activation of `editedPoolId`) moved no
+ * surviving block by more than `tol` px and did not change the document height.
+ * Reports every offending block + delta so a failure shows exactly where the
+ * crunch is (space above/below a heading, between a paragraph and a list, ...).
+ */
+function expectLayoutStable(
+    before: Layout,
+    after: Layout,
+    editedPoolId: string,
+    tol = 1.5,
+): void {
+    const moved: string[] = [];
+    for (const [poolId, top] of Object.entries(after.tops)) {
+        if (poolId === editedPoolId) continue;
+        const delta = Math.abs(top - before.tops[poolId]);
+        if (delta > tol) moved.push(`block ${poolId} moved ${delta.toFixed(1)}px`);
+    }
+    const heightDelta = Math.abs(after.scrollHeight - before.scrollHeight);
+    expect(
+        moved,
+        `blocks shifted on activation:\n  ${moved.join('\n  ')}`,
+    ).toEqual([]);
+    expect(
+        heightDelta,
+        `document height changed by ${heightDelta.toFixed(1)}px on activation (space crunch)`,
+    ).toBeLessThanOrEqual(tol);
+}
+
+/** Click the first block matching `tag`, returning its pool id; waits for the textarea. */
+async function activateBlock(iframe: FrameLocator, tag: string): Promise<string> {
+    const target = iframe.locator(`${tag}[data-block-pool-id]`).first();
+    const poolId = await target.getAttribute('data-block-pool-id');
+    await target.click();
+    await iframe.locator('textarea').first().waitFor({ timeout: 5000 });
+    return poolId!;
+}
+
 test.describe('q2-preview inline editing', () => {
     test.setTimeout(120000);
 
@@ -150,6 +221,147 @@ test.describe('q2-preview inline editing', () => {
             contains: ['New Heading'],
             lacks: ['My Heading'],
         });
+    });
+
+    test('activating edit on a heading does not shift the following paragraph (Plan 2c §4)', async ({ page }) => {
+        // P1 zero-reflow guarantee: Section 0's EditContentContext keeps the
+        // original element (with its CSS margins) in the DOM during editing, so
+        // the following sibling must not move when the textarea appears. This
+        // exercises the guarantee in a real layout engine — a regression that
+        // reverts to bare textarea substitution would drop the heading's margin
+        // and shift the paragraph up.
+        const serverUrl = getServerUrl();
+        const QMD = '---\nformat: q2-preview\n---\n\n## A Heading\n\nFollowing paragraph.\n';
+        const docId = await createProjectOnServer(serverUrl, [
+            { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+            { path: 'reflow.qmd', content: QMD, contentType: 'text' },
+        ]);
+
+        const iframe = await openFile(page, serverUrl, docId, 'reflow.qmd');
+        const para = iframe.locator('p[data-block-pool-id]').first();
+        await expect(iframe.locator('text=Following paragraph.')).toBeVisible();
+
+        // Measure the paragraph's viewport position before activation.
+        const topBefore = await para.evaluate(el => el.getBoundingClientRect().top);
+
+        // Activate edit on the heading (textarea appears inside the wrapped <h2>).
+        await iframe.locator('h2[data-block-pool-id]').first().click();
+        await iframe.locator('textarea').first().waitFor({ timeout: 5000 });
+
+        // Re-measure; the following paragraph must not have moved (±1px).
+        const topAfter = await para.evaluate(el => el.getBoundingClientRect().top);
+        expect(Math.abs(topAfter - topBefore)).toBeLessThanOrEqual(1);
+    });
+
+    // ── Stronger layout-preservation suite (Plan 2c §4 follow-up) ──────────
+    // These assert the FULL zero-reflow invariant: activating any block moves
+    // no other block and does not change the document height. They catch the
+    // "space crunch" the single-paragraph test above misses — e.g. a heading
+    // losing its Bootstrap padding-bottom + border-bottom (the rule under h2),
+    // or the gap between a paragraph and a following list collapsing.
+
+    test('activating a heading preserves all surrounding layout (no crunch)', async ({ page }) => {
+        const serverUrl = getServerUrl();
+        const QMD =
+            '---\nformat: q2-preview\n---\n\nIntro paragraph.\n\n## A Heading\n\nBody paragraph one.\n\nBody paragraph two.\n';
+        const docId = await createProjectOnServer(serverUrl, [
+            { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+            { path: 'crunch-heading.qmd', content: QMD, contentType: 'text' },
+        ]);
+
+        const iframe = await openFile(page, serverUrl, docId, 'crunch-heading.qmd');
+        await expect(iframe.locator('text=Body paragraph one.')).toBeVisible();
+
+        // Capture the heading's bottom rule (Bootstrap border-bottom) before edit.
+        const ruleBefore = await iframe
+            .locator('h2[data-block-pool-id]')
+            .first()
+            .evaluate(el => {
+                const cs = getComputedStyle(el);
+                return {
+                    width: cs.borderBottomWidth,
+                    style: cs.borderBottomStyle,
+                    color: cs.borderBottomColor,
+                };
+            });
+        // Sanity: this fixture's heading actually HAS a visible rule, otherwise
+        // the persistence check below would be vacuous.
+        expect(ruleBefore.style, 'fixture heading must have a border-bottom rule').not.toBe('none');
+        expect(parseFloat(ruleBefore.width)).toBeGreaterThan(0);
+
+        const before = await measureLayout(iframe);
+        const edited = await activateBlock(iframe, 'h2');
+        const after = await measureLayout(iframe);
+        expectLayoutStable(before, after, edited);
+
+        // The rule must NOT disappear when editing: the edit wrapper (the
+        // textarea's parent <div>) reproduces the same border-bottom.
+        const ruleAfter = await iframe
+            .locator('textarea')
+            .first()
+            .evaluate(el => {
+                const cs = getComputedStyle(el.parentElement as HTMLElement);
+                return {
+                    width: cs.borderBottomWidth,
+                    style: cs.borderBottomStyle,
+                    color: cs.borderBottomColor,
+                };
+            });
+        expect(ruleAfter, 'h2 bottom rule must persist while editing').toEqual(ruleBefore);
+    });
+
+    test('activating a paragraph before a list preserves the list position', async ({ page }) => {
+        const serverUrl = getServerUrl();
+        const QMD =
+            '---\nformat: q2-preview\n---\n\nLead paragraph.\n\n- first item\n- second item\n- third item\n\nTrailing paragraph.\n';
+        const docId = await createProjectOnServer(serverUrl, [
+            { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+            { path: 'crunch-list.qmd', content: QMD, contentType: 'text' },
+        ]);
+
+        const iframe = await openFile(page, serverUrl, docId, 'crunch-list.qmd');
+        await expect(iframe.locator('text=Lead paragraph.')).toBeVisible();
+
+        // Edit the lead paragraph — the list and trailing paragraph below must not move.
+        const before = await measureLayout(iframe);
+        const edited = await activateBlock(iframe, 'p');
+        const after = await measureLayout(iframe);
+        expectLayoutStable(before, after, edited);
+    });
+
+    test('activating a list preserves the trailing paragraph position', async ({ page }) => {
+        const serverUrl = getServerUrl();
+        const QMD =
+            '---\nformat: q2-preview\n---\n\nLead paragraph.\n\n- first item\n- second item\n\nTrailing paragraph.\n';
+        const docId = await createProjectOnServer(serverUrl, [
+            { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+            { path: 'crunch-list2.qmd', content: QMD, contentType: 'text' },
+        ]);
+
+        const iframe = await openFile(page, serverUrl, docId, 'crunch-list2.qmd');
+        await expect(iframe.locator('text=Trailing paragraph.')).toBeVisible();
+
+        // Reference: the lead paragraph's left edge = the document text column.
+        const paraLeft = await iframe
+            .locator('p[data-block-pool-id]')
+            .first()
+            .evaluate(el => el.getBoundingClientRect().left);
+
+        const before = await measureLayout(iframe);
+        const edited = await activateBlock(iframe, 'ul');
+        const after = await measureLayout(iframe);
+        expectLayoutStable(before, after, edited);
+
+        // The list's editing textarea must start at the text column, NOT be
+        // pushed right by the bullet gutter (the <ul> padding-left).
+        const taLeft = await iframe
+            .locator('textarea')
+            .first()
+            .evaluate(el => el.getBoundingClientRect().left);
+        expect(
+            Math.abs(taLeft - paraLeft),
+            `list textarea is indented ${(taLeft - paraLeft).toFixed(1)}px past the text column`,
+        ).toBeLessThanOrEqual(1.5);
     });
 
     test('editing a paragraph inside a fenced div updates only that block (Plan 3)', async ({ page }) => {

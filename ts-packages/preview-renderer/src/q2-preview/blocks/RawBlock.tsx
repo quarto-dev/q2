@@ -17,7 +17,7 @@ export const RawBlock = ({ node }: NodeArgs<RawBlockType>) => {
     const poolId = (node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(node) : null;
     const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
-    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
+    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {};
 
     const [format, content] = node.c;
     if (format === 'html' || format === 'html5') {

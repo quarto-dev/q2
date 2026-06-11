@@ -38,7 +38,7 @@ export const BulletList = (args: NodeArgs<BulletListBlock>) => {
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
     const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
     return (
-        <ul {...(isEditable ? { 'data-block-pool-id': poolId } : {})}>
+        <ul {...(isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {})}>
             {renderChildren(args)}
         </ul>
     );

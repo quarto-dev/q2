@@ -113,7 +113,7 @@ export const Callout = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<Cu
     const poolId = (node as any).s as string | number | undefined;
     const resolved = previewCtx?.resolveSource ? previewCtx.resolveSource(node) : null;
     const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
-    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId } : {};
+    const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {};
 
     // Q1-parity collapse-wrapper id naming (callouts.lua:281, 307,
     // 310, 316-317): the wrapper's `id` attribute is `callout-N`
@@ -157,6 +157,7 @@ export const Callout = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<Cu
     if (isEmptyContent) classList.push(CALLOUT_EMPTY_CONTENT);
 
     const id = node.attr[0];
+
     const setSlot = makeSlotSetter(node, setLocalAst);
     const ctx = { onNavigateToDocument };
 

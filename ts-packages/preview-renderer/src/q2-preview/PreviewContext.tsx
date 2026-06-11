@@ -12,8 +12,8 @@ import type { ReachabilityClass, SourceIndexEntry, ResolvedSource } from './sour
  * - `commitSubtreeEdit`: commit a pre-parsed Pandoc subtree edit via the
  *   subtree channel (Plan 2b). Used by render-component authors.
  * - `content`: QMD source content that produced the current render.
- * - `editTarget`: block currently being edited (poolId + measured DOMRect),
- *   or null when no block is active (Plan 2b: rect needed for P1 no-reflow sizing).
+ * - `editTarget`: block currently being edited (poolId + measured content
+ *   height + computed box for the measure-and-set wrapper), or null when none.
  * - `setEditTarget`: activate a block for editing; null clears.
  * - `sourceIndex`: SourceInfo-value index from the untransformed AST (Plan 2a).
  * - `resolveSource`: look up a transformed block's source counterpart (Plan 2a).
@@ -34,15 +34,30 @@ export interface PreviewContextValue {
     /** The QMD source content that produced the current render. Used by editable blocks to slice source bytes. */
     content?: string;
     /**
-     * The block currently being edited. `rect` is the border-box from
-     * getBoundingClientRect; `contentHeight` is the element's content-area
-     * height (rect.height minus padding and border), so the textarea fills
-     * the content area exactly even when the wrapper element has padding or
-     * a border (e.g. Bootstrap's `h2 { padding-bottom: 0.5rem; border-bottom }`).
+     * The block currently being edited (or null when none is active).
+     *
+     * - `contentHeight` is the content-area height (rect.height minus padding
+     *   and border), used as the textarea's height so it fills the content area
+     *   exactly even when the element has padding/border (e.g. Bootstrap's
+     *   `h2 { padding-bottom: 0.5rem; border-bottom }`).
+     * - `boxStyle` is the element's full computed box (margin + padding +
+     *   per-side border longhands), captured from `getComputedStyle` at
+     *   activation. The measure-and-set edit wrapper replicates it on a
+     *   synthetic `<div>` so the textarea's box exactly matches the element it
+     *   replaces — preserving vertical spacing AND visible decorations like an
+     *   h2's `border-bottom` rule, with zero reflow.
      */
-    editTarget?: { poolId: string | number; rect: DOMRect; contentHeight: number } | null;
+    editTarget?: {
+        poolId: string | number;
+        contentHeight: number;
+        boxStyle: Record<string, string>;
+    } | null;
     /** Activate a block for editing, or pass null to clear. */
-    setEditTarget?: (target: { poolId: string | number; rect: DOMRect; contentHeight: number } | null) => void;
+    setEditTarget?: (target: {
+        poolId: string | number;
+        contentHeight: number;
+        boxStyle: Record<string, string>;
+    } | null) => void;
     /** SourceInfo-value index from the untransformed AST (Plan 2a). Built once per render. */
     sourceIndex?: Map<string, SourceIndexEntry> | null;
     /** Resolve a transformed block to its source counterpart + reachability class (Plan 2a). */
