@@ -7,6 +7,12 @@ on:
         description: 'Delete and recreate ALL visual regression baselines'
         type: boolean
         default: false
+      run-smoke-all:
+        description: 'Also run smoke-all E2E tests (slow, ~80 extra tests, opt-in only)'
+        type: boolean
+        default: false
+  schedule:
+    - cron: '0 7 * * *'  # 2am EST / 3am EDT, runs on main
   push:
     branches:
       - main
@@ -138,11 +144,21 @@ jobs:
         if: inputs.recreate-all-snapshots == true
         run: find hub-client/e2e -type d -name '*-snapshots' -exec rm -rf {} + || true
 
-      # Run E2E tests (functional)
+      # Run E2E tests — custom specs only (smoke-all excluded by testIgnore)
       - name: Run E2E tests
         run: |
           cd hub-client
           npx playwright test
+
+      # Smoke-all: full render pipeline matrix (~80 tests). Runs nightly
+      # (schedule trigger) or on demand (workflow_dispatch with run-smoke-all=true).
+      # Skipped for every push/PR. Use this to verify render correctness after
+      # changes to the WASM pipeline or theme resolution.
+      - name: Run smoke-all E2E tests (nightly + opt-in)
+        if: inputs.run-smoke-all == true || github.event_name == 'schedule'
+        run: |
+          cd hub-client
+          npx playwright test e2e/smoke-all.spec.ts
 
       # Run visual regression tests
       - name: Run visual tests

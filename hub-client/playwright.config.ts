@@ -29,7 +29,7 @@ export default defineConfig({
   // Visual-regression specs run via playwright.visual.config.ts (which has
   // the --update-snapshots-on-missing retry flow); exclude them from the
   // functional run so a missing baseline isn't a hard failure here.
-  testIgnore: '**/*.visual.spec.ts',
+  testIgnore: ['**/*.visual.spec.ts', '**/smoke-all.spec.ts'],
   // Parallel tests are OK - they use different documents, single sync server handles concurrency
   fullyParallel: true,
   // Fail on `test.only` in CI
