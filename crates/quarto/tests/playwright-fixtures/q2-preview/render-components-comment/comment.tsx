@@ -127,10 +127,6 @@ const CommentWrapper = ({
     const commentsListRef = React.useRef<HTMLDivElement>(null);
     const commentInputRef = React.useRef<HTMLInputElement>(null);
 
-    // Tracks emojis this component instance has added in the current session.
-    // Survives React re-renders (ref, not state) and enables attribution-free
-    // "remove mine" for the e2e test environment (Attribution toggle off).
-    const mySessionReactions = React.useRef(new Map<string, number>());
 
     React.useEffect(() => {
         if (!showEmojiPicker) return;
@@ -239,32 +235,19 @@ const CommentWrapper = ({
             }
         } catch { /* noop */ }
 
-        // Priority 1: attribution-based remove-mine (Attribution toggle on).
-        const mineSpan = findMineSpan(emoji);
-        if (mineSpan) {
+        // Remove path: attribution identifies the current actor's span.
+        if (findMineSpan(emoji)) {
             removeFirstMatchingInSource(emoji);
             setShowEmojiPicker(false);
             return;
         }
 
-        // Priority 2: session-tracking remove-mine (Attribution toggle off).
-        // Tracks emojis added in this component's lifetime so add→remove
-        // round-trips work in single-actor e2e without attribution data.
-        const sessionCount = mySessionReactions.current.get(emoji) ?? 0;
-        if (me && sessionCount > 0) {
-            removeFirstMatchingInSource(emoji);
-            mySessionReactions.current.set(emoji, sessionCount - 1);
-            setShowEmojiPicker(false);
-            return;
-        }
-
-        // Priority 3: add new reaction.
+        // Add path.
         const newReaction: SpanInline = {
             t: 'Span',
             c: [['', ['quarto-edit-comment'], []], [{ t: 'Str', c: emoji }]],
         };
         appendInlineToSource(newReaction);
-        mySessionReactions.current.set(emoji, sessionCount + 1);
         setShowEmojiPicker(false);
     };
 

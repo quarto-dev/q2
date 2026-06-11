@@ -15,10 +15,9 @@
  *   3. "removing a reaction persists through the round-trip" — add an
  *      emoji, wait for re-render, click the bubble to remove; verify
  *      bubble disappears and QMD loses the span.
- *      Remove-mine works via the `mySessionReactions` ref in comment.tsx:
- *      attribution-based removal (Phase 2c) fires when Attribution is on;
- *      the ref-based fallback fires in single-actor e2e where the toggle
- *      is off.
+ *      Remove-mine works via attribution: openCommentFixture enables the
+ *      Authors overlay so attributionLookup is populated, and findMineSpan
+ *      identifies the TEST_ACTOR_ID span to remove.
  *
  * Note on `assertAutomerge`: polls `wasmRenderer.getFileContent()` (the
  * Automerge-backed VFS layer) rather than asserting on DOM text, because
@@ -54,7 +53,7 @@ const TEST_ACTOR_ID = 'e2e7e1f02a30000000000000000007e1';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-/** Seed a fresh project, navigate to the qmd, and wait for the first render. */
+/** Seed a fresh project, navigate to the qmd, enable attribution, and wait for the first render. */
 async function openCommentFixture(page: Page): Promise<FrameLocator> {
     const serverUrl = getServerUrl();
     const indexDocId = await createProjectOnServer(serverUrl, [
@@ -66,6 +65,14 @@ async function openCommentFixture(page: Page): Promise<FrameLocator> {
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
     await page.goto(`/#/p/${localId}/file/${encodeURIComponent('render-components-comment.qmd')}`);
     await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30_000 });
+
+    // Enable the Authors overlay so attributionLookup is populated inside the
+    // iframe and findMineSpan can identify the current actor's reactions.
+    await page.getByRole('button', { name: 'Authors overlay off' }).click();
+    await expect(page.getByRole('button', { name: 'Authors overlay on' })).toBeVisible({ timeout: 5_000 });
+    // Wait for the attribution re-render to complete.
+    await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 15_000 });
+
     const iframe = page.frameLocator('iframe[src*="q2-preview.html"]');
     // comment.tsx renders a "+ 🙂" picker button on every wrapped block
     await expect(iframe.locator('[title="Add reaction"]').first()).toBeVisible({ timeout: 30_000 });
@@ -154,9 +161,19 @@ test.describe('q2-preview render-components-comment', () => {
         await thinkingBubble.click();
         await expect(thinkingBubble).toContainText('3', { timeout: 15_000 });
 
+        // Wait for attribution to recompute for the new content. useAttribution
+        // is async: it runs parseQmdToAstWithAttribution on the new QMD and only
+        // then emits a fresh attributionPayload that triggers a re-render with the
+        // new span's actor info. Without this wait, the second click fires while
+        // attributionLookup still reflects the pre-edit AST, findMineSpan returns
+        // null, and the add path fires instead of remove.
+        const authorsButton = page.getByRole('button', { name: 'Authors overlay on' });
+        await expect(authorsButton).not.toHaveAttribute('aria-busy', 'true', { timeout: 10_000 });
+        await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 15_000 });
+
         // Step 2: click the same bubble again.
-        // comment.tsx now sees mySessionReactions.get('🤔') === 1, so the
-        // session-remove fallback fires: removeFirstMatchingInSource →
+        // comment.tsx's findMineSpan now finds the span attributed to TEST_ACTOR_ID
+        // so the remove path fires: removeFirstMatchingInSource →
         // commitSubtreeEdit → apply_node_edit → Automerge → re-render.
         await thinkingBubble.click();
 
