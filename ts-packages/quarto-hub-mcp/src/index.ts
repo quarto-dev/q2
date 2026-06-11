@@ -19,6 +19,7 @@
  *                                        to non-loopback hosts (dev only)
  */
 
+import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -139,8 +140,8 @@ function installRedactingErrorHandlers(): void {
  * calls `console.log` — rebind console.log itself to stderr. The
  * transport is unaffected: it writes to `process.stdout` directly.
  *
- * Called after parseArgs so `--help` (pre-protocol, conventional)
- * still prints to stdout.
+ * Called after parseArgs, which is pre-protocol (its --help/usage
+ * output already goes to stderr by this package's convention).
  */
 function protectProtocolStdout(): void {
   setSyncLogger((...args) => console.error(...args));
@@ -261,10 +262,21 @@ async function main(): Promise<void> {
 }
 
 // Run only when executed as the binary, not when imported (e.g. by
-// unit tests exercising `parseRedirectPort`).
-const invokedDirectly =
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(process.argv[1]).href;
+// unit tests exercising `parseRedirectPort`). argv[1] must be
+// canonicalized before comparing: Node resolves import.meta.url
+// through realpath, so a symlink anywhere in the invocation path
+// (macOS /tmp and /var, npm/npx .bin shims) would otherwise make this
+// guard silently skip main() (bd-2d8ur7e9).
+const invokedDirectly = (() => {
+  const argv1 = process.argv[1];
+  if (argv1 === undefined) return false;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(argv1)).href;
+  } catch {
+    // argv[1] doesn't resolve to a real file — we can't be it.
+    return false;
+  }
+})();
 
 if (invokedDirectly) {
   main().catch((err) => {
