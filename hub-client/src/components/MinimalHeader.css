@@ -120,11 +120,14 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 10px;
   background: var(--editor-header-bg);
   border: 1px solid var(--editor-disconnected-border);
   border-radius: 4px;
   font-size: 12px;
+  line-height: 1;
   user-select: none;
 }
 
