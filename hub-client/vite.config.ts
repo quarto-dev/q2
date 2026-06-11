@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 import wasm from 'vite-plugin-wasm'
 import compression from 'compression'
 import { VitePWA } from 'vite-plugin-pwa'
+import basicSsl from '@vitejs/plugin-basic-ssl'
 import path from 'path'
 import { readFileSync } from 'fs'
 import { execSync } from 'child_process'
@@ -62,6 +63,7 @@ export default defineConfig({
   plugins: [
     react(),
     wasm(),
+    ...(process.env.VITE_HTTPS === '1' ? [basicSsl()] : []),
     attributionViewerCssPlugin(),
     {
       // vite preview's static-file middleware does not gzip by default,
