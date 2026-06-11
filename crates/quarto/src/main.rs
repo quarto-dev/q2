@@ -438,6 +438,22 @@ enum Commands {
         command: TraceCommand,
     },
 
+    /// Run the Quarto Hub MCP server (for AI agents; needs Node.js).
+    ///
+    /// Delegates to the embedded TypeScript MCP server: all arguments
+    /// pass through verbatim (`q2 mcp --help` shows the server's own
+    /// usage, e.g. `--server <url>`, `--read-only`). Launcher-specific
+    /// controls: the `QUARTO_NODE` env var picks the Node.js binary
+    /// when discovery fails (GUI MCP hosts don't see your shell PATH),
+    /// and `q2 mcp --launcher-info` prints embed/cache/node
+    /// diagnostics.
+    #[command(disable_help_flag = true)]
+    Mcp {
+        /// Arguments passed through to the MCP server verbatim.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
     /// Start collaborative hub server for real-time editing.
     /// By default, watches the current directory (or --project path).
     /// Use --no-project to run as a standalone sync server.
@@ -700,6 +716,8 @@ fn main() -> Result<()> {
             strict,
             compact,
         }),
+        Commands::Mcp { args } => commands::mcp::run(&args),
+
         Commands::Hub {
             project,
             no_project,

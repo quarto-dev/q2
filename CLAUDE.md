@@ -443,6 +443,27 @@ For the deeper context (which crate produces which artifact, why the
 chain doesn't auto-fire, how to diagnose stale-WASM symptoms) see
 `claude-notes/instructions/preview-spa-rebuild.md`.
 
+## Verifying TypeScript changes in `q2 mcp`
+
+Same trap, different artifact: `q2 mcp` embeds the esbuild bundle at
+`ts-packages/quarto-hub-mcp/dist-bundle/` via `include_dir!` and runs
+it with ambient Node. A plain `cargo build --bin q2` re-embeds
+whatever bundle was last built — after changing `quarto-hub-mcp`,
+`quarto-sync-client`, or `quarto-automerge-schema`, run:
+
+```bash
+cargo xtask build-hub-mcp-bundle      # rebuild dist-bundle/ from TS sources
+cargo build --bin q2                  # re-embed via include_dir!
+```
+
+`cargo xtask build-all` includes the bundle step (ordered before the
+Rust build). Diagnose staleness with `q2 mcp --launcher-info`, which
+prints the embedded bundle's git commit, dirty flag, and build time.
+Fresh clones build fine without the bundle (a placeholder is embedded,
+with a cargo warning); `q2 mcp` then fails at runtime pointing at the
+xtask. Design: `claude-notes/plans/2026-06-11-q2-mcp-hub-auth.md`
+(bd-81cfshmw).
+
 ## Build Commands
 
 - WASM build: `npm run build:all` (NOT `cargo build --target wasm32-unknown-unknown`)

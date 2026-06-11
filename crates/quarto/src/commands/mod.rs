@@ -13,6 +13,7 @@ pub mod hub;
 pub mod install;
 pub mod list;
 pub mod lsp;
+pub mod mcp;
 pub mod pandoc;
 pub mod preview;
 pub mod publish;

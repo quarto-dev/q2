@@ -3837,6 +3837,7 @@ dependencies = [
  "quarto-error-reporting",
  "quarto-hub",
  "quarto-lsp",
+ "quarto-mcp-launcher",
  "quarto-preview",
  "quarto-publish",
  "quarto-sass",
@@ -4147,6 +4148,22 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "quarto-mcp-launcher"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "fs2",
+ "include_dir",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

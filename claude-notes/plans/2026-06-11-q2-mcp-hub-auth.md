@@ -330,8 +330,12 @@ own (e.g. `--launcher-info`).
       License-notice generation deferred to the npx-channel strand
       (bd-3tak0lyy) — the q2-embedded copy inherits q2's existing
       third-party-notice obligations, tracked there.
-- [ ] `cargo xtask build-hub-mcp-bundle`; wire into `build-all` /
-      `verify`; CLAUDE.md rebuild-chain documentation (risk 3).
+- [x] `cargo xtask build-hub-mcp-bundle`; wired into `build-all`
+      (before the Rust build) and `verify` (new Step 11 also runs the
+      sync-client + hub-mcp vitest suites, which verify previously
+      didn't run at all; `--skip-hub-mcp-*` flags opt out).
+      CLAUDE.md rebuild-chain documentation deferred to Phase 2 — it
+      documents the embed, which doesn't exist until `q2 mcp` lands.
 
 **Phase 1 discoveries:** three pre-existing TS-server bugs found and
 fixed TDD along the way — bd-sl4o01y0 (sync-client `console.log`
@@ -345,26 +349,56 @@ argv[1] was compared verbatim — macOS `/tmp`→`/private/tmp` and npm
 `.bin` shims both hit this; `realpathSync` fix; this one would have
 broken the npx channel outright).
 
-### Phase 2 — the Rust launcher
+### Phase 2 — the Rust launcher (CORE COMPLETE 2026-06-11; see notes)
 
-- [ ] Tests (integration layout per `.claude/rules/integration-tests.md`):
-      extraction idempotence + concurrency (two racing launches), hash
-      dir reuse, `QUARTO_NODE` override honored, missing-node error
-      message, exit-code forwarding (Windows path), stdout purity
-      (launcher emits nothing on stdout before delegation), MCP
-      handshake end-to-end through `q2 mcp` against a local hub.
-- [ ] GC tests: shared lock survives exec (child still holds it —
-      assert exclusive-try fails while a launched instance runs);
-      GC skips locked dirs; GC skips young-mtime dirs; GC removes
-      unlocked+old dirs via trash-rename; a launcher racing a GC'd
-      dir re-extracts cleanly; crash (kill -9) releases the lock and
-      the dir becomes collectable.
-- [ ] `q2 mcp` clap wiring (trailing args passed verbatim);
-      embed via `include_dir!`; extraction + lifetime shared lock +
-      launch-time GC (risk 5); node discovery (risk 2); exec/spawn
-      plumbing incl. CLOEXEC handling on the lock fd (risk 6);
+- [x] Tests (`crates/quarto-mcp-launcher/tests/integration/`, 26
+      passing): extraction payload+metadata, lifetime shared lock,
+      idempotent reuse, 8-thread concurrency convergence (caught a
+      real .tmp-name collision bug — fixed with an atomic uniquifier),
+      corrupt-dir self-heal, GC age/lock/keep-hash/leftover semantics,
+      crash-release collectability, re-extract after GC; QUARTO_NODE
+      override (wins, and too-old is an error not a fallthrough),
+      PATH lookup, floor fallthrough to well-knowns, actionable
+      not-found error. Exit-code forwarding (Windows spawn path) has
+      no unit test — needs a Windows CI run to exercise at all.
+- [x] Lock-survives-exec + stdout purity + e2e handshake: verified
+      against the real binary (see e2e evidence below); these are
+      properties of the exec'd process, untestable in-process.
+- [x] `q2 mcp` clap wiring (`disable_help_flag` + trailing varargs →
+      verbatim pass-through; TS server owns `--help`); new crate
+      `quarto-mcp-launcher` (bundle embed + hash, cache/locks/GC, node
+      discovery, exec/spawn delegate incl. FD_CLOEXEC clearing);
       `--launcher-info`.
-- [ ] `build.rs` missing-bundle guard with actionable message.
+- [x] `build.rs` guard: placeholder embed + cargo warning on missing
+      bundle (house style from quarto-preview — build succeeds, fresh
+      clones work); `q2 mcp` errors at runtime pointing at
+      `cargo xtask build-hub-mcp-bundle`. CLAUDE.md rebuild-chain
+      section added (deferred Phase 1 item).
+
+**Phase 2 e2e evidence (2026-06-11, per CLAUDE.md e2e policy).** All
+through `./target/debug/q2` against a local hub
+(`target/debug/hub --data-dir … -P 3941`):
+
+1. `q2 mcp --launcher-info` → printed bundle-hash
+   `3afafa38242075cc`, embedded build-info (git commit + dirty +
+   builtAt + node24), cache root
+   `~/Library/Caches/quarto/hub-mcp`, discovered node
+   `/opt/homebrew/bin/node (v24.15.0)`.
+2. `q2 mcp --help` → the TS server's usage on stderr (delegation
+   works end-to-end: extract → discover → exec).
+3. MCP session `q2 mcp --server ws://127.0.0.1:3941/ws` with
+   initialize + `create_project` → response
+   `{"indexDocId":"2rgwrw1rasNBHoBEwbyKSgh87rKk","files":["via-q2.qmd"]}`;
+   stdout pure JSON-RPC (jq parsed every line).
+4. Lock property, observed live: while a `q2 mcp` session ran,
+   `flock(LOCK_EX|LOCK_NB)` on the cache `.lock` from another process
+   **failed** (lock survived the exec into node); after the session
+   exited it **succeeded** (kernel release). Output inspected.
+
+Note for test authors: a `printf … | q2 mcp` one-liner closes stdin
+immediately, and the server (correctly, bd-9jq2a060) shuts down on
+EOF, racing in-flight tool calls — hold stdin open (real MCP host
+behavior) when driving sessions by hand.
 
 ### Phase 3 — auth + hub e2e through the launcher
 
