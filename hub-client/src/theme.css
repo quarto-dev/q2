@@ -281,9 +281,9 @@
   --replay-tooltip-bg: #0f0f1e;
 
   /* Minimal header */
-  --header-preview-bg: #ffffff;
-  --header-preview-text: #1e3a8a;
-  --header-preview-hover: #f0f0f0;
+  --header-preview-bg: var(--posit-blue);
+  --header-preview-text: #ffffff;
+  --header-preview-hover: var(--posit-blue-dark-1);
   --header-preview-shadow: rgba(255, 255, 255, 0.3);
   --header-preview-shadow-hover: rgba(255, 255, 255, 0.4);
   --header-share-bg: #646cff;

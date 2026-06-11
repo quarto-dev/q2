@@ -2,7 +2,7 @@ import { useViewMode } from './ViewModeContext';
 import './ViewToggleControl.css';
 
 /**
- * Compact horizontal view toggle at the top of the sidebar.
+ * Compact horizontal view toggle in the header.
  * Three small square buttons with layout-split icons.
  */
 export default function ViewToggleControl() {

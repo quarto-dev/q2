@@ -2,7 +2,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  padding: 6px 12px;
   background: var(--editor-header-bg);
   border-bottom: 1px solid var(--editor-header-border);
   min-height: 36px;
@@ -14,16 +14,97 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
 }
 
-.minimal-header .file-path {
+/* Shared icon action button (switch / share / preview). */
+.minimal-header .icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--editor-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.minimal-header .icon-btn:hover {
+  background: var(--view-toggle-hover-bg);
+  color: var(--editor-text);
+}
+
+/* Preview is the primary action: filled accent pill with icon + label. */
+.minimal-header .preview-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  background: var(--header-preview-bg);
+  border: 1px solid var(--header-preview-bg);
+  border-radius: 6px;
+  color: var(--header-preview-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.minimal-header .preview-btn:hover {
+  background: var(--header-preview-hover);
+  border-color: var(--header-preview-hover);
+}
+
+/* Vertical divider separating the actions from the document identity. */
+.header-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 2px;
+  background: var(--editor-header-border);
+  flex-shrink: 0;
+}
+
+/* Document identity: project name / file path. */
+.header-doc {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.header-doc .project-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--editor-text);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.header-doc .path-sep {
+  color: var(--editor-text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.header-doc .file-path {
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   font-size: 13px;
   color: var(--editor-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
-.minimal-header .file-path.empty {
+.header-doc .file-path.empty {
   color: var(--editor-text-muted);
   font-style: italic;
 }
@@ -76,72 +157,4 @@
 .header-right .connection-text {
   color: var(--editor-text-dim);
   font-weight: 500;
-}
-
-.header-right .project-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--editor-text-muted);
-  min-width: 120px;
-  max-width: 400px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: right;
-}
-
-.header-right .preview-btn {
-  padding: 6px 16px;
-  background: var(--header-preview-bg);
-  border: 2px solid var(--header-preview-bg);
-  border-radius: 6px;
-  color: var(--header-preview-text);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  box-shadow: 0 2px 8px var(--header-preview-shadow);
-}
-
-.header-right .preview-btn:hover {
-  background: var(--header-preview-hover);
-  border-color: var(--header-preview-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px var(--header-preview-shadow-hover);
-}
-
-.header-right .preview-btn:active {
-  transform: translateY(0);
-}
-
-.header-right .choose-project-btn {
-  padding: 4px 10px;
-  background: none;
-  border: 1px solid var(--editor-disconnected-border);
-  border-radius: 4px;
-  color: var(--editor-text-muted);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.header-right .choose-project-btn:hover {
-  border-color: var(--sidebar-active-accent);
-  color: var(--sidebar-active-accent);
-}
-
-.header-right .share-btn {
-  padding: 4px 10px;
-  background: var(--header-share-bg);
-  border: 1px solid var(--header-share-bg);
-  border-radius: 4px;
-  color: #fff;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.header-right .share-btn:hover {
-  background: var(--header-share-hover);
-  border-color: var(--header-share-hover);
 }
