@@ -24,6 +24,7 @@ node_modules/
 # Hub server secret — never commit this (matches any project subdirectory)
 **/.quarto/hub/hub.json
 ts-packages/*/dist/
+ts-packages/*/dist-bundle/
 ts-packages/*/*.tsbuildinfo
 q2-demos/*/dist/
 crates/wasm-quarto-hub-client/pkg/
