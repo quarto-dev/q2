@@ -234,13 +234,30 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
+  let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
+    // Re-entrancy guard: server.close() below fires server.onclose,
+    // which routes back here.
+    if (shuttingDown) return;
+    shuttingDown = true;
     await manager.disconnectAll();
     await server.close();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  // MCP hosts terminate stdio servers by closing stdin — but the SDK's
+  // StdioServerTransport never watches for EOF (its onclose only fires
+  // on programmatic close), and live sync websockets / reconnect
+  // timers keep the event loop alive forever, leaking one process per
+  // agent session (bd-9jq2a060). Watch stdin EOF ourselves; also wire
+  // server.onclose so a programmatic transport close shuts down too.
+  process.stdin.on('end', () => {
+    void shutdown();
+  });
+  server.onclose = () => {
+    void shutdown();
+  };
 }
 
 // Run only when executed as the binary, not when imported (e.g. by
