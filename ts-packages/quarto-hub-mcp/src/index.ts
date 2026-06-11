@@ -15,8 +15,13 @@
  *   QUARTO_HUB_SERVER              - Sync server URL (overridden by --server)
  *   QUARTO_HUB_MCP_CLIENT_ID       - Operator-supplied Google OAuth client id
  *   QUARTO_HUB_MCP_CLIENT_SECRET   - Operator-supplied matching client secret
+ *   QUARTO_HUB_MCP_ISSUER          - OIDC issuer URL (default:
+ *                                    https://accounts.google.com). http://
+ *                                    only for loopback issuers, and only with
+ *                                    the insecure escape hatch below.
  *   QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH - "1" to allow Bearer over plain HTTP
- *                                        to non-loopback hosts (dev only)
+ *                                        to non-loopback hosts, and plain-http
+ *                                        loopback issuers (dev only)
  */
 
 import { realpathSync } from 'node:fs';
@@ -34,11 +39,10 @@ import {
   discoverAuthorizationServer,
   loadOAuthConfigFromEnv,
   MissingOAuthConfigError,
+  resolveIssuer,
 } from './auth/oauth-config.js';
 import { redactTokens } from './auth/redact.js';
 import { RefreshManager } from './auth/refresh-manager.js';
-
-const GOOGLE_ISSUER = 'https://accounts.google.com';
 
 /**
  * Canonical Quarto Hub sync server — the default when neither
@@ -175,11 +179,22 @@ async function main(): Promise<void> {
   let refreshManager: RefreshManager | undefined;
   let flowConfig: ReturnType<typeof loadOAuthConfigFromEnv> | undefined;
 
-  // Lazy, memoized discovery: defers the Google network call off the
+  // IdP issuer: QUARTO_HUB_MCP_ISSUER override (validated: https, or
+  // gated loopback http) with Google as the default. Fail fast and
+  // named on bad config.
+  let issuer: string;
+  try {
+    issuer = resolveIssuer();
+  } catch (err) {
+    console.error(`[hub-mcp] ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+
+  // Lazy, memoized discovery: defers the IdP network call off the
   // startup path so a slow/unreachable discovery endpoint can't stop the
   // server from coming up (no-auth hubs and reads don't need it). Fires
   // on the first refresh / sign-in that actually requires it.
-  const authServer = () => discoverAuthorizationServer(GOOGLE_ISSUER);
+  const authServer = () => discoverAuthorizationServer(issuer);
 
   if (hasAuthEnv) {
     try {
@@ -193,7 +208,7 @@ async function main(): Promise<void> {
     }
 
     credentialStore = new CredentialStore({
-      issuer: GOOGLE_ISSUER,
+      issuer,
       clientId: flowConfig.clientId,
     });
     refreshManager = new RefreshManager({
@@ -233,7 +248,7 @@ async function main(): Promise<void> {
           flowConfig: {
             clientId: flowConfig.clientId,
             clientSecret: flowConfig.clientSecret,
-            issuer: GOOGLE_ISSUER,
+            issuer,
             redirectPort,
           },
           authServer,

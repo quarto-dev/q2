@@ -40,6 +40,8 @@
 import { decodeJwt } from 'jose';
 import * as oauth from 'oauth4webapi';
 
+import { issuerAllowsInsecureRequests } from './oauth-config.js';
+
 import {
   type CredentialBundle,
   type CredentialStore,
@@ -190,26 +192,26 @@ export class RefreshManager {
     const as = await this.deps.authServer();
     const client: oauth.Client = { client_id: this.deps.config.clientId };
     const clientAuth = oauth.ClientSecretPost(this.deps.config.clientSecret);
-    const requestOpts = this.deps.fetch
-      ? ({ [oauth.customFetch]: this.deps.fetch } as const)
-      : undefined;
+    const requestOpts: {
+      [oauth.customFetch]?: typeof fetch;
+      [oauth.allowInsecureRequests]?: boolean;
+    } = {};
+    if (this.deps.fetch) requestOpts[oauth.customFetch] = this.deps.fetch;
+    // Loopback/dev IdPs over plain http (gated upstream by
+    // resolveIssuer) need oauth4webapi's explicit opt-in.
+    if (issuerAllowsInsecureRequests(as.issuer)) {
+      requestOpts[oauth.allowInsecureRequests] = true;
+    }
 
     let tokens: oauth.TokenEndpointResponse;
     try {
-      const resp = requestOpts
-        ? await oauth.refreshTokenGrantRequest(
-            as,
-            client,
-            clientAuth,
-            bundle.refreshToken,
-            requestOpts,
-          )
-        : await oauth.refreshTokenGrantRequest(
-            as,
-            client,
-            clientAuth,
-            bundle.refreshToken,
-          );
+      const resp = await oauth.refreshTokenGrantRequest(
+        as,
+        client,
+        clientAuth,
+        bundle.refreshToken,
+        requestOpts,
+      );
       tokens = await oauth.processRefreshTokenResponse(as, client, resp);
     } catch (err) {
       if (err instanceof oauth.ResponseBodyError) {

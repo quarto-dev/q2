@@ -7,7 +7,13 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { loadOAuthConfigFromEnv, MissingOAuthConfigError } from './oauth-config.js';
+import {
+  GOOGLE_ISSUER,
+  issuerAllowsInsecureRequests,
+  loadOAuthConfigFromEnv,
+  MissingOAuthConfigError,
+  resolveIssuer,
+} from './oauth-config.js';
 
 function envOnly(values: Record<string, string | undefined>): NodeJS.ProcessEnv {
   const e: NodeJS.ProcessEnv = {};
@@ -59,5 +65,63 @@ describe('loadOAuthConfigFromEnv', () => {
         envOnly({ QUARTO_HUB_MCP_CLIENT_ID: '  ', QUARTO_HUB_MCP_CLIENT_SECRET: 'sec' }),
       ),
     ).toThrowError(/QUARTO_HUB_MCP_CLIENT_ID/);
+  });
+});
+
+describe('resolveIssuer', () => {
+  it('defaults to Google when unset', () => {
+    expect(resolveIssuer(envOnly({}))).toBe(GOOGLE_ISSUER);
+  });
+
+  it('accepts an https issuer override', () => {
+    expect(resolveIssuer(envOnly({ QUARTO_HUB_MCP_ISSUER: 'https://idp.example.com' }))).toBe(
+      'https://idp.example.com',
+    );
+  });
+
+  it('treats empty / whitespace as unset', () => {
+    expect(resolveIssuer(envOnly({ QUARTO_HUB_MCP_ISSUER: '  ' }))).toBe(GOOGLE_ISSUER);
+  });
+
+  it('accepts an http loopback issuer only with the insecure escape hatch', () => {
+    expect(
+      resolveIssuer(
+        envOnly({
+          QUARTO_HUB_MCP_ISSUER: 'http://127.0.0.1:9999',
+          QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH: '1',
+        }),
+      ),
+    ).toBe('http://127.0.0.1:9999');
+  });
+
+  it('rejects an http loopback issuer without the escape hatch, naming it', () => {
+    expect(() =>
+      resolveIssuer(envOnly({ QUARTO_HUB_MCP_ISSUER: 'http://127.0.0.1:9999' })),
+    ).toThrowError(/QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH/);
+  });
+
+  it('rejects an http non-loopback issuer even with the escape hatch', () => {
+    expect(() =>
+      resolveIssuer(
+        envOnly({
+          QUARTO_HUB_MCP_ISSUER: 'http://idp.example.com',
+          QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH: '1',
+        }),
+      ),
+    ).toThrowError(/https/i);
+  });
+
+  it('rejects garbage and non-http(s) schemes', () => {
+    expect(() => resolveIssuer(envOnly({ QUARTO_HUB_MCP_ISSUER: 'not a url' }))).toThrowError();
+    expect(() =>
+      resolveIssuer(envOnly({ QUARTO_HUB_MCP_ISSUER: 'ftp://idp.example.com' })),
+    ).toThrowError();
+  });
+});
+
+describe('issuerAllowsInsecureRequests', () => {
+  it('is false for https issuers and true for http ones', () => {
+    expect(issuerAllowsInsecureRequests('https://accounts.google.com')).toBe(false);
+    expect(issuerAllowsInsecureRequests('http://127.0.0.1:9999')).toBe(true);
   });
 });

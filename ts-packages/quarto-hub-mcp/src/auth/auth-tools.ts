@@ -48,6 +48,7 @@ import {
 } from './loopback.js';
 import type { AuthServerProvider } from './oauth-config.js';
 import { generatePkceParams } from './pkce.js';
+import { issuerAllowsInsecureRequests } from './oauth-config.js';
 import { redactTokens } from './redact.js';
 import {
   type RefreshManager,
@@ -454,27 +455,25 @@ export class AuthToolsState {
       callbackParams,
       expectedState,
     );
-    const requestOpts = this.deps.fetch
-      ? ({ [oauth.customFetch]: this.deps.fetch } as const)
-      : undefined;
-    const resp = requestOpts
-      ? await oauth.authorizationCodeGrantRequest(
-          as,
-          client,
-          clientAuth,
-          validated,
-          redirectUri,
-          codeVerifier,
-          requestOpts,
-        )
-      : await oauth.authorizationCodeGrantRequest(
-          as,
-          client,
-          clientAuth,
-          validated,
-          redirectUri,
-          codeVerifier,
-        );
+    const requestOpts: {
+      [oauth.customFetch]?: typeof fetch;
+      [oauth.allowInsecureRequests]?: boolean;
+    } = {};
+    if (this.deps.fetch) requestOpts[oauth.customFetch] = this.deps.fetch;
+    // Loopback/dev IdPs over plain http (gated upstream by
+    // resolveIssuer) need oauth4webapi's explicit opt-in.
+    if (issuerAllowsInsecureRequests(as.issuer)) {
+      requestOpts[oauth.allowInsecureRequests] = true;
+    }
+    const resp = await oauth.authorizationCodeGrantRequest(
+      as,
+      client,
+      clientAuth,
+      validated,
+      redirectUri,
+      codeVerifier,
+      requestOpts,
+    );
     return await oauth.processAuthorizationCodeResponse(as, client, resp);
   }
 

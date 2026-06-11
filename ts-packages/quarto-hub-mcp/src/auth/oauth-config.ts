@@ -15,6 +15,8 @@
 
 import * as oauth from 'oauth4webapi';
 
+import { isLoopbackHost } from '../connection-manager.js';
+
 // ---------------------------------------------------------------------------
 // Typed errors
 // ---------------------------------------------------------------------------
@@ -37,6 +39,11 @@ export interface OAuthEnvConfig {
 
 const CLIENT_ID_VAR = 'QUARTO_HUB_MCP_CLIENT_ID';
 const CLIENT_SECRET_VAR = 'QUARTO_HUB_MCP_CLIENT_SECRET';
+const ISSUER_VAR = 'QUARTO_HUB_MCP_ISSUER';
+const ALLOW_INSECURE_VAR = 'QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH';
+
+/** The default identity provider. */
+export const GOOGLE_ISSUER = 'https://accounts.google.com';
 
 function readNonEmpty(env: NodeJS.ProcessEnv, name: string): string | undefined {
   const v = env[name];
@@ -63,6 +70,53 @@ export function loadOAuthConfigFromEnv(
   return { clientId: clientId!, clientSecret: clientSecret! };
 }
 
+/**
+ * Resolve the OIDC issuer: `QUARTO_HUB_MCP_ISSUER` env override, else
+ * Google. Hubs configure their IdP with `--oidc-issuer`; this is the
+ * client-side counterpart, so an MCP client can match a non-Google
+ * hub. An `http://` issuer (mock IdPs, local dev) is allowed only for
+ * loopback hosts AND with `QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH=1` —
+ * the same escape hatch, and the same loopback restriction, as the
+ * connection manager's insecure-transport gate.
+ */
+export function resolveIssuer(env: NodeJS.ProcessEnv = process.env): string {
+  const raw = readNonEmpty(env, ISSUER_VAR);
+  if (raw === undefined) return GOOGLE_ISSUER;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`${ISSUER_VAR} is not a valid URL: ${JSON.stringify(raw)}`);
+  }
+  if (url.protocol === 'https:') return raw;
+  if (url.protocol !== 'http:') {
+    throw new Error(`${ISSUER_VAR} must be an https:// URL, got ${JSON.stringify(raw)}`);
+  }
+  if (!isLoopbackHost(url.hostname)) {
+    throw new Error(
+      `${ISSUER_VAR} must be an https:// URL for non-loopback hosts ` +
+        `(got ${JSON.stringify(raw)}); plain http is allowed only for ` +
+        `127.0.0.1 / localhost development issuers.`,
+    );
+  }
+  if (env[ALLOW_INSECURE_VAR] !== '1') {
+    throw new Error(
+      `${ISSUER_VAR} is a plain-http loopback issuer; set ` +
+        `${ALLOW_INSECURE_VAR}=1 to allow it (dev/test only).`,
+    );
+  }
+  return raw;
+}
+
+/**
+ * Whether oauth4webapi calls against this issuer need the
+ * `allowInsecureRequests` option. Only ever true for issuers that
+ * passed `resolveIssuer`'s loopback + escape-hatch gate.
+ */
+export function issuerAllowsInsecureRequests(issuer: string): boolean {
+  return new URL(issuer).protocol === 'http:';
+}
+
 // ---------------------------------------------------------------------------
 // AuthorizationServer discovery (cached)
 // ---------------------------------------------------------------------------
@@ -83,7 +137,12 @@ export async function discoverAuthorizationServer(
 ): Promise<oauth.AuthorizationServer> {
   if (cachedAS && cachedAS.issuer === issuer) return cachedAS.as;
   const url = new URL(issuer);
-  const requestOpts = opts?.fetch ? { [oauth.customFetch]: opts.fetch } : undefined;
+  const requestOpts: {
+    [oauth.customFetch]?: typeof fetch;
+    [oauth.allowInsecureRequests]?: boolean;
+  } = {};
+  if (opts?.fetch) requestOpts[oauth.customFetch] = opts.fetch;
+  if (issuerAllowsInsecureRequests(issuer)) requestOpts[oauth.allowInsecureRequests] = true;
   const resp = await oauth.discoveryRequest(url, requestOpts);
   const as = await oauth.processDiscoveryResponse(url, resp);
   cachedAS = { issuer, as };
