@@ -33,16 +33,31 @@ export class McpTestClient {
    */
   readonly stdoutPollution: string[] = [];
 
+  /** Server stderr, line by line (diagnostics; the auth e2e scrapes
+   * the sign-in URL from here). */
+  readonly stderrLines: string[] = [];
+  private stderrBuffer = '';
+
   /**
    * Start the MCP server process with the given arguments.
    *
    * `entry` overrides the server entry point (default: the tsc build
    * at dist/index.js) — used by bundle tests to drive the esbuild
-   * artifact from outside the repo tree.
+   * artifact from outside the repo tree. `command` (+ leading args)
+   * replaces `node` entirely — used by the auth e2e to drive the real
+   * `q2 mcp` launcher. `env` REPLACES the child environment when
+   * given (callers spread process.env themselves if they want it).
    */
-  async start(args: string[], opts?: { entry?: string }): Promise<void> {
-    this.proc = spawn('node', [opts?.entry ?? SERVER_ENTRY, ...args], {
+  async start(
+    args: string[],
+    opts?: { entry?: string; command?: { program: string; args: string[] }; env?: NodeJS.ProcessEnv },
+  ): Promise<void> {
+    const [program, leading] = opts?.command
+      ? [opts.command.program, opts.command.args]
+      : ['node', [opts?.entry ?? SERVER_ENTRY]];
+    this.proc = spawn(program, [...leading, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      ...(opts?.env ? { env: opts.env } : {}),
     });
 
     this.proc.stdout!.setEncoding('utf-8');
@@ -53,6 +68,12 @@ export class McpTestClient {
 
     this.proc.stderr!.setEncoding('utf-8');
     this.proc.stderr!.on('data', (chunk: string) => {
+      this.stderrBuffer += chunk;
+      let nl;
+      while ((nl = this.stderrBuffer.indexOf('\n')) >= 0) {
+        this.stderrLines.push(this.stderrBuffer.slice(0, nl));
+        this.stderrBuffer = this.stderrBuffer.slice(nl + 1);
+      }
       // Suppress stderr noise in tests unless debugging
       if (process.env['DEBUG_MCP']) {
         process.stderr.write(`[mcp-stderr] ${chunk}`);
@@ -68,6 +89,25 @@ export class McpTestClient {
 
     // Send initialized notification
     this.sendNotification('notifications/initialized');
+  }
+
+  /**
+   * Wait until a stderr line matching `pattern` appears (scanning
+   * lines already received too) and return the first match.
+   */
+  async waitForStderr(pattern: RegExp, timeoutMs = 10000): Promise<string> {
+    const deadline = Date.now() + timeoutMs;
+    let scanned = 0;
+    while (Date.now() < deadline) {
+      for (; scanned < this.stderrLines.length; scanned++) {
+        const line = this.stderrLines[scanned]!;
+        if (pattern.test(line)) return line;
+      }
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error(
+      `timed out waiting for stderr matching ${pattern}; saw:\n${this.stderrLines.join('\n')}`,
+    );
   }
 
   /**
