@@ -26,6 +26,14 @@ export class McpTestClient {
   private nextId = 1;
 
   /**
+   * Every stdout line that failed to parse as JSON-RPC. In a correct
+   * stdio MCP server this stays empty: stdout belongs exclusively to
+   * the protocol, and any stray write here corrupts the stream for
+   * real clients.
+   */
+  readonly stdoutPollution: string[] = [];
+
+  /**
    * Start the MCP server process with the given arguments.
    */
   async start(args: string[]): Promise<void> {
@@ -56,6 +64,23 @@ export class McpTestClient {
 
     // Send initialized notification
     this.sendNotification('notifications/initialized');
+  }
+
+  /**
+   * Close the server's stdin (how MCP hosts terminate stdio servers)
+   * and report whether the process exited within `timeoutMs`. Unlike
+   * `stop()`, does NOT kill the process on timeout — callers assert on
+   * the result and then call `stop()` to clean up.
+   */
+  async endStdinAndWaitForExit(timeoutMs = 5000): Promise<boolean> {
+    if (!this.proc) throw new Error('server not started');
+    if (this.proc.exitCode !== null) return true;
+    const exited = once(this.proc, 'exit').then(() => true);
+    this.proc.stdin!.end();
+    const timedOut = new Promise<boolean>((resolve) =>
+      setTimeout(() => resolve(false), timeoutMs),
+    );
+    return Promise.race([exited, timedOut]);
   }
 
   /**
@@ -163,7 +188,8 @@ export class McpTestClient {
             for (const w of waiters) w();
           }
         } catch {
-          // Ignore unparseable lines
+          // Not JSON-RPC: record as protocol pollution (see field doc).
+          this.stdoutPollution.push(line);
         }
       }
     }

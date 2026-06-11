@@ -23,6 +23,7 @@ import { pathToFileURL } from 'node:url';
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { setSyncLogger } from '@quarto/quarto-sync-client';
 
 import { ConnectionManager } from './connection-manager.js';
 import { registerTools } from './tools.js';
@@ -131,9 +132,25 @@ function installRedactingErrorHandlers(): void {
   });
 }
 
+/**
+ * Once the JSON-RPC transport owns stdout, nothing else may write to
+ * it (bd-sl4o01y0). Route sync-client diagnostics to stderr via its
+ * logger seam, and — defense in depth against any dependency that
+ * calls `console.log` — rebind console.log itself to stderr. The
+ * transport is unaffected: it writes to `process.stdout` directly.
+ *
+ * Called after parseArgs so `--help` (pre-protocol, conventional)
+ * still prints to stdout.
+ */
+function protectProtocolStdout(): void {
+  setSyncLogger((...args) => console.error(...args));
+  console.log = (...args: unknown[]) => console.error(...args);
+}
+
 async function main(): Promise<void> {
   installRedactingErrorHandlers();
   const { serverUrl, readOnly, redirectPort } = parseArgs(process.argv);
+  protectProtocolStdout();
 
   // Optional auth bootstrap: if both env vars are set we wire up the
   // credential store + refresh manager + auth tools; if not, we run

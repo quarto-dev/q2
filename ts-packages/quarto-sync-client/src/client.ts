@@ -45,6 +45,7 @@ import type {
   SyncClientAuthOptions,
 } from './types.js';
 import { computeSHA256 } from './hash.js';
+import { syncLog } from './log.js';
 
 /**
  * Build the WebSocket adapter for a sync connection. With `auth` set,
@@ -149,11 +150,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   const g = globalThis as any;
   if (typeof g.addEventListener === 'function') {
     const onBrowserOffline = () => {
-      console.log('Browser offline event fired');
+      syncLog('Browser offline event fired');
       callbacks.onConnectionChange?.(false);
     };
     const onBrowserOnline = () => {
-      console.log('Browser online event fired');
+      syncLog('Browser online event fired');
       callbacks.onConnectionChange?.(true);
     };
 
@@ -504,9 +505,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // Try to connect to peer, but continue in offline mode if it fails
       let isOnline = false;
       try {
-        console.log('Waiting for peer connection...');
+        syncLog('Waiting for peer connection...');
         await waitForPeer(state.repo, peerTimeoutMs);
-        console.log('Peer connected - online mode');
+        syncLog('Peer connected - online mode');
         isOnline = true;
       } catch (peerError) {
         console.warn('Peer connection failed, continuing in offline mode:', peerError);
@@ -565,14 +566,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const onPeerConnect = () => {
         if (!currentlyOnline) {
           currentlyOnline = true;
-          console.log('Peer connected - switching to online mode');
+          syncLog('Peer connected - switching to online mode');
           callbacks.onConnectionChange?.(true);
         }
       };
       const onPeerDisconnect = () => {
         if (currentlyOnline) {
           currentlyOnline = false;
-          console.log('Peer disconnected - switching to offline mode');
+          syncLog('Peer disconnected - switching to offline mode');
           callbacks.onConnectionChange?.(false);
         }
       };
@@ -951,9 +952,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // helpers) should pass options.peerTimeoutMs to wait for the peer.
       let isOnline = false;
       try {
-        console.log('Waiting for peer connection...');
+        syncLog('Waiting for peer connection...');
         await waitForPeer(state.repo, options.peerTimeoutMs ?? 1);
-        console.log('Peer connected - online mode');
+        syncLog('Peer connected - online mode');
         isOnline = true;
       } catch (peerError) {
         console.warn('Peer connection failed, creating project in offline mode:', peerError);
@@ -973,13 +974,13 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
       // Phase 2: Create the index document via createDoc with the
       // pre-generated ID so the first change uses the correct actor.
-      console.log(`[createNewProject] Creating index document with ID ${indexDocId}`);
+      syncLog(`[createNewProject] Creating index document with ID ${indexDocId}`);
       const indexHandle = createDoc<IndexDocument>(
         { files: {}, version: CURRENT_SCHEMA_VERSION, identities: {} },
         indexDocId,
       );
       state.indexHandle = indexHandle;
-      console.log(`[createNewProject] Index document created, ID:`, indexHandle.documentId);
+      syncLog(`[createNewProject] Index document created, ID:`, indexHandle.documentId);
 
       // Write identity (separate change so the schema init is clean).
       if (resolvedActorId && screenName) {
@@ -1056,14 +1057,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const onPeerConnect = () => {
         if (!currentlyOnline) {
           currentlyOnline = true;
-          console.log('Peer connected - switching to online mode');
+          syncLog('Peer connected - switching to online mode');
           callbacks.onConnectionChange?.(true);
         }
       };
       const onPeerDisconnect = () => {
         if (currentlyOnline) {
           currentlyOnline = false;
-          console.log('Peer disconnected - switching to offline mode');
+          syncLog('Peer disconnected - switching to offline mode');
           callbacks.onConnectionChange?.(false);
         }
       };

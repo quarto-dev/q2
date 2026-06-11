@@ -49,6 +49,11 @@ export type {
 export { createSyncClient } from './client.js';
 export type { SyncClient } from './client.js';
 
+// Injectable diagnostic-log sink (bd-sl4o01y0): stdio hosts (hub-mcp)
+// must route library diagnostics to stderr; browsers keep console.log.
+export { setSyncLogger, syncLog } from './log.js';
+export type { SyncLogger } from './log.js';
+
 // Browser adapter with terminal disconnect (zombie-reconnect fix,
 // bd-jit6pdwq) — used internally by connect(); exported for tests
 // and for consumers that build adapters directly.
