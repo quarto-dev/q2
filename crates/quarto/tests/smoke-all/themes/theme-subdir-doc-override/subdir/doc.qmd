@@ -1,0 +1,20 @@
+---
+title: Subdir Doc Theme Override
+format:
+  html:
+    theme:
+      - vapor
+      - custom.scss
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["#170229", "subdir-override-marker", "#e1d2c3"]
+---
+
+## Subdir Override
+
+Project sets darkly, `_metadata.yml` sets flatly, this document in `subdir/`
+overrides to vapor + a co-located `custom.scss`. Vapor (#170229) and the marker
+(#e1d2c3) must appear; the path `custom.scss` resolves relative to this document.

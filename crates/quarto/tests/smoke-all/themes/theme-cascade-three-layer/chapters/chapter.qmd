@@ -1,0 +1,20 @@
+---
+title: Three-Layer Theme Cascade
+format:
+  html:
+    theme:
+      - vapor
+      - custom.scss
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["#170229", "cascade-marker", "#f0e0d0"]
+---
+
+## Three-Layer Cascade
+
+Project sets darkly, `_metadata.yml` sets flatly, this document overrides
+to vapor + custom SCSS. Vapor (#170229) and the custom marker (#f0e0d0) must
+appear; the document-level theme wins over both directory and project levels.
