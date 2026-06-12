@@ -55,6 +55,28 @@ This is the same check that runs before `dev:fresh`, but without starting the de
 
 **Important:** Plain `tsc --noEmit` without `-p tsconfig.app.json` uses different settings and may miss errors that will break at runtime. Always use `npm run typecheck` or `npm run preflight`.
 
+### Testing on Mobile / Other Devices
+
+By default the dev server only accepts connections from `localhost`. To test on a phone or tablet on the same network, you need two things:
+
+1. **Expose the server on the network** (`--host`)
+2. **Serve over HTTPS** — browsers treat `http://<ip>` as an insecure context and block APIs like `crypto.randomUUID()` and `crypto.subtle`, causing a blank white page
+
+Start the server with both:
+
+```bash
+VITE_HTTPS=1 npm run dev:fresh -- --host
+```
+
+Vite will print the network HTTPS URL to open on your device:
+
+```
+➜  Local:   https://localhost:5173/
+➜  Network: https://192.168.x.x:5173/
+```
+
+The certificate is self-signed, so the browser will show a security warning on first visit. Click through it ("Advanced" → "Proceed") — this is expected for local development.
+
 ### When to Rebuild WASM
 
 You need to rebuild the WASM module (`npm run build:wasm` or `npm run dev:fresh`) when:

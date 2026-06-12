@@ -5,10 +5,12 @@
 //! to produce a working build:
 //!
 //! 1. `npm install` at the repo root (npm workspaces)
-//! 2. Build hub-client (includes WASM via `npm run build:all`)
-//! 3. Build trace-viewer (if present; Phase 4.3+)
-//! 4. Build q2-preview-spa (if present; q2-preview Phase A.4 / bd-501n)
-//! 5. Build the Rust workspace (`cargo build --workspace`)
+//! 2. Build the ts-packages workspaces (`dist/` for Node consumers like
+//!    the quarto-hub-mcp server; bd-6rczoll3 — see `ts_packages.rs`)
+//! 3. Build hub-client (includes WASM via `npm run build:all`)
+//! 4. Build trace-viewer (if present; Phase 4.3+)
+//! 5. Build q2-preview-spa (if present; q2-preview Phase A.4 / bd-501n)
+//! 6. Build the Rust workspace (`cargo build --workspace`)
 //!
 //! Both SPAs (trace-viewer + q2-preview-spa) must build *before* the
 //! Rust workspace because `quarto-trace-server` and `quarto-preview`
@@ -23,6 +25,8 @@ pub struct BuildAllConfig {
     /// Skip `npm install`. Useful when running in a loop where dependencies
     /// haven't changed.
     pub skip_npm_install: bool,
+    /// Skip the ts-packages build step. No-op when `ts-packages/` is absent.
+    pub skip_ts_packages_build: bool,
     /// Skip the hub-client build step.
     pub skip_hub_build: bool,
     /// Skip the trace-viewer build step. No-op until Phase 4.3 lands.
@@ -42,6 +46,7 @@ impl Default for BuildAllConfig {
     fn default() -> Self {
         Self {
             skip_npm_install: false,
+            skip_ts_packages_build: false,
             skip_hub_build: false,
             skip_trace_viewer_build: false,
             skip_hub_mcp_bundle: false,
@@ -55,9 +60,14 @@ impl Default for BuildAllConfig {
 /// Run the build-all command.
 pub fn run(config: &BuildAllConfig) -> Result<()> {
     let project_root = find_project_root()?;
+    let ts_workspaces = crate::ts_packages::workspace_paths(&project_root);
 
     let steps: Vec<(&str, bool)> = vec![
         ("npm install (root workspaces)", !config.skip_npm_install),
+        (
+            "ts-packages build",
+            !config.skip_ts_packages_build && !ts_workspaces.is_empty(),
+        ),
         ("hub-client build (WASM + TS)", !config.skip_hub_build),
         (
             "trace-viewer build",
@@ -90,6 +100,29 @@ pub fn run(config: &BuildAllConfig) -> Result<()> {
             "npm install failed",
         )?;
         println!("✓ npm install complete");
+    }
+
+    // Step: ts-packages build (bd-6rczoll3)
+    //
+    // Emits the `dist/` output that Node consumers (the quarto-hub-mcp
+    // server) resolve at runtime; nothing else in this sequence builds it
+    // because hub-client bundles ts-packages from source.
+    if !config.skip_ts_packages_build && !ts_workspaces.is_empty() {
+        step_idx += 1;
+        banner(step_idx, total, "Building ts-packages workspaces");
+        let mut npm_args: Vec<&str> = vec!["run", "build", "--if-present"];
+        for workspace in &ts_workspaces {
+            npm_args.push("-w");
+            npm_args.push(workspace);
+        }
+        run_command(
+            "npm",
+            &npm_args,
+            &project_root,
+            None,
+            "ts-packages build failed",
+        )?;
+        println!("✓ ts-packages build complete");
     }
 
     // Step: hub-client build (WASM + TS)

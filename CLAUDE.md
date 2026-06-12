@@ -481,8 +481,13 @@ cargo xtask verify           # Full verification (Rust + hub-client builds + tes
 This runs:
 1. `cargo build --workspace` - Build all Rust crates
 2. `cargo nextest run --workspace` - Run all Rust tests
-3. `cd hub-client && npm run build:all` - Build hub-client (includes WASM)
-4. `cd hub-client && npm run test:ci` - Run hub-client tests
+3. `npm run build --if-present -w ts-packages/...` - Build the ts-packages
+   workspaces, then smoke-check the quarto-hub-mcp server (`node
+   dist/index.js --help` must survive ESM module resolution). These `dist/`
+   outputs are consumed at runtime by Node consumers (the MCP server);
+   hub-client bundles ts-packages from source, so nothing else builds them.
+4. `cd hub-client && npm run build:all` - Build hub-client (includes WASM)
+5. `cd hub-client && npm run test:ci` - Run hub-client tests
 
 **Skip options** (for faster iteration):
 ```bash

@@ -1,5 +1,20 @@
 name: Hub-Client E2E Tests
 
+# Label runs by mode in the Actions UI. `run-name` is evaluated at workflow
+# top level with only the `github`/`inputs` contexts available, so it branches
+# purely on the trigger. Order matters — first truthy arm wins:
+#   - recreate-all-snapshots dispatch → baseline regeneration
+#   - schedule                        → nightly (interactive + smoke-all)
+#   - run-smoke-all dispatch          → on-demand interactive + smoke-all
+#   - everything else (push/PR)       → the fast interactive gate
+run-name: >-
+  ${{
+    inputs.recreate-all-snapshots && 'E2E — recreate baselines'
+    || github.event_name == 'schedule' && 'E2E — interactive + smoke-all (nightly)'
+    || inputs.run-smoke-all && 'E2E — interactive + smoke-all'
+    || 'E2E — interactive'
+  }}
+
 on:
   workflow_dispatch:
     inputs:
@@ -158,7 +173,7 @@ jobs:
         if: inputs.run-smoke-all == true || github.event_name == 'schedule'
         run: |
           cd hub-client
-          npx playwright test e2e/smoke-all.spec.ts
+          npx playwright test --config playwright.smoke-all.config.ts
 
       # Run visual regression tests
       - name: Run visual tests

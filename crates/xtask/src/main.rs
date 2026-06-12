@@ -29,6 +29,7 @@ mod stage_doc_examples;
 mod switch_task;
 mod test;
 mod treesitter_crlf;
+mod ts_packages;
 mod util;
 mod verify;
 
@@ -140,8 +141,9 @@ enum Command {
     /// 3. Build all Rust crates (cargo build --workspace, with -D warnings)
     /// 4. Test tree-sitter grammars (tree-sitter test)
     /// 5. Run all Rust tests (cargo nextest run --workspace, with -D warnings)
-    /// 6. Build hub-client including WASM (npm run build:all)
-    /// 7. Run hub-client tests (npm run test:ci)
+    /// 6. Build ts-packages workspaces + quarto-hub-mcp smoke check
+    /// 7. Build hub-client including WASM (npm run build:all)
+    /// 8. Run hub-client tests (npm run test:ci)
     ///
     /// Use this before pushing to ensure nothing will fail in CI.
     Verify {
@@ -152,6 +154,10 @@ enum Command {
         /// Skip Rust tests.
         #[arg(long)]
         skip_rust_tests: bool,
+
+        /// Skip the ts-packages build + quarto-hub-mcp smoke check.
+        #[arg(long)]
+        skip_ts_packages_build: bool,
 
         /// Skip hub-client build.
         #[arg(long)]
@@ -235,15 +241,20 @@ enum Command {
     /// of truth for what a fresh checkout (or CI) needs to produce a working
     /// build:
     /// 1. npm install at the repo root (npm workspaces)
-    /// 2. hub-client build (includes WASM)
-    /// 3. trace-viewer build (if present; Phase 4.3+)
-    /// 4. q2-preview-spa build (if present; q2-preview Phase A.4)
-    /// 5. hub MCP bundle (q2-mcp embed artifact; bd-81cfshmw)
-    /// 6. cargo build --workspace
+    /// 2. ts-packages build (dist/ for Node consumers like quarto-hub-mcp)
+    /// 3. hub-client build (includes WASM)
+    /// 4. trace-viewer build (if present; Phase 4.3+)
+    /// 5. q2-preview-spa build (if present; q2-preview Phase A.4)
+    /// 6. hub MCP bundle (q2-mcp embed artifact; bd-81cfshmw)
+    /// 7. cargo build --workspace
     BuildAll {
         /// Skip `npm install`.
         #[arg(long)]
         skip_npm_install: bool,
+
+        /// Skip the ts-packages build.
+        #[arg(long)]
+        skip_ts_packages_build: bool,
 
         /// Skip the hub-client build.
         #[arg(long)]
@@ -307,6 +318,7 @@ fn main() -> Result<()> {
         Command::Verify {
             skip_rust_build,
             skip_rust_tests,
+            skip_ts_packages_build,
             skip_hub_build,
             skip_hub_tests,
             skip_trace_viewer_build,
@@ -322,6 +334,7 @@ fn main() -> Result<()> {
             let config = verify::VerifyConfig {
                 skip_rust_build,
                 skip_rust_tests,
+                skip_ts_packages_build,
                 skip_hub_build,
                 skip_hub_tests,
                 skip_trace_viewer_build,
@@ -342,6 +355,7 @@ fn main() -> Result<()> {
         Command::BuildHubMcpBundle {} => build_hub_mcp_bundle::run(),
         Command::BuildAll {
             skip_npm_install,
+            skip_ts_packages_build,
             skip_hub_build,
             skip_trace_viewer_build,
             skip_q2_preview_spa_build,
@@ -351,6 +365,7 @@ fn main() -> Result<()> {
         } => {
             let config = build_all::BuildAllConfig {
                 skip_npm_install,
+                skip_ts_packages_build,
                 skip_hub_build,
                 skip_trace_viewer_build,
                 skip_q2_preview_spa_build,
