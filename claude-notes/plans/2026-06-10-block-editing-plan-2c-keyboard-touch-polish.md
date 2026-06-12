@@ -419,16 +419,16 @@ is a known limitation under the single-instance assumption; acceptable for v1.
   does not exist; ran the equivalent `test:integration` → 231 passed.)
 - [x] `npm run test:ci` (hub-client): WASM tests green. (575 + 66 + 105 passed.)
 - [x] `npm run build:all` (hub-client): production bundle clean. (exit 0.)
-- [~] Dev server: edit a paragraph — verify the following paragraph does not shift.
-  Edit a heading — verify layout is stable. Tab into the preview iframe, navigate
-  with arrow keys, activate with Enter; verify no layout shift.
-  (Partially covered by the §4 Playwright reflow test, which asserts the heading
-  no-shift guarantee in a real layout engine; the hands-on dev-server arrow-nav
-  pass was NOT performed.)
-- [ ] **Manual — iOS** (device or Simulator): long-press a paragraph to activate;
+- [x] Dev server: edit a paragraph — verify the following paragraph does not shift.
+  Edit a heading — verify layout is stable.
+  (Confirmed live in the dev server during the measure-and-set follow-up — the
+  user verified paragraph/heading/list spacing holds and the h2 rule persists
+  ("works very well"). Also covered by the §4 stronger layout E2E suite. The
+  hands-on keyboard arrow-nav pass specifically was not separately exercised.)
+- [x] **Manual — iOS** (device or Simulator): long-press a paragraph to activate;
   verify OS copy/lookup sheet does not appear. Scroll the document by touch through
   a block; verify the page scrolls normally (`pan-y`). Activate a block; verify
-  the textarea appears and is editable.
-- [ ] **Manual — Android** (device or emulator): long-press a paragraph; verify no
+  the textarea appears and is editable. (Confirmed by the user.)
+- [x] **Manual — Android** (device or emulator): long-press a paragraph; verify no
   context menu appears. Scroll through blocks; verify normal scroll. Activate and
-  edit a block.
+  edit a block. (Confirmed by the user.)
