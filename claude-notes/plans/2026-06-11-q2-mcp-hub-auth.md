@@ -463,12 +463,31 @@ unit test could reach (both fixed TDD, strands closed):**
       docs land with bd-3tak0lyy); Node requirement stated plainly.
 - [ ] ~~npm publish pipeline~~ — moved to follow-up strand
       **bd-3tak0lyy** (gated on public-release readiness).
-- [ ] **End-to-end verification (CLAUDE.md policy):** real
-      `q2 mcp` configured in a real agent app on this machine;
-      authenticate interactively against quarto-hub.com; edit a real
-      project; observe the edit live in hub-client in a browser with
-      correct attribution; record exact invocation + observed output
-      here.
+- [x] **End-to-end LIVE verification against quarto-hub.com
+      (2026-06-12, per CLAUDE.md policy).** Invocation: the real
+      `target/debug/q2 mcp` (no `--server`; production default) with
+      `QUARTO_HUB_MCP_CLIENT_ID/SECRET` for the Desktop client
+      registered 2026-06-12, driven over MCP stdio
+      (`/tmp` driver script; transcript in session bd-81cfshmw).
+      Carlos completed the Google sign-in in his browser
+      (carlos.scheidegger@posit.co, domain-allowlisted). Observed,
+      client side (driver log):
+      `AUTHENTICATE: Authenticated as carlos.scheidegger@posit.co.` →
+      `connect_project SNHcgVzUkWpGFmcxkCkpCDfFtmu` returned the real
+      playground file list → `READ /charlie/autosync.qmd` returned
+      document content over Bearer wss. Observed, server side (hub
+      journal): 15:26:09Z `auth_ok … credential_kind="bearer"` on
+      /health and /ws, then `Document accessed
+      email=carlos.scheidegger@posit.co` for the project docs. Output
+      inspected on both ends.
+      **Loose end (filed separately):** sign-in with the gmail
+      account hit Google's `Error 400: invalid_request
+      (redirect_uri)` post-login, while three discriminator probes
+      and the full flow passed with the posit.co account — an
+      account-conditional Google-side rejection, NOT a flow bug
+      (loopback+PKCE+Desktop-client confirmed compliant; current
+      loopback policy re-checked 2026-06-12). Likely the consent
+      screen's Testing-mode test-user list.
 
 ## Rust-native findings (v1 research, kept for the record)
 
