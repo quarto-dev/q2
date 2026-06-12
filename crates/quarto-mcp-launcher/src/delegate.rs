@@ -21,11 +21,36 @@ use std::fs::File;
 use std::path::Path;
 use std::process::Command;
 
-/// Returns only on failure to launch (Unix) or with the child's exit
-/// code (Windows). The caller turns the code into `process::exit`.
-pub fn delegate(node: &Path, entry: &Path, args: &[String], lock: File) -> Result<i32> {
+/// Assemble the child command: `node <entry> [args…]`, inheriting the
+/// parent environment plus `extra_env` (the bundled hub defaults — see
+/// `defaults.rs`; the caller has already resolved user-env precedence,
+/// so everything in `extra_env` is set unconditionally). Split from
+/// [`delegate`] because the Unix path execs and can never be observed
+/// by a test.
+pub(crate) fn build_command(
+    node: &Path,
+    entry: &Path,
+    args: &[String],
+    extra_env: &[(&str, &str)],
+) -> Command {
     let mut cmd = Command::new(node);
     cmd.arg(entry).args(args);
+    for (var, value) in extra_env {
+        cmd.env(var, value);
+    }
+    cmd
+}
+
+/// Returns only on failure to launch (Unix) or with the child's exit
+/// code (Windows). The caller turns the code into `process::exit`.
+pub fn delegate(
+    node: &Path,
+    entry: &Path,
+    args: &[String],
+    extra_env: &[(&str, &str)],
+    lock: File,
+) -> Result<i32> {
+    let mut cmd = build_command(node, entry, args, extra_env);
 
     #[cfg(unix)]
     {
@@ -60,5 +85,65 @@ pub fn delegate(node: &Path, entry: &Path, args: &[String], lock: File) -> Resul
         // Keep the lock alive for the child's whole lifetime.
         drop(lock);
         Ok(status.code().unwrap_or(1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsStr;
+    use std::path::PathBuf;
+
+    fn env_of(cmd: &Command) -> Vec<(String, String)> {
+        cmd.get_envs()
+            .filter_map(|(k, v)| {
+                Some((
+                    k.to_string_lossy().into_owned(),
+                    v?.to_string_lossy().into_owned(),
+                ))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn build_command_shape_is_node_entry_args() {
+        let cmd = build_command(
+            &PathBuf::from("/usr/bin/node"),
+            &PathBuf::from("/cache/index.mjs"),
+            &["--server".to_string(), "ws://x".to_string()],
+            &[],
+        );
+        assert_eq!(cmd.get_program(), OsStr::new("/usr/bin/node"));
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy()).collect();
+        assert_eq!(args, vec!["/cache/index.mjs", "--server", "ws://x"]);
+        assert!(env_of(&cmd).is_empty(), "no injections requested");
+    }
+
+    #[test]
+    fn build_command_sets_extra_env_on_the_child() {
+        let cmd = build_command(
+            &PathBuf::from("node"),
+            &PathBuf::from("index.mjs"),
+            &[],
+            &[
+                ("QUARTO_HUB_MCP_CLIENT_ID", "id-123"),
+                ("QUARTO_HUB_SERVER", "wss://quarto-hub.com/ws"),
+            ],
+        );
+        assert_eq!(
+            env_of(&cmd),
+            vec![
+                ("QUARTO_HUB_MCP_CLIENT_ID".to_string(), "id-123".to_string()),
+                (
+                    "QUARTO_HUB_SERVER".to_string(),
+                    "wss://quarto-hub.com/ws".to_string()
+                ),
+            ]
+        );
+        // Inherited environment is untouched: no env_clear, no removals.
+        assert!(
+            cmd.get_envs().all(|(_, v)| v.is_some()),
+            "no variable removals expected"
+        );
     }
 }

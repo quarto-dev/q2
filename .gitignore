@@ -44,3 +44,7 @@ CLAUDE.local.md
 # marker (which only names the project) is intentionally NOT ignored.
 .braid.toml
 .braid-stragglers.jsonl
+
+# Release signing keypair — NEVER commit (secret half lives in GH secrets + password manager)
+/q2-release.key
+/q2-release.pub

@@ -18,12 +18,14 @@
 
 mod bundle;
 mod cache;
+mod defaults;
 mod delegate;
 mod node;
 
 pub use cache::{
     DEFAULT_MAX_AGE, ExtractedBundle, LAST_USED_FILE, LOCK_FILE, extract_and_lock, gc,
 };
+pub use defaults::{BundledDefault, Source, bundled_defaults, classify, injections, sources};
 pub use node::{Discovery, MIN_NODE_MAJOR, NodeError, NodeInfo, find_node, parse_version};
 
 use anyhow::{Result, bail};
@@ -57,10 +59,15 @@ pub fn run(args: &[String]) -> Result<i32> {
     cache::gc(&cache_root, &hash, cache::DEFAULT_MAX_AGE);
 
     let node = node::find_node(&node::Discovery::from_env())?;
+    // Bundled quarto-hub.com defaults (release builds only): injected
+    // into the child env for any hub variable the user hasn't set.
+    let hub_defaults = defaults::bundled_defaults();
+    let extra_env = defaults::injections(&hub_defaults, |var| std::env::var(var).ok());
     delegate::delegate(
         &node.path,
         &extracted.dir.join("index.mjs"),
         args,
+        &extra_env,
         extracted.lock,
     )
 }
@@ -77,6 +84,15 @@ fn cache_root() -> Result<PathBuf> {
 /// extracts, and which node would run it.
 fn launcher_info() -> Result<String> {
     let mut out = String::new();
+    // Hub-connection variable sources (env / bundled / absent). Values
+    // are never printed: the source is the diagnostic, and the release
+    // workflow asserts `: bundled` on all three. Reported even for
+    // placeholder builds — the defaults are a property of the binary,
+    // not of the embedded bundle.
+    let hub_defaults = defaults::bundled_defaults();
+    for (var, source) in defaults::sources(&hub_defaults, |v| std::env::var(v).ok()) {
+        out.push_str(&format!("default {var}: {source}\n"));
+    }
     if bundle::is_placeholder() {
         out.push_str("bundle: PLACEHOLDER (run `cargo xtask build-hub-mcp-bundle` and rebuild)\n");
         return Ok(out);
