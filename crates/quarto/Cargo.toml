@@ -47,6 +47,14 @@ open = "5"
 
 [build-dependencies]
 
+# Static-musl release builds (release plan D4, bd-c6l13j79): samod →
+# tokio-tungstenite(native-tls) → openssl-sys needs an openssl to link,
+# and no musl-built system openssl exists on the runners — build it
+# from source into the static binary. cfg-scoped so native dev builds
+# (glibc/macOS/Windows) are untouched.
+[target.'cfg(target_env = "musl")'.dependencies]
+openssl-sys = { version = "0.9", features = ["vendored"] }
+
 [dev-dependencies]
 tempfile = "3"
 pampa.workspace = true

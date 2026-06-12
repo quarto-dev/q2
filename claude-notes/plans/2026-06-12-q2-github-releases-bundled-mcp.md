@@ -332,21 +332,40 @@ same code path with the same mechanism).
 
 ### Phase 3 — Release workflow
 
-- [ ] `.github/workflows/release.yml` adapted from braid: preflight
+- [x] `.github/workflows/release.yml` adapted from braid: preflight
       tag/version check; matrix (linux_amd64, linux_arm64, darwin_amd64,
       darwin_arm64, windows_amd64); Defender exclusion on Windows;
       archive + sha256; minisign (trusted comment = filename) +
       self-verify vs install.sh pin; combined checksums.sha256;
-      `gh release create`
-- [ ] Bundle-before-build ordering per D2: node setup → `npm ci` →
-      `cargo xtask build-hub-mcp-bundle` (with D3's cross-target
-      handling) → `cargo build --release --locked -p quarto`
-- [ ] Bundled-defaults injection: pass `QUARTO_HUB_BUNDLED_*` from
-      secrets/vars into the cargo build env, **release workflow only**
-- [ ] Per-platform workflow assertions: binary version matches tag;
-      `q2 mcp --launcher-info` shows non-placeholder bundle, bundled
-      defaults present, keyring package matches target platform
-- [ ] Release-notes generation (braid's table format, adjusted)
+      `gh release create` (actionlint-clean)
+- [x] Bundle-before-build ordering per D2 — **expanded**: a functional
+      q2 embeds THREE payloads (MCP bundle, preview SPA, trace viewer).
+      New `web-payloads` job builds the target-independent ones once
+      (WASM toolchain mirrors hub-client-e2e.yml: nightly + rust-src +
+      clang + lockfile-pinned wasm-bindgen-cli) and the matrix downloads
+      them; the MCP bundle builds per target with `KEYRING_PLATFORMS`
+- [x] Bundled-defaults injection from secrets/vars in the release
+      workflow only, with a fail-fast guard if any value is empty
+- [x] Per-platform workflow assertions: binary `--version` equals the
+      tag version; `q2 mcp --launcher-info` shows non-placeholder
+      bundle, `default …: bundled` ×3, and a keyring addon per entry in
+      the target's KEYRING_PLATFORMS list
+- [x] Release-notes generation (braid's table, experimental banner,
+      node-24 note for `q2 mcp`, pubkey extracted from install.sh)
+- [x] musl TLS: `[target.'cfg(target_env = "musl")']`
+      `openssl-sys = { features = ["vendored"] }` in crates/quarto
+      (Cargo.lock updated — release builds are `--locked`)
+
+**Phase 3 decision record (2026-06-12).**
+- **CLI version contract changed** (Carlos, in-session): `q2 --version`
+  now reports the real workspace version (`quarto 0.1.0`) instead of
+  the `99.9.9-dev` extension-compatibility placeholder — release
+  artifacts must be verifiable against their tag, and Lua-side
+  `quarto.version` already reported {0,1,0}. TDD'd in
+  `quarto-util/src/version.rs` (red first). Consequence: extension
+  minimum-quarto-version checks will see 0.1.0; accepted for now.
+- The `99.9.9` strings in `error_catalog.json` / `docs/errors/` are
+  `since_version` markers — a separate concern, deliberately untouched.
 
 ### Phase 4 — End-to-end verification (per CLAUDE.md, before declaring done)
 

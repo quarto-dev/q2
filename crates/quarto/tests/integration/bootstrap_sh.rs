@@ -1012,5 +1012,6 @@ fn resolves_latest_version_from_github() {
         .arg("--version")
         .output()
         .unwrap();
-    assert!(String::from_utf8_lossy(&run.stdout).contains("q2"));
+    // Output shape: "quarto <workspace-version>" (quarto-util/src/version.rs).
+    assert!(String::from_utf8_lossy(&run.stdout).contains("quarto"));
 }

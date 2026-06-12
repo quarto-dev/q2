@@ -1,0 +1,521 @@
+# Release pipeline (bd-c6l13j79): tag push (or manual dispatch on an
+# existing tag) → web payloads → 5-target binary build → checksummed,
+# signed artifacts → GitHub Release.
+#
+# Ported from cscheid/braid's release.yml (study copy in
+# external-sources/braid). The artifact naming and checksum layout is a
+# contract with install.sh (encoded by
+# crates/quarto/tests/integration/bootstrap_sh.rs):
+#
+#   q2-<version>-<platform>.tar.gz          single member: q2
+#   q2-<version>-<platform>.tar.gz.sha256   "<sha256>  <filename>"
+#   q2-<version>-<platform>.tar.gz.minisig  minisign (Ed25519) signature;
+#                                           trusted comment = the archive
+#                                           filename (replay protection —
+#                                           install.sh compares it)
+#   checksums.sha256                        all .sha256 lines, combined
+#
+# <version> has no "v" prefix in filenames; the tag does (v0.1.0 →
+# q2-0.1.0-darwin_arm64.tar.gz).
+#
+# q2 deltas from braid:
+#
+# - A functional q2 binary embeds THREE payloads via include_dir!:
+#   the hub MCP bundle (quarto-mcp-launcher), the preview SPA
+#   (quarto-preview), and the trace viewer (quarto-trace-server). A
+#   build without them succeeds but ships placeholders (the 2026-05-20
+#   stale-embed incident class) — the per-target "verify binary" step
+#   fails the release if any placeholder is detected.
+# - The `web-payloads` job builds the target-INDEPENDENT payloads once
+#   (WASM → preview SPA, trace viewer; the WASM toolchain is heavy and
+#   identical for every target). The MCP bundle is built per target:
+#   its keyring native addons must match the *user's* platform
+#   (KEYRING_PLATFORMS; see ts-packages/quarto-hub-mcp/scripts/
+#   stage-keyring.mjs).
+# - The bundled quarto-hub.com OAuth defaults (QUARTO_HUB_BUNDLED_*)
+#   are injected from repo secrets/vars into the cargo build env —
+#   release builds only; see crates/quarto-mcp-launcher/src/defaults.rs
+#   for why the Desktop-app client secret is safe to embed.
+# - Linux targets are static musl; openssl is built from source via the
+#   musl-scoped `openssl-sys/vendored` dep in crates/quarto/Cargo.toml.
+#   If musl turns out unbuildable (aws-lc-sys is the known risk), flip
+#   the matrix targets to *-unknown-linux-gnu — plan D4.
+#
+# Signing key: MINISIGN_SECRET_KEY repo secret; the public half is pinned
+# in install.sh (MINISIGN_PUBKEY) and README. The sign step verifies its
+# output against the key extracted from install.sh, so a secret/pinned-key
+# mismatch fails the release instead of shipping unverifiable artifacts.
+#
+# Plan: claude-notes/plans/2026-06-12-q2-github-releases-bundled-mcp.md
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re-)release, e.g. v0.1.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  preflight:
+    name: Verify tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.repository == 'quarto-dev/q2'
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # On workflow_dispatch the default ref is the branch; build
+          # from the requested tag so artifacts match what we verify.
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - id: version
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          CARGO_VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          if [ "v$CARGO_VERSION" != "$TAG" ]; then
+            echo "::error::tag $TAG does not match workspace Cargo.toml version $CARGO_VERSION"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$CARGO_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG (version $CARGO_VERSION)"
+
+  # Target-independent embedded payloads, built once: the WASM module
+  # (wasm32, same bytes for every release target), the preview SPA that
+  # consumes it, and the trace viewer. Toolchain steps mirror
+  # hub-client-e2e.yml (the canonical WASM CI setup).
+  web-payloads:
+    name: Build web payloads (SPA + trace viewer)
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.tag }}
+
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+          components: rust-src
+
+      - name: Set up Clang
+        uses: egor-tensin/setup-clang@v2
+        with:
+          version: latest
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-web-payloads
+          cache-on-failure: true
+
+      # build-wasm.js verifies wasm-bindgen CLI matches the version
+      # pinned in Cargo.lock; install that exact version.
+      - name: Install wasm-bindgen-cli
+        run: |
+          VERSION=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/version = |"/, ""); print; exit}' Cargo.lock)
+          echo "Installing wasm-bindgen-cli $VERSION"
+          cargo install -f wasm-bindgen-cli --version "$VERSION"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Build WASM (hub-client)
+        run: npm run build:wasm
+        working-directory: hub-client
+
+      # Same npm invocations as `cargo xtask build-trace-viewer` /
+      # `build-q2-preview-spa`, without compiling xtask on this runner.
+      - name: Build trace-viewer
+        run: npm run build
+        working-directory: trace-viewer
+
+      - name: Build q2-preview-spa
+        run: npm run build
+        working-directory: q2-preview-spa
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-payloads
+          path: |
+            trace-viewer/dist
+            q2-preview-spa/dist
+          retention-days: 7
+          if-no-files-found: error
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: [preflight, web-payloads]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # keyring: the @napi-rs/keyring platform addons staged into
+          # the MCP bundle. They must match the *user's node* on the
+          # target platform — both libc flavors on linux (glibc + Alpine
+          # node), both mac archs (Rosetta mismatch: x64 q2 under an
+          # arm64 node and vice versa), both win archs (arm64 Windows
+          # runs x64 q2 under emulation with a native arm64 node).
+          - platform: linux_amd64
+            target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            ext: tar.gz
+            keyring: linux-x64-gnu,linux-x64-musl
+          - platform: linux_arm64
+            target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+            ext: tar.gz
+            keyring: linux-arm64-gnu,linux-arm64-musl
+          - platform: darwin_amd64
+            target: x86_64-apple-darwin
+            os: macos-15  # arm64 runner; the x86_64 binary runs under Rosetta
+            ext: tar.gz
+            keyring: darwin-x64,darwin-arm64
+          - platform: darwin_arm64
+            target: aarch64-apple-darwin
+            os: macos-15
+            ext: tar.gz
+            keyring: darwin-arm64,darwin-x64
+          - platform: windows_amd64
+            target: x86_64-pc-windows-msvc
+            os: windows-latest
+            ext: zip
+            keyring: win32-x64-msvc,win32-arm64-msvc
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.tag }}
+
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl-tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+
+      # Defender real-time scanning inspects every object/rlib/exe the
+      # compiler writes; excluding the workspace cuts the MSVC build
+      # time markedly.
+      - name: Exclude workspace from Defender scanning
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      # Target-independent payloads from the web-payloads job, placed
+      # where the include_dir! build scripts look for them.
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-payloads
+          path: .
+
+      # Per-target payload: the MCP bundle, with keyring addons for the
+      # *target's* users (esbuild compiles workspace TS from source;
+      # missing addon packages are fetched via npm pack at the loader's
+      # locked version).
+      - name: Build hub MCP bundle
+        shell: bash
+        env:
+          KEYRING_PLATFORMS: ${{ matrix.keyring }}
+        run: npm run bundle -w ts-packages/quarto-hub-mcp
+
+      # The bundled quarto-hub.com defaults. Secrets here are masked in
+      # logs; they are public-client credentials (RFC 8252) kept out of
+      # the repo only to avoid GOCSPX- scanners — see
+      # crates/quarto-mcp-launcher/src/defaults.rs.
+      - name: Build release binary
+        shell: bash
+        env:
+          QUARTO_HUB_BUNDLED_CLIENT_ID: ${{ secrets.QUARTO_HUB_MCP_CLIENT_ID }}
+          QUARTO_HUB_BUNDLED_CLIENT_SECRET: ${{ secrets.QUARTO_HUB_MCP_CLIENT_SECRET }}
+          QUARTO_HUB_BUNDLED_SERVER: ${{ vars.QUARTO_HUB_SERVER }}
+        run: |
+          for VAR in QUARTO_HUB_BUNDLED_CLIENT_ID QUARTO_HUB_BUNDLED_CLIENT_SECRET QUARTO_HUB_BUNDLED_SERVER; do
+            if [ -z "${!VAR}" ]; then
+              echo "::error::$VAR is empty — release builds must carry the bundled hub defaults (repo secrets/vars)"
+              exit 1
+            fi
+          done
+          cargo build --release --locked --target ${{ matrix.target }} -p quarto
+
+      # Every target in the matrix can execute on its runner (musl
+      # binaries are static; darwin x86_64 runs under Rosetta; windows
+      # runs natively), so these checks are unconditional. `shell: bash`
+      # uses Git Bash on the windows runner.
+      #
+      # Beyond braid's version check, this is the anti-stale-embed /
+      # anti-placeholder gate: a release binary must carry a real MCP
+      # bundle (with the target's keyring addons), real bundled hub
+      # defaults, and real SPA payloads.
+      - name: Verify binary (version, embeds, bundled defaults)
+        shell: bash
+        run: |
+          BIN="./target/${{ matrix.target }}/release/q2"
+          [ "$RUNNER_OS" = "Windows" ] && BIN="$BIN.exe"
+
+          RAW=$("$BIN" --version)
+          ACTUAL="${RAW##* }"
+          if [ "$ACTUAL" != "${{ needs.preflight.outputs.version }}" ]; then
+            echo "::error::binary reports '$RAW', expected version ${{ needs.preflight.outputs.version }}"
+            exit 1
+          fi
+
+          INFO=$("$BIN" mcp --launcher-info)
+          printf '%s\n' "$INFO"
+          FAIL=0
+          if printf '%s' "$INFO" | grep -q "PLACEHOLDER"; then
+            echo "::error::release binary embeds the placeholder MCP bundle"
+            FAIL=1
+          fi
+          for VAR in QUARTO_HUB_MCP_CLIENT_ID QUARTO_HUB_MCP_CLIENT_SECRET QUARTO_HUB_SERVER; do
+            if ! printf '%s' "$INFO" | grep -q "default $VAR: bundled"; then
+              echo "::error::$VAR is not reported as bundled in the release binary"
+              FAIL=1
+            fi
+          done
+          IFS=',' read -ra PLATFORMS <<< "${{ matrix.keyring }}"
+          for P in "${PLATFORMS[@]}"; do
+            if ! printf '%s' "$INFO" | grep -q "keyring-$P"; then
+              echo "::error::MCP bundle is missing keyring addon for $P"
+              FAIL=1
+            fi
+          done
+          exit $FAIL
+
+      # Unix targets ship a .tar.gz of the `q2` binary.
+      - name: Package archive + checksum (tar.gz)
+        if: matrix.ext == 'tar.gz'
+        shell: bash
+        run: |
+          ARCHIVE="q2-${{ needs.preflight.outputs.version }}-${{ matrix.platform }}.tar.gz"
+          tar -czf "$ARCHIVE" -C "target/${{ matrix.target }}/release" q2
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
+            sha256sum -c "$ARCHIVE.sha256"
+          else
+            shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
+            shasum -a 256 -c "$ARCHIVE.sha256"
+          fi
+
+      # Windows ships a .zip of q2.exe. The .sha256 is written in GNU
+      # coreutils format ("<lowercase-hash>  <file>", LF-terminated, no
+      # BOM) so the ubuntu combine job's `sha256sum -c` accepts it
+      # alongside the unix lines.
+      - name: Package archive + checksum (zip)
+        if: matrix.ext == 'zip'
+        shell: pwsh
+        run: |
+          $version = "${{ needs.preflight.outputs.version }}"
+          $archive = "q2-$version-${{ matrix.platform }}.zip"
+          Compress-Archive -Path "target/${{ matrix.target }}/release/q2.exe" -DestinationPath $archive
+          $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+          [System.IO.File]::WriteAllText((Join-Path (Get-Location) "$archive.sha256"), "$hash  $archive`n")
+
+      - name: Install minisign
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            macOS)  brew install minisign ;;
+            Linux)  sudo apt-get update && sudo apt-get install -y minisign ;;
+          esac
+
+      # Trusted comment = archive filename: it is part of the signed
+      # payload, and install.sh compares it against the file they asked
+      # for, so a signature cannot be replayed from another artifact.
+      # Skipped for Windows: install.ps1 does not verify signatures
+      # (SHA-256 only), so the .zip has no .minisig consumer today.
+      - name: Sign archive (minisign, Ed25519)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          ARCHIVE="q2-${{ needs.preflight.outputs.version }}-${{ matrix.platform }}.${{ matrix.ext }}"
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          chmod 600 "$key"
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
+          minisign -Sm "$ARCHIVE" -s "$key" -t "$ARCHIVE"
+          # Verify with the public key pinned in install.sh: a mismatch
+          # between the repo secret and the pinned key fails the release
+          # here instead of shipping artifacts no installer can verify.
+          PUBKEY="$(sed -n 's/^MINISIGN_PUBKEY="\(.*\)"$/\1/p' install.sh)"
+          test -n "$PUBKEY"
+          minisign -Vm "$ARCHIVE" -P "$PUBKEY"
+
+      # Unix archives include a .minisig; the Windows zip does not (no consumer).
+      - uses: actions/upload-artifact@v7
+        if: matrix.ext == 'tar.gz'
+        with:
+          name: q2-${{ matrix.platform }}
+          path: |
+            q2-${{ needs.preflight.outputs.version }}-${{ matrix.platform }}.tar.gz
+            q2-${{ needs.preflight.outputs.version }}-${{ matrix.platform }}.tar.gz.sha256
+            q2-${{ needs.preflight.outputs.version }}-${{ matrix.platform }}.tar.gz.minisig
+          retention-days: 7
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        if: matrix.ext == 'zip'
+        with:
+          name: q2-${{ matrix.platform }}
+          path: |
+            q2-${{ needs.preflight.outputs.version }}-${{ matrix.platform }}.zip
+            q2-${{ needs.preflight.outputs.version }}-${{ matrix.platform }}.zip.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: [preflight, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.tag }}
+          fetch-depth: 0  # changelog needs the previous tag
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+          pattern: q2-*
+
+      - name: Validate all platforms present, combine and verify checksums
+        run: |
+          cd artifacts
+          VERSION="${{ needs.preflight.outputs.version }}"
+          MISSING=()
+          # "<platform>:<ext>" — Windows ships .zip, the rest .tar.gz.
+          # The .zip has no .minisig: install.ps1 does not verify signatures.
+          for entry in linux_amd64:tar.gz linux_arm64:tar.gz \
+                       darwin_amd64:tar.gz darwin_arm64:tar.gz \
+                       windows_amd64:zip; do
+            platform="${entry%%:*}"; ext="${entry##*:}"
+            required=("q2-${VERSION}-${platform}.${ext}" \
+                      "q2-${VERSION}-${platform}.${ext}.sha256")
+            [ "$ext" != "zip" ] && required+=("q2-${VERSION}-${platform}.${ext}.minisig")
+            for f in "${required[@]}"; do
+              [ -f "$f" ] || MISSING+=("$f")
+            done
+          done
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "::error::missing release files: ${MISSING[*]}"
+            exit 1
+          fi
+          cat -- *.sha256 | sort -k2 > checksums.sha256
+          sha256sum -c checksums.sha256
+          cat checksums.sha256
+
+      - name: Generate release notes
+        env:
+          TAG: ${{ needs.preflight.outputs.tag }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          PUBKEY="$(sed -n 's/^MINISIGN_PUBKEY="\(.*\)"$/\1/p' install.sh)"
+          PREV_TAG=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+          {
+            echo "> **Experimental.** q2 is under active development and not ready for production use."
+            echo
+            echo "## Install"
+            echo
+            echo '```sh'
+            echo "curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh | bash"
+            echo '```'
+            echo
+            echo "On Windows (PowerShell):"
+            echo
+            echo '```powershell'
+            echo "irm https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.ps1 | iex"
+            echo '```'
+            echo
+            echo "\`q2 mcp\` (the Quarto Hub MCP server) needs [Node.js](https://nodejs.org) 24+ at runtime;"
+            echo "everything else works standalone. Hub connection defaults for quarto-hub.com are built in."
+            echo
+            echo "| Platform | File |"
+            echo "|---|---|"
+            echo "| Linux x86_64 (static musl) | \`q2-${VERSION}-linux_amd64.tar.gz\` |"
+            echo "| Linux ARM64 (static musl) | \`q2-${VERSION}-linux_arm64.tar.gz\` |"
+            echo "| macOS Intel | \`q2-${VERSION}-darwin_amd64.tar.gz\` |"
+            echo "| macOS Apple Silicon | \`q2-${VERSION}-darwin_arm64.tar.gz\` |"
+            echo "| Windows x86_64 | \`q2-${VERSION}-windows_amd64.zip\` |"
+            echo
+            echo "**Verify a manual download** (Unix archives are signed with [minisign](https://jedisct1.github.io/minisign/), Ed25519):"
+            echo
+            echo '```sh'
+            echo "minisign -Vm q2-${VERSION}-<platform>.tar.gz -P ${PUBKEY}"
+            echo '```'
+            echo
+            echo "The trusted comment should name exactly the file you downloaded."
+            echo "Checksums (all platforms): \`sha256sum -c checksums.sha256 --ignore-missing\`"
+            echo
+            echo "## Changes"
+            echo
+            if [ -n "$PREV_TAG" ]; then
+              git log --pretty='- %s (%h)' "${PREV_TAG}..${TAG}"
+            else
+              git log --pretty='- %s (%h)' "$TAG" | head -50
+            fi
+          } > notes.md
+          cat notes.md
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+        run: |
+          PRERELEASE=()
+          case "$TAG" in *-*) PRERELEASE=(--prerelease) ;; esac
+          gh release create "$TAG" \
+            --title "q2 $TAG" \
+            --notes-file notes.md \
+            --verify-tag \
+            "${PRERELEASE[@]}" \
+            artifacts/q2-*.tar.gz artifacts/q2-*.tar.gz.sha256 \
+            artifacts/q2-*.tar.gz.minisig \
+            artifacts/q2-*.zip artifacts/q2-*.zip.sha256 \
+            artifacts/checksums.sha256

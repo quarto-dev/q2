@@ -156,7 +156,7 @@ impl SourceInfo {
     /// method) so that `unwrap_or_default()` and `#[derive(Default)]` still
     /// compile; those are caught by separate grep tooling.
     #[deprecated(
-        since = "0.x",
+        since = "0.1.0",
         note = "Use SourceInfo::for_test() in tests, or the appropriate Generated{by: <kind>} in production. See provenance-contract.md."
     )]
     #[doc(hidden)]

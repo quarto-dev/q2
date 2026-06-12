@@ -1,29 +1,18 @@
 //! Version handling for Quarto
 //!
-//! This module implements the versioning strategy where:
-//! - Cargo.toml version: 0.x.y (idiomatic Rust, signals instability)
-//! - CLI reported version: 99.9.9-dev (for extension compatibility)
+//! The CLI reports the workspace Cargo.toml version (e.g. "0.1.0").
 //!
-//! When the crate version is 2.x.y or higher, the CLI will report the actual version.
+//! History: until 2026-06-12 the CLI reported a "99.9.9-dev"
+//! placeholder while the crate version was 0.x, so extensions with
+//! minimum-quarto-version checks would always pass against dev builds.
+//! With binary releases (bd-c6l13j79) the version must be verifiable
+//! against the release tag, and the Lua-side `quarto.version` already
+//! reported the real {0,1,0}; Carlos chose the real version and
+//! accepted the consequences for extension minimum-version checks.
 
-/// Development version used for compatibility with extensions
-const DEV_VERSION: &str = "99.9.9-dev";
-
-/// Get the version string that should be reported by the CLI
-///
-/// During development (version 0.x.y), this returns "99.9.9-dev" to ensure
-/// compatibility with all existing Quarto extensions while clearly indicating
-/// this is a development build.
-///
-/// Once released as 2.0.0+, this will return the actual version.
+/// Get the version string that should be reported by the CLI.
 pub fn cli_version() -> &'static str {
-    let cargo_version = env!("CARGO_PKG_VERSION");
-
-    if cargo_version.starts_with("0.") {
-        DEV_VERSION
-    } else {
-        cargo_version
-    }
+    env!("CARGO_PKG_VERSION")
 }
 
 /// Get the Cargo package version (for internal use)
@@ -36,13 +25,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_cli_version() {
-        let version = cli_version();
-        // During development, should be dev version
-        assert!(
-            version == DEV_VERSION || version.starts_with("2."),
-            "CLI version should be either dev version or 2.x.y"
-        );
+    fn test_cli_version_is_the_cargo_version() {
+        // Decision 2026-06-12 (bd-c6l13j79): the CLI reports the real
+        // workspace version (e.g. "0.1.0"), not the old 99.9.9-dev
+        // placeholder, so release artifacts are verifiable against
+        // their tag. Carlos accepted the minimum-quarto-version
+        // consequences for extensions.
+        assert_eq!(cli_version(), env!("CARGO_PKG_VERSION"));
     }
 
     #[test]
