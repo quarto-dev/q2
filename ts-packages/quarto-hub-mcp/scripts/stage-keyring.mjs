@@ -56,9 +56,16 @@ export function keyringVersion(napiSrcDir) {
 export function npmPackFetcher(name, version, destDir) {
   const tmp = mkdtempSync(join(os.tmpdir(), 'keyring-fetch-'));
   try {
-    execFileSync('npm', ['pack', `${name}@${version}`, '--silent'], {
+    // On Windows npm is npm.cmd, which execFileSync cannot spawn
+    // without a shell (ENOENT; and Node ≥20.12 rejects .cmd without
+    // shell:true outright). Arguments here are fixed package
+    // specifiers, so shell quoting is not a concern. Seen in the
+    // v0.1.0 dry-run (run 27448388974, windows_amd64 leg).
+    const windows = process.platform === 'win32';
+    execFileSync(windows ? 'npm.cmd' : 'npm', ['pack', `${name}@${version}`, '--silent'], {
       cwd: tmp,
       stdio: ['ignore', 'pipe', 'pipe'],
+      shell: windows,
     });
     const tgz = readdirSync(tmp).find((f) => f.endsWith('.tgz'));
     if (!tgz) throw new Error(`npm pack produced no tarball for ${name}@${version}`);

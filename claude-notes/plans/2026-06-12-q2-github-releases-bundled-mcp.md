@@ -371,6 +371,28 @@ same code path with the same mechanism).
 
 - [ ] Dry-run the workflow (workflow_dispatch on a test tag or fork);
       download artifacts for all five platforms
+
+**Phase 4 log.** PR #278 (all 5 CI checks green) squash-merged to main
+by Carlos as `31222946` on 2026-06-12. Tag `v0.1.0` pushed at that
+commit; release run:
+https://github.com/quarto-dev/q2/actions/runs/27448388974
+
+*Iteration 1 (run 27448388974):* preflight ✓, web-payloads ✓ (WASM +
+SPA + trace viewer built cleanly on the release runner). Four matrix
+legs failed, two distinct causes:
+1. linux_amd64 / linux_arm64 / darwin_amd64 — `E0463 can't find crate
+   for core/std`: the dtolnay action adds the matrix target to the
+   *latest* nightly, but cargo resolves the dated nightly pinned in
+   `rust-toolchain.toml` (bd-at72), which auto-installs with only its
+   declared targets (wasm32). web-payloads only survived because wasm32
+   is in the pin's own `targets`. Fix: explicit `rustup target add` step.
+2. windows_amd64 — `spawnSync npm ENOENT` in stage-keyring's
+   npmPackFetcher fetching keyring-win32-arm64-msvc: npm is `npm.cmd`
+   on Windows; execFileSync needs `shell: true` (+ Node ≥20.12 rejects
+   .cmd without it). Fix in npmPackFetcher.
+darwin_arm64 (only leg whose target is host-default) ran the furthest —
+its outcome validates the downstream pipeline (defaults injection,
+verify gate, packaging, signing).
 - [ ] `install.sh` one-liner on a clean machine/container → `q2 --version`
 - [ ] `q2 mcp` with **no env vars set** connects to quarto-hub.com:
       browser consent → token → `connect_project` + `read_file` against a

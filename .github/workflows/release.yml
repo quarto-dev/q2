@@ -219,6 +219,17 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # The toolchain action adds the target to the *latest* nightly,
+      # but cargo resolves the dated nightly pinned in
+      # rust-toolchain.toml (bd-at72) — which auto-installs with only
+      # its own declared targets. Add the matrix target to the pinned
+      # toolchain explicitly, or every cross/musl build dies with
+      # E0463 "can't find crate for core" (v0.1.0 dry-run, run
+      # 27448388974).
+      - name: Add ${{ matrix.target }} to the pinned toolchain
+        shell: bash
+        run: rustup target add ${{ matrix.target }}
+
       - name: Install musl-tools
         if: contains(matrix.target, 'musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
