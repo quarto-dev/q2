@@ -25,6 +25,7 @@
 
 import {
   createSyncClient,
+  type DisconnectOptions,
   type SyncClient,
   type SyncClientCallbacks,
   type FilePayload,
@@ -281,11 +282,38 @@ export class ConnectionManager {
     return state;
   }
 
-  async disconnectAll(): Promise<void> {
-    const disconnects = Array.from(this.projects.values()).map((s) =>
-      s.client.disconnect(),
+  /**
+   * Disconnect every project. Pass `drainMs` at shutdown so outbound
+   * document sync gets a bounded window to reach the hub before the
+   * process exits — MCP clients run on memory storage, so anything
+   * undelivered at exit is lost (bd-10deu8h4, the 2026-06-12
+   * incident). Projects drain in parallel; the wall-clock bound is a
+   * single budget, not budget × projects.
+   *
+   * Loud on failure, never silent: every project that could not
+   * confirm delivery gets a stderr line naming the project and the
+   * possibly-lost paths (stdout is protocol — bd-sl4o01y0).
+   */
+  async disconnectAll(options?: DisconnectOptions): Promise<void> {
+    const results = await Promise.all(
+      Array.from(this.projects.entries()).map(async ([indexDocId, s]) => ({
+        indexDocId,
+        report: await s.client.disconnect(options),
+      })),
     );
-    await Promise.all(disconnects);
+    for (const { indexDocId, report } of results) {
+      if (!report.drained) {
+        const names = report.undelivered
+          .map((u) => u.path ?? `<index document ${u.docId}>`)
+          .join(', ');
+        console.error(
+          `[hub-mcp] WARNING: exiting before outbound sync completed for ` +
+            `project ${indexDocId}. Possibly NOT delivered to the hub ` +
+            `(and lost — this server keeps no local copy): ${names}. ` +
+            `Verify these documents on the hub before trusting them.`,
+        );
+      }
+    }
     this.projects.clear();
   }
 

@@ -6,8 +6,226 @@ incident), bd-vm5e5u10 (the amplifier, being fixed IN PARALLEL — see
 boundary contract below), bd-xnmd5ni1 (closed — requireOnline, which
 ensured the *connection* but not *delivery*), parent plan
 `claude-notes/plans/2026-06-12-sync-client-offline-race.md`.
-**Status:** READY TO IMPLEMENT — self-contained handoff; designed for
+**Status:** IN PROGRESS (2026-06-12, worktree
+`.worktrees/bd-10deu8h4-hub-mcp-server-exit`, branch
+`beads/bd-10deu8h4-hub-mcp-server-exit` off `4bd6d4bf`). Designed for
 parallel implementation alongside bd-vm5e5u10.
+
+## Work items
+
+### Phase 1 — red tests + delivery-signal investigation
+
+- [x] Delivery-signal investigation; verdict recorded below
+      (§ Phase 1 verdict).
+- [x] Additive API surface so the red tests compile:
+      `DisconnectOptions`/`DisconnectReport` in sync-client `types.ts`,
+      `disconnect(options?)` signature stub (NO drain behavior yet),
+      `MemoryStorageAdapter` exported from sync-client index.
+- [x] Test hubs announce a `storageId` like the real samod hub does:
+      give both `test-hub.ts` copies a `MemoryStorageAdapter`; add
+      `hubHasDoc` to the hub-mcp copy. (Also: their `stop()` now
+      tolerates `repo.shutdown()`'s flush throwing "DocHandle is not
+      ready" — the half-delivered state these tests leave behind.)
+- [x] Red test 1 (sync-client `exit-drain.test.ts`):
+      create-then-disconnect(drainMs) loses nothing; observed RED.
+- [x] Red test 2 (hub-mcp `exit-drain.test.ts`, stdio level): the
+      exact accident — `create_project` → stdin EOF → server exits AND
+      hub holds the file doc; observed RED.
+- [x] Red-output snippets recorded in this plan (§ Phase 1 red
+      evidence).
+
+### Phase 1 red evidence (2026-06-12, before any fix)
+
+Note on red-shape tuning (predicted by this plan): with 4×64 KB files
+the stdio test was GREEN by luck — on loopback, the `create_project`
+response round-trip gives the event loop time to flush outbound sync.
+At 64×64 KB (more docs = per-doc synchronizer backlog, more bytes =
+encode/send time) it is deterministically red. The sync-client-level
+test is red even at 8×64 KB because `disconnect()` follows
+`createNewProject()` with no intervening round-trip.
+
+`quarto-sync-client`, `npx vitest run src/exit-drain.test.ts`:
+
+```
+FAIL src/exit-drain.test.ts > … > create-then-disconnect loses nothing
+AssertionError: index doc must reach the hub: expected false to be true
+
+FAIL src/exit-drain.test.ts > … > reports undelivered docs when the hub
+is unreachable at disconnect
+AssertionError: drain cannot succeed against a dead hub: expected true
+to be false
+```
+
+`quarto-hub-mcp`, `npx vitest run src/exit-drain.test.ts` (server exits
+within the 5 s hygiene bound — that assertion passes — but file docs
+died with the process; the index escaped, exactly the incident):
+
+```
+FAIL src/exit-drain.test.ts > … > create_project then immediate stdin
+EOF must not lose the created docs
+AssertionError: file doc for q2-mcp-hello-30.qmd must reach the hub —
+its only copy was in-process: expected false to be true
+```
+
+### Phase 2 — implement
+
+- [x] sync-client: drain primitive (`drainOutbound`) wired into
+      `disconnect({drainMs})`; default 0 (browser teardown unchanged).
+      Event-driven (`remote-heads` per handle + `peer` for mid-drain
+      reconnects), bounded by `drainMs`, early-returns on confirmation.
+- [x] sync-client: peer storageId tracking in `trackPeers` (kept after
+      peer-disconnect — confirmed heads stay confirmed).
+- [x] hub-mcp: `disconnectAll({drainMs})` + loud stderr on undrained
+      projects (names indexDocId + paths; stderr only, bd-sl4o01y0).
+- [x] hub-mcp: `index.ts` shutdown passes `SHUTDOWN_DRAIN_MS = 3000`;
+      keeps re-entrancy guard; stdin-EOF exit stays within the 5 s
+      hygiene bound (3 s budget binds only when the hub is gone).
+- [x] Both red tests green; loud-failure path tested at BOTH levels
+      (sync-client report assertions + stdio stderr assertion with
+      prompt exit).
+- [x] BONUS: real-samod drain regression test (gated on
+      `target/debug/hub`, unix): create → `disconnect({drainMs})` →
+      report.drained AND every doc present in samod's on-disk storage.
+      This behaviorally verifies the delivery signal against the
+      production hub implementation — passed 2026-06-12.
+- [x] Suites green (2026-06-12): sync-client 99/99 (incl. rust-hub
+      gated), hub-mcp 181 passed/3 skipped (incl. bundle test;
+      skipped = keyring-gated e2e-auth), hub-client `npm run build` +
+      `test:ci` 97/97. `cargo xtask verify --skip-hub-build
+      --skip-hub-tests`: see Phase 3 note (run alongside).
+
+### Phase 3 — verification + close-out
+
+- [x] `cargo xtask verify --skip-hub-build --skip-hub-tests`: all
+      steps passed (2026-06-12).
+- [x] Manual e2e (2026-06-12, recorded below): rebuilt bundle + q2
+      (`cargo xtask build-hub-mcp-bundle && cargo build --bin q2`;
+      `--launcher-info` confirmed embedded gitCommit 194b9cc3),
+      replayed the original accident against a LOCAL Rust hub, output
+      inspected. Real-samod delivery-signal verification also locked
+      in as a gated regression test (sync-client exit-drain).
+- [x] Loud-failure path demonstrated once end-to-end (below).
+- [ ] braid: close bd-10deu8h4 with commit hash; note in parent plan;
+      merge `--no-ff` into the integration line (coordinate with
+      bd-vm5e5u10's agent — second merger resolves; their fix landed
+      on the line as 11931849, so WE resolve).
+
+### Phase 3 manual-e2e record (2026-06-12)
+
+Happy path — the exact production shape (one small file), through the
+real binary a user runs, against `target/debug/hub` on 127.0.0.1:3041
+with a fresh data dir:
+
+```
+$ node tmp-e2e/accident-replay.mjs ./target/debug/q2 tmp-e2e/hub-data \
+    ws://127.0.0.1:3041/ws
+created project 4XoG8ZeWkMCF6uJuu8RcojcY7u5N with 1 file(s)
+server exited: true (8 ms after stdin EOF)
+hub storage has 4XoG8ZeWkMCF6uJuu8RcojcY7u5N: true
+hub storage has 3U9wPp6BomDhXUfkW66fvxiT8LgC: true
+```
+
+8 ms exit = the drain's first check found delivery already confirmed
+(remote-heads from samod) and returned without waiting — the budget
+binds only when something is actually undelivered. Both the index and
+the file doc verified present in samod's on-disk storage (the artifact
+the incident lost).
+
+Loud-failure path — hub SIGKILLed mid-session, `create_file` during
+the outage, then stdin EOF:
+
+```
+created project 1Yxc2e2zULCy6631LkhcVXVu2kR with 1 file(s)
+killed hub pid 31167; creating a file during the outage…
+server exited: true (3011 ms after stdin EOF)
+--- server stderr ---
+[disconnect] drain budget (3000 ms) expired with 2 possibly-undelivered
+document(s): <index 1Yxc2e2zULCy6631LkhcVXVu2kR>, doomed.qmd
+[hub-mcp] WARNING: exiting before outbound sync completed for project
+1Yxc2e2zULCy6631LkhcVXVu2kR. Possibly NOT delivered to the hub (and
+lost — this server keeps no local copy): <index document
+1Yxc2e2zULCy6631LkhcVXVu2kR>, doomed.qmd. Verify these documents on
+the hub before trusting them.
+```
+
+Bounded (3011 ms ≈ the 3000 ms budget; never hangs), loud (names the
+project, the index — whose heads moved when the outage-created file
+was indexed — and the path), and exit still well inside the 5 s
+stdin-EOF promptness contract. The replay driver was a throwaway
+script (`tmp-e2e/accident-replay.mjs`, deleted after use); the same
+shapes are permanently covered by `quarto-hub-mcp/src/exit-drain.test.ts`
+(JS hub, stdio level) and the samod-gated test in
+`quarto-sync-client/src/exit-drain.test.ts`.
+
+## Phase 1 verdict: delivery signal (RECORDED 2026-06-12)
+
+**Chosen signal: per-document remote-heads sync info** —
+`DocHandle.getSyncInfo(hubStorageId).lastHeads` equal to the handle's
+current `heads()`, where `hubStorageId` comes from the hub's handshake
+peer metadata. Drain = wait (bounded, event-driven via the handle's
+`remote-heads` event) until every tracked doc (index + all file docs)
+satisfies the equality against at least one storage-backed peer.
+
+Why this is correct, from the sources (automerge-repo 2.5.6 installed;
+samod q2 fork checkout `0b50c16`):
+
+1. **No gossiping flag needed.** `Repo`'s constructor subscribes to the
+   synchronizer's `sync-state` event and calls
+   `handle.setSyncInfo(storageId, {lastHeads: theirHeads, ...})`
+   unconditionally (`dist/Repo.js` ~154-175). The
+   `enableRemoteHeadsGossiping` flag only gates *relay* of third-party
+   heads (`remote-heads-changed` control messages), not this direct
+   path. `theirHeads` comes from the automerge sync protocol: every
+   sync message carries the sender's heads, so after the hub applies
+   our changes its reply advertises heads that converge with ours.
+2. **The signal is keyed by the peer's storageId from handshake
+   metadata** (`peerMetadataByPeerId`); peers without a storageId never
+   populate it. **samod always announces one**:
+   `samod-core/src/actors/hub/state.rs::get_local_metadata()` returns
+   `PeerMetadata { is_ephemeral: false, storage_id: Some(..) }`, and the
+   wire protocol encodes it (`wire_protocol.rs`, `storageId` CBOR key).
+   Source-verified on the q2 fork; *behavioral* verification against
+   the real hub binary happens in the Phase 3 manual e2e (acceptance
+   criterion) — do not close the strand before it.
+3. **Awaitable**: `DocHandle.setSyncInfo` emits a `remote-heads` event
+   (`dist/DocHandle.js`), so the drain early-exits the moment delivery
+   is confirmed — no polling, no fixed sleep.
+4. **Equality, not subset**: `UrlHeads` equality (order-insensitive) is
+   the convergence steady state. If the hub holds *extra* changes, the
+   live sync we're draining over delivers them to us within the same
+   window, after which equality holds. Comparison re-reads
+   `handle.heads()` on every event for exactly this reason.
+
+**Degradation when the hub is unreachable**: no peer → no sync-state
+events → drain waits out the bounded budget (the WS adapter's retry
+loop may still reconnect mid-window and deliver — waiting is a feature),
+then reports the undelivered docs; the MCP shutdown path prints a loud
+stderr line naming the project and paths. Exit is never blocked past
+the budget.
+
+**Rejected alternatives**: sync-message settle heuristic (needs adapter
+introspection, and "no outbound traffic for N ms" is consistent with
+both "delivered" and "stalled"); verification re-find via a second
+connection (correct but heavyweight, and it would double connection
+churn at exit — keep as fallback if samod's heads behavior surprises us
+in Phase 3).
+
+**Test-hub consequence**: both JS test hubs construct `Repo` *without*
+storage, so they announce no storageId (`storageId: await
+storageSubsystem?.id()` → `undefined`) and the drain signal can never
+fire against them — unlike the production samod hub. Phase 1 therefore
+gives both test hubs a `MemoryStorageAdapter` (sync-client already
+defines one) so their handshake metadata matches samod's shape.
+
+**API decision (Phase 2 design)**: `disconnect(options?: { drainMs?:
+number })` returning a `DisconnectReport { drained, undelivered }`;
+default `drainMs: 0` — i.e. opt-in. Justification: hub-client's browser
+`disconnect()` runs on tab/component teardown where blocking is
+unacceptable AND harmless to skip (IndexedDB persists local changes;
+they deliver on the next connect). The MCP server is the caller with
+memory-only storage where exit = data loss, so it passes the budget
+(3000 ms, comfortably inside the 5 s stdio-hygiene exit bound, early
+exit on confirmation).
 
 ## Branch / coordination — READ FIRST
 

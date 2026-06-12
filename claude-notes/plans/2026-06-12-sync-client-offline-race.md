@@ -289,6 +289,18 @@ Part 1 therefore splits per host:
   await server receipt in create/write handlers (needs a delivery
   signal — remote-heads gossip or an explicit settle; design in that
   strand);
+  - **DONE 2026-06-12** (`2246e865` + `194b9cc3` on
+    `beads/bd-10deu8h4-hub-mcp-server-exit`): shutdown drains via
+    `disconnect({drainMs: 3000})`; delivery signal is per-doc
+    remote-heads sync info keyed by the hub's handshake storageId
+    (no gossiping flag needed; verified against real samod, both as
+    a gated regression test and via manual `q2 mcp` e2e). Bounded,
+    early-return, loud stderr on failure. Details + e2e record:
+    `claude-notes/plans/2026-06-12-mcp-exit-sync-drain.md`. The
+    per-write-receipt variant (tool handlers returning only after
+    server confirmation) was deliberately left out per the
+    bd-vm5e5u10 boundary contract — drain-on-shutdown covers the
+    incident; file a follow-up strand if per-write UX is wanted.
 - **Browser host**: flush-on-create + unload flush as below
   (defense-in-depth, playwright-verified).
 Fix order remains: bd-vm5e5u10 (amplifier) → bd-10deu8h4 (creator)

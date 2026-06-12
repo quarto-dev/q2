@@ -20,6 +20,8 @@ import { WebSocketServer } from 'ws';
 import { Repo, type DocumentId, type PeerId } from '@automerge/automerge-repo';
 import { WebSocketServerAdapter } from '@automerge/automerge-repo-network-websocket';
 
+import { MemoryStorageAdapter } from './storage-adapter.js';
+
 export interface TestHub {
   /** ws:// URL of the sync endpoint. */
   url: string;
@@ -78,6 +80,12 @@ export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> 
     network: [new WebSocketServerAdapter(wss as never)],
     peerId: 'test-hub' as PeerId,
     sharePolicy: async () => true,
+    // Storage gives the hub a storageId to announce in its handshake
+    // metadata, like the real samod hub (which always announces one).
+    // Clients key delivery confirmation off it (exit-drain,
+    // bd-10deu8h4); a storage-less Repo announces none and would make
+    // this hub unconfirmable in a way production never is.
+    storage: new MemoryStorageAdapter(),
   });
 
   httpServer.listen(0, '127.0.0.1');
@@ -108,7 +116,11 @@ export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> 
       return false;
     },
     async stop(): Promise<void> {
-      await repo.shutdown();
+      // shutdown() flushes storage, and flush() throws "DocHandle is
+      // not ready" for docs that were announced but never delivered —
+      // exactly the half-state the exit-drain tests (bd-10deu8h4)
+      // leave behind. Teardown must not mask a test's own assertions.
+      await repo.shutdown().catch(() => {});
       wss.close();
       httpServer.close();
       await once(httpServer, 'close');
