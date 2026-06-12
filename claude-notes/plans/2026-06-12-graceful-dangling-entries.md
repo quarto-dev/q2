@@ -5,7 +5,9 @@ how dangling entries get minted), bd-8x482xb0 (closed — the production
 casualty), bd-p68lx71t (the 2026-06-12 incident this amplified),
 bd-10bdjmjb (parent plan:
 `claude-notes/plans/2026-06-12-sync-client-offline-race.md`).
-**Status:** IN PROGRESS (2026-06-12, worktree
+**Status:** DONE (2026-06-12, commit `11931849` — originally `4d210f98`,
+rebased onto the bd-10deu8h4 boundary-contract commit before push;
+strand closed). Was: worktree
 `.worktrees/bd-vm5e5u10-hub-mcp-connectproject-hard`, branch
 `beads/bd-vm5e5u10-hub-mcp-connectproject-hard` off
 `origin/feature/bd-81cfshmw-q2-mcp-launcher`). Design agreed with
@@ -44,8 +46,13 @@ Carlos in the 2026-06-12 session; written as a self-contained handoff.
 - [x] Manual e2e: local hub + `q2 mcp`, mint ghost, `connect_project`
       lists unavailable, `delete_file` repairs; transcript recorded below
       (§ Manual e2e transcript)
-- [ ] Close-out: commits, braid comment + close with hash, parent-plan
-      note; NO deploy from this strand
+- [x] Close-out: fix landed as `11931849` (pre-rebase `4d210f98`), braid
+      bd-vm5e5u10 commented + closed, parent plan
+      (`2026-06-12-sync-client-offline-race.md`) notes the amplifier
+      fixed; pushed to `origin/feature/bd-81cfshmw-q2-mcp-launcher`
+      (Carlos-authorized, 2026-06-12) after rebasing onto the
+      bd-10deu8h4 parallel-work notice; NOT deployed from this strand
+      (rollout stays with parent plan Phase 5)
 
 ## Manual e2e transcript (2026-06-12)
 
