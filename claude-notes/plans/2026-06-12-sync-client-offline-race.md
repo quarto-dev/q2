@@ -235,6 +235,39 @@ for one integration pass if Phase 1 localizes to the hub side.
       observation, including the creator profile never self-healing
       after reconnect (there is nothing left to announce).
 
+**Correction (Carlos, 2026-06-12, after Phase 1):** the browser
+console repro was NOT the project index failing — the error
+`Document automerge:3HJoqsM… is unavailable` is the *hello-claude
+file document* (the message format invites the confusion; the
+project index `SNHcgVzU…` loads fine). With that identification the
+incident chain completes:
+
+1. one file document lost at creation (D1; durability hypothesis
+   below stands as the best candidate);
+2. its index entry synced everywhere;
+3. **one dangling entry bricks the whole project for every client**:
+   `loadFileDocuments` (connect path) and `syncWithFiles`
+   (index-change path, hitting already-open sessions) await `findDoc`
+   per file with no error tolerance — the first unavailable doc
+   throws out of `connect()`. Same defect the MCP server showed
+   (bd-vm5e5u10), now promoted: it is the amplifier that turns one
+   lost file into "the project fails to load" for the whole team.
+
+**Priority re-order**: graceful degradation (bd-vm5e5u10, one fix in
+sync-client serving browser + MCP) is now the highest-leverage item —
+shipping it unbricks affected projects everywhere with no production
+mutation. Then D1 durability (prevents new mintings), doctor
+(blast-radius + standing health check), D2/D3 as planned.
+
+**Recorded latent-risk note (evidence-downgraded, kept honest):**
+while chasing a wrong hypothesis we found that `findDoc`'s retry loop
+bails immediately when `connectedPeers.size === 0` (added in
+e326eb5c, bd-jit6pdwq Phase 1). For cold-cache boots this converts
+"slow but successful" (retry until the peer arrives) into "instant
+fail" — it was NOT the incident cause (the failing doc genuinely
+doesn't exist), but it deserves a test + fix in the D2 work: "no
+peers *yet*" (booting) and "no peers" (offline) are different states.
+
 **Part 1 fix design, amended by the verdict** (supersedes the
 re-announce sketch): make creation durable, not re-announced —
 - sync-client `createFile`/`createNewProject` await
