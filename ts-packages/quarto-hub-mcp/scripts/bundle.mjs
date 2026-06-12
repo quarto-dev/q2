@@ -37,17 +37,12 @@
 
 import * as esbuild from 'esbuild';
 import { execFileSync } from 'node:child_process';
-import {
-  cpSync,
-  mkdirSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-  existsSync,
-} from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { parsePlatformList, stageKeyring } from './stage-keyring.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = join(here, '..');
@@ -105,30 +100,22 @@ await esbuild.build({
 });
 
 // --- ship the keyring addon as a mini node_modules ---------------------
-// Copy the loader package plus every installed platform package. On a
-// normal dev machine that's exactly one platform; a CI machine staging
-// multiple platforms copies what it has.
+// The staged platform packages must match the **release target's**
+// users, not the build host: release jobs request explicit platforms
+// via KEYRING_PLATFORMS (e.g. "darwin-x64,darwin-arm64"), fetched at
+// the loader's exact version when not installed locally. Unset (dev
+// machines): stage every installed platform package — exactly one on
+// a normal dev box. Rules + fail-closed checks live in
+// scripts/stage-keyring.mjs (unit-tested in src/keyring-staging.test.ts).
 const napiSrcDir = join(
   dirname(require.resolve('@napi-rs/keyring/package.json')),
   '..',
 );
-const napiOutDir = join(outDir, 'node_modules', '@napi-rs');
-mkdirSync(napiOutDir, { recursive: true });
-const copied = [];
-for (const entry of readdirSync(napiSrcDir)) {
-  if (entry === 'keyring' || entry.startsWith('keyring-')) {
-    cpSync(join(napiSrcDir, entry), join(napiOutDir, entry), {
-      recursive: true,
-      dereference: true,
-    });
-    copied.push(entry);
-  }
-}
-if (!copied.includes('keyring') || copied.length < 2) {
-  throw new Error(
-    `expected @napi-rs/keyring plus at least one platform package, got: ${copied.join(', ')}`,
-  );
-}
+const copied = stageKeyring({
+  napiSrcDir,
+  outNapiDir: join(outDir, 'node_modules', '@napi-rs'),
+  platforms: parsePlatformList(process.env['KEYRING_PLATFORMS']),
+});
 
 // --- build stamp --------------------------------------------------------
 // Diagnosability guard against the stale-embed trap: the launcher and
