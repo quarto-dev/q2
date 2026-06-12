@@ -96,14 +96,66 @@ its only copy was in-process: expected false to be true
 
 ### Phase 3 — verification + close-out
 
-- [ ] Manual e2e per CLAUDE.md (rebuild bundle + q2, original accident
-      against a LOCAL Rust hub, verify doc in hub storage; record
-      invocation + output here). This is also the real-samod
-      verification of the delivery signal.
-- [ ] Loud-failure path demonstrated once end-to-end.
+- [x] `cargo xtask verify --skip-hub-build --skip-hub-tests`: all
+      steps passed (2026-06-12).
+- [x] Manual e2e (2026-06-12, recorded below): rebuilt bundle + q2
+      (`cargo xtask build-hub-mcp-bundle && cargo build --bin q2`;
+      `--launcher-info` confirmed embedded gitCommit 194b9cc3),
+      replayed the original accident against a LOCAL Rust hub, output
+      inspected. Real-samod delivery-signal verification also locked
+      in as a gated regression test (sync-client exit-drain).
+- [x] Loud-failure path demonstrated once end-to-end (below).
 - [ ] braid: close bd-10deu8h4 with commit hash; note in parent plan;
       merge `--no-ff` into the integration line (coordinate with
-      bd-vm5e5u10's agent — second merger resolves).
+      bd-vm5e5u10's agent — second merger resolves; their fix landed
+      on the line as 11931849, so WE resolve).
+
+### Phase 3 manual-e2e record (2026-06-12)
+
+Happy path — the exact production shape (one small file), through the
+real binary a user runs, against `target/debug/hub` on 127.0.0.1:3041
+with a fresh data dir:
+
+```
+$ node tmp-e2e/accident-replay.mjs ./target/debug/q2 tmp-e2e/hub-data \
+    ws://127.0.0.1:3041/ws
+created project 4XoG8ZeWkMCF6uJuu8RcojcY7u5N with 1 file(s)
+server exited: true (8 ms after stdin EOF)
+hub storage has 4XoG8ZeWkMCF6uJuu8RcojcY7u5N: true
+hub storage has 3U9wPp6BomDhXUfkW66fvxiT8LgC: true
+```
+
+8 ms exit = the drain's first check found delivery already confirmed
+(remote-heads from samod) and returned without waiting — the budget
+binds only when something is actually undelivered. Both the index and
+the file doc verified present in samod's on-disk storage (the artifact
+the incident lost).
+
+Loud-failure path — hub SIGKILLed mid-session, `create_file` during
+the outage, then stdin EOF:
+
+```
+created project 1Yxc2e2zULCy6631LkhcVXVu2kR with 1 file(s)
+killed hub pid 31167; creating a file during the outage…
+server exited: true (3011 ms after stdin EOF)
+--- server stderr ---
+[disconnect] drain budget (3000 ms) expired with 2 possibly-undelivered
+document(s): <index 1Yxc2e2zULCy6631LkhcVXVu2kR>, doomed.qmd
+[hub-mcp] WARNING: exiting before outbound sync completed for project
+1Yxc2e2zULCy6631LkhcVXVu2kR. Possibly NOT delivered to the hub (and
+lost — this server keeps no local copy): <index document
+1Yxc2e2zULCy6631LkhcVXVu2kR>, doomed.qmd. Verify these documents on
+the hub before trusting them.
+```
+
+Bounded (3011 ms ≈ the 3000 ms budget; never hangs), loud (names the
+project, the index — whose heads moved when the outage-created file
+was indexed — and the path), and exit still well inside the 5 s
+stdin-EOF promptness contract. The replay driver was a throwaway
+script (`tmp-e2e/accident-replay.mjs`, deleted after use); the same
+shapes are permanently covered by `quarto-hub-mcp/src/exit-drain.test.ts`
+(JS hub, stdio level) and the samod-gated test in
+`quarto-sync-client/src/exit-drain.test.ts`.
 
 ## Phase 1 verdict: delivery signal (RECORDED 2026-06-12)
 
