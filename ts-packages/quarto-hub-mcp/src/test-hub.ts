@@ -16,12 +16,25 @@
 import * as http from 'node:http';
 import { once } from 'node:events';
 import { WebSocketServer } from 'ws';
-import { Repo, type PeerId } from '@automerge/automerge-repo';
+import { Repo, type DocumentId, type PeerId } from '@automerge/automerge-repo';
 import { WebSocketServerAdapter } from '@automerge/automerge-repo-network-websocket';
 
 export interface TestHub {
   /** ws:// URL of the sync endpoint, e.g. `ws://127.0.0.1:NNNNN/ws`. */
   url: string;
+  /**
+   * The hub's own repo — server-side ground truth. Tests use it to
+   * assert what the server actually received, and to mint dangling
+   * index entries by mutating the index document directly
+   * (bd-vm5e5u10; mirrors quarto-sync-client/src/test-hub.ts).
+   */
+  repo: Repo;
+  /**
+   * True iff the hub holds the document (bounded wait). Uses the
+   * repo's find with an overall deadline; "unavailable" or timeout
+   * map to false.
+   */
+  hubHasDoc(docId: string, timeoutMs?: number): Promise<boolean>;
   stop(): Promise<void>;
 }
 
@@ -70,6 +83,20 @@ export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> 
 
   return {
     url: `ws://127.0.0.1:${address.port}/ws`,
+    repo,
+    async hubHasDoc(docId: string, timeoutMs = 5000): Promise<boolean> {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        try {
+          const handle = await repo.find(docId as DocumentId);
+          if (handle.doc() !== undefined) return true;
+        } catch {
+          // unavailable — keep polling until the deadline
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return false;
+    },
     async stop(): Promise<void> {
       await repo.shutdown();
       wss.close();

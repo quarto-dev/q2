@@ -5,8 +5,85 @@ how dangling entries get minted), bd-8x482xb0 (closed — the production
 casualty), bd-p68lx71t (the 2026-06-12 incident this amplified),
 bd-10bdjmjb (parent plan:
 `claude-notes/plans/2026-06-12-sync-client-offline-race.md`).
-**Status:** READY TO IMPLEMENT — design agreed with Carlos in the
-2026-06-12 session; written as a self-contained handoff.
+**Status:** IN PROGRESS (2026-06-12, worktree
+`.worktrees/bd-vm5e5u10-hub-mcp-connectproject-hard`, branch
+`beads/bd-vm5e5u10-hub-mcp-connectproject-hard` off
+`origin/feature/bd-81cfshmw-q2-mcp-launcher`). Design agreed with
+Carlos in the 2026-06-12 session; written as a self-contained handoff.
+
+## Work items (progress)
+
+- [x] Worktree off `origin/feature/bd-81cfshmw-q2-mcp-launcher`; baseline
+      green (sync-client 95 passed + 2 skipped, hub-mcp 179 passed + 3
+      skipped)
+- [x] Sync-client RED tests 1–4 (`src/dangling-entries.test.ts`), verified
+      failing for the right reason (connect threw `Document … is
+      unavailable`; mid-session case produced the predicted unhandled
+      rejection; index error lacked "index"; formatters absent)
+- [x] Sync-client fix: per-file tolerance in `loadFileDocuments` /
+      `syncWithFiles`, `unavailableFiles` state + `getUnavailableFiles()`,
+      `onFileUnavailable` callback, status marker on returned entries,
+      index-fatal message, handled `syncWithFiles` invocation; tests 1–4
+      green; full sync-client suite 100 passed + 2 skipped
+- [x] hub-mcp RED tests 5–7 (ghosted `connect_project`, per-file
+      `read_file` error, `delete_file` repair), verified failing. (By the
+      time these ran, the sync-client fix was already in its dist, so the
+      RED shape was the residual MCP gap: ghost absent from listings,
+      generic `File not found`, `delete_file` refusing — not the original
+      tool-level connect error.)
+- [x] hub-mcp fix: status in connect/list JSON (`buildFileList` merges
+      `client.getUnavailableFiles()`), per-file guards in
+      read/write/patch/create (write/create refuse to silently repoint a
+      dangling entry), delete/rename work on dangling entries; tests 5–7
+      green; full hub-mcp suite 182 passed + 3 skipped
+- [x] Verification gauntlet: sync-client 100 passed + 2 skipped; hub-mcp
+      182 passed + 3 skipped; hub-client `npm run build` (needed a
+      one-time `npm run build:wasm` in the fresh worktree) +
+      `npm run test:ci` 97 passed; `cargo xtask verify --skip-hub-build
+      --skip-hub-tests` all 13 steps green (9,993 Rust tests passed)
+- [x] Manual e2e: local hub + `q2 mcp`, mint ghost, `connect_project`
+      lists unavailable, `delete_file` repairs; transcript recorded below
+      (§ Manual e2e transcript)
+- [ ] Close-out: commits, braid comment + close with hash, parent-plan
+      note; NO deploy from this strand
+
+## Manual e2e transcript (2026-06-12)
+
+Binary-level verification per CLAUDE.md, real `q2 mcp` against a real
+Rust hub; output inspected, not inferred:
+
+```bash
+cargo xtask build-hub-mcp-bundle && cargo build --bin q2
+# embedded bundle confirmed fresh: q2 mcp --launcher-info →
+#   gitCommit 0fc9f2db (dirty), builtAt 2026-06-12T19:38:37Z
+./target/debug/hub -P 3030 --data-dir <tmp> &          # real Rust hub
+# create a 2-file project over MCP stdio (JSON-RPC driver script):
+#   create_project → indexDocId jA9AqnCVA5LFSKbrBEidSmYPrma
+# mint the dangling entry via an automerge-repo client (mirrors the
+# 2026-06-12 production state; the original fixture was repaired away):
+#   d.files['ghost.qmd'] = '4MFyCaaQTAWKhgQmyjisRkTbjgUL'  # no such doc
+```
+
+Fresh `q2 mcp` session against the ghosted project (observed output):
+
+1. `connect_project` → **succeeds** (was the bricked call in the
+   incident); JSON lists `alpha.qmd`/`beta.qmd` as `"type": "text"` and
+   `{"path": "ghost.qmd", "status": "unavailable", "docId":
+   "4MFyCaaQTAWKhgQmyjisRkTbjgUL"}`.
+2. `read_file ghost.qmd` → `isError: true`: `Error: file document for
+   'ghost.qmd' (automerge:4MFyCaaQTAWKhgQmyjisRkTbjgUL) is unavailable
+   on the sync server — the file may have been created by a client that
+   never synced it; other files in the project remain usable. Use
+   delete_file to remove the dangling entry.`
+3. `read_file alpha.qmd` in the same session → `# Alpha\n\nreal file
+   one\n` (project stays usable).
+4. `delete_file ghost.qmd` → `Deleted ghost.qmd` (the self-service
+   repair that the incident lacked).
+5. `list_files` → only `alpha.qmd` + `beta.qmd`; a **fresh** session's
+   `connect_project` confirms the repair persisted on the hub.
+
+Stdout hygiene: zero non-JSON-RPC stdout lines across all sessions
+(driver counts pollution; 0 in both runs).
 
 ## Branch / coordination — READ FIRST
 

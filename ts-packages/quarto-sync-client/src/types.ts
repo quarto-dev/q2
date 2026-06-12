@@ -59,6 +59,24 @@ export interface BinaryFilePayload {
 export type FilePayload = TextFilePayload | BinaryFilePayload;
 
 // ============================================================================
+// File Entry Annotation
+// ============================================================================
+
+/**
+ * A {@link FileEntry} annotated with an availability marker at the
+ * sync-client boundary (bd-vm5e5u10). This is client-side presentation
+ * only — the marker is never written to the index document.
+ *
+ * `status` is `'unavailable'` when the index references this path but
+ * the file's automerge document could not be fetched from the sync
+ * server (a "dangling entry"): the file is listed but has no content.
+ * Files that loaded normally carry `'ok'` or no marker at all.
+ */
+export interface AnnotatedFileEntry extends FileEntry {
+  status?: 'ok' | 'unavailable';
+}
+
+// ============================================================================
 // Callback Types
 // ============================================================================
 
@@ -88,6 +106,17 @@ export interface SyncClientCallbacks {
    * Called when a file is removed.
    */
   onFileRemoved: (path: string) => void;
+
+  /**
+   * Called when an index entry references a document that cannot be
+   * fetched from the sync server — a "dangling entry" (optional,
+   * bd-vm5e5u10). The file is skipped, not fatal: it appears in
+   * listings with `status: 'unavailable'` (see
+   * {@link AnnotatedFileEntry}) and `onFileAdded` does NOT fire for
+   * it. `docId` is the document id exactly as stored in the index.
+   * UIs can use this to show a degraded marker.
+   */
+  onFileUnavailable?: (path: string, docId: string) => void;
 
   /**
    * Called when the file index changes (optional).

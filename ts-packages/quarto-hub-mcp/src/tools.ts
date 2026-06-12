@@ -14,6 +14,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { fileUnavailableMessage, type SyncClient } from '@quarto/quarto-sync-client';
 import { ConnectionManager } from './connection-manager.js';
 import {
   AUTH_TOOL_DEFINITIONS,
@@ -186,6 +187,47 @@ function getWriteTools(): Tool[] {
 
 type ToolArgs = Record<string, unknown>;
 
+/**
+ * One listed file. `type` is present for loaded files; dangling index
+ * entries (bd-vm5e5u10) instead carry `status: 'unavailable'` plus the
+ * doc id the index references, so agents can see — and repair via
+ * `delete_file` — entries whose documents never reached the hub.
+ */
+interface ListedFile {
+  path: string;
+  type?: string;
+  status?: 'unavailable';
+  docId?: string;
+}
+
+/** Project state as exposed by {@link ConnectionManager.connect}. */
+type ProjectState = Awaited<ReturnType<ConnectionManager['connect']>>;
+
+function buildFileList(state: ProjectState): ListedFile[] {
+  const fileList: ListedFile[] = Array.from(state.files.keys()).map((path) => ({
+    path,
+    type: state.files.get(path)!.type,
+  }));
+  for (const ghost of state.client.getUnavailableFiles()) {
+    fileList.push({ path: ghost.path, status: 'unavailable', docId: ghost.docId });
+  }
+  fileList.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return fileList;
+}
+
+/** The dangling-entry record for `path`, if the index references a document the hub cannot provide. */
+function findUnavailable(client: SyncClient, path: string): { path: string; docId: string } | undefined {
+  return client.getUnavailableFiles().find((f) => f.path === path);
+}
+
+/** Per-file error for tools that need the file's content (bd-vm5e5u10 requirement 5/6). */
+function unavailableFileError(path: string, docId: string): CallToolResult {
+  return error(
+    `Error: ${fileUnavailableMessage(path, docId)}. ` +
+      'Use delete_file to remove the dangling entry.',
+  );
+}
+
 async function handleTool(
   name: string,
   args: ToolArgs,
@@ -218,23 +260,13 @@ async function handleTool(
 async function handleConnectProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const state = await manager.connect(project);
-  const filePaths = Array.from(state.files.keys()).sort();
-  const fileList = filePaths.map(path => {
-    const payload = state.files.get(path)!;
-    return { path, type: payload.type };
-  });
-  return text(JSON.stringify({ project, files: fileList }, null, 2));
+  return text(JSON.stringify({ project, files: buildFileList(state) }, null, 2));
 }
 
 async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const state = await manager.connect(project);
-  const filePaths = Array.from(state.files.keys()).sort();
-  const fileList = filePaths.map(path => {
-    const payload = state.files.get(path)!;
-    return { path, type: payload.type };
-  });
-  return text(JSON.stringify(fileList, null, 2));
+  return text(JSON.stringify(buildFileList(state), null, 2));
 }
 
 async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -244,6 +276,10 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
   const payload = state.files.get(path);
 
   if (!payload) {
+    const ghost = findUnavailable(state.client, path);
+    if (ghost) {
+      return unavailableFileError(path, ghost.docId);
+    }
     return error(`Error: File not found: ${path}`);
   }
   if (payload.type === 'binary') {
@@ -260,6 +296,13 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
   const existing = state.files.get(path);
 
   if (!existing) {
+    // A dangling entry is not writable: silently re-creating the
+    // document would repoint the index away from whatever the original
+    // (never-synced) client still holds. Repair is delete_file.
+    const ghost = findUnavailable(state.client, path);
+    if (ghost) {
+      return unavailableFileError(path, ghost.docId);
+    }
     await state.client.createFile(path, content);
     return text(`Created ${path}`);
   }
@@ -280,6 +323,10 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
   const payload = state.files.get(path);
 
   if (!payload) {
+    const ghost = findUnavailable(state.client, path);
+    if (ghost) {
+      return unavailableFileError(path, ghost.docId);
+    }
     return error(`Error: File not found: ${path}`);
   }
   if (payload.type === 'binary') {
@@ -315,6 +362,11 @@ async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Pro
   if (state.files.has(path)) {
     return error(`Error: File already exists: ${path}. Use write_file to update it.`);
   }
+  // Same hazard as write_file: don't silently repoint a dangling entry.
+  const ghost = findUnavailable(state.client, path);
+  if (ghost) {
+    return unavailableFileError(path, ghost.docId);
+  }
 
   await state.client.createFile(path, content);
   return text(`Created ${path}`);
@@ -325,7 +377,11 @@ async function handleDeleteFile(args: ToolArgs, manager: ConnectionManager): Pro
   const path = args.path as string;
   const state = await manager.connect(project);
 
-  if (!state.files.has(path)) {
+  // Dangling entries ARE deletable: delete only edits the index, no
+  // document fetch involved — this is the self-service repair for a
+  // ghost entry (bd-vm5e5u10; the 2026-06-12 incident needed manual
+  // index surgery precisely because this path didn't exist).
+  if (!state.files.has(path) && !findUnavailable(state.client, path)) {
     return error(`Error: File not found: ${path}`);
   }
 
@@ -339,10 +395,11 @@ async function handleRenameFile(args: ToolArgs, manager: ConnectionManager): Pro
   const newPath = args.new_path as string;
   const state = await manager.connect(project);
 
-  if (!state.files.has(oldPath)) {
+  // Renaming only edits the index, so a dangling entry can be renamed.
+  if (!state.files.has(oldPath) && !findUnavailable(state.client, oldPath)) {
     return error(`Error: File not found: ${oldPath}`);
   }
-  if (state.files.has(newPath)) {
+  if (state.files.has(newPath) || findUnavailable(state.client, newPath)) {
     return error(`Error: Destination already exists: ${newPath}`);
   }
 

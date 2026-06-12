@@ -292,7 +292,19 @@ Part 1 therefore splits per host:
 - **Browser host**: flush-on-create + unload flush as below
   (defense-in-depth, playwright-verified).
 Fix order remains: bd-vm5e5u10 (amplifier) → bd-10deu8h4 (creator)
-→ doctor → D2/D3. Also filed along the way: bd-3g0aijb3 (/auth/actor
+→ doctor → D2/D3.
+
+> **Amplifier FIXED (2026-06-12, bd-vm5e5u10 closed):** one dangling
+> entry no longer bricks a project. Sync-client tolerates unavailable
+> file docs (connect + index-change paths; the fire-and-forget
+> `syncWithFiles` unhandled rejection is handled now), surfaces them
+> via `status: 'unavailable'` / `onFileUnavailable` /
+> `getUnavailableFiles()`; index-unavailable stays fatal with a
+> message that says "index". MCP lists ghosts, gives per-file errors,
+> and `delete_file` on a ghost is the self-service repair (verified
+> e2e against a real hub). Details + transcript:
+> `claude-notes/plans/2026-06-12-graceful-dangling-entries.md`.
+> Retry-on-peer-arrival for unavailable files remains D2 scope. Also filed along the way: bd-3g0aijb3 (/auth/actor
 + /auth/me reject Bearer → MCP attribution silently degraded).
 
 **Part 1 fix design, amended by the verdict** (supersedes the

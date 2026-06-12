@@ -28,6 +28,7 @@ export {
 
 // Export sync client types
 export type {
+  AnnotatedFileEntry,
   Patch,
   EditorContentChange,
   TextFilePayload,
@@ -46,7 +47,14 @@ export type {
 } from './types.js';
 
 // Export sync client
-export { createSyncClient, PeerUnavailableError } from './client.js';
+export {
+  createSyncClient,
+  PeerUnavailableError,
+  // Locked unavailability wording (bd-vm5e5u10) — reused by hub-mcp
+  // so per-file tool errors match the sync client's diagnostics.
+  fileUnavailableMessage,
+  indexUnavailableMessage,
+} from './client.js';
 export type { SyncClient } from './client.js';
 
 // Injectable diagnostic-log sink (bd-sl4o01y0): stdio hosts (hub-mcp)
