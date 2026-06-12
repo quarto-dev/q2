@@ -209,12 +209,46 @@ for one integration pass if Phase 1 localizes to the hub side.
 
 ## Phases / work items
 
-### Phase 1 — localize D1 (red tests)
-- [ ] test-hub harness: deferred-upgrade switch (connect succeeds only
-      after the test releases it)
-- [ ] Red test: created-while-offline document must reach the hub
-- [ ] Wire-level localization: client never announces vs hub ignores
-      announce (record verdict here — it gates the Part 1 design)
+### Phase 1 — localize D1 (COMPLETE 2026-06-12; verdict below)
+- [x] test-hub harness with deferred-upgrade switch
+      (`quarto-sync-client/src/test-hub.ts`)
+- [x] Repro tests, three shapes, ALL GREEN in node:
+      fresh-create against held JS hub; fresh-create against
+      late-starting Rust hub; **restart-window** create (connect
+      online → SIGKILL hub → createFile in the gap → hub returns on
+      same port/data-dir → doc arrives). The announce machinery is
+      **exonerated on both sides** — kept as regression guards
+      (`offline-creation.test.ts`, `offline-creation-rust-hub.test.ts`,
+      `restart-window-creation.test.ts`).
+- [x] **VERDICT — hypothesis (c): a browser durability race, not an
+      announce gap.** hub-client creates files through the exact
+      sync-client path proven green above; the environmental delta is
+      tab lifecycle. automerge-repo persists documents via an
+      async-throttled save with a **100 ms debounce**
+      (`Repo.js: saveDebounceRate = 100`); a document created during
+      an offline window whose throttled IndexedDB write hasn't landed
+      when the tab unloads (hard refresh — exactly what users do
+      during an outage) loses its bytes entirely: the network can't
+      save it (offline) and the disk never had it. The index entry
+      survives (existing doc, separate flush/sync timing) — minting
+      precisely the hello-claude dangling entry. Consistent with every
+      observation, including the creator profile never self-healing
+      after reconnect (there is nothing left to announce).
+
+**Part 1 fix design, amended by the verdict** (supersedes the
+re-announce sketch): make creation durable, not re-announced —
+- sync-client `createFile`/`createNewProject` await
+  `repo.flush([docId, indexDocId])` (API exists:
+  `Repo.flush(documents?)`) before resolving, so "created" means
+  "persisted locally" — cheap in node/memory, the whole point in the
+  browser;
+- hub-client adds a `beforeunload`/`visibilitychange` flush so even
+  mid-debounce edits get a last write;
+- browser-level confirmation test (playwright, hub-client suite):
+  create offline + immediate reload → file must survive in IndexedDB
+  (red today, green after).
+The re-announce machinery needs no change (proven); the regression
+guards stay.
 
 ### Phase 1.5 — `hub doctor` (report-only storage health check)
 - [ ] Tests: fixture storage dirs (healthy / dangling entry /
