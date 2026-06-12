@@ -299,14 +299,36 @@ same code path with the same mechanism).
 
 ### Phase 2 — Installer scripts + offline tests
 
-- [ ] Adapt `install.sh` from braid (OWNER/REPO/BINARY_NAME=q2, new
+- [x] Adapt `install.sh` from braid (OWNER/REPO/BINARY_NAME=q2, new
       pinned pubkey); keep `--print-platform`, refusal paths, atomic
       install, trusted-comment check
-- [ ] Adapt `install.ps1` (checksum-only, matching braid's Windows story
+- [x] Adapt `install.ps1` (checksum-only, matching braid's Windows story
       — note the signature gap)
-- [ ] Port braid's `bootstrap_sh.rs` offline test (`--artifact-url
+- [x] Port braid's `bootstrap_sh.rs` offline test (`--artifact-url
       file://` + `--checksum`) into a workspace integration test
-- [ ] README install section + manual-verification instructions
+- [x] README install section + manual-verification instructions
+
+**Phase 2 record (2026-06-12).** Decisions made during the port:
+- Archive layout is **flat** (binary only) since the MCP bundle is
+  embedded in the binary — no `~/.local/share` payload dir needed;
+  install dir defaults to `~/.local/bin`, exactly like braid.
+- Env vars renamed: `Q2_REPO_OWNER`/`Q2_REPO_NAME`/`Q2_MINISIGN`/
+  `Q2_INSTALL_DIR`.
+- Unsupported-platform advice says `--from-source` (braid said `cargo
+  install --git`, which is untested for this workspace's bin layout).
+- `--from-source` builds the MCP bundle when npm is available
+  (`npm install && npm run bundle -w ts-packages/quarto-hub-mcp`),
+  loudly warns + proceeds without it otherwise (`q2 mcp`
+  non-functional, everything else works).
+- Test home: `crates/quarto/tests/integration/bootstrap_sh.rs` (32
+  tests; `pub mod bootstrap_sh;` registered alphabetized in main.rs;
+  `sha2 = "0.11"` added to quarto dev-deps — 0.11 dropped LowerHex on
+  digests, hence a local `sha256_hex` helper). All 32 pass locally;
+  shellcheck-clean verified (shellcheck installed here).
+- `test-suite.yml` gains minisign install steps (apt/brew) — the suite
+  requires it loudly rather than skipping (braid's contract, kept).
+- README gains an Installing section (pinned pubkey, manual
+  verification, node 24+ note for `q2 mcp`, env-var override story).
 
 ### Phase 3 — Release workflow
 
