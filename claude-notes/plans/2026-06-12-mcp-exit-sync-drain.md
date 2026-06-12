@@ -105,10 +105,13 @@ its only copy was in-process: expected false to be true
       inspected. Real-samod delivery-signal verification also locked
       in as a gated regression test (sync-client exit-drain).
 - [x] Loud-failure path demonstrated once end-to-end (below).
-- [ ] braid: close bd-10deu8h4 with commit hash; note in parent plan;
-      merge `--no-ff` into the integration line (coordinate with
-      bd-vm5e5u10's agent — second merger resolves; their fix landed
-      on the line as 11931849, so WE resolve).
+- [x] braid: closed bd-10deu8h4 (fix 194b9cc3, merge c0e5e136); noted
+      in parent plan; merged `--no-ff` into the integration line as
+      second merger (one trivial doc-comment conflict in
+      hub-mcp/test-hub.ts — both strands independently added
+      repo + hubHasDoc; bodies were identical). Combined-state suites
+      green: sync-client 105/105, hub-mcp 185/2-skipped, hub-client
+      build + test:ci 97/97.
 
 ### Phase 3 manual-e2e record (2026-06-12)
 
