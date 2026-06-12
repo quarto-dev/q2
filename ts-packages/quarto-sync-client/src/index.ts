@@ -40,9 +40,12 @@ export type {
   CreateBinaryFileResult,
   CreateProjectOptions,
   CreateProjectResult,
+  DisconnectOptions,
+  DisconnectReport,
   FindDocRetryOptions,
   StorageKind,
   SyncClientAuthOptions,
+  UndeliveredDoc,
 } from './types.js';
 
 // Export sync client
@@ -71,6 +74,12 @@ export type {
   WebSocketFactory,
   WebSocketLike,
 } from './NodeWebSocketClientAdapter.js';
+
+// In-memory storage adapter. Exported for test hubs that need a
+// storageId in their handshake metadata (the real samod hub always
+// announces one — exit-drain delivery confirmation keys off it,
+// bd-10deu8h4).
+export { MemoryStorageAdapter } from './storage-adapter.js';
 
 // Export utilities
 export { computeSHA256 } from './hash.js';

@@ -41,6 +41,8 @@ import type {
   CreateBinaryFileResult,
   CreateProjectOptions,
   CreateProjectResult,
+  DisconnectOptions,
+  DisconnectReport,
   FindDocRetryOptions,
   SyncClientAuthOptions,
 } from './types.js';
@@ -621,8 +623,13 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
   /**
    * Disconnect from the sync server.
+   *
+   * With `drainMs > 0`, first gives outbound document sync a bounded
+   * window to reach the hub (see {@link DisconnectOptions}); the
+   * teardown itself is unconditional and identical either way.
    */
-  async function disconnect(): Promise<void> {
+  async function disconnect(options?: DisconnectOptions): Promise<DisconnectReport> {
+    const report: DisconnectReport = { drained: true, undelivered: [] };
     // Clean up subscriptions
     for (const cleanup of state.cleanupFns) {
       cleanup();
@@ -652,6 +659,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     lastCaptures = {};
 
     callbacks.onConnectionChange?.(false);
+    return report;
   }
 
   /**

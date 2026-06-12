@@ -254,6 +254,57 @@ export interface ConnectOptions {
 }
 
 // ============================================================================
+// Disconnect / exit-drain types (bd-10deu8h4)
+// ============================================================================
+
+/**
+ * Options bag for `disconnect()`.
+ */
+export interface DisconnectOptions {
+  /**
+   * Bounded budget (ms) to drain outbound document sync before tearing
+   * the connection down. The drain returns early the moment the
+   * connected hub confirms it holds our heads for every tracked
+   * document (index + files), and never blocks past the budget.
+   *
+   * Default `0`: no drain — the existing teardown behavior. Browser
+   * callers (hub-client) should keep the default: their IndexedDB
+   * storage persists local changes across disconnects, so a blocking
+   * drain on tab/component teardown buys nothing. Memory-storage
+   * callers whose process is about to exit (the hub MCP server) are
+   * the intended users: for them, undelivered == lost (bd-10deu8h4,
+   * the 2026-06-12 incident).
+   */
+  drainMs?: number;
+}
+
+/**
+ * A document that may not have reached the sync server when the drain
+ * budget expired.
+ */
+export interface UndeliveredDoc {
+  /** Project-relative path; `null` for the project's index document. */
+  path: string | null;
+  /** The automerge document id (bare, no `automerge:` prefix). */
+  docId: string;
+}
+
+/**
+ * Result of `disconnect()`. Only meaningful when a drain was requested
+ * (`drainMs > 0`); the default no-drain path always reports
+ * `{ drained: true, undelivered: [] }` without checking.
+ */
+export interface DisconnectReport {
+  /**
+   * False iff the drain budget expired while at least one tracked
+   * document's heads were not yet confirmed by a storage-backed peer.
+   */
+  drained: boolean;
+  /** The documents that were not confirmed delivered. */
+  undelivered: UndeliveredDoc[];
+}
+
+// ============================================================================
 // Result Types
 // ============================================================================
 
