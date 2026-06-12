@@ -69,18 +69,30 @@ its only copy was in-process: expected false to be true
 
 ### Phase 2 — implement
 
-- [ ] sync-client: drain primitive (`drainOutbound`) wired into
+- [x] sync-client: drain primitive (`drainOutbound`) wired into
       `disconnect({drainMs})`; default 0 (browser teardown unchanged).
-- [ ] sync-client: peer storageId tracking in `trackPeers`.
-- [ ] hub-mcp: `disconnectAll({drainMs})` + loud stderr on undrained
-      projects (names indexDocId + paths).
-- [ ] hub-mcp: `index.ts` shutdown passes the drain budget; keeps
-      re-entrancy guard; stdin-EOF exit stays within hygiene bound.
-- [ ] Both red tests green; loud-failure path test (hub down at exit →
-      stderr names undelivered paths).
-- [ ] Suites green: sync-client, hub-mcp (incl. bundle test),
-      hub-client `npm run build && npm run test:ci`,
-      `cargo xtask verify --skip-hub-build --skip-hub-tests`.
+      Event-driven (`remote-heads` per handle + `peer` for mid-drain
+      reconnects), bounded by `drainMs`, early-returns on confirmation.
+- [x] sync-client: peer storageId tracking in `trackPeers` (kept after
+      peer-disconnect — confirmed heads stay confirmed).
+- [x] hub-mcp: `disconnectAll({drainMs})` + loud stderr on undrained
+      projects (names indexDocId + paths; stderr only, bd-sl4o01y0).
+- [x] hub-mcp: `index.ts` shutdown passes `SHUTDOWN_DRAIN_MS = 3000`;
+      keeps re-entrancy guard; stdin-EOF exit stays within the 5 s
+      hygiene bound (3 s budget binds only when the hub is gone).
+- [x] Both red tests green; loud-failure path tested at BOTH levels
+      (sync-client report assertions + stdio stderr assertion with
+      prompt exit).
+- [x] BONUS: real-samod drain regression test (gated on
+      `target/debug/hub`, unix): create → `disconnect({drainMs})` →
+      report.drained AND every doc present in samod's on-disk storage.
+      This behaviorally verifies the delivery signal against the
+      production hub implementation — passed 2026-06-12.
+- [x] Suites green (2026-06-12): sync-client 99/99 (incl. rust-hub
+      gated), hub-mcp 181 passed/3 skipped (incl. bundle test;
+      skipped = keyring-gated e2e-auth), hub-client `npm run build` +
+      `test:ci` 97/97. `cargo xtask verify --skip-hub-build
+      --skip-hub-tests`: see Phase 3 note (run alongside).
 
 ### Phase 3 — verification + close-out
 

@@ -260,13 +260,22 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
+  // Outbound-sync drain budget at shutdown (bd-10deu8h4): created
+  // documents live only in this process's memory until the hub acks
+  // them, so exit must give delivery a bounded window. The drain
+  // returns early the moment the hub confirms; the budget only binds
+  // when the hub is slow or unreachable. 3 s keeps the stdin-EOF exit
+  // comfortably inside the 5 s promptness contract that
+  // stdio-hygiene.test.ts asserts (bd-9jq2a060).
+  const SHUTDOWN_DRAIN_MS = 3000;
+
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
     // Re-entrancy guard: server.close() below fires server.onclose,
     // which routes back here.
     if (shuttingDown) return;
     shuttingDown = true;
-    await manager.disconnectAll();
+    await manager.disconnectAll({ drainMs: SHUTDOWN_DRAIN_MS });
     await server.close();
     process.exit(0);
   };

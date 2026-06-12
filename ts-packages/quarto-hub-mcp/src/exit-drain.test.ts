@@ -82,4 +82,37 @@ describe('exit drains outbound sync (bd-10deu8h4)', () => {
       ).toBe(true);
     }
   }, 30000);
+
+  it('warns loudly on stderr (and still exits promptly) when the hub is gone at shutdown', async () => {
+    // Own hub — this test kills it mid-session.
+    const doomedHub = await startTestHub();
+    client = new McpTestClient();
+    await client.start(['--server', doomedHub.url]);
+
+    const result = await client.callTool('create_project', {
+      files: [{ path: 'survives.qmd', content: 'created while the hub was up\n' }],
+    });
+    const created = JSON.parse(result.content[0]!.text) as CreateProjectResponse;
+
+    // Hub dies; a file is created during the outage. Its only copy is
+    // now in this server process's memory.
+    await doomedHub.stop();
+    await client.callTool('create_file', {
+      project: created.indexDocId,
+      path: 'doomed.qmd',
+      content: 'created while the hub was down\n',
+    });
+
+    // Shutdown must not hang past the drain budget (3 s < the 5 s
+    // promptness contract)…
+    expect(await client.endStdinAndWaitForExit(5000)).toBe(true);
+
+    // …and must name the project and the possibly-lost path on stderr.
+    const warning = client.stderrLines.find((l) =>
+      l.includes('Possibly NOT delivered'),
+    );
+    expect(warning, 'shutdown must warn about undelivered documents').toBeDefined();
+    expect(warning).toContain(created.indexDocId);
+    expect(warning).toContain('doomed.qmd');
+  }, 30000);
 });

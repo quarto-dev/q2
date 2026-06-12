@@ -7,7 +7,7 @@
  */
 
 import { Repo, DocHandle, updateText, splice, generateAutomergeUrl, parseAutomergeUrl } from '@automerge/automerge-repo';
-import type { DocumentId, Patch } from '@automerge/automerge-repo';
+import type { DocumentId, Patch, StorageId } from '@automerge/automerge-repo';
 import { clone as automergeClone, from as automergeFrom, save as automergeSerialize } from '@automerge/automerge';
 import type { NetworkAdapter } from '@automerge/automerge-repo/slim';
 
@@ -101,6 +101,18 @@ async function buildWsAdapter(
 type FileDocument = TextDocumentContent | BinaryDocumentContent;
 
 /**
+ * Order-insensitive equality of two automerge head sets (URL-encoded
+ * change hashes). Equality with a peer's last-confirmed heads is the
+ * sync protocol's convergence steady state — the delivery signal the
+ * exit drain waits for (bd-10deu8h4).
+ */
+function sameHeads(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const bSet = new Set<string>(b);
+  return a.every((h) => bSet.has(h));
+}
+
+/**
  * Internal state for a sync client instance.
  */
 interface SyncClientState {
@@ -117,6 +129,14 @@ interface SyncClientState {
    * unavailable is the truth (offline), not a sync race.
    */
   connectedPeers: Set<string>;
+  /**
+   * storageIds announced in peer handshake metadata, by peerId.
+   * Storage-backed peers (the hub — samod always announces one) are
+   * the ones whose remote-heads sync info counts as delivery proof
+   * for the exit drain (bd-10deu8h4). Entries are kept after a peer
+   * disconnects: heads a hub confirmed remain delivered.
+   */
+  peerStorageIds: Map<string, string>;
   /** Resolved retry policy for the current connection. */
   findDocRetry: Required<FindDocRetryOptions>;
 }
@@ -151,6 +171,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     cleanupFns: [],
     actorId: null,
     connectedPeers: new Set(),
+    peerStorageIds: new Map(),
     findDocRetry: DEFAULT_FIND_DOC_RETRY,
   };
 
@@ -283,8 +304,19 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   // Must run before waitForPeer so the first peer event is counted.
   // Returns a cleanup registered into state.cleanupFns by the caller.
   function trackPeers(repo: Repo): void {
-    const onPeer = ({ peerId }: { peerId: string }) => {
+    const onPeer = ({
+      peerId,
+      peerMetadata,
+    }: {
+      peerId: string;
+      peerMetadata?: { storageId?: string };
+    }) => {
       state.connectedPeers.add(peerId);
+      // Deliberately not removed on peer-disconnected: see the field
+      // doc on SyncClientState.peerStorageIds.
+      if (peerMetadata?.storageId) {
+        state.peerStorageIds.set(peerId, peerMetadata.storageId);
+      }
     };
     const onPeerGone = ({ peerId }: { peerId: string }) => {
       state.connectedPeers.delete(peerId);
@@ -621,6 +653,86 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Exit drain (bd-10deu8h4)
+  //
+  // Delivery proof for a document: some storage-backed peer's
+  // last-confirmed heads (DocHandle sync info, which automerge-repo
+  // updates from `syncState.theirHeads` on every received sync
+  // message) equal the handle's current heads. The hub (samod) always
+  // announces a storageId in its handshake metadata, so against a real
+  // hub this signal fires as soon as the hub has acked our changes.
+  // ---------------------------------------------------------------------
+
+  /** Every document this connection is responsible for delivering. */
+  function trackedDocs(): Array<{ path: string | null; handle: DocHandle<unknown> }> {
+    const docs: Array<{ path: string | null; handle: DocHandle<unknown> }> = [];
+    if (state.indexHandle) {
+      docs.push({ path: null, handle: state.indexHandle as unknown as DocHandle<unknown> });
+    }
+    for (const [path, handle] of state.fileHandles) {
+      docs.push({ path, handle: handle as unknown as DocHandle<unknown> });
+    }
+    return docs;
+  }
+
+  /** True iff some storage-backed peer has confirmed the handle's current heads. */
+  function isDelivered(handle: DocHandle<unknown>): boolean {
+    // A handle that never became ready holds no local changes of ours
+    // — there is nothing to deliver (and `heads()` would throw).
+    if (!handle.isReady()) return true;
+    const heads = handle.heads();
+    for (const storageId of new Set(state.peerStorageIds.values())) {
+      const info = handle.getSyncInfo(storageId as StorageId);
+      if (info && sameHeads(info.lastHeads, heads)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Wait (bounded by `drainMs`, returning early on confirmation) until
+   * every tracked document is delivered. Event-driven: re-checks on
+   * each `remote-heads` update and on `peer` (a reconnect mid-drain
+   * brings a fresh storageId and a fresh chance to deliver). Never
+   * rejects; never waits past the budget.
+   */
+  async function drainOutbound(drainMs: number): Promise<DisconnectReport> {
+    const repo = state.repo;
+    if (!repo) return { drained: true, undelivered: [] };
+    const docs = trackedDocs();
+    const pendingDocs = () => docs.filter((d) => !isDelivered(d.handle));
+
+    if (pendingDocs().length > 0) {
+      await new Promise<void>((resolve) => {
+        let done = false;
+        const cleanups: Array<() => void> = [];
+        const finish = () => {
+          if (done) return;
+          done = true;
+          for (const cleanup of cleanups) cleanup();
+          resolve();
+        };
+        const timer = setTimeout(finish, drainMs);
+        cleanups.push(() => clearTimeout(timer));
+        const recheck = () => {
+          if (pendingDocs().length === 0) finish();
+        };
+        for (const { handle } of docs) {
+          handle.on('remote-heads', recheck);
+          cleanups.push(() => handle.off('remote-heads', recheck));
+        }
+        repo.networkSubsystem.on('peer', recheck);
+        cleanups.push(() => repo.networkSubsystem.off('peer', recheck));
+      });
+    }
+
+    const undelivered = pendingDocs().map(({ path, handle }) => ({
+      path,
+      docId: String(handle.documentId),
+    }));
+    return { drained: undelivered.length === 0, undelivered };
+  }
+
   /**
    * Disconnect from the sync server.
    *
@@ -629,7 +741,18 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
    * teardown itself is unconditional and identical either way.
    */
   async function disconnect(options?: DisconnectOptions): Promise<DisconnectReport> {
-    const report: DisconnectReport = { drained: true, undelivered: [] };
+    const drainMs = options?.drainMs ?? 0;
+    let report: DisconnectReport = { drained: true, undelivered: [] };
+    if (drainMs > 0 && state.repo) {
+      report = await drainOutbound(drainMs);
+      if (!report.drained) {
+        syncLog(
+          `[disconnect] drain budget (${drainMs} ms) expired with ` +
+            `${report.undelivered.length} possibly-undelivered document(s): ` +
+            report.undelivered.map((u) => u.path ?? `<index ${u.docId}>`).join(', '),
+        );
+      }
+    }
     // Clean up subscriptions
     for (const cleanup of state.cleanupFns) {
       cleanup();
@@ -654,6 +777,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     state.indexHandle = null;
     state.actorId = null;
     state.connectedPeers = new Set();
+    state.peerStorageIds = new Map();
     state.findDocRetry = DEFAULT_FIND_DOC_RETRY;
     lastIdentities = {};
     lastCaptures = {};
