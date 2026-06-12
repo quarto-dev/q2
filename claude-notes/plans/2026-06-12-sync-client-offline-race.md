@@ -268,6 +268,33 @@ fail" — it was NOT the incident cause (the failing doc genuinely
 doesn't exist), but it deserves a test + fix in the D2 work: "no
 peers *yet*" (booting) and "no peers" (offline) are different states.
 
+**Second correction (2026-06-12, evening) — the actual casualty
+identified and resolved:** the dangling entry was
+`/cscheid/q2-mcp-hello.qmd` (created by the bd-81cfshmw live write
+test at 15:31Z), not hello-claude.qmd. Its cause is NOT the browser
+durability race below — it is the **MCP server exit racing outbound
+sync** (stdin-EOF shutdown ran before the new doc reached the hub;
+filed as bd-10deu8h4, the exit-flush race noted-and-deferred during
+bd-xnmd5ni1). The playground was surgically unbricked (entry removed
+with prior backup, Carlos-approved Path B; bd-8x482xb0 closed), the
+audiences flag re-enabled after exoneration, and hello-claude.qmd —
+never actually lost, just hidden behind the brick — edited normally.
+
+The browser durability hypothesis below is hereby DEMOTED to a
+latent concern with **no known casualty**: the 100 ms save debounce ×
+tab unload window is real and the flush-on-create fix remains
+worthwhile, but it is no longer load-bearing for any observed loss.
+Part 1 therefore splits per host:
+- **MCP host (bd-10deu8h4)**: drain outbound sync before exit and/or
+  await server receipt in create/write handlers (needs a delivery
+  signal — remote-heads gossip or an explicit settle; design in that
+  strand);
+- **Browser host**: flush-on-create + unload flush as below
+  (defense-in-depth, playwright-verified).
+Fix order remains: bd-vm5e5u10 (amplifier) → bd-10deu8h4 (creator)
+→ doctor → D2/D3. Also filed along the way: bd-3g0aijb3 (/auth/actor
++ /auth/me reject Bearer → MCP attribution silently degraded).
+
 **Part 1 fix design, amended by the verdict** (supersedes the
 re-announce sketch): make creation durable, not re-announced —
 - sync-client `createFile`/`createNewProject` await
