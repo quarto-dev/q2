@@ -248,7 +248,36 @@ for one integration pass if Phase 1 localizes to the hub side.
 - [ ] Close out bd-p68lx71t with the final root-cause narrative;
       unblock the audience re-rollout (bd-exs follow-up)
 
+## Resolved questions (Carlos, 2026-06-12)
+
+1. **Hub accept policy**: accept-any from authenticated clients,
+   matching the existing trust model (allowlisted user = trusted
+   collaborator). A real authorization layer is acknowledged future
+   work — it requires coordinating with external authorization
+   systems where quarto-hub deployments embed in other auth setups —
+   and is explicitly out of scope here.
+2. **Part 3 budget**: "5 s if /health says reachable" approved for
+   hub-client v1.
+3. **hello-claude.qmd**: throwaway content, BUT the inconsistent
+   storage state is deliberately **preserved as a live diagnostic
+   fixture** while this work is in flight (playground project =
+   internal-use, not production-critical). Do not clean it up until
+   the D1 fix + doctor are done with it.
+
+**Phase 1 design refinement** (from resolution discussion): the
+localization red test runs against BOTH hubs — the in-process JS
+automerge-repo harness AND the real Rust `hub` binary. If the JS run
+reproduces the loss, the gap is client-side ((a)); if JS passes but
+Rust fails, it's samod's accept path ((b)). The Rust-hub variant
+simulates the offline window by starting the hub AFTER the client
+created documents (adapter retry-loop reconnect = exactly the
+production restart scenario).
+
 ## Open questions for Carlos
+
+(none currently)
+
+<details><summary>Resolved 2026-06-12 (see above)</summary>
 
 1. **Hub-side accept policy** (if Phase 1 lands on (b)): should the
    hub accept any announced document from an authenticated client
@@ -263,3 +292,5 @@ for one integration pass if Phase 1 localizes to the hub side.
 3. **hello-claude.qmd**: recover (needs the creating profile + the
    Part 1 fix) or recreate-and-clean? If the content was throwaway,
    recreate is zero-effort once the scan tool exists.
+
+</details>
