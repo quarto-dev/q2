@@ -24,6 +24,17 @@ harness this plan tells you to use. `cargo xtask switch-task
 bd-vm5e5u10 --from beads/bd-81cfshmw-q2-mcp-launcher` is the
 sanctioned way (see `.claude/rules/worktrees.md`).
 
+## Parallel work notice
+
+**bd-10deu8h4** (MCP exit-sync drain, plan
+`2026-06-12-mcp-exit-sync-drain.md`) is being implemented in parallel
+on the same integration line. Boundary contract: THEY own
+`client.ts` `disconnect()` + drain primitives, `quarto-hub-mcp`
+`index.ts` shutdown and `connection-manager.ts` `disconnectAll`; YOU
+own `loadFileDocuments` / `syncWithFiles` / `indexChangeHandler` and
+all of `tools.ts`. Shared additive-only: `types.ts`, sync-client
+`index.ts` exports, new test files. Second merger resolves.
+
 ## What happens today (the defect)
 
 A project's index document maps paths → automerge doc ids. If one
