@@ -14,8 +14,11 @@ The defect lives in `ts-packages/quarto-sync-client`, which received
 several fixes on the **`beads/bd-81cfshmw-q2-mcp-launcher`** branch
 (requireOnline/PeerUnavailableError, never-throw ws error handlers,
 the test-hub harness, offline-creation regression tests). That branch
-is NOT yet merged to main. **Branch off
-`beads/bd-81cfshmw-q2-mcp-launcher`** (or off main after it merges) —
+is NOT yet merged to main; it is pushed as
+**`origin/feature/bd-81cfshmw-q2-mcp-launcher`** (repo convention:
+local `beads/…` names map to remote `feature/…` — see
+`.claude/rules/worktrees.md` § Pushing for PR). **Branch off that
+remote ref** (or off main after it merges) —
 implementing against plain main will conflict and will lack the test
 harness this plan tells you to use. `cargo xtask switch-task
 bd-vm5e5u10 --from beads/bd-81cfshmw-q2-mcp-launcher` is the
