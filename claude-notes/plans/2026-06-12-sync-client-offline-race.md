@@ -115,13 +115,39 @@ first. All in q2; no hub deployment required until rollout.
      and persisted (with the existing audit/access policy applied) —
      plus the same client-side test rides along as the regression
      guard.
-3. **Recovery tooling for existing casualties**: a small
-   `hub`-side maintenance command (or script) that scans index
-   documents for entries whose document is absent from storage and
-   reports them (the playground has at least `hello-claude.qmd`).
-   Cleanup = remove entry or restore from a client that still holds
-   the bytes; restoring becomes possible automatically once the fix
-   ships and the creator reopens the project.
+3. **Storage health check first, recovery later** (Carlos,
+   2026-06-12: no mutations to automerge documents until a
+   report-only instrument exists). A `hub doctor` subcommand
+   (working name) that is **read-only by construction** in its first
+   incarnation — there is no write path to gate behind a flag because
+   none is implemented:
+   - Scans a storage directory and reports, human-readable and
+     `--json`:
+     a. *dangling index entries* — index `files` entries whose
+        document is absent from storage (the hello-claude class);
+     b. *unloadable documents* — present but failing to load as
+        automerge (corruption);
+     c. *orphan documents* — in storage, referenced by no index
+        (informational);
+     d. summary counts + nonzero exit when (a)/(b) found, so it can
+        run under cron as a standing health check.
+   - Index documents are identified by attempt-parsing every doc
+     against the `IndexDocument` schema (the hub does not keep a
+     project registry; all docs are stored uniformly).
+   - Runs **offline against a copy** of the data dir (the live store
+     is lock-guarded; `/mnt/hub-data` is ~20 MB, and DLM snapshots
+     exist) — zero interaction with the running server. A live admin
+     endpoint is a possible later convenience, not v1.
+   - Immediate use once built: run against quarto-hub.com's storage
+     to size the damage — are there dangling entries beyond
+     `hello-claude.qmd`, and since when? That number is incident
+     data for bd-p68lx71t.
+   - **Mutation (cleanup/repair) is a separate, later work item**
+     with its own go-ahead: remove-dangling-entry and
+     restore-from-client flows, designed only after the report has
+     told us what production actually looks like. Restoration of
+     held-in-browser bytes becomes possible automatically once the
+     D1 fix ships and the creator reopens the project.
 
 ### Part 2 — self-heal failed opens on the online transition (D2)
 
@@ -190,11 +216,20 @@ for one integration pass if Phase 1 localizes to the hub side.
 - [ ] Wire-level localization: client never announces vs hub ignores
       announce (record verdict here — it gates the Part 1 design)
 
-### Phase 2 — fix D1 + recovery
+### Phase 1.5 — `hub doctor` (report-only storage health check)
+- [ ] Tests: fixture storage dirs (healthy / dangling entry /
+      corrupt doc / orphan) → exact report + exit codes; `--json`
+      schema locked by test
+- [ ] `hub doctor <data-dir>` subcommand, read-only by construction
+- [ ] Run against a copy of quarto-hub.com's storage; record findings
+      here and on bd-p68lx71t (damage sizing)
+
+### Phase 2 — fix D1
 - [ ] Fix per Phase 1 verdict (client re-announce or hub accept-policy)
 - [ ] Second-client open test goes green
-- [ ] Dangling-entry scan tool + playground cleanup/recovery of
-      `hello-claude.qmd`
+- [ ] (gated on its own go-ahead, after doctor findings) repair mode
+      design: remove-dangling-entry / restore-from-client; playground
+      cleanup or recovery of `hello-claude.qmd`
 
 ### Phase 3 — D2 self-healing opens
 - [ ] Red test + fix: failed loads retried on online transition,
