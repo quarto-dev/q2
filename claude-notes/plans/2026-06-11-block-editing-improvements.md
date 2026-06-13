@@ -258,11 +258,11 @@ preserves today's deepest-wins (`closest`) resolution otherwise. Ships first, on
 the active-region ref is independent of that.)
 
 ### TDD work items
-- [ ] RTL: with an editor open, a click inside the textarea/wrapper does **not** change
+- [x] RTL: with an editor open, a click inside the textarea/wrapper does **not** change
   `editTarget` (no climb to parent) **but does not tear down the editor either** (caret-move
   allowed); a click on a *different* surface switches to it.
-- [ ] RTL: regression — single click still activates the deepest surface as today.
-- [ ] Implement the active-region marker + `onPointerUp`/activation guard (inside → suppress
+- [x] RTL: regression — single click still activates the deepest surface as today.
+- [x] Implement the active-region marker + `onPointerUp`/activation guard (inside → suppress
   cross-surface activation only; outside → resolve-and-switch).
 
 ---

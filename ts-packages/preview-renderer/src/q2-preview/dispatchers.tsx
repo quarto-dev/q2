@@ -42,6 +42,7 @@ function renderMeasuredEdit(
     node: BlockNode | CustomBlockNode,
     textarea: React.ReactNode,
     editTarget: NonNullable<PreviewContextValue['editTarget']>,
+    activeEditRegionRef?: React.MutableRefObject<HTMLDivElement | null>,
 ): React.ReactNode {
     const wrapperStyle: React.CSSProperties = {
         ...(editTarget.boxStyle as React.CSSProperties),
@@ -57,7 +58,7 @@ function renderMeasuredEdit(
     }
     return (
         <AttributionWrap node={node} as="div">
-            <div style={wrapperStyle}>{textarea}</div>
+            <div ref={activeEditRegionRef} style={wrapperStyle}>{textarea}</div>
         </AttributionWrap>
     );
 }
@@ -186,8 +187,10 @@ export const Block = (args: NodeArgs<BlockNode>) => {
     if (isBlockEditTarget(ctx, poolId, resolved) && ctx) {
         // Editing: replace the block with a measure-and-set textarea wrapper
         // that reproduces the element's exact box (see renderMeasuredEdit).
+        // Pass activeEditRegionRef so the wrapper div is tracked — used by
+        // useBlockEditHover's onPointerUp to suppress parent-climb activation.
         const textarea = renderBlockTextarea(ctx, resolved!);
-        return renderMeasuredEdit(args.node, textarea, ctx.editTarget!);
+        return renderMeasuredEdit(args.node, textarea, ctx.editTarget!, ctx.activeEditRegionRef);
     }
 
     const Component = registry[args.node.t];
@@ -247,7 +250,7 @@ export const CustomBlock = (args: NodeArgs<CustomBlockNode>) => {
 
     if (isBlockEditTarget(ctx, poolId, resolved) && ctx) {
         const textarea = renderBlockTextarea(ctx, resolved!);
-        return renderMeasuredEdit(args.node, textarea, ctx.editTarget!);
+        return renderMeasuredEdit(args.node, textarea, ctx.editTarget!, ctx.activeEditRegionRef);
     }
 
     const Component =

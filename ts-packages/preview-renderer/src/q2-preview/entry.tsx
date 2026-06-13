@@ -375,6 +375,11 @@ function PreviewRoot(props: PreviewRootProps) {
         boxStyle: Record<string, string>;
     } | null>(null);
     const lastEditPoolIdRef = useRef<string | number | null>(null);
+    // Ref pointing to the inner wrapper div of the currently active edit
+    // region (set by renderMeasuredEdit in dispatchers.tsx). Used by
+    // useBlockEditHover's onPointerUp to suppress the parent-climb bug:
+    // a click inside this region must not activate any other surface.
+    const activeEditRegionRef = useRef<HTMLDivElement | null>(null);
     const setEditTarget = useCallback((target: typeof editTarget | null) => {
         if (target !== null) {
             lastEditPoolIdRef.current = target.poolId;
@@ -594,6 +599,7 @@ function PreviewRoot(props: PreviewRootProps) {
                 content: props.renderedContent,
                 editTarget,
                 setEditTarget,
+                activeEditRegionRef,
                 sourceIndex,
                 resolveSource,
                 editingDisabled: props.editingDisabled,

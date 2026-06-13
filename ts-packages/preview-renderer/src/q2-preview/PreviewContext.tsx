@@ -1,4 +1,5 @@
 import { createContext } from 'react';
+import type React from 'react';
 import type { BlockNode } from '../framework/types';
 import type { ReachabilityClass, SourceIndexEntry, ResolvedSource } from './sourceIndex';
 
@@ -62,6 +63,20 @@ export interface PreviewContextValue {
     sourceIndex?: Map<string, SourceIndexEntry> | null;
     /** Resolve a transformed block to its source counterpart + reachability class (Plan 2a). */
     resolveSource?: (node: BlockNode) => ResolvedSource | null;
+    /**
+     * Ref pointing to the inner wrapper `<div>` of the currently active
+     * measure-and-set edit region (`renderMeasuredEdit`'s inner div).
+     *
+     * Used by `useBlockEditHover`'s `onPointerUp` to detect whether a mouse
+     * click landed inside the open editor and suppress the spurious parent-
+     * climb activation that would otherwise occur (Phase 1 bug fix). A click
+     * whose target is inside this element must NOT activate any block — the
+     * textarea keeps focus and handles the caret-move itself.
+     *
+     * Set to `null` when no editor is open. There is exactly one active
+     * editor at a time, so a single shared ref is correct.
+     */
+    activeEditRegionRef?: React.MutableRefObject<HTMLDivElement | null>;
     /**
      * Globally disable the edit surface (bd-ov4gqk3m). When true, no
      * block renders an edit affordance (`data-block-pool-id`) and

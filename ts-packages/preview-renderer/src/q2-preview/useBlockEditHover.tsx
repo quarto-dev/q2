@@ -140,12 +140,19 @@ export function useBlockEditHover(): {
             pointerDownPosRef.current = null;
             return;
         }
+        // Active-region guard (Phase 1 fix): if the click landed inside the
+        // open editor's wrapper div, suppress activation — the textarea keeps
+        // focus and handles the caret-move itself. Only clicks OUTSIDE the
+        // region should resolve-and-switch.
+        if (ctx?.activeEditRegionRef?.current?.contains(e.target as Node)) {
+            return;
+        }
         // Mouse click: activate.
         const el = findEditTarget(e);
         if (el) {
             activate(el);
         }
-    }, [activate]);
+    }, [activate, ctx]);
 
     const onPointerLeave = useCallback((e: React.PointerEvent<HTMLElement>) => {
         if (e.pointerType === 'mouse') {

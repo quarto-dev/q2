@@ -18,6 +18,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/react';
 import { axe } from 'vitest-axe';
+import React, { useRef } from 'react';
 import type { ReactNode } from 'react';
 import { PreviewContext } from './PreviewContext';
 import type { PreviewContextValue } from './PreviewContext';
@@ -480,5 +481,119 @@ describe('useBlockEditHover — editingDisabled', () => {
     it('still injects the stylesheet when editing is enabled (control)', () => {
         const { container } = mountHost();
         expect(container.querySelector('style')).not.toBeNull();
+    });
+});
+
+/* ── Active-region guard (Phase 1 bug fix) ──────────────────────────── */
+//
+// Bug: clicking inside an already-open editor walks up past the affordance-
+// less wrapper div (which has no data-block-pool-id) and activates the
+// parent/grandparent block — "climbing" the user out of the block they're
+// editing.
+//
+// Fix: a tracked ref (`activeEditRegionRef`) on the inner wrapper div lets
+// onPointerUp detect that the click landed inside the open editor and
+// suppress the spurious activation. The textarea keeps focus → caret-move.
+
+/**
+ * Inner component that calls useBlockEditHover() so it runs INSIDE the
+ * PreviewContext.Provider. The wrapper div ref is threaded in from the
+ * parent so the provider's activeEditRegionRef can be set after the
+ * first render.
+ *
+ * Structure simulates an active edit session with the PARENT-CLIMB BUG:
+ * - A grandparent div (poolId=99) wraps the entire editing region.
+ * - Inside it: the measure-and-set wrapper div (NO pool-id) containing a textarea.
+ * - A sibling block (poolId=6) is adjacent, for cross-surface click tests.
+ *
+ * Without the fix, clicking inside the textarea causes `closest('[data-block-pool-id]')`
+ * to walk UP past the affordance-less wrapper and find the grandparent (poolId=99),
+ * triggering a spurious activation → the bug.
+ *
+ * With the fix, the activeEditRegionRef guard detects the click is inside the
+ * open editor region and suppresses activation entirely.
+ */
+function ActiveEditorInner({
+    wrapperRef,
+}: {
+    wrapperRef: React.MutableRefObject<HTMLDivElement | null>;
+}) {
+    const { hostProps, stylesheet } = useBlockEditHover();
+    return (
+        <div {...hostProps} data-testid="host">
+            {stylesheet}
+            {/* Grandparent block — this is where the bug "climbs" to without the fix */}
+            <div data-block-pool-id="99" data-testid="grandparent">
+                {/* Simulates the measure-and-set wrapper: has NO data-block-pool-id */}
+                <div ref={wrapperRef} data-testid="edit-wrapper">
+                    <textarea data-testid="textarea" />
+                </div>
+            </div>
+            {/* A sibling block outside the active editor */}
+            <p data-block-pool-id="6" data-testid="block6">block 6</p>
+        </div>
+    );
+}
+
+function mountActiveEditor() {
+    const setEditTarget = vi.fn();
+
+    function Wrapper() {
+        const wrapperRef = useRef<HTMLDivElement | null>(null);
+        const activeEditRegionRef = wrapperRef; // same ref object — both the context and the inner div's ref attachment point to it
+        const ctx: PreviewContextValue = {
+            currentFilePath: '/project/test.qmd',
+            setEditTarget,
+            editTarget: { poolId: 5, contentHeight: 40, boxStyle: {} },
+            activeEditRegionRef,
+        };
+        return (
+            <PreviewContext.Provider value={ctx}>
+                <ActiveEditorInner wrapperRef={wrapperRef} />
+            </PreviewContext.Provider>
+        );
+    }
+
+    const utils = render(<Wrapper />);
+    return { ...utils, setEditTarget };
+}
+
+describe('useBlockEditHover — active-region guard (Phase 1 fix)', () => {
+    it('does NOT call setEditTarget when clicking inside the active edit region (no parent climb)', () => {
+        const { getByTestId, setEditTarget } = mountActiveEditor();
+        const textarea = getByTestId('textarea');
+
+        // Click inside the open editor (inside the wrapper div / textarea).
+        fireEvent(textarea, ptrEvent('pointerdown', { pointerType: 'mouse' }));
+        fireEvent(textarea, ptrEvent('pointerup', { pointerType: 'mouse' }));
+
+        // Must NOT activate anything — no climb to parent/grandparent.
+        expect(setEditTarget).not.toHaveBeenCalled();
+    });
+
+    it('DOES switch to a different surface when clicking outside the active edit region', () => {
+        const { getByTestId, setEditTarget } = mountActiveEditor();
+        const block6 = getByTestId('block6');
+        vi.spyOn(block6, 'getBoundingClientRect').mockReturnValue(MOCK_RECT);
+
+        // Click on a different block outside the open editor.
+        fireEvent(block6, ptrEvent('pointerdown', { pointerType: 'mouse' }));
+        fireEvent(block6, ptrEvent('pointerup', { pointerType: 'mouse' }));
+
+        // Should switch to the new block (activate block6).
+        expect(setEditTarget).toHaveBeenCalledOnce();
+        expect(setEditTarget.mock.calls[0][0].poolId).toBe(6);
+    });
+
+    it('still activates on a single click with no editor open (regression guard)', () => {
+        const { getByTestId, setEditTarget } = mountHost();
+        const block = getByTestId('block5');
+        vi.spyOn(block, 'getBoundingClientRect').mockReturnValue(MOCK_RECT);
+
+        fireEvent(block, ptrEvent('pointerdown', { pointerType: 'mouse' }));
+        fireEvent(block, ptrEvent('pointerup', { pointerType: 'mouse' }));
+
+        expect(setEditTarget).toHaveBeenCalledOnce();
+        expect(setEditTarget.mock.calls[0][0].poolId).toBe(5);
     });
 });
