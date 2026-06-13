@@ -11,5 +11,6 @@ pub mod render_integration;
 pub mod revealjs_cli;
 pub mod smoke_all;
 pub mod trace_cli;
+pub mod version_cli;
 
 fn main() {}

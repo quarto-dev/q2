@@ -11,8 +11,12 @@ use quarto_core::attribution::AttributionMode;
 mod commands;
 
 #[derive(Parser)]
-#[command(name = "quarto")]
-#[command(version = quarto_util::cli_version())]
+// "q2" is the actual binary name (and what usage/help should show);
+// "(quarto 2)" in the version string disambiguates from TS Quarto, so
+// `q2 --version` prints "q2 (quarto 2) 0.1.0" (bd-qyjsncfx). The LAST
+// token must stay the bare version — release.yml's verify step parses it.
+#[command(name = "q2")]
+#[command(version = quarto_util::cli_version_display())]
 #[command(about = "Quarto CLI", long_about = None)]
 struct Cli {
     /// Increase log verbosity. Repeat for more detail:
