@@ -644,6 +644,43 @@ reimplementation; fail-on-revert mandatory):**
 - [x] Existing **DROP (content mismatch)** and **no-spurious-on-fresh-open** stay green; fail-on-revert
   on the self-heal effect still breaks the DROP + KEEP tests. (Real `PreviewRoot`, no harness.)
 
+### Self-heal on write (architectural follow-up — added 2026-06-13; not yet implemented)
+
+The stale-commit failure modes we keep hitting (the commit-on-drop corruption, the unmodified-KEEP
+cancel race, the dirty-edit-in-a-collapsing-callout race) are **one root cause**, not separate bugs:
+**identity was centralized for *reads* but not for *writes*.** We added the byte-offset identity
+(`editTarget`/`editTargetRef`) + self-heal so that *matching* (which block renders the textarea) and
+*keeping/dropping* always track the live, re-anchored location. But the **commit** still takes its
+destination from a **per-render closure** — `resolved.sourceEntry`, frozen at the render that mounted
+the textarea — and fires from a **DOM-lifecycle event** (`onBlur`). So when an external AST change
+shifts a block, React unmounts the old index-keyed textarea, and *its* `onBlur` fires **during the
+swap** carrying the *old* closure → a commit aimed at a stale byte range. The components do refresh;
+the stale write is a **parting shot from the outgoing instance**, using the snapshot it was born with,
+while self-heal re-anchors the live identity elsewhere. Two identities for one block (live + frozen),
+and the writer uses the un-healed one.
+
+**Principle — "self-heal on write": there is ONE self-healed identity; both match and commit read it.**
+- **Commit destination = the live `editTargetRef.current` range**, not the render closure. There is
+  exactly one open editor; `editTargetRef.current` *is* the block being edited, already re-anchored by
+  self-heal. Build the `sourceEntry` from `{t:0, r:[editTargetRef.current.anchorR0, anchorR1], d:0}`;
+  if `current === null` (dropped), the commit **no-ops**. With no closure-captured destination, the
+  whole "stale snapshot" class disappears, and the commit guard's job collapses from "do these two
+  snapshots agree?" to the trivial "is there still an active target?"
+- **Commits are intentional, not teardown side-effects.** Distinguish a real commit (Cmd-Enter, a
+  genuine focus-leaves-to-elsewhere, an explicit move/click-switch) from a React-unmount `blur`; the
+  latter must never write.
+
+**Scope:** small + localized — the commit call sites (`EditTextarea`'s commit, `commitSubtreeEdit`)
++ the lifecycle gating. Not a rearchitecture; it **completes** the identity migration that reads
+already finished. **Phase 3 should adopt this from the start:** the regenerated-buffer commit (§3c)
+is a *new* write path — wire it to the live identity, don't inherit the closure pattern.
+
+**Residual (separate, already Deferred — not solved by this):** byte offsets are **version-relative**,
+so even the live re-anchored offset can be stale *at the parent* across a truly concurrent edit
+(postMessage has no version handshake). The exact fix is **Automerge cursors** (version-independent
+positions) — see *Deferred*. This follow-up closes the **within-iframe** window (the recurring one);
+cursors close the **cross-actor** window (the rare, hard one).
+
 ---
 
 ## Phase 3 — "Depth cursor (nested blocks)" unlock (flagged)
@@ -776,29 +813,40 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
 - **Shown only when `unlockDepthCursor` is on** — the 95% see nothing new.
 
 ### TDD work items
-- [ ] **Setting end-to-end — hub-client** (RTL): checkbox toggles `unlockDepthCursor`; the value
-  reaches the iframe (new `ReactRenderer` pass-through); off ⇒ no keys, no chip, leaf-click disabled,
-  **no `regenerateNestedBuffers` call**; on ⇒ buffers computed + passed. Mid-session toggle reactive.
-- [ ] **SPA query-param opt-in** (RTL + q2-preview-spa e2e): `PreviewApp.tsx` reads `?depthCursor=1`
-  → passes `unlockDepthCursor` + computes/passes `nestedEditBuffers` **directly** to `Q2PreviewIframe`
-  (no `ReactRenderer`). **No param ⇒ omitted ⇒ locked**, no `regenerateNestedBuffers` call (type-safe
-  via the optional props). With `--allow-edit` + `?depthCursor=1`, the SPA gets the unlock; with
-  `--allow-edit` alone, Phase-2 locked. e2e: `q2-preview-spa/e2e` (real `q2 preview` binary) — load a
-  fixture with `?depthCursor=1`, confirm leaf-click + a clean nested-blockquote-child edit; load
-  without it, confirm locked (whole-quote). (Read-at-load: no live toggle — acceptable.)
+- [x] **Setting + threading — hub-client** (RTL): checkbox toggles `unlockDepthCursor`; the value
+  reaches the iframe (new `ReactRenderer` pass-through → `PreviewContext`); off ⇒ **no
+  `regenerateNestedBuffers` call**, on ⇒ buffers computed + passed. *(P3.2: `7f14e5ed`. Gate is the pure
+  `computeNestedEditBuffers` helper shared by both hosts; gating fail-on-revert independently verified
+  `c96f06a0`. Mid-session reactivity is structural — `usePreference` + the memo dep on the flag — and
+  has no dedicated test; add one if desired.)*
+- [x] **SPA query-param opt-in** (RTL): `PreviewApp.tsx` reads `?depthCursor=1` → passes
+  `unlockDepthCursor` + computes/passes `nestedEditBuffers` **directly** to `Q2PreviewIframe` (no
+  `ReactRenderer`). **No param ⇒ omitted ⇒ locked**, no `regenerateNestedBuffers` call (type-safe via
+  the optional props). With `--allow-edit` + `?depthCursor=1` the SPA gets the unlock; `--allow-edit`
+  alone stays Phase-2 locked. (Read-at-load: no live toggle — acceptable.) *(P3.2; SPA strict mocks
+  fixed `b66f898a`.)*
+- [ ] **off ⇒ no keys, no chip, leaf-click disabled** (RTL/Playwright): verify the unlock behaviors are
+  inert when the flag is off. *(Deferred — can only be tested once the behaviors exist: keys + leaf-click
+  in P3.3, chip in P3.4.)*
+- [ ] **SPA depth-cursor e2e** (`q2-preview-spa/e2e`, real `q2 preview` binary): with `?depthCursor=1`,
+  load a fixture → confirm leaf-click + a clean nested-blockquote-child edit; load without it → confirm
+  locked (whole-quote). *(Needs P3.3 behavior; P3.5 e2e tier.)*
 - [ ] Unlocked click → leaf; depth keys out/in along the AST path; clamp at the ends at
   key-press; click-in-subtree = caret-only; click-outside resets. Path derived from the AST
   (ancestor-only change re-derives with cursor unchanged).
-- [ ] Rust: `write_single_block` on a blockquote/list child → clean (no `>`/indent);
+- [x] Rust: `write_single_block` on a blockquote/list child → clean (no `>`/indent);
   `regenerate_nested_buffers` includes multi-line prefixed children (single- and
   multi-child), excludes single-line items and fenced-div children, keyed by `siKey`.
-- [ ] Rust **`siKey` contract**: exact `"0:<r0>-<r1>:0"`.
-- [ ] Rust **source fidelity**: a blockquote child with shortcode + inline math + raw
-  span → buffer is source form, not expanded.
-- [ ] Rust **code-block fidelity**: a multi-line code block in a blockquote → content
-  byte-exact (modulo `>`-removal).
-- [ ] Rust **offset-domain assertion**: untransformed pool `r[0]/r[1]` index the same
-  string as `content` (so the multi-line check is correct).
+  *(P3.1, `f5cb3132` + `8a51bb92`. Restriction predicate: prefixing ancestor ∈
+  {BlockQuote,BulletList,OrderedList,DefinitionList} ∧ multi-line. + WASM export
+  + JS wrapper `regenerateNestedBuffers`. 14 integration tests; review APPROVED.)*
+- [x] Rust **`siKey` contract**: exact `"0:<r0>-<r1>:0"`. *(P3.1)*
+- [x] Rust **source fidelity**: a blockquote child with shortcode + inline math + raw
+  span → buffer is source form, not expanded. *(P3.1)*
+- [x] Rust **code-block fidelity**: a multi-line code block in a blockquote → content
+  byte-exact (modulo `>`-removal). *(P3.1)*
+- [x] Rust **offset-domain assertion**: untransformed pool `r[0]/r[1]` index the same
+  string as `content` (so the multi-line check is correct). *(P3.1)*
 - [ ] RTL: activating an unlocked multi-line blockquote child seeds `draft` from
   `nestedEditBuffers` (clean) at selection time; a single-line child slices. A re-render
   that **shifts the `siKey`** keeps the clean draft (controlled value, not re-derived).
@@ -807,7 +855,7 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
 - [ ] Breadcrumb (RTL/Playwright): chip renders at the active surface's top-left, shows
   the AST-derived path, `◀`/`▶` move depth and carry shortcut tooltips, crumb-click jumps;
   hidden when the setting is off. Bindings verified in cross-platform Playwright.
-- [ ] Implement 3a–3d.
+- [ ] Implement 3a–3d. *(3a setting + threading ✓ P3.2; 3b behavior + 3c regenerated-buffer commit → P3.3; 3d breadcrumb → P3.4.)*
 
 ---
 

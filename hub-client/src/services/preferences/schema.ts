@@ -15,6 +15,14 @@ export const UserPreferencesSchema = z.object({
   scrollSyncEnabled: z.boolean(),
   errorOverlayCollapsed: z.boolean(),
   colorScheme: ColorSchemeSchema,
+  /**
+   * P3.2: depth-cursor mode for nested blocks (default-off).
+   * When true, the preview iframe descends into nested list/quote blocks
+   * and enables per-level editing. The flag gates the expensive
+   * `regenerateNestedBuffers` WASM pass — off means that call is
+   * unreachable.
+   */
+  unlockDepthCursor: z.boolean().default(false),
 });
 
 // Infer TypeScript type from schema
@@ -29,6 +37,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   scrollSyncEnabled: true,
   errorOverlayCollapsed: true, // collapsed by default
   colorScheme: 'auto',
+  unlockDepthCursor: false,   // depth-cursor off by default (P3.2)
 };
 
 // Validation function - returns valid preferences or defaults

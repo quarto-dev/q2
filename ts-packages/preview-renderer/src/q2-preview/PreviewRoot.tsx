@@ -95,6 +95,16 @@ export interface PreviewRootProps {
     /** Globally disable the edit surface (bd-ov4gqk3m). */
     editingDisabled?: boolean;
     /**
+     * P3.2: depth-cursor mode for nested blocks. When true, the context
+     * exposes depth-cursor behaviour. Default-off (undefined/false).
+     */
+    unlockDepthCursor?: boolean;
+    /**
+     * P3.2: per-siKey clean QMD buffers for nested blocks, produced by
+     * the host's `regenerateNestedBuffers` call. Undefined when off.
+     */
+    nestedEditBuffers?: Record<string, string>;
+    /**
      * Optional user-registry overrides to merge on top of `previewRegistry`.
      * In production, `entry.tsx` passes `customRegistry` (loaded via
      * `LOAD_CUSTOM_COMPONENTS`). Tests pass `{}` (the default).
@@ -835,6 +845,8 @@ export function PreviewRoot(props: PreviewRootProps) {
                 sourceIndex,
                 resolveSource,
                 editingDisabled: props.editingDisabled,
+                unlockDepthCursor: props.unlockDepthCursor,
+                nestedEditBuffers: props.nestedEditBuffers,
                 requestMove,
                 pendingCaretRef,
                 cancelPendingLand,

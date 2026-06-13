@@ -24,6 +24,11 @@ be in reverse chronological order (latest first).
 
 - [`ff31c8ea`](https://github.com/quarto-dev/q2/commits/ff31c8ea): RevealJS presentations now apply their configured theme through Quarto's SCSS theme system on reveal.js 6, instead of always rendering the white theme.
 - [`37061765`](https://github.com/quarto-dev/q2/commits/37061765): RevealJS preview now matches the render path's Quarto-1 defaults — slides top-align (no vertical centering), slide transitions are off by default, and the deck uses a 0.1 margin with linear navigation and edge controls.
+### 2026-06-13
+
+- [`c96f06a0`](https://github.com/quarto-dev/q2/commits/c96f06a0): Refactor P3.2 nested-buffer gating into a testable pure helper (`computeNestedEditBuffers`) — no behavior change, test coverage now genuinely fails on revert.
+- [`aae25bf0`](https://github.com/quarto-dev/q2/commits/aae25bf0): Fix preferences reset — adding the depth-cursor setting no longer wipes other saved preferences.
+- [`7f14e5ed`](https://github.com/quarto-dev/q2/commits/7f14e5ed): Add "Depth cursor (nested blocks)" preview setting (default off) and thread it to the renderer (both hub-client and SPA hosts); when enabled, the preview context exposes per-block nested edit buffers for P3.3 to consume.
 
 ### 2026-06-12
 

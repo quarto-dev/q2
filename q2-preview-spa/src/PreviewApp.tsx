@@ -37,7 +37,7 @@
  *   round-trip on boot, no new server-side patterns introduced.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   initWasm,
   connect,
@@ -52,6 +52,7 @@ import {
   getFileContent,
   diffToEditorChanges,
   applyEditorOperations,
+  regenerateNestedBuffers,
 } from '@quarto/preview-runtime';
 import { Q2PreviewIframe } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { extractMetaString } from '@quarto/preview-renderer/framework';
@@ -194,6 +195,13 @@ interface PreviewAppState {
    */
   allowEdit: boolean;
   /**
+   * P3.2: depth-cursor mode for nested blocks. Read once at boot from
+   * `?depthCursor=1` in the boot URL. When true the SPA passes
+   * `unlockDepthCursor` to the iframe and runs `regenerateNestedBuffers`
+   * on every render. Read-at-load only (no live toggle via the SPA).
+   */
+  depthCursor: boolean;
+  /**
    * IndexDocument V2 capture sidecar (Phase C.3) — path → CaptureRef
    * mapping. Populated by the server-side eager-capture driver (Phase
    * C.1) and read here by the render effect (Phase C.4) so the
@@ -259,27 +267,93 @@ const CONNECTION_BANNER_STYLE: React.CSSProperties = {
   boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
 };
 
-const INITIAL_STATE: PreviewAppState = {
-  boot: 'loading',
-  files: [],
-  activeFile: null,
-  pendingAnchor: null,
-  pendingAnchorEpoch: 0,
-  astJson: null,
-  untransformedAstJson: null,
-  renderedContent: '',
-  themeFingerprint: undefined,
-  deps: null,
-  error: null,
-  render: EMPTY_RENDER_STATUS,
-  serverDiagnostics: [],
-  contentTick: 0,
-  captures: {},
-  allowEdit: false,
-  bootAttempt: 1,
-  bootLastError: null,
-  connection: 'connected',
-};
+/**
+ * P3.2: parse `?depthCursor=1` from the boot URL search string.
+ * Returns true only when the param is exactly `"1"`. Read-at-load;
+ * the SPA does not react to URL changes after mount.
+ */
+function parseDepthCursorParam(search: string): boolean {
+  if (!search) return false;
+  try {
+    return new URLSearchParams(search).get('depthCursor') === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * P3.2: module-level empty object returned by the nestedEditBuffers memo
+ * when depthCursor is off. Referentially stable so the iframe effect dep
+ * never churns on an off-render.
+ */
+const EMPTY_NESTED_BUFFERS: Record<string, string> = {};
+
+/**
+ * P3.2: Pure gating helper for the nested-edit-buffer table (SPA mirror of
+ * hub-client's ReactPreview.computeNestedEditBuffers).
+ *
+ * Returns EMPTY_NESTED_BUFFERS (referentially stable) when:
+ *   - `unlock` is false (flag is off — the WASM pass must not run), OR
+ *   - `content` is absent/empty, OR
+ *   - `ast` is absent/empty.
+ *
+ * The `regen` callback is required — pass `regenerateNestedBuffers` at
+ * production call sites; pass a `vi.fn()` in tests. This avoids a
+ * problematic default-parameter reference to the import (which breaks when
+ * other test files mock @quarto/preview-runtime without the export).
+ *
+ * Exported so unit tests can call it directly, giving a genuine
+ * fail-on-revert: removing `!unlock` from the guard causes the "flag off"
+ * assertion to call regen and turn RED.
+ */
+export function computeNestedEditBuffers(
+  unlock: boolean,
+  content: string | undefined,
+  ast: string | null | undefined,
+  regen: (c: string, a: string) => Record<string, string>,
+): Record<string, string> {
+  if (!unlock || !content || !ast) {
+    return EMPTY_NESTED_BUFFERS;
+  }
+  try {
+    return regen(content, ast);
+  } catch {
+    return EMPTY_NESTED_BUFFERS;
+  }
+}
+
+/**
+ * Build the initial PreviewApp state. Called lazily via `useState(() => ...)`
+ * so it runs at component-mount time (when `window.location.search` is already
+ * set by the test harness or the real browser) rather than at module-import
+ * time (when jsdom may not have applied test overrides yet).
+ */
+function buildInitialState(): PreviewAppState {
+  return {
+    boot: 'loading',
+    files: [],
+    activeFile: null,
+    pendingAnchor: null,
+    pendingAnchorEpoch: 0,
+    astJson: null,
+    untransformedAstJson: null,
+    renderedContent: '',
+    themeFingerprint: undefined,
+    deps: null,
+    error: null,
+    render: EMPTY_RENDER_STATUS,
+    serverDiagnostics: [],
+    contentTick: 0,
+    captures: {},
+    allowEdit: false,
+    depthCursor: typeof window !== 'undefined'
+      ? parseDepthCursorParam(window.location.search)
+      : false,
+    bootAttempt: 1,
+    bootLastError: null,
+    connection: 'connected',
+  };
+}
 
 /**
  * Phase D.6 (bd-kw93.12): decide whether a text-file change at
@@ -440,7 +514,10 @@ function deriveWsUrl(loc: Location = window.location): string {
 
 
 export default function PreviewApp() {
-  const [state, setState] = useState<PreviewAppState>(INITIAL_STATE);
+  // Lazy initializer: reads window.location.search at mount time so tests can
+  // set window.location before rendering (module-level INITIAL_STATE would be
+  // evaluated at import time, before the test harness applies its overrides).
+  const [state, setState] = useState<PreviewAppState>(buildInitialState);
 
   // Force-refresh trigger (bd-b5hf): bumping `contentTick` re-fires
   // the render useEffect. Reuses the same channel `onFileContent`
@@ -1068,6 +1145,21 @@ export default function PreviewApp() {
     document.title = buildPreviewTabTitle(ast);
   }, [state.astJson]);
 
+  // P3.2: gated nested buffer table. Delegates to computeNestedEditBuffers
+  // (the exported pure helper) so the gating logic has a single testable
+  // source of truth. Returns EMPTY_NESTED_BUFFERS when depthCursor is off
+  // or either render input is missing, keeping the iframe dep stable.
+  const nestedEditBuffers = useMemo(
+    () =>
+      computeNestedEditBuffers(
+        state.depthCursor,
+        state.renderedContent,
+        state.untransformedAstJson,
+        regenerateNestedBuffers,
+      ),
+    [state.depthCursor, state.renderedContent, state.untransformedAstJson],
+  );
+
   // ── Render ────────────────────────────────────────────────────────────
 
   // bd-b9kzg: derive overlay inputs from the structured render
@@ -1155,6 +1247,9 @@ export default function PreviewApp() {
         // bd-ov4gqk3m: without --allow-edit the preview is read-only —
         // no edit affordance renders inside the iframe at all.
         editingDisabled={!state.allowEdit}
+        // P3.2: depth-cursor mode + per-key nested buffers.
+        unlockDepthCursor={state.depthCursor}
+        nestedEditBuffers={nestedEditBuffers}
       />
       {showStaleOverlay && (
         <StaleCaptureOverlay

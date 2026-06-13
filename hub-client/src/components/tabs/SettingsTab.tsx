@@ -22,6 +22,7 @@ export default function SettingsTab({
   onScrollSyncChange,
 }: SettingsTabProps) {
   const [errorOverlayCollapsed, setErrorOverlayCollapsed] = usePreference('errorOverlayCollapsed');
+  const [unlockDepthCursor, setUnlockDepthCursor] = usePreference('unlockDepthCursor');
   const [isCapturing, setIsCapturing] = useState(false);
 
   const handleScreenshot = async () => {
@@ -91,6 +92,17 @@ export default function SettingsTab({
           <span className="setting-name">Collapse error overlay</span>
           <span className="setting-description">
             Show errors as a small indicator instead of expanded panel
+          </span>
+        </label>
+        <label className="setting-toggle">
+          <input
+            type="checkbox"
+            checked={unlockDepthCursor}
+            onChange={(e) => setUnlockDepthCursor(e.target.checked)}
+          />
+          <span className="setting-name">Depth cursor (nested blocks)</span>
+          <span className="setting-description">
+            Descend into nested list/quote blocks; edit each level cleanly.
           </span>
         </label>
         <div style={{ marginTop: '16px' }}>

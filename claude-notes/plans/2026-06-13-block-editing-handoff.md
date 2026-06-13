@@ -1,15 +1,66 @@
 # Hand-off: block-editing execution (Phase 2 done → Phase 3)
 
-**Updated:** 2026-06-13 (Phase 2 essentially complete; self-heal fix + fail-on-revert audit in
-flight; Phase 3 not started). **Plan:** `claude-notes/plans/2026-06-11-block-editing-improvements.md`
+**Updated:** 2026-06-13 (Phase 2 done; **Phase 3 P3.1 + P3.2 done and green; P3.3 next** — see the
+START-HERE block below). **Plan:** `claude-notes/plans/2026-06-11-block-editing-improvements.md`
 (symlinked `CURRENT.md`). Read that plan, then this file — this is the *execution* companion: how we
 work, what's done, the testing rules we learned the hard way, and curated facts so you don't re-derive
 them.
 
-> **You are warming up for Phase 3. Read everything here + the plan's Phase 3 section + the key
-> sources below, build a mental model, and propose a Phase-3 plan-of-attack (+ any questions).
-> Do NOT start implementing until the orchestrator says "go."** (Phase 3 builds on the self-heal /
-> identity machinery that is being fixed right now, and on a clean fork point that isn't ready yet.)
+---
+
+## Phase 3 progress — START HERE (updated 2026-06-13, end of impl session)
+
+**P3.1 + P3.2 are DONE and fully green. P3.3 is next.** This block supersedes the
+"warming up / not started" framing above.
+
+**Commits (on `feature/block-editing-improvements`):**
+- **P3.1** (Rust `regenerate_nested_buffers` + WASM export + JS `regenerateNestedBuffers`):
+  `f5cb3132`, `8a51bb92`.
+- **P3.2** (setting + both-host threading + gating + fixes): `7f14e5ed`, `17f9b196`,
+  `aae25bf0`, `dff074da`, `c96f06a0`, `8af69988`, `b66f898a`.
+
+**Verified green (full scope):** pampa 3943 · preview-renderer 305 unit + 353 integration ·
+hub-client 755 (`test:ci`) · SPA 25 unit + 75 integration (`test:integration`) · `npm run build:all` ·
+all typechecks. Gating fail-on-revert independently re-verified (remove `!unlock` → reddens).
+
+**Decisions / gotchas the next session must know:**
+- **P3.1:** the reviewer-suggested `Figure.caption.long` descent was *reverted* — untestable with
+  this parser (a Figure under a prefixing container is emitted whole regardless; no caption-only
+  block exists), so it was carrying untested code. DefinitionList is produced by `::: {.definition-list}`
+  fenced syntax (NOT Pandoc `Term\n: def`, which this parser makes a Para).
+- **P3.2 setting:** `unlockDepthCursor: z.boolean().default(false)` — the `.default()` is load-bearing:
+  a *required* field would make `validatePreferences` `safeParse` fail on old prefs and wipe ALL of a
+  user's settings. Additive default-off prefs use `.default()`; the `version` literal is the breaking-change gate.
+- **P3.2 gating:** the gate lives in one exported pure helper `computeNestedEditBuffers(unlock, content,
+  ast, regen)` (in `ReactPreview.tsx`), called by BOTH hosts. Because PreviewApp passes the
+  `regenerateNestedBuffers` import to it on *every* render, any test that strict-`vi.mock`s
+  `@quarto/preview-runtime` MUST stub `regenerateNestedBuffers` or it throws "No export defined" (this
+  was a 47-test SPA regression — fixed in `b66f898a`; **always verify against the full CI config, not a
+  narrow scope**).
+- **PreviewContext now EXPOSES `unlockDepthCursor` + `nestedEditBuffers`** but nothing CONSUMES them yet
+  (no leaf-click/depth-key/draft-seed/commit). That consumption is P3.3.
+
+**P3.3 — read these BEFORE wiring anything:** plan §3b/§3c **and** the new **"Self-heal on write"**
+subsection (plan ~`:647`, immediately before `## Phase 3`). The load-bearing rule: the §3c
+regenerated-buffer commit is a NEW write path — source its destination from the **live**
+`editTargetRef.current` (`{t:0, r:[anchorR0, anchorR1], d:0}`, no-op if null), **never** a per-render
+`resolved.sourceEntry` closure. Do NOT refactor the existing `EditTextarea` commit (separate Phase-2
+follow-up); just don't inherit the closure pattern. Then: seed `draft = nestedEditBuffers?.[siKey] ??
+normalize(sliceBytes(...))` at `activate`; leaf resolution (no coincidence-climb / no prefixing-atomic);
+`leafAnchorR0` scalar for "in"; depth keys (**macOS `Cmd+Ctrl+←/→`**, **Win/Linux `Alt+Shift+←/→`**),
+clamp at keypress, AST path derived each render (no stored depth). Tier: jsdom real-`PreviewRoot` for
+logic; the key-bindings + breadcrumb geometry are environment → Playwright (P3.5).
+
+**Testing methodology note (corrected provenance):** fail-on-revert is NOT part of the superpowers
+skills (those prescribe TDD fail-*first* + don't-trust-the-report reviews). It is a project-local
+discipline (hand-off §1) that exists because fail-first and reading-reviews both miss *theater*. A
+reusable write-up now lives at `~/.claude/skills/fail-on-revert/SKILL.md` (per-user; reviewer-triggered
+for non-local binding; both-prove + independent re-verify). That skill is grounded in real failures but
+is **not yet GREEN-verified** with a controlled non-local subagent scenario — finish that before relying on it.
+
+**Loose end:** the fail-on-revert audit's `useBlockEditHover.integration.test.tsx` hardening (adds pool
+entry 99 so the Phase-1 climb-guard test reddens on revert) was reverted out of this worktree as a
+stray audit artifact — ensure it lands via the audit's own branch; it's a real coverage fix.
 
 ---
 
@@ -24,12 +75,11 @@ Branch `feature/block-editing-improvements`. **Phase 1 + Phase 2 (2.1–2.5) are
 the self-heal design-bug fix (commits `26a4ed8b` + `2e6e1133`: KEEP works, commit-on-drop guarded).
 **Plan 4 (section editing) was cancelled + expunged** (commit `efb39382`) — do not look for it.
 One Phase-2 item is **deferred** (not blocking): the collapsed-region self-heal drop (needs Playwright;
-tracked in the plan + a `PreviewRoot.tsx` comment). One thing may still be in flight when you read this:
-- **Fail-on-revert audit** of all completed Phase-2 behaviors (running in a separate detached
-  worktree `.worktrees/block-editing-audit`, so it can revert production without disturbing you).
+tracked in the plan + a `PreviewRoot.tsx` comment). A **fail-on-revert audit** of the Phase-2
+behaviors runs in a separate detached worktree `.worktrees/block-editing-audit` (it reverts production
+in isolation, so it won't disturb this branch) — do not touch it; let its findings land via its own branch.
 
-**Do not start Phase 3 until the orchestrator gives the "go"** — the self-heal machinery you'll
-extend must be fixed-and-green first.
+**Phase 3 has started: P3.1 + P3.2 are done and green (see START-HERE above).** P3.3 is next.
 
 ---
 
@@ -248,8 +298,8 @@ fresh context = no `> `/indent prefixer); WASM `crates/wasm-quarto-hub-client/sr
 
 See the plan's Phase 3 section for the full TDD checklist.
 
-**Before Phase 3 starts (orchestrator gates):** self-heal fix landed + green; fail-on-revert audit
-complete; the audit worktree forked so it doesn't collide. **Wait for "go."**
+**Status:** P3.1 + P3.2 done and green (see the START-HERE block at the top for commits, decisions,
+and the P3.3 instructions). P3.3 → P3.4 → P3.5 remain.
 
 ---
 

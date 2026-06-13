@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import type { Diagnostic, PreviewNodeEditPayload } from '@quarto/preview-renderer/types/diagnostic';
@@ -11,6 +11,7 @@ import {
   applyNodeEdit,
   parseQmdContentSync,
   getActorId,
+  regenerateNestedBuffers,
 } from '@quarto/preview-runtime';
 import { pipelineKindForFormat } from '@quarto/preview-runtime';
 import { useAttribution } from '../../hooks/useAttribution';
@@ -18,6 +19,47 @@ import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
 import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
 import { usePreference } from '../../hooks/usePreference';
 import ReactRenderer from './ReactRenderer';
+
+/**
+ * P3.2: Referentially stable empty object returned by the nestedEditBuffers
+ * memo when unlockDepthCursor is off (or inputs are unavailable). A module-
+ * level constant avoids creating a new object on every render, which would
+ * churn the iframe's UPDATE_AST effect even when nothing has changed.
+ */
+const EMPTY_NESTED_BUFFERS: Record<string, string> = {};
+
+/**
+ * P3.2: Pure gating helper for the nested-edit-buffer table.
+ *
+ * Returns EMPTY_NESTED_BUFFERS (referentially stable) when:
+ *   - `unlock` is false (flag is off — the WASM pass must not run), OR
+ *   - `content` is absent/empty, OR
+ *   - `ast` is absent/empty.
+ *
+ * The `regen` callback is required — pass `regenerateNestedBuffers` at
+ * production call sites; pass a `vi.fn()` in tests. This avoids a
+ * problematic default-parameter reference to the import (which breaks when
+ * other test files mock @quarto/preview-runtime without the export).
+ *
+ * Exported so unit tests can call it directly, giving a genuine
+ * fail-on-revert: removing `!unlock` from the guard causes the "flag off"
+ * assertion to call regen and turn RED.
+ */
+export function computeNestedEditBuffers(
+  unlock: boolean,
+  content: string | undefined,
+  ast: string | null | undefined,
+  regen: (c: string, a: string) => Record<string, string>,
+): Record<string, string> {
+  if (!unlock || !content || !ast) {
+    return EMPTY_NESTED_BUFFERS;
+  }
+  try {
+    return regen(content, ast);
+  } catch {
+    return EMPTY_NESTED_BUFFERS;
+  }
+}
 
 // Preview pane state machine:
 // START: Initial blank page
@@ -264,6 +306,11 @@ export default function ReactPreview({
   // overlay itself is package-internal in @quarto/preview-renderer and
   // takes the value via props (controlled component).
   const [errorOverlayCollapsed, setErrorOverlayCollapsed] = usePreference('errorOverlayCollapsed');
+  // P3.2: depth-cursor mode preference (default-off). When true, the
+  // nestedEditBuffers memo below calls regenerateNestedBuffers to produce
+  // a per-siKey clean QMD buffer table; when off, that WASM pass is
+  // completely unreachable.
+  const [unlockDepthCursor] = usePreference('unlockDepthCursor');
   // Track previewState in a ref for use in callbacks
   const previewStateRef = useRef<PreviewState>('START');
   useEffect(() => {
@@ -280,6 +327,22 @@ export default function ReactPreview({
     untransformedAstJson: string | null;
     renderedContent: string;
   }>({ astJson: null, untransformedAstJson: null, renderedContent: '' });
+
+  // P3.2: gated nested buffer table. Delegates to computeNestedEditBuffers
+  // (the exported pure helper) so the gating logic has a single testable
+  // source of truth. Returns EMPTY_NESTED_BUFFERS (a module-level constant)
+  // when unlockDepthCursor is off or either render input is missing, keeping
+  // the iframe effect dep referentially stable across renders.
+  const nestedEditBuffers = useMemo(
+    () =>
+      computeNestedEditBuffers(
+        unlockDepthCursor ?? false,
+        rendered.renderedContent,
+        rendered.untransformedAstJson,
+        regenerateNestedBuffers,
+      ),
+    [unlockDepthCursor, rendered.renderedContent, rendered.untransformedAstJson],
+  );
 
   // Three-way theme fingerprint (Plan 2A item 11):
   //   `undefined` → pre-first-render or render failed; iframe keeps
@@ -515,6 +578,8 @@ export default function ReactPreview({
             renderedContent={rendered.renderedContent}
             untransformedAstJson={rendered.untransformedAstJson}
             currentActor={getActorId()}
+            unlockDepthCursor={unlockDepthCursor}
+            nestedEditBuffers={nestedEditBuffers}
           />
         ) : previewState === 'ERROR_AT_START' && currentError ? (
           <div style={{ padding: '20px', color: 'red' }}>

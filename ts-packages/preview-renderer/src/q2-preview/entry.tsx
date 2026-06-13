@@ -180,6 +180,16 @@ interface UpdateAstPayload {
      * (`q2 preview` without `--allow-edit`). Absent/false ⇒ editable.
      */
     editingDisabled?: boolean;
+    /**
+     * P3.2: depth-cursor mode for nested blocks. Forwarded into
+     * `PreviewContext.unlockDepthCursor`. Default-off (undefined/false).
+     */
+    unlockDepthCursor?: boolean;
+    /**
+     * P3.2: per-siKey clean QMD buffers for nested blocks. Forwarded
+     * into `PreviewContext.nestedEditBuffers`. Undefined when flag is off.
+     */
+    nestedEditBuffers?: Record<string, string>;
 }
 
 // Module-top message handler. Registered before `IFRAME_READY` is
@@ -316,6 +326,8 @@ function updateAst(payload: UpdateAstPayload) {
         untransformedAstJson,
         currentActor,
         editingDisabled,
+        unlockDepthCursor,
+        nestedEditBuffers,
     } = payload;
     const rootElement = document.getElementById('root');
     if (!rootElement) {
@@ -339,6 +351,8 @@ function updateAst(payload: UpdateAstPayload) {
                 untransformedAstJson={untransformedAstJson}
                 currentActor={currentActor ?? null}
                 editingDisabled={editingDisabled}
+                unlockDepthCursor={unlockDepthCursor}
+                nestedEditBuffers={nestedEditBuffers}
                 customRegistry={customRegistry}
                 onDocIsSlides={setDocIsSlides}
                 scrollToAnchor={scrollToAnchorInDocument}

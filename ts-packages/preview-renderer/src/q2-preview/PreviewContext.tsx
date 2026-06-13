@@ -135,6 +135,21 @@ export interface PreviewContextValue {
      */
     editingDisabled?: boolean;
     /**
+     * P3.2: depth-cursor mode for nested blocks. When true, nested
+     * list/quote blocks are each separately editable (depth cursor).
+     * Default-off (undefined/false). Set by the hub-client
+     * `unlockDepthCursor` preference or the SPA's `?depthCursor=1`
+     * boot URL query param.
+     */
+    unlockDepthCursor?: boolean;
+    /**
+     * P3.2: per-siKey clean QMD buffers for nested blocks. Produced by
+     * `regenerateNestedBuffers` (gated on `unlockDepthCursor`). Keyed
+     * by `siKey = "0:<r0>-<r1>:0"`. Undefined when the flag is off or
+     * inputs are unavailable (safe default: no depth editing).
+     */
+    nestedEditBuffers?: Record<string, string>;
+    /**
      * P2.4b: cross-surface arrow-nav move trigger.
      *
      * Called by `EditTextarea`'s `onKeyDown` when a bare ArrowDown/ArrowUp

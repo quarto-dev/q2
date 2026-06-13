@@ -66,6 +66,10 @@ vi.mock('@quarto/preview-runtime', () => ({
   // Channel-routing functions (Plan 2b two-channel edit API).
   parseQmdContentSync: vi.fn(() => ({ success: true, ast: '{"blocks":[]}' })),
   applyNodeEdit: vi.fn(() => 'updated qmd content\n'),
+  // P3.2: PreviewApp's gated nested-buffer memo passes this import as an
+  // argument on every render (even when depth-cursor is off), so the strict
+  // full-object mock must define it or each render throws "No export defined".
+  regenerateNestedBuffers: vi.fn(() => ({})),
 }));
 
 // Imported after vi.mock so the mocks are in place.
