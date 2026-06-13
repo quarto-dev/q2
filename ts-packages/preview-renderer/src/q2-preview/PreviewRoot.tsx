@@ -28,6 +28,8 @@ import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';
 import { RevealDeck } from './RevealDeck';
 import { installLinkHandlers } from '../utils/iframeLinkHandlers';
+import { buildDepthCommitDestination, buildDepthSurfaces, parentSurface, childSurfaceToward } from './depthNav';
+import { sliceBytes } from '../utils/sliceSource';
 
 /**
  * P2.4b/c: descriptor for a pending cross-surface nav landing.
@@ -174,6 +176,8 @@ export function PreviewRoot(props: PreviewRootProps) {
         anchorSlice: string;
         contentHeight: number;
         boxStyle: Record<string, string>;
+        leafAnchorR0?: number;
+        seededDraft?: string;
     } | null>(null);
     // Root-held ref for the in-flight edit draft. Seeded with anchorSlice at
     // activation; reset to null on close. Referentially stable → no extra
@@ -217,6 +221,10 @@ export function PreviewRoot(props: PreviewRootProps) {
     // renderedContent ref: used by the P2.4b timeout fallback to read the latest
     // content without a stale closure over props.renderedContent.
     const renderedContentRef = useRef<string>(props.renderedContent ?? '');
+    // P3.3 §3b: sourceIndexRef / nestedEditBuffersRef — stable refs so
+    // requestDepthMove (a useCallback(fn, [])) can read the latest values.
+    const sourceIndexRef = useRef<Map<string, { reachabilityClass: string }> | null | undefined>(null);
+    const nestedEditBuffersRef = useRef<Record<string, string> | undefined>(undefined);
 
     // Self-heal layout effect. Fires post-DOM / pre-paint so re-anchoring is
     // invisible (no flicker). Keyed on the render inputs that signal an external
@@ -685,6 +693,68 @@ export function PreviewRoot(props: PreviewRootProps) {
         return false;
     }, []);
 
+    /**
+     * P3.3 §3c: nested-block commit. Builds the destination from the LIVE
+     * editTargetRef.current so an unmount-time blur cannot write to a stale
+     * byte range. No-ops when editTargetRef.current is null.
+     */
+    const commitDepthEdit = useCallback((newText: string) => {
+        const dest = buildDepthCommitDestination(editTargetRef.current);
+        if (dest === null) return; // no active target → no-op
+        const payload: PreviewNodeEditPayload = {
+            __isPreviewNodeEdit: true,
+            channel: 'text',
+            destinationSourceInfoJson: dest,
+            newText: normalizeLineEndings(newText),
+        };
+        setAstRef.current(payload as unknown as PandocAST);
+    }, []);
+
+    /**
+     * P3.3 §3b: move the depth cursor to the AST parent ('out') or the child
+     * toward leafAnchorR0 ('in'). Clamps at the ends (no parent → out no-ops;
+     * cursor is a leaf → in no-ops). Re-seeds the draft from the new node's
+     * clean buffer (nestedEditBuffers[siKey] ?? anchorSlice). Does NOT commit.
+     */
+    const requestDepthMove = useCallback((direction: 'in' | 'out') => {
+        const et = editTargetRef.current;
+        if (!et) return;
+        const surfaces = buildDepthSurfaces(sourceIndexRef.current);
+        const next = direction === 'out'
+            ? parentSurface(surfaces, et.anchorR0, et.anchorR1)
+            : childSurfaceToward(surfaces, et.anchorR0, et.anchorR1, et.leafAnchorR0 ?? et.anchorR0);
+        if (!next) return; // clamp — no-op at the path end
+        const content = renderedContentRef.current;
+        const anchorSlice = normalizeLineEndings(sliceBytes(content, next.r0, next.r1)).trimEnd();
+        const siKey = serializeSourceEntry({ t: 0, r: [next.r0, next.r1], d: 0 });
+        const seededDraft = nestedEditBuffersRef.current?.[siKey] ?? anchorSlice;
+        editDraftRef.current = seededDraft;
+        // Box: the parent ('out') is still a rendered tile → measure it.
+        // The child ('in') is not in the DOM yet (editor is rendering there) →
+        // fall back to the current box (best-effort; real box fidelity for 'in'
+        // is a P3.4/Playwright concern).
+        let contentHeight = et.contentHeight;
+        let boxStyle = et.boxStyle;
+        if (previewHostRef.current) {
+            const tile = tileForAnchorR0(previewHostRef.current, poolRef.current, next.r0, { exactOnly: true });
+            if (tile) {
+                const m = measureTileBox(tile);
+                contentHeight = m.contentHeight;
+                boxStyle = m.boxStyle;
+            }
+        }
+        pendingCaretRef.current = null; // depth move has no caret-edge hint
+        setEditTargetRaw({
+            anchorR0: next.r0,
+            anchorR1: next.r1,
+            anchorSlice,
+            contentHeight,
+            boxStyle,
+            seededDraft,
+            leafAnchorR0: et.leafAnchorR0 ?? et.anchorR0,
+        });
+    }, []);
+
     // Refs so the link-handler closure (installed once at mount)
     // sees the *latest* currentFilePath / projectFilePaths.
     const onNavigateRef = useRef(props.onNavigateToDocument);
@@ -756,6 +826,7 @@ export function PreviewRoot(props: PreviewRootProps) {
     // render body (not in an effect) so layout effects always read current values.
     poolRef.current = pool;
     renderedContentRef.current = props.renderedContent ?? '';
+    nestedEditBuffersRef.current = props.nestedEditBuffers;
 
     const astProps = parsed
         ? { ast: parsed }
@@ -777,6 +848,8 @@ export function PreviewRoot(props: PreviewRootProps) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [props.untransformedAstJson],
     );
+    // P3.3 §3b: keep sourceIndexRef in sync (must come after sourceIndex useMemo).
+    sourceIndexRef.current = sourceIndex;
 
     // resolveSource: look up a transformed block's untransformed counterpart via the SourceInfo value.
     const resolveSource = useCallback(
@@ -854,6 +927,8 @@ export function PreviewRoot(props: PreviewRootProps) {
                 requestClickSwitch,
                 handleClickSwitchBlur,
                 consumeDirtySwitchHandled,
+                commitDepthEdit,
+                requestDepthMove,
             }}
         >
             {/* previewHostRef scopes tile queries (tileForAnchorR0) to the

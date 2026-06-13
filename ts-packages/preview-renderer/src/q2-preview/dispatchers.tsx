@@ -11,6 +11,11 @@ import { PreviewContext } from './PreviewContext';
 import type { PreviewContextValue, ResolvedSource } from './PreviewContext';
 import { normalizeLineEndings } from '../utils/normalizeLineEndings';
 import { isOnFirstVisualLine, isOnLastVisualLine, getLogicalColumn, placeCaretAtColumn } from './caretGeometry';
+import { classifyDepthKey, detectPlatform } from './depthNav';
+
+// P3.3 §3b: detect platform once at module load so classifyDepthKey can
+// distinguish mac (Cmd+Ctrl) from other (Alt+Shift) depth chords.
+const PLATFORM = detectPlatform();
 
 /**
  * Block types whose left inset (the marker gutter: `<ul>`/`<ol>`/`<dl>`
@@ -124,12 +129,19 @@ function EditTextarea({
     resolved: ResolvedSource;
 }) {
     const { contentHeight, anchorSlice } = ctx.editTarget!;
+    // P3.3: the dirty baseline is the value the draft was seeded with at open
+    // (nestedEditBuffers[siKey] ?? anchorSlice). For nested blocks seeded with
+    // a clean buffer, anchorSlice carries '> '/indent and would incorrectly read
+    // as "dirty" on an untouched clean-buffer editor. seededDraft is the true
+    // baseline; fall back to anchorSlice when seededDraft is absent (non-nested
+    // blocks, or pre-P3.3 activation paths).
+    const baseline = normalizeLineEndings(ctx.editTarget!.seededDraft ?? anchorSlice).trimEnd();
     const isComposingRef = useRef(false);
     const taRef = useRef<HTMLTextAreaElement | null>(null);
 
     // Seed from the root-held ref so the draft persists across remounts.
     const [draft, setDraft] = useState<string>(
-        () => ctx.editDraftRef?.current ?? anchorSlice,
+        () => ctx.editDraftRef?.current ?? baseline,
     );
 
     // P2.4b: caret placement on arrival.
@@ -183,13 +195,22 @@ function EditTextarea({
         }
         const normalized = normalizeLineEndings(text).trimEnd();
         // Cancel (close without commit) when the draft is empty/whitespace OR
-        // equals the original source slice. An empty draft would delete the block —
+        // equals the seeded baseline. An empty draft would delete the block —
         // the old pre-P2.3a code had an explicit empty guard, and we restore it here.
-        if (!normalized || normalized === anchorSlice) {
+        // P3.3: baseline is seededDraft (or anchorSlice for non-nested blocks) so a
+        // clean-buffer-seeded nested editor doesn't incorrectly commit on untouched blur.
+        if (!normalized || normalized === baseline) {
             ctx.setEditTarget!(null);
             return;
         }
-        ctx.commitTextEdit!(JSON.stringify(resolved.sourceEntry), normalizeLineEndings(text));
+        // P3.3: in unlockDepthCursor mode, use commitDepthEdit (builds destination from
+        // the LIVE editTargetRef.current) instead of the per-render-closure commitTextEdit.
+        // This prevents stale byte-range commits when the block shifts between open and blur.
+        if (ctx.unlockDepthCursor && ctx.commitDepthEdit) {
+            ctx.commitDepthEdit(text);
+        } else {
+            ctx.commitTextEdit!(JSON.stringify(resolved.sourceEntry), normalizeLineEndings(text));
+        }
         ctx.setEditTarget!(null);
     };
 
@@ -232,6 +253,14 @@ function EditTextarea({
                 commitIfDirty(draft);
             }}
             onKeyDown={(e) => {
+                // P3.3 §3b: depth-cursor navigation (only in unlockDepthCursor mode).
+                // classifyDepthKey returns 'in'/'out' for the platform chord + ArrowRight/Left,
+                // or null for anything else (bare arrows, modified arrows without the full
+                // chord, unrecognised keys) — those fall through to the existing handlers.
+                if (ctx.unlockDepthCursor && ctx.requestDepthMove) {
+                    const dir = classifyDepthKey(e, PLATFORM);
+                    if (dir) { e.preventDefault(); ctx.requestDepthMove(dir); return; }
+                }
                 if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                     e.preventDefault();
                     // P2.4c: stash focus restore BEFORE commitIfDirty closes the editor.
@@ -269,7 +298,9 @@ function EditTextarea({
                         const normalized = normalizeLineEndings(draft).trimEnd();
                         // Empty/whitespace draft counts as not-dirty (cancel path),
                         // matching commitIfDirty's empty→cancel guard.
-                        const isDirty = !!normalized && normalized !== anchorSlice;
+                        // P3.3: use baseline (= seededDraft ?? anchorSlice) for consistency
+                        // with commitIfDirty's dirty check.
+                        const isDirty = !!normalized && normalized !== baseline;
                         ctx.requestMove(
                             isDown ? 'down' : 'up',
                             exitColumn,

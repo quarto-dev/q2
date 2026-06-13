@@ -64,6 +64,19 @@ export interface PreviewContextValue {
         anchorSlice: string;
         contentHeight: number;
         boxStyle: Record<string, string>;
+        /**
+         * P3.3 depth cursor: byte offset of the originally-clicked leaf — the
+         * path bottom 'in' descends toward. Set at activation = anchorR0; mutated
+         * by depth-out/in in a later task.
+         */
+        leafAnchorR0?: number;
+        /**
+         * P3.3 depth cursor: the value the draft was seeded with at open
+         * (nestedEditBuffers[siKey] ?? anchorSlice). The dirty guard baselines
+         * against THIS, not anchorSlice — a clean-buffer-seeded nested editor
+         * differs from the polluted anchorSlice slice.
+         */
+        seededDraft?: string;
     } | null;
     /** Activate a block for editing, or pass null to clear. */
     setEditTarget?: (target: {
@@ -72,6 +85,8 @@ export interface PreviewContextValue {
         anchorSlice: string;
         contentHeight: number;
         boxStyle: Record<string, string>;
+        leafAnchorR0?: number;
+        seededDraft?: string;
     } | null) => void;
     /**
      * Root-held ref for the in-flight edit draft text. Stable reference across
@@ -126,6 +141,8 @@ export interface PreviewContextValue {
         anchorSlice: string;
         contentHeight: number;
         boxStyle: Record<string, string>;
+        leafAnchorR0?: number;
+        seededDraft?: string;
     } | null>;
     /**
      * Globally disable the edit surface (bd-ov4gqk3m). When true, no
@@ -246,6 +263,20 @@ export interface PreviewContextValue {
      * stashed and `activate(B)` must be suppressed). Clears the flag.
      */
     consumeDirtySwitchHandled?: () => boolean;
+    /**
+     * P3.3 §3c nested-block commit. Builds the destination from the LIVE
+     * editTargetRef.current ({t:0,r:[anchorR0,anchorR1],d:0}); no-ops if null.
+     * Used in unlockDepthCursor mode instead of the per-render-closure
+     * commitTextEdit, so an unmount-time blur cannot write to a stale byte range.
+     */
+    commitDepthEdit?: (newText: string) => void;
+    /**
+     * P3.3 §3b: move the depth cursor to the AST parent ('out') or the child
+     * toward leafAnchorR0 ('in'); clamps at the ends (no parent → out no-ops;
+     * cursor is a leaf → in no-ops); re-seeds the draft from the new node's
+     * buffer/slice; no commit.
+     */
+    requestDepthMove?: (direction: 'in' | 'out') => void;
 }
 
 export const PreviewContext = createContext<PreviewContextValue | null>(null);

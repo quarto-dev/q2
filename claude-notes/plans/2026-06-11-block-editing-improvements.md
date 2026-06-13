@@ -825,15 +825,24 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   the optional props). With `--allow-edit` + `?depthCursor=1` the SPA gets the unlock; `--allow-edit`
   alone stays Phase-2 locked. (Read-at-load: no live toggle — acceptable.) *(P3.2; SPA strict mocks
   fixed `b66f898a`.)*
-- [ ] **off ⇒ no keys, no chip, leaf-click disabled** (RTL/Playwright): verify the unlock behaviors are
-  inert when the flag is off. *(Deferred — can only be tested once the behaviors exist: keys + leaf-click
-  in P3.3, chip in P3.4.)*
+- [~] **off ⇒ no keys, no chip, leaf-click disabled** (RTL/Playwright): verify the unlock behaviors are
+  inert when the flag is off. *(P3.3: **no keys** (depth chord no-ops when locked, `p3-3-depth` test 6,
+  gate fail-on-revert verified) and **leaf-click disabled** (locked click → whole blockquote, not the leaf,
+  `p3-3-seeding` test 2) are DONE. **no chip** awaits P3.4.)*
 - [ ] **SPA depth-cursor e2e** (`q2-preview-spa/e2e`, real `q2 preview` binary): with `?depthCursor=1`,
   load a fixture → confirm leaf-click + a clean nested-blockquote-child edit; load without it → confirm
   locked (whole-quote). *(Needs P3.3 behavior; P3.5 e2e tier.)*
-- [ ] Unlocked click → leaf; depth keys out/in along the AST path; clamp at the ends at
+- [x] Unlocked click → leaf; depth keys out/in along the AST path; clamp at the ends at
   key-press; click-in-subtree = caret-only; click-outside resets. Path derived from the AST
   (ancestor-only change re-derives with cursor unchanged).
+  *(P3.3 `ad797be1`. Leaf-click, depth out/in, clamp-both-ends, bare-arrow-doesn't-move:
+  `p3-3-depth` tests 1–5 (OUT + off-inert reverts verified cold). Path derived each press from
+  the live `sourceIndex` via `depthNav` range-containment (`buildDepthSurfaces`/`parentSurface`/
+  `childSurfaceToward`, unit-tested in `depthNav.test.ts`). click-in-subtree=caret-only reuses the
+  Phase-1 `activeEditRegionRef` guard; click-outside-resets uses the leaf-aware click-switch
+  (`useBlockEditHover`). **Untested sub-clauses (covered structurally, no dedicated test):**
+  click-outside-resets-to-leaf in unlocked mode, and ancestor-only-change-re-derives-with-cursor-
+  unchanged — candidates for a P3.5 pass.)*
 - [x] Rust: `write_single_block` on a blockquote/list child → clean (no `>`/indent);
   `regenerate_nested_buffers` includes multi-line prefixed children (single- and
   multi-child), excludes single-line items and fenced-div children, keyed by `siKey`.
@@ -847,15 +856,23 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   byte-exact (modulo `>`-removal). *(P3.1)*
 - [x] Rust **offset-domain assertion**: untransformed pool `r[0]/r[1]` index the same
   string as `content` (so the multi-line check is correct). *(P3.1)*
-- [ ] RTL: activating an unlocked multi-line blockquote child seeds `draft` from
+- [x] RTL: activating an unlocked multi-line blockquote child seeds `draft` from
   `nestedEditBuffers` (clean) at selection time; a single-line child slices. A re-render
   that **shifts the `siKey`** keeps the clean draft (controlled value, not re-derived).
+  *(P3.3 `0dde110c`, `p3-3-seeding` tests 1/3/5. Buffer-seed → clean draft (test 1); the
+  dirty-guard baselines on the seeded value not the polluted `anchorSlice` (test 3, fail-on-revert
+  verified cold); buffer-not-re-derived-on-table-change (test 5). "single-line child slices" is the
+  `?? anchorSlice` fallback (any no-buffer block, e.g. the blockquote in test 1). **Caveat: a NESTED
+  child self-heal DROPS on a large concurrent insert above — see the new watch-item below.**)*
 - [ ] WASM round-trip: edit an unlocked multi-line blockquote child → commit → blocks
   outside the quote byte-verbatim, quote re-wrapped (snapshot, Tier-2).
 - [ ] Breadcrumb (RTL/Playwright): chip renders at the active surface's top-left, shows
   the AST-derived path, `◀`/`▶` move depth and carry shortcut tooltips, crumb-click jumps;
   hidden when the setting is off. Bindings verified in cross-platform Playwright.
-- [ ] Implement 3a–3d. *(3a setting + threading ✓ P3.2; 3b behavior + 3c regenerated-buffer commit → P3.3; 3d breadcrumb → P3.4.)*
+- [~] Implement 3a–3d. *(3a setting + threading ✓ P3.2; **3b behavior + 3c regenerated-buffer commit ✓ P3.3**
+  — `depthNav.ts` `8643c27f`, §3c `0dde110c`, §3b `ad797be1`; preview-renderer 351 unit + 364 integration
+  green, jsdom tier only. 3d breadcrumb → P3.4. Real key-chords + native-conflict + WASM round-trip →
+  P3.5 Playwright/e2e.)*
 
 ---
 
@@ -876,6 +893,23 @@ before any live `q2 preview` check. Phases 1–2 are Rust-free → `--skip-hub-b
 plus the hub-client JS suites suffice.
 
 ## Risks / watch-items
+- **Nested-child self-heal DROP on a concurrent insert above (found 2026-06-13, P3.3; NEW with the
+  depth cursor).** Self-heal identifies the active node by `findReanchorCandidate` (`lockedTiles.ts`):
+  the *single* nearest pool entry `r[0] >= anchorR0`, then content-verify against `anchorSlice`. For a
+  NESTED child (depth-edited), a concurrent edit inserting ≥ the marker gap (~2 bytes) ABOVE the
+  container shifts the *container's* `r[0]` into the "nearest" slot; it fails content-verify (whole-
+  container ≠ child) and there is **no scan onward to the child** → the child's in-flight edit is
+  **dropped**, even though the child still exists unchanged. Phase-2 locked editing is unaffected (you
+  edit whole containers, which self-match). Surfaced by `p3-3-seeding` test 5, which was therefore built
+  on a top-level-para fixture (with a synthetic buffer) to exercise the controlled-value invariant in a
+  KEEP regime; the nested-DROP case is **documented, not fixed** (the fix touches Phase-2 self-heal,
+  outside P3.3's "self-heal identical to Phase 2" scope). Two candidate fixes: (a) make
+  `findReanchorCandidate` **scan all candidates `r[0] >= anchorR0` in order for the first that content-
+  verifies** (small, client-only; contradicts the documented "single nearest" choice → needs a Phase-2
+  regression pass); (b) **content-addressed relocation via a position-independent AST-subtree hash** from
+  q2's reconciliation/coarsen pipeline (under investigation 2026-06-13 — see
+  `claude-notes/research/` for the tree-reconciliation node-relocation note when it lands). Until then,
+  a nested depth-edit is fragile under concurrent edits-above; bounded (one editor, one lost draft).
 - **Tile enumeration cost on large docs** — each arrow press collapses every visible
   `[data-block-pool-id]` to its locked tile (a rect-climb per element), and `wrap` needs
   the global first/last. Cheap at normal sizes (cached layout); a watch-item for very large

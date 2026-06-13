@@ -597,6 +597,22 @@ function ActiveEditorInner({
     );
 }
 
+// Pool for the active-editor climb fixture. The grandparent block (the element
+// the parent-climb bug would walk UP to) carries data-block-pool-id="99", so its
+// pool entry MUST exist for the climb to be observable: without an entry at index
+// 99, activate() bails inside captureEditTarget (missing pool entry) and never
+// calls setEditTarget — making the "not called" assertion pass *regardless* of the
+// guard (green-on-revert). With a real Original entry here (anchorR0 = 700,
+// distinct from the active target's 100 so the dedup guard does not short-circuit
+// it), removing the onPointerUp active-region guard causes activate(grandparent)
+// to fire setEditTarget(700) → the assertion goes red. This makes the test a true
+// fail-on-revert sentinel for the Phase-1 guard. (bd: fail-on-revert audit 2026-06-13)
+const POOL_ACTIVE: unknown[] = (() => {
+    const p: unknown[] = [...POOL_WITH_5];
+    p[99] = { t: 0, r: [700, 800] as [number, number], d: 0 };
+    return p;
+})();
+
 function mountActiveEditor() {
     const setEditTarget = vi.fn();
 
@@ -608,7 +624,7 @@ function mountActiveEditor() {
             setEditTarget,
             // P2.3a: editTarget now uses anchorR0/anchorR1/anchorSlice instead of poolId.
             editTarget: { anchorR0: 100, anchorR1: 200, anchorSlice: '', contentHeight: 40, boxStyle: {} },
-            pool: POOL_WITH_5,
+            pool: POOL_ACTIVE,
             content: '',
             activeEditRegionRef,
         };

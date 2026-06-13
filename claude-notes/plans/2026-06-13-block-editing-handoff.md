@@ -1,6 +1,6 @@
 # Hand-off: block-editing execution (Phase 2 done → Phase 3)
 
-**Updated:** 2026-06-13 (Phase 2 done; **Phase 3 P3.1 + P3.2 done and green; P3.3 next** — see the
+**Updated:** 2026-06-13 (Phase 2 done; **Phase 3 P3.1 + P3.2 + P3.3 done and green; P3.4 next** — see the
 START-HERE block below). **Plan:** `claude-notes/plans/2026-06-11-block-editing-improvements.md`
 (symlinked `CURRENT.md`). Read that plan, then this file — this is the *execution* companion: how we
 work, what's done, the testing rules we learned the hard way, and curated facts so you don't re-derive
@@ -10,18 +10,42 @@ them.
 
 ## Phase 3 progress — START HERE (updated 2026-06-13, end of impl session)
 
-**P3.1 + P3.2 are DONE and fully green. P3.3 is next.** This block supersedes the
-"warming up / not started" framing above.
+**P3.1 + P3.2 + P3.3 are DONE and green (jsdom tier). P3.4 (breadcrumb) is next.** This block
+supersedes the "warming up / not started" framing above.
 
 **Commits (on `feature/block-editing-improvements`):**
 - **P3.1** (Rust `regenerate_nested_buffers` + WASM export + JS `regenerateNestedBuffers`):
   `f5cb3132`, `8a51bb92`.
 - **P3.2** (setting + both-host threading + gating + fixes): `7f14e5ed`, `17f9b196`,
   `aae25bf0`, `dff074da`, `c96f06a0`, `8af69988`, `b66f898a`.
+- **P3.3** (§3b depth behavior + §3c regenerated-buffer commit): `8643c27f` (`depthNav.ts` pure
+  module — `parentSurface`/`childSurfaceToward` range-containment, `classifyDepthKey`,
+  `buildDepthCommitDestination`), `0dde110c` (§3c: leaf resolution, buffer-seeded draft +
+  `seededDraft` dirty-baseline, live-identity `commitDepthEdit`), `ad797be1` (§3b: depth-key in/out
+  nav + clamp + off-inert). Plan checkboxes + finding: `20607ffb`.
 
-**Verified green (full scope):** pampa 3943 · preview-renderer 305 unit + 353 integration ·
+**Verified green (full scope):** pampa 3943 · preview-renderer **351 unit + 364 integration** ·
 hub-client 755 (`test:ci`) · SPA 25 unit + 75 integration (`test:integration`) · `npm run build:all` ·
-all typechecks. Gating fail-on-revert independently re-verified (remove `!unlock` → reddens).
+all typechecks. *(P3.3 added preview-renderer tests only; hub-client/SPA/pampa counts are from the
+P3.2 verification — re-run before relying on them.)* Gating independently re-verified.
+
+**P3.3 caveats the next session MUST know:**
+- **jsdom tier only.** The real key-chords (macOS `Cmd+Ctrl+←/→`, Win/Linux `Alt+Shift+←/→`) + native
+  word/line-select non-conflict, soft-wrap geometry, and the WASM round-trip (nested edit → clean
+  `> `-rewrapped commit) are NOT verified — they need `q2 preview` + the `build:wasm` chain + a browser
+  → **P3.5 Playwright/e2e**. `classifyDepthKey` logic is unit-tested; the wiring is integration-tested
+  with the *detected*-platform chord (jsdom → 'other' → Alt+Shift).
+- **Depth move = re-selection, not a commit.** A depth in/out re-seeds the draft from the new node's
+  buffer/slice ("read once at selection"); it does NOT commit, so a dirty draft from the previous depth
+  position is replaced. The real commit is blur/Cmd-Enter via `commitDepthEdit` (live `editTargetRef`).
+- **⚠ NESTED-CHILD SELF-HEAL DROP (real, unfixed — see the plan's Risks watch-item).** A nested child
+  being depth-edited DROPS its in-flight edit if a collaborator inserts ≥~2 bytes ABOVE its container:
+  `findReanchorCandidate` picks the shifted *container* as the single nearest `r[0]>=anchorR0`, fails
+  content-verify, and doesn't scan to the child. Phase-2 locked editing is unaffected. Two candidate
+  fixes (the user is deciding scope): (a) make `findReanchorCandidate` scan ALL `r[0]>=anchorR0` for the
+  first that content-verifies (client-only; contradicts the documented "single nearest"); (b) content-
+  addressed relocation via a position-independent AST-subtree hash from q2's reconciliation/coarsen
+  pipeline. An investigation prompt for (b) was drafted this session (ask the user; not yet dispatched).
 
 **Decisions / gotchas the next session must know:**
 - **P3.1:** the reviewer-suggested `Figure.caption.long` descent was *reverted* — untestable with
@@ -51,16 +75,16 @@ normalize(sliceBytes(...))` at `activate`; leaf resolution (no coincidence-climb
 clamp at keypress, AST path derived each render (no stored depth). Tier: jsdom real-`PreviewRoot` for
 logic; the key-bindings + breadcrumb geometry are environment → Playwright (P3.5).
 
-**Testing methodology note (corrected provenance):** fail-on-revert is NOT part of the superpowers
-skills (those prescribe TDD fail-*first* + don't-trust-the-report reviews). It is a project-local
-discipline (hand-off §1) that exists because fail-first and reading-reviews both miss *theater*. A
-reusable write-up now lives at `~/.claude/skills/fail-on-revert/SKILL.md` (per-user; reviewer-triggered
-for non-local binding; both-prove + independent re-verify). That skill is grounded in real failures but
-is **not yet GREEN-verified** with a controlled non-local subagent scenario — finish that before relying on it.
-
-**Loose end:** the fail-on-revert audit's `useBlockEditHover.integration.test.tsx` hardening (adds pool
-entry 99 so the Phase-1 climb-guard test reddens on revert) was reverted out of this worktree as a
-stray audit artifact — ensure it lands via the audit's own branch; it's a real coverage fix.
+**Durable implementation notes for P3.3/P3.4 (fold into the implementer prompt):**
+- **Extract the testable logic as pure functions** — e.g. the AST ancestor-path walk, the clamp, the
+  "which child range contains `leafAnchorR0`", the commit-destination builder from `editTargetRef.current`
+  — and test those directly. Precedent: P3.2's `computeNestedEditBuffers`. Keeps tests off fragile
+  component-driving, which is where vacuous jsdom tests breed.
+- **Be explicit about what jsdom can't verify** (real key chords + native-conflict, soft-wrap
+  last-visual-line, chip geometry): defer them to the P3.5 Playwright pass and *say so* — do not write a
+  jsdom test that simulates them and asserts success (project end-to-end-verification policy).
+- **Verify at full scope** — `test:ci` + `test:integration` + `build:all`, never a narrow file/subset. A
+  narrow run hid a 47-test SPA regression this session (`b66f898a`).
 
 ---
 
@@ -75,11 +99,11 @@ Branch `feature/block-editing-improvements`. **Phase 1 + Phase 2 (2.1–2.5) are
 the self-heal design-bug fix (commits `26a4ed8b` + `2e6e1133`: KEEP works, commit-on-drop guarded).
 **Plan 4 (section editing) was cancelled + expunged** (commit `efb39382`) — do not look for it.
 One Phase-2 item is **deferred** (not blocking): the collapsed-region self-heal drop (needs Playwright;
-tracked in the plan + a `PreviewRoot.tsx` comment). A **fail-on-revert audit** of the Phase-2
+tracked in the plan + a `PreviewRoot.tsx` comment). A **test-binding audit** of the Phase-2
 behaviors runs in a separate detached worktree `.worktrees/block-editing-audit` (it reverts production
 in isolation, so it won't disturb this branch) — do not touch it; let its findings land via its own branch.
 
-**Phase 3 has started: P3.1 + P3.2 are done and green (see START-HERE above).** P3.3 is next.
+**Phase 3 has started: P3.1 + P3.2 + P3.3 are done and green (see START-HERE above).** P3.4 (breadcrumb) is next.
 
 ---
 
@@ -117,11 +141,7 @@ silently-reverted wiring. Every time we converted a test from theater→real, it
    *logic under test*. If you find yourself writing a local `executeLanding`/`requestMove`/effect
    body in a test, STOP — that's theater. Reference exemplars: `p2-4-real.integration.test.tsx`,
    `p2-3b-real.integration.test.tsx`, `p2-4d.integration.test.tsx`.
-2. **Fail-on-revert is mandatory for every behavioral/bugfix test.** After green, revert ONLY the
-   production hunk, confirm the test goes red, paste the failure, restore. "Failed before I wrote the
-   test" is NOT enough (the harness didn't exist before either). The test must fail because
-   *production* is wrong.
-3. **Match the test TIER to where the risk lives:**
+2. **Match the test TIER to where the risk lives:**
    - *logic-dominated* behavior (byte arithmetic, content-verify, re-anchor, the Rust regen) →
      pure-function unit test or jsdom real-`PreviewRoot` integration. Cheap and real.
    - *environment-dominated* behavior (soft-wrap geometry, real CSS coincidence, layout) → jsdom is
@@ -160,7 +180,7 @@ controlled `EditTextarea` via root `editDraftRef`+local state (survives remount)
 `anchorR0 === resolved.sourceEntry.r[0]`.
 ✅ **P2.3b** self-heal + helpers `tileForAnchorR0`, `findReanchorCandidate`. The KEEP path had a
 critical bug (theater hid it) — **now fixed** (`26a4ed8b` + `2e6e1133`); KEEP/DROP/commit-guard are
-real-`PreviewRoot`-tested with fail-on-revert. Collapsed-region drop deferred (see below).
+real-`PreviewRoot`-tested. Collapsed-region drop deferred (see below).
 ✅ **P2.4a** `caretGeometry.ts` — mirror-div `isOnFirst/LastVisualLine` + pure `getLogicalColumn`/`placeCaretAtColumn`.
 ✅ **P2.4b** arrow-nav move machine: `requestMove`, `pendingLanding` (discriminated `activate`|`focus`),
 `executeLanding`, reland `useLayoutEffect` (render-input-keyed) + 250ms timeout fallback; destLine
@@ -171,7 +191,7 @@ caret-on-arrival via `pendingCaretRef`; bare-arrow-only guard.
 **Its production wiring had been silently reverted and was masked by theater tests** — restored +
 real-tested + projection off-by-one fixed.
 ✅ **P2.5a** real-`PreviewRoot` coverage for the move/reland/focus machine; retired the P2.4b/c
-reimplementation harnesses; fail-on-revert verified.
+reimplementation harnesses; binding verified.
 ✅ **P2.5b** Playwright e2e (`hub-client/e2e/q2-preview-block-nav-p2-5b.spec.ts`, 13 tests). **Found +
 fixed two real browser-only bugs** (now reviewed + jsdom-regression-guarded): `isOnLastVisualLine`
 integer-`scrollHeight` (2px tolerance in `caretGeometry.ts`); `requestMove` 2-tile no-op (guard
@@ -298,8 +318,8 @@ fresh context = no `> `/indent prefixer); WASM `crates/wasm-quarto-hub-client/sr
 
 See the plan's Phase 3 section for the full TDD checklist.
 
-**Status:** P3.1 + P3.2 done and green (see the START-HERE block at the top for commits, decisions,
-and the P3.3 instructions). P3.3 → P3.4 → P3.5 remain.
+**Status:** P3.1 + P3.2 + P3.3 done and green (see the START-HERE block at the top for commits,
+decisions, and caveats). P3.4 (breadcrumb) → P3.5 (Playwright + WASM e2e) remain.
 
 ---
 

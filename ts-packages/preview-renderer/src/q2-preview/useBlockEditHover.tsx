@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useRef } from 'react';
 import { PreviewContext } from './PreviewContext';
 import { resolveLockedTile, enumerateLockedTiles, captureEditTarget, measureTileBox } from './lockedTiles';
+import { serializeSourceEntry } from './sourceIndex';
 
 const HOLD_MS = 500;
 const MOVE_THRESHOLD_PX = 8;
@@ -56,10 +57,11 @@ export function useBlockEditHover(): {
     };
 
     const activate = useCallback((el: Element) => {
-        // P2.2: resolve the locked tile first — the tile (not the raw leaf)
-        // is what gets activated. resolveLockedTile is idempotent so calling
-        // activate on an already-resolved tile returns that same tile.
-        const tile = resolveLockedTile(el);
+        // P3.3: mode branch — unlocked uses the leaf (deepest pool-id),
+        // locked uses resolveLockedTile (collapses to outermost prefixing container).
+        const tile = ctx?.unlockDepthCursor
+            ? el.closest('[data-block-pool-id]')      // leaf: deepest pool-id, no collapse
+            : resolveLockedTile(el);
         if (!tile) return;
         if (!ctx?.setEditTarget) return;
 
@@ -78,12 +80,28 @@ export function useBlockEditHover(): {
         // so click-activation and move-opened editors both receive real box geometry.
         const { contentHeight, boxStyle } = measureTileBox(tile);
         outlineElement(null);
+
+        // P3.3: buffer-aware draft seeding.
+        // siKey identifies the block in the source index; nestedEditBuffers[siKey]
+        // holds the clean QMD buffer (no '> '/indent prefix). Seed the draft with
+        // that clean buffer when available; fall back to the raw anchorSlice.
+        const siKey = serializeSourceEntry({ t: 0, r: [anchorR0, anchorR1], d: 0 });
+        const seededDraft = ctx?.nestedEditBuffers?.[siKey] ?? anchorSlice;
+
         // Seed the draft ref BEFORE calling setEditTarget (the fresh-open site).
         // This is the single canonical place where the draft is seeded — setEditTarget
         // itself no longer reseeds, so a P2.3b self-heal re-anchor via setEditTarget
         // can preserve the in-flight draft without clobbering it.
-        if (ctx.editDraftRef) ctx.editDraftRef.current = anchorSlice;
-        ctx.setEditTarget({ anchorR0, anchorR1, anchorSlice, contentHeight, boxStyle });
+        if (ctx.editDraftRef) ctx.editDraftRef.current = seededDraft;
+        ctx.setEditTarget({
+            anchorR0,
+            anchorR1,
+            anchorSlice,
+            contentHeight,
+            boxStyle,
+            seededDraft,
+            leafAnchorR0: anchorR0,
+        });
     }, [ctx]);
 
     const findEditTarget = (e: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>) => {
@@ -131,8 +149,10 @@ export function useBlockEditHover(): {
                 // Resolve the tile the click landed on.
                 const el = findEditTarget(e);
                 if (el) {
-                    // Resolve to locked tile (same as activate() does).
-                    const clickedEl = resolveLockedTile(el) ?? el;
+                    // P3.3: mode-aware tile resolution (same as activate() does).
+                    const clickedEl = ctx.unlockDepthCursor
+                        ? (el.closest('[data-block-pool-id]') ?? el)
+                        : (resolveLockedTile(el) ?? el);
                     // Check if this tile is different from the current edit target.
                     const pidAttr = clickedEl.getAttribute('data-block-pool-id');
                     const pool = ctx.pool ?? [];
