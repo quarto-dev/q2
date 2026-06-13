@@ -371,40 +371,11 @@ jobs:
           $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
           [System.IO.File]::WriteAllText((Join-Path (Get-Location) "$archive.sha256"), "$hash  $archive`n")
 
-      - name: Install minisign
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          case "$RUNNER_OS" in
-            macOS)  brew install minisign ;;
-            Linux)  sudo apt-get update && sudo apt-get install -y minisign ;;
-          esac
-
-      # Trusted comment = archive filename: it is part of the signed
-      # payload, and install.sh compares it against the file they asked
-      # for, so a signature cannot be replayed from another artifact.
-      # Skipped for Windows: install.ps1 does not verify signatures
-      # (SHA-256 only), so the .zip has no .minisig consumer today.
-      - name: Sign archive (minisign, Ed25519)
-        if: runner.os != 'Windows'
-        shell: bash
-        env:
-          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-        run: |
-          ARCHIVE="q2-${{ needs.preflight.outputs.version }}-${{ matrix.platform }}.${{ matrix.ext }}"
-          key="$(mktemp)"
-          trap 'rm -f "$key"' EXIT
-          chmod 600 "$key"
-          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
-          minisign -Sm "$ARCHIVE" -s "$key" -t "$ARCHIVE"
-          # Verify with the public key pinned in install.sh: a mismatch
-          # between the repo secret and the pinned key fails the release
-          # here instead of shipping artifacts no installer can verify.
-          PUBKEY="$(sed -n 's/^MINISIGN_PUBKEY="\(.*\)"$/\1/p' install.sh)"
-          test -n "$PUBKEY"
-          minisign -Vm "$ARCHIVE" -P "$PUBKEY"
-
-      # Unix archives include a .minisig; the Windows zip does not (no consumer).
+      # Signing happens in the release job, NOT here: ubuntu-22.04
+      # (jammy) has no minisign apt package (v0.1.0 dry-run iteration 3,
+      # run 27450999322), and centralizing the signature step means the
+      # secret key is touched by exactly one job and signs the exact
+      # bytes being published, after their artifact round-trip.
       - uses: actions/upload-artifact@v7
         if: matrix.ext == 'tar.gz'
         with:
@@ -412,7 +383,6 @@ jobs:
           path: |
             q2-${{ needs.preflight.outputs.version }}-${{ matrix.platform }}.tar.gz
             q2-${{ needs.preflight.outputs.version }}-${{ matrix.platform }}.tar.gz.sha256
-            q2-${{ needs.preflight.outputs.version }}-${{ matrix.platform }}.tar.gz.minisig
           retention-days: 7
           if-no-files-found: error
 
@@ -449,15 +419,12 @@ jobs:
           VERSION="${{ needs.preflight.outputs.version }}"
           MISSING=()
           # "<platform>:<ext>" — Windows ships .zip, the rest .tar.gz.
-          # The .zip has no .minisig: install.ps1 does not verify signatures.
           for entry in linux_amd64:tar.gz linux_arm64:tar.gz \
                        darwin_amd64:tar.gz darwin_arm64:tar.gz \
                        windows_amd64:zip; do
             platform="${entry%%:*}"; ext="${entry##*:}"
-            required=("q2-${VERSION}-${platform}.${ext}" \
-                      "q2-${VERSION}-${platform}.${ext}.sha256")
-            [ "$ext" != "zip" ] && required+=("q2-${VERSION}-${platform}.${ext}.minisig")
-            for f in "${required[@]}"; do
+            for f in "q2-${VERSION}-${platform}.${ext}" \
+                     "q2-${VERSION}-${platform}.${ext}.sha256"; do
               [ -f "$f" ] || MISSING+=("$f")
             done
           done
@@ -468,6 +435,35 @@ jobs:
           cat -- *.sha256 | sort -k2 > checksums.sha256
           sha256sum -c checksums.sha256
           cat checksums.sha256
+
+      # Trusted comment = archive filename: it is part of the signed
+      # payload, and install.sh compares it against the file they asked
+      # for, so a signature cannot be replayed from another artifact.
+      # The Windows .zip is not signed: install.ps1 does not verify
+      # signatures (SHA-256 only), so it has no .minisig consumer today.
+      # Signing lives here (not in the build matrix) so the secret key
+      # is handled by one job and signs the exact bytes being published;
+      # ubuntu-22.04 build runners also have no minisign apt package.
+      - name: Sign tar.gz archives (minisign, Ed25519)
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y minisign
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          chmod 600 "$key"
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
+          # Verify with the public key pinned in install.sh: a mismatch
+          # between the repo secret and the pinned key fails the release
+          # here instead of shipping artifacts no installer can verify.
+          PUBKEY="$(sed -n 's/^MINISIGN_PUBKEY="\(.*\)"$/\1/p' install.sh)"
+          test -n "$PUBKEY"
+          for ARCHIVE in artifacts/q2-*.tar.gz; do
+            NAME="$(basename "$ARCHIVE")"
+            minisign -Sm "$ARCHIVE" -s "$key" -t "$NAME"
+            minisign -Vm "$ARCHIVE" -P "$PUBKEY"
+          done
+          ls -l artifacts/*.minisig
 
       - name: Generate release notes
         env:
