@@ -22,6 +22,7 @@ pub mod node_lookup;
 pub mod options;
 pub mod pandoc;
 pub mod readers;
+pub mod regenerate_nested_buffers;
 pub mod template;
 pub mod toc;
 pub mod transforms;

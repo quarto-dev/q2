@@ -2912,6 +2912,31 @@ pub fn apply_node_edit(
 }
 
 // ============================================================================
+// NESTED BUFFER REGENERATION
+// ============================================================================
+
+/// Regenerate clean QMD buffers for every block that:
+///   (1) has a prefixing ancestor (BlockQuote / BulletList / OrderedList /
+///       DefinitionList), AND
+///   (2) is multi-line in source.
+///
+/// Used by the depth-cursor mode of the block editor so the frontend can
+/// edit a nested block without the container's `> ` or list-indent prefix.
+///
+/// # Arguments
+/// * `content`               — raw QMD source text
+/// * `untransformed_ast_json` — pre-pipeline Pandoc JSON for `content`
+///
+/// # Returns
+/// A JSON object `{ "<siKey>": "<cleanQmd>", ... }`.
+/// Returns `"{}"` on any error so the caller always receives a parseable object.
+#[wasm_bindgen]
+pub fn regenerate_nested_buffers(content: &str, untransformed_ast_json: &str) -> String {
+    pampa::regenerate_nested_buffers::regenerate_nested_buffers(content, untransformed_ast_json)
+        .unwrap_or_else(|_| "{}".to_string())
+}
+
+// ============================================================================
 // TEMPLATE PROCESSING
 // ============================================================================
 

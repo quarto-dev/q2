@@ -23,6 +23,7 @@ pub mod json_location_test;
 pub mod json_reader_smoke_tests;
 pub mod node_edit_tests;
 pub mod qmd_writer_source_info;
+pub mod regenerate_nested_buffers_tests;
 pub mod test;
 pub mod test_ansi_writer;
 pub mod test_attr_source_parsing;

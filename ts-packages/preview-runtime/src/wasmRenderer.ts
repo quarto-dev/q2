@@ -93,6 +93,7 @@ interface WasmModuleExtended {
     destination_source_info_json: string,
     modified_subtree_json: string,
   ): string;
+  regenerate_nested_buffers(content: string, untransformed_ast_json: string): string;
   convert: (document: string, inputFormat: string, outputFormat: string) => Promise<string>;
   lsp_analyze_document: (path: string) => string;
   lsp_get_symbols: (path: string) => string;
@@ -792,6 +793,32 @@ export function applyNodeEdit(
   }
 
   return response.qmd
+}
+
+/**
+ * Regenerate clean QMD buffers for every block that has a prefixing ancestor
+ * (BlockQuote / BulletList / OrderedList / DefinitionList) AND is multi-line
+ * in source.  Used by the depth-cursor mode of the block editor.
+ *
+ * @param content              - raw QMD source text
+ * @param untransformedAstJson - pre-pipeline Pandoc JSON for `content`
+ * @returns a map from siKey to clean QMD string; `{}` on any error.
+ * @throws if WASM is not initialized.
+ */
+export function regenerateNestedBuffers(
+  content: string,
+  untransformedAstJson: string,
+): Record<string, string> {
+  if (!wasmModule) {
+    throw new Error('WASM not initialized. Call initWasm() first.')
+  }
+  try {
+    return JSON.parse(
+      wasmModule.regenerate_nested_buffers(content, untransformedAstJson),
+    ) as Record<string, string>
+  } catch {
+    return {}
+  }
 }
 
 /**
