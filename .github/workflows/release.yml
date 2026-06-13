@@ -36,10 +36,12 @@
 #   are injected from repo secrets/vars into the cargo build env —
 #   release builds only; see crates/quarto-mcp-launcher/src/defaults.rs
 #   for why the Desktop-app client secret is safe to embed.
-# - Linux targets are static musl; openssl is built from source via the
-#   musl-scoped `openssl-sys/vendored` dep in crates/quarto/Cargo.toml.
-#   If musl turns out unbuildable (aws-lc-sys is the known risk), flip
-#   the matrix targets to *-unknown-linux-gnu — plan D4.
+# - Linux targets are gnu on the oldest available runners (glibc 2.35
+#   floor). Static musl is impossible for q2: rusty_v8 (deno_core →
+#   quarto-system-runtime) publishes no musl prebuilt archives — both
+#   musl legs 404'd in the v0.1.0 dry-run (run 27449454203). The linux
+#   legs build with `--features vendored-openssl` so the binary has no
+#   runtime libssl dependency (plan D4).
 #
 # Signing key: MINISIGN_SECRET_KEY repo secret; the public half is pinned
 # in install.sh (MINISIGN_PUBKEY) and README. The sign step verifies its
@@ -184,31 +186,40 @@ jobs:
           # node), both mac archs (Rosetta mismatch: x64 q2 under an
           # arm64 node and vice versa), both win archs (arm64 Windows
           # runs x64 q2 under emulation with a native arm64 node).
+          # cargo_flags: linux legs vendor openssl (no runtime libssl
+          # dep); macOS/Windows TLS is security-framework/schannel, no
+          # openssl involved. ubuntu-22.04 runners set the glibc floor
+          # at 2.35.
           - platform: linux_amd64
-            target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
             ext: tar.gz
             keyring: linux-x64-gnu,linux-x64-musl
+            cargo_flags: --features vendored-openssl
           - platform: linux_arm64
-            target: aarch64-unknown-linux-musl
-            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm
             ext: tar.gz
             keyring: linux-arm64-gnu,linux-arm64-musl
+            cargo_flags: --features vendored-openssl
           - platform: darwin_amd64
             target: x86_64-apple-darwin
             os: macos-15  # arm64 runner; the x86_64 binary runs under Rosetta
             ext: tar.gz
             keyring: darwin-x64,darwin-arm64
+            cargo_flags: ''
           - platform: darwin_arm64
             target: aarch64-apple-darwin
             os: macos-15
             ext: tar.gz
             keyring: darwin-arm64,darwin-x64
+            cargo_flags: ''
           - platform: windows_amd64
             target: x86_64-pc-windows-msvc
             os: windows-latest
             ext: zip
             keyring: win32-x64-msvc,win32-arm64-msvc
+            cargo_flags: ''
     steps:
       - uses: actions/checkout@v6
         with:
@@ -229,10 +240,6 @@ jobs:
       - name: Add ${{ matrix.target }} to the pinned toolchain
         shell: bash
         run: rustup target add ${{ matrix.target }}
-
-      - name: Install musl-tools
-        if: contains(matrix.target, 'musl')
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -289,7 +296,7 @@ jobs:
               exit 1
             fi
           done
-          cargo build --release --locked --target ${{ matrix.target }} -p quarto
+          cargo build --release --locked --target ${{ matrix.target }} -p quarto ${{ matrix.cargo_flags }}
 
       # Every target in the matrix can execute on its runner (musl
       # binaries are static; darwin x86_64 runs under Rosetta; windows
@@ -489,8 +496,8 @@ jobs:
             echo
             echo "| Platform | File |"
             echo "|---|---|"
-            echo "| Linux x86_64 (static musl) | \`q2-${VERSION}-linux_amd64.tar.gz\` |"
-            echo "| Linux ARM64 (static musl) | \`q2-${VERSION}-linux_arm64.tar.gz\` |"
+            echo "| Linux x86_64 (glibc 2.35+) | \`q2-${VERSION}-linux_amd64.tar.gz\` |"
+            echo "| Linux ARM64 (glibc 2.35+) | \`q2-${VERSION}-linux_arm64.tar.gz\` |"
             echo "| macOS Intel | \`q2-${VERSION}-darwin_amd64.tar.gz\` |"
             echo "| macOS Apple Silicon | \`q2-${VERSION}-darwin_arm64.tar.gz\` |"
             echo "| Windows x86_64 | \`q2-${VERSION}-windows_amd64.zip\` |"

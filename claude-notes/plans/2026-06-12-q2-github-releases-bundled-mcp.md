@@ -393,6 +393,31 @@ legs failed, two distinct causes:
 darwin_arm64 (only leg whose target is host-default) ran the furthest —
 its outcome validates the downstream pipeline (defaults injection,
 verify gate, packaging, signing).
+
+*Iteration 1 fixes:* PR #279 (merged as `8f44bcbb`): explicit
+`rustup target add` step; `shell: true` npm spawn on Windows in
+npmPackFetcher. darwin_arm64 then passed END-TO-END in iteration 1 —
+bundle, bundled defaults (verify gate green), tar.gz + sha256, minisign
+sign + self-verify all confirmed working on a real runner.
+
+*Iteration 2 (run 27449454203, tag re-pushed at `8f44bcbb`):*
+darwin_arm64 ✓ again. **Both linux musl legs failed with HTTP 404
+downloading the rusty_v8 prebuilt static library** — rusty_v8
+(deno_core → quarto-system-runtime → pampa/quarto-core) publishes no
+musl archives, and building V8 from source in CI is a non-starter. So
+**D4's musl plan is dead for q2 — not openssl/aws-lc, but the JS
+engine braid doesn't have.** Resolution (D4 fallback, adjusted):
+- linux legs → `*-unknown-linux-gnu` on ubuntu-22.04 / ubuntu-22.04-arm
+  (glibc 2.35 floor; documented in the release-notes table);
+- new `vendored-openssl` cargo feature on `crates/quarto`
+  (`dep:openssl-sys` + `openssl-sys/vendored`), enabled only by the
+  linux release legs via a `cargo_flags` matrix field, so release
+  binaries never depend on the host's libssl and dev builds are
+  untouched (replaces the musl-scoped dep table);
+- musl-tools step dropped.
+Alpine users: gnu binaries need gcompat; acceptable for now (the
+keyring bundle still ships musl addons for users running musl node
+against a gcompat'd q2 — 500 KB of insurance).
 - [ ] `install.sh` one-liner on a clean machine/container → `q2 --version`
 - [ ] `q2 mcp` with **no env vars set** connects to quarto-hub.com:
       browser consent → token → `connect_project` + `read_file` against a

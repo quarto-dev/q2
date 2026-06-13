@@ -44,16 +44,22 @@ tempfile = "3"
 # `xdg-open` on Linux, `cmd /C start` on Windows). No heavy transitive
 # tree.
 open = "5"
+# Only via the vendored-openssl feature (see [features]); never a
+# direct code dependency.
+openssl-sys = { version = "0.9", optional = true }
 
 [build-dependencies]
 
-# Static-musl release builds (release plan D4, bd-c6l13j79): samod →
-# tokio-tungstenite(native-tls) → openssl-sys needs an openssl to link,
-# and no musl-built system openssl exists on the runners — build it
-# from source into the static binary. cfg-scoped so native dev builds
-# (glibc/macOS/Windows) are untouched.
-[target.'cfg(target_env = "musl")'.dependencies]
-openssl-sys = { version = "0.9", features = ["vendored"] }
+[features]
+# Release-build knob (plan D4, bd-c6l13j79): samod →
+# tokio-tungstenite(native-tls) → openssl-sys links openssl on Linux;
+# without this feature the binary picks up a runtime dependency on the
+# build host's libssl. The release workflow's linux legs enable it so
+# openssl is built from source and linked statically; dev builds are
+# untouched. (Static *musl* is off the table entirely: rusty_v8, via
+# deno_core → quarto-system-runtime, publishes no musl prebuilt
+# archives — both linux legs 404'd in the v0.1.0 dry-run.)
+vendored-openssl = ["dep:openssl-sys", "openssl-sys/vendored"]
 
 [dev-dependencies]
 tempfile = "3"
