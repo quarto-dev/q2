@@ -56,6 +56,27 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// Stabilize rendered HTML against the one thing in it that legitimately
+/// changes every release: the `<meta name="generator"
+/// content="quarto-rust-X.Y.Z">` version. We bump the workspace version
+/// on a cadence (bd-yomgkxoc), so a raw byte-identity hash would break
+/// on every bump even though nothing about the *rendering* changed.
+/// Replacing the crate version with a fixed placeholder keeps the
+/// byte-identity guarantee for all other bytes while absorbing version
+/// churn — the baseline never needs re-capturing for a version bump.
+/// (`CARGO_PKG_VERSION` here is the workspace version, identical to what
+/// the generator embeds.) Non-HTML artifacts carry no version, so they
+/// are hashed raw.
+fn normalize_for_hash(rel: &str, bytes: Vec<u8>) -> Vec<u8> {
+    if rel.ends_with(".html") {
+        String::from_utf8_lossy(&bytes)
+            .replace(env!("CARGO_PKG_VERSION"), "VERSION")
+            .into_bytes()
+    } else {
+        bytes
+    }
+}
+
 // === Test 17 ================================================================
 
 /// **Plan test 17 (the most important test in Phase 5):** the
@@ -90,9 +111,9 @@ fn single_doc_render_unchanged_under_scope_refactor() {
         let want = parts.next().expect("sha256 field");
 
         let on_disk = result.output_path.parent().unwrap().join(rel);
-        let got_bytes = std::fs::read(&on_disk)
+        let raw = std::fs::read(&on_disk)
             .unwrap_or_else(|e| panic!("missing post-refactor file {}: {}", on_disk.display(), e));
-        let got = sha256_hex(&got_bytes);
+        let got = sha256_hex(&normalize_for_hash(rel, raw));
         assert_eq!(
             got, want,
             "byte-identity broken for {}: post-refactor hash differs from baseline",

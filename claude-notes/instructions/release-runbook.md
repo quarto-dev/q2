@@ -79,6 +79,14 @@ Commit (Cargo.toml + Cargo.lock), push, open a PR, get it merged. A
 version bump is small but still goes through a PR — `main` is gated
 (CI clippy gate, bd-3zst4hwy).
 
+A version bump **should not break any test.** Rendered output embeds
+the version in a `<meta name="generator" content="quarto-rust-X.Y.Z">`
+tag, but byte-identity/snapshot tests normalize it away (e.g.
+`artifact_scoping_pipeline.rs` replaces the crate version with a
+placeholder before hashing). If a bump *does* break a test, harden the
+test to absorb version churn — do not blindly re-capture a snapshot to
+the new version, or it just breaks again next cadence (bd-yomgkxoc).
+
 ### 3. Tag the merged commit and push
 
 After the bump PR is merged, tag `origin/main`'s new HEAD:

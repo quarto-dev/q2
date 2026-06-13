@@ -136,5 +136,13 @@
 # the fixture has no `.embed-example-iframe` div, so the new selectors
 # match nothing in the body/head — they only appear in the compiled CSS,
 # so the `styles.css` hash shifts.
-doc.html f81f6b0c1ceac71d249f208dac84875e53b251b85d2ead6129169320c86ac7f6
+# Re-captured 2026-06-13 (bd-yomgkxoc): the test now NORMALIZES the
+# embedded generator version (`quarto-rust-X.Y.Z` -> `quarto-rust-VERSION`)
+# before hashing `doc.html`, so the baseline is stable across workspace
+# version bumps (we bump on a cadence now). The doc.html hash below is
+# therefore of the version-normalized bytes, not the raw file. styles.css
+# carries no version and is hashed raw (unchanged). To re-capture after an
+# *intentional* render change, run the test and copy the `left:` hash from
+# the failure -- do NOT shasum the raw doc.html, the version won't match.
+doc.html f2e961001ddc65cb9bd3029a328cd9a1b1bfa97137371024536496637df2b0a0
 doc_files/styles.css 53eb1e60ea330392e7d0db61366c7febaf097722a3139bf8fc65aadbaecab721
