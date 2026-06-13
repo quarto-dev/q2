@@ -108,6 +108,103 @@ export interface PreviewContextValue {
      * `q2 preview` without `--allow-edit`. Absent/false ⇒ editable.
      */
     editingDisabled?: boolean;
+    /**
+     * P2.4b: cross-surface arrow-nav move trigger.
+     *
+     * Called by `EditTextarea`'s `onKeyDown` when a bare ArrowDown/ArrowUp
+     * fires on the edge of the visual content. The root-level implementation
+     * in `entry.tsx` handles both synchronous hops (unmodified) and
+     * async relands (modified, waits for commit re-render).
+     *
+     * @param direction  'down' or 'up'
+     * @param exitColumn getLogicalColumn(ta) at the moment the arrow fires
+     * @param draft      Current textarea value
+     * @param isDirty    Whether draft !== anchorSlice (dirty guard)
+     * @param sourceInfoJson  JSON.stringify(resolved.sourceEntry) for committing
+     */
+    requestMove?: (
+        direction: 'down' | 'up',
+        exitColumn: number,
+        draft: string,
+        isDirty: boolean,
+        sourceInfoJson: string,
+    ) => void;
+    /**
+     * P2.4b: pending caret hint. Set by the hop/reland just before opening
+     * the destination editor; consumed (and cleared) by `EditTextarea`'s
+     * mount effect to place the caret on the correct edge/column.
+     *
+     * The ref is root-held so it survives across React renders without
+     * causing extra re-renders.
+     */
+    pendingCaretRef?: MutableRefObject<{ edge: 'first' | 'last'; column: number } | null>;
+    /**
+     * P2.4b: cancel a pending land (if any). Called by `EditTextarea`'s
+     * Escape handler so Esc during a modified move that has not yet relanded
+     * (waiting for the commit re-render or the byte-identical timeout) discards
+     * the stashed landing instead of relanding after Esc.
+     *
+     * Clears `pendingLandingRef`, cancels the fallback timer, and clears
+     * `pendingCaretRef`. No-op when no landing is pending.
+     */
+    cancelPendingLand?: () => void;
+    /**
+     * P2.4c: stash a plain-close focus landing. Called by `EditTextarea` BEFORE
+     * `setEditTarget(null)` on Esc / Cmd-Enter / plain blur — NOT on a move
+     * (moves go through `requestMove` which stashes intent:'activate').
+     *
+     * After the editor closes, the next re-render (or the byte-identical timeout
+     * fallback) focuses the tile at `anchorR0` via `tileForAnchorR0`, so
+     * roving-tabindex resumes at the edited block.
+     *
+     * @param anchorR0  Byte offset of the tile being closed.
+     */
+    requestFocusRestore?: (anchorR0: number) => void;
+    /**
+     * P2.4d: record a pending click-switch to tile B.
+     *
+     * Called by `useBlockEditHover`'s `onPointerDown` when a MOUSE click lands
+     * on a DIFFERENT tile while an editor is open. Records the tile element and
+     * its current anchorR0 so the blur handler can project B's destination line
+     * after A's potential commit.
+     *
+     * Must be called before A's blur fires (pointerdown precedes blur in the
+     * browser event ordering). Clears any previously pending click-switch.
+     *
+     * @param tileEl  The resolved locked tile B that was clicked.
+     */
+    requestClickSwitch?: (tileEl: Element) => void;
+    /**
+     * P2.4d: handle the dirty-or-unmodified click-switch in the blur handler.
+     *
+     * Called by `EditTextarea`'s `onBlur` INSTEAD OF `requestFocusRestore` when
+     * a click-switch is pending. The implementation in `PreviewRoot.tsx` checks
+     * whether the draft is dirty and branches:
+     *
+     *   - **Dirty:** commit A, stash a projected `pendingLanding` for B, suppress
+     *     the normal focus-restore, mark `dirtySwitchHandled` so `onPointerUp`
+     *     skips `activate(B)`. Returns `true` (consumed, blur handler must NOT
+     *     call `requestFocusRestore` or `commitIfDirty`).
+     *   - **Unmodified:** clear the click-switch record, let A close without a
+     *     landing, let `onPointerUp`'s `activate(B)` proceed normally. Returns
+     *     `false` (not consumed — blur handler still calls the normal
+     *     `commitIfDirty` close, which is a no-op for unmodified drafts).
+     *
+     * Returns `false` when no click-switch is pending (normal blur path).
+     *
+     * @param draft            Current textarea value (raw, not yet normalized).
+     * @param sourceInfoJson   JSON.stringify(resolved.sourceEntry) — same value
+     *                         that `commitTextEdit` receives.
+     */
+    handleClickSwitchBlur?: (draft: string, sourceInfoJson: string) => boolean;
+    /**
+     * P2.4d: check and clear the dirty-switch-handled flag.
+     *
+     * Called by `useBlockEditHover`'s `onPointerUp`. Returns `true` if a dirty
+     * click-switch was handled in `onBlur` (so the landing for B is already
+     * stashed and `activate(B)` must be suppressed). Clears the flag.
+     */
+    consumeDirtySwitchHandled?: () => boolean;
 }
 
 export const PreviewContext = createContext<PreviewContextValue | null>(null);

@@ -210,6 +210,90 @@ export function enumerateLockedTiles(host: Element): Element[] {
 }
 
 // ---------------------------------------------------------------------------
+// P2.4b helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Measure the content height and full computed box style of a tile element.
+ *
+ * Extracted from `useBlockEditHover.tsx`'s `activate` function so the same
+ * measurement can be used both at click-activation time and at move-open time
+ * (sync hop and reland paths in `entry.tsx`).
+ *
+ * - `contentHeight`: rect.height minus padding and border (content-area height).
+ *   Used as the textarea height so it fills the content area exactly.
+ * - `boxStyle`: full computed box (margin + padding + per-side border longhands)
+ *   for the measure-and-set wrapper to replicate the element's exact box.
+ *
+ * Returns `{ contentHeight: 0, boxStyle: {} }` if `getComputedStyle` or
+ * `getBoundingClientRect` is unavailable (jsdom test environments that don't
+ * provide layout). Callers should still open the editor — the textarea will
+ * auto-focus and the draft is set; size can be corrected by a subsequent
+ * `activate` call.
+ */
+export function measureTileBox(tileEl: Element): {
+    contentHeight: number;
+    boxStyle: Record<string, string>;
+} {
+    const rect = tileEl.getBoundingClientRect();
+    const cs = getComputedStyle(tileEl);
+    // parseFloat returns NaN for empty strings (jsdom) — treat NaN as 0.
+    const px = (v: string) => parseFloat(v) || 0;
+    const contentHeight = rect.height
+        - px(cs.paddingTop) - px(cs.paddingBottom)
+        - px(cs.borderTopWidth) - px(cs.borderBottomWidth);
+    const boxStyle: Record<string, string> = {
+        marginTop: cs.marginTop, marginRight: cs.marginRight,
+        marginBottom: cs.marginBottom, marginLeft: cs.marginLeft,
+        paddingTop: cs.paddingTop, paddingRight: cs.paddingRight,
+        paddingBottom: cs.paddingBottom, paddingLeft: cs.paddingLeft,
+        borderTopWidth: cs.borderTopWidth, borderRightWidth: cs.borderRightWidth,
+        borderBottomWidth: cs.borderBottomWidth, borderLeftWidth: cs.borderLeftWidth,
+        borderTopStyle: cs.borderTopStyle, borderRightStyle: cs.borderRightStyle,
+        borderBottomStyle: cs.borderBottomStyle, borderLeftStyle: cs.borderLeftStyle,
+        borderTopColor: cs.borderTopColor, borderRightColor: cs.borderRightColor,
+        borderBottomColor: cs.borderBottomColor, borderLeftColor: cs.borderLeftColor,
+    };
+    return { contentHeight, boxStyle };
+}
+
+/**
+ * Capture the edit identity triple from a locked tile element.
+ *
+ * Reads the `data-block-pool-id` attribute off `tileEl`, looks up the pool
+ * entry, slices `content` to get the source text, and returns the identity
+ * triple `{ anchorR0, anchorR1, anchorSlice }` used to open an editor.
+ *
+ * Returns `null` when:
+ *  - `tileEl` has no `data-block-pool-id` attribute.
+ *  - The pool entry is missing or not an Original entry (`t !== 0`).
+ *
+ * This is the canonical place for the identity logic. Both `activate` in
+ * `useBlockEditHover.tsx` (click/keyboard) and the nav reland in `entry.tsx`
+ * (arrow-key move) use this helper instead of inlining the same calculation.
+ *
+ * Box measurements (`contentHeight`, `boxStyle`) are NOT included — those
+ * require live DOM geometry and belong at the activation site.
+ */
+export function captureEditTarget(
+    tileEl: Element,
+    pool: unknown[],
+    content: string,
+): { anchorR0: number; anchorR1: number; anchorSlice: string } | null {
+    const pidAttr = tileEl.getAttribute('data-block-pool-id');
+    if (pidAttr === null) return null;
+
+    const poolEntry = pool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
+    if (!poolEntry || poolEntry.t !== 0) return null;
+
+    const anchorR0 = poolEntry.r[0];
+    const anchorR1 = poolEntry.r[1];
+    const anchorSlice = normalizeLineEndings(sliceBytes(content, anchorR0, anchorR1)).trimEnd();
+
+    return { anchorR0, anchorR1, anchorSlice };
+}
+
+// ---------------------------------------------------------------------------
 // P2.3b helpers
 // ---------------------------------------------------------------------------
 

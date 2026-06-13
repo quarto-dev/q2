@@ -529,7 +529,7 @@ longer re-writes the wrong block on blur).
   locked mode like lists; the earlier "blockquote text → child" line was stale — full
   per-layer descent is the Phase 3 unlock. Reason: only the outermost prefixing
   container has a clean byte-slice; inner targets' slices carry the outer `> `/indent.)*
-- [ ] **Ordered tiles** (RTL): next/prev derived from live `[data-block-pool-id]` at
+- [x] **Ordered tiles** (RTL; enumerate P2.2, next/prev scan P2.4b): next/prev derived from live `[data-block-pool-id]` at
   event time, locked-resolved, linear-scanned; a `HorizontalRule` between paras is
   skipped; partition has no container-then-child redundancy.
 - [x] **Visibility filter** (RTL done in P2.2; real collapsed-callout → P2.5 Playwright): a **collapsed callout's** body is skipped
@@ -538,7 +538,7 @@ longer re-writes the wrong block on blur).
 - [x] **Roving-tabindex alignment** (RTL, P2.2): not-editing arrows focus locked-tile
   representatives (not raw leaves), skip hidden tiles, and Enter opens the same tile the
   focus ring is on.
-- [ ] **Cross-surface nav** (RTL): ArrowDown last line → next tile; ArrowUp first → prev;
+- [x] **Cross-surface nav** (RTL, P2.4b; geometry mocked → real soft-wrap in P2.5 Playwright): ArrowDown last line → next tile; ArrowUp first → prev;
   wrap both ways; arrow *within* a multi-line buffer does not leave; modifier+Arrow at an
   edge does not leave.
 - [x] **Dirty guard** (RTL, P2.3a): blur without typing → no commit, document unchanged (write
@@ -548,7 +548,7 @@ longer re-writes the wrong block on blur).
   re-render that **shifts indices** (insert a block above), assert the draft is **preserved**
   (not reset to original) and the editor stays on the right block. *(P2.3a: controlled-value/ref
   survives a remount; P2.3b self-heal re-anchors so it stays on the right block.)*
-- [ ] **Trigger robustness** (RTL): unmodified move → synchronous hop, no commit, no gap;
+- [x] **Trigger robustness** (RTL, P2.4b): unmodified move → synchronous hop, no commit, no gap;
   modified move → commit + `setEditTarget(null)` + `pendingLanding`; a dirty byte-identical
   commit still resolves (fallback); a file switch cancels a pending land.
 - [x] **`r[0]` uniqueness** (unit): every block's `pool[s].r[0]` is distinct in a doc with
@@ -561,7 +561,7 @@ longer re-writes the wrong block on blur).
   lands on the changed/inserted block. **Drop-focus** lands on the nearest visible tile.
 - [x] **Active editor goes hidden** (RTL, P2.3b; real collapsed-callout → P2.5 Playwright): a re-render that puts the active block
   in a collapsed region drops the editor (no invisible focused textarea).
-- [ ] **Focus-restoration** (RTL): a *plain* commit (Esc / Cmd-Enter / blur) closes the
+- [x] **Focus-restoration** (RTL, P2.4c): a *plain* commit (Esc / Cmd-Enter / blur) closes the
   editor and returns focus to the edited tile by `anchorR0` (not a stale pool id), so
   roving-tabindex resumes there.
 - [ ] **Update existing editing tests** — Phase 2 changes the default click target
@@ -569,14 +569,17 @@ longer re-writes the wrong block on blur).
   corpus that asserts the old behavior: `useEditableBlock`, `q2-preview`, `useBlockEditHover`
   integration tests, and e2e `q2-preview-inline-edit`, `q2-preview-columns-layout`,
   `q2-preview-render-components-*`, `edit-cell-sizing`. In-scope work, not incidental churn.
-- [ ] **Click-switch** (RTL): clicking from a *dirty* tile A onto tile B commits A and
+- [x] **Click-switch** (RTL): clicking from a *dirty* tile A onto tile B commits A and
   lands the cursor in B (same reland path as an arrow move), via B's `anchorR0` after the
   re-render.
-- [ ] **Caret on arrival** (RTL/Playwright): ↓ lands on the destination's first line, ↑
+- [x] **Caret on arrival** (RTL done P2.4a/P2.4b; mirror-div real-browser verification → P2.5 Playwright): ↓ lands on the destination's first line, ↑
   on its last; exit column preserved (clamped on a short line); mirror-div last/first-visual-row
   detection verified in a real browser.
-- [ ] Playwright (`q2-preview-inline-edit.spec.ts`): edit tile A, ArrowDown off the last
-  visual line, type into B; assert B opened and A committed.
+- [x] Playwright (`q2-preview-block-nav-p2-5b.spec.ts`): 13 tests covering arrow-nav, click-switch,
+  locked resolution, caret on arrival, soft-wrap. **Two bugs found and fixed:** (1) `isOnLastVisualLine`
+  false-negative in Chromium (scrollHeight integer rounding — fixed with 2px LAST_LINE_TOLERANCE in
+  `caretGeometry.ts`); (2) `requestMove` bailed out on 2-tile docs (active tile's pool-id absent from
+  DOM during edit — fixed guard from `<= 1` to `=== 0` in `PreviewRoot.tsx`). All 13 pass. Commit: 05500132.
 - [ ] Implement 2a (locked resolution + roving-tabindex alignment) + 2b (nav, byte-offset
   identity, controlled value, self-heal, focus) + 2c (dirty guard).
 

@@ -1,8 +1,6 @@
 import React, { useCallback, useContext, useRef } from 'react';
 import { PreviewContext } from './PreviewContext';
-import { resolveLockedTile, enumerateLockedTiles } from './lockedTiles';
-import { sliceBytes } from '../utils/sliceSource';
-import { normalizeLineEndings } from '../utils/normalizeLineEndings';
+import { resolveLockedTile, enumerateLockedTiles, captureEditTarget, measureTileBox } from './lockedTiles';
 
 const HOLD_MS = 500;
 const MOVE_THRESHOLD_PX = 8;
@@ -63,46 +61,22 @@ export function useBlockEditHover(): {
         // activate on an already-resolved tile returns that same tile.
         const tile = resolveLockedTile(el);
         if (!tile) return;
-        const tilePoolId = tile.getAttribute('data-block-pool-id');
-        if (tilePoolId === null || !ctx?.setEditTarget) return;
+        if (!ctx?.setEditTarget) return;
 
-        // Read the pool entry to capture byte-offset identity (anchorR0/anchorR1).
-        // If the pool entry is missing or not an Original entry (t !== 0), skip
-        // activation gracefully — we cannot identify the block by byte range.
-        const poolEntry = ctx?.pool?.[Number(tilePoolId)] as { t: number; r: [number, number]; d: number } | undefined;
-        if (!poolEntry || poolEntry.t !== 0) return;
+        // P2.4b: use captureEditTarget for the identity triple (anchorR0/R1/anchorSlice).
+        // This is the canonical extraction site; the nav reland path uses the same helper.
+        const content = ctx?.content ?? '';
+        const identity = captureEditTarget(tile, ctx?.pool ?? [], content);
+        if (!identity) return;
 
-        const anchorR0 = poolEntry.r[0];
-        const anchorR1 = poolEntry.r[1];
+        const { anchorR0, anchorR1, anchorSlice } = identity;
 
         // Dedup: if this block is already the active edit target (same byte range), do nothing.
         if (ctx?.editTarget?.anchorR0 === anchorR0) return;
 
-        // Compute anchorSlice: the normalized source text for the dirty-guard baseline.
-        const content = ctx?.content ?? '';
-        const anchorSlice = normalizeLineEndings(sliceBytes(content, anchorR0, anchorR1)).trimEnd();
-
-        const rect = tile.getBoundingClientRect();
-        const cs = getComputedStyle(tile);
-        const contentHeight = rect.height
-            - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
-            - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth);
-        // Full computed box (margin + padding + per-side border) so the
-        // measure-and-set wrapper reproduces the element's exact box — keeping
-        // vertical spacing and visible decorations (e.g. an h2's Bootstrap
-        // border-bottom rule) intact while editing.
-        const boxStyle: Record<string, string> = {
-            marginTop: cs.marginTop, marginRight: cs.marginRight,
-            marginBottom: cs.marginBottom, marginLeft: cs.marginLeft,
-            paddingTop: cs.paddingTop, paddingRight: cs.paddingRight,
-            paddingBottom: cs.paddingBottom, paddingLeft: cs.paddingLeft,
-            borderTopWidth: cs.borderTopWidth, borderRightWidth: cs.borderRightWidth,
-            borderBottomWidth: cs.borderBottomWidth, borderLeftWidth: cs.borderLeftWidth,
-            borderTopStyle: cs.borderTopStyle, borderRightStyle: cs.borderRightStyle,
-            borderBottomStyle: cs.borderBottomStyle, borderLeftStyle: cs.borderLeftStyle,
-            borderTopColor: cs.borderTopColor, borderRightColor: cs.borderRightColor,
-            borderBottomColor: cs.borderBottomColor, borderLeftColor: cs.borderLeftColor,
-        };
+        // P2.4b: use measureTileBox (shared with the move-open paths in entry.tsx)
+        // so click-activation and move-opened editors both receive real box geometry.
+        const { contentHeight, boxStyle } = measureTileBox(tile);
         outlineElement(null);
         // Seed the draft ref BEFORE calling setEditTarget (the fresh-open site).
         // This is the single canonical place where the draft is seeded — setEditTarget
@@ -144,7 +118,37 @@ export function useBlockEditHover(): {
         // fresh even when a pointerdown lands during an active edit, so a later
         // right-click is not mis-classified as touch.
         lastPointerTypeRef.current = e.pointerType;
-        if (ctx?.editTarget != null) return;
+
+        if (ctx?.editTarget != null) {
+            // P2.4d: mouse click while editing — classify the target.
+            // Touch path is NOT a click-switch (touch uses hold-to-edit, handled below).
+            if (e.pointerType === 'mouse') {
+                const target = e.target as Element;
+                // Active-region guard: click inside the open editor → caret-move, not switch.
+                if (ctx.activeEditRegionRef?.current?.contains(target)) {
+                    return; // P1 caret-move path; no click-switch
+                }
+                // Resolve the tile the click landed on.
+                const el = findEditTarget(e);
+                if (el) {
+                    // Resolve to locked tile (same as activate() does).
+                    const clickedEl = resolveLockedTile(el) ?? el;
+                    // Check if this tile is different from the current edit target.
+                    const pidAttr = clickedEl.getAttribute('data-block-pool-id');
+                    const pool = ctx.pool ?? [];
+                    const entry = pidAttr != null
+                        ? pool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined
+                        : undefined;
+                    const clickedAnchorR0 = entry?.t === 0 ? entry.r[0] : undefined;
+                    if (clickedAnchorR0 !== undefined && clickedAnchorR0 !== ctx.editTarget.anchorR0) {
+                        ctx.requestClickSwitch?.(clickedEl);
+                    }
+                }
+                // else: empty area click — no click-switch, plain close on blur.
+            }
+            return;
+        }
+
         const el = findEditTarget(e);
         if (!el) return;
 
@@ -159,7 +163,7 @@ export function useBlockEditHover(): {
                 activate(el);
             }, HOLD_MS);
         }
-    }, [activate]);
+    }, [activate, ctx]);
 
     const onPointerUp = useCallback((e: React.PointerEvent<HTMLElement>) => {
         if (e.pointerType !== 'mouse') {
@@ -172,6 +176,11 @@ export function useBlockEditHover(): {
         // focus and handles the caret-move itself. Only clicks OUTSIDE the
         // region should resolve-and-switch.
         if (ctx?.activeEditRegionRef?.current?.contains(e.target as Node)) {
+            return;
+        }
+        // P2.4d: if a dirty click-switch was handled in blur (landing for B is pending),
+        // skip activate(B) — the reland will open B with the projected anchorR0.
+        if (ctx?.consumeDirtySwitchHandled?.()) {
             return;
         }
         // Mouse click: activate.

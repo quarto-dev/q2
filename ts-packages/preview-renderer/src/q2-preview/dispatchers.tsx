@@ -1,4 +1,4 @@
-import React, { useContext, useState, useRef } from 'react';
+import React, { useContext, useState, useRef, useLayoutEffect } from 'react';
 import { RegistryContext, AttributionWrap, renderChildren } from '../framework';
 import type {
     BlockNode,
@@ -10,6 +10,7 @@ import type {
 import { PreviewContext } from './PreviewContext';
 import type { PreviewContextValue, ResolvedSource } from './PreviewContext';
 import { normalizeLineEndings } from '../utils/normalizeLineEndings';
+import { isOnFirstVisualLine, isOnLastVisualLine, getLogicalColumn, placeCaretAtColumn } from './caretGeometry';
 
 /**
  * Block types whose left inset (the marker gutter: `<ul>`/`<ol>`/`<dl>`
@@ -124,11 +125,29 @@ function EditTextarea({
 }) {
     const { contentHeight, anchorSlice } = ctx.editTarget!;
     const isComposingRef = useRef(false);
+    const taRef = useRef<HTMLTextAreaElement | null>(null);
 
     // Seed from the root-held ref so the draft persists across remounts.
     const [draft, setDraft] = useState<string>(
         () => ctx.editDraftRef?.current ?? anchorSlice,
     );
+
+    // P2.4b: caret placement on arrival.
+    // When a pending-caret hint is set (by hop/reland), apply it once on mount
+    // and clear the ref so subsequent re-mounts (e.g. self-heal) don't re-apply.
+    // useLayoutEffect (not useEffect) so the caret is positioned before paint —
+    // no single-frame flash of the caret at the default position after autoFocus.
+    useLayoutEffect(() => {
+        const ta = taRef.current;
+        const hint = ctx.pendingCaretRef?.current;
+        if (ta && hint) {
+            placeCaretAtColumn(ta, hint.edge, hint.column);
+            ctx.pendingCaretRef!.current = null; // consumed
+        }
+        // Only run on mount (empty deps). Geometry is only valid after the
+        // textarea is attached to the DOM.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const commitIfDirty = (text: string) => {
         const normalized = normalizeLineEndings(text).trimEnd();
@@ -147,6 +166,7 @@ function EditTextarea({
 
     return (
         <textarea
+            ref={taRef}
             autoFocus
             value={draft}
             style={{
@@ -169,15 +189,69 @@ function EditTextarea({
             onBlur={() => {
                 // Do not commit mid-IME-composition (e.g. mobile dismiss before compositionend).
                 if (isComposingRef.current) return;
+                // P2.4d: check for a pending click-switch FIRST. If a dirty switch is in
+                // progress, handleClickSwitchBlur commits A, stashes B's landing, and closes
+                // the editor — all in one shot. Returns true when consumed (skip normal path).
+                const sourceInfoJson = JSON.stringify(resolved.sourceEntry);
+                if (ctx.handleClickSwitchBlur?.(draft, sourceInfoJson)) {
+                    return; // dirty click-switch handled — do NOT also focus-restore or commitIfDirty
+                }
+                // P2.4c: stash focus restore BEFORE commitIfDirty closes the editor.
+                // requestFocusRestore only stashes the landing + arms the timer;
+                // setEditTarget(null) is called inside commitIfDirty.
+                ctx.requestFocusRestore?.(ctx.editTarget!.anchorR0);
                 commitIfDirty(draft);
             }}
             onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                     e.preventDefault();
+                    // P2.4c: stash focus restore BEFORE commitIfDirty closes the editor.
+                    // requestFocusRestore only stashes; commitIfDirty handles commit + close.
+                    ctx.requestFocusRestore?.(ctx.editTarget!.anchorR0);
                     commitIfDirty(draft);
                 } else if (e.key === 'Escape') {
                     e.preventDefault();
+                    // P2.4b: cancel any prior pending land so Esc during a dirty move
+                    // (editor closed, waiting for commit re-render) does not reland.
+                    // P2.4c: stash a focus-restore landing (Esc = no commit = no re-render,
+                    // so the reland effect won't fire; the timeout fallback restores focus).
+                    // cancelPendingLand is called first; requestFocusRestore re-arms the timer.
+                    ctx.cancelPendingLand?.();
+                    ctx.requestFocusRestore?.(ctx.editTarget!.anchorR0);
                     ctx.setEditTarget!(null);
+                } else if (
+                    // P2.4b: cross-surface arrow navigation.
+                    // Only bare arrows (no Shift/Ctrl/Alt/Meta) trigger a move.
+                    // Modified arrows (Shift+Arrow selects; Ctrl+Arrow jumps words) must
+                    // be left to the native textarea — they must NOT leave the surface.
+                    !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey &&
+                    ctx.requestMove &&
+                    (e.key === 'ArrowDown' || e.key === 'ArrowUp')
+                ) {
+                    const ta = e.currentTarget as HTMLTextAreaElement;
+                    const isDown = e.key === 'ArrowDown';
+                    const onEdge = isDown
+                        ? isOnLastVisualLine(ta)
+                        : isOnFirstVisualLine(ta);
+
+                    if (onEdge) {
+                        e.preventDefault();
+                        const exitColumn = getLogicalColumn(ta);
+                        const normalized = normalizeLineEndings(draft).trimEnd();
+                        // Empty/whitespace draft counts as not-dirty (cancel path),
+                        // matching commitIfDirty's empty→cancel guard.
+                        const isDirty = !!normalized && normalized !== anchorSlice;
+                        ctx.requestMove(
+                            isDown ? 'down' : 'up',
+                            exitColumn,
+                            draft,
+                            isDirty,
+                            JSON.stringify(resolved.sourceEntry),
+                        );
+                        // Note: a move is NOT a plain close — requestFocusRestore is NOT
+                        // called here. The move stashes intent:'activate' via requestMove.
+                    }
+                    // If NOT on the edge, fall through — native caret move.
                 }
             }}
         />
