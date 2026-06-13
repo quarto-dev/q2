@@ -470,6 +470,16 @@ xtask. Design: `claude-notes/plans/2026-06-11-q2-mcp-hub-auth.md`
 - Always verify WASM changes with the correct build command
 - Fresh clone builds require dist/ directories to exist; run full build before testing
 
+## Cutting a release
+
+To ship a signed, multi-platform `q2` binary release (the `Release`
+GitHub Actions workflow), follow the runbook:
+**`claude-notes/instructions/release-runbook.md`**. It covers the
+version-bump → tag → monitor → verify procedure and the non-obvious
+gotchas (tag must equal `Cargo.toml` version; linux is gnu not musl;
+signing happens in the release job; etc.). Do not improvise a release —
+the preflight job and `--locked` builds are unforgiving.
+
 ## Full Project Verification
 
 **IMPORTANT**: Before committing changes that affect `quarto-core`, `quarto-pandoc-types`, or other crates used by `wasm-quarto-hub-client`, run full verification:
