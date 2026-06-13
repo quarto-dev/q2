@@ -1,279 +1,390 @@
 # Block editing in q2-preview — design / master spec
 
-**Date:** 2026-06-06 (interaction model revised 2026-06-07; dual-node substrate +
-series re-split 2026-06-08; render-component API + boundary section revised 2026-06-09)
-**Branch:** feature/block-editing (worktree `.worktrees/block-editing`)
-**Status:** Design approved in brainstorming; revised through pre-implementation
-review. Series: **Plan 1, 2a, 2b, 3, 4** under `claude-notes/plans/`.
-**Builds on:** `claude-notes/plans/2026-06-04-target-incremental-writes.md`
-(the `apply_node_edit` / source-slice round-trip this feature extends).
+**Date:** 2026-06-06 (interaction model 2026-06-07; dual-node substrate 2026-06-08;
+render-component API 2026-06-09). **Reworked 2026-06-13** to describe the system *as built
+through Phase 2* — the resolution model, the byte-offset identity + self-heal concurrency model,
+and the cross-surface cursor — which the earlier draft predated.
+**Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`).
+**Status:** **Phases 1–2 implemented** (locked depth-aware editing + cross-surface cursor +
+concurrency-safe identity). **Phase 3 (the depth-cursor unlock) is designed but not yet built**, and
+is owned by a separate agent. Implementation plan + execution log:
+`claude-notes/plans/2026-06-11-block-editing-improvements.md`.
+**Builds on:** `claude-notes/plans/2026-06-04-target-incremental-writes.md` (the `apply_node_edit`
+source-slice round-trip this feature extends).
 
 ---
 
 ## Overview
 
-Edit a Quarto document's **markdown source, block by block, inside the live
-preview**:
+A user edits a Quarto document's **markdown source, block by block, inside the live preview**. The
+editor shows the *markdown source* of a block — sliced from the document `content` by the block's
+byte range — not its rendered text. Activating any source-backed block turns it into a same-sized
+markdown textarea; committing writes the edit back through the existing core
+(`parse_qmd_content → splice into the untransformed AST → reconcile → incremental_write`). That
+write-back core is unchanged; this feature is the front-end interaction and identity layer above it,
+plus (in Phase 3) one new Rust serialization entry point.
 
-1. **Edit the markdown, not the rendered text.** The editor shows the *markdown
-   source* of the node, source-sliced from the document `content`.
-2. **Every source-backed block is its own edit affordance.** No pencil, no
-   buttons: hovering (mouse), pressing (touch), or focusing (keyboard) a block
-   **outlines** it; activating turns it into a same-sized markdown editor. Uniform
-   across block types and input modalities.
-3. **The untransformed AST is a first-class dispatch input.** Every rendered node
-   carries both `transformedNode` (display) and `sourceNode` (the untransformed
-   counterpart, for editing). Authors and the built-in editor never map between
-   trees by hand.
+Two ideas organize the whole design:
 
-All of it rides the existing write-back core: `parse_qmd_content → splice into the
-untransformed AST → compute_reconciliation → incremental_write`. The
-reconcile/writer core is unchanged.
+1. **The untransformed AST is a first-class dispatch input.** Every rendered node carries both its
+   transformed (display) form and its untransformed `sourceNode` counterpart. Editing operates on the
+   `sourceNode`, so shortcodes / cross-refs / includes inside the edited region survive as their
+   *source*, not as their expansions.
+2. **Editable surfaces nest, so a click or an arrow selects a root-to-leaf *path*, not a single
+   surface.** Collapsing that path to one editable surface is the *resolution model* below — the
+   conceptual core of Phases 1–3.
 
-## Interaction model (no pencil — revised 2026-06-07)
+---
 
-The earlier draft used a floating pencil overlay; dropped in favor of **the block
-being its own affordance**, which removes overlay positioning/scroll-tracking and
-is keyboard- and tablet-friendly.
+## The resolution model (the conceptual core)
 
-- **Mouse:** hover outlines the deepest editable target; click activates.
-- **Touch (Pointer Events):** one progressive press — `pointerdown` outlines
-  (reveal); holding past `HOLD_MS` activates; early release / move-beyond-
-  threshold cancels. OS gestures suppressed (`touch-action: none`, `contextmenu`
-  preventDefault, `-webkit-touch-callout: none`).
-- **Keyboard (roving tabindex):** the edit layer is a single Tab stop; arrows move
-  the active region in **DOM pre-order** (section → heading → first para → …);
-  Enter/Space activates; Esc exits; `:focus-visible` reuses the outline; ARIA
-  role + name per region.
+Because editable surfaces nest in the DOM exactly as they nest in the AST, a pointer click (or an
+arrow key) falls inside a whole chain of surfaces. A policy must collapse that chain to one. The
+policy is **deepest-wins hit-testing with a principled tiebreak**: assign each pixel to the *deepest*
+surface whose box contains it. A child's interior resolves to the child; a container's *exclusive*
+pixels — its chrome (a callout title bar, a blockquote rule, a div's padding, the gaps between
+siblings) — resolve to the container. Mechanically this is `closest('[data-block-pool-id]')`, and it
+partitions the visible document uniquely, provided top-level blocks are always candidates.
 
-**Heading vs. section by geometry (Plan 4).** An `<h2>` is a full-width block box,
-so the split uses **glyph-rect hit-testing**: the heading's inline text rectangle
-(`Range.getClientRects()`) is the heading target; the section rectangle showing
-through elsewhere (notably right of the heading) is the section target. Keyboard
-expresses the same split as adjacent pre-order stops. This is the first instance
-of a general **"text selects, background activates"** model the architecture is
-built to extend.
+Deepest-wins has exactly one ambiguity: **coincident extents** — a single child wrapped by a
+chrome-less container whose box fits it exactly (a bare `<div>` around one paragraph, measured at 0px
+on all four edges). There the child's box and the container's box coincide, and "deepest" is
+undefined. The **mode** is precisely how that tie is broken:
 
-**Editor sizing (Plan 2b prereq).** P1 no-reflow height match (textarea sized to
-the measured box); P2 body-sized monospace (≈0.9× computed body); P3 auto-fit font
-*considered, not implemented* (logical-vs-wrapped-line problem).
+- **Locked (the default, Phase 2): take the topmost of the coincident stack.** A text click on a
+  paragraph inside a chrome-less div opens the *div*. Everything non-coincident (multi-child
+  containers, anything with visible chrome) still resolves by plain deepest-wins.
+- **Unlocked (Phase 3, default-off): take the leaf.** The click descends fully.
 
-## Decisions
+Locked mode adds one rule that **dominates** the coincidence tiebreak: **prefixing containers are
+atomic.** `BlockQuote`, `BulletList`, `OrderedList`, and `DefinitionList` (`<blockquote>`/`<ul>`/`<ol>`/`<dl>`)
+are never descended into in locked mode — a click anywhere inside selects the *whole outermost* such
+container, edited as one buffer (`> a` / `> b`, markers and all). The locked target is therefore a
+single precedence: **the outermost prefixing container if the path crosses one; otherwise the topmost
+coincident ancestor of the leaf.**
 
-| # | Decision | Rationale |
-|---|----------|-----------|
-| D1 | **Source-slice** for the edit buffer; **`sourceNode`** for AST edits. | The textarea shows exact source bytes (no WASM); render components edit the untransformed subtree. |
-| D2 | **No request/response.** Ship `content` + `untransformedAst` on `UPDATE_AST`; the iframe slices and resolves `sourceNode` locally. | The iframe already has the pool; it only lacked `content` + the untransformed tree. |
-| D3 | **Editable = source-backed** (`sourceNode != null`), active-file. | You edit source, not generated output. |
-| D4 | **The block is the affordance — no pencil.** Hover/press/focus outlines; activate to edit. Heading-vs-section by glyph-rect (Plan 4). | Removes overlay positioning entirely; keyboard/touch-friendly; the block has the right geometry. The framework never wraps blocks. |
-| D5 | **Editor = in-place `<textarea>`**, monospace, sized to the block (no reflow). | Plain-text markdown source; drops nbsp/`viewKey` hacks. |
-| D6 | **Activate per modality** (click / progressive-press / Enter); commit = ⌘/Ctrl+Enter or blur; Esc/empty = cancel. | Uniform across types and inputs. |
-| D7 | **Sections: frontend envelope + backend range** (Plan 4). | The section `Div` is `Generated` (not source-backed); a section spans multiple untransformed blocks. |
-| D8 | **Edit only the active file** (`file_id == 0`). | `apply_node_edit` hardcodes `FileId(0)`. |
-| D9 | **Editability is a structural property of `sourceNode`** (Plan 2a), not a context-propagation gate. | Shipping the untransformed AST lets us read reachability directly; obviates the opt-out `InsideContainerContext` + closed-container audit entirely. |
-| D10 | **Empty commit = cancel.** | Avoids accidental destruction without an undo story. |
+That precedence is not optional, and the reason is the edit buffer. A locked buffer is a **byte-slice**
+of the target's source range — cheap, synchronous, no WASM. Only the *outermost* prefixing container
+has a clean slice: an inner target's slice carries the outer container's `> `/indent on every
+continuation line. So locked mode, by always stopping at the outermost prefixing container, guarantees
+every buffer is a clean slice and **never needs regeneration**. That guarantee is what lets the
+expensive AST-regeneration path stay entirely behind the Phase-3 flag (below).
+
+**Coincidence is a screen-extent property, not an AST child count.** It compares bounding rects on
+**all four edges** within a tight epsilon. (Measured against real Bootstrap + theme CSS: a chrome-less
+single-child div coincides with its child at *exactly* 0px, while the nearest deciding edge of any
+chrome-bearing container is ≥~12px. A 1px border counts as chrome and resolves to the leaf.) The
+comparison and the tile enumeration both **skip non-laid-out surfaces** (`offsetParent === null` /
+zero rect — e.g. a collapsed callout body), so a zero-rect never corrupts a comparison and an editor
+never opens on a block the user cannot see.
+
+The partition this yields — the ordered, deduped, visible **locked tiles** — is a shared primitive.
+Activation, cross-surface navigation, and the keyboard roving-tabindex all consume the same tile
+helper, so the focus ring, the arrow destinations, and the click target can never disagree.
+
+---
+
+## Identity and concurrency (the data-integrity core)
+
+The preview is a collaborative surface: a second user (or any pipeline re-render) can rewrite the
+document while you have an editor open. The identity of "the block I am editing" must survive that.
+
+**The pool index is not an identity.** Every source-tracked node carries a pool index `s`
+(`data-block-pool-id`), but `s` is a *positional ordinal reassigned on every render*. A block's
+**start byte offset `r[0]` is stable** across the block's own edit, and distinct per block. So the
+editor keys identity off the byte offset, never the ordinal:
+
+```
+editTarget = { anchorR0, anchorR1, anchorSlice, contentHeight, boxStyle }
+```
+
+`anchorR0`/`anchorR1` are the edited block's source byte range; `anchorSlice` is its
+normalized, trimmed source text, frozen when the editor opens. The dispatcher renders the textarea
+for the block whose `resolved.sourceEntry.r[0]` equals `editTarget.anchorR0` — a rect-free,
+render-safe integer compare in the byte-offset coordinate system the commit *also* targets by.
+
+**The bug this fixes is real and was live on `main`.** When matching keyed off the pool ordinal, a
+collaborator inserting or removing a block *above* your open editor shifted every ordinal, so your
+stale ordinal silently selected a *different* block — and your next commit wrote your text into that
+block's range. Byte-offset identity moves matching into the commit's own coordinate system, and a
+content guard (below) closes the rest of the window.
+
+**Self-heal carries the open editor across an external re-render.** When new content arrives while an
+editor is open, a layout effect re-finds the block by content: it locates the candidate at-or-after
+`anchorR0` and verifies its slice still equals `anchorSlice`. On a match it **re-anchors** (updates
+`anchorR0`/`anchorR1`, preserving the draft) and the editor stays open on the same block; on a
+mismatch (your block was edited under you) it **drops** the editor, discards the draft, and moves
+focus to the nearest visible tile. Dropping is the safe outcome at this granularity, where a merge is
+not attainable.
+
+**The draft is controlled, and lives at the iframe root.** Block child lists are index-keyed, so a
+collaborator edit above you remounts the textarea — which would discard an uncontrolled
+`defaultValue`. The draft therefore lives in a root ref (`editDraftRef`), seeded once at open and
+mirrored into the textarea's local state for the controlled value; a remount re-seeds from the
+surviving ref, so typed text survives. The per-keystroke `setState` stays local to the textarea, so
+typing never re-renders the document. IME composition is handled so a mid-composition update cannot
+prematurely commit.
+
+Three invariants fell out of building (and breaking, and fixing) this layer; future work must respect
+them:
+
+- **An actively-edited block is a textarea *wrapper* with no `data-block-pool-id`.** The dispatcher
+  replaces the block element with a measure-and-set wrapper, and that wrapper deliberately omits the
+  pool-id (so a click inside the editor cannot "climb" to a parent — Phase 1). Consequently the
+  active editor is **not a tile**: any tile-set query (`tileForAnchorR0`, `enumerateLockedTiles`) will
+  never find it. The wrapper is reachable only through a ref (`activeEditRegionRef`).
+- **The active editor's visibility must be judged from its wrapper, never the tile set.** "Did my
+  block survive the edit?" is a *logic* question (pool + content); "is my block still visible?" is a
+  *DOM* question answered by `activeEditRegionRef`'s box, after the re-anchor remount. Conflating the
+  two — asking the tile set whether the active editor is visible — makes the answer permanently
+  "hidden" (it is never a tile) and silently drops every keep.
+- **A textarea must not commit unless it is still the active target.** Because `onBlur` fires during
+  unmount, a dropped or re-anchored-away editor would otherwise commit its stale draft onto whatever
+  block now occupies that range. The commit checks the *current* `editTarget` (via a ref) and no-ops
+  when it no longer matches — so a drop discards, as intended, rather than corrupts.
+
+---
 
 ## Editability gate — the structural (dual-node) model
 
-A node is editable iff the commit path can reach its untransformed counterpart.
-Plan 2a ships the untransformed AST to the iframe and builds a SourceInfo-**value**
-index in `PreviewContext` (the two trees have separate pools but shared values).
-q2-preview's leaf components look up their pool entry in this index. Then:
+A node is editable iff the commit path can reach its untransformed counterpart. The iframe receives
+the untransformed AST and builds a SourceInfo-**value** index (`sourceIndex`) in `PreviewContext`; the
+two trees carry separate pools but shared values, so correspondence is by value and survives
+transforms that *move* blocks (appendix structure, footnotes) or *insert* structure (sectionize → a
+`Generated` Div with no source counterpart).
 
 ```
-editable(node) = ctx.resolveSource(node)?.reachabilityClass ∈ allowed(plan)
-              && editableType(node)   // Plan 2b+
+editable(node) = ctx.resolveSource(node)?.reachabilityClass ∈ allowed(mode) && editableType(node)
 ```
 
-- **Present in `sourceIndex`** subsumes the old `t==0` (Original) **and** `d==0`
-  (active-file) conjuncts — a Generated/Substring/Concat or included-file node's
-  `s` value matches nothing in the active-file untransformed index.
-- `reachabilityClass` is assigned at index-build time from the node's untransformed
-  ancestry: **`TopLevel`** (top-level block), **`Descendable`** (nested only in
-  `Div`(non-section)/`BlockQuote`/lists/`DefinitionList`/`Figure`-body),
-  **`Opaque`** (reached by crossing a `Table` cell/caption or `Figure` caption;
-  absorbing). A small **structural classifier** computed once, not a per-component
-  context push.
-- `allowed`: Plan 2a/2b `{TopLevel}`; Plan 3 `{TopLevel, Descendable}`; `Opaque`
+- Presence in `sourceIndex` subsumes the old `t==0` (Original) **and** `d==0` (active-file)
+  conjuncts: a Generated / Substring / included-file node's `s` matches nothing in the active-file
+  index.
+- `reachabilityClass` is assigned once at index-build from the untransformed ancestry: **`TopLevel`**
+  (top-level block); **`Descendable`** (nested only in `Div`(non-section) / `BlockQuote` / lists /
+  `DefinitionList` / `Figure`-body); **`Opaque`** (reached by crossing a `Table` cell/caption or
+  `Figure` caption — absorbing, never editable).
+- `allowed`: locked mode admits `{TopLevel, Descendable}` through the gate, then the *resolution
+  model* collapses to the locked tile; the unlocked (Phase 3) mode descends to the leaf. `Opaque` is
   never editable in this series.
-- `editableType` (Para/Header/CodeBlock/…) is Plan 2b — not part of Plan 2a's gate.
-- Key format: `serializeSourceEntry(sourceEntry)` = `"${t}:${r[0]}-${r[1]}:${d}"` (compact, deterministic).
-- **`NodeArgs` (`framework/types.ts`) is unchanged.** The index lives entirely in
-  `PreviewContext`; q2-debug and q2-slides are unaffected.
+- Key format: `serializeSourceEntry(entry)` = `"${t}:${r[0]}-${r[1]}:${d}"`.
+- `NodeArgs` (`framework/types.ts`) is unchanged; the index lives entirely in `PreviewContext`, so
+  q2-debug and q2-slides are unaffected.
 
-Correspondence is **by value**, so it survives transforms that *move* blocks
-(appendix-structure, footnotes) and *insert* structure (sectionize → section
-`Div` is Generated → `sourceNode = null`). And **`sourceNode` is always a plain
-primitive, never a CustomNode** (see "Plan 5 dissolved").
+This **replaces** the earlier opt-out `InsideContainerContext` design entirely: no context push, no
+default, no closed-container audit, no drift hazard.
 
-This **replaces** the earlier opt-out `InsideContainerContext` design: no context,
-no default, no closed-container audit, no drift hazard.
+---
 
-## Format routing (by design)
+## Interaction model
 
-**q2-preview** ships `untransformedAstJson`, builds `PreviewContext.sourceIndex`,
-uses the structural gate, and commits **targeted subtrees** (SourceInfo →
-`apply_node_edit`) — no copy-on-write bubble (the Rust reconcile rebuilds to root).
+The block *is* its own affordance — no pencil, no buttons. Hovering (mouse), pressing (touch), or
+focusing (keyboard) a surface outlines it; activating turns it into the markdown editor. The outline
+is a `box-shadow` on the element itself, so there is no overlay to position and no scroll to track.
 
-**q2-debug / q2-slides** drive the display directly from the AST they receive,
-without a pipeline or transforms. They have their own registries and leaf components;
-they never receive `untransformedAstJson` and never consult `sourceIndex`. The shared
-framework (`Node`, `renderChildren`, `NodeArgs`) is unchanged by Plan 2a.
+- **Mouse:** hover outlines the resolved locked tile; click activates it. A click *inside* an open
+  editor is a caret move, not a re-resolution — the active-region ref suppresses the climb that would
+  otherwise carry the click up to a parent tile (the Phase-1 fix).
+- **Touch (Pointer Events):** one progressive press — `pointerdown` outlines (reveal); holding past
+  `HOLD_MS` activates; early release or move-beyond-threshold cancels. OS gestures are suppressed
+  (`touch-action: pan-y`, `contextmenu` preventDefault for touch, `-webkit-touch-callout: none`).
+- **Keyboard (roving tabindex):** the edit layer is a single Tab stop; arrows move a programmatic
+  focus across the **locked tiles** (so the focus ring lands exactly where Enter will open an editor,
+  and hidden tiles are skipped); Enter/Space activates; Esc exits; `:focus-visible` reuses the
+  outline; ARIA role + name per region.
 
-The two routings differ because only q2-preview has a transform gap between the
-displayed AST and the source AST, and needs the targeted-subtree splice.
+**Cross-surface cursor.** While editing, the caret can leave the surface: **ArrowDown on the last
+visual line** opens the next tile, **ArrowUp on the first visual line** opens the previous, and the
+ends wrap. "Last/first *visual* line" is a geometry question (soft-wrapped rows, not `\n`-delimited
+lines), answered by a hidden mirror-div that mirrors the textarea's wrapping; the *destination* is a
+*logical* source-line projection (down → the first tile at/after `L0 + n`; up → the tile before `L0`),
+resolved against the post-commit document. Only bare arrows move; modifier+arrow keeps native textarea
+behavior.
+
+Three post-interaction outcomes route through one landing mechanism and must not be conflated:
+
+- **A move** (arrow, or a click onto a *different* tile) commits the current edit and opens the
+  destination. A modified move commits, closes, and *relands* after the commit's re-render (a render
+  arrives via the one-way postMessage channel; a short timeout is the fallback for a byte-identical
+  commit that changes nothing to key off). An unmodified move hops synchronously, with no commit and
+  no editability gap. The caret lands on the destination's first (↓) or last (↑) line at the captured
+  column, clamped.
+- **A plain commit** (Esc / ⌘-Enter / blur with no move) closes the editor and returns focus to the
+  edited tile **by `anchorR0`** — so roving-tabindex resumes there, even though the pool ordinal has
+  changed.
+- **An external re-render** (collaborator) while editing triggers **self-heal**, not a commit (above).
+
+---
+
+## Edit buffer and commit
+
+The locked buffer is a byte-slice of the target's source range, line-ending-normalized and trimmed.
+Two normalizations are load-bearing because the comparisons depend on them:
+
+- **CRLF.** pampa parses CRLF natively (byte offsets include `\r`), but a textarea LF-normalizes its
+  value. So a sliced CRLF block reads `\r\n` while the draft reads `\n`. The fix normalizes every
+  *sliced string* (`anchorSlice`, the draft seed, any self-heal candidate slice), **never** the
+  `content` buffer itself — whose offsets live in the CRLF domain.
+- **Dirty guard.** A commit fires only when `normalize(draft).trimEnd() !== anchorSlice`. An untouched
+  blur is a no-op (so a list no longer renumbers on an empty blur, and a silently re-targeted editor
+  no longer rewrites a wrong block); an emptied buffer cancels rather than deleting.
+
+Commit then runs the existing write-back core unchanged: `commitTextEdit(JSON.stringify(sourceEntry),
+text)` → parent `parse_qmd_content` → `apply_node_edit` (locates the node by SourceInfo, splices,
+re-serializes the enclosing container wholesale) → `onContentRewrite` → re-render → fresh
+`UPDATE_AST`. The kept guarantee is that blocks *outside* the edit stay byte-verbatim; the edited
+container is reformatted (Tier-2), so commits on lists/quotes are snapshot-tested, never byte-asserted.
+
+---
 
 ## Two edit modalities, two channels
 
-- **Built-in editing → text channel.** The textarea shows source markdown (slice
-  `content` over `sourceNode`'s range); commit sends `newText`; the parent
-  `parse_qmd_content` → `apply_node_edit`. (The iframe can't run the writer, so
-  text is the right representation for a textarea.)
+- **Built-in editing → text channel.** The textarea shows source markdown; commit sends `newText`;
+  the parent parses and splices. (The iframe cannot run the writer, so text is the right
+  representation for a textarea.)
 - **Render-component editing → subtree channel.** A component calls
-  `edit.commitSubtreeEdit(destinationSourceInfoJson, modifiedBlock)` with a clone
-  of `resolved.sourceNode`; `PreviewNodeEditPayload` is a `channel`-discriminated
-  union (`'text'` | `'subtree'`); the parent passes the subtree variant straight
-  to `apply_node_edit` (no parse step). Editing `sourceNode` (not the transformed
-  node) is what keeps shortcodes/refs/includes **inside** the edited region from
-  being baked in as their expansions.
+  `commitSubtreeEdit(destinationSourceInfoJson, modifiedBlock)` with a clone of `resolved.sourceNode`;
+  `PreviewNodeEditPayload` is a `channel`-discriminated union (`'text'` | `'subtree'`); the parent
+  passes the subtree variant straight to `apply_node_edit` (no parse). Editing the `sourceNode`
+  (not the transformed node) keeps shortcodes/refs/includes inside the region from being baked in.
 
-Render-component authors access `resolveSource` and `commitSubtreeEdit` via
-**`usePreviewEdit()`** from `window.__Q2_PREVIEW_RENDERER__` — a hook that wraps
-`useContext(PreviewContext)` and returns nullish functions when the context is
-absent (q2-debug, q2-slides). `NodeArgs` and `PreviewContext` are not changed or
-exposed for this purpose; `usePreviewEdit` is the public surface. See Plan 2b for
-the full API and migration example.
+Render-component authors reach `resolveSource` + `commitSubtreeEdit` via **`usePreviewEdit()`** (from
+`window.__Q2_PREVIEW_RENDERER__`), which wraps `useContext(PreviewContext)` and returns nullish
+functions when the context is absent (q2-debug, q2-slides). `NodeArgs`/`PreviewContext` are not
+exposed for this purpose; `usePreviewEdit` is the public surface.
+
+---
+
+## Format routing (by design)
+
+**q2-preview** ships `untransformedAstJson`, builds `sourceIndex`, uses the structural gate, and
+commits targeted subtrees (SourceInfo → `apply_node_edit`) — no copy-on-write bubble, since the Rust
+reconcile rebuilds to root.
+
+**q2-debug / q2-slides** drive the display directly from the AST they receive, with no pipeline,
+transforms, `untransformedAstJson`, or `sourceIndex`. The shared framework (`Node`, `renderChildren`,
+`NodeArgs`) is unchanged. The two routings differ because only q2-preview has a transform gap between
+the displayed AST and the source AST.
+
+---
 
 ## Plan 5 dissolved (CustomNode writing/editability)
 
-We resurrected the old Plan-7e ("the empty `Block::Custom` writer arm deletes a
-callout on edit") and then dissolved it. **Reason (verified 2026-06-08):** a
-callout is a plain `Div.callout-note` in the *untransformed* AST — the
-Callout/Theorem/Proof/FloatRefTarget CustomNodes are all *transform* products and
-do not exist pre-pipeline. Since edits operate on `sourceNode` (untransformed),
-the writer is **never** asked to serialize a CustomNode on the edit path. So:
-- Writer arms (7e): **not needed** for this epic. (Optional hardening side-bead:
-  make the empty `Block::Custom` arm *error* rather than silently emit nothing,
-  as a guard against a component that wrongly submits a transformed node.)
-- Callout/theorem **editability**: subsumed by **Plan 2b** — their `sourceNode` is
-  a writer-covered `Div`, editable-as-whole once the `custom/` components spread
-  `data-block-pool-id` and participate in the affordance. Their **bodies** ride
-  **Plan 3** (nested descent into the untransformed `Div`).
+A callout is a plain `Div.callout-note` in the *untransformed* AST; the
+Callout/Theorem/Proof/FloatRefTarget CustomNodes are transform products that do not exist
+pre-pipeline. Since edits operate on the `sourceNode`, the writer is never asked to serialize a
+CustomNode on the edit path, so the old "empty `Block::Custom` writer arm" worry is moot. Callout /
+theorem **editability** is just whole-`Div` editing once the `custom/` components carry the affordance;
+their **bodies** ride Phase 3 (descent into the untransformed `Div`).
 
-## `data-block-pool-id` placement and composition (Plan 2b)
+---
 
-The affordance attribute lives on the block's **own root element**, never on a
-framework-added wrapper — because the framework never wraps (D4).
-`useBlockEditHover`'s `closest('[data-block-pool-id]')` finds it there.
+## Component / module map
 
-Custom components that render the block through `<B>` or `renderChildren`
-preserve the attribute automatically. A component that wraps the block output
-(e.g. `comment`'s `position:relative` div) gets both its overlay UI **and** the
-built-in text-edit affordance on the inner element — no extra work needed.
+The edit-state machine lives in **`PreviewRoot.tsx`** (extracted from `entry.tsx` so it is mountable
+in tests): it owns `editTarget` state, `editDraftRef`, `editTargetRef`, `activeEditRegionRef`, the
+**self-heal** effect, the **landing** effect (`pendingLandingRef`/`pendingCaretRef` + a render-keyed
+layout effect with a timeout fallback) serving `intent:'activate'` (move/click-switch) and
+`intent:'focus'` (plain commit), the `requestMove`/`requestFocusRestore`/`requestClickSwitch`/
+`cancelPendingLand` callbacks, and the `PreviewContext` provider. (`entry.tsx` is now thin: module-top
+side effects + the `setAst` wiring.)
 
-A component that replaces the rendered block entirely (no `<B>` delegation,
-fully custom HTML) emits no `data-block-pool-id` and gets no built-in affordance
-— a natural consequence of not delegating, not a distinct mechanism. If such a
-component wants the affordance it spreads `data-block-pool-id={poolId}` on its
-own root.
+Under `ts-packages/preview-renderer/src/q2-preview/`:
 
-## Key facts established by research (with refs)
+- `lockedTiles.ts` — the resolution primitives: `resolveLockedTile`, `enumerateLockedTiles`,
+  `isVisibleTile`, `rectsCoincide`, `tileForAnchorR0`, `findReanchorCandidate`, `captureEditTarget`,
+  `measureTileBox`.
+- `byteLineMap.ts` — UTF-8 byte ↔ 0-based line (`lineOf`/`lineStart`/`lineCount`).
+- `caretGeometry.ts` — `isOnFirst/LastVisualLine` (mirror-div geometry), `getLogicalColumn`,
+  `placeCaretAtColumn`.
+- `useBlockEditHover.tsx` — the delegated host handler (`activate` resolves the locked tile + captures
+  identity + measures the box + seeds the draft; pointer classification for caret-move vs switch).
+- `dispatchers.tsx` — `Block`/`CustomBlock`, `isBlockEditTarget` (matches `anchorR0`), `EditTextarea`
+  (controlled value, dirty + commit guard, IME, move trigger, caret-on-arrival).
+- `PreviewContext.tsx`, `sourceIndex.ts` — context surface and the value index.
 
-- **`AttributionWrap` is a passthrough in preview** (`attribution.tsx:153`); blocks
-  are not wrapped — the block's own root carries `data-block-pool-id`.
-- **`useAttributionHover` is the affordance precedent** (`attribution.tsx:189`):
-  delegated handler + `closest()`. The edit hover reuses that shape (no overlay).
-- **Pool entry shape** (`types/sourceInfo.ts:69-77`): `Original {t:0, r:[s,e],
-  d:file}`; `r` are UTF-8 byte offsets (slice via `TextEncoder`/`TextDecoder`).
-- **Every block carries `s`** uniformly (`writers/json.rs`). Verified: a fresh
-  parse of heading→para/list/table/quote/div/rawblock is all `t:0` Original,
-  whole-block ranges (a fenced `:::` div is one Original range → editable as a
-  whole, which is how you edit its attrs/classes). A callout parses to
-  `Div.callout-note` (no `type_name`).
-- **`preimage_in`** (`source_info.rs:435-471`): `Some` for Original; `None` for
-  sectionize Divs (Generated).
-- **The writer supports N→M block replacement** preserving outside bytes
-  (`incremental.rs`); it re-serializes block **containers wholesale** (Tier-2).
-- **Container shapes** (`block.rs`): `Div/BlockQuote/Figure` hold `Blocks`; lists
-  hold `Vec<Blocks>`; `DefinitionList` `Vec<(Inlines, Vec<Blocks>)>` → Plan 3 path.
-- **`lookup_block` is top-level only** today (`node_lookup.rs`), Pass-1 exact +
-  Pass-2 `preimage_in` covering. Pass-2 is unused on live paths and is **removed**
-  in 2b (it was target-incremental-writes' "property #2", retired with it).
+---
 
-## Data flow (edit)
+## Phase breakdown
 
-```
-render → parent sends UPDATE_AST { astJson, untransformedAstJson, content, … } → iframe
-dispatch → each node gets { transformedNode, sourceNode, reachabilityClass }
-input  → useBlockEditHover → outline deepest editable block
-activate → built-in: textarea(sourceNode range slice)   |  component: edit sourceNode
-commit → { channel:'text',    destinationSourceInfoJson, newText }
-      OR { channel:'subtree', destinationSourceInfoJson, modifiedSubtreeJson }
-parent → channel=text: parse_qmd_content(newText) → apply_node_edit
-      OR channel=subtree: apply_node_edit directly
-       → onContentRewrite(newQmd) → re-render → fresh UPDATE_AST
-```
+- **Phase 1 — active-region fix (done).** A click inside an open editor no longer climbs to the
+  parent; the active editor's wrapper is marked by `activeEditRegionRef`, and a click inside it is a
+  caret move. Mode-independent; ships first.
+- **Phase 2 — locked depth-aware editing + cross-surface cursor + concurrency-safe identity (done).**
+  Everyone gets this; no WASM, no setting. Resolution collapses a click to the locked tile
+  (deepest-wins + coincidence + prefixing-atomic); the roving-tabindex aligns to the locked tiles;
+  the cross-surface cursor moves between tiles (arrows + click-switch, committing as it goes); the
+  byte-offset identity + controlled value + self-heal + dirty/commit guards make editing
+  concurrency-safe and fix the live re-target data-integrity bug. The default click target therefore
+  changes from leaf-first (old) to locked-tile (a chrome-less single-child div now opens the div; a
+  list/quote opens whole) — intended.
+- **Phase 3 — "Depth cursor (nested blocks)" unlock (designed, not yet built; separate agent).** A
+  default-off `unlockDepthCursor` flag turns the locked default into a power-user depth editor: clicks
+  resolve to the leaf; two depth keys move in/out through nesting (`Cmd+Ctrl+←/→` on macOS,
+  `Alt+Shift+←/→` elsewhere); a breadcrumb chip shows the AST-derived path. **Both hosts can opt in,
+  feeding the same host-agnostic iframe behavior:** hub-client via a reactive `usePreference` setting;
+  the SPA via a `?depthCursor=1` URL query param (read at load) in `PreviewApp.tsx`. The flag +
+  regenerated buffers are optional payload fields, so a host with its opt-in off omits them and the
+  iframe stays locked (zero-touch).
+  Editing a multi-line block *inside* a prefixing container would slice in `> `/indent, so — and only
+  here — the buffer is **regenerated clean from the AST** (`pampa::write_single_block` via a new
+  `regenerate_nested_buffers` WASM entry point), gated so the regeneration pass is unreachable in the
+  locked default. The identity, self-heal, and commit machinery are reused unchanged; the cursor
+  simply tracks a deeper `anchorR0`. (This **supersedes** the earlier "Plan 3 = recursive
+  `lookup_block` path-splice in Rust" mechanism: descent rides AST-regenerated buffers + the existing
+  splice, not a new recursive lookup.) See the plan's Phase 3 section.
 
-## Phase breakdown (the series)
+---
 
-- **Plan 1 — Markdown-faithful editing on Para/Header** *(frontend; done)*.
-  `content` plumbing; `sliceBytes`; `PreviewContext` `content` + `editTarget`;
-  Para/Header textarea showing sliced markdown (click activates — the seed).
-- **Plan 2a — SourceInfo-value index + structural gate** *(frontend substrate;
-  no Rust changes)*. Ship `untransformedAstJson` through the iframe chain;
-  build `sourceIndex` in `PreviewContext` (`useMemo`); refactor Plan 1's
-  Para/Header gate onto `sourceIndex` lookup; `NodeArgs` unchanged; q2-debug
-  and q2-slides unaffected.
-- **Plan 2b — Interaction + editing (built-in + render-component)** *(frontend +
-  Rust cleanup)*. Hover/touch/keyboard → outline → activate; generalized textarea
-  editor + sizing; affordance on all editable types incl. `custom/` components;
-  subtree channel; fix the three render-component demos; the override boundary;
-  Pass-1 guard + remove Pass-2.
-- **Plan 3 — Nested-block descent** *(Rust + thin frontend)*. Recursive
-  `lookup_block` (returns a path) + path splice; the gate admits `Descendable`
-  (one predicate change). Enables editing inside fenced divs / list items /
-  blockquotes / **callout bodies**. Container reformat is Tier-2/snapshotted.
-- **Plan 4 — Section editing + heading/section geometry** *(Rust + frontend)*.
-  Source-envelope range payload; `lookup_range` + range splice; glyph-rect
-  heading-vs-section hit-test; keyboard section stop; whole-container-as-unit via
-  the same geometry.
+## Key facts (pool / write-back, with refs)
 
-## Known limitations (v1 — start safe, more affordances later)
+- **Pool entry shape** (`types/sourceInfo.ts`): `Original {t:0, r:[s,e], d:file}`; `r` are UTF-8 byte
+  offsets (slice via `TextEncoder`/`TextDecoder`). A block and its first *inline* child can share
+  `r[0]`; the dispatcher matches block nodes only, and the `anchorSlice` content check is the arbiter,
+  so the sharing is harmless.
+- **`anchorR0` lives in the pool `r` space, which equals the untransformed `sourceEntry.r`** by
+  value-keyed correspondence (`resolveSource` returns `sourceEntry = pool[node.s]`). Capture at click
+  time from `pool[s].r`; match at render time against `resolved.sourceEntry.r[0]`.
+- **The writer re-serializes containers wholesale** (Tier-2, `incremental.rs`), preserving outside
+  bytes. Container shapes (`block.rs`): `Div/BlockQuote/Figure` hold `Blocks`; lists hold
+  `Vec<Blocks>`; `DefinitionList` holds `Vec<(Inlines, Vec<Blocks>)>`.
+- **postMessage is one-way** (parent→iframe `UPDATE_AST`; iframe→parent `SET_AST`); there is no
+  request/response channel, which is why a modified move's reland keys off the next render (+ timeout
+  fallback) rather than awaiting a specific commit.
 
-- **LineBlock** not editable (`| line` parses as `Para`).
-- **Inline-span editing** out of scope (only `Cite`/`Note` carry `s`) → def-list
-  terms, short captions, `CaptionBlock` not editable.
-- **Table cells/captions, figure captions** not block-editable (`Opaque`).
-- **Generated-container regions** (e.g. `appendix-structure`'s synthesized Div)
-  gated off (no `sourceNode`) — safe, silently uneditable.
-- **Cross-file edits** out of scope.
-- **Selection/link vs click-to-edit** accepted for the demo (a future "background
-  activates / text selects" model or an edit mode resolves it).
+---
 
-## Risks / watch-items
+## Known limitations (v1) and risks
 
-- **Submit is not a no-op.** Commit re-serializes the edited block; Tier-2
-  (containers/tables) reformats. Only **cancel** is a guaranteed no-op; the kept
-  guarantee is that blocks **outside** the edit stay byte-verbatim.
-- **Value-equality invariant** (Plan 2a): `sourceNode` correspondence relies on a
-  transformed Original node's SourceInfo value equaling its untransformed
-  counterpart's; a mismatch degrades **safe** (`sourceNode = null` → not editable),
-  never a wrong commit. The Pass-1 commit guard is the second line of defense.
-- **Attribution + edit-hover coexistence:** when attribution lights up (inert in
-  preview today), two pointer-driven hover systems share `#quarto-content`;
-  undesigned — human-in-the-loop will observe.
-- **Touch long-press** co-opts the OS selection/context-menu gesture.
-- **Shared dispatcher / debug-slides degradation** must be preserved + tested.
+- **LineBlock** not editable (`| line` parses as `Para`); **inline-span editing** out of scope (only
+  `Cite`/`Note` carry `s`); **table cells/captions, figure captions** not block-editable (`Opaque`);
+  **generated-container regions** and **cross-file edits** out of scope.
+- **Commit is not a no-op.** Only *cancel* is a guaranteed no-op; a commit reformats the edited
+  container (Tier-2). The kept guarantee is byte-verbatim *outside* the edit.
+- **Locked coarseness = concurrency-clobber unit.** Two users editing different items of one list both
+  hold the whole-list buffer; last-writer-wins, since the CRDT cannot merge two full-container
+  rewrites. Per-item (unlocked, Phase 3) editing splices each item separately and does not collide.
+- **The destination projection has no concurrency guard.** Self-heal protects the *active* editor; a
+  concurrent collaborator re-render landing first can resolve a move's `destLine` against a
+  doubly-changed document (worst case: off by a tile, never onto nothing). The exact fix is Automerge
+  native cursors — deferred.
+- **Geometry is browser-only.** Coincidence epsilon, collapsed-callout visibility, soft-wrap
+  last-visual-line, and caret-on-arrival are verified in Playwright; jsdom (no layout) cannot test
+  them. Two real bugs (an integer-`scrollHeight` rounding miss in last-line detection; a 2-tile
+  navigation no-op) were caught only by the real browser — a standing argument that environment-
+  dependent behavior must be tested in Playwright, not mocked geometry.
+
+---
 
 ## References
 
-- Round-trip core: `claude-notes/plans/2026-06-04-target-incremental-writes.md`
-- `apply_node_edit.rs`, `node_lookup.rs`, `writers/{incremental,qmd,json}.rs`
-- `quarto-source-map/src/source_info.rs` (`preimage_in`)
-- `framework/attribution.tsx`; `q2-preview/{dispatchers,entry,PreviewContext,
-  PreviewDocument}.tsx`, `q2-preview/blocks/*`, `q2-preview/custom/*`,
-  `iframe/Q2PreviewIframe.tsx`
-- `hub-client/src/components/render/ReactPreview.tsx`, `…/applyNodeEdit*`
-- Render-component demos: `~/docs/demo-playground/gordon/render-components2/`
-- Plan 5 origin (dissolved): `2026-05-29-q2-preview-plan-7e-customnode-qmd.md`
-  (`git show bf375258^:…`)
+- Round-trip core: `claude-notes/plans/2026-06-04-target-incremental-writes.md`;
+  `apply_node_edit.rs`, `writers/{incremental,qmd,json}.rs`, `quarto-source-map/src/source_info.rs`.
+- Implementation plan + execution log: `claude-notes/plans/2026-06-11-block-editing-improvements.md`;
+  hand-off companion: `claude-notes/plans/2026-06-13-block-editing-handoff.md`.
+- Front-end: `q2-preview/{PreviewRoot,entry,dispatchers,useBlockEditHover,PreviewContext,sourceIndex,
+  lockedTiles,byteLineMap,caretGeometry}.tsx`, `q2-preview/{blocks,custom}/*`,
+  `iframe/Q2PreviewIframe.tsx`; `hub-client/src/components/render/{ReactPreview,ReactRenderer}.tsx`.
+- Phase 3 Rust/WASM entry points: `crates/pampa/src/writers/qmd.rs::write_single_block`,
+  `crates/wasm-quarto-hub-client/src/lib.rs::apply_node_edit`,
+  `ts-packages/preview-runtime/src/wasmRenderer.ts`.

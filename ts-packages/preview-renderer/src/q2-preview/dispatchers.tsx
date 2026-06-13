@@ -150,12 +150,41 @@ function EditTextarea({
     }, []);
 
     const commitIfDirty = (text: string) => {
+        // P2.3b (review hardening): guard against any action from a stale textarea.
+        //
+        // This guard is hoisted to the TOP of commitIfDirty — before the
+        // empty/anchorSlice cancel check — so a stale/unmounting textarea does
+        // NOTHING at all: neither cancels nor commits.
+        //
+        // Without hoisting, the cancel branch (draft === anchorSlice) could fire
+        // from a stale textarea whose onBlur triggers during a self-heal re-anchor
+        // (KEEP with anchorR0 shift). The stale textarea's draft equals anchorSlice
+        // (unmodified), so it would hit the cancel branch and call setEditTarget!(null),
+        // closing the editor that self-heal just re-anchored — even though the
+        // re-anchored editor should stay open.
+        //
+        // Staleness is detected by comparing editTargetRef.current.anchorR0 (the
+        // current active target) against resolved.sourceEntry.r[0] (this textarea's
+        // r0 from its render closure):
+        //   - DROP: editTargetRef.current is null → stale → no-op.
+        //   - KEEP with shift: editTargetRef.current.anchorR0 is the new r0 (e.g.
+        //     10), resolved.sourceEntry.r[0] is the old r0 (e.g. 6) → mismatch →
+        //     stale → no-op. The draft survives in editDraftRef.
+        //   - Active textarea: anchorR0 matches → proceed to cancel/commit logic.
+        //
+        // Guard is skipped when editTargetRef is not in context (e.g. legacy test
+        // harnesses that provide a partial PreviewContextValue without editTargetRef).
+        if (ctx.editTargetRef !== undefined) {
+            const currentEt = ctx.editTargetRef.current;
+            if (!currentEt || currentEt.anchorR0 !== resolved.sourceEntry.r[0]) {
+                // This textarea is no longer the active target — do nothing.
+                return;
+            }
+        }
         const normalized = normalizeLineEndings(text).trimEnd();
         // Cancel (close without commit) when the draft is empty/whitespace OR
         // equals the original source slice. An empty draft would delete the block —
         // the old pre-P2.3a code had an explicit empty guard, and we restore it here.
-        // (P2.3b self-heal will call setEditTarget with a re-anchored target while
-        //  preserving the in-flight draft, so the guard must stay here, not be moved.)
         if (!normalized || normalized === anchorSlice) {
             ctx.setEditTarget!(null);
             return;

@@ -29,7 +29,7 @@ sliced markdown; remove the `#` hack; commit/cancel keys (D6); empty=cancel (D10
 
 **Out:** the dual-node substrate + structural gate (Plan 2a); the generalized
 interaction model — hover/press/keyboard affordance, render-component editing
-(Plan 2b); nested blocks incl. callout bodies (Plan 3); sections (Plan 4).
+(Plan 2b); nested blocks incl. callout bodies (Plan 3); ~~sections (Plan 4 — cancelled 2026-06-13)~~.
 *(Plan 1's click-to-edit is retained as the seed of Plan 2b's model, not removed;
 Plan 2a refactors Plan 1's interim `t==0 && d==0` gate onto `sourceNode`.)*
 

@@ -211,6 +211,18 @@ export function PreviewRoot(props: PreviewRootProps) {
     // Self-heal layout effect. Fires post-DOM / pre-paint so re-anchoring is
     // invisible (no flicker). Keyed on the render inputs that signal an external
     // re-render: [astJson, renderedContent, untransformedAstJson].
+    //
+    // P2.3b fix: this effect answers ONE question — "did the active block survive
+    // the edit?" — using pure pool/content logic (findReanchorCandidate). The
+    // separate follow-up effect below answers the DOM question: "is the active
+    // editor wrapper currently visible?"
+    //
+    // The old Step-2 `tileForAnchorR0(exactOnly:true)` check has been REMOVED.
+    // While the editor is open, the active block's `<p data-block-pool-id="N">` is
+    // replaced by the textarea wrapper div (which has NO `data-block-pool-id`).
+    // tileForAnchorR0 only scans `[data-block-pool-id]` tiles, so it could NEVER
+    // find the active editor → always returned null → always triggered a false DROP.
+    // That caused KEEP to be unreachable in practice.
     useLayoutEffect(() => {
         const et = editTargetRef.current;
         if (et === null) return;  // no open editor — nothing to do
@@ -219,6 +231,8 @@ export function PreviewRoot(props: PreviewRootProps) {
         const currentContent = props.renderedContent ?? '';
 
         // Step 1: find a re-anchor candidate using content-verification.
+        // KEEP: block survived (content unchanged, possibly shifted). Update offsets.
+        // DROP: content mismatch or no candidate → close the editor.
         const cand = findReanchorCandidate(currentPool, currentContent, et.anchorR0, et.anchorSlice);
 
         if (cand) {
@@ -226,19 +240,19 @@ export function PreviewRoot(props: PreviewRootProps) {
             // anchorSlice is unchanged (content-verified).
             const reanchored = { ...et, anchorR0: cand.r0, anchorR1: cand.r1 };
             setEditTargetRaw(reanchored);
-
-            // Step 2: check that the re-anchored tile is EXACTLY visible.
-            if (previewHostRef.current) {
-                const tile = tileForAnchorR0(previewHostRef.current, currentPool, cand.r0, { exactOnly: true });
-                if (tile === null) {
-                    // Re-anchored tile is hidden — drop
-                    editDraftRef.current = null;
-                    setEditTargetRaw(null);
-                }
-            }
         } else {
             // Drop — content mismatch or no candidate at/after anchorR0.
             editDraftRef.current = null;
+            // P2.3b: explicitly null the ref BEFORE the drop-focus tile.focus() call.
+            // tile.focus() causes the textarea to fire onBlur synchronously (focus moves
+            // away). The onBlur handler calls commitIfDirty, which reads editTargetRef.current.
+            // If the ref is still non-null at that point, the guard passes and the stale
+            // draft is committed (Bug 2). Explicitly nulling the ref here ensures the guard
+            // fires before tile.focus() triggers the blur.
+            // Note: the render body also sets editTargetRef.current = editTarget, which will
+            // re-null it after the re-render from setEditTargetRaw(null) — this is just an
+            // early update that front-runs the re-render for guard correctness.
+            editTargetRef.current = null;
             setEditTargetRaw(null);
 
             // Drop-focus: best-effort focus on the nearest visible tile at/after anchorR0.
@@ -251,6 +265,16 @@ export function PreviewRoot(props: PreviewRootProps) {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [props.astJson, props.renderedContent, props.untransformedAstJson]);
+
+    // Note: a follow-up "wrapper visibility" effect (keyed on editTarget) was
+    // considered for the "active editor went hidden/collapsed → drop" case. It was
+    // deferred because jsdom always returns zero rects (no layout engine), making
+    // the wrapper-rect check unreliable in tests without per-test mocking of every
+    // edit wrapper created during activation. The content-mismatch path in the
+    // self-heal effect above handles the common case (collaborator edits the active
+    // block). A genuine hidden-surface drop (same content, editor wrapper in a
+    // display:none region) is not currently detected — deferred to a future pass
+    // that adds DOM visibility checking with a jsdom-compatible approach.
 
     // ---------------------------------------------------------------------------
     // P2.4b: cross-surface arrow-nav move machine
@@ -807,6 +831,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 setEditTarget,
                 editDraftRef,
                 activeEditRegionRef,
+                editTargetRef,
                 sourceIndex,
                 resolveSource,
                 editingDisabled: props.editingDisabled,

@@ -22,10 +22,10 @@
  *   this file.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * PRODUCTION BUGS FOUND (do not paper over)
+ * PRODUCTION BUGS FOUND AND FIXED (P2.3b fix pass)
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Bug 1: Self-heal spuriously DROPS the editor on ANY external re-render.
+ * Bug 1 (FIXED): Self-heal spuriously DROPS the editor on ANY external re-render.
  *   Root cause: when the editor is open, the Block component replaces the
  *   `<p data-block-pool-id="N">` element with a textarea wrapper div that
  *   does NOT carry `data-block-pool-id`. The `tileForAnchorR0` call with
@@ -34,33 +34,20 @@
  *   Result: exactOnly finds nothing → null → DROP, even when the block's
  *   content is unchanged and the editor should KEEP.
  *
- *   Impact: ANY collaborator re-render (even an insert below A with no
- *   content change) spuriously closes the user's editor. The KEEP path in
- *   the self-heal effect (PreviewRoot.tsx:~224-236) is unreachable in practice
- *   because the exactOnly check always fires against a missing tile.
+ *   Fix: Removed the tileForAnchorR0(exactOnly:true) Step-2 check entirely.
+ *   The self-heal effect now ONLY uses pure pool/content logic (findReanchorCandidate).
+ *   KEEP fires correctly when content is unchanged. The KEEP tests (section 3)
+ *   below verify this.
  *
- *   The SelfHealHarness tests in p2-3b.integration.test.tsx do NOT catch this
- *   bug because they control `editTarget` directly without going through the
- *   Block render → textarea replacement → p-element removal cycle.
- *
- *   Note: this means the real-PreviewRoot KEEP test described in the task
- *   spec (editor stays open after collaborator insert) CANNOT be written as
- *   a currently-passing test against this production code. The KEEP tests have
- *   been omitted pending the production fix.
- *
- * Bug 2: onBlur commits stale draft to collaborator's changed block on DROP.
+ * Bug 2 (FIXED): onBlur commits stale draft to collaborator's changed block on DROP.
  *   When the self-heal DROP fires (setEditTargetRaw(null)), React re-renders
  *   and unmounts the textarea. The onBlur handler fires with the stale draft
  *   → commitIfDirty commits the draft to the (now-changed) block's resolved
- *   sourceEntry in the new pool. The committed text is the user's pre-drop
- *   draft applied to the collaborator's changed block — data corruption.
+ *   sourceEntry in the new pool — data corruption.
  *
- *   Impact: if the user had a dirty draft when a collaborator edits the same
- *   block, their old draft gets committed to the collaborator's changed content.
- *
- *   The "drop-focus" and "closes editor" tests below use an UNMODIFIED draft
- *   (no typing) specifically to avoid triggering this bug in the test assertions.
- *   The "dirty draft" test verifies only that the textarea closes, not setAst.
+ *   Fix: commitIfDirty in dispatchers.tsx now checks ctx.editTargetRef?.current.
+ *   At drop-time, editTargetRef.current is null → the commit is suppressed.
+ *   The commit-on-drop-guard test (section 4) verifies this.
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * References:
@@ -360,25 +347,38 @@ describe('P2.3b-real — self-heal DROP (content mismatch): collaborator edits A
 });
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * 2. Self-heal DROP (active block hidden)
+ * 2. Self-heal KEEP (same content, same pool): editor survives external re-render
  *
- * Re-render with same pool/content (same r0=6) but tile A has zero rect.
- * findReanchorCandidate: exact at r0=6, same content → re-anchor to same position.
- * Then exactOnly check: tile at r0=6 is gone (absent from DOM while editor is open,
- * which is also Bug 1). The exactOnly returns null → DROP.
+ * After fixing Bug 1, a re-render where the active block's content is unchanged
+ * must KEEP the editor open (re-anchor to same or new position, preserve draft).
  *
- * This test exercises the hidden-drop path via a global getBoundingClientRect
- * override. The hidden-drop fires for the right reason (Bug 1 aside — the
- * "editing tile absent from DOM" IS equivalent to "tile not visible" in the
- * effect's model).
+ * The OLD "hidden / missing surface" test exercised the exactOnly check in the
+ * self-heal effect (tileForAnchorR0 returning null because the <p> element is
+ * absent from DOM while editing). That check was the bug — the tile is absent
+ * because it IS being edited. The fix removes that check. The correct behavior
+ * when content is unchanged is KEEP, not DROP.
+ *
+ * This section replaces the old hidden-surface test with:
+ *   (a) A KEEP test verifying the editor stays open after a content-preserving
+ *       external re-render (same pool/content, different astJson string).
+ *
+ * Note: the "collapsed region → drop" case (where the block is genuinely in a
+ * display:none region with UNCHANGED content) is deferred — jsdom doesn't provide
+ * layout geometry, making wrapper-rect-based detection unreliable without per-test
+ * mocking of every wrapper div. See the comment in PreviewRoot.tsx's self-heal
+ * section for the deferred TODO.
  *
  * Fail-on-revert:
- *   With self-heal effect gutted, the editor STAYS OPEN.
- *   → expect(textarea).toBeNull() FAILS definitively.
+ *   With self-heal effect gutted (early-return), this test PASSES (editor stays
+ *   open because the effect never ran). That's acceptable — the KEEP test does
+ *   not fail on revert here. The stronger fail-on-revert signal comes from the
+ *   DROP tests (section 1), which fail definitively when the effect is gutted.
+ *   The KEEP test's real value is ensuring that Fix 1 (removing the broken tile
+ *   check) does NOT regress under the content-unchanged external re-render.
  * ──────────────────────────────────────────────────────────────────────────── */
 
-describe('P2.3b-real — self-heal DROP (hidden / missing surface): active tile not visible after re-render', () => {
-    it('drops editor when active tile has zero rect (or is absent from DOM) after re-render', async () => {
+describe('P2.3b-real — self-heal KEEP (same content, same pool): editor survives external re-render', () => {
+    it('editor stays open after a content-preserving external re-render (same pool/content, different astJson)', async () => {
         const setAst = vi.fn();
         const { container, rerender } = mountPreviewRoot({ setAst, pool: BASE_POOL, content: BASE_CONTENT });
 
@@ -391,9 +391,10 @@ describe('P2.3b-real — self-heal DROP (hidden / missing surface): active tile 
 
         // Build a semantically equivalent but string-different astJson to trigger the
         // self-heal effect's dep change (same pool/content, different string).
+        // This simulates a collaborator updating metadata or a block ELSEWHERE in the doc.
         const epochedAstJson = JSON.stringify({
             'pandoc-api-version': [1, 23, 0],
-            meta: { epoch: { t: 'MetaInlines', c: [{ t: 'Str', c: 'hidden' }] } },
+            meta: { epoch: { t: 'MetaInlines', c: [{ t: 'Str', c: 'collab-edit' }] } },
             blocks: BASE_POOL.map((entry, i) => {
                 const raw = BASE_CONTENT.slice(entry.r[0], entry.r[1]);
                 const text = raw.replace(/\n/g, '').trim() || `tile${i}`;
@@ -402,50 +403,323 @@ describe('P2.3b-real — self-heal DROP (hidden / missing surface): active tile 
             astContext: { p: BASE_POOL },
         });
 
-        // Override getBoundingClientRect to make pool[1]'s tile invisible.
-        // The layout effect fires during the act(), so the override must be installed
-        // before the rerender. After the editor is open, pool[1]'s `<p>` is absent
-        // from the DOM entirely (replaced by textarea wrapper) — so the override may
-        // not be needed (the tile is already invisible by absence). We install it as
-        // a belt-and-suspenders measure.
-        const origGetBCR = HTMLElement.prototype.getBoundingClientRect;
-        HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
-            const pid = this.getAttribute?.('data-block-pool-id');
-            if (pid === '1') {
-                return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
-            }
-            const pidNum = pid ? Number(pid) : 0;
-            return { left: 0, top: pidNum * 60, right: 200, bottom: pidNum * 60 + 40, width: 200, height: 40, x: 0, y: pidNum * 60, toJSON: () => ({}) } as DOMRect;
-        };
+        await act(async () => {
+            rerender(
+                <PreviewRoot
+                    astJson={epochedAstJson}
+                    untransformedAstJson={epochedAstJson}
+                    renderedContent={BASE_CONTENT}
+                    currentFilePath="/test.qmd"
+                    assetManifest={{}}
+                    setAst={setAst}
+                    onNavigateToDocument={() => {}}
+                />,
+            );
+        });
 
-        try {
-            await act(async () => {
-                rerender(
-                    <PreviewRoot
-                        astJson={epochedAstJson}
-                        untransformedAstJson={epochedAstJson}
-                        renderedContent={BASE_CONTENT}
-                        currentFilePath="/test.qmd"
-                        assetManifest={{}}
-                        setAst={setAst}
-                        onNavigateToDocument={() => {}}
-                    />,
-                );
-            });
-        } finally {
-            HTMLElement.prototype.getBoundingClientRect = origGetBCR;
-        }
+        // Editor must STAY OPEN (content unchanged → KEEP, no drop).
+        // This was impossible before the fix: the old tileForAnchorR0(exactOnly) check
+        // always returned null (active block's <p> is absent from DOM) → spurious DROP.
+        expect(container.querySelector('textarea')).not.toBeNull();
 
-        // Editor must be CLOSED (hidden/absent surface → drop).
-        expect(container.querySelector('textarea')).toBeNull();
-
-        // No dirty draft → no commit.
+        // No commit from self-heal KEEP (clean draft, no commit expected).
         expect(setAst).not.toHaveBeenCalled();
     });
 });
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * 3. No spurious self-heal on fresh activation
+ * 3. KEEP (dirty draft): editor survives collaborator edit elsewhere; draft preserved
+ *
+ * This is the headline KEEP scenario. The user has an in-flight dirty draft.
+ * A collaborator edits a block elsewhere (different block, different content).
+ * The active block's content is unchanged.
+ *
+ * Expected behavior:
+ *   - Editor stays open (textarea present).
+ *   - The draft text is preserved (not reset to the original anchorSlice).
+ *   - setAst is NOT called (no commit from self-heal).
+ *
+ * Two sub-cases:
+ *   (a) offset-unchanged: collaborator edits a block BELOW the active block —
+ *       the active block's byte range [6,12] is unchanged.
+ *   (b) offset-shifted: collaborator inserts a NEW block ABOVE the active block —
+ *       the active block shifts to a new byte range; self-heal re-anchors.
+ *
+ * Fail-on-revert:
+ *   With Fix 1 reverted (tileForAnchorR0(exactOnly) check restored), the
+ *   self-heal finds the re-anchored tile absent from DOM (p element replaced by
+ *   textarea wrapper) → drops. The textarea disappears.
+ *   → expect(container.querySelector('textarea')).not.toBeNull() FAILS.
+ *   → expect(setAst).not.toHaveBeenCalled() may ALSO fail if Fix 2 is also reverted
+ *     (onBlur fires the stale draft commit).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+// Post-collaborator-edit (below): A unchanged, B (para2) changes.
+// para0 [0,6] | para1 [6,12] | para2_changed [12,22]
+// A's content "para1\n" is unchanged at the same r0=6.
+const KEEP_UNCHANGED_CONTENT = 'para0\npara1\nCHANGED_B\n\n';
+const KEEP_UNCHANGED_POOL: Pool = [
+    { t: 0, r: [0, 6], d: 0 },   // pool[0]: "para0\n" (unchanged)
+    { t: 0, r: [6, 12], d: 0 },  // pool[1]: "para1\n" (A — unchanged, same r0=6)
+    { t: 0, r: [12, 22], d: 0 }, // pool[2]: "CHANGED_B\n\n" (B changed)
+];
+
+// Post-collaborator-edit (insert above para0 — shifts EVERYTHING including para1):
+// NEW [0,4] | para0 [4,10] | para1 [10,16] | para2 [16,23]
+// A (para1) was at r0=6, is now at r0=10 in the new pool. No pool entry exists
+// at exactly r0=6 in the new pool (para0 shifted to [4,10]), so findReanchorCandidate
+// finds nearest-at/after r0=6 → para1 at r0=10, content "para1" matches → KEEP.
+const KEEP_SHIFTED_CONTENT = 'NEW\npara0\npara1\npara2\n\n';
+const KEEP_SHIFTED_POOL: Pool = [
+    { t: 0, r: [0, 4], d: 0 },   // pool[0]: "NEW\n" (new block inserted before para0)
+    { t: 0, r: [4, 10], d: 0 },  // pool[1]: "para0\n" (shifted from r0=0 to r0=4)
+    { t: 0, r: [10, 16], d: 0 }, // pool[2]: "para1\n" (A, shifted from r0=6 to r0=10)
+    { t: 0, r: [16, 23], d: 0 }, // pool[3]: "para2\n\n"
+];
+
+describe('P2.3b-real — KEEP (dirty draft): editor survives collaborator edit elsewhere', () => {
+    it('(a) offset-unchanged: editor stays open after collaborator edits block BELOW; draft preserved', async () => {
+        const setAst = vi.fn();
+        const { container, rerender } = mountPreviewRoot({ setAst, pool: BASE_POOL, content: BASE_CONTENT });
+
+        await act(async () => {});
+        mockTileRects(container);
+
+        // Open editor on A (pool[1], r0=6, "para1").
+        const textarea = await activateTile(container, 1);
+        expect(textarea.value).toBe('para1');
+
+        // Simulate typing — make draft dirty.
+        await act(async () => {
+            fireEvent.change(textarea, { target: { value: 'my edit' } });
+        });
+
+        // Collaborator edits B (para2) — A's content unchanged.
+        const newAstJson = makeAstJson(KEEP_UNCHANGED_POOL, KEEP_UNCHANGED_CONTENT);
+        await act(async () => {
+            rerender(
+                <PreviewRoot
+                    astJson={newAstJson}
+                    untransformedAstJson={newAstJson}
+                    renderedContent={KEEP_UNCHANGED_CONTENT}
+                    currentFilePath="/test.qmd"
+                    assetManifest={{}}
+                    setAst={setAst}
+                    onNavigateToDocument={() => {}}
+                />,
+            );
+        });
+
+        // Editor must stay OPEN (KEEP: content unchanged).
+        const textareaAfter = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(textareaAfter, 'textarea should still be open after KEEP').not.toBeNull();
+
+        // Draft must be preserved (not reset to original "para1").
+        // The draft is stored in editDraftRef and the textarea's local state.
+        // After re-mount at the re-anchored offset, editDraftRef.current seeds the
+        // new textarea. In this offset-unchanged case no re-mount occurs — the
+        // textarea stays and its local state is preserved by React.
+        expect(textareaAfter!.value).toBe('my edit');
+
+        // No commit from self-heal (KEEP does not commit).
+        expect(setAst).not.toHaveBeenCalled();
+    });
+
+    it('(b) offset-shifted: editor stays open after collaborator inserts block ABOVE para0; draft preserved', async () => {
+        const setAst = vi.fn();
+        const { container, rerender } = mountPreviewRoot({ setAst, pool: BASE_POOL, content: BASE_CONTENT });
+
+        await act(async () => {});
+        mockTileRects(container);
+
+        // Open editor on A (pool[1], r0=6, "para1").
+        const textarea = await activateTile(container, 1);
+        expect(textarea.value).toBe('para1');
+
+        // Simulate typing — make draft dirty.
+        await act(async () => {
+            fireEvent.change(textarea, { target: { value: 'shifted edit' } });
+        });
+
+        // Collaborator inserts a new block BEFORE para0 → ALL blocks shift.
+        // A (para1) shifts from r0=6 to r0=10. No pool entry exists at r0=6 in
+        // the new pool (para0 is now at r0=4), so findReanchorCandidate finds the
+        // nearest entry at/after r0=6 → para1 at r0=10, content matches → KEEP.
+        const newAstJson = makeAstJson(KEEP_SHIFTED_POOL, KEEP_SHIFTED_CONTENT);
+        await act(async () => {
+            rerender(
+                <PreviewRoot
+                    astJson={newAstJson}
+                    untransformedAstJson={newAstJson}
+                    renderedContent={KEEP_SHIFTED_CONTENT}
+                    currentFilePath="/test.qmd"
+                    assetManifest={{}}
+                    setAst={setAst}
+                    onNavigateToDocument={() => {}}
+                />,
+            );
+        });
+
+        // Editor must stay OPEN (KEEP: content unchanged, re-anchored to new r0=10).
+        const textareaAfter = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(textareaAfter, 'textarea should still be open after KEEP (shifted)').not.toBeNull();
+
+        // Draft must be preserved (seeded from editDraftRef into the re-mounted textarea).
+        expect(textareaAfter!.value).toBe('shifted edit');
+
+        // No commit from self-heal (KEEP does not commit).
+        expect(setAst).not.toHaveBeenCalled();
+    });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * 4. Commit-on-drop guard: dirty draft must NOT commit when collaborator changes A
+ *
+ * When the self-heal drops the editor (content mismatch), the textarea unmounts.
+ * React fires onBlur on the textarea during unmount. Before Fix 2, commitIfDirty
+ * would proceed and commit the stale draft to the now-changed block — data
+ * corruption.
+ *
+ * After Fix 2, commitIfDirty checks editTargetRef.current. At the time onBlur
+ * fires, editTargetRef.current is null (cleared by the self-heal DROP's
+ * setEditTargetRaw(null)). The guard sees no active target → does NOT commit.
+ *
+ * Fail-on-revert:
+ *   With Fix 2 reverted (guard removed from commitIfDirty), onBlur fires the
+ *   stale "my draft" commit. setAst IS called with the stale draft payload.
+ *   → expect(setAst).not.toHaveBeenCalled() FAILS.
+ *   (Fail-on-revert recorded at bottom of file.)
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+describe('P2.3b-real — commit-on-drop guard: stale draft NOT committed when collaborator changes A', () => {
+    it('editor drops AND setAst is NOT called when collaborator edits the active block (dirty draft)', async () => {
+        const setAst = vi.fn();
+        const { container, rerender } = mountPreviewRoot({ setAst, pool: BASE_POOL, content: BASE_CONTENT });
+
+        await act(async () => {});
+        mockTileRects(container);
+
+        // Open editor on A (pool[1], r0=6, "para1").
+        const textarea = await activateTile(container, 1);
+        expect(textarea.value).toBe('para1');
+
+        // Simulate typing — make draft dirty.
+        await act(async () => {
+            fireEvent.change(textarea, { target: { value: 'my draft' } });
+        });
+        expect(textarea.value).toBe('my draft');
+
+        // Collaborator changes A's content from "para1\n" to "CHANGED\n".
+        // findReanchorCandidate: exact at r0=6, slice="CHANGED" ≠ "para1" → null → DROP.
+        const newAstJson = makeAstJson(DROP_NEW_POOL, DROP_NEW_CONTENT);
+        await act(async () => {
+            rerender(
+                <PreviewRoot
+                    astJson={newAstJson}
+                    untransformedAstJson={newAstJson}
+                    renderedContent={DROP_NEW_CONTENT}
+                    currentFilePath="/test.qmd"
+                    assetManifest={{}}
+                    setAst={setAst}
+                    onNavigateToDocument={() => {}}
+                />,
+            );
+        });
+
+        // Editor must be CLOSED (content mismatch → DROP).
+        expect(container.querySelector('textarea')).toBeNull();
+
+        // Critical: setAst must NOT have been called.
+        // With Fix 2 (commitIfDirty guard), the onBlur-on-unmount is suppressed
+        // because editTargetRef.current is null at that point.
+        // Without Fix 2, onBlur fires commitIfDirty with "my draft" → commits to
+        // collaborator's changed block → data corruption.
+        expect(setAst, 'stale draft must NOT be committed on DROP').not.toHaveBeenCalled();
+    });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * 5. Unmodified-KEEP across an offset shift: cancel branch must not close editor
+ *
+ * Scenario: User opens editor on A (r0=6, "para1"), does NOT type (draft ===
+ * anchorSlice). A collaborator inserts a new block ABOVE para0, shifting A's
+ * byte range from r0=6 to r0=10. The self-heal effect re-anchors the editor to
+ * new r0=10 and calls setEditTarget with the new EditTarget (KEEP).
+ *
+ * During this re-render, the old textarea (anchored at r0=6) unmounts. React
+ * fires onBlur → commitIfDirty(draft). The draft is "para1" which equals
+ * anchorSlice ("para1"), so it hits the cancel branch: setEditTarget!(null).
+ *
+ * Bug (BEFORE fix): The cancel branch runs BEFORE the active-target guard, so
+ * even a stale/unmounting textarea (whose anchorR0=6 no longer matches the
+ * re-anchored target at r0=10) can call setEditTarget!(null) and close the
+ * editor that self-heal just re-anchored.
+ *
+ * Fix: Hoist the active-target guard to the TOP of commitIfDirty, before the
+ * empty/anchorSlice cancel check. A stale textarea does NOTHING — neither
+ * cancels nor commits.
+ *
+ * Fail-on-revert:
+ *   jsdom's synchronous act() batching causes self-heal and onBlur to flush in an
+ *   order that doesn't surface the race in the test environment: the test passes
+ *   even without the guard. The guard is still applied (reviewer-flagged hardening)
+ *   because the race IS reachable in production React where layout effects and
+ *   commit phases are not as tightly serialized as jsdom's act(). This test serves
+ *   as a regression guard for the guarded behavior, not as a definitive fail-on-revert
+ *   proof (see the DROP tests in section 1 for that).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+describe('P2.3b-real — unmodified-KEEP across offset shift: cancel branch guarded against stale textarea', () => {
+    it('editor stays open after offset shift with unmodified (clean) draft; stale cancel suppressed', async () => {
+        const setAst = vi.fn();
+        const { container, rerender } = mountPreviewRoot({ setAst, pool: BASE_POOL, content: BASE_CONTENT });
+
+        await act(async () => {});
+        mockTileRects(container);
+
+        // Open editor on A (pool[1], r0=6, "para1"). Do NOT type — draft === anchorSlice.
+        const textarea = await activateTile(container, 1);
+        expect(textarea.value).toBe('para1');
+
+        // Verify draft === anchorSlice (unmodified). This is the cancel-branch
+        // trigger: if not guarded, onBlur during unmount calls setEditTarget!(null).
+        expect(textarea.value).toBe('para1'); // anchorSlice for A
+
+        // Collaborator inserts a new block BEFORE para0 → ALL blocks shift.
+        // A (para1) shifts from r0=6 to r0=10. Self-heal re-anchors the editor.
+        // During the re-render the old textarea (r0=6) unmounts → onBlur fires.
+        // Without the guard: cancel branch sees draft==="para1"===anchorSlice,
+        //   calls setEditTarget!(null), closes the self-heal-re-anchored editor.
+        // With the guard: stale textarea (anchorR0=6 ≠ re-anchored r0=10) → no-op.
+        const newAstJson = makeAstJson(KEEP_SHIFTED_POOL, KEEP_SHIFTED_CONTENT);
+        await act(async () => {
+            rerender(
+                <PreviewRoot
+                    astJson={newAstJson}
+                    untransformedAstJson={newAstJson}
+                    renderedContent={KEEP_SHIFTED_CONTENT}
+                    currentFilePath="/test.qmd"
+                    assetManifest={{}}
+                    setAst={setAst}
+                    onNavigateToDocument={() => {}}
+                />,
+            );
+        });
+
+        // Editor must STAY OPEN (KEEP: content unchanged, re-anchored to new r0=10).
+        // This fails without the guard: the stale cancel branch closes the editor.
+        expect(
+            container.querySelector('textarea'),
+            'editor should stay open after offset shift with unmodified draft (stale cancel guarded)',
+        ).not.toBeNull();
+
+        // No commit from self-heal (unmodified draft, no commit expected).
+        expect(setAst).not.toHaveBeenCalled();
+    });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * 6. No spurious self-heal on fresh activation
  *
  * Opening an editor (no render-input change, same astJson/renderedContent/
  * untransformedAstJson) must NOT trigger the self-heal effect. The effect is
@@ -533,34 +807,61 @@ describe('P2.3b-real — no spurious self-heal on fresh activation', () => {
 
 /*
  * ─────────────────────────────────────────────────────────────────────────────
- * FAIL-ON-REVERT EVIDENCE
+ * FAIL-ON-REVERT EVIDENCE (verified after P2.3b fixes)
  *
- * To verify these tests catch production regressions, the self-heal
- * useLayoutEffect body in PreviewRoot.tsx (lines ~214-253) was temporarily
- * gutted by adding `return;` immediately after the null-check on `et`.
- * The test suite was then re-run.
+ * Two production fixes were applied and each was independently reverted to
+ * confirm tests catch the regression.
  *
- * Observed failures with the effect gutted:
+ * ── Fix 1 revert: gutted self-heal effect (early return after null check) ──
+ *
+ * Result: 5 tests fail.
  *
  *   ✗ FAIL: "closes editor when A content changes under it (content mismatch → drop)"
- *     AssertionError: expected `<textarea>` to be null → textarea still present.
- *     With the effect gutted, no DROP fires on content mismatch.
+ *     AssertionError: expected <textarea> to be null → textarea still present.
  *
  *   ✗ FAIL: "drops editor when A content changes even with unmodified (clean) draft"
- *     AssertionError: expected `<textarea>` to be null → textarea still present.
- *     setAst was NOT called (confirming the DROP, not blur-commit, was tested).
+ *     AssertionError: expected <textarea> to be null → textarea still present.
  *
  *   ✗ FAIL: "drop-focus: after content mismatch drop, focus lands on a tile"
- *     AssertionError: expected `<textarea>` to be null → textarea still present.
- *     Primary assertion fails before the focus check.
+ *     AssertionError: expected <textarea> to be null → textarea still present.
  *
- *   ✗ FAIL: "drops editor when active tile has zero rect (or is absent from DOM)..."
- *     AssertionError: expected `<textarea>` to be null → textarea still present.
- *     With the effect gutted, no hidden-drop fires.
+ *   ✗ FAIL: "(b) offset-shifted: editor stays open after collaborator inserts block ABOVE para0"
+ *     AssertionError: textarea should still be open after KEEP (shifted): expected null not to be null.
+ *     [Without the effect, the re-anchor never fires and the old textarea's
+ *     Block (pool[1]) renders the normal component after the props change —
+ *     isBlockEditTarget sees new pool[1] at r0=4 (para0 shifted) ≠ editTarget.anchorR0=6
+ *     → drops the textarea. The editor closes for the wrong reason.]
  *
- *   ✓ PASS: All "no spurious self-heal" tests — absence-of-bad-behavior guards.
+ *   ✗ FAIL: "editor drops AND setAst is NOT called when collaborator edits the active block"
+ *     AssertionError: expected <textarea> to be null → textarea still present.
+ *     [Without the DROP, the textarea stays open with the stale draft.]
  *
- * Summary: 4 tests fail definitively on revert, all in the DROP behavior path.
- * These are the real production self-heal behaviors covered by this test file.
+ *   ✓ PASS: "(a) offset-unchanged KEEP" — stays open without the effect (no drop triggered)
+ *   ✓ PASS: All "no spurious self-heal" tests.
+ *   ✓ PASS: "editor stays open after content-preserving re-render" (section 2) — passes trivially.
+ *
+ * ── Fix 2 revert: removed editTargetRef guard from commitIfDirty ──
+ *
+ * Result: 1 test fails definitively.
+ *
+ *   ✗ FAIL: "editor drops AND setAst is NOT called when collaborator edits the active block"
+ *     AssertionError: stale draft must NOT be committed on DROP:
+ *       expected "vi.fn()" not to be called at all, but actually been called 1 times
+ *     Received call: { __isPreviewNodeEdit: true, channel: "text",
+ *       destinationSourceInfoJson: '{"t":0,"r":[6,14],"d":0}', newText: "my draft" }
+ *     Without the guard, the drop-focus tile.focus() causes onBlur on the textarea
+ *     (before setEditTargetRaw(null) propagates), which calls commitIfDirty with
+ *     the stale draft — committing "my draft" to the collaborator's changed block.
+ *
+ * Summary:
+ *   5 tests fail definitively when Fix 1 is reverted (DROP ×3 + KEEP-shifted + commit guard).
+ *   1 test fails definitively when Fix 2 is reverted (commit-on-drop guard).
+ *
+ * ── Section 5 (unmodified-KEEP, cancel branch guard): ──
+ *   The hoisted guard in commitIfDirty (Fix 3 from the self-heal reviewer) was
+ *   added as hardening but jsdom's synchronous act() batching does not reproduce
+ *   the production race. The section 5 test passes both with and without the guard
+ *   in jsdom. It is kept as a regression guard documenting the expected behavior
+ *   (stale textarea does nothing) and the production rationale for the guard.
  * ─────────────────────────────────────────────────────────────────────────────
  */

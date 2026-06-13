@@ -24,8 +24,8 @@
 > extended to all 14 block components (not just Para/Header); full affected-file
 > list corrected (BlockQuote, DefinitionList, CodeBlock, RawBlock, Table were
 > missing); custom components (Callout/Theorem/Proof/FloatRefTarget) get affordance
-> update only — whole-custom-block textarea is Plan 4. Callout fixture test must
-> use full WASM pipeline.
+> update only — ~~whole-custom-block textarea is Plan 4~~ (see session 3 correction
+> below; this deferral was wrong). Callout fixture test must use full WASM pipeline.
 >
 > **Review-applied (2026-06-09, session 3).** Major frontend architecture
 > correction: drop `useBlockAffordance`/`useBlockEditor` hooks; instead centralize
@@ -71,7 +71,7 @@ inactive rendered view and break Bootstrap/Quarto CSS `>` child-combinator rules
 whole* in Plan 2 (e.g. to change a fenced div's attrs). Once Plan 3 makes its
 contents editable, the deepest-target hover resolves to the inner block, so the
 whole-container affordance is **shadowed**. Reaching the container as a single
-unit is the Plan 4 background-vs-text geometry; accepted.
+unit requires depth-key descent (Phase 3 unlock); ~~section/heading geometry (Plan 4 — cancelled 2026-06-13)~~.
 
 ## Investigation result (pre-coding)
 

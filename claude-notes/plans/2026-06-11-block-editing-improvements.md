@@ -553,22 +553,33 @@ longer re-writes the wrong block on blur).
   commit still resolves (fallback); a file switch cancels a pending land.
 - [x] **`r[0]` uniqueness** (unit): every block's `pool[s].r[0]` is distinct in a doc with
   nested containers (the assumption the `anchorR0` match relies on).
-- [x] **Self-heal — keep** (RTL, P2.3b): the active editor survives an *external* re-render that
-  edits *elsewhere* via `anchorR0` re-matching (rect-free, exact-preferred) — stays open,
-  draft preserved, no remount-to-leaf.
-- [x] **Self-heal — drop** (RTL, P2.3b): an external edit *to the active block*
-  (content mismatch) **closes** the editor and discards the draft; a subsequent commit never
-  lands on the changed/inserted block. **Drop-focus** lands on the nearest visible tile.
-- [x] **Active editor goes hidden** (RTL, P2.3b; real collapsed-callout → P2.5 Playwright): a re-render that puts the active block
-  in a collapsed region drops the editor (no invisible focused textarea).
+- [x] **Self-heal — keep** (RTL via real `PreviewRoot`): the active editor survives an *external*
+  re-render that edits *elsewhere* — stays open, re-anchored, draft preserved.
+  **Was FOUND BROKEN 2026-06-13** — P2.3b's `SelfHealHarness` test was theater (it reimplemented the
+  effect), masking that KEEP was unreachable in production; the real `p2-3b-real.integration.test.tsx`
+  exposed it. **FIXED** (see *Self-heal design bug* below): removed the broken tile-based visibility
+  check; KEEP works (dirty + unmodified, offset-unchanged + offset-shifted), fail-on-revert verified.
+- [x] **Self-heal — drop** (RTL via real `PreviewRoot`, `p2-3b-real`): an external edit *to the active
+  block* (content mismatch) **closes** the editor and discards the draft; drop-focus best-effort.
+  *(DROP + no-spurious are genuinely covered + fail-on-revert verified. KEEP and the commit-on-drop
+  corruption are the fix below.)*
+- [~] **Active editor goes hidden** (collapsed region → drop): **DEFERRED 2026-06-13.** The original
+  tile-based visibility check was *exactly* what broke KEEP — while editing, the active block is a
+  textarea wrapper with **no `data-block-pool-id`**, so `tileForAnchorR0` can never find it → always
+  reads "hidden" → spurious drop. The fix below **removed** that broken check (restoring KEEP). The
+  correct collapsed-region drop — measuring the editor's own wrapper (`activeEditRegionRef`) box
+  *after* the re-anchor remount — is **deferred**: jsdom returns zero rects for everything, so it
+  needs Playwright (real layout) to test, and the case is rare (a collaborator re-render moving your
+  *unchanged* edited block into a `display:none` region → an invisible focused textarea; not data
+  corruption). Tracked here + in a `PreviewRoot.tsx` code comment. **→ P2.5/Phase-3 Playwright.**
 - [x] **Focus-restoration** (RTL, P2.4c): a *plain* commit (Esc / Cmd-Enter / blur) closes the
   editor and returns focus to the edited tile by `anchorR0` (not a stale pool id), so
   roving-tabindex resumes there.
-- [ ] **Update existing editing tests** — Phase 2 changes the default click target
-  (leaf → locked tile) *and* the textarea (uncontrolled → controlled), so audit and fix the
-  corpus that asserts the old behavior: `useEditableBlock`, `q2-preview`, `useBlockEditHover`
-  integration tests, and e2e `q2-preview-inline-edit`, `q2-preview-columns-layout`,
-  `q2-preview-render-components-*`, `edit-cell-sizing`. In-scope work, not incidental churn.
+- [x] **Update existing editing tests** — done incrementally across P2.2–P2.4 as each task changed
+  behavior; **verified by the P2.5 audit**: no stale `editTarget.poolId` or uncontrolled `defaultValue`
+  remains anywhere; the corpus is on the new locked-tile/controlled-value model. *(The audit also found
+  the P2.4b/c + P2.3b tests were harness "theater" — replaced with real-`PreviewRoot` coverage in
+  P2.5a + the self-heal fix below.)*
 - [x] **Click-switch** (RTL): clicking from a *dirty* tile A onto tile B commits A and
   lands the cursor in B (same reland path as an arrow move), via B's `anchorR0` after the
   re-render.
@@ -580,8 +591,58 @@ longer re-writes the wrong block on blur).
   false-negative in Chromium (scrollHeight integer rounding — fixed with 2px LAST_LINE_TOLERANCE in
   `caretGeometry.ts`); (2) `requestMove` bailed out on 2-tile docs (active tile's pool-id absent from
   DOM during edit — fixed guard from `<= 1` to `=== 0` in `PreviewRoot.tsx`). All 13 pass. Commit: 05500132.
-- [ ] Implement 2a (locked resolution + roving-tabindex alignment) + 2b (nav, byte-offset
-  identity, controlled value, self-heal, focus) + 2c (dirty guard).
+- [x] Implement 2a (locked resolution + roving-tabindex alignment) + 2b (nav, byte-offset
+  identity, controlled value, self-heal, focus) + 2c (dirty guard). *(All implemented; the
+  self-heal KEEP path + commit-on-drop are re-opened as the design-bug fix below.)*
+
+### Self-heal design bug (found 2026-06-13 by real-`PreviewRoot` testing) — fix
+
+Retiring the `SelfHealHarness` test theater (it reimplemented the effect and so passed against a
+fiction) and writing the test against the **real `PreviewRoot`** exposed that the headline
+data-integrity feature is broken in production. Two bugs:
+
+- **Bug 1 — KEEP is unreachable; self-heal drops on (essentially) every external re-render.** The
+  self-heal effect (`PreviewRoot.tsx` ~:214–253) re-anchors correctly (Step 1, pure pool/content),
+  then in Step 2 checks visibility via `tileForAnchorR0(host, pool, cand.r0, {exactOnly:true})`. But
+  while editing, the active block is a **textarea wrapper with no `data-block-pool-id`**, so that
+  tile lookup can never find it → returns `null` → read as "hidden" → drop. The re-anchor is
+  immediately overridden by a false hidden-drop. **Root cause: the visibility check asks the
+  *tile* oracle about something that, by construction, is never a tile while edited.**
+- **Bug 2 — commit-on-drop corrupts.** When self-heal (or the transient re-render where the old
+  `anchorR0` stops matching) unmounts the textarea, its `onBlur` fires → `commitIfDirty` writes the
+  **stale draft** onto whatever block now occupies that byte range. Worse than the original bug.
+
+**Fix:**
+- Separate the two questions that were conflated: *"did my block survive?"* (logic — pool/content,
+  already correct) vs *"is my block currently visible?"* (DOM). Step 2's visibility check must use
+  the active editor's **own wrapper** via `activeEditRegionRef` (set by the Phase-1 fix), **not**
+  `tileForAnchorR0`. And it must run **after** the re-anchor (re)mounts the textarea — i.e. a
+  **follow-up layout effect** keyed on the open editor, checking `activeEditRegionRef.current`'s box
+  (`offsetParent`/zero-rect = collapsed region → drop). The self-heal effect itself just re-anchors
+  (KEEP) or drops on content-mismatch/no-candidate — no DOM visibility check inline.
+  *(Fallback if the follow-up timing proves fiddly: ship KEEP-correctness first by removing the
+  broken tile-based check; re-add the collapsed-region drop as a small follow-on. Prefer the
+  principled two-effect version.)*
+- Guard `commitIfDirty` (`dispatchers.tsx`) to **no-op unless this textarea is still the active edit
+  target** (`editTarget` non-null and `anchorR0` matches). On a drop, `editTarget` is null/re-anchored
+  away, so the unmount-blur discards the draft (intended DROP semantics) instead of committing it.
+
+**TDD work items (against the real `PreviewRoot` — `p2-3b-real.integration.test.tsx`; NO harness
+reimplementation; fail-on-revert mandatory):**
+- [x] **KEEP** (was impossible to write as passing; now passes): open an editor, simulate a
+  collaborator edit *elsewhere* → editor **stays open** on the same block (re-anchored `anchorR0`),
+  **draft preserved**. Covers dirty + unmodified, offset-unchanged + offset-shifted. Fail-on-revert:
+  a surgical revert of the broken tile-based check fails the KEEP tests. (Commit `86738bff`.)
+- [x] **Commit-on-drop guard**: open an editor, type (dirty), simulate a collaborator edit *to the
+  active block* → editor drops **and `commitTextEdit` is NOT called** with the stale draft.
+  Fail-on-revert verified (reverting the guard → stale draft committed). Plus a follow-up hoisted the
+  guard to the top of `commitIfDirty` so the *cancel* branch can't fire on a stale textarea either
+  (commit `2e6e1133`; hardening — the race is not jsdom-reproducible, test kept as a regression guard).
+- [~] **Collapsed-region drop (reworked)**: **DEFERRED → P2.5/Phase-3 Playwright** (jsdom has no
+  layout; the `activeEditRegionRef`-box check can't be tested without real rects). The broken
+  tile-based check was removed; this correct version is the remaining piece. Documented in code + ↑.
+- [x] Existing **DROP (content mismatch)** and **no-spurious-on-fresh-open** stay green; fail-on-revert
+  on the self-heal effect still breaks the DROP + KEEP tests. (Real `PreviewRoot`, no harness.)
 
 ---
 
@@ -604,13 +665,22 @@ editor. **Only here is AST regeneration reachable, so only here is its cost paid
   so `ReactRenderer`'s props interface gains its first preference-driven row. `usePreference`
   is reactive (`ReactPreview.tsx:266` precedent), so toggling mid-session re-renders and posts
   a fresh `UPDATE_AST`.
-- **Consequence — Phase 3 is hub-client-only for now, by design (not a gap).** The SPA has no
-  settings UI; it gates editing on a server `allowEdit` flag (`PreviewApp.tsx:1157`) and stays
-  entirely on **Phase-2 (locked) behavior**: no leaf-click, no depth keys, no breadcrumb, no
-  regeneration — even with `--allow-edit`. This is self-consistent (the SPA never reaches a
-  regeneration case, so never computing the table is correct). A future `--unlock-depth-cursor`
-  CLI flag is the natural source if depth editing is ever wanted in `q2 preview`. The
-  SPA/hub-client edit-flag asymmetry is recorded as a deliberate divergence, not work.
+- **Both hosts opt in — hub-client via the setting, the SPA via a query param** *(revised
+  2026-06-13: the SPA depth cursor is now in scope, not deferred).* The flag `unlockDepthCursor` has
+  two sources feeding the **same** host-agnostic iframe behavior:
+  - **hub-client:** `usePreference` (above) — reactive, so a mid-session toggle re-renders + posts a
+    fresh `UPDATE_AST`.
+  - **SPA (`PreviewApp.tsx`):** a **`?depthCursor=1` URL query param**, read once at load
+    (`new URLSearchParams(location.search)`), passed as `unlockDepthCursor={true}` to
+    `Q2PreviewIframe`. The SPA drives `Q2PreviewIframe` **directly** (no `ReactRenderer` hop), so this
+    is just sourcing the flag + computing the buffer table (§3c) in `PreviewApp`. Read-at-load = **no
+    live toggle** in the SPA (set the param, (re)load) — fine for a power-user/dev affordance; a live
+    control is a later refinement, not needed. Still additive on top of the SPA's `--allow-edit`
+    server gate (no `--allow-edit` → no editing at all; with it → Phase-2 locked, or unlocked when
+    `?depthCursor=1`).
+  - **The props stay optional** (mirror `editingDisabled`): a host with its opt-in off omits both
+    `unlockDepthCursor` and `nestedEditBuffers`, and the iframe reads that as locked. So locked
+    remains zero-touch on either host; unlocked is each host supplying the two fields.
 
 ### 3b. Behavior when on — depth identity is data-driven and unified with Phase 2
 - **Click resolves to the leaf** (deepest-wins, no coincidence-climb-to-top, no
@@ -667,9 +737,23 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   value, `activate` seeds `draft = ctx.nestedEditBuffers?.[siKey] ?? normalize(sliceBytes(...))`
   **once at click time** (current render → correct `siKey`); the draft then lives in state and
   is never re-derived from the shifting table. So the shift is a non-issue for the active editor.
-- **Plumbing:** `nestedEditBuffers?: Record<string,string>` onto `Q2PreviewIframe`'s
-  UPDATE_AST payload + deps, through `entry.tsx`/`PreviewContext`. Both hosts (ReactPreview +
-  the SPA) compute it; Host A needs the `ReactRenderer` pass-through (same new hop as §3a).
+- **Plumbing:** `nestedEditBuffers?: Record<string,string>` (and `unlockDepthCursor?: boolean`) are
+  **optional** fields onto `Q2PreviewIframe`'s UPDATE_AST payload + deps, through
+  `entry.tsx`/`PreviewContext`. **Each host computes/passes them when ITS opt-in is on, else omits
+  them** (omitted optional field → iframe reads as locked → zero-touch). Compute via the same gated
+  `useMemo` on both hosts: `unlockDepthCursor && rendered ? regenerateNestedBuffers(content,
+  untransformedAstJson) : EMPTY` (module-level shared `EMPTY` for referential stability).
+  - **hub-client (`ReactPreview`)** — flag from `usePreference`; passes through the new
+    `ReactRenderer → Q2PreviewIframe` hop (§3a).
+  - **SPA (`PreviewApp.tsx`)** — flag from the `?depthCursor=1` query param (§3a); computes the table
+    in the same `useMemo` and passes it **directly** to `Q2PreviewIframe` (no `ReactRenderer`). The
+    SPA already has WASM + `untransformedAstJson`/`renderedContent`, so this reuses the existing
+    `regenerateNestedBuffers` call — no new infra.
+  *(History 2026-06-13: §3a originally scoped Phase 3 hub-client-only and a mid-draft "both hosts
+  compute it" line conflicted with that; the SPA depth cursor was then brought into scope via the
+  query param, so "both hosts compute it (gated by each host's opt-in)" is now correct. The
+  optionality still guarantees locked is zero-touch on a host whose opt-in is off. Keep the props
+  optional, mirroring `editingDisabled`.)*
 - **`siKey` contract:** Rust keys from the untransformed pool; the iframe looks up from the
   transformed pool — they match because `resolveSource` is value-keyed. Rust test asserts the
   exact `"0:<r0>-<r1>:0"` string.
@@ -692,9 +776,16 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
 - **Shown only when `unlockDepthCursor` is on** — the 95% see nothing new.
 
 ### TDD work items
-- [ ] Setting end-to-end (RTL): checkbox toggles `unlockDepthCursor`; the value reaches
-  the iframe (new `ReactRenderer` pass-through); off ⇒ no keys, no chip, leaf-click
-  disabled, **no `regenerateNestedBuffers` call**.
+- [ ] **Setting end-to-end — hub-client** (RTL): checkbox toggles `unlockDepthCursor`; the value
+  reaches the iframe (new `ReactRenderer` pass-through); off ⇒ no keys, no chip, leaf-click disabled,
+  **no `regenerateNestedBuffers` call**; on ⇒ buffers computed + passed. Mid-session toggle reactive.
+- [ ] **SPA query-param opt-in** (RTL + q2-preview-spa e2e): `PreviewApp.tsx` reads `?depthCursor=1`
+  → passes `unlockDepthCursor` + computes/passes `nestedEditBuffers` **directly** to `Q2PreviewIframe`
+  (no `ReactRenderer`). **No param ⇒ omitted ⇒ locked**, no `regenerateNestedBuffers` call (type-safe
+  via the optional props). With `--allow-edit` + `?depthCursor=1`, the SPA gets the unlock; with
+  `--allow-edit` alone, Phase-2 locked. e2e: `q2-preview-spa/e2e` (real `q2 preview` binary) — load a
+  fixture with `?depthCursor=1`, confirm leaf-click + a clean nested-blockquote-child edit; load
+  without it, confirm locked (whole-quote). (Read-at-load: no live toggle — acceptable.)
 - [ ] Unlocked click → leaf; depth keys out/in along the AST path; clamp at the ends at
   key-press; click-in-subtree = caret-only; click-outside resets. Path derived from the AST
   (ancestor-only change re-derives with cursor unchanged).

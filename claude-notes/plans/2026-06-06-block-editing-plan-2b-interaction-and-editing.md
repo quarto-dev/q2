@@ -70,9 +70,7 @@ wrapper — D4), and activates the editor:
   move the active region in DOM pre-order; Enter/Space activates; Esc exits;
   `:focus-visible` reuses the outline; ARIA role + name per region.
 
-No overlay to position, so there is no scroll-tracking problem. (Plan 4's
-heading/section split adds a glyph-rect target and may need a drawn highlight;
-out of scope here.)
+No overlay to position, so there is no scroll-tracking problem.
 
 ## Editability (from Plan 2a — no gate machinery here)
 
@@ -294,7 +292,7 @@ user an error. `DestinationNotFound` is removed from the error enum entirely.
   *Same test file.*
 - [x] **Render-component demos (RTL + edit-survival):** drag/comment/kanban
   migrated to `usePreviewEdit()` + `commitSubtreeEdit`; Playwright E2E tests pass.
-- [x] *(Plan 4 boundary)* section Div with TopLevel source shows **no** `data-block-pool-id`
+- [x] section Div with TopLevel source shows **no** `data-block-pool-id`
   (`section` class check fires before `resolveSource`).
   *Test: `ts-packages/preview-renderer/src/q2-preview/q2-preview.integration.test.tsx`*
 
@@ -356,8 +354,8 @@ P1 reflow Playwright test. See
   tabindex not yet implemented).
 
 ## Known limitations (this phase)
-- LineBlock not editable; container **contents** (Plan 3), **sections** (Plan 4)
-  not yet; selection/link-vs-click accepted; generated-container regions (e.g.
+- LineBlock not editable; container **contents** (Plan 3), ~~**sections** (Plan 4 — cancelled 2026-06-13)~~;
+  selection/link-vs-click accepted; generated-container regions (e.g.
   appendix) gated off.
 
 ## Risks / watch-items

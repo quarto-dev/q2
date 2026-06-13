@@ -102,6 +102,32 @@ export interface PreviewContextValue {
      */
     activeEditRegionRef?: React.MutableRefObject<HTMLDivElement | null>;
     /**
+     * P2.3b: ref to the current `editTarget` state. Stable reference updated
+     * every render. Used by `EditTextarea`'s `commitIfDirty` to guard against
+     * writing a stale draft when the textarea unmounts due to a self-heal DROP
+     * (or the transient unmount before a re-anchor):
+     *
+     *   - On a DROP, `editTargetRef.current` is set to null (by the self-heal
+     *     effect's `setEditTargetRaw(null)`) before React unmounts the textarea.
+     *     The `onBlur` fires during unmount with the stale draft — the guard
+     *     checks `editTargetRef.current` and suppresses the commit.
+     *   - On a transient unmount (old `anchorR0` stops matching before re-anchor),
+     *     `editTargetRef.current` holds the OLD anchorR0. The guard compares
+     *     `anchorR0 === resolved.sourceEntry.r[0]` — old anchorR0 ≠ re-anchored
+     *     anchorR0 → guard suppresses the commit, draft survives in `editDraftRef`
+     *     to be restored when the textarea re-mounts.
+     *
+     * A `MutableRefObject` is always referentially stable — exposing it on the
+     * context does NOT cause extra re-renders.
+     */
+    editTargetRef?: MutableRefObject<{
+        anchorR0: number;
+        anchorR1: number;
+        anchorSlice: string;
+        contentHeight: number;
+        boxStyle: Record<string, string>;
+    } | null>;
+    /**
      * Globally disable the edit surface (bd-ov4gqk3m). When true, no
      * block renders an edit affordance (`data-block-pool-id`) and
      * `useBlockEditHover` is inert. Set by hosts that are read-only —
