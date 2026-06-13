@@ -169,13 +169,17 @@ still matches.
 - **`--locked` everywhere** — the lockfile must be committed and in
   sync, or every build leg fails. Always `cargo update --workspace`
   after a version bump.
-- **Linux is gnu, not musl.** `rusty_v8` (via `deno_core` →
-  `quarto-system-runtime`) publishes no musl prebuilt archives, so a
-  static-musl build 404s at the v8 download. The linux legs build
-  `x86_64/aarch64-unknown-linux-gnu` on **ubuntu-22.04** runners
-  (glibc 2.35 floor) with `--features vendored-openssl` (so the binary
-  has no runtime `libssl` dependency). Alpine users need `gcompat`.
-  *If bd-3e3sam51 removes the v8/deno_core dependency, revisit musl.*
+- **Linux ships gnu today** (`x86_64/aarch64-unknown-linux-gnu` on
+  **ubuntu-22.04** runners, glibc 2.35 floor, `--features
+  vendored-openssl` so the binary has no runtime `libssl` dependency;
+  Alpine users need `gcompat`). Static musl was originally *blocked* by
+  `rusty_v8` (via `deno_core` → `quarto-system-runtime`), which shipped
+  no musl prebuilts — both musl legs 404'd at the v8 download in the
+  v0.1.0 dry-run. **That dependency has since been removed
+  (bd-3e3sam51), so musl is now viable** — the only remaining
+  consideration is openssl/aws-lc, both vendorable/musl-buildable.
+  Switching the matrix to musl (one artifact per arch, Alpine included)
+  is unblocked future work; until someone does it, linux is gnu.
 - **Signing happens in the `release` job, not the build matrix.**
   ubuntu-22.04 (jammy) has no `minisign` apt package; ubuntu-latest
   (the release runner) does. Centralizing also means the secret key is

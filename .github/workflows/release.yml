@@ -37,11 +37,13 @@
 #   release builds only; see crates/quarto-mcp-launcher/src/defaults.rs
 #   for why the Desktop-app client secret is safe to embed.
 # - Linux targets are gnu on the oldest available runners (glibc 2.35
-#   floor). Static musl is impossible for q2: rusty_v8 (deno_core →
-#   quarto-system-runtime) publishes no musl prebuilt archives — both
-#   musl legs 404'd in the v0.1.0 dry-run (run 27449454203). The linux
-#   legs build with `--features vendored-openssl` so the binary has no
-#   runtime libssl dependency (plan D4).
+#   floor). Static musl was originally blocked because rusty_v8
+#   (deno_core → quarto-system-runtime) shipped no musl prebuilts —
+#   both musl legs 404'd in the v0.1.0 dry-run (run 27449454203). That
+#   dependency has since been removed (bd-3e3sam51), so musl is now
+#   viable; we simply haven't switched yet (tracked separately). The
+#   linux legs build with `--features vendored-openssl` so the binary
+#   has no runtime libssl dependency (plan D4).
 #
 # Signing key: MINISIGN_SECRET_KEY repo secret; the public half is pinned
 # in install.sh (MINISIGN_PUBKEY) and README. The sign step verifies its
