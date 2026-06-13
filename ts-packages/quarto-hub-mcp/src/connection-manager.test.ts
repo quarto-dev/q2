@@ -586,6 +586,103 @@ describe('lastObservedAuthMode state machine', () => {
 });
 
 // ---------------------------------------------------------------------------
+// waitForChange (long-poll)
+// ---------------------------------------------------------------------------
+
+/**
+ * Sync-client factory that captures the callbacks object so a test can
+ * drive `onFileChanged` / `onFileRemoved` to simulate remote edits. The
+ * `connect` stub seeds one text file ('test.qmd' = 'hello') via
+ * `onFileAdded`, mirroring a real initial sync.
+ */
+function capturingSyncClientFactory() {
+  let captured: SyncClientCallbacks | undefined;
+  const factory = (cbs: SyncClientCallbacks): SyncClient => {
+    captured = cbs;
+    const stub: Partial<SyncClient> = {
+      connect: vi.fn(async () => {
+        cbs.onFileAdded?.('test.qmd', { type: 'text', text: 'hello' });
+        return [];
+      }) as unknown as SyncClient['connect'],
+      disconnect: vi.fn().mockResolvedValue(undefined) as unknown as SyncClient['disconnect'],
+    };
+    return stub as SyncClient;
+  };
+  return { factory, cbs: () => captured! };
+}
+
+describe('waitForChange (long-poll)', () => {
+  it('resolves when the watched file changes', async () => {
+    const fetchSpy = scriptedFetch([200]);
+    const cap = capturingSyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      fetch: fetchSpy.fetch,
+      syncClientFactory: cap.factory,
+    });
+    await mgr.connect('idx-1');
+
+    const pending = mgr.waitForChange('idx-1', 'test.qmd', 5000);
+    // Simulate a remote edit arriving on the watched path.
+    cap.cbs().onFileChanged('test.qmd', 'hello world', []);
+
+    const res = await pending;
+    expect(res.changed).toBe(true);
+    expect(res.payload?.type).toBe('text');
+    expect((res.payload as { type: 'text'; text: string }).text).toBe('hello world');
+    expect(res.hash).toMatch(/^sha256:/);
+  });
+
+  it('times out with changed=false when nothing changes', async () => {
+    const fetchSpy = scriptedFetch([200]);
+    const cap = capturingSyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      fetch: fetchSpy.fetch,
+      syncClientFactory: cap.factory,
+    });
+    await mgr.connect('idx-1');
+
+    const res = await mgr.waitForChange('idx-1', 'test.qmd', 20);
+    expect(res.changed).toBe(false);
+  });
+
+  it('returns immediately when since_hash differs from current (gap-close)', async () => {
+    const fetchSpy = scriptedFetch([200]);
+    const cap = capturingSyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      fetch: fetchSpy.fetch,
+      syncClientFactory: cap.factory,
+    });
+    await mgr.connect('idx-1');
+
+    // No onFileChanged fired; current is the seeded 'hello'. A stale
+    // baseline hash means a change already happened in the gap → resolve now.
+    const res = await mgr.waitForChange('idx-1', 'test.qmd', 5000, 'sha256:stale');
+    expect(res.changed).toBe(true);
+    expect((res.payload as { type: 'text'; text: string }).text).toBe('hello');
+  });
+
+  it('ignores changes to other paths', async () => {
+    const fetchSpy = scriptedFetch([200]);
+    const cap = capturingSyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      fetch: fetchSpy.fetch,
+      syncClientFactory: cap.factory,
+    });
+    await mgr.connect('idx-1');
+
+    const pending = mgr.waitForChange('idx-1', 'test.qmd', 40);
+    // A change to a different file must not satisfy the waiter.
+    cap.cbs().onFileChanged('other.qmd', 'nope', []);
+    const res = await pending;
+    expect(res.changed).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Redaction invariants
 // ---------------------------------------------------------------------------
 

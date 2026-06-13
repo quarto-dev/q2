@@ -45,6 +45,7 @@ describe('MCP protocol', () => {
       'patch_file',
       'read_file',
       'rename_file',
+      'wait_for_change',
       'write_file',
     ]);
   });
@@ -99,6 +100,7 @@ describe('MCP protocol (read-only mode)', () => {
       'connect_project',
       'list_files',
       'read_file',
+      'wait_for_change',
     ]);
   });
 

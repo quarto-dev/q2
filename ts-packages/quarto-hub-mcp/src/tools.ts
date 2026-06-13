@@ -79,6 +79,35 @@ function getReadTools(): Tool[] {
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
     },
+    {
+      name: 'wait_for_change',
+      description:
+        'Long-poll: block until a file in the project is edited by any collaborator, then return its ' +
+        'new content. Returns as soon as a change is observed, or after `timeout_seconds` with ' +
+        '`changed: false` (re-call to keep watching). The result includes a `hash`; pass it back as ' +
+        '`since_hash` on the next call so an edit landing between calls is never missed. Lets an agent ' +
+        'react to a live collaborator without busy-polling read_file.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'The automerge index document ID of the project' },
+          path: { type: 'string', description: 'The file path within the project to watch' },
+          timeout_seconds: {
+            type: 'number',
+            description: 'Max seconds to block before returning changed=false (default 25, clamped to 1-55)',
+            default: 25,
+          },
+          since_hash: {
+            type: 'string',
+            description:
+              'Optional hash from a prior result. If the file already differs from it, returns immediately ' +
+              '(closes the gap between polls).',
+          },
+        },
+        required: ['project', 'path'],
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false },
+    },
   ];
 }
 
@@ -198,6 +227,8 @@ async function handleTool(
       return handleListFiles(args, manager);
     case 'read_file':
       return handleReadFile(args, manager);
+    case 'wait_for_change':
+      return handleWaitForChange(args, manager);
     case 'write_file':
       return handleWriteFile(args, manager);
     case 'patch_file':
@@ -250,6 +281,46 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
     return error(`Error: ${path} is a binary file. Use read_binary_file_metadata instead.`);
   }
   return text(payload.text);
+}
+
+async function handleWaitForChange(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const path = args.path as string;
+  const rawTimeout = typeof args.timeout_seconds === 'number' ? args.timeout_seconds : 25;
+  const timeoutSec = Math.max(1, Math.min(55, rawTimeout));
+  const sinceHash = typeof args.since_hash === 'string' ? args.since_hash : undefined;
+
+  const result = await manager.waitForChange(project, path, timeoutSec * 1000, sinceHash);
+
+  if (!result.changed) {
+    return text(
+      JSON.stringify(
+        {
+          changed: false,
+          path,
+          hash: result.hash,
+          message: `No change within ${timeoutSec}s. Call wait_for_change again (pass this hash as since_hash) to keep watching.`,
+        },
+        null,
+        2,
+      ),
+    );
+  }
+  if (result.payload === null) {
+    return text(JSON.stringify({ changed: true, removed: true, path }, null, 2));
+  }
+  if (result.payload.type === 'binary') {
+    return text(
+      JSON.stringify(
+        { changed: true, path, type: 'binary', mimeType: result.payload.mimeType, hash: result.hash },
+        null,
+        2,
+      ),
+    );
+  }
+  return text(
+    JSON.stringify({ changed: true, path, hash: result.hash, content: result.payload.text }, null, 2),
+  );
 }
 
 async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {

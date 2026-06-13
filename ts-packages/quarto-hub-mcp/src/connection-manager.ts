@@ -23,6 +23,8 @@
  * not require auth.
  */
 
+import { createHash } from 'node:crypto';
+
 import {
   createSyncClient,
   type SyncClient,
@@ -83,9 +85,58 @@ export interface ConnectionManagerDeps {
   readonly probePath?: string;
 }
 
+/**
+ * A one-shot listener registered by {@link ConnectionManager.waitForChange}.
+ * Fired (and removed) the next time the watched `path` changes.
+ */
+interface ChangeWaiter {
+  path: string;
+  fire: (payload: FilePayload | null) => void;
+}
+
 interface ProjectState {
   client: SyncClient;
   files: Map<string, FilePayload>;
+  /** Pending long-poll waiters, keyed implicitly by their `path` field. */
+  waiters: Set<ChangeWaiter>;
+}
+
+/**
+ * Result of a {@link ConnectionManager.waitForChange} long-poll.
+ * `changed: false` means the call timed out with no edit observed.
+ * `payload: null` means the file was removed.
+ */
+export interface ChangeResult {
+  changed: boolean;
+  payload: FilePayload | null;
+  /** sha256 (`sha256:<hex>`) of the payload, or null when absent/removed. */
+  hash: string | null;
+}
+
+/** Content hash used for the long-poll gap-close check. */
+function hashPayload(p: FilePayload | undefined | null): string | null {
+  if (!p) return null;
+  const h = createHash('sha256');
+  if (p.type === 'text') h.update(p.text, 'utf8');
+  else h.update(Buffer.from(p.data));
+  return `sha256:${h.digest('hex')}`;
+}
+
+/**
+ * Fire (and remove) every waiter registered for `path`, handing it the
+ * new payload (`null` on removal). Other paths' waiters are untouched.
+ */
+function fireWaiters(
+  waiters: Set<ChangeWaiter>,
+  path: string,
+  payload: FilePayload | null,
+): void {
+  for (const w of [...waiters]) {
+    if (w.path === path) {
+      waiters.delete(w);
+      w.fire(payload);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -172,18 +223,25 @@ export class ConnectionManager {
     const auth = await this.resolveAuthForConnect();
 
     const files = new Map<string, FilePayload>();
+    const waiters = new Set<ChangeWaiter>();
     const callbacks: SyncClientCallbacks = {
       onFileAdded(path: string, file: FilePayload) {
         files.set(path, file);
+        fireWaiters(waiters, path, file);
       },
       onFileChanged(path: string, text: string, _patches: Patch[]) {
-        files.set(path, { type: 'text', text });
+        const payload: FilePayload = { type: 'text', text };
+        files.set(path, payload);
+        fireWaiters(waiters, path, payload);
       },
       onBinaryChanged(path: string, data: Uint8Array, mimeType: string) {
-        files.set(path, { type: 'binary', data, mimeType });
+        const payload: FilePayload = { type: 'binary', data, mimeType };
+        files.set(path, payload);
+        fireWaiters(waiters, path, payload);
       },
       onFileRemoved(path: string) {
         files.delete(path);
+        fireWaiters(waiters, path, null);
       },
       onError(err: Error) {
         console.error(
@@ -206,9 +264,54 @@ export class ConnectionManager {
       auth,
     );
 
-    const state: ProjectState = { client, files };
+    const state: ProjectState = { client, files, waiters };
     this.projects.set(indexDocId, state);
     return state;
+  }
+
+  /**
+   * Long-poll: resolve the next time `path` changes in the project, or
+   * after `timeoutMs` with `changed: false`. Connects first if needed.
+   *
+   * `sinceHash` closes the gap between polls: if the file already differs
+   * from the caller's last-known hash, the change is returned immediately
+   * (so an edit that lands between two `waitForChange` calls is never
+   * missed). Pass back the `hash` from the previous result each call.
+   */
+  async waitForChange(
+    indexDocId: string,
+    path: string,
+    timeoutMs: number,
+    sinceHash?: string,
+  ): Promise<ChangeResult> {
+    // Register the waiter synchronously when already connected so an edit
+    // arriving immediately after the call can't slip through the await gap.
+    // (First-time connects still pay one await; `sinceHash` covers that gap.)
+    const state = this.projects.get(indexDocId) ?? (await this.connect(indexDocId));
+
+    const current = state.files.get(path);
+    const currentHash = hashPayload(current);
+    // Gap-close: a change already happened relative to the caller's baseline.
+    if (sinceHash !== undefined && sinceHash !== currentHash) {
+      return { changed: true, payload: current ?? null, hash: currentHash };
+    }
+
+    return await new Promise<ChangeResult>((resolve) => {
+      let timer: ReturnType<typeof setTimeout>;
+      const waiter: ChangeWaiter = {
+        path,
+        fire: (payload) => {
+          clearTimeout(timer);
+          resolve({ changed: true, payload, hash: hashPayload(payload) });
+        },
+      };
+      state.waiters.add(waiter);
+      timer = setTimeout(() => {
+        state.waiters.delete(waiter);
+        const latest = state.files.get(path);
+        resolve({ changed: false, payload: latest ?? null, hash: hashPayload(latest) });
+      }, timeoutMs);
+    });
   }
 
   /**
@@ -222,18 +325,25 @@ export class ConnectionManager {
     const auth = await this.resolveAuthForConnect();
 
     const tempFiles = new Map<string, FilePayload>();
+    const waiters = new Set<ChangeWaiter>();
     const callbacks: SyncClientCallbacks = {
       onFileAdded(path: string, file: FilePayload) {
         tempFiles.set(path, file);
+        fireWaiters(waiters, path, file);
       },
       onFileChanged(path: string, text: string, _patches: Patch[]) {
-        tempFiles.set(path, { type: 'text', text });
+        const payload: FilePayload = { type: 'text', text };
+        tempFiles.set(path, payload);
+        fireWaiters(waiters, path, payload);
       },
       onBinaryChanged(path: string, data: Uint8Array, mimeType: string) {
-        tempFiles.set(path, { type: 'binary', data, mimeType });
+        const payload: FilePayload = { type: 'binary', data, mimeType };
+        tempFiles.set(path, payload);
+        fireWaiters(waiters, path, payload);
       },
       onFileRemoved(path: string) {
         tempFiles.delete(path);
+        fireWaiters(waiters, path, null);
       },
     };
 
@@ -248,7 +358,7 @@ export class ConnectionManager {
       auth,
     });
 
-    const state: ProjectState = { client, files: tempFiles };
+    const state: ProjectState = { client, files: tempFiles, waiters };
     this.projects.set(result.indexDocId, state);
     return { indexDocId: result.indexDocId, files: result.files };
   }

@@ -16,6 +16,61 @@ The design lives in
 operators registering a hub for end-user use should consult
 [`claude-notes/instructions/hub-mcp-operator-runbook.md`](../../claude-notes/instructions/hub-mcp-operator-runbook.md).
 
+## Tools
+
+Once configured, the agent has the tools below. Each operates on a project
+identified by its Automerge **index document ID**, passed as the `project`
+argument.
+
+### Reading
+
+| Tool | What it does |
+|------|--------------|
+| `connect_project` | Connect to a project by its index doc ID; returns the file list. Triggers the sign-in flow if the hub requires auth. |
+| `list_files` | List the files in a connected project. |
+| `read_file` | Read a text file's content. |
+| `wait_for_change` | **Long-poll**: block until a file is edited by any collaborator, then return its new content (see below). |
+
+### Writing
+
+| Tool | What it does |
+|------|--------------|
+| `write_file` | Replace a text file's entire content (creates it if absent). |
+| `patch_file` | Replace one unique substring in a text file. |
+| `create_file` | Create a new text file. |
+| `delete_file` | Delete a file. |
+| `rename_file` | Rename / move a file. |
+| `create_project` | Create a new project on the sync server with optional initial files. |
+
+The write tools are hidden when the server is started with `--read-only`.
+
+### Authentication
+
+`authenticate` and `authenticate_clear` are present only when the OAuth env
+vars are configured (see [Setup](#setup)). On a no-auth hub they are unused.
+
+### `wait_for_change` — reacting to a live collaborator
+
+`wait_for_change` lets an agent respond to another editor without busy-polling
+`read_file`. It blocks until the watched `path` changes, then returns
+`{ changed: true, content, hash }`; on timeout it returns
+`{ changed: false, hash }`, so the agent just calls again to keep watching.
+
+```jsonc
+wait_for_change({
+  project: "<index-doc-id>",
+  path: "report.qmd",
+  timeout_seconds: 25,    // optional, clamped to 1–55
+  since_hash: "sha256:…"  // optional — see below
+})
+```
+
+Pass the `hash` from the previous result back as `since_hash`: if the file
+already differs from it, the call returns **immediately**. This closes the gap
+between polls, so an edit that lands *between* two `wait_for_change` calls is
+never missed. The tool is read-only and is available even in `--read-only`
+mode.
+
 ## Setup
 
 You need two values from your hub operator:
