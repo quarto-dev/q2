@@ -1,5 +1,8 @@
 import React, { useCallback, useContext, useRef } from 'react';
 import { PreviewContext } from './PreviewContext';
+import { resolveLockedTile, enumerateLockedTiles } from './lockedTiles';
+import { sliceBytes } from '../utils/sliceSource';
+import { normalizeLineEndings } from '../utils/normalizeLineEndings';
 
 const HOLD_MS = 500;
 const MOVE_THRESHOLD_PX = 8;
@@ -55,13 +58,32 @@ export function useBlockEditHover(): {
     };
 
     const activate = useCallback((el: Element) => {
-        const poolId = el.getAttribute('data-block-pool-id');
-        if (poolId === null || !ctx?.setEditTarget) return;
-        const id: string | number = /^\d+$/.test(poolId) ? Number(poolId) : poolId;
-        // Dedup: if this block is already the active edit target, do nothing.
-        if (ctx?.editTarget?.poolId === id) return;
-        const rect = el.getBoundingClientRect();
-        const cs = getComputedStyle(el);
+        // P2.2: resolve the locked tile first — the tile (not the raw leaf)
+        // is what gets activated. resolveLockedTile is idempotent so calling
+        // activate on an already-resolved tile returns that same tile.
+        const tile = resolveLockedTile(el);
+        if (!tile) return;
+        const tilePoolId = tile.getAttribute('data-block-pool-id');
+        if (tilePoolId === null || !ctx?.setEditTarget) return;
+
+        // Read the pool entry to capture byte-offset identity (anchorR0/anchorR1).
+        // If the pool entry is missing or not an Original entry (t !== 0), skip
+        // activation gracefully — we cannot identify the block by byte range.
+        const poolEntry = ctx?.pool?.[Number(tilePoolId)] as { t: number; r: [number, number]; d: number } | undefined;
+        if (!poolEntry || poolEntry.t !== 0) return;
+
+        const anchorR0 = poolEntry.r[0];
+        const anchorR1 = poolEntry.r[1];
+
+        // Dedup: if this block is already the active edit target (same byte range), do nothing.
+        if (ctx?.editTarget?.anchorR0 === anchorR0) return;
+
+        // Compute anchorSlice: the normalized source text for the dirty-guard baseline.
+        const content = ctx?.content ?? '';
+        const anchorSlice = normalizeLineEndings(sliceBytes(content, anchorR0, anchorR1)).trimEnd();
+
+        const rect = tile.getBoundingClientRect();
+        const cs = getComputedStyle(tile);
         const contentHeight = rect.height
             - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
             - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth);
@@ -82,7 +104,12 @@ export function useBlockEditHover(): {
             borderBottomColor: cs.borderBottomColor, borderLeftColor: cs.borderLeftColor,
         };
         outlineElement(null);
-        ctx.setEditTarget({ poolId: id, contentHeight, boxStyle });
+        // Seed the draft ref BEFORE calling setEditTarget (the fresh-open site).
+        // This is the single canonical place where the draft is seeded — setEditTarget
+        // itself no longer reseeds, so a P2.3b self-heal re-anchor via setEditTarget
+        // can preserve the in-flight draft without clobbering it.
+        if (ctx.editDraftRef) ctx.editDraftRef.current = anchorSlice;
+        ctx.setEditTarget({ anchorR0, anchorR1, anchorSlice, contentHeight, boxStyle });
     }, [ctx]);
 
     const findEditTarget = (e: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>) => {
@@ -162,21 +189,21 @@ export function useBlockEditHover(): {
 
     const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
         if (ctx?.editTarget != null) return;
-        // Roving-tabindex navigation: arrows move focus through the
-        // [data-block-pool-id] elements in DOM pre-order; hoveredRef is
-        // updated in lock-step so the existing Enter/Space handler (which
-        // reads hoveredRef) activates whichever block keyboard focus landed on.
+        // P2.2 Roving-tabindex navigation: arrows move focus through the
+        // LOCKED-TILE list (enumerateLockedTiles), not the raw
+        // querySelectorAll result. This means:
+        //   - Hidden tiles (zero-area rect) are skipped automatically.
+        //   - Coincident lone-child wrappers dedupe their child away.
+        //   - Enter on the focused tile resolves idempotently → same tile.
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
             const host = e.currentTarget;
-            const blocks = Array.from(
-                host.querySelectorAll<HTMLElement>('[data-block-pool-id]'),
-            );
-            if (!blocks.length) return;
-            const idx = blocks.indexOf(document.activeElement as HTMLElement);
+            const tiles = enumerateLockedTiles(host) as HTMLElement[];
+            if (!tiles.length) return;
+            const idx = tiles.indexOf(document.activeElement as HTMLElement);
             const next = e.key === 'ArrowDown'
-                ? blocks[(idx + 1) % blocks.length]
-                : blocks[(idx - 1 + blocks.length) % blocks.length];
+                ? tiles[(idx + 1) % tiles.length]
+                : tiles[(idx - 1 + tiles.length) % tiles.length];
             next.focus();
             hoveredRef.current = next;
             return;

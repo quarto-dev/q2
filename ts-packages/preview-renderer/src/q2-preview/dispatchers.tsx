@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useRef } from 'react';
 import { RegistryContext, AttributionWrap, renderChildren } from '../framework';
 import type {
     BlockNode,
@@ -9,7 +9,7 @@ import type {
 } from '../framework';
 import { PreviewContext } from './PreviewContext';
 import type { PreviewContextValue, ResolvedSource } from './PreviewContext';
-import { sliceBytes } from '../utils/sliceSource';
+import { normalizeLineEndings } from '../utils/normalizeLineEndings';
 
 /**
  * Block types whose left inset (the marker gutter: `<ul>`/`<ol>`/`<dl>`
@@ -81,48 +81,74 @@ const PLACEHOLDER_CLASS = 'q2-preview-placeholder';
  * would evaluate true (undefined !== 'Opaque'), silently making Generated /
  * included-file blocks editable.  The widened gate includes both `TopLevel` and
  * `Descendable` (all non-Opaque, non-null classes).
+ *
+ * Identity is matched by `anchorR0` (the block's start byte offset captured at
+ * click time) against `resolved.sourceEntry.r[0]`. This survives collaborator
+ * inserts/removes above the active block — ordinals (poolId) shift but byte
+ * ranges of existing blocks stay stable.
  */
 function isBlockEditTarget(
     ctx: PreviewContextValue | null,
-    poolId: string | number | undefined,
     resolved: ResolvedSource | null,
 ): boolean {
     return (
         resolved != null &&
         resolved.reachabilityClass !== 'Opaque' &&
-        poolId !== undefined &&
         ctx?.commitTextEdit !== undefined &&
         ctx?.content != null &&
-        ctx?.editTarget?.poolId === poolId
+        ctx?.editTarget != null &&
+        ctx.editTarget.anchorR0 === resolved.sourceEntry.r[0]
     );
 }
 
-/** Render an in-place editing textarea for the matched block. */
-function renderBlockTextarea(
-    ctx: PreviewContextValue,
-    resolved: ResolvedSource,
-): React.ReactNode {
-    const { contentHeight } = ctx.editTarget!;
-    const initialText = sliceBytes(
-        ctx.content!,
-        resolved.sourceEntry.r[0],
-        resolved.sourceEntry.r[1],
-    ).trimEnd();
+/**
+ * Controlled textarea for block editing. Local state isolates per-keystroke
+ * re-renders to this component only. Seeded from `ctx.editDraftRef.current`
+ * on mount so the draft survives remounts (e.g. when a collaborator inserts
+ * a block above, shifting pool ordinals and forcing a key-change remount).
+ *
+ * Dirty guard: blur / Cmd-Enter only commit when
+ * `normalizeLineEndings(draft).trimEnd() !== editTarget.anchorSlice`.
+ * This makes CRLF-sourced blocks safe — the textarea LF-normalizes its value,
+ * and `anchorSlice` was already normalized at activation time.
+ *
+ * IME composition: `isComposingRef` gates the blur handler so mid-composition
+ * blurs (e.g. mobile keyboard dismiss before compositionend) do not commit.
+ */
+function EditTextarea({
+    ctx,
+    resolved,
+}: {
+    ctx: PreviewContextValue;
+    resolved: ResolvedSource;
+}) {
+    const { contentHeight, anchorSlice } = ctx.editTarget!;
+    const isComposingRef = useRef(false);
 
-    const commit = (el: HTMLTextAreaElement) => {
-        const text = el.value;
-        if (!text.trim()) {
+    // Seed from the root-held ref so the draft persists across remounts.
+    const [draft, setDraft] = useState<string>(
+        () => ctx.editDraftRef?.current ?? anchorSlice,
+    );
+
+    const commitIfDirty = (text: string) => {
+        const normalized = normalizeLineEndings(text).trimEnd();
+        // Cancel (close without commit) when the draft is empty/whitespace OR
+        // equals the original source slice. An empty draft would delete the block —
+        // the old pre-P2.3a code had an explicit empty guard, and we restore it here.
+        // (P2.3b self-heal will call setEditTarget with a re-anchored target while
+        //  preserving the in-flight draft, so the guard must stay here, not be moved.)
+        if (!normalized || normalized === anchorSlice) {
             ctx.setEditTarget!(null);
             return;
         }
-        ctx.commitTextEdit!(JSON.stringify(resolved.sourceEntry), text);
+        ctx.commitTextEdit!(JSON.stringify(resolved.sourceEntry), normalizeLineEndings(text));
         ctx.setEditTarget!(null);
     };
 
     return (
         <textarea
             autoFocus
-            defaultValue={initialText}
+            value={draft}
             style={{
                 display: 'block',
                 fontFamily: 'monospace',
@@ -132,11 +158,23 @@ function renderBlockTextarea(
                 boxSizing: 'border-box',
                 resize: 'vertical',
             }}
-            onBlur={(e) => commit(e.currentTarget)}
+            onChange={(e) => {
+                const v = e.currentTarget.value;
+                setDraft(v);
+                // Keep the root ref in sync so remounts seed the latest draft.
+                if (ctx.editDraftRef) ctx.editDraftRef.current = v;
+            }}
+            onCompositionStart={() => { isComposingRef.current = true; }}
+            onCompositionEnd={() => { isComposingRef.current = false; }}
+            onBlur={() => {
+                // Do not commit mid-IME-composition (e.g. mobile dismiss before compositionend).
+                if (isComposingRef.current) return;
+                commitIfDirty(draft);
+            }}
             onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                     e.preventDefault();
-                    commit(e.currentTarget);
+                    commitIfDirty(draft);
                 } else if (e.key === 'Escape') {
                     e.preventDefault();
                     ctx.setEditTarget!(null);
@@ -144,6 +182,14 @@ function renderBlockTextarea(
             }}
         />
     );
+}
+
+/** Render an in-place editing textarea for the matched block. */
+function renderBlockTextarea(
+    ctx: PreviewContextValue,
+    resolved: ResolvedSource,
+): React.ReactNode {
+    return <EditTextarea ctx={ctx} resolved={resolved} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -181,10 +227,9 @@ function renderBlockTextarea(
 export const Block = (args: NodeArgs<BlockNode>) => {
     const { registry } = useContext(RegistryContext);
     const ctx = useContext(PreviewContext);
-    const poolId = (args.node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
 
-    if (isBlockEditTarget(ctx, poolId, resolved) && ctx) {
+    if (isBlockEditTarget(ctx, resolved) && ctx) {
         // Editing: replace the block with a measure-and-set textarea wrapper
         // that reproduces the element's exact box (see renderMeasuredEdit).
         // Pass activeEditRegionRef so the wrapper div is tracked — used by
@@ -245,10 +290,9 @@ export const Inline = (args: NodeArgs<InlineNode>) => {
 export const CustomBlock = (args: NodeArgs<CustomBlockNode>) => {
     const { registry } = useContext(RegistryContext);
     const ctx = useContext(PreviewContext);
-    const poolId = (args.node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
 
-    if (isBlockEditTarget(ctx, poolId, resolved) && ctx) {
+    if (isBlockEditTarget(ctx, resolved) && ctx) {
         const textarea = renderBlockTextarea(ctx, resolved!);
         return renderMeasuredEdit(args.node, textarea, ctx.editTarget!, ctx.activeEditRegionRef);
     }

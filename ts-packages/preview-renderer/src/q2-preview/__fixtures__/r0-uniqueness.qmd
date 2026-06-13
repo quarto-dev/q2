@@ -1,0 +1,19 @@
+---
+title: r0 uniqueness fixture
+---
+
+A top-level paragraph.
+
+::: {.foo}
+A single-child div paragraph.
+:::
+
+> A blockquote paragraph.
+
+- Bullet item one.
+- Bullet item two.
+- Bullet item three with nested list:
+  - Nested item A.
+  - Nested item B.
+
+Another paragraph after the lists.

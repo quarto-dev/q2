@@ -518,42 +518,48 @@ half of the §Load-bearing data-integrity bug (an untouched silently-retargeted 
 longer re-writes the wrong block on blur).
 
 ### TDD work items
-- [ ] **byte→line map** (unit): line-start table + `lineOf`; CRLF + trailing-newline.
-- [ ] **Locked resolution** (RTL + Playwright for rects): chrome-less single-child div →
-  the **div**; multi-child div → the clicked **child**; single-child blockquote text →
-  the **child**, blockquote **rule** → the blockquote; a list (any size) → the **whole
-  list** (prefixing-atomic). Coincidence epsilon (~1px, all four edges) pinned with a
-  hairline-border fixture (→ leaf).
+- [x] **byte→line map** (unit): line-start table + `lineOf`; CRLF + trailing-newline.
+- [x] **Locked resolution** (RTL done in P2.2; real-browser epsilon tuning → P2.5 Playwright): chrome-less single-child div →
+  the **div**; multi-child div → the clicked **child**; a blockquote (single- or
+  multi-child, click anywhere — text *or* rule) → the **whole blockquote**
+  (prefixing-atomic); a list (any size) → the **whole list** (prefixing-atomic); nested
+  prefixing containers (list-in-blockquote, blockquote-in-list-item) → the **outermost**
+  prefixing container. Coincidence epsilon (~1px, all four edges) pinned with a
+  hairline-border fixture (→ leaf). *(Confirmed 2026-06-13: blockquote is atomic in
+  locked mode like lists; the earlier "blockquote text → child" line was stale — full
+  per-layer descent is the Phase 3 unlock. Reason: only the outermost prefixing
+  container has a clean byte-slice; inner targets' slices carry the outer `> `/indent.)*
 - [ ] **Ordered tiles** (RTL): next/prev derived from live `[data-block-pool-id]` at
   event time, locked-resolved, linear-scanned; a `HorizontalRule` between paras is
   skipped; partition has no container-then-child redundancy.
-- [ ] **Visibility filter** (RTL/Playwright): a **collapsed callout's** body is skipped
+- [x] **Visibility filter** (RTL done in P2.2; real collapsed-callout → P2.5 Playwright): a **collapsed callout's** body is skipped
   by the climb, the tile scan, **and** the roving-tabindex — no editor opens on a hidden
   block; the zero-rect doesn't corrupt the coincidence comparison.
-- [ ] **Roving-tabindex alignment** (RTL): not-editing arrows focus locked-tile
+- [x] **Roving-tabindex alignment** (RTL, P2.2): not-editing arrows focus locked-tile
   representatives (not raw leaves), skip hidden tiles, and Enter opens the same tile the
   focus ring is on.
 - [ ] **Cross-surface nav** (RTL): ArrowDown last line → next tile; ArrowUp first → prev;
   wrap both ways; arrow *within* a multi-line buffer does not leave; modifier+Arrow at an
   edge does not leave.
-- [ ] **Dirty guard** (RTL): blur without typing → no commit, document unchanged (write
+- [x] **Dirty guard** (RTL, P2.3a): blur without typing → no commit, document unchanged (write
   first; fails before the guard). Type-then-undo → unmodified. **CRLF**: a CRLF-source
-  block, blur untyped → no commit (normalization; fails before the fix).
-- [ ] **Controlled value survives remount** (RTL): type into a block, simulate an external
+  block, blur untyped → no commit (normalization; fails before the fix). Also empty→cancel + IME.
+- [x] **Controlled value survives remount** (RTL, P2.3a + P2.3b): type into a block, simulate an external
   re-render that **shifts indices** (insert a block above), assert the draft is **preserved**
-  (not reset to original) and the editor stays on the right block.
+  (not reset to original) and the editor stays on the right block. *(P2.3a: controlled-value/ref
+  survives a remount; P2.3b self-heal re-anchors so it stays on the right block.)*
 - [ ] **Trigger robustness** (RTL): unmodified move → synchronous hop, no commit, no gap;
   modified move → commit + `setEditTarget(null)` + `pendingLanding`; a dirty byte-identical
   commit still resolves (fallback); a file switch cancels a pending land.
-- [ ] **`r[0]` uniqueness** (unit): every block's `pool[s].r[0]` is distinct in a doc with
+- [x] **`r[0]` uniqueness** (unit): every block's `pool[s].r[0]` is distinct in a doc with
   nested containers (the assumption the `anchorR0` match relies on).
-- [ ] **Self-heal — keep** (RTL): the active editor survives an *external* re-render that
+- [x] **Self-heal — keep** (RTL, P2.3b): the active editor survives an *external* re-render that
   edits *elsewhere* via `anchorR0` re-matching (rect-free, exact-preferred) — stays open,
   draft preserved, no remount-to-leaf.
-- [ ] **Self-heal — drop** (RTL, fails on `main`): an external edit *to the active block*
+- [x] **Self-heal — drop** (RTL, P2.3b): an external edit *to the active block*
   (content mismatch) **closes** the editor and discards the draft; a subsequent commit never
   lands on the changed/inserted block. **Drop-focus** lands on the nearest visible tile.
-- [ ] **Active editor goes hidden** (RTL/Playwright): a re-render that puts the active block
+- [x] **Active editor goes hidden** (RTL, P2.3b; real collapsed-callout → P2.5 Playwright): a re-render that puts the active block
   in a collapsed region drops the editor (no invisible focused textarea).
 - [ ] **Focus-restoration** (RTL): a *plain* commit (Esc / Cmd-Enter / blur) closes the
   editor and returns focus to the edited tile by `anchorR0` (not a stale pool id), so

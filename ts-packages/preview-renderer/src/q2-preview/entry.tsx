@@ -26,7 +26,7 @@
  */
 
 import { createRoot } from 'react-dom/client';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 // Phase F.1 (bd-kw93.14): Bootstrap 5 bundled JS, vendored at the
@@ -75,6 +75,7 @@ import type { PreviewNodeEditPayload } from '../types/diagnostic';
 import { Block, Inline, previewRegistry, PreviewContext, usePreviewEdit } from '.';
 import { buildSourceIndex, serializeSourceEntry } from './sourceIndex';
 import type { ResolvedSource } from './sourceIndex';
+import { tileForAnchorR0, findReanchorCandidate } from './lockedTiles';
 import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';
 import { renderSlot } from './utils';
@@ -371,10 +372,16 @@ function walkForNoteNumbers(ast: PandocAST): WeakMap<NoteInline, number> {
 
 function PreviewRoot(props: PreviewRootProps) {
     const [editTarget, setEditTargetRaw] = useState<{
-        poolId: string | number; contentHeight: number;
+        anchorR0: number;
+        anchorR1: number;
+        anchorSlice: string;
+        contentHeight: number;
         boxStyle: Record<string, string>;
     } | null>(null);
-    const lastEditPoolIdRef = useRef<string | number | null>(null);
+    // Root-held ref for the in-flight edit draft. Seeded with anchorSlice at
+    // activation; reset to null on close. Referentially stable → no extra
+    // re-renders from draft changes.
+    const editDraftRef = useRef<string | null>(null);
     // Ref pointing to the inner wrapper div of the currently active edit
     // region (set by renderMeasuredEdit in dispatchers.tsx). Used by
     // useBlockEditHover's onPointerUp to suppress the parent-climb bug:
@@ -382,22 +389,102 @@ function PreviewRoot(props: PreviewRootProps) {
     const activeEditRegionRef = useRef<HTMLDivElement | null>(null);
     const setEditTarget = useCallback((target: typeof editTarget | null) => {
         if (target !== null) {
-            lastEditPoolIdRef.current = target.poolId;
+            // Draft is seeded at the fresh-open site (activate / future nav-reland),
+            // never here, so a P2.3b self-heal re-anchor via setEditTarget preserves
+            // the in-flight draft without clobbering it.
             setEditTargetRaw(target);
         } else {
-            const poolId = lastEditPoolIdRef.current;
-            lastEditPoolIdRef.current = null;
+            editDraftRef.current = null;
             setEditTargetRaw(null);
-            if (poolId !== null) {
-                setTimeout(() => {
-                    if (lastEditPoolIdRef.current !== null) return;
-                    document.querySelector<HTMLElement>(
-                        `[data-block-pool-id="${poolId}"]`,
-                    )?.focus();
-                }, 0);
-            }
+            // P2.3b: drop-focus is handled in the self-heal layout effect below.
+            // Plain-commit focus-restoration is deferred to P2.4 (pendingLanding).
         }
     }, []);
+
+    // ---------------------------------------------------------------------------
+    // P2.3b: self-heal + hidden-surface drop
+    //
+    // Runs after every external re-render (keyed on render inputs, NOT on
+    // editTarget — keying on editTarget would fire this on fresh activation and
+    // corrupt the open). editTarget is read via ref so the effect always sees
+    // the current value without becoming stale.
+    //
+    // The effect re-anchors the open editor when the active block shifted but is
+    // content-verified, or drops it when the block was edited under the user or
+    // the tile became hidden.
+    // ---------------------------------------------------------------------------
+
+    // Keep editTarget in a ref so the layout effect reads it without depending on it.
+    const editTargetRef = useRef<typeof editTarget>(editTarget);
+    editTargetRef.current = editTarget;
+
+    // previewHostRef: a ref to the wrapper div that scopes tile queries
+    // (tileForAnchorR0) to the preview document tree. The iframe already
+    // has a single document so `document.body` would also work, but using
+    // a ref keeps the DOM queries scoped below the React root and avoids
+    // querying any elements injected outside the React tree (e.g. the
+    // Bootstrap script tag in document.head).
+    const previewHostRef = useRef<HTMLDivElement | null>(null);
+
+    // Keep pool in a ref for the same reason — pool changes with astJson but we
+    // don't want pool in the effect deps (that would fire on every render, not
+    // just epoch-ticks). Pool is re-derived from astJson in the useMemo below.
+    const poolRef = useRef<unknown[]>([]);
+
+    // Self-heal layout effect. Fires post-DOM / pre-paint so re-anchoring is
+    // invisible (no flicker). Keyed on the render inputs that signal an external
+    // re-render: [astJson, renderedContent, untransformedAstJson].
+    useLayoutEffect(() => {
+        const et = editTargetRef.current;
+        if (et === null) return;  // no open editor — nothing to do
+
+        const currentPool = poolRef.current;
+        const currentContent = props.renderedContent ?? '';
+
+        // Step 1: find a re-anchor candidate using content-verification.
+        const cand = findReanchorCandidate(currentPool, currentContent, et.anchorR0, et.anchorSlice);
+
+        if (cand) {
+            // Re-anchor: update anchorR0/anchorR1; draft (editDraftRef) is untouched.
+            // anchorSlice is unchanged (content-verified).
+            const reanchored = { ...et, anchorR0: cand.r0, anchorR1: cand.r1 };
+            setEditTargetRaw(reanchored);
+
+            // Step 2: check that the re-anchored tile is EXACTLY visible. A re-render
+            // can move the block into a collapsed region — drop if so.
+            // Must use exactOnly:true to test visibility of THIS specific tile, not
+            // the nearest subsequent tile. Without exactOnly, a later visible tile
+            // would return non-null and the hidden-drop would be silently missed.
+            if (previewHostRef.current) {
+                const tile = tileForAnchorR0(previewHostRef.current, currentPool, cand.r0, { exactOnly: true });
+                if (tile === null) {
+                    // Re-anchored tile is hidden — drop
+                    editDraftRef.current = null;
+                    setEditTargetRaw(null);
+                    // drop-focus: no tile to focus at/after (everything hidden here)
+                }
+            }
+        } else {
+            // Drop — content mismatch or no candidate at/after anchorR0.
+            // The block was edited under the user, or all blocks after anchorR0 are gone.
+            editDraftRef.current = null;
+            setEditTargetRaw(null);
+
+            // Drop-focus: best-effort focus on the nearest visible tile at/after anchorR0.
+            // This positions roving-tabindex without reopening an editor.
+            // Note: a "don't steal focus if a new edit started" guard belongs to P2.4's
+            // async reland path (pendingLanding), not this synchronous layout-effect path —
+            // setEditTargetRaw(null) is async so editTargetRef.current still holds the
+            // pre-drop non-null value here, making any such guard ineffective anyway.
+            if (previewHostRef.current) {
+                const tile = tileForAnchorR0(previewHostRef.current, currentPool, et.anchorR0);
+                if (tile) {
+                    (tile as HTMLElement).focus?.();
+                }
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [props.astJson, props.renderedContent, props.untransformedAstJson]);
 
     // Refs so the link-handler closure (installed once at mount)
     // sees the *latest* currentFilePath / projectFilePaths instead
@@ -502,6 +589,11 @@ function PreviewRoot(props: PreviewRootProps) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [props.astJson]);
 
+    // Keep poolRef in sync with the latest pool value. Updated in render body
+    // (not in an effect) so the self-heal layout effect always reads the pool
+    // from the current render cycle when it fires.
+    poolRef.current = pool;
+
     const astProps = parsed
         ? { ast: parsed }
         : { astJson: props.astJson };
@@ -599,34 +691,41 @@ function PreviewRoot(props: PreviewRootProps) {
                 content: props.renderedContent,
                 editTarget,
                 setEditTarget,
+                editDraftRef,
                 activeEditRegionRef,
                 sourceIndex,
                 resolveSource,
                 editingDisabled: props.editingDisabled,
             }}
         >
-            <CurrentActorContext.Provider value={props.currentActor ?? null}>
-                <AssetManifestContext.Provider value={props.assetManifest}>
-                    <NoteNumberingContext.Provider value={noteNumbers}>
-                        {isSlides && parsed ? (
-                            <RevealDeck
-                                ast={parsed}
-                                registry={mergedPreviewRegistry}
-                                currentFilePath={props.currentFilePath}
-                                onNavigateToDocument={props.onNavigateToDocument}
-                            />
-                        ) : (
-                        <Ast
-                            {...astProps}
-                            currentFilePath={props.currentFilePath}
-                            onNavigateToDocument={props.onNavigateToDocument}
-                            setAst={props.setAst}
-                            registry={mergedPreviewRegistry}
-                        />
-                        )}
-                    </NoteNumberingContext.Provider>
-                </AssetManifestContext.Provider>
-            </CurrentActorContext.Provider>
+            {/* previewHostRef scopes tile queries (tileForAnchorR0) to the
+                preview document so the self-heal effect does not accidentally
+                query tiles from other parts of the page. The div is a
+                transparent pass-through with no visual effect. */}
+            <div ref={previewHostRef} style={{ display: 'contents' }}>
+                <CurrentActorContext.Provider value={props.currentActor ?? null}>
+                    <AssetManifestContext.Provider value={props.assetManifest}>
+                        <NoteNumberingContext.Provider value={noteNumbers}>
+                            {isSlides && parsed ? (
+                                <RevealDeck
+                                    ast={parsed}
+                                    registry={mergedPreviewRegistry}
+                                    currentFilePath={props.currentFilePath}
+                                    onNavigateToDocument={props.onNavigateToDocument}
+                                />
+                            ) : (
+                                <Ast
+                                    {...astProps}
+                                    currentFilePath={props.currentFilePath}
+                                    onNavigateToDocument={props.onNavigateToDocument}
+                                    setAst={props.setAst}
+                                    registry={mergedPreviewRegistry}
+                                />
+                            )}
+                        </NoteNumberingContext.Provider>
+                    </AssetManifestContext.Provider>
+                </CurrentActorContext.Provider>
+            </div>
         </PreviewContext.Provider>
     );
 }

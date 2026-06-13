@@ -8,8 +8,8 @@
  *
  * These tests exercise the `Block` dispatcher directly (the logic moved here
  * from `useEditableBlock` in Plan 3).  The dispatcher is rendered with a Para
- * node, a minimal registry, and a PreviewContext whose `editTarget.poolId`
- * matches the node's pool id.
+ * node, a minimal registry, and a PreviewContext whose `editTarget.anchorR0`
+ * matches the node's resolved source entry's `r[0]` (P2.3a: identity by byte offset).
  *
  * jsdom 26 supports DOMRect natively. Em units are NOT resolved to px
  * by getComputedStyle — assert the raw '0.9em' string.
@@ -50,24 +50,37 @@ const MOCK_BOX_STYLE: Record<string, string> = {
     borderBottomColor: 'rgb(222, 226, 230)', borderLeftColor: 'rgb(0, 0, 0)',
 };
 
+// P2.3a: editTarget now uses anchorR0/anchorR1/anchorSlice instead of poolId.
+// MOCK_RESOLVED.sourceEntry.r = [0, 12], so anchorR0 = 0, anchorR1 = 12.
 const POOL_ID = 42;
+// anchorR0 matches MOCK_RESOLVED.sourceEntry.r[0] = 0
+const ANCHOR_R0 = 0;
+const ANCHOR_R1 = 12;
+const ANCHOR_SLICE = 'test content'; // sliceBytes('test content', 0, 12).trimEnd()
 
 function mountBlock(
-    editTargetPoolId: number,
-    nodePoolId: number = editTargetPoolId,
+    matchingR0: number = ANCHOR_R0,
+    nodePoolId: number = POOL_ID,
 ) {
     const node = { t: 'Para', c: [], s: nodePoolId } as any;
+    // isBlockEditTarget matches by anchorR0 === resolved.sourceEntry.r[0].
+    // MOCK_RESOLVED.sourceEntry.r[0] = 0. When matchingR0 ≠ 0, no textarea renders.
+    const editDraftRef = { current: ANCHOR_SLICE as string | null };
     const ctx: PreviewContextValue = {
         currentFilePath: '/project/test.qmd',
         content: 'test content',
         editTarget: {
-            poolId: editTargetPoolId, contentHeight: 72,
+            anchorR0: matchingR0,
+            anchorR1: matchingR0 === ANCHOR_R0 ? ANCHOR_R1 : matchingR0 + 12,
+            anchorSlice: ANCHOR_SLICE,
+            contentHeight: 72,
             boxStyle: MOCK_BOX_STYLE,
         },
         setEditTarget: vi.fn(),
         commitTextEdit: vi.fn(),
         resolveSource: (n: any) =>
             n.s === nodePoolId ? MOCK_RESOLVED : null,
+        editDraftRef,
     };
     const registry = {};
     return render(
@@ -81,34 +94,35 @@ function mountBlock(
 
 describe('Block dispatcher — P1 sizing', () => {
     it('renders <textarea> with width: 100% (inherits from wrapper element)', () => {
-        const { container } = mountBlock(POOL_ID);
+        const { container } = mountBlock(ANCHOR_R0);
         const ta = container.querySelector('textarea')!;
         expect(ta).not.toBeNull();
         expect(ta.style.width).toBe('100%');
     });
 
     it('renders <textarea> with height matching editTarget.contentHeight', () => {
-        const { container } = mountBlock(POOL_ID);
+        const { container } = mountBlock(ANCHOR_R0);
         const ta = container.querySelector('textarea')!;
         expect(ta.style.height).toBe('72px');
     });
 
-    it('renders no <textarea> when poolId does not match editTarget.poolId', () => {
-        // editTarget.poolId = 99, but node has poolId = POOL_ID — no match
-        const { container } = mountBlock(/* editTargetPoolId= */ 99, /* nodePoolId= */ POOL_ID);
+    it('renders no <textarea> when anchorR0 does not match resolved.sourceEntry.r[0]', () => {
+        // anchorR0 = 99, but MOCK_RESOLVED.sourceEntry.r[0] = 0 — no match
+        // P2.3a: identity is now matched by anchorR0, not poolId
+        const { container } = mountBlock(/* matchingR0= */ 99);
         expect(container.querySelector('textarea')).toBeNull();
     });
 });
 
 describe('Block dispatcher — P2 font', () => {
     it("renders <textarea> with fontFamily: 'monospace'", () => {
-        const { container } = mountBlock(POOL_ID);
+        const { container } = mountBlock(ANCHOR_R0);
         const ta = container.querySelector('textarea')!;
         expect(ta.style.fontFamily).toBe('monospace');
     });
 
     it("renders <textarea> with fontSize: '0.9em' (raw string, not computed px)", () => {
-        const { container } = mountBlock(POOL_ID);
+        const { container } = mountBlock(ANCHOR_R0);
         const ta = container.querySelector('textarea')!;
         expect(ta.style.fontSize).toBe('0.9em');
     });
@@ -127,16 +141,22 @@ function mountBlockWithClass(
         reachabilityClass === null
             ? null
             : { ...MOCK_RESOLVED, reachabilityClass };
+    // P2.3a: anchorR0 must match resolved.sourceEntry.r[0] = 0 for the gate to pass.
+    const editDraftRef = { current: ANCHOR_SLICE as string | null };
     const ctx: PreviewContextValue = {
         currentFilePath: '/project/test.qmd',
         content: 'test content',
         editTarget: {
-            poolId: POOL_ID, contentHeight: 72,
+            anchorR0: ANCHOR_R0,
+            anchorR1: ANCHOR_R1,
+            anchorSlice: ANCHOR_SLICE,
+            contentHeight: 72,
             boxStyle: MOCK_BOX_STYLE,
         },
         setEditTarget: vi.fn(),
         commitTextEdit: vi.fn(),
         resolveSource: () => resolved,
+        editDraftRef,
     };
     return render(
         <PreviewContext.Provider value={ctx}>
@@ -181,13 +201,22 @@ function mountBlockStructural(
     registryComponent: ((args: NodeArgs<any>) => React.ReactNode) | null,
 ) {
     const node = { t: nodeType, c: [], s: POOL_ID } as any;
+    // P2.3a: anchorR0 must match MOCK_RESOLVED.sourceEntry.r[0] = 0.
+    const editDraftRef = { current: ANCHOR_SLICE as string | null };
     const ctx: PreviewContextValue = {
         currentFilePath: '/project/test.qmd',
         content: 'test content',
-        editTarget: { poolId: POOL_ID, contentHeight: 72, boxStyle: MOCK_BOX_STYLE },
+        editTarget: {
+            anchorR0: ANCHOR_R0,
+            anchorR1: ANCHOR_R1,
+            anchorSlice: ANCHOR_SLICE,
+            contentHeight: 72,
+            boxStyle: MOCK_BOX_STYLE,
+        },
         setEditTarget: vi.fn(),
         commitTextEdit: vi.fn(),
         resolveSource: () => MOCK_RESOLVED,
+        editDraftRef,
     };
     const registry = registryComponent ? { [nodeType]: registryComponent } : {};
     return render(
