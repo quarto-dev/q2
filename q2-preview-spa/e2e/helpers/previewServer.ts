@@ -161,6 +161,13 @@ export interface StartOptions {
    * an input. Hidden directories are skipped too.
    */
   copyFromDir?: string;
+  /**
+   * Pass `--allow-edit` to the spawned `q2 preview` binary so the SPA's
+   * edit surface is enabled (the SPA fetches `/api/preview/config` and gates
+   * editing on `allowEdit`). Off by default — most specs are read-only.
+   * Used by the depth-cursor e2e (P3.5), which must open an editor.
+   */
+  allowEdit?: boolean;
 }
 
 /**
@@ -221,7 +228,14 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
 
   const proc = spawn(
     Q2_BINARY,
-    ['preview', '--no-browser', '--data-dir', dataDir, projectDir],
+    [
+      'preview',
+      '--no-browser',
+      '--data-dir',
+      dataDir,
+      ...(opts.allowEdit ? ['--allow-edit'] : []),
+      projectDir,
+    ],
     {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {

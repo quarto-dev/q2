@@ -56,6 +56,10 @@ let server: PreviewServerHandle;
 
 test.beforeEach(async () => {
     server = await startPreviewServer({
+        // Editing must be enabled or no block renders `data-block-pool-id`
+        // (read-only is the default since the editingDisabled gate, 44faeb5e),
+        // and these no-reflow tests wait on that attribute to activate an editor.
+        allowEdit: true,
         fixtureFiles: [{ path: 'index.qmd', content: FIXTURE }],
     });
 });
