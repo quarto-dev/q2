@@ -798,7 +798,7 @@ export function applyNodeEdit(
 /**
  * Regenerate clean QMD buffers for every block that has a prefixing ancestor
  * (BlockQuote / BulletList / OrderedList / DefinitionList) AND is multi-line
- * in source.  Used by the depth-cursor mode of the block editor.
+ * in source.  Used by the nesting-cursor mode of the block editor.
  *
  * @param content              - raw QMD source text
  * @param untransformedAstJson - pre-pipeline Pandoc JSON for `content`

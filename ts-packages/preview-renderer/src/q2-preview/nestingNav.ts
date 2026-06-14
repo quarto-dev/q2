@@ -1,5 +1,5 @@
 /**
- * depthNav.ts — pure depth-cursor navigation utilities (Plan P3.3).
+ * nestingNav.ts — pure nesting-cursor navigation utilities (Plan P3.3).
  *
  * All exports are pure functions (no DOM, no React). The one platform sniff
  * (`detectPlatform`) accepts an injectable navigator-like object so it can be
@@ -11,7 +11,7 @@ import type { SourceIndexEntry } from './sourceIndex';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface DepthSurface {
+export interface NestingSurface {
   r0: number;
   r1: number;
 }
@@ -47,25 +47,25 @@ export function parseSiKey(
   };
 }
 
-// ── buildDepthSurfaces ────────────────────────────────────────────────────────
+// ── buildNestingSurfaces ────────────────────────────────────────────────────────
 
 /**
- * Extract the depth-navigable block surfaces from a source index.
+ * Extract the nesting-navigable block surfaces from a source index.
  *
  * - Skips entries whose reachabilityClass === 'Opaque'.
  * - Skips entries whose key fails to parse.
- * - Returns DepthSurface[] sorted by r0 ascending, then r1 DESCENDING
+ * - Returns NestingSurface[] sorted by r0 ascending, then r1 DESCENDING
  *   (outer before inner at same r0).
  * - Dedupes surfaces with identical (r0, r1).
  * - null/undefined input → [].
  */
-export function buildDepthSurfaces(
+export function buildNestingSurfaces(
   sourceIndex: Map<string, { reachabilityClass: string }> | null | undefined,
-): DepthSurface[] {
+): NestingSurface[] {
   if (!sourceIndex) return [];
 
   const seen = new Set<string>();
-  const surfaces: DepthSurface[] = [];
+  const surfaces: NestingSurface[] = [];
 
   for (const [key, entry] of sourceIndex) {
     if (entry.reachabilityClass === 'Opaque') continue;
@@ -101,11 +101,11 @@ export function buildDepthSurfaces(
  * Returns null if the cursor has no container (already outermost).
  */
 export function parentSurface(
-  surfaces: DepthSurface[],
+  surfaces: NestingSurface[],
   cursorR0: number,
   cursorR1: number,
-): DepthSurface | null {
-  let best: DepthSurface | null = null;
+): NestingSurface | null {
+  let best: NestingSurface | null = null;
 
   for (const s of surfaces) {
     const strictlyContains =
@@ -127,6 +127,34 @@ export function parentSurface(
   return best;
 }
 
+// ── topBlockR0 ────────────────────────────────────────────────────────────────
+
+/**
+ * The `r0` of the OUTERMOST nesting surface containing `[r0, r1]` — i.e. climb
+ * `parentSurface` repeatedly until there is no container, returning the last
+ * non-null surface's `r0` (or the cursor's own `r0` if it is already outermost).
+ *
+ * Used by §1's geometry snapshot to derive the top-level block's start byte so
+ * snapshot keys can be stored block-relative (`r0 − topBlockR0`), making them
+ * shift-invariant under an insert-above. Computed from the same source index at
+ * both capture and lookup. Pure (no DOM).
+ *
+ * Note: returns the last non-null surface's r0 — NOT null — so an already-top
+ * cursor maps to its own r0.
+ */
+export function topBlockR0(
+  surfaces: NestingSurface[],
+  r0: number,
+  r1: number,
+): number {
+  let cur: NestingSurface = { r0, r1 };
+  for (;;) {
+    const p = parentSurface(surfaces, cur.r0, cur.r1);
+    if (!p) return cur.r0;
+    cur = p;
+  }
+}
+
 // ── childSurfaceToward ────────────────────────────────────────────────────────
 
 /**
@@ -145,11 +173,11 @@ export function parentSurface(
  * 4. Returns null if `contained` is empty (cursor is a leaf).
  */
 export function childSurfaceToward(
-  surfaces: DepthSurface[],
+  surfaces: NestingSurface[],
   cursorR0: number,
   cursorR1: number,
   leafAnchorR0: number,
-): DepthSurface | null {
+): NestingSurface | null {
   // Step 1: all surfaces strictly contained by the cursor
   const contained = surfaces.filter(
     s =>
@@ -197,10 +225,10 @@ export function childSurfaceToward(
   });
 }
 
-// ── classifyDepthKey ──────────────────────────────────────────────────────────
+// ── classifyNestingKey ──────────────────────────────────────────────────────────
 
 /**
- * Classify a keyboard chord as a depth move, per platform.
+ * Classify a keyboard chord as a nesting move, per platform.
  *
  * mac:   metaKey && ctrlKey && !altKey && !shiftKey
  * other: altKey && shiftKey && !metaKey && !ctrlKey
@@ -212,7 +240,7 @@ export function childSurfaceToward(
  *
  * Any non-matching modifier combo → null (never swallow bare arrows).
  */
-export function classifyDepthKey(
+export function classifyNestingKey(
   e: {
     key: string;
     metaKey: boolean;
@@ -340,16 +368,16 @@ export function buildAncestorPath(
   }));
 }
 
-// ── buildDepthCommitDestination ───────────────────────────────────────────────
+// ── buildNestingCommitDestination ───────────────────────────────────────────────
 
 /**
- * Build the commit-destination JSON for the depth ("self-heal on write")
+ * Build the commit-destination JSON for the nesting cursor ("self-heal on write")
  * commit path, from the LIVE edit target.
  *
  * Returns null when there is no active target (commit no-ops).
  * Shape: JSON.stringify({ t: 0, r: [anchorR0, anchorR1], d: 0 })
  */
-export function buildDepthCommitDestination(
+export function buildNestingCommitDestination(
   et: { anchorR0: number; anchorR1: number } | null | undefined,
 ): string | null {
   if (!et) return null;

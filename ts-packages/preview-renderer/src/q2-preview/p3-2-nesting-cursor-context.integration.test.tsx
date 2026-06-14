@@ -1,13 +1,13 @@
 /**
- * P3.2 Test 1: unlockDepthCursor + nestedEditBuffers reach PreviewContext.
+ * P3.2 Test 1: unlockNestingCursor + nestedEditBuffers reach PreviewContext.
  *
  * TDD: written BEFORE implementation. Mounts the real PreviewRoot with the
  * two new payload fields and asserts a context consumer sees them.
  * Also asserts that OMITTING the fields yields undefined/falsy (default-locked).
  *
- * Fail-on-revert: remove the `unlockDepthCursor` field from the
+ * Fail-on-revert: remove the `unlockNestingCursor` field from the
  * PreviewContext.Provider value in PreviewRoot.tsx → the
- * "context consumer sees unlockDepthCursor: true" assertion reddens.
+ * "context consumer sees unlockNestingCursor: true" assertion reddens.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -58,47 +58,47 @@ function mountAndCapture(props: Partial<React.ComponentProps<typeof PreviewRoot>
     return { capturedCtx: capturedCtx as any, unmount: result.unmount };
 }
 
-describe('P3.2: unlockDepthCursor + nestedEditBuffers reach PreviewContext', () => {
-    it('context consumer sees unlockDepthCursor: true when provided', () => {
+describe('P3.2: unlockNestingCursor + nestedEditBuffers reach PreviewContext', () => {
+    it('context consumer sees unlockNestingCursor: true when provided', () => {
         const { capturedCtx, unmount } = mountAndCapture({
-            unlockDepthCursor: true,
+            unlockNestingCursor: true,
             nestedEditBuffers: SAMPLE_NESTED_BUFFERS,
         });
 
         expect(capturedCtx).not.toBeNull();
-        // Fail-on-revert: if unlockDepthCursor is removed from the provider value,
+        // Fail-on-revert: if unlockNestingCursor is removed from the provider value,
         // this assertion reddens.
-        expect(capturedCtx?.unlockDepthCursor).toBe(true);
+        expect(capturedCtx?.unlockNestingCursor).toBe(true);
         expect(capturedCtx?.nestedEditBuffers).toEqual(SAMPLE_NESTED_BUFFERS);
 
         unmount();
     });
 
-    it('context consumer sees unlockDepthCursor: undefined (default-locked) when not passed', () => {
-        // Default-locked: unlockDepthCursor not passed → should be undefined in context.
+    it('context consumer sees unlockNestingCursor: undefined (default-locked) when not passed', () => {
+        // Default-locked: unlockNestingCursor not passed → should be undefined in context.
         const { capturedCtx, unmount } = mountAndCapture();
 
         expect(capturedCtx).not.toBeNull();
-        expect(capturedCtx?.unlockDepthCursor).toBeFalsy();
+        expect(capturedCtx?.unlockNestingCursor).toBeFalsy();
         expect(capturedCtx?.nestedEditBuffers).toBeUndefined();
 
         unmount();
     });
 
-    it('context consumer sees nestedEditBuffers undefined when unlockDepthCursor is false', () => {
+    it('context consumer sees nestedEditBuffers undefined when unlockNestingCursor is false', () => {
         const { capturedCtx, unmount } = mountAndCapture({
-            unlockDepthCursor: false,
+            unlockNestingCursor: false,
         });
 
         expect(capturedCtx).not.toBeNull();
         // false or undefined — both are falsy and represent "locked"
-        expect(capturedCtx?.unlockDepthCursor).toBeFalsy();
+        expect(capturedCtx?.unlockNestingCursor).toBeFalsy();
         expect(capturedCtx?.nestedEditBuffers).toBeUndefined();
 
         unmount();
     });
 
-    it('context consumer sees nestedEditBuffers when provided without unlockDepthCursor', () => {
+    it('context consumer sees nestedEditBuffers when provided without unlockNestingCursor', () => {
         // Both fields are optional — nestedEditBuffers can be provided independently.
         const { capturedCtx, unmount } = mountAndCapture({
             nestedEditBuffers: SAMPLE_NESTED_BUFFERS,

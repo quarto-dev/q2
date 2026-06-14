@@ -32,11 +32,11 @@
  *
  * jsdom gotchas:
  *  - getBoundingClientRect returns zeroes by default. Must be mocked on tile
- *    elements for enumerateLockedTiles to treat them as visible.
+ *    elements for enumerateOuterBlocks to treat them as visible.
  *  - PointerEvent.pointerType is NOT honoured from the constructor in jsdom 26.
  *    Use Object.defineProperty via the ptrEvent helper (from useBlockEditHover
  *    integration tests).
- *  - getComputedStyle returns empty strings — measureTileBox returns { contentHeight: 0,
+ *  - getComputedStyle returns empty strings — measureBlockBox returns { contentHeight: 0,
  *    boxStyle: {} } which is fine; the editor still opens and the textarea is found.
  *
  * Why PreviewRoot and not entry.tsx:
@@ -163,7 +163,7 @@ function mountPreviewRoot(
 
 /**
  * Mock getBoundingClientRect on all [data-block-pool-id] elements inside
- * the container so enumerateLockedTiles treats them as visible.
+ * the container so enumerateOuterBlocks treats them as visible.
  *
  * Each tile gets a distinct non-zero rect (top = poolId * 60).
  * Must be called AFTER the initial render so the elements exist in the DOM.

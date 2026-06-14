@@ -165,7 +165,7 @@ export interface StartOptions {
    * Pass `--allow-edit` to the spawned `q2 preview` binary so the SPA's
    * edit surface is enabled (the SPA fetches `/api/preview/config` and gates
    * editing on `allowEdit`). Off by default — most specs are read-only.
-   * Used by the depth-cursor e2e (P3.5), which must open an editor.
+   * Used by the nesting-cursor e2e (P3.5), which must open an editor.
    */
   allowEdit?: boolean;
 }

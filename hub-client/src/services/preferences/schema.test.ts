@@ -8,12 +8,12 @@ describe('validatePreferences', () => {
       scrollSyncEnabled: true,
       errorOverlayCollapsed: false,
       colorScheme: 'dark',
-      unlockDepthCursor: true,
+      unlockNestingCursor: true,
     });
     expect(result.scrollSyncEnabled).toBe(true);
     expect(result.errorOverlayCollapsed).toBe(false);
     expect(result.colorScheme).toBe('dark');
-    expect(result.unlockDepthCursor).toBe(true);
+    expect(result.unlockNestingCursor).toBe(true);
   });
 
   it('falls back to defaults for invalid data', () => {
@@ -22,12 +22,12 @@ describe('validatePreferences', () => {
   });
 
   // Regression test for P3.2 follow-up bug:
-  // Adding unlockDepthCursor as a required field (z.boolean()) caused
+  // Adding unlockNestingCursor as a required field (z.boolean()) caused
   // safeParse to fail on old stored prefs missing that key, silently
   // wiping scrollSyncEnabled, colorScheme, and errorOverlayCollapsed.
   // The fix: z.boolean().default(false) — old objects still parse OK.
-  it('preserves other settings when unlockDepthCursor is absent (old stored prefs)', () => {
-    // Simulate a prefs object written before P3.2 — no unlockDepthCursor key.
+  it('preserves other settings when unlockNestingCursor is absent (old stored prefs)', () => {
+    // Simulate a prefs object written before P3.2 — no unlockNestingCursor key.
     const oldPrefs = {
       version: 1,
       scrollSyncEnabled: false,        // non-default (default is true)
@@ -40,6 +40,6 @@ describe('validatePreferences', () => {
     expect(result.errorOverlayCollapsed).toBe(false);
     expect(result.colorScheme).toBe('dark');
     // Must fill in the missing field with its default:
-    expect(result.unlockDepthCursor).toBe(false);
+    expect(result.unlockNestingCursor).toBe(false);
   });
 });

@@ -6,7 +6,7 @@ through Phase 2* — the resolution model, the byte-offset identity + self-heal 
 and the cross-surface cursor — which the earlier draft predated.
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`).
 **Status:** **Phases 1–2 implemented** (locked depth-aware editing + cross-surface cursor +
-concurrency-safe identity). **Phase 3 (the depth-cursor unlock) is designed but not yet built**, and
+concurrency-safe identity). **Phase 3 (the nesting-cursor unlock) is designed but not yet built**, and
 is owned by a separate agent. Implementation plan + execution log:
 `claude-notes/plans/2026-06-11-block-editing-improvements.md`.
 **Builds on:** `claude-notes/plans/2026-06-04-target-incremental-writes.md` (the `apply_node_edit`
@@ -318,12 +318,12 @@ Under `ts-packages/preview-renderer/src/q2-preview/`:
   concurrency-safe and fix the live re-target data-integrity bug. The default click target therefore
   changes from leaf-first (old) to locked-tile (a chrome-less single-child div now opens the div; a
   list/quote opens whole) — intended.
-- **Phase 3 — "Depth cursor (nested blocks)" unlock (designed, not yet built; separate agent).** A
-  default-off `unlockDepthCursor` flag turns the locked default into a power-user depth editor: clicks
-  resolve to the leaf; two depth keys move in/out through nesting (`Cmd+Ctrl+←/→` on macOS,
+- **Phase 3 — "Nesting cursor" unlock (designed, not yet built; separate agent).** A
+  default-off `unlockNestingCursor` flag turns the locked default into a power-user nesting editor: clicks
+  resolve to the leaf; two nesting keys move in/out through nesting (`Cmd+Ctrl+←/→` on macOS,
   `Alt+Shift+←/→` elsewhere); a breadcrumb chip shows the AST-derived path. **Both hosts can opt in,
   feeding the same host-agnostic iframe behavior:** hub-client via a reactive `usePreference` setting;
-  the SPA via a `?depthCursor=1` URL query param (read at load) in `PreviewApp.tsx`. The flag +
+  the SPA via a `?nestingCursor=1` URL query param (read at load) in `PreviewApp.tsx`. The flag +
   regenerated buffers are optional payload fields, so a host with its opt-in off omits them and the
   iframe stays locked (zero-touch).
   Editing a multi-line block *inside* a prefixing container would slice in `> `/indent, so — and only

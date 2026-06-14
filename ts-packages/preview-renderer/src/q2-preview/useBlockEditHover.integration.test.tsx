@@ -302,11 +302,11 @@ function mountMulti() {
     return { ...utils, setEditTarget };
 }
 
-// P2.2 note: these tests mock rects on all blocks so enumerateLockedTiles
-// returns a non-empty tile list. Before P2.2, arrow nav used raw
-// querySelectorAll (no visibility filter); now it uses enumerateLockedTiles
-// which requires isVisibleTile → non-zero rect. The behavior (navigate flat
-// tiles in order, wrap at boundaries) is unchanged; only the rect mocking
+// P2.2 note: these tests mock rects on all blocks so enumerateOuterBlocks
+// returns a non-empty outer block list. Before P2.2, arrow nav used raw
+// querySelectorAll (no visibility filter); now it uses enumerateOuterBlocks
+// which requires isVisibleBlock → non-zero rect. The behavior (navigate flat
+// outer blocks in order, wrap at boundaries) is unchanged; only the rect mocking
 // requirement is new. Flagged for P2.5 corpus audit.
 describe('useBlockEditHover — keyboard arrow navigation', () => {
     it('ArrowDown moves focus to the next block; ArrowUp to the previous', () => {
@@ -315,7 +315,7 @@ describe('useBlockEditHover — keyboard arrow navigation', () => {
         const b1 = getByTestId('block1');
         const b2 = getByTestId('block2');
         const b3 = getByTestId('block3');
-        // Mock visible rects so enumerateLockedTiles includes all three blocks.
+        // Mock visible rects so enumerateOuterBlocks includes all three blocks.
         const r1: DOMRect = { width: 200, height: 20, top: 0, bottom: 20, left: 0, right: 200, x: 0, y: 0, toJSON: () => ({}) };
         const r2: DOMRect = { width: 200, height: 20, top: 20, bottom: 40, left: 0, right: 200, x: 0, y: 20, toJSON: () => ({}) };
         const r3: DOMRect = { width: 200, height: 20, top: 40, bottom: 60, left: 0, right: 200, x: 0, y: 40, toJSON: () => ({}) };
@@ -336,7 +336,7 @@ describe('useBlockEditHover — keyboard arrow navigation', () => {
         const b1 = getByTestId('block1');
         const b2 = getByTestId('block2');
         const b3 = getByTestId('block3');
-        // Mock visible rects so enumerateLockedTiles includes all three blocks.
+        // Mock visible rects so enumerateOuterBlocks includes all three blocks.
         const r1: DOMRect = { width: 200, height: 20, top: 0, bottom: 20, left: 0, right: 200, x: 0, y: 0, toJSON: () => ({}) };
         const r2: DOMRect = { width: 200, height: 20, top: 20, bottom: 40, left: 0, right: 200, x: 0, y: 20, toJSON: () => ({}) };
         const r3: DOMRect = { width: 200, height: 20, top: 40, bottom: 60, left: 0, right: 200, x: 0, y: 40, toJSON: () => ({}) };
@@ -357,7 +357,7 @@ describe('useBlockEditHover — keyboard arrow navigation', () => {
         const b1 = getByTestId('block1');
         const b2 = getByTestId('block2');
         const b3 = getByTestId('block3');
-        // Mock visible rects so enumerateLockedTiles includes all three blocks.
+        // Mock visible rects so enumerateOuterBlocks includes all three blocks.
         const r1: DOMRect = { width: 200, height: 20, top: 0, bottom: 20, left: 0, right: 200, x: 0, y: 0, toJSON: () => ({}) };
         const r2: DOMRect = { width: 200, height: 20, top: 20, bottom: 40, left: 0, right: 200, x: 0, y: 20, toJSON: () => ({}) };
         const r3: DOMRect = { width: 200, height: 20, top: 40, bottom: 60, left: 0, right: 200, x: 0, y: 40, toJSON: () => ({}) };
@@ -681,16 +681,16 @@ describe('useBlockEditHover — active-region guard (Phase 1 fix)', () => {
     });
 });
 
-/* ── P2.2: Locked-tile resolution wired into activate ───────────────── */
+/* ── P2.2: Outer-block resolution wired into activate ───────────────── */
 //
-// After P2.2, activate() routes through resolveLockedTile() before reading
-// poolId and measuring the element. The locked tile — not the raw leaf —
+// After P2.2, activate() routes through resolveOuterBlock() before reading
+// poolId and measuring the element. The outer block — not the raw leaf —
 // is what gets activated.
 
 /**
  * A chrome-less single-child div wrapping one <p>. Both elements carry
  * data-block-pool-id. The div and p have identical mocked rects → the div
- * is the locked tile. Clicking the <p> should activate the div's poolId.
+ * is the outer block. Clicking the <p> should activate the div's poolId.
  */
 function ChromelessWrapperInner() {
     const { hostProps, stylesheet } = useBlockEditHover();
@@ -766,16 +766,16 @@ describe('useBlockEditHover — P2.2 locked-tile resolution in activate', () => 
     });
 });
 
-/* ── P2.2: Roving-tabindex alignment (enumerateLockedTiles) ──────────── */
+/* ── P2.2: Roving-tabindex alignment (enumerateOuterBlocks) ──────────── */
 //
-// After P2.2, ArrowDown/ArrowUp navigate the locked-tile list from
-// enumerateLockedTiles(), not the raw querySelectorAll result. This means:
+// After P2.2, ArrowDown/ArrowUp navigate the outer-block list from
+// enumerateOuterBlocks(), not the raw querySelectorAll result. This means:
 //  - Coincident lone-child wrappers dedupe their child away.
-//  - Hidden tiles (zero-area rect) are skipped automatically.
-//  - Enter on the focused tile opens that tile (idempotent via resolveLockedTile).
+//  - Hidden outer blocks (zero-area rect) are skipped automatically.
+//  - Enter on the focused outer block opens that outer block (idempotent via resolveOuterBlock).
 
 /**
- * Two flat <p> blocks (tiles) with a hidden <p> in between.
+ * Two flat <p> blocks with a hidden <p> in between.
  * After P2.2, ArrowDown should skip the hidden one.
  */
 function HiddenTileInner() {

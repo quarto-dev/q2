@@ -4,7 +4,7 @@
  * Two regression back-fill tests that pin already-shipped behaviors:
  *
  *  Test 1 ★ (fail-on-revert): click-outside-resets-to-leaf (unlocked)
- *    With an editor open (unlockDepthCursor=true), a mouse click on a *different*
+ *    With an editor open (unlockNestingCursor=true), a mouse click on a *different*
  *    nested block switches the editor to that block's LEAF — not to its prefixing
  *    container (which is what LOCKED mode would pick).
  *
@@ -18,7 +18,7 @@
  * BreadcrumbChip. The resolution / ancestor-path logic is never re-implemented here.
  *
  * Fail-on-revert probes:
- *  Test 1: forcing the locked branch (`resolveLockedTile`) in activate() makes the
+ *  Test 1: forcing the locked branch (`resolveOuterBlock`) in activate() makes the
  *    editor open on the whole BlockQuote → textarea.value === '> BBB', not 'BBB'.
  *  Test 2: memoizing buildAncestorPath on [anchorR0, anchorR1] (stable across the
  *    ancestor-only change) causes the chip to show stale 'Div.a' labels after the
@@ -89,11 +89,11 @@ function mockTileRects(container: HTMLElement) {
  *   pool[3] ParaB r=[9,12]  "BBB"     (leaf paragraph inside BQ2)
  *
  * In LOCKED mode, clicking ParaB would resolve to the containing BQ2 tile
- * (resolveLockedTile collapses to outermost prefixing container → anchorSlice='> BBB').
+ * (resolveOuterBlock collapses to outermost prefixing container → anchorSlice='> BBB').
  * In UNLOCKED mode, activate() uses el.closest('[data-block-pool-id]') → the leaf
  * (ParaB, anchorSlice='BBB'). This test pins the UNLOCKED behavior.
  *
- * FAIL-ON-REVERT: forcing the locked branch in activate() (always use resolveLockedTile)
+ * FAIL-ON-REVERT: forcing the locked branch in activate() (always use resolveOuterBlock)
  * makes textarea.value === '> BBB' instead of 'BBB' → test RED.
  * ─────────────────────────────────────────────────────────────────────────── */
 
@@ -128,7 +128,7 @@ describe('P3.3 §3b test 1 ★ — click-outside-resets-to-leaf (unlocked)', () 
             currentFilePath: '/test.qmd',
             assetManifest: {},
             setAst,
-            unlockDepthCursor: true,
+            unlockNestingCursor: true,
             onNavigateToDocument: () => {},
         };
 
@@ -173,7 +173,7 @@ describe('P3.3 §3b test 1 ★ — click-outside-resets-to-leaf (unlocked)', () 
         textarea = container.querySelector<HTMLTextAreaElement>('textarea');
         expect(textarea, 'editor should switch to ParaB').not.toBeNull();
         // UNLOCKED → leaf (ParaB, anchorSlice='BBB').
-        // LOCKED    → resolveLockedTile would give BQ2, anchorSlice='> BBB'.
+        // LOCKED    → resolveOuterBlock would give BQ2, anchorSlice='> BBB'.
         expect(textarea!.value).toBe('BBB');
 
         // Unmodified click-switch: no commit.
@@ -232,7 +232,7 @@ describe('P3.3 §3b test 2 ★ — ancestor-only change re-derives path, cursor 
             currentFilePath: '/test.qmd',
             assetManifest: {},
             setAst,
-            unlockDepthCursor: true,
+            unlockNestingCursor: true,
             onNavigateToDocument: () => {},
         };
 
@@ -276,7 +276,7 @@ describe('P3.3 §3b test 2 ★ — ancestor-only change re-derives path, cursor 
                     currentFilePath="/test.qmd"
                     assetManifest={{}}
                     setAst={setAst}
-                    unlockDepthCursor={true}
+                    unlockNestingCursor={true}
                     onNavigateToDocument={() => {}}
                 />,
             );

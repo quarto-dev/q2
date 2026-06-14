@@ -1,7 +1,6 @@
 import React, { useCallback, useContext, useRef } from 'react';
 import { PreviewContext } from './PreviewContext';
-import { resolveLockedTile, enumerateLockedTiles, captureEditTarget, measureTileBox } from './lockedTiles';
-import { serializeSourceEntry } from './sourceIndex';
+import { resolveOuterBlock, enumerateOuterBlocks, captureEditTarget, measureBlockBox, seedForRange } from './outerBlocks';
 
 const HOLD_MS = 500;
 const MOVE_THRESHOLD_PX = 8;
@@ -58,17 +57,17 @@ export function useBlockEditHover(): {
 
     const activate = useCallback((el: Element) => {
         // P3.3: mode branch — unlocked uses the leaf (deepest pool-id),
-        // locked uses resolveLockedTile (collapses to outermost prefixing container).
-        const tile = ctx?.unlockDepthCursor
+        // locked uses resolveOuterBlock (collapses to outermost prefixing container).
+        const outerBlock = ctx?.unlockNestingCursor
             ? el.closest('[data-block-pool-id]')      // leaf: deepest pool-id, no collapse
-            : resolveLockedTile(el);
-        if (!tile) return;
+            : resolveOuterBlock(el);
+        if (!outerBlock) return;
         if (!ctx?.setEditTarget) return;
 
         // P2.4b: use captureEditTarget for the identity triple (anchorR0/R1/anchorSlice).
         // This is the canonical extraction site; the nav reland path uses the same helper.
         const content = ctx?.content ?? '';
-        const identity = captureEditTarget(tile, ctx?.pool ?? [], content);
+        const identity = captureEditTarget(outerBlock, ctx?.pool ?? [], content);
         if (!identity) return;
 
         const { anchorR0, anchorR1, anchorSlice } = identity;
@@ -76,17 +75,20 @@ export function useBlockEditHover(): {
         // Dedup: if this block is already the active edit target (same byte range), do nothing.
         if (ctx?.editTarget?.anchorR0 === anchorR0) return;
 
-        // P2.4b: use measureTileBox (shared with the move-open paths in entry.tsx)
+        // P2.4b: use measureBlockBox (shared with the move-open paths in entry.tsx)
         // so click-activation and move-opened editors both receive real box geometry.
-        const { contentHeight, boxStyle } = measureTileBox(tile);
+        const { contentHeight, boxStyle } = measureBlockBox(outerBlock);
         outlineElement(null);
 
-        // P3.3: buffer-aware draft seeding.
-        // siKey identifies the block in the source index; nestedEditBuffers[siKey]
-        // holds the clean QMD buffer (no '> '/indent prefix). Seed the draft with
-        // that clean buffer when available; fall back to the raw anchorSlice.
-        const siKey = serializeSourceEntry({ t: 0, r: [anchorR0, anchorR1], d: 0 });
-        const seededDraft = ctx?.nestedEditBuffers?.[siKey] ?? anchorSlice;
+        // P3.3: buffer-aware draft seeding (shared with the move/reland/nest-retarget
+        // sites via the pure seedForRange helper). nestedEditBuffers[siKey] holds the
+        // clean QMD buffer (no '> '/indent prefix); falls back to the raw anchorSlice.
+        const { seededDraft } = seedForRange({ r0: anchorR0, r1: anchorR1 }, content, ctx?.nestedEditBuffers);
+
+        // §1: capture the opened block's subtree geometry BEFORE setEditTarget swaps
+        // the children to a textarea (a post-open effect would be too late). No-op in
+        // locked mode or for a flat block.
+        ctx.captureGeometry?.(outerBlock, { r0: anchorR0, r1: anchorR1 });
 
         // Seed the draft ref BEFORE calling setEditTarget (the fresh-open site).
         // This is the single canonical place where the draft is seeded — setEditTarget
@@ -103,6 +105,7 @@ export function useBlockEditHover(): {
             leafAnchorR0: anchorR0,
         });
     }, [ctx]);
+
 
     const findEditTarget = (e: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>) => {
         const target = e.target as Element;
@@ -146,13 +149,13 @@ export function useBlockEditHover(): {
                 if (ctx.activeEditRegionRef?.current?.contains(target)) {
                     return; // P1 caret-move path; no click-switch
                 }
-                // Resolve the tile the click landed on.
+                // Resolve the outer block the click landed on.
                 const el = findEditTarget(e);
                 if (el) {
-                    // P3.3: mode-aware tile resolution (same as activate() does).
-                    const clickedEl = ctx.unlockDepthCursor
+                    // P3.3: mode-aware outer block resolution (same as activate() does).
+                    const clickedEl = ctx.unlockNestingCursor
                         ? (el.closest('[data-block-pool-id]') ?? el)
-                        : (resolveLockedTile(el) ?? el);
+                        : (resolveOuterBlock(el) ?? el);
                     // Check if this tile is different from the current edit target.
                     const pidAttr = clickedEl.getAttribute('data-block-pool-id');
                     const pool = ctx.pool ?? [];
@@ -219,20 +222,20 @@ export function useBlockEditHover(): {
     const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
         if (ctx?.editTarget != null) return;
         // P2.2 Roving-tabindex navigation: arrows move focus through the
-        // LOCKED-TILE list (enumerateLockedTiles), not the raw
+        // outer-block list (enumerateOuterBlocks), not the raw
         // querySelectorAll result. This means:
-        //   - Hidden tiles (zero-area rect) are skipped automatically.
+        //   - Hidden outer blocks (zero-area rect) are skipped automatically.
         //   - Coincident lone-child wrappers dedupe their child away.
-        //   - Enter on the focused tile resolves idempotently → same tile.
+        //   - Enter on the focused outer block resolves idempotently → same outer block.
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
             const host = e.currentTarget;
-            const tiles = enumerateLockedTiles(host) as HTMLElement[];
-            if (!tiles.length) return;
-            const idx = tiles.indexOf(document.activeElement as HTMLElement);
+            const blocks = enumerateOuterBlocks(host) as HTMLElement[];
+            if (!blocks.length) return;
+            const idx = blocks.indexOf(document.activeElement as HTMLElement);
             const next = e.key === 'ArrowDown'
-                ? tiles[(idx + 1) % tiles.length]
-                : tiles[(idx - 1 + tiles.length) % tiles.length];
+                ? blocks[(idx + 1) % blocks.length]
+                : blocks[(idx - 1 + blocks.length) % blocks.length];
             next.focus();
             hoveredRef.current = next;
             return;

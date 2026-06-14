@@ -1,5 +1,5 @@
 /**
- * Unit tests for lockedTiles.ts — pure DOM helper for locked-tile resolution
+ * Unit tests for outerBlocks.ts — pure DOM helper for outer-block resolution
  * (Plan 2b, Phase 2.2).
  *
  * jsdom returns zero-area rects by default, so every test that exercises
@@ -14,11 +14,12 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-    isVisibleTile,
+    isVisibleBlock,
     rectsCoincide,
-    resolveLockedTile,
-    enumerateLockedTiles,
-} from './lockedTiles';
+    resolveOuterBlock,
+    enumerateOuterBlocks,
+    snapshotOuterBlockGeometry,
+} from './outerBlocks';
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -62,25 +63,25 @@ function makeDom(html: string): { root: HTMLElement; [key: string]: Element } {
     return named as any;
 }
 
-/* ─── isVisibleTile ─────────────────────────────────────────────────────────── */
+/* ─── isVisibleBlock ─────────────────────────────────────────────────────────── */
 
-describe('isVisibleTile', () => {
+describe('isVisibleBlock', () => {
     it('returns true for a non-zero-area rect', () => {
         const el = document.createElement('p');
         mockRect(el, FULL);
-        expect(isVisibleTile(el)).toBe(true);
+        expect(isVisibleBlock(el)).toBe(true);
     });
 
     it('returns false for a zero-width element', () => {
         const el = document.createElement('p');
         mockRect(el, rect(0, 0, 0, 40));
-        expect(isVisibleTile(el)).toBe(false);
+        expect(isVisibleBlock(el)).toBe(false);
     });
 
     it('returns false for a zero-height element (e.g. display:none)', () => {
         const el = document.createElement('p');
         mockRect(el, ZERO);
-        expect(isVisibleTile(el)).toBe(false);
+        expect(isVisibleBlock(el)).toBe(false);
     });
 });
 
@@ -117,13 +118,13 @@ describe('rectsCoincide', () => {
     });
 });
 
-/* ─── resolveLockedTile — coincidence climb ──────────────────────────────────── */
+/* ─── resolveOuterBlock — coincidence climb ──────────────────────────────────── */
 
-describe('resolveLockedTile — coincidence climb (no prefixing containers)', () => {
+describe('resolveOuterBlock — coincidence climb (no prefixing containers)', () => {
     it('returns null when the element has no [data-block-pool-id] ancestor', () => {
         const el = document.createElement('span');
         document.body.appendChild(el);
-        expect(resolveLockedTile(el)).toBeNull();
+        expect(resolveOuterBlock(el)).toBeNull();
     });
 
     it('chrome-less single-child wrapper: click on child → resolves to wrapper', () => {
@@ -137,7 +138,7 @@ describe('resolveLockedTile — coincidence climb (no prefixing containers)', ()
         mockRect(dom.wrapper, rect(0, 0, 200, 40));
         mockRect(dom.child, rect(0, 0, 200, 40));
 
-        expect(resolveLockedTile(dom.child)).toBe(dom.wrapper);
+        expect(resolveOuterBlock(dom.child)).toBe(dom.wrapper);
     });
 
     it('multi-child wrapper: click on one child → resolves to that child (not wrapper)', () => {
@@ -153,10 +154,10 @@ describe('resolveLockedTile — coincidence climb (no prefixing containers)', ()
         mockRect(dom.child1, rect(0, 0, 200, 40));
         mockRect(dom.child2, rect(0, 40, 200, 80));
 
-        expect(resolveLockedTile(dom.child1)).toBe(dom.child1);
+        expect(resolveOuterBlock(dom.child1)).toBe(dom.child1);
     });
 
-    it('is idempotent: resolving an already-resolved tile returns that same tile', () => {
+    it('is idempotent: resolving an already-resolved outer block returns that same outer block', () => {
         const dom = makeDom(`
             <div data-block-pool-id="1" data-name="wrapper">
                 <p data-block-pool-id="2" data-name="child">text</p>
@@ -165,11 +166,11 @@ describe('resolveLockedTile — coincidence climb (no prefixing containers)', ()
         mockRect(dom.wrapper, rect(0, 0, 200, 40));
         mockRect(dom.child, rect(0, 0, 200, 40));
 
-        const tile = resolveLockedTile(dom.child);
-        expect(tile).toBe(dom.wrapper);
-        // resolving the tile itself is idempotent
+        const outerBlock = resolveOuterBlock(dom.child);
+        expect(outerBlock).toBe(dom.wrapper);
+        // resolving the outer block itself is idempotent
         mockRect(dom.wrapper, rect(0, 0, 200, 40));
-        expect(resolveLockedTile(dom.wrapper!)).toBe(dom.wrapper);
+        expect(resolveOuterBlock(dom.wrapper!)).toBe(dom.wrapper);
     });
 
     it('lone <p> with no container: resolves to itself', () => {
@@ -177,7 +178,7 @@ describe('resolveLockedTile — coincidence climb (no prefixing containers)', ()
             <p data-block-pool-id="5" data-name="para">text</p>
         `);
         mockRect(dom.para, FULL);
-        expect(resolveLockedTile(dom.para)).toBe(dom.para);
+        expect(resolveOuterBlock(dom.para)).toBe(dom.para);
     });
 
     it('skips hidden (zero-rect) ancestors in the coincidence climb', () => {
@@ -191,13 +192,13 @@ describe('resolveLockedTile — coincidence climb (no prefixing containers)', ()
         mockRect(dom.hidden, ZERO);   // collapsed
         mockRect(dom.child, FULL);
 
-        expect(resolveLockedTile(dom.child)).toBe(dom.child);
+        expect(resolveOuterBlock(dom.child)).toBe(dom.child);
     });
 });
 
-/* ─── resolveLockedTile — prefixing-atomic (WINS over coincidence) ──────────── */
+/* ─── resolveOuterBlock — prefixing-atomic (WINS over coincidence) ──────────── */
 
-describe('resolveLockedTile — prefixing-atomic containers', () => {
+describe('resolveOuterBlock — prefixing-atomic containers', () => {
     it('<blockquote data-block-pool-id> containing a <p data-block-pool-id>: resolves to blockquote', () => {
         const dom = makeDom(`
             <blockquote data-block-pool-id="10" data-name="bq">
@@ -205,11 +206,11 @@ describe('resolveLockedTile — prefixing-atomic containers', () => {
             </blockquote>
         `);
         // Give both a visible rect (prefixing-atomic rule doesn't need rect comparison,
-        // but isVisibleTile needs a non-zero rect to not be filtered out).
+        // but isVisibleBlock needs a non-zero rect to not be filtered out).
         mockRect(dom.bq, rect(0, 0, 200, 60));
         mockRect(dom.para, rect(20, 10, 200, 50));  // indented — intentionally differs
 
-        expect(resolveLockedTile(dom.para)).toBe(dom.bq);
+        expect(resolveOuterBlock(dom.para)).toBe(dom.bq);
     });
 
     it('<ul data-block-pool-id> containing an inner <p data-block-pool-id>: resolves to ul', () => {
@@ -223,7 +224,7 @@ describe('resolveLockedTile — prefixing-atomic containers', () => {
         mockRect(dom.list, rect(0, 0, 200, 40));
         mockRect(dom.item, rect(20, 5, 200, 35));
 
-        expect(resolveLockedTile(dom.item)).toBe(dom.list);
+        expect(resolveOuterBlock(dom.item)).toBe(dom.list);
     });
 
     it('<ol data-block-pool-id> containing an inner <p data-block-pool-id>: resolves to ol', () => {
@@ -237,7 +238,7 @@ describe('resolveLockedTile — prefixing-atomic containers', () => {
         mockRect(dom.list, rect(0, 0, 200, 40));
         mockRect(dom.item, rect(20, 5, 200, 35));
 
-        expect(resolveLockedTile(dom.item)).toBe(dom.list);
+        expect(resolveOuterBlock(dom.item)).toBe(dom.list);
     });
 
     it('<dl data-block-pool-id> containing an inner <p data-block-pool-id>: resolves to dl', () => {
@@ -252,7 +253,7 @@ describe('resolveLockedTile — prefixing-atomic containers', () => {
         mockRect(dom.list, rect(0, 0, 200, 60));
         mockRect(dom.item, rect(20, 30, 200, 55));
 
-        expect(resolveLockedTile(dom.item)).toBe(dom.list);
+        expect(resolveOuterBlock(dom.item)).toBe(dom.list);
     });
 
     it('nested prefixing: blockquote > ul > p → outermost (blockquote) wins', () => {
@@ -269,7 +270,7 @@ describe('resolveLockedTile — prefixing-atomic containers', () => {
         mockRect(dom.list, rect(20, 10, 200, 70));
         mockRect(dom.para, rect(40, 15, 200, 60));
 
-        expect(resolveLockedTile(dom.para)).toBe(dom.bq);
+        expect(resolveOuterBlock(dom.para)).toBe(dom.bq);
     });
 
     it('prefixing-atomic dominates coincidence: chrome-less div inside blockquote → blockquote wins', () => {
@@ -287,10 +288,10 @@ describe('resolveLockedTile — prefixing-atomic containers', () => {
         mockRect(dom.wrapper, rect(0, 0, 200, 40));
         mockRect(dom.para, rect(0, 0, 200, 40));
 
-        expect(resolveLockedTile(dom.para)).toBe(dom.bq);
+        expect(resolveOuterBlock(dom.para)).toBe(dom.bq);
     });
 
-    it('idempotent for a prefixing tile: resolveLockedTile(blockquote) === blockquote', () => {
+    it('idempotent for a prefixing outer block: resolveOuterBlock(blockquote) === blockquote', () => {
         const dom = makeDom(`
             <blockquote data-block-pool-id="70" data-name="bq">
                 <p data-block-pool-id="71" data-name="para">text</p>
@@ -299,7 +300,7 @@ describe('resolveLockedTile — prefixing-atomic containers', () => {
         mockRect(dom.bq, rect(0, 0, 200, 60));
         mockRect(dom.para, rect(20, 10, 200, 50));
 
-        expect(resolveLockedTile(dom.bq)).toBe(dom.bq);
+        expect(resolveOuterBlock(dom.bq)).toBe(dom.bq);
     });
 
     it('hidden outer prefixing: hidden blockquote > visible ul > visible p → resolves to ul (outermost visible prefixing)', () => {
@@ -321,15 +322,15 @@ describe('resolveLockedTile — prefixing-atomic containers', () => {
         mockRect(dom.ul,   rect(0, 0, 200, 40));        // visible
         mockRect(dom.para, rect(20, 5, 200, 35));       // visible
 
-        // resolveLockedTile(p) should return ul (outermost *visible* prefixing),
+        // resolveOuterBlock(p) should return ul (outermost *visible* prefixing),
         // NOT the hidden blockquote.
-        expect(resolveLockedTile(dom.para)).toBe(dom.ul);
+        expect(resolveOuterBlock(dom.para)).toBe(dom.ul);
     });
 });
 
 /* ─── coincidence epsilon boundary ─────────────────────────────────────────── */
 
-describe('resolveLockedTile — epsilon boundary (1px border vs. true coincidence)', () => {
+describe('resolveOuterBlock — epsilon boundary (1px border vs. true coincidence)', () => {
     it('exactly 0px delta on all edges → coincides → wrapper wins', () => {
         const dom = makeDom(`
             <div data-block-pool-id="80" data-name="wrapper">
@@ -339,7 +340,7 @@ describe('resolveLockedTile — epsilon boundary (1px border vs. true coincidenc
         mockRect(dom.wrapper, rect(0, 0, 200, 40));
         mockRect(dom.child, rect(0, 0, 200, 40));   // identical → 0px delta
 
-        expect(resolveLockedTile(dom.child)).toBe(dom.wrapper);
+        expect(resolveOuterBlock(dom.child)).toBe(dom.wrapper);
     });
 
     it('1px border (each edge delta = 1px) → does NOT coincide → leaf wins', () => {
@@ -353,14 +354,14 @@ describe('resolveLockedTile — epsilon boundary (1px border vs. true coincidenc
         mockRect(dom.wrapper, rect(0, 0, 200, 40));
         mockRect(dom.child, rect(1, 1, 199, 39));   // 1px inset on each side
 
-        expect(resolveLockedTile(dom.child)).toBe(dom.child);
+        expect(resolveOuterBlock(dom.child)).toBe(dom.child);
     });
 });
 
-/* ─── enumerateLockedTiles ──────────────────────────────────────────────────── */
+/* ─── enumerateOuterBlocks ──────────────────────────────────────────────────── */
 
-describe('enumerateLockedTiles', () => {
-    it('chrome-less wrapper + lone child: deduped to one tile (the wrapper)', () => {
+describe('enumerateOuterBlocks', () => {
+    it('chrome-less wrapper + lone child: deduped to one outer block (the wrapper)', () => {
         const dom = makeDom(`
             <div data-block-pool-id="1" data-name="wrapper">
                 <p data-block-pool-id="2" data-name="child">text</p>
@@ -369,12 +370,12 @@ describe('enumerateLockedTiles', () => {
         mockRect(dom.wrapper, rect(0, 0, 200, 40));
         mockRect(dom.child, rect(0, 0, 200, 40));
 
-        const tiles = enumerateLockedTiles(dom.root);
-        expect(tiles).toHaveLength(1);
-        expect(tiles[0]).toBe(dom.wrapper);
+        const blocks = enumerateOuterBlocks(dom.root);
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toBe(dom.wrapper);
     });
 
-    it('multi-child wrapper: all three distinct tiles in DOM pre-order', () => {
+    it('multi-child wrapper: all three distinct outer blocks in DOM pre-order', () => {
         const dom = makeDom(`
             <div data-block-pool-id="1" data-name="wrapper">
                 <p data-block-pool-id="2" data-name="c1">first</p>
@@ -386,15 +387,15 @@ describe('enumerateLockedTiles', () => {
         mockRect(dom.c1, rect(0, 0, 200, 40));
         mockRect(dom.c2, rect(0, 40, 200, 80));
 
-        const tiles = enumerateLockedTiles(dom.root);
+        const blocks = enumerateOuterBlocks(dom.root);
         // wrapper + c1 + c2 (all three, none coincident)
-        expect(tiles).toHaveLength(3);
-        expect(tiles[0]).toBe(dom.wrapper);
-        expect(tiles[1]).toBe(dom.c1);
-        expect(tiles[2]).toBe(dom.c2);
+        expect(blocks).toHaveLength(3);
+        expect(blocks[0]).toBe(dom.wrapper);
+        expect(blocks[1]).toBe(dom.c1);
+        expect(blocks[2]).toBe(dom.c2);
     });
 
-    it('hidden tile (zero rect) is excluded', () => {
+    it('hidden outer block (zero rect) is excluded', () => {
         const dom = makeDom(`
             <p data-block-pool-id="1" data-name="visible">visible</p>
             <p data-block-pool-id="2" data-name="hidden">hidden</p>
@@ -402,9 +403,9 @@ describe('enumerateLockedTiles', () => {
         mockRect(dom.visible, FULL);
         mockRect(dom.hidden, ZERO);
 
-        const tiles = enumerateLockedTiles(dom.root);
-        expect(tiles).toHaveLength(1);
-        expect(tiles[0]).toBe(dom.visible);
+        const blocks = enumerateOuterBlocks(dom.root);
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toBe(dom.visible);
     });
 
     it('DOM pre-order is preserved', () => {
@@ -417,11 +418,11 @@ describe('enumerateLockedTiles', () => {
         mockRect(dom.b, rect(0, 20, 200, 40));
         mockRect(dom.c, rect(0, 40, 200, 60));
 
-        const tiles = enumerateLockedTiles(dom.root);
-        expect(tiles.map((t) => t.getAttribute('data-block-pool-id'))).toEqual(['1', '2', '3']);
+        const blocks = enumerateOuterBlocks(dom.root);
+        expect(blocks.map((b) => b.getAttribute('data-block-pool-id'))).toEqual(['1', '2', '3']);
     });
 
-    it('blockquote containing a para: only the blockquote appears', () => {
+    it('blockquote containing a para: only the blockquote outer block appears', () => {
         // Prefixing-atomic means the para resolves to the blockquote, so dedup
         // collapses them to one entry.
         const dom = makeDom(`
@@ -432,8 +433,121 @@ describe('enumerateLockedTiles', () => {
         mockRect(dom.bq, rect(0, 0, 200, 60));
         mockRect(dom.para, rect(20, 10, 200, 50));
 
-        const tiles = enumerateLockedTiles(dom.root);
-        expect(tiles).toHaveLength(1);
-        expect(tiles[0]).toBe(dom.bq);
+        const blocks = enumerateOuterBlocks(dom.root);
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toBe(dom.bq);
+    });
+});
+
+/* ─── snapshotOuterBlockGeometry (§1 geometry snapshot) ─────────────────────────
+ *
+ * Capture the rendered geometry of a multilevel block's whole subtree at
+ * activation, keyed BLOCK-RELATIVE to the top-level block's start byte
+ * (`r0 − topBlockR0`, `r1 − topBlockR0`) so the keys are shift-invariant under an
+ * insert-above. jsdom can't lay out, so rects are mocked per-element; in jsdom
+ * `getComputedStyle` returns empty strings → measureBlockBox's padding/border
+ * terms are 0 → `contentHeight === rect.height`, which is what we assert.
+ */
+describe('snapshotOuterBlockGeometry', () => {
+    type PoolEntry = { t: number; r: [number, number]; d: number };
+
+    // 3-level nested bullet list mirroring the acceptance fixture:
+    //   ul0 = whole list   pool[0] r=[0,69]
+    //   ul1 = sub-list     pool[1] r=[20,69]
+    //   ul2 = sub-sub-list pool[2] r=[39,60]
+    const LIST_HTML = `
+      <ul data-block-pool-id="0" data-name="ul0">
+        <li>another</li>
+        <li>hello
+          <ul data-block-pool-id="1" data-name="ul1">
+            <li>sub-item
+              <ul data-block-pool-id="2" data-name="ul2">
+                <li>sub-sub-item</li>
+              </ul>
+            </li>
+            <li>nother</li>
+          </ul>
+        </li>
+      </ul>`;
+    const LIST_POOL: PoolEntry[] = [
+        { t: 0, r: [0, 69], d: 0 },
+        { t: 0, r: [20, 69], d: 0 },
+        { t: 0, r: [39, 60], d: 0 },
+    ];
+
+    it('captures every visible nested surface, keyed block-relative, with content heights', () => {
+        const dom = makeDom(LIST_HTML);
+        // Distinct heights so we can assert each value maps to the right surface.
+        mockRect(dom.ul0, rect(0, 0, 200, 120)); // whole list: tall
+        mockRect(dom.ul1, rect(0, 0, 200, 80));  // sub-list
+        mockRect(dom.ul2, rect(0, 0, 200, 40));  // sub-sub-list
+
+        // Open from the innermost; the helper climbs to the outermost pool-id (ul0).
+        const map = snapshotOuterBlockGeometry(dom.ul2, LIST_POOL, /* topBlockR0 */ 0);
+
+        expect(map.size).toBe(3);
+        // Block-relative keys (topBlockR0 = 0 → same as absolute here).
+        expect(map.get('0:69')?.contentHeight).toBe(120);
+        expect(map.get('20:69')?.contentHeight).toBe(80);
+        expect(map.get('39:60')?.contentHeight).toBe(40);
+    });
+
+    it('keys are block-relative: a non-zero topBlockR0 shifts every key uniformly', () => {
+        const dom = makeDom(LIST_HTML);
+        mockRect(dom.ul0, rect(0, 0, 200, 120));
+        mockRect(dom.ul1, rect(0, 0, 200, 80));
+        mockRect(dom.ul2, rect(0, 0, 200, 40));
+
+        // Pretend the whole list begins at byte 20 (an insert-above shifted it):
+        // pool ranges shift too, but the helper subtracts topBlockR0, so the keys
+        // are identical to the topBlockR0 = 0 case above.
+        const shiftedPool: PoolEntry[] = [
+            { t: 0, r: [20, 89], d: 0 },
+            { t: 0, r: [40, 89], d: 0 },
+            { t: 0, r: [59, 80], d: 0 },
+        ];
+        const map = snapshotOuterBlockGeometry(dom.ul2, shiftedPool, /* topBlockR0 */ 20);
+        expect(map.size).toBe(3);
+        expect(map.get('0:69')?.contentHeight).toBe(120);
+        expect(map.get('20:69')?.contentHeight).toBe(80);
+        expect(map.get('39:60')?.contentHeight).toBe(40);
+    });
+
+    it('returns an empty map for a flat block (≤1 visible pool-id) — no nesting to size', () => {
+        const dom = makeDom(`<p data-block-pool-id="0" data-name="p0">flat</p>`);
+        mockRect(dom.p0, rect(0, 0, 200, 40));
+        const map = snapshotOuterBlockGeometry(dom.p0, [{ t: 0, r: [0, 5], d: 0 }], 0);
+        expect(map.size).toBe(0);
+    });
+
+    it('excludes hidden (zero-rect) surfaces from the snapshot', () => {
+        const dom = makeDom(LIST_HTML);
+        mockRect(dom.ul0, rect(0, 0, 200, 120));
+        mockRect(dom.ul1, ZERO);                 // collapsed / hidden
+        mockRect(dom.ul2, rect(0, 0, 200, 40));
+        const map = snapshotOuterBlockGeometry(dom.ul2, LIST_POOL, 0);
+        expect(map.size).toBe(2);
+        expect(map.has('0:69')).toBe(true);
+        expect(map.has('20:69')).toBe(false);    // hidden ul1 excluded
+        expect(map.has('39:60')).toBe(true);
+    });
+
+    it('full (r0,r1) key disambiguates a container and a first child sharing r0 (r0-only would collide)', () => {
+        // Div [0,30] whose FIRST child Para starts at the Div's own r0 (0). An
+        // r0-only key ("0") would collide; the full key ("0:30" vs "0:15") does not.
+        const dom = makeDom(`
+          <div data-block-pool-id="0" data-name="div0">
+            <p data-block-pool-id="1" data-name="p1">child</p>
+          </div>`);
+        mockRect(dom.div0, rect(0, 0, 200, 60));
+        mockRect(dom.p1, rect(0, 0, 200, 30));
+        const pool: PoolEntry[] = [
+            { t: 0, r: [0, 30], d: 0 },
+            { t: 0, r: [0, 15], d: 0 },
+        ];
+        const map = snapshotOuterBlockGeometry(dom.p1, pool, 0);
+        expect(map.size).toBe(2);                // no collision
+        expect(map.get('0:30')?.contentHeight).toBe(60);
+        expect(map.get('0:15')?.contentHeight).toBe(30);
     });
 });

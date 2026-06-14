@@ -22,7 +22,7 @@ export default function SettingsTab({
   onScrollSyncChange,
 }: SettingsTabProps) {
   const [errorOverlayCollapsed, setErrorOverlayCollapsed] = usePreference('errorOverlayCollapsed');
-  const [unlockDepthCursor, setUnlockDepthCursor] = usePreference('unlockDepthCursor');
+  const [unlockNestingCursor, setUnlockNestingCursor] = usePreference('unlockNestingCursor');
   const [isCapturing, setIsCapturing] = useState(false);
 
   const handleScreenshot = async () => {
@@ -97,10 +97,10 @@ export default function SettingsTab({
         <label className="setting-toggle">
           <input
             type="checkbox"
-            checked={unlockDepthCursor}
-            onChange={(e) => setUnlockDepthCursor(e.target.checked)}
+            checked={unlockNestingCursor}
+            onChange={(e) => setUnlockNestingCursor(e.target.checked)}
           />
-          <span className="setting-name">Depth cursor (nested blocks)</span>
+          <span className="setting-name">Nesting cursor</span>
           <span className="setting-description">
             Descend into nested list/quote blocks; edit each level cleanly.
           </span>

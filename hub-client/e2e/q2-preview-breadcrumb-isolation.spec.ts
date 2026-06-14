@@ -5,11 +5,11 @@
  *
  * 1. **Chip pointer-isolation** (Test A): clicking the ◀ out button does NOT
  *    blur-commit the dirty textarea. The chip's onPointerDown preventDefault
- *    keeps the textarea focused so no blur fires; the depth move re-seeds
+ *    keeps the textarea focused so no blur fires; the nesting move re-seeds
  *    the draft to the div buffer instead.
  *
- * 2. **Depth key-chords** (Tests B + C): the dispatchers.tsx onKeyDown branch
- *    for classifyDepthKey fires on the platform's chord, moves depth, and does
+ * 2. **Nesting key-chords** (Tests B + C): the dispatchers.tsx onKeyDown branch
+ *    for classifyNestingKey fires on the platform's chord, moves the nesting cursor, and does
  *    NOT swallow native selection chords.
  *    - Test B: mac chord Meta+Control+Arrow (runs natively on macOS CI).
  *    - Test C: Win/Linux chord Alt+Shift+Arrow, spoofed via addInitScript so
@@ -35,7 +35,7 @@ import {
 import { waitForPreviewRender } from './helpers/previewExtraction';
 
 // ---------------------------------------------------------------------------
-// Fixture: nested doc so depth out/in has somewhere to go.
+// Fixture: nested doc so nesting out/in has somewhere to go.
 // Parses to Div.outer → Para("Inner paragraph.").
 // In unlocked mode, a leaf-click on the inner para opens the para (the leaf).
 // ---------------------------------------------------------------------------
@@ -95,14 +95,14 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
     // ── Test A: chip ◀ button does NOT blur-commit the open editor ──────────
 
     test('clicking the chip ◀ button does not blur-commit the open editor', async ({ page }) => {
-        // Enable depth cursor BEFORE navigation so addInitScript applies to the iframe too.
+        // Enable nesting cursor BEFORE navigation so addInitScript applies to the iframe too.
         await page.addInitScript(() => {
             localStorage.setItem('quarto-hub:preferences', JSON.stringify({
                 version: 1,
                 scrollSyncEnabled: true,
                 errorOverlayCollapsed: true,
                 colorScheme: 'auto',
-                unlockDepthCursor: true,
+                unlockNestingCursor: true,
             }));
         });
 
@@ -119,10 +119,10 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
         await iframe.locator('div.outer p[data-block-pool-id]').first().click();
         await iframe.locator('textarea').first().waitFor({ timeout: 10_000 });
 
-        // Confirm the chip is visible (unlockDepthCursor took effect).
+        // Confirm the chip is visible (unlockNestingCursor took effect).
         const chip = iframe.locator('[data-testid="q2-breadcrumb-chip"]');
         await chip.waitFor({ timeout: 5000 });
-        await expect(chip, 'BreadcrumbChip must be visible — unlockDepthCursor did not propagate').toBeVisible();
+        await expect(chip, 'BreadcrumbChip must be visible — unlockNestingCursor did not propagate').toBeVisible();
 
         // Snapshot original file content (pre-edit).
         const contentBefore = await getFileContent(page, filename);
@@ -143,17 +143,17 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
             'textarea must still be visible after clicking the ◀ button',
         ).toBeVisible();
 
-        // ASSERTION 2: depth moved OUT — the textarea now contains the div source (:::).
+        // ASSERTION 2: nesting moved OUT — the textarea now contains the div source (:::).
         await expect
             .poll(
                 async () => iframe.locator('textarea').first().inputValue(),
-                { timeout: 8000, message: 'textarea must contain ::: (depth moved out to the Div)' },
+                { timeout: 8000, message: 'textarea must contain ::: (nesting moved out to the Div)' },
             )
             .toContain(':::');
 
         // ASSERTION 3: no blur-commit — after a 1s settle, the file content must NOT
         // contain the probe. (With isolation: button press → focus kept → no blur →
-        // no commit; depth move re-seeds the draft, discarding the probe.)
+        // no commit; nesting move re-seeds the draft, discarding the probe.)
         await page.waitForTimeout(1000);
         const contentAfter = await getFileContent(page, filename);
         expect(
@@ -165,16 +165,16 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
         await iframe.locator('textarea').first().press('Escape');
     });
 
-    // ── Test B: macOS depth chord moves depth; native selection still works ──
+    // ── Test B: macOS nesting chord moves the nesting cursor; native selection still works ──
 
-    test('macOS depth chord moves depth; native selection still works', async ({ page }) => {
+    test('macOS nesting chord moves the nesting cursor; native selection still works', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('quarto-hub:preferences', JSON.stringify({
                 version: 1,
                 scrollSyncEnabled: true,
                 errorOverlayCollapsed: true,
                 colorScheme: 'auto',
-                unlockDepthCursor: true,
+                unlockNestingCursor: true,
             }));
         });
 
@@ -221,7 +221,7 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
         await expect
             .poll(
                 async () => iframe.locator('textarea').first().inputValue(),
-                { timeout: 8000, message: 'Meta+Control+ArrowLeft must move depth out (textarea should contain :::)' },
+                { timeout: 8000, message: 'Meta+Control+ArrowLeft must move nesting out (textarea should contain :::)' },
             )
             .toContain(':::');
 
@@ -232,15 +232,15 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
         await expect
             .poll(
                 async () => iframe.locator('textarea').first().inputValue(),
-                { timeout: 8000, message: 'Meta+Control+ArrowRight must move depth in (back to para)' },
+                { timeout: 8000, message: 'Meta+Control+ArrowRight must move nesting in (back to para)' },
             )
             .toContain('Inner paragraph.');
         const taValueIn = await iframe.locator('textarea').first().inputValue();
         expect(taValueIn, 'after moving back in, should not contain :::').not.toContain(':::');
 
         // Step 5: Native selection still works.
-        // Press Shift+ArrowLeft — NOT the depth chord (shift alone is not the mac modifier
-        // set metaKey+ctrlKey), so classifyDepthKey returns null and native selection fires.
+        // Press Shift+ArrowLeft — NOT the nesting chord (shift alone is not the mac modifier
+        // set metaKey+ctrlKey), so classifyNestingKey returns null and native selection fires.
         await iframe.locator('textarea').first().evaluate((el: HTMLTextAreaElement) => {
             el.selectionStart = el.selectionEnd = el.value.length;
             el.focus();
@@ -251,7 +251,7 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
         const taValueAfterShift = await iframe.locator('textarea').first().inputValue();
         expect(
             taValueAfterShift,
-            'Shift+ArrowLeft must not change the textarea value (not a depth chord)',
+            'Shift+ArrowLeft must not change the textarea value (not a nesting chord)',
         ).toContain('Inner paragraph.');
         expect(taValueAfterShift, 'Shift+ArrowLeft must not switch to ::: content').not.toContain(':::');
 
@@ -268,9 +268,9 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
         await iframe.locator('textarea').first().press('Escape');
     });
 
-    // ── Test C: Windows/Linux depth chord (Alt+Shift) via navigator spoof ───
+    // ── Test C: Windows/Linux nesting chord (Alt+Shift) via navigator spoof ───
 
-    test('Windows/Linux depth chord (Alt+Shift) moves depth via navigator spoof', async ({ page }) => {
+    test('Windows/Linux nesting chord (Alt+Shift) moves the nesting cursor via navigator spoof', async ({ page }) => {
         // Spoof navigator so the bundle's module-load detectPlatform() returns 'other'.
         // addInitScript fires before ANY script in the page AND the iframe — module-load
         // PLATFORM = detectPlatform() will see the spoofed values.
@@ -287,7 +287,7 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
                 scrollSyncEnabled: true,
                 errorOverlayCollapsed: true,
                 colorScheme: 'auto',
-                unlockDepthCursor: true,
+                unlockNestingCursor: true,
             }));
         });
 
@@ -318,7 +318,7 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
                 `Test C: expected 'Out (Alt+Shift+←)' tooltip (Win/Linux branch) ` +
                 `but got '${outTitle}'. ` +
                 `The addInitScript navigator spoof may not have reached the iframe bundle ` +
-                `before module load of depthNav.ts. ` +
+                `before module load of nestingNav.ts. ` +
                 `Observed platform hint: detectPlatform() still returned 'mac'. ` +
                 `This is an honest observation — not faking a pass.`,
             );
@@ -336,11 +336,11 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
         // Step 4: Press the other-platform OUT chord.
         await iframe.locator('textarea').first().press('Alt+Shift+ArrowLeft');
 
-        // Assert (poll) textarea value now contains ::: (depth moved out).
+        // Assert (poll) textarea value now contains ::: (nesting moved out).
         await expect
             .poll(
                 async () => iframe.locator('textarea').first().inputValue(),
-                { timeout: 8000, message: 'Alt+Shift+ArrowLeft must move depth out (textarea should contain :::)' },
+                { timeout: 8000, message: 'Alt+Shift+ArrowLeft must move nesting out (textarea should contain :::)' },
             )
             .toContain(':::');
 

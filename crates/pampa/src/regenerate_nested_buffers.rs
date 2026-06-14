@@ -6,7 +6,7 @@
  *   (2) is multi-line in source (contains an internal newline — a '\n' other than the
  *       single trailing newline that every block's offset range includes).
  *
- * Used by the depth-cursor mode of the block editor so the frontend can
+ * Used by the nesting-cursor mode of the block editor so the frontend can
  * descend into a nested block and edit it without the container's `> ` or
  * list-indent prefix appearing in the editor buffer.
  *

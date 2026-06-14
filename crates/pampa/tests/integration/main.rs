@@ -12,7 +12,6 @@
 
 pub mod attribution_html_coalescing_test;
 pub mod attribution_json_wire_test;
-pub mod depth_cursor_roundtrip_tests;
 pub mod error_node_analysis;
 pub mod incremental_writer_investigation;
 pub mod incremental_writer_tests;
@@ -22,6 +21,7 @@ pub mod inline_splice_property_tests;
 pub mod inline_splice_safety_tests;
 pub mod json_location_test;
 pub mod json_reader_smoke_tests;
+pub mod nesting_cursor_roundtrip_tests;
 pub mod node_edit_tests;
 pub mod qmd_writer_source_info;
 pub mod regenerate_nested_buffers_tests;

@@ -22,7 +22,7 @@ import ReactRenderer from './ReactRenderer';
 
 /**
  * P3.2: Referentially stable empty object returned by the nestedEditBuffers
- * memo when unlockDepthCursor is off (or inputs are unavailable). A module-
+ * memo when unlockNestingCursor is off (or inputs are unavailable). A module-
  * level constant avoids creating a new object on every render, which would
  * churn the iframe's UPDATE_AST effect even when nothing has changed.
  */
@@ -306,11 +306,11 @@ export default function ReactPreview({
   // overlay itself is package-internal in @quarto/preview-renderer and
   // takes the value via props (controlled component).
   const [errorOverlayCollapsed, setErrorOverlayCollapsed] = usePreference('errorOverlayCollapsed');
-  // P3.2: depth-cursor mode preference (default-off). When true, the
+  // P3.2: nesting-cursor mode preference (default-off). When true, the
   // nestedEditBuffers memo below calls regenerateNestedBuffers to produce
   // a per-siKey clean QMD buffer table; when off, that WASM pass is
   // completely unreachable.
-  const [unlockDepthCursor] = usePreference('unlockDepthCursor');
+  const [unlockNestingCursor] = usePreference('unlockNestingCursor');
   // Track previewState in a ref for use in callbacks
   const previewStateRef = useRef<PreviewState>('START');
   useEffect(() => {
@@ -331,17 +331,17 @@ export default function ReactPreview({
   // P3.2: gated nested buffer table. Delegates to computeNestedEditBuffers
   // (the exported pure helper) so the gating logic has a single testable
   // source of truth. Returns EMPTY_NESTED_BUFFERS (a module-level constant)
-  // when unlockDepthCursor is off or either render input is missing, keeping
+  // when unlockNestingCursor is off or either render input is missing, keeping
   // the iframe effect dep referentially stable across renders.
   const nestedEditBuffers = useMemo(
     () =>
       computeNestedEditBuffers(
-        unlockDepthCursor ?? false,
+        unlockNestingCursor ?? false,
         rendered.renderedContent,
         rendered.untransformedAstJson,
         regenerateNestedBuffers,
       ),
-    [unlockDepthCursor, rendered.renderedContent, rendered.untransformedAstJson],
+    [unlockNestingCursor, rendered.renderedContent, rendered.untransformedAstJson],
   );
 
   // Three-way theme fingerprint (Plan 2A item 11):
@@ -578,7 +578,7 @@ export default function ReactPreview({
             renderedContent={rendered.renderedContent}
             untransformedAstJson={rendered.untransformedAstJson}
             currentActor={getActorId()}
-            unlockDepthCursor={unlockDepthCursor}
+            unlockNestingCursor={unlockNestingCursor}
             nestedEditBuffers={nestedEditBuffers}
           />
         ) : previewState === 'ERROR_AT_START' && currentError ? (

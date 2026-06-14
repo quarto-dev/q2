@@ -1,8 +1,8 @@
 /*
- * depth_cursor_roundtrip_tests.rs
+ * nesting_cursor_roundtrip_tests.rs
  *
  * P3.5 tier-(ii) WASM round-trip composition snapshot for the block-editing
- * depth-cursor feature.
+ * nesting-cursor feature.
  *
  * Honesty note: this test adds NO new production code.  It is a composition
  * and regression snapshot over already-shipped `regenerate_nested_buffers` and
@@ -53,7 +53,7 @@ fn original_offsets(si: &SourceInfo) -> (usize, usize) {
 /// committed back.  If you neutralize the prefixer in qmd.rs:128, the
 /// `result.contains("> EDITED line two.")` assertion will go RED.
 #[test]
-fn depth_cursor_blockquote_round_trip() {
+fn nesting_cursor_blockquote_round_trip() {
     // ── Fixture ──────────────────────────────────────────────────────────────
     // Parses as: Para("Before quote.") [0], BlockQuote [1] with one multi-line
     // Para child, Para("After quote.") [2].

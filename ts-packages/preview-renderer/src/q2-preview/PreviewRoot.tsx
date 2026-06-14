@@ -21,15 +21,14 @@ import type { PreviewNodeEditPayload } from '../types/diagnostic';
 import { previewRegistry, PreviewContext } from '.';
 import { buildSourceIndex, serializeSourceEntry } from './sourceIndex';
 import type { ResolvedSource } from './sourceIndex';
-import { tileForAnchorR0, findReanchorCandidate, enumerateLockedTiles, captureEditTarget, measureTileBox } from './lockedTiles';
+import { outerBlockForAnchorR0, findReanchorCandidate, enumerateOuterBlocks, captureEditTarget, measureBlockBox, seedForRange, snapshotOuterBlockGeometry } from './outerBlocks';
 import { buildByteLineMap } from '../utils/byteLineMap';
 import { normalizeLineEndings } from '../utils/normalizeLineEndings';
 import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';
 import { RevealDeck } from './RevealDeck';
 import { installLinkHandlers } from '../utils/iframeLinkHandlers';
-import { buildDepthCommitDestination, buildDepthSurfaces, parentSurface, childSurfaceToward } from './depthNav';
-import { sliceBytes } from '../utils/sliceSource';
+import { buildNestingCommitDestination, buildNestingSurfaces, parentSurface, childSurfaceToward, topBlockR0 } from './nestingNav';
 
 /**
  * P2.4b/c: descriptor for a pending cross-surface nav landing.
@@ -57,18 +56,25 @@ export type PendingLanding =
            * Does NOT open an editor — just positions roving-tabindex focus.
            */
           intent: 'focus';
-          /** Byte offset of the edited tile — resolved via tileForAnchorR0. */
+          /** Byte offset of the edited outer block — resolved via outerBlockForAnchorR0. */
           anchorR0: number;
           /** File that was active when the close fired — cancels on file switch. */
           fromFile: string;
       };
 
 /**
- * P2.4d: stashed at pointerdown time when a mouse click lands on a different tile
+ * Caret-edge placement hint applied once on editor mount. Today only the
+ * first/last logical-line edges are expressible; §2 widens this to an interior
+ * `{ line; column }` for caret-aware nest moves.
+ */
+export type CaretHint = { edge: 'first' | 'last'; column: number };
+
+/**
+ * P2.4d: stashed at pointerdown time when a mouse click lands on a different outer block
  * while an editor is open. Consumed by handleClickSwitchBlur.
  */
 export interface ClickSwitchRecord {
-    tileEl: Element;
+    blockEl: Element;
     /** B's anchorR0 at pointerdown time (pre-commit, for projection). */
     anchorR0: number;
 }
@@ -97,10 +103,10 @@ export interface PreviewRootProps {
     /** Globally disable the edit surface (bd-ov4gqk3m). */
     editingDisabled?: boolean;
     /**
-     * P3.2: depth-cursor mode for nested blocks. When true, the context
-     * exposes depth-cursor behaviour. Default-off (undefined/false).
+     * P3.2: nesting-cursor mode for nested blocks. When true, the context
+     * exposes nesting-cursor behaviour. Default-off (undefined/false).
      */
-    unlockDepthCursor?: boolean;
+    unlockNestingCursor?: boolean;
     /**
      * P3.2: per-siKey clean QMD buffers for nested blocks, produced by
      * the host's `regenerateNestedBuffers` call. Undefined when off.
@@ -196,6 +202,7 @@ export function PreviewRoot(props: PreviewRootProps) {
             setEditTargetRaw(target);
         } else {
             editDraftRef.current = null;
+            editGeometryRef.current = new Map(); // §1: plain close invalidates the snapshot
             setEditTargetRaw(null);
             // P2.3b: drop-focus is handled in the self-heal layout effect below.
             // Plain-commit focus-restoration is deferred to P2.4 (pendingLanding).
@@ -210,8 +217,8 @@ export function PreviewRoot(props: PreviewRootProps) {
     const editTargetRef = useRef<typeof editTarget>(editTarget);
     editTargetRef.current = editTarget;
 
-    // previewHostRef: a ref to the wrapper div that scopes tile queries
-    // (tileForAnchorR0) to the preview document tree.
+    // previewHostRef: a ref to the wrapper div that scopes outer-block queries
+    // (outerBlockForAnchorR0) to the preview document tree.
     const previewHostRef = useRef<HTMLDivElement | null>(null);
 
     // Keep pool in a ref for the same reason — pool changes with astJson but we
@@ -222,9 +229,39 @@ export function PreviewRoot(props: PreviewRootProps) {
     // content without a stale closure over props.renderedContent.
     const renderedContentRef = useRef<string>(props.renderedContent ?? '');
     // P3.3 §3b: sourceIndexRef / nestedEditBuffersRef — stable refs so
-    // requestDepthMove (a useCallback(fn, [])) can read the latest values.
+    // requestNestingMove (a useCallback(fn, [])) can read the latest values.
     const sourceIndexRef = useRef<Map<string, { reachabilityClass: string }> | null | undefined>(null);
     const nestedEditBuffersRef = useRef<Record<string, string> | undefined>(undefined);
+    // §1 geometry snapshot: rendered geometry of the active block's whole subtree,
+    // captured at activation (pre-textarea-swap), keyed block-relative
+    // ("${r0-topBlockR0}:${r1-topBlockR0}"). Consumed by nest moves to size their
+    // destination from the original render. Each capture REPLACES the map; cleared
+    // on plain close and on every self-heal fire (the re-anchor is content-based,
+    // not a uniform δ, so block-relative keys can't be trusted across it).
+    const editGeometryRef = useRef<Map<string, { contentHeight: number; boxStyle: Record<string, string> }>>(new Map());
+    // Stable ref for the unlock-nesting preference so []-deps callbacks (capture
+    // sites, future §3 hover handlers) read the latest value without re-subscribing.
+    const unlockNestingCursorRef = useRef(props.unlockNestingCursor);
+    unlockNestingCursorRef.current = props.unlockNestingCursor;
+
+    // §1: capture the opened block's subtree geometry BEFORE the children are
+    // swapped to a textarea. Gated to unlock mode (no nesting in locked mode) and,
+    // implicitly, to multilevel blocks (snapshotOuterBlockGeometry returns empty
+    // for a flat block). topBlockR0 is derived from the source index — the SAME
+    // origin the consume-side lookup uses — so block-relative keys line up.
+    const captureGeometry = useCallback((openedEl: Element, range: { r0: number; r1: number }) => {
+        if (!unlockNestingCursorRef.current) {
+            editGeometryRef.current = new Map();
+            return;
+        }
+        const surfaces = buildNestingSurfaces(sourceIndexRef.current);
+        const topR0 = topBlockR0(surfaces, range.r0, range.r1);
+        editGeometryRef.current = snapshotOuterBlockGeometry(
+            openedEl,
+            poolRef.current as Array<{ t: number; r: [number, number]; d: number }>,
+            topR0,
+        );
+    }, []);
 
     // Self-heal layout effect. Fires post-DOM / pre-paint so re-anchoring is
     // invisible (no flicker). Keyed on the render inputs that signal an external
@@ -235,15 +272,22 @@ export function PreviewRoot(props: PreviewRootProps) {
     // separate follow-up effect below answers the DOM question: "is the active
     // editor wrapper currently visible?"
     //
-    // The old Step-2 `tileForAnchorR0(exactOnly:true)` check has been REMOVED.
+    // The old Step-2 `outerBlockForAnchorR0(exactOnly:true)` check has been REMOVED.
     // While the editor is open, the active block's `<p data-block-pool-id="N">` is
     // replaced by the textarea wrapper div (which has NO `data-block-pool-id`).
-    // tileForAnchorR0 only scans `[data-block-pool-id]` tiles, so it could NEVER
+    // outerBlockForAnchorR0 only scans `[data-block-pool-id]` outer blocks, so it could NEVER
     // find the active editor → always returned null → always triggered a false DROP.
     // That caused KEEP to be unreachable in practice.
     useLayoutEffect(() => {
         const et = editTargetRef.current;
         if (et === null) return;  // no open editor — nothing to do
+
+        // §1: an external re-render invalidates the geometry snapshot on EVERY
+        // self-heal fire (both KEEP and DROP). findReanchorCandidate is
+        // content-based, not a uniform δ, so block-relative keys could describe the
+        // wrong subtree; and KEEP spreads the old box forward without re-measuring.
+        // Clear and let the next fresh open re-capture (consume falls back meanwhile).
+        editGeometryRef.current = new Map();
 
         const currentPool = poolRef.current;
         const currentContent = props.renderedContent ?? '';
@@ -261,23 +305,23 @@ export function PreviewRoot(props: PreviewRootProps) {
         } else {
             // Drop — content mismatch or no candidate at/after anchorR0.
             editDraftRef.current = null;
-            // P2.3b: explicitly null the ref BEFORE the drop-focus tile.focus() call.
-            // tile.focus() causes the textarea to fire onBlur synchronously (focus moves
+            // P2.3b: explicitly null the ref BEFORE the drop-focus outerBlock.focus() call.
+            // outerBlock.focus() causes the textarea to fire onBlur synchronously (focus moves
             // away). The onBlur handler calls commitIfDirty, which reads editTargetRef.current.
             // If the ref is still non-null at that point, the guard passes and the stale
             // draft is committed (Bug 2). Explicitly nulling the ref here ensures the guard
-            // fires before tile.focus() triggers the blur.
+            // fires before outerBlock.focus() triggers the blur.
             // Note: the render body also sets editTargetRef.current = editTarget, which will
             // re-null it after the re-render from setEditTargetRaw(null) — this is just an
             // early update that front-runs the re-render for guard correctness.
             editTargetRef.current = null;
             setEditTargetRaw(null);
 
-            // Drop-focus: best-effort focus on the nearest visible tile at/after anchorR0.
+            // Drop-focus: best-effort focus on the nearest visible outer block at/after anchorR0.
             if (previewHostRef.current) {
-                const tile = tileForAnchorR0(previewHostRef.current, currentPool, et.anchorR0);
-                if (tile) {
-                    (tile as HTMLElement).focus?.();
+                const outerBlock = outerBlockForAnchorR0(previewHostRef.current, currentPool, et.anchorR0);
+                if (outerBlock) {
+                    (outerBlock as HTMLElement).focus?.();
                 }
             }
         }
@@ -313,19 +357,92 @@ export function PreviewRoot(props: PreviewRootProps) {
     setAstRef.current = props.setAst;
 
     /**
+     * Open (or re-open) the editor on a source range — the single canonical opener
+     * shared by the three PreviewRoot-internal fresh-open / reland / nest-retarget
+     * sites (executeLanding, requestMove's sync hop, applyNestingRetarget).
+     * `activate` in useBlockEditHover does NOT route through this (it keeps its
+     * mode-aware pre-open dedup local) — it shares only the pure `seedForRange`.
+     *
+     * Reads pool/content/buffers from refs (every internal caller already used the
+     * same ref values), so this is a behavior-preserving extraction of the
+     * previously-quadruplicated edit-target assembly.
+     *
+     *  - `box`: how to size the editor. `{ measure: el }` measures a live element;
+     *    `'keep'` retains the current edit target's box; `'snapshot'` (§1) looks the
+     *    destination up in `editGeometryRef` by its block-relative key, falling back
+     *    to live-measure-if-rendered-else-keep when the snapshot lacks the key
+     *    (jsdom/no-layout, an unrendered surface, or after a self-heal clear).
+     *  - `caret`: caret-edge hint to place on arrival (null → caret at top).
+     *  - `leafAnchorR0`: preserved across nest moves; defaults to `range.r0`.
+     */
+    const openEditTarget = useCallback((
+        range: { r0: number; r1: number },
+        opts: {
+            box: { measure: Element } | 'keep' | 'snapshot';
+            caret?: CaretHint | null;
+            leafAnchorR0?: number;
+        },
+    ) => {
+        const et = editTargetRef.current;
+        const content = renderedContentRef.current;
+        const { anchorSlice, seededDraft } = seedForRange(range, content, nestedEditBuffersRef.current);
+        editDraftRef.current = seededDraft;
+
+        let contentHeight: number;
+        let boxStyle: Record<string, string>;
+        if (opts.box === 'keep') {
+            contentHeight = et?.contentHeight ?? 0;
+            boxStyle = et?.boxStyle ?? {};
+        } else if (opts.box === 'snapshot') {
+            const surfaces = buildNestingSurfaces(sourceIndexRef.current);
+            const topR0 = topBlockR0(surfaces, range.r0, range.r1);
+            const snap = editGeometryRef.current.get(`${range.r0 - topR0}:${range.r1 - topR0}`);
+            if (snap) {
+                contentHeight = snap.contentHeight;
+                boxStyle = snap.boxStyle;
+            } else {
+                // Fallback: measure the destination outer block if it is in the live
+                // DOM (the pre-§1 best-effort), else keep the current box.
+                let fb: { contentHeight: number; boxStyle: Record<string, string> } | null = null;
+                if (previewHostRef.current) {
+                    const ob = outerBlockForAnchorR0(previewHostRef.current, poolRef.current, range.r0, { exactOnly: true });
+                    if (ob) fb = measureBlockBox(ob);
+                }
+                contentHeight = fb?.contentHeight ?? et?.contentHeight ?? 0;
+                boxStyle = fb?.boxStyle ?? et?.boxStyle ?? {};
+            }
+        } else {
+            const m = measureBlockBox(opts.box.measure);
+            contentHeight = m.contentHeight;
+            boxStyle = m.boxStyle;
+        }
+
+        pendingCaretRef.current = opts.caret ?? null;
+        setEditTargetRaw({
+            anchorR0: range.r0,
+            anchorR1: range.r1,
+            anchorSlice,
+            contentHeight,
+            boxStyle,
+            seededDraft,
+            leafAnchorR0: opts.leafAnchorR0 ?? range.r0,
+        });
+    }, []);
+
+    /**
      * Execute a landing. Handles both intents:
      *
-     * intent:'activate' (P2.4b move) — find the destination tile in the current
+     * intent:'activate' (P2.4b move) — find the destination outer block in the current
      * DOM/content and open its editor.
      *
-     * intent:'focus' (P2.4c plain close) — focus the edited tile by anchorR0.
+     * intent:'focus' (P2.4c plain close) — focus the edited outer block by anchorR0.
      */
     const executeLanding = useCallback((
         pl: PendingLanding,
         currentPool: unknown[],
         currentContent: string,
     ) => {
-        // P2.4c: intent:'focus' — return focus to the edited tile without opening an editor.
+        // P2.4c: intent:'focus' — return focus to the edited outer block without opening an editor.
         if (pl.intent === 'focus') {
             // Don't steal focus if a new edit has already started.
             if (editTargetRef.current !== null) {
@@ -333,63 +450,62 @@ export function PreviewRoot(props: PreviewRootProps) {
                 return;
             }
             if (!previewHostRef.current) return;
-            const tile = tileForAnchorR0(previewHostRef.current, currentPool, pl.anchorR0);
-            if (tile) {
-                (tile as HTMLElement).focus?.();
+            const outerBlock = outerBlockForAnchorR0(previewHostRef.current, currentPool, pl.anchorR0);
+            if (outerBlock) {
+                (outerBlock as HTMLElement).focus?.();
             }
             pendingLandingRef.current = null; // consumed
             return;
         }
 
-        // intent:'activate' (P2.4b move): find the destination tile and open its editor.
+        // intent:'activate' (P2.4b move): find the destination outer block and open its editor.
         if (!previewHostRef.current) return;
-        const tiles = enumerateLockedTiles(previewHostRef.current);
-        if (tiles.length === 0) return;
+        const blocks = enumerateOuterBlocks(previewHostRef.current);
+        if (blocks.length === 0) return;
 
         const map = buildByteLineMap(currentContent);
-        let destTile: Element | null = null;
+        let destBlock: Element | null = null;
 
         if (pl.direction === 'down') {
-            // First tile with start line >= destLine
-            for (const tile of tiles) {
-                const pidAttr = tile.getAttribute('data-block-pool-id');
+            // First outer block with start line >= destLine
+            for (const outerBlock of blocks) {
+                const pidAttr = outerBlock.getAttribute('data-block-pool-id');
                 if (pidAttr === null) continue;
                 const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
                 if (!entry || entry.t !== 0) continue;
-                if (map.lineOf(entry.r[0]) >= pl.destLine) { destTile = tile; break; }
+                if (map.lineOf(entry.r[0]) >= pl.destLine) { destBlock = outerBlock; break; }
             }
-            if (!destTile) destTile = tiles[0]; // wrap to first
+            if (!destBlock) destBlock = blocks[0]; // wrap to first
         } else {
-            // Last tile with start line < destLine
-            for (let i = tiles.length - 1; i >= 0; i--) {
-                const tile = tiles[i];
-                const pidAttr = tile.getAttribute('data-block-pool-id');
+            // Last outer block with start line < destLine
+            for (let i = blocks.length - 1; i >= 0; i--) {
+                const outerBlock = blocks[i];
+                const pidAttr = outerBlock.getAttribute('data-block-pool-id');
                 if (pidAttr === null) continue;
                 const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
                 if (!entry || entry.t !== 0) continue;
-                if (map.lineOf(entry.r[0]) < pl.destLine) { destTile = tile; break; }
+                if (map.lineOf(entry.r[0]) < pl.destLine) { destBlock = outerBlock; break; }
             }
-            if (!destTile) destTile = tiles[tiles.length - 1]; // wrap to last
+            if (!destBlock) destBlock = blocks[blocks.length - 1]; // wrap to last
         }
 
-        if (!destTile) return;
-        const captured = captureEditTarget(destTile, currentPool, currentContent);
+        if (!destBlock) return;
+        const captured = captureEditTarget(destBlock, currentPool, currentContent);
         if (!captured) return;
 
-        editDraftRef.current = captured.anchorSlice;
-        pendingCaretRef.current = {
-            edge: pl.direction === 'down' ? 'first' : 'last',
-            column: pl.desiredColumn,
-        };
         pendingLandingRef.current = null; // consumed
-        // Measure the destination tile's box so the textarea renders at the
+        // §1: capture the (clean, rendered) destination subtree's geometry BEFORE
+        // openEditTarget swaps it to a textarea, so a later nest move can size from it.
+        captureGeometry(destBlock, { r0: captured.anchorR0, r1: captured.anchorR1 });
+        // Measure the destination outer block's box so the textarea renders at the
         // correct height (not collapsed to height: 0).
-        const { contentHeight, boxStyle } = measureTileBox(destTile);
-        setEditTargetRaw({
-            ...captured,
-            contentHeight,
-            boxStyle,
-        });
+        openEditTarget(
+            { r0: captured.anchorR0, r1: captured.anchorR1 },
+            {
+                box: { measure: destBlock },
+                caret: { edge: pl.direction === 'down' ? 'first' : 'last', column: pl.desiredColumn },
+            },
+        );
     }, []);
 
     /**
@@ -428,59 +544,57 @@ export function PreviewRoot(props: PreviewRootProps) {
         const currentPool = poolRef.current;
         const currentContent = renderedContentRef.current;
 
-        // Build the line map and compute the current tile's start line.
+        // Build the line map and compute the current outer block's start line.
         const map = buildByteLineMap(currentContent);
         const L0 = map.lineOf(et.anchorR0);
 
-        // Find the destination tile in the current DOM.
+        // Find the destination outer block in the current DOM.
         if (!previewHostRef.current) return;
-        const tiles = enumerateLockedTiles(previewHostRef.current);
-        // Guard: empty → no-op. We allow tiles.length === 1 because the active
-        // tile's DOM element has no data-block-pool-id (the textarea wrapper
-        // replaced it), so a 2-tile document shows only 1 tile in the scan.
-        // A single DOM tile + the active tile = at least 2 tiles total → nav is valid.
-        if (tiles.length === 0) return;
+        const blocks = enumerateOuterBlocks(previewHostRef.current);
+        // Guard: empty → no-op. We allow blocks.length === 1 because the active
+        // outer block's DOM element has no data-block-pool-id (the textarea wrapper
+        // replaced it), so a 2-outer-block document shows only 1 outer block in the scan.
+        // A single DOM outer block + the active outer block = at least 2 outer blocks total → nav is valid.
+        if (blocks.length === 0) return;
 
         const draftLineCount = draft.split('\n').length;
 
-        let destTile: Element | null = null;
+        let destBlock: Element | null = null;
         if (direction === 'down') {
             const targetLine = L0 + draftLineCount;
-            for (const tile of tiles) {
-                const pidAttr = tile.getAttribute('data-block-pool-id');
+            for (const outerBlock of blocks) {
+                const pidAttr = outerBlock.getAttribute('data-block-pool-id');
                 if (pidAttr === null) continue;
                 const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
                 if (!entry || entry.t !== 0) continue;
-                if (map.lineOf(entry.r[0]) >= targetLine) { destTile = tile; break; }
+                if (map.lineOf(entry.r[0]) >= targetLine) { destBlock = outerBlock; break; }
             }
-            if (!destTile) destTile = tiles[0]; // wrap to first
+            if (!destBlock) destBlock = blocks[0]; // wrap to first
         } else {
-            for (let i = tiles.length - 1; i >= 0; i--) {
-                const tile = tiles[i];
-                const pidAttr = tile.getAttribute('data-block-pool-id');
+            for (let i = blocks.length - 1; i >= 0; i--) {
+                const outerBlock = blocks[i];
+                const pidAttr = outerBlock.getAttribute('data-block-pool-id');
                 if (pidAttr === null) continue;
                 const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
                 if (!entry || entry.t !== 0) continue;
-                if (map.lineOf(entry.r[0]) < L0) { destTile = tile; break; }
+                if (map.lineOf(entry.r[0]) < L0) { destBlock = outerBlock; break; }
             }
-            if (!destTile) destTile = tiles[tiles.length - 1]; // wrap to last
+            if (!destBlock) destBlock = blocks[blocks.length - 1]; // wrap to last
         }
 
         if (!isDirty) {
             // Synchronous hop: no commit, no editability gap.
-            const captured = captureEditTarget(destTile!, currentPool, currentContent);
+            const captured = captureEditTarget(destBlock!, currentPool, currentContent);
             if (!captured) return;
-            editDraftRef.current = captured.anchorSlice;
-            pendingCaretRef.current = {
-                edge: direction === 'down' ? 'first' : 'last',
-                column: exitColumn,
-            };
-            const { contentHeight, boxStyle } = measureTileBox(destTile!);
-            setEditTargetRaw({
-                ...captured,
-                contentHeight,
-                boxStyle,
-            });
+            // §1: snapshot the destination subtree before it is swapped to a textarea.
+            captureGeometry(destBlock!, { r0: captured.anchorR0, r1: captured.anchorR1 });
+            openEditTarget(
+                { r0: captured.anchorR0, r1: captured.anchorR1 },
+                {
+                    box: { measure: destBlock! },
+                    caret: { edge: direction === 'down' ? 'first' : 'last', column: exitColumn },
+                },
+            );
         } else {
             // Modified: compute destLine (delta-adjusted for down, unadjusted for up).
             const destLine = direction === 'down' ? L0 + draftLineCount : L0;
@@ -493,11 +607,11 @@ export function PreviewRoot(props: PreviewRootProps) {
             };
 
             // Commit the edit and close the editor.
-            // Use the LIVE identity from editTargetRef.current (via buildDepthCommitDestination)
+            // Use the LIVE identity from editTargetRef.current (via buildNestingCommitDestination)
             // rather than the per-render closure sourceInfoJson. For editable blocks (t=0, d=0)
             // the two are string-identical (see commit-destination-equivalence.test.ts), but the
             // live form anchors to the self-healed identity in every reachable commit state.
-            const dest = buildDepthCommitDestination(editTargetRef.current);
+            const dest = buildNestingCommitDestination(editTargetRef.current);
             if (dest === null) {
                 // No active target — skip commit and abort the move.
                 editDraftRef.current = null;
@@ -580,22 +694,22 @@ export function PreviewRoot(props: PreviewRootProps) {
     }, []);
 
     // ---------------------------------------------------------------------------
-    // P2.4d: click-switch (pointerdown on a different tile while editing)
+    // P2.4d: click-switch (pointerdown on a different outer block while editing)
     // ---------------------------------------------------------------------------
 
     const clickSwitchRef = useRef<ClickSwitchRecord | null>(null);
     const dirtySwitchHandledRef = useRef<boolean>(false);
 
     /**
-     * P2.4d: record a pending click-switch to tile B.
+     * P2.4d: record a pending click-switch to outer block B.
      */
-    const requestClickSwitch = useCallback((tileEl: Element) => {
+    const requestClickSwitch = useCallback((blockEl: Element) => {
         const currentPool = poolRef.current;
-        const pidAttr = tileEl.getAttribute('data-block-pool-id');
+        const pidAttr = blockEl.getAttribute('data-block-pool-id');
         if (!pidAttr) return;
         const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
         if (!entry || entry.t !== 0) return;
-        clickSwitchRef.current = { tileEl, anchorR0: entry.r[0] };
+        clickSwitchRef.current = { blockEl, anchorR0: entry.r[0] };
         dirtySwitchHandledRef.current = false;
     }, []);
 
@@ -607,7 +721,7 @@ export function PreviewRoot(props: PreviewRootProps) {
      *
      * Projection: B is after A → destLine = L_B + delta (delta = draft lines − anchorSlice lines).
      *             B is before A → destLine = L_B, direction='down'
-     *             (B's bytes are unaffected by A's edit; first-tile-at/after resolves exactly).
+     *             (B's bytes are unaffected by A's edit; first-outer-block-at/after resolves exactly).
      */
     const handleClickSwitchBlur = useCallback((draft: string): boolean => {
         const cs = clickSwitchRef.current;
@@ -642,8 +756,8 @@ export function PreviewRoot(props: PreviewRootProps) {
         const delta = draftLineCount - anchorSliceLineCount;
 
         // direction is always 'down':
-        //   B >= A: project forward (destLine = L_B + delta, executeLanding finds first tile at line >= destLine).
-        //   B < A:  B's bytes unchanged (destLine = L_B, first tile at line >= L_B = B itself).
+        //   B >= A: project forward (destLine = L_B + delta, executeLanding finds first outer block at line >= destLine).
+        //   B < A:  B's bytes unchanged (destLine = L_B, first outer block at line >= L_B = B itself).
         const direction = 'down';
         const destLine = L_B >= L_A ? L_B + delta : L_B;
 
@@ -672,13 +786,13 @@ export function PreviewRoot(props: PreviewRootProps) {
         }, 250);
 
         // Commit A (same wire format as requestMove's dirty path).
-        // Use the LIVE identity from editTargetRef.current (via buildDepthCommitDestination)
+        // Use the LIVE identity from editTargetRef.current (via buildNestingCommitDestination)
         // rather than the per-render closure sourceInfoJson. At this point editTargetRef.current
         // is still A's identity (the editor is closing A, not B) — correct to use here.
         // For editable blocks (t=0, d=0) the two are string-identical
         // (see commit-destination-equivalence.test.ts), but the live form anchors to
         // the self-healed identity in every reachable commit state.
-        const destA = buildDepthCommitDestination(editTargetRef.current);
+        const destA = buildNestingCommitDestination(editTargetRef.current);
         if (destA === null) {
             // No active target — skip commit and clean up.
             editDraftRef.current = null;
@@ -723,8 +837,8 @@ export function PreviewRoot(props: PreviewRootProps) {
      * editTargetRef.current so an unmount-time blur cannot write to a stale
      * byte range. No-ops when editTargetRef.current is null.
      */
-    const commitDepthEdit = useCallback((newText: string) => {
-        const dest = buildDepthCommitDestination(editTargetRef.current);
+    const commitNestingEdit = useCallback((newText: string) => {
+        const dest = buildNestingCommitDestination(editTargetRef.current);
         if (dest === null) return; // no active target → no-op
         const payload: PreviewNodeEditPayload = {
             __isPreviewNodeEdit: true,
@@ -736,65 +850,44 @@ export function PreviewRoot(props: PreviewRootProps) {
     }, []);
 
     /**
-     * Shared re-target core (factored out of requestDepthMove). Re-seeds the draft
+     * Shared re-target core (factored out of requestNestingMove). Re-seeds the draft
      * from the new node's clean buffer/slice and re-anchors editTarget. No commit.
      */
-    const applyDepthRetarget = useCallback((next: { r0: number; r1: number }, leafAnchorR0: number) => {
+    const applyNestingRetarget = useCallback((next: { r0: number; r1: number }, leafAnchorR0: number) => {
         const et = editTargetRef.current;
         if (!et) return;
-        const content = renderedContentRef.current;
-        const anchorSlice = normalizeLineEndings(sliceBytes(content, next.r0, next.r1)).trimEnd();
-        const siKey = serializeSourceEntry({ t: 0, r: [next.r0, next.r1], d: 0 });
-        const seededDraft = nestedEditBuffersRef.current?.[siKey] ?? anchorSlice;
-        editDraftRef.current = seededDraft;
-        // Box: prefer measuring the destination tile if it is in the DOM; else keep
-        // the current box (best-effort — real box fidelity for 'in'/jumps is P3.5).
-        let contentHeight = et.contentHeight;
-        let boxStyle = et.boxStyle;
-        if (previewHostRef.current) {
-            const tile = tileForAnchorR0(previewHostRef.current, poolRef.current, next.r0, { exactOnly: true });
-            if (tile) {
-                const m = measureTileBox(tile);
-                contentHeight = m.contentHeight;
-                boxStyle = m.boxStyle;
-            }
-        }
-        pendingCaretRef.current = null; // depth move/jump has no caret-edge hint
-        setEditTargetRaw({
-            anchorR0: next.r0,
-            anchorR1: next.r1,
-            anchorSlice,
-            contentHeight,
-            boxStyle,
-            seededDraft,
-            leafAnchorR0,
-        });
+        // §1: size the destination from the geometry snapshot captured at the
+        // original open (the live DOM is edit-distorted — the active subtree is a
+        // textarea — so even nest-out's parent is present-but-distorted). openEditTarget
+        // resolves 'snapshot' to the block-relative key and falls back to
+        // live-measure-if-rendered-else-keep on a miss. No caret-edge hint for a nest move.
+        openEditTarget({ r0: next.r0, r1: next.r1 }, { box: 'snapshot', caret: null, leafAnchorR0 });
     }, []);
 
     /**
-     * P3.3 §3b: move the depth cursor to the AST parent ('out') or the child
+     * P3.3 §3b: move the nesting cursor to the AST parent ('out') or the child
      * toward leafAnchorR0 ('in'). Clamps at the ends (no parent → out no-ops;
      * cursor is a leaf → in no-ops). Re-seeds the draft from the new node's
      * clean buffer (nestedEditBuffers[siKey] ?? anchorSlice). Does NOT commit.
      */
-    const requestDepthMove = useCallback((direction: 'in' | 'out') => {
+    const requestNestingMove = useCallback((direction: 'in' | 'out') => {
         const et = editTargetRef.current;
         if (!et) return;
-        const surfaces = buildDepthSurfaces(sourceIndexRef.current);
+        const surfaces = buildNestingSurfaces(sourceIndexRef.current);
         const next = direction === 'out'
             ? parentSurface(surfaces, et.anchorR0, et.anchorR1)
             : childSurfaceToward(surfaces, et.anchorR0, et.anchorR1, et.leafAnchorR0 ?? et.anchorR0);
         if (!next) return; // clamp — no-op at the path end
-        applyDepthRetarget({ r0: next.r0, r1: next.r1 }, et.leafAnchorR0 ?? et.anchorR0);
+        applyNestingRetarget({ r0: next.r0, r1: next.r1 }, et.leafAnchorR0 ?? et.anchorR0);
     }, []);
 
-    // P3.4: jump the depth cursor directly to a chosen ancestor crumb's range.
+    // P3.4: jump the nesting cursor directly to a chosen ancestor crumb's range.
     // leafAnchorR0 is UNCHANGED by a jump, so a later 'in' still descends toward
     // the originally-clicked leaf.
-    const requestDepthSelect = useCallback((r0: number, r1: number) => {
+    const requestNestingSelect = useCallback((r0: number, r1: number) => {
         const et = editTargetRef.current;
         if (!et) return;
-        applyDepthRetarget({ r0, r1 }, et.leafAnchorR0 ?? et.anchorR0);
+        applyNestingRetarget({ r0, r1 }, et.leafAnchorR0 ?? et.anchorR0);
     }, []);
 
     // Refs so the link-handler closure (installed once at mount)
@@ -960,7 +1053,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 sourceIndex,
                 resolveSource,
                 editingDisabled: props.editingDisabled,
-                unlockDepthCursor: props.unlockDepthCursor,
+                unlockNestingCursor: props.unlockNestingCursor,
                 nestedEditBuffers: props.nestedEditBuffers,
                 requestMove,
                 pendingCaretRef,
@@ -969,14 +1062,15 @@ export function PreviewRoot(props: PreviewRootProps) {
                 requestClickSwitch,
                 handleClickSwitchBlur,
                 consumeDirtySwitchHandled,
-                commitDepthEdit,
-                requestDepthMove,
-                requestDepthSelect,
+                commitNestingEdit,
+                requestNestingMove,
+                requestNestingSelect,
+                captureGeometry,
             }}
         >
-            {/* previewHostRef scopes tile queries (tileForAnchorR0) to the
+            {/* previewHostRef scopes outer-block queries (outerBlockForAnchorR0) to the
                 preview document so the self-heal effect does not accidentally
-                query tiles from other parts of the page. The div is a
+                query outer blocks from other parts of the page. The div is a
                 transparent pass-through with no visual effect. */}
             <div ref={previewHostRef} style={{ display: 'contents' }}>
                 <CurrentActorContext.Provider value={props.currentActor ?? null}>

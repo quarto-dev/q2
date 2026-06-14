@@ -1,7 +1,7 @@
 /**
  * P3.5 tier (i) item 1 — Breadcrumb geometry (real browser, layout engine required)
  *
- * Verifies that the depth-cursor breadcrumb chip (`BreadcrumbChip.tsx`,
+ * Verifies that the nesting-cursor breadcrumb chip (`BreadcrumbChip.tsx`,
  * `data-testid="q2-breadcrumb-chip"`) is positioned ABOVE the active edit
  * surface — its bottom edge is anchored to the surface's top (the `- chipH`
  * term in `useLayoutEffect`) so it never occludes line 1 of the edit text.
@@ -62,7 +62,7 @@ test.describe('P3.5 — Breadcrumb chip geometry (real browser)', () => {
     });
 
     test('chip sits above the active edit surface, never occluding line 1', async ({ page }) => {
-        // Enable the depth-cursor BEFORE any navigation — addInitScript re-applies
+        // Enable the nesting-cursor BEFORE any navigation — addInitScript re-applies
         // on every document load, including the iframe.
         await page.addInitScript(() => {
             localStorage.setItem('quarto-hub:preferences', JSON.stringify({
@@ -70,7 +70,7 @@ test.describe('P3.5 — Breadcrumb chip geometry (real browser)', () => {
                 scrollSyncEnabled: true,
                 errorOverlayCollapsed: true,
                 colorScheme: 'auto',
-                unlockDepthCursor: true,
+                unlockNestingCursor: true,
             }));
         });
 
@@ -104,11 +104,11 @@ test.describe('P3.5 — Breadcrumb chip geometry (real browser)', () => {
         const chip = iframe.locator('[data-testid="q2-breadcrumb-chip"]');
         await chip.waitFor({ timeout: 5000 });
 
-        // The chip being visible is the proof that unlockDepthCursor took effect.
+        // The chip being visible is the proof that unlockNestingCursor took effect.
         const chipVisible = await chip.isVisible();
         expect(
             chipVisible,
-            'BreadcrumbChip must be visible — unlockDepthCursor preference did not propagate',
+            'BreadcrumbChip must be visible — unlockNestingCursor preference did not propagate',
         ).toBe(true);
 
         // Step 4: get bounding boxes from the real layout engine.

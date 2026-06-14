@@ -61,7 +61,7 @@ vi.mock('@quarto/preview-runtime', () => ({
   })),
   applyNodeEdit: vi.fn(() => 'updated qmd\n'),
   // P3.2: PreviewApp passes this import to its gated nested-buffer memo on
-  // every render (even depth-cursor off), so the strict mock must define it.
+  // every render (even nesting-cursor off), so the strict mock must define it.
   regenerateNestedBuffers: vi.fn(() => ({})),
   // bd-ov4gqk3m: Automerge write-back path.
   getFileContent: vi.fn(() => 'old qmd content\n'),

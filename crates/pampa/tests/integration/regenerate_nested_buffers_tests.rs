@@ -3,7 +3,7 @@
  *
  * Integration tests for pampa::regenerate_nested_buffers.
  *
- * TDD suite for P3.1 of the block-editing feature (depth-cursor clean buffers).
+ * TDD suite for P3.1 of the block-editing feature (nesting-cursor clean buffers).
  *
  * Copyright (c) 2026 Posit, PBC
  */

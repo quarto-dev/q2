@@ -65,13 +65,13 @@ export interface PreviewContextValue {
         contentHeight: number;
         boxStyle: Record<string, string>;
         /**
-         * P3.3 depth cursor: byte offset of the originally-clicked leaf — the
+         * P3.3 nesting cursor: byte offset of the originally-clicked leaf — the
          * path bottom 'in' descends toward. Set at activation = anchorR0; mutated
-         * by depth-out/in in a later task.
+         * by nesting-out/in in a later task.
          */
         leafAnchorR0?: number;
         /**
-         * P3.3 depth cursor: the value the draft was seeded with at open
+         * P3.3 nesting cursor: the value the draft was seeded with at open
          * (nestedEditBuffers[siKey] ?? anchorSlice). The dirty guard baselines
          * against THIS, not anchorSlice — a clean-buffer-seeded nested editor
          * differs from the polluted anchorSlice slice.
@@ -152,18 +152,18 @@ export interface PreviewContextValue {
      */
     editingDisabled?: boolean;
     /**
-     * P3.2: depth-cursor mode for nested blocks. When true, nested
-     * list/quote blocks are each separately editable (depth cursor).
+     * P3.2: nesting-cursor mode for nested blocks. When true, nested
+     * list/quote blocks are each separately editable (nesting cursor).
      * Default-off (undefined/false). Set by the hub-client
-     * `unlockDepthCursor` preference or the SPA's `?depthCursor=1`
+     * `unlockNestingCursor` preference or the SPA's `?nestingCursor=1`
      * boot URL query param.
      */
-    unlockDepthCursor?: boolean;
+    unlockNestingCursor?: boolean;
     /**
      * P3.2: per-siKey clean QMD buffers for nested blocks. Produced by
-     * `regenerateNestedBuffers` (gated on `unlockDepthCursor`). Keyed
+     * `regenerateNestedBuffers` (gated on `unlockNestingCursor`). Keyed
      * by `siKey = "0:<r0>-<r1>:0"`. Undefined when the flag is off or
-     * inputs are unavailable (safe default: no depth editing).
+     * inputs are unavailable (safe default: no nesting editing).
      */
     nestedEditBuffers?: Record<string, string>;
     /**
@@ -211,26 +211,26 @@ export interface PreviewContextValue {
      * (moves go through `requestMove` which stashes intent:'activate').
      *
      * After the editor closes, the next re-render (or the byte-identical timeout
-     * fallback) focuses the tile at `anchorR0` via `tileForAnchorR0`, so
+     * fallback) focuses the outer block at `anchorR0` via `outerBlockForAnchorR0`, so
      * roving-tabindex resumes at the edited block.
      *
-     * @param anchorR0  Byte offset of the tile being closed.
+     * @param anchorR0  Byte offset of the outer block being closed.
      */
     requestFocusRestore?: (anchorR0: number) => void;
     /**
-     * P2.4d: record a pending click-switch to tile B.
+     * P2.4d: record a pending click-switch to outer block B.
      *
      * Called by `useBlockEditHover`'s `onPointerDown` when a MOUSE click lands
-     * on a DIFFERENT tile while an editor is open. Records the tile element and
+     * on a DIFFERENT outer block while an editor is open. Records the outer block element and
      * its current anchorR0 so the blur handler can project B's destination line
      * after A's potential commit.
      *
      * Must be called before A's blur fires (pointerdown precedes blur in the
      * browser event ordering). Clears any previously pending click-switch.
      *
-     * @param tileEl  The resolved locked tile B that was clicked.
+     * @param blockEl  The resolved outer block B that was clicked.
      */
-    requestClickSwitch?: (tileEl: Element) => void;
+    requestClickSwitch?: (blockEl: Element) => void;
     /**
      * P2.4d: handle the dirty-or-unmodified click-switch in the blur handler.
      *
@@ -265,23 +265,32 @@ export interface PreviewContextValue {
     /**
      * P3.3 §3c nested-block commit. Builds the destination from the LIVE
      * editTargetRef.current ({t:0,r:[anchorR0,anchorR1],d:0}); no-ops if null.
-     * Used in unlockDepthCursor mode instead of the per-render-closure
+     * Used in unlockNestingCursor mode instead of the per-render-closure
      * commitTextEdit, so an unmount-time blur cannot write to a stale byte range.
      */
-    commitDepthEdit?: (newText: string) => void;
+    commitNestingEdit?: (newText: string) => void;
     /**
-     * P3.3 §3b: move the depth cursor to the AST parent ('out') or the child
+     * P3.3 §3b: move the nesting cursor to the AST parent ('out') or the child
      * toward leafAnchorR0 ('in'); clamps at the ends (no parent → out no-ops;
      * cursor is a leaf → in no-ops); re-seeds the draft from the new node's
      * buffer/slice; no commit.
      */
-    requestDepthMove?: (direction: 'in' | 'out') => void;
+    requestNestingMove?: (direction: 'in' | 'out') => void;
     /**
-     * P3.4: jump the depth cursor directly to the ancestor crumb at byte range
-     * [r0, r1] (breadcrumb-click). Shares the re-target core with requestDepthMove;
+     * P3.4: jump the nesting cursor directly to the ancestor crumb at byte range
+     * [r0, r1] (breadcrumb-click). Shares the re-target core with requestNestingMove;
      * leafAnchorR0 is unchanged so a later 'in' descends toward the original leaf.
      */
-    requestDepthSelect?: (r0: number, r1: number) => void;
+    requestNestingSelect?: (r0: number, r1: number) => void;
+    /**
+     * §1 geometry snapshot: at activation, capture the rendered geometry of the
+     * opened block's whole top-level subtree into PreviewRoot's editGeometryRef,
+     * BEFORE the children are swapped to a textarea. `range` is the opened block's
+     * `(anchorR0, anchorR1)` (used to derive the block-relative key origin). A
+     * later nest move sizes its destination from this snapshot. No-op in locked
+     * mode or for a flat (non-multilevel) block.
+     */
+    captureGeometry?: (openedEl: Element, range: { r0: number; r1: number }) => void;
 }
 
 export const PreviewContext = createContext<PreviewContextValue | null>(null);

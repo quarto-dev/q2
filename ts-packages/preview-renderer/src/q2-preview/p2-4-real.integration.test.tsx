@@ -15,7 +15,7 @@
  *   - The EditTextareaKeydownHarness tests in p2-4b are kept — they exercise the
  *     real EditTextarea.onKeyDown → ctx.requestMove trigger contract, which is a
  *     distinct unit from the machine itself.
- *   - All direct-unit tests (captureEditTarget, measureTileBox, caretGeometry) are kept.
+ *   - All direct-unit tests (captureEditTarget, measureBlockBox, caretGeometry) are kept.
  *
  * Coverage added here:
  *
@@ -32,7 +32,7 @@
  *
  *  4. Plain-commit focus-restoration (Cmd-Enter):
  *     Open A, type, Cmd-Enter → commit + close; re-render → focus lands on A's tile
- *     via tileForAnchorR0 (by anchorR0, not pool index — meaningful because the pool
+ *     via outerBlockForAnchorR0 (by anchorR0, not pool index — meaningful because the pool
  *     shifts in the re-render fixture).
  *
  *  5. Esc focus-restoration (timeout fallback):
@@ -149,7 +149,7 @@ function mountPreviewRoot(
 
 /**
  * Mock getBoundingClientRect on all [data-block-pool-id] tile elements.
- * Each tile gets a distinct non-zero rect so enumerateLockedTiles sees them.
+ * Each tile gets a distinct non-zero rect so enumerateOuterBlocks sees them.
  */
 function mockTileRects(container: HTMLElement) {
     const tiles = container.querySelectorAll<HTMLElement>('[data-block-pool-id]');
@@ -401,13 +401,13 @@ describe('P2.5a — modified move: byte-identical commit uses real 250ms timeout
 /* ─────────────────────────────────────────────────────────────────────────────
  * 4. Plain-commit focus-restoration (Cmd-Enter)
  *
- * Tests the real requestFocusRestore → reland layout effect → tileForAnchorR0
+ * Tests the real requestFocusRestore → reland layout effect → outerBlockForAnchorR0
  * → tile.focus() chain.
  *
  * The pool SHIFTS in the re-render so "by anchorR0, not pool-index" is meaningful:
  *   - Pre-commit: A is pool[1] at r0=6.
  *   - Post-commit: new block inserted at pool[0], A shifts to pool[2] at r0=10.
- *   - Stashed anchorR0=6 resolves via tileForAnchorR0 nearest-at/after → new tile.
+ *   - Stashed anchorR0=6 resolves via outerBlockForAnchorR0 nearest-at/after → new outer block.
  *
  * Approach: the reland layout effect fires SYNCHRONOUSLY during the rerender act()
  * call, which means the focus spy must be installed BEFORE rerender. We use
@@ -488,7 +488,7 @@ describe('P2.5a — Cmd-Enter: plain-commit focus-restoration via real reland ef
                 );
             });
 
-            // Mock rects on new tiles (reland needs enumerateLockedTiles to see them).
+            // Mock rects on new tiles (reland needs enumerateOuterBlocks to see them).
             // The reland effect already fired; if rects weren't mocked it would have used
             // existing tile elements. Let's check if focus was called.
             // Note: the layout effect fires AFTER DOM is committed but BEFORE paint.
@@ -563,7 +563,7 @@ describe('P2.5a — Esc: focus-restoration via real 250ms timeout fallback', () 
             expect(container.querySelector('textarea')).toBeNull();
 
             // After editor closes, tile A's <p> element is back in the DOM.
-            // Mock its rect so tileForAnchorR0 finds it during the timeout.
+            // Mock its rect so outerBlockForAnchorR0 finds it during the timeout.
             mockTileRects(container);
 
             // Timeout not yet fired.
@@ -572,7 +572,7 @@ describe('P2.5a — Esc: focus-restoration via real 250ms timeout fallback', () 
             );
             expect(tileFocusCallsBefore).toHaveLength(0);
 
-            // Advance past 250ms — real timeout fires → tileForAnchorR0(r0=6) → tileA.focus().
+            // Advance past 250ms — real timeout fires → outerBlockForAnchorR0(r0=6) → tileA.focus().
             await act(async () => {
                 vi.advanceTimersByTime(300);
             });
@@ -622,7 +622,7 @@ describe('P2.5a — Esc: focus-restoration via real 250ms timeout fallback', () 
             expect(setAst).not.toHaveBeenCalled();
             expect(container.querySelector('textarea')).toBeNull();
 
-            // After editor closes, tile A's <p> is back. Mock its rect for tileForAnchorR0.
+            // After editor closes, tile A's <p> is back. Mock its rect for outerBlockForAnchorR0.
             mockTileRects(container);
 
             // Timeout not yet fired.
@@ -1039,7 +1039,7 @@ describe('P2.5a — Esc cancelPendingLand clears the fallback timer (reachable p
  * Fail-on-revert check (reported):
  *   When the `if (pl.fromFile !== currentFilePathRef.current)` guard is
  *   removed from the requestFocusRestore timeout callback, the timer fires
- *   and calls executeLanding → tileForAnchorR0 → tile.focus().  The test
+ *   and calls executeLanding → outerBlockForAnchorR0 → tile.focus().  The test
  *   asserts zero tile focus-calls after vi.advanceTimersByTime(300); with the
  *   guard removed a focus call appears and the assertion fails.
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -1179,7 +1179,7 @@ describe('P2.5a — file switch cancels pending landing', () => {
  *
  * Bug: while editing tile A in a 2-tile document, A's DOM element (the
  * <p data-block-pool-id="1">) is replaced by the textarea wrapper (which has
- * no data-block-pool-id). enumerateLockedTiles therefore returns only tile B
+ * no data-block-pool-id). enumerateOuterBlocks therefore returns only outer block B
  * (tiles.length === 1). The old guard was `<= 1 → return`, which made
  * requestMove a no-op on any 2-tile document — ArrowDown silently did nothing.
  *
@@ -1233,7 +1233,7 @@ describe('P2.5b — 2-tile document: ArrowDown navigates from A to B (Fix B regr
         const { container } = render(<PreviewRoot {...props} />);
         await act(async () => {});
 
-        // Mock getBoundingClientRect for both tiles so enumerateLockedTiles sees them.
+        // Mock getBoundingClientRect for both tiles so enumerateOuterBlocks sees them.
         const tiles = container.querySelectorAll<HTMLElement>('[data-block-pool-id]');
         tiles.forEach((tile) => {
             const pid = Number(tile.getAttribute('data-block-pool-id'));
@@ -1256,7 +1256,7 @@ describe('P2.5b — 2-tile document: ArrowDown navigates from A to B (Fix B regr
         expect(textareaA!.value).toBe('tileA');
 
         // After A is open, tile A's <p data-block-pool-id="0"> is gone from the DOM.
-        // Only tile B (pool[1]) remains in enumerateLockedTiles → tiles.length === 1.
+        // Only outer block B (pool[1]) remains in enumerateOuterBlocks → blocks.length === 1.
         // Old guard (<= 1): returned early → no-op (bug).
         // New guard (=== 0): proceeds → finds tile B → opens B's editor.
 
@@ -1271,5 +1271,135 @@ describe('P2.5b — 2-tile document: ArrowDown navigates from A to B (Fix B regr
         const textareaB = container.querySelector<HTMLTextAreaElement>('textarea');
         expect(textareaB).not.toBeNull();
         expect(textareaB!.value).toBe('tileB');
+    });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * §2 Phase 0 characterization — dirty multiline ArrowUp resolves against L0,
+ * NOT L0 + draftLineCount (Reflection #21).
+ *
+ * Why this test exists:
+ *   The dirty (modified) move's destination line is computed asymmetrically in
+ *   requestMove:  down → destLine = L0 + draftLineCount;  up → destLine = L0
+ *   (PreviewRoot.tsx). executeLanding then resolves: down → first outer block
+ *   with startLine >= destLine; up → last outer block with startLine < destLine.
+ *
+ *   The two find-by-line blocks (executeLanding vs requestMove) look duplicated,
+ *   so the upcoming Phase-0 landing-core extraction is tempted to unify them on a
+ *   single destLine = L0 + draftLineCount (the value the DOWN path needs). Doing
+ *   so would silently break the UP path. The existing modified-DOWN test (above)
+ *   already pins the down asymmetry; no existing test pinned the up/L0 case — so
+ *   a "behavior-preserving" extraction could flatten it undetected.
+ *
+ *   This is a CHARACTERIZATION (guard) test: it pins the current, correct
+ *   behavior and must stay green through the extraction. Its fail-on-revert lever
+ *   is the flattening regression itself — see below.
+ *
+ * Fixture arithmetic (drives the real requestMove → executeLanding path):
+ *   Open A (pool[1], r0=6, "para1", L0 = lineOf(6) = 1). Type to 3 lines
+ *   ("para1\nx\ny", draftLineCount = 3, dirty). ArrowUp → dirty commit, stash
+ *   landing with destLine = L0 = 1. Re-render with A grown to 3 lines:
+ *     line 0: para0 (pool[0] r0=0)
+ *     lines 1-3: A = "para1\nx\ny" (pool[1] r0=6)
+ *     line 4: para2 (pool[2] r0=16)
+ *     line 6: para3 (pool[3] r0=23)
+ *   executeLanding up: last outer block with startLine < destLine(1) → only
+ *   para0 (line 0) qualifies → relands on para0. ✓
+ *
+ * Fail-on-revert (verified cold): change PreviewRoot.tsx requestMove's up-path
+ *   `const destLine = direction === 'down' ? L0 + draftLineCount : L0;`
+ *   to use `L0 + draftLineCount` for up as well → "last block with startLine < 4"
+ *   selects A itself (line 1) → the editor relands on A ("para1\nx\ny"), the
+ *   assertion `value === 'para0'` fails RED. Restore → GREEN.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+describe('§2 Phase 0 characterization — dirty multiline ArrowUp uses L0 (Reflection #21)', () => {
+    it('relands on para0 (not the just-edited block) after a dirty multiline up-move', async () => {
+        // Caret IS on the first visual line → ArrowUp triggers a move.
+        vi.spyOn(caretGeometry, 'isOnFirstVisualLine').mockReturnValue(true);
+        vi.spyOn(caretGeometry, 'isOnLastVisualLine').mockReturnValue(false);
+
+        // Prototype-level rect mock (not per-element): the reland useLayoutEffect
+        // fires DURING the commit re-render, BEFORE a per-element re-mock could run,
+        // and the edited block's <p> is a FRESH node post-edit. A per-element mock
+        // (mockTileRects) would leave that fresh node with a zero rect → invisible →
+        // excluded from enumerateOuterBlocks at reland, masking the up/L0 asymmetry.
+        // A prototype mock keeps every block (incl. the freshly-rerendered edited
+        // block) visible at reland — faithfully matching the real browser, where the
+        // edited block IS laid out and visible. Rect VALUES are irrelevant here (only
+        // width/height>0 gates visibility; the destination is chosen by source-line
+        // arithmetic, not geometry). This mocks genuine browser-only geometry only.
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+            function (this: HTMLElement): DOMRect {
+                const pidAttr = this.getAttribute?.('data-block-pool-id');
+                const pid = pidAttr != null ? Number(pidAttr) : 0;
+                const top = pid * 60;
+                return {
+                    left: 0, top, right: 200, bottom: top + 40,
+                    width: 200, height: 40, x: 0, y: top, toJSON: () => ({}),
+                } as DOMRect;
+            },
+        );
+
+        const setAst = vi.fn();
+        const { container, rerender } = mountPreviewRoot({ setAst });
+
+        await act(async () => {});
+
+        // Step 1: activate A (pool[1], r0=6, "para1", L0 = 1).
+        const textarea = await activateTileA(container);
+
+        // Step 2: type to make A a 3-line dirty buffer (draftLineCount = 3).
+        await act(async () => {
+            fireEvent.change(textarea, { target: { value: 'para1\nx\ny' } });
+        });
+        const ta = container.querySelector<HTMLTextAreaElement>('textarea')!;
+        expect(ta.value).toBe('para1\nx\ny');
+
+        // Step 3: ArrowUp at first visual line → dirty move → commit + stash + close.
+        await act(async () => {
+            fireEvent.keyDown(ta, { key: 'ArrowUp' });
+        });
+
+        // Commit happened; editor closed.
+        expect(setAst).toHaveBeenCalledOnce();
+        expect(container.querySelector('textarea')).toBeNull();
+
+        // Step 4: simulate the commit re-render — A grew to 3 lines (1..3), pushing
+        // para2 to line 4 and para3 to line 6.
+        //   para0:  pool[0] r=[0,6]    line 0
+        //   A:      pool[1] r=[6,16]   line 1 ("para1\nx\ny\n")
+        //   para2:  pool[2] r=[16,23]  line 4
+        //   para3:  pool[3] r=[23,30]  line 6
+        const newPool = [
+            { t: 0, r: [0, 6], d: 0 },
+            { t: 0, r: [6, 16], d: 0 },
+            { t: 0, r: [16, 23], d: 0 },
+            { t: 0, r: [23, 30], d: 0 },
+        ] as typeof POOL;
+        const newContent = 'para0\npara1\nx\ny\npara2\n\npara3\n\n';
+        const newAstJson = makeAstJson(newPool, newContent);
+
+        await act(async () => {
+            rerender(
+                <PreviewRoot
+                    astJson={newAstJson}
+                    untransformedAstJson={newAstJson}
+                    renderedContent={newContent}
+                    currentFilePath="/test.qmd"
+                    assetManifest={{}}
+                    setAst={setAst}
+                    onNavigateToDocument={() => {}}
+                />,
+            );
+        });
+
+        // Step 5: reland fires. up-path destLine = L0 = 1 → last visible block with
+        // startLine < 1 → para0 (the block ABOVE the edited one). A flattened
+        // destLine = L0 + draftLineCount (= 4) regression would instead select the
+        // just-edited block A itself (line 1 < 4) → reland on "para1\nx\ny".
+        const relanded = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(relanded).not.toBeNull();
+        expect(relanded!.value).toBe('para0');
     });
 });

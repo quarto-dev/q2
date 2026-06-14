@@ -26,11 +26,11 @@ be in reverse chronological order (latest first).
 - [`37061765`](https://github.com/quarto-dev/q2/commits/37061765): RevealJS preview now matches the render path's Quarto-1 defaults — slides top-align (no vertical centering), slide transitions are off by default, and the deck uses a 0.1 margin with linear navigation and edge controls.
 ### 2026-06-13
 
-- [`1a93c5f0`](https://github.com/quarto-dev/q2/commits/1a93c5f0): Add P3.5 real-browser e2e tests for the depth-cursor breadcrumb: chip clicks don't blur-commit or switch the editor, and the platform depth key-chords (mac Cmd+Ctrl, Win/Linux Alt+Shift) move depth without breaking native text selection.
-- [`0bc23061`](https://github.com/quarto-dev/q2/commits/0bc23061): Add P3.5 real-browser e2e test verifying the depth-cursor breadcrumb chip sits above the active edit surface (never occluding line 1).
+- [`1a93c5f0`](https://github.com/quarto-dev/q2/commits/1a93c5f0): Add P3.5 real-browser e2e tests for the nesting-cursor breadcrumb: chip clicks don't blur-commit or switch the editor, and the platform nesting key-chords (mac Cmd+Ctrl, Win/Linux Alt+Shift) move the nesting cursor without breaking native text selection.
+- [`0bc23061`](https://github.com/quarto-dev/q2/commits/0bc23061): Add P3.5 real-browser e2e test verifying the nesting-cursor breadcrumb chip sits above the active edit surface (never occluding line 1).
 - [`c96f06a0`](https://github.com/quarto-dev/q2/commits/c96f06a0): Refactor P3.2 nested-buffer gating into a testable pure helper (`computeNestedEditBuffers`) — no behavior change, test coverage now genuinely fails on revert.
-- [`aae25bf0`](https://github.com/quarto-dev/q2/commits/aae25bf0): Fix preferences reset — adding the depth-cursor setting no longer wipes other saved preferences.
-- [`7f14e5ed`](https://github.com/quarto-dev/q2/commits/7f14e5ed): Add "Depth cursor (nested blocks)" preview setting (default off) and thread it to the renderer (both hub-client and SPA hosts); when enabled, the preview context exposes per-block nested edit buffers for P3.3 to consume.
+- [`aae25bf0`](https://github.com/quarto-dev/q2/commits/aae25bf0): Fix preferences reset — adding the nesting-cursor setting no longer wipes other saved preferences.
+- [`7f14e5ed`](https://github.com/quarto-dev/q2/commits/7f14e5ed): Add "Nesting cursor" preview setting (default off) and thread it to the renderer (both hub-client and SPA hosts); when enabled, the preview context exposes per-block nested edit buffers for P3.3 to consume.
 
 ### 2026-06-12
 

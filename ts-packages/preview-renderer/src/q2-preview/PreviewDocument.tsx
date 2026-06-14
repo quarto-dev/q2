@@ -290,11 +290,11 @@ export const PreviewDocument = ({
                     {pageNavHtml ? <PageNavSlot html={pageNavHtml} /> : null}
                 </main>
 
-                {/* P3.4: floating breadcrumb chip for depth cursor navigation.
+                {/* P3.4: floating breadcrumb chip for nesting cursor navigation.
                     Must be a child of #quarto-content (inside the blockEdit.hostProps
                     div) so its synthetic pointer events bubble to the host handlers,
                     which stopPropagation then intercepts. Self-gating: renders null
-                    unless unlockDepthCursor && editTarget. */}
+                    unless unlockNestingCursor && editTarget. */}
                 <BreadcrumbChip />
             </div>
 

@@ -26,9 +26,9 @@ surface.** This plan delivers them in three phases:
    fixes a live data-integrity bug** (see Load-bearing facts): on `main`, a concurrent
    structural edit *above* an open editor silently re-targets your next commit to a
    different block.
-3. **"Depth cursor (nested blocks)" — a power-user unlock** (a default-off user
+3. **"Nesting cursor" — a power-user unlock** (a default-off user
    setting). When on: clicks resolve to the leaf, two keys move in/out through nesting
-   depth, a breadcrumb chip shows/operates the depth, and — only here — editing a
+   depth, a breadcrumb chip shows/operates the nesting cursor, and — only here — editing a
    block nested inside a marker-prefixed container needs an **AST-regenerated buffer**
    (so it isn't polluted with `> `/indent). Because regeneration is unreachable in the
    locked default, the whole expensive serialization path is gated behind this flag.
@@ -717,8 +717,8 @@ cursors close the **cross-actor** window (the rare, hard one).
 - [x] **Downgrade → behavior-equivalent live-identity refactor (user chose to do it as
   correctness-by-construction hardening, 2026-06-13).** All THREE default text commit paths
   (`commitIfDirty`, `requestMove` dirty commit, `handleClickSwitchBlur`) now build their destination from
-  the live `editTargetRef.current` via `buildDepthCommitDestination` instead of the per-render closure —
-  unifying with P3.3's `commitDepthEdit`. **Provably behavior-equivalent + safe:** the Rust matcher
+  the live `editTargetRef.current` via `buildNestingCommitDestination` instead of the per-render closure —
+  unifying with P3.3's `commitNestingEdit`. **Provably behavior-equivalent + safe:** the Rust matcher
   (`apply_node_edit.rs`) reads only `t`/`r`/`d` (extra fields ignored), and `sourceIndex.ts` only makes
   `t:0,d:0` blocks editable, so the live form string-matches the closure form for every editable block —
   asserted by `commit-destination-equivalence.test.ts`. It is *hardening* (removes a latent stale-snapshot
@@ -738,15 +738,15 @@ cursors close the **cross-actor** window (the rare, hard one).
 
 ---
 
-## Phase 3 — "Depth cursor (nested blocks)" unlock (flagged)
+## Phase 3 — "Nesting cursor" unlock (flagged)
 
 A default-off user setting that turns the locked default into a power-user, depth-aware
 editor. **Only here is AST regeneration reachable, so only here is its cost paid.**
 
 ### 3a. The setting
-- **`unlockDepthCursor: boolean`**, default `false`, in hub-client's preferences
+- **`unlockNestingCursor: boolean`**, default `false`, in hub-client's preferences
   (`hub-client/src/services/preferences/schema.ts` — add to `UserPreferencesSchema` +
-  `DEFAULT_PREFERENCES`), a checkbox **"Depth cursor (nested blocks)"** in
+  `DEFAULT_PREFERENCES`), a checkbox **"Nesting cursor"** in
   `SettingsTab.tsx` (mirror the `errorOverlayCollapsed` block), read via `usePreference`.
 - **Threading — reuse the proven iframe wire; add the missing hub-client host leg.** The
   iframe-side path (`UPDATE_AST` payload → `entry.tsx` → `PreviewContext` → consumer) is the
@@ -758,34 +758,34 @@ editor. **Only here is AST regeneration reachable, so only here is its cost paid
   is reactive (`ReactPreview.tsx:266` precedent), so toggling mid-session re-renders and posts
   a fresh `UPDATE_AST`.
 - **Both hosts opt in — hub-client via the setting, the SPA via a query param** *(revised
-  2026-06-13: the SPA depth cursor is now in scope, not deferred).* The flag `unlockDepthCursor` has
+  2026-06-13: the SPA nesting cursor is now in scope, not deferred).* The flag `unlockNestingCursor` has
   two sources feeding the **same** host-agnostic iframe behavior:
   - **hub-client:** `usePreference` (above) — reactive, so a mid-session toggle re-renders + posts a
     fresh `UPDATE_AST`.
-  - **SPA (`PreviewApp.tsx`):** a **`?depthCursor=1` URL query param**, read once at load
-    (`new URLSearchParams(location.search)`), passed as `unlockDepthCursor={true}` to
+  - **SPA (`PreviewApp.tsx`):** a **`?nestingCursor=1` URL query param**, read once at load
+    (`new URLSearchParams(location.search)`), passed as `unlockNestingCursor={true}` to
     `Q2PreviewIframe`. The SPA drives `Q2PreviewIframe` **directly** (no `ReactRenderer` hop), so this
     is just sourcing the flag + computing the buffer table (§3c) in `PreviewApp`. Read-at-load = **no
     live toggle** in the SPA (set the param, (re)load) — fine for a power-user/dev affordance; a live
     control is a later refinement, not needed. Still additive on top of the SPA's `--allow-edit`
     server gate (no `--allow-edit` → no editing at all; with it → Phase-2 locked, or unlocked when
-    `?depthCursor=1`).
+    `?nestingCursor=1`).
   - **The props stay optional** (mirror `editingDisabled`): a host with its opt-in off omits both
-    `unlockDepthCursor` and `nestedEditBuffers`, and the iframe reads that as locked. So locked
+    `unlockNestingCursor` and `nestedEditBuffers`, and the iframe reads that as locked. So locked
     remains zero-touch on either host; unlocked is each host supplying the two fields.
 
-### 3b. Behavior when on — depth identity is data-driven and unified with Phase 2
+### 3b. Behavior when on — nesting identity is data-driven and unified with Phase 2
 - **Click resolves to the leaf** (deepest-wins, no coincidence-climb-to-top, no
   prefixing-atomic — descend fully).
 - **Identity is the same `anchorR0` as Phase 2 — it just tracks a deeper node.**
   `editTarget.anchorR0` is **always the node being edited** (the locked *tile* in Phase 2; the
   *cursor node* in Phase 3). Phase 3 stores one extra scalar, **`leafAnchorR0`** (the clicked
-  path-bottom), so the **in** direction knows which child to descend toward. **No stored depth
+  path-bottom), so the **in** direction knows which child to descend toward. **No stored nesting
   integer, no stored path:** the breadcrumb path is **derived from the AST each render** (the
   cursor node's ancestors via `resolveSource`), so re-validation is automatic — an ancestor-only
   change re-derives the path with the cursor unchanged. Self-heal/match/drop is **identical to
   Phase 2** (content-verify the edited node's `anchorSlice`, drop on mismatch, re-anchor).
-- **Depth keys** mutate `anchorR0` along the path: **left = out** (cursor → its AST parent),
+- **Nesting keys** mutate `anchorR0` along the path: **left = out** (cursor → its AST parent),
   **right = in** (cursor → the child whose range contains `leafAnchorR0`); **clamp at the ends
   at key-press time** (out stops at the outermost tile, in stops at the leaf) — *not* on
   re-render. A click within the active subtree is caret-only (the Phase-1 guard); a click
@@ -795,7 +795,7 @@ editor. **Only here is AST regeneration reachable, so only here is its cost paid
     **macOS `Cmd+Ctrl+←/→`** (preserves `Option+Shift` word-select and `Cmd+Shift`
     line-select); **Windows/Linux `Alt+Shift+←/→`** (word-nav there is `Ctrl`-based).
     Mnemonic: breadcrumb — root on the left. **Modifier conflicts can only be verified by
-    trying them — cross-platform Playwright** (assert the depth move *and* that native
+    trying them — cross-platform Playwright** (assert the nesting move *and* that native
     word/line-select still work on each platform).
 - **Descending into prefixing containers** reaches their (possibly multi-line) children →
   **these need regeneration** (3c). Because identity is data-driven, **the controlled-value
@@ -817,7 +817,7 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   `crates/wasm-quarto-hub-client/src/lib.rs` mirroring `apply_node_edit`. JS wrapper
   `regenerateNestedBuffers` in `ts-packages/preview-runtime/src/wasmRenderer.ts`.
 - **Gating + reactivity (the perf win, done right):** in `ReactPreview`, compute the
-  table in a `useMemo` keyed on **`[unlockDepthCursor, rendered.renderedContent,
+  table in a `useMemo` keyed on **`[unlockNestingCursor, rendered.renderedContent,
   rendered.untransformedAstJson]`** — the table when the flag is on (and both inputs
   present), else a **module-level shared empty object** (referential stability, so an off
   render never churns the iframe effect). The flag dep makes a *mid-session toggle*
@@ -829,20 +829,20 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   value, `activate` seeds `draft = ctx.nestedEditBuffers?.[siKey] ?? normalize(sliceBytes(...))`
   **once at click time** (current render → correct `siKey`); the draft then lives in state and
   is never re-derived from the shifting table. So the shift is a non-issue for the active editor.
-- **Plumbing:** `nestedEditBuffers?: Record<string,string>` (and `unlockDepthCursor?: boolean`) are
+- **Plumbing:** `nestedEditBuffers?: Record<string,string>` (and `unlockNestingCursor?: boolean`) are
   **optional** fields onto `Q2PreviewIframe`'s UPDATE_AST payload + deps, through
   `entry.tsx`/`PreviewContext`. **Each host computes/passes them when ITS opt-in is on, else omits
   them** (omitted optional field → iframe reads as locked → zero-touch). Compute via the same gated
-  `useMemo` on both hosts: `unlockDepthCursor && rendered ? regenerateNestedBuffers(content,
+  `useMemo` on both hosts: `unlockNestingCursor && rendered ? regenerateNestedBuffers(content,
   untransformedAstJson) : EMPTY` (module-level shared `EMPTY` for referential stability).
   - **hub-client (`ReactPreview`)** — flag from `usePreference`; passes through the new
     `ReactRenderer → Q2PreviewIframe` hop (§3a).
-  - **SPA (`PreviewApp.tsx`)** — flag from the `?depthCursor=1` query param (§3a); computes the table
+  - **SPA (`PreviewApp.tsx`)** — flag from the `?nestingCursor=1` query param (§3a); computes the table
     in the same `useMemo` and passes it **directly** to `Q2PreviewIframe` (no `ReactRenderer`). The
     SPA already has WASM + `untransformedAstJson`/`renderedContent`, so this reuses the existing
     `regenerateNestedBuffers` call — no new infra.
   *(History 2026-06-13: §3a originally scoped Phase 3 hub-client-only and a mid-draft "both hosts
-  compute it" line conflicted with that; the SPA depth cursor was then brought into scope via the
+  compute it" line conflicted with that; the SPA nesting cursor was then brought into scope via the
   query param, so "both hosts compute it (gated by each host's opt-in)" is now correct. The
   optionality still guarantees locked is zero-touch on a host whose opt-in is off. Keep the props
   optional, mirroring `editingDisabled`.)*
@@ -864,47 +864,47 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   node's type `t` plus any id/class from the AST attr.
 - Flanked by **`◀` (out) / `▶` (in) buttons**, with the platform shortcut as each button's
   tooltip — the **discoverability** answer and the **primary touch affordance** (touch has no
-  modifier keys). Clicking a crumb jumps to that depth.
-- **Shown only when `unlockDepthCursor` is on** — the 95% see nothing new.
+  modifier keys). Clicking a crumb jumps to that level.
+- **Shown only when `unlockNestingCursor` is on** — the 95% see nothing new.
 
-> **Status (P3.4, ✓):** the chip (flag-gating, AST ancestor path, `◀`/`▶`→`requestDepthMove`,
-> crumb-click→`requestDepthSelect` with `leafAnchorR0` preserved) shipped and is
+> **Status (P3.4, ✓):** the chip (flag-gating, AST ancestor path, `◀`/`▶`→`requestNestingMove`,
+> crumb-click→`requestNestingSelect` with `leafAnchorR0` preserved) shipped and is
 > fail-on-revert-verified at the jsdom / real-`PreviewRoot` tier. The browser-only parts —
 > **geometry** (positioning above the surface) and **event-isolation + real cross-platform
-> key-chords** (`stopPropagation`/`preventDefault`, the depth chords + native word/line-select
+> key-chords** (`stopPropagation`/`preventDefault`, the nesting chords + native word/line-select
 > non-conflict) — have production code shipped but are verified in
 > **[Phase 3.5](#phase-35--real-browser--real-binary-verification)**.
 
 ### TDD work items
-- [x] **Setting + threading — hub-client** (RTL): checkbox toggles `unlockDepthCursor`; the value
+- [x] **Setting + threading — hub-client** (RTL): checkbox toggles `unlockNestingCursor`; the value
   reaches the iframe (new `ReactRenderer` pass-through → `PreviewContext`); off ⇒ **no
   `regenerateNestedBuffers` call**, on ⇒ buffers computed + passed. *(P3.2: `7f14e5ed`. Gate is the pure
   `computeNestedEditBuffers` helper shared by both hosts; gating fail-on-revert independently verified
   `c96f06a0`. Mid-session reactivity is structural — `usePreference` + the memo dep on the flag — and
   has no dedicated test; add one if desired.)*
-- [x] **SPA query-param opt-in** (RTL): `PreviewApp.tsx` reads `?depthCursor=1` → passes
-  `unlockDepthCursor` + computes/passes `nestedEditBuffers` **directly** to `Q2PreviewIframe` (no
+- [x] **SPA query-param opt-in** (RTL): `PreviewApp.tsx` reads `?nestingCursor=1` → passes
+  `unlockNestingCursor` + computes/passes `nestedEditBuffers` **directly** to `Q2PreviewIframe` (no
   `ReactRenderer`). **No param ⇒ omitted ⇒ locked**, no `regenerateNestedBuffers` call (type-safe via
-  the optional props). With `--allow-edit` + `?depthCursor=1` the SPA gets the unlock; `--allow-edit`
+  the optional props). With `--allow-edit` + `?nestingCursor=1` the SPA gets the unlock; `--allow-edit`
   alone stays Phase-2 locked. (Read-at-load: no live toggle — acceptable.) *(P3.2; SPA strict mocks
   fixed `b66f898a`.)*
 - [x] **off ⇒ no keys, no chip, leaf-click disabled** (RTL/Playwright): verify the unlock behaviors are
-  inert when the flag is off. *(P3.3: **no keys** (depth chord no-ops when locked, `p3-3-depth` test 6,
+  inert when the flag is off. *(P3.3: **no keys** (nesting chord no-ops when locked, `p3-3-nesting` test 6,
   gate fail-on-revert verified) and **leaf-click disabled** (locked click → whole blockquote, not the leaf,
   `p3-3-seeding` test 2) DONE. **no chip** DONE P3.4 — `p3-4-breadcrumb` test 1, flag-gate fail-on-revert
   verified cold.)*
-> **Deferred Playwright / e2e tests for §3a–§3d** (SPA depth-cursor e2e against the real
+> **Deferred Playwright / e2e tests for §3a–§3d** (SPA nesting-cursor e2e against the real
 > `q2 preview` binary, WASM round-trip snapshot, breadcrumb geometry, and event-isolation +
 > cross-platform key-chords) are consolidated in **[Phase 3.5](#phase-35--real-browser--real-binary-verification)**
 > below — pulled out of this list so §3a–§3d read as fully done at the jsdom / RTL + Rust
 > tier they target.
-- [x] Unlocked click → leaf; depth keys out/in along the AST path; clamp at the ends at
+- [x] Unlocked click → leaf; nesting keys out/in along the AST path; clamp at the ends at
   key-press; click-in-subtree = caret-only; click-outside resets. Path derived from the AST
   (ancestor-only change re-derives with cursor unchanged).
-  *(P3.3 `ad797be1`. Leaf-click, depth out/in, clamp-both-ends, bare-arrow-doesn't-move:
-  `p3-3-depth` tests 1–5 (OUT + off-inert reverts verified cold). Path derived each press from
-  the live `sourceIndex` via `depthNav` range-containment (`buildDepthSurfaces`/`parentSurface`/
-  `childSurfaceToward`, unit-tested in `depthNav.test.ts`). click-in-subtree=caret-only reuses the
+  *(P3.3 `ad797be1`. Leaf-click, nesting out/in, clamp-both-ends, bare-arrow-doesn't-move:
+  `p3-3-nesting` tests 1–5 (OUT + off-inert reverts verified cold). Path derived each press from
+  the live `sourceIndex` via `nestingNav` range-containment (`buildNestingSurfaces`/`parentSurface`/
+  `childSurfaceToward`, unit-tested in `nestingNav.test.ts`). click-in-subtree=caret-only reuses the
   Phase-1 `activeEditRegionRef` guard; click-outside-resets uses the leaf-aware click-switch
   (`useBlockEditHover`). **Untested sub-clauses (covered structurally, no dedicated test):**
   click-outside-resets-to-leaf in unlocked mode, and ancestor-only-change-re-derives-with-cursor-
@@ -934,29 +934,29 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   child self-heal DROPS on a large concurrent insert above — see the new watch-item below.**)*
 **Breadcrumb chip (split by tier — was one "Breadcrumb (RTL/Playwright)" item):**
 - [x] Breadcrumb chip — **flag-gating** (real-`PreviewRoot`, jsdom): chip renders only when
-  `unlockDepthCursor` is on AND an editor is open; hidden when the setting is off or no editor.
+  `unlockNestingCursor` is on AND an editor is open; hidden when the setting is off or no editor.
   *(P3.4 `56eb2d3a`; `p3-4-breadcrumb` tests 1–3; flag-gate fail-on-revert independently verified cold.)*
 - [x] Breadcrumb chip — **AST-derived ancestor path**, current level highlighted, via the new pure
-  `buildAncestorPath`/`labelForSourceNode` (`depthNav.ts`) walked against the real source index each render.
+  `buildAncestorPath`/`labelForSourceNode` (`nestingNav.ts`) walked against the real source index each render.
   *(P3.4 helper `095afc88` (unit-tested + fail-on-revert), chip render `56eb2d3a`; `p3-4` test 4 asserts
   crumb labels `['Div.d','Para']` + `aria-current="true"` on the current crumb.)*
-- [x] Breadcrumb chip — **`◀`/`▶` buttons** call `requestDepthMove('out'|'in')` and re-target the editor;
+- [x] Breadcrumb chip — **`◀`/`▶` buttons** call `requestNestingMove('out'|'in')` and re-target the editor;
   platform shortcut shown as each button's tooltip. *(P3.4 `56eb2d3a`; `p3-4` test 5, button→move fail-on-revert verified.)*
-- [x] Breadcrumb chip — **crumb-click → `requestDepthSelect(r0,r1)`** jumps to that depth, `leafAnchorR0`
+- [x] Breadcrumb chip — **crumb-click → `requestNestingSelect(r0,r1)`** jumps to that level, `leafAnchorR0`
   **unchanged** (a later `in` still descends toward the original leaf). Re-target core factored out of
-  `requestDepthMove` into a shared `applyDepthRetarget`. *(P3.4 `56eb2d3a`; `p3-4` test 6, leaf-preservation
+  `requestNestingMove` into a shared `applyNestingRetarget`. *(P3.4 `56eb2d3a`; `p3-4` test 6, leaf-preservation
   fail-on-revert independently verified cold — jump-target-as-leaf → wrong child `'AAA'`.)*
   *(Geometry + event-isolation + real cross-platform key-chords for the chip → **[Phase 3.5](#phase-35--real-browser--real-binary-verification)** (real layout / real pointer+focus events; production code shipped `56eb2d3a`).)*
 - [x] Implement 3a–3d. *(3a setting + threading ✓ P3.2; 3b behavior + 3c regenerated-buffer commit ✓ P3.3
-  — `depthNav.ts` `8643c27f`, §3c `0dde110c`, §3b `ad797be1`; **3d breadcrumb chip ✓ P3.4** — ancestor-path
-  helper `095afc88`, chip + `requestDepthSelect` `56eb2d3a`; preview-renderer 366 unit + 374 integration green,
+  — `nestingNav.ts` `8643c27f`, §3c `0dde110c`, §3b `ad797be1`; **3d breadcrumb chip ✓ P3.4** — ancestor-path
+  helper `095afc88`, chip + `requestNestingSelect` `56eb2d3a`; preview-renderer 366 unit + 374 integration green,
   jsdom tier. Real key-chords + native-conflict + chip geometry + WASM round-trip → P3.5 Playwright/e2e.)*
 
 ---
 
 ## Phase 3.5 — Real-browser & real-binary verification
 
-Phase 3's jsdom suites cover every state-machine behavior (resolution, depth identity,
+Phase 3's jsdom suites cover every state-machine behavior (resolution, nesting identity,
 re-seed, buffer gating, the chip's flag-gating / AST ancestor-path / button + crumb wiring,
 **and the §3b unlocked click-outside→leaf + ancestor-only-re-derive sub-clauses** — all
 fail-on-revert-verified). What remains here are the checks a jsdom unit genuinely **cannot**
@@ -982,9 +982,9 @@ the jsdom / Rust tier); what is deferred is the browser-/binary-level *verificat
   per test against a fresh tempdir fixture; `globalSetup.ts` asserts the binary exists
   (build with `cargo build -p quarto --bin q2`). 13 specs already run this way (e.g.
   `basic-preview.spec.ts` exercises file-edit + re-render). The binary embeds the SPA + WASM
-  via `include_dir!` (`crates/quarto-preview/build.rs`), so the SPA depth-cursor e2e
-  **extends** this harness (add `?depthCursor=1` to the navigate URL + a nested-quote
-  fixture). **No existing q2-preview-spa spec asserts depth resolution, so the
+  via `include_dir!` (`crates/quarto-preview/build.rs`), so the SPA nesting-cursor e2e
+  **extends** this harness (add `?nestingCursor=1` to the navigate URL + a nested-quote
+  fixture). **No existing q2-preview-spa spec asserts nesting resolution, so the
   leaf-click-vs-locked assertions are genuinely new** — new fixture + assertions, existing
   boot mechanism. The build chain must be fresh first: `build:wasm → build-q2-preview-spa →
   build --bin q2` (the binary does not auto-rebuild the embedded SPA/WASM).
@@ -1005,12 +1005,12 @@ the jsdom / Rust tier); what is deferred is the browser-/binary-level *verificat
   `- chipH` lift makes chip bottom 97.5 > 66 (one chip-height of occlusion) → RED; restore → GREEN.)*
 - [x] **Breadcrumb event-isolation + real cross-platform key-chords** (§3b/§3d):
   `stopPropagation`/`preventDefault` so the host's delegated pointer handlers never see chip
-  clicks (no leaf-reset / click-switch; no blur-commit on a button press); the depth chords
-  (macOS `Cmd+Ctrl+←/→`, Win/Linux `Alt+Shift+←/→`) move depth **and** native word/line-select
+  clicks (no leaf-reset / click-switch; no blur-commit on a button press); the nesting chords
+  (macOS `Cmd+Ctrl+←/→`, Win/Linux `Alt+Shift+←/→`) move the nesting cursor **and** native word/line-select
   still works on each platform. Production isolation shipped `56eb2d3a`; jsdom can't fail-on-revert
   pointer isolation (`fireEvent.click` fires no pointer events / no focus move), hence this tier.
   *(P3.5 DONE — `hub-client/e2e/q2-preview-breadcrumb-isolation.spec.ts`, 3 tests: (A) clicking ◀
-  keeps the editor open + no blur-commit of a dirty probe; (B) mac `Cmd+Ctrl+←/→` moves depth while
+  keeps the editor open + no blur-commit of a dirty probe; (B) mac `Cmd+Ctrl+←/→` moves the nesting cursor while
   `Shift+←` still selects natively; (C) Win/Linux `Alt+Shift+←/→` via a `navigator` spoof (verified
   it reaches the iframe bundle via the chip tooltip). Fail-on-revert verified cold (orchestrator-run):
   removing the chip `preventDefault`/`eat` reds (A) (host tears the editor down on the click), and
@@ -1034,23 +1034,23 @@ the jsdom / Rust tier); what is deferred is the browser-/binary-level *verificat
   explicitly out of scope. Re-open once bd-k1evg0g1 lands.
 
 ### Work items — tier (ii): real-binary / WASM build-chain (not Playwright-DOM)
-- [x] **SPA depth-cursor e2e** (§3a/§3b; `q2-preview-spa/e2e`, real `q2 preview` binary — Playwright
-  *against the binary*): with `?depthCursor=1`, load a nested-blockquote fixture → confirm leaf-click
+- [x] **SPA nesting-cursor e2e** (§3a/§3b; `q2-preview-spa/e2e`, real `q2 preview` binary — Playwright
+  *against the binary*): with `?nestingCursor=1`, load a nested-blockquote fixture → confirm leaf-click
   resolution + a clean nested-blockquote-child edit; load **without** the param → confirm locked
   (whole-quote). Extends `basic-preview.spec.ts`'s `startPreviewServer()`. (Boot path already covered
-  at jsdom: `q2-preview-spa/src/p3-2-depth-cursor-spa.integration.test.tsx`.) *(P3.5 DONE —
-  `q2-preview-spa/e2e/depth-cursor.spec.ts` (2 tests) + a `startPreviewServer({allowEdit})` test-infra
-  extension. With `?depthCursor=1` the leaf-click yields the clean child buffer (no `>`); without it,
+  at jsdom: `q2-preview-spa/src/p3-2-nesting-cursor-spa.integration.test.tsx`.) *(P3.5 DONE —
+  `q2-preview-spa/e2e/nesting-cursor.spec.ts` (2 tests) + a `startPreviewServer({allowEdit})` test-infra
+  extension. With `?nestingCursor=1` the leaf-click yields the clean child buffer (no `>`); without it,
   the whole quote with `>`. Fail-on-revert verified cold (orchestrator-run): disabling
-  `parseDepthCursorParam` reds the unlocked test (resolves locked → `>`), other stays green; restore →
-  2/2 green. **Lesson:** `server.url` already carries the CLI's `?page=index.qmd`, so the depthCursor
-  param must be joined with `&` — `${server.url}?depthCursor=1` is malformed (`?page=…?depthCursor=1`,
+  `parseNestingCursorParam` reds the unlocked test (resolves locked → `>`), other stays green; restore →
+  2/2 green. **Lesson:** `server.url` already carries the CLI's `?page=index.qmd`, so the nestingCursor
+  param must be joined with `&` — `${server.url}?nestingCursor=1` is malformed (`?page=…?nestingCursor=1`,
   parses to null); the real binary surfaced this where jsdom could not.)*
 - [x] **WASM round-trip snapshot** (§3c; **Rust/WASM snapshot via `cargo nextest` — NOT Playwright**,
   Tier-2): edit an unlocked multi-line blockquote child → commit → blocks outside the quote
   byte-verbatim, quote re-wrapped (`> `-rewrap). Production path already verified at the Rust tier
   (P3.1 `regenerate_nested_buffers` + `write_single_block`); this is the end-to-end
-  iframe→WASM→commit round-trip. *(P3.5 DONE — `crates/pampa/tests/integration/depth_cursor_roundtrip_tests.rs`:
+  iframe→WASM→commit round-trip. *(P3.5 DONE — `crates/pampa/tests/integration/nesting_cursor_roundtrip_tests.rs`:
   composes `regenerate_nested_buffers_ast` (clean buffer) → user edit → `apply_node_edit` (re-wrap).
   Asserts outside blocks verbatim + `> ` restored on both quote lines. Honest note: composition
   snapshot, no new production code; fail-on-revert lever is the shared qmd-writer BlockQuote `> `
@@ -1087,7 +1087,7 @@ plus the hub-client JS suites suffice.
   tracked in **bd-k1evg0g1** with the e2e as its `test.fail()` tripwire. Original mechanism (still
   accurate): Self-heal identifies the active node by `findReanchorCandidate` (`lockedTiles.ts`):
   the *single* nearest pool entry `r[0] >= anchorR0`, then content-verify against `anchorSlice`. For a
-  NESTED child (depth-edited), a concurrent edit inserting ≥ the marker gap (~2 bytes) ABOVE the
+  NESTED child (nesting-edited), a concurrent edit inserting ≥ the marker gap (~2 bytes) ABOVE the
   container shifts the *container's* `r[0]` into the "nearest" slot; it fails content-verify (whole-
   container ≠ child) and there is **no scan onward to the child** → the child's in-flight edit is
   **dropped**, even though the child still exists unchanged. **The same single-nearest flaw drops
@@ -1101,7 +1101,7 @@ plus the hub-client JS suites suffice.
   regression pass); (b) **content-addressed relocation via a position-independent AST-subtree hash** from
   q2's reconciliation/coarsen pipeline (under investigation 2026-06-13 — see
   `claude-notes/research/` for the tree-reconciliation node-relocation note when it lands). Until then,
-  a nested depth-edit is fragile under concurrent edits-above; bounded (one editor, one lost draft).
+  a nested nesting-edit is fragile under concurrent edits-above; bounded (one editor, one lost draft).
 - **Tile enumeration cost on large docs** — each arrow press collapses every visible
   `[data-block-pool-id]` to its locked tile (a rect-climb per element), and `wrap` needs
   the global first/last. Cheap at normal sizes (cached layout); a watch-item for very large
@@ -1136,7 +1136,7 @@ plus the hub-client JS suites suffice.
 - Live `q2 preview`: (P1) clicking inside an open editor doesn't climb, repositions caret;
   (P2) clicking a single-child div edits the div, a list edits whole, arrow between tiles with
   wrap, blur-without-typing doesn't mutate, keyboard-arrow focus ring matches the edit target;
-  (P3) toggle the setting on → leaf-click, depth keys + chip, an unlocked multi-line blockquote
+  (P3) toggle the setting on → leaf-click, nesting keys + chip, an unlocked multi-line blockquote
   child edits clean (no `>`).
 
 ## Design history / deferred (no strands filed — this is the record)

@@ -109,14 +109,14 @@ interface ReactRendererProps {
    */
   currentActor?: string | null;
   /**
-   * P3.2: depth-cursor mode for nested blocks. Forwarded to
+   * P3.2: nesting-cursor mode for nested blocks. Forwarded to
    * `Q2PreviewIframe` only (q2-debug/slides don't support it).
    */
-  unlockDepthCursor?: boolean;
+  unlockNestingCursor?: boolean;
   /**
    * P3.2: per-siKey clean QMD buffers for nested blocks, produced by
    * `regenerateNestedBuffers` in `ReactPreview` (gated on
-   * `unlockDepthCursor`). Forwarded to `Q2PreviewIframe` only.
+   * `unlockNestingCursor`). Forwarded to `Q2PreviewIframe` only.
    */
   nestedEditBuffers?: Record<string, string>;
 }
@@ -141,7 +141,7 @@ function ReactRenderer({
   renderedContent,
   untransformedAstJson,
   currentActor,
-  unlockDepthCursor,
+  unlockNestingCursor,
   nestedEditBuffers,
 }: ReactRendererProps) {
   // Stable wrappers for Q2PreviewIframe props that are useEffect dependencies.
@@ -294,7 +294,7 @@ function ReactRenderer({
             renderedContent={renderedContent}
             untransformedAstJson={untransformedAstJson}
             currentActor={currentActor}
-            unlockDepthCursor={unlockDepthCursor}
+            unlockNestingCursor={unlockNestingCursor}
             nestedEditBuffers={nestedEditBuffers}
           />
         </div>

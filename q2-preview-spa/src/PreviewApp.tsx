@@ -195,12 +195,12 @@ interface PreviewAppState {
    */
   allowEdit: boolean;
   /**
-   * P3.2: depth-cursor mode for nested blocks. Read once at boot from
-   * `?depthCursor=1` in the boot URL. When true the SPA passes
-   * `unlockDepthCursor` to the iframe and runs `regenerateNestedBuffers`
+   * P3.2: nesting-cursor mode for nested blocks. Read once at boot from
+   * `?nestingCursor=1` in the boot URL. When true the SPA passes
+   * `unlockNestingCursor` to the iframe and runs `regenerateNestedBuffers`
    * on every render. Read-at-load only (no live toggle via the SPA).
    */
-  depthCursor: boolean;
+  nestingCursor: boolean;
   /**
    * IndexDocument V2 capture sidecar (Phase C.3) — path → CaptureRef
    * mapping. Populated by the server-side eager-capture driver (Phase
@@ -268,14 +268,14 @@ const CONNECTION_BANNER_STYLE: React.CSSProperties = {
 };
 
 /**
- * P3.2: parse `?depthCursor=1` from the boot URL search string.
+ * P3.2: parse `?nestingCursor=1` from the boot URL search string.
  * Returns true only when the param is exactly `"1"`. Read-at-load;
  * the SPA does not react to URL changes after mount.
  */
-function parseDepthCursorParam(search: string): boolean {
+function parseNestingCursorParam(search: string): boolean {
   if (!search) return false;
   try {
-    return new URLSearchParams(search).get('depthCursor') === '1';
+    return new URLSearchParams(search).get('nestingCursor') === '1';
   } catch {
     return false;
   }
@@ -283,7 +283,7 @@ function parseDepthCursorParam(search: string): boolean {
 
 /**
  * P3.2: module-level empty object returned by the nestedEditBuffers memo
- * when depthCursor is off. Referentially stable so the iframe effect dep
+ * when nestingCursor is off. Referentially stable so the iframe effect dep
  * never churns on an off-render.
  */
 const EMPTY_NESTED_BUFFERS: Record<string, string> = {};
@@ -346,8 +346,8 @@ function buildInitialState(): PreviewAppState {
     contentTick: 0,
     captures: {},
     allowEdit: false,
-    depthCursor: typeof window !== 'undefined'
-      ? parseDepthCursorParam(window.location.search)
+    nestingCursor: typeof window !== 'undefined'
+      ? parseNestingCursorParam(window.location.search)
       : false,
     bootAttempt: 1,
     bootLastError: null,
@@ -1147,17 +1147,17 @@ export default function PreviewApp() {
 
   // P3.2: gated nested buffer table. Delegates to computeNestedEditBuffers
   // (the exported pure helper) so the gating logic has a single testable
-  // source of truth. Returns EMPTY_NESTED_BUFFERS when depthCursor is off
+  // source of truth. Returns EMPTY_NESTED_BUFFERS when nestingCursor is off
   // or either render input is missing, keeping the iframe dep stable.
   const nestedEditBuffers = useMemo(
     () =>
       computeNestedEditBuffers(
-        state.depthCursor,
+        state.nestingCursor,
         state.renderedContent,
         state.untransformedAstJson,
         regenerateNestedBuffers,
       ),
-    [state.depthCursor, state.renderedContent, state.untransformedAstJson],
+    [state.nestingCursor, state.renderedContent, state.untransformedAstJson],
   );
 
   // ── Render ────────────────────────────────────────────────────────────
@@ -1247,8 +1247,8 @@ export default function PreviewApp() {
         // bd-ov4gqk3m: without --allow-edit the preview is read-only —
         // no edit affordance renders inside the iframe at all.
         editingDisabled={!state.allowEdit}
-        // P3.2: depth-cursor mode + per-key nested buffers.
-        unlockDepthCursor={state.depthCursor}
+        // P3.2: nesting-cursor mode + per-key nested buffers.
+        unlockNestingCursor={state.nestingCursor}
         nestedEditBuffers={nestedEditBuffers}
       />
       {showStaleOverlay && (

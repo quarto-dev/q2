@@ -2920,7 +2920,7 @@ pub fn apply_node_edit(
 ///       DefinitionList), AND
 ///   (2) is multi-line in source.
 ///
-/// Used by the depth-cursor mode of the block editor so the frontend can
+/// Used by the nesting-cursor mode of the block editor so the frontend can
 /// edit a nested block without the container's `> ` or list-indent prefix.
 ///
 /// # Arguments

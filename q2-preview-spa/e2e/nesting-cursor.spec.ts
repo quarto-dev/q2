@@ -1,11 +1,11 @@
 /**
- * P3.5 tier (ii) — SPA depth-cursor e2e against the REAL `q2 preview` binary.
+ * P3.5 tier (ii) — SPA nesting-cursor e2e against the REAL `q2 preview` binary.
  *
  * Drives the compiled binary (target/debug/q2) via `startPreviewServer`, which
- * embeds the SPA + WASM through `include_dir!`. Asserts the §3a/§3b depth-cursor
+ * embeds the SPA + WASM through `include_dir!`. Asserts the §3a/§3b nesting-cursor
  * RESOLUTION that no existing q2-preview-spa spec covers:
  *
- *   - WITH `?depthCursor=1` (+ `--allow-edit`): a leaf-click on a blockquote
+ *   - WITH `?nestingCursor=1` (+ `--allow-edit`): a leaf-click on a blockquote
  *     child opens THAT child with a CLEAN, AST-regenerated buffer (no `>`
  *     markers) — proving leaf resolution + nested-buffer regeneration end to
  *     end through the binary's embedded SPA + WASM.
@@ -13,7 +13,7 @@
  *     markers (Phase-2 locked, prefixing-atomic) — proving the unlock is gated.
  *
  * The boot path is covered at jsdom in
- * `q2-preview-spa/src/p3-2-depth-cursor-spa.integration.test.tsx`; the
+ * `q2-preview-spa/src/p3-2-nesting-cursor-spa.integration.test.tsx`; the
  * resolution assertions here are genuinely new and only meaningful against the
  * real binary + real WASM.
  *
@@ -24,7 +24,7 @@
  *   cargo build -p quarto --bin q2
  *
  * Run via (from q2-preview-spa/):
- *   npx playwright test e2e/depth-cursor.spec.ts --project=chromium
+ *   npx playwright test e2e/nesting-cursor.spec.ts --project=chromium
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -48,7 +48,7 @@ const FIXTURE_QMD = [
 
 let server: PreviewServerHandle;
 
-test.describe('P3.5 — SPA depth-cursor resolution (real q2 preview binary)', () => {
+test.describe('P3.5 — SPA nesting-cursor resolution (real q2 preview binary)', () => {
     test.setTimeout(120_000);
 
     test.beforeEach(async () => {
@@ -76,13 +76,13 @@ test.describe('P3.5 — SPA depth-cursor resolution (real q2 preview binary)', (
         );
     }
 
-    test('with ?depthCursor=1: leaf-click opens the blockquote child with a clean buffer (no `>`)', async ({ page }) => {
+    test('with ?nestingCursor=1: leaf-click opens the blockquote child with a clean buffer (no `>`)', async ({ page }) => {
         // server.url already carries the CLI's `?page=index.qmd` query (previewServer
-        // waitForUrl captures it), so append depthCursor with the correct separator —
-        // `${server.url}?depthCursor=1` would produce the malformed `?page=index.qmd?depthCursor=1`
-        // (depthCursor parses to null → the unlock silently never engages).
+        // waitForUrl captures it), so append nestingCursor with the correct separator —
+        // `${server.url}?nestingCursor=1` would produce the malformed `?page=index.qmd?nestingCursor=1`
+        // (nestingCursor parses to null → the unlock silently never engages).
         const sep = server.url.includes('?') ? '&' : '?';
-        await page.goto(`${server.url}${sep}depthCursor=1`);
+        await page.goto(`${server.url}${sep}nestingCursor=1`);
         await waitForBlockquote(page);
 
         const iframe = page.frameLocator('iframe');

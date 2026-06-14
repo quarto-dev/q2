@@ -1,5 +1,5 @@
 /**
- * Tests for depthNav.ts — pure depth-cursor navigation utilities (Plan P3.3).
+ * Tests for nestingNav.ts — pure nesting-cursor navigation utilities (Plan P3.3).
  *
  * All functions are pure (no DOM, no React). Default vitest environment (node).
  */
@@ -7,14 +7,15 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseSiKey,
-  buildDepthSurfaces,
+  buildNestingSurfaces,
   parentSurface,
+  topBlockR0,
   childSurfaceToward,
-  classifyDepthKey,
+  classifyNestingKey,
   detectPlatform,
-  buildDepthCommitDestination,
-  type DepthSurface,
-} from './depthNav';
+  buildNestingCommitDestination,
+  type NestingSurface,
+} from './nestingNav';
 
 // ── Fixture ───────────────────────────────────────────────────────────────────
 //
@@ -46,11 +47,11 @@ const fixtureIndex = makeIndex([
 ]);
 
 // Convenience surfaces that match the fixture
-const sT:  DepthSurface = { r0: 0,  r1: 6  };
-const sBQ: DepthSurface = { r0: 6,  r1: 40 };
-const sD:  DepthSurface = { r0: 8,  r1: 39 };
-const sP1: DepthSurface = { r0: 10, r1: 22 };
-const sP2: DepthSurface = { r0: 24, r1: 38 };
+const sT:  NestingSurface = { r0: 0,  r1: 6  };
+const sBQ: NestingSurface = { r0: 6,  r1: 40 };
+const sD:  NestingSurface = { r0: 8,  r1: 39 };
+const sP1: NestingSurface = { r0: 10, r1: 22 };
+const sP2: NestingSurface = { r0: 24, r1: 38 };
 
 // ── parseSiKey ────────────────────────────────────────────────────────────────
 
@@ -80,17 +81,17 @@ describe('parseSiKey', () => {
   });
 });
 
-// ── buildDepthSurfaces ────────────────────────────────────────────────────────
+// ── buildNestingSurfaces ────────────────────────────────────────────────────────
 
-describe('buildDepthSurfaces', () => {
+describe('buildNestingSurfaces', () => {
   it('builds surfaces from fixture index, excluding no Opaque entries', () => {
-    const surfaces = buildDepthSurfaces(fixtureIndex);
+    const surfaces = buildNestingSurfaces(fixtureIndex);
     // All five surfaces should be present
     expect(surfaces).toHaveLength(5);
   });
 
   it('sorts by r0 ascending, then r1 descending (outer before inner)', () => {
-    const surfaces = buildDepthSurfaces(fixtureIndex);
+    const surfaces = buildNestingSurfaces(fixtureIndex);
     // r0 order: 0, 6, 8, 10, 24
     expect(surfaces[0]).toEqual(sT);
     expect(surfaces[1]).toEqual(sBQ);
@@ -105,7 +106,7 @@ describe('buildDepthSurfaces', () => {
       ['0:50-60:0', 'Opaque'],
       [BQ_KEY, 'Descendable'],
     ]);
-    const surfaces = buildDepthSurfaces(idx);
+    const surfaces = buildNestingSurfaces(idx);
     expect(surfaces.some(s => s.r0 === 50)).toBe(false);
     expect(surfaces).toHaveLength(2);
   });
@@ -115,7 +116,7 @@ describe('buildDepthSurfaces', () => {
       [T_KEY, 'TopLevel'],
       ['bad-key', 'TopLevel'],
     ]);
-    const surfaces = buildDepthSurfaces(idx);
+    const surfaces = buildNestingSurfaces(idx);
     expect(surfaces).toHaveLength(1);
     expect(surfaces[0]).toEqual(sT);
   });
@@ -125,17 +126,17 @@ describe('buildDepthSurfaces', () => {
       [T_KEY, 'TopLevel'],
       ['1:0-6:0', 'TopLevel'], // same r0=0, r1=6, different t
     ]);
-    const surfaces = buildDepthSurfaces(idx);
+    const surfaces = buildNestingSurfaces(idx);
     expect(surfaces).toHaveLength(1);
     expect(surfaces[0]).toEqual(sT);
   });
 
   it('returns [] for null input', () => {
-    expect(buildDepthSurfaces(null)).toEqual([]);
+    expect(buildNestingSurfaces(null)).toEqual([]);
   });
 
   it('returns [] for undefined input', () => {
-    expect(buildDepthSurfaces(undefined)).toEqual([]);
+    expect(buildNestingSurfaces(undefined)).toEqual([]);
   });
 
   it('outer before inner at same r0 (r1 descending)', () => {
@@ -144,7 +145,7 @@ describe('buildDepthSurfaces', () => {
       ['0:5-20:0', 'TopLevel'],
       ['0:5-15:0', 'TopLevel'],
     ]);
-    const surfaces = buildDepthSurfaces(idx);
+    const surfaces = buildNestingSurfaces(idx);
     expect(surfaces[0]).toEqual({ r0: 5, r1: 20 });
     expect(surfaces[1]).toEqual({ r0: 5, r1: 15 });
   });
@@ -153,10 +154,10 @@ describe('buildDepthSurfaces', () => {
 // ── parentSurface ─────────────────────────────────────────────────────────────
 
 describe('parentSurface', () => {
-  let surfaces: DepthSurface[];
+  let surfaces: NestingSurface[];
 
   beforeAll(() => {
-    surfaces = buildDepthSurfaces(fixtureIndex);
+    surfaces = buildNestingSurfaces(fixtureIndex);
   });
 
   it('cursor=P1 → parent=D (tightest, not BQ)', () => {
@@ -185,13 +186,44 @@ describe('parentSurface', () => {
   });
 });
 
+// ── topBlockR0 ────────────────────────────────────────────────────────────────
+
+describe('topBlockR0', () => {
+  let surfaces: NestingSurface[];
+
+  beforeAll(() => {
+    surfaces = buildNestingSurfaces(fixtureIndex);
+  });
+
+  it('leaf P1 climbs P1→D→BQ → outermost r0 = BQ.r0 (6)', () => {
+    // Multi-level climb: P1 ⊂ D ⊂ BQ; BQ has no parent (T does not contain it).
+    expect(topBlockR0(surfaces, sP1.r0, sP1.r1)).toBe(sBQ.r0);
+  });
+
+  it('leaf P2 climbs P2→D→BQ → outermost r0 = BQ.r0 (6)', () => {
+    expect(topBlockR0(surfaces, sP2.r0, sP2.r1)).toBe(sBQ.r0);
+  });
+
+  it('mid-level D climbs D→BQ → outermost r0 = BQ.r0 (6)', () => {
+    expect(topBlockR0(surfaces, sD.r0, sD.r1)).toBe(sBQ.r0);
+  });
+
+  it('already-outermost BQ → its own r0 (6) [last non-null, not null]', () => {
+    expect(topBlockR0(surfaces, sBQ.r0, sBQ.r1)).toBe(sBQ.r0);
+  });
+
+  it('top-level T (no parent at all) → its own r0 (0)', () => {
+    expect(topBlockR0(surfaces, sT.r0, sT.r1)).toBe(sT.r0);
+  });
+});
+
 // ── childSurfaceToward ────────────────────────────────────────────────────────
 
 describe('childSurfaceToward', () => {
-  let surfaces: DepthSurface[];
+  let surfaces: NestingSurface[];
 
   beforeAll(() => {
-    surfaces = buildDepthSurfaces(fixtureIndex);
+    surfaces = buildNestingSurfaces(fixtureIndex);
   });
 
   it('cursor=BQ, leafAnchorR0=P2.r0(24) → child=D (direct child, one step)', () => {
@@ -227,9 +259,9 @@ describe('childSurfaceToward', () => {
   });
 });
 
-// ── classifyDepthKey ──────────────────────────────────────────────────────────
+// ── classifyNestingKey ──────────────────────────────────────────────────────────
 
-describe('classifyDepthKey', () => {
+describe('classifyNestingKey', () => {
   function ev(
     key: string,
     meta: boolean,
@@ -242,52 +274,52 @@ describe('classifyDepthKey', () => {
 
   // mac: metaKey && ctrlKey && !altKey && !shiftKey
   it('mac Cmd+Ctrl+ArrowLeft → out', () => {
-    expect(classifyDepthKey(ev('ArrowLeft', true, true, false, false), 'mac')).toBe('out');
+    expect(classifyNestingKey(ev('ArrowLeft', true, true, false, false), 'mac')).toBe('out');
   });
 
   it('mac Cmd+Ctrl+ArrowRight → in', () => {
-    expect(classifyDepthKey(ev('ArrowRight', true, true, false, false), 'mac')).toBe('in');
+    expect(classifyNestingKey(ev('ArrowRight', true, true, false, false), 'mac')).toBe('in');
   });
 
   it('mac Cmd+Ctrl+non-arrow → null', () => {
-    expect(classifyDepthKey(ev('ArrowUp', true, true, false, false), 'mac')).toBeNull();
+    expect(classifyNestingKey(ev('ArrowUp', true, true, false, false), 'mac')).toBeNull();
   });
 
   it('mac bare ArrowLeft → null', () => {
-    expect(classifyDepthKey(ev('ArrowLeft', false, false, false, false), 'mac')).toBeNull();
+    expect(classifyNestingKey(ev('ArrowLeft', false, false, false, false), 'mac')).toBeNull();
   });
 
   it('mac Alt+Shift+ArrowLeft (wrong platform chord on mac) → null', () => {
-    expect(classifyDepthKey(ev('ArrowLeft', false, false, true, true), 'mac')).toBeNull();
+    expect(classifyNestingKey(ev('ArrowLeft', false, false, true, true), 'mac')).toBeNull();
   });
 
   it('mac Shift+ArrowLeft → null', () => {
-    expect(classifyDepthKey(ev('ArrowLeft', false, false, false, true), 'mac')).toBeNull();
+    expect(classifyNestingKey(ev('ArrowLeft', false, false, false, true), 'mac')).toBeNull();
   });
 
   // other: altKey && shiftKey && !metaKey && !ctrlKey
   it('other Alt+Shift+ArrowLeft → out', () => {
-    expect(classifyDepthKey(ev('ArrowLeft', false, false, true, true), 'other')).toBe('out');
+    expect(classifyNestingKey(ev('ArrowLeft', false, false, true, true), 'other')).toBe('out');
   });
 
   it('other Alt+Shift+ArrowRight → in', () => {
-    expect(classifyDepthKey(ev('ArrowRight', false, false, true, true), 'other')).toBe('in');
+    expect(classifyNestingKey(ev('ArrowRight', false, false, true, true), 'other')).toBe('in');
   });
 
   it('other Alt+Shift+non-arrow → null', () => {
-    expect(classifyDepthKey(ev('ArrowDown', false, false, true, true), 'other')).toBeNull();
+    expect(classifyNestingKey(ev('ArrowDown', false, false, true, true), 'other')).toBeNull();
   });
 
   it('other bare ArrowLeft → null', () => {
-    expect(classifyDepthKey(ev('ArrowLeft', false, false, false, false), 'other')).toBeNull();
+    expect(classifyNestingKey(ev('ArrowLeft', false, false, false, false), 'other')).toBeNull();
   });
 
   it('other Cmd+Ctrl+ArrowLeft (mac chord on other) → null', () => {
-    expect(classifyDepthKey(ev('ArrowLeft', true, true, false, false), 'other')).toBeNull();
+    expect(classifyNestingKey(ev('ArrowLeft', true, true, false, false), 'other')).toBeNull();
   });
 
   it('other Shift+ArrowLeft → null', () => {
-    expect(classifyDepthKey(ev('ArrowLeft', false, false, false, true), 'other')).toBeNull();
+    expect(classifyNestingKey(ev('ArrowLeft', false, false, false, true), 'other')).toBeNull();
   });
 });
 
@@ -315,26 +347,26 @@ describe('detectPlatform', () => {
   });
 });
 
-// ── buildDepthCommitDestination ───────────────────────────────────────────────
+// ── buildNestingCommitDestination ───────────────────────────────────────────────
 
-describe('buildDepthCommitDestination', () => {
+describe('buildNestingCommitDestination', () => {
   it('null input → null', () => {
-    expect(buildDepthCommitDestination(null)).toBeNull();
+    expect(buildNestingCommitDestination(null)).toBeNull();
   });
 
   it('undefined input → null', () => {
-    expect(buildDepthCommitDestination(undefined)).toBeNull();
+    expect(buildNestingCommitDestination(undefined)).toBeNull();
   });
 
   it('{anchorR0:6, anchorR1:40} → JSON with t=0, r=[6,40], d=0', () => {
-    const result = buildDepthCommitDestination({ anchorR0: 6, anchorR1: 40 });
+    const result = buildNestingCommitDestination({ anchorR0: 6, anchorR1: 40 });
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result!);
     expect(parsed).toEqual({ t: 0, r: [6, 40], d: 0 });
   });
 
   it('{anchorR0:0, anchorR1:0} → valid JSON', () => {
-    const result = buildDepthCommitDestination({ anchorR0: 0, anchorR1: 0 });
+    const result = buildNestingCommitDestination({ anchorR0: 0, anchorR1: 0 });
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result!);
     expect(parsed).toEqual({ t: 0, r: [0, 0], d: 0 });
@@ -347,7 +379,7 @@ import { beforeAll } from 'vitest';
 // ── buildAncestorPath / labelForSourceNode ────────────────────────────────────
 
 import { buildSourceIndex } from './sourceIndex';
-import { buildAncestorPath, labelForSourceNode } from './depthNav';
+import { buildAncestorPath, labelForSourceNode } from './nestingNav';
 
 // Fixture AST: Div#sec ⊃ BlockQuote ⊃ Para
 // Pool ranges are strictly nested: Div[0,40] ⊃ BlockQuote[10,38] ⊃ Para[12,36]

@@ -1,6 +1,6 @@
 /**
  * P3.4 §3d integration tests: BreadcrumbChip floating chip — breadcrumb
- * rendering, ◀/▶ depth navigation, and crumb-click jump-to-depth.
+ * rendering, ◀/▶ nesting navigation, and crumb-click jump-to-level.
  *
  * All tests drive the REAL PreviewRoot (no custom registry) so real Div/Para
  * components render nested [data-block-pool-id] elements and the real chip
@@ -46,7 +46,7 @@ import { render, cleanup, act, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { PreviewRoot } from './PreviewRoot';
 import type { PreviewRootProps } from './PreviewRoot';
-import { detectPlatform } from './depthNav';
+import { detectPlatform } from './nestingNav';
 
 afterEach(() => {
     cleanup();
@@ -56,11 +56,11 @@ afterEach(() => {
 
 /* ─── Platform detection ──────────────────────────────────────────────────── */
 // (detectPlatform used in tests 5 for the tooltip labels; not needed for click
-// tests but kept for symmetry with p3-3-depth)
+// tests but kept for symmetry with p3-3-nesting)
 const _PLATFORM = detectPlatform();
 void _PLATFORM; // suppress unused-var lint
 
-/* ─── PointerEvent helper (verbatim from p3-3-depth) ─────────────────────── */
+/* ─── PointerEvent helper (verbatim from p3-3-nesting) ─────────────────────── */
 function ptrEvent(
     type: string,
     opts: PointerEventInit & { clientX?: number; clientY?: number } = {},
@@ -114,7 +114,7 @@ function makeAstJson(): string {
     });
 }
 
-function mountFixture(opts: { setAst?: any; unlockDepthCursor?: boolean } = {}) {
+function mountFixture(opts: { setAst?: any; unlockNestingCursor?: boolean } = {}) {
     const setAst = opts.setAst ?? vi.fn();
     const astJson = makeAstJson();
     const props: PreviewRootProps = {
@@ -124,7 +124,7 @@ function mountFixture(opts: { setAst?: any; unlockDepthCursor?: boolean } = {}) 
         currentFilePath: '/test.qmd',
         assetManifest: {},
         setAst,
-        unlockDepthCursor: opts.unlockDepthCursor,
+        unlockNestingCursor: opts.unlockNestingCursor,
         onNavigateToDocument: () => {},
     };
     return { ...render(<PreviewRoot {...props} />), setAst };
@@ -157,15 +157,15 @@ const ta = (c: HTMLElement) => c.querySelector<HTMLTextAreaElement>('textarea');
 /* ─────────────────────────────────────────────────────────────────────────────
  * Test 1 ★ (fail-on-revert): Chip hidden when LOCKED
  *
- * unlockDepthCursor is NOT set; open editor on ParaB (pool-id=2).
+ * unlockNestingCursor is NOT set; open editor on ParaB (pool-id=2).
  * Editor opens (textarea appears) but chip does NOT appear.
  *
- * FAIL-ON-REVERT: removing the unlockDepthCursor gate in BreadcrumbChip
+ * FAIL-ON-REVERT: removing the unlockNestingCursor gate in BreadcrumbChip
  * makes the chip appear when locked → chip(container) !== null → test fails.
  * ─────────────────────────────────────────────────────────────────────────── */
 describe('P3.4 test 1 ★ — chip hidden when locked', () => {
-    it('chip does not render when unlockDepthCursor is not set', async () => {
-        const { container } = mountFixture({}); // no unlockDepthCursor
+    it('chip does not render when unlockNestingCursor is not set', async () => {
+        const { container } = mountFixture({}); // no unlockNestingCursor
         await act(async () => {});
         mockTileRects(container);
 
@@ -179,11 +179,11 @@ describe('P3.4 test 1 ★ — chip hidden when locked', () => {
 /* ─────────────────────────────────────────────────────────────────────────────
  * Test 2: Chip hidden when NO editor open
  *
- * unlockDepthCursor=true but no editor open → chip null.
+ * unlockNestingCursor=true but no editor open → chip null.
  * ─────────────────────────────────────────────────────────────────────────── */
 describe('P3.4 test 2 — chip hidden when no editor open', () => {
     it('chip does not render when editTarget is null', async () => {
-        const { container } = mountFixture({ unlockDepthCursor: true });
+        const { container } = mountFixture({ unlockNestingCursor: true });
         await act(async () => {});
 
         expect(chip(container)).toBeNull();
@@ -194,8 +194,8 @@ describe('P3.4 test 2 — chip hidden when no editor open', () => {
  * Test 3: Chip shown when unlocked + editor open
  * ─────────────────────────────────────────────────────────────────────────── */
 describe('P3.4 test 3 — chip shown when unlocked + editor open', () => {
-    it('chip renders when unlockDepthCursor=true and editor is open', async () => {
-        const { container } = mountFixture({ unlockDepthCursor: true });
+    it('chip renders when unlockNestingCursor=true and editor is open', async () => {
+        const { container } = mountFixture({ unlockNestingCursor: true });
         await act(async () => {});
         mockTileRects(container);
 
@@ -214,7 +214,7 @@ describe('P3.4 test 3 — chip shown when unlocked + editor open', () => {
  * ─────────────────────────────────────────────────────────────────────────── */
 describe('P3.4 test 4 — ancestor path rendered in chip', () => {
     it('crumb buttons show [Div.d, Para] with Para as aria-current', async () => {
-        const { container } = mountFixture({ unlockDepthCursor: true });
+        const { container } = mountFixture({ unlockNestingCursor: true });
         await act(async () => {});
         mockTileRects(container);
 
@@ -234,41 +234,41 @@ describe('P3.4 test 4 — ancestor path rendered in chip', () => {
 });
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * Test 5 ★ (fail-on-revert): ◀ / ▶ buttons move depth
+ * Test 5 ★ (fail-on-revert): ◀ / ▶ buttons move the nesting cursor
  *
  * unlocked, open ParaB (value 'BBB').
  * Click ◀ (q2-breadcrumb-out) → editor re-targets to Div → value = DIV_SLICE.
  * Click ▶ (q2-breadcrumb-in) → editor descends back to ParaB → value = 'BBB'.
  * setAst NOT called.
  *
- * FAIL-ON-REVERT: neutralize the ◀ onClick (or requestDepthMove) → editor stays
+ * FAIL-ON-REVERT: neutralize the ◀ onClick (or requestNestingMove) → editor stays
  * at 'BBB' → test fails.
  * ─────────────────────────────────────────────────────────────────────────── */
-describe('P3.4 test 5 ★ — ◀/▶ buttons move depth', () => {
+describe('P3.4 test 5 ★ — ◀/▶ buttons move the nesting cursor', () => {
     it('out button moves to Div, in button moves back to ParaB', async () => {
         const setAst = vi.fn();
-        const { container } = mountFixture({ setAst, unlockDepthCursor: true });
+        const { container } = mountFixture({ setAst, unlockNestingCursor: true });
         await act(async () => {});
         mockTileRects(container);
 
         await openEditor(container, '2'); // ParaB — value 'BBB'
         expect(ta(container)!.value).toBe('BBB');
 
-        // Click ◀ (depth out: ParaB → Div)
+        // Click ◀ (nesting out: ParaB → Div)
         const outBtn = chip(container)!.querySelector<HTMLElement>('.q2-breadcrumb-out')!;
         await act(async () => { fireEvent.click(outBtn); });
         mockTileRects(container);
 
         expect(ta(container)!.value).toBe(DIV_SLICE);
 
-        // Click ▶ (depth in: Div → ParaB, toward leafAnchorR0=11)
+        // Click ▶ (nesting in: Div → ParaB, toward leafAnchorR0=11)
         const inBtn = chip(container)!.querySelector<HTMLElement>('.q2-breadcrumb-in')!;
         await act(async () => { fireEvent.click(inBtn); });
         mockTileRects(container);
 
         expect(ta(container)!.value).toBe('BBB');
 
-        // Depth moves must NOT commit
+        // Nesting moves must NOT commit
         expect(setAst).not.toHaveBeenCalled();
     });
 });
@@ -277,18 +277,18 @@ describe('P3.4 test 5 ★ — ◀/▶ buttons move depth', () => {
  * Test 6 ★ (fail-on-revert): Crumb-click jumps + leafAnchorR0 unchanged
  *
  * unlocked, open ParaB (value 'BBB', leafAnchorR0=11).
- * Click the 'Div.d' crumb → requestDepthSelect(0,18) → value = DIV_SLICE.
+ * Click the 'Div.d' crumb → requestNestingSelect(0,18) → value = DIV_SLICE.
  * Click ▶ → because leafAnchorR0 is still 11, descends to ParaB → value 'BBB'.
  * setAst NOT called.
  *
- * FAIL-ON-REVERT: if requestDepthSelect wrongly resets leafAnchorR0 to r0 (0),
+ * FAIL-ON-REVERT: if requestNestingSelect wrongly resets leafAnchorR0 to r0 (0),
  * the ▶ press descends toward r0=0 → hits ParaA (r=[6,9]) → value 'AAA' ≠ 'BBB'
  * → test fails RED. See the explicit probe in the report.
  * ─────────────────────────────────────────────────────────────────────────── */
 describe('P3.4 test 6 ★ — crumb-click jump preserves leafAnchorR0', () => {
     it('jump to Div.d then ▶ still descends to ParaB (not ParaA)', async () => {
         const setAst = vi.fn();
-        const { container } = mountFixture({ setAst, unlockDepthCursor: true });
+        const { container } = mountFixture({ setAst, unlockNestingCursor: true });
         await act(async () => {});
         mockTileRects(container);
 

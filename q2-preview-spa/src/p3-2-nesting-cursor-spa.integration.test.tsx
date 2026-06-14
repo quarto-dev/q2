@@ -6,8 +6,8 @@
  *    argument. Genuine fail-on-revert: remove `!unlock` from the guard →
  *    the "flag off" test calls regen and turns RED.
  *
- * B. Integration tests: SPA query param `?depthCursor=1` → depthCursor: true
- *    in state → iframe receives unlockDepthCursor: true AND regenerateNestedBuffers
+ * B. Integration tests: SPA query param `?nestingCursor=1` → nestingCursor: true
+ *    in state → iframe receives unlockNestingCursor: true AND regenerateNestedBuffers
  *    is called with the rendered content + AST (on-path assertion).
  *
  * @vitest-environment jsdom
@@ -163,13 +163,13 @@ beforeEach(() => {
   );
 });
 
-describe('P3.2 SPA query param: ?depthCursor=1 → iframe receives unlockDepthCursor', () => {
-  it('passes unlockDepthCursor: true to Q2PreviewIframe when ?depthCursor=1 in the URL', async () => {
+describe('P3.2 SPA query param: ?nestingCursor=1 → iframe receives unlockNestingCursor', () => {
+  it('passes unlockNestingCursor: true to Q2PreviewIframe when ?nestingCursor=1 in the URL', async () => {
     // Seed window.location.search before PreviewApp reads it at load.
     Object.defineProperty(window, 'location', {
       value: {
         ...window.location,
-        search: '?depthCursor=1',
+        search: '?nestingCursor=1',
         hash: '',
       },
       writable: true,
@@ -186,14 +186,14 @@ describe('P3.2 SPA query param: ?depthCursor=1 → iframe receives unlockDepthCu
     );
 
     const props = capturedIframeProps[capturedIframeProps.length - 1];
-    // After boot with ?depthCursor=1, the iframe should receive unlockDepthCursor: true.
-    expect(props?.unlockDepthCursor).toBe(true);
+    // After boot with ?nestingCursor=1, the iframe should receive unlockNestingCursor: true.
+    expect(props?.unlockNestingCursor).toBe(true);
     // On-path assertion: regenerateNestedBuffers must have been called because
-    // depthCursor is on AND the render produced non-empty content + untransformedAstJson.
+    // nestingCursor is on AND the render produced non-empty content + untransformedAstJson.
     expect(mockRegenerateNestedBuffers).toHaveBeenCalledWith(CONTENT, AST);
   });
 
-  it('passes unlockDepthCursor: false (or absent) when no ?depthCursor param', async () => {
+  it('passes unlockNestingCursor: false (or absent) when no ?nestingCursor param', async () => {
     Object.defineProperty(window, 'location', {
       value: {
         ...window.location,
@@ -214,15 +214,15 @@ describe('P3.2 SPA query param: ?depthCursor=1 → iframe receives unlockDepthCu
     );
 
     const props = capturedIframeProps[capturedIframeProps.length - 1];
-    // No param → depthCursor defaults to false → unlockDepthCursor should be false/absent.
-    expect(props?.unlockDepthCursor).toBeFalsy();
+    // No param → nestingCursor defaults to false → unlockNestingCursor should be false/absent.
+    expect(props?.unlockNestingCursor).toBeFalsy();
   });
 
-  it('passes unlockDepthCursor: false when ?depthCursor=0', async () => {
+  it('passes unlockNestingCursor: false when ?nestingCursor=0', async () => {
     Object.defineProperty(window, 'location', {
       value: {
         ...window.location,
-        search: '?depthCursor=0',
+        search: '?nestingCursor=0',
         hash: '',
       },
       writable: true,
@@ -239,6 +239,6 @@ describe('P3.2 SPA query param: ?depthCursor=1 → iframe receives unlockDepthCu
     );
 
     const props = capturedIframeProps[capturedIframeProps.length - 1];
-    expect(props?.unlockDepthCursor).toBeFalsy();
+    expect(props?.unlockNestingCursor).toBeFalsy();
   });
 });

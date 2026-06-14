@@ -1,14 +1,15 @@
 import { normalizeLineEndings } from '../utils/normalizeLineEndings';
 import { sliceBytes } from '../utils/sliceSource';
+import { serializeSourceEntry } from './sourceIndex';
 
 /**
- * lockedTiles.ts — pure DOM helper for locked-tile resolution (Plan 2b, Phase 2.2).
+ * outerBlocks.ts — pure DOM helper for outer-block resolution (Plan 2b, Phase 2.2).
  *
- * A "locked tile" is the single editable surface that owns a click or keyboard
+ * An "outer block" is the single editable surface that owns a click or keyboard
  * focus event. When multiple [data-block-pool-id] elements nest in the DOM
  * (which happens whenever a prefixing container such as a blockquote or list
  * contains inner paragraphs — each of which is itself Descendable), a click
- * identifies a root→leaf path that must be collapsed to ONE tile.
+ * identifies a root→leaf path that must be collapsed to ONE outer block.
  *
  * ## Collapse precedence (single rule, two cases)
  *
@@ -22,7 +23,7 @@ import { sliceBytes } from '../utils/sliceSource';
  *   Starting from the deepest [data-block-pool-id] element, climb toward the
  *   root while consecutive [data-block-pool-id] ancestors have bounding rects
  *   that coincide on all four edges within EPS_PX. The topmost coincident
- *   ancestor is the tile.
+ *   ancestor is the outer block.
  *   Rationale: a chrome-less single-child wrapper (e.g. a bare <div> that
  *   fits its lone child exactly) coincides → you climb to it; a multi-child
  *   div or any container with visible chrome (blockquote rule, list marker
@@ -39,12 +40,12 @@ import { sliceBytes } from '../utils/sliceSource';
  * ## Visibility
  *   An element with a zero-area bounding rect is hidden (e.g. a collapsed
  *   callout body inside `.callout-collapse.collapse` → Bootstrap `display:none`
- *   → zero rect). Hidden elements must never become tiles and must not
+ *   → zero rect). Hidden elements must never become outer blocks and must not
  *   participate in coincidence comparison.
  *
  * ## Idempotency
- *   resolveLockedTile(tile) === tile for any already-resolved tile. This is
- *   required so that keyboard Enter on a focused tile re-opens the same tile.
+ *   resolveOuterBlock(outerBlock) === outerBlock for any already-resolved outer block. This is
+ *   required so that keyboard Enter on a focused outer block re-opens the same outer block.
  */
 
 /**
@@ -74,7 +75,7 @@ const EPS_PX = 0.5;
  * return a zero rect. In jsdom, rects are always zero by default, so tests must
  * mock getBoundingClientRect on individual elements.
  */
-export function isVisibleTile(el: Element): boolean {
+export function isVisibleBlock(el: Element): boolean {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
 }
@@ -99,14 +100,14 @@ export function rectsCoincide(a: Element, b: Element, epsPx: number = EPS_PX): b
 }
 
 /**
- * Resolve a DOM element to its locked tile.
+ * Resolve a DOM element to its outer block.
  *
  * Returns null if `el` has no [data-block-pool-id] ancestor (including itself).
  * Otherwise applies the two-case collapse described in the module doc.
  *
- * Idempotent: resolveLockedTile(tile) === tile.
+ * Idempotent: resolveOuterBlock(outerBlock) === outerBlock.
  */
-export function resolveLockedTile(el: Element): Element | null {
+export function resolveOuterBlock(el: Element): Element | null {
     // Step 1: find the deepest [data-block-pool-id] ancestor (includes el itself).
     const leaf = el.closest('[data-block-pool-id]');
     if (!leaf) return null;
@@ -134,10 +135,10 @@ export function resolveLockedTile(el: Element): Element | null {
     // guard is defensive — if the outer is hidden but an inner prefixing
     // element is visible, we prefer the outermost visible one. If NO prefixing
     // element is visible we fall through to the coincidence climb rather than
-    // returning a hidden tile.
+    // returning a hidden outer block.
     let outermostPrefixing: Element | null = null;
     for (const ancestor of chain) {
-        if (PREFIXING_TAGS.has(ancestor.tagName.toLowerCase()) && isVisibleTile(ancestor)) {
+        if (PREFIXING_TAGS.has(ancestor.tagName.toLowerCase()) && isVisibleBlock(ancestor)) {
             // chain is leaf-to-root; iterating naturally overrides with later
             // (more outer) visible elements, so the last assignment is the
             // outermost visible prefixing element.
@@ -150,21 +151,21 @@ export function resolveLockedTile(el: Element): Element | null {
 
     // Step 4: Coincidence climb — starting from leaf, climb while the next
     // [data-block-pool-id] ancestor is visible and coincides with the current
-    // element. The topmost reached is the tile.
+    // element. The topmost reached is the outer block.
     //
-    // Transitivity note: we compare each ancestor against `tile` (the running
+    // Transitivity note: we compare each ancestor against `outerBlock` (the running
     // climb-top), not against the original leaf. This is equivalent because
     // each intermediate ancestor that passed the coincidence check has the same
     // rect as the leaf (flow-layout rects are monotone-expanding, so two
     // elements that each coincide with the leaf necessarily coincide with each
-    // other). Comparing against `tile` avoids re-fetching the leaf rect.
-    let tile: Element = leaf;
+    // other). Comparing against `outerBlock` avoids re-fetching the leaf rect.
+    let outerBlock: Element = leaf;
     for (let i = 1; i < chain.length; i++) {
         const ancestor = chain[i];
         // Skip non-visible ancestors (collapsed / display:none).
-        if (!isVisibleTile(ancestor)) break;
-        if (rectsCoincide(tile, ancestor)) {
-            tile = ancestor;
+        if (!isVisibleBlock(ancestor)) break;
+        if (rectsCoincide(outerBlock, ancestor)) {
+            outerBlock = ancestor;
         } else {
             // The moment a non-coincident ancestor is found, stop climbing.
             // (Further ancestors would be even larger, so they won't coincide.)
@@ -172,41 +173,41 @@ export function resolveLockedTile(el: Element): Element | null {
         }
     }
 
-    return tile;
+    return outerBlock;
 }
 
 /**
- * Enumerate all locked tiles visible in `host`, in DOM pre-order, deduped.
+ * Enumerate all outer blocks visible in `host`, in DOM pre-order, deduped.
  *
  * Algorithm:
  *   1. querySelectorAll('[data-block-pool-id]') — returns all pool-id elements
  *      in DOM pre-order.
- *   2. Filter to visible elements only (isVisibleTile).
- *   3. Map each through resolveLockedTile — a leaf whose tile is its parent
+ *   2. Filter to visible elements only (isVisibleBlock).
+ *   3. Map each through resolveOuterBlock — a leaf whose outer block is its parent
  *      container resolves to that container.
  *   4. Dedupe using a Set<Element>. The dedup relies on querySelectorAll's
- *      DOM pre-order guarantee (per the DOM spec, §12.4): the outer tile is
+ *      DOM pre-order guarantee (per the DOM spec, §12.4): the outer block is
  *      enumerated before its descendants, so the Set collapses duplicates to
- *      the first occurrence = the outer tile. This is not just an artifact of
+ *      the first occurrence = the outer block. This is not just an artifact of
  *      the climb direction — it is guaranteed by the spec.
  *
  * This yields an ordered, deduped, visible partition of the editable surface.
- * A chrome-less single-child div and its lone child collapse to one tile
+ * A chrome-less single-child div and its lone child collapse to one outer block
  * (the div). A multi-child div appears alongside each of its children.
  */
-export function enumerateLockedTiles(host: Element): Element[] {
+export function enumerateOuterBlocks(host: Element): Element[] {
     const all = Array.from(host.querySelectorAll<Element>('[data-block-pool-id]'));
-    const visible = all.filter(isVisibleTile);
+    const visible = all.filter(isVisibleBlock);
     const seen = new Set<Element>();
-    const tiles: Element[] = [];
+    const blocks: Element[] = [];
     for (const el of visible) {
-        const tile = resolveLockedTile(el);
-        if (tile && !seen.has(tile)) {
-            seen.add(tile);
-            tiles.push(tile);
+        const outerBlock = resolveOuterBlock(el);
+        if (outerBlock && !seen.has(outerBlock)) {
+            seen.add(outerBlock);
+            blocks.push(outerBlock);
         }
     }
-    return tiles;
+    return blocks;
 }
 
 // ---------------------------------------------------------------------------
@@ -214,7 +215,7 @@ export function enumerateLockedTiles(host: Element): Element[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Measure the content height and full computed box style of a tile element.
+ * Measure the content height and full computed box style of a block element.
  *
  * Extracted from `useBlockEditHover.tsx`'s `activate` function so the same
  * measurement can be used both at click-activation time and at move-open time
@@ -231,12 +232,12 @@ export function enumerateLockedTiles(host: Element): Element[] {
  * auto-focus and the draft is set; size can be corrected by a subsequent
  * `activate` call.
  */
-export function measureTileBox(tileEl: Element): {
+export function measureBlockBox(blockEl: Element): {
     contentHeight: number;
     boxStyle: Record<string, string>;
 } {
-    const rect = tileEl.getBoundingClientRect();
-    const cs = getComputedStyle(tileEl);
+    const rect = blockEl.getBoundingClientRect();
+    const cs = getComputedStyle(blockEl);
     // parseFloat returns NaN for empty strings (jsdom) — treat NaN as 0.
     const px = (v: string) => parseFloat(v) || 0;
     const contentHeight = rect.height
@@ -258,14 +259,14 @@ export function measureTileBox(tileEl: Element): {
 }
 
 /**
- * Capture the edit identity triple from a locked tile element.
+ * Capture the edit identity triple from an outer block element.
  *
- * Reads the `data-block-pool-id` attribute off `tileEl`, looks up the pool
+ * Reads the `data-block-pool-id` attribute off `blockEl`, looks up the pool
  * entry, slices `content` to get the source text, and returns the identity
  * triple `{ anchorR0, anchorR1, anchorSlice }` used to open an editor.
  *
  * Returns `null` when:
- *  - `tileEl` has no `data-block-pool-id` attribute.
+ *  - `blockEl` has no `data-block-pool-id` attribute.
  *  - The pool entry is missing or not an Original entry (`t !== 0`).
  *
  * This is the canonical place for the identity logic. Both `activate` in
@@ -276,11 +277,11 @@ export function measureTileBox(tileEl: Element): {
  * require live DOM geometry and belong at the activation site.
  */
 export function captureEditTarget(
-    tileEl: Element,
+    blockEl: Element,
     pool: unknown[],
     content: string,
 ): { anchorR0: number; anchorR1: number; anchorSlice: string } | null {
-    const pidAttr = tileEl.getAttribute('data-block-pool-id');
+    const pidAttr = blockEl.getAttribute('data-block-pool-id');
     if (pidAttr === null) return null;
 
     const poolEntry = pool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
@@ -315,53 +316,53 @@ function isOriginalEntry(entry: unknown): entry is OriginalPoolEntry {
 }
 
 /**
- * Find the visible locked-tile DOM element for a byte offset `anchorR0`.
+ * Find the visible outer-block DOM element for a byte offset `anchorR0`.
  *
  * Strategy:
- *   1. Enumerate all visible locked tiles in `host` (via `enumerateLockedTiles`).
- *   2. For each tile, read its pool entry's `r[0]` from `pool[Number(tile.getAttribute('data-block-pool-id'))]`.
- *   3. Prefer an exact match (tile whose `r[0] === anchorR0`).
- *   4. If no exact match, return the tile with the smallest `r[0] >= anchorR0`
+ *   1. Enumerate all visible outer blocks in `host` (via `enumerateOuterBlocks`).
+ *   2. For each outer block, read its pool entry's `r[0]` from `pool[Number(outerBlock.getAttribute('data-block-pool-id'))]`.
+ *   3. Prefer an exact match (outer block whose `r[0] === anchorR0`).
+ *   4. If no exact match, return the outer block with the smallest `r[0] >= anchorR0`
  *      (nearest-at/after) — unless `exactOnly` is true (see below).
- *   5. Return null if no visible tile qualifies.
+ *   5. Return null if no visible outer block qualifies.
  *
- * Hidden tiles (zero rect, `isVisibleTile` returns false) are excluded by
- * `enumerateLockedTiles`. This means a hidden tile that would be an exact
- * match is skipped; the next visible tile at/after is tried — UNLESS
+ * Hidden outer blocks (zero rect, `isVisibleBlock` returns false) are excluded by
+ * `enumerateOuterBlocks`. This means a hidden outer block that would be an exact
+ * match is skipped; the next visible outer block at/after is tried — UNLESS
  * `exactOnly` is true, in which case null is returned.
  *
  * ### `exactOnly` option
  *
  * When `opts.exactOnly` is `true`, the nearest-at/after fallback is suppressed.
- * The function returns the visible tile only if its `r[0] === anchorR0` exactly;
+ * The function returns the visible outer block only if its `r[0] === anchorR0` exactly;
  * otherwise null. This is required for the hidden-surface drop check in the
  * P2.3b self-heal effect:
  *
  *   - After a successful re-anchor to `cand.r0`, we need to know whether the
- *     tile at exactly `cand.r0` is visible.
- *   - With the default path, if the re-anchored tile is hidden (excluded by
- *     `enumerateLockedTiles`) but a later visible tile exists, `tileForAnchorR0`
- *     returns that later tile (non-null) — causing the hidden-drop to be missed.
+ *     outer block at exactly `cand.r0` is visible.
+ *   - With the default path, if the re-anchored outer block is hidden (excluded by
+ *     `enumerateOuterBlocks`) but a later visible outer block exists, `outerBlockForAnchorR0`
+ *     returns that later outer block (non-null) — causing the hidden-drop to be missed.
  *   - `exactOnly: true` returns null in that case, correctly triggering the drop.
  *
  * Drop-focus (P2.4) uses the default path (no `exactOnly`) where an approximate
  * nearest landing is acceptable.
  */
-export function tileForAnchorR0(
+export function outerBlockForAnchorR0(
     host: Element,
     pool: unknown[],
     anchorR0: number,
     opts?: { exactOnly?: boolean },
 ): Element | null {
-    const tiles = enumerateLockedTiles(host);
+    const blocks = enumerateOuterBlocks(host);
     const exactOnly = opts?.exactOnly ?? false;
 
-    let exactTile: Element | null = null;
-    let nearestTile: Element | null = null;
+    let exactBlock: Element | null = null;
+    let nearestBlock: Element | null = null;
     let nearestR0 = Infinity;
 
-    for (const tile of tiles) {
-        const poolIdAttr = tile.getAttribute('data-block-pool-id');
+    for (const outerBlock of blocks) {
+        const poolIdAttr = outerBlock.getAttribute('data-block-pool-id');
         if (poolIdAttr === null) continue;
         const poolId = Number(poolIdAttr);
         const entry = pool[poolId];
@@ -369,17 +370,17 @@ export function tileForAnchorR0(
         const r0 = entry.r[0];
 
         if (r0 === anchorR0) {
-            exactTile = tile;
+            exactBlock = outerBlock;
             break;  // exact is highest priority; stop searching
         }
 
         if (!exactOnly && r0 > anchorR0 && r0 < nearestR0) {
             nearestR0 = r0;
-            nearestTile = tile;
+            nearestBlock = outerBlock;
         }
     }
 
-    return exactTile ?? (exactOnly ? null : nearestTile);
+    return exactBlock ?? (exactOnly ? null : nearestBlock);
 }
 
 /**
@@ -428,4 +429,100 @@ export function findReanchorCandidate(
         return { r0: cand.r[0], r1: cand.r[1] };
     }
     return null;
+}
+
+/**
+ * Seed the draft buffer for a source range — the canonical, shared seeding step
+ * used by every fresh-open / reland / nest-retarget site.
+ *
+ * Returns:
+ *  - `anchorSlice`: the raw source text of `[range.r0, range.r1)`, line-ending
+ *    normalized and right-trimmed (identical to what `captureEditTarget`
+ *    produces for the same range).
+ *  - `seededDraft`: the clean nesting buffer for the range if one exists
+ *    (`nestedEditBuffers[siKey]`), else `anchorSlice`. The clean buffer strips
+ *    the ancestor `> `/indent prefix; top-level blocks have no entry and fall
+ *    back to `anchorSlice`.
+ *
+ * Extracted from the duplicated 2-line seeding in `activate`
+ * (useBlockEditHover) and `applyNestingRetarget` (PreviewRoot) so both share one
+ * definition. Pure (no DOM, no React).
+ */
+export function seedForRange(
+    range: { r0: number; r1: number },
+    content: string,
+    nestedEditBuffers: Record<string, string> | null | undefined,
+): { anchorSlice: string; seededDraft: string } {
+    const anchorSlice = normalizeLineEndings(sliceBytes(content, range.r0, range.r1)).trimEnd();
+    const siKey = serializeSourceEntry({ t: 0, r: [range.r0, range.r1], d: 0 });
+    const seededDraft = nestedEditBuffers?.[siKey] ?? anchorSlice;
+    return { anchorSlice, seededDraft };
+}
+
+/**
+ * §1 geometry snapshot — capture the rendered geometry of an opened block's
+ * whole top-level subtree, keyed BLOCK-RELATIVE to the top-level block's start
+ * byte, so a later nest move can size its destination from the ORIGINAL render
+ * instead of the edit-distorted live DOM (where the active subtree is a textarea).
+ *
+ * Must run synchronously at activation, BEFORE the children are swapped to a
+ * textarea.
+ *
+ *  1. Climb from `openedEl` to the OUTERMOST `[data-block-pool-id]` (the
+ *     top-level block) via the same chain-walk `resolveOuterBlock` uses.
+ *  2. Collect `[topBlock, ...topBlock descendants with a pool id]`. If ≤ 1 is
+ *     visible (a flat block, no nesting to size) → return an empty map.
+ *  3. Otherwise `measureBlockBox` each visible surface, keyed
+ *     `` `${pool[pid].r[0] - topBlockR0}:${pool[pid].r[1] - topBlockR0}` `` — the
+ *     full `(r0,r1)` range is the only thing that joins a transformed DOM element
+ *     to an untransformed nesting surface; `r0`-only collides for a container
+ *     whose first child shares its `r0`. Block-relative subtraction makes the key
+ *     shift-invariant under an insert-above.
+ *
+ * Duplicate-key rule: DOM-pre-order-first (outermost wins), matching
+ * `enumerateOuterBlocks`' dedupe; coincident same-range wrappers are harmless
+ * (same box).
+ *
+ * `topBlockR0` is supplied by the caller (derived from the source index via
+ * `nestingNav.topBlockR0`) so capture and lookup subtract the SAME origin.
+ */
+export function snapshotOuterBlockGeometry(
+    openedEl: Element,
+    pool: Array<{ t: number; r: [number, number]; d: number }>,
+    topBlockR0: number,
+): Map<string, { contentHeight: number; boxStyle: Record<string, string> }> {
+    const empty = new Map<string, { contentHeight: number; boxStyle: Record<string, string> }>();
+
+    // Step 1: climb to the outermost [data-block-pool-id].
+    const leaf = openedEl.closest('[data-block-pool-id]');
+    if (!leaf) return empty;
+    let topBlock: Element = leaf;
+    let current: Element = leaf;
+    while (true) {
+        const parent = current.parentElement?.closest('[data-block-pool-id]') ?? null;
+        if (!parent) break;
+        topBlock = parent;
+        current = parent;
+    }
+
+    // Step 2: the top block plus its pool-id descendants; gate on >1 visible.
+    const surfaces: Element[] = [
+        topBlock,
+        ...Array.from(topBlock.querySelectorAll<Element>('[data-block-pool-id]')),
+    ];
+    const visible = surfaces.filter(isVisibleBlock);
+    if (visible.length <= 1) return empty;
+
+    // Step 3: measure each, key block-relative, DOM-pre-order-first on duplicates.
+    const map = new Map<string, { contentHeight: number; boxStyle: Record<string, string> }>();
+    for (const el of visible) {
+        const pidAttr = el.getAttribute('data-block-pool-id');
+        if (pidAttr === null) continue;
+        const entry = pool[Number(pidAttr)];
+        if (!entry || !Array.isArray(entry.r)) continue;
+        const key = `${entry.r[0] - topBlockR0}:${entry.r[1] - topBlockR0}`;
+        if (map.has(key)) continue; // outermost (pre-order-first) wins
+        map.set(key, measureBlockBox(el));
+    }
+    return map;
 }

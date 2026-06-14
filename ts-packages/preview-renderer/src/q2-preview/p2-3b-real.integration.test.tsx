@@ -28,13 +28,13 @@
  * Bug 1 (FIXED): Self-heal spuriously DROPS the editor on ANY external re-render.
  *   Root cause: when the editor is open, the Block component replaces the
  *   `<p data-block-pool-id="N">` element with a textarea wrapper div that
- *   does NOT carry `data-block-pool-id`. The `tileForAnchorR0` call with
+ *   does NOT carry `data-block-pool-id`. The `outerBlockForAnchorR0` call with
  *   `exactOnly:true` in the self-heal effect queries `[data-block-pool-id]`
- *   elements — which excludes the currently-editing tile (its p is absent).
+ *   elements — which excludes the currently-editing outer block (its p is absent).
  *   Result: exactOnly finds nothing → null → DROP, even when the block's
  *   content is unchanged and the editor should KEEP.
  *
- *   Fix: Removed the tileForAnchorR0(exactOnly:true) Step-2 check entirely.
+ *   Fix: Removed the outerBlockForAnchorR0(exactOnly:true) Step-2 check entirely.
  *   The self-heal effect now ONLY uses pure pool/content logic (findReanchorCandidate).
  *   KEEP fires correctly when content is unchanged. The KEEP tests (section 3)
  *   below verify this.
@@ -54,7 +54,7 @@
  *   - p2-4-real.integration.test.tsx — mount/re-render pattern and ptrEvent helper
  *   - p2-4d.integration.test.tsx — same scaffold
  *   - PreviewRoot.tsx lines ~214-253 — the production self-heal effect under test
- *   - lockedTiles.ts findReanchorCandidate — governs KEEP vs DROP logic
+ *   - outerBlocks.ts findReanchorCandidate — governs KEEP vs DROP logic
  */
 
 // @vitest-environment jsdom
@@ -139,7 +139,7 @@ function mountPreviewRoot(opts: {
 
 /**
  * Mock getBoundingClientRect on all [data-block-pool-id] tile elements.
- * Each tile gets a distinct non-zero rect so enumerateLockedTiles sees them.
+ * Each tile gets a distinct non-zero rect so enumerateOuterBlocks sees them.
  */
 function mockTileRects(container: HTMLElement) {
     const tiles = container.querySelectorAll<HTMLElement>('[data-block-pool-id]');
@@ -201,8 +201,8 @@ const DROP_NEW_POOL: Pool = [
  *
  * Why this test can exercise the real DROP path even though the KEEP path is broken:
  *   In the DROP case (content mismatch), the self-heal effect takes the `else`
- *   branch (no cand → drop immediately), which does NOT call tileForAnchorR0 with
- *   exactOnly. The drop-focus call uses `tileForAnchorR0` without exactOnly, which
+ *   branch (no cand → drop immediately), which does NOT call outerBlockForAnchorR0 with
+ *   exactOnly. The drop-focus call uses `outerBlockForAnchorR0` without exactOnly, which
  *   returns the nearest visible tile at/after r0=6 (pool[0] or pool[2] may be found).
  *   The "closes editor" tests do not rely on tile visibility at all.
  *
@@ -333,7 +333,7 @@ describe('P2.3b-real — self-heal DROP (content mismatch): collaborator edits A
             expect(container.querySelector('textarea')).toBeNull();
 
             // Secondary: drop-focus should call .focus() on a tile.
-            // The self-heal drop path calls tileForAnchorR0(host, pool, anchorR0=6)
+            // The self-heal drop path calls outerBlockForAnchorR0(host, pool, anchorR0=6)
             // which finds the nearest visible tile at/after r0=6 in the new pool.
             // pool[1] in new pool has r0=6 and is visible (back in DOM after drop).
             const tileFocusCalls = focusedElements.filter(
@@ -353,7 +353,7 @@ describe('P2.3b-real — self-heal DROP (content mismatch): collaborator edits A
  * must KEEP the editor open (re-anchor to same or new position, preserve draft).
  *
  * The OLD "hidden / missing surface" test exercised the exactOnly check in the
- * self-heal effect (tileForAnchorR0 returning null because the <p> element is
+ * self-heal effect (outerBlockForAnchorR0 returning null because the <p> element is
  * absent from DOM while editing). That check was the bug — the tile is absent
  * because it IS being edited. The fix removes that check. The correct behavior
  * when content is unchanged is KEEP, not DROP.
@@ -418,7 +418,7 @@ describe('P2.3b-real — self-heal KEEP (same content, same pool): editor surviv
         });
 
         // Editor must STAY OPEN (content unchanged → KEEP, no drop).
-        // This was impossible before the fix: the old tileForAnchorR0(exactOnly) check
+        // This was impossible before the fix: the old outerBlockForAnchorR0(exactOnly) check
         // always returned null (active block's <p> is absent from DOM) → spurious DROP.
         expect(container.querySelector('textarea')).not.toBeNull();
 
@@ -446,7 +446,7 @@ describe('P2.3b-real — self-heal KEEP (same content, same pool): editor surviv
  *       the active block shifts to a new byte range; self-heal re-anchors.
  *
  * Fail-on-revert:
- *   With Fix 1 reverted (tileForAnchorR0(exactOnly) check restored), the
+ *   With Fix 1 reverted (outerBlockForAnchorR0(exactOnly) check restored), the
  *   self-heal finds the re-anchored tile absent from DOM (p element replaced by
  *   textarea wrapper) → drops. The textarea disappears.
  *   → expect(container.querySelector('textarea')).not.toBeNull() FAILS.

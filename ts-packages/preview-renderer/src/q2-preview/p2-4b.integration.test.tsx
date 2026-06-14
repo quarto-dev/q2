@@ -6,15 +6,15 @@
  *
  * Coverage:
  *
- *  1. captureEditTarget helper — extraction of identity from a tile element.
+ *  1. captureEditTarget helper — extraction of identity from an outer block element.
  *
  *  2. Cross-surface nav trigger (mocked geometry):
- *     - ArrowDown on last visual line → hop to next tile (unmodified, no commit)
- *     - ArrowUp on first visual line → hop to previous tile (unmodified, no commit)
- *     - Wrap: ArrowDown on last tile → first tile; ArrowUp on first tile → last tile
+ *     - ArrowDown on last visual line → hop to next outer block (unmodified, no commit)
+ *     - ArrowUp on first visual line → hop to previous outer block (unmodified, no commit)
+ *     - Wrap: ArrowDown on last outer block → first outer block; ArrowUp on first outer block → last outer block
  *     - Arrow NOT on edge → no hop (native caret move)
  *     - Modifier+Arrow at edge → no hop (Shift/Ctrl/Alt/Meta)
- *     - Single-tile document → no-op (ArrowDown/Up at edge does nothing)
+ *     - Single-outer-block document → no-op (ArrowDown/Up at edge does nothing)
  *
  *  3. Trigger robustness:
  *     - Unmodified move → synchronous hop, commitTextEdit NOT called, destination
@@ -55,7 +55,7 @@ import { PreviewContext } from './PreviewContext';
 import type { PreviewContextValue } from './PreviewContext';
 import { RegistryContext } from '../framework';
 import { Block } from './dispatchers';
-import { captureEditTarget, measureTileBox } from './lockedTiles';
+import { captureEditTarget, measureBlockBox } from './outerBlocks';
 import * as caretGeometry from './caretGeometry';
 
 afterEach(() => {
@@ -94,10 +94,10 @@ function makeEditTarget(r0: number, r1: number, slice: string): EditTarget {
 }
 
 /**
- * A tile element with a visible rect mock.
+ * A block element with a visible rect mock.
  * Uses useLayoutEffect so mock is installed before any parent layout effects.
  */
-function TileElement({
+function BlockElement({
     poolId,
     visible = true,
     tabIndex = -1,
@@ -147,14 +147,14 @@ interface PendingCaret {
 /* ─── 1. captureEditTarget helper ────────────────────────────────────────────── */
 
 describe('captureEditTarget', () => {
-    it('returns the identity triple from a tile element and pool', () => {
+    it('returns the identity triple from an outer block element and pool', () => {
         // Pool entry 0: r=[0, 11]
         const pool: unknown[] = [
             { t: 0, r: [0, 11], d: 0 },
         ];
         const content = 'hello world'; // 11 ASCII bytes
 
-        // Build a tile element with data-block-pool-id="0"
+        // Build an outer block element with data-block-pool-id="0"
         const div = document.createElement('div');
         div.setAttribute('data-block-pool-id', '0');
         document.body.appendChild(div);
@@ -218,17 +218,17 @@ describe('captureEditTarget', () => {
     });
 });
 
-/* ─── Fix 1: measureTileBox ──────────────────────────────────────────────────── */
+/* ─── Fix 1: measureBlockBox ──────────────────────────────────────────────────── */
 
-describe('measureTileBox', () => {
+describe('measureBlockBox', () => {
     it('returns contentHeight=0 and empty-ish boxStyle for an unmeasured jsdom element', () => {
         // In jsdom getBoundingClientRect always returns zero rect; getComputedStyle
-        // returns empty/zero strings. measureTileBox should still return a populated
+        // returns empty/zero strings. measureBlockBox should still return a populated
         // boxStyle object (all 20 keys present) with contentHeight=0.
         const div = document.createElement('div');
         document.body.appendChild(div);
         try {
-            const result = measureTileBox(div);
+            const result = measureBlockBox(div);
             // contentHeight = 0 - 0 - 0 - 0 - 0 = 0
             expect(result.contentHeight).toBe(0);
             // boxStyle has all 20 expected longhands
@@ -253,7 +253,7 @@ describe('measureTileBox', () => {
             // contentHeight = 80 - paddingTop - paddingBottom - borderTopWidth - borderBottomWidth
             // In jsdom these are all '', parseFloat('') = NaN → NaN becomes 0 via subtraction
             // So contentHeight = 80 - 0 - 0 - 0 - 0 = 80.
-            const result = measureTileBox(div);
+            const result = measureBlockBox(div);
             expect(result.contentHeight).toBe(80);
             expect(Object.keys(result.boxStyle)).toHaveLength(20);
         } finally {
@@ -262,16 +262,16 @@ describe('measureTileBox', () => {
     });
 });
 
-/* ─── helpers for multi-tile documents ─────────────────────────────────────── */
+/* ─── helpers for multi-block documents ─────────────────────────────────────── */
 
 /**
- * Three-tile document:
- *   tile 0: pool[0] r=[0, 6]   → "para0\n"  → line 0
- *   tile 1: pool[1] r=[6, 13]  → "para1\n\n" → line 1
- *   tile 2: pool[2] r=[13, 20] → "para2\n\n" → line 3
+ * Three-block document:
+ *   outer block 0: pool[0] r=[0, 6]   → "para0\n"  → line 0
+ *   outer block 1: pool[1] r=[6, 13]  → "para1\n\n" → line 1
+ *   outer block 2: pool[2] r=[13, 20] → "para2\n\n" → line 3
  */
-const THREE_TILE_CONTENT = 'para0\npara1\n\npara2\n\n';
-const THREE_TILE_POOL: PoolEntry[] = [
+const THREE_BLOCK_CONTENT = 'para0\npara1\n\npara2\n\n';
+const THREE_BLOCK_POOL: PoolEntry[] = [
     { t: 0, r: [0, 6], d: 0 },    // "para0\n" — line 0
     { t: 0, r: [6, 13], d: 0 },   // "para1\n\n" — line 1
     { t: 0, r: [13, 20], d: 0 },  // "para2\n\n" — line 3
@@ -281,11 +281,11 @@ const THREE_TILE_POOL: PoolEntry[] = [
 
 /**
  * BoxMeasureHarness: a minimal harness that exposes requestMove and provides
- * a PreviewContext with measureTileBox-capable tile elements (mocked rects).
+ * a PreviewContext with measureBlockBox-capable outer block elements (mocked rects).
  *
  * Verifies that after a synchronous hop, the opened editor's editTarget has a
- * non-zero contentHeight and a populated boxStyle — i.e. measureTileBox was
- * called on the destination tile and its result was used.
+ * non-zero contentHeight and a populated boxStyle — i.e. measureBlockBox was
+ * called on the destination outer block and its result was used.
  */
 function BoxMeasureHarness({
     onOpen,
@@ -296,8 +296,8 @@ function BoxMeasureHarness({
     onReady?: (fns: { requestMove: (...args: any[]) => void }) => void;
     children?: React.ReactNode;
 }) {
-    const pool: PoolEntry[] = THREE_TILE_POOL;
-    const content = THREE_TILE_CONTENT;
+    const pool: PoolEntry[] = THREE_BLOCK_POOL;
+    const content = THREE_BLOCK_CONTENT;
     const hostRef = useRef<HTMLDivElement | null>(null);
     const editTargetRef = useRef<EditTarget | null>(makeEditTarget(0, 6, 'para0'));
     const editDraftRef = useRef<string | null>('para0');
@@ -325,26 +325,26 @@ function BoxMeasureHarness({
     ) => {
         const et = editTargetRef.current;
         if (!et || !hostRef.current) return;
-        const tiles = Array.from(hostRef.current.querySelectorAll<HTMLElement>('[data-block-pool-id]'))
+        const blocks = Array.from(hostRef.current.querySelectorAll<HTMLElement>('[data-block-pool-id]'))
             .filter(el => {
                 const r = el.getBoundingClientRect();
                 return r.width > 0 || r.height > 0;
             });
-        if (tiles.length <= 1) return;
+        if (blocks.length <= 1) return;
 
-        // For simplicity in this test: go to tile 1 (pool[1])
-        const destTile = tiles.find(t => t.getAttribute('data-block-pool-id') === '1') ?? tiles[1];
-        if (!destTile || isDirty) return;
+        // For simplicity in this test: go to outer block 1 (pool[1])
+        const destBlock = blocks.find(b => b.getAttribute('data-block-pool-id') === '1') ?? blocks[1];
+        if (!destBlock || isDirty) return;
 
         const currentPool = poolRef.current;
         const currentContent = contentRef.current;
-        const captured = captureEditTarget(destTile, currentPool, currentContent);
+        const captured = captureEditTarget(destBlock, currentPool, currentContent);
         if (!captured) return;
 
         editDraftRef.current = captured.anchorSlice;
         pendingCaretRef.current = { edge: direction === 'down' ? 'first' : 'last', column: exitColumn };
-        // Use the real measureTileBox — this is the fix under test
-        const { contentHeight, boxStyle } = measureTileBox(destTile);
+        // Use the real measureBlockBox — this is the fix under test
+        const { contentHeight, boxStyle } = measureBlockBox(destBlock);
         setEditTarget({ ...captured, contentHeight, boxStyle });
     }, [setEditTarget]);
 
@@ -384,24 +384,24 @@ function BoxMeasureHarness({
 }
 
 describe('Fix 1 — move-opened editor has real box measurement (not height:0)', () => {
-    it('sync-hop opens editor with non-zero contentHeight and populated boxStyle when dest tile rect is mocked', async () => {
+    it('sync-hop opens editor with non-zero contentHeight and populated boxStyle when dest outer block rect is mocked', async () => {
         const onOpen = vi.fn();
         let moveRef: ((...args: any[]) => void) | null = null;
         const onReady = vi.fn(({ requestMove }: any) => { moveRef = requestMove; });
 
         render(
             <BoxMeasureHarness onOpen={onOpen} onReady={onReady}>
-                <TileElement poolId={0} />
-                <TileElement poolId={1} />
-                <TileElement poolId={2} />
+                <BlockElement poolId={0} />
+                <BlockElement poolId={1} />
+                <BlockElement poolId={2} />
             </BoxMeasureHarness>,
         );
 
         await act(async () => {});
         onOpen.mockClear();
 
-        // TileElement mocks getBoundingClientRect to return height=40 for visible tiles.
-        // measureTileBox(tile1) should return contentHeight=40 (height - 0 - 0 - 0 - 0).
+        // BlockElement mocks getBoundingClientRect to return height=40 for visible outer blocks.
+        // measureBlockBox(outerBlock1) should return contentHeight=40 (height - 0 - 0 - 0 - 0).
         await act(async () => {
             moveRef!('down', 0, 'para0', false, '{}');
         });
@@ -412,7 +412,7 @@ describe('Fix 1 — move-opened editor has real box measurement (not height:0)',
         expect(openedTarget.contentHeight).toBe(40);
         // boxStyle should be a populated object (all 20 keys)
         expect(Object.keys(openedTarget.boxStyle)).toHaveLength(20);
-        // The destination tile's anchorR0 should be 6 (pool[1])
+        // The destination outer block's anchorR0 should be 6 (pool[1])
         expect(openedTarget.anchorR0).toBe(6);
     });
 });
@@ -493,8 +493,8 @@ describe('Fix 3 — real keydown through EditTextarea.onKeyDown → requestMove'
 
         render(
             <EditTextareaKeydownHarness
-                pool={THREE_TILE_POOL}
-                content={THREE_TILE_CONTENT}
+                pool={THREE_BLOCK_POOL}
+                content={THREE_BLOCK_CONTENT}
                 editTarget={et}
                 requestMove={requestMove}
             />,
@@ -523,8 +523,8 @@ describe('Fix 3 — real keydown through EditTextarea.onKeyDown → requestMove'
 
         render(
             <EditTextareaKeydownHarness
-                pool={THREE_TILE_POOL}
-                content={THREE_TILE_CONTENT}
+                pool={THREE_BLOCK_POOL}
+                content={THREE_BLOCK_CONTENT}
                 editTarget={et}
                 requestMove={requestMove}
             />,
@@ -550,8 +550,8 @@ describe('Fix 3 — real keydown through EditTextarea.onKeyDown → requestMove'
 
         render(
             <EditTextareaKeydownHarness
-                pool={THREE_TILE_POOL}
-                content={THREE_TILE_CONTENT}
+                pool={THREE_BLOCK_POOL}
+                content={THREE_BLOCK_CONTENT}
                 editTarget={et}
                 requestMove={requestMove}
             />,
@@ -577,8 +577,8 @@ describe('Fix 3 — real keydown through EditTextarea.onKeyDown → requestMove'
 
         render(
             <EditTextareaKeydownHarness
-                pool={THREE_TILE_POOL}
-                content={THREE_TILE_CONTENT}
+                pool={THREE_BLOCK_POOL}
+                content={THREE_BLOCK_CONTENT}
                 editTarget={et}
                 requestMove={requestMove}
             />,
@@ -603,8 +603,8 @@ describe('Fix 3 — real keydown through EditTextarea.onKeyDown → requestMove'
 
         render(
             <EditTextareaKeydownHarness
-                pool={THREE_TILE_POOL}
-                content={THREE_TILE_CONTENT}
+                pool={THREE_BLOCK_POOL}
+                content={THREE_BLOCK_CONTENT}
                 editTarget={et}
                 requestMove={requestMove}
             />,
@@ -627,8 +627,8 @@ describe('Fix 3 — real keydown through EditTextarea.onKeyDown → requestMove'
 
         render(
             <EditTextareaKeydownHarness
-                pool={THREE_TILE_POOL}
-                content={THREE_TILE_CONTENT}
+                pool={THREE_BLOCK_POOL}
+                content={THREE_BLOCK_CONTENT}
                 editTarget={et}
                 requestMove={requestMove}
                 cancelPendingLand={cancelPendingLand}

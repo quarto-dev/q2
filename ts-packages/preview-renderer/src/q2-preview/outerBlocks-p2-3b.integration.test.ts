@@ -1,11 +1,11 @@
 /**
- * P2.3b integration tests: tileForAnchorR0 + findReanchorCandidate
+ * P2.3b integration tests: outerBlockForAnchorR0 + findReanchorCandidate
  *
  * TDD: these tests were written BEFORE implementation. They fail until
- * tileForAnchorR0 and findReanchorCandidate are exported from lockedTiles.ts.
+ * outerBlockForAnchorR0 and findReanchorCandidate are exported from outerBlocks.ts.
  *
- * tileForAnchorR0(host, pool, anchorR0):
- *   Returns the visible locked-tile DOM element for a byte offset.
+ * outerBlockForAnchorR0(host, pool, anchorR0):
+ *   Returns the visible outer-block DOM element for a byte offset.
  *   Exact match preferred; nearest-at/after as fallback; null if nothing qualifies.
  *
  * findReanchorCandidate(pool, content, anchorR0, anchorSlice):
@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { tileForAnchorR0, findReanchorCandidate } from './lockedTiles';
+import { outerBlockForAnchorR0, findReanchorCandidate } from './outerBlocks';
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -43,12 +43,12 @@ function mockRect(el: Element, r: DOMRect) {
 }
 
 /**
- * Build a host div with tiles. `tiles` is an array of { poolId, r0 } so
+ * Build a host div with outer blocks. `outerBlocks` is an array of { poolId, r0 } so
  * we can set data-block-pool-id. `pool` is the parallel array where
  * pool[poolId] = { t: 0, r: [r0, r0+10], d: 0 }.
  */
 function makeHost(
-    tiles: Array<{ poolId: number; r0: number; visible?: boolean }>,
+    outerBlocks: Array<{ poolId: number; r0: number; visible?: boolean }>,
 ): { host: HTMLElement; elements: HTMLElement[]; pool: unknown[] } {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -56,7 +56,7 @@ function makeHost(
     const pool: unknown[] = [];
     const elements: HTMLElement[] = [];
 
-    for (const { poolId, r0, visible = true } of tiles) {
+    for (const { poolId, r0, visible = true } of outerBlocks) {
         const el = document.createElement('p');
         el.setAttribute('data-block-pool-id', String(poolId));
         host.appendChild(el);
@@ -70,119 +70,119 @@ function makeHost(
     return { host, elements, pool };
 }
 
-/* ─── tileForAnchorR0 ───────────────────────────────────────────────────────── */
+/* ─── outerBlockForAnchorR0 ───────────────────────────────────────────────────────── */
 
-describe('tileForAnchorR0 — exact hit', () => {
-    it('returns the tile whose pool r[0] === anchorR0 exactly', () => {
+describe('outerBlockForAnchorR0 — exact hit', () => {
+    it('returns the outer block whose pool r[0] === anchorR0 exactly', () => {
         const { host, elements, pool } = makeHost([
             { poolId: 0, r0: 100 },
             { poolId: 1, r0: 200 },
             { poolId: 2, r0: 300 },
         ]);
-        const result = tileForAnchorR0(host, pool, 200);
+        const result = outerBlockForAnchorR0(host, pool, 200);
         expect(result).toBe(elements[1]);
     });
 });
 
-describe('tileForAnchorR0 — nearest-at/after when exact missing', () => {
-    it('returns the tile with smallest r[0] >= anchorR0 when exact not found', () => {
+describe('outerBlockForAnchorR0 — nearest-at/after when exact missing', () => {
+    it('returns the outer block with smallest r[0] >= anchorR0 when exact not found', () => {
         const { host, elements, pool } = makeHost([
             { poolId: 0, r0: 100 },
             { poolId: 1, r0: 200 },
             { poolId: 2, r0: 300 },
         ]);
         // anchorR0=150 doesn't exist; nearest >= 150 is r0=200
-        const result = tileForAnchorR0(host, pool, 150);
+        const result = outerBlockForAnchorR0(host, pool, 150);
         expect(result).toBe(elements[1]);
     });
 
-    it('returns the tile at the exact anchorR0 position when it happens to equal r0', () => {
+    it('returns the outer block at the exact anchorR0 position when it happens to equal r0', () => {
         const { host, elements, pool } = makeHost([
             { poolId: 0, r0: 100 },
             { poolId: 1, r0: 200 },
         ]);
-        const result = tileForAnchorR0(host, pool, 100);
+        const result = outerBlockForAnchorR0(host, pool, 100);
         expect(result).toBe(elements[0]);
     });
 });
 
-describe('tileForAnchorR0 — null when nothing at/after', () => {
-    it('returns null when all tiles have r[0] < anchorR0', () => {
+describe('outerBlockForAnchorR0 — null when nothing at/after', () => {
+    it('returns null when all outer blocks have r[0] < anchorR0', () => {
         const { host, pool } = makeHost([
             { poolId: 0, r0: 100 },
             { poolId: 1, r0: 200 },
         ]);
-        const result = tileForAnchorR0(host, pool, 999);
+        const result = outerBlockForAnchorR0(host, pool, 999);
         expect(result).toBeNull();
     });
 
     it('returns null for an empty host', () => {
         const host = document.createElement('div');
         document.body.appendChild(host);
-        const result = tileForAnchorR0(host, [], 0);
+        const result = outerBlockForAnchorR0(host, [], 0);
         expect(result).toBeNull();
     });
 });
 
-describe('tileForAnchorR0 — skips hidden tiles', () => {
-    it('skips hidden (zero-rect) tiles; returns nearest visible at/after', () => {
-        // tile0 r0=100 visible; tile1 r0=200 hidden; tile2 r0=300 visible
-        // anchorR0=200: exact match is tile1 but it's hidden.
-        // enumerateLockedTiles excludes hidden tiles, so only r0=100 and r0=300 are candidates.
-        // nearest visible at/after 200 is r0=300 (tile2).
+describe('outerBlockForAnchorR0 — skips hidden outer blocks', () => {
+    it('skips hidden (zero-rect) outer blocks; returns nearest visible at/after', () => {
+        // outerBlock0 r0=100 visible; outerBlock1 r0=200 hidden; outerBlock2 r0=300 visible
+        // anchorR0=200: exact match is outerBlock1 but it's hidden.
+        // enumerateOuterBlocks excludes hidden outer blocks, so only r0=100 and r0=300 are candidates.
+        // nearest visible at/after 200 is r0=300 (outerBlock2).
         const { host, elements, pool } = makeHost([
             { poolId: 0, r0: 100, visible: true },
             { poolId: 1, r0: 200, visible: false },  // hidden
             { poolId: 2, r0: 300, visible: true },
         ]);
-        const result = tileForAnchorR0(host, pool, 200);
+        const result = outerBlockForAnchorR0(host, pool, 200);
         expect(result).toBe(elements[2]);
     });
 
-    it('returns null when all at/after tiles are hidden', () => {
+    it('returns null when all at/after outer blocks are hidden', () => {
         const { host, pool } = makeHost([
             { poolId: 0, r0: 100, visible: true },
             { poolId: 1, r0: 200, visible: false },
             { poolId: 2, r0: 300, visible: false },
         ]);
-        const result = tileForAnchorR0(host, pool, 200);
+        const result = outerBlockForAnchorR0(host, pool, 200);
         expect(result).toBeNull();
     });
 });
 
-/* ─── tileForAnchorR0 — exactOnly option ────────────────────────────────────── */
+/* ─── outerBlockForAnchorR0 — exactOnly option ────────────────────────────────────── */
 
-describe('tileForAnchorR0 — exactOnly: true', () => {
-    it('returns the tile when it is visible at exactly anchorR0', () => {
+describe('outerBlockForAnchorR0 — exactOnly: true', () => {
+    it('returns the outer block when it is visible at exactly anchorR0', () => {
         const { host, elements, pool } = makeHost([
             { poolId: 0, r0: 100, visible: true },
             { poolId: 1, r0: 200, visible: true },
             { poolId: 2, r0: 300, visible: true },
         ]);
-        const result = tileForAnchorR0(host, pool, 200, { exactOnly: true });
+        const result = outerBlockForAnchorR0(host, pool, 200, { exactOnly: true });
         expect(result).toBe(elements[1]);
     });
 
-    it('returns null when the tile at exactly anchorR0 is hidden (zero rect)', () => {
-        // The re-anchored tile is hidden, but a later visible tile exists.
-        // exactOnly must return null — NOT the later visible tile.
+    it('returns null when the outer block at exactly anchorR0 is hidden (zero rect)', () => {
+        // The re-anchored outer block is hidden, but a later visible outer block exists.
+        // exactOnly must return null — NOT the later visible outer block.
         const { host, pool } = makeHost([
             { poolId: 0, r0: 100, visible: true },
-            { poolId: 1, r0: 200, visible: false },  // hidden — our re-anchored tile
-            { poolId: 2, r0: 300, visible: true },   // a later visible tile exists
+            { poolId: 1, r0: 200, visible: false },  // hidden — our re-anchored outer block
+            { poolId: 2, r0: 300, visible: true },   // a later visible outer block exists
         ]);
-        const result = tileForAnchorR0(host, pool, 200, { exactOnly: true });
-        // Must be null — the re-anchored tile is hidden; must NOT fall back to r0=300
+        const result = outerBlockForAnchorR0(host, pool, 200, { exactOnly: true });
+        // Must be null — the re-anchored outer block is hidden; must NOT fall back to r0=300
         expect(result).toBeNull();
     });
 
-    it('returns null when no visible tile exists at exactly anchorR0 (no tile at that r0)', () => {
+    it('returns null when no visible outer block exists at exactly anchorR0 (no outer block at that r0)', () => {
         const { host, pool } = makeHost([
             { poolId: 0, r0: 100, visible: true },
             { poolId: 1, r0: 300, visible: true },
         ]);
-        // anchorR0=200 has no tile — exactOnly must not fall back to nearest
-        const result = tileForAnchorR0(host, pool, 200, { exactOnly: true });
+        // anchorR0=200 has no outer block — exactOnly must not fall back to nearest
+        const result = outerBlockForAnchorR0(host, pool, 200, { exactOnly: true });
         expect(result).toBeNull();
     });
 
@@ -194,31 +194,31 @@ describe('tileForAnchorR0 — exactOnly: true', () => {
             { poolId: 2, r0: 300, visible: true },
         ]);
         // Default: exact hidden → skip; nearest visible at/after 200 is r0=300
-        const result = tileForAnchorR0(host, pool, 200);
+        const result = outerBlockForAnchorR0(host, pool, 200);
         expect(result).toBe(elements[2]);
     });
 });
 
-/* ─── hidden-drop correctness: multi-tile pool with later visible tile ───────── */
+/* ─── hidden-drop correctness: multi-outer-block pool with later visible outer block ───────── */
 
-describe('tileForAnchorR0 — exactOnly hidden-drop correctness (multi-tile pool)', () => {
-    it('hidden-drop is correctly detected when re-anchored tile is hidden but a later visible tile exists', () => {
-        // This is the Fix 1 scenario: after re-anchor to r0=200, that tile is hidden.
-        // But a visible tile exists at r0=300. The hidden-drop check MUST use exactOnly:
-        //   - old code: tileForAnchorR0(host, pool, 200) → returns r0=300 (non-null) → hidden-drop MISSED
-        //   - new code: tileForAnchorR0(host, pool, 200, {exactOnly:true}) → null → hidden-drop DETECTED
+describe('outerBlockForAnchorR0 — exactOnly hidden-drop correctness (multi-outer-block pool)', () => {
+    it('hidden-drop is correctly detected when re-anchored outer block is hidden but a later visible outer block exists', () => {
+        // This is the Fix 1 scenario: after re-anchor to r0=200, that outer block is hidden.
+        // But a visible outer block exists at r0=300. The hidden-drop check MUST use exactOnly:
+        //   - old code: outerBlockForAnchorR0(host, pool, 200) → returns r0=300 (non-null) → hidden-drop MISSED
+        //   - new code: outerBlockForAnchorR0(host, pool, 200, {exactOnly:true}) → null → hidden-drop DETECTED
         const { host, pool } = makeHost([
             { poolId: 0, r0: 100, visible: true },
-            { poolId: 1, r0: 200, visible: false },  // re-anchored tile — hidden
-            { poolId: 2, r0: 300, visible: true },   // later visible tile (should not rescue)
+            { poolId: 1, r0: 200, visible: false },  // re-anchored outer block — hidden
+            { poolId: 2, r0: 300, visible: true },   // later visible outer block (should not rescue)
         ]);
 
         // Old (broken) behavior: non-null because r0=300 is visible
-        const oldResult = tileForAnchorR0(host, pool, 200);
+        const oldResult = outerBlockForAnchorR0(host, pool, 200);
         expect(oldResult).not.toBeNull(); // confirms the bug exists in the default path
 
-        // New (correct) behavior: null because the exact tile at r0=200 is hidden
-        const newResult = tileForAnchorR0(host, pool, 200, { exactOnly: true });
+        // New (correct) behavior: null because the exact outer block at r0=200 is hidden
+        const newResult = outerBlockForAnchorR0(host, pool, 200, { exactOnly: true });
         expect(newResult).toBeNull();
     });
 });

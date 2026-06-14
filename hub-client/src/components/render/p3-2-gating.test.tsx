@@ -1,6 +1,6 @@
 /**
  * P3.2: nestedEditBuffers gating — regenerateNestedBuffers is NOT called
- * when unlockDepthCursor is off, IS called when on.
+ * when unlockNestingCursor is off, IS called when on.
  *
  * Tests the exported `computeNestedEditBuffers` helper from ReactPreview.
  * The helper is a pure function; we pass a mocked `regen` argument so

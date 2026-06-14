@@ -1,5 +1,5 @@
 /**
- * P3.3 integration tests: depth-cursor seeding, dirty guard, and nested commit.
+ * P3.3 integration tests: nesting-cursor seeding, dirty guard, and nested commit.
  *
  * All five cases drive the REAL PreviewRoot (no custom registry) so real
  * BlockQuote / Para components render nested [data-block-pool-id] elements.
@@ -118,7 +118,7 @@ function makeAstJson(): string {
 function mountFixture(
     opts: {
         setAst?: (ast: PandocAST) => void;
-        unlockDepthCursor?: boolean;
+        unlockNestingCursor?: boolean;
         nestedEditBuffers?: Record<string, string>;
     } = {},
 ) {
@@ -132,7 +132,7 @@ function mountFixture(
         currentFilePath: '/test.qmd',
         assetManifest: {},
         setAst,
-        unlockDepthCursor: opts.unlockDepthCursor,
+        unlockNestingCursor: opts.unlockNestingCursor,
         nestedEditBuffers: opts.nestedEditBuffers,
         onNavigateToDocument: () => {},
     };
@@ -145,7 +145,7 @@ function mountFixture(
 
 /**
  * Mock getBoundingClientRect on all [data-block-pool-id] tiles.
- * Each gets a distinct non-zero rect so isVisibleTile passes.
+ * Each gets a distinct non-zero rect so isVisibleBlock passes.
  */
 function mockTileRects(container: HTMLElement) {
     const tiles = container.querySelectorAll<HTMLElement>('[data-block-pool-id]');
@@ -161,7 +161,7 @@ function mockTileRects(container: HTMLElement) {
 /* ─────────────────────────────────────────────────────────────────────────────
  * Test 1: Leaf resolution (unlocked)
  *
- * unlockDepthCursor=true; click the inner child Para → textarea opens for the
+ * unlockNestingCursor=true; click the inner child Para → textarea opens for the
  * CHILD (value = clean buffer), NOT the whole blockquote.
  *
  * Production path:
@@ -177,7 +177,7 @@ describe('P3.3 test 1 — leaf resolution (unlocked): click child Para opens chi
         const setAst = vi.fn();
         const { container } = mountFixture({
             setAst,
-            unlockDepthCursor: true,
+            unlockNestingCursor: true,
             nestedEditBuffers: { [CHILD_SI_KEY]: CLEAN_BUFFER },
         });
 
@@ -197,7 +197,7 @@ describe('P3.3 test 1 — leaf resolution (unlocked): click child Para opens chi
         expect(textarea).not.toBeNull();
 
         // Must open for the CHILD (value = clean buffer, no '> ').
-        // If leaf resolution were absent (still using resolveLockedTile), the
+        // If leaf resolution were absent (still using resolveOuterBlock), the
         // blockquote would be selected and value = '> line one\n> line two'.
         expect(textarea!.value).toBe(CLEAN_BUFFER);
         expect(textarea!.value).not.toContain('> ');
@@ -207,7 +207,7 @@ describe('P3.3 test 1 — leaf resolution (unlocked): click child Para opens chi
 /* ─────────────────────────────────────────────────────────────────────────────
  * Test 2: Locked contrast
  *
- * unlockDepthCursor omitted (default locked); click the inner child Para →
+ * unlockNestingCursor omitted (default locked); click the inner child Para →
  * textarea opens for the whole BLOCKQUOTE (value includes '> ').
  *
  * This proves the mode branch. If leaf resolution were unconditional this fails.
@@ -234,7 +234,7 @@ describe('P3.3 test 2 — locked contrast: click child Para opens blockquote edi
         expect(textarea).not.toBeNull();
 
         // Must open for the BLOCKQUOTE (contains '> ').
-        // resolveLockedTile climbs to the blockquote (PREFIXING_TAGS).
+        // resolveOuterBlock climbs to the blockquote (PREFIXING_TAGS).
         expect(textarea!.value).toContain('> ');
         // Specifically: the blockquote's anchorSlice.
         expect(textarea!.value).toBe('> line one\n> line two');
@@ -261,7 +261,7 @@ describe('P3.3 test 3 ★ — buffer-seed: clean draft + dirty guard baseline', 
         const setAst = vi.fn();
         const { container } = mountFixture({
             setAst,
-            unlockDepthCursor: true,
+            unlockNestingCursor: true,
             nestedEditBuffers: { [CHILD_SI_KEY]: CLEAN_BUFFER },
         });
 
@@ -308,19 +308,19 @@ describe('P3.3 test 3 ★ — buffer-seed: clean draft + dirty guard baseline', 
  *   payload.destinationSourceInfoJson = JSON.stringify({t:0, r:[2,22], d:0})
  *   payload.channel === 'text'
  *
- * FAIL-ON-REVERT: if commitDepthEdit is made a no-op (early return), setAst
+ * FAIL-ON-REVERT: if commitNestingEdit is made a no-op (early return), setAst
  * is not called → `expect(setAst).toHaveBeenCalledOnce()` FAILS.
  *
  * Fail-on-revert red line (confirmed):
  *   AssertionError: expected "spy" to have been called once, but got 0 times
  * ─────────────────────────────────────────────────────────────────────────── */
 
-describe('P3.3 test 4 ★ — Cmd-Enter commit via LIVE identity (commitDepthEdit)', () => {
+describe('P3.3 test 4 ★ — Cmd-Enter commit via LIVE identity (commitNestingEdit)', () => {
     it('commits to the child para destination with live anchorR0/R1 on Cmd-Enter', async () => {
         const setAst = vi.fn();
         const { container } = mountFixture({
             setAst,
-            unlockDepthCursor: true,
+            unlockNestingCursor: true,
             nestedEditBuffers: { [CHILD_SI_KEY]: CLEAN_BUFFER },
         });
 
@@ -347,7 +347,7 @@ describe('P3.3 test 4 ★ — Cmd-Enter commit via LIVE identity (commitDepthEdi
 
         const ta = container.querySelector<HTMLTextAreaElement>('textarea')!;
 
-        // Cmd-Enter → commitDepthEdit → setAst called with live identity.
+        // Cmd-Enter → commitNestingEdit → setAst called with live identity.
         await act(async () => {
             fireEvent.keyDown(ta, { key: 'Enter', metaKey: true });
         });
@@ -436,7 +436,7 @@ describe('P3.3 test 5 — siKey-shift preserves in-flight draft', () => {
             currentFilePath: '/test.qmd',
             assetManifest: {},
             setAst,
-            unlockDepthCursor: true,
+            unlockNestingCursor: true,
             nestedEditBuffers: { [siKey5]: buffer5 },
             onNavigateToDocument: () => {},
         };
@@ -502,7 +502,7 @@ describe('P3.3 test 5 — siKey-shift preserves in-flight draft', () => {
                     currentFilePath="/test.qmd"
                     assetManifest={{}}
                     setAst={setAst}
-                    unlockDepthCursor={true}
+                    unlockNestingCursor={true}
                     nestedEditBuffers={newNestedBuffers5}
                     onNavigateToDocument={() => {}}
                 />,

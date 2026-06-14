@@ -79,15 +79,15 @@ interface Q2PreviewIframeProps {
    */
   editingDisabled?: boolean;
   /**
-   * P3.2: depth-cursor mode for nested blocks. When true, the iframe's
-   * PreviewContext exposes depth-cursor behaviour. Default-off
+   * P3.2: nesting-cursor mode for nested blocks. When true, the iframe's
+   * PreviewContext exposes nesting-cursor behaviour. Default-off
    * (undefined/false). Forwarded unchanged in the UPDATE_AST payload.
    */
-  unlockDepthCursor?: boolean;
+  unlockNestingCursor?: boolean;
   /**
    * P3.2: per-siKey clean QMD buffers for nested blocks, produced by
    * the host's `regenerateNestedBuffers` call (gated on
-   * `unlockDepthCursor`). Forwarded unchanged in the UPDATE_AST payload
+   * `unlockNestingCursor`). Forwarded unchanged in the UPDATE_AST payload
    * into `PreviewContext.nestedEditBuffers`.
    */
   nestedEditBuffers?: Record<string, string>;
@@ -125,7 +125,7 @@ export function Q2PreviewIframe({
   untransformedAstJson,
   currentActor,
   editingDisabled,
-  unlockDepthCursor,
+  unlockNestingCursor,
   nestedEditBuffers,
 }: Q2PreviewIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -246,8 +246,8 @@ export function Q2PreviewIframe({
           currentActor,
           // bd-ov4gqk3m: read-only hosts disable the edit surface.
           editingDisabled,
-          // P3.2: depth-cursor mode + per-key nested buffers.
-          unlockDepthCursor,
+          // P3.2: nesting-cursor mode + per-key nested buffers.
+          unlockNestingCursor,
           nestedEditBuffers,
         },
       },
@@ -265,7 +265,7 @@ export function Q2PreviewIframe({
     untransformedAstJson,
     currentActor,
     editingDisabled,
-    unlockDepthCursor,
+    unlockNestingCursor,
     nestedEditBuffers,
   ]);
 

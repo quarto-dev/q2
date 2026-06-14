@@ -11,10 +11,10 @@ import { PreviewContext } from './PreviewContext';
 import type { PreviewContextValue, ResolvedSource } from './PreviewContext';
 import { normalizeLineEndings } from '../utils/normalizeLineEndings';
 import { isOnFirstVisualLine, isOnLastVisualLine, getLogicalColumn, placeCaretAtColumn } from './caretGeometry';
-import { buildDepthCommitDestination, classifyDepthKey, detectPlatform } from './depthNav';
+import { buildNestingCommitDestination, classifyNestingKey, detectPlatform } from './nestingNav';
 
-// P3.3 §3b: detect platform once at module load so classifyDepthKey can
-// distinguish mac (Cmd+Ctrl) from other (Alt+Shift) depth chords.
+// P3.3 §3b: detect platform once at module load so classifyNestingKey can
+// distinguish mac (Cmd+Ctrl) from other (Alt+Shift) nesting chords.
 const PLATFORM = detectPlatform();
 
 /**
@@ -211,7 +211,7 @@ function EditTextarea({
             return;
         }
         // Self-heal-on-write hardening: build the commit destination from the LIVE
-        // edit target (editTargetRef.current) via buildDepthCommitDestination. This is equivalent
+        // edit target (editTargetRef.current) via buildNestingCommitDestination. This is equivalent
         // to JSON.stringify(resolved.sourceEntry) for every editable block (t=0, d=0)
         // — proven by commit-destination-equivalence.test.ts — but anchors to the
         // self-healed identity rather than the per-render closure snapshot.
@@ -220,7 +220,7 @@ function EditTextarea({
         // PreviewContextValue), fall back to the closure form so existing tests pass.
         let dest: string;
         if (ctx.editTargetRef !== undefined) {
-            const liveDest = buildDepthCommitDestination(ctx.editTargetRef.current);
+            const liveDest = buildNestingCommitDestination(ctx.editTargetRef.current);
             if (liveDest === null) {
                 // Guard above passed but ref raced to null — skip.
                 ctx.setEditTarget!(null);
@@ -274,13 +274,13 @@ function EditTextarea({
                 commitIfDirty(draft);
             }}
             onKeyDown={(e) => {
-                // P3.3 §3b: depth-cursor navigation (only in unlockDepthCursor mode).
-                // classifyDepthKey returns 'in'/'out' for the platform chord + ArrowRight/Left,
+                // P3.3 §3b: nesting-cursor navigation (only in unlockNestingCursor mode).
+                // classifyNestingKey returns 'in'/'out' for the platform chord + ArrowRight/Left,
                 // or null for anything else (bare arrows, modified arrows without the full
                 // chord, unrecognised keys) — those fall through to the existing handlers.
-                if (ctx.unlockDepthCursor && ctx.requestDepthMove) {
-                    const dir = classifyDepthKey(e, PLATFORM);
-                    if (dir) { e.preventDefault(); ctx.requestDepthMove(dir); return; }
+                if (ctx.unlockNestingCursor && ctx.requestNestingMove) {
+                    const dir = classifyNestingKey(e, PLATFORM);
+                    if (dir) { e.preventDefault(); ctx.requestNestingMove(dir); return; }
                 }
                 if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                     e.preventDefault();
