@@ -19,9 +19,10 @@ use quarto_source_map::SourceInfo;
 // =============================================================================
 
 fn parse_qmd(content: &str) -> pampa::pandoc::Pandoc {
-    qmd_to_pandoc(content.as_bytes())
-        .map(|(pandoc, _ctx)| pandoc)
-        .unwrap_or_else(|errs| panic!("Failed to parse QMD: {errs:?}"))
+    match qmd_to_pandoc(content.as_bytes()) {
+        Ok((pandoc, _ctx)) => pandoc,
+        Err(errs) => panic!("Failed to parse QMD: {errs:?}"),
+    }
 }
 
 fn parse_qmd_with_context(content: &str) -> (pampa::pandoc::Pandoc, ASTContext) {

@@ -173,7 +173,7 @@ fn maybe_emit(block: &Block, content: &str, out: &mut BTreeMap<String, String>) 
     // final character. Every block offset range includes the block's trailing
     // newline, so `slice.contains('\n')` would match all single-line blocks.
     // We skip the last byte to detect only genuine continuation lines.
-    let is_multiline = content.as_bytes().get(start..end).map_or(false, |b| {
+    let is_multiline = content.as_bytes().get(start..end).is_some_and(|b| {
         let body = if b.last() == Some(&b'\n') {
             &b[..b.len() - 1]
         } else {
