@@ -44,6 +44,11 @@ import {
     getServerUrl,
 } from './helpers/projectFactory';
 import { waitForPreviewRender } from './helpers/previewExtraction';
+import {
+    activateBlock,
+    expectLayoutStable,
+    measureLayout,
+} from '@quarto/preview-e2e-helpers';
 
 /** Set up the project, navigate, and wait for Monaco + preview (+ edit affordances) to be ready. */
 async function openFile(
@@ -99,77 +104,6 @@ async function assertAutomerge(
         for (const s of contains) expect(text).toContain(s);
         for (const s of lacks) expect(text).not.toContain(s);
     }).toPass({ timeout: 10000 });
-}
-
-/**
- * Layout snapshot for the zero-reflow invariant: the viewport `top` of every
- * editable block (keyed by its stable pool id) plus the document's total
- * scrollHeight. Activating a block for editing must not move ANY other block
- * and must not change the document's total height (no "space crunch").
- */
-type Layout = { tops: Record<string, number>; scrollHeight: number };
-
-async function measureLayout(iframe: FrameLocator): Promise<Layout> {
-    // Settle before reading geometry: wait for web fonts to finish loading
-    // (font swaps change line heights) and two animation frames so any pending
-    // reflow has flushed. Without this, parallel workers can snapshot `before`
-    // mid-font-load and see spurious sub-block shifts.
-    await iframe.locator('body').evaluate(async () => {
-        await (document as Document & { fonts?: FontFaceSet }).fonts?.ready;
-        await new Promise<void>(r =>
-            requestAnimationFrame(() => requestAnimationFrame(() => r())),
-        );
-    });
-    const tops = await iframe.locator('[data-block-pool-id]').evaluateAll(els =>
-        Object.fromEntries(
-            els.map(el => [
-                el.getAttribute('data-block-pool-id')!,
-                el.getBoundingClientRect().top,
-            ]),
-        ),
-    );
-    const scrollHeight = await iframe
-        .locator('body')
-        .evaluate(() => document.documentElement.scrollHeight);
-    return { tops, scrollHeight };
-}
-
-/**
- * Assert that going `before → after` (activation of `editedPoolId`) moved no
- * surviving block by more than `tol` px and did not change the document height.
- * Reports every offending block + delta so a failure shows exactly where the
- * crunch is (space above/below a heading, between a paragraph and a list, ...).
- */
-function expectLayoutStable(
-    before: Layout,
-    after: Layout,
-    editedPoolId: string,
-    tol = 1.5,
-): void {
-    const moved: string[] = [];
-    for (const [poolId, top] of Object.entries(after.tops)) {
-        if (poolId === editedPoolId) continue;
-        const delta = Math.abs(top - before.tops[poolId]);
-        if (delta > tol) moved.push(`block ${poolId} moved ${delta.toFixed(1)}px`);
-    }
-    const heightDelta = Math.abs(after.scrollHeight - before.scrollHeight);
-    expect(
-        moved,
-        `blocks shifted on activation:\n  ${moved.join('\n  ')}`,
-    ).toEqual([]);
-    expect(
-        heightDelta,
-        `document height changed by ${heightDelta.toFixed(1)}px on activation (space crunch)`,
-    ).toBeLessThanOrEqual(tol);
-}
-
-/** Click the first block matching `tag`, returning its pool id; waits for the textarea. */
-async function activateBlock(iframe: FrameLocator, tag: string): Promise<string> {
-    const target = iframe.locator(`${tag}[data-block-pool-id]`).first();
-    const poolId = await target.getAttribute('data-block-pool-id');
-    await target.click();
-    await iframe.locator('textarea').first().waitFor({ timeout: 5000 });
-    return poolId!;
 }
 
 test.describe('q2-preview inline editing', () => {
