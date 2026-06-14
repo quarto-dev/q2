@@ -64,7 +64,7 @@ function renderMeasuredEdit(
     }
     return (
         <AttributionWrap node={node} as="div">
-            <div ref={activeEditRegionRef} style={wrapperStyle}>{textarea}</div>
+            <div ref={activeEditRegionRef} id="q2-active-edit-region" style={wrapperStyle}>{textarea}</div>
         </AttributionWrap>
     );
 }
