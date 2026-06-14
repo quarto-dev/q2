@@ -6,11 +6,21 @@
  * tested without touching `globalThis.navigator`.
  */
 
+import type { BlockNode } from '../framework/types';
+import type { SourceIndexEntry } from './sourceIndex';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface DepthSurface {
   r0: number;
   r1: number;
+}
+
+export interface AncestorCrumb {
+  label: string;
+  r0: number;
+  r1: number;
+  isCurrent: boolean;
 }
 
 // ── parseSiKey ────────────────────────────────────────────────────────────────
@@ -237,6 +247,97 @@ export function detectPlatform(
   const n = nav ?? (typeof navigator !== 'undefined' ? navigator : {});
   const haystack = `${n.platform ?? ''} ${n.userAgent ?? ''}`;
   return /mac/i.test(haystack) ? 'mac' : 'other';
+}
+
+// ── labelForSourceNode ────────────────────────────────────────────────────────
+
+/**
+ * Return a human-readable label for a Pandoc block node, optionally decorated
+ * with the first identifying token from its Attr.
+ *
+ * Attr location by type:
+ *   Div / CodeBlock / Figure / Table → c[0]
+ *   Header                            → c[1]
+ *   All others (Para, Plain, BlockQuote, BulletList, …) → no Attr
+ *
+ * Priority: id > first class > bare type.
+ * Defensive: returns "" when node is null/undefined or has no string `t`.
+ */
+export function labelForSourceNode(node: BlockNode): string {
+  if (!node || typeof node.t !== 'string') return '';
+  const t = node.t;
+  const c = (node as unknown as { c?: unknown }).c;
+
+  // Extract the Attr based on block type
+  let attr: unknown;
+  if (t === 'Div' || t === 'CodeBlock' || t === 'Figure' || t === 'Table') {
+    attr = Array.isArray(c) ? (c as unknown[])[0] : undefined;
+  } else if (t === 'Header') {
+    attr = Array.isArray(c) ? (c as unknown[])[1] : undefined;
+  }
+
+  // Defensive: Attr must be array of length >= 2, attr[0] is string (id), attr[1] is array (classes)
+  if (
+    Array.isArray(attr) &&
+    attr.length >= 2 &&
+    typeof attr[0] === 'string' &&
+    Array.isArray(attr[1])
+  ) {
+    const id = attr[0] as string;
+    const classes = attr[1] as string[];
+    if (id.length > 0) return `${t}#${id}`;
+    if (classes.length > 0) return `${t}.${classes[0]}`;
+  }
+
+  return t;
+}
+
+// ── buildAncestorPath ─────────────────────────────────────────────────────────
+
+/**
+ * Build the ancestor path for the breadcrumb chip.
+ *
+ * For each (non-Opaque) source index entry whose range contains the cursor
+ * position, produces an AncestorCrumb. Dedupes by (r0,r1). Sorts
+ * outermost → innermost. Marks the crumb whose range exactly matches the
+ * cursor as `isCurrent: true` (always the last entry).
+ *
+ * Returns [] for null/undefined sourceIndex.
+ */
+export function buildAncestorPath(
+  sourceIndex: Map<string, SourceIndexEntry> | null | undefined,
+  cursorR0: number,
+  cursorR1: number,
+): AncestorCrumb[] {
+  if (!sourceIndex) return [];
+
+  const seen = new Map<string, { r0: number; r1: number; sourceNode: BlockNode }>();
+
+  for (const [key, entry] of sourceIndex) {
+    if (entry.reachabilityClass === 'Opaque') continue;
+    const parsed = parseSiKey(key);
+    if (!parsed) continue;
+    const { r0, r1 } = parsed;
+    // Keep only surfaces that contain the cursor
+    if (r0 > cursorR0 || r1 < cursorR1) continue;
+    // Dedupe by (r0, r1) — first wins
+    const dedupeKey = `${r0}:${r1}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.set(dedupeKey, { r0, r1, sourceNode: entry.sourceNode });
+  }
+
+  // Sort outermost → innermost: r0 ascending, then r1 descending
+  const items = Array.from(seen.values()).sort((a, b) => {
+    if (a.r0 !== b.r0) return a.r0 - b.r0;
+    return b.r1 - a.r1;
+  });
+
+  return items.map(({ r0, r1, sourceNode }) => ({
+    label: labelForSourceNode(sourceNode),
+    r0,
+    r1,
+    isCurrent: r0 === cursorR0 && r1 === cursorR1,
+  }));
 }
 
 // ── buildDepthCommitDestination ───────────────────────────────────────────────

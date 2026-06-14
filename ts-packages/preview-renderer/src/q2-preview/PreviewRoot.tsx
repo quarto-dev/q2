@@ -736,6 +736,42 @@ export function PreviewRoot(props: PreviewRootProps) {
     }, []);
 
     /**
+     * Shared re-target core (factored out of requestDepthMove). Re-seeds the draft
+     * from the new node's clean buffer/slice and re-anchors editTarget. No commit.
+     */
+    const applyDepthRetarget = useCallback((next: { r0: number; r1: number }, leafAnchorR0: number) => {
+        const et = editTargetRef.current;
+        if (!et) return;
+        const content = renderedContentRef.current;
+        const anchorSlice = normalizeLineEndings(sliceBytes(content, next.r0, next.r1)).trimEnd();
+        const siKey = serializeSourceEntry({ t: 0, r: [next.r0, next.r1], d: 0 });
+        const seededDraft = nestedEditBuffersRef.current?.[siKey] ?? anchorSlice;
+        editDraftRef.current = seededDraft;
+        // Box: prefer measuring the destination tile if it is in the DOM; else keep
+        // the current box (best-effort — real box fidelity for 'in'/jumps is P3.5).
+        let contentHeight = et.contentHeight;
+        let boxStyle = et.boxStyle;
+        if (previewHostRef.current) {
+            const tile = tileForAnchorR0(previewHostRef.current, poolRef.current, next.r0, { exactOnly: true });
+            if (tile) {
+                const m = measureTileBox(tile);
+                contentHeight = m.contentHeight;
+                boxStyle = m.boxStyle;
+            }
+        }
+        pendingCaretRef.current = null; // depth move/jump has no caret-edge hint
+        setEditTargetRaw({
+            anchorR0: next.r0,
+            anchorR1: next.r1,
+            anchorSlice,
+            contentHeight,
+            boxStyle,
+            seededDraft,
+            leafAnchorR0,
+        });
+    }, []);
+
+    /**
      * P3.3 §3b: move the depth cursor to the AST parent ('out') or the child
      * toward leafAnchorR0 ('in'). Clamps at the ends (no parent → out no-ops;
      * cursor is a leaf → in no-ops). Re-seeds the draft from the new node's
@@ -749,35 +785,16 @@ export function PreviewRoot(props: PreviewRootProps) {
             ? parentSurface(surfaces, et.anchorR0, et.anchorR1)
             : childSurfaceToward(surfaces, et.anchorR0, et.anchorR1, et.leafAnchorR0 ?? et.anchorR0);
         if (!next) return; // clamp — no-op at the path end
-        const content = renderedContentRef.current;
-        const anchorSlice = normalizeLineEndings(sliceBytes(content, next.r0, next.r1)).trimEnd();
-        const siKey = serializeSourceEntry({ t: 0, r: [next.r0, next.r1], d: 0 });
-        const seededDraft = nestedEditBuffersRef.current?.[siKey] ?? anchorSlice;
-        editDraftRef.current = seededDraft;
-        // Box: the parent ('out') is still a rendered tile → measure it.
-        // The child ('in') is not in the DOM yet (editor is rendering there) →
-        // fall back to the current box (best-effort; real box fidelity for 'in'
-        // is a P3.4/Playwright concern).
-        let contentHeight = et.contentHeight;
-        let boxStyle = et.boxStyle;
-        if (previewHostRef.current) {
-            const tile = tileForAnchorR0(previewHostRef.current, poolRef.current, next.r0, { exactOnly: true });
-            if (tile) {
-                const m = measureTileBox(tile);
-                contentHeight = m.contentHeight;
-                boxStyle = m.boxStyle;
-            }
-        }
-        pendingCaretRef.current = null; // depth move has no caret-edge hint
-        setEditTargetRaw({
-            anchorR0: next.r0,
-            anchorR1: next.r1,
-            anchorSlice,
-            contentHeight,
-            boxStyle,
-            seededDraft,
-            leafAnchorR0: et.leafAnchorR0 ?? et.anchorR0,
-        });
+        applyDepthRetarget({ r0: next.r0, r1: next.r1 }, et.leafAnchorR0 ?? et.anchorR0);
+    }, []);
+
+    // P3.4: jump the depth cursor directly to a chosen ancestor crumb's range.
+    // leafAnchorR0 is UNCHANGED by a jump, so a later 'in' still descends toward
+    // the originally-clicked leaf.
+    const requestDepthSelect = useCallback((r0: number, r1: number) => {
+        const et = editTargetRef.current;
+        if (!et) return;
+        applyDepthRetarget({ r0, r1 }, et.leafAnchorR0 ?? et.anchorR0);
     }, []);
 
     // Refs so the link-handler closure (installed once at mount)
@@ -954,6 +971,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 consumeDirtySwitchHandled,
                 commitDepthEdit,
                 requestDepthMove,
+                requestDepthSelect,
             }}
         >
             {/* previewHostRef scopes tile queries (tileForAnchorR0) to the

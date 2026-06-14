@@ -19,6 +19,7 @@ import {
     HeaderIncludesEffect,
 } from './chromeSlots';
 import { useBlockEditHover } from './useBlockEditHover';
+import { BreadcrumbChip } from './BreadcrumbChip';
 
 /**
  * bd-elgxx (D6 react): mirror of Rust
@@ -288,6 +289,13 @@ export const PreviewDocument = ({
                         content (template.rs:244-246). */}
                     {pageNavHtml ? <PageNavSlot html={pageNavHtml} /> : null}
                 </main>
+
+                {/* P3.4: floating breadcrumb chip for depth cursor navigation.
+                    Must be a child of #quarto-content (inside the blockEdit.hostProps
+                    div) so its synthetic pointer events bubble to the host handlers,
+                    which stopPropagation then intercepts. Self-gating: renders null
+                    unless unlockDepthCursor && editTarget. */}
+                <BreadcrumbChip />
             </div>
 
             {/* Page-footer lives AFTER quarto-content

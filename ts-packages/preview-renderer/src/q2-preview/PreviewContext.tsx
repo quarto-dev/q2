@@ -276,6 +276,12 @@ export interface PreviewContextValue {
      * buffer/slice; no commit.
      */
     requestDepthMove?: (direction: 'in' | 'out') => void;
+    /**
+     * P3.4: jump the depth cursor directly to the ancestor crumb at byte range
+     * [r0, r1] (breadcrumb-click). Shares the re-target core with requestDepthMove;
+     * leafAnchorR0 is unchanged so a later 'in' descends toward the original leaf.
+     */
+    requestDepthSelect?: (r0: number, r1: number) => void;
 }
 
 export const PreviewContext = createContext<PreviewContextValue | null>(null);

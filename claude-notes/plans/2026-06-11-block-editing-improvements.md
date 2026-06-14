@@ -867,6 +867,14 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   modifier keys). Clicking a crumb jumps to that depth.
 - **Shown only when `unlockDepthCursor` is on** — the 95% see nothing new.
 
+> **Status (P3.4, ✓):** the chip (flag-gating, AST ancestor path, `◀`/`▶`→`requestDepthMove`,
+> crumb-click→`requestDepthSelect` with `leafAnchorR0` preserved) shipped and is
+> fail-on-revert-verified at the jsdom / real-`PreviewRoot` tier. The browser-only parts —
+> **geometry** (positioning above the surface) and **event-isolation + real cross-platform
+> key-chords** (`stopPropagation`/`preventDefault`, the depth chords + native word/line-select
+> non-conflict) — have production code shipped but are verified in
+> **[Phase 3.5](#phase-35--playwright--e2e-tier-real-layout--real-binary)**.
+
 ### TDD work items
 - [x] **Setting + threading — hub-client** (RTL): checkbox toggles `unlockDepthCursor`; the value
   reaches the iframe (new `ReactRenderer` pass-through → `PreviewContext`); off ⇒ **no
@@ -880,13 +888,16 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   the optional props). With `--allow-edit` + `?depthCursor=1` the SPA gets the unlock; `--allow-edit`
   alone stays Phase-2 locked. (Read-at-load: no live toggle — acceptable.) *(P3.2; SPA strict mocks
   fixed `b66f898a`.)*
-- [~] **off ⇒ no keys, no chip, leaf-click disabled** (RTL/Playwright): verify the unlock behaviors are
+- [x] **off ⇒ no keys, no chip, leaf-click disabled** (RTL/Playwright): verify the unlock behaviors are
   inert when the flag is off. *(P3.3: **no keys** (depth chord no-ops when locked, `p3-3-depth` test 6,
   gate fail-on-revert verified) and **leaf-click disabled** (locked click → whole blockquote, not the leaf,
-  `p3-3-seeding` test 2) are DONE. **no chip** awaits P3.4.)*
-- [ ] **SPA depth-cursor e2e** (`q2-preview-spa/e2e`, real `q2 preview` binary): with `?depthCursor=1`,
-  load a fixture → confirm leaf-click + a clean nested-blockquote-child edit; load without it → confirm
-  locked (whole-quote). *(Needs P3.3 behavior; P3.5 e2e tier.)*
+  `p3-3-seeding` test 2) DONE. **no chip** DONE P3.4 — `p3-4-breadcrumb` test 1, flag-gate fail-on-revert
+  verified cold.)*
+> **Deferred Playwright / e2e tests for §3a–§3d** (SPA depth-cursor e2e against the real
+> `q2 preview` binary, WASM round-trip snapshot, breadcrumb geometry, event-isolation +
+> cross-platform key-chords, and the §3b RTL sub-clauses) are consolidated in **[Phase 3.5](#phase-35--playwright--e2e-tier-real-layout--real-binary)**
+> below — pulled out of this list so §3a–§3d read as fully done at the jsdom / RTL + Rust
+> tier they target.
 - [x] Unlocked click → leaf; depth keys out/in along the AST path; clamp at the ends at
   key-press; click-in-subtree = caret-only; click-outside resets. Path derived from the AST
   (ancestor-only change re-derives with cursor unchanged).
@@ -897,7 +908,7 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   Phase-1 `activeEditRegionRef` guard; click-outside-resets uses the leaf-aware click-switch
   (`useBlockEditHover`). **Untested sub-clauses (covered structurally, no dedicated test):**
   click-outside-resets-to-leaf in unlocked mode, and ancestor-only-change-re-derives-with-cursor-
-  unchanged — candidates for a P3.5 pass.)*
+  unchanged — moved to **[Phase 3.5](#phase-35--playwright--e2e-tier-real-layout--real-binary)**.)*
 - [x] Rust: `write_single_block` on a blockquote/list child → clean (no `>`/indent);
   `regenerate_nested_buffers` includes multi-line prefixed children (single- and
   multi-child), excludes single-line items and fenced-div children, keyed by `siKey`.
@@ -919,15 +930,88 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   verified cold); buffer-not-re-derived-on-table-change (test 5). "single-line child slices" is the
   `?? anchorSlice` fallback (any no-buffer block, e.g. the blockquote in test 1). **Caveat: a NESTED
   child self-heal DROPS on a large concurrent insert above — see the new watch-item below.**)*
-- [ ] WASM round-trip: edit an unlocked multi-line blockquote child → commit → blocks
-  outside the quote byte-verbatim, quote re-wrapped (snapshot, Tier-2).
-- [ ] Breadcrumb (RTL/Playwright): chip renders at the active surface's top-left, shows
-  the AST-derived path, `◀`/`▶` move depth and carry shortcut tooltips, crumb-click jumps;
-  hidden when the setting is off. Bindings verified in cross-platform Playwright.
-- [~] Implement 3a–3d. *(3a setting + threading ✓ P3.2; **3b behavior + 3c regenerated-buffer commit ✓ P3.3**
-  — `depthNav.ts` `8643c27f`, §3c `0dde110c`, §3b `ad797be1`; preview-renderer 351 unit + 364 integration
-  green, jsdom tier only. 3d breadcrumb → P3.4. Real key-chords + native-conflict + WASM round-trip →
-  P3.5 Playwright/e2e.)*
+**Breadcrumb chip (split by tier — was one "Breadcrumb (RTL/Playwright)" item):**
+- [x] Breadcrumb chip — **flag-gating** (real-`PreviewRoot`, jsdom): chip renders only when
+  `unlockDepthCursor` is on AND an editor is open; hidden when the setting is off or no editor.
+  *(P3.4 `56eb2d3a`; `p3-4-breadcrumb` tests 1–3; flag-gate fail-on-revert independently verified cold.)*
+- [x] Breadcrumb chip — **AST-derived ancestor path**, current level highlighted, via the new pure
+  `buildAncestorPath`/`labelForSourceNode` (`depthNav.ts`) walked against the real source index each render.
+  *(P3.4 helper `095afc88` (unit-tested + fail-on-revert), chip render `56eb2d3a`; `p3-4` test 4 asserts
+  crumb labels `['Div.d','Para']` + `aria-current="true"` on the current crumb.)*
+- [x] Breadcrumb chip — **`◀`/`▶` buttons** call `requestDepthMove('out'|'in')` and re-target the editor;
+  platform shortcut shown as each button's tooltip. *(P3.4 `56eb2d3a`; `p3-4` test 5, button→move fail-on-revert verified.)*
+- [x] Breadcrumb chip — **crumb-click → `requestDepthSelect(r0,r1)`** jumps to that depth, `leafAnchorR0`
+  **unchanged** (a later `in` still descends toward the original leaf). Re-target core factored out of
+  `requestDepthMove` into a shared `applyDepthRetarget`. *(P3.4 `56eb2d3a`; `p3-4` test 6, leaf-preservation
+  fail-on-revert independently verified cold — jump-target-as-leaf → wrong child `'AAA'`.)*
+  *(Geometry + event-isolation + real cross-platform key-chords for the chip → **[Phase 3.5](#phase-35--playwright--e2e-tier-real-layout--real-binary)** (real layout / real pointer+focus events; production code shipped `56eb2d3a`).)*
+- [x] Implement 3a–3d. *(3a setting + threading ✓ P3.2; 3b behavior + 3c regenerated-buffer commit ✓ P3.3
+  — `depthNav.ts` `8643c27f`, §3c `0dde110c`, §3b `ad797be1`; **3d breadcrumb chip ✓ P3.4** — ancestor-path
+  helper `095afc88`, chip + `requestDepthSelect` `56eb2d3a`; preview-renderer 366 unit + 374 integration green,
+  jsdom tier. Real key-chords + native-conflict + chip geometry + WASM round-trip → P3.5 Playwright/e2e.)*
+
+---
+
+## Phase 3.5 — Playwright / e2e tier (real layout + real binary)
+
+Phase 3's jsdom suites cover every state-machine behavior (resolution, depth identity,
+re-seed, buffer gating, and the chip's flag-gating / AST ancestor-path / button + crumb
+wiring — all fail-on-revert-verified). What jsdom **cannot** verify is consolidated here:
+anything needing a real layout engine (geometry, soft-wrap, real CSS boxes), the real
+pointer/focus event sequence (event-isolation, focus-retention), real cross-platform key
+chords, or the real compiled `q2 preview` binary (the SPA + WASM boot path). These are the
+deferred tests pulled out of §3a–§3d (and one cross-referenced from P2.3b). **None of the
+production code is missing** — every item below has shipped production code at the jsdom
+tier; what is deferred is the *browser-level verification*.
+
+**Harness precedent (surveyed 2026-06-13 — these are NOT greenfield):**
+- **`q2-preview-spa/e2e/` already drives the REAL binary.** `helpers/previewServer.ts`
+  (`startPreviewServer()`) `spawn`s `target/debug/q2 preview --no-browser --data-dir … <projectDir>`
+  per test against a fresh tempdir fixture; `globalSetup.ts` asserts the binary exists
+  (build with `cargo build -p quarto --bin q2`). 13 specs already run this way (e.g.
+  `basic-preview.spec.ts` exercises file-edit + re-render). The binary embeds the SPA + WASM
+  via `include_dir!` (`crates/quarto-preview/build.rs`), so the SPA depth-cursor e2e
+  **extends** this harness (add `?depthCursor=1` to the navigate URL + a nested-quote
+  fixture). **No existing q2-preview-spa spec asserts depth resolution, so the
+  leaf-click-vs-locked assertions are genuinely new** — new fixture + assertions, existing
+  boot mechanism. The build chain must be fresh first: `build:wasm → build-q2-preview-spa →
+  build --bin q2` (the binary does not auto-rebuild the embedded SPA/WASM).
+- **`hub-client/e2e/` drives the vite-built SPA + real WASM (NOT the binary).** Its
+  `playwright.config.ts` `webServer` runs `npm run preview` (the built hub-client SPA on
+  :5174); `globalSetup` starts `cargo run --bin hub` for sync. Specs reach the live WASM
+  renderer via `window.__quartoTest` hooks (precedents: `q2-preview-block-nav-p2-5b.spec.ts`,
+  `q2-preview-self-heal-on-write.spec.ts`). This is the right tier for the breadcrumb
+  geometry / event-isolation / key-chord specs (real layout + real pointer/focus events; no
+  standalone binary required).
+
+### TDD work items
+- [ ] **SPA depth-cursor e2e** (§3a/§3b; `q2-preview-spa/e2e`, real `q2 preview` binary):
+  with `?depthCursor=1`, load a nested-blockquote fixture → confirm leaf-click resolution +
+  a clean nested-blockquote-child edit; load **without** the param → confirm locked
+  (whole-quote). Extends `basic-preview.spec.ts`'s `startPreviewServer()`; needs the fresh
+  `build:wasm → build-q2-preview-spa → build --bin q2` chain. (Boot path already covered at
+  jsdom: `q2-preview-spa/src/p3-2-depth-cursor-spa.integration.test.tsx`.)
+- [ ] **WASM round-trip snapshot** (§3c; Tier-2): edit an unlocked multi-line blockquote
+  child → commit → blocks outside the quote byte-verbatim, quote re-wrapped (`> `-rewrap).
+  Production path verified at the Rust tier (P3.1 `regenerate_nested_buffers` + `write_single_block`);
+  this is the end-to-end iframe→WASM→commit round-trip.
+- [ ] **Breadcrumb geometry** (§3d; `hub-client/e2e`, real layout): chip positioned above the
+  active edit surface (chip bottom aligned to the surface top, negative `top`), never occluding
+  line 1, page-margin at the document top. Production positioning shipped `56eb2d3a`.
+- [ ] **Breadcrumb event-isolation + real cross-platform key-chords** (§3b/§3d; `hub-client/e2e`):
+  `stopPropagation`/`preventDefault` so the host's delegated pointer handlers never see chip
+  clicks (no leaf-reset / click-switch; no blur-commit on a button press); the depth chords
+  (macOS `Cmd+Ctrl+←/→`, Win/Linux `Alt+Shift+←/→`) move depth **and** native word/line-select
+  still works on each platform. Production isolation shipped `56eb2d3a`; jsdom can't fail-on-revert
+  pointer isolation (`fireEvent.click` fires no pointer events / no focus move), hence this tier.
+- [ ] **Unlocked §3b sub-clauses** (RTL candidates, currently covered only structurally):
+  click-outside-the-active-subtree resets to that area's **leaf** in unlocked mode; an
+  **ancestor-only** structural change re-derives the breadcrumb path with the cursor unchanged.
+  Both are jsdom-testable (low risk) — RTL, not strictly Playwright.
+- [ ] **(cross-ref) Collapsed-region drop** (from P2.3b — see the §2b/Self-heal deferral notes):
+  a collaborator re-render that moves the active *unchanged* edited block into a `display:none`
+  region → drop, measuring `activeEditRegionRef`'s box after the re-anchor remount. Needs real
+  layout. Already removed from the P2.3b inline check; this is the remaining browser-tier piece.
 
 ---
 

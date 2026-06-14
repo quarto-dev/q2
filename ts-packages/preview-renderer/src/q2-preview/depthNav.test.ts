@@ -343,3 +343,95 @@ describe('buildDepthCommitDestination', () => {
 
 // ── Need to import beforeAll ──────────────────────────────────────────────────
 import { beforeAll } from 'vitest';
+
+// ── buildAncestorPath / labelForSourceNode ────────────────────────────────────
+
+import { buildSourceIndex } from './sourceIndex';
+import { buildAncestorPath, labelForSourceNode } from './depthNav';
+
+// Fixture AST: Div#sec ⊃ BlockQuote ⊃ Para
+// Pool ranges are strictly nested: Div[0,40] ⊃ BlockQuote[10,38] ⊃ Para[12,36]
+const ANCESTOR_AST = {
+  'pandoc-api-version': [1, 23, 0],
+  meta: {},
+  blocks: [
+    {
+      t: 'Div',
+      c: [['sec', [], []], [   // Attr id="sec"
+        {
+          t: 'BlockQuote',
+          c: [
+            { t: 'Para', c: [{ t: 'Str', c: 'hello' }], s: 2 },
+          ],
+          s: 1,
+        },
+      ]],
+      s: 0,
+    },
+  ],
+  astContext: {
+    p: [
+      { t: 0, r: [0, 40], d: 0 },   // pool[0] Div         siKey 0:0-40:0
+      { t: 0, r: [10, 38], d: 0 },  // pool[1] BlockQuote  siKey 0:10-38:0
+      { t: 0, r: [12, 36], d: 0 },  // pool[2] Para        siKey 0:12-36:0
+    ],
+  },
+};
+const SI = buildSourceIndex(JSON.stringify(ANCESTOR_AST))!;
+
+describe('buildAncestorPath', () => {
+  it('cursor=Para(12,36) → full path [Div#sec, BlockQuote, Para]', () => {
+    expect(buildAncestorPath(SI, 12, 36)).toEqual([
+      { label: 'Div#sec',    r0: 0,  r1: 40, isCurrent: false },
+      { label: 'BlockQuote', r0: 10, r1: 38, isCurrent: false },
+      { label: 'Para',       r0: 12, r1: 36, isCurrent: true  },
+    ]);
+  });
+
+  it('cursor=Div(0,40) (outermost) → single crumb [Div#sec]', () => {
+    expect(buildAncestorPath(SI, 0, 40)).toEqual([
+      { label: 'Div#sec', r0: 0, r1: 40, isCurrent: true },
+    ]);
+  });
+
+  it('cursor=BlockQuote(10,38) → [Div#sec(false), BlockQuote(true)]', () => {
+    expect(buildAncestorPath(SI, 10, 38)).toEqual([
+      { label: 'Div#sec',    r0: 0,  r1: 40, isCurrent: false },
+      { label: 'BlockQuote', r0: 10, r1: 38, isCurrent: true  },
+    ]);
+  });
+
+  it('null sourceIndex → []', () => {
+    expect(buildAncestorPath(null, 12, 36)).toEqual([]);
+  });
+
+  it('undefined sourceIndex → []', () => {
+    expect(buildAncestorPath(undefined, 12, 36)).toEqual([]);
+  });
+});
+
+describe('labelForSourceNode', () => {
+  it('Para with no Attr slot → "Para"', () => {
+    expect(labelForSourceNode({ t: 'Para', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('Para');
+  });
+
+  it('Div with id="myid" and class → id wins, returns "Div#myid"', () => {
+    expect(labelForSourceNode({ t: 'Div', c: [['myid', ['note'], []], []] } as unknown as import('../framework/types').BlockNode)).toBe('Div#myid');
+  });
+
+  it('Div with no id but classes → first class, returns "Div.note"', () => {
+    expect(labelForSourceNode({ t: 'Div', c: [['', ['note', 'tip'], []], []] } as unknown as import('../framework/types').BlockNode)).toBe('Div.note');
+  });
+
+  it('Div with empty Attr (no id, no classes) → "Div"', () => {
+    expect(labelForSourceNode({ t: 'Div', c: [['', [], []], []] } as unknown as import('../framework/types').BlockNode)).toBe('Div');
+  });
+
+  it('Header with Attr at c[1] with id → "Header#h-id"', () => {
+    expect(labelForSourceNode({ t: 'Header', c: [2, ['h-id', [], []], []] } as unknown as import('../framework/types').BlockNode)).toBe('Header#h-id');
+  });
+
+  it('BlockQuote with no Attr slot → "BlockQuote"', () => {
+    expect(labelForSourceNode({ t: 'BlockQuote', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('BlockQuote');
+  });
+});
