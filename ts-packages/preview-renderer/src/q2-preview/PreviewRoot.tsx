@@ -421,7 +421,6 @@ export function PreviewRoot(props: PreviewRootProps) {
         exitColumn: number,
         draft: string,
         isDirty: boolean,
-        sourceInfoJson: string,
     ) => {
         const et = editTargetRef.current;
         if (!et) return;
@@ -494,10 +493,21 @@ export function PreviewRoot(props: PreviewRootProps) {
             };
 
             // Commit the edit and close the editor.
+            // Use the LIVE identity from editTargetRef.current (via buildDepthCommitDestination)
+            // rather than the per-render closure sourceInfoJson. For editable blocks (t=0, d=0)
+            // the two are string-identical (see commit-destination-equivalence.test.ts), but the
+            // live form anchors to the self-healed identity in every reachable commit state.
+            const dest = buildDepthCommitDestination(editTargetRef.current);
+            if (dest === null) {
+                // No active target — skip commit and abort the move.
+                editDraftRef.current = null;
+                setEditTargetRaw(null);
+                return;
+            }
             const payload: PreviewNodeEditPayload = {
                 __isPreviewNodeEdit: true,
                 channel: 'text',
-                destinationSourceInfoJson: sourceInfoJson,
+                destinationSourceInfoJson: dest,
                 newText: normalizeLineEndings(draft),
             };
             setAstRef.current(payload as unknown as PandocAST);
@@ -599,7 +609,7 @@ export function PreviewRoot(props: PreviewRootProps) {
      *             B is before A → destLine = L_B, direction='down'
      *             (B's bytes are unaffected by A's edit; first-tile-at/after resolves exactly).
      */
-    const handleClickSwitchBlur = useCallback((draft: string, sourceInfoJson: string): boolean => {
+    const handleClickSwitchBlur = useCallback((draft: string): boolean => {
         const cs = clickSwitchRef.current;
         if (cs === null) return false; // no pending click-switch
 
@@ -662,10 +672,25 @@ export function PreviewRoot(props: PreviewRootProps) {
         }, 250);
 
         // Commit A (same wire format as requestMove's dirty path).
+        // Use the LIVE identity from editTargetRef.current (via buildDepthCommitDestination)
+        // rather than the per-render closure sourceInfoJson. At this point editTargetRef.current
+        // is still A's identity (the editor is closing A, not B) — correct to use here.
+        // For editable blocks (t=0, d=0) the two are string-identical
+        // (see commit-destination-equivalence.test.ts), but the live form anchors to
+        // the self-healed identity in every reachable commit state.
+        const destA = buildDepthCommitDestination(editTargetRef.current);
+        if (destA === null) {
+            // No active target — skip commit and clean up.
+            editDraftRef.current = null;
+            setEditTargetRaw(null);
+            dirtySwitchHandledRef.current = true;
+            clickSwitchRef.current = null;
+            return true;
+        }
         const payload: PreviewNodeEditPayload = {
             __isPreviewNodeEdit: true,
             channel: 'text',
-            destinationSourceInfoJson: sourceInfoJson,
+            destinationSourceInfoJson: destA,
             newText: normalizeLineEndings(draft),
         };
         setAstRef.current(payload as unknown as PandocAST);

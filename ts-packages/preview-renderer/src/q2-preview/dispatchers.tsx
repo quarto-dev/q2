@@ -11,7 +11,7 @@ import { PreviewContext } from './PreviewContext';
 import type { PreviewContextValue, ResolvedSource } from './PreviewContext';
 import { normalizeLineEndings } from '../utils/normalizeLineEndings';
 import { isOnFirstVisualLine, isOnLastVisualLine, getLogicalColumn, placeCaretAtColumn } from './caretGeometry';
-import { classifyDepthKey, detectPlatform } from './depthNav';
+import { buildDepthCommitDestination, classifyDepthKey, detectPlatform } from './depthNav';
 
 // P3.3 §3b: detect platform once at module load so classifyDepthKey can
 // distinguish mac (Cmd+Ctrl) from other (Alt+Shift) depth chords.
@@ -169,19 +169,26 @@ function EditTextarea({
         // NOTHING at all: neither cancels nor commits.
         //
         // Without hoisting, the cancel branch (draft === anchorSlice) could fire
-        // from a stale textarea whose onBlur triggers during a self-heal re-anchor
-        // (KEEP with anchorR0 shift). The stale textarea's draft equals anchorSlice
-        // (unmodified), so it would hit the cancel branch and call setEditTarget!(null),
-        // closing the editor that self-heal just re-anchored — even though the
-        // re-anchored editor should stay open.
+        // from a stale textarea and call setEditTarget!(null), closing an editor
+        // that a concurrent operation (e.g. self-heal re-anchor) just opened.
+        //
+        // EMPIRICAL REALITY (jsdom + Chromium fail-on-revert proven):
+        //   React does NOT invoke onBlur on a component's prop when that component
+        //   is unmounted by a re-render (collaborator-shift). The "stale teardown
+        //   blur" from a re-render-driven unmount does NOT occur in either tier.
+        //
+        // The guard's ACTUAL load-bearing role:
+        //   The self-heal DROP path calls tile.focus() to restore focus. That
+        //   moves focus off a STILL-MOUNTED textarea → a real browser onBlur →
+        //   commitIfDirty is called. At that point editTargetRef.current is null
+        //   (cleared by setEditTargetRaw(null) in the DROP branch). The guard
+        //   detects null → no-op, preventing a stale commit to the now-dropped
+        //   block. (Tested in p2-3b-real.integration.test.tsx §4, fail-on-revert-proven.)
         //
         // Staleness is detected by comparing editTargetRef.current.anchorR0 (the
         // current active target) against resolved.sourceEntry.r[0] (this textarea's
         // r0 from its render closure):
         //   - DROP: editTargetRef.current is null → stale → no-op.
-        //   - KEEP with shift: editTargetRef.current.anchorR0 is the new r0 (e.g.
-        //     10), resolved.sourceEntry.r[0] is the old r0 (e.g. 6) → mismatch →
-        //     stale → no-op. The draft survives in editDraftRef.
         //   - Active textarea: anchorR0 matches → proceed to cancel/commit logic.
         //
         // Guard is skipped when editTargetRef is not in context (e.g. legacy test
@@ -203,14 +210,29 @@ function EditTextarea({
             ctx.setEditTarget!(null);
             return;
         }
-        // P3.3: in unlockDepthCursor mode, use commitDepthEdit (builds destination from
-        // the LIVE editTargetRef.current) instead of the per-render-closure commitTextEdit.
-        // This prevents stale byte-range commits when the block shifts between open and blur.
-        if (ctx.unlockDepthCursor && ctx.commitDepthEdit) {
-            ctx.commitDepthEdit(text);
+        // Self-heal-on-write hardening: build the commit destination from the LIVE
+        // edit target (editTargetRef.current) via buildDepthCommitDestination. This is equivalent
+        // to JSON.stringify(resolved.sourceEntry) for every editable block (t=0, d=0)
+        // — proven by commit-destination-equivalence.test.ts — but anchors to the
+        // self-healed identity rather than the per-render closure snapshot.
+        //
+        // When editTargetRef is absent (legacy test harnesses that provide a partial
+        // PreviewContextValue), fall back to the closure form so existing tests pass.
+        let dest: string;
+        if (ctx.editTargetRef !== undefined) {
+            const liveDest = buildDepthCommitDestination(ctx.editTargetRef.current);
+            if (liveDest === null) {
+                // Guard above passed but ref raced to null — skip.
+                ctx.setEditTarget!(null);
+                return;
+            }
+            dest = liveDest;
         } else {
-            ctx.commitTextEdit!(JSON.stringify(resolved.sourceEntry), normalizeLineEndings(text));
+            // Legacy harness fallback: closure form (string-identical to live form for
+            // all editable blocks, see commit-destination-equivalence.test.ts).
+            dest = JSON.stringify(resolved.sourceEntry);
         }
+        ctx.commitTextEdit!(dest, normalizeLineEndings(text));
         ctx.setEditTarget!(null);
     };
 
@@ -242,8 +264,7 @@ function EditTextarea({
                 // P2.4d: check for a pending click-switch FIRST. If a dirty switch is in
                 // progress, handleClickSwitchBlur commits A, stashes B's landing, and closes
                 // the editor — all in one shot. Returns true when consumed (skip normal path).
-                const sourceInfoJson = JSON.stringify(resolved.sourceEntry);
-                if (ctx.handleClickSwitchBlur?.(draft, sourceInfoJson)) {
+                if (ctx.handleClickSwitchBlur?.(draft)) {
                     return; // dirty click-switch handled — do NOT also focus-restore or commitIfDirty
                 }
                 // P2.4c: stash focus restore BEFORE commitIfDirty closes the editor.
@@ -306,7 +327,6 @@ function EditTextarea({
                             exitColumn,
                             draft,
                             isDirty,
-                            JSON.stringify(resolved.sourceEntry),
                         );
                         // Note: a move is NOT a plain close — requestFocusRestore is NOT
                         // called here. The move stashes intent:'activate' via requestMove.

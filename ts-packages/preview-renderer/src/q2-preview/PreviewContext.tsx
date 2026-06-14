@@ -185,7 +185,6 @@ export interface PreviewContextValue {
         exitColumn: number,
         draft: string,
         isDirty: boolean,
-        sourceInfoJson: string,
     ) => void;
     /**
      * P2.4b: pending caret hint. Set by the hop/reland just before opening
@@ -254,7 +253,7 @@ export interface PreviewContextValue {
      * @param sourceInfoJson   JSON.stringify(resolved.sourceEntry) — same value
      *                         that `commitTextEdit` receives.
      */
-    handleClickSwitchBlur?: (draft: string, sourceInfoJson: string) => boolean;
+    handleClickSwitchBlur?: (draft: string) => boolean;
     /**
      * P2.4d: check and clear the dirty-switch-handled flag.
      *

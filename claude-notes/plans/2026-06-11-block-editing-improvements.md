@@ -681,6 +681,61 @@ so even the live re-anchored offset can be stale *at the parent* across a truly 
 positions) — see *Deferred*. This follow-up closes the **within-iframe** window (the recurring one);
 cursors close the **cross-actor** window (the rare, hard one).
 
+#### TDD work items (verify-then-fix; decided 2026-06-13 — execute BEFORE P3.4)
+
+> **Follow-the-consequences finding (2026-06-13).** Swapping the commit destination from the render
+> closure to the live `editTargetRef.current` does **NOT** fix the headline stale write on its own. Trace:
+> an external structural edit triggers render N with the block's *new* offset; `editTarget` state is
+> still the old one and the self-heal effect hasn't run, so `isBlockEditTarget` goes false → the
+> index-keyed textarea **unmounts in render N's commit** → its `onBlur` fires; at that instant
+> `editTargetRef.current` is *still* the old r0 (re-anchor happens in the *later* layout effect). So the
+> live identity is **also** pre-re-anchor — closure and live both point at `[old]`. The load-bearing fix
+> is the plan's **bullet 2: "a teardown/unmount blur must never write"** (distinguish an intentional
+> commit from a React-unmount blur). The destination→live-identity swap is the clean *form*, not the fix.
+> This also contradicts the section's "the guard collapses to the trivial 'is there still an active
+> target?'" — a per-instance "am I still the active instance?" check is still required.
+
+> **OUTCOME (2026-06-13, executed verify-then-fix).** The headline teardown-blur stale write is
+> **structurally UNREACHABLE — in both jsdom AND Chromium** — for a reason neither the plan nor the
+> intermediate traces predicted: **React does not invoke a component's `onBlur` prop on a re-render-driven
+> unmount.** The native DOM blur fires in Chromium (capture-phase listener saw it), but React's delegated
+> focusout does not re-dispatch to the removed fiber, so `commitIfDirty` is **never called** on the
+> collaborator-shift unmount. Proven via **fail-on-revert in Chromium**: an instrumented `COMMITIFDIRTY_PROBE`
+> stayed empty across runs, and reverting the P2.3b guard produced **no** stale write (so the earlier
+> "the guard catches it via re-anchor ordering" explanation was wrong — the guard isn't even reached on
+> that path). The guard's REAL load-bearing role is the self-heal **DROP** path's explicit `tile.focus()`
+> (moves focus off a *still-mounted* textarea → real `onBlur` → commit → guard suppresses), tested in
+> `p2-3b-real.integration.test.tsx` §4. The contradictory guard-comment and the "collapses to trivial"
+> claim are corrected.
+
+- [x] **Reproduce first (real `PreviewRoot`, TDD).** DONE → **NOT reproducible** in either tier.
+  jsdom: `self-heal-on-write.integration.test.tsx` Probe (A) — onBlur spy = 0 on React unmount (binding
+  mechanism assertion). Chromium: `hub-client/e2e/q2-preview-self-heal-on-write.spec.ts` + a fail-on-revert
+  guard-removal experiment — no `commitIfDirty` call, no stale write. Verdict + mechanism above.
+- [x] **If reproduced → fix:** N/A (not reproduced). The teardown-blur-no-write fix is unnecessary —
+  there is no teardown blur to gate.
+- [x] **Downgrade → behavior-equivalent live-identity refactor (user chose to do it as
+  correctness-by-construction hardening, 2026-06-13).** All THREE default text commit paths
+  (`commitIfDirty`, `requestMove` dirty commit, `handleClickSwitchBlur`) now build their destination from
+  the live `editTargetRef.current` via `buildDepthCommitDestination` instead of the per-render closure —
+  unifying with P3.3's `commitDepthEdit`. **Provably behavior-equivalent + safe:** the Rust matcher
+  (`apply_node_edit.rs`) reads only `t`/`r`/`d` (extra fields ignored), and `sourceIndex.ts` only makes
+  `t:0,d:0` blocks editable, so the live form string-matches the closure form for every editable block —
+  asserted by `commit-destination-equivalence.test.ts`. It is *hardening* (removes a latent stale-snapshot
+  hazard), NOT an active-bug fix; closure ≡ live in every reachable commit state, so it is **not**
+  behaviorally fail-on-revert-able (stated honestly, no fake red line). Guard-comment + jsdom-probe
+  comments corrected to the empirical reality.
+- [x] **Out of scope (decided 2026-06-13):** `commitSubtreeEdit` left as-is (programmatic
+  `usePreviewEdit` path, no active text editor → live-identity doesn't apply).
+- [x] **No regression:** preview-renderer **355 unit + 368 integration + typecheck** green; existing
+  `p2-3b` KEEP/DROP/commit-guard tests stay green. Rust-free (no Rust/WASM delta).
+- [~] **Browser-tier self-heal-KEEP guard — REVEALED A REAL BUG, deferred (bd-k1evg0g1).** The reshaped
+  `q2-preview-self-heal-on-write.spec.ts` (real hub + Automerge) asserts self-heal KEEP survives a real
+  collaborator shift. It FAILS — exposing that `findReanchorCandidate` DROPs a TOP-LEVEL block when a
+  preceding block shifts past the active block's old `anchorR0` (see the corrected watch-item below). Left
+  in the suite as a `test.fail()` tripwire (flips green when bd-k1evg0g1 lands). NOT in scope for
+  self-heal-on-write (a read/re-anchor bug, not the write path).
+
 ---
 
 ## Phase 3 — "Depth cursor (nested blocks)" unlock (flagged)
@@ -893,14 +948,24 @@ before any live `q2 preview` check. Phases 1–2 are Rust-free → `--skip-hub-b
 plus the hub-client JS suites suffice.
 
 ## Risks / watch-items
-- **Nested-child self-heal DROP on a concurrent insert above (found 2026-06-13, P3.3; NEW with the
-  depth cursor).** Self-heal identifies the active node by `findReanchorCandidate` (`lockedTiles.ts`):
+- **Self-heal DROP on a concurrent insert-above — `findReanchorCandidate` single-nearest (found
+  2026-06-13; tracked as bd-k1evg0g1; BROADER than first documented).** ⚠ **Correction (2026-06-13):**
+  this was initially scoped to nested children with "Phase-2 locked editing unaffected" — that is **wrong.**
+  The browser-tier e2e `q2-preview-self-heal-on-write.spec.ts` demonstrated the SAME DROP on a **top-level
+  Phase-2 paragraph**: a collaborator insert-above large enough that a *preceding* sibling's new `r[0]`
+  lands ≥ the active block's old `anchorR0` puts the wrong block in the "nearest" slot → content-verify
+  fails → DROP. The jsdom KEEP test (`p2-3b-real` §3 case b) passes **only because its tiny fixture's
+  insert (4 bytes) is smaller than the inter-block gap (6 bytes)** — a fixture artifact that masked the
+  bug; a realistic-sized insert (28 B > 19 B gap) triggers it. The fix (candidate (a) below) is now
+  tracked in **bd-k1evg0g1** with the e2e as its `test.fail()` tripwire. Original mechanism (still
+  accurate): Self-heal identifies the active node by `findReanchorCandidate` (`lockedTiles.ts`):
   the *single* nearest pool entry `r[0] >= anchorR0`, then content-verify against `anchorSlice`. For a
   NESTED child (depth-edited), a concurrent edit inserting ≥ the marker gap (~2 bytes) ABOVE the
   container shifts the *container's* `r[0]` into the "nearest" slot; it fails content-verify (whole-
   container ≠ child) and there is **no scan onward to the child** → the child's in-flight edit is
-  **dropped**, even though the child still exists unchanged. Phase-2 locked editing is unaffected (you
-  edit whole containers, which self-match). Surfaced by `p3-3-seeding` test 5, which was therefore built
+  **dropped**, even though the child still exists unchanged. **The same single-nearest flaw drops
+  top-level Phase-2 blocks too** (corrected above): any active block drops when a preceding block shifts
+  to ≥ its old `anchorR0`. Surfaced by `p3-3-seeding` test 5, which was therefore built
   on a top-level-para fixture (with a synthetic buffer) to exercise the controlled-value invariant in a
   KEEP regime; the nested-DROP case is **documented, not fixed** (the fix touches Phase-2 self-heal,
   outside P3.3's "self-heal identical to Phase 2" scope). Two candidate fixes: (a) make

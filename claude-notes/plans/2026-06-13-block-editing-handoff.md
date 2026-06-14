@@ -1,7 +1,7 @@
 # Hand-off: block-editing execution (Phase 2 done → Phase 3)
 
-**Updated:** 2026-06-13 (Phase 2 done; **Phase 3 P3.1 + P3.2 + P3.3 done and green; P3.4 next** — see the
-START-HERE block below). **Plan:** `claude-notes/plans/2026-06-11-block-editing-improvements.md`
+**Updated:** 2026-06-13 (Phase 2 done; **Phase 3 P3.1 + P3.2 + P3.3 done and green; self-heal-on-write →
+P3.4 next** — see the START-HERE block below). **Plan:** `claude-notes/plans/2026-06-11-block-editing-improvements.md`
 (symlinked `CURRENT.md`). Read that plan, then this file — this is the *execution* companion: how we
 work, what's done, the testing rules we learned the hard way, and curated facts so you don't re-derive
 them.
@@ -10,8 +10,8 @@ them.
 
 ## Phase 3 progress — START HERE (updated 2026-06-13, end of impl session)
 
-**P3.1 + P3.2 + P3.3 are DONE and green (jsdom tier). P3.4 (breadcrumb) is next.** This block
-supersedes the "warming up / not started" framing above.
+**P3.1 + P3.2 + P3.3 are DONE and green (jsdom tier). NEXT: do _self-heal on write_ (verify-then-fix)
+FIRST, then P3.4 (breadcrumb) — see the "NEXT SESSION" block below.**
 
 **Commits (on `feature/block-editing-improvements`):**
 - **P3.1** (Rust `regenerate_nested_buffers` + WASM export + JS `regenerateNestedBuffers`):
@@ -47,6 +47,77 @@ P3.2 verification — re-run before relying on them.)* Gating independently re-v
   addressed relocation via a position-independent AST-subtree hash from q2's reconciliation/coarsen
   pipeline. An investigation prompt for (b) was drafted this session (ask the user; not yet dispatched).
 
+---
+
+## NEXT SESSION — do these in order
+
+### Task 1 (FIRST): "Self-heal on write" — VERIFY-THEN-FIX (decided 2026-06-13)
+
+The plan's **"Self-heal on write"** subsection (just before `## Phase 3`) is the architectural follow-up
+to *complete the identity migration for WRITES* (reads already track the self-healed location). Its
+TDD checklist now lives there. **Approach is verify-then-fix, not build-blind.** It is distinct from the
+nested-child DROP above: that's a *read*/re-anchor failure (editor closes); this is a *write* failure
+(a stale commit to the wrong byte range). Doing this is **not** what fixes the nested-child DROP.
+
+**Load-bearing finding from this session's follow-the-consequences (do not re-derive — verify it):**
+the plan's headline fix (commit destination = live `editTargetRef.current` instead of the render
+closure) does **NOT** fix the stale write by itself. Trace: an external structural edit → render N with
+the block's *new* offset; `editTarget` state is still old and the self-heal effect hasn't run, so
+`isBlockEditTarget` goes false → the index-keyed textarea **unmounts in render N's commit** → its
+`onBlur` fires while `editTargetRef.current` is *still* the old r0 (re-anchor is in the *later* layout
+effect). So closure AND live identity both point at `[old]` at that instant — the destination swap is
+the clean *form*, not the fix. **The fix is "a teardown/unmount blur must never write"** (intentional
+commit vs React-unmount blur). This also means the section's "the guard collapses to the trivial 'is
+there still an active target?'" is wrong — a per-instance "am I still the active instance?" check stays.
+
+**Step 1 — reproduce (real `PreviewRoot`).** Dirty editor + external insert above the active block
+(offset shifts, textarea remounts); assert whether the teardown `onBlur` fires a stale `commitTextEdit`
+to the OLD byte range. This resolves a real contradiction: the P2.3b `commitIfDirty` guard *comment*
+claims KEEP-with-shift no-ops, but the render/effect ordering says the unmount precedes the re-anchor so
+the guard *passes*. **If jsdom's blur-on-unmount doesn't fire like a browser, say so and move it to
+Playwright — do not fake a jsdom pass** (this is exactly the jsdom-blind-spot class that bit P2.5b).
+
+**Step 2 — branch on the result:** reproduced → implement teardown-blur-no-write for the three
+TEXT-editor commit paths (`commitIfDirty` locked branch, `requestMove` dirty commit,
+`handleClickSwitchBlur`) + build their destination from live `editTargetRef.current`; fail-on-revert
+each; fix the contradictory guard-comment. Not reproduced → downgrade to the behavior-equivalent
+clarity refactor or skip, and correct the comment. **`commitSubtreeEdit` is OUT OF SCOPE** (decided
+2026-06-13: programmatic `usePreviewEdit` path, not tied to the active editor → live-identity doesn't
+apply). Rust-free → `cargo xtask verify --skip-hub-build` suffices.
+
+### Task 2: P3.4 — breadcrumb floating toolbar (§3d)
+
+Re-read **§3d** in the plan. A chip shown ONLY when `unlockDepthCursor` is on, that surfaces and
+operates the depth cursor. Key build notes (consequences traced 2026-06-13):
+- **Event isolation:** the chip `stopPropagation`s on its OWN pointer handlers so the host's delegated
+  `onPointerUp`/`onPointerDown` (in `useBlockEditHover`) never see a chip click as a leaf-reset /
+  click-switch. Works as a normal child or a React portal (React propagation follows the React tree).
+- **Position:** absolutely positioned, anchored above the active surface's top-left (chip bottom edge =
+  surface top, negative `top`), never in document flow (zero reflow). The active surface is the edit
+  wrapper — use `activeEditRegionRef`. At the very top of the doc it sits in the page margin (no flip).
+  **Geometry is environment → Playwright; jsdom can't verify placement.**
+- **AST-derived path:** shows `Section › Div › Paragraph` (current level highlighted), derived from the
+  AST each render. `depthNav` gives the *ranges* but NOT labels — P3.4 needs an **ancestor-PATH helper
+  that returns the ordered path nodes with labels** (node type `t` + id/class from the AST attr). The
+  labels need `sourceNode` (type + attr), which `sourceIndex` carries per entry — so extend `depthNav`
+  (or add a sibling) to map the range-path → `sourceIndex` entries → `sourceNode` → label.
+- **Buttons + crumb-click:** `◀` (out) / `▶` (in) call the existing `ctx.requestDepthMove('out'|'in')`;
+  the platform shortcut is each button's tooltip (discoverability + the touch affordance — touch has no
+  modifiers). **Crumb-click "jumps to that depth"** = a NEW capability (requestDepthMove only steps one
+  level) → add a `requestDepthSelect(r0,r1)` (or jump-to-anchor) that re-targets directly; factor the
+  re-target core out of `requestDepthMove` and share it. `leafAnchorR0` is unchanged by a jump (a later
+  "in" still descends toward the original clicked leaf).
+- **Tier:** the AST-path derivation + button→requestDepthMove + crumb-click→requestDepthSelect are
+  jsdom/RTL-testable; chip geometry + the real chords/tooltips are Playwright (P3.5).
+
+### Task 3 (later): P3.5 — Playwright + WASM e2e
+
+Cross-platform chord bindings (assert native word/line-select still works per platform), soft-wrap
+last-visual-line, chip geometry, and the WASM round-trip (nested edit → clean `> `-rewrapped commit).
+Needs the full `build:wasm → build-q2-preview-spa → build --bin q2` chain + a browser.
+
+---
+
 **Decisions / gotchas the next session must know:**
 - **P3.1:** the reviewer-suggested `Figure.caption.long` descent was *reverted* — untestable with
   this parser (a Figure under a prefixing container is emitted whole regardless; no caption-only
@@ -61,21 +132,8 @@ P3.2 verification — re-run before relying on them.)* Gating independently re-v
   `@quarto/preview-runtime` MUST stub `regenerateNestedBuffers` or it throws "No export defined" (this
   was a 47-test SPA regression — fixed in `b66f898a`; **always verify against the full CI config, not a
   narrow scope**).
-- **PreviewContext now EXPOSES `unlockDepthCursor` + `nestedEditBuffers`** but nothing CONSUMES them yet
-  (no leaf-click/depth-key/draft-seed/commit). That consumption is P3.3.
 
-**P3.3 — read these BEFORE wiring anything:** plan §3b/§3c **and** the new **"Self-heal on write"**
-subsection (plan ~`:647`, immediately before `## Phase 3`). The load-bearing rule: the §3c
-regenerated-buffer commit is a NEW write path — source its destination from the **live**
-`editTargetRef.current` (`{t:0, r:[anchorR0, anchorR1], d:0}`, no-op if null), **never** a per-render
-`resolved.sourceEntry` closure. Do NOT refactor the existing `EditTextarea` commit (separate Phase-2
-follow-up); just don't inherit the closure pattern. Then: seed `draft = nestedEditBuffers?.[siKey] ??
-normalize(sliceBytes(...))` at `activate`; leaf resolution (no coincidence-climb / no prefixing-atomic);
-`leafAnchorR0` scalar for "in"; depth keys (**macOS `Cmd+Ctrl+←/→`**, **Win/Linux `Alt+Shift+←/→`**),
-clamp at keypress, AST path derived each render (no stored depth). Tier: jsdom real-`PreviewRoot` for
-logic; the key-bindings + breadcrumb geometry are environment → Playwright (P3.5).
-
-**Durable implementation notes for P3.3/P3.4 (fold into the implementer prompt):**
+**Durable implementation notes for P3.4 (fold into the implementer prompt):**
 - **Extract the testable logic as pure functions** — e.g. the AST ancestor-path walk, the clamp, the
   "which child range contains `leafAnchorR0`", the commit-destination builder from `editTargetRef.current`
   — and test those directly. Precedent: P3.2's `computeNestedEditBuffers`. Keeps tests off fragile
@@ -102,8 +160,6 @@ One Phase-2 item is **deferred** (not blocking): the collapsed-region self-heal 
 tracked in the plan + a `PreviewRoot.tsx` comment). A **test-binding audit** of the Phase-2
 behaviors runs in a separate detached worktree `.worktrees/block-editing-audit` (it reverts production
 in isolation, so it won't disturb this branch) — do not touch it; let its findings land via its own branch.
-
-**Phase 3 has started: P3.1 + P3.2 + P3.3 are done and green (see START-HERE above).** P3.4 (breadcrumb) is next.
 
 ---
 
@@ -279,47 +335,15 @@ behind a default-off setting so the expensive WASM regeneration path is unreacha
 (Decision recap: blockquotes/lists are *atomic* in the default; only the outermost prefixing container
 has a clean byte-slice, so descending requires regeneration — hence the flag. See §5.)
 
-Entry points (verified present): `crates/pampa/src/writers/qmd.rs::write_single_block` (~:2392, public,
-fresh context = no `> `/indent prefixer); WASM `crates/wasm-quarto-hub-client/src/lib.rs::apply_node_edit`
-(~:2938) as the export model; `ts-packages/preview-runtime/src/wasmRenderer.ts` for the JS wrapper.
-
-**Suggested decomposition (each a review-gated subtask; sonnet implementers):**
-- **P3.1 (Rust/WASM)** — `pampa::regenerate_nested_buffers(content, untransformed_ast_json) -> String`
-  (JSON `{siKey: cleanQmd}`) via `write_single_block`→`trim_end`. Restriction: block has a prefixing
-  ancestor (fenced `:::` excluded) AND is multi-line; no reachability filter in Rust (over-inclusion
-  harmless). `siKey` = `serializeSourceEntry` format `"0:<r0>-<r1>:0"`. WASM export mirroring
-  `apply_node_edit`; JS wrapper `regenerateNestedBuffers` in `wasmRenderer.ts`. **Logic-dominated →
-  Rust unit tests** (siKey contract; source fidelity for shortcode/math/raw/code-blocks; offset-domain).
-- **P3.2 (setting + threading — BOTH hosts)** — `unlockDepthCursor:boolean` (default false), two
-  sources feeding the same host-agnostic iframe behavior:
-  - **hub-client:** in `hub-client/src/services/preferences/schema.ts` (+ DEFAULT_PREFERENCES); checkbox
-    in `SettingsTab.tsx` (mirror `errorOverlayCollapsed`); read via `usePreference` (reactive). Reuse
-    the proven `editingDisabled` iframe wire; ADD the missing host leg `ReactPreview → ReactRenderer →
-    Q2PreviewIframe` (hub-client threads no such flag today).
-  - **SPA:** a `?depthCursor=1` URL query param in `PreviewApp.tsx`, read at load, passed **directly**
-    to `Q2PreviewIframe` (the SPA bypasses `ReactRenderer`). Read-at-load = no live toggle (fine).
-  Both pass the **optional** `unlockDepthCursor` + `nestedEditBuffers`; a host with its opt-in off
-  omits them → iframe locked (zero-touch). (Revised 2026-06-13: the SPA depth cursor is in scope —
-  ~20 lines in `PreviewApp.tsx`, reusing the host-agnostic iframe behavior; no Rust/iframe changes.)
-- **P3.3 (behavior when on + buffer gating)** — click resolves to the **leaf** (no coincidence-climb,
-  no prefixing-atomic); identity = same `anchorR0` + a `leafAnchorR0` scalar for "in"; depth keys
-  mutate anchorR0 along the AST path (**macOS `Cmd+Ctrl+←/→`**, **Win/Linux `Alt+Shift+←/→`**), clamp
-  at ends at key-press; path derived from the AST each render (no stored depth/path). Gate the buffer
-  table in a `useMemo` keyed on `[unlockDepthCursor, renderedContent, untransformedAstJson]` (else a
-  module-level shared empty object for referential stability). Seed `draft` from
-  `nestedEditBuffers?.[siKey] ?? slice` at activate. Plumb `nestedEditBuffers` on the UPDATE_AST
-  payload from **both** hosts.
-- **P3.4 (breadcrumb floating toolbar)** — `stopPropagation` on its own pointer handlers; absolutely
-  positioned above the active surface's top-left; AST-derived ancestor path with `◀`/`▶` in/out
-  buttons (+ platform-shortcut tooltips, the touch affordance); shown only when the flag is on.
-- **P3.5 (e2e)** — setting end-to-end; depth keys; WASM round-trip (edit nested blockquote child →
-  clean commit, no `> `); **cross-platform Playwright** for the bindings (verify native word/line-select
-  still work) — environment-dominated, so Playwright is the real test.
-
-See the plan's Phase 3 section for the full TDD checklist.
+**Decomposition:** P3.1 (Rust `regenerate_nested_buffers` + WASM + JS wrapper), P3.2 (setting +
+both-host threading), and P3.3 (depth behavior + regenerated-buffer commit) are **DONE** — see the
+START-HERE commits. The remaining work (self-heal-on-write → P3.4 breadcrumb → P3.5 e2e) is in the
+**"NEXT SESSION — do these in order"** block above; the full TDD checklist is in the plan's Phase 3
+section + the "Self-heal on write" subsection.
 
 **Status:** P3.1 + P3.2 + P3.3 done and green (see the START-HERE block at the top for commits,
-decisions, and caveats). P3.4 (breadcrumb) → P3.5 (Playwright + WASM e2e) remain.
+decisions, and caveats). **Next: "Self-heal on write" (verify-then-fix) → P3.4 (breadcrumb) →
+P3.5 (Playwright + WASM e2e).** See the "NEXT SESSION — do these in order" block at the top.
 
 ---
 
