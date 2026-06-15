@@ -591,7 +591,7 @@ fn add_metadata_to_context_except(meta: &ConfigValue, ctx: &mut TemplateContext,
     if let ConfigValueKind::Map(entries) = &meta.value {
         for entry in entries {
             if !exclude.contains(&entry.key.as_str()) {
-                let value = config_value_to_template_value(&entry.value);
+                let value = metadata_entry_to_template_value(&entry.key, &entry.value);
                 ctx.insert(&entry.key, value);
             }
         }
@@ -627,9 +627,59 @@ fn extract_css_from_meta(meta: &ConfigValue) -> Option<Vec<TemplateValue>> {
 fn add_metadata_to_context(meta: &ConfigValue, ctx: &mut TemplateContext) {
     if let ConfigValueKind::Map(entries) = &meta.value {
         for entry in entries {
-            let value = config_value_to_template_value(&entry.value);
+            let value = metadata_entry_to_template_value(&entry.key, &entry.value);
             ctx.insert(&entry.key, value);
         }
+    }
+}
+
+/// Title-block metadata fields whose inline/block Markdown is rendered to
+/// HTML (rather than flattened to plain text) so that markup like code
+/// spans and emphasis survives into the body title block.
+///
+/// `pagetitle` is deliberately *not* listed: it feeds the head `<title>`
+/// element, where HTML tags are invalid. It is derived as plain text by
+/// `derive_pagetitle` (pampa's `template::config_merge`) and must stay so.
+///
+/// `author`/`date` are out of scope for now (an author can be an object or
+/// list, and also feeds `<meta>` attribute contexts that require plain
+/// text); they continue to flatten via the generic conversion. See
+/// strand bd-5706gcrq.
+const RICH_TITLE_BLOCK_FIELDS: &[&str] = &["title", "subtitle", "abstract"];
+
+/// Convert a metadata entry to a template value, honoring the rich
+/// title-block allowlist. Allowlisted fields whose value is Pandoc
+/// inlines/blocks are rendered to HTML; everything else (and every
+/// non-allowlisted field) uses the generic plain-text conversion.
+fn metadata_entry_to_template_value(key: &str, value: &ConfigValue) -> TemplateValue {
+    if RICH_TITLE_BLOCK_FIELDS.contains(&key)
+        && let Some(html) = titleblock_field_to_html(value)
+    {
+        return TemplateValue::String(html);
+    }
+    config_value_to_template_value(value)
+}
+
+/// Render a title-block field's Pandoc content to an HTML string.
+///
+/// Returns `None` for non-Pandoc values (scalars, arrays, maps, …) so the
+/// caller falls back to the generic conversion. Uses the HTML writer's
+/// default config, which emits no source-location annotations — the head
+/// title block in the CLI render path is unannotated, and preview-path
+/// annotations are tracked separately (bd-z37euevy).
+fn titleblock_field_to_html(value: &ConfigValue) -> Option<String> {
+    match &value.value {
+        ConfigValueKind::PandocInlines(inlines) => {
+            let mut out: Vec<u8> = Vec::new();
+            pampa::writers::html::write_inlines_to(inlines, &mut out).ok()?;
+            Some(String::from_utf8_lossy(&out).into_owned())
+        }
+        ConfigValueKind::PandocBlocks(blocks) => {
+            let mut out: Vec<u8> = Vec::new();
+            pampa::writers::html::write_blocks_to(blocks, &mut out).ok()?;
+            Some(String::from_utf8_lossy(&out).into_owned())
+        }
+        _ => None,
     }
 }
 
@@ -766,6 +816,7 @@ fn blocks_to_text(blocks: &[quarto_pandoc_types::block::Block]) -> String {
 mod tests {
     use super::*;
     use quarto_pandoc_types::ConfigMapEntry;
+    use quarto_pandoc_types::attr::{AttrSourceInfo, empty_attr};
     use quarto_pandoc_types::block::*;
     use quarto_pandoc_types::inline::*;
     use quarto_pandoc_types::{ListNumberDelim, ListNumberStyle};
@@ -2381,6 +2432,150 @@ mod tests {
         assert!(
             !html.contains(r#"<div id="quarto-margin-sidebar""#),
             "sidebar must be absent when neither toc nor categories are set; got: {html}"
+        );
+    }
+
+    // === Rich-Markdown title-block fields (bd-5706gcrq) ===
+    //
+    // Inline-valued title-block metadata (title, subtitle, abstract) must
+    // be rendered to HTML so code spans, emphasis, etc. survive into the
+    // `<h1 class="title">` / `<p class="subtitle">` / abstract block.
+    // Previously these were flattened to plain text by
+    // `config_value_to_template_value`.
+
+    /// A `Code` inline `\`text\``.
+    fn code_inline(text: &str) -> Inline {
+        Inline::Code(Code {
+            attr: empty_attr(),
+            text: text.to_string(),
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    fn str_inline(text: &str) -> Inline {
+        Inline::Str(Str {
+            text: text.to_string(),
+            source_info: dummy_source_info(),
+        })
+    }
+
+    fn entry(key: &str, value: ConfigValue) -> ConfigMapEntry {
+        ConfigMapEntry {
+            key: key.to_string(),
+            key_source: dummy_source_info(),
+            value,
+        }
+    }
+
+    /// Extract the inner text of `<h1 class="title">…</h1>` for assertions.
+    fn h1_title(html: &str) -> String {
+        let open = r#"<h1 class="title">"#;
+        let start = html.find(open).expect("h1 title present") + open.len();
+        let end = html[start..].find("</h1>").expect("h1 closes") + start;
+        html[start..end].to_string()
+    }
+
+    #[test]
+    fn title_code_span_renders_as_html_code_element() {
+        // title: Multiformat branding with `_brand.yml`
+        let title = ConfigValue::new_inlines(
+            vec![
+                str_inline("Multiformat branding with "),
+                code_inline("_brand.yml"),
+            ],
+            dummy_source_info(),
+        );
+        let meta = ConfigValue::new_map(vec![entry("title", title)], dummy_source_info());
+        let html = render_full("<p>body</p>", &meta);
+        assert_eq!(
+            h1_title(&html),
+            "Multiformat branding with <code>_brand.yml</code>",
+            "code span must render as a <code> element in the title h1"
+        );
+    }
+
+    #[test]
+    fn title_emphasis_renders_as_html_em_element() {
+        // title: An *emphatic* title
+        let title = ConfigValue::new_inlines(
+            vec![
+                str_inline("An "),
+                Inline::Emph(Emph {
+                    content: vec![str_inline("emphatic")],
+                    source_info: dummy_source_info(),
+                }),
+                str_inline(" title"),
+            ],
+            dummy_source_info(),
+        );
+        let meta = ConfigValue::new_map(vec![entry("title", title)], dummy_source_info());
+        let html = render_full("<p>body</p>", &meta);
+        assert_eq!(h1_title(&html), "An <em>emphatic</em> title");
+    }
+
+    #[test]
+    fn subtitle_inline_markup_renders_as_html() {
+        let title = ConfigValue::new_inlines(vec![str_inline("Doc")], dummy_source_info());
+        let subtitle = ConfigValue::new_inlines(
+            vec![str_inline("about "), code_inline("things")],
+            dummy_source_info(),
+        );
+        let meta = ConfigValue::new_map(
+            vec![entry("title", title), entry("subtitle", subtitle)],
+            dummy_source_info(),
+        );
+        let html = render_full("<p>body</p>", &meta);
+        assert!(
+            html.contains(r#"<p class="subtitle">about <code>things</code></p>"#),
+            "subtitle code span must render as <code>; got: {html}"
+        );
+    }
+
+    #[test]
+    fn pagetitle_stays_plain_text_when_title_is_rich() {
+        // The head <title> uses `pagetitle`, which must remain plain text
+        // (HTML tags are invalid inside <title>). A rich `title` must not
+        // bleed markup into the head element.
+        let title = ConfigValue::new_inlines(
+            vec![str_inline("Branding with "), code_inline("_brand.yml")],
+            dummy_source_info(),
+        );
+        let meta = ConfigValue::new_map(
+            vec![
+                entry("title", title),
+                entry(
+                    "pagetitle",
+                    ConfigValue::new_string("Branding with _brand.yml", dummy_source_info()),
+                ),
+            ],
+            dummy_source_info(),
+        );
+        let html = render_full("<p>body</p>", &meta);
+        assert!(
+            html.contains("<title>Branding with _brand.yml</title>"),
+            "head <title> must stay plain text; got: {html}"
+        );
+        assert!(
+            !html.contains("<title>Branding with <code>"),
+            "head <title> must not contain markup; got: {html}"
+        );
+    }
+
+    #[test]
+    fn non_titleblock_inline_field_is_not_htmlized() {
+        // Only the allowlisted title-block fields are rendered to HTML.
+        // Arbitrary inline-valued metadata (which may land in attribute
+        // contexts) must keep flattening to plain text via the generic
+        // conversion, so the generic converter is unchanged.
+        let value = ConfigValue::new_inlines(
+            vec![str_inline("plain "), code_inline("code")],
+            dummy_source_info(),
+        );
+        assert_eq!(
+            config_value_to_template_value(&value),
+            TemplateValue::String("plain code".to_string()),
+            "generic conversion must remain plain-text flattening"
         );
     }
 }
