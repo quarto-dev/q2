@@ -6,6 +6,24 @@
 **PR:** [#235](https://github.com/quarto-dev/q2/pull/235)
 **Branch:** `feature/bd-ky14a-pampa-hash-fileids` (this branch)
 **Author of this note:** investigation on 2026-06-15
+**Related in-flight PR:** [#286](https://github.com/quarto-dev/q2/pull/286)
+(block-editing epic) — see §"Entanglement with #286 and the `d === 0`
+assumption" and §"Recommended sequencing".
+
+## TL;DR sequencing recommendation
+
+**Wait for #286 (block-editing epic) to land before merging bd-ky14a.**
+The root entanglement is not a merge conflict — it is a *semantic*
+assumption, "FileId 0 = the document", that #260 wove into the q2-preview
+block-editing source index (`buildSourceIndex` filters `entry.d === 0`;
+lookups pass `d: 0`; the Rust siKey is `"0:{start}-{end}:{file_id}"`).
+bd-ky14a turns `d` from `0` into a hash, which would **silently empty the
+source index** and break block editing / targeted edits in q2-preview.
+#286 is *actively extending* that same `d`-keyed machinery right now, so
+the assumption is a moving target. Land #286 first, let the siKey surface
+settle, then rebase bd-ky14a once and fix the `d`-scheme in one pass.
+(Note: waiting does **not** simplify the hardest *merge conflict* —
+`engine_execution.rs` — which comes from #260, already on `main`.)
 
 ## Why this document exists
 
@@ -150,6 +168,77 @@ Two things still need an explicit audit before declaring this safe:
 - The dead `FileId(0)` argument and its "single-file document" comment
   should be cleaned up (or made real) so the next reader isn't misled.
 
+> **The `apply_node_edit` literal is the *least* of it.** The serious
+> version of this assumption lives on the **frontend**, in the q2-preview
+> block-editing source index — see the next section. That is the one that
+> silently breaks.
+
+### 2b. Entanglement with #260 + #286 — the `d === 0` source-index assumption
+
+This is the entanglement that motivates **waiting for #286** (see
+§"Recommended sequencing"). It is broader than `apply_node_edit` and it
+is not a merge conflict — it is a live, working assumption that bd-ky14a
+silently violates.
+
+**Root cause (already on `main`, from #260).** The q2-preview block
+editor builds a source index keyed by a "siKey" string of the form
+`"<t>:<r0>-<r1>:<d>"`, where `d` is the SourceInfo file_id. In
+`ts-packages/preview-renderer/src/q2-preview/sourceIndex.ts`,
+`buildSourceIndex` only indexes blocks whose pool entry has **`d === 0`**:
+
+```ts
+// sourceIndex.ts (origin/main, from #260)
+const entry = pool[Number(s)];
+if (entry?.t === 0 && entry.d === 0) {        // ← hardcoded "primary file is 0"
+    const key = serializeSourceEntry(entry);  // "0:<r0>-<r1>:0"
+    index.set(key, { sourceNode: block, … });
+}
+```
+
+Under bd-ky14a, every `Original` block's `d` is `hash(filename) ≠ 0`, so
+**no block satisfies `entry.d === 0` → the source index is empty →** every
+hover/click/edit in q2-preview resolves to nothing. The targeted-edit
+feature (#260) silently stops working. No test in pampa/quarto-core
+catches this; it only shows up in a real q2-preview browser session.
+
+**What #286 adds.** #286 (`feature/block-editing-improvements`, the
+epic-closing PR) is **purely additive on the Rust side** (a new
+`crates/pampa/src/regenerate_nested_buffers.rs` + a WASM binding + tests)
+and does **not** touch the FileId machinery, `apply_node_edit`,
+`node_lookup`, the JSON reader, or `engine_execution`. But it *extends the
+same `d`-keyed siKey scheme* with more consumers that bake in `d = 0`:
+
+- `regenerate_nested_buffers.rs` emits map keys as
+  `format!("0:{start}-{end}:{file_id}")` with the comment
+  *"d=file_id (always 0 for single-file docs)"*.
+- Its Rust tests hardcode the expected key as `format!("0:{start}-{end}:0")`
+  (`regenerate_nested_buffers_tests.rs:69,316`) — these **fail** the moment
+  `file_id` becomes a hash.
+- The frontend depth-cursor lookups pass a literal `d: 0`
+  (`PreviewRoot.tsx:747`, `useBlockEditHover.tsx:88`:
+  `serializeSourceEntry({ t: 0, r: [...], d: 0 })`), so even if the Rust
+  map were re-keyed by hash, the frontend would still ask for `:0` and miss.
+
+So #286 does not *create* the entanglement (it's #260's), but it **widens
+the blast radius** and keeps the siKey surface in active flux.
+
+**The clean fix (for the eventual bd-ky14a rebase).** Make the block
+editor scheme-agnostic instead of assuming `0`:
+
+- Drop the `&& entry.d === 0` filter in `buildSourceIndex` — it already has
+  `entry.d` in hand; index every Original block under its real `d`.
+- Replace the hardcoded `d: 0` at lookup sites with the real file_id the
+  frontend already knows (the block's pool entry `d`).
+- Re-key `regenerate_nested_buffers` by the real `file_id` (it already
+  does — the bug is only in the *tests'* hardcoded `:0` and the frontend
+  lookups), and update its tests.
+
+This fix is small and well-contained, but it touches `sourceIndex.ts`,
+`PreviewRoot.tsx`, `useBlockEditHover.tsx`, and the
+`regenerate_nested_buffers` tests — **all files #286 is rewriting.** Doing
+it before #286 lands guarantees a conflict and a re-audit. Hence the
+sequencing recommendation.
+
 ### 3. The 61 snapshot conflicts are NOT mechanical
 
 The PR description frames the snapshot churn as a pure `"d": 0 → "d": <hash>`
@@ -237,6 +326,30 @@ multi-engine loop and won't exercise it.
 **A new test is wanted** for the §2 interaction: an `apply_node_edit`
 round-trip on a document whose primary FileId is a hash (not 0), proving
 the targeted-edit path still locates the destination block.
+
+**A new e2e check is required** for §2b: a real q2-preview browser
+session proving the block-editing source index is non-empty and a
+targeted edit resolves when the primary file's `d` is a hash. This is the
+only thing that catches the "empty source index" regression — no Rust or
+vitest unit test does.
+
+## Recommended sequencing
+
+1. **Let #286 land first.** It is `MERGEABLE`, freshly rebased on `main`,
+   and a draft. Its Rust side is purely additive; the bulk is q2-preview
+   TS. Once it merges, the q2-preview siKey / source-index surface is
+   stable and the full set of `d === 0` consumers is visible in one tree.
+2. **Then rebase bd-ky14a onto the post-#286 `main`.** Do the `d`-scheme
+   fix from §2b *once*, against settled code, instead of chasing a moving
+   target.
+3. What waiting does **not** buy you: the `engine_execution.rs` conflict
+   (§1) is from #260/bd-5yff4 and already on `main`; it is unaffected by
+   #286 either way. Plan to solve it regardless.
+
+(If for some reason bd-ky14a must go first, the cost is that #286 will
+have to absorb the `d`-scheme change mid-flight — re-keying its siKeys,
+fixing its hardcoded `:0` tests, and re-running its browser e2e. That is
+strictly more total work and lands on the #286 author. Not recommended.)
 
 ## Suggested merge strategy (for when the go-ahead comes)
 
