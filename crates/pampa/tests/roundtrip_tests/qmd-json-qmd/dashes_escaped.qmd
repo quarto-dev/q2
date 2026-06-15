@@ -1,0 +1,1 @@
+literal a\-\-b and a\-\-\-b and dots a\.\.\.b stay.

@@ -142,10 +142,71 @@ pub fn create_specifier_base_text(
     PandocNativeIntermediate::IntermediateBaseText(id, node_location(node))
 }
 
-/// Helper function to convert straight apostrophes to smart quotes
-/// Converts ASCII apostrophe (') to Unicode right single quotation mark (')
-pub fn apply_smart_quotes(text: String) -> String {
-    text.replace('\'', "\u{2019}")
+/// Apply Pandoc "smart" typography to a prose text run: straight apostrophes
+/// become curly (`'` → `’`), runs of hyphens become en/em dashes, and runs of
+/// dots become ellipses.
+///
+/// Dash runs follow Pandoc's default `dash` parser
+/// (`Text/Pandoc/Parsing/Smart.hs`): consumed left-to-right, greedily taking
+/// three hyphens as an EM DASH (—) while at least three remain, then a trailing
+/// pair as an EN DASH (–), leaving a lone hyphen literal. Dot runs take three
+/// at a time as a HORIZONTAL ELLIPSIS (…), leaving a remainder of one or two
+/// dots literal.
+///
+/// **Must be applied per prose-str node, before merging adjacent strings.**
+/// Escaped punctuation (`\-`, `\.`) arrives from tree-sitter as its own
+/// single-character node, so a single node never contains an escaped hyphen or
+/// dot run; converting here (rather than after `merge_strs`) is what keeps
+/// `a\-\-b` literal instead of collapsing it to an en dash.
+pub fn apply_smart_typography(text: String) -> String {
+    let mut out = String::with_capacity(text.len());
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        match chars[i] {
+            '\'' => {
+                out.push('\u{2019}');
+                i += 1;
+            }
+            '-' => {
+                let start = i;
+                while i < chars.len() && chars[i] == '-' {
+                    i += 1;
+                }
+                let mut run = i - start;
+                while run >= 3 {
+                    out.push('\u{2014}'); // — em dash
+                    run -= 3;
+                }
+                if run == 2 {
+                    out.push('\u{2013}'); // – en dash
+                } else if run == 1 {
+                    out.push('-');
+                }
+            }
+            '.' => {
+                let start = i;
+                while i < chars.len() && chars[i] == '.' {
+                    i += 1;
+                }
+                let mut run = i - start;
+                while run >= 3 {
+                    out.push('\u{2026}'); // … ellipsis
+                    run -= 3;
+                }
+                for _ in 0..run {
+                    out.push('.');
+                }
+            }
+            other => {
+                out.push(other);
+                i += 1;
+            }
+        }
+    }
+
+    out
 }
 
 /// Process backslash escapes in text according to Pandoc rules.
@@ -156,6 +217,13 @@ pub fn apply_smart_quotes(text: String) -> String {
 /// - A backslash followed by an ASCII space is Pandoc's non-breaking-space
 ///   shorthand: the pair collapses to a single U+00A0 (NO-BREAK SPACE).
 ///   See <https://pandoc.org/MANUAL.html#non-breaking-spaces>.
+/// - A backslash before one of the "smart typography" output characters —
+///   EM DASH (—, U+2014), EN DASH (–, U+2013), or HORIZONTAL ELLIPSIS
+///   (…, U+2026) — is also an escape: the backslash is dropped, leaving the
+///   character literal. This is how the QMD writer round-trips an em dash that
+///   would otherwise land on an all-dash line and be misread as a thematic
+///   break (it emits `\—`). A deliberate, narrow divergence from Pandoc, which
+///   keeps `\—` literal.
 /// - Any other `\X` is left as the literal two characters.
 pub fn process_backslash_escapes(text: String) -> String {
     let mut result = String::with_capacity(text.len());
@@ -166,9 +234,9 @@ pub fn process_backslash_escapes(text: String) -> String {
             // Check if next character is ASCII punctuation, an ASCII space,
             // or anything else.
             if let Some(&next_ch) = chars.peek() {
-                if is_escapable_punctuation(next_ch) {
-                    // Backslash escape for a punctuation char: drop the
-                    // backslash, emit the punctuation.
+                if is_escapable_punctuation(next_ch) || is_escapable_smart_char(next_ch) {
+                    // Backslash escape for a punctuation or smart-typography
+                    // char: drop the backslash, emit the character.
                     chars.next();
                     result.push(next_ch);
                 } else if next_ch == ' ' {
@@ -228,6 +296,12 @@ fn is_escapable_punctuation(ch: char) -> bool {
             | '}'
             | '~'
     )
+}
+
+/// Smart-typography output characters that a backslash may escape (D5): the em
+/// dash, en dash, and horizontal ellipsis. See `process_backslash_escapes`.
+fn is_escapable_smart_char(ch: char) -> bool {
+    matches!(ch, '\u{2014}' | '\u{2013}' | '\u{2026}')
 }
 
 /// Helper function to create simple line break inlines
@@ -501,5 +575,86 @@ mod tests {
     fn trailing_backslash_preserved() {
         // A dangling backslash with nothing after it stays literal.
         assert_eq!(extract_quoted_text(r#""abc\""#), "abc\\");
+    }
+}
+
+#[cfg(test)]
+mod smart_typography_tests {
+    use super::{apply_smart_typography, process_backslash_escapes};
+
+    const EN: &str = "\u{2013}"; // –
+    const EM: &str = "\u{2014}"; // —
+    const ELL: &str = "\u{2026}"; // …
+    const RSQUO: &str = "\u{2019}"; // ’
+
+    #[test]
+    fn dash_runs_match_pandoc() {
+        // Greedy: 3=em while >=3 remain, trailing 2=en, lone 1=hyphen.
+        assert_eq!(apply_smart_typography("-".into()), "-");
+        assert_eq!(apply_smart_typography("--".into()), EN);
+        assert_eq!(apply_smart_typography("---".into()), EM);
+        assert_eq!(apply_smart_typography("----".into()), format!("{EM}-"));
+        assert_eq!(apply_smart_typography("-----".into()), format!("{EM}{EN}"));
+        assert_eq!(apply_smart_typography("------".into()), format!("{EM}{EM}"));
+        assert_eq!(
+            apply_smart_typography("-------".into()),
+            format!("{EM}{EM}-")
+        );
+    }
+
+    #[test]
+    fn dash_mid_word_converts() {
+        assert_eq!(
+            apply_smart_typography("un---spaced".into()),
+            format!("un{EM}spaced")
+        );
+        assert_eq!(
+            apply_smart_typography("en--dash".into()),
+            format!("en{EN}dash")
+        );
+    }
+
+    #[test]
+    fn single_intraword_hyphen_preserved() {
+        assert_eq!(apply_smart_typography("well-known".into()), "well-known");
+    }
+
+    #[test]
+    fn ellipsis_runs() {
+        assert_eq!(apply_smart_typography("...".into()), ELL);
+        assert_eq!(
+            apply_smart_typography("Wait...".into()),
+            format!("Wait{ELL}")
+        );
+        assert_eq!(apply_smart_typography("....".into()), format!("{ELL}."));
+        assert_eq!(
+            apply_smart_typography("......".into()),
+            format!("{ELL}{ELL}")
+        );
+        // Only two dots: not an ellipsis, left literal.
+        assert_eq!(apply_smart_typography("..".into()), "..");
+    }
+
+    #[test]
+    fn apostrophe_becomes_smart_quote() {
+        assert_eq!(
+            apply_smart_typography("don't".into()),
+            format!("don{RSQUO}t")
+        );
+    }
+
+    #[test]
+    fn backslash_escapes_smart_chars() {
+        // D5: backslash strips before em/en-dash/ellipsis so `\—` → `—`.
+        assert_eq!(process_backslash_escapes(format!("\\{EM}")), EM);
+        assert_eq!(process_backslash_escapes(format!("\\{EN}")), EN);
+        assert_eq!(process_backslash_escapes(format!("\\{ELL}")), ELL);
+    }
+
+    #[test]
+    fn backslash_escapes_ascii_punct_still_work() {
+        assert_eq!(process_backslash_escapes("\\*".into()), "*");
+        assert_eq!(process_backslash_escapes("a\\-b".into()), "a-b");
+        assert_eq!(process_backslash_escapes("\\ ".into()), "\u{00A0}");
     }
 }

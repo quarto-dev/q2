@@ -563,7 +563,7 @@ fn process_native_inline<T: Write>(
                 })
             } else {
                 Inline::Str(Str {
-                    text: apply_smart_quotes(text),
+                    text: apply_smart_typography(text),
                     source_info: quarto_source_map::SourceInfo::from_range(
                         context.current_file_id(),
                         range,
@@ -737,7 +737,7 @@ fn native_visitor<T: Write>(
             if leading_ws == 0 {
                 let text = process_backslash_escapes(raw_text.to_string());
                 PandocNativeIntermediate::IntermediateInline(Inline::Str(Str {
-                    text: apply_smart_quotes(text),
+                    text: apply_smart_typography(text),
                     source_info: node_source_info_with_context(node, context),
                 }))
             } else {
@@ -771,7 +771,7 @@ fn native_visitor<T: Write>(
                         end: node_range.end,
                     };
                     result.push(Inline::Str(Str {
-                        text: apply_smart_quotes(text),
+                        text: apply_smart_typography(text),
                         source_info: quarto_source_map::SourceInfo::from_range(
                             context.current_file_id(),
                             str_range,

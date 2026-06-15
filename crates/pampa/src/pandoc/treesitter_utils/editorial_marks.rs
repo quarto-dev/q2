@@ -15,7 +15,7 @@ use regex::Regex;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 use super::text_helpers::{
-    apply_smart_quotes, extract_delimiter_space_info, wrap_inline_with_delimiter_spaces,
+    apply_smart_typography, extract_delimiter_space_info, wrap_inline_with_delimiter_spaces,
 };
 
 macro_rules! process_editorial_mark {
@@ -59,7 +59,7 @@ macro_rules! process_editorial_mark {
                                 }))
                             } else {
                                 content.push(Inline::Str(Str {
-                                    text: apply_smart_quotes(text),
+                                    text: apply_smart_typography(text),
                                     source_info: quarto_source_map::SourceInfo::from_range(context.current_file_id(), range),
                                 }))
                             }

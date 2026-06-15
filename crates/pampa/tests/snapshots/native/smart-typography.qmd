@@ -1,0 +1,5 @@
+Mid-word em-dashes---convert and en--dashes too, plus ellipsis...
+
+Escaped a\-\-b and a\-\-\-b and a\.\.\.b stay literal.
+
+Code `a---b` and `x...y` are untouched.

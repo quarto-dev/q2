@@ -1676,20 +1676,12 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
     if result.1 { Err(()) } else { Ok(result.0) }
 }
 
-/// Convert smart typography strings
-fn as_smart_str(s: String) -> String {
-    if s == "..." {
-        "…".to_string()
-    } else if s == "--" {
-        "–".to_string()
-    } else if s == "---" {
-        "—".to_string()
-    } else {
-        s
-    }
-}
-
-/// Merge consecutive Str inlines and apply smart typography
+/// Merge consecutive Str inlines.
+///
+/// Smart typography (dashes, ellipsis, apostrophes) is applied earlier, per
+/// prose-str node, by `apply_smart_typography` — NOT here. Doing it per node is
+/// what keeps escaped runs literal: `a\-\-b` arrives as separate single-hyphen
+/// nodes, so merging them afterwards yields `a--b` rather than an en dash.
 pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
     let mut ctx = FilterContext::new();
     topdown_traverse(
@@ -1702,7 +1694,7 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
             for inline in inlines {
                 match inline {
                     Inline::Str(s) => {
-                        let str_text = as_smart_str(s.text.clone());
+                        let str_text = s.text.clone();
                         if let Some(ref mut current) = current_str {
                             current.push_str(&str_text);
                             if let Some(ref mut info) = current_source_info {

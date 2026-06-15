@@ -1,0 +1,5 @@
+---
+source: crates/pampa/tests/integration/test.rs
+expression: output
+---
+[ Para [Str "Mid-word", Space, Str "em-dashes—convert", Space, Str "and", Space, Str "en–dashes", Space, Str "too,", Space, Str "plus", Space, Str "ellipsis…"], Para [Str "Escaped", Space, Str "a--b", Space, Str "and", Space, Str "a---b", Space, Str "and", Space, Str "a...b", Space, Str "stay", Space, Str "literal."], Para [Str "Code", Space, Code ( "" , [] , [] ) "a---b", Space, Str "and", Space, Code ( "" , [] , [] ) "x...y", Space, Str "are", Space, Str "untouched."] ]

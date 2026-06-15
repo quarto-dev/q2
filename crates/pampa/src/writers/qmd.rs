@@ -53,6 +53,14 @@ pub struct QmdWriterContext {
     /// `write_inline` after each inline emits its bytes and reset to
     /// `false` at the start of every block. See bd-nsb9 / issue #205.
     pub prev_emitted_alnum: bool,
+
+    /// When true, `write_str` keeps smart dashes (—, –) as their literal
+    /// Unicode characters instead of canonicalizing them to `---`/`--`. Set by
+    /// the prose-block writers for an output line that would otherwise become a
+    /// thematic break (see `line_is_dash_only_hazard`); on such a line the
+    /// caller emits a leading `\` and the dashes stay Unicode so the reader
+    /// recovers them rather than reading a HorizontalRule.
+    pub suppress_dash_canonicalization: bool,
 }
 
 impl Default for QmdWriterContext {
@@ -67,6 +75,7 @@ impl QmdWriterContext {
             errors: Vec::new(),
             emphasis_stack: Vec::new(),
             prev_emitted_alnum: false,
+            suppress_dash_canonicalization: false,
         }
     }
 
@@ -1379,38 +1388,68 @@ fn determine_backticks(text: &str) -> String {
     "`".repeat(max_backticks + 1)
 }
 
-// Helper function to reverse smart quotes conversion
-// Converts Unicode right single quotation mark (') back to ASCII apostrophe (')
-fn reverse_smart_quotes(text: &str) -> String {
-    text.replace('\u{2019}', "'")
+// True if a single output line composed of these inlines would, after dash
+// canonicalization, be misread by the reader as a thematic break
+// (HorizontalRule): every inline is either a `Space` or a `Str` made solely of
+// dash characters (em —, en –, or ASCII hyphen), and the dashes sum to at least
+// three ASCII hyphens. Such a line must keep its dashes as unicode and prefix a
+// backslash (`\—…`) instead of canonicalizing to ASCII, so the leading `\`
+// stops thematic-break recognition while the reader still recovers the dash.
+//
+// En dash alone (`--`, 2 hyphens) and a lone hyphen are below the thematic-break
+// minimum and stay safe, so they are intentionally *not* flagged.
+fn line_is_dash_only_hazard(line: &[Inline]) -> bool {
+    let mut hyphens = 0usize;
+    for inline in line {
+        match inline {
+            Inline::Space(_) => {}
+            Inline::Str(s) => {
+                for c in s.text.chars() {
+                    match c {
+                        '\u{2014}' => hyphens += 3,
+                        '\u{2013}' => hyphens += 2,
+                        '-' => hyphens += 1,
+                        _ => return false,
+                    }
+                }
+            }
+            _ => return false,
+        }
+    }
+    hyphens >= 3
 }
 
-// Helper function to escape special markdown characters
-// This follows Pandoc's escaping strategy: escape characters that have special
-// markdown meaning to ensure proper roundtripping (qmd -> AST -> qmd).
-// We escape characters defensively when they could trigger markdown syntax.
+// Helper function to canonicalize smart typography and escape special markdown
+// characters in a single pass over the *original* `Str` text. This follows
+// Pandoc's escaping strategy: escape characters that have special markdown
+// meaning so the document round-trips (qmd -> AST -> qmd).
 //
-// The ASCII apostrophe `'` is escaped whenever the reader would otherwise
-// misclassify it as a smart-quote open/close. The reader's smart-quote
-// classifier accepts `'` as an apostrophe only when it sits between two
-// alphanumeric characters (e.g. `don't`, `it's`, `ab'9`); in any other
-// position the apostrophe is treated as a quotation mark and produces a
-// Q-2-7 / Q-2-10 parse error on the regenerated qmd.
+// Smart typography canonicalization (`—`→`---`, `–`→`--`, `…`→`...`, `’`→`'`)
+// is emitted UNescaped, because the reader re-applies smart typography and turns
+// the ASCII spelling back into the Unicode character. Conversely, a *literal*
+// ASCII run that the reader's smart pass would otherwise convert — a hyphen run
+// of length ≥2 (→ en/em dash) or a dot run of length ≥3 (→ ellipsis) — is
+// backslash-escaped per character (`\-`, `\.`) so it stays literal. Working on
+// the original text is what lets us tell a canonicalized em dash (`—` → bare
+// `---`) apart from genuinely-literal hyphens (`--` → `\-\-`). A run short
+// enough to be inert (a lone hyphen, or one/two dots) is emitted verbatim.
 //
-// The lookup uses three sources of context:
-//   * the previous char in the `Str` body when one exists, otherwise
-//     `start_prev_is_alnum` (carried in from `QmdWriterContext` so the
-//     rule can see across inline boundaries — e.g. a closing backtick
-//     from a preceding `Code` span); see bd-nsb9 / issue #205.
-//   * the next char in the `Str` body when one exists.
-// When either side is absent or non-alphanumeric, the apostrophe is
-// escaped. The original intra-`Str` fix from bd-8lcm / issue #201 is a
-// special case of this rule.
+// The ASCII apostrophe `'` (and its Unicode form `’`) is escaped whenever the
+// reader would otherwise misclassify it as a smart-quote open/close. The
+// reader's smart-quote classifier accepts `'` as an apostrophe only when it sits
+// between two alphanumeric characters (e.g. `don't`, `it's`, `ab'9`); in any
+// other position the apostrophe is treated as a quotation mark and produces a
+// Q-2-7 / Q-2-10 parse error on the regenerated qmd. The lookup uses the
+// previous char in the `Str` body when one exists, otherwise
+// `start_prev_is_alnum` (carried in from `QmdWriterContext` so the rule can see
+// across inline boundaries — e.g. a closing backtick from a preceding `Code`
+// span; see bd-nsb9 / issue #205), and the next char in the `Str` body.
 fn escape_markdown(text: &str, start_prev_is_alnum: bool) -> String {
+    let chars: Vec<char> = text.chars().collect();
     let mut result = String::new();
-    let mut chars = text.chars().peekable();
-    let mut prev_char: Option<char> = None;
-    while let Some(ch) = chars.next() {
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
         match ch {
             // Characters that must be escaped to avoid triggering markdown syntax:
             '\\' => result.push_str("\\\\"), // Escape character itself
@@ -1432,13 +1471,55 @@ fn escape_markdown(text: &str, start_prev_is_alnum: bool) -> String {
             '{' => result.push_str("\\{"), // Attribute span open: bare { in
             '}' => result.push_str("\\}"), // a Str body is always a parse
             // error in qmd. Always escape.
-            '\'' => {
-                let next_in_str = chars.peek().copied();
-                let prev_is_alnum = match prev_char {
-                    Some(c) => c.is_alphanumeric(),
-                    None => start_prev_is_alnum,
+
+            // Smart typography → ASCII source spelling, emitted UNescaped so the
+            // reader re-converts it back to the Unicode character.
+            '\u{2014}' => result.push_str("---"), // em dash
+            '\u{2013}' => result.push_str("--"),  // en dash
+            '\u{2026}' => result.push_str("..."), // ellipsis
+
+            // Literal ASCII runs the reader's smart pass would convert: escape
+            // per character so they round-trip as literal text.
+            '-' => {
+                let start = i;
+                while i < chars.len() && chars[i] == '-' {
+                    i += 1;
+                }
+                let run = i - start;
+                if run >= 2 {
+                    for _ in 0..run {
+                        result.push_str("\\-");
+                    }
+                } else {
+                    result.push('-');
+                }
+                continue; // `i` already advanced past the run
+            }
+            '.' => {
+                let start = i;
+                while i < chars.len() && chars[i] == '.' {
+                    i += 1;
+                }
+                let run = i - start;
+                if run >= 3 {
+                    for _ in 0..run {
+                        result.push_str("\\.");
+                    }
+                } else {
+                    for _ in 0..run {
+                        result.push('.');
+                    }
+                }
+                continue; // `i` already advanced past the run
+            }
+
+            '\'' | '\u{2019}' => {
+                let prev_is_alnum = if i > 0 {
+                    chars[i - 1].is_alphanumeric()
+                } else {
+                    start_prev_is_alnum
                 };
-                let next_is_alnum = next_in_str.is_some_and(|c| c.is_alphanumeric());
+                let next_is_alnum = chars.get(i + 1).is_some_and(|c| c.is_alphanumeric());
                 if prev_is_alnum && next_is_alnum {
                     result.push('\'');
                 } else {
@@ -1447,12 +1528,12 @@ fn escape_markdown(text: &str, start_prev_is_alnum: bool) -> String {
             }
 
             // Characters that don't need escaping in most contexts:
-            // . , - + ! ? = : ; / ( ) % & "
+            // , + ! ? = : ; / ( ) % & "
             // These are only special in very specific contexts and escaping them
             // everywhere would make output unnecessarily verbose.
             _ => result.push(ch),
         }
-        prev_char = Some(ch);
+        i += 1;
     }
     result
 }
@@ -1462,8 +1543,26 @@ fn write_str(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    let text = reverse_smart_quotes(&s.text);
-    let escaped = escape_markdown(&text, ctx.prev_emitted_alnum);
+    if ctx.suppress_dash_canonicalization {
+        // This Str sits on a line that would otherwise canonicalize to only
+        // dashes and re-parse as a thematic break (HorizontalRule). Escape each
+        // dash character individually so the line cannot be a thematic break,
+        // while still round-tripping to the same AST:
+        //   * em/en dash kept Unicode + `\` → `\—`, `\–`  (reader: `\X` → X)
+        //   * literal hyphen → `\-`                       (reader: `\-` → -)
+        // Written directly: routing `\` through `escape_markdown` would double
+        // it. Such a line contains only dash chars (see `line_is_dash_only_hazard`),
+        // so no other markdown-special characters can appear here.
+        for c in s.text.chars() {
+            match c {
+                '\u{2014}' | '\u{2013}' | '-' => write!(buf, "\\{c}")?,
+                '\u{2019}' => write!(buf, "'")?,
+                other => write!(buf, "{other}")?,
+            }
+        }
+        return Ok(());
+    }
+    let escaped = escape_markdown(&s.text, ctx.prev_emitted_alnum);
     write!(buf, "{}", escaped)
 }
 
@@ -2081,6 +2180,70 @@ fn shortcode_string_looks_like_number(s: &str) -> bool {
 }
 
 #[cfg(test)]
+mod smart_typography_writer_tests {
+    use super::{escape_markdown, line_is_dash_only_hazard};
+    use crate::pandoc::inline::{Inline, Space, Str};
+    use quarto_source_map::SourceInfo;
+
+    fn s(text: &str) -> Inline {
+        Inline::Str(Str {
+            text: text.to_string(),
+            source_info: SourceInfo::for_test(),
+        })
+    }
+
+    fn space() -> Inline {
+        Inline::Space(Space {
+            source_info: SourceInfo::for_test(),
+        })
+    }
+
+    #[test]
+    fn canonicalizes_unicode_smart_chars_unescaped() {
+        // Unicode smart chars become their ASCII spelling, emitted UNescaped so
+        // the reader re-converts them.
+        assert_eq!(escape_markdown("\u{2014}", false), "---"); // em → ---
+        assert_eq!(escape_markdown("\u{2013}", false), "--"); // en → --
+        assert_eq!(escape_markdown("\u{2026}", false), "..."); // … → ...
+        assert_eq!(escape_markdown("a\u{2014}b\u{2026}c", false), "a---b...c");
+        // ’ between alnums is kept as ', elsewhere escaped.
+        assert_eq!(escape_markdown("don\u{2019}t", false), "don't");
+    }
+
+    #[test]
+    fn escapes_literal_dash_and_dot_runs() {
+        // Literal ASCII runs the reader would smart-convert must be escaped so
+        // they stay literal (e.g. from escaped input `a\-\-b`).
+        assert_eq!(escape_markdown("a--b", false), "a\\-\\-b");
+        assert_eq!(escape_markdown("a---b", false), "a\\-\\-\\-b");
+        assert_eq!(escape_markdown("a-b", false), "a-b"); // lone hyphen inert
+        assert_eq!(escape_markdown("x...", false), "x\\.\\.\\.");
+        assert_eq!(escape_markdown("x..", false), "x.."); // two dots inert
+    }
+
+    #[test]
+    fn hazard_detects_all_dash_lines() {
+        assert!(line_is_dash_only_hazard(&[s("\u{2014}")])); // — = 3 hyphens
+        assert!(line_is_dash_only_hazard(&[s("\u{2013}\u{2013}")])); // –– = 4
+        assert!(line_is_dash_only_hazard(&[s("---")])); // literal --- (from escapes)
+        assert!(line_is_dash_only_hazard(&[
+            s("\u{2014}"),
+            space(),
+            s("\u{2014}")
+        ])); // — — → ------ with space
+    }
+
+    #[test]
+    fn hazard_ignores_safe_lines() {
+        assert!(!line_is_dash_only_hazard(&[s("\u{2013}")])); // – = only 2 hyphens
+        assert!(!line_is_dash_only_hazard(&[s("-")])); // 1 hyphen
+        assert!(!line_is_dash_only_hazard(&[s("\u{2014}a")])); // — followed by text
+        assert!(!line_is_dash_only_hazard(&[s("a"), s("\u{2014}")])); // contains a letter
+        assert!(!line_is_dash_only_hazard(&[])); // empty
+    }
+}
+
+#[cfg(test)]
 mod shortcode_writer_tests {
     use super::{shortcode_string_looks_like_number, shortcode_string_needs_quoting};
 
@@ -2358,14 +2521,51 @@ fn write_block(
     Ok(())
 }
 
+/// Write a sequence of prose inlines (paragraph or plain content), guarding
+/// each output line against being misread as a thematic break. The content is
+/// split into line segments at soft/hard breaks; any segment that would
+/// canonicalize to an all-dash line (`line_is_dash_only_hazard`) is written
+/// with `suppress_dash_canonicalization` set so its dashes are backslash-escaped
+/// (see `write_str`). The break inlines themselves are written between segments.
+fn write_prose_inlines(
+    content: &[Inline],
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
+    let mut segment_start = 0;
+    for (i, inline) in content.iter().enumerate() {
+        if matches!(inline, Inline::SoftBreak(_) | Inline::LineBreak(_)) {
+            write_prose_line(&content[segment_start..i], buf, ctx)?;
+            write_inline(inline, buf, ctx)?;
+            segment_start = i + 1;
+        }
+    }
+    write_prose_line(&content[segment_start..], buf, ctx)?;
+    Ok(())
+}
+
+fn write_prose_line(
+    line: &[Inline],
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
+    let hazard = line_is_dash_only_hazard(line);
+    if hazard {
+        ctx.suppress_dash_canonicalization = true;
+    }
+    for inline in line {
+        write_inline(inline, buf, ctx)?;
+    }
+    ctx.suppress_dash_canonicalization = false;
+    Ok(())
+}
+
 pub fn write_paragraph(
     para: &Paragraph,
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    for inline in &para.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_prose_inlines(&para.content, buf, ctx)?;
     writeln!(buf)?;
     Ok(())
 }
@@ -2375,9 +2575,7 @@ pub fn write_plain(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    for inline in &plain.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_prose_inlines(&plain.content, buf, ctx)?;
     writeln!(buf)?;
     Ok(())
 }

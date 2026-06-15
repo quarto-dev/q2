@@ -1,5 +1,5 @@
 ---
-source: crates/quarto-markdown-pandoc/tests/test.rs
+source: crates/pampa/tests/integration/test.rs
 expression: output
 ---
-[ Para [Str "Pages", Space, Str "1--30.", Space, Str "Hello---maybe---world..."] ]
+[ Para [Str "Pages", Space, Str "1–30.", Space, Str "Hello—maybe—world…"] ]

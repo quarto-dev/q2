@@ -1,0 +1,1 @@
+em-dashes---like this one---are fine and en--dash too.
