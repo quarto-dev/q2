@@ -13,6 +13,13 @@ import { spawn, type ChildProcess } from 'node:child_process';
 export interface BrowserOpenSpec {
   readonly command: string;
   readonly args: readonly string[];
+  /**
+   * Whether to spawn with `windowsVerbatimArguments`. Only the Windows
+   * spec sets this `true`: it has already wrapped the URL in literal
+   * double quotes, so Node must pass argv through verbatim rather than
+   * re-quoting it.
+   */
+  readonly windowsVerbatimArguments: boolean;
 }
 
 /**
@@ -23,7 +30,20 @@ export interface BrowserOpenSpec {
  *
  * Two gotchas the naive `start <url>` form gets wrong:
  *   1. `cmd.exe` treats `&` as a statement separator and OAuth URLs are
- *      dense with `&`; quoting the URL prevents that interpretation.
+ *      dense with `&`. The URL must reach `cmd.exe` wrapped in double
+ *      quotes so the `&` stays literal. Node's default
+ *      (`windowsVerbatimArguments: false`) only quotes an argv element
+ *      when it contains a space, tab, or `"` — an OAuth URL contains
+ *      none of those, so Node leaves it bare and `cmd.exe` splits the
+ *      command at the first `&` (dropping `redirect_uri` and everything
+ *      after it). We therefore quote the URL ourselves and pass argv
+ *      verbatim. Double quotes neutralise `&`, `|`, `<`, `>`, `(`, `)`
+ *      but NOT `%`: `cmd.exe` still performs `%VAR%` expansion inside
+ *      quotes. The percent-encoded URL (`%3A`, `%2F`, …) survives only
+ *      because no environment variable is named like a two-hex-digit
+ *      token (`3A`, `2F`, …). That holds for every real Windows
+ *      environment; the dynamic URL fields (`state`, `code_challenge`)
+ *      are base64url and never contain `%` at all.
  *   2. `start`'s first *quoted* argument is the window title, not the
  *      URL. The empty `""` is a placeholder title so the quoted URL is
  *      parsed as the target.
@@ -31,12 +51,16 @@ export interface BrowserOpenSpec {
 export function browserOpenSpec(platform: NodeJS.Platform, url: string): BrowserOpenSpec {
   switch (platform) {
     case 'darwin':
-      return { command: 'open', args: [url] };
+      return { command: 'open', args: [url], windowsVerbatimArguments: false };
     case 'win32':
-      return { command: 'cmd.exe', args: ['/c', 'start', '', url] };
+      return {
+        command: 'cmd.exe',
+        args: ['/c', 'start', '""', `"${url}"`],
+        windowsVerbatimArguments: true,
+      };
     default:
       // Linux and other Unix-likes.
-      return { command: 'xdg-open', args: [url] };
+      return { command: 'xdg-open', args: [url], windowsVerbatimArguments: false };
   }
 }
 
@@ -60,14 +84,16 @@ export interface OpenBrowserOptions {
 export function openBrowser(url: string, opts: OpenBrowserOptions = {}): ChildProcess | undefined {
   const platform = opts.platform ?? process.platform;
   const spawnFn = opts.spawnFn ?? spawn;
-  const { command, args } = browserOpenSpec(platform, url);
+  const { command, args, windowsVerbatimArguments } = browserOpenSpec(platform, url);
   let child: ChildProcess;
   try {
     child = spawnFn(command, args as string[], {
       stdio: 'ignore',
-      // Single argv element per arg, no shell — the URL is never passed
-      // through a shell that could re-interpret its metacharacters.
-      windowsVerbatimArguments: false,
+      // No shell is involved on any platform. On Windows the URL is
+      // pre-quoted in the argv (see browserOpenSpec) and must be passed
+      // verbatim so `cmd.exe` sees the literal double quotes that keep
+      // `&` from splitting the command.
+      windowsVerbatimArguments,
     });
   } catch {
     return undefined;
