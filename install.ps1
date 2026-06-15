@@ -36,7 +36,7 @@ $Repo = 'q2'
 $Platform = 'windows_amd64'
 $UA = @{ 'User-Agent' = 'q2-install' }
 
-function Die([string]$msg) { Write-Error "q2 install: $msg"; exit 1 }
+function Die([string]$msg) { throw "q2 install: $msg" }
 function Step([string]$msg) { Write-Host "-> $msg" }
 
 # q2 ships an x86_64 Windows binary; ARM64 Windows runs it under
