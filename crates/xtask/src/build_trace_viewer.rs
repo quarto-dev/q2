@@ -6,7 +6,8 @@
 
 use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
-use std::process::Command;
+
+use crate::util::nested_command;
 
 pub fn run() -> Result<()> {
     let project_root = find_project_root()?;
@@ -19,7 +20,7 @@ pub fn run() -> Result<()> {
     }
 
     println!("━━━ Building trace-viewer SPA ━━━");
-    let status = Command::new("npm")
+    let status = nested_command("npm")
         .args(["run", "build"])
         .current_dir(&trace_viewer_dir)
         .status()

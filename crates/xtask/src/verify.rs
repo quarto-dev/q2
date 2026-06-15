@@ -21,7 +21,6 @@
 //! 14. q2-preview-spa Playwright E2E (only when --e2e is set)
 
 use anyhow::{Context, Result, bail};
-use std::process::Command;
 
 use crate::lint;
 use crate::test;
@@ -602,13 +601,13 @@ fn run_command(
     rustflags: Option<&str>,
     error_msg: &str,
 ) -> Result<()> {
-    let mut cmd = Command::new(program);
-    cmd.args(args).current_dir(dir);
-    // Nested cargo/npm: strip the outer `cargo xtask`'s package env vars so a
+    // `nested_command` strips the outer `cargo xtask`'s package env vars so a
     // child cargo doesn't spuriously rebuild q2's TLS-stack closure (an
-    // inherited CARGO_MANIFEST_DIR flips the `ring` build script dirty). See
-    // `util::strip_inherited_cargo_env` (bd-awchm8w7).
-    crate::util::strip_inherited_cargo_env(&mut cmd);
+    // inherited CARGO_MANIFEST_DIR flips the `ring` build script dirty;
+    // bd-awchm8w7), and on Windows runs `.cmd` shims like npm through `cmd /C`
+    // so they resolve at all.
+    let mut cmd = crate::util::nested_command(program);
+    cmd.args(args).current_dir(dir);
 
     if let Some(flags) = rustflags {
         cmd.env("RUSTFLAGS", flags);

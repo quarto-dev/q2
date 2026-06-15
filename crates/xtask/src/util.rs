@@ -77,12 +77,42 @@ pub fn strip_inherited_cargo_env(cmd: &mut Command) -> &mut Command {
     cmd
 }
 
+/// Programs that on Windows ship as `.cmd`/`.bat` shims rather than a
+/// `.exe` (npm, npx, …). `Command::new("npm")` fails on Windows with
+/// "program not found": the bare name carries no extension and
+/// `std::process::Command` does NOT search `PATHEXT` to discover the
+/// `.cmd` (only `.exe` may be specified without its extension). The
+/// established fix — used by Tauri's `cross_command` and wasm-pack's
+/// `new_command` — is to trampoline through `cmd /C <program>`, letting
+/// Windows resolve the real `npm.cmd` via `PATHEXT`. Our args are
+/// trusted literals, so the `cmd.exe`/`.bat` argument-escaping hazard
+/// (CVE-2024-24576) does not apply.
+#[cfg(windows)]
+const WINDOWS_CMD_SHIMS: &[&str] = &["npm", "npx"];
+
 /// Construct a [`Command`] for `program` with the inherited cargo package env
 /// vars already stripped (see [`strip_inherited_cargo_env`]). This is the
 /// preferred constructor for any nested `cargo`/`npm` invocation from an xtask
 /// subcommand.
+///
+/// On Windows a `program` that is a `.cmd` shim (see [`WINDOWS_CMD_SHIMS`])
+/// is run through `cmd /C` so it resolves at all; `.exe` programs such as
+/// `cargo` are invoked directly.
 pub fn nested_command(program: &str) -> Command {
-    let mut cmd = Command::new(program);
+    let mut cmd;
+    #[cfg(windows)]
+    {
+        if WINDOWS_CMD_SHIMS.contains(&program) {
+            cmd = Command::new("cmd");
+            cmd.args(["/C", program]);
+        } else {
+            cmd = Command::new(program);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        cmd = Command::new(program);
+    }
     strip_inherited_cargo_env(&mut cmd);
     cmd
 }
@@ -140,6 +170,29 @@ mod tests {
         let cmd = nested_command("cargo");
         let env = env_overrides(&cmd);
         assert_eq!(env.get("CARGO_MANIFEST_DIR"), Some(&None));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn nested_command_trampolines_npm_through_cmd_on_windows() {
+        // `Command::new("npm")` cannot find `npm.cmd` on Windows; the
+        // program must become `cmd /C npm` so PATHEXT resolves the shim.
+        let cmd = nested_command("npm");
+        assert_eq!(cmd.get_program(), "cmd");
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(args, vec!["/C", "npm"]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn nested_command_leaves_exe_programs_direct_on_windows() {
+        // `cargo` is a real `.exe`; it must not be wrapped in `cmd /C`.
+        let cmd = nested_command("cargo");
+        assert_eq!(cmd.get_program(), "cargo");
+        assert_eq!(cmd.get_args().count(), 0);
     }
 
     #[test]

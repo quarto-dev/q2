@@ -9,7 +9,8 @@
 
 use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
-use std::process::Command;
+
+use crate::util::nested_command;
 
 pub fn run() -> Result<()> {
     let project_root = find_project_root()?;
@@ -22,7 +23,7 @@ pub fn run() -> Result<()> {
     }
 
     println!("━━━ Building q2-preview-spa ━━━");
-    let status = Command::new("npm")
+    let status = nested_command("npm")
         .args(["run", "build"])
         .current_dir(&spa_dir)
         .status()
