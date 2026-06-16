@@ -1,0 +1,167 @@
+/*-- scss:defaults --*/
+
+// =============================================================================
+// Quarto's reveal.js layer (the Quarto-2 analogue of Quarto 1's quarto.scss).
+//
+// Ported from external-sources/quarto-cli .../formats/revealjs/quarto.scss,
+// adapted to reveal.js 6 (kebab-case Sass variables + the stable --r-* runtime
+// contract). This is the layer that makes a deck "feel at home" for Quarto
+// users; without it a deck inherits reveal's centered slides + uppercase
+// headings (see claude-notes/plans/2026-06-16-revealjs-themes-q1-to-q2.md).
+//
+// User-facing vocabulary is the Quarto `$presentation-*` / `$body-*` /
+// `$font-*` names (decision D2 — shared with HTML/Bootstrap theming so
+// _brand.yml and cross-format themes "just work"). This layer maps that
+// vocabulary onto reveal-6's own kebab variables, which reveal's _expose.scss
+// then publishes as `--r-*` custom properties.
+//
+// Stage A subset: fonts, colors, headings, spacing, slide/title alignment,
+// lists, and basic code blocks. Callouts, panels, tabsets, kbd, the `.smaller`
+// system, and per-background (light/dark) recoloring are Stage C.
+// =============================================================================
+
+// --- fonts -------------------------------------------------------------------
+$font-family-sans-serif: "Source Sans Pro", Helvetica, sans-serif !default;
+$font-family-monospace: SFMono-Regular, Menlo, Monaco, Consolas,
+  "Liberation Mono", "Courier New", monospace !default;
+$presentation-font-size-root: 40px !default;
+$presentation-font-smaller: 0.7 !default;
+$presentation-line-height: 1.3 !default;
+$font-weight-base: 400 !default;
+$code-font-size: 1em !default;
+
+// --- main colors -------------------------------------------------------------
+$body-bg: #fff !default;
+$body-color: #222 !default;
+
+// --- link colors -------------------------------------------------------------
+// NOTE: in reveal 6 `$link-color` / `$link-color-hover` are *also* reveal's own
+// variable names, so setting the Quarto default here directly feeds reveal's
+// :root emitter — no separate mapping line is needed (see mapping section).
+$primary: #2a76dd !default;
+$link-color: $primary !default;
+$link-color-hover: lighten($link-color, 10%) !default;
+
+// --- selection colors --------------------------------------------------------
+// `$selection-color` likewise coincides with reveal's own variable name.
+$selection-bg: lighten($link-color, 25%) !default;
+$selection-color: $body-bg !default;
+
+// --- headings ----------------------------------------------------------------
+$presentation-heading-font: $font-family-sans-serif !default;
+$presentation-heading-color: $body-color !default;
+$presentation-heading-line-height: 1.2 !default;
+$presentation-heading-letter-spacing: normal !default;
+$presentation-heading-text-transform: none !default; // reveal defaults to uppercase
+$presentation-heading-text-shadow: none !default;
+$presentation-h1-text-shadow: none !default;
+$presentation-heading-font-weight: 600 !default;
+$presentation-h1-font-size: 2.5em !default;
+$presentation-h2-font-size: 1.6em !default;
+$presentation-h3-font-size: 1.3em !default;
+$presentation-h4-font-size: 1em !default;
+
+// --- margins -----------------------------------------------------------------
+$presentation-block-margin: 12px !default;
+
+// --- text alignment ----------------------------------------------------------
+$presentation-slide-text-align: left !default; // reveal centers by default
+$presentation-title-slide-text-align: center !default;
+$reveal-slide-text-align: $presentation-slide-text-align !default;
+$reveal-title-slide-text-align: $presentation-title-slide-text-align !default;
+
+// --- lists -------------------------------------------------------------------
+$presentation-list-bullet-color: $body-color !default;
+
+// --- code blocks -------------------------------------------------------------
+$code-block-bg: $body-bg !default;
+$code-block-border-color: lighten($body-color, 60%) !default;
+$code-block-font-size: $code-font-size * 0.55 !default;
+$code-block-color: $body-color !default;
+
+// --- inline code -------------------------------------------------------------
+$code-inline-font-size: $code-font-size * 0.875 !default;
+$code-bg: transparent !default;
+
+// --- derive reveal-tuned versions of presentation variables ------------------
+// (a second indirection so a user can override the reveal-specific value
+// without disturbing the shared, cross-format `$presentation-*` name.)
+$revealjs-font-size-root: $presentation-font-size-root !default;
+$revealjs-h1-font-size: $presentation-h1-font-size !default;
+$revealjs-h2-font-size: $presentation-h2-font-size !default;
+$revealjs-h3-font-size: $presentation-h3-font-size !default;
+$revealjs-h4-font-size: $presentation-h4-font-size !default;
+$revealjs-heading-font: $presentation-heading-font !default;
+$revealjs-heading-color: $presentation-heading-color !default;
+$revealjs-heading-line-height: $presentation-heading-line-height !default;
+$revealjs-heading-letter-spacing: $presentation-heading-letter-spacing !default;
+$revealjs-heading-text-transform: $presentation-heading-text-transform !default;
+$revealjs-heading-text-shadow: $presentation-heading-text-shadow !default;
+$revealjs-h1-text-shadow: $presentation-h1-text-shadow !default;
+$revealjs-heading-font-weight: $presentation-heading-font-weight !default;
+$revealjs-block-margin: $presentation-block-margin !default;
+$revealjs-line-height: $presentation-line-height !default;
+$revealjs-list-bullet-color: $presentation-list-bullet-color !default;
+
+// --- map Quarto vocabulary onto reveal-6 kebab variables ---------------------
+// These reveal variables have names distinct from the Quarto vocabulary, so an
+// explicit mapping is required. reveal's `_expose.scss` reads these to emit the
+// `--r-*` custom properties that `_theme.scss` consumes at runtime.
+$background: $body-bg !default;
+$background-color: $body-bg !default;
+$main-font: $font-family-sans-serif !default;
+$main-font-size: $revealjs-font-size-root !default;
+$main-color: $body-color !default;
+$block-margin: $revealjs-block-margin !default;
+$heading-margin: 0 0 $revealjs-block-margin 0 !default;
+$heading-font: $revealjs-heading-font !default;
+$heading-color: $revealjs-heading-color !default;
+$heading-line-height: $revealjs-heading-line-height !default;
+$heading-letter-spacing: $revealjs-heading-letter-spacing !default;
+$heading-text-transform: $revealjs-heading-text-transform !default;
+$heading-text-shadow: $revealjs-heading-text-shadow !default;
+$heading1-text-shadow: $revealjs-h1-text-shadow !default;
+$heading-font-weight: $revealjs-heading-font-weight !default;
+$heading1-size: $revealjs-h1-font-size !default;
+$heading2-size: $revealjs-h2-font-size !default;
+$heading3-size: $revealjs-h3-font-size !default;
+$heading4-size: $revealjs-h4-font-size !default;
+$code-font: $font-family-monospace !default;
+$selection-background-color: $selection-bg !default;
+
+/*-- scss:rules --*/
+
+// Quarto aligns slide body content to the left; reveal centers it by default.
+.reveal .slides {
+  text-align: $reveal-slide-text-align;
+}
+
+// The title slide is centered (overriding the left body alignment), and its
+// title is sized like an h2 rather than a full-size h1 — the Quarto 1 look.
+#title-slide,
+div.reveal div.slides section.title-slide {
+  text-align: $reveal-title-slide-text-align;
+
+  .subtitle {
+    margin-bottom: 2.5rem;
+  }
+}
+
+.reveal #title-slide h1,
+.reveal .title-slide h1.title {
+  font-size: $revealjs-h2-font-size;
+}
+
+// In linear navigation mode (no vertical stacks) the title returns to h1 size.
+.reveal[data-navigation-mode="linear"] #title-slide h1,
+.reveal[data-navigation-mode="linear"] .title-slide h1.title {
+  font-size: $revealjs-h1-font-size;
+}
+
+// Bullet/marker color follows the configured list bullet color.
+.reveal ul,
+.reveal ol {
+  li::marker {
+    color: $revealjs-list-bullet-color;
+  }
+}

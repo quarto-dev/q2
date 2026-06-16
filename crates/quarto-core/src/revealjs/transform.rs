@@ -149,7 +149,16 @@ fn build_title_slide(meta: &quarto_pandoc_types::ConfigValue) -> Option<Block> {
     Some(Block::Div(Div {
         attr: (
             "title-slide".to_string(),
-            vec!["section".to_string(), "title-slide".to_string()],
+            // `center` keeps the title slide vertically centered even though
+            // the deck defaults to `center: false` (top-aligned body slides).
+            // reveal honors the per-slide `.center` class when the global
+            // `center` config is off — this mirrors Quarto 1's approach
+            // (format-reveal.ts: add `.center` to the title slide).
+            vec![
+                "section".to_string(),
+                "title-slide".to_string(),
+                "center".to_string(),
+            ],
             LinkedHashMap::new(),
         ),
         content,

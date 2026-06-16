@@ -321,18 +321,90 @@ greenlit** — awaiting user go-ahead._
       text-align:left`, so it centers as a block → classic reveal centered look).
       Confirms §4: both differences are reveal defaults Q2 doesn't override.
 
-### Stage A — Quarto reveal layer (own branch)
-- [ ] Reveal variant of `assemble_scss` in `quarto-sass` (reveal framework layer,
-      not Bootstrap; single unified compilation per D1)
-- [ ] Port reveal-6 `settings.scss` `:root{--r-*}` emission into the Quarto reveal
-      layer (kebab-case); use reveal `theme.scss` as the rules framework
-      (see §2 implementation note — avoids the `@use ... with` vs layered-`!default` clash)
-- [ ] Define the `$presentation-*`/`$body-*` → reveal-6 kebab mapping layer (D2)
-- [ ] Wire reveal branch of `CompileThemeCssStage` to compile the Quarto reveal layer
-- [ ] Port Q1 `quarto.scss` defaults + core rules → reveal-6 layer (TDD: snapshot
-      the compiled CSS; assert `text-align:left`, no `uppercase`, title-slide rules)
-- [ ] End-to-end verify through `q2 render` AND `q2 preview` (parity); re-run the
-      Chrome computed-style check from the study phase to confirm the flip
+### Stage A — Quarto reveal layer (branch `beads/bd-r9mkybwl-reveal-scss-layer`)
+
+**Architecture (sound, unified-compilation per D1).** A reveal assembly in
+`quarto-sass` mirroring the Bootstrap one, but with a **reveal framework layer**
+instead of Bootstrap. Layers, assembled with the existing 5-region order
+(`defaults` reversed):
+
+- **reveal framework layer** (vendored locally — External Sources Policy):
+  - `defaults` = reveal-6 `settings.scss` `$kebab: … !default` declarations
+    (the low-priority fallbacks: `#bbb`, `uppercase`, etc.)
+  - `rules` = the `:root{--r-*: #{$kebab}}` emitter (split out of settings so it
+    runs *after* defaults collapse) **then** reveal `theme.scss` rules (`var(--r-*)`)
+  - `mixins` = reveal `mixins.scss` (`light/dark-bg-text-color`)
+  - `uses` = `@use 'sass:color'`, `@use 'sass:meta'` (settings needs `color.scale`)
+- **Quarto reveal layer** (ported from Q1 `quarto.scss`, Stage-A subset):
+  - `defaults` = `$presentation-*`/`$body-*` vocabulary (D2) **+** the
+    Q1 mapping section converted to reveal-6 **kebab** names
+    (`$background-color: $body-bg !default;` etc.) so Quarto values flow into `--r-*`
+  - `rules` = the look-fixing overrides: `$presentation-slide-text-align: left`,
+    `heading-text-transform: none`, title-slide layout (centered, h1→h2 size),
+    list/heading/spacing/basic code-block rules
+- **theme layer** = none in Stage A (white-equivalent is the Quarto defaults);
+  real themes are Stage B.
+
+Sub-steps (TDD — test first each time):
+- [x] **A1.** Vendored reveal-6 theme template SCSS locally under
+      `resources/scss/revealjs/reveal-template/` (settings split into
+      `_settings-vars.scss` + `_expose.scss` `:root` emitter, `_theme.scss`,
+      `_mixins.scss`). Provenance in `resources/scss/revealjs/README.md`.
+      (Landed under `resources/scss/revealjs/`, alongside the crate's other
+      embedded SCSS, rather than the originally-noted `resources/revealjs/scss/`.)
+- [x] **A2.** `quarto-sass`: `load_reveal_framework` + `load_quarto_reveal_layer` +
+      `assemble_reveal_scss()` (reuses the shared `assemble_scss` ordering).
+      7 unit/integration tests in `reveal_theme_test.rs` — all green: layer load;
+      grass compile; `--r-main-color:#222`, `--r-background-color:#fff`,
+      `--r-link-color:#2a76dd` (collision case); `--r-heading-text-transform:none`
+      + no `uppercase`; `text-align:left`; `#title-slide` centered.
+- [x] **A3.** Authored `resources/scss/revealjs/quarto-revealjs.scss`. Discovered
+      a useful simplification: in reveal 6 `$link-color`/`$link-color-hover`/
+      `$selection-color` coincide with reveal's own kebab names, so those need no
+      mapping line — set the Quarto default once and it feeds the `:root` emitter.
+- [x] **A4.** `compile_reveal_theme_css()` in `quarto-sass/compile.rs`
+      (native `grass`, WASM dart-sass). Self-contained: no embedded load paths
+      (only built-in `sass:color`/`sass:meta`).
+- [x] **A5.** Wired `CompileThemeCssStage` reveal branch via a cfg-split
+      `compile_reveal` helper; `register_reveal_assets` now takes
+      `compiled_theme_css: Option<&str>` (`Some` = compiled theme in the
+      `3-theme-*` slot; `None` = vendored stock fallback on compile failure).
+      `RevealAsset.content` is now `Cow<'static, str>`. `reset.css` + core
+      `reveal.css` stay vendored; **`quarto-reveal.css` kept separate** (it's
+      columns/aside/footnotes, orthogonal to theming). Integration test
+      `revealjs_theme_slot_is_compiled_quarto_theme` (reads the flushed theme).
+- [x] **A6.** E2E verified through `q2 render` + Chrome computed styles:
+      content slide `h2` → `text-transform:none`, `text-align:left`; `.reveal
+      .slides` → `text-align:left`; title slide centered, title h1 → 1.6em (h2
+      size). Screenshots confirm the Quarto-1 feel (mixed-case left-aligned
+      content; centered h2-sized title). Font falls back to system Helvetica
+      (Source Sans Pro bundling is the Stage B item).
+- [x] **A7.** `q2 preview` parity assessed. **Stage A converges the render path
+      ONLY.** The reveal branch keys on `FormatIdentifier::Revealjs`; the preview
+      pseudo-format `q2-slides` is `(Html, preview)` and never enters it. The SPA
+      (`hub-client/.../RevealjsReactAstSlideRenderer.tsx`, `q2-debug/entry.tsx`)
+      **statically imports the vendored stock `resources/revealjs/theme/white.css`**
+      at build time, so preview still shows the centered/uppercase reveal look.
+      ⚠ **This re-introduces a render/preview divergence that bd-4b7f1hr7
+      deliberately removed** by pointing both at the same vendored files. The
+      divergence is intentional + temporary for staged delivery (D3). Converging
+      preview (Stage C) means feeding the *compiled* Quarto reveal theme to the
+      SPA — likely by precompiling the default Quarto reveal theme to a committed
+      static CSS asset that both the render default and the SPA import, with the
+      runtime compile reserved for non-default themes/brand/user vars. Tracked on
+      Stage C (bd-j8qoyc0s). No automated parity test breaks (the hub-client
+      parity test mocks the CSS imports; `preview_render_css_parity.rs` covers
+      Bootstrap, not reveal).
+- [x] **A8.** Vertical alignment parity (found during user experimentation).
+      Q1 defaults reveal `center: false` (slides top-align; reveal's own default
+      is `true`) and re-centers the title slide via a per-slide `.center` class
+      (`format-reveal.ts`). Q2 wrongly defaulted `center: true`. Fixed:
+      `reveal_config_json` now defaults `center: false`; `build_title_slide`
+      adds the `center` class to the title-slide section. TDD (config test +
+      title-slide-class test); E2E + Chrome confirmed body slides top-align
+      (`top:18`, no inline offset) while the title slide stays centered (reveal
+      applies `top` from the `.center` class). `.reveal` carries no global
+      `center` class.
 
 ### Stage B — theme set + selection (own branch)
 - [ ] Adapt 12 themes to reveal-6 form (kebab vars / `--r-*`), as `defaults` layers

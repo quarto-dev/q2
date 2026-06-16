@@ -1,0 +1,62 @@
+// reveal.js 6 theme settings — VARIABLE DECLARATIONS ONLY.
+//
+// Vendored from reveal.js 6.0.x `css/theme/template/settings.scss`
+// (External Sources Policy: kept local, never referenced from external-sources/).
+// See resources/scss/revealjs/README.md for provenance + update procedure.
+//
+// This file holds ONLY the `$kebab: … !default;` declarations. The companion
+// `_expose.scss` holds the `:root { --r-*: … }` emitter that the upstream
+// settings.scss appended after these declarations — we split it out so the
+// emitter can live in the SCSS `rules` layer (running *after* all `!default`
+// values collapse) while these declarations live in the `defaults` layer.
+//
+// These are the reveal-native fallbacks (#bbb, uppercase, Lato, …). Quarto's
+// reveal layer overrides them via its own `!default` assignments in a
+// higher-priority layer (see quarto-revealjs.scss).
+//
+// Requires `@use 'sass:color'` in scope (assembled into the framework `uses`
+// layer) for the `color.scale(...)` calls below.
+
+// Background of the presentation
+$background: #2b2b2b !default;
+$background-color: #bbb !default;
+
+// Primary/body text
+$main-font: 'Lato', sans-serif !default;
+$main-font-size: 40px !default;
+$main-color: #eee !default;
+
+// Vertical spacing between blocks of text
+$block-margin: 20px !default;
+
+// Headings
+$heading-margin: 0 0 20px 0 !default;
+$heading-font: 'League Gothic', Impact, sans-serif !default;
+$heading-color: #eee !default;
+$heading-line-height: 1.2 !default;
+$heading-letter-spacing: normal !default;
+$heading-text-transform: uppercase !default;
+$heading-text-shadow: none !default;
+$heading-font-weight: normal !default;
+$heading1-text-shadow: none !default;
+
+$heading1-size: 3.77em !default;
+$heading2-size: 2.11em !default;
+$heading3-size: 1.55em !default;
+$heading4-size: 1em !default;
+
+$code-font: monospace !default;
+
+// Links and actions
+$link-color: #13daec !default;
+$link-color-dark: color.scale($link-color, $lightness: -15%) !default;
+$link-color-hover: color.scale($link-color, $lightness: 20%) !default;
+
+// Text selection
+$selection-background-color: #0fadbb !default;
+$selection-color: #fff !default;
+
+// Colors used for UI elements that are overlaid on top of
+// the presentation
+$overlay-element-bg-color: 240, 240, 240 !default;
+$overlay-element-fg-color: 0, 0, 0 !default;

@@ -356,6 +356,34 @@ pub fn compile_default_css(
     Ok(css)
 }
 
+/// Compile Quarto's reveal.js theme CSS (native).
+///
+/// Assembles the reveal framework + Quarto reveal layers (see
+/// [`crate::assemble_reveal_scss`]) into a single SCSS bundle and compiles it in
+/// one `grass` pass (decision D1 — unified compilation). The result is a
+/// self-contained reveal theme stylesheet: reveal's base rules driven by
+/// `--r-*` custom properties carrying Quarto's overridden values, plus Quarto's
+/// look-fixing rule overrides.
+///
+/// Stage A compiles the white-equivalent default (no theme layer); built-in /
+/// user themes (Stage B) will extend this with an additional theme layer.
+///
+/// Unlike Bootstrap compilation this needs no embedded-resource load paths — the
+/// reveal SCSS only `@use`s the built-in `sass:color` / `sass:meta` modules and
+/// is otherwise self-contained.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn compile_reveal_theme_css(
+    runtime: &dyn SystemRuntime,
+    minified: bool,
+) -> Result<String, SassError> {
+    use quarto_system_runtime::sass_native::compile_scss;
+
+    let scss = crate::bundle::assemble_reveal_scss(None)?;
+    compile_scss(runtime, &scss, &[], minified).map_err(|e| SassError::CompilationFailed {
+        message: e.to_string(),
+    })
+}
+
 /// Clear the default CSS cache.
 ///
 /// This is primarily useful for testing. In production, the cache persists
@@ -536,6 +564,25 @@ pub async fn compile_default_css(
     }
 
     Ok(css)
+}
+
+/// Compile Quarto's reveal.js theme CSS (WASM mirror of the native entry).
+///
+/// See the native [`compile_reveal_theme_css`] for the architecture. Compiles
+/// via the dart-sass JS bridge. No embedded-resource load paths are needed (the
+/// reveal SCSS only uses built-in Sass modules).
+#[cfg(target_arch = "wasm32")]
+pub async fn compile_reveal_theme_css(
+    runtime: &dyn SystemRuntime,
+    minified: bool,
+) -> Result<String, SassError> {
+    let scss = crate::bundle::assemble_reveal_scss(None)?;
+    runtime
+        .compile_sass(&scss, &[], minified)
+        .await
+        .map_err(|e| SassError::CompilationFailed {
+            message: e.to_string(),
+        })
 }
 
 #[cfg(test)]
