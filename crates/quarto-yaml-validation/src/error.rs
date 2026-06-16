@@ -137,6 +137,9 @@ pub enum ValidationErrorKind {
     /// Unresolved schema reference
     UnresolvedReference { ref_id: String },
 
+    /// A mapping key appears more than once
+    DuplicateKey { key: String },
+
     /// Other validation error
     ///
     /// **WARNING**: This is a last-resort variant for errors that don't fit any other category.
@@ -164,6 +167,7 @@ impl ValidationErrorKind {
             ValidationErrorKind::ObjectPropertyCountInvalid { .. } => "Q-1-16",
             ValidationErrorKind::UnresolvedReference { .. } => "Q-1-17",
             ValidationErrorKind::UnknownProperty { .. } => "Q-1-18",
+            ValidationErrorKind::DuplicateKey { .. } => "Q-1-20",
             ValidationErrorKind::ArrayItemsNotUnique => "Q-1-19",
             ValidationErrorKind::StringLengthInvalid { .. } => "Q-1-29",
             ValidationErrorKind::Other { .. } => "Q-1-99",
@@ -259,6 +263,9 @@ impl ValidationErrorKind {
             }
             ValidationErrorKind::UnresolvedReference { ref_id } => {
                 format!("Unresolved schema reference: {}", ref_id)
+            }
+            ValidationErrorKind::DuplicateKey { key } => {
+                format!("Duplicate key '{}'", key)
             }
             ValidationErrorKind::Other { message } => message.clone(),
         }
@@ -727,6 +734,22 @@ mod tests {
             property: "foo".to_string(),
         };
         assert_eq!(kind.error_code(), "Q-1-18");
+    }
+
+    #[test]
+    fn test_error_code_duplicate_key() {
+        let kind = ValidationErrorKind::DuplicateKey {
+            key: "examples".to_string(),
+        };
+        assert_eq!(kind.error_code(), "Q-1-20");
+    }
+
+    #[test]
+    fn test_message_duplicate_key() {
+        let kind = ValidationErrorKind::DuplicateKey {
+            key: "examples".to_string(),
+        };
+        assert_eq!(kind.message(), "Duplicate key 'examples'");
     }
 
     #[test]

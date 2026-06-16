@@ -588,11 +588,20 @@ fn validate_object(
         }
     };
 
-    // Extract keys
+    // Extract keys, rejecting duplicates. The source-tracked hash view
+    // preserves every entry (the collapsed `Yaml::Hash` would not), so a
+    // repeated key is detectable here. Report it on the second occurrence,
+    // pointing at that key's span.
     let mut keys = HashSet::new();
     for entry in entries {
-        if let Yaml::String(ref key) = entry.key.yaml {
-            keys.insert(key.clone());
+        if let Yaml::String(ref key) = entry.key.yaml
+            && !keys.insert(key.clone())
+        {
+            context.add_error(
+                ValidationErrorKind::DuplicateKey { key: key.clone() },
+                &entry.key,
+            );
+            return Err(context.errors[0].clone());
         }
     }
 
@@ -1545,6 +1554,40 @@ mod tests {
         // Invalid: additional property is not a number
         let yaml = yaml_object(vec![("anything", Yaml::String("not a number".to_string()))]);
         assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_object_duplicate_keys() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties: HashMap::new(),
+            pattern_properties: HashMap::new(),
+            additional_properties: None,
+            required: vec![],
+            min_properties: None,
+            max_properties: None,
+            closed: false,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        // A mapping with a repeated key must be rejected, not silently deduped.
+        let yaml = yaml_object(vec![
+            ("examples", Yaml::String("a".to_string())),
+            ("examples", Yaml::String("c".to_string())),
+        ]);
+        let result = validate(&yaml, &schema, &registry, &source_ctx);
+        let err = result.expect_err("duplicate key should fail validation");
+        assert_eq!(
+            err.kind,
+            ValidationErrorKind::DuplicateKey {
+                key: "examples".to_string(),
+            }
+        );
+        assert_eq!(err.error_code(), "Q-1-20");
     }
 
     // ==================== AnyOf Tests ====================
