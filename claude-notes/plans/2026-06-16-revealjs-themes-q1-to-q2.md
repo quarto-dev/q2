@@ -635,11 +635,79 @@ Increments (by value × unblocked-ness; TDD; commit per increment):
       Fixed brand's reveal base-font mapping `$mainFont`→`$main-font` (reveal-6
       kebab). TDD: `revealjs_brand_yml_flows_into_theme`. E2E confirmed
       `--r-link-color:#c00` + `--r-main-font:Georgia`. Commit a80b28de.
-- [ ] **D3. `footer:` / `logo:` (new AST transform).** New reveal transform after
-      `RevealSlidesTransform` (`pipeline.rs:1109`) injecting `<img class="slide-logo">`
-      + `.footer` Div from `logo:`/`footer:` meta; + SCSS (footer muted/bg-aware;
-      logo positioning). _(Per-slide JS placement that Q1's plugin does is out of
-      scope — Q2 ships no plugins; the markup + CSS gets us the look.)_
+- [x] **D3. `footer:` / `logo:` (generate-reuse + reveal render + slot + scaffold).**
+      **DONE 2026-06-16 (this session).** Implemented as designed below; full
+      `cargo xtask verify --skip-hub-tests` (incl. WASM build) green; E2E through
+      `q2 render` + Chrome confirmed footer/logo are `position: fixed`, direct
+      children of `.reveal` outside `.slides`, footer link rendered, `has-logo`
+      set. Files: `crates/quarto-core/src/revealjs/footer_logo.rs` (alias + render
+      transforms, 12 unit tests), `pipeline.rs` (`footer_render_stage` selector +
+      reveal alias registration), `revealjs/assemble.rs` (scaffold reads slots),
+      `resources/scss/revealjs/quarto-revealjs.scss` (SCSS). Integration:
+      `revealjs_footer_and_logo_render_outside_slides` (via `footer:` alias) +
+      `revealjs_page_footer_key_drives_footer` (canonical key). SCSS:
+      `footer_and_logo_compile_and_emit`.
+
+      **Design settled with the user 2026-06-16 (this session); supersedes both the
+      original "AST transform into `ast.blocks`" sketch AND this session's first
+      "scaffold reads raw meta" pass.**
+
+      *Why not inject into `ast.blocks`:* reveal.js applies CSS `transform` to
+      `.slides` and every `<section>` (verified in vendored `reveal.css`), so a
+      `position: fixed` element nested there resolves against the transformed
+      ancestor, not the viewport — it would NOT stay fixed. The deck-level footer/
+      logo must be **direct children of `.reveal`, outside `.slides`** (where Q1's
+      quarto-support *plugin* relocates them at runtime; Q2 ships no plugin so the
+      scaffold places them statically).
+
+      *Why a transform + meta-slot rather than the scaffold reading `footer:`/`logo:`
+      directly:* user-defined filters must be able to manipulate these entries the
+      same way they manipulate navbar/sidebar/TOC/footer in `format: html`. That
+      contract lives in the **generate → `rendered.*` slot → template** flow, not in
+      late scaffold reads. The pipeline already runs user filters around the AST
+      transforms (`UserFiltersStage::pre` → `AstTransformsStage` → `…::post`,
+      pipeline.rs:318-320), so routing footer/logo through that machinery makes the
+      contract real.
+
+      *Architecture (generate = format-agnostic, render = format-specific):*
+      - **Reuse** the format-agnostic `FooterGenerateTransform` (`page-footer:` →
+        `navigation.footer`, already registered unconditionally → already runs for
+        reveal). A small reveal-scoped **alias** transform maps Q1's `footer:` →
+        `page-footer:` (when `page-footer:` absent) *before* generate, so a bare Q1
+        `footer:` flows through the same generate (string → `center` region).
+      - A reveal-specific **render** transform reads `navigation.footer` (the
+        `center` region; left/right deferred per decision) → reveal `.footer
+        .footer-default` markup → slot `rendered.reveal.footer`; and reads `logo:`
+        (no format-agnostic logo-generate exists — logo is reveal-specific) →
+        `<img class="slide-logo">` → slot `rendered.reveal.logo`. Each render is
+        skipped if its slot is already populated (override hook). Footer inline
+        content (links/emphasis) renders via the pampa HTML writer; `.qmd` hrefs in
+        a Text-region footer pass through unrewritten (parity with html's
+        FooterRender, which defers Text-region rewriting).
+      - **Gate** the html `FooterRenderTransform` off for reveal via a localized
+        format→stage selection helper (`footer_render_stage(format)`), chosen so the
+        reveal render writes its own `rendered.reveal.*` slot without colliding with
+        html's `rendered.navigation.footer` skip-hook. This helper is the first small
+        step toward format-driven pipeline composition (vs. scattering `is_revealjs`
+        checks) — intentionally localized, not a framework.
+      - **Scaffold** (`render_revealjs_document`) reads `rendered.reveal.footer`/
+        `rendered.reveal.logo` and places them outside `.slides`; `.reveal` gains
+        `has-logo` when the logo slot is present (drives slide-number repositioning,
+        matching Q1).
+      - **SCSS** (done): footer colors (muted + `.has-dark/light-background`
+        variants, `quarto.scss`:570-592) + footer/logo positioning + responsive
+        sizing (`plugins/support/footer.css`) in `quarto-revealjs.scss`. The
+        `.has-dark/light-background` recoloring is **dormant without a plugin** (Q1
+        toggles those classes per-slide); ported for forward-compat with bd-buwhvpc2.
+      _(Out of scope, plugin/other-strand territory: per-slide footers,
+      `data-footer="false"` overrides, runtime relocation, brand/object-form logos,
+      left/right footer regions for reveal.)_
+- [ ] **D3-Lua. User Lua filters in revealjs (own phase / strand — bd-ocxnva1f).** General goal:
+      Lua filters should work for reveal decks (the footer/logo slot design above
+      *enables* this, but end-to-end filter support may be harder than it looks).
+      Confirm `UserFiltersStage` runs filters for reveal and add a test exercising a
+      filter that manipulates footer/logo (or meta generally) on a reveal deck. Open
+      a strand; do NOT block D3 on it.
 - [ ] **D4. `auto-stretch` (new AST transform).** Transform after
       `RevealSlidesTransform` detecting single-image slides → add `.r-stretch`
       (reveal-core class; default-on with a config toggle). Mostly AST; styling is

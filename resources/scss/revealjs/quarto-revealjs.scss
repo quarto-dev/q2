@@ -475,6 +475,89 @@ section.has-dark-background {
   }
 }
 
+// --- deck-level footer + logo ------------------------------------------------
+// Quarto 1 places footer/logo on every slide via its quarto-support reveal
+// *plugin*, which relocates the markup to be a direct child of `.reveal` at
+// runtime. Quarto 2 ships no plugins, so the assembler emits a single
+// deck-level `.footer .footer-default` + `<img class="slide-logo">` as direct
+// children of `.reveal`, OUTSIDE `.slides` (see assemble.rs `footer_logo_html`).
+// They must live outside `.slides` because reveal applies CSS transforms to
+// `.slides`/`<section>`, under which `position: fixed` resolves against the
+// transformed ancestor rather than the viewport. Colors port quarto.scss:
+// 570-592; positioning ports plugins/support/footer.css.
+.reveal .slide-logo {
+  display: block;
+  position: fixed;
+  bottom: 0;
+  right: 12px;
+  max-height: 2.2rem;
+  height: 100%;
+  width: auto;
+  z-index: 2;
+}
+
+.reveal .footer {
+  display: block;
+  position: fixed;
+  bottom: 18px;
+  width: 100%;
+  margin: 0 auto;
+  text-align: center;
+  font-size: 18px;
+  z-index: 2;
+  color: $text-muted;
+
+  a {
+    color: $link-color;
+  }
+
+  &.has-dark-background {
+    color: quarto-color.scale($dark-bg-text-color, $whiteness: 30%);
+
+    a {
+      color: quarto-color.scale($dark-bg-link-color, $whiteness: 30%);
+    }
+  }
+
+  &.has-light-background {
+    color: quarto-color.scale($light-bg-text-color, $whiteness: 30%);
+
+    a {
+      color: quarto-color.scale($light-bg-link-color, $whiteness: 30%);
+    }
+  }
+}
+
+.reveal .footer > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+// Defensive: an in-slide `::: {.footer}` would be mis-positioned by reveal's
+// slide transforms; hide it so only the deck-level footer shows (matches Q1).
+.reveal .slide .footer {
+  display: none;
+}
+
+// When a logo sits bottom-right, move the slide number out of its way (Q1).
+.reveal.has-logo .slide-number {
+  bottom: initial;
+  top: 8px;
+  right: 8px;
+}
+
+@media screen and (max-width: 800px) {
+  .reveal .slide-logo {
+    max-height: 1.1rem;
+    bottom: -2px;
+    right: 10px;
+  }
+  .reveal .footer {
+    font-size: 14px;
+    bottom: 12px;
+  }
+}
+
 // --- figure captions ---------------------------------------------------------
 .reveal .slide {
   figure > figcaption,

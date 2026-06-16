@@ -1057,6 +1057,24 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 /// 18. `AppendixStructureTransform` - Consolidate appendix content into container
 /// 19. `CrossrefRenderTransform` - Resolve crossref custom nodes to final HTML structure
 /// 20. `ResourceCollectorTransform` - Collect image dependencies
+/// Select the format-specific footer-render stage.
+///
+/// Footer *generation* is format-agnostic (`FooterGenerateTransform` →
+/// `navigation.footer`); footer *rendering* is not. `format: html` emits
+/// page-footer chrome into `rendered.navigation.footer`; `format: revealjs`
+/// emits a deck-level `.footer`/`.slide-logo` into `rendered.reveal.*` (and so
+/// must *not* run the html render, whose "skip if slot populated" hook keys a
+/// different slot). This is the one place that maps format → render stage; see
+/// the call site for why it's the seam a future format-driven composition layer
+/// would grow from.
+fn footer_render_stage(is_revealjs: bool) -> Box<dyn crate::transform::AstTransform> {
+    if is_revealjs {
+        Box::new(crate::revealjs::RevealFooterLogoTransform::new())
+    } else {
+        Box::new(FooterRenderTransform::new())
+    }
+}
+
 pub fn build_transform_pipeline(
     shortcode_paths: Vec<std::path::PathBuf>,
     extensions: Vec<crate::extension::types::Extension>,
@@ -1107,6 +1125,11 @@ pub fn build_transform_pipeline(
         // construction (the column Divs are still flat at this point).
         pipeline.push(Box::new(crate::revealjs::RevealColumnsTransform::new()));
         pipeline.push(Box::new(crate::revealjs::RevealSlidesTransform::new()));
+        // Alias Quarto-1's reveal `footer:` → `page-footer:` so it flows
+        // through the format-agnostic `FooterGenerateTransform` below. Must run
+        // before that generate (and it only touches metadata, so its position
+        // relative to slide construction is irrelevant).
+        pipeline.push(Box::new(crate::revealjs::RevealFooterAliasTransform::new()));
     } else {
         pipeline.push(Box::new(TitleBlockTransform::new()));
         pipeline.push(Box::new(SectionizeTransform::new()));
@@ -1209,7 +1232,14 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(NavbarRenderTransform::new()));
     pipeline.push(Box::new(SidebarRenderTransform::new()));
     pipeline.push(Box::new(PageNavRenderTransform::new()));
-    pipeline.push(Box::new(FooterRenderTransform::new()));
+    // Footer *generation* (above) is format-agnostic; footer *rendering* is
+    // format-specific — html emits page-footer chrome, revealjs emits a
+    // deck-level `.footer`/`.slide-logo` into `rendered.reveal.*`. Selecting the
+    // render stage by format here (rather than scattering `is_revealjs` checks)
+    // is a deliberately small first step toward format-driven pipeline
+    // composition: as more "non-`html` HTML formats" appear, this is the seam
+    // where a format → stage-sequence mapping would grow.
+    pipeline.push(footer_render_stage(is_revealjs));
 
     // === FINALIZATION PHASE ===
     // LinkRewriteTransform runs first in the Finalization Phase
