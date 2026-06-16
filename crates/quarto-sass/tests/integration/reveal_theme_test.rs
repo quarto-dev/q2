@@ -252,6 +252,39 @@ fn quick_wins_compile_and_emit() {
 }
 
 #[test]
+fn footer_and_logo_compile_and_emit() {
+    let css = compile(&assemble_reveal_scss(&[]).unwrap());
+
+    // The deck-level footer/logo elements are direct children of `.reveal`, so
+    // CSS positions them fixed (see assemble.rs `footer_logo_html`).
+    assert!(css.contains(".reveal .footer"), "footer color/layout rule");
+    assert!(
+        css.contains(".reveal .slide-logo"),
+        "slide-logo positioning rule"
+    );
+    // Both are fixed-positioned (the whole point of placing them outside .slides).
+    assert!(
+        css.contains("position: fixed"),
+        "footer/logo fixed positioning"
+    );
+    // Footer recolors on contrasting backgrounds, matching quarto.scss:570-592.
+    assert!(
+        css.contains(".reveal .footer.has-dark-background")
+            || css.contains(".footer.has-dark-background"),
+        "footer has-dark-background variant\n{css}"
+    );
+    assert!(
+        css.contains(".footer.has-light-background"),
+        "footer has-light-background variant"
+    );
+    // has-logo repositions the slide number (Q1 plugin footer.css).
+    assert!(
+        css.contains(".reveal.has-logo .slide-number"),
+        "has-logo slide-number reposition"
+    );
+}
+
+#[test]
 fn callouts_compile_and_emit_per_type() {
     let css = compile(&assemble_reveal_scss(&[]).unwrap());
     assert!(css.contains(".reveal div.callout"), "callout base rules");

@@ -279,6 +279,35 @@ fn reveal_config_json(meta: &ConfigValue) -> String {
         .unwrap_or_else(|_| "{}".to_string())
 }
 
+/// Collect the deck-level footer + logo markup to place as **direct children of
+/// `.reveal`** (outside `.slides`).
+///
+/// The markup is *pre-rendered* by [`RevealFooterLogoTransform`](super::RevealFooterLogoTransform)
+/// into the `rendered.reveal.footer` / `rendered.reveal.logo` metadata slots
+/// (footer routed through the format-agnostic `FooterGenerateTransform`; logo
+/// from `logo:`). The scaffold only *places* it: footer/logo must be direct
+/// children of `.reveal`, outside `.slides`, because reveal.js applies CSS
+/// `transform` to `.slides`/`<section>`, under which a `position: fixed` element
+/// resolves against the transformed ancestor rather than the viewport. Quarto 1
+/// relocates the markup at runtime with its quarto-support reveal *plugin*;
+/// Quarto 2 ships no plugin, so we place the single deck-level elements
+/// statically here.
+///
+/// Returns `(markup, has_logo)`. `markup` is empty when neither slot is set;
+/// `has_logo` drives the `.reveal.has-logo` class (slide-number repositioning).
+fn footer_logo_html(meta: &ConfigValue) -> (String, bool) {
+    let logo = meta
+        .get_path(&["rendered", "reveal", "logo"])
+        .and_then(|v| v.as_str());
+    let footer = meta
+        .get_path(&["rendered", "reveal", "footer"])
+        .and_then(|v| v.as_str());
+
+    // Logo first, then footer (matches Quarto 1's after-body order).
+    let parts: Vec<&str> = [logo, footer].into_iter().flatten().collect();
+    (parts.join("\n"), logo.is_some())
+}
+
 /// Assemble the reveal.js HTML document, **linking** its CSS/JS assets.
 ///
 /// * `body` — the rendered slide sections (the inner HTML of `.slides`).
@@ -305,6 +334,20 @@ pub fn render_revealjs_document(
         .unwrap_or_default();
     let config = reveal_config_json(meta);
 
+    // Deck-level footer/logo live OUTSIDE `.slides` (see `footer_logo_html`).
+    let (footer_logo, has_logo) = footer_logo_html(meta);
+    let reveal_class = if has_logo {
+        "reveal has-logo"
+    } else {
+        "reveal"
+    };
+    // Emit on its own line only when present, so an empty deck stays clean.
+    let footer_logo_block = if footer_logo.is_empty() {
+        String::new()
+    } else {
+        format!("\n{footer_logo}")
+    };
+
     let links = css_urls
         .iter()
         .map(|url| format!(r#"<link rel="stylesheet" href="{}">"#, attr_escape(url)))
@@ -326,10 +369,10 @@ pub fn render_revealjs_document(
 {links}
 </head>
 <body>
-<div class="reveal">
+<div class="{reveal_class}">
 <div class="slides">
 {body}
-</div>
+</div>{footer_logo_block}
 </div>
 {scripts}
 <script>
@@ -339,8 +382,10 @@ Reveal.initialize({config});
 </html>
 "#,
         title = escape_html(&title),
+        reveal_class = reveal_class,
         links = links,
         body = body,
+        footer_logo_block = footer_logo_block,
         scripts = scripts,
         config = config,
     )
@@ -589,6 +634,70 @@ mod tests {
             theme_key(&b),
             theme_key(&b2),
             "identical CSS → identical key (dedup)"
+        );
+    }
+
+    /// A metadata map carrying a pre-rendered `rendered.reveal.<key>` slot, as
+    /// `RevealFooterLogoTransform` would have populated it.
+    fn meta_with_slot(slot: &str, html: &str) -> ConfigValue {
+        let mut m = meta(vec![("title", s("T"))]);
+        m.insert_path(&["rendered", "reveal", slot], s(html));
+        m
+    }
+
+    /// The index where `.slides` closes — everything the deck-level footer/logo
+    /// places must come *after* this (outside `.slides`) but before `.reveal`
+    /// closes, so reveal's slide transforms don't break their fixed positioning.
+    fn slides_close_idx(html: &str) -> usize {
+        let slides_open = html.find(r#"<div class="slides">"#).expect("slides open");
+        // the first `</div>` after the slides open closes `.slides`
+        slides_open + html[slides_open..].find("</div>").expect("slides close")
+    }
+
+    #[test]
+    fn footer_slot_placed_outside_slides() {
+        let m = meta_with_slot(
+            "footer",
+            r#"<div class="footer footer-default">© 2026</div>"#,
+        );
+        let html = render_revealjs_document("<section></section>", &m, &sample_css(), &sample_js());
+        let footer_at = html
+            .find(r#"<div class="footer footer-default">"#)
+            .expect("footer placed");
+        assert!(
+            footer_at > slides_close_idx(&html),
+            "footer must be placed after `.slides` closes (outside it)"
+        );
+    }
+
+    #[test]
+    fn logo_slot_placed_outside_slides_and_marks_reveal() {
+        let m = meta_with_slot("logo", r#"<img class="slide-logo" src="logo.png">"#);
+        let html = render_revealjs_document("<section></section>", &m, &sample_css(), &sample_js());
+        let logo_at = html.find(r#"class="slide-logo""#).expect("logo placed");
+        assert!(
+            logo_at > slides_close_idx(&html),
+            "logo must be placed after `.slides` closes (outside it)"
+        );
+        // `.reveal` gains `has-logo` so slide-number repositioning kicks in.
+        assert!(
+            html.contains(r#"<div class="reveal has-logo">"#),
+            "reveal element should carry `has-logo` when the logo slot is set"
+        );
+    }
+
+    #[test]
+    fn no_slots_emits_no_markup_and_no_has_logo() {
+        let m = meta(vec![("title", s("T"))]);
+        let html = render_revealjs_document("<section></section>", &m, &sample_css(), &sample_js());
+        assert!(!html.contains("slide-logo"), "no logo markup expected");
+        assert!(
+            !html.contains("footer-default"),
+            "no footer markup expected"
+        );
+        assert!(
+            html.contains(r#"<div class="reveal">"#),
+            "reveal element has no has-logo class without a logo slot"
         );
     }
 

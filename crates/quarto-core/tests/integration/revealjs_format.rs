@@ -140,6 +140,80 @@ fn revealjs_render_produces_reveal_scaffold() {
     );
 }
 
+/// End-to-end: `footer:`/`logo:` metadata produce a single deck-level footer +
+/// logo placed OUTSIDE `.slides` (a direct child of `.reveal`). They must live
+/// outside `.slides` because reveal applies CSS transforms to `.slides`/section
+/// under which `position: fixed` breaks; see `revealjs::assemble`.
+#[test]
+fn revealjs_footer_and_logo_render_outside_slides() {
+    let deck = "\
+---
+title: \"Footed Talk\"
+logo: logo.png
+footer: \"© 2026 [Quarto](https://quarto.org)\"
+format: revealjs
+---
+
+## A slide
+
+- one
+";
+    let html = render_revealjs(deck);
+
+    // Logo image + footer container both present.
+    assert!(
+        html.contains(r#"<img class="slide-logo" src="logo.png">"#),
+        "expected a .slide-logo img; got:\n{html}"
+    );
+    assert!(
+        html.contains(r#"<div class="footer footer-default">"#),
+        "expected a deck-level .footer; got:\n{html}"
+    );
+    // Footer inline markdown renders (link preserved, not flattened).
+    assert!(
+        html.contains(r#"<a href="https://quarto.org">Quarto</a>"#),
+        "footer link should render as an anchor"
+    );
+    // `.reveal` carries `has-logo`.
+    assert!(
+        html.contains(r#"class="reveal has-logo""#),
+        "reveal element should carry `has-logo`"
+    );
+    // Placement: footer/logo come AFTER the `.slides` container closes, so they
+    // are direct children of `.reveal`, not nested inside transformed slides.
+    let slides_open = html.find(r#"<div class="slides">"#).unwrap();
+    let slides_close = slides_open + html[slides_open..].find("</div>").unwrap();
+    assert!(
+        html.find(r#"class="slide-logo""#).unwrap() > slides_close
+            && html.find(r#"class="footer footer-default""#).unwrap() > slides_close,
+        "footer/logo must be placed after `.slides` closes (outside it)"
+    );
+}
+
+/// The canonical `page-footer:` key (shared with `format: html`) also drives the
+/// reveal footer — the reveal render reuses the format-agnostic
+/// `FooterGenerateTransform`, so no reveal-specific `footer:` alias is required.
+#[test]
+fn revealjs_page_footer_key_drives_footer() {
+    let deck = "\
+---
+title: \"Canonical Footer\"
+page-footer: \"Shared footer key\"
+format: revealjs
+---
+
+## A slide
+
+- one
+";
+    let html = render_revealjs(deck);
+    assert!(
+        html.contains(r#"<div class="footer footer-default">"#)
+            && html.contains("Shared footer key"),
+        "page-footer: should drive the reveal footer; got:\n{html}"
+    );
+}
+
 #[test]
 fn revealjs_render_emits_title_slide() {
     let html = render_revealjs(FLAT_DECK);

@@ -19,6 +19,7 @@
 
 mod assemble;
 mod columns;
+mod footer_logo;
 mod footnotes;
 mod slides;
 mod theme;
@@ -26,6 +27,7 @@ mod transform;
 
 pub use assemble::{DEFAULT_THEME, register_reveal_assets, render_revealjs_document};
 pub use columns::RevealColumnsTransform;
+pub use footer_logo::{RevealFooterAliasTransform, RevealFooterLogoTransform};
 pub use footnotes::RevealFootnotesTransform;
 pub use slides::{DEFAULT_SLIDE_LEVEL, build_reveal_slides};
 pub use theme::{RevealThemeResolution, resolve_reveal_theme};
