@@ -708,10 +708,27 @@ Increments (by value × unblocked-ness; TDD; commit per increment):
       Confirm `UserFiltersStage` runs filters for reveal and add a test exercising a
       filter that manipulates footer/logo (or meta generally) on a reveal deck. Open
       a strand; do NOT block D3 on it.
-- [ ] **D4. `auto-stretch` (new AST transform).** Transform after
-      `RevealSlidesTransform` detecting single-image slides → add `.r-stretch`
-      (reveal-core class; default-on with a config toggle). Mostly AST; styling is
-      reveal-native.
+- [x] **D4. `auto-stretch` (new AST transform). DONE 2026-06-16 (this session).**
+      `RevealAutoStretchTransform` (`crates/quarto-core/src/revealjs/auto_stretch.rs`,
+      registered in the reveal branch after `RevealFootnotesTransform`) adds reveal's
+      core `.r-stretch` class to single-image slides. Default-on; `auto-stretch: false`
+      opt-out. Pure AST (no Quarto SCSS — `.r-stretch` is reveal-core).
+      **Scope is conservative — narrower than Q1's `applyStretch`:** stretches only
+      when the slide body (ignoring the heading) is exactly ONE block that is a
+      `Paragraph` wrapping a single `Image` or a `Figure` wrapping a single image. Q1
+      also stretches a lone image on a text-bearing slide and does DOM hoisting of the
+      `<img>` to section level + caption re-insertion; we do neither (single-image
+      slides don't need it, and Chrome E2E confirmed reveal sizes the nested
+      `<p><img class=r-stretch>` correctly without hoisting). Opt-outs ported:
+      `.nostretch` on slide or image (image class consumed), `.absolute`, already
+      `.stretch`/`.r-stretch`, and explicit sizing (Q1 guards only `height`; we also
+      guard `width` — conservative). 11 unit tests + integration
+      `revealjs_auto_stretch_single_image_slides` (lone/sized/inline/opt-out). E2E:
+      `q2 render` + Chrome confirmed the lone image fills the slide (350px of an 816px
+      container) while a `width=200` image stays small. Full verify incl. WASM green.
+      _(Preview-parity caveat: the transform runs only in the `is_revealjs` branch,
+      which the `q2-slides` preview pseudo-format does not enter, so preview does not
+      auto-stretch. Same gap class as D3.)_
 - [ ] **D5. Docs (D1 caveat).** User-facing guide on the theming variables + a
       "migrating a Quarto-1 revealjs theme to Q2" how-to incl. the `--r-*` runtime
       escape hatch (docs/ site — render with `q2`, not Q1). Open a doc strand.
