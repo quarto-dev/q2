@@ -2,10 +2,10 @@
 
 **Strand:** bd-yown2ts4
 **Branch:** `feature/revealjs-q1-themes` (epic integration line; stages land on sub-branches)
-**Status (2026-06-16):** Stages A/B/C **merged** to `feature/revealjs-q1-themes`.
-Stage D (bd-j8qoyc0s) in progress on branch `beads/bd-j8qoyc0s-reveal-brand-callouts`
-(off feature, **unmerged**): D1 callouts + D2 brand done; **D3/D4/D5 remain** —
-see "## Handoff for next session" at the bottom.
+**Status (2026-06-16):** Stages A/B/C **and** Stage D's D1 (callouts) + D2 (brand)
+are merged to `feature/revealjs-q1-themes`, which is **pushed to `origin`**.
+Stage D (bd-j8qoyc0s) continues: **D3/D4/D5 remain** — see "## Handoff for next
+session" at the bottom (a fresh-clone agent branches off `feature` for these).
 
 ---
 
@@ -15,11 +15,14 @@ see "## Handoff for next session" at the bottom.
 key context is above. Repo: `/Users/cscheid/rooms/room-1/q2`.
 
 ### Where things are
-- On disk you should be (or `git switch` to) branch
-  **`beads/bd-j8qoyc0s-reveal-brand-callouts`** (off `feature/revealjs-q1-themes`).
-  Stages A/B/C are merged to `feature`; D1+D2 are committed on this branch but
-  **NOT yet merged**. Check `git log --oneline -6`; latest D commits are
-  `ebbdd732` (D1 callouts), `a80b28de` (D2 brand).
+- **Stages A/B/C AND Stage D's D1+D2 are all merged to `feature/revealjs-q1-themes`,
+  which is pushed to `origin` (quarto-dev/q2).** Clone the repo, `git checkout
+  feature/revealjs-q1-themes`, and **create a fresh continuation branch off it**
+  for the rest of Stage D (e.g. `git switch -c beads/bd-j8qoyc0s-reveal-stage-d-cont`).
+  (The original local `beads/bd-j8qoyc0s-reveal-brand-callouts` branch is not
+  pushed; its content equals `feature` now that D1/D2 are merged.)
+- Latest D commits on `feature`: `ebbdd732` (D1 callouts), `a80b28de` (D2 brand),
+  then plan/handoff doc commits + the Stage-D merge commit. `git log --oneline -8`.
 - **Done:** D1 callouts (pure SCSS), D2 `_brand.yml` (config plumbing). See the
   Stage D checklist above for exactly what landed.
 - **Remaining: D3 (footer/logo), D4 (auto-stretch), D5 (docs).** Both D3 and D4
@@ -92,9 +95,11 @@ key context is above. Repo: `/Users/cscheid/rooms/room-1/q2`.
   runs for `q2-slides`; check `pipeline.rs` `Q2_PREVIEW_TRANSFORM_EXCLUDED`
   (~line 1314). The *styling* still won't be in preview. State this honestly when
   reporting "done".
-- **Git**: branch is off `feature/revealjs-q1-themes`. When Stage D is complete,
-  merge `--no-ff` into feature and `braid close bd-j8qoyc0s`. **Never push without
-  explicit user permission.** Commit message trailer:
+- **Git**: branch your continuation off `feature/revealjs-q1-themes`. When the
+  remaining Stage D work is complete, merge `--no-ff` into `feature` and
+  `braid close bd-j8qoyc0s`. `feature` is already on `origin`; **push only with
+  explicit user permission** (the D1/D2 push was explicitly authorized — don't
+  assume standing permission for D3+). Commit message trailer:
   `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 
 ### Key files
