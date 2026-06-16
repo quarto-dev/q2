@@ -17,10 +17,9 @@ title slide. The rest of this page walks through the slide-authoring
 features Quarto 2 supports today.
 
 ::: {.callout-note}
-Quarto 2's reveal.js support is still growing. This page documents only
-what is implemented now; features such as slide backgrounds, code-line
-highlighting, transitions, themes, and the speaker-view UI are not yet
-available.
+Quarto 2's reveal.js support is still growing. This page documents only what is
+implemented now; features such as code-line highlighting, the speaker-view UI,
+and the reveal.js plugins (menu, search, chalkboard) are not yet available.
 :::
 
 ## Creating slides
@@ -260,3 +259,72 @@ format:
     reference-location: document
 ---
 ```
+
+## Themes
+
+Every deck starts from the `default` theme — a left-aligned, white theme tuned
+to feel like Quarto. To restyle the whole deck, set `theme:` to one of the
+built-in reveal.js themes (`dark`, `league`, `dracula`, `solarized`, and the
+rest):
+
+:::: {#demo-themes .embed-example-iframe file="/examples/presentations/09-themes/slides.html"}
+```markdown
+---
+format:
+  revealjs:
+    theme: dark
+---
+
+## A dark slide
+
+Content on a dark background.
+```
+
+The `theme:` option restyles the deck's background, text, and links at once;
+this deck uses the built-in `dark` theme. `white` aliases to `default` and
+`black` aliases to `dark`. [View source](https://github.com/quarto-dev/q2/tree/main/examples/presentations/09-themes)
+::::
+
+## Footer and logo
+
+To repeat a line of text along the bottom of every slide, set `footer:`. To pin
+an image to the corner of every slide, set `logo:`. Both live in the front
+matter and apply to the whole deck.
+
+:::: {#demo-footer-logo .embed-example-iframe file="/examples/presentations/10-footer-logo/slides.html"}
+```markdown
+---
+format: revealjs
+footer: "© 2026 Example Corp — [example.com](https://example.com)"
+logo: logo.svg
+---
+
+## A slide
+
+The footer and logo appear here, and on every other slide.
+```
+
+The footer sits centered and muted at the bottom of each slide and accepts
+Markdown, so a link in it renders as a link; the logo sits in the corner. [View source](https://github.com/quarto-dev/q2/tree/main/examples/presentations/10-footer-logo)
+::::
+
+## Stretching images
+
+When a slide's only image stands in a block of its own, Quarto sizes it to fill
+the space the slide's other content leaves — reveal.js calls this `.r-stretch`,
+and Quarto adds it automatically so a large image never overflows. A heading and
+a line of explanation can sit alongside the image.
+
+:::: {#demo-auto-stretch .embed-example-iframe file="/examples/presentations/11-auto-stretch/slides.html"}
+```markdown
+## A single image fills the slide
+
+Here is our architecture:
+
+![](diagram.svg)
+```
+
+A lone slide image stretches to fill the available space. To keep an image at
+its natural size, set `auto-stretch: false`, give the image an explicit
+`width`/`height`, or mark it `.nostretch`. [View source](https://github.com/quarto-dev/q2/tree/main/examples/presentations/11-auto-stretch)
+::::

@@ -248,6 +248,16 @@ fn revealjs_auto_stretch_single_image_slides() {
         "lone-image slide should stretch; got:\n{html}"
     );
 
+    // A standalone image amid explanatory text still stretches (matches Q1:
+    // one image, in its own block, with sibling prose).
+    let amid_text = render(
+        "---\ntitle: T\nformat: revealjs\n---\n\n## Slide\n\nHere is the diagram:\n\n![](pic.png)\n",
+    );
+    assert!(
+        amid_text.contains("r-stretch"),
+        "a standalone image beside text should stretch; got:\n{amid_text}"
+    );
+
     // Sized image → no stretch.
     let sized =
         render("---\ntitle: T\nformat: revealjs\n---\n\n## Slide\n\n![](pic.png){width=\"300\"}\n");

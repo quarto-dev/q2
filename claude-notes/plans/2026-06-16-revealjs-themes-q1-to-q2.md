@@ -713,25 +713,46 @@ Increments (by value × unblocked-ness; TDD; commit per increment):
       registered in the reveal branch after `RevealFootnotesTransform`) adds reveal's
       core `.r-stretch` class to single-image slides. Default-on; `auto-stretch: false`
       opt-out. Pure AST (no Quarto SCSS — `.r-stretch` is reveal-core).
-      **Scope is conservative — narrower than Q1's `applyStretch`:** stretches only
-      when the slide body (ignoring the heading) is exactly ONE block that is a
-      `Paragraph` wrapping a single `Image` or a `Figure` wrapping a single image. Q1
-      also stretches a lone image on a text-bearing slide and does DOM hoisting of the
-      `<img>` to section level + caption re-insertion; we do neither (single-image
-      slides don't need it, and Chrome E2E confirmed reveal sizes the nested
-      `<p><img class=r-stretch>` correctly without hoisting). Opt-outs ported:
+      **Scope matches Q1's `applyStretch`** (refined during D5 — the first cut was
+      over-conservative; the auto-stretch example's natural "heading + a sentence +
+      a diagram" slide didn't stretch, which Q1 does). Stretches when a slide holds
+      exactly ONE image (peripheral `.notes`/`.aside` aside), carries no `.aside`, and
+      that image sits in a *standalone* top-level block (a `Paragraph` whose only
+      inline is the image, or a `Figure`). Sibling blocks (heading, explanatory
+      paragraphs) are allowed — reveal sizes the image to the space they leave. An
+      image among inline text, nested in a `.column`/layout/fragment div, or a
+      multi-image slide is skipped. We do NOT do Q1's DOM hoisting (`<img>` → section
+      child + caption re-insert); Chrome E2E confirmed reveal sizes the nested
+      `<p><img class=r-stretch>` / figure image correctly without it. Opt-outs ported:
       `.nostretch` on slide or image (image class consumed), `.absolute`, already
       `.stretch`/`.r-stretch`, and explicit sizing (Q1 guards only `height`; we also
-      guard `width` — conservative). 11 unit tests + integration
-      `revealjs_auto_stretch_single_image_slides` (lone/sized/inline/opt-out). E2E:
-      `q2 render` + Chrome confirmed the lone image fills the slide (350px of an 816px
-      container) while a `width=200` image stays small. Full verify incl. WASM green.
+      guard `width` — conservative). 14 unit tests + integration
+      `revealjs_auto_stretch_single_image_slides` (lone / amid-text / sized / inline /
+      opt-out). E2E: `q2 render` + Chrome confirmed the lone image fills the slide
+      (350px of an 816px container) while a `width=200` image stays small. Full verify
+      incl. WASM green.
       _(Preview-parity caveat: the transform runs only in the `is_revealjs` branch,
       which the `q2-slides` preview pseudo-format does not enter, so preview does not
       auto-stretch. Same gap class as D3.)_
-- [ ] **D5. Docs (D1 caveat).** User-facing guide on the theming variables + a
-      "migrating a Quarto-1 revealjs theme to Q2" how-to incl. the `--r-*` runtime
-      escape hatch (docs/ site — render with `q2`, not Q1). Open a doc strand.
+- [x] **D5. Docs (partial — feature docs done; deep theming guide deferred).**
+      **DONE 2026-06-16 (this session)** for the agreed scope: documented theme
+      selection, footer/logo (D3), and auto-stretch (D4) in
+      `docs/presentations/revealjs/index.qmd`, each with prose + a minimal runnable
+      example (`examples/presentations/09-themes`, `10-footer-logo`, `11-auto-stretch`)
+      embedded via `.embed-example-iframe` (the established pattern). Registered the
+      three in `examples/manifest.yml` + the examples `README.md` table; fixed the
+      page's stale "themes/transitions not available" callout. Extended
+      `cargo xtask stage-doc-examples` to stage top-level **image** assets (so
+      image-using examples' logos/figures resolve in the embed). Prose written with
+      the reader-expectations methodology (Gopen & Swan). E2E: `q2 render docs/`
+      (165/166; the 1 error is a pre-existing broken link in `brand.qmd`, unrelated)
+      + Chrome confirmed the new sections render and the footer/logo demo iframe shows
+      the live deck with footer + logo. Full verify incl. WASM green.
+      **Deferred (separate page + own pass): the deep theming-variables guide**
+      (`$presentation-*`/`$body-*`, custom themes, `_brand.yml`, the `--r-*` runtime
+      escape hatch) + the "migrating a Quarto-1 revealjs theme to Q2" how-to. Per the
+      user, this goes on a dedicated `docs/presentations/revealjs/theming.qmd` page.
+      Open a doc strand for it.
 
 **Preview-parity caveat (carry to Stage E / a parity pass):** SCSS-only features
 (callouts, brand) render correctly via `q2 render` but NOT in the `q2-slides`

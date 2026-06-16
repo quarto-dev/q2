@@ -17,13 +17,19 @@
 //! therefore a pure AST transform: it adds the class to the image and lets
 //! reveal's own layout size it.
 //!
-//! Scope (conservative, matching this stage's plan; **narrower than Q1**):
-//! a slide qualifies only when its content — *ignoring the slide heading* — is
-//! exactly **one** block that is a `Paragraph` wrapping a single `Image`, or a
-//! `Figure` wrapping a single `Image`. Q1 is more aggressive (it stretches a
-//! lone image even on a slide that also has text); we stretch only
-//! single-image slides, where overflow is the real problem and there is no text
-//! for the stretch to collide with.
+//! Scope (matches Quarto 1's `applyStretch`): a slide qualifies when it holds
+//! exactly **one** image (peripheral `.notes`/`.aside` content aside), carries
+//! no `.aside`, and that image sits in a *standalone* top-level block — a
+//! `Paragraph` whose only inline is the image, or a `Figure`. Sibling blocks (a
+//! heading, an explanatory paragraph) are allowed: reveal sizes the image to
+//! the space they leave, so the common "heading + a sentence + a diagram" slide
+//! stretches. An image nested in a `.column`/layout/fragment div, an image
+//! among inline text, or a multi-image slide is left untouched.
+//!
+//! We still **don't** do Q1's DOM hoisting (moving the `<img>` to be a direct
+//! child of `<section>` and re-inserting the figure caption); Chrome E2E
+//! confirmed reveal sizes the nested `<p><img class=r-stretch>` / figure image
+//! correctly without it.
 //!
 //! Opt-outs (ported from Q1 `applyStretch`):
 //! - `auto-stretch: false` in metadata — disables the whole transform.
@@ -101,54 +107,86 @@ fn is_section(div: &Div) -> bool {
     div.attr.1.iter().any(|c| c == "section")
 }
 
-/// Add `.r-stretch` to the lone image of a single-image leaf slide, honoring
-/// the opt-outs. No-op for stacks, multi-block slides, sized/opted-out images.
+/// Add `.r-stretch` to the lone image of a slide, honoring the opt-outs.
+///
+/// A slide qualifies when it holds exactly **one** image (counting everything
+/// but speaker `.notes`), carries no peripheral `.aside`, and that image lives
+/// in a *standalone* top-level block — a `Paragraph` whose only inline is the
+/// image, or a `Figure`. Other blocks (a heading, explanatory paragraphs) may
+/// coexist: reveal sizes the image to the space they leave. This matches Quarto
+/// 1's `applyStretch`; an image nested in a `.column`/layout/fragment div, an
+/// image among inline text, or a multi-image slide is left untouched.
 fn maybe_stretch_section(div: &mut Div, auto_stretch: bool) {
-    // Per-slide opt-out.
+    // Per-slide opt-out, peripheral aside, and exactly-one-image gates.
     if div.attr.1.iter().any(|c| c == "nostretch") {
         return;
     }
+    if contains_aside(&div.content) {
+        return;
+    }
+    if count_images(&div.content) != 1 {
+        return;
+    }
 
-    // The slide body is everything but the heading(s). Exactly one body block
-    // qualifies a single-image slide.
-    let body: Vec<usize> = div
-        .content
+    // The image must sit in a standalone top-level block (Paragraph[Image] or
+    // Figure). If the single image is nested in a custom/layout div, no
+    // top-level block is eligible and we leave it alone.
+    for block in &mut div.content {
+        let Some(image) = body_image_mut(block) else {
+            continue;
+        };
+
+        // Per-image opt-outs. `.nostretch` is consumed (removed) per Q1.
+        if let Some(pos) = image.attr.1.iter().position(|c| c == "nostretch") {
+            image.attr.1.remove(pos);
+            return;
+        }
+        if image.attr.1.iter().any(|c| c == "absolute") {
+            return;
+        }
+        if image
+            .attr
+            .1
+            .iter()
+            .any(|c| c == STRETCH_CLASS || c == "stretch")
+        {
+            return; // already stretched (explicit or idempotent re-run)
+        }
+        if has_explicit_size(image) {
+            return;
+        }
+        if auto_stretch {
+            image.attr.1.push(STRETCH_CLASS.to_string());
+        }
+        return;
+    }
+}
+
+/// Whether the block tree contains a peripheral `.aside` div (a coalesced
+/// footnote block or an author `.aside`). Speaker `.notes` do not count.
+fn contains_aside(blocks: &[Block]) -> bool {
+    blocks.iter().any(|b| match b {
+        Block::Div(d) if d.attr.1.iter().any(|c| c == "aside") => true,
+        Block::Div(d) => contains_aside(&d.content),
+        Block::Figure(f) => contains_aside(&f.content),
+        _ => false,
+    })
+}
+
+/// Count `Image` inlines across the slide, skipping `.notes`/`.aside` divs
+/// (their images are peripheral and should not gate auto-stretch).
+fn count_images(blocks: &[Block]) -> usize {
+    blocks
         .iter()
-        .enumerate()
-        .filter(|(_, b)| !matches!(b, Block::Header(_)))
-        .map(|(i, _)| i)
-        .collect();
-    if body.len() != 1 {
-        return;
-    }
-
-    let Some(image) = body_image_mut(&mut div.content[body[0]]) else {
-        return;
-    };
-
-    // Per-image opt-outs. `.nostretch` is consumed (removed) per Q1.
-    if let Some(pos) = image.attr.1.iter().position(|c| c == "nostretch") {
-        image.attr.1.remove(pos);
-        return;
-    }
-    if image.attr.1.iter().any(|c| c == "absolute") {
-        return;
-    }
-    if image
-        .attr
-        .1
-        .iter()
-        .any(|c| c == STRETCH_CLASS || c == "stretch")
-    {
-        return; // already stretched (explicit or idempotent re-run)
-    }
-    if has_explicit_size(image) {
-        return;
-    }
-
-    if auto_stretch {
-        image.attr.1.push(STRETCH_CLASS.to_string());
-    }
+        .map(|b| match b {
+            Block::Paragraph(p) => image_count(&p.content),
+            Block::Plain(p) => image_count(&p.content),
+            Block::Figure(f) => count_images(&f.content),
+            Block::Div(d) if d.attr.1.iter().any(|c| c == "notes" || c == "aside") => 0,
+            Block::Div(d) => count_images(&d.content),
+            _ => 0,
+        })
+        .sum()
 }
 
 /// A mutable reference to the slide's lone image, when the body block is a
@@ -365,19 +403,75 @@ mod tests {
     }
 
     #[test]
-    fn multi_block_slide_skipped() {
-        // heading + image + a second paragraph → not single-image.
+    fn lone_image_with_sibling_text_stretches() {
+        // heading + explanatory paragraph + a standalone image → the lone image
+        // still stretches (matches Q1: one image, in its own block, amid text).
+        let blocks = vec![section(
+            &[],
+            vec![
+                header(),
+                para(vec![Inline::Str(Str {
+                    text: "Here is our architecture:".to_string(),
+                    source_info: si(),
+                })]),
+                para(vec![image(&[], &[])]),
+            ],
+        )];
+        assert!(stretch_classes(blocks, true).contains(&"r-stretch".to_string()));
+    }
+
+    #[test]
+    fn two_images_skipped() {
         let blocks = vec![section(
             &[],
             vec![
                 header(),
                 para(vec![image(&[], &[])]),
-                para(vec![Inline::Str(Str {
-                    text: "text".to_string(),
-                    source_info: si(),
-                })]),
+                para(vec![image(&[], &[])]),
             ],
         )];
+        assert!(!stretch_classes(blocks, true).contains(&"r-stretch".to_string()));
+    }
+
+    #[test]
+    fn slide_with_aside_skipped() {
+        // A peripheral aside (e.g. a coalesced footnote) suppresses auto-stretch,
+        // matching Q1 (`aside:not(.notes)`).
+        let aside = Block::Div(Div {
+            attr: (
+                String::new(),
+                vec!["aside".to_string()],
+                LinkedHashMap::new(),
+            ),
+            content: vec![para(vec![Inline::Str(Str {
+                text: "note".to_string(),
+                source_info: si(),
+            })])],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let blocks = vec![section(
+            &[],
+            vec![header(), para(vec![image(&[], &[])]), aside],
+        )];
+        assert!(!stretch_classes(blocks, true).contains(&"r-stretch".to_string()));
+    }
+
+    #[test]
+    fn image_nested_in_column_div_skipped() {
+        // A single image inside a `.column` is not a top-level standalone block,
+        // so it is left alone (Q1 screens out layout/column/fragment parents).
+        let column = Block::Div(Div {
+            attr: (
+                String::new(),
+                vec!["column".to_string()],
+                LinkedHashMap::new(),
+            ),
+            content: vec![para(vec![image(&[], &[])])],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let blocks = vec![section(&[], vec![header(), column])];
         assert!(!stretch_classes(blocks, true).contains(&"r-stretch".to_string()));
     }
 

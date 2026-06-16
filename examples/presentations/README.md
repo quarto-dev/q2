@@ -34,3 +34,6 @@ cargo run --bin q2 -- render examples/presentations/03-fragments
 | [`06-speaker-notes`](06-speaker-notes/) | `.notes` speaker notes |
 | [`07-asides`](07-asides/) | `.aside` peripheral commentary |
 | [`08-footnotes`](08-footnotes/) | per-slide footnote coalescing |
+| [`09-themes`](09-themes/) | `theme:` selection and built-in theme aliases |
+| [`10-footer-logo`](10-footer-logo/) | deck-level `footer:` and `logo:` |
+| [`11-auto-stretch`](11-auto-stretch/) | auto-stretch single-image slides |

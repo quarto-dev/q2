@@ -137,9 +137,16 @@ fn render_project(root: &Path, project: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Image extensions staged alongside the rendered HTML. A deck that references
+/// an image (`logo:`, a slide `![](pic.svg)`, …) keeps it as a **top-level**
+/// asset beside `slides.html` (a `type: default` project renders in place), so
+/// the embedded iframe needs it copied too — `*_files/` alone is not enough.
+const STAGED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "svg", "webp", "avif"];
+
 /// Copy the static render output from `src_project` into `dest`: every
-/// top-level `*.html` file and every top-level `*_files/` directory. Source
-/// files (`*.qmd`, `_quarto.yml`, `README.md`), caches (`.quarto/`), and
+/// top-level `*.html` file, every top-level image asset (see
+/// [`STAGED_IMAGE_EXTENSIONS`]), and every top-level `*_files/` directory.
+/// Source files (`*.qmd`, `_quarto.yml`, `README.md`), caches (`.quarto/`), and
 /// dotfiles are skipped — only published artifacts are staged. Returns the
 /// number of top-level items copied.
 fn copy_static_output(src_project: &Path, dest: &Path) -> Result<usize> {
@@ -156,13 +163,20 @@ fn copy_static_output(src_project: &Path, dest: &Path) -> Result<usize> {
         if file_type.is_dir() && name.ends_with("_files") {
             copy_dir_recursive(&path, &dest.join(name.as_ref()))?;
             copied += 1;
-        } else if file_type.is_file() && name.ends_with(".html") {
+        } else if file_type.is_file() && (name.ends_with(".html") || is_staged_image(&name)) {
             fs::copy(&path, dest.join(name.as_ref()))
                 .with_context(|| format!("copying {}", path.display()))?;
             copied += 1;
         }
     }
     Ok(copied)
+}
+
+/// Whether a top-level file is an image asset that should be staged.
+fn is_staged_image(name: &str) -> bool {
+    name.rsplit_once('.').is_some_and(|(_, ext)| {
+        STAGED_IMAGE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str())
+    })
 }
 
 /// Recursively copy a directory tree.
@@ -179,4 +193,29 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_staged_image;
+
+    #[test]
+    fn recognizes_image_assets_case_insensitively() {
+        for name in ["logo.svg", "pic.png", "photo.JPG", "anim.gif", "img.WEBP"] {
+            assert!(is_staged_image(name), "{name} should be staged");
+        }
+    }
+
+    #[test]
+    fn rejects_non_images_and_extensionless() {
+        for name in [
+            "slides.html",
+            "slides.qmd",
+            "_quarto.yml",
+            "README.md",
+            "noext",
+        ] {
+            assert!(!is_staged_image(name), "{name} should not be staged");
+        }
+    }
 }
