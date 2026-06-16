@@ -473,15 +473,26 @@ TDD; commit per increment._
       integration `slideNumber` assertion. E2E: `q2 render` + Chrome
       `Reveal.getConfig()` confirmed. Full verify (incl. hub build) green.
       Commits 37061765 (code) + 3cea68ce (hub changelog).
-- [ ] **C2. Sass-helper foundation.** Port Q1 `quarto.scss` helpers into the
-      reveal layer: `quarto-color.blackness/.scale`, `quarto-math.pow`,
-      `shift-color`, `shift_to_dark`, `make/undo-smaller-font-size` (Q1
-      `quarto.scss:204-258`). Unblocks the C3 SCSS items.
-- [ ] **C3. SCSS quick-wins** (port from `quarto.scss`): `.has-light/dark-background`
-      text switching; code-block border/scroll/max-height; `.smaller` system;
-      light/dark sentinel `/*! dark */` (+ a Q2 consumer for code-highlight mode);
-      blockquote restyle; kbd; slide-number; figure/caption; column gutters; link
-      styling. Per-item tests (compiled CSS assertions) + E2E spot-checks.
+- [x] **C2. Sass-helper foundation.** Ported into the Quarto reveal layer:
+      `colorToRGB`/`tint`/`shade`/`shift-color` functions; `shift_to_dark`
+      (kebab `$background-color` + `quarto-color.blackness`),
+      `make/undo-smaller-font-size` (`quarto-math.pow`). Added the
+      `quarto-color`/`quarto-math` `@use`s + supporting defaults
+      (`$code-block-theme-dark-threshhold`, border/gray vars). Probed `grass`
+      first — it supports `color.blackness`/`color.scale`/`math.pow`/`mix`.
+- [x] **C3. SCSS quick-wins** ported from `quarto.scss`: `.has-light/dark-background`
+      text+link+code recoloring; code-block border + full-width + scrollable
+      `max-height`; `.smaller` system (global + per-slide, headings keep size via
+      `undo-smaller-font-size`); blockquote restyle (left accent border, not
+      italic-centered); kbd keycaps (`shift_to_dark` background); slide-number
+      (muted, bg-aware); figure captions; multi-column gutters; ordered-list
+      `type=` + task-list checkboxes; edge nav-control spacing; link
+      weight/decoration; `--r-*` code-font custom properties. Tests:
+      `quick_wins_compile_and_emit`, `shift_to_dark_picks_dark_value_on_dark_theme`.
+      E2E + Chrome: code block, blockquote, kbd, `.smaller`, and dark-background
+      legibility all render faithfully. Full `cargo xtask verify` (incl. WASM)
+      green. **Deferred to Stage D** (need markup/consumer/plugins): light/dark
+      sentinel, footer/logo, panels/tabsets, callouts, code-annotation, tippy.
 
 ### Stage D — brand + callouts + parity hardening + docs (bd-j8qoyc0s)
 - [ ] `_brand.yml` integration; **callouts** (the big one — depends on the C2 helper

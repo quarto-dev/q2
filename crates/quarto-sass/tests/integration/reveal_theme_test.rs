@@ -211,3 +211,67 @@ fn beige_theme_has_radial_background() {
 fn unknown_theme_errors() {
     assert!(load_reveal_theme_layer("no-such-theme").is_err());
 }
+
+// ── Stage C quick-wins (the ported quarto.scss systems) ──────────────────────
+
+#[test]
+fn quick_wins_compile_and_emit() {
+    let css = compile(&assemble_reveal_scss(&[]).unwrap());
+
+    // per-background text recoloring
+    assert!(
+        css.contains("section.has-dark-background"),
+        "has-dark-background rule present"
+    );
+    assert!(
+        css.contains("section.has-light-background"),
+        "has-light-background rule present"
+    );
+    // code blocks: bordered + scrollable
+    assert!(css.contains("div.sourceCode"), "sourceCode border rule");
+    assert!(
+        css.contains("max-height: 500px"),
+        "code block scroll max-height\n{css}"
+    );
+    // blockquote restyle (left accent border, not italic-centered)
+    assert!(
+        css.contains("border-left: 0.25rem"),
+        "blockquote accent border"
+    );
+    // .smaller system
+    assert!(css.contains(".reveal.smaller"), "global .smaller rule");
+    // kbd
+    assert!(css.contains("kbd {") || css.contains("kbd{"), "kbd rule");
+    // task lists
+    assert!(css.contains("task-list"), "task-list rule");
+    // code-font custom properties
+    assert!(
+        css.contains("--r-inline-code-font:"),
+        "inline code font custom property"
+    );
+}
+
+#[test]
+fn shift_to_dark_picks_dark_value_on_dark_theme() {
+    // kbd uses `shift_to_dark`, which depends on the slide background's
+    // blackness. On the `dark` theme (bg #191919) the dark branch is chosen
+    // (a shifted background), proving the helper + blackness threshold work.
+    let dark = compile(&assemble_reveal_scss(&[load_reveal_theme_layer("dark").unwrap()]).unwrap());
+    let light = compile(&assemble_reveal_scss(&[]).unwrap());
+    // The kbd background-color differs between dark and light themes.
+    let kbd_bg = |css: &str| {
+        let i = css
+            .find("kbd {")
+            .or_else(|| css.find("kbd{"))
+            .expect("kbd rule");
+        let seg = &css[i..(i + 200).min(css.len())];
+        seg.find("background-color:")
+            .map(|j| seg[j..].split(';').next().unwrap_or("").to_string())
+            .expect("kbd background-color")
+    };
+    assert_ne!(
+        kbd_bg(&dark),
+        kbd_bg(&light),
+        "shift_to_dark should yield different kbd backgrounds on dark vs light themes"
+    );
+}
