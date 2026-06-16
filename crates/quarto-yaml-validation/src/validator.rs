@@ -230,7 +230,7 @@ fn validate_number(
 ) -> ValidationResult<()> {
     let num = match &value.yaml {
         Yaml::Integer(n) => *n as f64,
-        Yaml::Real(s) => s.parse::<f64>().unwrap_or(f64::NAN),
+        Yaml::Real(_) => value.yaml.as_f64().unwrap_or(f64::NAN),
         _ => {
             context.add_error(
                 ValidationErrorKind::TypeMismatch {
@@ -827,6 +827,48 @@ mod tests {
 
         let yaml = yaml_scalar(Yaml::Real("3.14".to_string()));
         assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+    }
+
+    #[test]
+    fn test_validate_number_yaml_infinity_and_nan() {
+        // End-to-end: parse real YAML text and validate against a `number`
+        // schema. The YAML core-schema float spellings (`.inf`, `-.inf`, …)
+        // must validate as numbers. Regression for tidyverse/data-dict#47,
+        // where `range: [-.inf, 8.3]` was rejected with "got string".
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let number_schema = || {
+            Schema::Number(NumberSchema {
+                annotations: SchemaAnnotations::default(),
+                minimum: None,
+                maximum: None,
+                exclusive_minimum: None,
+                exclusive_maximum: None,
+                multiple_of: None,
+            })
+        };
+
+        for text in [".inf", "+.inf", "-.inf", ".Inf", ".INF", ".nan", ".NaN", ".NAN"] {
+            let yaml = quarto_yaml::parse(text).unwrap();
+            assert!(
+                validate(&yaml, &number_schema(), &registry, &source_ctx).is_ok(),
+                "{text:?} should validate as a number"
+            );
+        }
+
+        // And the data-dict shape: an array of numbers including -.inf.
+        let array_schema = Schema::Array(ArraySchema {
+            annotations: SchemaAnnotations::default(),
+            items: Some(Box::new(number_schema())),
+            min_items: None,
+            max_items: None,
+            unique_items: None,
+        });
+        let yaml = quarto_yaml::parse("[-.inf, 8.3]").unwrap();
+        assert!(
+            validate(&yaml, &array_schema, &registry, &source_ctx).is_ok(),
+            "[-.inf, 8.3] should validate as an array of numbers"
+        );
     }
 
     #[test]

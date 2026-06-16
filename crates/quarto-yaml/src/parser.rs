@@ -558,8 +558,10 @@ fn parse_scalar_value(value: &str) -> Yaml {
         return Yaml::Integer(i);
     }
 
-    // Try to parse as float
-    if let Ok(_f) = value.parse::<f64>() {
+    // Try to parse as float, including the YAML 1.2 core-schema float
+    // spellings (`.inf`, `-.inf`, `+.inf`, `.nan`, and case variants) that
+    // Rust's `f64::from_str` does not accept.
+    if is_yaml_float(value) {
         return Yaml::Real(value.to_string());
     }
 
@@ -581,6 +583,16 @@ fn parse_scalar_value(value: &str) -> Yaml {
     Yaml::String(value.to_string())
 }
 
+/// Returns `true` if `value` is a YAML 1.2 core-schema float.
+fn is_yaml_float(value: &str) -> bool {
+    match value {
+        ".inf" | ".Inf" | ".INF" | "+.inf" | "+.Inf" | "+.INF" => true,
+        "-.inf" | "-.Inf" | "-.INF" => true,
+        ".nan" | ".NaN" | ".NAN" => true,
+        _ => value.bytes().any(|b| b.is_ascii_digit()) && value.parse::<f64>().is_ok(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -597,6 +609,57 @@ mod tests {
         let yaml = parse("42").unwrap();
         assert!(yaml.is_scalar());
         assert_eq!(yaml.yaml.as_i64(), Some(42));
+    }
+
+    #[test]
+    fn test_parse_yaml_float_special_forms() {
+        // YAML 1.2 core-schema float spellings must resolve to Yaml::Real,
+        // not Yaml::String. See tidyverse/data-dict#47.
+        for (text, expected) in [
+            (".inf", f64::INFINITY),
+            ("+.inf", f64::INFINITY),
+            (".Inf", f64::INFINITY),
+            (".INF", f64::INFINITY),
+            ("+.INF", f64::INFINITY),
+            ("-.inf", f64::NEG_INFINITY),
+            ("-.Inf", f64::NEG_INFINITY),
+            ("-.INF", f64::NEG_INFINITY),
+        ] {
+            let yaml = parse(text).unwrap();
+            assert!(
+                matches!(yaml.yaml, Yaml::Real(_)),
+                "{text:?} should parse as Yaml::Real, got {:?}",
+                yaml.yaml
+            );
+            assert_eq!(
+                yaml.yaml.as_f64(),
+                Some(expected),
+                "{text:?} should evaluate to {expected}"
+            );
+        }
+
+        for text in [".nan", ".NaN", ".NAN"] {
+            let yaml = parse(text).unwrap();
+            assert!(
+                matches!(yaml.yaml, Yaml::Real(_)),
+                "{text:?} should parse as Yaml::Real, got {:?}",
+                yaml.yaml
+            );
+            assert!(
+                yaml.yaml.as_f64().unwrap().is_nan(),
+                "{text:?} should evaluate to NaN"
+            );
+        }
+
+        // Bare `inf` / `nan` (no leading dot) are NOT YAML floats — they stay strings.
+        for text in ["inf", "nan", "infinity"] {
+            let yaml = parse(text).unwrap();
+            assert!(
+                matches!(yaml.yaml, Yaml::String(_)),
+                "{text:?} should stay a Yaml::String, got {:?}",
+                yaml.yaml
+            );
+        }
     }
 
     #[test]
