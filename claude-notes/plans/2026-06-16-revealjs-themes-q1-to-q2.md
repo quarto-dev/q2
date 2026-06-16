@@ -514,20 +514,21 @@ Two more items moved to their own strands after the investigation:
 Stage D branch: `beads/bd-j8qoyc0s-reveal-brand-callouts` off `feature/revealjs-q1-themes`.
 Increments (by value × unblocked-ness; TDD; commit per increment):
 
-- [ ] **D1. Callouts (pure SCSS).** Q2 **already emits identical `.callout` markup
-      for reveal** (`CalloutTransform`+`CalloutResolveTransform` run before the
-      reveal branch — `pipeline.rs:1073-1074`); the reveal SCSS layer just has no
-      `.callout` rules. Port Q1 `quarto.scss:873-1116` callout rules + `$callout-*`
-      defaults into `quarto-revealjs.scss` (helpers `shift-color`/`shift_to_dark`/
-      `colorToRGB` already present from C2). Source: also `resources/scss/bootstrap/
-      _bootstrap-rules.scss:1759+` (icon SVG map). No Rust. _(bd-1kor9's "needs
-      reveal callout AST" premise is already satisfied.)_
-- [ ] **D2. `_brand.yml` integration (config plumbing).** `brand_to_layers`
-      already emits reveal `presentation-*` vars; the reveal compile path just
-      never resolves brand. Thread a brand layer through: stage reveal branch
-      (resolve brand like HTML, `compile_theme_css.rs:421-441`) →
-      `resolve_reveal_theme` → `assemble_reveal_scss` → `compile_reveal_theme_css`
-      (+ the `compile_reveal` helper). TDD: brand vars reach `--r-*`.
+- [x] **D1. Callouts (pure SCSS).** Ported Q1 `quarto.scss:873-1116` (base rules,
+      simple/default layouts, the `$callouts` map with per-type accent + inlined
+      recolored Bootstrap-icon SVGs, default-title `shift_to_dark` bg) into
+      `quarto-revealjs.scss`. Added `$callout-*`/`$table-border-color` defaults,
+      `sass:map` use, and a local `str-replace` fn. Q2 already emits identical
+      `.callout` markup for reveal — pure SCSS, no AST work. TDD +
+      E2E (Chrome: note/tip/warning render with colored borders, recolored icons,
+      titled vs simple). Commit ebbdd732.
+- [x] **D2. `_brand.yml` integration (config plumbing).** New
+      `quarto_sass::resolve_brand_layers` (extract `brand:` → typed Brand →
+      layers, independent of Bootstrap theme parsing); reveal branch resolves it
+      against the project dir and appends brand layers LAST (highest priority).
+      Fixed brand's reveal base-font mapping `$mainFont`→`$main-font` (reveal-6
+      kebab). TDD: `revealjs_brand_yml_flows_into_theme`. E2E confirmed
+      `--r-link-color:#c00` + `--r-main-font:Georgia`. Commit a80b28de.
 - [ ] **D3. `footer:` / `logo:` (new AST transform).** New reveal transform after
       `RevealSlidesTransform` (`pipeline.rs:1109`) injecting `<img class="slide-logo">`
       + `.footer` Div from `logo:`/`footer:` meta; + SCSS (footer muted/bg-aware;
