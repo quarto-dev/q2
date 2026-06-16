@@ -253,7 +253,7 @@ impl ValidationDiagnostic {
         let mut hints = Vec::new();
 
         match kind {
-            ValidationErrorKind::MissingRequiredProperty { property } => {
+            ValidationErrorKind::MissingRequiredProperty { property, .. } => {
                 hints.push(format!(
                     "Add the `{}` property to your YAML document?",
                     property
@@ -355,6 +355,8 @@ mod tests {
         let error = ValidationError::new(
             ValidationErrorKind::MissingRequiredProperty {
                 property: "author".to_string(),
+                allowed: None,
+                expected_type: None,
             },
             InstancePath::new(),
         );
@@ -393,6 +395,8 @@ mod tests {
 
         let kind = ValidationErrorKind::MissingRequiredProperty {
             property: "author".to_string(),
+            allowed: None,
+            expected_type: None,
         };
         let hints = ValidationDiagnostic::suggest_fixes_from_kind(&kind);
         assert_eq!(hints.len(), 1);

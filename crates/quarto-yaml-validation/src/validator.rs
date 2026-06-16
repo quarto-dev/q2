@@ -599,9 +599,21 @@ fn validate_object(
     // Check required properties
     for required in &schema.required {
         if !keys.contains(required) {
+            // Advertise what the absent property should have been, mirroring the
+            // message the user would have seen had it been present with a bad
+            // value: enum values for an enum subschema, otherwise the type(s).
+            let (allowed, expected_type) = match schema.properties.get(required) {
+                Some(Schema::Enum(e)) if !e.values.is_empty() => {
+                    (Some(e.values.iter().map(|v| format!("{}", v)).collect()), None)
+                }
+                Some(prop) => (None, expected_type_description(prop)),
+                None => (None, None),
+            };
             context.add_error(
                 ValidationErrorKind::MissingRequiredProperty {
                     property: required.clone(),
+                    allowed,
+                    expected_type,
                 },
                 value,
             );
@@ -680,6 +692,40 @@ fn yaml_type_name(value: &Yaml) -> &'static str {
         Yaml::Array(_) => "array",
         Yaml::Hash(_) => "object",
         Yaml::Alias(_) => "alias",
+    }
+}
+
+/// Brief description of the type(s) a property subschema permits, reusing the
+/// `Schema::type_name()` vocabulary (which matches `TypeMismatch`'s `expected`).
+///
+/// Returns `None` for schemas that carry no useful concrete type to advertise
+/// (`any`, `true`, `allOf`, unresolved `$ref`); `Enum` is handled separately via
+/// its permitted values, so it also returns `None` here.
+fn expected_type_description(schema: &Schema) -> Option<String> {
+    match schema {
+        Schema::Boolean(_)
+        | Schema::Number(_)
+        | Schema::String(_)
+        | Schema::Null(_)
+        | Schema::Array(_)
+        | Schema::Object(_) => Some(schema.type_name().to_string()),
+        Schema::AnyOf(s) => {
+            let names: Vec<String> = s
+                .schemas
+                .iter()
+                .filter_map(expected_type_description)
+                .collect();
+            if names.is_empty() {
+                None
+            } else {
+                Some(names.join(" or "))
+            }
+        }
+        Schema::Enum(_)
+        | Schema::AllOf(_)
+        | Schema::Any(_)
+        | Schema::True
+        | Schema::Ref(_) => None,
     }
 }
 
@@ -1369,6 +1415,213 @@ mod tests {
         // Invalid: missing required property
         let yaml = yaml_object(vec![("other", Yaml::String("test".to_string()))]);
         assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_object_required_enum_reports_allowed_values() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+
+        // A required `version` property whose subschema is `enum: ["0.1.0"]`.
+        let mut properties = HashMap::new();
+        properties.insert(
+            "version".to_string(),
+            Schema::Enum(EnumSchema {
+                annotations: SchemaAnnotations::default(),
+                values: vec![serde_json::Value::String("0.1.0".to_string())],
+            }),
+        );
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties,
+            pattern_properties: HashMap::new(),
+            additional_properties: None,
+            required: vec!["version".to_string()],
+            min_properties: None,
+            max_properties: None,
+            closed: false,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        // Missing the required enum property: the error should advertise the
+        // allowed values, mirroring InvalidEnumValue.
+        let yaml = yaml_object(vec![("other", Yaml::String("test".to_string()))]);
+        let err = validate(&yaml, &schema, &registry, &source_ctx)
+            .expect_err("missing required property should fail validation");
+        match &err.kind {
+            ValidationErrorKind::MissingRequiredProperty {
+                property,
+                allowed,
+                expected_type,
+            } => {
+                assert_eq!(property, "version");
+                // Enum values render via `format!("{}", json)`, so strings keep
+                // their quotes — matching the `InvalidEnumValue` rendering.
+                assert_eq!(allowed.as_deref(), Some(["\"0.1.0\"".to_string()].as_slice()));
+                assert_eq!(*expected_type, None);
+            }
+            other => panic!("expected MissingRequiredProperty, got {:?}", other),
+        }
+        assert!(
+            err.kind
+                .message()
+                .contains("must be one of: \"0.1.0\""),
+            "message was: {}",
+            err.kind.message()
+        );
+    }
+
+    #[test]
+    fn test_validate_object_required_non_enum_reports_expected_type() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+
+        // A required non-enum property advertises its expected type instead.
+        let mut properties = HashMap::new();
+        properties.insert(
+            "name".to_string(),
+            Schema::String(StringSchema {
+                annotations: SchemaAnnotations::default(),
+                min_length: None,
+                max_length: None,
+                pattern: None,
+            }),
+        );
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties,
+            pattern_properties: HashMap::new(),
+            additional_properties: None,
+            required: vec!["name".to_string()],
+            min_properties: None,
+            max_properties: None,
+            closed: false,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        let yaml = yaml_object(vec![("other", Yaml::String("test".to_string()))]);
+        let err = validate(&yaml, &schema, &registry, &source_ctx)
+            .expect_err("missing required property should fail validation");
+        match &err.kind {
+            ValidationErrorKind::MissingRequiredProperty {
+                property,
+                allowed,
+                expected_type,
+            } => {
+                assert_eq!(property, "name");
+                assert_eq!(*allowed, None);
+                assert_eq!(expected_type.as_deref(), Some("string"));
+            }
+            other => panic!("expected MissingRequiredProperty, got {:?}", other),
+        }
+        assert_eq!(
+            err.kind.message(),
+            "Missing required property 'name' (expected string)"
+        );
+    }
+
+    #[test]
+    fn test_validate_object_required_number_reports_expected_type() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+
+        // A required number property advertises "number" as its expected type.
+        let mut properties = HashMap::new();
+        properties.insert(
+            "count".to_string(),
+            Schema::Number(NumberSchema {
+                annotations: SchemaAnnotations::default(),
+                minimum: None,
+                maximum: None,
+                exclusive_minimum: None,
+                exclusive_maximum: None,
+                multiple_of: None,
+            }),
+        );
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties,
+            pattern_properties: HashMap::new(),
+            additional_properties: None,
+            required: vec!["count".to_string()],
+            min_properties: None,
+            max_properties: None,
+            closed: false,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        let yaml = yaml_object(vec![("other", Yaml::String("test".to_string()))]);
+        let err = validate(&yaml, &schema, &registry, &source_ctx)
+            .expect_err("missing required property should fail validation");
+        match &err.kind {
+            ValidationErrorKind::MissingRequiredProperty {
+                property,
+                allowed,
+                expected_type,
+            } => {
+                assert_eq!(property, "count");
+                assert_eq!(*allowed, None);
+                assert_eq!(expected_type.as_deref(), Some("number"));
+            }
+            other => panic!("expected MissingRequiredProperty, got {:?}", other),
+        }
+        assert_eq!(
+            err.kind.message(),
+            "Missing required property 'count' (expected number)"
+        );
+    }
+
+    #[test]
+    fn test_validate_object_required_anyof_reports_expected_types() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+
+        // An anyOf subschema advertises the union of its member types.
+        let mut properties = HashMap::new();
+        properties.insert(
+            "x".to_string(),
+            Schema::AnyOf(AnyOfSchema {
+                annotations: SchemaAnnotations::default(),
+                schemas: vec![
+                    Schema::Boolean(BooleanSchema {
+                        annotations: SchemaAnnotations::default(),
+                    }),
+                    Schema::String(StringSchema {
+                        annotations: SchemaAnnotations::default(),
+                        min_length: None,
+                        max_length: None,
+                        pattern: None,
+                    }),
+                ],
+            }),
+        );
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties,
+            pattern_properties: HashMap::new(),
+            additional_properties: None,
+            required: vec!["x".to_string()],
+            min_properties: None,
+            max_properties: None,
+            closed: false,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        let yaml = yaml_object(vec![("other", Yaml::String("test".to_string()))]);
+        let err = validate(&yaml, &schema, &registry, &source_ctx)
+            .expect_err("missing required property should fail validation");
+        assert_eq!(
+            err.kind.message(),
+            "Missing required property 'x' (expected boolean or string)"
+        );
     }
 
     #[test]

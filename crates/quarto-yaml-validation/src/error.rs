@@ -87,7 +87,19 @@ pub enum ValidationErrorKind {
     TypeMismatch { expected: String, got: String },
 
     /// Missing required property
-    MissingRequiredProperty { property: String },
+    ///
+    /// When the schema knows what the absent property should have been, the
+    /// error advertises it, mirroring the message the user would have seen had
+    /// the property been present with a bad value:
+    /// - `allowed` carries the permitted values when the subschema is an enum
+    ///   (like [`ValidationErrorKind::InvalidEnumValue`]).
+    /// - `expected_type` carries the permitted type(s) otherwise (like
+    ///   [`ValidationErrorKind::TypeMismatch`]).
+    MissingRequiredProperty {
+        property: String,
+        allowed: Option<Vec<String>>,
+        expected_type: Option<String>,
+    },
 
     /// Unknown property in closed object
     UnknownProperty { property: String },
@@ -176,9 +188,23 @@ impl ValidationErrorKind {
             ValidationErrorKind::TypeMismatch { expected, got } => {
                 format!("Expected {}, got {}", expected, got)
             }
-            ValidationErrorKind::MissingRequiredProperty { property } => {
-                format!("Missing required property '{}'", property)
-            }
+            ValidationErrorKind::MissingRequiredProperty {
+                property,
+                allowed,
+                expected_type,
+            } => match (allowed, expected_type) {
+                (Some(values), _) if !values.is_empty() => {
+                    format!(
+                        "Missing required property '{}' (must be one of: {})",
+                        property,
+                        values.join(", ")
+                    )
+                }
+                (_, Some(ty)) => {
+                    format!("Missing required property '{}' (expected {})", property, ty)
+                }
+                _ => format!("Missing required property '{}'", property),
+            },
             ValidationErrorKind::UnknownProperty { property } => {
                 format!("Unknown property '{}'", property)
             }
@@ -641,6 +667,8 @@ mod tests {
     fn test_error_code_missing_required_property() {
         let kind = ValidationErrorKind::MissingRequiredProperty {
             property: "foo".to_string(),
+            allowed: None,
+            expected_type: None,
         };
         assert_eq!(kind.error_code(), "Q-1-10");
     }
@@ -994,6 +1022,8 @@ mod tests {
         let error = ValidationError::new(
             ValidationErrorKind::MissingRequiredProperty {
                 property: "toc".to_string(),
+                allowed: None,
+                expected_type: None,
             },
             path,
         );
@@ -1001,6 +1031,30 @@ mod tests {
             error.to_string(),
             "Validation error at format.html: Missing required property 'toc'"
         );
+    }
+
+    #[test]
+    fn test_missing_required_property_with_allowed_values() {
+        let kind = ValidationErrorKind::MissingRequiredProperty {
+            property: "version".to_string(),
+            allowed: Some(vec!["0.1.0".to_string()]),
+            expected_type: None,
+        };
+        assert_eq!(
+            kind.message(),
+            "Missing required property 'version' (must be one of: 0.1.0)"
+        );
+    }
+
+    #[test]
+    fn test_missing_required_property_empty_allowed_values() {
+        // An empty allowed list must not append a "(must be one of: )" clause.
+        let kind = ValidationErrorKind::MissingRequiredProperty {
+            property: "version".to_string(),
+            allowed: Some(vec![]),
+            expected_type: None,
+        };
+        assert_eq!(kind.message(), "Missing required property 'version'");
     }
 
     // Tests for ValidationError::with_schema_path
