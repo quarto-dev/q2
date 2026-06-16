@@ -2,8 +2,10 @@
 
 **Strand:** bd-yown2ts4
 **Branch:** `feature/revealjs-q1-themes` (epic integration line; stages land on sub-branches)
-**Status:** Study phase + toolchain experiment complete; decisions D1–D5 resolved
-(2026-06-16). **Awaiting user go-ahead to begin Stage A implementation.**
+**Status:** Stage A (bd-r9mkybwl) + Stage B (bd-n697m7u7) implemented, verified, and
+**merged** to `feature/revealjs-q1-themes` (2026-06-16). Running a Q1/reveal-5
+look-and-feel audit (below) before deciding Stage C scope vs implementing
+additional parity features.
 
 ## Overview
 
@@ -458,6 +460,82 @@ was a wrong mental model — `ctx.artifacts` is per-document, not project-wide.)
 - [ ] **Docs (D1 caveat):** user-facing guide on the theming variables and a
       "migrating a Quarto-1 revealjs theme to Q2" how-to, incl. the `--r-*`
       runtime escape hatch (docs/ site — render with `q2`, not Q1). Open a doc strand.
+
+---
+
+## Q1/reveal-5 look-and-feel audit (2026-06-16)
+
+Done after Stage B at the user's request, prompted by the `center` bug (A8) —
+which showed the study-phase assumption "Q2's reveal config matches Q1" was
+false. Full evidence-based audit of Q1's revealjs look-and-feel surface vs Q2
+(post-A+B). **Decision pending: implement a subset of these vs proceed to Stage C
+as originally scoped.**
+
+### Headline finding (same class as the `center` bug)
+
+**`transition` defaults to `"slide"` in Q2 but `"none"` in Q1**
+(`format-reveal.ts:357`; schema `document-reveal-transitions.yml:6`). Q2 decks
+animate on every slide change; Q1 decks don't. Immediately visible. Q2 emits only
+**8** reveal config keys; Q1 seeds an **opinionated default block** (gated on
+`revealjs-config != "default"`, `format-reveal.ts:343-361`) the user effectively
+gets. Divergent/missing defaults Q2 should adopt:
+
+| Key | Q1 default | Q2 today |
+|---|---|---|
+| `transition` | `"none"` | `"slide"` ⚠ |
+| `width` / `height` | `1050` / `700` | unset (reveal `960`/`700`) |
+| `margin` | `0.1` | unset (reveal `0.04`) |
+| `navigationMode` | `"linear"` | unset (`"default"`) — also drives the title-h1 sizing rule |
+| `controlsLayout` | `"edges"` | unset (`"bottom-right"`) |
+| `controlsTutorial` | `false` | unset (`true` — bouncing arrows appear) |
+| `history` | `true` | unset (`false`) |
+| `backgroundTransition` | `"none"` | unset (`"fade"`) |
+| `fragmentInURL` / `pdfSeparateFragments` | `false` | unset (`true`) |
+| `slideNumber` | rewritten to `"c/t"`/`"h.v"` then quoted (`:336-340,516-519`) | raw bool/string passthrough |
+
+⚠ **Preview parity bug:** `RevealDeck.tsx:158-171` hardcodes `center: true` +
+`transition: 'slide'` — contradicts render's `center:false` + (corrected)
+`transition:"none"`. Fix alongside.
+
+### SCSS systems not yet ported from `quarto.scss` (highest-value)
+
+- **Callouts** (`quarto.scss:873-1116`) — *very high* impact ("the #1 feels-like-Quarto element"), **large**; needs the Sass-helper foundation + revealjs callout AST output (bd-1kor9).
+- **`.has-light/dark-background` text switching** (117-123, 269-305) — *high* (legibility on contrasting bg), **small SCSS**.
+- **Code-block border/scroll/max-height** (328-373) — *high* (recognizable), **small-medium SCSS**.
+- **`.smaller` font-scaling** (240-250, 488-549) — *high* (`smaller:true` ubiquitous), **medium**; needs `make/undo-smaller` mixins.
+- **Light/dark sentinel** `/*! dark */` (669-677) — *high (functional)*: renderer greps it to pick the code-highlight theme. Small emit + a Q2 consumer.
+- **Blockquote restyle** (385-400), **kbd** (841-856), **slide-number** (594-604), **figure/caption** (606-613), **multi-column gutters** (551-563), **link/brand** (865-871), **code-annotation** (735-824), **ol type/task-lists** (679-727) — mostly *medium/small* pure SCSS.
+- **Foundational prerequisite:** the high-value SCSS items depend on porting Q1's Sass helpers (`quarto-color.blackness/.scale`, `quarto-math.pow`, `shift-color`, `shift_to_dark`, `make/undo-smaller-font-size`; `quarto.scss:204-258`). **Port this helper layer once first** — it unblocks the whole SCSS batch.
+
+### Chrome / transform / plugin gaps
+
+- **Fancy title slide** (authors/affiliations/ORCID/email; `title-fancy/`) — *high*, **medium-large**; needs author-metadata normalization (AST) + template + SCSS. Q2 has only single-author plain text.
+- **`auto-stretch`** (default **true**) — single-image slides → `.r-stretch`; without it images overflow. *Medium-high*, AST/transform.
+- **`logo:` / `footer:`** — markup injection (transform) + per-slide JS placement + SCSS. *Medium(-high)*.
+- **Plugins: Q2 ships ZERO reveal plugins** in the render scaffold (no `plugins:` array). Q1 bundles menu (default), notes/search/zoom, line-highlight, pdfexport. Speaker view (S), menu, code-line stepping all absent. *Medium*, JS-plugin foundation. (Notes follow-up: bd-0qaarvzx.)
+- **Footnotes/refs trailing-slide treatment** (`.smaller .scrollable` + title; `format-reveal.ts:770-808`) — Q2 coalesces footnotes but lacks this. *Medium*, transform.
+- **`output-location: slide`**, slide backgrounds (`data-background-*`), citation→`#/references` rewriting — Tier-3, *medium/low*.
+
+### Prioritized shortlist
+
+**Quick wins (high impact / low effort):**
+1. Config defaults: `transition:"none"` + the full opinionated block; `slideNumber` `c/t` rewrite+quoting; fix `RevealDeck.tsx` to match. *(config, small-medium)*
+2. `.has-light/dark-background` text switching. *(SCSS, small)*
+3. Code-block border/scroll/max-height. *(SCSS, small-medium)*
+4. Blockquote restyle; kbd; slide-number; figure-caption; column gutters; link styling. *(SCSS, small each)*
+5. `.smaller` system + light/dark sentinel. *(SCSS, medium; needs helper layer)*
+
+**Larger efforts (high value, phase them):** callouts; fancy title slide; footer+logo; auto-stretch; plugin foundation (menu/notes/line-highlight). The **Sass-helper foundation** is the prerequisite to sequence first.
+
+### Suggested re-scoping (proposal — awaiting user decision)
+
+The audit suggests inserting a **config-defaults fix + Sass-helper foundation +
+SCSS quick-wins** stage *before* the originally-scoped Stage C, because:
+- the `transition`/config divergences are as user-visible as the `center` bug and cheap to fix;
+- the SCSS quick-wins (legibility, code blocks, `.smaller`) are high "at home" payoff;
+- the helper foundation unblocks both the quick-wins and the larger Stage-C items (callouts).
+
+Stage C's brand + callouts + docs would then build on that foundation.
 
 ## References
 
