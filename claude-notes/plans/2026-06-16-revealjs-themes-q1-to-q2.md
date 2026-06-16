@@ -503,25 +503,49 @@ their own strands** (not part of Stage D):
 - code-annotation styling → **bd-h176qcgp** (wants dedicated design time).
 - reveal plugin foundation (menu/notes/line-highlight) → **bd-buwhvpc2**.
 
-Remaining Stage D scope (concrete decomposition pending the prerequisite
-investigation, 2026-06-16):
-- [ ] **Callouts** — the highest-value "feels like Quarto" element (helper
-      foundation from C2 is in place). Verify whether Q2 emits `.callout` markup
-      for reveal first (else AST work; cf. bd-1kor9).
-- [ ] **`_brand.yml` integration** — thread a resolved brand layer into
-      `assemble_reveal_scss` (quarto-sass `brand_layer.rs` has reveal hooks).
-- [ ] **Fancy title slide** — authors/affiliations/ORCID/email (likely needs
-      author-metadata normalization).
-- [ ] **`footer:` / `logo:`** — markup injection (reveal transform) + SCSS.
-- [ ] **`auto-stretch`** (default on in Q1) — single-image slides → `.r-stretch`.
-- [ ] **panels/tabsets** SCSS (state TBD by investigation).
-- [ ] Render/preview parity hardening; keep the vendored-asset drift guard meaningful.
-- [ ] **Docs (D1 caveat):** user-facing guide on the theming variables + a
+**Prerequisite investigation (2026-06-16) findings drive this decomposition.**
+Two more items moved to their own strands after the investigation:
+- Fancy title slide → **bd-tntzuvzl**: BLOCKED on author-metadata normalization
+  (Q2 drops all structured author fields — `document_profile.rs:742-744`; needs
+  the deferred author-model epic first).
+- panels/tabsets → **bd-ewfppclm**: greenfield (no tabset transform in Q2 for any
+  format); lowest priority.
+
+Stage D branch: `beads/bd-j8qoyc0s-reveal-brand-callouts` off `feature/revealjs-q1-themes`.
+Increments (by value × unblocked-ness; TDD; commit per increment):
+
+- [ ] **D1. Callouts (pure SCSS).** Q2 **already emits identical `.callout` markup
+      for reveal** (`CalloutTransform`+`CalloutResolveTransform` run before the
+      reveal branch — `pipeline.rs:1073-1074`); the reveal SCSS layer just has no
+      `.callout` rules. Port Q1 `quarto.scss:873-1116` callout rules + `$callout-*`
+      defaults into `quarto-revealjs.scss` (helpers `shift-color`/`shift_to_dark`/
+      `colorToRGB` already present from C2). Source: also `resources/scss/bootstrap/
+      _bootstrap-rules.scss:1759+` (icon SVG map). No Rust. _(bd-1kor9's "needs
+      reveal callout AST" premise is already satisfied.)_
+- [ ] **D2. `_brand.yml` integration (config plumbing).** `brand_to_layers`
+      already emits reveal `presentation-*` vars; the reveal compile path just
+      never resolves brand. Thread a brand layer through: stage reveal branch
+      (resolve brand like HTML, `compile_theme_css.rs:421-441`) →
+      `resolve_reveal_theme` → `assemble_reveal_scss` → `compile_reveal_theme_css`
+      (+ the `compile_reveal` helper). TDD: brand vars reach `--r-*`.
+- [ ] **D3. `footer:` / `logo:` (new AST transform).** New reveal transform after
+      `RevealSlidesTransform` (`pipeline.rs:1109`) injecting `<img class="slide-logo">`
+      + `.footer` Div from `logo:`/`footer:` meta; + SCSS (footer muted/bg-aware;
+      logo positioning). _(Per-slide JS placement that Q1's plugin does is out of
+      scope — Q2 ships no plugins; the markup + CSS gets us the look.)_
+- [ ] **D4. `auto-stretch` (new AST transform).** Transform after
+      `RevealSlidesTransform` detecting single-image slides → add `.r-stretch`
+      (reveal-core class; default-on with a config toggle). Mostly AST; styling is
+      reveal-native.
+- [ ] **D5. Docs (D1 caveat).** User-facing guide on the theming variables + a
       "migrating a Quarto-1 revealjs theme to Q2" how-to incl. the `--r-*` runtime
       escape hatch (docs/ site — render with `q2`, not Q1). Open a doc strand.
 
-_(A concrete per-increment decomposition + branch will be added once the
-prerequisite investigation lands.)_
+**Preview-parity caveat (carry to Stage E / a parity pass):** SCSS-only features
+(callouts, brand) render correctly via `q2 render` but NOT in the `q2-slides`
+preview SPA (it statically imports stock `white.css`; `callout-resolve` is also
+excluded from preview transforms — `pipeline.rs:1314`). Render is the Stage D
+target; full preview convergence is its own follow-up.
 
 ---
 
