@@ -189,7 +189,8 @@ fn escape_html(s: &str) -> String {
 ///
 /// Maps Quarto/Pandoc option names to reveal.js config keys (camelCase). Only
 /// Tier-1 options are wired; unknown keys are ignored. Defaults match Quarto 1
-/// (controls/progress/center/hash on, `slide` transition).
+/// (controls/progress/hash on, `center` OFF so slides top-align, `slide`
+/// transition).
 fn reveal_config_json(meta: &ConfigValue) -> String {
     let mut map = serde_json::Map::new();
 
@@ -209,7 +210,10 @@ fn reveal_config_json(meta: &ConfigValue) -> String {
     for (key, reveal_key, default) in [
         ("controls", "controls", true),
         ("progress", "progress", true),
-        ("center", "center", true),
+        // Quarto 1 default: slides top-align vertically (reveal's own default
+        // is true). The title slide is re-centered via a per-slide `.center`
+        // class (see `build_title_slide`), matching Q1's format-reveal.ts.
+        ("center", "center", false),
         ("hash", "hash", true),
     ] {
         let value = bool_opt(meta, key).unwrap_or(default);
@@ -359,7 +363,10 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&cfg).unwrap();
         assert_eq!(v["controls"], serde_json::json!(true));
         assert_eq!(v["progress"], serde_json::json!(true));
-        assert_eq!(v["center"], serde_json::json!(true));
+        // Quarto 1 defaults center:false — body slides top-align vertically
+        // (reveal's own default is true; the title slide is re-centered via a
+        // per-slide `.center` class, see build_title_slide).
+        assert_eq!(v["center"], serde_json::json!(false));
         assert_eq!(v["hash"], serde_json::json!(true));
         assert_eq!(v["transition"], serde_json::json!("slide"));
     }

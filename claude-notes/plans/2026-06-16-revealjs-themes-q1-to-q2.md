@@ -395,6 +395,16 @@ Sub-steps (TDD — test first each time):
       Stage C (bd-j8qoyc0s). No automated parity test breaks (the hub-client
       parity test mocks the CSS imports; `preview_render_css_parity.rs` covers
       Bootstrap, not reveal).
+- [x] **A8.** Vertical alignment parity (found during user experimentation).
+      Q1 defaults reveal `center: false` (slides top-align; reveal's own default
+      is `true`) and re-centers the title slide via a per-slide `.center` class
+      (`format-reveal.ts`). Q2 wrongly defaulted `center: true`. Fixed:
+      `reveal_config_json` now defaults `center: false`; `build_title_slide`
+      adds the `center` class to the title-slide section. TDD (config test +
+      title-slide-class test); E2E + Chrome confirmed body slides top-align
+      (`top:18`, no inline offset) while the title slide stays centered (reveal
+      applies `top` from the `.center` class). `.reveal` carries no global
+      `center` class.
 
 ### Stage B — theme set + selection (own branch)
 - [ ] Adapt 12 themes to reveal-6 form (kebab vars / `--r-*`), as `defaults` layers

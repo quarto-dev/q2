@@ -151,6 +151,13 @@ fn revealjs_render_emits_title_slide() {
         html.contains("My Talk"),
         "title slide must carry the metadata title"
     );
+    // The deck defaults to center:false (top-aligned body slides), so the
+    // title slide must carry a per-slide `.center` class to stay vertically
+    // centered — matching Quarto 1.
+    assert!(
+        html.contains("title-slide center"),
+        "title slide section must carry the `center` class; got:\n{html}"
+    );
 }
 
 #[test]
