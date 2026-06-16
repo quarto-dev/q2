@@ -55,13 +55,13 @@ pub const CSS_BUILD_ID: &str = include_str!(concat!(env!("OUT_DIR"), "/css_build
 
 pub use brand_layer::brand_to_layers;
 pub use bundle::{
-    assemble_bootstrap, assemble_scss, assemble_themes, assemble_with_theme,
-    assemble_with_user_layers, load_bootstrap_framework, load_quarto_layer, load_theme,
-    load_title_block_layer,
+    assemble_bootstrap, assemble_reveal_scss, assemble_scss, assemble_themes, assemble_with_theme,
+    assemble_with_user_layers, load_bootstrap_framework, load_quarto_layer,
+    load_quarto_reveal_layer, load_reveal_framework, load_theme, load_title_block_layer,
 };
 pub use compile::{
-    assemble_theme_scss, compile_css_from_config, compile_default_css, compile_theme_css,
-    compile_with_doc_vars,
+    assemble_theme_scss, compile_css_from_config, compile_default_css, compile_reveal_theme_css,
+    compile_theme_css, compile_with_doc_vars,
 };
 pub use config::{ResolvedThemeConfig, ThemeConfig};
 pub use error::SassError;

@@ -19,6 +19,8 @@
 //! Tier-1 scope: linked (non-inlined) assets, additional themes, and plugins
 //! are later phases of the revealjs epic.
 
+use std::borrow::Cow;
+
 use quarto_pandoc_types::ConfigValue;
 
 use crate::artifact::{Artifact, ArtifactScope, ArtifactStore};
@@ -76,8 +78,10 @@ pub struct RevealAsset {
     pub key_suffix: String,
     /// Output filename under the `revealjs/` lib dir.
     pub filename: String,
-    /// Embedded byte content.
-    pub content: &'static str,
+    /// Asset content: `Borrowed` for the vendored static assets (reset, core
+    /// reveal CSS/JS, quarto-reveal overrides); `Owned` for the theme slot when
+    /// it carries a freshly-compiled Quarto reveal theme.
+    pub content: Cow<'static, str>,
     /// MIME type for the artifact.
     pub content_type: &'static str,
     pub kind: RevealAssetKind,
@@ -89,41 +93,51 @@ pub struct RevealAsset {
 /// `Artifact` (key `css:revealjs:<suffix>` / `js:revealjs:<suffix>`, path
 /// `revealjs/<filename>`) so they flow through the same `site_libs` flush +
 /// dedup as `format: html`'s bootstrap/theme deps.
-pub fn reveal_assets(theme: &str) -> Vec<RevealAsset> {
+///
+/// `compiled_theme_css` supplies the **theme slot** (`3-theme-*`): `Some(css)`
+/// uses a freshly-compiled Quarto reveal theme (the normal path since Stage A of
+/// bd-r9mkybwl); `None` falls back to the vendored stock theme CSS
+/// ([`theme_css`]) — used if reveal-theme compilation fails so a deck still
+/// renders.
+pub fn reveal_assets(theme: &str, compiled_theme_css: Option<&str>) -> Vec<RevealAsset> {
     let resolved = resolve_theme_name(theme);
+    let theme_content: Cow<'static, str> = match compiled_theme_css {
+        Some(css) => Cow::Owned(css.to_string()),
+        None => Cow::Borrowed(theme_css(resolved)),
+    };
     vec![
         RevealAsset {
             key_suffix: "1-reset".to_string(),
             filename: "reset.css".to_string(),
-            content: REVEAL_RESET_CSS,
+            content: Cow::Borrowed(REVEAL_RESET_CSS),
             content_type: "text/css",
             kind: RevealAssetKind::Css,
         },
         RevealAsset {
             key_suffix: "2-reveal".to_string(),
             filename: "reveal.css".to_string(),
-            content: REVEAL_CSS,
+            content: Cow::Borrowed(REVEAL_CSS),
             content_type: "text/css",
             kind: RevealAssetKind::Css,
         },
         RevealAsset {
             key_suffix: format!("3-theme-{resolved}"),
             filename: format!("theme-{resolved}.css"),
-            content: theme_css(resolved),
+            content: theme_content,
             content_type: "text/css",
             kind: RevealAssetKind::Css,
         },
         RevealAsset {
             key_suffix: "4-quarto-reveal".to_string(),
             filename: "quarto-reveal.css".to_string(),
-            content: QUARTO_REVEAL_CSS,
+            content: Cow::Borrowed(QUARTO_REVEAL_CSS),
             content_type: "text/css",
             kind: RevealAssetKind::Css,
         },
         RevealAsset {
             key_suffix: "reveal".to_string(),
             filename: "reveal.js".to_string(),
-            content: REVEAL_JS,
+            content: Cow::Borrowed(REVEAL_JS),
             content_type: "application/javascript",
             kind: RevealAssetKind::Js,
         },
@@ -139,8 +153,16 @@ pub fn reveal_assets(theme: &str) -> Vec<RevealAsset> {
 /// Called from `CompileThemeCssStage`'s reveal branch — the pipeline point that
 /// already establishes a document's CSS-framework artifacts (and where the
 /// Bootstrap theme path is skipped for reveal).
-pub fn register_reveal_assets(artifacts: &mut ArtifactStore, theme: &str) {
-    for asset in reveal_assets(theme) {
+///
+/// `compiled_theme_css` is the freshly-compiled Quarto reveal theme for the
+/// theme slot; pass `None` to fall back to the vendored stock theme CSS (see
+/// [`reveal_assets`]).
+pub fn register_reveal_assets(
+    artifacts: &mut ArtifactStore,
+    theme: &str,
+    compiled_theme_css: Option<&str>,
+) {
+    for asset in reveal_assets(theme, compiled_theme_css) {
         let prefix = match asset.kind {
             RevealAssetKind::Css => "css",
             RevealAssetKind::Js => "js",
@@ -409,7 +431,8 @@ mod tests {
         use std::path::Path;
 
         let mut store = ArtifactStore::new();
-        register_reveal_assets(&mut store, "white");
+        // None → stock vendored theme CSS in the theme slot (the fallback path).
+        register_reveal_assets(&mut store, "white", None);
 
         // CSS artifacts, keyed so sorted order == cascade order.
         let mut css: Vec<&str> = store
@@ -466,7 +489,7 @@ mod tests {
     fn register_reveal_assets_unknown_theme_falls_back_to_white() {
         use crate::artifact::ArtifactStore;
         let mut store = ArtifactStore::new();
-        register_reveal_assets(&mut store, "no-such-theme");
+        register_reveal_assets(&mut store, "no-such-theme", None);
         assert!(store.get("css:revealjs:3-theme-white").is_some());
         assert!(store.get("css:revealjs:3-theme-no-such-theme").is_none());
     }

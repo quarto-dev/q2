@@ -252,6 +252,86 @@ pub fn load_embed_example_layer() -> Result<SassLayer, SassError> {
     parse_layer(content, Some("embed-example.scss"))
 }
 
+/// Load the reveal.js framework layer.
+///
+/// This is the reveal analogue of [`load_bootstrap_framework`]: it provides the
+/// low-priority framework layer for a reveal deck's theme compilation. It is
+/// assembled from the vendored reveal.js 6 theme template
+/// (`resources/scss/revealjs/reveal-template/`):
+///
+/// - `uses`     — `@use 'sass:color'` / `@use 'sass:meta'` (needed by the
+///   `color.scale(...)` calls in the settings declarations).
+/// - `defaults` — `_settings-vars.scss`: reveal's `$kebab: … !default;`
+///   declarations (the reveal-native fallbacks). Quarto's reveal layer
+///   overrides these via its own higher-priority `!default` assignments.
+/// - `mixins`   — `_mixins.scss`: `light/dark-bg-text-color`.
+/// - `rules`    — `_expose.scss` (the `:root { --r-*: … }` emitter, which must
+///   run *after* defaults collapse) followed by `_theme.scss` (the `var(--r-*)`
+///   rule set). Quarto's reveal rules are assembled after these and override them.
+///
+/// See `resources/scss/revealjs/README.md` for why settings is split this way
+/// (the `@use ... with (...)` authoring API fights the layered-`!default` model).
+pub fn load_reveal_framework() -> Result<SassLayer, SassError> {
+    use crate::resources::REVEALJS_RESOURCES;
+
+    let read = |rel: &str| -> Result<&'static str, SassError> {
+        REVEALJS_RESOURCES
+            .read_str(Path::new(rel))
+            .ok_or_else(|| SassError::CompilationFailed {
+                message: format!("reveal template SCSS not found: {rel}"),
+            })
+    };
+
+    let settings_vars = read("reveal-template/_settings-vars.scss")?;
+    let expose = read("reveal-template/_expose.scss")?;
+    let theme = read("reveal-template/_theme.scss")?;
+    let mixins = read("reveal-template/_mixins.scss")?;
+
+    Ok(SassLayer {
+        uses: "@use 'sass:color';\n@use 'sass:meta';\n".to_string(),
+        functions: String::new(),
+        defaults: settings_vars.to_string(),
+        mixins: mixins.to_string(),
+        // `_expose.scss` first so the `--r-*` custom properties are defined
+        // before `_theme.scss` consumes them via `var(--r-*)`.
+        rules: format!("{expose}\n\n{theme}"),
+    })
+}
+
+/// Load Quarto's reveal layer (`quarto-revealjs.scss`).
+///
+/// The reveal analogue of [`load_quarto_layer`]: the Quarto-owned layer that
+/// defines the `$presentation-*` / `$body-*` vocabulary, maps it onto reveal-6's
+/// kebab variables, and adds the rule overrides that make a deck feel native to
+/// Quarto (left-aligned slides, non-uppercase headings, Quarto title slide).
+pub fn load_quarto_reveal_layer() -> Result<SassLayer, SassError> {
+    use crate::resources::REVEALJS_RESOURCES;
+
+    let content = REVEALJS_RESOURCES
+        .read_str(Path::new("quarto-revealjs.scss"))
+        .ok_or_else(|| SassError::CompilationFailed {
+            message: "quarto-revealjs.scss not found in revealjs resources".to_string(),
+        })?;
+
+    parse_layer(content, Some("quarto-revealjs.scss"))
+}
+
+/// Assemble a complete SCSS string for a reveal.js deck.
+///
+/// The reveal analogue of [`assemble_with_theme`] / [`assemble_bootstrap`]: it
+/// loads the reveal framework + Quarto reveal layers and assembles them (with an
+/// optional theme layer) using the shared [`assemble_scss`] ordering. The result
+/// is a single SCSS string compiled in **one** pass (decision D1 — unified
+/// compilation), producing a self-contained reveal theme stylesheet.
+///
+/// `theme` is `None` in Stage A (the Quarto defaults are the white-equivalent);
+/// built-in/user themes arrive in Stage B as additional `defaults` layers.
+pub fn assemble_reveal_scss(theme: Option<&SassLayer>) -> Result<String, SassError> {
+    let framework = load_reveal_framework()?;
+    let quarto = load_quarto_reveal_layer()?;
+    Ok(assemble_scss(&framework, &quarto, theme))
+}
+
 /// Assemble a complete SCSS string for compilation.
 ///
 /// This function implements the correct assembly order from TypeScript Quarto:

@@ -271,7 +271,28 @@ impl PipelineStage for CompileThemeCssStage {
                 .get("theme")
                 .and_then(|v| v.as_plain_text())
                 .unwrap_or_else(|| crate::revealjs::DEFAULT_THEME.to_string());
-            crate::revealjs::register_reveal_assets(&mut ctx.artifacts, &theme);
+
+            // Compile Quarto's reveal theme (single unified SCSS pass, D1) and
+            // register it as the theme-slot artifact. On a compile failure we
+            // fall back to the vendored stock theme CSS so the deck still
+            // renders (mirrors the Bootstrap path's graceful fallback).
+            let compiled = match compile_reveal(ctx, true).await {
+                Ok(css) => Some(css),
+                Err(e) => {
+                    trace_event!(
+                        ctx,
+                        EventLevel::Warn,
+                        "reveal theme compilation failed: {}, using vendored stock theme",
+                        e
+                    );
+                    None
+                }
+            };
+            crate::revealjs::register_reveal_assets(
+                &mut ctx.artifacts,
+                &theme,
+                compiled.as_deref(),
+            );
             return Ok(PipelineData::DocumentAst(doc));
         }
 
@@ -578,6 +599,21 @@ async fn compile_default(ctx: &StageContext, minified: bool) -> Result<String, S
 #[cfg(target_arch = "wasm32")]
 async fn compile_default(ctx: &StageContext, minified: bool) -> Result<String, String> {
     compile_default_css(ctx.runtime.as_ref(), minified)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Compile Quarto's reveal.js theme CSS. Native uses `grass` in-process (sync);
+/// WASM uses the dart-sass JS bridge (async). This wrapper gives the reveal
+/// branch one call site. See `quarto_sass::compile_reveal_theme_css`.
+#[cfg(not(target_arch = "wasm32"))]
+async fn compile_reveal(ctx: &StageContext, minified: bool) -> Result<String, String> {
+    quarto_sass::compile_reveal_theme_css(ctx.runtime.as_ref(), minified).map_err(|e| e.to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn compile_reveal(ctx: &StageContext, minified: bool) -> Result<String, String> {
+    quarto_sass::compile_reveal_theme_css(ctx.runtime.as_ref(), minified)
         .await
         .map_err(|e| e.to_string())
 }

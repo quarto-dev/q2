@@ -1,0 +1,33 @@
+// reveal.js 6 theme mixins.
+//
+// Vendored verbatim from reveal.js 6.0.x `css/theme/template/mixins.scss`
+// (External Sources Policy: kept local). Used by themes that recolor text on
+// light/dark slide backgrounds. See resources/scss/revealjs/README.md.
+
+@mixin light-bg-text-color($color) {
+	section.has-light-background {
+		&,
+		h1,
+		h2,
+		h3,
+		h4,
+		h5,
+		h6 {
+			color: $color;
+		}
+	}
+}
+
+@mixin dark-bg-text-color($color) {
+	section.has-dark-background {
+		&,
+		h1,
+		h2,
+		h3,
+		h4,
+		h5,
+		h6 {
+			color: $color;
+		}
+	}
+}

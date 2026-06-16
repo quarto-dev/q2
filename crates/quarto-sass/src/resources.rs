@@ -59,6 +59,14 @@ static QUARTO_BOOTSTRAP_DIR: Dir<'static> =
 static TEMPLATES_DIR: Dir<'static> =
     include_dir!("$CARGO_MANIFEST_DIR/../../resources/scss/html/templates");
 
+/// RevealJS SCSS directory embedded at compile time.
+///
+/// Contains the vendored reveal.js 6 theme template (`reveal-template/`) and
+/// Quarto's reveal layer (`quarto-revealjs.scss`). See
+/// `resources/scss/revealjs/README.md` for provenance.
+static REVEALJS_DIR: Dir<'static> =
+    include_dir!("$CARGO_MANIFEST_DIR/../../resources/scss/revealjs");
+
 /// Virtual path prefix for embedded resources.
 ///
 /// Files embedded via `EmbeddedResources` are accessible under this prefix.
@@ -280,6 +288,15 @@ pub static QUARTO_BOOTSTRAP_RESOURCES: EmbeddedResources =
 /// - `title-block.scss` - Styling for document title block, metadata, abstract
 pub static TEMPLATES_RESOURCES: EmbeddedResources =
     EmbeddedResources::new(&TEMPLATES_DIR, "html/templates");
+
+/// RevealJS SCSS resources.
+///
+/// Contains the vendored reveal.js 6 theme template under `reveal-template/`
+/// (`_settings-vars.scss`, `_expose.scss`, `_theme.scss`, `_mixins.scss`) and
+/// Quarto's reveal layer `quarto-revealjs.scss`. Consumed by
+/// `bundle::load_reveal_framework` / `bundle::load_quarto_reveal_layer`.
+pub static REVEALJS_RESOURCES: EmbeddedResources =
+    EmbeddedResources::new(&REVEALJS_DIR, "revealjs");
 
 /// Get the default load paths for SASS compilation.
 ///

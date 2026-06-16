@@ -1,0 +1,57 @@
+// reveal.js 6 theme settings — CSS CUSTOM-PROPERTY EMITTER.
+//
+// Vendored from reveal.js 6.0.x `css/theme/template/settings.scss` (the trailing
+// `:root { … }` block). Split out of the variable declarations so it can run in
+// the SCSS `rules` layer, AFTER every `!default` has collapsed — that way the
+// emitted `--r-*` custom properties carry the *final* (Quarto-overridden) values.
+//
+// reveal's `theme.scss` styles everything via `var(--r-*)`, so this block is the
+// bridge between the compile-time Sass variables and the runtime appearance.
+// See resources/scss/revealjs/README.md for provenance.
+
+// Expose all SCSS variables as CSS custom properties
+:root {
+	// Background of the presentation
+	--r-background: #{$background};
+	--r-background-color: #{$background-color};
+
+	// Primary/body text
+	--r-main-font: #{$main-font};
+	--r-main-font-size: #{$main-font-size};
+	--r-main-color: #{$main-color};
+
+	// Vertical spacing between blocks of text
+	--r-block-margin: #{$block-margin};
+
+	// Headings
+	--r-heading-margin: #{$heading-margin};
+	--r-heading-font: #{$heading-font};
+	--r-heading-color: #{$heading-color};
+	--r-heading-line-height: #{$heading-line-height};
+	--r-heading-letter-spacing: #{$heading-letter-spacing};
+	--r-heading-text-transform: #{$heading-text-transform};
+	--r-heading-text-shadow: #{$heading-text-shadow};
+	--r-heading-font-weight: #{$heading-font-weight};
+	--r-heading1-text-shadow: #{$heading1-text-shadow};
+
+	--r-heading1-size: #{$heading1-size};
+	--r-heading2-size: #{$heading2-size};
+	--r-heading3-size: #{$heading3-size};
+	--r-heading4-size: #{$heading4-size};
+
+	--r-code-font: #{$code-font};
+
+	// Links and actions
+	--r-link-color: #{$link-color};
+	--r-link-color-dark: #{$link-color-dark};
+	--r-link-color-hover: #{$link-color-hover};
+
+	// Text selection
+	--r-selection-background-color: #{$selection-background-color};
+	--r-selection-color: #{$selection-color};
+
+	// Colors used for UI elements that are overlaid on top of
+	// the presentation
+	--r-overlay-element-bg-color: #{$overlay-element-bg-color};
+	--r-overlay-element-fg-color: #{$overlay-element-fg-color};
+}

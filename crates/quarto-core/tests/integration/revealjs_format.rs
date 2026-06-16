@@ -276,3 +276,51 @@ fn revealjs_rich_deck_has_scaffold_and_section_divider() {
         "level-3 subslide content must appear in the deck"
     );
 }
+
+/// bd-r9mkybwl Stage A: the theme slot now carries a *compiled* Quarto reveal
+/// theme (not the stock reveal `white.css`). End-to-end through `render_to_file`,
+/// the flushed `theme-white.css` must contain Quarto's look-fixing output:
+/// left-aligned slides, non-uppercase headings, Quarto title-slide layout, and
+/// the `--r-*` custom properties carrying Quarto's values.
+#[test]
+fn revealjs_theme_slot_is_compiled_quarto_theme() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let qmd_path = temp.path().join("talk.qmd");
+    write_file(&qmd_path, FLAT_DECK);
+    let options = RenderToFileOptions {
+        quiet: true,
+        ..Default::default()
+    };
+    let result = render_to_file(&qmd_path, "revealjs", &options, runtime_arc())
+        .expect("revealjs render failed");
+
+    let out_dir = result.output_path.parent().unwrap();
+    let theme_css = read(
+        &out_dir
+            .join("talk_files")
+            .join("revealjs")
+            .join("theme-white.css"),
+    );
+    // The shipped theme is minified, so match whitespace-insensitively.
+    let css = compact(&theme_css);
+
+    // Quarto values flowed into the reveal custom properties.
+    assert!(
+        css.contains("--r-main-color:#222"),
+        "compiled theme should set --r-main-color to Quarto's body color"
+    );
+    // Quarto's look-fixing rules are present.
+    assert!(
+        css.contains("text-align:left"),
+        "compiled theme should left-align slides"
+    );
+    assert!(
+        css.contains("#title-slide"),
+        "compiled theme should style the Quarto title slide"
+    );
+    // reveal's default uppercase headings are turned off.
+    assert!(
+        !css.contains("uppercase"),
+        "compiled Quarto theme must not uppercase headings"
+    );
+}

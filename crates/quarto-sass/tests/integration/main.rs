@@ -8,5 +8,6 @@ pub mod compile_all_themes_test;
 pub mod custom_theme_test;
 pub mod embedded_compile_test;
 pub mod parity_test;
+pub mod reveal_theme_test;
 
 fn main() {}
