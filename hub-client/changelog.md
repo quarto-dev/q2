@@ -15,6 +15,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-06-16
+
+- [`37061765`](https://github.com/quarto-dev/q2/commits/37061765): RevealJS preview now matches the render path's Quarto-1 defaults — slides top-align (no vertical centering), slide transitions are off by default, and the deck uses a 0.1 margin with linear navigation and edge controls.
+
 ### 2026-06-12
 
 - [`3a35de43`](https://github.com/quarto-dev/q2/commits/3a35de43): Project-creation scaffolds (`create_project`) now render their templates in pure Rust (quarto-doctemplate) instead of EJS via the JS bridge; titles containing quotes, backslashes, or `&` now produce correct YAML in `_quarto.yml` and `index.qmd`.
