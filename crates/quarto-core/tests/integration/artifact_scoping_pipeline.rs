@@ -408,19 +408,34 @@ fn website_with_two_decks_shares_one_revealjs_lib() {
 
     // Vendored assets written ONCE under the shared lib dir.
     let shared = site.join("site_libs").join("revealjs");
-    for f in [
-        "reset.css",
-        "reveal.css",
-        "theme-white.css",
-        "quarto-reveal.css",
-        "reveal.js",
-    ] {
+    for f in ["reset.css", "reveal.css", "quarto-reveal.css", "reveal.js"] {
         assert!(
             shared.join(f).is_file(),
             "expected shared asset {}",
             shared.join(f).display()
         );
     }
+    // Both decks use the default theme, so the fingerprinted theme CSS dedups
+    // to EXACTLY ONE shared `theme-<hash>.css` file (per-deck themes would
+    // produce distinct fingerprints; same theme → same fingerprint → one file).
+    let theme_files: Vec<_> = std::fs::read_dir(&shared)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| {
+            e.file_name()
+                .to_str()
+                .is_some_and(|n| n.starts_with("theme-") && n.ends_with(".css"))
+        })
+        .collect();
+    assert_eq!(
+        theme_files.len(),
+        1,
+        "two decks on the same (default) theme must share one theme-<hash>.css; found {:?}",
+        theme_files
+            .iter()
+            .map(|e| e.file_name())
+            .collect::<Vec<_>>()
+    );
 
     // NOT duplicated per-deck.
     assert!(

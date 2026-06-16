@@ -1,0 +1,41 @@
+/**
+ * Sky theme for reveal.js — adapted from Quarto 1 themes/sky.scss to reveal.js 6
+ * (kebab-case reveal vars; bodyBackground() -> $background gradient).
+ * Original (C) 2011-2012 Hakim El Hattab; Quarto adaptation (C) Posit, PBC.
+ */
+
+/*-- scss:defaults --*/
+
+@import url(https://fonts.googleapis.com/css?family=Quicksand:400,700,400italic,700italic);
+@import url(https://fonts.googleapis.com/css?family=Open+Sans:400italic,700italic,400,700);
+
+$font-family-sans-serif: "Open Sans", sans-serif !default;
+$body-color: #333 !default;
+$presentation-heading-font: "Quicksand", sans-serif !default;
+$presentation-heading-color: $body-color !default;
+$presentation-heading-letter-spacing: -0.08em !default;
+$presentation-heading-text-shadow: none !default;
+$body-bg: #f7fbfc !default;
+$link-color: #3b759e !default;
+$selection-bg: #134674 !default;
+
+$presentation-heading-text-transform: uppercase !default;
+$presentation-heading-font-weight: normal !default;
+
+$overlay-element-bg-color: 0, 0, 0 !default;
+$overlay-element-fg-color: 240, 240, 240 !default;
+
+// Change text colors against dark slide backgrounds
+$dark-bg-text-color: #fff !default;
+
+$code-block-border-color: lighten($link-color, 30%) !default;
+$code-block-bg: transparent !default;
+
+$background: radial-gradient(circle at center, #f7fbfc 0%, #add9e4 100%) !default;
+
+/*-- scss:rules --*/
+
+// Fix links so they are not cut off
+.reveal a {
+  line-height: 1.3em;
+}

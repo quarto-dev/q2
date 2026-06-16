@@ -407,11 +407,50 @@ Sub-steps (TDD — test first each time):
       `center` class.
 
 ### Stage B — theme set + selection (own branch)
-- [ ] Adapt 12 themes to reveal-6 form (kebab vars / `--r-*`), as `defaults` layers
-- [ ] Real theme resolution (built-ins, `white→default`/`black→dark` aliases,
-      user `theme: [name, custom.scss]` arrays) — replace hardcoded `resolve_theme_name`
-- [ ] Tests per theme
-- [ ] Font handling (reveal themes `@import url(./fonts/…)`; decide vendor vs link)
+
+**Per-deck themes in websites WORK like `format: html` (corrected 2026-06-16).**
+Each document render has its own `StageContext.artifacts`; `ApplyTemplateStage`
+collects `css:revealjs:*` from *that* store only, so a deck links exactly the
+theme it registered. Project-scoped artifacts drain into the orchestrator's
+`project_artifacts` accumulator (`pass_two`) for one deduped flush to
+`site_libs/`. HTML keys its theme by **content fingerprint** (`css:theme:<hash>`)
+so different themes get different files and identical themes dedup — reveal will
+do the same. (An earlier note here wrongly claimed reveal cross-links decks; that
+was a wrong mental model — `ctx.artifacts` is per-document, not project-wide.)
+
+- [x] **Theme artifact keyed by content fingerprint**: `css:revealjs:3-theme-<hash>`
+      → `theme-<hash>.css` (replaced the fixed `3-theme-white`, reusing
+      `theme_fingerprint`). `3-theme-` prefix keeps cascade order. Same theme →
+      one shared file; different themes → distinct files; each deck links its own
+      (per-document `ctx.artifacts`). Matches HTML; future-proof for Stage-C
+      brand/per-deck vars. Tests: `register_reveal_assets_keys_theme_by_content_fingerprint`,
+      and the two-deck website test now asserts exactly one shared `theme-<hash>.css`.
+- [x] Adapted the 12 themes → `resources/scss/revealjs/themes/*.scss`: kebab-case
+      for direct reveal-var sets (`$overlayElementBgColor` →
+      `$overlay-element-bg-color`); `bodyBackground()`/`radial-gradient` →
+      `$background: radial-gradient(...)`. Renamed dracula's local `$background`
+      palette var → `$drac-background` (collides with reveal-6's `$background`).
+- [x] Reveal theme resolution (`crates/quarto-core/src/revealjs/theme.rs`):
+      parse `theme:` (string|array|absent→`default`); built-in (12 names +
+      `white→default`/`black→dark` via `quarto_sass::resolve_reveal_theme_name`)
+      vs user `.scss` (reuse `load_custom_theme`). Unknown/missing → loud stage
+      error. `resolve_reveal_theme_name`/`load_reveal_theme_layer` added to
+      quarto-sass; `resolve_theme_name`/`theme_css` removed.
+- [x] `assemble_reveal_scss(&[SassLayer])` merges theme layers via `merge_layers`;
+      `compile_reveal_theme_css(runtime, minified, &[layer], &[load_path])`;
+      stage `compile_reveal` helper + reveal branch updated to resolve→compile→
+      register.
+- [x] Tests: 6 per-theme/alias/unknown tests in `reveal_theme_test.rs`; resolution
+      unit tests in `theme.rs`; integration `revealjs_named_theme_is_compiled_and_selected`
+      (`theme: dark`). Full quarto-sass+quarto-core suites + `cargo xtask verify`
+      (incl. WASM) green.
+- [x] **Font handling (B7 decision):** kept Q1's Google-CDN `@import`s; converted
+      local `./fonts/league-gothic/…` → League Gothic Google-Fonts CDN; default
+      theme stays system-font (Helvetica). Offline/self-contained font bundling
+      deferred to Stage C.
+- [x] E2E + Chrome: `theme: dark` (#191919 bg, white text, blue links) and
+      `theme: dracula` (#282a36 bg, purple headings, cyan bullets, orange bold,
+      yellow italic) render faithfully, top-aligned/left-aligned.
 
 ### Stage C — parity + extras + docs (own branch)
 - [ ] `_brand.yml` integration, callouts/panels/tabsets/`.smaller`, light/dark sentinel

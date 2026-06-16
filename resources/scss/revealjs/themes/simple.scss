@@ -1,0 +1,26 @@
+/**
+ * Simple theme for reveal.js (darkblue accent) — adapted from Quarto 1
+ * themes/simple.scss to reveal.js 6 (kebab-case reveal vars).
+ * Original (C) 2012 Owen Versteeg (MIT); Quarto adaptation (C) Posit, PBC.
+ */
+
+/*-- scss:defaults --*/
+
+@import url(https://fonts.googleapis.com/css?family=News+Cycle:400,700);
+@import url(https://fonts.googleapis.com/css?family=Lato:400,700,400italic,700italic);
+
+$font-family-sans-serif: "Lato", sans-serif !default;
+$body-color: #000 !default;
+$presentation-heading-font: "News Cycle", sans-serif !default;
+$presentation-heading-color: $body-color !default;
+$presentation-heading-text-shadow: none !default;
+$presentation-heading-text-transform: none !default;
+$body-bg: #fff !default;
+$link-color: #00008b !default;
+$selection-bg: rgba(0, 0, 0, 0.99) !default;
+
+$overlay-element-bg-color: 0, 0, 0 !default;
+$overlay-element-fg-color: 240, 240, 240 !default;
+
+// Change text colors against dark slide backgrounds
+$dark-bg-text-color: #fff !default;

@@ -185,6 +185,31 @@ fn revealjs_initialize_carries_options() {
     );
 }
 
+/// Extract the fingerprinted theme href (`…/revealjs/theme-<hash>.css`) from a
+/// rendered deck. The theme filename is content-fingerprinted (like
+/// `format: html`'s theme), so tests can't hardcode it.
+fn theme_href(html: &str) -> String {
+    let marker = "revealjs/theme-";
+    let start = html.find(marker).expect("theme css link present in deck");
+    let rest = &html[start..];
+    let end = rest.find(".css").expect("theme css href ends in .css") + ".css".len();
+    rest[..end].to_string()
+}
+
+/// Find the flushed `theme-<hash>.css` file in a revealjs lib dir.
+fn find_theme_css(libs: &Path) -> std::path::PathBuf {
+    std::fs::read_dir(libs)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("theme-") && n.ends_with(".css"))
+        })
+        .expect("a theme-<hash>.css file should be flushed")
+}
+
 #[test]
 fn revealjs_links_assets_instead_of_inlining() {
     // bd-jij5gge2: vendored reveal assets are LINKED (shared lib dir), not
@@ -192,12 +217,14 @@ fn revealjs_links_assets_instead_of_inlining() {
     // order, and assert the ~700KB core does NOT appear inline.
     let html = render_revealjs(FLAT_DECK);
 
-    for href in [
-        "talk_files/revealjs/reset.css",
-        "talk_files/revealjs/reveal.css",
-        "talk_files/revealjs/theme-white.css",
-        "talk_files/revealjs/quarto-reveal.css",
-    ] {
+    let theme = theme_href(&html);
+    let mut hrefs = vec![
+        "talk_files/revealjs/reset.css".to_string(),
+        "talk_files/revealjs/reveal.css".to_string(),
+        "talk_files/revealjs/quarto-reveal.css".to_string(),
+    ];
+    hrefs.push(format!("talk_files/{theme}"));
+    for href in &hrefs {
         assert!(
             html.contains(&format!(r#"<link rel="stylesheet" href="{href}">"#)),
             "expected a <link> to {href}; head was:\n{}",
@@ -212,8 +239,8 @@ fn revealjs_links_assets_instead_of_inlining() {
     // Cascade order: reset → reveal → theme → quarto overrides.
     let at = |s: &str| html.find(s).unwrap_or_else(|| panic!("missing {s}"));
     assert!(at("reset.css") < at("revealjs/reveal.css"));
-    assert!(at("revealjs/reveal.css") < at("theme-white.css"));
-    assert!(at("theme-white.css") < at("quarto-reveal.css"));
+    assert!(at("revealjs/reveal.css") < at(&theme));
+    assert!(at(&theme) < at("quarto-reveal.css"));
     // reveal.js loads before the per-doc initialize().
     assert!(at("revealjs/reveal.js") < at("Reveal.initialize"));
 
@@ -250,14 +277,14 @@ fn revealjs_flushes_linked_assets_to_disk() {
 
     let out_dir = result.output_path.parent().unwrap();
     let libs = out_dir.join("talk_files").join("revealjs");
-    for f in [
-        "reset.css",
-        "reveal.css",
-        "theme-white.css",
-        "quarto-reveal.css",
-        "reveal.js",
-    ] {
-        let p = libs.join(f);
+    // The fixed-name assets, plus the fingerprinted theme file.
+    let mut paths: Vec<std::path::PathBuf> =
+        ["reset.css", "reveal.css", "quarto-reveal.css", "reveal.js"]
+            .iter()
+            .map(|f| libs.join(f))
+            .collect();
+    paths.push(find_theme_css(&libs));
+    for p in paths {
         assert!(p.is_file(), "expected flushed asset {}", p.display());
         assert!(
             std::fs::metadata(&p).unwrap().len() > 0,
@@ -302,12 +329,8 @@ fn revealjs_theme_slot_is_compiled_quarto_theme() {
         .expect("revealjs render failed");
 
     let out_dir = result.output_path.parent().unwrap();
-    let theme_css = read(
-        &out_dir
-            .join("talk_files")
-            .join("revealjs")
-            .join("theme-white.css"),
-    );
+    let libs = out_dir.join("talk_files").join("revealjs");
+    let theme_css = read(&find_theme_css(&libs));
     // The shipped theme is minified, so match whitespace-insensitively.
     let css = compact(&theme_css);
 
@@ -329,5 +352,47 @@ fn revealjs_theme_slot_is_compiled_quarto_theme() {
     assert!(
         !css.contains("uppercase"),
         "compiled Quarto theme must not uppercase headings"
+    );
+}
+
+/// bd-r9mkybwl Stage B: selecting a built-in theme (`theme: dark`) compiles
+/// THAT theme into the deck — end-to-end through `render_to_file`. Guards the
+/// theme-resolution + per-theme-compile path beyond the white default.
+#[test]
+fn revealjs_named_theme_is_compiled_and_selected() {
+    let deck = "\
+---
+title: \"Dark Talk\"
+format:
+  revealjs:
+    theme: dark
+---
+
+## A slide
+
+- one
+";
+    let temp = tempfile::TempDir::new().unwrap();
+    let qmd_path = temp.path().join("talk.qmd");
+    write_file(&qmd_path, deck);
+    let options = RenderToFileOptions {
+        quiet: true,
+        ..Default::default()
+    };
+    let result = render_to_file(&qmd_path, "revealjs", &options, runtime_arc())
+        .expect("revealjs render failed");
+
+    let out_dir = result.output_path.parent().unwrap();
+    let libs = out_dir.join("talk_files").join("revealjs");
+    let css = compact(&read(&find_theme_css(&libs)));
+
+    // The `dark` theme's dark background + light text flowed into --r-*.
+    assert!(
+        css.contains("--r-background-color:#191919"),
+        "theme: dark should compile the dark background\n{css}"
+    );
+    assert!(
+        css.contains("--r-main-color:#fff"),
+        "theme: dark should use light text"
     );
 }
