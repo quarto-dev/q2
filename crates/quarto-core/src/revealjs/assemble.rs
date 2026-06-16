@@ -34,28 +34,9 @@ const THEME_WHITE_CSS: &str = include_str!("../../../../resources/revealjs/theme
 /// the same file. Keep render/preview in sync by editing only the one file.
 const QUARTO_REVEAL_CSS: &str = include_str!("../../../../resources/revealjs/quarto-reveal.css");
 
-/// Default reveal theme when `theme:` is absent. Consumed by
-/// `RevealAssetsStage` to pick the theme artifact.
-pub const DEFAULT_THEME: &str = "white";
-
-/// Resolve a requested theme name to the canonical name we actually ship.
-/// Tier-1 ships only `white`; unknown themes fall back to it. Returning the
-/// **resolved** name (not the requested one) keeps the artifact key/filename
-/// stable so two decks that both fall back to `white` dedup to one copy.
-fn resolve_theme_name(theme: &str) -> &'static str {
-    match theme {
-        "white" => "white",
-        _ => "white",
-    }
-}
-
-/// Theme CSS bytes for a *resolved* theme name (see [`resolve_theme_name`]).
-fn theme_css(resolved: &str) -> &'static str {
-    match resolved {
-        "white" => THEME_WHITE_CSS,
-        _ => THEME_WHITE_CSS,
-    }
-}
+/// Default reveal theme when `theme:` is absent. The reveal theme *resolver*
+/// (`crate::revealjs::theme`) defaults to this; `white` aliases to it.
+pub const DEFAULT_THEME: &str = "default";
 
 /// Kind of a vendored reveal asset (decides the `css:` / `js:` artifact key
 /// prefix and the emitted tag).
@@ -94,17 +75,23 @@ pub struct RevealAsset {
 /// `revealjs/<filename>`) so they flow through the same `site_libs` flush +
 /// dedup as `format: html`'s bootstrap/theme deps.
 ///
-/// `compiled_theme_css` supplies the **theme slot** (`3-theme-*`): `Some(css)`
-/// uses a freshly-compiled Quarto reveal theme (the normal path since Stage A of
-/// bd-r9mkybwl); `None` falls back to the vendored stock theme CSS
-/// ([`theme_css`]) — used if reveal-theme compilation fails so a deck still
-/// renders.
-pub fn reveal_assets(theme: &str, compiled_theme_css: Option<&str>) -> Vec<RevealAsset> {
-    let resolved = resolve_theme_name(theme);
+/// `compiled_theme_css` supplies the **theme slot** (`3-theme-<fingerprint>`):
+/// `Some(css)` uses a freshly-compiled Quarto reveal theme (the normal path);
+/// `None` falls back to the vendored stock reveal theme CSS — used if
+/// reveal-theme compilation fails so a deck still renders.
+///
+/// The theme slot's key/filename carry a **content fingerprint** of the theme
+/// CSS (like `format: html`'s `css:theme:<hash>`). This makes per-deck themes in
+/// a website work correctly: identical themes dedup to one shared file; distinct
+/// themes get distinct files and each deck links its own (collected per-document
+/// from that deck's `StageContext.artifacts`). The `3-theme-` prefix keeps the
+/// CSS cascade order (between `2-reveal` and `4-quarto-reveal`).
+pub fn reveal_assets(compiled_theme_css: Option<&str>) -> Vec<RevealAsset> {
     let theme_content: Cow<'static, str> = match compiled_theme_css {
         Some(css) => Cow::Owned(css.to_string()),
-        None => Cow::Borrowed(theme_css(resolved)),
+        None => Cow::Borrowed(THEME_WHITE_CSS),
     };
+    let fingerprint = crate::stage::stages::theme_fingerprint(&theme_content);
     vec![
         RevealAsset {
             key_suffix: "1-reset".to_string(),
@@ -121,8 +108,8 @@ pub fn reveal_assets(theme: &str, compiled_theme_css: Option<&str>) -> Vec<Revea
             kind: RevealAssetKind::Css,
         },
         RevealAsset {
-            key_suffix: format!("3-theme-{resolved}"),
-            filename: format!("theme-{resolved}.css"),
+            key_suffix: format!("3-theme-{fingerprint}"),
+            filename: format!("theme-{fingerprint}.css"),
             content: theme_content,
             content_type: "text/css",
             kind: RevealAssetKind::Css,
@@ -157,12 +144,8 @@ pub fn reveal_assets(theme: &str, compiled_theme_css: Option<&str>) -> Vec<Revea
 /// `compiled_theme_css` is the freshly-compiled Quarto reveal theme for the
 /// theme slot; pass `None` to fall back to the vendored stock theme CSS (see
 /// [`reveal_assets`]).
-pub fn register_reveal_assets(
-    artifacts: &mut ArtifactStore,
-    theme: &str,
-    compiled_theme_css: Option<&str>,
-) {
-    for asset in reveal_assets(theme, compiled_theme_css) {
+pub fn register_reveal_assets(artifacts: &mut ArtifactStore, compiled_theme_css: Option<&str>) {
+    for asset in reveal_assets(compiled_theme_css) {
         let prefix = match asset.kind {
             RevealAssetKind::Css => "css",
             RevealAssetKind::Js => "js",
@@ -439,9 +422,14 @@ mod tests {
 
         let mut store = ArtifactStore::new();
         // None → stock vendored theme CSS in the theme slot (the fallback path).
-        register_reveal_assets(&mut store, "white", None);
+        register_reveal_assets(&mut store, None);
 
-        // CSS artifacts, keyed so sorted order == cascade order.
+        // The theme slot is keyed by a content fingerprint of the stock theme.
+        let theme_fp = crate::stage::stages::theme_fingerprint(THEME_WHITE_CSS);
+        let theme_key = format!("css:revealjs:3-theme-{theme_fp}");
+
+        // CSS artifacts, keyed so sorted order == cascade order
+        // (1-reset < 2-reveal < 3-theme-<fp> < 4-quarto-reveal).
         let mut css: Vec<&str> = store
             .get_by_prefix("css:revealjs:")
             .into_iter()
@@ -453,7 +441,7 @@ mod tests {
             vec![
                 "css:revealjs:1-reset",
                 "css:revealjs:2-reveal",
-                "css:revealjs:3-theme-white",
+                theme_key.as_str(),
                 "css:revealjs:4-quarto-reveal",
             ]
         );
@@ -475,11 +463,11 @@ mod tests {
         );
         assert_eq!(reveal.as_str(), Some(REVEAL_CSS));
 
-        // theme artifact carries the resolved theme name + the theme bytes.
-        let theme = store.get("css:revealjs:3-theme-white").unwrap();
+        // theme artifact: fingerprinted path + the (fallback stock) theme bytes.
+        let theme = store.get(&theme_key).unwrap();
         assert_eq!(
             theme.path.as_deref(),
-            Some(Path::new("revealjs/theme-white.css"))
+            Some(Path::new(&*format!("revealjs/theme-{theme_fp}.css")))
         );
         assert_eq!(theme.as_str(), Some(THEME_WHITE_CSS));
 
@@ -490,15 +478,36 @@ mod tests {
         assert_eq!(core.as_str(), Some(REVEAL_JS));
     }
 
-    /// An unknown theme falls back to `white` for both content AND
-    /// key/filename, so two decks requesting unknown themes still dedup.
+    /// Distinct theme CSS → distinct fingerprinted keys (so per-deck themes in a
+    /// website don't collide); identical theme CSS → identical key (dedups).
     #[test]
-    fn register_reveal_assets_unknown_theme_falls_back_to_white() {
+    fn register_reveal_assets_keys_theme_by_content_fingerprint() {
         use crate::artifact::ArtifactStore;
-        let mut store = ArtifactStore::new();
-        register_reveal_assets(&mut store, "no-such-theme", None);
-        assert!(store.get("css:revealjs:3-theme-white").is_some());
-        assert!(store.get("css:revealjs:3-theme-no-such-theme").is_none());
+
+        let mut a = ArtifactStore::new();
+        register_reveal_assets(&mut a, Some(".reveal{color:red}"));
+        let mut b = ArtifactStore::new();
+        register_reveal_assets(&mut b, Some(".reveal{color:blue}"));
+        let mut b2 = ArtifactStore::new();
+        register_reveal_assets(&mut b2, Some(".reveal{color:blue}"));
+
+        let theme_key = |s: &ArtifactStore| {
+            s.get_by_prefix("css:revealjs:3-theme-")
+                .into_iter()
+                .map(|(k, _)| k.to_string())
+                .next()
+                .unwrap()
+        };
+        assert_ne!(
+            theme_key(&a),
+            theme_key(&b),
+            "different CSS → different keys"
+        );
+        assert_eq!(
+            theme_key(&b),
+            theme_key(&b2),
+            "identical CSS → identical key (dedup)"
+        );
     }
 
     #[test]
