@@ -1,0 +1,23 @@
+---
+title: "Themes"
+format:
+  revealjs:
+    theme: dark
+---
+
+## A themed deck
+
+The `theme:` option restyles the whole deck. This deck sets `theme: dark`, so
+its background, text, and links all come from the built-in dark theme.
+
+- The background is dark
+- The text is light
+- Links pick up the theme accent
+
+## Choosing a theme
+
+Quarto ships the reveal.js themes — `dark`, `league`, `dracula`, `solarized`,
+and the rest. The default theme (when you omit `theme:`) is `default`, a
+left-aligned white theme tuned to feel like Quarto.
+
+`white` is an alias for `default`, and `black` is an alias for `dark`.

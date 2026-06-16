@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" role="img" aria-label="Example diagram">
+  <rect width="640" height="400" fill="#eef3fb"/>
+  <rect x="40" y="40" width="200" height="120" rx="10" fill="#2a76dd"/>
+  <rect x="400" y="240" width="200" height="120" rx="10" fill="#21908c"/>
+  <line x1="240" y1="100" x2="400" y2="300" stroke="#444" stroke-width="4"/>
+  <circle cx="320" cy="200" r="34" fill="#f6c344"/>
+</svg>

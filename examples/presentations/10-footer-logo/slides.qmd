@@ -1,0 +1,18 @@
+---
+title: "Footer and logo"
+format: revealjs
+footer: "© 2026 Example Corp — [example.com](https://example.com)"
+logo: logo.svg
+---
+
+## Deck chrome
+
+A `footer:` repeats one line along the bottom of every slide, and a `logo:`
+pins an image to the corner. Both stay fixed as you move through the deck.
+
+The footer accepts Markdown, so a link in it renders as a link.
+
+## They persist across slides
+
+This second slide carries the same footer and logo — you set them once in the
+front matter and they apply to the whole deck.
