@@ -494,16 +494,34 @@ TDD; commit per increment._
       green. **Deferred to Stage D** (need markup/consumer/plugins): light/dark
       sentinel, footer/logo, panels/tabsets, callouts, code-annotation, tippy.
 
-### Stage D — brand + callouts + parity hardening + docs (bd-j8qoyc0s)
-- [ ] `_brand.yml` integration; **callouts** (the big one — depends on the C2 helper
-      foundation + revealjs callout AST output, bd-1kor9); panels/tabsets
-- [ ] Fancy title slide (authors/affiliations/ORCID/email — needs author-metadata
-      normalization); `logo:`/`footer:`; `auto-stretch`; reveal plugin foundation
-      (menu/notes/line-highlight) — from the 2026-06-16 audit backlog
-- [ ] Render/preview parity hardening; keep the vendored-asset drift guard meaningful
-- [ ] **Docs (D1 caveat):** user-facing guide on the theming variables and a
-      "migrating a Quarto-1 revealjs theme to Q2" how-to, incl. the `--r-*`
-      runtime escape hatch (docs/ site — render with `q2`, not Q1). Open a doc strand.
+### Stage D — brand + callouts + title/footer/logo + docs (bd-j8qoyc0s)
+
+**Scope set 2026-06-16** after the audit. Three audit items are **deferred to
+their own strands** (not part of Stage D):
+- light/dark theme integration → **bd-904h9kmt** (Q2 lacks Q1's light/dark
+  story broadly; the `/*! dark */` sentinel waits on that design).
+- code-annotation styling → **bd-h176qcgp** (wants dedicated design time).
+- reveal plugin foundation (menu/notes/line-highlight) → **bd-buwhvpc2**.
+
+Remaining Stage D scope (concrete decomposition pending the prerequisite
+investigation, 2026-06-16):
+- [ ] **Callouts** — the highest-value "feels like Quarto" element (helper
+      foundation from C2 is in place). Verify whether Q2 emits `.callout` markup
+      for reveal first (else AST work; cf. bd-1kor9).
+- [ ] **`_brand.yml` integration** — thread a resolved brand layer into
+      `assemble_reveal_scss` (quarto-sass `brand_layer.rs` has reveal hooks).
+- [ ] **Fancy title slide** — authors/affiliations/ORCID/email (likely needs
+      author-metadata normalization).
+- [ ] **`footer:` / `logo:`** — markup injection (reveal transform) + SCSS.
+- [ ] **`auto-stretch`** (default on in Q1) — single-image slides → `.r-stretch`.
+- [ ] **panels/tabsets** SCSS (state TBD by investigation).
+- [ ] Render/preview parity hardening; keep the vendored-asset drift guard meaningful.
+- [ ] **Docs (D1 caveat):** user-facing guide on the theming variables + a
+      "migrating a Quarto-1 revealjs theme to Q2" how-to incl. the `--r-*` runtime
+      escape hatch (docs/ site — render with `q2`, not Q1). Open a doc strand.
+
+_(A concrete per-increment decomposition + branch will be added once the
+prerequisite investigation lands.)_
 
 ---
 
