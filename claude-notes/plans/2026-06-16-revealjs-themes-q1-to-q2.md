@@ -2,10 +2,116 @@
 
 **Strand:** bd-yown2ts4
 **Branch:** `feature/revealjs-q1-themes` (epic integration line; stages land on sub-branches)
-**Status:** Stage A (bd-r9mkybwl) + Stage B (bd-n697m7u7) implemented, verified, and
-**merged** to `feature/revealjs-q1-themes` (2026-06-16). Running a Q1/reveal-5
-look-and-feel audit (below) before deciding Stage C scope vs implementing
-additional parity features.
+**Status (2026-06-16):** Stages A/B/C **and** Stage D's D1 (callouts) + D2 (brand)
+are merged to `feature/revealjs-q1-themes`, which is **pushed to `origin`**.
+Stage D (bd-j8qoyc0s) continues: **D3/D4/D5 remain** — see "## Handoff for next
+session" at the bottom (a fresh-clone agent branches off `feature` for these).
+
+---
+
+## Handoff for next session (Stage D continuation)
+
+**You are continuing Stage D (strand bd-j8qoyc0s).** Read this whole plan first;
+key context is above. Repo: `/Users/cscheid/rooms/room-1/q2`.
+
+### Where things are
+- **Stages A/B/C AND Stage D's D1+D2 are all merged to `feature/revealjs-q1-themes`,
+  which is pushed to `origin` (quarto-dev/q2).** Clone the repo, `git checkout
+  feature/revealjs-q1-themes`, and **create a fresh continuation branch off it**
+  for the rest of Stage D (e.g. `git switch -c beads/bd-j8qoyc0s-reveal-stage-d-cont`).
+  (The original local `beads/bd-j8qoyc0s-reveal-brand-callouts` branch is not
+  pushed; its content equals `feature` now that D1/D2 are merged.)
+- Latest D commits on `feature`: `ebbdd732` (D1 callouts), `a80b28de` (D2 brand),
+  then plan/handoff doc commits + the Stage-D merge commit. `git log --oneline -8`.
+- **Done:** D1 callouts (pure SCSS), D2 `_brand.yml` (config plumbing). See the
+  Stage D checklist above for exactly what landed.
+- **Remaining: D3 (footer/logo), D4 (auto-stretch), D5 (docs).** Both D3 and D4
+  are **new reveal AST transforms** — more Rust than D1/D2.
+
+### Deferred — do NOT build these in Stage D (each has its own strand)
+- light/dark integration **bd-904h9kmt**; code-annotation **bd-h176qcgp**;
+  reveal plugins **bd-buwhvpc2**; fancy title slide **bd-tntzuvzl** (blocked on a
+  deferred author-model normalization epic); panels/tabsets **bd-ewfppclm**
+  (greenfield).
+
+### D3 — footer / logo (new AST transform + SCSS)
+- Add a reveal transform (e.g. `crates/quarto-core/src/revealjs/footer_logo.rs`),
+  register it in `pipeline.rs` `build_transform_pipeline` reveal branch
+  (~lines 1105-1121) **after `RevealSlidesTransform`** (so the slide `<section>`
+  tree exists), export from `revealjs/mod.rs`.
+- Read `logo:` / `footer:` from `ast.meta`; inject `<img class="slide-logo">`
+  and a `.footer` Div (Q1 emits `::: {.footer .footer-default}`). Q1 ref:
+  `external-sources/quarto-cli/src/format/reveal/format-reveal.ts:402-424`.
+- SCSS: port footer styling (Q1 `quarto.scss:570-592`, muted + `.has-dark/light-
+  background` variants) and `.slide-logo` positioning into
+  `resources/scss/revealjs/quarto-revealjs.scss`. (Footer SCSS was deferred from
+  C3 precisely because the markup didn't exist yet.)
+- **Scope note:** Q1 places footer/logo on *every* slide via its quarto-support
+  reveal *plugin*. Q2 ships no plugins (deferred), so do the simple thing: a
+  single deck-level `.footer` fixed at the bottom via CSS (reveal shows it on all
+  slides) + a positioned `.slide-logo`. Document the difference; don't pull in a
+  plugin.
+
+### D4 — auto-stretch (new AST transform)
+- Another reveal transform after `RevealSlidesTransform`. Walk each slide
+  `section`; if it contains a *single* image (one `Para`/`Figure` wrapping one
+  `Image`, ignoring the heading), add class `r-stretch` to it. Default-ON with a
+  `auto-stretch: false` opt-out (Q1 schema default is true). `.r-stretch` is a
+  reveal-core CSS class — **no Quarto SCSS needed**. Q1 ref: `format-reveal.ts`
+  `applyStretch` (~949-1060). Skip slides with multiple blocks or images that
+  already carry explicit sizing / `.r-stretch`.
+
+### D5 — docs (open a doc strand)
+- `docs/` is a **Quarto-2 website — render/preview with `cargo run --bin q2 -- …`,
+  never the system `quarto`.** Write a user-facing guide on the reveal theming
+  variables (`$presentation-*` / `$body-*`) + a "migrating a Quarto-1 revealjs
+  theme to Q2" how-to, incl. the `--r-*` runtime escape hatch.
+
+### Conventions / gotchas (non-negotiable)
+- **TDD**: write the test first, watch it fail, then implement. Use
+  `cargo nextest run` (never `cargo test`); never pipe nextest through `tail`.
+- After each increment run `cargo xtask verify --skip-hub-tests` (SCSS is
+  embedded in `quarto-sass` and transforms live in `quarto-core` — **both feed
+  the WASM build**, so the WASM leg must pass). Commit per increment.
+- **End-to-end verify through the real binary**: `cargo run --bin q2 -- render
+  <fixture>.qmd`, inspect the output, and use the Chrome DevTools MCP (navigate
+  `file://…`, `evaluate_script` for computed styles, `take_screenshot`). After
+  re-rendering, **reload with `ignoreCache:true`** — hash navigation alone does
+  NOT reload the document. Use a project-local temp dir (e.g. `.tmp-reveal-check`)
+  and delete it when done.
+- **External Sources Policy**: never reference `external-sources/` at compile
+  time — read it for porting, but vendor anything needed.
+- **reveal.js 6 uses kebab-case Sass vars.** The Quarto reveal layer
+  (`resources/scss/revealjs/quarto-revealjs.scss`) defines the `$presentation-*`/
+  `$body-*` vocabulary, maps it to reveal-6 kebab vars, and has the helper
+  foundation (`shift_to_dark`, `shift-color`, `make/undo-smaller-font-size`,
+  `colorToRGB`, `str-replace`).
+- **hub-client changelog**: required ONLY if you change a file under
+  `hub-client/` (two-commit workflow per CLAUDE.md). D3/D4 are `quarto-core` →
+  likely no hub-client change → no changelog.
+- **Preview parity caveat**: SCSS-only features render via `q2 render` but not in
+  the `q2-slides` preview SPA (it imports stock `white.css`). D3/D4 add *markup*
+  via AST transforms — that markup WILL appear in preview if the transform also
+  runs for `q2-slides`; check `pipeline.rs` `Q2_PREVIEW_TRANSFORM_EXCLUDED`
+  (~line 1314). The *styling* still won't be in preview. State this honestly when
+  reporting "done".
+- **Git**: branch your continuation off `feature/revealjs-q1-themes`. When the
+  remaining Stage D work is complete, merge `--no-ff` into `feature` and
+  `braid close bd-j8qoyc0s`. `feature` is already on `origin`; **push only with
+  explicit user permission** (the D1/D2 push was explicitly authorized — don't
+  assume standing permission for D3+). Commit message trailer:
+  `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
+
+### Key files
+- Reveal transforms: `crates/quarto-core/src/revealjs/{transform,slides,columns,footnotes,theme,assemble,mod}.rs`
+- Pipeline (reveal branch + preview-excluded list): `crates/quarto-core/src/pipeline.rs`
+- Reveal SCSS layer: `resources/scss/revealjs/quarto-revealjs.scss`
+- Reveal SCSS assembly/compile: `crates/quarto-sass/src/{bundle,compile,config,brand_layer}.rs`
+- Reveal config (`Reveal.initialize`): `crates/quarto-core/src/revealjs/assemble.rs` (`reveal_config_json`)
+- Tests: `crates/quarto-core/tests/integration/{revealjs_format,revealjs_features}.rs`,
+  `crates/quarto-sass/tests/integration/reveal_theme_test.rs`
+- Q1 references: `external-sources/quarto-cli/src/format/reveal/format-reveal.ts`,
+  `external-sources/quarto-cli/src/resources/formats/revealjs/quarto.scss`
 
 ## Overview
 
@@ -514,20 +620,21 @@ Two more items moved to their own strands after the investigation:
 Stage D branch: `beads/bd-j8qoyc0s-reveal-brand-callouts` off `feature/revealjs-q1-themes`.
 Increments (by value × unblocked-ness; TDD; commit per increment):
 
-- [ ] **D1. Callouts (pure SCSS).** Q2 **already emits identical `.callout` markup
-      for reveal** (`CalloutTransform`+`CalloutResolveTransform` run before the
-      reveal branch — `pipeline.rs:1073-1074`); the reveal SCSS layer just has no
-      `.callout` rules. Port Q1 `quarto.scss:873-1116` callout rules + `$callout-*`
-      defaults into `quarto-revealjs.scss` (helpers `shift-color`/`shift_to_dark`/
-      `colorToRGB` already present from C2). Source: also `resources/scss/bootstrap/
-      _bootstrap-rules.scss:1759+` (icon SVG map). No Rust. _(bd-1kor9's "needs
-      reveal callout AST" premise is already satisfied.)_
-- [ ] **D2. `_brand.yml` integration (config plumbing).** `brand_to_layers`
-      already emits reveal `presentation-*` vars; the reveal compile path just
-      never resolves brand. Thread a brand layer through: stage reveal branch
-      (resolve brand like HTML, `compile_theme_css.rs:421-441`) →
-      `resolve_reveal_theme` → `assemble_reveal_scss` → `compile_reveal_theme_css`
-      (+ the `compile_reveal` helper). TDD: brand vars reach `--r-*`.
+- [x] **D1. Callouts (pure SCSS).** Ported Q1 `quarto.scss:873-1116` (base rules,
+      simple/default layouts, the `$callouts` map with per-type accent + inlined
+      recolored Bootstrap-icon SVGs, default-title `shift_to_dark` bg) into
+      `quarto-revealjs.scss`. Added `$callout-*`/`$table-border-color` defaults,
+      `sass:map` use, and a local `str-replace` fn. Q2 already emits identical
+      `.callout` markup for reveal — pure SCSS, no AST work. TDD +
+      E2E (Chrome: note/tip/warning render with colored borders, recolored icons,
+      titled vs simple). Commit ebbdd732.
+- [x] **D2. `_brand.yml` integration (config plumbing).** New
+      `quarto_sass::resolve_brand_layers` (extract `brand:` → typed Brand →
+      layers, independent of Bootstrap theme parsing); reveal branch resolves it
+      against the project dir and appends brand layers LAST (highest priority).
+      Fixed brand's reveal base-font mapping `$mainFont`→`$main-font` (reveal-6
+      kebab). TDD: `revealjs_brand_yml_flows_into_theme`. E2E confirmed
+      `--r-link-color:#c00` + `--r-main-font:Georgia`. Commit a80b28de.
 - [ ] **D3. `footer:` / `logo:` (new AST transform).** New reveal transform after
       `RevealSlidesTransform` (`pipeline.rs:1109`) injecting `<img class="slide-logo">`
       + `.footer` Div from `logo:`/`footer:` meta; + SCSS (footer muted/bg-aware;

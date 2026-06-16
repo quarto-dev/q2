@@ -252,6 +252,28 @@ fn quick_wins_compile_and_emit() {
 }
 
 #[test]
+fn callouts_compile_and_emit_per_type() {
+    let css = compile(&assemble_reveal_scss(&[]).unwrap());
+    assert!(css.contains(".reveal div.callout"), "callout base rules");
+    assert!(
+        css.contains(".callout-note") && css.contains(".callout-warning"),
+        "per-type callout rules"
+    );
+    // Per-type icon as an inlined, URL-encoded SVG with the accent color.
+    assert!(
+        css.contains("background-image: url('data:image/svg+xml,"),
+        "callout icon SVG data URI\n{}",
+        &css[css.len().saturating_sub(600)..]
+    );
+    // The icon fill is recolored per type and URL-encoded (# → %23).
+    assert!(css.contains("%23"), "callout icon color URL-encoded");
+    assert!(css.contains("fill:"), "callout icon fill set");
+    // callout-style-simple / -default specific rules present
+    assert!(css.contains(".callout-style-simple"));
+    assert!(css.contains(".callout-style-default"));
+}
+
+#[test]
 fn shift_to_dark_picks_dark_value_on_dark_theme() {
     // kbd uses `shift_to_dark`, which depends on the slide background's
     // blackness. On the `dark` theme (bg #191919) the dark branch is chosen

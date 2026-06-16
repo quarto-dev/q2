@@ -398,8 +398,10 @@ fn variable_translations_for_kind(kind: &str) -> &'static [(&'static str, &'stat
             ("size", "font-size-base"),
             ("line-height", "line-height-base"),
             ("weight", "font-weight-base"),
-            // revealjs
-            ("family", "mainFont"),
+            // revealjs (reveal.js 6 uses kebab-case Sass vars; the Quarto reveal
+            // layer maps $font-family-sans-serif → $main-font, and reads
+            // $main-font directly, so target the reveal-6 name)
+            ("family", "main-font"),
             ("size", "presentation-font-size-root"),
             ("line-height", "presentation-line-height"),
             // mermaid

@@ -289,6 +289,44 @@ impl ThemeConfig {
     }
 }
 
+/// Resolve a `_brand.yml` (from the `brand:` key) into SCSS layers, independent
+/// of the Bootstrap `theme:` parsing.
+///
+/// `format: html` resolves brand through [`ThemeConfig::from_config_value`] +
+/// the `brand` position marker in `process_theme_specs`, but that path also
+/// parses `theme:` against the Bootswatch theme set — which rejects reveal theme
+/// names. RevealJS therefore resolves brand on its own via this helper: extract
+/// the `brand:` reference, read/parse it into a [`Brand`], and convert it to
+/// SCSS layers with [`crate::brand_to_layers`]. Returns an empty vector when no
+/// brand is configured.
+///
+/// `base_dir` resolves a relative `brand:` path (typically the project root);
+/// `font_path_prefix` is the directory prefix for `@font-face` URLs (pass an
+/// empty path to reference brand-bundled fonts by bare name).
+pub fn resolve_brand_layers(
+    config: &ConfigValue,
+    runtime: &dyn SystemRuntime,
+    base_dir: &Path,
+    font_path_prefix: &Path,
+) -> Result<Vec<crate::SassLayer>, SassError> {
+    let Some(brand_ref) = extract_brand_ref(config.get("brand"))? else {
+        return Ok(Vec::new());
+    };
+    // Reuse ThemeConfig's brand resolution (path/inline → typed Brand).
+    let resolved = ThemeConfig {
+        themes: Vec::new(),
+        minified: true,
+        suppress_bootstrap: false,
+        brand_ref: Some(brand_ref),
+    }
+    .resolve(runtime, base_dir)?;
+
+    match resolved.brand {
+        Some(brand) => crate::brand_layer::brand_to_layers(&brand, font_path_prefix),
+        None => Ok(Vec::new()),
+    }
+}
+
 /// Extract the text content from a ConfigValue, handling both Scalar strings
 /// and PandocInlines (which occur when document frontmatter values are parsed
 /// as markdown by pampa).

@@ -356,6 +356,47 @@ fn revealjs_theme_slot_is_compiled_quarto_theme() {
     );
 }
 
+/// bd-j8qoyc0s Stage D2: a `_brand.yml` flows into the compiled reveal theme —
+/// brand colors and typography reach the `--r-*` custom properties.
+#[test]
+fn revealjs_brand_yml_flows_into_theme() {
+    let temp = tempfile::TempDir::new().unwrap();
+    write_file(
+        &temp.path().join("_brand.yml"),
+        "color:\n  palette:\n    brandred: \"#cc0000\"\n  primary: brandred\ntypography:\n  base:\n    family: Georgia\n",
+    );
+    let qmd_path = temp.path().join("talk.qmd");
+    write_file(
+        &qmd_path,
+        "---\ntitle: Branded\nbrand: _brand.yml\nformat: revealjs\n---\n\n## A slide\n\n- x\n",
+    );
+    let options = RenderToFileOptions {
+        quiet: true,
+        ..Default::default()
+    };
+    let result = render_to_file(&qmd_path, "revealjs", &options, runtime_arc())
+        .expect("revealjs render failed");
+
+    let libs = result
+        .output_path
+        .parent()
+        .unwrap()
+        .join("talk_files")
+        .join("revealjs");
+    let css = compact(&read(&find_theme_css(&libs)));
+
+    // Brand primary → $link-color → --r-link-color (#cc0000 minifies to #c00).
+    assert!(
+        css.contains("--r-link-color:#c00") || css.contains("--r-link-color:#cc0000"),
+        "brand primary should drive --r-link-color\n{css}"
+    );
+    // Brand base font → --r-main-font.
+    assert!(
+        css.contains("--r-main-font:Georgia"),
+        "brand base font should drive --r-main-font"
+    );
+}
+
 /// bd-r9mkybwl Stage B: selecting a built-in theme (`theme: dark`) compiles
 /// THAT theme into the deck — end-to-end through `render_to_file`. Guards the
 /// theme-resolution + per-theme-compile path beyond the white default.
