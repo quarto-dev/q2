@@ -214,6 +214,67 @@ format: revealjs
     );
 }
 
+/// End-to-end: a single-image slide gets reveal's `.r-stretch` (default-on);
+/// a sized image, an inline-among-text image, and `auto-stretch: false` do not.
+#[test]
+fn revealjs_auto_stretch_single_image_slides() {
+    // 1x1 transparent PNG so the resource collector's copy succeeds.
+    const PNG: &[u8] = &[
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f,
+        0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00,
+        0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ];
+
+    let render = |deck: &str| -> String {
+        let temp = tempfile::TempDir::new().unwrap();
+        std::fs::write(temp.path().join("pic.png"), PNG).unwrap();
+        let qmd_path = temp.path().join("talk.qmd");
+        write_file(&qmd_path, deck);
+        let options = RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        };
+        let result = render_to_file(&qmd_path, "revealjs", &options, runtime_arc())
+            .expect("revealjs render failed");
+        read(&result.output_path)
+    };
+
+    // Lone image slide → image gains r-stretch.
+    let html = render("---\ntitle: T\nformat: revealjs\n---\n\n## Slide\n\n![](pic.png)\n");
+    assert!(
+        html.contains("r-stretch"),
+        "lone-image slide should stretch; got:\n{html}"
+    );
+
+    // Sized image → no stretch.
+    let sized =
+        render("---\ntitle: T\nformat: revealjs\n---\n\n## Slide\n\n![](pic.png){width=\"300\"}\n");
+    assert!(
+        !sized.contains("r-stretch"),
+        "sized image must not stretch; got:\n{sized}"
+    );
+
+    // Inline image among text → no stretch.
+    let inline = render(
+        "---\ntitle: T\nformat: revealjs\n---\n\n## Slide\n\nHere is ![](pic.png) inline.\n",
+    );
+    assert!(
+        !inline.contains("r-stretch"),
+        "inline image among text must not stretch; got:\n{inline}"
+    );
+
+    // auto-stretch: false → opt-out.
+    let off = render(
+        "---\ntitle: T\nformat:\n  revealjs:\n    auto-stretch: false\n---\n\n## Slide\n\n![](pic.png)\n",
+    );
+    assert!(
+        !off.contains("r-stretch"),
+        "auto-stretch: false must disable stretching; got:\n{off}"
+    );
+}
+
 #[test]
 fn revealjs_render_emits_title_slide() {
     let html = render_revealjs(FLAT_DECK);

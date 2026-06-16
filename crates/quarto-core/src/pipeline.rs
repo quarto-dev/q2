@@ -1141,6 +1141,11 @@ pub fn build_transform_pipeline(
         // `Div#footnotes`), so it must run *after* it. Pure AST → benefits
         // render and preview alike. See `revealjs::footnotes`.
         pipeline.push(Box::new(crate::revealjs::RevealFootnotesTransform::new()));
+        // Auto-stretch single-image slides (add reveal's `.r-stretch`). Runs
+        // *after* footnote/aside coalescing so a slide that gained a coalesced
+        // aside has >1 body block and is correctly skipped. Default-on, gated
+        // by `auto-stretch: false`. See `revealjs::auto_stretch`.
+        pipeline.push(Box::new(crate::revealjs::RevealAutoStretchTransform::new()));
     }
     // Example-iframe embeds (bd-z1smhvuo / bd-t3cert81). Sugars
     // `Div.embed-example-iframe[file=…]` into a `CustomNode("ExampleEmbed")`.
