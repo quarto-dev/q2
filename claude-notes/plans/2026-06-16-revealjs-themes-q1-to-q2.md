@@ -461,15 +461,18 @@ _Inserted before the brand/callouts/docs stage per the 2026-06-16 audit decision
 `beads/bd-jxyqjf15-reveal-config-and-quickwins` off `feature/revealjs-q1-themes`.
 TDD; commit per increment._
 
-- [ ] **C1. Reveal config defaults.** Port Q1's opinionated default block into
-      `reveal_config_json` (`transition:"none"`, `width:1050`, `height:700`,
-      `margin:0.1`, `navigationMode:"linear"`, `controlsLayout:"edges"`,
-      `controlsTutorial:false`, `history:true`, `backgroundTransition:"none"`,
-      `fragmentInURL:false`, `pdfSeparateFragments:false`, `hashOneBasedIndex:false`)
-      — each overridable by front-matter. `slideNumber` `c/t`/`h.v` rewrite +
-      quoting. Fix `RevealDeck.tsx` preview parity (`center:false`,
-      `transition:"none"`, width/height). TDD: config snapshot; Chrome confirms
-      no animation + edges controls.
+- [x] **C1. Reveal config defaults.** Ported Q1's opinionated block into
+      `reveal_config_json` (transition/backgroundTransition:none, center:false,
+      1050×700, margin:0.1, navigationMode:linear, controlsLayout:edges,
+      controlsTutorial:false, history:true, fragmentInURL/pdfSeparateFragments/
+      hashOneBasedIndex:false) — each front-matter-overridable. `slideNumber`
+      true→`c/t`(linear)/`h.v`(vertical); width/height accept `%` strings. Fixed
+      preview parity in **both** `RevealDeck.tsx` and `RevealjsReactAstSlideRenderer.tsx`
+      (center:false, transition:none, margin:0.1, linear nav, edge controls).
+      TDD: `config_defaults_match_quarto1` + vertical-nav/override tests;
+      integration `slideNumber` assertion. E2E: `q2 render` + Chrome
+      `Reveal.getConfig()` confirmed. Full verify (incl. hub build) green.
+      Commits 37061765 (code) + 3cea68ce (hub changelog).
 - [ ] **C2. Sass-helper foundation.** Port Q1 `quarto.scss` helpers into the
       reveal layer: `quarto-color.blackness/.scale`, `quarto-math.pow`,
       `shift-color`, `shift_to_dark`, `make/undo-smaller-font-size` (Q1
