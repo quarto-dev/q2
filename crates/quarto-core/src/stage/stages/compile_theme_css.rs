@@ -273,12 +273,29 @@ impl PipelineStage for CompileThemeCssStage {
                 || std::path::PathBuf::from("."),
                 std::path::Path::to_path_buf,
             );
-            let resolution = crate::revealjs::resolve_reveal_theme(
+            let mut resolution = crate::revealjs::resolve_reveal_theme(
                 &doc.ast.meta,
                 &document_dir,
                 ctx.runtime.as_ref(),
             )
             .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
+
+            // `_brand.yml` integration: resolve the brand into SCSS layers and
+            // append them LAST (highest priority) so brand colors/typography
+            // override the built-in theme. Relative `brand:` paths resolve
+            // against the project dir, mirroring the HTML path. Reveal resolves
+            // brand on its own because the Bootstrap `ThemeConfig` theme path
+            // rejects reveal theme names.
+            let brand_layers = quarto_sass::resolve_brand_layers(
+                &doc.ast.meta,
+                ctx.runtime.as_ref(),
+                &ctx.project.dir,
+                std::path::Path::new(""),
+            )
+            .map_err(|e| {
+                PipelineError::stage_error(self.name(), format!("brand resolution: {e}"))
+            })?;
+            resolution.layers.extend(brand_layers);
 
             // Compile Quarto's reveal theme (single unified SCSS pass, D1) and
             // register it as the theme-slot artifact (keyed by content

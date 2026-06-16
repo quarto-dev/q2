@@ -64,7 +64,7 @@ pub use compile::{
     assemble_theme_scss, compile_css_from_config, compile_default_css, compile_reveal_theme_css,
     compile_theme_css, compile_with_doc_vars,
 };
-pub use config::{ResolvedThemeConfig, ThemeConfig};
+pub use config::{ResolvedThemeConfig, ThemeConfig, resolve_brand_layers};
 pub use error::SassError;
 pub use layer::{merge_layers, parse_layer, parse_layer_from_parts};
 pub use resources::{
