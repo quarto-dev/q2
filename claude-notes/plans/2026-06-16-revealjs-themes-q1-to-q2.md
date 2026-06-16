@@ -454,8 +454,38 @@ was a wrong mental model — `ctx.artifacts` is per-document, not project-wide.)
       `theme: dracula` (#282a36 bg, purple headings, cyan bullets, orange bold,
       yellow italic) render faithfully, top-aligned/left-aligned.
 
-### Stage C — parity + extras + docs (own branch)
-- [ ] `_brand.yml` integration, callouts/panels/tabsets/`.smaller`, light/dark sentinel
+### Stage C — config defaults + Sass-helper foundation + SCSS quick-wins (bd-jxyqjf15)
+
+_Inserted before the brand/callouts/docs stage per the 2026-06-16 audit decision
+(user chose "config fixes + quick-wins first"). Branch
+`beads/bd-jxyqjf15-reveal-config-and-quickwins` off `feature/revealjs-q1-themes`.
+TDD; commit per increment._
+
+- [ ] **C1. Reveal config defaults.** Port Q1's opinionated default block into
+      `reveal_config_json` (`transition:"none"`, `width:1050`, `height:700`,
+      `margin:0.1`, `navigationMode:"linear"`, `controlsLayout:"edges"`,
+      `controlsTutorial:false`, `history:true`, `backgroundTransition:"none"`,
+      `fragmentInURL:false`, `pdfSeparateFragments:false`, `hashOneBasedIndex:false`)
+      — each overridable by front-matter. `slideNumber` `c/t`/`h.v` rewrite +
+      quoting. Fix `RevealDeck.tsx` preview parity (`center:false`,
+      `transition:"none"`, width/height). TDD: config snapshot; Chrome confirms
+      no animation + edges controls.
+- [ ] **C2. Sass-helper foundation.** Port Q1 `quarto.scss` helpers into the
+      reveal layer: `quarto-color.blackness/.scale`, `quarto-math.pow`,
+      `shift-color`, `shift_to_dark`, `make/undo-smaller-font-size` (Q1
+      `quarto.scss:204-258`). Unblocks the C3 SCSS items.
+- [ ] **C3. SCSS quick-wins** (port from `quarto.scss`): `.has-light/dark-background`
+      text switching; code-block border/scroll/max-height; `.smaller` system;
+      light/dark sentinel `/*! dark */` (+ a Q2 consumer for code-highlight mode);
+      blockquote restyle; kbd; slide-number; figure/caption; column gutters; link
+      styling. Per-item tests (compiled CSS assertions) + E2E spot-checks.
+
+### Stage D — brand + callouts + parity hardening + docs (bd-j8qoyc0s)
+- [ ] `_brand.yml` integration; **callouts** (the big one — depends on the C2 helper
+      foundation + revealjs callout AST output, bd-1kor9); panels/tabsets
+- [ ] Fancy title slide (authors/affiliations/ORCID/email — needs author-metadata
+      normalization); `logo:`/`footer:`; `auto-stretch`; reveal plugin foundation
+      (menu/notes/line-highlight) — from the 2026-06-16 audit backlog
 - [ ] Render/preview parity hardening; keep the vendored-asset drift guard meaningful
 - [ ] **Docs (D1 caveat):** user-facing guide on the theming variables and a
       "migrating a Quarto-1 revealjs theme to Q2" how-to, incl. the `--r-*`

@@ -177,11 +177,12 @@ fn revealjs_initialize_carries_options() {
     let c = compact(&html);
     assert!(
         c.contains("\"transition\":\"fade\""),
-        "Reveal.initialize must carry transition: fade"
+        "Reveal.initialize must carry the front-matter transition: fade"
     );
+    // slide-number: true → Quarto's "c/t" format (linear navigation default).
     assert!(
-        c.contains("\"slideNumber\":true"),
-        "slide-number: true must map to reveal `slideNumber: true`"
+        c.contains("\"slideNumber\":\"c/t\""),
+        "slide-number: true must map to reveal `slideNumber: \"c/t\"`"
     );
 }
 
