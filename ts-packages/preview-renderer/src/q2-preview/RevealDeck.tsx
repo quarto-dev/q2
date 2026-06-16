@@ -156,18 +156,26 @@ export function RevealDeck(props: RevealDeckProps) {
             <IncrementalContext.Provider value={{ enabled: true, incremental: globalIncremental }}>
                 <Deck
                     config={{
+                        // Match the render path's Quarto-1 opinionated defaults
+                        // (see reveal_config_json in quarto-core) so preview and
+                        // render look the same: top-aligned slides, no
+                        // transition, 0.1 margin, linear nav, edge controls.
                         width: 1050,
                         height: 700,
-                        margin: 0.04,
+                        margin: 0.1,
                         minScale: 0.2,
                         maxScale: 2.0,
                         controls: true,
                         progress: true,
-                        center: true,
+                        center: false,
+                        navigationMode: 'linear',
+                        controlsLayout: 'edges',
+                        controlsTutorial: false,
+                        backgroundTransition: 'none',
                         // Preview re-renders on every edit; URL-hash navigation
                         // would fight that. Keep nav purely in-deck.
                         hash: false,
-                        transition: 'slide',
+                        transition: 'none',
                     }}
                 >
                     {slides}

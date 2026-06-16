@@ -123,17 +123,23 @@ export function RevealjsSlideAst({ astJson, currentFilePath, onNavigateToDocumen
       <Deck
         deckRef={deckRef}
         config={{
+          // Match the render path's Quarto-1 opinionated defaults (see
+          // reveal_config_json in quarto-core): top-aligned slides, no
+          // transition, 0.1 margin, linear nav, edge controls.
           width: 1050,
           height: 700,
-          margin: 0.04,
+          margin: 0.1,
           minScale: 0.2,
           maxScale: 2.0,
           controls: true,
           progress: true,
-          center: true,
+          center: false,
+          navigationMode: 'linear',
+          controlsLayout: 'edges',
+          controlsTutorial: false,
           hash: false,
-          transition: 'slide',
-          backgroundTransition: 'fade',
+          transition: 'none',
+          backgroundTransition: 'none',
           // probably need to re-enable this on-focus or something
           // but it was making it so I can't type!
           keyboard: false,

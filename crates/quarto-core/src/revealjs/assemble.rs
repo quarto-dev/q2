@@ -170,10 +170,12 @@ fn escape_html(s: &str) -> String {
 
 /// Build the `Reveal.initialize(...)` config object from merged metadata.
 ///
-/// Maps Quarto/Pandoc option names to reveal.js config keys (camelCase). Only
-/// Tier-1 options are wired; unknown keys are ignored. Defaults match Quarto 1
-/// (controls/progress/hash on, `center` OFF so slides top-align, `slide`
-/// transition).
+/// Maps Quarto/Pandoc option names to reveal.js config keys (camelCase) and
+/// seeds Quarto 1's **opinionated default block** (`format-reveal.ts:343-361`),
+/// which differs from reveal's own defaults in user-visible ways: no slide
+/// transition, top-aligned slides (`center:false`), a 1050×700 deck with a 0.1
+/// margin, linear navigation, edge controls, no controls tutorial. Each option
+/// is overridable from front-matter (kebab-case keys, e.g. `controls-layout`).
 fn reveal_config_json(meta: &ConfigValue) -> String {
     let mut map = serde_json::Map::new();
 
@@ -188,26 +190,46 @@ fn reveal_config_json(meta: &ConfigValue) -> String {
     fn int_opt(meta: &ConfigValue, key: &str) -> Option<i64> {
         meta.get(key).and_then(|v| v.as_int())
     }
+    // No `as_f64` on ConfigValue; accept an int or a parseable numeric string.
+    fn float_opt(meta: &ConfigValue, key: &str) -> Option<f64> {
+        let v = meta.get(key)?;
+        if let Some(i) = v.as_int() {
+            return Some(i as f64);
+        }
+        v.as_plain_text().and_then(|s| s.trim().parse::<f64>().ok())
+    }
 
-    // Booleans with Quarto-1 defaults.
+    // Booleans — Quarto-1 opinionated defaults. `center: false` top-aligns
+    // slides (reveal's own default is true); the title slide is re-centered via
+    // a per-slide `.center` class (see `build_title_slide`).
     for (key, reveal_key, default) in [
         ("controls", "controls", true),
         ("progress", "progress", true),
-        // Quarto 1 default: slides top-align vertically (reveal's own default
-        // is true). The title slide is re-centered via a per-slide `.center`
-        // class (see `build_title_slide`), matching Q1's format-reveal.ts.
         ("center", "center", false),
         ("hash", "hash", true),
+        ("history", "history", true),
+        ("controls-tutorial", "controlsTutorial", false),
+        ("hash-one-based-index", "hashOneBasedIndex", false),
+        ("fragment-in-url", "fragmentInURL", false),
+        ("pdf-separate-fragments", "pdfSeparateFragments", false),
     ] {
         let value = bool_opt(meta, key).unwrap_or(default);
         map.insert(reveal_key.to_string(), serde_json::Value::Bool(value));
     }
 
-    // Transition (string), default "slide".
-    let transition = str_opt(meta, "transition").unwrap_or_else(|| "slide".to_string());
+    // Strings — Quarto-1 opinionated defaults (no transition, edge controls).
+    let navigation_mode = str_opt(meta, "navigation-mode").unwrap_or_else(|| "linear".to_string());
+    for (key, reveal_key, default) in [
+        ("transition", "transition", "none"),
+        ("background-transition", "backgroundTransition", "none"),
+        ("controls-layout", "controlsLayout", "edges"),
+    ] {
+        let value = str_opt(meta, key).unwrap_or_else(|| default.to_string());
+        map.insert(reveal_key.to_string(), serde_json::Value::String(value));
+    }
     map.insert(
-        "transition".to_string(),
-        serde_json::Value::String(transition),
+        "navigationMode".to_string(),
+        serde_json::Value::String(navigation_mode.clone()),
     );
     if let Some(speed) = str_opt(meta, "transition-speed") {
         map.insert(
@@ -216,21 +238,41 @@ fn reveal_config_json(meta: &ConfigValue) -> String {
         );
     }
 
-    // slide-number: either a bool or a format string (e.g. "c/t").
+    // Deck dimensions + margin — Quarto-1 opinionated defaults (1050×700, 0.1).
+    // width/height accept an int or a percentage string (e.g. "100%").
+    for (key, reveal_key, default) in [("width", "width", 1050), ("height", "height", 700)] {
+        let value = int_opt(meta, key).map(serde_json::Value::from).or_else(|| {
+            str_opt(meta, key)
+                .filter(|s| s.ends_with('%'))
+                .map(serde_json::Value::String)
+        });
+        map.insert(
+            reveal_key.to_string(),
+            value.unwrap_or_else(|| serde_json::Value::from(default)),
+        );
+    }
+    map.insert(
+        "margin".to_string(),
+        serde_json::Value::from(float_opt(meta, "margin").unwrap_or(0.1)),
+    );
+
+    // slide-number: Quarto 1 rewrites `true` → "c/t" (linear navigation) or
+    // "h.v" (vertical), and passes a format string through. Default: off.
     if let Some(v) = meta.get("slide-number") {
         if let Some(b) = v.as_bool() {
-            map.insert("slideNumber".to_string(), serde_json::Value::Bool(b));
+            if b {
+                let vertical = matches!(navigation_mode.as_str(), "default" | "grid");
+                let fmt = if vertical { "h.v" } else { "c/t" };
+                map.insert(
+                    "slideNumber".to_string(),
+                    serde_json::Value::String(fmt.to_string()),
+                );
+            } else {
+                map.insert("slideNumber".to_string(), serde_json::Value::Bool(false));
+            }
         } else if let Some(s) = v.as_plain_text() {
             map.insert("slideNumber".to_string(), serde_json::Value::String(s));
         }
-    }
-
-    // Explicit deck dimensions.
-    if let Some(w) = int_opt(meta, "width") {
-        map.insert("width".to_string(), serde_json::Value::from(w));
-    }
-    if let Some(h) = int_opt(meta, "height") {
-        map.insert("height".to_string(), serde_json::Value::from(h));
     }
 
     serde_json::to_string_pretty(&serde_json::Value::Object(map))
@@ -351,7 +393,19 @@ mod tests {
         // per-slide `.center` class, see build_title_slide).
         assert_eq!(v["center"], serde_json::json!(false));
         assert_eq!(v["hash"], serde_json::json!(true));
-        assert_eq!(v["transition"], serde_json::json!("slide"));
+        // Quarto 1's opinionated block: no transition, 1050x700 / margin 0.1,
+        // linear navigation, edge controls, no controls tutorial.
+        assert_eq!(v["transition"], serde_json::json!("none"));
+        assert_eq!(v["backgroundTransition"], serde_json::json!("none"));
+        assert_eq!(v["width"], serde_json::json!(1050));
+        assert_eq!(v["height"], serde_json::json!(700));
+        assert_eq!(v["margin"], serde_json::json!(0.1));
+        assert_eq!(v["navigationMode"], serde_json::json!("linear"));
+        assert_eq!(v["controlsLayout"], serde_json::json!("edges"));
+        assert_eq!(v["controlsTutorial"], serde_json::json!(false));
+        assert_eq!(v["history"], serde_json::json!(true));
+        assert_eq!(v["fragmentInURL"], serde_json::json!(false));
+        assert_eq!(v["pdfSeparateFragments"], serde_json::json!(false));
     }
 
     #[test]
@@ -359,8 +413,36 @@ mod tests {
         let m = meta(vec![("transition", s("fade")), ("slide-number", b(true))]);
         let cfg = reveal_config_json(&m);
         let compact: String = cfg.chars().filter(|c| !c.is_whitespace()).collect();
+        // Front-matter overrides the opinionated default.
         assert!(compact.contains("\"transition\":\"fade\""));
-        assert!(compact.contains("\"slideNumber\":true"));
+        // slide-number: true → Quarto's "c/t" format (linear navigation default).
+        assert!(compact.contains("\"slideNumber\":\"c/t\""));
+    }
+
+    #[test]
+    fn config_slide_number_vertical_navigation_uses_h_dot_v() {
+        let m = meta(vec![
+            ("slide-number", b(true)),
+            ("navigation-mode", s("grid")),
+        ]);
+        let cfg = reveal_config_json(&m);
+        let compact: String = cfg.chars().filter(|c| !c.is_whitespace()).collect();
+        assert!(compact.contains("\"slideNumber\":\"h.v\""));
+        assert!(compact.contains("\"navigationMode\":\"grid\""));
+    }
+
+    #[test]
+    fn config_front_matter_overrides_opinionated_defaults() {
+        let m = meta(vec![
+            ("transition", s("slide")),
+            ("controls-layout", s("bottom-right")),
+            ("history", b(false)),
+        ]);
+        let cfg = reveal_config_json(&m);
+        let v: serde_json::Value = serde_json::from_str(&cfg).unwrap();
+        assert_eq!(v["transition"], serde_json::json!("slide"));
+        assert_eq!(v["controlsLayout"], serde_json::json!("bottom-right"));
+        assert_eq!(v["history"], serde_json::json!(false));
     }
 
     /// CSS/JS URLs as the stage + resolver would hand them to the
