@@ -180,6 +180,13 @@ let foldingRangeDisposable: Monaco.IDisposable | null = null;
 let semanticTokensDisposable: Monaco.IDisposable | null = null;
 
 /**
+ * Fired to make Monaco re-request semantic tokens immediately. Monaco wires a
+ * provider's `onDidChange` to `schedule(0)` (no debounce), so firing this on
+ * file open paints the correct colours without the adaptive ≥300ms wait.
+ */
+let semanticTokensChangeEmitter: Monaco.Emitter<void> | null = null;
+
+/**
  * Register intelligence providers with Monaco.
  *
  * This registers:
@@ -201,8 +208,19 @@ export function registerIntelligenceProviders(
   monaco: typeof Monaco,
   getCurrentFilePath: () => string | null
 ): void {
-  // Clean up any existing registrations
-  disposeIntelligenceProviders();
+  // Idempotent: register once. The editor remounts per file (Editor.tsx keys
+  // MonacoEditor on the path), but these providers are global and read the
+  // current path dynamically, so re-registering on each open is wasteful — and
+  // worse, it fires Monaco's provider-registry onDidChange, which reschedules
+  // the semantic-tokens fetch with the adaptive debounce (≥300ms) instead of
+  // the immediate schedule(0) a freshly-attached model gets. Refresh after open
+  // is handled by refreshSemanticTokens(), not by tearing down the providers.
+  if (semanticTokensDisposable) {
+    return;
+  }
+
+  // Emitter Monaco wires to schedule(0); fired by refreshSemanticTokens().
+  semanticTokensChangeEmitter = new monaco.Emitter<void>();
 
   // Register DocumentSymbolProvider for Cmd+Shift+O
   documentSymbolDisposable = monaco.languages.registerDocumentSymbolProvider(
@@ -265,6 +283,10 @@ export function registerIntelligenceProviders(
   semanticTokensDisposable = monaco.languages.registerDocumentSemanticTokensProvider(
     'qmd',
     {
+      // Lets refreshSemanticTokens() force an immediate re-tokenise (Monaco
+      // schedules onDidChange with delay 0, bypassing the adaptive debounce).
+      onDidChange: semanticTokensChangeEmitter.event,
+
       // Synchronous, from the checked-in TS constant (the WASM module is not
       // initialised at registration). Fixed for the provider lifetime.
       getLegend: (): Monaco.languages.SemanticTokensLegend => ({
@@ -315,6 +337,15 @@ export function registerIntelligenceProviders(
 }
 
 /**
+ * Force Monaco to re-request `.qmd` semantic tokens immediately, skipping the
+ * adaptive debounce. Call right after a file opens so the correct colours
+ * appear without the ≥300ms wait. No-op if providers aren't registered.
+ */
+export function refreshSemanticTokens(): void {
+  semanticTokensChangeEmitter?.fire();
+}
+
+/**
  * Dispose of registered providers.
  *
  * Call this if you need to clean up providers (e.g., when the editor is unmounted
@@ -332,5 +363,9 @@ export function disposeIntelligenceProviders(): void {
   if (semanticTokensDisposable) {
     semanticTokensDisposable.dispose();
     semanticTokensDisposable = null;
+  }
+  if (semanticTokensChangeEmitter) {
+    semanticTokensChangeEmitter.dispose();
+    semanticTokensChangeEmitter = null;
   }
 }

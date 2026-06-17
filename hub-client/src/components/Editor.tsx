@@ -16,6 +16,7 @@ import {
 import { vfsAddFile, isWasmReady } from '@quarto/preview-runtime';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
+import { useSemanticTokensWasmRefresh } from '../hooks/useSemanticTokensWasmRefresh';
 import { registerQmdLanguage } from './quartoTheme';
 import { processFileForUpload } from '../services/resourceService';
 import { usePresence } from '../hooks/usePresence';
@@ -246,6 +247,10 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const editorHasFocusRef = useRef(false);
   // Track when editor is mounted (for scroll sync initialization)
   const [editorReady, setEditorReady] = useState(false);
+
+  // Re-tokenise once WASM is ready — the mount-time refresh may fire before the
+  // highlighter has initialized (cold start, first file).
+  useSemanticTokensWasmRefresh(wasmStatus, editorReady);
 
   // Monaco instance ref for setting markers
   const monacoRef = useRef<typeof Monaco | null>(null);

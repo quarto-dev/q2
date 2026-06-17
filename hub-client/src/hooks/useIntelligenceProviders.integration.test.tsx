@@ -12,9 +12,11 @@ import type * as Monaco from 'monaco-editor';
 
 const registerSpy = vi.fn();
 const disposeSpy = vi.fn();
+const refreshSpy = vi.fn();
 vi.mock('../services/monacoProviders', () => ({
   registerIntelligenceProviders: (...args: unknown[]) => registerSpy(...args),
   disposeIntelligenceProviders: (...args: unknown[]) => disposeSpy(...args),
+  refreshSemanticTokens: (...args: unknown[]) => refreshSpy(...args),
 }));
 
 import { useIntelligenceProviders } from './useIntelligenceProviders';
@@ -25,6 +27,7 @@ describe('useIntelligenceProviders', () => {
   beforeEach(() => {
     registerSpy.mockReset();
     disposeSpy.mockReset();
+    refreshSpy.mockReset();
   });
 
   it('registers on editor mount and disposes only on unmount', () => {
@@ -35,9 +38,11 @@ describe('useIntelligenceProviders', () => {
       { initialProps: { path: 'index.qmd' } }
     );
 
-    // Editor mounts → register once.
+    // Editor mounts → register once, and force an immediate re-tokenise so the
+    // correct colours appear without waiting out Monaco's adaptive debounce.
     result.current(fakeMonaco);
     expect(registerSpy).toHaveBeenCalledTimes(1);
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
     expect(disposeSpy).not.toHaveBeenCalled();
 
     // currentFile changes identity, same path (no Monaco remount) — must NOT

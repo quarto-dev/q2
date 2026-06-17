@@ -21,6 +21,7 @@ import {
   encodeSemanticTokens,
   registerIntelligenceProviders,
   disposeIntelligenceProviders,
+  refreshSemanticTokens,
 } from './monacoProviders';
 
 describe('encodeSemanticTokens', () => {
@@ -49,20 +50,52 @@ describe('encodeSemanticTokens', () => {
 
 type SemanticProvider = Monaco.languages.DocumentSemanticTokensProvider;
 
-/** Capture the semantic-tokens provider registered with a stub Monaco. */
-function captureProvider(currentPath: string | null): SemanticProvider {
-  let captured: SemanticProvider | null = null;
+/** Minimal stand-in for Monaco's `Emitter`, recording subscribers. */
+class StubEmitter<T> {
+  private listeners: Array<(e: T) => void> = [];
+  readonly event = (listener: (e: T) => void) => {
+    this.listeners.push(listener);
+    return {
+      dispose: () => {
+        this.listeners = this.listeners.filter((l) => l !== listener);
+      },
+    };
+  };
+  fire = (e: T) => {
+    for (const l of this.listeners) l(e);
+  };
+  dispose = () => {
+    this.listeners = [];
+  };
+}
+
+/** Build a stub Monaco, optionally observing semantic-tokens registrations. */
+function makeStubMonaco(
+  onSemanticRegister?: (provider: SemanticProvider) => void
+): typeof Monaco {
   const disposable = { dispose: () => {} };
-  const monaco = {
+  return {
+    Emitter: StubEmitter,
     languages: {
       registerDocumentSymbolProvider: () => disposable,
       registerFoldingRangeProvider: () => disposable,
-      registerDocumentSemanticTokensProvider: (_lang: string, provider: SemanticProvider) => {
-        captured = provider;
+      registerDocumentSemanticTokensProvider: (
+        _lang: string,
+        provider: SemanticProvider
+      ) => {
+        onSemanticRegister?.(provider);
         return disposable;
       },
     },
   } as unknown as typeof Monaco;
+}
+
+/** Capture the semantic-tokens provider registered with a stub Monaco. */
+function captureProvider(currentPath: string | null): SemanticProvider {
+  let captured: SemanticProvider | null = null;
+  const monaco = makeStubMonaco((provider) => {
+    captured = provider;
+  });
 
   registerIntelligenceProviders(monaco, () => currentPath);
   if (!captured) throw new Error('semantic provider was not registered');
@@ -169,5 +202,45 @@ describe('provideDocumentSemanticTokens return shape', () => {
     );
     expect(result).toBeNull();
     expect(getSemanticTokensForContentMock).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Immediate-refresh contract (skip the debounce on file open)
+// ---------------------------------------------------------------------------
+
+describe('semantic-tokens immediate refresh', () => {
+  beforeEach(() => {
+    disposeIntelligenceProviders();
+  });
+
+  it('exposes an onDidChange so Monaco can re-tokenise on demand', () => {
+    const provider = captureProvider('/project/a.qmd');
+    expect(typeof provider.onDidChange).toBe('function');
+  });
+
+  it('refreshSemanticTokens fires onDidChange (forces Monaco schedule(0))', () => {
+    const provider = captureProvider('/project/a.qmd');
+    const listener = vi.fn();
+    provider.onDidChange?.(listener);
+    refreshSemanticTokens();
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshSemanticTokens is a no-op when no providers are registered', () => {
+    disposeIntelligenceProviders();
+    expect(() => refreshSemanticTokens()).not.toThrow();
+  });
+
+  it('registers the semantic-tokens provider once across repeated mounts', () => {
+    // The editor remounts per file open; re-registering would reschedule the
+    // fetch with the adaptive debounce instead of firing immediately.
+    let registrations = 0;
+    const monaco = makeStubMonaco(() => {
+      registrations++;
+    });
+    registerIntelligenceProviders(monaco, () => '/project/a.qmd');
+    registerIntelligenceProviders(monaco, () => '/project/a.qmd');
+    expect(registrations).toBe(1);
   });
 });
