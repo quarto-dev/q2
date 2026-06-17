@@ -16,7 +16,6 @@ import {
 import { vfsAddFile, isWasmReady } from '@quarto/preview-runtime';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
-import { useSemanticTokensWasmRefresh } from '../hooks/useSemanticTokensWasmRefresh';
 import { registerQmdLanguage } from './quartoTheme';
 import { processFileForUpload } from '../services/resourceService';
 import { usePresence } from '../hooks/usePresence';
@@ -174,11 +173,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Track current file path in a ref for Monaco providers (they need stable callbacks)
   const currentFilePathRef = useRef<string | null>(currentFile?.path ?? null);
 
-  // Stable getter + lifecycle hook for the Monaco intelligence providers
-  // (symbols, folding, semantic tokens). Registered on editor mount, disposed
-  // only on unmount — must not be coupled to `currentFile`.
+  // Stable path getter for the Monaco intelligence providers (wired up by
+  // useIntelligenceProviders below, once wasmStatus/editorReady exist).
   const getCurrentFilePath = useCallback(() => currentFilePathRef.current, []);
-  const registerIntelligenceProvidersOnMount = useIntelligenceProviders(getCurrentFilePath);
 
   // Presence for collaborative cursors
   const { remoteUsers, userCount, onEditorMount: onPresenceEditorMount } = usePresence(currentFile?.path ?? null);
@@ -248,9 +245,13 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Track when editor is mounted (for scroll sync initialization)
   const [editorReady, setEditorReady] = useState(false);
 
-  // Re-tokenise once WASM is ready — the mount-time refresh may fire before the
-  // highlighter has initialized (cold start, first file).
-  useSemanticTokensWasmRefresh(wasmStatus, editorReady);
+  // Monaco intelligence providers (symbols, folding, semantic tokens). Here
+  // rather than above because it needs wasmStatus/editorReady.
+  const registerIntelligenceProvidersOnMount = useIntelligenceProviders(
+    getCurrentFilePath,
+    wasmStatus,
+    editorReady
+  );
 
   // Monaco instance ref for setting markers
   const monacoRef = useRef<typeof Monaco | null>(null);

@@ -179,11 +179,8 @@ let documentSymbolDisposable: Monaco.IDisposable | null = null;
 let foldingRangeDisposable: Monaco.IDisposable | null = null;
 let semanticTokensDisposable: Monaco.IDisposable | null = null;
 
-/**
- * Fired to make Monaco re-request semantic tokens immediately. Monaco wires a
- * provider's `onDidChange` to `schedule(0)` (no debounce), so firing this on
- * file open paints the correct colours without the adaptive ≥300ms wait.
- */
+// Fired to make Monaco re-request semantic tokens immediately (it wires a
+// provider's `onDidChange` to `schedule(0)`, skipping the adaptive debounce).
 let semanticTokensChangeEmitter: Monaco.Emitter<void> | null = null;
 
 /**
@@ -208,18 +205,13 @@ export function registerIntelligenceProviders(
   monaco: typeof Monaco,
   getCurrentFilePath: () => string | null
 ): void {
-  // Idempotent: register once. The editor remounts per file (Editor.tsx keys
-  // MonacoEditor on the path), but these providers are global and read the
-  // current path dynamically, so re-registering on each open is wasteful — and
-  // worse, it fires Monaco's provider-registry onDidChange, which reschedules
-  // the semantic-tokens fetch with the adaptive debounce (≥300ms) instead of
-  // the immediate schedule(0) a freshly-attached model gets. Refresh after open
-  // is handled by refreshSemanticTokens(), not by tearing down the providers.
+  // Register once: re-registering fires the registry's onDidChange, which
+  // reschedules tokenisation behind the adaptive debounce. Per-open refresh is
+  // refreshSemanticTokens()'s job, not a teardown's.
   if (semanticTokensDisposable) {
     return;
   }
 
-  // Emitter Monaco wires to schedule(0); fired by refreshSemanticTokens().
   semanticTokensChangeEmitter = new monaco.Emitter<void>();
 
   // Register DocumentSymbolProvider for Cmd+Shift+O
@@ -283,8 +275,7 @@ export function registerIntelligenceProviders(
   semanticTokensDisposable = monaco.languages.registerDocumentSemanticTokensProvider(
     'qmd',
     {
-      // Lets refreshSemanticTokens() force an immediate re-tokenise (Monaco
-      // schedules onDidChange with delay 0, bypassing the adaptive debounce).
+      // Lets refreshSemanticTokens() force an immediate re-tokenise.
       onDidChange: semanticTokensChangeEmitter.event,
 
       // Synchronous, from the checked-in TS constant (the WASM module is not
@@ -336,11 +327,7 @@ export function registerIntelligenceProviders(
   );
 }
 
-/**
- * Force Monaco to re-request `.qmd` semantic tokens immediately, skipping the
- * adaptive debounce. Call right after a file opens so the correct colours
- * appear without the ≥300ms wait. No-op if providers aren't registered.
- */
+/** Re-request `.qmd` semantic tokens now, skipping the debounce. No-op if unregistered. */
 export function refreshSemanticTokens(): void {
   semanticTokensChangeEmitter?.fire();
 }
