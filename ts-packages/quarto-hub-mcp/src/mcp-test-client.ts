@@ -45,8 +45,11 @@ export class McpTestClient {
    * at dist/index.js) — used by bundle tests to drive the esbuild
    * artifact from outside the repo tree. `command` (+ leading args)
    * replaces `node` entirely — used by the auth e2e to drive the real
-   * `q2 mcp` launcher. `env` REPLACES the child environment when
-   * given (callers spread process.env themselves if they want it).
+   * `q2 mcp` launcher. `env` REPLACES the child environment when given
+   * (callers spread process.env themselves if they want it); when omitted
+   * the child inherits process.env minus the auth-gating vars
+   * (QUARTO_HUB_MCP_CLIENT_ID/SECRET) so the server runs unauthenticated
+   * regardless of the developer's shell (bd-uyiqciqk).
    */
   async start(
     args: string[],
@@ -55,9 +58,19 @@ export class McpTestClient {
     const [program, leading] = opts?.command
       ? [opts.command.program, opts.command.args]
       : ['node', [opts?.entry ?? SERVER_ENTRY]];
+    // Don't let the developer's real auth config leak into the spawned
+    // server: with QUARTO_HUB_MCP_CLIENT_ID/SECRET set it takes the OS-keychain
+    // credential path, which fails nondeterministically against a populated
+    // keychain. Strip them from the inherited env unless a test passes its own.
+    let env = opts?.env;
+    if (!env) {
+      env = { ...process.env };
+      delete env['QUARTO_HUB_MCP_CLIENT_ID'];
+      delete env['QUARTO_HUB_MCP_CLIENT_SECRET'];
+    }
     this.proc = spawn(program, [...leading, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      ...(opts?.env ? { env: opts.env } : {}),
+      env,
     });
 
     this.proc.stdout!.setEncoding('utf-8');
