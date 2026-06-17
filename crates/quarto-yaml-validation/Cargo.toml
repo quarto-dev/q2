@@ -7,8 +7,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-# Error handling
-anyhow.workspace = true
 thiserror.workspace = true
 
 # Serialization (serde_json for enum values in schemas)

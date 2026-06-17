@@ -17,7 +17,6 @@ quarto-source-map.workspace = true
 quarto-error-reporting.workspace = true
 
 [dev-dependencies]
-insta.workspace = true
 yaml-rust2.workspace = true
 
 [lints]

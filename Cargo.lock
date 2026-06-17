@@ -658,7 +658,6 @@ version = "0.3.0"
 dependencies = [
  "comrak",
  "hashlink",
- "insta",
  "pampa",
  "proptest",
  "quarto-pandoc-types",
@@ -1133,12 +1132,6 @@ dependencies = [
  "rustc_version",
  "syn",
 ]
-
-[[package]]
-name = "diff"
-version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
 
 [[package]]
 name = "digest"
@@ -2936,7 +2929,6 @@ dependencies = [
 name = "pampa"
 version = "0.0.0"
 dependencies = [
- "ariadne",
  "base64 0.22.1",
  "clap",
  "comrak",
@@ -2944,7 +2936,6 @@ dependencies = [
  "crossterm",
  "glob",
  "hashlink",
- "indexmap",
  "insta",
  "mlua",
  "once_cell",
@@ -3308,16 +3299,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
 
 [[package]]
-name = "pretty_assertions"
-version = "1.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ae130e2f271fbc2ac3a40fb1d07180839cdbbe443c7a27e1e3c13c5cac0116d"
-dependencies = [
- "diff",
- "yansi",
-]
-
-[[package]]
 name = "prettyplease"
 version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3417,14 +3398,12 @@ dependencies = [
  "pampa",
  "pollster",
  "quarto-core",
- "quarto-doctemplate",
  "quarto-error-reporting",
  "quarto-hub",
  "quarto-lsp",
  "quarto-mcp-launcher",
  "quarto-preview",
  "quarto-publish",
- "quarto-sass",
  "quarto-source-map",
  "quarto-system-runtime",
  "quarto-test",
@@ -3433,7 +3412,6 @@ dependencies = [
  "quarto-util",
  "serde",
  "serde_json",
- "serde_yaml",
  "sha2 0.11.0",
  "tempfile",
  "tokio",
@@ -3446,7 +3424,6 @@ dependencies = [
 name = "quarto-analysis"
 version = "0.3.0"
 dependencies = [
- "insta",
  "quarto-error-reporting",
  "quarto-pandoc-types",
  "quarto-source-map",
@@ -3473,7 +3450,6 @@ name = "quarto-brand"
 version = "0.3.0"
 dependencies = [
  "serde",
- "serde_json",
  "serde_yaml",
  "thiserror 2.0.18",
 ]
@@ -3482,9 +3458,7 @@ dependencies = [
 name = "quarto-citeproc"
 version = "0.3.0"
 dependencies = [
- "glob",
  "hashlink",
- "insta",
  "quarto-csl",
  "quarto-error-reporting",
  "quarto-pandoc-types",
@@ -3494,15 +3468,12 @@ dependencies = [
  "serde",
  "serde_json",
  "similar 3.1.0",
- "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "quarto-config"
 version = "0.0.0"
 dependencies = [
- "indexmap",
- "insta",
  "quarto-error-reporting",
  "quarto-pandoc-types",
  "quarto-source-map",
@@ -3515,7 +3486,6 @@ dependencies = [
 name = "quarto-core"
 version = "0.3.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "base64 0.22.1",
  "clap",
@@ -3542,7 +3512,6 @@ dependencies = [
  "quarto-source-map",
  "quarto-system-runtime",
  "quarto-trace",
- "quarto-util",
  "quarto-yaml",
  "rayon",
  "regex",
@@ -3569,24 +3538,18 @@ dependencies = [
 name = "quarto-csl"
 version = "0.3.0"
 dependencies = [
- "insta",
  "quarto-error-reporting",
  "quarto-source-map",
  "quarto-xml",
- "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "quarto-doctemplate"
 version = "0.1.0"
 dependencies = [
- "pretty_assertions",
  "quarto-error-reporting",
- "quarto-parse-errors",
  "quarto-source-map",
  "quarto-treesitter-ast",
- "serde",
- "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "tree-sitter",
@@ -3614,7 +3577,6 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
  "url",
 ]
 
@@ -3691,7 +3653,6 @@ dependencies = [
  "time",
  "tokio",
  "tokio-util",
- "tower 0.5.3",
  "tower-http",
  "tracing",
  "tracing-subscriber",
@@ -3703,16 +3664,10 @@ dependencies = [
 name = "quarto-lsp"
 version = "0.3.0"
 dependencies = [
- "anyhow",
- "insta",
  "quarto-lsp-core",
- "serde",
  "serde_json",
- "thiserror 2.0.18",
  "tokio",
  "tower-lsp",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -3726,13 +3681,10 @@ dependencies = [
  "quarto-core",
  "quarto-error-reporting",
  "quarto-highlight",
- "quarto-pandoc-types",
  "quarto-source-map",
  "quarto-system-runtime",
- "quarto-yaml",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
  "tokio",
  "tree-sitter",
  "tree-sitter-qmd",
@@ -3747,7 +3699,6 @@ dependencies = [
  "fs2",
  "include_dir",
  "libc",
- "serde",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
@@ -3769,7 +3720,6 @@ name = "quarto-pandoc-types"
 version = "0.0.0"
 dependencies = [
  "hashlink",
- "indexmap",
  "quarto-source-map",
  "serde",
  "serde_json",
@@ -3784,7 +3734,6 @@ dependencies = [
  "quarto-error-message-macros",
  "quarto-error-reporting",
  "quarto-source-map",
- "serde",
  "serde_json",
  "tree-sitter",
 ]
@@ -3798,7 +3747,6 @@ dependencies = [
  "axum",
  "flate2",
  "http",
- "http-body-util",
  "include_dir",
  "pampa",
  "pollster",
@@ -3817,7 +3765,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "tower 0.5.3",
  "tracing",
 ]
 
@@ -3838,18 +3785,13 @@ dependencies = [
  "async-trait",
  "pollster",
  "quarto-config",
- "quarto-core",
- "quarto-error-reporting",
  "quarto-pandoc-types",
  "quarto-source-map",
- "quarto-system-runtime",
- "quarto-util",
  "serde",
  "serde_json",
  "serde_yaml",
  "tempfile",
  "thiserror 2.0.18",
- "tracing",
  "ureq",
  "url",
  "uuid",
@@ -3861,7 +3803,6 @@ version = "0.3.0"
 dependencies = [
  "grass",
  "include_dir",
- "insta",
  "once_cell",
  "quarto-brand",
  "quarto-pandoc-types",
@@ -3914,11 +3855,8 @@ dependencies = [
  "quarto-system-runtime",
  "regex",
  "scraper",
- "serde",
  "serde_yaml",
  "tempfile",
- "thiserror 2.0.18",
- "tracing",
 ]
 
 [[package]]
@@ -3942,14 +3880,9 @@ dependencies = [
  "http-body-util",
  "include_dir",
  "quarto-trace",
- "serde",
  "serde_json",
- "tempfile",
- "thiserror 2.0.18",
  "tokio",
  "tower 0.5.3",
- "tower-http",
- "tracing",
 ]
 
 [[package]]
@@ -3962,20 +3895,14 @@ dependencies = [
 [[package]]
 name = "quarto-util"
 version = "0.3.0"
-dependencies = [
- "serde",
- "thiserror 2.0.18",
-]
 
 [[package]]
 name = "quarto-xml"
 version = "0.3.0"
 dependencies = [
- "insta",
  "quarto-error-reporting",
  "quarto-source-map",
  "quick-xml",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3984,8 +3911,6 @@ version = "0.3.0"
 dependencies = [
  "quarto-source-map",
  "regex",
- "serde",
- "thiserror 2.0.18",
  "yaml-rust2",
 ]
 
@@ -3993,7 +3918,6 @@ dependencies = [
 name = "quarto-yaml-validation"
 version = "0.3.0"
 dependencies = [
- "anyhow",
  "insta",
  "quarto-error-reporting",
  "quarto-source-map",
@@ -5998,7 +5922,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
- "quarto-error-reporting",
  "quarto-source-map",
  "quarto-yaml",
  "quarto-yaml-validation",

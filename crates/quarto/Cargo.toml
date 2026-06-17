@@ -29,15 +29,12 @@ quarto-trace.workspace = true
 quarto-trace-server.workspace = true
 quarto-util.workspace = true
 quarto-system-runtime.workspace = true
-quarto-doctemplate.workspace = true
 quarto-lsp = { workspace = true }
 quarto-hub.workspace = true
 quarto-mcp-launcher = { path = "../quarto-mcp-launcher" }
 quarto-preview = { path = "../quarto-preview" }
 quarto-publish.workspace = true
-quarto-sass.workspace = true
 quarto-test.workspace = true
-serde_yaml.workspace = true
 tempfile = "3"
 # Phase D.1 (bd-kw93.8): auto-open browser tabs on `q2 preview`.
 # `open` shells out to the platform-native launcher (`open` on macOS,

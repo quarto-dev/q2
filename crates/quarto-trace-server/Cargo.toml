@@ -8,19 +8,14 @@ description = "Local HTTP server for the Quarto trace viewer SPA."
 
 [dependencies]
 anyhow.workspace = true
-tracing.workspace = true
-serde.workspace = true
 serde_json.workspace = true
-thiserror.workspace = true
 include_dir.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "fs"] }
 axum = "0.8"
-tower-http = { version = "0.6", features = ["cors"] }
 
 quarto-trace.workspace = true
 
 [dev-dependencies]
-tempfile = "3"
 tower = "0.5"
 http-body-util = "0.1"
 http = "1"

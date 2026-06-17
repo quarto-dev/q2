@@ -8,7 +8,6 @@ repository.workspace = true
 description = "Core rendering infrastructure for Quarto"
 
 [dependencies]
-anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true
@@ -32,8 +31,6 @@ glob = "0.3"
 # RFC 3339 / RFC 2822 / ISO date-only inputs); `macros` enables the
 # compile-time `format_description!` macro. WASM-compatible.
 time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
-
-quarto-util.workspace = true
 quarto-system-runtime.workspace = true
 quarto-pandoc-types.workspace = true
 quarto-source-map.workspace = true

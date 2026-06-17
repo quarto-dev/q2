@@ -11,10 +11,8 @@ description = "CSL (Citation Style Language) parsing with source tracking for Qu
 quarto-error-reporting = { path = "../quarto-error-reporting" }
 quarto-source-map = { path = "../quarto-source-map" }
 quarto-xml = { path = "../quarto-xml" }
-thiserror = { workspace = true }
 
 [dev-dependencies]
-insta = { workspace = true }
 
 [lints]
 workspace = true

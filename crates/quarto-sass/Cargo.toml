@@ -28,7 +28,6 @@ quarto-brand.workspace = true
 sha2 = "0.11"
 
 [dev-dependencies]
-insta.workspace = true
 serde_json.workspace = true
 yaml-rust2.workspace = true
 tempfile = "3"

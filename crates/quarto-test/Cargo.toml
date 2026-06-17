@@ -9,9 +9,6 @@ description = "Testing infrastructure for Quarto documents with embedded asserti
 
 [dependencies]
 anyhow.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-serde.workspace = true
 serde_yaml.workspace = true
 regex.workspace = true
 scraper.workspace = true

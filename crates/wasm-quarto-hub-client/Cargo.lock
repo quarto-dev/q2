@@ -1796,14 +1796,12 @@ dependencies = [
 name = "pampa"
 version = "0.0.0"
 dependencies = [
- "ariadne",
  "base64",
  "clap",
  "comrak",
  "comrak-to-pandoc",
  "glob",
  "hashlink",
- "indexmap",
  "mlua",
  "once_cell",
  "paste",
@@ -2105,7 +2103,6 @@ dependencies = [
 name = "quarto-citeproc"
 version = "0.3.0"
 dependencies = [
- "glob",
  "hashlink",
  "quarto-csl",
  "quarto-error-reporting",
@@ -2116,14 +2113,12 @@ dependencies = [
  "serde",
  "serde_json",
  "similar",
- "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "quarto-config"
 version = "0.0.0"
 dependencies = [
- "indexmap",
  "quarto-error-reporting",
  "quarto-pandoc-types",
  "quarto-source-map",
@@ -2136,7 +2131,6 @@ dependencies = [
 name = "quarto-core"
 version = "0.3.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "base64",
  "glob",
@@ -2160,7 +2154,6 @@ dependencies = [
  "quarto-source-map",
  "quarto-system-runtime",
  "quarto-trace",
- "quarto-util",
  "quarto-yaml",
  "rayon",
  "regex",
@@ -2189,7 +2182,6 @@ dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
  "quarto-xml",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2197,11 +2189,8 @@ name = "quarto-doctemplate"
 version = "0.1.0"
 dependencies = [
  "quarto-error-reporting",
- "quarto-parse-errors",
  "quarto-source-map",
  "quarto-treesitter-ast",
- "serde",
- "serde_json",
  "thiserror 2.0.18",
  "tree-sitter",
  "tree-sitter-doctemplate",
@@ -2228,7 +2217,6 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
  "url",
 ]
 
@@ -2276,13 +2264,10 @@ dependencies = [
  "quarto-core",
  "quarto-error-reporting",
  "quarto-highlight",
- "quarto-pandoc-types",
  "quarto-source-map",
  "quarto-system-runtime",
- "quarto-yaml",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
  "tree-sitter",
  "tree-sitter-qmd",
 ]
@@ -2302,7 +2287,6 @@ name = "quarto-pandoc-types"
 version = "0.0.0"
 dependencies = [
  "hashlink",
- "indexmap",
  "quarto-source-map",
  "serde",
  "serde_json",
@@ -2317,7 +2301,6 @@ dependencies = [
  "quarto-error-message-macros",
  "quarto-error-reporting",
  "quarto-source-map",
- "serde",
  "serde_json",
  "tree-sitter",
 ]
@@ -2394,21 +2377,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "quarto-util"
-version = "0.3.0"
-dependencies = [
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "quarto-xml"
 version = "0.3.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
  "quick-xml",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2416,8 +2390,6 @@ name = "quarto-yaml"
 version = "0.3.0"
 dependencies = [
  "quarto-source-map",
- "serde",
- "thiserror 2.0.18",
  "yaml-rust2",
 ]
 

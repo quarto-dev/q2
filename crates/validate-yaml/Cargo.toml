@@ -10,7 +10,6 @@ repository.workspace = true
 # Workspace crates
 quarto-yaml.workspace = true
 quarto-yaml-validation.workspace = true
-quarto-error-reporting.workspace = true
 quarto-source-map.workspace = true
 
 # Error handling

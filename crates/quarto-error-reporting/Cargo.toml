@@ -13,7 +13,6 @@ quarto-source-map = { path = "../quarto-source-map" }
 
 # Error reporting
 ariadne = { workspace = true }
-thiserror = { workspace = true }
 once_cell = { workspace = true }
 
 # Serialization

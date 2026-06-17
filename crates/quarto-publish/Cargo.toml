@@ -19,18 +19,12 @@ serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 thiserror.workspace = true
-tracing.workspace = true
 url = "2.5"
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 uuid.workspace = true
-
-quarto-core.workspace = true
-quarto-util.workspace = true
-quarto-system-runtime.workspace = true
 quarto-config.workspace = true
 quarto-pandoc-types.workspace = true
 quarto-source-map.workspace = true
-quarto-error-reporting.workspace = true
 
 [dev-dependencies]
 pollster.workspace = true
