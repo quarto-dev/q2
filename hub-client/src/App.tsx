@@ -14,6 +14,7 @@ function DevHarnessLazy({ page }: { page: string }) {
   );
 }
 import Editor from './components/Editor';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
 import { LoginScreen } from './components/auth/LoginScreen';
@@ -652,19 +653,21 @@ function App() {
         />
       ) : (
         <ViewModeProvider>
-          <Editor
-            project={project}
-            files={files}
-            fileContents={fileContents}
-            onDisconnect={handleDisconnect}
-            onContentOperations={handleContentOperations}
-            route={route}
-            onNavigateToFile={(filePath, options) => {
-              navigateToFile(project.id, filePath, options);
-            }}
-            identities={identities}
-            isOnline={isOnline}
-          />
+          <ErrorBoundary>
+            <Editor
+              project={project}
+              files={files}
+              fileContents={fileContents}
+              onDisconnect={handleDisconnect}
+              onContentOperations={handleContentOperations}
+              route={route}
+              onNavigateToFile={(filePath, options) => {
+                navigateToFile(project.id, filePath, options);
+              }}
+              identities={identities}
+              isOnline={isOnline}
+            />
+          </ErrorBoundary>
         </ViewModeProvider>
       )}
       <Toast
