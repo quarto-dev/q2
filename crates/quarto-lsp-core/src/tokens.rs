@@ -271,14 +271,8 @@ fn code_cell_tokens(code_block: Node<'_>, content: &str) -> Vec<ByteToken> {
                     lang = Some(word.to_string());
                 }
             }
-            "attribute_specifier" => {
-                if let Some(ls) = find_first(child, "language_specifier") {
-                    let text = node_text(ls, content).trim().trim_start_matches('.');
-                    if !text.is_empty() {
-                        lang = Some(text.to_string());
-                    }
-                }
-            }
+            // Brace cell — executable `{r}`/`{python}` or class `{.r}`/`{.python}`.
+            "attribute_specifier" => lang = cell_language(child, content),
             "code_fence_content" => interior = Some(child),
             _ => {}
         }
@@ -315,19 +309,31 @@ fn embedded_body_tokens(lang: &str, body: &str, offset: usize) -> Vec<ByteToken>
         .collect()
 }
 
-/// Find the first descendant (or `node` itself) of the given `kind`.
-fn find_first<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
-    let mut stack = vec![node];
-    while let Some(n) = stack.pop() {
-        if n.kind() == kind {
-            return Some(n);
+/// Resolve a brace cell's highlight language. The executable form `{r}` carries
+/// a `language_specifier`; the class form `{.r}` carries `attribute_class`
+/// nodes. In document order, the first specifier naming a supported grammar
+/// wins — mirroring quarto-highlight's `pick_first_resolvable_class`, so
+/// `{.numberLines .python}` is python and `{r .foo}` is r.
+fn cell_language(attr: Node<'_>, content: &str) -> Option<String> {
+    fn collect<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
+        if matches!(node.kind(), "language_specifier" | "attribute_class") {
+            out.push(node);
         }
-        let mut cursor = n.walk();
-        for child in n.children(&mut cursor) {
-            stack.push(child);
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            collect(child, out);
         }
     }
-    None
+    let mut specifiers = Vec::new();
+    collect(attr, &mut specifiers);
+    specifiers
+        .into_iter()
+        // A `language_specifier` may span trailing classes ("r .foo"); the
+        // language is its first word. `attribute_class` text carries a leading dot.
+        .filter_map(|n| node_text(n, content).split_whitespace().next())
+        .map(|w| w.trim_start_matches('.'))
+        .find(|name| quarto_highlight::is_language_supported(name))
+        .map(str::to_string)
 }
 
 /// Borrow the source text a node spans.
@@ -663,6 +669,57 @@ mod tests {
         );
         // The fence delimiters are structural, not code.
         assert!(has_type(&toks, "qmd.punctuation.delimiter.fence"));
+    }
+
+    #[test]
+    fn tokens_for_code_cell_dot_r() {
+        // ```{.r} — the class-attribute form must embed the same as ```{r}.
+        let toks = tokens("```{.r}\nx <- 1\n```\n");
+        assert!(
+            line_has_code_type(&toks, 1),
+            "expected code-legend tokens on the {{.r}} cell body, got {toks:?}"
+        );
+        assert!(
+            toks.iter()
+                .any(|t| t.line == 1 && type_name(t) == "qmd.code.operator"),
+            "expected qmd.code.operator on the body, got {toks:?}"
+        );
+    }
+
+    #[test]
+    fn tokens_for_code_cell_dot_python() {
+        // ```{.python} — class-attribute form delegates to the python grammar.
+        let toks = tokens("```{.python}\nimport os\n```\n");
+        assert!(
+            toks.iter()
+                .any(|t| t.line == 1 && type_name(t) == "qmd.code.keyword"),
+            "expected qmd.code.keyword over `import`, got {toks:?}"
+        );
+    }
+
+    #[test]
+    fn tokens_for_code_cell_first_resolvable_class() {
+        // First class that names a supported language wins, mirroring the
+        // render path's `pick_first_resolvable_class`: `.numberLines` is not a
+        // language, so highlighting falls through to `.python`.
+        let toks = tokens("```{.numberLines .python}\nimport os\n```\n");
+        assert!(
+            toks.iter()
+                .any(|t| t.line == 1 && type_name(t) == "qmd.code.keyword"),
+            "expected python highlighting despite leading non-language class, got {toks:?}"
+        );
+    }
+
+    #[test]
+    fn tokens_for_executable_cell_with_trailing_class() {
+        // ```{r .foo} — a language specifier followed by a class still embeds
+        // as r; the language is the first word of the specifier.
+        let toks = tokens("```{r .foo}\nx <- 1\n```\n");
+        assert!(
+            toks.iter()
+                .any(|t| t.line == 1 && type_name(t) == "qmd.code.operator"),
+            "expected r highlighting for `{{r .foo}}`, got {toks:?}"
+        );
     }
 
     #[test]
