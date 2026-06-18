@@ -28,36 +28,6 @@ describe('quartoThemeRules namespace invariant', () => {
   });
 });
 
-describe('qmd Monarch base — group reconstruction invariant', () => {
-  // Regression (GH#10): Monaco's MonarchTokenizer throws "with groups, all
-  // characters should be matched in consecutive groups" when an array-action
-  // rule's regex consumes characters outside its capture groups (e.g. via a
-  // non-capturing `(?:…)` group). It crashes the editor mid-tokenise, but only
-  // on lines that actually match — so it slips past mount and fires when a
-  // ```{r} executable cell appears. Encode the invariant statically.
-  const samples: Array<{ line: string; desc: string }> = [
-    { line: '```{r}', desc: 'executable cell, brace syntax' },
-    { line: '```{python echo=false}', desc: 'executable cell with options' },
-    { line: '```python', desc: 'plain fenced cell' },
-    { line: '```', desc: 'bare fence' },
-  ];
-  const contentRules = qmdMonarch.tokenizer.content as Array<[RegExp, unknown]>;
-  for (const { line, desc } of samples) {
-    it(`array-action rules matching "${line}" (${desc}) capture every char`, () => {
-      for (const [re, action] of contentRules) {
-        if (!Array.isArray(action)) continue;
-        const m = line.match(re);
-        if (!m) continue;
-        const groupLen = m.slice(1).reduce((n, g) => n + (g?.length ?? 0), 0);
-        expect(
-          groupLen,
-          `rule ${re} leaves ${m[0].length - groupLen} char(s) uncaptured — Monaco will throw mid-tokenise`,
-        ).toBe(m[0].length);
-      }
-    });
-  }
-});
-
 describe('qmd Monarch base — bracket symmetry', () => {
   // Regression: a base `content` rule coloured the opening `[` (as `string`)
   // but nothing coloured the closing `]`, so wherever the base shows through

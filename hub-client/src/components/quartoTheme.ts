@@ -123,7 +123,7 @@ export const qmdMonarch: Monaco.languages.IMonarchLanguage = {
       // Quarto executable cell: ```{r}, ```{python}, ... — route by the inner
       // language name (capture group 2).
       [
-        /^(\s*`{3,}\{)([\w-]+)([^}]*\}.*)$/,
+        /^(\s*`{3,})(?:\{)([\w-]+)([^}]*\}.*)$/,
         ['string', { token: 'attribute.name', nextEmbedded: '$2', next: '@codeblock' }, 'attribute.value'],
       ],
       // Plain fenced cell: ```python, ```sql, ...

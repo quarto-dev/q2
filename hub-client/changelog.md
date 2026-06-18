@@ -17,7 +17,6 @@ be in reverse chronological order (latest first).
 
 ### 2026-06-17
 
-- [`0e2bb57d`](https://github.com/quarto-dev/q2/commits/0e2bb57d): Fixed a crash that blanked the editor when opening a `.qmd` file containing an executable code cell (e.g. ```` ```{r} ````).
 - [`744c6ed1`](https://github.com/quarto-dev/q2/commits/744c6ed1): Editor `.qmd` syntax highlighting now appears immediately on file open, instead of after a brief debounce.
 - [`13c5b98b`](https://github.com/quarto-dev/q2/commits/13c5b98b): The Monaco editor now syntax-highlights `.qmd` files via tree-sitter — qmd structure, frontmatter YAML, and code-cell interiors (comments and link/image brackets included) — driven by the same highlighter as the render path.
 
