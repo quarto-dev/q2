@@ -320,14 +320,32 @@ fn leading_directive_byte_len(body: &str) -> usize {
     end
 }
 
+/// Where one `#|` line's YAML content lives in both coordinate systems: its
+/// byte offset within the reconstructed yaml document and within the real
+/// document, plus its length. Used to map highlight spans back.
+struct DirectiveLine {
+    virt_start: usize,
+    doc_start: usize,
+    len: usize,
+}
+
 /// Tokenize a cell-option block (`segment`, starting at byte `seg_start`): the
-/// `#|` marker on each line is a comment; the YAML after it is highlighted
-/// per line with the yaml grammar.
+/// `#|` marker on each line is a comment, and the YAML after it is highlighted
+/// as a **single document** — the per-line content (with the `#|` prefix
+/// stripped, indentation preserved) is reassembled, highlighted once, and the
+/// spans mapped back into document coordinates. Parsing the whole block as one
+/// document is what makes multi-line YAML (block scalars, flow collections
+/// split across lines) highlight correctly.
 fn directive_tokens(segment: &str, seg_start: usize) -> Vec<ByteToken> {
     let comment_tt = capture_to_token_type("comment", true);
     let mut out = Vec::new();
+
+    // Pass 1: emit `#|` markers and reconstruct the YAML document, recording
+    // each line's content position in both the virtual and real documents.
+    let mut yaml_doc = String::with_capacity(segment.len());
+    let mut lines: Vec<DirectiveLine> = Vec::new();
     let mut pos = seg_start;
-    for line in segment.split_inclusive('\n') {
+    for (i, line) in segment.split_inclusive('\n').enumerate() {
         let mut line_body = line.strip_suffix('\n').unwrap_or(line);
         line_body = line_body.strip_suffix('\r').unwrap_or(line_body);
 
@@ -340,19 +358,55 @@ fn directive_tokens(segment: &str, seg_start: usize) -> Vec<ByteToken> {
                 token_type: tt,
             });
         }
-        // YAML content begins after `#|` and an optional single space.
+        // YAML content begins after `#|` and an optional single space; the
+        // remaining indentation is kept so nesting survives reassembly.
         let mut content_col = indent + 2;
         if line_body.as_bytes().get(content_col) == Some(&b' ') {
             content_col += 1;
         }
-        if content_col < line_body.len() {
-            out.extend(embedded_body_tokens(
-                "yaml",
-                &line_body[content_col..],
-                pos + content_col,
-            ));
+        let content = &line_body[content_col.min(line_body.len())..];
+
+        // One virtual line per directive line (preserve blank lines exactly).
+        if i > 0 {
+            yaml_doc.push('\n');
         }
+        lines.push(DirectiveLine {
+            virt_start: yaml_doc.len(),
+            doc_start: pos + content_col,
+            len: content.len(),
+        });
+        yaml_doc.push_str(content);
+
         pos += line.len();
+    }
+
+    // Pass 2: highlight the reassembled block once, then map each span back,
+    // splitting it across the lines it touches (a multi-line YAML span becomes
+    // one token per document line; the synthetic `\n` joins are never coloured).
+    let Ok(Some(spans)) = quarto_highlight::highlight_captures("yaml", &yaml_doc) else {
+        return out;
+    };
+    for s in flatten_spans(spans) {
+        let Some(tt) = capture_to_token_type(&s.capture, true) else {
+            continue;
+        };
+        for line in &lines {
+            // `lines` is sorted by `virt_start`, so once a line starts at or
+            // after the span's end, no later line can overlap it.
+            if line.virt_start >= s.end {
+                break;
+            }
+            let line_end = line.virt_start + line.len;
+            let start = s.start.max(line.virt_start);
+            let end = s.end.min(line_end);
+            if end > start {
+                out.push(ByteToken {
+                    start: line.doc_start + (start - line.virt_start),
+                    end: line.doc_start + (end - line.virt_start),
+                    token_type: tt,
+                });
+            }
+        }
     }
     out
 }
@@ -841,6 +895,71 @@ mod tests {
                 .iter()
                 .any(|t| t.line == 2 && type_name(t) == "qmd.code.property"),
             "non-leading `#|` must not be parsed as YAML, got {toks:?}"
+        );
+    }
+
+    #[test]
+    fn cell_option_multiline_flow_sequence_parsed_as_block() {
+        // The whole `#|` block is parsed as one YAML document, so a flow
+        // sequence split across lines is highlighted correctly — not as the
+        // per-line plain scalars a line-at-a-time parse would produce.
+        let src = "```{r}\n#| also_array: [\n#|   1, 2, 3\n#| ]\n#| echo: true\ncat(1)\n```\n";
+        let toks = tokens(src);
+        // The key before the across-lines flow sequence stays a property.
+        assert!(
+            toks.iter()
+                .any(|t| t.line == 1 && type_name(t) == "qmd.code.property"),
+            "expected `also_array` as property on line 1, got {toks:?}"
+        );
+        // The continuation line's elements are three numbers, not one string.
+        assert_eq!(
+            toks.iter()
+                .filter(|t| t.line == 2 && type_name(t) == "qmd.code.number")
+                .count(),
+            3,
+            "expected 3 numbers on the flow continuation line, got {toks:?}"
+        );
+        assert!(
+            !toks
+                .iter()
+                .any(|t| t.line == 2 && type_name(t) == "qmd.code.string"),
+            "flow elements must not be a plain-scalar string, got {toks:?}"
+        );
+        // The closing bracket on its own line is punctuation.
+        assert!(
+            toks.iter()
+                .any(|t| t.line == 3 && type_name(t) == "qmd.code.punctuation"),
+            "expected `]` as punctuation on line 3, got {toks:?}"
+        );
+        // Subsequent option and code are still correct.
+        assert!(
+            toks.iter()
+                .any(|t| t.line == 4 && type_name(t) == "qmd.code.boolean"),
+            "expected `echo: true` boolean on line 4, got {toks:?}"
+        );
+        assert!(line_has_code_type(&toks, 5), "expected r code on line 5");
+    }
+
+    #[test]
+    fn cell_option_block_scalar_body_is_string_per_line() {
+        // A `>` block scalar whose body spans multiple `#|` lines: each body
+        // line is a string token (the multi-line YAML span is split per line).
+        let src = "```{r}\n#| desc: >\n#|   line one\n#|   line two\nx <- 1\n```\n";
+        let toks = tokens(src);
+        assert!(
+            toks.iter()
+                .any(|t| t.line == 1 && type_name(t) == "qmd.code.property"),
+            "expected `desc` property on line 1, got {toks:?}"
+        );
+        assert!(
+            toks.iter()
+                .any(|t| t.line == 2 && type_name(t) == "qmd.code.string"),
+            "expected block-scalar body string on line 2, got {toks:?}"
+        );
+        assert!(
+            toks.iter()
+                .any(|t| t.line == 3 && type_name(t) == "qmd.code.string"),
+            "expected block-scalar body string on line 3, got {toks:?}"
         );
     }
 
