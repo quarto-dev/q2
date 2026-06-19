@@ -15,6 +15,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-06-19
+
+- [`c38ca41b`](https://github.com/quarto-dev/q2/commits/c38ca41b): Block-editing fixes (G20–G22): the in-place editor for a nested list item no longer opens taller than the line it replaces; committing a nested-item edit now keeps the edited node selected instead of jumping focus to the next block; and a new commit-status indicator shows whether each edit was a real change or a spurious no-op, surfacing edit errors in the preview.
+
 ### 2026-06-18
 
 - [`8f6d5a0c`](https://github.com/quarto-dev/q2/commits/8f6d5a0c): Block-editing fixes (G14–G19): the nesting cursor is now ON by default; single-line editors no longer inflate to two lines on expand; down-arrow steps correctly out of a blockquote-wrapped loose list; clicking between items reliably activates on the first click with nesting kept live; a stuck "blur the cell you left" effect now always clears; and a spurious no-op write when clicking off an untouched nested block is eliminated.

@@ -20,6 +20,7 @@ import {
     enumerateOuterBlocks,
     enumerateNestingLeaves,
     snapshotOuterBlockGeometry,
+    refocusTargetForAnchorR0,
 } from './outerBlocks';
 
 afterEach(() => {
@@ -591,5 +592,92 @@ describe('snapshotOuterBlockGeometry', () => {
         expect(map.size).toBe(2);                // no collision
         expect(map.get('0:30')?.contentHeight).toBe(60);
         expect(map.get('0:15')?.contentHeight).toBe(30);
+    });
+});
+
+/* ─── refocusTargetForAnchorR0 (G21 mode-aware focus restore) ───────────────────
+ *
+ * G21: post-commit focus restore after closing the editor. In unlock mode,
+ * the function must return the EXACT edited surface by r[0] across ALL
+ * [data-block-pool-id] elements (not just outer blocks), so that nested list
+ * items do not cause a next-block jump. In locked mode it delegates to
+ * outerBlockForAnchorR0 (outer-block behaviour).
+ */
+describe('refocusTargetForAnchorR0', () => {
+    type PoolEntry = { t: 0; r: [number, number]; d: 0 };
+
+    // DOM: three [data-block-pool-id] elements.
+    //   A = outer block  at pool index 0, r[0]=100
+    //   B = nested <li>  at pool index 1, r[0]=150 — inside a <ul> so NOT an outer block
+    //   C = outer block  at pool index 2, r[0]=200
+    //
+    // Pool entries follow the isOriginalEntry shape: { t:0, r:[r0,r1], d:0 }.
+    const POOL: PoolEntry[] = [
+        { t: 0, r: [100, 120], d: 0 }, // index 0 — A
+        { t: 0, r: [150, 165], d: 0 }, // index 1 — B (nested li)
+        { t: 0, r: [200, 220], d: 0 }, // index 2 — C
+    ];
+
+    // Build the host with A, B (inside a <ul>), C.
+    // We append to document.body so makeDom's cleanup runs on afterEach.
+    function makeG21Dom() {
+        const host = document.createElement('div');
+        host.innerHTML = `
+            <p data-block-pool-id="0" data-name="elA">outer A</p>
+            <ul data-name="ul">
+                <li data-block-pool-id="1" data-name="elB">nested B</li>
+            </ul>
+            <p data-block-pool-id="2" data-name="elC">outer C</p>
+        `;
+        document.body.appendChild(host);
+        const named: Record<string, Element> = { host };
+        host.querySelectorAll('[data-name]').forEach((el) => {
+            named[el.getAttribute('data-name')!] = el;
+        });
+        return named as { host: Element; elA: Element; elB: Element; elC: Element; ul: Element };
+    }
+
+    it('unlock mode: returns the EXACT element with r[0]===anchorR0, even when nested (not the next outer block)', () => {
+        // This is the G21 regression test: before the fix, calling outerBlockForAnchorR0
+        // for a nested li (r[0]=150) would return C (r[0]=200) because B is not an
+        // outer block. refocusTargetForAnchorR0 with unlock:true must return B.
+        const { host, elB, elC } = makeG21Dom();
+
+        const result = refocusTargetForAnchorR0(host, POOL, 150, { unlock: true });
+
+        // Vacuity guard: result must be the element for B (r[0]=150), not C (r[0]=200).
+        expect(result).not.toBeNull();
+        const poolId = result!.getAttribute('data-block-pool-id');
+        expect(poolId).not.toBeNull();
+        const entry = POOL[Number(poolId)];
+        expect(entry.r[0]).toBe(150); // must be B
+        expect(result).not.toBe(elC); // must NOT be C
+        expect(result).toBe(elB);     // must be B
+    });
+
+    it('unlock mode: returns null when no element has r[0]===anchorR0 (no forward fallback)', () => {
+        const { host } = makeG21Dom();
+        // anchorR0=999 does not match any pool entry
+        const result = refocusTargetForAnchorR0(host, POOL, 999, { unlock: true });
+        expect(result).toBeNull();
+    });
+
+    it('locked mode: delegates to outerBlockForAnchorR0 (outer-block behaviour)', () => {
+        // In locked mode, nested editing is not reachable, so we use the outer-block
+        // scan. A is the only outer block at r[0]=100 — no wrapping prefixing container.
+        // Give A and C visible rects; B's rect need not be mocked (outerBlockForAnchorR0
+        // uses enumerateOuterBlocks which calls isVisibleBlock).
+        const { host, elA, elC } = makeG21Dom();
+        mockRect(elA, rect(0, 0, 200, 20));
+        mockRect(elC, rect(0, 40, 200, 60));
+        // B is inside <ul>; the ul has no pool-id, so enumerateOuterBlocks sees B
+        // (resolveOuterBlock of B: no prefixing-tag ancestor with pool-id, and B has
+        // no coincident ancestors → B resolves to itself). Give B a zero rect so it
+        // is excluded by enumerateOuterBlocks (hidden).
+        const elBEl = host.querySelector('[data-block-pool-id="1"]')!;
+        mockRect(elBEl, ZERO);
+
+        const result = refocusTargetForAnchorR0(host, POOL, 100, { unlock: false });
+        expect(result).toBe(elA);
     });
 });

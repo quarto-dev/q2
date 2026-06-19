@@ -21,7 +21,7 @@ import type { PreviewNodeEditPayload } from '../types/diagnostic';
 import { previewRegistry, PreviewContext } from '.';
 import { buildSourceIndex, serializeSourceEntry } from './sourceIndex';
 import type { ResolvedSource } from './sourceIndex';
-import { outerBlockForAnchorR0, findReanchorCandidate, enumerateOuterBlocks, captureEditTarget, measureBlockBox, seedForRange, snapshotOuterBlockGeometry, isDirty } from './outerBlocks';
+import { outerBlockForAnchorR0, refocusTargetForAnchorR0, findReanchorCandidate, enumerateOuterBlocks, captureEditTarget, measureBlockBox, seedForRange, snapshotOuterBlockGeometry, isDirty } from './outerBlocks';
 import { buildByteLineMap } from '../utils/byteLineMap';
 import { normalizeLineEndings } from '../utils/normalizeLineEndings';
 import { AssetManifestContext } from './AssetManifestContext';
@@ -783,9 +783,15 @@ export function PreviewRoot(props: PreviewRootProps) {
                 return;
             }
             if (!previewHostRef.current) return;
-            const outerBlock = outerBlockForAnchorR0(previewHostRef.current, currentPool, pl.anchorR0);
-            if (outerBlock) {
-                (outerBlock as HTMLElement).focus?.();
+            // G21: mode-aware focus restore. In unlock mode, return focus to the
+            // EXACT edited surface (no next-block jump); in locked mode, keep the
+            // outer-block behaviour.
+            const refocus = refocusTargetForAnchorR0(
+                previewHostRef.current, currentPool, pl.anchorR0,
+                { unlock: unlockNestingCursorRef.current ?? false },
+            );
+            if (refocus) {
+                (refocus as HTMLElement).focus?.();
             }
             pendingLandingRef.current = null; // consumed
             return;

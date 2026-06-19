@@ -377,14 +377,28 @@ export function measureLeadingBlockBox(blockEl: Element): {
         const range = document.createRange();
         range.setStart(blockEl, 0);
         range.setEndBefore(nestedPoolChild);
-        // jsdom does not implement Range.getBoundingClientRect — guard gracefully.
-        const rangeRect: DOMRect | null = typeof range.getBoundingClientRect === 'function'
-            ? range.getBoundingClientRect()
-            : null;
+        // G20: measure the leading-text line via the range's FIRST client rect,
+        // NOT its bounding rect. `getBoundingClientRect()` unions every client
+        // rect the range touches — the leading line PLUS the inter-block gap
+        // down to the sublist boundary — inflating the height (~25.5px line →
+        // ~32.6px union) so the editor sat taller than the rendered line it
+        // replaces. `getClientRects()[0]` is the leading line's own fragment,
+        // which matches the rendered line exactly. Falls back to the bounding
+        // rect if client rects are unavailable.
+        // jsdom implements neither — guard gracefully (contentHeight 0).
         const px = (v: string) => parseFloat(v) || 0;
-        // A Plain fragment has no padding/border of its own; the leading-text
-        // contentHeight is simply the range rect height.
-        const contentHeight = rangeRect !== null ? px(String(rangeRect.height)) : 0;
+        const rangeRects = typeof range.getClientRects === 'function'
+            ? range.getClientRects()
+            : null;
+        let contentHeight: number;
+        if (rangeRects !== null && rangeRects.length > 0) {
+            contentHeight = px(String(rangeRects[0].height));
+        } else {
+            const rangeRect: DOMRect | null = typeof range.getBoundingClientRect === 'function'
+                ? range.getBoundingClientRect()
+                : null;
+            contentHeight = rangeRect !== null ? px(String(rangeRect.height)) : 0;
+        }
         // The boxStyle for the range proxy is the trivial/empty box — no
         // padding or border on the Plain fragment itself.
         const emptyBoxStyle: Record<string, string> = {
@@ -543,6 +557,50 @@ export function outerBlockForAnchorR0(
     }
 
     return exactBlock ?? (exactOnly ? null : nearestBlock);
+}
+
+/**
+ * G21: mode-aware focus-restore target after a commit closes the editor.
+ *
+ * The old post-commit focus path called `outerBlockForAnchorR0` unconditionally.
+ * That scans OUTER blocks only and, when no outer block has `r0 === anchorR0`
+ * (always true for a nested list/def item, whose anchor lives inside a list),
+ * falls back to the NEXT outer block (`r0 > anchorR0`) — so committing a nested
+ * item navigated focus AWAY to the following top-level block. That fallback is
+ * locked-cursor-era residue.
+ *
+ * Mode-aware behaviour (mirrors the roving partition in `onKeyDown`):
+ *  - **Unlock nesting cursor (setting ON):** the roving partition is the full
+ *    nesting-surface set, so restore focus to the EXACT edited surface
+ *    (`r[0] === anchorR0`), scanning ALL `[data-block-pool-id]` elements. No
+ *    next-block fallback — never navigate forward. Returns null if the edited
+ *    surface did not survive (caller then leaves focus where it is).
+ *  - **Locked (setting OFF):** the roving partition is outer blocks only, and
+ *    nested-item editing is not reachable, so keep the existing
+ *    `outerBlockForAnchorR0` behaviour for outer-block edits.
+ *
+ * Pure DOM read (no React); same shape as `outerBlockForAnchorR0`.
+ */
+export function refocusTargetForAnchorR0(
+    host: Element,
+    pool: unknown[],
+    anchorR0: number,
+    opts: { unlock: boolean },
+): Element | null {
+    if (!opts.unlock) {
+        return outerBlockForAnchorR0(host, pool, anchorR0);
+    }
+    // Unlock mode: exact-r0 match across every surface (leaf, li/dd proxy, or
+    // container) — the just-edited node. No forward fallback.
+    const all = Array.from(host.querySelectorAll<Element>('[data-block-pool-id]'));
+    for (const el of all) {
+        const pidAttr = el.getAttribute('data-block-pool-id');
+        if (pidAttr === null) continue;
+        const entry = pool[Number(pidAttr)];
+        if (!isOriginalEntry(entry)) continue;
+        if (entry.r[0] === anchorR0) return el;
+    }
+    return null;
 }
 
 /**

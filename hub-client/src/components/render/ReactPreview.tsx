@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import type { CSSProperties } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import type { Diagnostic, PreviewNodeEditPayload } from '@quarto/preview-renderer/types/diagnostic';
@@ -281,6 +282,113 @@ async function doRender(
   }
 }
 
+// Exported for unit test. SPURIOUS = the edit round-tripped to identical QMD.
+export function classifyCommitOutcome(
+  newQmd: string,
+  renderedContent: string,
+): 'change' | 'spurious' {
+  return newQmd === renderedContent ? 'spurious' : 'change';
+}
+
+/**
+ * G22: commit-status indicator — a translucent "glass" status dot in the
+ * preview's bottom-right corner that glows out of the page and fades to nothing.
+ *
+ *   pending  → amber  (commit going out)
+ *   change   → green  (real diff written)
+ *   spurious → blue   (no-op round-trip — the false-dirty bug class)
+ *   error    → (not lit here; the error pill takes over the corner)
+ *
+ * Modern / non-skeuomorphic: no bezel, no fixture, no persistence. The dot is
+ * defined by LIGHT not by a housing — a colored radial bloom, a thin colored
+ * glass rim, and a `backdrop-filter` refraction — so it reads on a white page
+ * now and on a dark background later. Idle → opacity 0 (gone). Lit states bloom
+ * in (scale + fade) and dim back out; only the attention state (blue) pulses.
+ */
+const COMMIT_BULB_CSS = `
+@keyframes q2-bulb-pulse {
+  0%, 100% { opacity: 0.84; }
+  50% { opacity: 1; }
+}
+.q2-commit-bulb {
+  position: absolute;
+  /* Sits in the bottom-right corner where the error pill appears, so on error
+     the pill visually replaces the bulb. */
+  bottom: 20px;
+  right: 20px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 45%, var(--c-bright) 0%, var(--c-soft) 58%, transparent 100%);
+  border: 1px solid var(--c-rim);
+  backdrop-filter: blur(3px) saturate(1.4);
+  -webkit-backdrop-filter: blur(3px) saturate(1.4);
+  box-shadow: 0 0 var(--c-glow-blur) var(--c-glow-spread) var(--c-glow);
+  opacity: var(--bulb-opacity);
+  transform: scale(var(--bulb-scale));
+  transition:
+    opacity 300ms ease,
+    box-shadow 220ms ease,
+    background 220ms ease,
+    border-color 220ms ease,
+    transform 300ms cubic-bezier(0.2, 0.7, 0.3, 1.3);
+  pointer-events: none;
+  z-index: 50;
+  will-change: opacity, transform;
+}
+/* Gentle, slow breath — only the attention state (blue) pulses. */
+.q2-commit-bulb[data-pulse="1"] { animation: q2-bulb-pulse 1.5s ease-in-out infinite; }
+`;
+
+export function CommitStatusBulb({
+  status,
+}: {
+  status: 'idle' | 'pending' | 'change' | 'spurious' | 'error';
+}) {
+  // RGB triples + per-state "loudness" — green (a normal change) is quiet; blue
+  // (spurious) glows harder, pulses, and lingers so it pulls the eye. Derived
+  // from one hue so it carries to light and dark backgrounds.
+  //
+  // 'error' is intentionally NOT lit here: on error the bulb hands off to the
+  // error pill (PreviewErrorOverlay), which appears in the same corner — see the
+  // render below where the bulb is suppressed while a commit error is showing.
+  const PALETTE: Record<
+    'pending' | 'change' | 'spurious',
+    { rgb: string; glowA: number; blur: string; spread: string; pulse: boolean; title: string }
+  > = {
+    pending: { rgb: '255,160,30', glowA: 0.42, blur: '9px', spread: '0px', pulse: false, title: 'Committing…' },
+    change: { rgb: '40,200,100', glowA: 0.36, blur: '8px', spread: '0px', pulse: false, title: 'Change committed' },
+    spurious: { rgb: '60,140,255', glowA: 0.6, blur: '13px', spread: '1px', pulse: true, title: 'No change (spurious edit)' },
+  };
+  const on = status === 'pending' || status === 'change' || status === 'spurious';
+  const p = on ? PALETTE[status] : null;
+  const rgb = p?.rgb ?? '128,128,128';
+  return (
+    <>
+      <style>{COMMIT_BULB_CSS}</style>
+      <div
+        className="q2-commit-bulb"
+        data-pulse={p?.pulse ? '1' : undefined}
+        title={p?.title}
+        style={
+          {
+            '--c-bright': `rgba(${rgb},0.92)`,
+            '--c-soft': `rgba(${rgb},0.30)`,
+            '--c-rim': `rgba(${rgb},0.55)`,
+            '--c-glow': `rgba(${rgb},${p?.glowA ?? 0})`,
+            '--c-glow-blur': p?.blur ?? '0px',
+            '--c-glow-spread': p?.spread ?? '0px',
+            // No persistence: idle fades to nothing and shrinks slightly so lit
+            // states bloom back in.
+            '--bulb-opacity': on ? 1 : 0,
+            '--bulb-scale': on ? 1 : 0.55,
+          } as CSSProperties
+        }
+      />
+    </>
+  );
+}
+
 export default function ReactPreview({
   content,
   currentFile,
@@ -390,6 +498,51 @@ export default function ReactPreview({
   // Debounce rendering
   const renderTimeoutRef = useRef<number | null>(null);
   const lastContentRef = useRef<string>('');
+
+  // G22: commit-status indicator. Every commit channel (text / subtree /
+  // nesting) funnels through handleSetAst, so we classify the outcome there and
+  // drive ONE bulb overlay from a single status state — no per-site plumbing.
+  const [commitStatus, setCommitStatus] = useState<
+    'idle' | 'pending' | 'change' | 'spurious' | 'error'
+  >('idle');
+  const commitStatusTimerRef = useRef<number | null>(null);
+  const commitPendingSinceRef = useRef<number>(0);
+  // G22: the message for a rejected commit, surfaced in the existing
+  // PreviewErrorOverlay. Persists until the next SUCCESSFUL commit.
+  const [commitError, setCommitError] = useState<string | null>(null);
+
+  // Light the bulb amber when a commit goes out.
+  const beginCommitStatus = useCallback(() => {
+    if (commitStatusTimerRef.current !== null) clearTimeout(commitStatusTimerRef.current);
+    commitPendingSinceRef.current = Date.now();
+    setCommitStatus('pending');
+  }, []);
+
+  // applyNodeEdit is synchronous, so hold 'pending' a minimum so it is visible,
+  // then flip to the result colour, then auto-clear to idle.
+  const settleCommitStatus = useCallback(
+    (result: 'change' | 'spurious' | 'error') => {
+      const MIN_PENDING_MS = 200;
+      // Loudness via dwell time: a normal change blinks briefly; a spurious /
+      // rejected commit lingers longer so it draws the eye.
+      const HOLD_MS = { change: 450, spurious: 1100, error: 1700 }[result];
+      const elapsed = Date.now() - commitPendingSinceRef.current;
+      const delay = Math.max(0, MIN_PENDING_MS - elapsed);
+      if (commitStatusTimerRef.current !== null) clearTimeout(commitStatusTimerRef.current);
+      commitStatusTimerRef.current = window.setTimeout(() => {
+        setCommitStatus(result);
+        commitStatusTimerRef.current = window.setTimeout(() => {
+          setCommitStatus('idle');
+          commitStatusTimerRef.current = null;
+        }, HOLD_MS);
+      }, delay);
+    },
+    [],
+  );
+
+  useEffect(() => () => {
+    if (commitStatusTimerRef.current !== null) clearTimeout(commitStatusTimerRef.current);
+  }, []);
 
   // Handler for cross-document navigation
   const handleNavigateToDocument = useCallback(
@@ -522,6 +675,8 @@ export default function ReactPreview({
           );
           return;
         }
+        // G22: a commit is going out — light the bulb amber.
+        beginCommitStatus();
         try {
           let modifiedSubtreeJson: string;
           if (edit.channel === 'text') {
@@ -529,6 +684,8 @@ export default function ReactPreview({
             const parseResult = parseQmdContentSync(edit.newText);
             if (!parseResult.success || !parseResult.ast) {
               console.error('parse_qmd_content failed:', parseResult.error);
+              settleCommitStatus('error'); // G22: parse rejected
+              setCommitError(`Edit could not be parsed: ${parseResult.error ?? 'unknown error'}`);
               return;
             }
             modifiedSubtreeJson = parseResult.ast;
@@ -544,9 +701,15 @@ export default function ReactPreview({
             edit.destinationSourceInfoJson,
             modifiedSubtreeJson,
           );
+          // G22: a commit that round-trips to identical QMD is a SPURIOUS edit
+          // (the false-dirty bug class) — surface it instead of silently writing.
+          settleCommitStatus(classifyCommitOutcome(newQmd, rendered.renderedContent));
+          setCommitError(null); // G22: a successful commit clears the prior error
           onContentRewrite(newQmd);
         } catch (err) {
           console.error('apply_node_edit failed:', err);
+          settleCommitStatus('error'); // G22: apply rejected
+          setCommitError(`Edit could not be applied: ${err instanceof Error ? err.message : String(err)}`);
         }
         return;
       }
@@ -557,11 +720,14 @@ export default function ReactPreview({
         console.error('Failed to write AST back to QMD:', err);
       }
     },
-    [content, onContentRewrite, format, rendered.untransformedAstJson, rendered.renderedContent],
+    [content, onContentRewrite, format, rendered.untransformedAstJson, rendered.renderedContent, beginCommitStatus, settleCommitStatus],
   );
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {/* Bulb lives in the same bottom-right corner as the error pill; while a
+          commit error is showing, the pill replaces the bulb (bulb → idle). */}
+      <CommitStatusBulb status={commitError ? 'idle' : commitStatus} />
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         {rendered.astJson && (previewState === 'GOOD' || previewState === 'ERROR_FROM_GOOD') ? (
           <ReactRenderer
@@ -596,8 +762,8 @@ export default function ReactPreview({
       </div>
       {/* Error overlay shown when error occurs after successful render */}
       <PreviewErrorOverlay
-        error={currentError}
-        visible={previewState === 'ERROR_FROM_GOOD'}
+        error={currentError ?? (commitError ? { message: commitError } : null)}
+        visible={previewState === 'ERROR_FROM_GOOD' || commitError != null}
         collapsed={errorOverlayCollapsed}
         onToggleCollapsed={setErrorOverlayCollapsed}
       />

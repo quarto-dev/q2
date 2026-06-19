@@ -176,6 +176,50 @@ describe('0.a — measureLeadingBlockBox: Range-aware leading-block measure', ()
         }
     });
 
+    it('G20: uses getClientRects()[0] (first rect = leading line) not getBoundingClientRect() (union)', () => {
+        // G20 regression test: the Range path must use getClientRects()[0] (the
+        // leading-line fragment, ~25.5px) NOT getBoundingClientRect() (the union of
+        // all client rects the range touches including the inter-block gap, ~32.5px).
+        const li = document.createElement('li');
+        const text = document.createTextNode('leading text');
+        const nested = document.createElement('div');
+        nested.setAttribute('data-block-pool-id', '0');
+        li.appendChild(text);
+        li.appendChild(nested);
+        document.body.appendChild(li);
+
+        // Stub BOTH Range prototype methods to disambiguate which path is taken.
+        // getClientRects()[0].height = 25.5 (leading line)
+        // getBoundingClientRect().height = 32.5 (union)
+        const origGetClientRects = (Range.prototype as any).getClientRects;
+        const origGetBCR = (Range.prototype as any).getBoundingClientRect;
+        (Range.prototype as any).getClientRects = function () {
+            return [{ height: 25.5 }, { height: 7 }];
+        };
+        (Range.prototype as any).getBoundingClientRect = function () {
+            return { height: 32.5 };
+        };
+
+        try {
+            const result = measureLeadingBlockBox(li);
+            // Vacuity guard: Range path must have run
+            expect(result.rangeUsed).toBe(true);
+            // G20 assertion: must use first client rect (25.5), not bounding rect (32.5)
+            expect(result.contentHeight).toBe(25.5);
+        } finally {
+            if (origGetClientRects === undefined) {
+                delete (Range.prototype as any).getClientRects;
+            } else {
+                (Range.prototype as any).getClientRects = origGetClientRects;
+            }
+            if (origGetBCR === undefined) {
+                delete (Range.prototype as any).getBoundingClientRect;
+            } else {
+                (Range.prototype as any).getBoundingClientRect = origGetBCR;
+            }
+        }
+    });
+
     it('falls back gracefully when Range.getBoundingClientRect is unavailable (jsdom)', () => {
         // Without the polyfill, measureLeadingBlockBox guards with typeof check.
         // The function should not throw; contentHeight will be 0; rangeUsed is still true.
