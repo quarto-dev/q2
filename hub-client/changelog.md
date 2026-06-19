@@ -17,11 +17,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-06-19
 
-- [`c38ca41b`](https://github.com/quarto-dev/q2/commits/c38ca41b): Block-editing fixes (G20–G22): the in-place editor for a nested list item no longer opens taller than the line it replaces; committing a nested-item edit now keeps the edited node selected instead of jumping focus to the next block; and a new commit-status indicator shows whether each edit was a real change or a spurious no-op, surfacing edit errors in the preview.
-
-### 2026-06-18
-
-- [`8f6d5a0c`](https://github.com/quarto-dev/q2/commits/8f6d5a0c): Block-editing fixes (G14–G19): the nesting cursor is now ON by default; single-line editors no longer inflate to two lines on expand; down-arrow steps correctly out of a blockquote-wrapped loose list; clicking between items reliably activates on the first click with nesting kept live; a stuck "blur the cell you left" effect now always clears; and a spurious no-op write when clicking off an untouched nested block is eliminated.
+- [`de037126`](https://github.com/quarto-dev/q2/commits/de037126): Inline block editing in the live preview pane. Click any block — a paragraph, heading, list item, div, or blockquote — to edit it in place, with the surrounding page layout staying put while you type. A breadcrumb "nesting cursor" moves the edit focus into and out of nested blocks (click a breadcrumb level, or use a keyboard chord), and a small status indicator shows whether each edit was saved, changed nothing, or hit an error. Enabled by default.
 
 ### 2026-06-17
 
@@ -32,19 +28,6 @@ be in reverse chronological order (latest first).
 
 - [`ff31c8ea`](https://github.com/quarto-dev/q2/commits/ff31c8ea): RevealJS presentations now apply their configured theme through Quarto's SCSS theme system on reveal.js 6, instead of always rendering the white theme.
 - [`37061765`](https://github.com/quarto-dev/q2/commits/37061765): RevealJS preview now matches the render path's Quarto-1 defaults — slides top-align (no vertical centering), slide transitions are off by default, and the deck uses a 0.1 margin with linear navigation and edge controls.
-- [`24df47d1`](https://github.com/quarto-dev/q2/commits/24df47d1): Revert the G8 marker-aware list resolution — it hijacked every tight list-item click/hover to the parent list (a tight item's text is a bare node, so text clicks also report `e.target===<li>`), breaking per-item editing. Tight list items hover/click as items again.
-- [`04440c47`](https://github.com/quarto-dev/q2/commits/04440c47): Add Playwright e2e spec: T13(c) crumb jump relands collapsed (proven RED-on-revert). (The G8 marker spec from this commit was removed in 24df47d1; the G6/G7 settle-gate e2e was omitted — that timing-race guard is bound deterministically at the jsdom tier, so a browser test of it would pass vacuously.)
-- [`5e20b96e`](https://github.com/quarto-dev/q2/commits/5e20b96e): G4/G11/G12: bare modifier keys no longer trigger expand-on-edit; a second click inside an open editor now expands it; overflow-y is now 'auto' only when content genuinely clips (no scrolljack on expanded/fitting editors).
-- [`63b463b6`](https://github.com/quarto-dev/q2/commits/63b463b6): Fix G3 ArrowDown on single-line tight list items: exclude paddingBottom from isOnLastVisualLine height comparison; add G1/G3 Playwright + jsdom tests (T18/T19/T21).
-- [`2efb0bde`](https://github.com/quarto-dev/q2/commits/2efb0bde): Fix dirty nest-in/out caret column to apply `prefixWidth` adjustment (Principle A), matching the clean path so the column lands at the same source position after a dirty round-trip.
-
-### 2026-06-13
-
-- [`1a93c5f0`](https://github.com/quarto-dev/q2/commits/1a93c5f0): Add P3.5 real-browser e2e tests for the nesting-cursor breadcrumb: chip clicks don't blur-commit or switch the editor, and the platform nesting key-chords (mac Cmd+Ctrl, Win/Linux Alt+Shift) move the nesting cursor without breaking native text selection.
-- [`0bc23061`](https://github.com/quarto-dev/q2/commits/0bc23061): Add P3.5 real-browser e2e test verifying the nesting-cursor breadcrumb chip sits above the active edit surface (never occluding line 1).
-- [`c96f06a0`](https://github.com/quarto-dev/q2/commits/c96f06a0): Refactor P3.2 nested-buffer gating into a testable pure helper (`computeNestedEditBuffers`) — no behavior change, test coverage now genuinely fails on revert.
-- [`aae25bf0`](https://github.com/quarto-dev/q2/commits/aae25bf0): Fix preferences reset — adding the nesting-cursor setting no longer wipes other saved preferences.
-- [`7f14e5ed`](https://github.com/quarto-dev/q2/commits/7f14e5ed): Add "Nesting cursor" preview setting (default off) and thread it to the renderer (both hub-client and SPA hosts); when enabled, the preview context exposes per-block nested edit buffers for P3.3 to consume.
 
 ### 2026-06-12
 
@@ -52,7 +35,6 @@ be in reverse chronological order (latest first).
 
 ### 2026-06-11
 
-- [`5f381cfa`](https://github.com/quarto-dev/q2/commits/5f381cfa): Inline block editing in the q2-preview pane no longer shifts surrounding content or drops decorations when you start editing — activating a block now reproduces its exact box (margins, padding, and borders such as a heading's underline rule), so the page layout stays put.
 - [`1ecc1d8c`](https://github.com/quarto-dev/q2/commits/1ecc1d8c): Sessions whose silent sign-in renewal never completes (e.g. Google One Tap blocked) now correctly reach the login screen at token expiry, instead of silently losing both the expiry logout and all future renewal attempts.
 
 ### 2026-06-10
