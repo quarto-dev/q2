@@ -274,19 +274,26 @@ describe('P3.4 test 5 ★ — ◀/▶ buttons move the nesting cursor', () => {
 });
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * Test 6 ★ (fail-on-revert): Crumb-click jumps + leafAnchorR0 unchanged
+ * Test 6 ★ (fail-on-revert): after a crumb jump, ▶ follows the live CARET
+ *
+ * CONTRACT CHANGE (§2, 2026-06-15): nest-in now descends toward the live caret's
+ * source line, NOT the frozen `leafAnchorR0`. The pre-§2 version of this test
+ * asserted the opposite ("jump to Div then ▶ still descends to ParaB because
+ * leafAnchorR0=11"); that invariant is intentionally retired — the live cursor is
+ * the single source of truth (Reflection #5). `leafAnchorR0` survives only as the
+ * no-readable-caret fallback.
  *
  * unlocked, open ParaB (value 'BBB', leafAnchorR0=11).
  * Click the 'Div.d' crumb → requestNestingSelect(0,18) → value = DIV_SLICE.
- * Click ▶ → because leafAnchorR0 is still 11, descends to ParaB → value 'BBB'.
- * setAst NOT called.
+ * Place the caret on the 'AAA' line (line 1 of the Div buffer) → click ▶ →
+ * descends to ParaA (the caret-toward child) → value 'AAA', overriding the
+ * leafAnchorR0=11 (ParaB) that the old contract would have followed.
  *
- * FAIL-ON-REVERT: if requestNestingSelect wrongly resets leafAnchorR0 to r0 (0),
- * the ▶ press descends toward r0=0 → hits ParaA (r=[6,9]) → value 'AAA' ≠ 'BBB'
- * → test fails RED. See the explicit probe in the report.
+ * FAIL-ON-REVERT: make nest-in descend by `leafAnchorR0` instead of the caret
+ * → ▶ hits ParaB → value 'BBB' ≠ 'AAA' → RED.
  * ─────────────────────────────────────────────────────────────────────────── */
-describe('P3.4 test 6 ★ — crumb-click jump preserves leafAnchorR0', () => {
-    it('jump to Div.d then ▶ still descends to ParaB (not ParaA)', async () => {
+describe('P3.4 test 6 ★ — after a crumb jump, ▶ follows the live caret (not leafAnchorR0)', () => {
+    it('jump to Div.d, caret on the AAA line, then ▶ descends to ParaA (caret wins over leafAnchorR0)', async () => {
         const setAst = vi.fn();
         const { container } = mountFixture({ setAst, unlockNestingCursor: true });
         await act(async () => {});
@@ -305,13 +312,101 @@ describe('P3.4 test 6 ★ — crumb-click jump preserves leafAnchorR0', () => {
         mockTileRects(container);
         expect(ta(container)!.value).toBe(DIV_SLICE);
 
-        // Click ▶ — must descend to ParaB (leafAnchorR0=11), not ParaA (r0=6)
+        // Place the caret on the 'AAA' line (buffer line 1 = offset 6, after "::: d\n").
+        await act(async () => {
+            const t = ta(container)!;
+            t.focus();
+            t.selectionStart = t.selectionEnd = 6;
+        });
+
+        // Click ▶ — must follow the caret to ParaA ('AAA'), overriding leafAnchorR0=11.
         const inBtn = chip(container)!.querySelector<HTMLElement>('.q2-breadcrumb-in')!;
         await act(async () => { fireEvent.click(inBtn); });
         mockTileRects(container);
-        expect(ta(container)!.value).toBe('BBB');
+        expect(ta(container)!.value).toBe('AAA');
 
-        // Jump must NOT commit
+        // Neither the jump nor the (clean) nest-in commits.
         expect(setAst).not.toHaveBeenCalled();
+    });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Test 7 ★ (fail-on-revert): a DIRTY crumb jump COMMITS, then relands on the target.
+ *
+ * §2 commit-if-dirty must cover crumb-jumps too (the ▶/◀ buttons preventDefault, so
+ * the textarea never blur-commits): editing ParaB then clicking the 'Div.d' crumb
+ * must commit the edit (was: reseed with no commit — silent data loss) and reland
+ * on the chosen ancestor (Div) via resolveLanding kind:'crumb'.
+ *
+ * FAIL-ON-REVERT: make requestNestingSelect reseed without committing → setAst
+ * assertion fails → RED.
+ * ─────────────────────────────────────────────────────────────────────────── */
+describe('P3.4 test 7 ★ — a dirty crumb jump commits, then relands on the target', () => {
+    it('edits ParaB, clicks Div.d → commits, relands on the Div', async () => {
+        const setAst = vi.fn();
+        const { container, rerender } = mountFixture({ setAst, unlockNestingCursor: true });
+        await act(async () => {});
+        mockTileRects(container);
+
+        await openEditor(container, '2'); // ParaB — value 'BBB'
+        let textarea = ta(container)!;
+        expect(textarea.value).toBe('BBB');
+
+        // Edit dirty (length-preserving so ranges stay stable): BBB → CCC.
+        await act(async () => {
+            fireEvent.change(textarea, { target: { value: 'CCC' } });
+        });
+
+        // Click the 'Div.d' crumb → must COMMIT, then close.
+        const divCrumb = Array.from(chip(container)!.querySelectorAll<HTMLElement>('.q2-crumb'))
+            .find(c => c.textContent === 'Div.d')!;
+        await act(async () => { fireEvent.click(divCrumb); });
+        expect(setAst).toHaveBeenCalledOnce();
+        const payload = setAst.mock.calls[0][0] as unknown as { newText: string };
+        expect(payload.newText).toContain('CCC');
+        expect(ta(container)).toBeNull(); // editor closed
+
+        // Simulate the commit re-render (ParaB BBB→CCC, ranges preserved).
+        const newContent = '::: d\nAAA\n\nCCC\n:::\npara2\n';
+        const newAst = {
+            'pandoc-api-version': [1, 23, 0],
+            meta: {},
+            blocks: [
+                {
+                    t: 'Div',
+                    c: [
+                        ['', ['d'], []],
+                        [
+                            { t: 'Para', c: [{ t: 'Str', c: 'AAA' }], s: 1 },
+                            { t: 'Para', c: [{ t: 'Str', c: 'CCC' }], s: 2 },
+                        ],
+                    ],
+                    s: 0,
+                },
+                { t: 'Para', c: [{ t: 'Str', c: 'para2' }], s: 3 },
+            ],
+            astContext: { p: POOL },
+        };
+        const newAstJson = JSON.stringify(newAst);
+        await act(async () => {
+            rerender(
+                <PreviewRoot
+                    astJson={newAstJson}
+                    untransformedAstJson={newAstJson}
+                    renderedContent={newContent}
+                    currentFilePath="/test.qmd"
+                    assetManifest={{}}
+                    setAst={setAst}
+                    unlockNestingCursor
+                    onNavigateToDocument={() => {}}
+                />,
+            );
+        });
+        mockTileRects(container);
+
+        // Reland (kind:'crumb') opened the Div (the chosen ancestor), with CCC.
+        textarea = ta(container)!;
+        expect(textarea).not.toBeNull();
+        expect(textarea.value).toBe('::: d\nAAA\n\nCCC\n:::');
     });
 });

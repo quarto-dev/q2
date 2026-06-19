@@ -874,3 +874,146 @@ describe('useBlockEditHover — P2.2 roving-tabindex alignment', () => {
         expect(setEditTarget.mock.calls[0][0].anchorR0).toBe(10);
     });
 });
+
+/* ── §3 mode-aware hover outline + stale-ctx guard ──────────────────────── */
+
+const NESTED_POOL: unknown[] = [
+    { t: 0, r: [0, 20] as [number, number], d: 0 },  // pool[0] <ul> (outer block)
+    { t: 0, r: [2, 10] as [number, number], d: 0 },  // pool[1] <p> leaf
+];
+
+function NestedInner() {
+    const { hostProps, stylesheet } = useBlockEditHover();
+    return (
+        <div {...hostProps} data-testid="host">
+            {stylesheet}
+            <ul data-block-pool-id="0" data-testid="ul">
+                <li>
+                    <p data-block-pool-id="1" data-testid="leaf">item</p>
+                </li>
+            </ul>
+        </div>
+    );
+}
+
+function NestedHost({
+    unlock,
+    editing,
+}: {
+    unlock?: boolean;
+    editing?: boolean;
+}) {
+    const editTargetRef = useRef<any>(editing ? { anchorR0: 999, anchorR1: 1000 } : null);
+    const unlockRef = useRef<boolean | undefined>(unlock);
+    const ctx: PreviewContextValue = {
+        currentFilePath: '/project/test.qmd',
+        setEditTarget: vi.fn(),
+        pool: NESTED_POOL,
+        content: '',
+        unlockNestingCursor: unlock,
+        unlockNestingCursorRef: unlockRef,
+        editTargetRef,
+    };
+    return (
+        <PreviewContext.Provider value={ctx}>
+            <NestedInner />
+        </PreviewContext.Provider>
+    );
+}
+
+function mountNested(opts: { unlock?: boolean; editing?: boolean } = {}) {
+    const utils = render(<NestedHost unlock={opts.unlock} editing={opts.editing} />);
+    const ul = utils.getByTestId('ul');
+    const leaf = utils.getByTestId('leaf');
+    // Both surfaces must be "visible" (non-zero rect) for resolveOuterBlock's
+    // prefixing-tag / isVisibleBlock checks.
+    vi.spyOn(ul, 'getBoundingClientRect').mockReturnValue(MOCK_RECT);
+    vi.spyOn(leaf, 'getBoundingClientRect').mockReturnValue(MOCK_RECT);
+    return { ...utils, ul, leaf };
+}
+
+describe('useBlockEditHover — §3 mode-aware hover outline', () => {
+    it('LOCKED: hovering a leaf outlines the OUTER BLOCK (the <ul>), not the leaf', () => {
+        const { ul, leaf } = mountNested({ unlock: false });
+        fireEvent(leaf, ptrEvent('pointermove', { pointerType: 'mouse' }));
+        // The <ul> is a prefixing container → resolveOuterBlock(leaf) === <ul>.
+        expect(ul.style.boxShadow, 'outer block <ul> carries the outline').toBeTruthy();
+        expect(leaf.style.boxShadow, 'leaf must NOT carry the outline in locked mode').toBe('');
+    });
+
+    it('UNLOCK: hovering a leaf outlines the LEAF itself', () => {
+        const { ul, leaf } = mountNested({ unlock: true });
+        fireEvent(leaf, ptrEvent('pointermove', { pointerType: 'mouse' }));
+        expect(leaf.style.boxShadow, 'leaf carries the outline in unlock mode').toBeTruthy();
+        expect(ul.style.boxShadow, 'outer block must NOT be outlined in unlock mode').toBe('');
+    });
+
+    it('STALE-CTX GUARD: no outline while an edit is active (editTargetRef.current set)', () => {
+        // The editTarget SCALAR is intentionally NOT set on ctx — only the live
+        // ref. The pre-§3 guard read the stale scalar and would outline anyway;
+        // the latest-ref guard reads editTargetRef.current and bails.
+        const { ul, leaf } = mountNested({ unlock: false, editing: true });
+        fireEvent(leaf, ptrEvent('pointermove', { pointerType: 'mouse' }));
+        expect(ul.style.boxShadow).toBe('');
+        expect(leaf.style.boxShadow).toBe('');
+    });
+});
+
+/* ── §3 mode-aware roving (arrow nav focuses leaves in unlock, outer in locked) ── */
+
+function RovingInner() {
+    const { hostProps, stylesheet } = useBlockEditHover();
+    return (
+        <div {...hostProps} data-testid="host">
+            {stylesheet}
+            <ul data-block-pool-id="0" data-testid="ul" tabIndex={-1}>
+                <li><p data-block-pool-id="1" data-testid="leaf1" tabIndex={-1}>one</p></li>
+                <li><p data-block-pool-id="2" data-testid="leaf2" tabIndex={-1}>two</p></li>
+            </ul>
+        </div>
+    );
+}
+
+function RovingHost({ unlock }: { unlock?: boolean }) {
+    const unlockRef = useRef<boolean | undefined>(unlock);
+    const ctx: PreviewContextValue = {
+        currentFilePath: '/project/test.qmd',
+        setEditTarget: vi.fn(),
+        pool: NESTED_POOL,
+        content: '',
+        unlockNestingCursor: unlock,
+        unlockNestingCursorRef: unlockRef,
+        editTargetRef: useRef<any>(null),
+    };
+    return (
+        <PreviewContext.Provider value={ctx}>
+            <RovingInner />
+        </PreviewContext.Provider>
+    );
+}
+
+function mountRoving(opts: { unlock?: boolean } = {}) {
+    const utils = render(<RovingHost unlock={opts.unlock} />);
+    const ul = utils.getByTestId('ul');
+    const leaf1 = utils.getByTestId('leaf1');
+    const leaf2 = utils.getByTestId('leaf2');
+    [ul, leaf1, leaf2].forEach((el) => vi.spyOn(el, 'getBoundingClientRect').mockReturnValue(MOCK_RECT));
+    return { ...utils, host: utils.getByTestId('host'), ul, leaf1, leaf2 };
+}
+
+describe('useBlockEditHover — §3 mode-aware roving', () => {
+    it('LOCKED: ArrowDown focuses the OUTER BLOCK (<ul>), not a leaf', () => {
+        const { host, ul } = mountRoving({ unlock: false });
+        fireEvent.keyDown(host, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(ul);
+    });
+
+    it('UNLOCK: ArrowDown focuses a LEAF (the nesting-leaf surface)', () => {
+        const { host, leaf1, leaf2 } = mountRoving({ unlock: true });
+        fireEvent.keyDown(host, { key: 'ArrowDown' });
+        // From no active leaf, ArrowDown lands on the first leaf; another moves to the second.
+        expect([leaf1, leaf2]).toContain(document.activeElement);
+        fireEvent.keyDown(host, { key: 'ArrowDown' });
+        expect([leaf1, leaf2]).toContain(document.activeElement);
+    });
+});

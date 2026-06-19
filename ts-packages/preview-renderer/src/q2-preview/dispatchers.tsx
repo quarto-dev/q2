@@ -153,7 +153,7 @@ function EditTextarea({
         const ta = taRef.current;
         const hint = ctx.pendingCaretRef?.current;
         if (ta && hint) {
-            placeCaretAtColumn(ta, hint.edge, hint.column);
+            placeCaretAtColumn(ta, hint);
             ctx.pendingCaretRef!.current = null; // consumed
         }
         // Only run on mount (empty deps). Geometry is only valid after the
@@ -329,7 +329,7 @@ function EditTextarea({
                             isDirty,
                         );
                         // Note: a move is NOT a plain close — requestFocusRestore is NOT
-                        // called here. The move stashes intent:'activate' via requestMove.
+                        // called here. The move stashes intent:'open' via requestMove.
                     }
                     // If NOT on the edge, fall through — native caret move.
                 }

@@ -3,6 +3,7 @@ import type React from 'react';
 import type { BlockNode } from '../framework/types';
 import type { ReachabilityClass, SourceIndexEntry, ResolvedSource } from './sourceIndex';
 import type { MutableRefObject } from 'react';
+import type { CaretHint } from './caretGeometry';
 
 /**
  * q2-preview-specific context. Carries values that don't belong on the
@@ -160,6 +161,14 @@ export interface PreviewContextValue {
      */
     unlockNestingCursor?: boolean;
     /**
+     * §3: stable ref mirror of `unlockNestingCursor`, updated in PreviewRoot's
+     * render body. The hover handlers (`onPointerMove`/`onPointerLeave`) are
+     * `useCallback(…, [])` and would otherwise capture a stale render-0 value of
+     * the scalar; reading `.current` gives the live preference without churning
+     * the handler identity (latest-ref pattern, Reflection #11/#12).
+     */
+    unlockNestingCursorRef?: MutableRefObject<boolean | undefined>;
+    /**
      * P3.2: per-siKey clean QMD buffers for nested blocks. Produced by
      * `regenerateNestedBuffers` (gated on `unlockNestingCursor`). Keyed
      * by `siKey = "0:<r0>-<r1>:0"`. Undefined when the flag is off or
@@ -194,7 +203,7 @@ export interface PreviewContextValue {
      * The ref is root-held so it survives across React renders without
      * causing extra re-renders.
      */
-    pendingCaretRef?: MutableRefObject<{ edge: 'first' | 'last'; column: number } | null>;
+    pendingCaretRef?: MutableRefObject<CaretHint | null>;
     /**
      * P2.4b: cancel a pending land (if any). Called by `EditTextarea`'s
      * Escape handler so Esc during a modified move that has not yet relanded
@@ -208,7 +217,7 @@ export interface PreviewContextValue {
     /**
      * P2.4c: stash a plain-close focus landing. Called by `EditTextarea` BEFORE
      * `setEditTarget(null)` on Esc / Cmd-Enter / plain blur — NOT on a move
-     * (moves go through `requestMove` which stashes intent:'activate').
+     * (moves go through `requestMove` which stashes intent:'open').
      *
      * After the editor closes, the next re-render (or the byte-identical timeout
      * fallback) focuses the outer block at `anchorR0` via `outerBlockForAnchorR0`, so

@@ -777,17 +777,16 @@ mislabeled "sub-sub"):
 - [x] **Characterization test first:** pin the up/down find-by-line asymmetry (`down: L0+draftLineCount`
   vs `up: L0`) so the extraction can't flatten it (Reflection #21). (commit bfb09706; real
   PreviewRoot mount, fail-on-revert verified cold: flatten up→RED, restore→GREEN; integ 377)
-- [ ] Extract `seedForRange` + `openEditTarget`; retarget the three internal sites (`executeLanding`,
-  `requestMove` sync-hop, `applyNestingRetarget`) to `openEditTarget`, and point `activate` at
-  `seedForRange`. Existing specs green (no-op extraction = the fail-on-revert lever).
 - [x] Extract `seedForRange` + `openEditTarget`; retarget the three internal sites + point `activate`
   at `seedForRange`. (commit 9e8fe88d; tsc clean, 366+377 green — no-op verified)
-- [ ] Extract `resolveLanding` (`kind:'outerByLine'`, DOM-based dispatcher returning `{range, caret?,
-  box}`); point `executeLanding` + `requestMove` sync-hop **and `handleClickSwitchBlur`** at the new
-  `{intent:'open', spec}` landing shape. Remove the copy-pasted find-by-line. Existing specs green.
-  **RE-SEQUENCED (2026-06-14):** deferred to the start of §2 — §1's snapshot capture/consume depends
-  only on `openEditTarget` (step 1, done), not on `resolveLanding`, which is §2 (nest/crumb) infra.
-  §1 is independent and is being done first (it is the user's review milestone).
+- [x] Extract `resolveLanding` (`kind:'outerByLine'`, DOM-based dispatcher returning `{range, caret?,
+  box}`) + `openFromResolved` helper; point `executeLanding` + `requestMove` sync-hop **and
+  `handleClickSwitchBlur`** at the new `{intent:'open', spec, caret}` landing shape (dropped
+  `intent:'activate'`). Removed the copy-pasted find-by-line. **DONE (2026-06-15):** tsc clean,
+  371 unit + 384 integ green (no-op verified); fail-on-revert verified COLD — breaking
+  `resolveLanding`'s up-comparison turns the §2-Phase-0 characterization test (dirty reland) AND the
+  P2.5a unmodified-ArrowUp sync-hop test RED (both route through the new dispatcher), restore → GREEN.
+  **RE-SEQUENCED (2026-06-14):** §1 was done first (user review milestone); this is the start of §2.
 
 ### §1 Geometry snapshot
 - [x] `topBlockR0` pure helper (commit fd990709; 5 unit tests, nestingNav 62 green).
@@ -843,18 +842,95 @@ mislabeled "sub-sub"):
     Harmless for the all-ASCII acceptance fixtures; wrong for non-ASCII source lines.
 
 ### §2 Caret-aware nest-in
-- [ ] `childSurfaceTowardLine` with **trimmed `surfaceLineSpan` + tiebreak** (Reflection #17; test on
-  the verified fixture's `nother` / sub-sub-item overlap) (+ retain `childSurfaceToward` as fallback);
-  caret→source-line read **from the caret / `selectionEnd` on a selection**, pre-commit, centralized
-  in `requestNestingMove`; widen `CaretHint` + generalize `placeCaretAtColumn` to interior line;
-  **bidirectional `prefixWidth` via full-source-line `endsWith` guard + clamp-and-warn** (Reflection
-  #19); **unified in/out caret-placement rule** (Reflection #20); warn-and-proceed; `leafAnchorR0`
-  demotion + P3.4 test update; `resolveLanding` `kind:'nest'` + `kind:'crumb'`; commit-if-dirty in
-  the shared core covering chord, ◀/▶ buttons, and crumb-jumps, **with the pending-landing
-  re-entrancy guard** (Reflection #22). **Acceptance:** `q2-preview-nesting-caret-in.spec.ts`
-  (fail-on-revert).
+**Pure foundations — DONE (2026-06-15):**
+- [x] `surfaceLineSpan` + `childSurfaceTowardLine` (trimmed span + tiebreak, Reflection #17);
+  `childSurfaceToward` retained as the no-readable-caret fallback. (commit 3b27f724; 13 jsdom
+  tests on the real 3-level fixture; fail-on-revert COLD: revert trim→raw turns the 3
+  `surfaceLineSpan` tests RED. The descent-outcome tests are rescued by the start-line tiebreak
+  → they pin descent correctness, not the trim; comments say so.)
+- [x] Widen `CaretHint` → `{line;column} | {edge;column}` (relocated to `caretGeometry.ts`,
+  re-exported from PreviewRoot; `pendingCaretRef` widened in PreviewRoot + PreviewContext) +
+  generalize `placeCaretAtColumn(ta, hint)` to an interior line. (commit b94d02b2; +5 interior
+  jsdom tests; existing calls mechanically migrated to the hint shape; fail-on-revert COLD:
+  force interior line index→0 turns the 4 interior tests RED.)
+
+**Remaining integration (one cohesive, high-risk, multi-file chunk — IN PROGRESS 2026-06-15):**
+- [x] `prefixWidth` (commit cd0d9c7d; 7 jsdom tests; fail-on-revert COLD on the last-line edge). Lives in
+  `caretGeometry.ts` (with the caret-placement primitives, per the handoff "caller-coupled" note).
+- [x] Centralized caret read in `requestNestingMove` (commit 69f9c4b4; `readLiveCaret`, selectionEnd on
+  non-collapsed; one source of truth for chord + ◀/▶).
+- [x] `resolveLanding` `kind:'nest'` (commit 69f9c4b4; relocate by commit-stable (startLine, depth),
+  project caret line, descend/ascend; box:'snapshot' + captureFrom). **`kind:'crumb'` still TODO.**
+- [x] Unified in/out caret placement (commit 69f9c4b4; Reflection #20; no nest-out special case).
+- [x] Commit-if-dirty for chord + ◀/▶ (commit 69f9c4b4); re-entrancy guard; leafAnchorR0 demoted;
+  P3.4 test 6 updated to the caret model. **Crumb-jump commit-if-dirty still TODO.**
+- [x] **Crumb** (commit 5e45821a): `requestNestingSelect` commit-if-dirty + `resolveLanding kind:'crumb'`
+  (relocate target by commit-stable (startLine, depth); `depthOfSurface`/`relocateSurface` moved to
+  pure `nestingNav.ts` + unit-tested incl. the shared-start-line case; p3-4 test 7 dirty crumb-jump).
+  Fail-on-revert COLD: neutralizing the shared `commitAndArmReland` commit reddens both dirty nest +
+  dirty crumb; dropping the depth filter reddens the shared-start-line relocation test.
+- [x] **Acceptance** `q2-preview-nesting-caret-in.spec.ts` (Playwright, real browser) — GREEN.
+  Edit the whole list → caret onto the "nother" line (source line 4) → nest-in opens the level-1
+  sub-list (buffer `"* sub-item\n  * sub-sub-item\n* nother"`), not the first item. Fail-on-revert
+  verified COLD: forcing the leafAnchorR0 descent (rebuild SPA) → nest-in opens `"another"` → RED;
+  restore + rebuild → GREEN. `q2-preview-nesting-size-in.spec.ts` re-run GREEN (no §1 regression).
+  Stricter `tsc -b` build (`VITE_E2E=1 npm run build`) passes.
+
+**§2 COMPLETE (2026-06-15).** All logic + acceptance green; tsc clean; 400 unit + 387 integ jsdom.
+
+<!-- superseded checklist below kept for the detailed spec text -->
+- [x] ~~`prefixWidth(sourceLine, surfaceR0, content, map, cleanBuffer)`~~ — bidirectional prefix
+  width (Reflection #19). `cleanBuffer === undefined` (verbatim parent) → 0; else
+  `bufferLine = sourceLine − map.lineOf(surfaceR0)`, `cleanT = cleanBuffer.split('\n')[bufferLine].trimEnd()`,
+  `fullT = sliceUtf8(content, map.lineStart(L), map.lineStart(L+1)).trimEnd()`; if
+  `fullT.endsWith(cleanT)` → `fullT.length − cleanT.length`, else **warn + best-effort**
+  (`placeCaretAtColumn`'s existing column clamp absorbs overflow → that IS the clamp-and-warn).
+  Column space is UTF-16 (textarea-native, matches `getLogicalColumn`/`placeCaretAtColumn`);
+  byte offsets only ever feed `sliceUtf8`/`map`. Pure → jsdom unit (construct realistic
+  blockquote `> `/indent pairs + the `endsWith`-fail case). Belongs WITH the caret-placement
+  caller (its contract is caller-coupled).
+- [x] Centralized caret read in `requestNestingMove(dir)` — read the live textarea via
+  `activeEditRegionRef.current?.querySelector('textarea')` (selection survives the breadcrumb
+  button's `preventDefault`), `selectionEnd` on a non-collapsed selection, **synchronously
+  before any commit/close**. One source of truth for the chord (dispatchers.tsx) and the ▶
+  button (BreadcrumbChip.tsx) — `requestNestingMove`'s signature does NOT change.
+- [x] `resolveLanding` `kind:'nest'` (+ `kind:'crumb'`): the §2-Phase-0 dispatcher already exists
+  (`outerByLine` done, commit 449eea3b). `nest`: relocate the committed container by its
+  commit-stable `fromStartLine` in the new source index, project `caretBufferLine`, then
+  `childSurfaceTowardLine` (`'in'`) / `parentSurface` (`'out'`); returns `box:'snapshot'`.
+- [x] Unified in/out caret placement (Reflection #20): map invariant `(Ls,Cs)` into dest coords —
+  `destBufferLine = Ls − map.lineOf(destR0)`, `destBufferCol = Cs − prefixWidth(dest,Ls,...)`,
+  `Cs = currentBufferCol + prefixWidth(current,Ls,...)`. No nest-out special case.
+- [x] Commit-if-dirty in the shared core (`applyNestingRetarget` → the `move(spec,caret,box)`
+  chokepoint) covering chord + ◀/▶ + crumb-jumps (today it reseeds with NO commit — data-loss
+  footgun); **pending-landing re-entrancy guard** (ignore nest requests while
+  `pendingLandingRef.current != null`, Reflection #22); demote `leafAnchorR0` to fallback;
+  **update P3.4 breadcrumb test 6 to the caret model** (contract changed — note it explicitly).
+- [x] **Acceptance** `q2-preview-nesting-caret-in.spec.ts` (Playwright; reuse the size-in spec's
+  harness): edit the whole list, caret onto a deeper item's line, nest-in → opened editor targets
+  the caret-toward child, not the first. Fail-on-revert: disable the centralized caret read (fall
+  back to `leafAnchorR0`) → opens the first item → RED. **Done-criteria before closing §2:** jsdom
+  green, tsc clean, `cd hub-client && npm run build:all`, caret-in Playwright green + fail-on-revert
+  COLD.
+
+**Ground truth for the next session (pre-derived, do NOT re-derive):** 3-level fixture
+`* another\n* hello\n    * sub-item\n        * sub-sub-item\n    * nother\n` (69 bytes). Real
+surfaces (via `pampa -t json` → real `buildSourceIndex`/`buildNestingSurfaces`), with trimmed
+line spans: `[0,69]`top`[0,4]`, `[2,10]`another`[0,0]`, `[12,20]`hello`[1,1]`, `[20,69]`L1-list`[2,4]`,
+`[24,39]`sub-item`[2,2]`, `[39,60]`L2-list`[3,3]`, `[43,60]`sub-sub-item`[3,3]`, `[62,69]`nother`[4,4]`.
+Direct children of `[0,69]`: `{[2,10],[12,20],[20,69]}`; of `[20,69]`: `{[24,39],[39,60],[62,69]}`.
+`childSurfaceTowardLine([0,69], Ls=2..4)` → `[20,69]`; `([20,69], 4)` → `[62,69]`; `([20,69], 2)` →
+`[24,39]`. The exported `surfaceLineSpan`/`childSurfaceTowardLine` + the widened
+`CaretHint`/`placeCaretAtColumn(ta, hint)` are READY to consume.
 
 ### §3 Mode-aware indicators
-- [ ] Latest-ref fix for `onPointerMove`/`onPointerLeave` (+ `unlockNestingCursorRef`); split
-  `hoveredRef`/`rawLeafRef`; mode-aware outline (mouse + touch); `enumerateNestingLeaves` +
-  mode-aware roving; dedupe. **Acceptance:** `q2-preview-locked-hover.spec.ts` (fail-on-revert).
+- [x] **DONE (2026-06-15, commits 85a30c26 + e2e spec).** Latest-ref fix for
+  `onPointerMove`/`onPointerLeave` (+ `unlockNestingCursorRef` added to PreviewContext);
+  split `hoveredRef`/`rawLeafRef`; mode-aware outline (mouse + touch); `enumerateNestingLeaves`
+  + mode-aware roving. jsdom: mode-aware outline (locked→`<ul>`, unlock→leaf), stale-ctx guard,
+  roving, `enumerateNestingLeaves` units — fail-on-revert COLD on the outline + guard.
+  **Acceptance** `q2-preview-locked-hover.spec.ts` (Playwright) GREEN: locked-mode hover of the
+  deepest leaf outlines the OUTERMOST `<ul>` (no pool-id ancestor); fail-on-revert COLD: raw-leaf
+  outline (rebuild SPA) → inner `<ul>` (`hasPoolIdAncestor:true`) → RED; restore + rebuild → GREEN.
+
+**PLAN COMPLETE (2026-06-15): §0, §1, §2, §3 all done + acceptance specs green.**

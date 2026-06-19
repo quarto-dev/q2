@@ -18,6 +18,9 @@
  *    unit-testable in jsdom.
  */
 
+import type { ByteLineMap } from '../utils/byteLineMap';
+import { sliceUtf8 } from '../utils/utf8Slice';
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
@@ -203,44 +206,112 @@ export function getLogicalColumn(ta: HTMLTextAreaElement): number {
 }
 
 /**
- * Places the caret on the first (`edge='first'`) or last (`edge='last'`)
- * *logical* (`\n`-delimited) line of `ta.value`, at `min(column, lineLength)`.
+ * Caret-placement hint applied once on editor mount.
  *
- * This is used when navigating INTO a tile: arrival via ↓ lands on the first
- * logical line; arrival via ↑ lands on the last.
+ * - `{ edge: 'first' | 'last'; column }` — land on the first/last *logical*
+ *   (`\n`-delimited) line. Used by cross-surface arrow nav (↓ lands first, ↑
+ *   lands last).
+ * - `{ line; column }` — land on an interior logical line (0-based). Used by
+ *   §2 caret-aware nest moves, which preserve the caret's actual source row.
+ */
+export type CaretHint =
+    | { line: number; column: number }
+    | { edge: 'first' | 'last'; column: number };
+
+/**
+ * Places the caret on a *logical* (`\n`-delimited) line of `ta.value`, at
+ * `min(column, lineLength)`. The target line is the first/last edge (for
+ * `{ edge }` hints) or an explicit interior line clamped to `[0, lineCount-1]`
+ * (for `{ line }` hints).
  *
  * **Known limitation (documented, not fixed here):** `setSelectionRange` resets
  * the browser's native goal column, so a desired column is not preserved past a
  * short arrival line on subsequent arrow-key presses. Carrying the goal column
- * across tiles is a refinement deferred to a later phase; v1 capture-and-clamp
+ * across surfaces is a refinement deferred to a later phase; capture-and-clamp
  * is sufficient for the cross-surface jump.
  *
- * @param ta     The textarea to update.
- * @param edge   'first' → land on the first logical line; 'last' → last line.
- * @param column Desired column (0-based). Clamped to the line length.
+ * @param ta   The textarea to update.
+ * @param hint Edge or interior-line target + desired 0-based column (clamped).
  */
 export function placeCaretAtColumn(
     ta: HTMLTextAreaElement,
-    edge: 'first' | 'last',
-    column: number,
+    hint: CaretHint,
 ): void {
     const lines = ta.value.split('\n');
     // `''.split('\n')` yields [''], so lines.length is always ≥ 1 here.
+    const lineIndex = 'edge' in hint
+        ? (hint.edge === 'first' ? 0 : lines.length - 1)
+        : Math.max(0, Math.min(hint.line, lines.length - 1));
 
-    if (edge === 'first') {
-        const line = lines[0];
-        const clampedCol = Math.min(column, line.length);
-        ta.selectionStart = ta.selectionEnd = clampedCol;
-    } else {
-        // edge === 'last'
-        // Compute the character offset of the start of the last logical line.
-        const lastLineIndex = lines.length - 1;
-        let lineStartOffset = 0;
-        for (let i = 0; i < lastLineIndex; i++) {
-            lineStartOffset += lines[i].length + 1; // +1 for '\n'
-        }
-        const lastLine = lines[lastLineIndex];
-        const clampedCol = Math.min(column, lastLine.length);
-        ta.selectionStart = ta.selectionEnd = lineStartOffset + clampedCol;
+    // Character offset of the start of the target logical line.
+    let lineStartOffset = 0;
+    for (let i = 0; i < lineIndex; i++) {
+        lineStartOffset += lines[i].length + 1; // +1 for '\n'
     }
+    const clampedCol = Math.min(hint.column, lines[lineIndex].length);
+    ta.selectionStart = ta.selectionEnd = lineStartOffset + clampedCol;
+}
+
+// ── Ancestor-prefix width (§2 caret-aware nest) ────────────────────────────────
+
+/**
+ * The width (in UTF-16 columns) of the ancestor `> `/indent prefix that the
+ * clean nesting buffer strips from a source line — the bidirectional bridge
+ * between **buffer columns** (textarea-native, what `getLogicalColumn` reads and
+ * `placeCaretAtColumn` writes) and **source columns** (`Ls,Cs` invariants):
+ *
+ *   Cs            = currentBufferCol + prefixWidth(current, Ls, …)   (read)
+ *   destBufferCol = Cs              − prefixWidth(dest,    Ls, …)    (place)
+ *
+ * The clean buffer (`nestedEditBuffers[siKey]`) is a *re-serialization*
+ * (`write_single_block`), not a per-line strip, so an exact integer prefix
+ * exists **iff** the clean line is a suffix of the full source line (no inline
+ * normalization on that line — the common case + all acceptance fixtures). When
+ * the suffix guard fails we `warn` and return the best-effort length delta;
+ * `placeCaretAtColumn`'s column clamp absorbs any overflow (the clamp-and-warn
+ * posture, Reflection #19).
+ *
+ * @param sourceLine  0-based source line the caret/column lives on (`Ls`).
+ * @param surfaceR0   The surface's start byte; `map.lineOf(surfaceR0)` is the
+ *                    source line of the clean buffer's line 0.
+ * @param content     Full rendered source (for the line slice).
+ * @param map         Byte↔line map over `content`.
+ * @param cleanBuffer The surface's clean stripped buffer, or `undefined` for a
+ *                    verbatim parent (top-level surface) → width is always 0.
+ *
+ * **Column space is UTF-16** (`.length` on JS strings); byte offsets only ever
+ * feed `sliceUtf8` / the line map. Pure (no DOM).
+ */
+export function prefixWidth(
+    sourceLine: number,
+    surfaceR0: number,
+    content: string,
+    map: ByteLineMap,
+    cleanBuffer: string | undefined,
+): number {
+    // Verbatim parent: the clean line IS the source line → no stripped prefix.
+    if (cleanBuffer === undefined) return 0;
+
+    const bufferLine = sourceLine - map.lineOf(surfaceR0);
+    const cleanLines = cleanBuffer.split('\n');
+    if (bufferLine < 0 || bufferLine >= cleanLines.length) return 0; // out of range → can't compute
+    const cleanT = cleanLines[bufferLine].trimEnd();
+
+    // The full source line. On the final line there is no `lineStart(L+1)`
+    // (it clamps to `lineStart(L)`), so slice to end-of-content instead.
+    const startByte = map.lineStart(sourceLine);
+    const endByte =
+        sourceLine + 1 < map.lineCount ? map.lineStart(sourceLine + 1) : Number.MAX_SAFE_INTEGER;
+    const fullT = sliceUtf8(content, startByte, endByte).trimEnd();
+
+    const delta = fullT.length - cleanT.length;
+    if (!fullT.endsWith(cleanT)) {
+        // Inline normalization changed the line: no exact integer prefix exists.
+        // Warn and return the best-effort delta; the caret-place clamp absorbs it.
+        console.warn(
+            `prefixWidth: clean line is not a suffix of the source line (sourceLine=${sourceLine}); ` +
+                `caret column is best-effort. full=${JSON.stringify(fullT)} clean=${JSON.stringify(cleanT)}`,
+        );
+    }
+    return delta;
 }

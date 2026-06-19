@@ -8,6 +8,8 @@
 
 import type { BlockNode } from '../framework/types';
 import type { SourceIndexEntry } from './sourceIndex';
+import type { ByteLineMap } from '../utils/byteLineMap';
+import { sliceUtf8 } from '../utils/utf8Slice';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -155,6 +157,44 @@ export function topBlockR0(
   }
 }
 
+// ── depthOfSurface / relocateSurface (§2 commit-stable relocation) ──────────────
+
+/**
+ * The containment depth of `[r0,r1]` — the number of OTHER surfaces that strictly
+ * contain it. Commit-stable: an in-place list rewrite renumbers / respaces but
+ * does not change the nesting structure. Used to disambiguate two surfaces that
+ * share a start line (a container and its first child) when relocating a
+ * committed surface in a rewritten source index. Pure (no DOM).
+ */
+export function depthOfSurface(surfaces: NestingSurface[], r0: number, r1: number): number {
+  let depth = 0;
+  for (const s of surfaces) {
+    if (s.r0 <= r0 && s.r1 >= r1 && !(s.r0 === r0 && s.r1 === r1)) depth++;
+  }
+  return depth;
+}
+
+/**
+ * Relocate a committed surface in a (possibly rewritten) source index by its
+ * commit-stable `(startLine, depth)`. Returns the first surface whose start line
+ * is `startLine` AND whose containment depth is `depth`, or null when none match.
+ * The depth filter is what disambiguates a container from its first child when
+ * the two share a start line (Reflection: dirty crumb-jump relocation ambiguity).
+ * Pure (no DOM); `map` is any byte→line lookup.
+ */
+export function relocateSurface(
+  surfaces: NestingSurface[],
+  map: { lineOf(b: number): number },
+  startLine: number,
+  depth: number,
+): NestingSurface | null {
+  for (const s of surfaces) {
+    if (map.lineOf(s.r0) !== startLine) continue;
+    if (depthOfSurface(surfaces, s.r0, s.r1) === depth) return s;
+  }
+  return null;
+}
+
 // ── childSurfaceToward ────────────────────────────────────────────────────────
 
 /**
@@ -223,6 +263,131 @@ export function childSurfaceToward(
     if (s.r0 === best.r0 && s.r1 > best.r1) return s;
     return best;
   });
+}
+
+// ── surfaceLineSpan ─────────────────────────────────────────────────────────────
+
+/**
+ * The 0-based [startLine, endLine] source-line span of a surface, computed from
+ * its **trimmed** content range (Reflection #17).
+ *
+ * Node source ranges absorb the previous line's trailing whitespace at `r0` and
+ * the next line's leading indent at `r1`, so RAW line spans of siblings overlap
+ * (verified on the 3-level acceptance fixture: the sub-sub-item list `[39,60]`
+ * has raw end byte 60 on the `nother` line). Trimming both ends collapses each
+ * surface to the lines its visible content actually occupies, which is what
+ * `childSurfaceTowardLine` needs to disambiguate siblings.
+ *
+ * **Byte hazard:** `r0`/`r1` are UTF-8 byte offsets, so the surface text is
+ * extracted with `sliceUtf8` (NOT `String.prototype.slice`, which is UTF-16).
+ * Leading/trailing whitespace is ASCII (space/tab/newline → 1 byte each), so the
+ * trimmed-length deltas are byte counts and can be added to the byte offsets
+ * directly. Pure (no DOM).
+ */
+export function surfaceLineSpan(
+  surface: NestingSurface,
+  content: string,
+  map: ByteLineMap,
+): [number, number] {
+  const text = sliceUtf8(content, surface.r0, surface.r1);
+  const leadingWs = text.length - text.trimStart().length;   // ASCII ws → byte count
+  const trailingWs = text.length - text.trimEnd().length;    // ASCII ws → byte count
+  // Degenerate all-whitespace surface: fall back to the raw byte span.
+  if (leadingWs + trailingWs >= text.length) {
+    return [map.lineOf(surface.r0), map.lineOf(Math.max(surface.r0, surface.r1 - 1))];
+  }
+  const startByte = surface.r0 + leadingWs;
+  const endByte = surface.r1 - 1 - trailingWs;
+  return [map.lineOf(startByte), map.lineOf(endByte)];
+}
+
+// ── childSurfaceTowardLine ──────────────────────────────────────────────────────
+
+/**
+ * The direct CHILD surface to descend into, heading toward the source LINE the
+ * caret is on (`Ls`). The line-space sibling of `childSurfaceToward` (byte
+ * space): line space sidesteps the `> `/indent prefix (which only shifts
+ * columns) and the trailing-whitespace overlap of raw byte ranges.
+ *
+ * Picks among the cursor's DIRECT children (same direct-child definition as
+ * `childSurfaceToward`) the one whose **trimmed** line span (`surfaceLineSpan`)
+ * contains `Ls`. Tiebreak when more than one contains `Ls`:
+ *   1. start line == `Ls`  (the child that begins on the caret line)
+ *   2. narrowest span
+ *   3. nearest start line to `Ls`
+ *   4. smallest `r0` (determinism)
+ * When NO direct child contains `Ls` (e.g. caret beyond every child), returns
+ * the nearest direct child by line distance to its span interval.
+ *
+ * Returns null when the cursor has no contained children (it is a leaf). The
+ * caller falls back to the byte-space `childSurfaceToward` when there is no
+ * readable caret at all. Pure (no DOM).
+ */
+export function childSurfaceTowardLine(
+  surfaces: NestingSurface[],
+  cursorR0: number,
+  cursorR1: number,
+  Ls: number,
+  map: ByteLineMap,
+  content: string,
+): NestingSurface | null {
+  const contained = surfaces.filter(
+    s =>
+      s.r0 >= cursorR0 &&
+      s.r1 <= cursorR1 &&
+      !(s.r0 === cursorR0 && s.r1 === cursorR1),
+  );
+  if (contained.length === 0) return null;
+
+  // Direct children: contained surfaces not strictly contained by another
+  // contained surface (mirrors childSurfaceToward step 3).
+  const directChildren = contained.filter(
+    s =>
+      !contained.some(
+        other =>
+          other !== s &&
+          other.r0 <= s.r0 &&
+          other.r1 >= s.r1 &&
+          !(other.r0 === s.r0 && other.r1 === s.r1),
+      ),
+  );
+  if (directChildren.length === 0) return null;
+
+  const withSpan = directChildren.map(s => ({ s, span: surfaceLineSpan(s, content, map) }));
+  const containing = withSpan.filter(({ span }) => span[0] <= Ls && Ls <= span[1]);
+
+  if (containing.length > 0) {
+    return containing
+      .slice()
+      .sort((a, b) => {
+        // 1. start line == Ls first
+        const aStart = a.span[0] === Ls ? 0 : 1;
+        const bStart = b.span[0] === Ls ? 0 : 1;
+        if (aStart !== bStart) return aStart - bStart;
+        // 2. narrowest span
+        const aw = a.span[1] - a.span[0];
+        const bw = b.span[1] - b.span[0];
+        if (aw !== bw) return aw - bw;
+        // 3. nearest start line to Ls
+        const ad = Math.abs(a.span[0] - Ls);
+        const bd = Math.abs(b.span[0] - Ls);
+        if (ad !== bd) return ad - bd;
+        // 4. determinism
+        return a.s.r0 - b.s.r0;
+      })[0].s;
+  }
+
+  // None contain Ls → nearest direct child by line distance to its span.
+  const dist = (span: [number, number]) =>
+    Ls < span[0] ? span[0] - Ls : Ls > span[1] ? Ls - span[1] : 0;
+  return withSpan
+    .slice()
+    .sort((a, b) => {
+      const da = dist(a.span);
+      const db = dist(b.span);
+      if (da !== db) return da - db;
+      return a.s.r0 - b.s.r0;
+    })[0].s;
 }
 
 // ── classifyNestingKey ──────────────────────────────────────────────────────────

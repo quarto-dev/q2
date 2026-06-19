@@ -210,6 +210,23 @@ export function enumerateOuterBlocks(host: Element): Element[] {
     return blocks;
 }
 
+/**
+ * §3: enumerate the nesting-mode LEAVES of `host` — visible `[data-block-pool-id]`
+ * elements with no `[data-block-pool-id]` descendant — in DOM pre-order.
+ *
+ * This is the nesting-mode counterpart of `enumerateOuterBlocks`: roving-tabindex
+ * in unlock mode should focus/activate the same deepest surfaces the mouse does
+ * (a single click in unlock mode opens the leaf, not the outer block). A container
+ * (e.g. a `<ul>` that holds `<li>`s with pool-ids) is excluded; only the innermost
+ * pool-id elements are returned. Pure (no React); visibility via `isVisibleBlock`.
+ */
+export function enumerateNestingLeaves(host: Element): Element[] {
+    const all = Array.from(host.querySelectorAll<Element>('[data-block-pool-id]'));
+    return all.filter(
+        (el) => isVisibleBlock(el) && el.querySelector('[data-block-pool-id]') === null,
+    );
+}
+
 // ---------------------------------------------------------------------------
 // P2.4b helpers
 // ---------------------------------------------------------------------------

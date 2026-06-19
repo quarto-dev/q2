@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useRef } from 'react';
 import { PreviewContext } from './PreviewContext';
-import { resolveOuterBlock, enumerateOuterBlocks, captureEditTarget, measureBlockBox, seedForRange } from './outerBlocks';
+import { resolveOuterBlock, enumerateOuterBlocks, enumerateNestingLeaves, captureEditTarget, measureBlockBox, seedForRange } from './outerBlocks';
 
 const HOLD_MS = 500;
 const MOVE_THRESHOLD_PX = 8;
@@ -29,7 +29,13 @@ export function useBlockEditHover(): {
     stylesheet: React.ReactNode;
 } {
     const ctx = useContext(PreviewContext);
+    // §3: `hoveredRef` is the RESOLVED element that carries the box-shadow and is
+    // the Enter/Space activation target (mode-aware: the leaf in unlock mode, the
+    // outer block in locked mode). `rawLeafRef` is the raw `closest(pool-id)` —
+    // used ONLY as the cheap pointermove dedupe key. Splitting the two lets the
+    // outline promise exactly the granularity a click will deliver.
     const hoveredRef = useRef<Element | null>(null);
+    const rawLeafRef = useRef<Element | null>(null);
     const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
     // Last observed pointer type — read in onContextMenu to suppress the OS
@@ -113,7 +119,10 @@ export function useBlockEditHover(): {
     };
 
     const onPointerMove = useCallback((e: React.PointerEvent<HTMLElement>) => {
-        if (ctx?.editTarget != null) return;
+        // §3 latest-ref guard (Reflection #11/#12): this handler is useCallback(…,[])
+        // so `ctx` is frozen at render 0; read the LIVE edit state / mode off the
+        // stable refs, never the per-render scalars (which would be stale).
+        if (ctx?.editTargetRef?.current != null) return;
         if (e.pointerType !== 'mouse') {
             // Touch: cancel hold if moved beyond threshold.
             if (pointerDownPosRef.current) {
@@ -122,16 +131,26 @@ export function useBlockEditHover(): {
                 if (Math.hypot(dx, dy) > MOVE_THRESHOLD_PX) {
                     clearHold();
                     outlineElement(null);
+                    rawLeafRef.current = null;
                     pointerDownPosRef.current = null;
                 }
             }
             return;
         }
-        // Mouse hover.
-        const el = findEditTarget(e);
-        if (el !== hoveredRef.current) {
-            outlineElement(el);
-        }
+        // Mouse hover. Dedupe on the RAW leaf so pointermove stays cheap; only
+        // re-resolve + re-outline when the leaf under the pointer changes.
+        const rawLeaf = findEditTarget(e);
+        if (rawLeaf === rawLeafRef.current) return;
+        rawLeafRef.current = rawLeaf;
+        // §3 mode-aware outline: highlight the surface a click would ACTIVATE —
+        // the leaf in unlock mode, the outer block (resolveOuterBlock) in locked.
+        const resolved = !rawLeaf
+            ? null
+            : ctx?.unlockNestingCursorRef?.current
+                ? rawLeaf
+                : resolveOuterBlock(rawLeaf);
+        outlineElement(resolved);
+        hoveredRef.current = resolved;
     }, []);
 
     const onPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
@@ -176,8 +195,13 @@ export function useBlockEditHover(): {
         if (!el) return;
 
         if (e.pointerType !== 'mouse') {
-            // Touch: outline on pointerdown, activate after hold.
-            outlineElement(el);
+            // Touch: outline on pointerdown, activate after hold. §3: outline the
+            // mode-aware resolved surface (ctx is fresh here — [activate, ctx] deps);
+            // the hold timer's activate(el) re-resolves the raw leaf itself.
+            rawLeafRef.current = el;
+            const resolved = ctx?.unlockNestingCursor ? el : (resolveOuterBlock(el) ?? el);
+            outlineElement(resolved);
+            hoveredRef.current = resolved;
             pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
             holdTimerRef.current = setTimeout(() => {
@@ -216,6 +240,7 @@ export function useBlockEditHover(): {
     const onPointerLeave = useCallback((e: React.PointerEvent<HTMLElement>) => {
         if (e.pointerType === 'mouse') {
             outlineElement(null);
+            rawLeafRef.current = null;
         }
     }, []);
 
@@ -230,13 +255,21 @@ export function useBlockEditHover(): {
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
             const host = e.currentTarget;
-            const blocks = enumerateOuterBlocks(host) as HTMLElement[];
+            // §3 mode-aware roving: focus the same surfaces the mouse activates —
+            // outer blocks in locked mode, nesting leaves in unlock mode — so the
+            // two input paths agree.
+            const blocks = (ctx?.unlockNestingCursor
+                ? enumerateNestingLeaves(host)
+                : enumerateOuterBlocks(host)) as HTMLElement[];
             if (!blocks.length) return;
             const idx = blocks.indexOf(document.activeElement as HTMLElement);
             const next = e.key === 'ArrowDown'
                 ? blocks[(idx + 1) % blocks.length]
                 : blocks[(idx - 1 + blocks.length) % blocks.length];
             next.focus();
+            // Set BOTH refs so a following hover doesn't redundantly re-resolve,
+            // and Enter/Space activates the focused element.
+            rawLeafRef.current = next;
             hoveredRef.current = next;
             return;
         }

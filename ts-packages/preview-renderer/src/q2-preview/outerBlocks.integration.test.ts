@@ -18,6 +18,7 @@ import {
     rectsCoincide,
     resolveOuterBlock,
     enumerateOuterBlocks,
+    enumerateNestingLeaves,
     snapshotOuterBlockGeometry,
 } from './outerBlocks';
 
@@ -355,6 +356,47 @@ describe('resolveOuterBlock — epsilon boundary (1px border vs. true coincidenc
         mockRect(dom.child, rect(1, 1, 199, 39));   // 1px inset on each side
 
         expect(resolveOuterBlock(dom.child)).toBe(dom.child);
+    });
+});
+
+/* ─── enumerateNestingLeaves (§3 mode-aware roving) ──────────────────────────── */
+
+describe('enumerateNestingLeaves', () => {
+    it('returns only the innermost (no pool-id descendant) visible surfaces', () => {
+        // A list container holds two leaf items; the container is NOT a leaf.
+        const dom = makeDom(`
+            <ul data-block-pool-id="0" data-name="ul">
+                <li><p data-block-pool-id="1" data-name="i1">one</p></li>
+                <li><p data-block-pool-id="2" data-name="i2">two</p></li>
+            </ul>
+        `);
+        mockRect(dom.ul, rect(0, 0, 200, 80));
+        mockRect(dom.i1, rect(0, 0, 200, 40));
+        mockRect(dom.i2, rect(0, 40, 200, 80));
+
+        const leaves = enumerateNestingLeaves(dom.root);
+        expect(leaves).toEqual([dom.i1, dom.i2]); // the <ul> container is excluded
+    });
+
+    it('excludes hidden leaves (zero rect)', () => {
+        const dom = makeDom(`
+            <p data-block-pool-id="1" data-name="visible">visible</p>
+            <p data-block-pool-id="2" data-name="hidden">hidden</p>
+        `);
+        mockRect(dom.visible, FULL);
+        mockRect(dom.hidden, ZERO);
+
+        expect(enumerateNestingLeaves(dom.root)).toEqual([dom.visible]);
+    });
+
+    it('preserves DOM pre-order', () => {
+        const dom = makeDom(`
+            <p data-block-pool-id="1" data-name="a">A</p>
+            <p data-block-pool-id="2" data-name="b">B</p>
+        `);
+        mockRect(dom.a, rect(0, 0, 200, 20));
+        mockRect(dom.b, rect(0, 20, 200, 40));
+        expect(enumerateNestingLeaves(dom.root)).toEqual([dom.a, dom.b]);
     });
 });
 

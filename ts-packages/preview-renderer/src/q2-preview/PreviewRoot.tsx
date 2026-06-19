@@ -28,25 +28,79 @@ import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';
 import { RevealDeck } from './RevealDeck';
 import { installLinkHandlers } from '../utils/iframeLinkHandlers';
-import { buildNestingCommitDestination, buildNestingSurfaces, parentSurface, childSurfaceToward, topBlockR0 } from './nestingNav';
+import { buildNestingCommitDestination, buildNestingSurfaces, parentSurface, childSurfaceToward, childSurfaceTowardLine, topBlockR0, depthOfSurface, relocateSurface } from './nestingNav';
+import type { NestingSurface } from './nestingNav';
+import type { CaretHint } from './caretGeometry';
+import { prefixWidth } from './caretGeometry';
+
+/**
+ * §2 Phase 0: a landing-resolution spec — what the reland (or the synchronous
+ * hop) should resolve the destination range/box from. `resolveLanding(spec)`
+ * dispatches on `kind`. Today only `outerByLine` exists (the arrow-move /
+ * click-switch find-by-line resolver, formerly copy-pasted between
+ * `executeLanding` and `requestMove`); §2 adds `nest`/`crumb`.
+ */
+export type ResolverSpec =
+    | {
+          /** Find the destination outer block by source start line (arrow move / click switch). */
+          kind: 'outerByLine';
+          direction: 'down' | 'up';
+          /** Target line: down → first outer block with startLine >= destLine; up → last with startLine < destLine. */
+          destLine: number;
+      }
+    | {
+          /**
+           * §2 nest move (commit-if-dirty reland): relocate the committed
+           * container by its commit-stable (startLine, depth) in the NEW source
+           * index, then descend toward / ascend from the projected caret line.
+           */
+          kind: 'nest';
+          direction: 'in' | 'out';
+          /** `lineOf(et.anchorR0)` pre-commit — stable across an in-place list rewrite. */
+          fromStartLine: number;
+          /** Containment depth of the committed surface — disambiguates surfaces sharing a start line. */
+          fromDepth: number;
+          /** Caret's 0-based line within the pre-commit buffer (projected against the relocated node). */
+          caretBufferLine: number;
+          /** Caret's column within the pre-commit buffer (carried as the dest buffer column, best-effort). */
+          caretBufferCol: number;
+          /** Frozen leaf anchor — the no-readable-caret descent fallback. */
+          leafAnchorR0: number;
+      }
+    | {
+          /**
+           * §2 crumb-jump (commit-if-dirty reland): relocate the chosen ancestor
+           * by its commit-stable (startLine, depth), then place the caret by
+           * projecting the pre-commit buffer line against the relocated target.
+           */
+          kind: 'crumb';
+          /** Start line + containment depth of the chosen ancestor (depth disambiguates a shared start line). */
+          targetStartLine: number;
+          targetDepth: number;
+          /** Start line of the surface being edited (for caret-line projection). */
+          fromStartLine: number;
+          caretBufferLine: number;
+          caretBufferCol: number;
+      };
 
 /**
  * P2.4b/c: descriptor for a pending cross-surface nav landing.
  * Stashed in `pendingLandingRef` when:
- *   - (P2.4b) a modified move fires — intent:'activate' opens the destination editor.
+ *   - (P2.4b) a modified move fires — intent:'open' opens the destination editor.
  *   - (P2.4c) a plain close fires — intent:'focus' returns focus to the edited tile.
  * Consumed by the reland layout effect after the commit re-render delivers new props,
  * or by the byte-identical timeout fallback.
  */
 export type PendingLanding =
     | {
-          /** P2.4b: open the destination editor on landing. */
-          intent: 'activate';
-          direction: 'down' | 'up';
-          /** Target line for destination lookup in the new DOM/content. */
-          destLine: number;
-          /** Logical column to place the caret at on arrival. */
-          desiredColumn: number;
+          /**
+           * P2.4b: open the destination editor on landing. The destination is
+           * resolved post-render via `resolveLanding(spec)`; `caret` is the
+           * caret hint to place on arrival (null → caret at top).
+           */
+          intent: 'open';
+          spec: ResolverSpec;
+          caret: CaretHint | null;
           /** File that was active when the move fired — cancels on file switch. */
           fromFile: string;
       }
@@ -62,12 +116,9 @@ export type PendingLanding =
           fromFile: string;
       };
 
-/**
- * Caret-edge placement hint applied once on editor mount. Today only the
- * first/last logical-line edges are expressible; §2 widens this to an interior
- * `{ line; column }` for caret-aware nest moves.
- */
-export type CaretHint = { edge: 'first' | 'last'; column: number };
+// CaretHint (`{ edge } | { line }`, §2-widened) lives in caretGeometry.ts (the
+// placement primitive's home); re-export it here for the landing core / context.
+export type { CaretHint };
 
 /**
  * P2.4d: stashed at pointerdown time when a mouse click lands on a different outer block
@@ -343,7 +394,7 @@ export function PreviewRoot(props: PreviewRootProps) {
     // ---------------------------------------------------------------------------
 
     const pendingLandingRef = useRef<PendingLanding | null>(null);
-    const pendingCaretRef = useRef<{ edge: 'first' | 'last'; column: number } | null>(null);
+    const pendingCaretRef = useRef<CaretHint | null>(null);
     // Timer ID for the byte-identical fallback. Stored in a ref so Esc can cancel it.
     const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -430,17 +481,148 @@ export function PreviewRoot(props: PreviewRootProps) {
     }, []);
 
     /**
+     * §2 Phase 0: the landing-resolution dispatcher. Given a `ResolverSpec`,
+     * resolve the destination `{range, box}` (and optionally a `caret`) against
+     * the CURRENT live DOM / content (read from refs). Returns null when no
+     * destination can be resolved (no host, empty scan, uncapturable block).
+     *
+     * This is a PreviewRoot dispatcher, not a pure function: `outerByLine` reads
+     * the live DOM via `enumerateOuterBlocks`; `nest` is pure-surface (refs only).
+     * It collapses the find-by-line resolver that was previously copy-pasted
+     * between `executeLanding` and `requestMove`. The box source is coupled to the
+     * kind — `outerByLine` returns `{ measure: destBlock }` (a live element to size
+     * from); `nest` returns `'snapshot'` + a `captureFrom` element (the freshly
+     * re-rendered, clean destination subtree, captured by `openFromResolved`
+     * before the open swaps it to a textarea).
+     */
+    const resolveLanding = useCallback((
+        spec: ResolverSpec,
+    ): { range: { r0: number; r1: number }; caret?: CaretHint; box: { measure: Element } | 'snapshot'; captureFrom?: Element } | null => {
+        if (!previewHostRef.current) return null;
+        const currentPool = poolRef.current;
+        const currentContent = renderedContentRef.current;
+
+        // ── §2 nest (commit-if-dirty reland) ─────────────────────────────────
+        // Pure-surface: relocate the committed container by (startLine, depth) in
+        // the NEW source index, project the caret line against it, then descend
+        // (childSurfaceTowardLine) / ascend (parentSurface). box:'snapshot' — the
+        // destination subtree is clean and rendered now, so openFromResolved
+        // captures a fresh snapshot of it before opening (that capture IS its live
+        // measure). Falls back to the byte-space leaf descent when there is no
+        // projected caret span to aim at.
+        if (spec.kind === 'nest') {
+            const surfaces = buildNestingSurfaces(sourceIndexRef.current);
+            if (surfaces.length === 0) return null;
+            const map = buildByteLineMap(currentContent);
+            const relocated = relocateSurface(surfaces, map, spec.fromStartLine, spec.fromDepth);
+            if (!relocated) return null;
+            const projectedLine = map.lineOf(relocated.r0) + spec.caretBufferLine;
+            const next: NestingSurface | null =
+                spec.direction === 'out'
+                    ? parentSurface(surfaces, relocated.r0, relocated.r1)
+                    : childSurfaceTowardLine(surfaces, relocated.r0, relocated.r1, projectedLine, map, currentContent)
+                      ?? childSurfaceToward(surfaces, relocated.r0, relocated.r1, spec.leafAnchorR0);
+            if (!next) return null; // clamp — no parent / leaf
+            const destLine = Math.max(0, projectedLine - map.lineOf(next.r0));
+            const caret: CaretHint = { line: destLine, column: spec.caretBufferCol };
+            // Element to snapshot the destination subtree from (its top block).
+            const topR0 = topBlockR0(surfaces, next.r0, next.r1);
+            const captureFrom =
+                outerBlockForAnchorR0(previewHostRef.current, currentPool, topR0, { exactOnly: true }) ?? undefined;
+            return { range: { r0: next.r0, r1: next.r1 }, caret, box: 'snapshot', captureFrom };
+        }
+
+        // ── §2 crumb (commit-if-dirty reland) ────────────────────────────────
+        // Relocate the chosen ancestor by (startLine, depth) in the new index;
+        // project the caret line against it. box:'snapshot' (clean re-rendered
+        // subtree, captured by openFromResolved before opening).
+        if (spec.kind === 'crumb') {
+            const surfaces = buildNestingSurfaces(sourceIndexRef.current);
+            if (surfaces.length === 0) return null;
+            const map = buildByteLineMap(currentContent);
+            const target = relocateSurface(surfaces, map, spec.targetStartLine, spec.targetDepth);
+            if (!target) return null;
+            const projectedLine = spec.fromStartLine + spec.caretBufferLine;
+            const destLine = Math.max(0, projectedLine - map.lineOf(target.r0));
+            const caret: CaretHint = { line: destLine, column: spec.caretBufferCol };
+            const topR0 = topBlockR0(surfaces, target.r0, target.r1);
+            const captureFrom =
+                outerBlockForAnchorR0(previewHostRef.current, currentPool, topR0, { exactOnly: true }) ?? undefined;
+            return { range: { r0: target.r0, r1: target.r1 }, caret, box: 'snapshot', captureFrom };
+        }
+
+        const blocks = enumerateOuterBlocks(previewHostRef.current);
+        if (blocks.length === 0) return null;
+
+        const map = buildByteLineMap(currentContent);
+        let destBlock: Element | null = null;
+
+        if (spec.direction === 'down') {
+            // First outer block with start line >= destLine
+            for (const outerBlock of blocks) {
+                const pidAttr = outerBlock.getAttribute('data-block-pool-id');
+                if (pidAttr === null) continue;
+                const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
+                if (!entry || entry.t !== 0) continue;
+                if (map.lineOf(entry.r[0]) >= spec.destLine) { destBlock = outerBlock; break; }
+            }
+            if (!destBlock) destBlock = blocks[0]; // wrap to first
+        } else {
+            // Last outer block with start line < destLine
+            for (let i = blocks.length - 1; i >= 0; i--) {
+                const outerBlock = blocks[i];
+                const pidAttr = outerBlock.getAttribute('data-block-pool-id');
+                if (pidAttr === null) continue;
+                const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
+                if (!entry || entry.t !== 0) continue;
+                if (map.lineOf(entry.r[0]) < spec.destLine) { destBlock = outerBlock; break; }
+            }
+            if (!destBlock) destBlock = blocks[blocks.length - 1]; // wrap to last
+        }
+
+        if (!destBlock) return null;
+        const captured = captureEditTarget(destBlock, currentPool, currentContent);
+        if (!captured) return null;
+
+        return { range: { r0: captured.anchorR0, r1: captured.anchorR1 }, box: { measure: destBlock } };
+    }, []);
+
+    /**
+     * §2 Phase 0: open the editor from a resolved landing. When the resolver
+     * sized the box from a live element (`{ measure }`), capture that subtree's
+     * geometry FIRST (§1) — before `openEditTarget` swaps it to a textarea — so a
+     * later nest move can size its destination from the original render. The
+     * caret falls back to `fallbackCaret` when the resolver did not specify one
+     * (e.g. `outerByLine`, whose column is producer-supplied).
+     *
+     * §2: a `nest` reland returns `box:'snapshot'` with a `captureFrom` element —
+     * the freshly re-rendered, clean destination subtree. Snapshot it NOW (before
+     * the open swaps it to a textarea) so the `box:'snapshot'` lookup hits.
+     */
+    const openFromResolved = useCallback((
+        r: { range: { r0: number; r1: number }; caret?: CaretHint; box: { measure: Element } | 'snapshot'; captureFrom?: Element },
+        fallbackCaret: CaretHint | null,
+    ) => {
+        if (r.box !== 'snapshot') {
+            captureGeometry(r.box.measure, r.range);
+        } else if (r.captureFrom) {
+            captureGeometry(r.captureFrom, r.range);
+        }
+        openEditTarget(r.range, { box: r.box, caret: r.caret ?? fallbackCaret });
+    }, [captureGeometry, openEditTarget]);
+
+    /**
      * Execute a landing. Handles both intents:
      *
-     * intent:'activate' (P2.4b move) — find the destination outer block in the current
-     * DOM/content and open its editor.
+     * intent:'open' (P2.4b move) — resolve the destination via `resolveLanding`
+     * against the current DOM/content and open its editor.
      *
      * intent:'focus' (P2.4c plain close) — focus the edited outer block by anchorR0.
      */
     const executeLanding = useCallback((
         pl: PendingLanding,
         currentPool: unknown[],
-        currentContent: string,
+        _currentContent: string,
     ) => {
         // P2.4c: intent:'focus' — return focus to the edited outer block without opening an editor.
         if (pl.intent === 'focus') {
@@ -458,55 +640,12 @@ export function PreviewRoot(props: PreviewRootProps) {
             return;
         }
 
-        // intent:'activate' (P2.4b move): find the destination outer block and open its editor.
-        if (!previewHostRef.current) return;
-        const blocks = enumerateOuterBlocks(previewHostRef.current);
-        if (blocks.length === 0) return;
-
-        const map = buildByteLineMap(currentContent);
-        let destBlock: Element | null = null;
-
-        if (pl.direction === 'down') {
-            // First outer block with start line >= destLine
-            for (const outerBlock of blocks) {
-                const pidAttr = outerBlock.getAttribute('data-block-pool-id');
-                if (pidAttr === null) continue;
-                const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
-                if (!entry || entry.t !== 0) continue;
-                if (map.lineOf(entry.r[0]) >= pl.destLine) { destBlock = outerBlock; break; }
-            }
-            if (!destBlock) destBlock = blocks[0]; // wrap to first
-        } else {
-            // Last outer block with start line < destLine
-            for (let i = blocks.length - 1; i >= 0; i--) {
-                const outerBlock = blocks[i];
-                const pidAttr = outerBlock.getAttribute('data-block-pool-id');
-                if (pidAttr === null) continue;
-                const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
-                if (!entry || entry.t !== 0) continue;
-                if (map.lineOf(entry.r[0]) < pl.destLine) { destBlock = outerBlock; break; }
-            }
-            if (!destBlock) destBlock = blocks[blocks.length - 1]; // wrap to last
-        }
-
-        if (!destBlock) return;
-        const captured = captureEditTarget(destBlock, currentPool, currentContent);
-        if (!captured) return;
-
+        // intent:'open' (P2.4b move): resolve the destination and open its editor.
+        const r = resolveLanding(pl.spec);
+        if (!r) return; // leave the pending landing for the fallback timer / next render
         pendingLandingRef.current = null; // consumed
-        // §1: capture the (clean, rendered) destination subtree's geometry BEFORE
-        // openEditTarget swaps it to a textarea, so a later nest move can size from it.
-        captureGeometry(destBlock, { r0: captured.anchorR0, r1: captured.anchorR1 });
-        // Measure the destination outer block's box so the textarea renders at the
-        // correct height (not collapsed to height: 0).
-        openEditTarget(
-            { r0: captured.anchorR0, r1: captured.anchorR1 },
-            {
-                box: { measure: destBlock },
-                caret: { edge: pl.direction === 'down' ? 'first' : 'last', column: pl.desiredColumn },
-            },
-        );
-    }, []);
+        openFromResolved(r, pl.caret);
+    }, [resolveLanding, openFromResolved]);
 
     /**
      * P2.4b reland layout effect.
@@ -541,68 +680,40 @@ export function PreviewRoot(props: PreviewRootProps) {
         const et = editTargetRef.current;
         if (!et) return;
 
-        const currentPool = poolRef.current;
         const currentContent = renderedContentRef.current;
 
         // Build the line map and compute the current outer block's start line.
         const map = buildByteLineMap(currentContent);
         const L0 = map.lineOf(et.anchorR0);
 
-        // Find the destination outer block in the current DOM.
-        if (!previewHostRef.current) return;
-        const blocks = enumerateOuterBlocks(previewHostRef.current);
-        // Guard: empty → no-op. We allow blocks.length === 1 because the active
-        // outer block's DOM element has no data-block-pool-id (the textarea wrapper
-        // replaced it), so a 2-outer-block document shows only 1 outer block in the scan.
-        // A single DOM outer block + the active outer block = at least 2 outer blocks total → nav is valid.
-        if (blocks.length === 0) return;
-
         const draftLineCount = draft.split('\n').length;
-
-        let destBlock: Element | null = null;
-        if (direction === 'down') {
-            const targetLine = L0 + draftLineCount;
-            for (const outerBlock of blocks) {
-                const pidAttr = outerBlock.getAttribute('data-block-pool-id');
-                if (pidAttr === null) continue;
-                const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
-                if (!entry || entry.t !== 0) continue;
-                if (map.lineOf(entry.r[0]) >= targetLine) { destBlock = outerBlock; break; }
-            }
-            if (!destBlock) destBlock = blocks[0]; // wrap to first
-        } else {
-            for (let i = blocks.length - 1; i >= 0; i--) {
-                const outerBlock = blocks[i];
-                const pidAttr = outerBlock.getAttribute('data-block-pool-id');
-                if (pidAttr === null) continue;
-                const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
-                if (!entry || entry.t !== 0) continue;
-                if (map.lineOf(entry.r[0]) < L0) { destBlock = outerBlock; break; }
-            }
-            if (!destBlock) destBlock = blocks[blocks.length - 1]; // wrap to last
-        }
+        // destLine asymmetry (pinned by the §2-Phase-0 characterization test,
+        // Reflection #21): down → first outer block at/after L0+draftLineCount;
+        // up → last outer block before L0 (NOT L0+draftLineCount). resolveLanding
+        // compares `>= destLine` (down) / `< destLine` (up).
+        const destLine = direction === 'down' ? L0 + draftLineCount : L0;
+        const spec: ResolverSpec = { kind: 'outerByLine', direction, destLine };
+        const caret: CaretHint = { edge: direction === 'down' ? 'first' : 'last', column: exitColumn };
 
         if (!isDirty) {
-            // Synchronous hop: no commit, no editability gap.
-            const captured = captureEditTarget(destBlock!, currentPool, currentContent);
-            if (!captured) return;
-            // §1: snapshot the destination subtree before it is swapped to a textarea.
-            captureGeometry(destBlock!, { r0: captured.anchorR0, r1: captured.anchorR1 });
-            openEditTarget(
-                { r0: captured.anchorR0, r1: captured.anchorR1 },
-                {
-                    box: { measure: destBlock! },
-                    caret: { edge: direction === 'down' ? 'first' : 'last', column: exitColumn },
-                },
-            );
+            // Synchronous hop: no commit, no editability gap. resolveLanding's
+            // internal empty-scan guard returns null → no-op.
+            const r = resolveLanding(spec);
+            if (!r) return;
+            openFromResolved(r, caret);
         } else {
-            // Modified: compute destLine (delta-adjusted for down, unadjusted for up).
-            const destLine = direction === 'down' ? L0 + draftLineCount : L0;
+            // Guard: empty scan → no destination to land on; skip the commit.
+            // We allow blocks.length === 1 because the active outer block's DOM
+            // element has no data-block-pool-id (the textarea wrapper replaced it),
+            // so a 2-outer-block document shows only 1 outer block in the scan.
+            if (!previewHostRef.current) return;
+            if (enumerateOuterBlocks(previewHostRef.current).length === 0) return;
+
+            // Modified: stash the landing spec; resolve post-commit against the new render.
             pendingLandingRef.current = {
-                intent: 'activate',
-                direction,
-                destLine,
-                desiredColumn: exitColumn,
+                intent: 'open',
+                spec,
+                caret,
                 fromFile: currentFilePathRef.current,
             };
 
@@ -765,10 +876,9 @@ export function PreviewRoot(props: PreviewRootProps) {
         cancelPendingLand();
 
         pendingLandingRef.current = {
-            intent: 'activate',
-            direction,
-            destLine,
-            desiredColumn: 0,
+            intent: 'open',
+            spec: { kind: 'outerByLine', direction, destLine },
+            caret: { edge: direction === 'down' ? 'first' : 'last', column: 0 },
             fromFile: currentFilePathRef.current,
         };
 
@@ -850,45 +960,219 @@ export function PreviewRoot(props: PreviewRootProps) {
     }, []);
 
     /**
-     * Shared re-target core (factored out of requestNestingMove). Re-seeds the draft
-     * from the new node's clean buffer/slice and re-anchors editTarget. No commit.
+     * Shared re-target core (factored out of requestNestingMove). Re-seeds the
+     * draft from the new node's clean buffer/slice and re-anchors editTarget,
+     * sizing from the §1 geometry snapshot. No commit. The `caret` hint (computed
+     * by the producer from the live caret) places the cursor in the destination.
      */
-    const applyNestingRetarget = useCallback((next: { r0: number; r1: number }, leafAnchorR0: number) => {
+    const applyNestingRetarget = useCallback((next: { r0: number; r1: number }, leafAnchorR0: number, caret: CaretHint | null) => {
         const et = editTargetRef.current;
         if (!et) return;
         // §1: size the destination from the geometry snapshot captured at the
         // original open (the live DOM is edit-distorted — the active subtree is a
         // textarea — so even nest-out's parent is present-but-distorted). openEditTarget
         // resolves 'snapshot' to the block-relative key and falls back to
-        // live-measure-if-rendered-else-keep on a miss. No caret-edge hint for a nest move.
-        openEditTarget({ r0: next.r0, r1: next.r1 }, { box: 'snapshot', caret: null, leafAnchorR0 });
+        // live-measure-if-rendered-else-keep on a miss.
+        openEditTarget({ r0: next.r0, r1: next.r1 }, { box: 'snapshot', caret, leafAnchorR0 });
     }, []);
 
     /**
-     * P3.3 §3b: move the nesting cursor to the AST parent ('out') or the child
-     * toward leafAnchorR0 ('in'). Clamps at the ends (no parent → out no-ops;
-     * cursor is a leaf → in no-ops). Re-seeds the draft from the new node's
-     * clean buffer (nestedEditBuffers[siKey] ?? anchorSlice). Does NOT commit.
+     * §2: read the live textarea's caret. Returns null when no editor textarea is
+     * mounted (programmatic move). The selection survives the breadcrumb button's
+     * `preventDefault`-on-pointerdown and the chord's own keydown, so this is the
+     * ONE source of truth for both the chord (dispatchers) and the ▶/◀ buttons.
+     * A non-collapsed selection uses its active end (`selectionEnd`, Reflection #18).
+     */
+    const readLiveCaret = useCallback((): { bufferLine: number; bufferCol: number; draft: string } | null => {
+        const ta = activeEditRegionRef.current?.querySelector('textarea');
+        if (!ta) return null;
+        const value = ta.value;
+        const pos =
+            ta.selectionStart === ta.selectionEnd
+                ? (ta.selectionStart ?? 0)
+                : (ta.selectionEnd ?? ta.selectionStart ?? 0);
+        const before = value.slice(0, pos);
+        const lastNl = before.lastIndexOf('\n');
+        const bufferLine = lastNl === -1 ? 0 : (before.match(/\n/g)?.length ?? 0);
+        const bufferCol = pos - (lastNl + 1);
+        return { bufferLine, bufferCol, draft: value };
+    }, []);
+
+    /**
+     * §2: commit the live edit and stash a `kind:'nest'`/`'crumb'` landing, then
+     * arm the byte-identical 250ms fallback. Shared by the dirty branches of
+     * `requestNestingMove` and `requestNestingSelect` (the chord, ◀/▶ buttons, and
+     * crumb-jumps all route through one commit-if-dirty chokepoint). The reland
+     * (layout effect or this timer) resolves the spec against the new render.
+     */
+    const commitAndArmReland = useCallback((spec: ResolverSpec, draftSrc: string) => {
+        const et = editTargetRef.current;
+        if (!et) return;
+        pendingLandingRef.current = {
+            intent: 'open',
+            spec,
+            caret: null, // the nest/crumb resolver computes the dest caret post-relocation
+            fromFile: currentFilePathRef.current,
+        };
+        const dest = buildNestingCommitDestination(et);
+        if (dest === null) {
+            pendingLandingRef.current = null;
+            editDraftRef.current = null;
+            setEditTargetRaw(null);
+            return;
+        }
+        const payload: PreviewNodeEditPayload = {
+            __isPreviewNodeEdit: true,
+            channel: 'text',
+            destinationSourceInfoJson: dest,
+            newText: normalizeLineEndings(draftSrc),
+        };
+        setAstRef.current(payload as unknown as PandocAST);
+        editDraftRef.current = null;
+        setEditTargetRaw(null);
+
+        if (fallbackTimerRef.current !== null) clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = setTimeout(() => {
+            fallbackTimerRef.current = null;
+            const pl = pendingLandingRef.current;
+            if (!pl) return;
+            if (pl.fromFile !== currentFilePathRef.current) {
+                pendingLandingRef.current = null;
+                return;
+            }
+            executeLanding(pl, poolRef.current, renderedContentRef.current);
+        }, 250);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [executeLanding]);
+
+    /**
+     * §2: the unified clean-move caret hint — map the live caret's invariant
+     * source position (Ls,Cs) into the destination surface's buffer coords
+     * (Reflection #20). Returns null when there is no readable caret. `prefixWidth`
+     * bridges buffer columns ↔ source columns; a verbatim parent contributes 0.
+     */
+    const cleanCaretHint = useCallback((
+        fromR0: number, fromR1: number, destR0: number, destR1: number,
+        live: { bufferCol: number } | null, Ls: number | null,
+        content: string, map: ReturnType<typeof buildByteLineMap>,
+    ): CaretHint | null => {
+        if (!live || Ls === null) return null;
+        const curClean = nestedEditBuffersRef.current?.[serializeSourceEntry({ t: 0, r: [fromR0, fromR1], d: 0 })];
+        const Cs = live.bufferCol + prefixWidth(Ls, fromR0, content, map, curClean);
+        const destClean = nestedEditBuffersRef.current?.[serializeSourceEntry({ t: 0, r: [destR0, destR1], d: 0 })];
+        return { line: Math.max(0, Ls - map.lineOf(destR0)), column: Math.max(0, Cs - prefixWidth(Ls, destR0, content, map, destClean)) };
+    }, []);
+
+    /**
+     * §2: move the nesting cursor OUT to the AST parent or IN toward the live
+     * CARET's source line (falling back to the frozen `leafAnchorR0` when there is
+     * no readable caret). Clamps at the ends (no parent → out no-ops; leaf → in
+     * no-ops). Commit-if-dirty: a CLEAN move hops synchronously (no commit); a
+     * DIRTY move commits the edit, closes, and relands on the destination via the
+     * `kind:'nest'` resolver — so no nest move discards an in-flight edit.
      */
     const requestNestingMove = useCallback((direction: 'in' | 'out') => {
         const et = editTargetRef.current;
         if (!et) return;
-        const surfaces = buildNestingSurfaces(sourceIndexRef.current);
-        const next = direction === 'out'
-            ? parentSurface(surfaces, et.anchorR0, et.anchorR1)
-            : childSurfaceToward(surfaces, et.anchorR0, et.anchorR1, et.leafAnchorR0 ?? et.anchorR0);
-        if (!next) return; // clamp — no-op at the path end
-        applyNestingRetarget({ r0: next.r0, r1: next.r1 }, et.leafAnchorR0 ?? et.anchorR0);
-    }, []);
+        // Re-entrancy guard (Reflection #22): one in-flight nest at a time — a
+        // second request during the async commit→reland window would clobber the
+        // pending landing or hit an unmounted textarea.
+        if (pendingLandingRef.current !== null) return;
 
-    // P3.4: jump the nesting cursor directly to a chosen ancestor crumb's range.
-    // leafAnchorR0 is UNCHANGED by a jump, so a later 'in' still descends toward
-    // the originally-clicked leaf.
+        const content = renderedContentRef.current;
+        const map = buildByteLineMap(content);
+        const surfaces = buildNestingSurfaces(sourceIndexRef.current);
+
+        const live = readLiveCaret();
+        const Ls = live ? map.lineOf(et.anchorR0) + live.bufferLine : null;
+
+        // Dirty check (mirrors dispatchers' baseline: seededDraft ?? anchorSlice).
+        const baseline = normalizeLineEndings(et.seededDraft ?? et.anchorSlice).trimEnd();
+        const draftSrc = live ? live.draft : (editDraftRef.current ?? '');
+        const draftNorm = normalizeLineEndings(draftSrc).trimEnd();
+        const isDirty = !!draftNorm && draftNorm !== baseline;
+
+        if (!isDirty) {
+            // ── CLEAN sync hop: source unchanged, resolve + open synchronously ──
+            const next = direction === 'out'
+                ? parentSurface(surfaces, et.anchorR0, et.anchorR1)
+                : (live && Ls !== null
+                    ? childSurfaceTowardLine(surfaces, et.anchorR0, et.anchorR1, Ls, map, content)
+                    : childSurfaceToward(surfaces, et.anchorR0, et.anchorR1, et.leafAnchorR0 ?? et.anchorR0));
+            if (!next) return; // clamp — no-op at the path end
+
+            // Unified in/out caret placement (Reflection #20): map the invariant
+            // source position (Ls,Cs) into the destination surface's buffer coords.
+            const caret = cleanCaretHint(et.anchorR0, et.anchorR1, next.r0, next.r1, live, Ls, content, map);
+            applyNestingRetarget({ r0: next.r0, r1: next.r1 }, et.leafAnchorR0 ?? et.anchorR0, caret);
+            return;
+        }
+
+        // ── DIRTY: commit-if-dirty, then reland on the destination (kind:'nest') ──
+        // The committed container's start line + depth are commit-stable, so the
+        // reland relocates it in the new source index and descends/ascends toward
+        // the projected caret line. (Reflection #8.)
+        if (!live) {
+            // No live textarea to read the dirty draft from — should not happen
+            // (a dirty buffer implies a mounted textarea); bail rather than guess.
+            return;
+        }
+        commitAndArmReland({
+            kind: 'nest',
+            direction,
+            fromStartLine: map.lineOf(et.anchorR0),
+            fromDepth: depthOfSurface(surfaces, et.anchorR0, et.anchorR1),
+            caretBufferLine: live.bufferLine,
+            caretBufferCol: live.bufferCol,
+            leafAnchorR0: et.leafAnchorR0 ?? et.anchorR0,
+        }, draftSrc);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [readLiveCaret, cleanCaretHint, commitAndArmReland]);
+
+    /**
+     * P3.4 / §2: jump the nesting cursor directly to a chosen ancestor crumb's
+     * range. Commit-if-dirty (the ▶/◀/crumb buttons preventDefault so the textarea
+     * never blur-commits): a CLEAN jump hops synchronously (preserving the caret's
+     * source position into the target); a DIRTY jump commits, then relands on the
+     * target via `resolveLanding kind:'crumb'`.
+     */
     const requestNestingSelect = useCallback((r0: number, r1: number) => {
         const et = editTargetRef.current;
         if (!et) return;
-        applyNestingRetarget({ r0, r1 }, et.leafAnchorR0 ?? et.anchorR0);
-    }, []);
+        if (pendingLandingRef.current !== null) return; // re-entrancy guard (Reflection #22)
+
+        const content = renderedContentRef.current;
+        const map = buildByteLineMap(content);
+        const surfaces = buildNestingSurfaces(sourceIndexRef.current);
+
+        const live = readLiveCaret();
+        const Ls = live ? map.lineOf(et.anchorR0) + live.bufferLine : null;
+
+        const baseline = normalizeLineEndings(et.seededDraft ?? et.anchorSlice).trimEnd();
+        const draftSrc = live ? live.draft : (editDraftRef.current ?? '');
+        const draftNorm = normalizeLineEndings(draftSrc).trimEnd();
+        const isDirty = !!draftNorm && draftNorm !== baseline;
+
+        if (!isDirty) {
+            // CLEAN sync jump: preserve the caret's source position into the target.
+            const caret = cleanCaretHint(et.anchorR0, et.anchorR1, r0, r1, live, Ls, content, map);
+            applyNestingRetarget({ r0, r1 }, et.leafAnchorR0 ?? et.anchorR0, caret);
+            return;
+        }
+
+        // DIRTY: commit, then reland on the chosen ancestor (relocated by
+        // commit-stable (startLine, depth) to disambiguate a shared start line).
+        if (!live) return;
+        commitAndArmReland({
+            kind: 'crumb',
+            targetStartLine: map.lineOf(r0),
+            targetDepth: depthOfSurface(surfaces, r0, r1),
+            fromStartLine: map.lineOf(et.anchorR0),
+            caretBufferLine: live.bufferLine,
+            caretBufferCol: live.bufferCol,
+        }, draftSrc);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [readLiveCaret, cleanCaretHint, commitAndArmReland]);
 
     // Refs so the link-handler closure (installed once at mount)
     // sees the *latest* currentFilePath / projectFilePaths.
@@ -1054,6 +1338,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 resolveSource,
                 editingDisabled: props.editingDisabled,
                 unlockNestingCursor: props.unlockNestingCursor,
+                unlockNestingCursorRef,
                 nestedEditBuffers: props.nestedEditBuffers,
                 requestMove,
                 pendingCaretRef,

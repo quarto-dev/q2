@@ -23,7 +23,9 @@ import {
     placeCaretAtColumn,
     isOnFirstVisualLine,
     isOnLastVisualLine,
+    prefixWidth,
 } from './caretGeometry';
+import { buildByteLineMap } from '../utils/byteLineMap';
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
 
@@ -125,35 +127,35 @@ describe('placeCaretAtColumn', () => {
 
     it('places caret at column 0 on first line', () => {
         const el = ta('hello\nworld', 8);
-        placeCaretAtColumn(el, 'first', 0);
+        placeCaretAtColumn(el, { edge: 'first', column: 0 });
         expect(el.selectionStart).toBe(0);
         expect(el.selectionEnd).toBe(0);
     });
 
     it('places caret at column 3 on first line', () => {
         const el = ta('hello\nworld', 8);
-        placeCaretAtColumn(el, 'first', 3);
+        placeCaretAtColumn(el, { edge: 'first', column: 3 });
         expect(el.selectionStart).toBe(3);
         expect(el.selectionEnd).toBe(3);
     });
 
     it('places caret at end of first line (column == lineLength)', () => {
         const el = ta('hello\nworld', 0);
-        placeCaretAtColumn(el, 'first', 5);
+        placeCaretAtColumn(el, { edge: 'first', column: 5 });
         expect(el.selectionStart).toBe(5);
     });
 
     it('clamps column to first-line length when column > lineLength', () => {
         // first line "hello" has length 5; column 99 → clamped to 5
         const el = ta('hello\nworld', 0);
-        placeCaretAtColumn(el, 'first', 99);
+        placeCaretAtColumn(el, { edge: 'first', column: 99 });
         expect(el.selectionStart).toBe(5);
     });
 
     it('clamps column to 0 when first line is empty', () => {
         // value = '\nworld', first line is ''
         const el = ta('\nworld', 5);
-        placeCaretAtColumn(el, 'first', 3);
+        placeCaretAtColumn(el, { edge: 'first', column: 3 });
         expect(el.selectionStart).toBe(0);
     });
 
@@ -162,41 +164,41 @@ describe('placeCaretAtColumn', () => {
     it('places caret at column 0 on last line', () => {
         // 'hello\nworld', last line starts at offset 6
         const el = ta('hello\nworld', 0);
-        placeCaretAtColumn(el, 'last', 0);
+        placeCaretAtColumn(el, { edge: 'last', column: 0 });
         expect(el.selectionStart).toBe(6);
         expect(el.selectionEnd).toBe(6);
     });
 
     it('places caret at column 3 on last line', () => {
         const el = ta('hello\nworld', 0);
-        placeCaretAtColumn(el, 'last', 3);
+        placeCaretAtColumn(el, { edge: 'last', column: 3 });
         expect(el.selectionStart).toBe(9); // 6 + 3
     });
 
     it('places caret at end of last line', () => {
         const el = ta('hello\nworld', 0);
-        placeCaretAtColumn(el, 'last', 5);
+        placeCaretAtColumn(el, { edge: 'last', column: 5 });
         expect(el.selectionStart).toBe(11); // 6 + 5
     });
 
     it('clamps column to last-line length when column > lineLength', () => {
         // last line "world" has length 5; column 99 → clamped to 5 → offset 11
         const el = ta('hello\nworld', 0);
-        placeCaretAtColumn(el, 'last', 99);
+        placeCaretAtColumn(el, { edge: 'last', column: 99 });
         expect(el.selectionStart).toBe(11);
     });
 
     it('clamps column to 0 when last line is empty', () => {
         // 'hello\n', last line is ''
         const el = ta('hello\n', 0);
-        placeCaretAtColumn(el, 'last', 5);
+        placeCaretAtColumn(el, { edge: 'last', column: 5 });
         expect(el.selectionStart).toBe(6); // offset of the empty last line
     });
 
     it('handles three logical lines, places on last', () => {
         // 'aa\nbb\ncc': 'aa'(2) + '\n'(1) + 'bb'(2) + '\n'(1) = offset 6 for "cc"
         const el = ta('aa\nbb\ncc', 0);
-        placeCaretAtColumn(el, 'last', 1);
+        placeCaretAtColumn(el, { edge: 'last', column: 1 });
         expect(el.selectionStart).toBe(7); // 6 + 1 ✓
     });
 
@@ -205,8 +207,8 @@ describe('placeCaretAtColumn', () => {
     it('for a single-line value, first and last refer to the same line', () => {
         const el1 = ta('hello', 0);
         const el2 = ta('hello', 0);
-        placeCaretAtColumn(el1, 'first', 2);
-        placeCaretAtColumn(el2, 'last', 2);
+        placeCaretAtColumn(el1, { edge: 'first', column: 2 });
+        placeCaretAtColumn(el2, { edge: 'last', column: 2 });
         expect(el1.selectionStart).toBe(2);
         expect(el2.selectionStart).toBe(2);
     });
@@ -214,17 +216,54 @@ describe('placeCaretAtColumn', () => {
     it('clamps on single-line value for both edges', () => {
         const el1 = ta('hi', 0);
         const el2 = ta('hi', 0);
-        placeCaretAtColumn(el1, 'first', 99);
-        placeCaretAtColumn(el2, 'last', 99);
+        placeCaretAtColumn(el1, { edge: 'first', column: 99 });
+        placeCaretAtColumn(el2, { edge: 'last', column: 99 });
         expect(el1.selectionStart).toBe(2);
         expect(el2.selectionStart).toBe(2);
     });
 
     it('handles empty value without throwing', () => {
         const el = ta('', 0);
-        expect(() => placeCaretAtColumn(el, 'first', 0)).not.toThrow();
-        expect(() => placeCaretAtColumn(el, 'last', 0)).not.toThrow();
+        expect(() => placeCaretAtColumn(el, { edge: 'first', column: 0 })).not.toThrow();
+        expect(() => placeCaretAtColumn(el, { edge: 'last', column: 0 })).not.toThrow();
         expect(el.selectionStart).toBe(0);
+    });
+
+    // ── { line; column } interior-line hint (§2 caret-aware nest moves) ──────────
+
+    it('places caret on an interior logical line at the given column', () => {
+        // 'aa\nbb\ncc': line 1 ("bb") starts at offset 3 → col 1 → offset 4
+        const el = ta('aa\nbb\ncc', 0);
+        placeCaretAtColumn(el, { line: 1, column: 1 });
+        expect(el.selectionStart).toBe(4);
+        expect(el.selectionEnd).toBe(4);
+    });
+
+    it('places caret on the third logical line (line 2)', () => {
+        // 'aa\nbb\ncc': line 2 ("cc") starts at offset 6 → col 2 → offset 8
+        const el = ta('aa\nbb\ncc', 0);
+        placeCaretAtColumn(el, { line: 2, column: 2 });
+        expect(el.selectionStart).toBe(8);
+    });
+
+    it('clamps the column to the interior line length', () => {
+        // line 1 ("bb") length 2; column 99 → offset 3 + 2 = 5
+        const el = ta('aa\nbb\ncc', 0);
+        placeCaretAtColumn(el, { line: 1, column: 99 });
+        expect(el.selectionStart).toBe(5);
+    });
+
+    it('clamps the line index past the last line (no overflow)', () => {
+        // line 99 → clamps to last line ("cc", offset 6); column 0 → offset 6
+        const el = ta('aa\nbb\ncc', 0);
+        placeCaretAtColumn(el, { line: 99, column: 0 });
+        expect(el.selectionStart).toBe(6);
+    });
+
+    it('line 0 interior hint matches the first-edge hint', () => {
+        const el = ta('aa\nbb\ncc', 0);
+        placeCaretAtColumn(el, { line: 0, column: 1 });
+        expect(el.selectionStart).toBe(1);
     });
 });
 
@@ -428,5 +467,91 @@ describe('visual-line functions are mockable (vi.spyOn)', () => {
         expect(result).toBe(true);
         expect(spy).toHaveBeenCalledOnce();
         spy.mockRestore();
+    });
+});
+
+// ── C. prefixWidth (§2 caret-aware nest: bidirectional ancestor-prefix width) ──
+//
+// `prefixWidth(sourceLine, surfaceR0, content, map, cleanBuffer)` returns how many
+// leading characters (the ancestor `> `/indent prefix) the clean nesting buffer
+// strips from the FULL source line, so the §2 caret math can convert between
+// buffer columns (textarea-native) and source columns:
+//   Cs           = currentBufferCol + prefixWidth(current, Ls, …)   (read)
+//   destBufferCol = Cs            − prefixWidth(dest,    Ls, …)      (place)
+//
+// Column space is UTF-16 (matches getLogicalColumn / placeCaretAtColumn). Byte
+// offsets only feed sliceUtf8 / the line map. (Reflection #19.)
+describe('prefixWidth', () => {
+    it('returns 0 for a verbatim parent (cleanBuffer undefined)', () => {
+        // A top-level surface has no stripped buffer → the clean line IS the source
+        // line → no prefix.
+        const content = 'plain text\n';
+        const map = buildByteLineMap(content);
+        expect(prefixWidth(0, 0, content, map, undefined)).toBe(0);
+    });
+
+    it('measures a blockquote `> ` prefix (2 chars) on every line', () => {
+        const content = '> hello\n> world\n';
+        const map = buildByteLineMap(content);
+        const clean = 'hello\nworld'; // stripped buffer
+        expect(prefixWidth(0, 0, content, map, clean)).toBe(2);
+        expect(prefixWidth(1, 0, content, map, clean)).toBe(2);
+    });
+
+    it('measures a list indent prefix relative to a non-zero surface start line', () => {
+        // The real 3-level fixture's level-1 list surface [20,69] spans source
+        // lines 2–4. Its clean buffer strips the 4-space base indent off each line.
+        const content =
+            '* another\n* hello\n    * sub-item\n        * sub-sub-item\n    * nother\n';
+        const map = buildByteLineMap(content);
+        // map.lineOf(20) === 2, so bufferLine = sourceLine − 2.
+        const clean = '* sub-item\n    * sub-sub-item\n* nother';
+        expect(prefixWidth(2, 20, content, map, clean)).toBe(4); // "    * sub-item"
+        expect(prefixWidth(3, 20, content, map, clean)).toBe(4); // 8-space line, 4 stripped
+        expect(prefixWidth(4, 20, content, map, clean)).toBe(4); // "    * nother"
+    });
+
+    it('handles the last source line when content has NO trailing newline', () => {
+        // The fail-on-revert lever for the lineStart(L+1)==lineStart(L) edge: without
+        // slicing to end-of-content on the final line, fullT would be "" → guard
+        // fails → wrong (negative) width.
+        const content = '> hello\n> world'; // no trailing \n
+        const map = buildByteLineMap(content);
+        const clean = 'hello\nworld';
+        expect(prefixWidth(1, 0, content, map, clean)).toBe(2);
+    });
+
+    it('uses UTF-16 column units, not byte counts, for the width', () => {
+        // "é" is 2 UTF-8 bytes but 1 UTF-16 unit. The `> ` prefix is 2 columns
+        // regardless of the multibyte content after it.
+        const content = '> café\n';
+        const map = buildByteLineMap(content);
+        const clean = 'café';
+        expect(prefixWidth(0, 0, content, map, clean)).toBe(2);
+    });
+
+    it('warns and returns the best-effort length delta when the clean line is not a suffix (inline normalization)', () => {
+        // When a writer normalizes inline markup the clean line is no longer a
+        // suffix of the source line; there is no exact integer prefix. We warn and
+        // return the length delta; placeCaretAtColumn's column clamp absorbs any
+        // overflow (clamp-and-warn posture).
+        const content = '> *hi*\n';
+        const map = buildByteLineMap(content);
+        const clean = '_hi_'; // normalized emphasis marker — not a suffix of "> *hi*"
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            expect(prefixWidth(0, 0, content, map, clean)).toBe(2); // 6 − 4, best effort
+            expect(warn).toHaveBeenCalled();
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
+    it('returns 0 defensively when the buffer line index is out of range', () => {
+        const content = '> hello\n';
+        const map = buildByteLineMap(content);
+        const clean = 'hello';
+        // sourceLine 5 → bufferLine 5, but clean has 1 line → out of range → 0.
+        expect(prefixWidth(5, 0, content, map, clean)).toBe(0);
     });
 });
