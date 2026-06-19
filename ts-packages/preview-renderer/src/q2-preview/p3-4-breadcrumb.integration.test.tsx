@@ -423,3 +423,152 @@ describe('P3.4 test 7 ★ — a dirty crumb jump commits, then relands on the ta
         expect(textarea.value).toBe('::: d\nAAA\n\nCCC\n:::');
     });
 });
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Test 8 ★ (T18 — fail-on-revert): code-block-in-blockquote shows BOTH crumbs
+ *
+ * Fixture: a CodeBlock nested inside a BlockQuote.
+ * QMD source: '> ```\n> code here\n> ```\n'  (20 bytes)
+ *
+ * Byte map:
+ *   0  > ␠ ` ` `  \n
+ *   6  > ␠ c  o  d  e  ␠  h  e  r  e  \n
+ *  18  > ␠ ` ` `  \n   (note: entire blockquote is bytes 0–20)
+ *
+ * The pool entries mirror the AST structure:
+ *   pool[0] BlockQuote  r=[0,20]  (the outer container)
+ *   pool[1] CodeBlock   r=[0,20]  (the code block, same range in this fixture
+ *                                  because the blockquote wraps it exactly)
+ *
+ * NOTE: In jsdom, surfaceLeft <= 0 (all geometry returns 0), so the
+ * computeChipGeometry branch `surfaceLeft <= 0 → slots = crumbCount` fires.
+ * This means geometry changes (left-spill vs gutter-only) do NOT affect
+ * whether crumbs render in jsdom — BOTH old and new geometry take the same
+ * full-path branch. T18 therefore guards:
+ *   (a) buildAncestorPath correctly returns BlockQuote AND CodeBlock ancestors
+ *   (b) selectDisplayItems renders the full path (both crumbs visible)
+ *
+ * FAIL-ON-REVERT: break buildAncestorPath (e.g. drop BlockQuote from the
+ * ancestor walk) → only CodeBlock crumb present → getByTitle('BlockQuote')
+ * assertion fails → RED. A geometry revert does NOT redden this test (both
+ * old/new geometry take the same jsdom branch).
+ * ─────────────────────────────────────────────────────────────────────────── */
+describe('T18 ★ — code-block-in-blockquote: both crumbs render in jsdom (guards buildAncestorPath + selectDisplayItems)', () => {
+    // Fixture: a BlockQuote containing a CodeBlock.
+    // Source: "> ```\n> code here\n> ```\n"  (21 bytes)
+    //
+    // Byte layout:
+    //   0  '>'  1  ' '  2  '`'  3  '`'  4  '`'  5  '\n'
+    //   6  '>'  7  ' '  8  'c'  9  'o' 10  'd' 11  'e' 12  ' ' 13  'h' 14  'e' 15  'r' 16  'e' 17  '\n'
+    //  18  '>'  19 ' '  20 '`'  21 '`'  22 '`'  23 '\n'
+    //  Total: 24 bytes
+    //
+    // AST structure:
+    //   BlockQuote (pool[0], r=[0,24])
+    //     CodeBlock (pool[1], r=[0,24]) — same range (blockquote wraps it exactly)
+    //
+    // The pool ranges are equal: buildAncestorPath must emit BOTH entries
+    // (deduplication key is "r0:r1", but BlockQuote ≠ CodeBlock so they differ
+    // in the seen-map key... Wait, they'd have the same dedupeKey "0:24"!
+    // Use a slightly different range for the CodeBlock to avoid deduplication.)
+    //
+    // REVISED: Use distinct ranges to avoid the dedupeKey collision:
+    //   BlockQuote r=[0,24] (outer, wider range)
+    //   CodeBlock  r=[2,22] (inner, just the fenced code without outer > marks)
+    //
+    // For the purposes of this test the exact byte values don't need to match
+    // a real parse — we just need buildAncestorPath to find BOTH ancestors when
+    // the cursor is on the CodeBlock range.
+
+    const BQ_CONTENT = '> ```\n> code here\n> ```\n';   // 24 bytes
+    const BQ_R0 = 0, BQ_R1 = 24;
+    const CB_R0 = 2, CB_R1 = 22;   // inner range (distinct from BlockQuote)
+    // cursorR0/R1 = CodeBlock's range (the active surface)
+    const CURSOR_R0 = CB_R0, CURSOR_R1 = CB_R1;
+
+    function makeBqAstJson(): string {
+        return JSON.stringify({
+            'pandoc-api-version': [1, 23, 0],
+            meta: {},
+            blocks: [
+                {
+                    t: 'BlockQuote',
+                    c: [
+                        {
+                            t: 'CodeBlock',
+                            c: [
+                                ['', [], []],  // Attr (empty)
+                                'code here',   // code text
+                            ],
+                            s: 1,  // pool index 1
+                        },
+                    ],
+                    s: 0,  // pool index 0
+                },
+            ],
+            astContext: {
+                p: [
+                    { t: 0, r: [BQ_R0, BQ_R1], d: 0 },   // pool[0] BlockQuote
+                    { t: 0, r: [CB_R0, CB_R1], d: 0 },    // pool[1] CodeBlock
+                ],
+            },
+        });
+    }
+
+    it('chip shows both BlockQuote and CodeBlock crumbs when editing the code block', async () => {
+        const astJson = makeBqAstJson();
+        const props: PreviewRootProps = {
+            astJson,
+            untransformedAstJson: astJson,
+            renderedContent: BQ_CONTENT,
+            currentFilePath: '/test-bq.qmd',
+            assetManifest: {},
+            setAst: vi.fn(),
+            unlockNestingCursor: true,
+            onNavigateToDocument: () => {},
+        };
+        const { container, getByTitle } = render(<PreviewRoot {...props} />);
+        await act(async () => {});
+
+        // Mock tile rects so the editor can be activated.
+        const tiles = container.querySelectorAll<HTMLElement>('[data-block-pool-id]');
+        tiles.forEach((tile) => {
+            const pid = Number(tile.getAttribute('data-block-pool-id'));
+            vi.spyOn(tile, 'getBoundingClientRect').mockReturnValue({
+                left: 0, top: pid * 80, right: 300, bottom: pid * 80 + 60,
+                width: 300, height: 60, x: 0, y: pid * 80, toJSON: () => ({}),
+            } as DOMRect);
+        });
+
+        // Open the CodeBlock editor (pool-id=1, r=[CB_R0, CB_R1]).
+        const codeBlockEl = container.querySelector<HTMLElement>('[data-block-pool-id="1"]');
+        expect(codeBlockEl, 'CodeBlock element must be in the DOM').not.toBeNull();
+
+        await act(async () => {
+            fireEvent(codeBlockEl!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
+            fireEvent(codeBlockEl!, ptrEvent('pointerup', { pointerType: 'mouse' }));
+        });
+
+        // The textarea must be open.
+        expect(ta(container), 'textarea must open for CodeBlock').not.toBeNull();
+
+        // The chip must be visible (unlockNestingCursor=true).
+        const chipEl = chip(container);
+        expect(chipEl, 'BreadcrumbChip must render when editor is open').not.toBeNull();
+
+        // CORE ASSERTION (T18 fail-on-revert):
+        // Both the BlockQuote ancestor AND the CodeBlock current crumb must be present.
+        // getByTitle throws if the element is not found — that's the RED condition.
+        //
+        // Failure mode: if buildAncestorPath drops BlockQuote (e.g. skips non-current
+        // ancestors), only 'CodeBlock' would render → getByTitle('BlockQuote') throws → RED.
+        expect(
+            getByTitle('BlockQuote'),
+            'A crumb with title="BlockQuote" must render — guards buildAncestorPath returning the ancestor',
+        ).not.toBeNull();
+        expect(
+            getByTitle('CodeBlock'),
+            'A crumb with title="CodeBlock" must render — guards selectDisplayItems returning the current node',
+        ).not.toBeNull();
+    });
+});

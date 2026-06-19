@@ -596,6 +596,106 @@ describe('OrderedList round-trip', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// T11 (G10) — list tightness preserved across a SINGLE-item text-channel edit,
+// through the real WASM build.
+//
+// The whole-list round-trips above edit the entire list and don't exercise
+// tightness. This binds `preserve_leaf_variant` (crates/pampa/src/apply_node_edit.rs)
+// through the WASM pipeline: editing one tight item's leaf re-parses its bare
+// text standalone → a `Para`; without the coercion the spliced `Para` turns the
+// list LOOSE (a blank line appears between items / re-parsed leading block is
+// `Paragraph`). With the fix the item stays a `Plain` and the list stays tight.
+//
+// Named revert hunk (fail-on-revert): revert `preserve_leaf_variant` in
+// apply_node_edit.rs + rebuild WASM → the edited list loosens → these tests RED.
+// ---------------------------------------------------------------------------
+
+/** Render `content`, locate the first list of `listType` ('BulletList' |
+ *  'OrderedList'), edit ITEM 0's leading leaf block (its `Plain`) via
+ *  apply_node_edit with `newText`, and return both the resulting QMD and the
+ *  re-parsed output's leading-block types per item (the tightness signal). */
+async function editFirstListItemLeaf(
+    content: string,
+    listType: 'BulletList' | 'OrderedList',
+    newText: string,
+): Promise<{ qmd: string; leadTypes: string[]; itemCount: number }> {
+    vfsAddFile(PATH, content);
+    const result: RenderResponse = JSON.parse(
+        await wasm.render_page_in_project_with_attribution(PATH, undefined, null),
+    );
+    expect(result.success, result.error).toBe(true);
+
+    const a_u = JSON.parse(result.untransformed_ast_json!);
+    const pool: any[] = a_u.astContext.p;
+    const list = a_u.blocks.find((b: any) => b.t === listType);
+    expect(list, `untransformed AST must contain a ${listType}`).toBeTruthy();
+    // Items array: a BulletList's `c` IS the array of items; an OrderedList's
+    // `c` is `[ListAttributes, items]` (Pandoc shape). Each item is an array of
+    // blocks. Target the leading leaf of item 0 — NOT the whole list — so the
+    // text channel re-parses the bare item text standalone (the exact path that
+    // loosens without the fix).
+    const items: any[] = listType === 'OrderedList' ? list.c[1] : list.c;
+    const leaf = items[0][0];
+    expect(leaf.t, 'a tight item leads with a Plain leaf').toBe('Plain');
+    const destSiJson = JSON.stringify(pool[leaf.s]);
+
+    const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content(newText));
+    expect(subtree.success, `parse failed: ${subtree.error}`).toBe(true);
+
+    const editResult: AstResponse = JSON.parse(
+        wasm.apply_node_edit(content, result.untransformed_ast_json!, destSiJson, subtree.ast!),
+    );
+    expect(editResult.success, `apply_node_edit failed: ${editResult.error}`).toBe(true);
+
+    // Re-parse the output QMD and read the leading block type of each list item.
+    const reparsed: AstResponse = JSON.parse(wasm.parse_qmd_content(editResult.qmd!));
+    expect(reparsed.success, `re-parse failed: ${reparsed.error}`).toBe(true);
+    const rlist = JSON.parse(reparsed.ast!).blocks.find((b: any) => b.t === listType);
+    expect(rlist, `re-parsed output must still contain a ${listType}`).toBeTruthy();
+    const ritems: any[] = listType === 'OrderedList' ? rlist.c[1] : rlist.c;
+    const leadTypes: string[] = ritems.map((item: any[]) => item[0].t);
+    return { qmd: editResult.qmd!, leadTypes, itemCount: ritems.length };
+}
+
+describe('T11: single-item edit preserves bullet list tightness (real WASM)', () => {
+    it('editing one item keeps the bullet list tight (no loosening)', async () => {
+        const content = '---\nformat: q2-preview\n---\n\n- foo\n- bar\n';
+        const { qmd, leadTypes, itemCount } = await editFirstListItemLeaf(
+            content,
+            'BulletList',
+            'foo edited\n',
+        );
+
+        // Edited content present.
+        expect(qmd).toContain('foo edited');
+        // Still two items.
+        expect(itemCount).toBe(2);
+        // Tightness — both items' leading blocks stay `Plain` (loose would be
+        // `Paragraph`). This is the discriminator the revert reddens.
+        expect(leadTypes).toEqual(['Plain', 'Plain']);
+        // Belt-and-suspenders at the byte level: no blank line between items
+        // (a loose list inserts `\n\n`).
+        expect(qmd).not.toMatch(/foo edited\n\n/);
+    });
+});
+
+describe('T11: single-item edit preserves ordered list tightness (real WASM)', () => {
+    it('editing one item keeps the ordered list tight (no loosening)', async () => {
+        const content = '---\nformat: q2-preview\n---\n\n1. foo\n2. bar\n';
+        const { qmd, leadTypes, itemCount } = await editFirstListItemLeaf(
+            content,
+            'OrderedList',
+            'foo edited\n',
+        );
+
+        expect(qmd).toContain('foo edited');
+        expect(itemCount).toBe(2);
+        expect(leadTypes).toEqual(['Plain', 'Plain']);
+        expect(qmd).not.toMatch(/foo edited\n\n/);
+    });
+});
+
 describe('DefinitionList round-trip', () => {
     // postprocess.rs always fully rewrites DefinitionList (a desugared form of
     // Div(.definition-list)), so no byte-identity assertion on the edited block.

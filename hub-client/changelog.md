@@ -24,8 +24,13 @@ be in reverse chronological order (latest first).
 
 - [`ff31c8ea`](https://github.com/quarto-dev/q2/commits/ff31c8ea): RevealJS presentations now apply their configured theme through Quarto's SCSS theme system on reveal.js 6, instead of always rendering the white theme.
 - [`37061765`](https://github.com/quarto-dev/q2/commits/37061765): RevealJS preview now matches the render path's Quarto-1 defaults — slides top-align (no vertical centering), slide transitions are off by default, and the deck uses a 0.1 margin with linear navigation and edge controls.
+- [`24df47d1`](https://github.com/quarto-dev/q2/commits/24df47d1): Revert the G8 marker-aware list resolution — it hijacked every tight list-item click/hover to the parent list (a tight item's text is a bare node, so text clicks also report `e.target===<li>`), breaking per-item editing. Tight list items hover/click as items again.
+- [`04440c47`](https://github.com/quarto-dev/q2/commits/04440c47): Add Playwright e2e spec: T13(c) crumb jump relands collapsed (proven RED-on-revert). (The G8 marker spec from this commit was removed in 24df47d1; the G6/G7 settle-gate e2e was omitted — that timing-race guard is bound deterministically at the jsdom tier, so a browser test of it would pass vacuously.)
+- [`5e20b96e`](https://github.com/quarto-dev/q2/commits/5e20b96e): G4/G11/G12: bare modifier keys no longer trigger expand-on-edit; a second click inside an open editor now expands it; overflow-y is now 'auto' only when content genuinely clips (no scrolljack on expanded/fitting editors).
+
 ### 2026-06-16
 
+- [`63b463b6`](https://github.com/quarto-dev/q2/commits/63b463b6): Fix G3 ArrowDown on single-line tight list items: exclude paddingBottom from isOnLastVisualLine height comparison; add G1/G3 Playwright + jsdom tests (T18/T19/T21).
 - [`2efb0bde`](https://github.com/quarto-dev/q2/commits/2efb0bde): Fix dirty nest-in/out caret column to apply `prefixWidth` adjustment (Principle A), matching the clean path so the column lands at the same source position after a dirty round-trip.
 
 ### 2026-06-13

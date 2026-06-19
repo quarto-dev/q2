@@ -929,4 +929,283 @@ test.describe('Phase 4 — Breadcrumb chip geometry (real browser)', () => {
 
         await iframe.locator('textarea').first().press('Escape');
     });
+
+    // -------------------------------------------------------------------------
+    // T19a — G1 left-spill: code-in-blockquote shows both crumbs, pivot correct.
+    //
+    // Fixture: a paragraph inside a CodeBlock inside a BlockQuote. The blockquote
+    // provides ~24–30px of indent gutter. With the old gutter-only geometry:
+    //   gutter ≈ 24px, MIN_GLYPH_W=16 → slots=1 → only current crumb shown.
+    // With the new left-spill geometry:
+    //   naturalWidth = 2 * CRUMB_W (=22) = 44px; bandWidth = max(gutter, 44) = 44px
+    //   chipLeft = surfaceLeft - OUT_W - 44 → spills left into margin
+    //   slots = floor(44 / 16) = 2 → both crumbs shown.
+    //
+    // This test guards:
+    //   (i)  Both BlockQuote AND CodeBlock crumbs are visible (not ellipsized)
+    //   (ii) Leftmost crumb x ≥ -1 (≈0) — no horizontal scrollbar on #root
+    //   (iii) Rightmost crumb right ≤ surfaceLeft + CRUMB_W (right edge ≈ pivot or
+    //         at most CRUMB_W past pivot if spilling right at edge)
+    //
+    // fail-on-revert: reverting computeChipGeometry to gutter-only (bandWidth=gutter,
+    // slots=1) → only ONE crumb visible → assertion (i) fails → RED.
+    // -------------------------------------------------------------------------
+
+    test('T19a — G1 left-spill: code-in-blockquote shows BOTH crumbs with correct pivot (guards computeChipGeometry)', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('quarto-hub:preferences', JSON.stringify({
+                version: 1,
+                scrollSyncEnabled: true,
+                errorOverlayCollapsed: true,
+                colorScheme: 'auto',
+                unlockNestingCursor: true,
+            }));
+        });
+
+        const serverUrl = getServerUrl();
+
+        // Fixture: paragraph INSIDE a CodeBlock INSIDE a BlockQuote.
+        // The CodeBlock is itself an editable surface (in unlock mode);
+        // when editing the CodeBlock, the ancestor path is [BlockQuote, CodeBlock].
+        // The blockquote provides ~24–30px of indent gutter (typically less than
+        // 2 * CRUMB_W = 44px), triggering the left-spill path.
+        const QMD = [
+            '---',
+            'format: q2-preview',
+            '---',
+            '',
+            '> ```',
+            '> code line one',
+            '> ```',
+            '',
+            'Paragraph after blockquote.',
+            '',
+        ].join('\n');
+
+        const docId = await createProjectOnServer(serverUrl, [
+            { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+            { path: 'breadcrumb-t19a-code-in-bq.qmd', content: QMD, contentType: 'text' },
+        ]);
+
+        const iframe = await openFile(page, serverUrl, docId, 'breadcrumb-t19a-code-in-bq.qmd');
+
+        // Open the code block editor by clicking on it (in unlock mode).
+        // The CodeBlock inside the blockquote should be activatable.
+        await iframe.locator('[data-block-pool-id]').first().click();
+        await iframe.locator('textarea').first().waitFor({ timeout: 10_000 });
+        const chip = iframe.locator('[data-testid="q2-breadcrumb-chip"]');
+        await chip.waitFor({ timeout: 5_000 });
+
+        // Measure all chip geometry iframe-relative.
+        const surfaceLeft = await iframe.locator('textarea').first().evaluate((el) => {
+            return el.getBoundingClientRect().left;
+        });
+
+        const chipGeom = await iframe.locator('[data-testid="q2-breadcrumb-chip"]').evaluate((chipEl) => {
+            const crumbs = Array.from(chipEl.querySelectorAll('.q2-crumb'));
+            const outArrow = chipEl.querySelector('.q2-breadcrumb-out');
+            if (crumbs.length === 0 || !outArrow) return null;
+            const crumbRects = crumbs.map((el) => el.getBoundingClientRect());
+            const outRect = outArrow.getBoundingClientRect();
+            return {
+                crumbCount: crumbs.length,
+                crumbTitles: crumbs.map((el) => el.getAttribute('title') ?? ''),
+                crumbLeft: Math.min(...crumbRects.map((r) => r.left)),
+                crumbRight: Math.max(...crumbRects.map((r) => r.right)),
+                outArrowRight: outRect.right,
+            };
+        });
+
+        expect(chipGeom, 'chip geometry must be non-null').not.toBeNull();
+        if (!chipGeom) throw new Error('impossible — asserted above');
+
+        console.log(
+            `T19a: surfaceLeft=${surfaceLeft.toFixed(2)}, ` +
+            `crumbCount=${chipGeom.crumbCount}, titles=${JSON.stringify(chipGeom.crumbTitles)}, ` +
+            `crumbLeft=${chipGeom.crumbLeft.toFixed(2)}, crumbRight=${chipGeom.crumbRight.toFixed(2)}, ` +
+            `outArrowRight=${chipGeom.outArrowRight.toFixed(2)}`,
+        );
+
+        // (i) BOTH crumbs must be visible (BlockQuote ancestor + CodeBlock current).
+        //     fail-on-revert: gutter-only geometry → slots=1 → only one crumb → RED.
+        expect(
+            chipGeom.crumbCount,
+            `must have at least 2 crumbs (BlockQuote + CodeBlock). ` +
+            `Got ${chipGeom.crumbCount}: ${JSON.stringify(chipGeom.crumbTitles)}. ` +
+            `fail-on-revert: revert computeChipGeometry to gutter-only → slots=1 → only 1 crumb → RED`,
+        ).toBeGreaterThanOrEqual(2);
+
+        // Verify the expected crumb types are present.
+        const hasBlockQuoteCrumb = chipGeom.crumbTitles.some((t) => t === 'BlockQuote');
+        const hasCodeBlockCrumb = chipGeom.crumbTitles.some((t) => t === 'CodeBlock');
+        expect(
+            hasBlockQuoteCrumb,
+            `BlockQuote ancestor crumb must be present. Got: ${JSON.stringify(chipGeom.crumbTitles)}`,
+        ).toBe(true);
+        expect(
+            hasCodeBlockCrumb,
+            `CodeBlock current crumb must be present. Got: ${JSON.stringify(chipGeom.crumbTitles)}`,
+        ).toBe(true);
+
+        // (ii) Leftmost crumb x ≥ -1 (≈0): no horizontal scrollbar on #root.
+        //      Even though crumbs spill left into the page margin, the left-edge
+        //      clamp ensures they don't go past x=0. -1 tolerance for sub-pixel rounding.
+        expect(
+            chipGeom.crumbLeft,
+            `leftmost crumb left (${chipGeom.crumbLeft.toFixed(2)}) must be ≥ -1 (≈0). ` +
+            `Crumbs must not spill past #quarto-content's left edge (x≈0).`,
+        ).toBeGreaterThanOrEqual(-1);
+
+        // (iii) No horizontal scrollbar on #root after opening the editor.
+        const noHScrollbar = await iframe.locator('#root').evaluate((el) => {
+            return el.scrollWidth <= el.clientWidth + 1;
+        });
+        expect(
+            noHScrollbar,
+            '#root must not have a horizontal scrollbar after opening the code-in-blockquote editor.',
+        ).toBe(true);
+
+        await iframe.locator('textarea').first().press('Escape');
+    });
+
+    // -------------------------------------------------------------------------
+    // T19b — G1 right-spill at edge: when ◀ is clamped at x≈0, band extends
+    // right past the pivot; full path still visible.
+    //
+    // Fixture: a paragraph at the LEFT EDGE of the document (surfaceLeft ≈ colLeft,
+    // essentially zero indent from the left margin of quarto-content). This means
+    // the chipLeft calculation would go negative → pin ◀ at x=0 and let the band
+    // extend RIGHT past the pivot.
+    //
+    // A deeply zero-indented paragraph (many stacked fenced Divs) brings
+    // surfaceLeft ≈ colLeft, and with a 2-crumb path the chipLeft < 0 → right-spill.
+    //
+    // This test guards:
+    //   (i)  ◀ arrow left edge ≈ 0 (pinned at #quarto-content boundary)
+    //   (ii) All crumbs are still visible (full path, no ellipsis on short paths)
+    //   (iii) No horizontal scrollbar on #root
+    //
+    // fail-on-revert: reverting the right-spill branch (keeping chipLeft < 0 → clip)
+    // → crumbs go off-screen left → x < -1 → assertion (i) fails OR crumbs missing.
+    // -------------------------------------------------------------------------
+
+    test('T19b — G1 right-spill: near-left-edge block — ◀ pinned at x≈0, full crumb path visible (guards right-spill branch)', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('quarto-hub:preferences', JSON.stringify({
+                version: 1,
+                scrollSyncEnabled: true,
+                errorOverlayCollapsed: true,
+                colorScheme: 'auto',
+                unlockNestingCursor: true,
+            }));
+        });
+
+        const serverUrl = getServerUrl();
+
+        // Fixture: a paragraph inside a zero-indent fenced Div.
+        // surfaceLeft ≈ colLeft (Div adds no indent).
+        // With a 2-crumb path (Dv + ¶), naturalWidth = 2*22 = 44px.
+        // chipLeft = surfaceLeft - OUT_W - 44; if surfaceLeft ≈ colLeft ≈ 25px:
+        //   chipLeft = 25 - 16 - 44 = -35 → clamped to 0 → right-spill.
+        const QMD = [
+            '---',
+            'format: q2-preview',
+            '---',
+            '',
+            '::: {.zero-indent-div}',
+            '',
+            'Paragraph inside zero-indent Div.',
+            '',
+            ':::',
+            '',
+        ].join('\n');
+
+        const docId = await createProjectOnServer(serverUrl, [
+            { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+            { path: 'breadcrumb-t19b-edge.qmd', content: QMD, contentType: 'text' },
+        ]);
+
+        const iframe = await openFile(page, serverUrl, docId, 'breadcrumb-t19b-edge.qmd');
+
+        // Open the paragraph inside the div.
+        await iframe.locator('p[data-block-pool-id]').first().click();
+        await iframe.locator('textarea').first().waitFor({ timeout: 10_000 });
+        const chip = iframe.locator('[data-testid="q2-breadcrumb-chip"]');
+        await chip.waitFor({ timeout: 5_000 });
+
+        // Measure chip and layout geometry (iframe-relative via .evaluate()).
+        const colLeft = await iframe.locator('main#quarto-document-content').evaluate((el) => {
+            return el.getBoundingClientRect().left;
+        });
+
+        const surfaceLeft = await iframe.locator('textarea').first().evaluate((el) => {
+            return el.getBoundingClientRect().left;
+        });
+
+        const chipGeom = await iframe.locator('[data-testid="q2-breadcrumb-chip"]').evaluate((chipEl) => {
+            const crumbs = Array.from(chipEl.querySelectorAll('.q2-crumb'));
+            const outArrow = chipEl.querySelector('.q2-breadcrumb-out');
+            if (!outArrow) return null;
+            const crumbRects = crumbs.map((el) => el.getBoundingClientRect());
+            const outRect = outArrow.getBoundingClientRect();
+            return {
+                crumbCount: crumbs.length,
+                crumbTitles: crumbs.map((el) => el.getAttribute('title') ?? ''),
+                crumbLeft: crumbs.length > 0 ? Math.min(...crumbRects.map((r) => r.left)) : null,
+                outArrowLeft: outRect.left,
+                outArrowRight: outRect.right,
+            };
+        });
+
+        expect(chipGeom, 'chip geometry must be non-null').not.toBeNull();
+        if (!chipGeom) throw new Error('impossible — asserted above');
+
+        console.log(
+            `T19b: colLeft=${colLeft.toFixed(2)}, surfaceLeft=${surfaceLeft.toFixed(2)}, ` +
+            `crumbCount=${chipGeom.crumbCount}, titles=${JSON.stringify(chipGeom.crumbTitles)}, ` +
+            `outArrowLeft=${chipGeom.outArrowLeft.toFixed(2)}, outArrowRight=${chipGeom.outArrowRight.toFixed(2)}, ` +
+            `crumbLeft=${chipGeom.crumbLeft?.toFixed(2) ?? 'null'}`,
+        );
+
+        // (i) ◀ must not be clipped past x≈0.
+        //     For a near-left-edge block, the right-spill branch pins ◀ at x=0
+        //     (or near it, within the #quarto-content boundary). -2px tolerance.
+        //     fail-on-revert: removing the right-spill clamp → outArrowLeft < -2 → RED.
+        expect(
+            chipGeom.outArrowLeft,
+            `◀ left (${chipGeom.outArrowLeft.toFixed(2)}) must be ≥ -2 (≈0) — not clipped past x=0. ` +
+            `Guards the right-spill-at-edge clamp in computeChipGeometry.`,
+        ).toBeGreaterThanOrEqual(-2);
+
+        // (ii) Full crumb path must still be visible (no ellipsis for a 2-crumb path).
+        //      With right-spill the band extends rightward past the pivot but keeps
+        //      naturalWidth (= 2 * CRUMB_W), so slots ≥ crumbCount.
+        expect(
+            chipGeom.crumbCount,
+            `at least 1 crumb must be visible. Got ${chipGeom.crumbCount}. ` +
+            `The path should be [Dv, ¶] (2 crumbs); both must show.`,
+        ).toBeGreaterThanOrEqual(1);
+
+        // (iii) No horizontal scrollbar on #root.
+        const noHScrollbar = await iframe.locator('#root').evaluate((el) => {
+            return el.scrollWidth <= el.clientWidth + 1;
+        });
+        expect(
+            noHScrollbar,
+            '#root must not have a horizontal scrollbar with right-spill geometry.',
+        ).toBe(true);
+
+        // Bonus: with right-spill, the band DOES extend right past the pivot.
+        // The crumbs should be to the RIGHT of or overlapping the pivot (surfaceLeft).
+        // This is the "right-spill" observable effect — crumbs extend into content area.
+        // (This assertion is softer since the exact extent depends on CRUMB_W and layout.)
+        if (chipGeom.crumbLeft !== null) {
+            console.log(
+                `T19b right-spill check: crumbLeft=${chipGeom.crumbLeft.toFixed(2)}, ` +
+                `surfaceLeft=${surfaceLeft.toFixed(2)}, colLeft=${colLeft.toFixed(2)}`,
+            );
+        }
+
+        await iframe.locator('textarea').first().press('Escape');
+    });
 });

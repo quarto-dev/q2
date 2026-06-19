@@ -600,8 +600,12 @@ export function abbrevForSourceNode(node: BlockNode): string {
     case 'Table':
       return 'Tb';
     case 'Para':
-    case 'Plain':
       return '¶';
+    case 'Plain':
+      // Distinct 2-char glyph (not the ¶ pilcrow): Plain holds [Inline] WITHOUT
+      // paragraph semantics — a tight list item's leading block. Reads "• › Pl"
+      // (tight) vs "• › ¶" (loose), surfacing the otherwise-invisible distinction.
+      return 'Pl';
     default:
       // Fallback: first 2 characters of the type string
       return t.slice(0, 2);

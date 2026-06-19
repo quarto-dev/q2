@@ -627,3 +627,116 @@ describe('§7.h — self-heal remount preserves expanded state', () => {
         ).toBe(true);
     });
 });
+
+/* ─── Test T12: G4 — bare modifier keydowns do NOT expand ────────────────────
+ *
+ * A bare modifier key (Meta, Control, Alt, Shift) pressed alone should NOT
+ * expand the editor. Only the leading modifier alone precedes a chord; we want
+ * the chord's leave key (or the chord itself returning early) to handle the
+ * expand, not the bare modifier keydown that precedes it.
+ *
+ * Part (a): bare modifier keys → data-expanded stays absent.
+ * Part (b): a printable key + change → data-expanded PRESENT (guard not over-broad).
+ *
+ * FAIL-ON-REVERT (T12):
+ *   Remove `!isBareModifier` from the guard condition:
+ *   `if (!isLeaveKey && !expanded)` → bare Meta expands → (a) data-expanded present → RED.
+ *   Discriminator: (a) bare-modifier vs (b) printable — both states asserted, can't go vacuous.
+ */
+describe('T12 (G4) — bare modifier keydowns do NOT expand', () => {
+    it('(a) bare Meta/Control/Alt/Shift keydowns → data-expanded stays absent', async () => {
+        const { container } = mountPreviewRoot();
+        await act(async () => {});
+        mockTileRects(container);
+
+        const ta = await clickActivateTile(container, 0);
+        // Must open collapsed.
+        expect(ta.hasAttribute('data-expanded'), 'must open collapsed').toBe(false);
+
+        // Fire each bare modifier keydown — none should expand.
+        await act(async () => {
+            fireEvent.keyDown(ta, { key: 'Meta' });
+        });
+        expect(ta.hasAttribute('data-expanded'), 'bare Meta must not expand').toBe(false);
+
+        await act(async () => {
+            fireEvent.keyDown(ta, { key: 'Control' });
+        });
+        expect(ta.hasAttribute('data-expanded'), 'bare Control must not expand').toBe(false);
+
+        await act(async () => {
+            fireEvent.keyDown(ta, { key: 'Alt' });
+        });
+        expect(ta.hasAttribute('data-expanded'), 'bare Alt must not expand').toBe(false);
+
+        await act(async () => {
+            fireEvent.keyDown(ta, { key: 'Shift' });
+        });
+        expect(ta.hasAttribute('data-expanded'), 'bare Shift must not expand').toBe(false);
+    });
+
+    it('(b) a printable key + change → data-expanded PRESENT (guard not over-broad)', async () => {
+        const { container } = mountPreviewRoot();
+        await act(async () => {});
+        mockTileRects(container);
+
+        const ta = await clickActivateTile(container, 0);
+        expect(ta.hasAttribute('data-expanded'), 'must open collapsed').toBe(false);
+
+        // Fire a printable keydown + change → should expand.
+        await act(async () => {
+            fireEvent.keyDown(ta, { key: 'x' });
+            fireEvent.change(ta, { target: { value: 'x' } });
+        });
+        expect(ta.hasAttribute('data-expanded'), 'printable key must still expand (guard not over-broad)').toBe(true);
+    });
+});
+
+/* ─── Test T14: G11 — second click inside an open editor expands it ─────────
+ *
+ * A click INSIDE an already-open (but collapsed) editor should expand it.
+ * The ACTIVATING click cannot fire this because the textarea isn't mounted yet
+ * when the activating mousedown/mouseup are hit-tested (activation happens on
+ * pointerup, but setEditTarget routes through useState → the textarea mounts only
+ * on a later React render). A genuine second click (both mousedown + mouseup on
+ * the already-mounted textarea) fires the onClick handler.
+ *
+ * Part (a): click-activate collapsed → second click (fireEvent.click) → data-expanded present.
+ * Part (b): starting already-expanded → second click → still present (no toggle-off, idempotent).
+ *
+ * FAIL-ON-REVERT (T14):
+ *   Remove the textarea `onClick` block → click does not expand → data-expanded absent → RED.
+ */
+describe('T14 (G11) — second click inside open editor expands it', () => {
+    it('(a) click-activate collapsed → fireEvent.click(textarea) → data-expanded present', async () => {
+        const { container } = mountPreviewRoot();
+        await act(async () => {});
+        mockTileRects(container);
+
+        const ta = await clickActivateTile(container, 0);
+        // Must open collapsed after first (activating) click.
+        expect(ta.hasAttribute('data-expanded'), 'must open collapsed after activation click').toBe(false);
+
+        // A second click inside the textarea should expand it.
+        await act(async () => {
+            fireEvent.click(ta);
+        });
+        expect(ta.hasAttribute('data-expanded'), 'second click must expand the editor').toBe(true);
+    });
+
+    it('(b) starting expanded → second click → still expanded (idempotent, no toggle-off)', async () => {
+        const { container } = mountPreviewRoot();
+        await act(async () => {});
+        mockTileRects(container);
+
+        // Keyboard-activate → opens expanded.
+        const ta = await keyboardActivateTile(container, 0);
+        expect(ta.hasAttribute('data-expanded'), 'keyboard activate opens expanded').toBe(true);
+
+        // Second click on an already-expanded editor → should stay expanded (no toggle-off).
+        await act(async () => {
+            fireEvent.click(ta);
+        });
+        expect(ta.hasAttribute('data-expanded'), 'already-expanded: second click must not collapse').toBe(true);
+    });
+});

@@ -380,24 +380,27 @@ describe('P2.5a — arrow move (modified): async reland via real reland effect',
 });
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * 3. Modified move — byte-identical commit fallback (real 250ms timeout)
+ * 3. Modified move — settle-gate defers then re-render lands B.
  *
- * Dirty ArrowDown → commit → no content re-render (byte-identical) →
- * the reland useLayoutEffect has no new inputs to fire on →
- * the real 250ms timeout fallback in requestMove fires → B opens.
+ * Dirty ArrowDown → commit → G6+G7 settle-gate defers the 250ms backstop →
+ * re-render with updated content → reland layout effect fires → B opens.
  *
- * Fail-on-revert: if the setTimeout fallback in requestMove is removed, the
- * timeout never fires and the test fails on "B's editor open" assertion.
+ * "para1x" is dirty (≠ "para1"), same line count → delta=0, destLine=2.
+ * The re-render uses "para1x" content (reflecting the commit); the settle-gate
+ * passes because renderedContent now differs from preCommitContent.
+ *
+ * Fail-on-revert: if the armRelandBackstop() in requestMove dirty branch is
+ * removed, the 250ms backstop never arms and B never opens via timeout.
  * ──────────────────────────────────────────────────────────────────────────── */
 
-describe('P2.5a — modified move: byte-identical commit uses real 250ms timeout fallback', () => {
-    it('relands B via timeout when no re-render occurs (byte-identical commit)', async () => {
+describe('P2.5a — modified move: settle-gate defers then re-render lands B', () => {
+    it('gate defers stale timer, props-change effect lands B after re-render', async () => {
         vi.useFakeTimers();
         vi.spyOn(caretGeometry, 'isOnLastVisualLine').mockReturnValue(true);
         vi.spyOn(caretGeometry, 'isOnFirstVisualLine').mockReturnValue(false);
 
         const setAst = vi.fn();
-        const { container } = mountPreviewRoot({ setAst });
+        const { container, rerender } = mountPreviewRoot({ setAst });
 
         await act(async () => {});
         mockTileRects(container);
@@ -411,7 +414,7 @@ describe('P2.5a — modified move: byte-identical commit uses real 250ms timeout
         });
         const ta = container.querySelector<HTMLTextAreaElement>('textarea')!;
 
-        // ArrowDown — dirty move; byte-identical, so no re-render will come.
+        // ArrowDown — dirty move → commit + arm reland backstop.
         await act(async () => {
             fireEvent.keyDown(ta, { key: 'ArrowDown' });
         });
@@ -420,12 +423,121 @@ describe('P2.5a — modified move: byte-identical commit uses real 250ms timeout
         // Editor closed; B not yet open.
         expect(container.querySelector('textarea')).toBeNull();
 
-        // Advance past 250ms — real timeout fallback fires.
+        // Settle-gate defers: content hasn't changed yet, timer fires but gate blocks.
+        await act(async () => {
+            vi.advanceTimersByTime(300);
+        });
+        expect(container.querySelector('textarea')).toBeNull();
+
+        // Re-render with updated content reflecting the commit ("para1" → "para1x").
+        // Pool byte-ranges shift because A grew by 1 byte.
+        const updatedContent = CONTENT.replace('para1\n', 'para1x\n');
+        const updatedPool = [
+            { t: 0, r: [0, 6], d: 0 },
+            { t: 0, r: [6, 13], d: 0 },
+            { t: 0, r: [13, 20], d: 0 },
+            { t: 0, r: [20, 27], d: 0 },
+        ] as typeof POOL;
+        const updatedAstJson = makeAstJson(updatedPool, updatedContent);
+        await act(async () => {
+            rerender(
+                <PreviewRoot
+                    astJson={updatedAstJson}
+                    untransformedAstJson={updatedAstJson}
+                    renderedContent={updatedContent}
+                    currentFilePath="/test.qmd"
+                    assetManifest={{}}
+                    setAst={setAst}
+                    onNavigateToDocument={() => {}}
+                />,
+            );
+        });
+        mockTileRects(container);
+
+        // Props-change effect fires → B opens.
+        const textareaB = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(textareaB).not.toBeNull();
+        expect(textareaB!.value).toBe('para2');
+    });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * T3b: G6+G7 settle-gate defers dirty arrow-move until content advances.
+ *
+ * Verifies that `preCommitContentRef` is snapshotted in `requestMove`'s dirty
+ * branch and that the settle-gate defers the 250ms backstop timer when
+ * renderedContent hasn't changed.
+ *
+ * FAIL-ON-REVERT: Remove `preCommitContentRef.current = renderedContentRef.current`
+ * from `requestMove` dirty branch → gate sees null → timer lands immediately on
+ * stale content → "no premature land" assertion RED.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+describe('P2.5a T3b ★ — settle-gate defers dirty arrow-move until content advances', () => {
+    it('defers the 250ms backstop when content is stale, then lands after settled rerender', async () => {
+        vi.useFakeTimers();
+        vi.spyOn(caretGeometry, 'isOnLastVisualLine').mockReturnValue(true);
+        vi.spyOn(caretGeometry, 'isOnFirstVisualLine').mockReturnValue(false);
+
+        const setAst = vi.fn();
+        const { container, rerender } = mountPreviewRoot({ setAst });
+
+        await act(async () => {});
+        mockTileRects(container);
+
+        // Activate A.
+        const textarea = await activateTileA(container);
+
+        // Make dirty (1-line → 2-line so B shifts).
+        await act(async () => {
+            fireEvent.change(textarea, { target: { value: 'para1\nextra' } });
+        });
+        const ta = container.querySelector<HTMLTextAreaElement>('textarea')!;
+        expect(ta.value).toBe('para1\nextra');
+
+        // ArrowDown — dirty move → commit + arm reland backstop.
+        await act(async () => {
+            fireEvent.keyDown(ta, { key: 'ArrowDown' });
+        });
+
+        expect(setAst).toHaveBeenCalledOnce();
+        expect(container.querySelector('textarea')).toBeNull();
+
+        // Advance 250ms with STALE content (no re-render yet).
+        // Gate must defer: preCommitContent === current renderedContent.
         await act(async () => {
             vi.advanceTimersByTime(300);
         });
 
-        // B (pool[2], r0=12, "para2") should be open.
+        // No premature landing.
+        expect(container.querySelector('textarea')).toBeNull();
+
+        // Settled re-render.
+        const newPool = [
+            { t: 0, r: [0, 6], d: 0 },
+            { t: 0, r: [6, 18], d: 0 },   // para1\nextra (A expanded)
+            { t: 0, r: [18, 25], d: 0 },  // para2\n\n (B shifted to line 3)
+            { t: 0, r: [25, 32], d: 0 },
+        ] as typeof POOL;
+        const newContent = 'para0\npara1\nextra\npara2\n\npara3\n\n';
+        const newAstJson = makeAstJson(newPool, newContent);
+
+        await act(async () => {
+            rerender(
+                <PreviewRoot
+                    astJson={newAstJson}
+                    untransformedAstJson={newAstJson}
+                    renderedContent={newContent}
+                    currentFilePath="/test.qmd"
+                    assetManifest={{}}
+                    setAst={setAst}
+                    onNavigateToDocument={() => {}}
+                />,
+            );
+        });
+        mockTileRects(container);
+
+        // Reland layout effect fires → B opens.
         const textareaB = container.querySelector<HTMLTextAreaElement>('textarea');
         expect(textareaB).not.toBeNull();
         expect(textareaB!.value).toBe('para2');

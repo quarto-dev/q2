@@ -174,7 +174,7 @@ function EditTextarea({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // §7 expand-on-edit: auto-size the textarea when expanded.
+    // §7 expand-on-edit: auto-size the textarea when expanded + control overflow-y.
     //
     // When `expanded`, set height to 'auto' (to shrink-wrap) then read scrollHeight
     // and clamp to max(contentHeight, scrollHeight). This fires on every draft/
@@ -183,14 +183,27 @@ function EditTextarea({
     //
     // When NOT expanded, height stays at contentHeight (the inline style prop below).
     //
-    // jsdom returns scrollHeight === 0 always, so max(contentHeight, 0) === contentHeight
+    // G12 — overflow-y clip rule (runs for BOTH expanded and collapsed states):
+    // Set overflow-y to 'auto' only when the content is genuinely clipped
+    // (scrollHeight > clientHeight + SCROLLJACK_TOLERANCE_PX). Otherwise use
+    // 'hidden' so the wheel event passes through to the page (no scrolljack).
+    //   - Collapsed, spilling:  overflowY = 'auto'  (internal scroll wanted)
+    //   - Expanded or fitting:  overflowY = 'hidden' (wheel scrolls the page)
+    // The 6px tolerance absorbs sub-pixel rounding + small leading/padding deltas.
+    //
+    // jsdom returns scrollHeight === 0 and clientHeight === 0 always, so max(ch,0)===ch
     // in tests — safe and non-shrinking. Pixel-fit assertions are e2e-only.
+    const SCROLLJACK_TOLERANCE_PX = 6;
     useLayoutEffect(() => {
-        if (!expanded) return;
         const ta = taRef.current;
         if (!ta) return;
-        ta.style.height = 'auto';
-        ta.style.height = `${Math.max(contentHeight, ta.scrollHeight)}px`;
+        if (expanded) {
+            ta.style.height = 'auto';
+            ta.style.height = `${Math.max(contentHeight, ta.scrollHeight)}px`;
+        }
+        // G12: set overflow-y based on whether content is genuinely clipped.
+        const clips = ta.scrollHeight > ta.clientHeight + SCROLLJACK_TOLERANCE_PX;
+        ta.style.overflowY = clips ? 'auto' : 'hidden';
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [draft, expanded, contentHeight]);
 
@@ -315,6 +328,20 @@ function EditTextarea({
                 boxSizing: 'border-box',
                 resize: 'vertical',
             }}
+            onClick={() => {
+                // G11: a click inside the already-open editor (a "second click" after
+                // activation) signals intent to read/edit the full content — expand.
+                // Self-guarding: no-op when already expanded (idempotent).
+                // The ACTIVATING click cannot trigger this because the textarea is not
+                // yet mounted when the activating mousedown/mouseup are hit-tested
+                // (setEditTarget routes through useState; the textarea mounts on the
+                // next render). A genuine second click with both down+up on the
+                // mounted textarea fires here.
+                if (!expanded) {
+                    setExpanded(true);
+                    if (ctx.editExpandedRef) ctx.editExpandedRef.current = true;
+                }
+            }}
             onChange={(e) => {
                 const v = e.currentTarget.value;
                 setDraft(v);
@@ -374,7 +401,17 @@ function EditTextarea({
                 const isEsc = e.key === 'Escape';
                 const isLeaveKey = isCommitChord || isEsc || arrowOnEdge;
 
-                if (!isLeaveKey && !expanded) {
+                // G4: bare modifier keydowns (the leading keydown before a chord)
+                // must NOT expand the editor. Only bare modifier-alone keys are
+                // excluded — modifier+printable (e.g. ⌘V paste) is NOT excluded
+                // because those fall through to the native textarea and may need
+                // to expand after the change event follows.
+                // Note: each disjunct repeats `e.key ===`; `e.key === 'Shift' || 'Control'`
+                // is an always-truthy bug — do NOT write that shorthand.
+                const isBareModifier =
+                    e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta';
+
+                if (!isLeaveKey && !isBareModifier && !expanded) {
                     // In-surface keystroke (printable char, Backspace/Delete, Home/End,
                     // non-edge arrow, or any other key that stays in the surface).
                     // Expand the editor and mirror the state to the root ref so remounts

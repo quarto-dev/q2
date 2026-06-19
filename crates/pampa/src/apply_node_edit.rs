@@ -12,7 +12,7 @@
  */
 
 use crate::node_lookup::{ContainerStep, NodePath, lookup_block};
-use crate::pandoc::block::{Block, Blocks};
+use crate::pandoc::block::{Block, Blocks, Plain};
 use crate::readers::json::{read as json_read, read_completing_source_info};
 use crate::writers::incremental::incremental_write;
 use quarto_ast_reconcile::compute_reconciliation;
@@ -195,6 +195,7 @@ fn splice_in_blocks(
     replacement: Vec<Block>,
 ) {
     let Some((head, tail)) = steps.split_first() else {
+        let replacement = preserve_leaf_variant(current.get(leaf_idx), replacement);
         current.splice(leaf_idx..=leaf_idx, replacement);
         return;
     };
@@ -233,4 +234,32 @@ fn splice_in_blocks(
             splice_in_blocks(child, tail, leaf_idx, replacement);
         }
     }
+}
+
+/// Coerce a single-`Para` replacement back to `Plain` when the original block
+/// was `Plain`.
+///
+/// An inline-text edit (text channel) re-parses the bare text as a standalone
+/// paragraph → `Para`. If the original block was `Plain` (a tight list item),
+/// splicing in a `Para` turns the list loose. This function restores the
+/// original variant when:
+///   1. The original block was `Block::Plain`, AND
+///   2. The replacement is exactly one block, AND
+///   3. That block is `Block::Paragraph`.
+///
+/// The `len() == 1` guard is load-bearing: a multi-block replacement (e.g. two
+/// paragraphs from a structural edit) must pass through unchanged so the list
+/// legitimately loosens. See T10 in the test suite.
+fn preserve_leaf_variant(original: Option<&Block>, mut replacement: Vec<Block>) -> Vec<Block> {
+    if matches!(original, Some(Block::Plain(_)))
+        && replacement.len() == 1
+        && matches!(replacement[0], Block::Paragraph(_))
+        && let Block::Paragraph(para) = replacement.remove(0)
+    {
+        return vec![Block::Plain(Plain {
+            content: para.content,
+            source_info: para.source_info,
+        })];
+    }
+    replacement
 }

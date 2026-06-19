@@ -1291,3 +1291,136 @@ fn apply_node_edit_nested_sibling_fidelity() {
         "sibling item content must survive; got: {result:?}"
     );
 }
+
+// ── T8 ─────────────────────────────────────────────────────────────────────
+/// T8: editing a tight bullet-list item's text must keep the list tight.
+///
+/// Root cause (without the fix): the text channel re-parses the inline text
+/// standalone → a `Para`; `apply_node_edit` splices it unchanged; the writer
+/// renders a `Para`-leading list as loose (blank line between items).
+///
+/// With `preserve_leaf_variant`: a single-`Para` replacement whose original
+/// was `Plain` is coerced back to `Plain` → the list stays tight.
+///
+/// Discriminator: re-parsed `item[0][0]` and `item[1][0]` are `Block::Plain`
+/// (tight), not `Block::Paragraph` (loose).
+#[test]
+fn text_edit_preserves_bullet_list_tightness() {
+    let content = "- foo\n- bar\n";
+    let ast = parse_qmd(content);
+
+    let target_si = list_item_block(&ast, 0, 0, 0).source_info().clone();
+    let result = edit_nested_block(content, target_si, "foo edited\n");
+
+    let re_parsed = parse_qmd(&result);
+
+    let Block::BulletList(ref bl) = re_parsed.blocks[0] else {
+        panic!(
+            "re-parsed doc must contain a BulletList; got: {:?}",
+            re_parsed.blocks
+        );
+    };
+
+    assert_eq!(
+        bl.content.len(),
+        2,
+        "BulletList must still have 2 items; output: {result:?}"
+    );
+
+    assert!(
+        matches!(bl.content[0][0], Block::Plain(_)),
+        "item[0][0] must be Plain (tight list); got: {:?}; output: {result:?}",
+        bl.content[0][0]
+    );
+    assert!(
+        matches!(bl.content[1][0], Block::Plain(_)),
+        "item[1][0] must be Plain (tight list); got: {:?}; output: {result:?}",
+        bl.content[1][0]
+    );
+}
+
+// ── T9 ─────────────────────────────────────────────────────────────────────
+/// T9: same tightness preservation for an ordered list.
+///
+/// Same mechanism as T8; `Block::OrderedList` instead of `Block::BulletList`.
+#[test]
+fn text_edit_preserves_ordered_list_tightness() {
+    let content = "1. foo\n2. bar\n";
+    let ast = parse_qmd(content);
+
+    let target_si = list_item_block(&ast, 0, 0, 0).source_info().clone();
+    let result = edit_nested_block(content, target_si, "foo edited\n");
+
+    let re_parsed = parse_qmd(&result);
+
+    let Block::OrderedList(ref ol) = re_parsed.blocks[0] else {
+        panic!(
+            "re-parsed doc must contain an OrderedList; got: {:?}",
+            re_parsed.blocks
+        );
+    };
+
+    assert_eq!(
+        ol.content.len(),
+        2,
+        "OrderedList must still have 2 items; output: {result:?}"
+    );
+
+    assert!(
+        matches!(ol.content[0][0], Block::Plain(_)),
+        "item[0][0] must be Plain (tight list); got: {:?}; output: {result:?}",
+        ol.content[0][0]
+    );
+    assert!(
+        matches!(ol.content[1][0], Block::Plain(_)),
+        "item[1][0] must be Plain (tight list); got: {:?}; output: {result:?}",
+        ol.content[1][0]
+    );
+}
+
+// ── T10 ────────────────────────────────────────────────────────────────────
+/// T10: `preserve_leaf_variant` over-fire guard — multi-paragraph replacement
+/// must NOT be coerced to Plain; the list legitimately loosens.
+///
+/// The `replacement.len() == 1` guard in `preserve_leaf_variant` ensures that
+/// a multi-block edit (e.g. two paragraphs) passes through unchanged so the
+/// list loosens correctly.
+///
+/// Discriminator: dropping the `len() == 1` check would coerce the leading
+/// Para of a 2-block replacement to Plain, producing a broken AST.
+///
+/// This test asserts that the replacement with two paragraphs leads to the
+/// first item having `Block::Paragraph` as its leading block (loose) and
+/// at least 2 blocks in the item.
+#[test]
+fn preserve_leaf_variant_does_not_fire_on_multi_block_replacement() {
+    let content = "- foo\n- bar\n";
+    let ast = parse_qmd(content);
+
+    let target_si = list_item_block(&ast, 0, 0, 0).source_info().clone();
+    // Two paragraphs → multi-block replacement → must NOT coerce to Plain.
+    let result = edit_nested_block(content, target_si, "para one\n\npara two\n");
+
+    let re_parsed = parse_qmd(&result);
+
+    let Block::BulletList(ref bl) = re_parsed.blocks[0] else {
+        panic!(
+            "re-parsed doc must contain a BulletList; got: {:?}",
+            re_parsed.blocks
+        );
+    };
+
+    // The edited item must have at least 2 blocks (para one + para two).
+    assert!(
+        bl.content[0].len() >= 2,
+        "item[0] must have ≥ 2 blocks after multi-para edit; got: {:?}; output: {result:?}",
+        bl.content[0]
+    );
+
+    // The leading block must be Paragraph (loose), not Plain.
+    assert!(
+        matches!(bl.content[0][0], Block::Paragraph(_)),
+        "item[0][0] must be Paragraph (legitimately loose); got: {:?}; output: {result:?}",
+        bl.content[0][0]
+    );
+}

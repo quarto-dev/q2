@@ -123,6 +123,14 @@ export function useBlockEditHover(): {
 
     const findEditTarget = (e: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>) => {
         const target = e.target as Element;
+        // NOTE (G8 reverted 2026-06-17): a marker-aware branch that climbed a tight
+        // <li>/<dd> to its parent list was removed. It used `leaf === target` as the
+        // marker discriminator, but a tight item's text is a bare text node directly
+        // in the <li> (Plain renders as a fragment, Str as bare text), so a TEXT click
+        // ALSO reports e.target === <li>. The branch therefore hijacked every tight-item
+        // click/hover to the parent list, breaking per-item editing. Distinguishing
+        // marker from text needs the marker in the <ul> gutter (CSS) or a coordinate
+        // check — not this DOM-identity test. See the plan's G8 section.
         return target.closest('[data-block-pool-id]');
     };
 
@@ -330,6 +338,18 @@ export function useBlockEditHover(): {
                     touch-action: pan-y;         /* allow vertical scroll; suppress pinch-zoom/horizontal pan during hold */
                 }
                 [data-block-pool-id]:focus-visible { outline: 2px solid rgba(59, 130, 246, 0.8); }
+
+                /* G9: reland-gap blur — applied to the outgoing source cell while the
+                   settle-gate waits for the committed render. The settle-gate guarantees
+                   stable content during this interval, so the class survives the whole
+                   gap and animates cleanly. Cleared by clearRelandFade() in openEditTarget. */
+                @keyframes q2-reland-fade-in {
+                    from { filter: blur(0px); opacity: 1; }
+                    to   { filter: blur(1px); opacity: 0.85; }
+                }
+                .q2-reland-fade {
+                    animation: q2-reland-fade-in 0.1s ease-out forwards;
+                }
             `}</style>
             {/* Visually-hidden hint announced once when the host first
                 receives focus (referenced by aria-describedby). */}

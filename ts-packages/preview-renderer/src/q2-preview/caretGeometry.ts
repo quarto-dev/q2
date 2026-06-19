@@ -173,8 +173,14 @@ export function isOnLastVisualLine(ta: HTMLTextAreaElement): boolean {
         const markerOffsetTop = marker.offsetTop;
 
         // Step 2: measure full content height (entire value).
+        // Exclude paddingBottom from the height comparison: markerOffsetTop
+        // includes paddingTop but NOT paddingBottom, while scrollHeight includes
+        // BOTH. Subtracting paddingBottom makes the two measures comparable.
+        // Without this, a single-line textarea with bottom padding produces
+        //   markerOffsetTop + lineHeight < scrollHeight (short by paddingBottom)
+        // — a false negative that prevents ArrowDown from stepping off (G3).
         mirror.textContent = ta.value;
-        const fullHeight = mirror.scrollHeight;
+        const fullHeight = mirror.scrollHeight - parseFloat(cs.paddingBottom);
 
         // The caret is on the last row if there is less than one line-height
         // of content below the marker's row start. We add LAST_LINE_TOLERANCE

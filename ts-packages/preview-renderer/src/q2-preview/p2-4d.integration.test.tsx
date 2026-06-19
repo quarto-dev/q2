@@ -582,20 +582,22 @@ describe('P2.4d — dirty click-switch delta: off-by-one discriminator', () => {
     });
 });
 
-/* ─── 5. Byte-identical dirty click-switch — timeout fallback ────────────────
+/* ─── 5. Dirty click-switch — settle-gate then re-render ────────────────────
  *
  * Dirty click-switch from A (pool[1]) to B (pool[2]).
- * No re-render (byte-identical commit). Timeout fallback relands B.
+ * G6+G7 settle-gate: the 250ms backstop is deferred when renderedContent has
+ * not yet advanced past the pre-commit snapshot. The pending landing is
+ * consumed only after a re-render (with content reflecting the commit) arrives.
  *
- * Draft "para1x" is dirty (≠ "para1") and same line count as anchorSlice
- * → delta=0, destLine=L_B=2. executeLanding(down, destLine=2) in original
- * pool: first tile at line >= 2 = pool[2] (r0=12, "para2"). ✓
+ * Draft "para1x" is dirty (≠ "para1") and same line count → delta=0,
+ * destLine=L_B=2. executeLanding in the updated pool lands on pool[2]
+ * (r0=12, "para2"). ✓
  */
-describe('P2.4d — byte-identical dirty click-switch uses timeout fallback', () => {
-    it('relands B via timeout when commit is byte-identical (props unchanged)', async () => {
+describe('P2.4d — dirty click-switch: settle-gate defers then re-render lands B', () => {
+    it('gate defers stale timer, props-change effect lands B after re-render', async () => {
         vi.useFakeTimers();
         const setAst = vi.fn();
-        const { container } = mountPreviewRoot({ setAst });
+        const { container, rerender, content } = mountPreviewRoot({ setAst });
 
         await act(async () => {});
         mockTileRects(container);
@@ -636,15 +638,136 @@ describe('P2.4d — byte-identical dirty click-switch uses timeout fallback', ()
             fireEvent(tileB!, ptrEvent('pointerup', { pointerType: 'mouse' }));
         });
 
-        // No re-render (byte-identical). B not yet open.
+        // Settle-gate defers: content hasn't changed yet, timer fires but gate blocks.
+        await act(async () => {
+            vi.advanceTimersByTime(300);
+        });
         expect(container.querySelector('textarea')).toBeNull();
 
-        // Timeout fires after 250ms → timeout fallback relands B.
+        // Re-render with updated content reflecting the commit ("para1" → "para1x").
+        // Pool byte-ranges shift because A grew by 1 byte.
+        const updatedContent = content.replace('para1\n', 'para1x\n');
+        const updatedPool = [
+            { t: 0, r: [0, 6], d: 0 },     // para0\n
+            { t: 0, r: [6, 13], d: 0 },    // para1x\n (1 byte longer)
+            { t: 0, r: [13, 20], d: 0 },   // para2\n\n (shifted)
+            { t: 0, r: [20, 27], d: 0 },   // para3\n\n (shifted)
+        ];
+        const updatedAstJson = makeAstJson(updatedPool, updatedContent);
+        await act(async () => {
+            rerender(
+                <PreviewRoot
+                    astJson={updatedAstJson}
+                    untransformedAstJson={updatedAstJson}
+                    renderedContent={updatedContent}
+                    currentFilePath="/test.qmd"
+                    assetManifest={{}}
+                    setAst={setAst}
+                    onNavigateToDocument={() => {}}
+                />,
+            );
+        });
+        mockTileRects(container);
+
+        // Props-change effect fires → B opens.
+        const textareaB = container.querySelector('textarea');
+        expect(textareaB).not.toBeNull();
+        expect(textareaB!.value).toBe('para2');
+    });
+});
+
+/* ─── T3a: G6+G7 settle-gate defers dirty click-switch until content advances ──
+ *
+ * Verifies that `preCommitContentRef` is snapshotted in `handleClickSwitchBlur`
+ * and that the settle-gate in `executeLanding` defers the 250ms backstop timer
+ * when renderedContent hasn't changed.
+ *
+ * FAIL-ON-REVERT: Remove `preCommitContentRef.current = renderedContentRef.current`
+ * from `handleClickSwitchBlur` → gate sees null → lands immediately on stale timer
+ * → premature textarea opens after advanceTimersByTime → "no premature land" assertion RED.
+ */
+describe('P2.4d T3a ★ — settle-gate defers dirty click-switch until content advances', () => {
+    it('defers the 250ms backstop when content is stale, then lands after settled rerender', async () => {
+        vi.useFakeTimers();
+        const setAst = vi.fn();
+        const { container, rerender } = mountPreviewRoot({ setAst });
+
+        await act(async () => {});
+        mockTileRects(container);
+
+        // Activate A (pool[1]).
+        const tileA = container.querySelector<HTMLElement>('[data-block-pool-id="1"]');
+        expect(tileA).not.toBeNull();
+        await act(async () => {
+            fireEvent(tileA!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
+            fireEvent(tileA!, ptrEvent('pointerup', { pointerType: 'mouse' }));
+        });
+
+        let textarea = container.querySelector('textarea')!;
+        expect(textarea).not.toBeNull();
+        expect(textarea!.value).toBe('para1');
+
+        // Dirty A (multi-line so B shifts post-commit).
+        await act(async () => {
+            fireEvent.change(textarea!, { target: { value: 'para1\nextra' } });
+        });
+        textarea = container.querySelector('textarea')!;
+
+        // pointerdown on B.
+        const tileB = container.querySelector<HTMLElement>('[data-block-pool-id="2"]');
+        expect(tileB).not.toBeNull();
+        await act(async () => {
+            fireEvent(tileB!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
+        });
+
+        // blur → dirty click-switch: commits A, stashes pendingLanding for B.
+        await act(async () => {
+            fireEvent.blur(textarea!);
+        });
+
+        expect(setAst).toHaveBeenCalledOnce();
+        expect(container.querySelector('textarea')).toBeNull();
+
+        // pointerup on B — suppressed.
+        await act(async () => {
+            fireEvent(tileB!, ptrEvent('pointerup', { pointerType: 'mouse' }));
+        });
+
+        // Advance 250ms with STALE content (no re-render yet).
+        // The settle-gate must defer: preCommitContentRef === renderedContentRef → return.
         await act(async () => {
             vi.advanceTimersByTime(300);
         });
 
-        // B (pool[2], r0=12, anchorSlice="para2") editor opens.
+        // No premature landing.
+        expect(container.querySelector('textarea')).toBeNull();
+
+        // Settled re-render: A expanded → B shifts.
+        const newPool = [
+            { t: 0, r: [0, 6], d: 0 },
+            { t: 0, r: [6, 18], d: 0 },   // para1\nextra
+            { t: 0, r: [18, 25], d: 0 },  // para2\n\n (B shifted)
+            { t: 0, r: [25, 32], d: 0 },
+        ] as typeof POOL;
+        const newContent = 'para0\npara1\nextra\npara2\n\npara3\n\n';
+        const newAstJson = makeAstJson(newPool, newContent);
+
+        await act(async () => {
+            rerender(
+                <PreviewRoot
+                    astJson={newAstJson}
+                    untransformedAstJson={newAstJson}
+                    renderedContent={newContent}
+                    currentFilePath="/test.qmd"
+                    assetManifest={{}}
+                    setAst={setAst}
+                    onNavigateToDocument={() => {}}
+                />,
+            );
+        });
+        mockTileRects(container);
+
+        // Reland layout effect fires → B opens.
         const textareaB = container.querySelector('textarea');
         expect(textareaB).not.toBeNull();
         expect(textareaB!.value).toBe('para2');

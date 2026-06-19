@@ -887,4 +887,170 @@ test.describe('P2.5b — Block navigation & locked resolution (real browser)', (
             expect(val).toContain('Next tile.');
         }).toPass({ timeout: 8000 });
     });
+
+    // ── T21. G3 — Single-line block with paddingBottom: ArrowDown steps off ───
+    //
+    // G3 root cause: isOnLastVisualLine compared markerOffsetTop + lineHeightPx
+    // against mirror.scrollHeight, which includes BOTH paddingTop AND paddingBottom.
+    // markerOffsetTop only includes paddingTop, so the comparison was short by
+    // paddingBottom — a false negative for any block with bottom padding.
+    //
+    // Fix: subtract cs.paddingBottom from scrollHeight before comparing.
+    //
+    // Tight list item surfaces (in unlock mode) have paddingTop + paddingBottom and
+    // are the canonical G3 reproduction case. A loose list item paragraph is also
+    // tested here (b) to confirm the fix applies broadly.
+    //
+    // Test (a): single-line tight list item → ArrowDown ACTIVATES next surface.
+    // Test (b): multi-line block → ArrowDown moves within (does NOT step off on
+    //           the first visual row). This proves we didn't over-correct.
+    //
+    // fail-on-revert: reverting to `= mirror.scrollHeight` (removing paddingBottom
+    // subtraction) makes isOnLastVisualLine return FALSE for single-line padded
+    // blocks → ArrowDown is eaten (no hop) → (a) fails.
+
+    test('T21a — G3: single-line tight list item — ArrowDown steps off to next surface (guards paddingBottom fix)', async ({ page }) => {
+        // Enable unlock mode so tight list item Plain nodes are surfaced individually.
+        await page.addInitScript(() => {
+            localStorage.setItem('quarto-hub:preferences', JSON.stringify({
+                version: 1,
+                scrollSyncEnabled: true,
+                errorOverlayCollapsed: true,
+                colorScheme: 'auto',
+                unlockNestingCursor: true,
+            }));
+        });
+
+        const serverUrl = getServerUrl();
+        // Tight list (no blank lines between items) → each item is a Plain node.
+        // Each item is a single-line block with non-trivial paddingBottom.
+        const QMD = [
+            '---',
+            'format: q2-preview',
+            '---',
+            '',
+            '- Item one',
+            '- Item two',
+            '- Item three',
+            '',
+            'Paragraph after list.',
+            '',
+        ].join('\n');
+        const docId = await createProjectOnServer(serverUrl, [
+            { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+            { path: 'tight-list-arrowdown.qmd', content: QMD, contentType: 'text' },
+        ]);
+
+        const iframe = await openFile(page, serverUrl, docId, 'tight-list-arrowdown.qmd');
+        await expect(iframe.locator('text=Item one')).toBeVisible();
+
+        // Click the first list item to open its editor. In unlock mode the individual
+        // Plain surface is activated (single-line block with paddingBottom).
+        await iframe.locator('li').first().click();
+        const ta = iframe.locator('textarea').first();
+        await ta.waitFor({ timeout: 5000 });
+
+        // Verify the textarea contains the first item's text.
+        const firstVal = await ta.evaluate((el: HTMLTextAreaElement) => el.value);
+        expect(firstVal, 'first tight list item editor must contain "Item one"').toContain('Item one');
+
+        // Verify this IS a single-line block (for diagnostic purposes).
+        const singleLineGeo = await ta.evaluate((el: HTMLTextAreaElement) => {
+            // Quick check: value has no newlines → definitely single-line.
+            return { isSingleLine: !el.value.includes('\n'), value: el.value };
+        });
+        console.log('T21a: single-line check:', JSON.stringify(singleLineGeo));
+        expect(singleLineGeo.isSingleLine, 'tight list item must be single-line').toBe(true);
+
+        // Move caret to end.
+        await ta.evaluate((el: HTMLTextAreaElement) => {
+            el.selectionStart = el.selectionEnd = el.value.length;
+            el.focus();
+        });
+
+        // Diagnose: measure the geometry to confirm the fix is in effect.
+        const geo = await measureLastVisualLine(iframe);
+        console.log('T21a: isOnLastVisualLine geometry for single-line tight list item:', JSON.stringify(geo));
+
+        // With the paddingBottom fix, isLastLine MUST be true for a single-line block.
+        // fail-on-revert: remove paddingBottom subtraction → this becomes false → assertion fails.
+        expect(
+            geo.isLastLine,
+            `isOnLastVisualLine must be true for a single-line block at end. ` +
+            `geometry: markerOffsetTop=${geo.markerOffsetTop}, lineHeightPx=${geo.lineHeightPx}, fullHeight=${geo.fullHeight}. ` +
+            `fail-on-revert: restoring scrollHeight without paddingBottom subtraction → false → RED`,
+        ).toBe(true);
+
+        // Press ArrowDown — must step off to the NEXT surface (item two).
+        await ta.press('ArrowDown');
+
+        // The next surface (Item two) should now be open.
+        await expect(async () => {
+            const ta2 = iframe.locator('textarea').first();
+            await ta2.waitFor({ timeout: 5000 });
+            const val = await ta2.evaluate((el: HTMLTextAreaElement) => el.value);
+            expect(val, 'ArrowDown must step off to next item').toContain('Item two');
+        }).toPass({ timeout: 8000 });
+    });
+
+    test('T21b — G3 non-regression: multi-line block — ArrowDown on non-last row does NOT step off', async ({ page }) => {
+        // This test proves that the paddingBottom fix does NOT cause a false positive
+        // (i.e., it doesn't make multi-line blocks step off prematurely).
+        // A multi-line paragraph's caret on the FIRST visual row must still return
+        // isOnLastVisualLine=false, so ArrowDown moves within rather than stepping off.
+        //
+        // This mirrors the existing soft-wrap stay-in test but is explicitly tied to
+        // the G3 fix: if the paddingBottom subtraction were applied incorrectly (too
+        // aggressively), it could cause false positives on multi-line blocks.
+
+        const serverUrl = getServerUrl();
+        const LONG_TEXT =
+            'This is a very long paragraph that is intentionally long enough to soft-wrap ' +
+            'across multiple visual rows in the browser viewport at typical zoom levels. ' +
+            'It keeps going and going to ensure the wrap and stays in the editor.';
+        const QMD = [
+            '---',
+            'format: q2-preview',
+            '---',
+            '',
+            LONG_TEXT,
+            '',
+            'Next tile after long.',
+            '',
+        ].join('\n');
+        const docId = await createProjectOnServer(serverUrl, [
+            { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+            { path: 'multi-line-stay-in-t21b.qmd', content: QMD, contentType: 'text' },
+        ]);
+
+        const iframe = await openFile(page, serverUrl, docId, 'multi-line-stay-in-t21b.qmd');
+        await expect(iframe.locator('text=Next tile after long.')).toBeVisible();
+
+        // Open the long paragraph.
+        await iframe.locator('p[data-block-pool-id]').first().click();
+        const ta = iframe.locator('textarea').first();
+        await ta.waitFor({ timeout: 5000 });
+
+        // Place caret at position 0 — first visual row of a multi-line block.
+        await ta.evaluate((el: HTMLTextAreaElement) => {
+            el.selectionStart = el.selectionEnd = 0;
+            el.focus();
+        });
+
+        // Verify we are NOT on the last visual line at position 0.
+        const geo = await measureLastVisualLine(iframe);
+        console.log('T21b: geometry at pos 0 of multi-line para:', JSON.stringify(geo));
+        expect(
+            geo.isLastLine,
+            'caret at pos 0 of multi-line content must NOT be on last visual line — non-regression guard',
+        ).toBe(false);
+
+        // Press ArrowDown — must stay within the textarea (move within, not step off).
+        await ta.press('ArrowDown');
+
+        // The textarea must still be visible (no hop to the next tile).
+        await expect(ta).toBeVisible();
+        const val = await ta.evaluate((el: HTMLTextAreaElement) => el.value);
+        expect(val, 'multi-line textarea must stay open after ArrowDown on non-last visual row').toContain('very long paragraph');
+    });
 });

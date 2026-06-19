@@ -226,6 +226,10 @@ function walkForNoteNumbers(ast: PandocAST): WeakMap<NoteInline, number> {
  * `<Ast registry={mergedPreviewRegistry}>` inside `PreviewContext.Provider`
  * so all descendant blocks can read editing state and callbacks.
  */
+
+/** G6+G7: gate time for the reland backstop timer (ms). */
+const RELAND_BACKSTOP_MS = 250;
+
 export function PreviewRoot(props: PreviewRootProps) {
     const [editTarget, setEditTargetRaw] = useState<{
         anchorR0: number;
@@ -245,6 +249,10 @@ export function PreviewRoot(props: PreviewRootProps) {
     //   - Remounts read the correct value (PRESERVED).
     //   - Hops see false (RESET on every new open, not left stale from a prior expand).
     const editExpandedRef = useRef<boolean>(false);
+    // G9: records the `anchorR0` of the source cell at every dirty-commit site.
+    // The editor-close useLayoutEffect reads this to add `q2-reland-fade` to that
+    // cell's DOM element during the reland gap.
+    const fadeSourceR0Ref = useRef<number | null>(null);
     // Ref pointing to the inner wrapper div of the currently active edit
     // region (set by renderMeasuredEdit in dispatchers.tsx). Used by
     // useBlockEditHover's onPointerUp to suppress the parent-climb bug:
@@ -284,6 +292,9 @@ export function PreviewRoot(props: PreviewRootProps) {
     // renderedContent ref: used by the P2.4b timeout fallback to read the latest
     // content without a stale closure over props.renderedContent.
     const renderedContentRef = useRef<string>(props.renderedContent ?? '');
+    // G6+G7 settle-gate: stash the pre-commit renderedContent so executeLanding
+    // can detect when the render hasn't yet reflected the commit.
+    const preCommitContentRef = useRef<string | null>(null);
     // P3.3 §3b: sourceIndexRef / nestedEditBuffersRef — stable refs so
     // requestNestingMove (a useCallback(fn, [])) can read the latest values.
     const sourceIndexRef = useRef<Map<string, { reachabilityClass: string }> | null | undefined>(null);
@@ -413,6 +424,19 @@ export function PreviewRoot(props: PreviewRootProps) {
     setAstRef.current = props.setAst;
 
     /**
+     * G9: remove the `q2-reland-fade` class from all elements that have it.
+     * Called at the top of `openEditTarget` (destination editor opens) and in
+     * `cancelPendingLand` (reland aborted — no destination opens).
+     * Declared before `openEditTarget` to avoid the temporal dead zone.
+     */
+    const clearRelandFade = useCallback(() => {
+        if (!previewHostRef.current) return;
+        previewHostRef.current.querySelectorAll('.q2-reland-fade').forEach((el) => {
+            (el as HTMLElement).classList.remove('q2-reland-fade');
+        });
+    }, []);
+
+    /**
      * Open (or re-open) the editor on a source range — the single canonical opener
      * shared by the three PreviewRoot-internal fresh-open / reland / nest-retarget
      * sites (executeLanding, requestMove's sync hop, applyNestingRetarget).
@@ -437,8 +461,16 @@ export function PreviewRoot(props: PreviewRootProps) {
             box: { measure: Element } | 'keep' | 'snapshot';
             caret?: CaretHint | null;
             leafAnchorR0?: number;
+            /** G5: when true, keep editExpandedRef as-is (carry expansion into the
+             *  new editor). Only nest moves pass this; crumb jumps, fresh clicks,
+             *  and reland hops do not. */
+            keepExpanded?: boolean;
         },
     ) => {
+        // G6+G7: clear the pre-commit snapshot on land — editor is now open on current content.
+        preCommitContentRef.current = null;
+        // G9: clear the fade class — the destination editor is about to open.
+        clearRelandFade();
         const et = editTargetRef.current;
         const content = renderedContentRef.current;
         const { anchorSlice, seededDraft } = seedForRange(range, content, nestedEditBuffersRef.current);
@@ -474,11 +506,11 @@ export function PreviewRoot(props: PreviewRootProps) {
         }
 
         pendingCaretRef.current = opts.caret ?? null;
-        // §7: hops / reland / nest-retarget always open collapsed — reset editExpandedRef
-        // to false so a hop landing right after a keyboard-expanded block reads false, not
-        // the stale true from the prior open. The activate() keyboard path writes
-        // editExpandedRef BEFORE calling setEditTarget, so it wins over this reset.
-        editExpandedRef.current = false;
+        // §7: hops / reland / nest-retarget open collapsed — reset editExpandedRef unless
+        // G5 keepExpanded is set (nest moves carry the source's expansion state). The
+        // activate() keyboard path writes editExpandedRef BEFORE calling setEditTarget,
+        // so it wins over this reset when keepExpanded is false.
+        if (!opts.keepExpanded) editExpandedRef.current = false;
         setEditTargetRaw({
             anchorR0: range.r0,
             anchorR1: range.r1,
@@ -488,7 +520,7 @@ export function PreviewRoot(props: PreviewRootProps) {
             seededDraft,
             leafAnchorR0: opts.leafAnchorR0 ?? range.r0,
         });
-    }, []);
+    }, [clearRelandFade]);
 
     /**
      * §2 Phase 0: the landing-resolution dispatcher. Given a `ResolverSpec`,
@@ -698,13 +730,14 @@ export function PreviewRoot(props: PreviewRootProps) {
     const openFromResolved = useCallback((
         r: { range: { r0: number; r1: number }; caret?: CaretHint; box: { measure: Element } | 'snapshot'; captureFrom?: Element },
         fallbackCaret: CaretHint | null,
+        keepExpanded?: boolean,
     ) => {
         if (r.box !== 'snapshot') {
             captureGeometry(r.box.measure, r.range);
         } else if (r.captureFrom) {
             captureGeometry(r.captureFrom, r.range);
         }
-        openEditTarget(r.range, { box: r.box, caret: r.caret ?? fallbackCaret });
+        openEditTarget(r.range, { box: r.box, caret: r.caret ?? fallbackCaret, keepExpanded });
     }, [captureGeometry, openEditTarget]);
 
     /**
@@ -736,12 +769,43 @@ export function PreviewRoot(props: PreviewRootProps) {
             return;
         }
 
+        // G6+G7 settle-gate: if we have a pre-commit snapshot and the render hasn't
+        // yet advanced past it, defer — the props-change layout effect will re-fire
+        // once the new content arrives.
+        if (preCommitContentRef.current !== null && renderedContentRef.current === preCommitContentRef.current) {
+            return; // not consumed — leave pendingLandingRef in place
+        }
+
         // intent:'open' (P2.4b move): resolve the destination and open its editor.
         const r = resolveLanding(pl.spec);
         if (!r) return; // leave the pending landing for the fallback timer / next render
         pendingLandingRef.current = null; // consumed
-        openFromResolved(r, pl.caret);
+        // G5: carry expansion only for nest moves (not crumb jumps, not outerByLine hops).
+        const carryExpanded = pl.spec.kind === 'nest';
+        openFromResolved(r, pl.caret, carryExpanded);
     }, [resolveLanding, openFromResolved]);
+
+    /**
+     * G6+G7: arm the reland backstop timer. Cancels any existing timer, then
+     * schedules a fallback that calls executeLanding if the pending landing
+     * hasn't been consumed by the props-change layout effect first.
+     *
+     * All four dirty-commit sites share this guard pattern.
+     */
+    const armRelandBackstop = useCallback(() => {
+        if (fallbackTimerRef.current !== null) clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = setTimeout(() => {
+            fallbackTimerRef.current = null;
+            const pl = pendingLandingRef.current;
+            if (!pl) return;
+            if (pl.fromFile !== currentFilePathRef.current) {
+                pendingLandingRef.current = null;
+                return;
+            }
+            executeLanding(pl, poolRef.current, renderedContentRef.current);
+        }, RELAND_BACKSTOP_MS);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [executeLanding]);
 
     /**
      * P2.4b reland layout effect.
@@ -762,6 +826,35 @@ export function PreviewRoot(props: PreviewRootProps) {
         executeLanding(pl, poolRef.current, renderedContentRef.current);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [props.astJson, props.renderedContent, props.untransformedAstJson]);
+
+    /**
+     * G9: apply the `q2-reland-fade` class to the source cell on the editor-close
+     * render. Fires whenever `editTarget` changes (keyed on the useState value).
+     * When `editTarget === null` and a pending landing is active, we are in the
+     * reland gap — find and fade the outgoing cell.
+     *
+     * IMPORTANT: scans ALL `[data-block-pool-id]` elements (not outerBlockForAnchorR0,
+     * which only scans outer blocks and misses a nested source — that was the first
+     * cut's bug). The pool entry at `data-block-pool-id` index is checked for
+     * `r[0] === fadeSourceR0Ref.current`.
+     */
+    useLayoutEffect(() => {
+        if (editTarget !== null) return; // editor open — no fade needed
+        if (!pendingLandingRef.current) return; // no reland pending — nothing to fade
+        const r0 = fadeSourceR0Ref.current;
+        if (r0 === null) return; // no source recorded (shouldn't happen, but guard)
+        if (!previewHostRef.current) return;
+
+        const pool = poolRef.current;
+        previewHostRef.current.querySelectorAll<HTMLElement>('[data-block-pool-id]').forEach((el) => {
+            const pid = Number(el.getAttribute('data-block-pool-id'));
+            const entry = pool[pid] as { r: [number, number] } | undefined;
+            if (entry?.r[0] === r0) {
+                el.classList.add('q2-reland-fade');
+            }
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editTarget]);
 
     /**
      * requestMove: called by EditTextarea's onKeyDown when a bare Arrow fires at
@@ -842,27 +935,16 @@ export function PreviewRoot(props: PreviewRootProps) {
                 destinationSourceInfoJson: dest,
                 newText: normalizeLineEndings(draft),
             };
+            // G6+G7: snapshot before commit so the settle-gate knows which render
+            // to wait for.
+            preCommitContentRef.current = renderedContentRef.current;
             setAstRef.current(payload as unknown as PandocAST);
             editDraftRef.current = null;
             setEditTargetRaw(null);
-
-            // Byte-identical fallback.
-            if (fallbackTimerRef.current !== null) {
-                clearTimeout(fallbackTimerRef.current);
-            }
-            fallbackTimerRef.current = setTimeout(() => {
-                fallbackTimerRef.current = null;
-                const pl = pendingLandingRef.current;
-                if (!pl) return;
-                if (pl.fromFile !== currentFilePathRef.current) {
-                    pendingLandingRef.current = null;
-                    return;
-                }
-                executeLanding(pl, poolRef.current, renderedContentRef.current);
-            }, 250);
+            armRelandBackstop();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [armRelandBackstop]);
 
     /**
      * P2.4b: cancel a pending land (if any).
@@ -870,11 +952,13 @@ export function PreviewRoot(props: PreviewRootProps) {
     const cancelPendingLand = useCallback(() => {
         pendingLandingRef.current = null;
         pendingCaretRef.current = null;
+        preCommitContentRef.current = null;
         if (fallbackTimerRef.current !== null) {
             clearTimeout(fallbackTimerRef.current);
             fallbackTimerRef.current = null;
         }
-    }, []);
+        clearRelandFade(); // G9: remove the fade class if the reland is cancelled.
+    }, [clearRelandFade]);
 
     /**
      * P2.4c: stash a plain-close focus landing (intent:'focus') and arm the
@@ -898,18 +982,9 @@ export function PreviewRoot(props: PreviewRootProps) {
         };
 
         // Arm timeout fallback.
-        fallbackTimerRef.current = setTimeout(() => {
-            fallbackTimerRef.current = null;
-            const pl = pendingLandingRef.current;
-            if (!pl) return;
-            if (pl.fromFile !== currentFilePathRef.current) {
-                pendingLandingRef.current = null;
-                return;
-            }
-            executeLanding(pl, poolRef.current, renderedContentRef.current);
-        }, 250);
+        armRelandBackstop();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [armRelandBackstop]);
 
     // ---------------------------------------------------------------------------
     // P2.4d: click-switch (pointerdown on a different outer block while editing)
@@ -989,19 +1064,6 @@ export function PreviewRoot(props: PreviewRootProps) {
             fromFile: currentFilePathRef.current,
         };
 
-        // Arm the byte-identical timeout fallback (same pattern as requestMove).
-        if (fallbackTimerRef.current !== null) clearTimeout(fallbackTimerRef.current);
-        fallbackTimerRef.current = setTimeout(() => {
-            fallbackTimerRef.current = null;
-            const pl = pendingLandingRef.current;
-            if (!pl) return;
-            if (pl.fromFile !== currentFilePathRef.current) {
-                pendingLandingRef.current = null;
-                return;
-            }
-            executeLanding(pl, poolRef.current, renderedContentRef.current);
-        }, 250);
-
         // Commit A (same wire format as requestMove's dirty path).
         // Use the LIVE identity from editTargetRef.current (via buildNestingCommitDestination)
         // rather than the per-render closure sourceInfoJson. At this point editTargetRef.current
@@ -1024,11 +1086,17 @@ export function PreviewRoot(props: PreviewRootProps) {
             destinationSourceInfoJson: destA,
             newText: normalizeLineEndings(draft),
         };
+        // G6+G7: snapshot before commit so the settle-gate knows which render
+        // to wait for.
+        preCommitContentRef.current = renderedContentRef.current;
         setAstRef.current(payload as unknown as PandocAST);
 
         // Close the editor WITHOUT a focus-restore (landing will open B).
         editDraftRef.current = null;
         setEditTargetRaw(null);
+
+        // Arm the byte-identical timeout fallback (same pattern as requestMove).
+        armRelandBackstop();
 
         // Mark dirty switch handled so onPointerUp skips activate(B).
         dirtySwitchHandledRef.current = true;
@@ -1036,7 +1104,7 @@ export function PreviewRoot(props: PreviewRootProps) {
 
         return true; // consumed — blur handler must not also call requestFocusRestore/commitIfDirty
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cancelPendingLand]);
+    }, [cancelPendingLand, armRelandBackstop]);
 
     /**
      * P2.4d: check and clear the dirty-switch-handled flag.
@@ -1072,7 +1140,7 @@ export function PreviewRoot(props: PreviewRootProps) {
      * sizing from the §1 geometry snapshot. No commit. The `caret` hint (computed
      * by the producer from the live caret) places the cursor in the destination.
      */
-    const applyNestingRetarget = useCallback((next: { r0: number; r1: number }, leafAnchorR0: number, caret: CaretHint | null) => {
+    const applyNestingRetarget = useCallback((next: { r0: number; r1: number }, leafAnchorR0: number, caret: CaretHint | null, keepExpanded?: boolean) => {
         const et = editTargetRef.current;
         if (!et) return;
         // §1: size the destination from the geometry snapshot captured at the
@@ -1080,7 +1148,8 @@ export function PreviewRoot(props: PreviewRootProps) {
         // textarea — so even nest-out's parent is present-but-distorted). openEditTarget
         // resolves 'snapshot' to the block-relative key and falls back to
         // live-measure-if-rendered-else-keep on a miss.
-        openEditTarget({ r0: next.r0, r1: next.r1 }, { box: 'snapshot', caret, leafAnchorR0 });
+        // G5: keepExpanded is true only for nest moves (passed from requestNestingMove).
+        openEditTarget({ r0: next.r0, r1: next.r1 }, { box: 'snapshot', caret, leafAnchorR0, keepExpanded });
     }, []);
 
     /**
@@ -1134,23 +1203,18 @@ export function PreviewRoot(props: PreviewRootProps) {
             destinationSourceInfoJson: dest,
             newText: normalizeLineEndings(draftSrc),
         };
+        // G6+G7: snapshot before commit so the settle-gate knows which render
+        // to wait for.
+        preCommitContentRef.current = renderedContentRef.current;
+        // G9: record the source cell's r0 so the editor-close layout effect can
+        // add `q2-reland-fade` to that element during the reland gap.
+        fadeSourceR0Ref.current = et.anchorR0;
         setAstRef.current(payload as unknown as PandocAST);
         editDraftRef.current = null;
         setEditTargetRaw(null);
-
-        if (fallbackTimerRef.current !== null) clearTimeout(fallbackTimerRef.current);
-        fallbackTimerRef.current = setTimeout(() => {
-            fallbackTimerRef.current = null;
-            const pl = pendingLandingRef.current;
-            if (!pl) return;
-            if (pl.fromFile !== currentFilePathRef.current) {
-                pendingLandingRef.current = null;
-                return;
-            }
-            executeLanding(pl, poolRef.current, renderedContentRef.current);
-        }, 250);
+        armRelandBackstop();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [executeLanding]);
+    }, [executeLanding, armRelandBackstop]);
 
     /**
      * §2: the unified clean-move caret hint — map the live caret's invariant
@@ -1211,7 +1275,8 @@ export function PreviewRoot(props: PreviewRootProps) {
             // Unified in/out caret placement (Reflection #20): map the invariant
             // source position (Ls,Cs) into the destination surface's buffer coords.
             const caret = cleanCaretHint(et.anchorR0, et.anchorR1, next.r0, next.r1, live, Ls, content, map);
-            applyNestingRetarget({ r0: next.r0, r1: next.r1 }, et.leafAnchorR0 ?? et.anchorR0, caret);
+            // G5: nest moves carry expansion; pass keepExpanded:true to applyNestingRetarget.
+            applyNestingRetarget({ r0: next.r0, r1: next.r1 }, et.leafAnchorR0 ?? et.anchorR0, caret, true);
             return;
         }
 

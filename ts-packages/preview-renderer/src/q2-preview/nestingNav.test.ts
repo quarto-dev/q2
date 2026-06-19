@@ -525,8 +525,8 @@ describe('abbrevForSourceNode', () => {
     expect(abbrevForSourceNode({ t: 'Para', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('¶');
   });
 
-  it('Plain → "¶"', () => {
-    expect(abbrevForSourceNode({ t: 'Plain', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('¶');
+  it('Plain → "Pl" (distinct from Para — surfaces tight vs loose list items)', () => {
+    expect(abbrevForSourceNode({ t: 'Plain', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('Pl');
   });
 
   it('unknown type "RawBlock" → first 2 chars "Ra"', () => {
