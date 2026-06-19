@@ -124,25 +124,34 @@ describe('P2.3a — dirty guard: blur without typing', () => {
         expect(ctx.commitTextEdit).toHaveBeenCalledOnce();
     });
 
-    it('does NOT call commitTextEdit when clearing to empty (empty→cancel, not empty→commit)', () => {
-        // Fix 1: clearing the textarea to "" must cancel (close editor), NOT commit
-        // an empty string that would delete the block.
+    it('DOES call commitTextEdit with empty string when clearing to empty (§6: empty→DELETE)', () => {
+        // §6 premise change: clearing a NON-EMPTY block's textarea to "" commits ''
+        // (delete-by-emptying) instead of cancelling. This is the three-way guard:
+        //   !normalized && !!baseline → DELETE (fall through to commit with '').
+        // The old comment "empty→cancel, not empty→commit" is now inverted.
         const ctx = buildCtx();
         const { container } = mountBlock(ctx);
         const ta = container.querySelector('textarea')!;
 
-        // Clear the textarea to empty
+        // Clear the textarea to empty.
         fireEvent.change(ta, { target: { value: '' } });
         fireEvent.blur(ta);
 
-        // Must NOT commit the empty string
-        expect(ctx.commitTextEdit).not.toHaveBeenCalled();
-        // Editor must close (cancel)
+        // §6: MUST commit with empty string (delete the block).
+        expect(ctx.commitTextEdit).toHaveBeenCalledOnce();
+        // The committed newText MUST be '' (Fix 1: delete branch commits '' explicitly).
+        expect(ctx.commitTextEdit).toHaveBeenCalledWith(
+            JSON.stringify(LF_RESOLVED.sourceEntry), '',
+        );
+        // After commit, editor closes via setEditTarget(null) — called from commitIfDirty.
         expect(ctx.setEditTarget).toHaveBeenCalledWith(null);
     });
 
-    it('does NOT call commitTextEdit when draft is whitespace-only (whitespace→cancel)', () => {
-        // Fix 1: whitespace-only draft (normalizes+trims to "") must also cancel.
+    it('DOES call commitTextEdit with empty string when draft is whitespace-only (§6: whitespace-only draft → DELETE, commits empty string)', () => {
+        // §6 premise change: whitespace-only draft normalizes+trims to ""; baseline
+        // is non-empty → DELETE commit (same three-way guard: !normalized && !!baseline).
+        // Fix 1: the delete branch commits '' explicitly, so even a whitespace-only
+        // draft ('   \n  ') results in newText==='' reaching commitTextEdit.
         const ctx = buildCtx();
         const { container } = mountBlock(ctx);
         const ta = container.querySelector('textarea')!;
@@ -150,7 +159,14 @@ describe('P2.3a — dirty guard: blur without typing', () => {
         fireEvent.change(ta, { target: { value: '   \n  ' } });
         fireEvent.blur(ta);
 
-        expect(ctx.commitTextEdit).not.toHaveBeenCalled();
+        // §6: MUST commit with empty string (whitespace-only draft → delete branch → '' committed).
+        expect(ctx.commitTextEdit).toHaveBeenCalledOnce();
+        // The committed newText MUST be '' (Fix 1: delete branch commits '' explicitly,
+        // NOT normalizeLineEndings('   \n  ') which would be whitespace).
+        expect(ctx.commitTextEdit).toHaveBeenCalledWith(
+            JSON.stringify(LF_RESOLVED.sourceEntry), '',
+        );
+        // After commit, editor closes via setEditTarget(null) — called from commitIfDirty.
         expect(ctx.setEditTarget).toHaveBeenCalledWith(null);
     });
 });

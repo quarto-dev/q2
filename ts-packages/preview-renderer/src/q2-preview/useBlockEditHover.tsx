@@ -61,7 +61,7 @@ export function useBlockEditHover(): {
         hoveredRef.current = el;
     };
 
-    const activate = useCallback((el: Element) => {
+    const activate = useCallback((el: Element, opts?: { keyboard?: boolean }) => {
         // P3.3: mode branch — unlocked uses the leaf (deepest pool-id),
         // locked uses resolveOuterBlock (collapses to outermost prefixing container).
         const outerBlock = ctx?.unlockNestingCursor
@@ -96,11 +96,19 @@ export function useBlockEditHover(): {
         // locked mode or for a flat block.
         ctx.captureGeometry?.(outerBlock, { r0: anchorR0, r1: anchorR1 });
 
+        // §7: keyboard activation (roving Enter/Space) opens already expanded; pointer/touch
+        // activation opens collapsed and expands on the first in-surface keystroke.
+        const expandOnOpen = opts?.keyboard === true;
+
         // Seed the draft ref BEFORE calling setEditTarget (the fresh-open site).
         // This is the single canonical place where the draft is seeded — setEditTarget
         // itself no longer reseeds, so a P2.3b self-heal re-anchor via setEditTarget
         // can preserve the in-flight draft without clobbering it.
         if (ctx.editDraftRef) ctx.editDraftRef.current = seededDraft;
+        // ORDER MATTERS: write editExpandedRef BEFORE setEditTarget (openEditTarget resets it to false for hops; this keyboard-activate write must win).
+        // §7: write editExpandedRef at EVERY open so remounts read the correct value
+        // and hops see false (reset) rather than stale true from a prior expand.
+        if (ctx.editExpandedRef) ctx.editExpandedRef.current = expandOnOpen;
         ctx.setEditTarget({
             anchorR0,
             anchorR1,
@@ -280,7 +288,9 @@ export function useBlockEditHover(): {
         }
         if ((e.key === 'Enter' || e.key === ' ') && hoveredRef.current) {
             e.preventDefault();
-            activate(hoveredRef.current);
+            // §7: keyboard activation → expandOnOpen = true (the roving Enter/Space
+            // IS the first in-surface interaction; the surface opens already expanded).
+            activate(hoveredRef.current, { keyboard: true });
         }
     }, [activate, ctx]);
 

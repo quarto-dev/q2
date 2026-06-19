@@ -101,6 +101,40 @@ delete, so a stale range matches nothing → genuine no-op (it cannot hit the sh
 only on genuine opens — 7.g/7.h hold as written. The one still-open item is §6 blur-delete undo
 forwarding (needs a real browser check; can't be settled statically).
 
+## Execution status (2026-06-16) — ALL SECTIONS IMPLEMENTED
+
+Executed via subagent-driven development (implementer + two-stage spec/quality review per task).
+All eight sections (§0–§7) are implemented and green at the jsdom/Rust tier:
+
+- **§5** test-only guard · **§3** Cause-1 (by-design, documenting tests) · **§4** dirty-column prefixWidth
+  · **§0** list-item surfaces (incl. the A4 dead-code wiring gap caught + fixed) · **§1** line-anchored
+  nav (locked behavior-preserving except wrap→clamp) · **§2** roving over the C1 partition · **§6**
+  delete-by-emptying (Rust round-trips + frontend, 6.r honestly accepted-untested) · **§7** expand-on-edit.
+- Suites green: **preview-renderer 441 unit / ~444 integration / typecheck clean**; **pampa node_edit
+  round-trips pass** (1 *pre-existing, unrelated* pampa failure: `test_fenced_div_multiline_child_excluded`).
+- Production build **`npm run build:all` passes (exit 0)**.
+
+### End-to-end verification (real browser, Playwright)
+- **0.d / 6.g / 7.e** — NEW e2e specs written and **passing** in chromium (item-sizing on tight-item
+  activation; paragraph delete-by-emptying removed from DOM **and** Automerge source; expand-on-type
+  grows the textarea). Commit `dcaf5a20`.
+- **`q2-preview-nesting-size-in`** updated for the **intended §0** item-activation premise (clicking a
+  tight item now activates the item; re-derived geometry item 25.5 → out 127.5 → in 76.5 — still binds
+  size-in). **`q2-preview-block-nav-p2-5b`** updated for the **intended §1** wrap→clamp.
+- Audited `inline-edit`, `nesting-caret-in`, `locked-hover`, `breadcrumb-geometry`, `self-heal-on-write`
+  — all pass (locked-mode paths unaffected by §0). **34 e2e passed / 0 failed** across the touched + new set.
+- **One PRE-EXISTING e2e failure** (`q2-preview-breadcrumb-isolation` Test A): verified to fail
+  **identically at base `de450dd5`** (NOT introduced by this work — the nest-out reland path is
+  byte-identical to base). Root-caused (a `requestFocusRestore` teardown-blur clobber + a stale test
+  assertion contradicting the §2 commit-and-reland design) and **filed as a braid bug** (`-l block-editing`,
+  needs a product decision). Left RED on purpose; not in scope for this plan.
+
+### Remaining (deferred e2e — tracked, not blocking)
+- **0.e** (text-with-sublist nest-in), **1.d** (unlock arrow into sublist + caret col + doc-end no-op),
+  **6.h** (bullet delete leaves empty `<li>`), **7.f** (roving-Enter opens expanded) — not yet written.
+- Side-issues filed as braid strands: dirty-UNLOCK arrow-away coverage (§1); dead `commitNestingEdit` (§6);
+  the pre-existing breadcrumb-isolation bug (above).
+
 ## Overview
 
 This plan grew out of two reported problems with the nesting cursor and a review of its navigation:
@@ -273,22 +307,23 @@ their **own** items (precedent: their existing incremental-revealjs branches alr
   which flow `two → alpha` by line and hide the distinction). Document this so it reads as intended.
 
 ### Tests (TDD-first)
-- [ ] **0.a** `nestingNav`/`outerBlocks` unit: `surfaceLineSpan`/`depthOfSurface` already covered;
-  add a unit for the new `Range`-aware leading-block measure (jsdom: stub `getClientRects`).
-- [ ] **0.b** Integration (jsdom): a tight single-block list renders `<li data-block-pool-id>`;
+- [x] **0.a** `nestingNav`/`outerBlocks` unit: `surfaceLineSpan`/`depthOfSurface` already covered;
+  add a unit for the new `Range`-aware leading-block measure (jsdom: stub `getClientRects`). → `measureLeadingBlockBox` unit tests.
+- [x] **0.b** Integration (jsdom): a tight single-block list renders `<li data-block-pool-id>`;
   `snapshotOuterBlockGeometry` keys the item by its leading block's range; a click in unlock mode
   activates the item (editTarget = the `Plain`), and locked mode still activates the whole list.
-- [ ] **0.c** Integration: a text-with-sublist item — the `<li>` borrows the leading `Plain`'s
+- [x] **0.c** Integration: a text-with-sublist item — the `<li>` borrows the leading `Plain`'s
   pool-id; the leading-block Range measure excludes the sublist height (assert the measured height
-  < the full `<li>` height when the element has a sublist child).
+  < the full `<li>` height when the element has a sublist child). → plus a **wiring-proof** `0.c-wiring`
+  test driving `snapshotOuterBlockGeometry` (the production path), which caught a dead-code A4 gap (now fixed, commit `8486b4c1`).
 - [ ] **0.d** e2e (`hub-client/e2e/`, real browser, **fail-on-revert**): nest-in to a **tight
   single-block** item → the editor sizes to the item, **not** the list (assert `≈ item height`,
-  `< list height`). This is the reported bug.
+  `< list height`). This is the reported bug. → **DEFERRED to the consolidated e2e phase.**
 - [ ] **0.e** e2e: nest-in to the **leading text of a text-with-sublist** item → editor is one line
-  tall (the leading-block Range), not the full `<li>` (the C3 generalization).
-- [ ] **0.f** Integration (jsdom): an **empty** list item (authored `- `, or produced by a §6 delete)
+  tall (the leading-block Range), not the full `<li>` (the C3 generalization). → **DEFERRED to the e2e phase.**
+- [x] **0.f** Integration (jsdom): an **empty** list item (authored `- `, or produced by a §6 delete)
   renders a bare `<li>` with **no** `data-block-pool-id` and does **not** crash the list render.
-- [ ] **0.g** Integration (jsdom, **Amendment A1** — the missing predicate test): a **loose** list
+- [x] **0.g** Integration (jsdom, **Amendment A1** — the missing predicate test): a **loose** list
   item (leading `Para`) renders `<li>` with **no** `data-block-pool-id`, and the inner `<p>` retains
   the **sole** pool-id (no duplicate). RED if the borrow is gated on anything weaker than
   `item[0].t === 'Plain'`. Pair with a `<dd>` whose definition body leads with a `Para` (same assert).
@@ -338,17 +373,19 @@ Generalize `resolveLanding`'s `outerByLine` kind (`PreviewRoot.tsx:554-587`) int
 - **Clamp at ends** in both modes (remove the wrap branches at `:569`/`:580`).
 
 ### Tests (TDD-first)
-- [ ] **1.a** Pure unit for `surfaceAtLine(set, L)`: the worked-example table (unlock leaves);
-  blank-line skip; clamp at ends; container-start drops to the leaf at the adjacent line.
-- [ ] **1.b** Characterization (**before** refactor): pin current **locked** up/down outer-block
+- [x] **1.a** Pure unit for `surfaceAtLine(set, L)`: the worked-example table (unlock leaves);
+  blank-line skip; clamp at ends; container-start drops to the leaf at the adjacent line. → `nestingNav.test.ts` (9 cases, incl. A2 gap→null).
+- [x] **1.b** Characterization (**before** refactor): pin current **locked** up/down outer-block
   travel so the `lineSurface` generalization is proven behavior-preserving (extends Reflection #21's
-  test).
-- [ ] **1.c** Integration (jsdom): unlock up/down flows leaf-to-leaf across a sublist boundary
-  (`two ↓ alpha ↓ beta ↓ three`; reverse for ↑); clamp at top/bottom (no wrap).
+  test). → `p2-4-real` (stayed green through the whole refactor; verified by opus spec review).
+- [x] **1.c** Integration (jsdom): unlock up/down flows leaf-to-leaf across a sublist boundary
+  (`two ↓ alpha ↓ beta ↓ three`; reverse for ↑); clamp at top/bottom (no wrap). → `s1-unlock-line-nav.integration.test.tsx` (4 cases).
 - [ ] **1.d** e2e (real browser): unlock arrow-down from a list item into its sublist's first item,
-  caret column preserved; arrow at the document end no-ops.
-- [ ] **1.e** Update the existing locked-mode up/down tests for **wrap→clamp** (the one intended
-  locked change); all other locked assertions stay green.
+  caret column preserved; arrow at the document end no-ops. → **DEFERRED to the e2e phase.**
+- [x] **1.e** Update the existing locked-mode up/down tests for **wrap→clamp** (the one intended
+  locked change); all other locked assertions stay green. → 2 wrap tests → clamp; spec review confirmed wrap-boundary-only. Commits `235d199b`, `10a82cb4`.
+
+  > Follow-up (does not block the plan): dirty-edit UNLOCK arrow-away landing has no coverage — filed as a braid strand (`-l test`, discovered during §1).
 
 ### Consequences
 - **The one locked change:** wrap→clamp at the ends (you called wrapping a misfeature). Outer-block
@@ -375,11 +412,13 @@ scroll/resize/reflow tracking (the iframe is scroll-synced), multi-rect geometry
 two parallel outline mechanisms (shadow vs drawn), and would have to absorb the focus ring too.
 
 ### Tests (TDD-first)
-- [ ] **2.a** Integration: unlock roving visits the C1 partition (incl. a multi-block item's leading
-  text); locked roving visits outer blocks (unchanged).
-- [ ] **2.b** Integration: hovering a single-block item outlines exactly the item; (documented) a
+- [x] **2.a** Integration: unlock roving visits the C1 partition (incl. a multi-block item's leading
+  text); locked roving visits outer blocks (unchanged). → new `enumerateNestingSurfaces` (C1 DOM partition =
+  DOM-leaf ∪ `<li>`/`<dd>` proxies); `s2-mode-aware-roving.integration.test.tsx`.
+- [x] **2.b** Integration: hovering a single-block item outlines exactly the item; (documented) a
   multi-block item outlines the whole `<li>` — assert the element that carries the shadow, and that
-  it equals the activation target's element.
+  it equals the activation target's element. → box-shadow kept (overlay rejected); over-cover documented;
+  hover-CSS item match accepted as cosmetic in locked mode. Commits `d44ed18e`, `c15bef98`.
 
 ### Consequences
 - Whole-`<li>` outline over-cover for multi-block items: accepted/documented.
@@ -405,14 +444,18 @@ positions on the *same* line should not diverge. Candidate causes:
    null, `PreviewRoot.tsx:1101` / `:524`) does **not** trim → disagrees with the trim-aware path.
 
 ### Fix
-- [ ] **3.a** TDD: build the exact beginning-vs-inside case (jsdom + e2e) and identify which cause
-  fires. **Write the failing test first.**
-- [ ] **3.b** Clamp the caret-derived `Ls` to the current surface's **trimmed** span
-  (`surfaceLineSpan`) so a caret in trailing whitespace maps to the last content line (kills cause 2).
-- [ ] **3.c** Always use the trim-aware line path when a caret exists; align (or retire) the
-  non-trimming byte fallback so it can't disagree (kills cause 3).
-- [ ] **3.d** If the repro is cause 1, **don't "fix" it** — document that descent is caret-line-driven
-  by design and close.
+- [x] **3.a** TDD: build the exact beginning-vs-inside case (jsdom + e2e) and identify which cause
+  fires. **Write the failing test first.** → **Resolved: Cause 1.** Column position cannot change
+  descent — `readLiveCaret` derives `bufferLine` by counting `\n` bytes only (column-invariant), so
+  `Ls` is identical for begin-vs-inside on the same source line; trailing-blank overshoot resolves
+  correctly via the nearest-child fallback. Verified independently (opus spec review). Commit `444590db`.
+- [~] **3.b** Clamp the caret-derived `Ls` to the current surface's **trimmed** span — **N/A (Cause 1):**
+  no overshoot bug exists; `surfaceLineSpan` already trims and the fallback resolves correctly.
+- [~] **3.c** Align/retire the non-trimming byte fallback — **N/A (Cause 1):** the byte-space
+  `childSurfaceToward` fallback is only reached in the **no-caret** branch, so it cannot diverge for a
+  trailing-whitespace caret.
+- [x] **3.d** If the repro is cause 1, **don't "fix" it** — document that descent is caret-line-driven
+  by design and close. → **Done:** 5 documenting tests pin the by-design behavior (no production change).
 
 ---
 
@@ -423,9 +466,10 @@ positions on the *same* line should not diverge. Candidate causes:
 projects a raw `caretBufferCol` with no `prefixWidth` (`PreviewRoot.tsx:526-527`, `:1123-1127`), so
 clean vs dirty in/out can differ by a column.
 
-- [ ] **4.a** TDD: dirty nest-in/out lands on the same column as the equivalent clean move (assert
-  caret column after a dirty round-trip).
-- [ ] **4.b** Route the dirty path's column through `prefixWidth` like the clean path.
+- [x] **4.a** TDD: dirty nest-in/out lands on the same column as the equivalent clean move (assert
+  caret column after a dirty round-trip). → `s4-dirty-caret-col.integration.test.tsx` (col 5→3, binds). Commit `2efb0bde`.
+- [x] **4.b** Route the dirty path's column through `prefixWidth` like the clean path. → dirty reland now
+  shares `cleanCaretHint`'s `(bufferCol→Cs→destCol)` projection (var names aligned for §6 reuse). Commits `2efb0bde`, `d009fff5`.
 
 ---
 
@@ -434,7 +478,7 @@ clean vs dirty in/out can differ by a column.
 Nest-in already descends exactly **one level** (`childSurfaceTowardLine` picks a single direct
 child, `nestingNav.ts:326`) — your stated preference. No change; just lock it:
 
-- [ ] **5.a** Add/confirm a regression test that nest-in from a 3-level structure descends exactly
+- [x] **5.a** Add/confirm a regression test that nest-in from a 3-level structure descends exactly
   one level (not to the deepest leaf), so §0/§1 can't silently regress it.
 
 ---
@@ -503,22 +547,23 @@ When the emptied block is left via an **edge arrow** (§1 cross-surface nav):
   document** (`blocks: []`). These are real round-trip tests, not assumptions.
 
 ### Tests (TDD-first)
-- [ ] **6.a** Rust unit (pampa): `apply_node_edit` with an empty-blocks `modified_subtree_json`
-  deletes the target block from a 3-block doc (assert the middle block is gone, neighbors intact).
-  **Write it failing-first** only if not already covered; this pins the backend contract §6 relies on.
-- [ ] **6.b** Rust round-trip (**NEW, load-bearing**): deleting a tight single-block bullet's `Plain`
-  yields valid qmd with an empty `- ` item, and the result **re-parses** cleanly.
-- [ ] **6.c** Rust round-trip (**NEW**): deleting the document's only block yields a valid empty doc.
-- [ ] **6.d** Integration (jsdom): empty the draft + Cmd/Ctrl+Enter → `commitTextEdit` called with
+- [x] **6.a** Rust unit (pampa): `apply_node_edit` with an empty-blocks `modified_subtree_json`
+  deletes the target block from a 3-block doc (assert the middle block is gone, neighbors intact). → passes (pin). Commit `fd7c3378`.
+- [x] **6.b** Rust round-trip (**NEW, load-bearing**): deleting a tight single-block bullet's `Plain`
+  yields valid qmd with an empty item, and the result **re-parses** cleanly. → output `*\n- bar\n` re-parses to a
+  2-item list, `item[0].is_empty()` (left empty, NOT whole-item removed — the discriminator). No writer bug.
+- [x] **6.c** Rust round-trip (**NEW**): deleting the document's only block yields a valid empty doc. → re-parses to `blocks: []`.
+- [x] **6.d** Integration (jsdom): empty the draft + Cmd/Ctrl+Enter → `commitTextEdit` called with
   `newText === ''` (delete), editor closes. Empty draft over an **already-empty** block → cancel
-  (`setAst` NOT called).
-- [ ] **6.e** Integration: empty the draft + arrow-away → delete (dirty path) **and reland on the
-  deletion-point neighbor** (assert the landed surface), not cancel; assert **exactly one** commit.
-- [ ] **6.f** Integration: empty the draft + **blur/click-away** → delete (the aggressive trigger).
+  (`setAst` NOT called). → delete commits `''` explicitly; commit `fb8ed2f2`/`666fa18e`.
+- [x] **6.e** Integration: empty the draft + arrow-away → delete (dirty path) **and reland on the
+  deletion-point neighbor** (assert the landed surface), not cancel; assert **exactly one** commit. → `destLine`
+  delete-override (down→L0, gated on `isDirty`); both revert levers RED it.
+- [x] **6.f** Integration: empty the draft + **blur/click-away** → delete (the aggressive trigger). → same `commitIfDirty` branch.
 - [ ] **6.g** e2e (`hub-client/e2e/`, real browser, **fail-on-revert**): select a paragraph, delete
-  all its text, press Cmd/Ctrl+Enter → the paragraph is removed from the rendered doc and the source.
+  all its text, press Cmd/Ctrl+Enter → the paragraph is removed from the rendered doc and the source. → **DEFERRED to the e2e phase.**
 - [ ] **6.h** e2e: delete a **bullet's** text → an empty bullet remains and the list still renders
-  (ties to §0's empty-item crash guard, 0.f).
+  (ties to §0's empty-item crash guard, 0.f). → **DEFERRED to the e2e phase.**
 
 ### Consequences / watch-items
 - **Destructive on blur** (chosen): clicking away from an emptied block deletes it. Recoverable via
@@ -604,26 +649,25 @@ interaction (typing or in-surface cursoring).
     non-edge-arrow case; in-surface cursoring expands as required.
 
 ### Tests (TDD-first)
-- [ ] **7.a** Integration (jsdom): click-activate → `expanded` is false and the height effect keeps
-  `contentHeight`; type a character → `expanded` flips true and the height effect runs
-  (assert the flag + that the layout effect set an explicit `style.height`; not the pixel value).
-- [ ] **7.b** Integration: roving **Enter/Space** activation opens with `expanded === true`
-  immediately; a pointer activation opens with `expanded === false`.
-- [ ] **7.c** Integration: leave keys do **not** expand — assert `expanded` stays false after an
-  edge ↓ that navigates away, after a nesting chord, after `Esc`, and after Cmd/Ctrl+Enter.
-- [ ] **7.d** Integration: the floor holds — with a stubbed `scrollHeight < contentHeight`, expanded
-  height clamps to `contentHeight` (never smaller than the original element).
+- [x] **7.a** Integration (jsdom): click-activate → `expanded` is false and the height effect keeps
+  `contentHeight`; type a character → `expanded` flips true and the height effect runs. → `s7-expand-on-edit.integration.test.tsx`.
+- [x] **7.b** Integration: roving **Enter/Space** activation opens with `expanded === true`
+  immediately; a pointer activation opens with `expanded === false`. → binds `{keyboard:true}`→`editExpandedRef`.
+- [x] **7.c** Integration: leave keys do **not** expand — assert `expanded` stays false after an
+  edge ↓ that navigates away, after a nesting chord, after `Esc`, and after Cmd/Ctrl+Enter. → with vacuity guards (leave action fired).
+- [x] **7.d** Integration: the floor holds — with a stubbed `scrollHeight < contentHeight`, expanded
+  height clamps to `contentHeight` (never smaller than the original element). → binds `Math.max(contentHeight, scrollHeight)`.
 - [ ] **7.e** e2e (`hub-client/e2e/`, real browser): activate a **multi-line** block by click →
-  surface is one/short-line tall (== replaced element); type one character → it grows to show all
-  lines; delete lines → it shrinks back down but not below the original. **This is the new step the
-  existing e2e specs need** (see below).
-- [ ] **7.f** e2e: keyboard-select (roving) + Enter on a multi-line block → opens already expanded.
-- [ ] **7.g** Integration (**NEW — missing-test pass, the round-2 reset bug**): open block A **expanded**
+  surface grows on first keystroke, shrinks back but not below the original. → **DEFERRED to the e2e phase.**
+- [ ] **7.f** e2e: keyboard-select (roving) + Enter on a multi-line block → opens already expanded. → **DEFERRED to the e2e phase.**
+- [x] **7.g** Integration (**NEW — missing-test pass, the round-2 reset bug**): open block A **expanded**
   (keyboard activate), then **hop/click** to block B → B opens **collapsed** (`data-expanded` false),
-  proving `editExpandedRef` was *reset* at B's open, not left stale-`true`.
-- [ ] **7.h** Integration (**NEW — the preserve half**): open A expanded, force a self-heal **remount**
-  (collaborator-shift rerender, à la `p2-3b-real`) → A stays **expanded**, proving the ref is read on
-  re-mount.
+  proving `editExpandedRef` was *reset* at B's open. → passes.
+- [x] **7.h** Integration (**NEW — the preserve half**): open A expanded, force a self-heal **remount**
+  → A stays **expanded**, proving the ref is read on re-mount. → passes.
+
+  > §7 cleanup: the `expandOnOpen` field on `EditTarget` was found to be dead (never read) and removed —
+  > `editExpandedRef` is the sole carrier. Commits `2740638d`, `313ac0f4`.
 
 ### Consequences / watch-items
 - **Edge detection is already expand-safe (verified — this is §7's real value).** `isOnLastVisualLine`
@@ -778,6 +822,20 @@ in jsdom; pixel growth is asserted only in the e2e tier (real layout).
   sibling trap (firing in a state that no-ops, or a fixture where the two states coincide).
 
 ### Missing-test pass (skill check 3) — accepted-untested, with rationale
+- **§6.r empty-via-nesting-commit delete (accepted-untested, 2026-06-16):** an earlier 6.r claimed to
+  pin that the nesting-commit path routes empty text → delete with no empty-guard. A re-review found
+  this not mechanically testable at the integration layer and the test non-binding (fail-on-revert
+  GREEN with an empty-guard added to `commitAndArmReland`). Reasons, established by reading production:
+  (1) `commitNestingEdit` (PreviewRoot.tsx) has **no production caller** — Cmd/Ctrl+Enter and blur in
+  `EditTextarea` route through `commitIfDirty`, not `commitNestingEdit`; (2) the real nesting-commit
+  chokepoint `commitAndArmReland` is reached only via `requestNestingMove`/`requestNestingSelect`,
+  whose `isDirty = !!draftNorm && …` check makes an EMPTY draft a clean sync hop (no commit) — so the
+  nesting path never routes empty→delete; (3) the click-switch path `handleClickSwitchBlur` likewise
+  guards on `!!normalized`, so an empty click-switch draft falls through to `commitIfDirty('')` — the
+  §6 DELETE branch already covered by **6.d/6.e/6.f**. The empty→delete behavior is owned entirely by
+  `commitIfDirty`; the empty-via-`commitNestingEdit` path can't be driven without exposing
+  `commitNestingEdit` (a production change we are not making). The false 6.r was removed and replaced
+  with an `it.skip` carrying this rationale.
 - **Delete-reland caret column (§6 × §4):** 6.e asserts the landed *surface* but not the caret *column*
   (jsdom can't). **Recommend** adding a caret-column assertion to a delete-reland **e2e** (extend 6.g);
   if not, accept-untested on the rationale that §4.a (clean/dirty column parity) + §1.d (nav caret

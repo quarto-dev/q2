@@ -7,13 +7,19 @@
  * geometry SNAPSHOT captured at activation, where every surface's original box was
  * measured.
  *
- * Interaction: activate the SUB-list, nest-OUT to the whole list (full height),
- * then nest-IN back to the sub-list (leafAnchorR0 is preserved across the moves so
- * 'in' descends to the sub-list). The nest-in destination must size to the
- * sub-list's ORIGINAL height (the child's snapshot box), not the whole-list box the
- * nest-out step left behind. (We descend back to the sub-list — a pool-id surface
- * with captured geometry — rather than a tight-list item, which has no pool-id
- * element to measure; caret-aware descent into items is §2.)
+ * Interaction: click a tight sub-list item ("nother"). Post-§0 this activates the
+ * ITEM proxy (its borrowed leading-Plain box ≈ one line), NOT the whole list. We
+ * then nest-OUT TWICE to climb item → sub-list → whole list (full height), then
+ * nest-IN back to the sub-list. The nest-in destination must size to the sub-list's
+ * ORIGINAL height (the child's snapshot box), not the whole-list box the nest-out
+ * step left behind.
+ *
+ * §0 premise note: pre-§0, clicking "nother" seeded a leaf into the sub-list and a
+ * SINGLE nest-out reached the whole list. Post-§0, clicking "nother" activates the
+ * item proxy, so one nest-out only reaches the sub-list — hence the extra nest-out
+ * here to still exercise the whole-list → sub-list size-in. The geometry sequence
+ * (measured in a real browser) is: item 25.5 → sub-list 76.5 → whole-list 127.5,
+ * and back down 127.5 → 76.5 → 25.5.
  *
  * Pixel geometry → real browser. Capture/consume wiring + key arithmetic are
  * covered at the jsdom tier; this spec proves the real render path.
@@ -98,12 +104,23 @@ test.describe('§1 — nesting-cursor SIZE-IN geometry (real browser)', () => {
         console.log(`original heights: whole-list H0=${h0.toFixed(1)}  sub-list H1=${h1.toFixed(1)}`);
         expect(h0).toBeGreaterThan(h1 + TOL);
 
-        // Open an editor on the SUB-list (click a clean leaf inside it). This seeds
-        // leafAnchorR0 INTO the sub-list so a later nest-in descends back to it.
+        // Click the tight sub-list item "nother". Post-§0 this activates the ITEM
+        // proxy (borrowed leading-Plain box ≈ one line), NOT the whole list — so a
+        // single nest-out only reaches the sub-list. Sanity-check the item box is
+        // ≈ one line (well under the sub-list height), proving §0 item activation.
         await iframe.getByText('nother', { exact: true }).click();
-        await iframe.locator('textarea').first().waitFor({ timeout: 10_000 });
+        await iframe.locator('#q2-active-edit-region').waitFor({ timeout: 10_000 });
+        const itemBox = await iframe.locator('#q2-active-edit-region').boundingBox();
+        console.log(`item-proxy edit height after click: ${itemBox!.height.toFixed(1)} (expect ≪ H1=${h1.toFixed(1)})`);
+        expect(
+            itemBox!.height,
+            `clicking the tight item "nother" must activate the ITEM proxy (≈ one line), not the sub-list (${h1.toFixed(1)}px)`,
+        ).toBeLessThan(h1 - TOL);
 
-        // Nest OUT to the whole list → editor sizes to the full height (≈ H0).
+        // Nest OUT once → climbs item → sub-list (≈ H1).
+        await iframe.getByRole('button', { name: /^Out/ }).click();
+        await iframe.locator('#q2-active-edit-region').waitFor({ timeout: 10_000 });
+        // Nest OUT again → climbs sub-list → whole list (≈ H0).
         await iframe.getByRole('button', { name: /^Out/ }).click();
         await iframe.locator('#q2-active-edit-region').waitFor({ timeout: 10_000 });
         const outBox = await iframe.locator('#q2-active-edit-region').boundingBox();

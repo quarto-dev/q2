@@ -729,14 +729,17 @@ pub(crate) fn edit_nested_block(
     apply_node_edit(content, &a_u_json, &si_json, &subtree_json).expect("apply_node_edit failed")
 }
 
+/// Minimal Pandoc JSON subtree with an empty blocks array.
+/// Used by the §6 delete helpers to request a zero-block replacement.
+const EMPTY_SUBTREE_JSON: &str = r#"{"pandoc-api-version":[1,23,0],"meta":{},"blocks":[]}"#;
+
 /// High-level helper: delete a nested block (N→0 splice) by passing an empty
 /// replacement blocks list.
 pub(crate) fn delete_nested_block(content: &str, target_si: SourceInfo) -> String {
     let a_u = parse_qmd(content);
     let a_u_json = ast_to_json(&a_u);
     let si_json = source_info_to_json(&target_si);
-    let empty_subtree_json = r#"{"pandoc-api-version":[1,23,0],"meta":{},"blocks":[]}"#;
-    apply_node_edit(content, &a_u_json, &si_json, empty_subtree_json)
+    apply_node_edit(content, &a_u_json, &si_json, EMPTY_SUBTREE_JSON)
         .expect("apply_node_edit failed")
 }
 
@@ -1119,6 +1122,147 @@ fn apply_node_edit_nested_attr_strip_round_trips() {
     let new_qmd = result.expect("attr-strip at depth must succeed");
     assert!(new_qmd.contains("Modified."), "got: {new_qmd:?}");
     assert!(!new_qmd.contains("Content."), "got: {new_qmd:?}");
+}
+
+// =============================================================================
+// §6 — Delete-by-emptying round-trips
+//
+// Deletion works through the text channel with empty `newText`.  The frontend
+// sends a Pandoc JSON subtree with `{"blocks":[]}`.  `apply_node_edit` splices
+// an EMPTY Vec<Block> at the leaf via `splice_in_blocks`, which removes the
+// block from its parent container.  These tests pin that mechanism as a
+// regression suite and verify that the resulting qmd is valid and re-parseable.
+// =============================================================================
+
+/// Helper: delete a top-level block (N→0 splice at the root blocks level).
+pub(crate) fn delete_top_level_block(content: &str, block_idx: usize) -> String {
+    let a_u = parse_qmd(content);
+    let a_u_json = ast_to_json(&a_u);
+    let target_si = a_u.blocks[block_idx].source_info().clone();
+    let si_json = source_info_to_json(&target_si);
+    apply_node_edit(content, &a_u_json, &si_json, EMPTY_SUBTREE_JSON)
+        .expect("apply_node_edit delete failed")
+}
+
+/// §6.a — Regression pin: deleting the middle block of a 3-block document
+/// leaves the first and last blocks intact.
+///
+/// Discriminator: if `splice_in_blocks` guarded against an empty replacement
+/// (`if !replacement.is_empty() { ... }`), the middle block would survive and
+/// this test would go RED.
+#[test]
+fn delete_middle_block_in_three_block_doc() {
+    let content = "A\n\nB\n\nC\n";
+    let result = delete_top_level_block(content, 1); // delete "B"
+
+    // A and C must survive.
+    assert!(
+        result.contains('A'),
+        "first block must remain; got: {result:?}"
+    );
+    assert!(
+        result.contains('C'),
+        "last block must remain; got: {result:?}"
+    );
+    // The middle block must be gone.
+    assert!(
+        !result.contains('B'),
+        "middle block must be deleted; got: {result:?}"
+    );
+
+    // Re-parse: two blocks remaining.
+    let re_parsed = parse_qmd(&result);
+    assert_eq!(
+        re_parsed.blocks.len(),
+        2,
+        "re-parsed doc must have exactly 2 blocks; got: {:?}",
+        re_parsed.blocks
+    );
+}
+
+/// §6.b — Load-bearing: deleting the Plain block inside the FIRST bullet item
+/// leaves the item empty (bare marker), NOT removes the whole item.
+///
+/// Correct: item[0] becomes `[]` (empty) → written as bare `*` marker.
+/// Wrong: the whole first item is removed → only one item would remain.
+///
+/// This is the CRITICAL discriminator: whole-item removal would be the future
+/// `setAstRange` behavior; emptying-the-item-content is the text-channel
+/// delete behavior we are testing here.
+#[test]
+fn delete_plain_in_bullet_item_leaves_empty_item() {
+    let content = "- foo\n- bar\n";
+    let ast = parse_qmd(content);
+
+    // Navigate: BulletList at root[0], item 0, inner block 0 (the Plain).
+    let plain_si = list_item_block(&ast, 0, 0, 0).source_info().clone();
+    let result = delete_nested_block(content, plain_si);
+
+    // Note: the writer normalizes an empty bullet item's marker to `*` (not `-`),
+    // so the output reads as `*\n- bar\n`. That is expected writer behavior, not a bug.
+    // We assert on the re-parsed AST structure (2 items, item[0] empty), not literal bytes.
+
+    // The result must re-parse cleanly.
+    let re_parsed = parse_qmd(&result);
+
+    // Must still be a BulletList.
+    assert!(
+        matches!(re_parsed.blocks[0], Block::BulletList(_)),
+        "re-parsed doc must contain a BulletList; got: {:?}",
+        re_parsed.blocks
+    );
+
+    let Block::BulletList(ref bl) = re_parsed.blocks[0] else {
+        panic!("Expected BulletList");
+    };
+
+    // Two items must remain (the item is emptied, not removed).
+    assert_eq!(
+        bl.content.len(),
+        2,
+        "BulletList must still have 2 items (first is empty, not removed); \
+         actual output: {result:?}"
+    );
+
+    // First item must be empty (no blocks).
+    assert!(
+        bl.content[0].is_empty(),
+        "first item must be empty (bare marker); got item[0]: {:?}; output: {result:?}",
+        bl.content[0]
+    );
+
+    // Second item must still contain "bar".
+    let Block::Plain(ref plain) = bl.content[1][0] else {
+        panic!(
+            "second item's first block must be Plain; got: {:?}",
+            bl.content[1]
+        );
+    };
+    assert!(
+        plain.content.iter().any(|inline| matches!(inline,
+            pampa::pandoc::Inline::Str(s) if s.text == "bar"
+        )),
+        "second item must contain 'bar'; got: {:?}; output: {result:?}",
+        plain.content
+    );
+}
+
+/// §6.c — Load-bearing: deleting the only block in a single-paragraph document
+/// produces a valid empty document that re-parses to zero blocks.
+#[test]
+fn delete_only_block_produces_empty_doc() {
+    let content = "hello\n";
+    let result = delete_top_level_block(content, 0);
+
+    // Re-parse: zero blocks.
+    let re_parsed = parse_qmd(&result);
+    assert_eq!(
+        re_parsed.blocks.len(),
+        0,
+        "deleting the only block must yield an empty document; \
+         actual output: {result:?}; re-parsed blocks: {:?}",
+        re_parsed.blocks
+    );
 }
 
 /// Sibling fidelity: bytes OUTSIDE the enclosing container and its boundary

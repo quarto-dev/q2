@@ -17,6 +17,12 @@ import { buildNestingCommitDestination, classifyNestingKey, detectPlatform } fro
 // distinguish mac (Cmd+Ctrl) from other (Alt+Shift) nesting chords.
 const PLATFORM = detectPlatform();
 
+/** True when text, after line-ending normalization + trailing-whitespace removal,
+ *  has no content — i.e. the block is effectively empty (the §6 delete trigger). */
+function isEffectivelyEmpty(text: string): boolean {
+    return normalizeLineEndings(text).trimEnd() === '';
+}
+
 /**
  * Block types whose left inset (the marker gutter: `<ul>`/`<ol>`/`<dl>`
  * padding-left) must NOT indent the editing textarea — their source markdown
@@ -144,6 +150,13 @@ function EditTextarea({
         () => ctx.editDraftRef?.current ?? baseline,
     );
 
+    // §7 expand-on-edit: initialise from editExpandedRef so self-heal remounts
+    // see the same value as the original open (PRESERVED across remounts by the ref).
+    // The ref is set at every open, so the initializer is always correct.
+    const [expanded, setExpanded] = useState<boolean>(
+        () => ctx.editExpandedRef?.current ?? false,
+    );
+
     // P2.4b: caret placement on arrival.
     // When a pending-caret hint is set (by hop/reland), apply it once on mount
     // and clear the ref so subsequent re-mounts (e.g. self-heal) don't re-apply.
@@ -160,6 +173,26 @@ function EditTextarea({
         // textarea is attached to the DOM.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // §7 expand-on-edit: auto-size the textarea when expanded.
+    //
+    // When `expanded`, set height to 'auto' (to shrink-wrap) then read scrollHeight
+    // and clamp to max(contentHeight, scrollHeight). This fires on every draft/
+    // expanded/contentHeight change — once expanded the textarea tracks text size,
+    // growing AND shrinking, always clamped to the original content height floor.
+    //
+    // When NOT expanded, height stays at contentHeight (the inline style prop below).
+    //
+    // jsdom returns scrollHeight === 0 always, so max(contentHeight, 0) === contentHeight
+    // in tests — safe and non-shrinking. Pixel-fit assertions are e2e-only.
+    useLayoutEffect(() => {
+        if (!expanded) return;
+        const ta = taRef.current;
+        if (!ta) return;
+        ta.style.height = 'auto';
+        ta.style.height = `${Math.max(contentHeight, ta.scrollHeight)}px`;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [draft, expanded, contentHeight]);
 
     const commitIfDirty = (text: string) => {
         // P2.3b (review hardening): guard against any action from a stale textarea.
@@ -201,15 +234,31 @@ function EditTextarea({
             }
         }
         const normalized = normalizeLineEndings(text).trimEnd();
-        // Cancel (close without commit) when the draft is empty/whitespace OR
-        // equals the seeded baseline. An empty draft would delete the block —
-        // the old pre-P2.3a code had an explicit empty guard, and we restore it here.
+        // §6 three-way guard (uniform delete-by-emptying):
+        //
+        // Cancel (close without commit) when the draft equals the seeded baseline
+        // (unchanged) OR when the draft was already empty and baseline is also empty
+        // (nothing to delete — block had no content to remove).
+        //
+        // DELETE: when the draft is now empty but the baseline was non-empty, the
+        // user has intentionally cleared a block → fall through to the commit path,
+        // which calls commitTextEdit(dest, '') → backend deletes the block.
+        //
         // P3.3: baseline is seededDraft (or anchorSlice for non-nested blocks) so a
         // clean-buffer-seeded nested editor doesn't incorrectly commit on untouched blur.
-        if (!normalized || normalized === baseline) {
+        if (normalized === baseline) {
+            // Unchanged (including both non-empty unchanged, and empty-from-start untouched).
             ctx.setEditTarget!(null);
             return;
         }
+        if (isEffectivelyEmpty(text) && !baseline) {
+            // Already-empty block, draft still empty → nothing to delete → cancel.
+            ctx.setEditTarget!(null);
+            return;
+        }
+        // Remaining cases:
+        //   - normalized !== baseline && !!normalized  → changed, non-empty → normal commit
+        //   - !normalized && !!baseline               → had content, now empty → DELETE commit (empty text)
         // Self-heal-on-write hardening: build the commit destination from the LIVE
         // edit target (editTargetRef.current) via buildNestingCommitDestination. This is equivalent
         // to JSON.stringify(resolved.sourceEntry) for every editable block (t=0, d=0)
@@ -232,7 +281,18 @@ function EditTextarea({
             // all editable blocks, see commit-destination-equivalence.test.ts).
             dest = JSON.stringify(resolved.sourceEntry);
         }
-        ctx.commitTextEdit!(dest, normalizeLineEndings(text));
+        // At this point the guards above have returned for (unchanged) and (already-empty).
+        // So: empty draft here ⇒ baseline was non-empty ⇒ §6 DELETE (commit '').
+        // The non-delete (real edit) path commits normalizeLineEndings(text) so both
+        // an empty draft AND a whitespace-only draft (which trims to '') produce an
+        // unambiguous newText==='' delete signal to the backend.
+        let newText: string;
+        if (!normalized) {
+            newText = ''; // delete signal: draft emptied from non-empty baseline
+        } else {
+            newText = normalizeLineEndings(text);
+        }
+        ctx.commitTextEdit!(dest, newText);
         ctx.setEditTarget!(null);
     };
 
@@ -240,12 +300,17 @@ function EditTextarea({
         <textarea
             ref={taRef}
             autoFocus
+            // §7: data-expanded seam — present when expanded, absent when collapsed.
+            // Tests assert expansion via this flag, never via pixel height.
+            data-expanded={expanded ? '' : undefined}
             value={draft}
             style={{
                 display: 'block',
                 fontFamily: 'monospace',
                 fontSize: '0.9em',
                 width: '100%',
+                // When expanded the layout effect drives the height; the static prop
+                // below is the initial height (contentHeight) before any expansion.
                 height: contentHeight,
                 boxSizing: 'border-box',
                 resize: 'vertical',
@@ -280,15 +345,51 @@ function EditTextarea({
                 // chord, unrecognised keys) — those fall through to the existing handlers.
                 if (ctx.unlockNestingCursor && ctx.requestNestingMove) {
                     const dir = classifyNestingKey(e, PLATFORM);
+                    // §7: nesting chords are leave-keys — they do NOT expand.
                     if (dir) { e.preventDefault(); ctx.requestNestingMove(dir); return; }
                 }
-                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+
+                // §7 expand-on-edit: determine whether this keystroke should expand the
+                // surface. A keystroke expands ONLY when it stays in the surface:
+                //   - NOT Cmd/Ctrl+Enter (commit chord — closes the editor)
+                //   - NOT Esc (closes the editor)
+                //   - NOT a bare edge arrow (cross-surface navigation)
+                //   - NOT a nesting chord (handled above, already returned)
+                //
+                // For arrows: we must compute onEdge before the expand guard so we can
+                // exclude edge arrows but include non-edge arrows (native caret move).
+                // This share avoids a second isOnFirst/LastVisualLine call in the
+                // cross-surface branch below.
+                let arrowOnEdge = false;
+                if (
+                    !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey &&
+                    (e.key === 'ArrowDown' || e.key === 'ArrowUp')
+                ) {
+                    const ta = e.currentTarget as HTMLTextAreaElement;
+                    const isDown = e.key === 'ArrowDown';
+                    arrowOnEdge = isDown ? isOnLastVisualLine(ta) : isOnFirstVisualLine(ta);
+                }
+
+                const isCommitChord = (e.metaKey || e.ctrlKey) && e.key === 'Enter';
+                const isEsc = e.key === 'Escape';
+                const isLeaveKey = isCommitChord || isEsc || arrowOnEdge;
+
+                if (!isLeaveKey && !expanded) {
+                    // In-surface keystroke (printable char, Backspace/Delete, Home/End,
+                    // non-edge arrow, or any other key that stays in the surface).
+                    // Expand the editor and mirror the state to the root ref so remounts
+                    // read the same value (PRESERVED across self-heal re-anchors).
+                    setExpanded(true);
+                    if (ctx.editExpandedRef) ctx.editExpandedRef.current = true;
+                }
+
+                if (isCommitChord) {
                     e.preventDefault();
                     // P2.4c: stash focus restore BEFORE commitIfDirty closes the editor.
                     // requestFocusRestore only stashes; commitIfDirty handles commit + close.
                     ctx.requestFocusRestore?.(ctx.editTarget!.anchorR0);
                     commitIfDirty(draft);
-                } else if (e.key === 'Escape') {
+                } else if (isEsc) {
                     e.preventDefault();
                     // P2.4b: cancel any prior pending land so Esc during a dirty move
                     // (editor closed, waiting for commit re-render) does not reland.
@@ -307,23 +408,20 @@ function EditTextarea({
                     ctx.requestMove &&
                     (e.key === 'ArrowDown' || e.key === 'ArrowUp')
                 ) {
-                    const ta = e.currentTarget as HTMLTextAreaElement;
-                    const isDown = e.key === 'ArrowDown';
-                    const onEdge = isDown
-                        ? isOnLastVisualLine(ta)
-                        : isOnFirstVisualLine(ta);
-
-                    if (onEdge) {
+                    // arrowOnEdge was computed above (shared with the expand guard).
+                    if (arrowOnEdge) {
                         e.preventDefault();
+                        const ta = e.currentTarget as HTMLTextAreaElement;
                         const exitColumn = getLogicalColumn(ta);
                         const normalized = normalizeLineEndings(draft).trimEnd();
-                        // Empty/whitespace draft counts as not-dirty (cancel path),
-                        // matching commitIfDirty's empty→cancel guard.
+                        // §6 dirty check for arrow-away (mirrors commitIfDirty's three-way guard):
+                        // A block emptied from non-empty counts as dirty (delete path).
+                        // An already-empty block that remains empty is NOT dirty (nothing changed).
                         // P3.3: use baseline (= seededDraft ?? anchorSlice) for consistency
                         // with commitIfDirty's dirty check.
-                        const isDirty = !!normalized && normalized !== baseline;
+                        const isDirty = normalized !== baseline;
                         ctx.requestMove(
-                            isDown ? 'down' : 'up',
+                            e.key === 'ArrowDown' ? 'down' : 'up',
                             exitColumn,
                             draft,
                             isDirty,

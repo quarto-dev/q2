@@ -684,7 +684,13 @@ test.describe('P2.5b — Block navigation & locked resolution (real browser)', (
         }).toPass({ timeout: 8000 });
     });
 
-    test('arrow-nav: ArrowDown wraps from last tile to first tile', async ({ page }) => {
+    test('arrow-nav: ArrowDown from the last tile CLAMPS (no wrap to first)', async ({ page }) => {
+        // §1 premise change: locked nav no longer WRAPS at the document ends — it
+        // CLAMPS. ArrowDown from the last tile's last visual line must keep the
+        // editor on the LAST tile (no move to the first tile). Pre-§1 this wrapped
+        // to "First tile."; that wrap behavior was intentionally removed.
+        // Fail-on-revert: restore the wrap → the editor jumps to "First tile." →
+        // the "stays on Last tile." assertion goes RED.
         const serverUrl = getServerUrl();
         const QMD = [
             '---',
@@ -716,15 +722,18 @@ test.describe('P2.5b — Block navigation & locked resolution (real browser)', (
         const geo = await measureLastVisualLine(iframe);
         expect(geo.isLastLine, 'caret at end of last tile should be on last visual line').toBe(true);
 
-        // Press ArrowDown: should wrap to the FIRST tile.
+        // Press ArrowDown at the document end: must CLAMP (stay on the last tile).
         await ta.press('ArrowDown');
 
-        await expect(async () => {
-            const ta2 = iframe.locator('textarea').first();
-            await ta2.waitFor({ timeout: 5000 });
-            const val = await ta2.evaluate((el: HTMLTextAreaElement) => el.value);
-            expect(val).toContain('First tile.');
-        }).toPass({ timeout: 8000 });
+        // Give any (erroneous) re-activation a chance to settle, then assert the
+        // editor is still on the LAST tile and did NOT wrap to the first.
+        await page.waitForTimeout(500);
+        const val = await iframe
+            .locator('textarea')
+            .first()
+            .evaluate((el: HTMLTextAreaElement) => el.value);
+        expect(val, 'ArrowDown at doc end must clamp on the last tile').toContain('Last tile.');
+        expect(val, 'ArrowDown at doc end must NOT wrap to the first tile').not.toContain('First tile.');
     });
 
     // ── 4. Caret on arrival ──────────────────────────────────────────────────

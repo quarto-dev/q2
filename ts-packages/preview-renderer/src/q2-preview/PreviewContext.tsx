@@ -292,6 +292,21 @@ export interface PreviewContextValue {
      */
     requestNestingSelect?: (r0: number, r1: number) => void;
     /**
+     * §7 expand-on-edit: root-held ref mirroring the expanded state of the
+     * current editor. Set at EVERY open (both `activate` and `openEditTarget`):
+     *   - keyboard roving activation → true
+     *   - pointer/click/hop → false
+     *
+     * Reading `editExpandedRef.current` in `EditTextarea`'s `useState` initializer
+     * ensures a self-heal remount sees the same value as the original open
+     * (PRESERVED across remounts). The per-open write ensures a hop landing
+     * reads the correct value (RESET on every new open, not left stale).
+     *
+     * Exposed on the context (like `editDraftRef` / `pendingCaretRef`) so
+     * `EditTextarea` can read it without prop-drilling.
+     */
+    editExpandedRef?: MutableRefObject<boolean>;
+    /**
      * §1 geometry snapshot: at activation, capture the rendered geometry of the
      * opened block's whole top-level subtree into PreviewRoot's editGeometryRef,
      * BEFORE the children are swapped to a textarea. `range` is the opened block's

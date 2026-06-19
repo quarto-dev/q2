@@ -240,6 +240,11 @@ export function PreviewRoot(props: PreviewRootProps) {
     // activation; reset to null on close. Referentially stable → no extra
     // re-renders from draft changes.
     const editDraftRef = useRef<string | null>(null);
+    // §7 expand-on-edit: mirrors the expanded state of the current editor.
+    // Written at EVERY open (activate / openEditTarget) so:
+    //   - Remounts read the correct value (PRESERVED).
+    //   - Hops see false (RESET on every new open, not left stale from a prior expand).
+    const editExpandedRef = useRef<boolean>(false);
     // Ref pointing to the inner wrapper div of the currently active edit
     // region (set by renderMeasuredEdit in dispatchers.tsx). Used by
     // useBlockEditHover's onPointerUp to suppress the parent-climb bug:
@@ -469,6 +474,11 @@ export function PreviewRoot(props: PreviewRootProps) {
         }
 
         pendingCaretRef.current = opts.caret ?? null;
+        // §7: hops / reland / nest-retarget always open collapsed — reset editExpandedRef
+        // to false so a hop landing right after a keyboard-expanded block reads false, not
+        // the stale true from the prior open. The activate() keyboard path writes
+        // editExpandedRef BEFORE calling setEditTarget, so it wins over this reset.
+        editExpandedRef.current = false;
         setEditTargetRaw({
             anchorR0: range.r0,
             anchorR1: range.r1,
@@ -777,7 +787,18 @@ export function PreviewRoot(props: PreviewRootProps) {
         // Reflection #21): down → first outer block at/after L0+draftLineCount;
         // up → last outer block before L0 (NOT L0+draftLineCount). resolveLanding
         // compares `>= destLine` (down) / `< destLine` (up).
-        const destLine = direction === 'down' ? L0 + draftLineCount : L0;
+        //
+        // §6 DELETE override: when the draft is dirty AND empty (empty-string commit
+        // = block deletion), the committed block's lines VANISH from the document.
+        // The former-next block (down) now occupies L0; the block before (up) is
+        // unaffected by the deletion. Only down needs the override (L0+draftLineCount
+        // → L0). Down: reland at L0 (the former-next block now occupies it).
+        // Up: the normal `L0` formula already lands on the block above the deletion
+        // point, so no override needed.
+        const isDraftEmpty = isDirty && normalizeLineEndings(draft).trimEnd() === '';
+        const destLine = direction === 'down'
+            ? (isDraftEmpty ? L0 : L0 + draftLineCount)
+            : L0;
         const spec: ResolverSpec = { kind: 'outerByLine', direction, destLine };
         const caret: CaretHint = { edge: direction === 'down' ? 'first' : 'last', column: exitColumn };
 
@@ -1418,6 +1439,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 editTarget,
                 setEditTarget,
                 editDraftRef,
+                editExpandedRef,
                 activeEditRegionRef,
                 editTargetRef,
                 sourceIndex,
