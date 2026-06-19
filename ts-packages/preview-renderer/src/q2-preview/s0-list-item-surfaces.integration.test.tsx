@@ -436,9 +436,17 @@ describe('0.c — text-with-sublist item: Range measure excludes sublist height'
         vi.spyOn(li!, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 200, 60));
         vi.spyOn(innerUl!, 'getBoundingClientRect').mockReturnValue(rect(0, 20, 200, 60));
 
-        // Stub Range.prototype.getBoundingClientRect to return only the leading text
-        // height (20px). Production measureBlockBox should use this for the <li>.
-        (Range.prototype as any).getBoundingClientRect = () => rect(0, 0, 200, 20);
+        // Stub Range.prototype.getBoundingClientRect: boundary-sensitive.
+        // When the Range includes the sublist (setEndAfter — wrong), returns 60px.
+        // When the Range excludes the sublist (setEndBefore — correct), returns 20px.
+        // This means setEndBefore→setEndAfter REDs the test; the constant stub would not.
+        const sublistEl = innerUl!;
+        (Range.prototype as any).getBoundingClientRect = function(this: Range) {
+            const includesSublist = typeof this.intersectsNode === 'function'
+                ? this.intersectsNode(sublistEl)
+                : false;
+            return includesSublist ? rect(0, 0, 200, 60) : rect(0, 0, 200, 20);
+        };
 
         try {
             // topBlockR0 = pool[2].r[0] = 0 (the outer BulletList).

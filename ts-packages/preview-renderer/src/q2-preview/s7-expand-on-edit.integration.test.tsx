@@ -23,6 +23,7 @@
  *          pointer activation opens data-expanded absent.
  *   7.c — leave keys do NOT expand; vacuity guard: leave action DID fire.
  *   7.d — floor holds: scrollHeight < contentHeight → style.height = contentHeight px.
+ *          grow holds: scrollHeight > contentHeight → style.height = scrollHeight px.
  *   7.g — hop to block B → B opens collapsed (editExpandedRef reset).
  *   7.h — self-heal remount preserves expanded state (editExpandedRef read on remount).
  *
@@ -40,11 +41,13 @@ import {
     act,
     fireEvent,
 } from '@testing-library/react';
-import React from 'react';
+import React, { useContext } from 'react';
 import { PreviewRoot } from './PreviewRoot';
 import type { PreviewRootProps } from './PreviewRoot';
 import type { PandocAST } from '../framework';
 import * as caretGeometry from './caretGeometry';
+import { PreviewContext } from './PreviewContext';
+import type { MutableRefObject } from 'react';
 
 afterEach(() => {
     cleanup();
@@ -97,17 +100,53 @@ function makeAstJson(pool: typeof POOL_AB, content: string): string {
     });
 }
 
+/**
+ * Context-capture probe: renders inside the PreviewContext.Provider via the
+ * customRegistry Para slot. Captures ctx.editExpandedRef into a stable holder
+ * so tests can read editExpandedRef.current without being inside the React tree.
+ *
+ * At least one Para tile is always rendered (the non-edited one), so the holder
+ * is populated on every render cycle. Since editExpandedRef is a stable ref
+ * object (same MutableRefObject<boolean> for the lifetime of PreviewRoot),
+ * reading holder.current.current after any fireEvent gives the live value.
+ *
+ * Must emit data-block-pool-id to preserve the tile seam used by clickActivateTile /
+ * keyboardActivateTile (the production Para.tsx does the same). Without the attribute,
+ * tile queries return null and activation fails.
+ */
+function makeContextCapture() {
+    const holder: { current: MutableRefObject<boolean> | undefined } = { current: undefined };
+    function ContextCapturePara(args: { node: { s?: string | number }; [k: string]: unknown }) {
+        const ctx = useContext(PreviewContext);
+        holder.current = ctx?.editExpandedRef as MutableRefObject<boolean> | undefined;
+        const poolId = args.node.s;
+        const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node as any) : null;
+        const isEditable = resolved != null
+            && resolved.reachabilityClass !== 'Opaque'
+            && poolId !== undefined
+            && !ctx?.editingDisabled;
+        return (
+            <p {...(isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {})}>
+                para
+            </p>
+        );
+    }
+    return { holder, ContextCapturePara };
+}
+
 function mountPreviewRoot(
     opts: {
         setAst?: (ast: PandocAST) => void;
         pool?: typeof POOL_AB;
         content?: string;
+        customRegistry?: Record<string, React.ComponentType<any>>;
     } = {},
 ) {
     const pool = opts.pool ?? POOL_AB;
     const content = opts.content ?? CONTENT_AB;
     const setAst = opts.setAst ?? vi.fn();
     const astJson = makeAstJson(pool, content);
+    const { holder, ContextCapturePara } = makeContextCapture();
     const props: PreviewRootProps = {
         astJson,
         untransformedAstJson: astJson,
@@ -116,9 +155,14 @@ function mountPreviewRoot(
         assetManifest: {},
         setAst,
         onNavigateToDocument: () => {},
+        // Inject the context-capture probe as the Para renderer so tests can
+        // access editExpandedRef.current from outside the React tree.
+        customRegistry: { Para: ContextCapturePara, ...(opts.customRegistry ?? {}) },
     };
     const result = render(<PreviewRoot {...props} />);
-    return { ...result, setAst, pool, content, astJson };
+    // editExpandedRef is the ref object captured by ContextCapturePara.
+    // It is the same MutableRefObject<boolean> for the lifetime of PreviewRoot.
+    return { ...result, setAst, pool, content, astJson, editExpandedRefHolder: holder };
 }
 
 /** Mock getBoundingClientRect on all [data-block-pool-id] tile elements. */
@@ -270,143 +314,216 @@ describe('§7.b — keyboard/pointer activation: expanded vs collapsed', () => {
 /* ─── Test 7.c: leave keys do NOT expand ─────────────────────────────────────
  *
  * Sub-cases:
- *   - edge ArrowDown (onEdge=true) → navigates away, data-expanded stays absent.
- *   - Esc → closes editor, data-expanded stays absent.
- *   - Cmd/Ctrl+Enter → commits + closes, data-expanded stays absent.
+ *   - edge ArrowDown (onEdge=true) → navigates away, editExpandedRef stays false.
+ *   - Esc → closes editor, editExpandedRef stays false.
+ *   - Cmd/Ctrl+Enter → commits + closes, editExpandedRef stays false.
+ *
+ * Binding: assert on ctx.editExpandedRef.current (read from ContextCapturePara).
+ * The DOM-attribute approach was theater: after a leave key, the textarea unmounts
+ * (the leave action closes the editor), so `data-expanded` is read on a detached
+ * element and is always absent — even if the expand guard is removed.
+ * editExpandedRef.current is set SYNCHRONOUSLY in onKeyDown before any unmount;
+ * the guard (! isLeaveKey) prevents the write for leave keys.
+ *
+ * Positive control: a printable key sets editExpandedRef.current = true
+ * (tested per sub-case to confirm the ref is wired).
  *
  * Vacuity guard: the leave action must actually have fired (not just "nothing happened").
  *
  * FAIL-ON-REVERT:
- *   - Remove the leave-key exclusions from the expand trigger → all three fire expand
- *     → `data-expanded` present → RED.
- *   - Vacuity guard: if the leave key is a no-op (not actually leaving), the guard's
- *     assertion (requestMove called / setEditTarget called) would also fail → RED.
+ *   Remove the `!isLeaveKey` check from the onKeyDown expand guard in dispatchers.tsx
+ *   → leave keys call `editExpandedRef.current = true` synchronously
+ *   → each sub-case's `editExpandedRef.current === false` assertion fails → RED.
  */
 describe('§7.c — leave keys do not expand', () => {
-    it('edge ArrowDown does not expand; navigate away fires (vacuity guard)', async () => {
+    it('edge ArrowDown does not set editExpandedRef; positive control: printable key does', async () => {
         const setAst = vi.fn();
-        const { container } = mountPreviewRoot({ setAst });
+        const { container, editExpandedRefHolder } = mountPreviewRoot({ setAst });
         await act(async () => {});
         mockTileRects(container);
 
-        // Mock isOnLastVisualLine to return true (edge condition).
         vi.spyOn(caretGeometry, 'isOnLastVisualLine').mockReturnValue(true);
         vi.spyOn(caretGeometry, 'isOnFirstVisualLine').mockReturnValue(false);
         vi.spyOn(caretGeometry, 'getLogicalColumn').mockReturnValue(0);
 
+        // Open tile A via pointer (collapsed).
         const ta = await clickActivateTile(container, 0);
 
-        // Must open collapsed.
-        expect(ta.hasAttribute('data-expanded')).toBe(false);
+        // The ContextCapturePara probe has now rendered (tile B is visible).
+        // editExpandedRef must be populated.
+        expect(editExpandedRefHolder.current, 'editExpandedRef should be captured by probe').toBeDefined();
+        const editExpandedRef = editExpandedRefHolder.current!;
 
-        // Fire edge ArrowDown.
-        let requestMoveFired = false;
-        // We intercept by checking that the editor closes (the move happens synchronously
-        // when the draft is clean, opening the next tile or no-opping if no B).
-        // With POOL_AB, there is a tile B (pool[1]). The hop should open B's textarea.
+        // Precondition: editExpandedRef starts false (collapsed open).
+        expect(editExpandedRef.current, 'editExpandedRef.current must be false before leave key').toBe(false);
+
+        // Make the draft DIRTY so ArrowDown takes the async commit path (not the
+        // synchronous hop path). The synchronous hop path calls openEditTarget which
+        // itself resets editExpandedRef.current = false, masking the revert. The
+        // async path (dirty) does NOT call openEditTarget synchronously — it stashes
+        // a pending landing — leaving editExpandedRef.current intact for the check.
+        await act(async () => {
+            fireEvent.change(ta, { target: { value: 'dirty' } });
+        });
+        // editExpandedRef.current must still be false (change doesn't trigger keyDown expand guard).
+        expect(editExpandedRef.current, 'editExpandedRef must still be false after onChange').toBe(false);
+
+        // Fire edge ArrowDown (leave key) with dirty draft → async commit path.
         await act(async () => {
             fireEvent.keyDown(ta, { key: 'ArrowDown' });
         });
 
-        // data-expanded must still be absent on the (possibly new) textarea.
-        // After a hop, A's textarea is gone and B's may open. Check A's textarea
-        // was not expanded (it was closed/replaced before expand).
-        // The key check: we never transitioned to expanded on A before leave.
-        expect(ta.hasAttribute('data-expanded'), 'edge ArrowDown must not expand').toBe(false);
+        // Binding assertion: the leave-key guard must have prevented the expand write.
+        // With the revert (!isLeaveKey removed): editExpandedRef.current = true (set
+        // synchronously in the handler, not reset by the async dirty path) → RED.
+        expect(editExpandedRef.current, 'edge ArrowDown must NOT set editExpandedRef').toBe(false);
 
-        // Vacuity guard: the move fired — editor is now either on B or closed.
-        // In jsdom, the hop opens B. If B opens, we have a different textarea.
-        // If B doesn't open (no dest), A's textarea closes. Either way, the
-        // leave action was attempted (isOnLastVisualLine was called).
+        // Vacuity guard: isOnLastVisualLine was called (the edge-detection path ran).
         expect(caretGeometry.isOnLastVisualLine).toHaveBeenCalled();
+        // Vacuity guard: setAst was called (dirty commit fired via the async path).
+        expect(setAst, 'setAst must be called for dirty ArrowDown hop').toHaveBeenCalled();
+
+        // ── Positive control: open a fresh editor and fire a printable key ────
+        // This confirms the ref IS being written (not broken by a test setup issue).
+        // Editor closed after dirty hop (pending landing stashed). Reopen tile A.
+        await act(async () => {}); // flush any remaining effects
+        const tileA = container.querySelector<HTMLElement>('[data-block-pool-id="0"]');
+        if (tileA) {
+            await act(async () => {
+                fireEvent(tileA!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
+                fireEvent(tileA!, ptrEvent('pointerup', { pointerType: 'mouse' }));
+            });
+        }
+        const ta2 = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(ta2, 'a textarea must be open for positive control').not.toBeNull();
+        // editExpandedRef was reset to false on the new open (pointer activation).
+        expect(editExpandedRef.current, 'editExpandedRef reset to false on re-open').toBe(false);
+        // Fire a printable key → expand guard fires → editExpandedRef.current = true.
+        fireEvent.keyDown(ta2!, { key: 'a' });
+        expect(editExpandedRef.current, 'printable key MUST set editExpandedRef (positive control)').toBe(true);
     });
 
-    it('Esc does not expand; editor closes (vacuity guard)', async () => {
+    it('Esc does not set editExpandedRef; positive control: printable key does', async () => {
         const setAst = vi.fn();
-        const { container } = mountPreviewRoot({ setAst });
+        const { container, editExpandedRefHolder } = mountPreviewRoot({ setAst });
         await act(async () => {});
         mockTileRects(container);
 
+        // Open tile A via pointer (collapsed).
         const ta = await clickActivateTile(container, 0);
-        expect(ta.hasAttribute('data-expanded')).toBe(false);
 
-        // Press Escape.
+        const editExpandedRef = editExpandedRefHolder.current!;
+        expect(editExpandedRef, 'editExpandedRef should be captured').toBeDefined();
+
+        // Precondition: collapsed.
+        expect(editExpandedRef.current, 'editExpandedRef.current must be false before Esc').toBe(false);
+
+        // Fire Esc (leave key).
         await act(async () => {
             fireEvent.keyDown(ta, { key: 'Escape' });
         });
 
-        // data-expanded was never set on the textarea (it's now gone).
-        expect(ta.hasAttribute('data-expanded'), 'Esc must not expand').toBe(false);
+        // Binding assertion: Esc must NOT set editExpandedRef.
+        expect(editExpandedRef.current, 'Esc must NOT set editExpandedRef').toBe(false);
 
-        // Vacuity guard: editor is closed.
+        // Vacuity guard: editor is closed (Esc fired the leave action).
         expect(container.querySelector('textarea'), 'editor must be closed after Esc').toBeNull();
+
+        // ── Positive control ────────────────────────────────────────────────
+        // Re-open tile A via pointer.
+        const tileA = container.querySelector<HTMLElement>('[data-block-pool-id="0"]');
+        expect(tileA).not.toBeNull();
+        await act(async () => {
+            fireEvent(tileA!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
+            fireEvent(tileA!, ptrEvent('pointerup', { pointerType: 'mouse' }));
+        });
+        const ta2 = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(ta2, 'editor should reopen').not.toBeNull();
+        // editExpandedRef was reset to false on the new open.
+        expect(editExpandedRef.current, 'editExpandedRef reset to false on re-open').toBe(false);
+        // Fire a printable key.
+        fireEvent.keyDown(ta2!, { key: 'a' });
+        expect(editExpandedRef.current, 'printable key MUST set editExpandedRef (positive control)').toBe(true);
     });
 
-    it('Cmd+Enter does not expand; editor commits and closes (vacuity guard)', async () => {
+    it('Cmd+Enter does not set editExpandedRef; positive control: printable key does', async () => {
         const setAst = vi.fn();
-        const { container } = mountPreviewRoot({ setAst });
+        const { container, editExpandedRefHolder } = mountPreviewRoot({ setAst });
         await act(async () => {});
         mockTileRects(container);
 
+        // Open tile A via pointer (collapsed).
         const ta = await clickActivateTile(container, 0);
-        // Type so the draft is dirty (for the commit to fire).
+        // Make the draft dirty so commit fires.
         await act(async () => {
             fireEvent.change(ta, { target: { value: 'newcontent' } });
         });
 
-        // Verify still collapsed after change (change doesn't expand without keyDown).
-        // Actually change does NOT trigger expand — only keyDown does. Let's check.
-        // NOTE: onChange doesn't call onKeyDown, so data-expanded stays absent here.
-        // (We don't fire keyDown for the printable char in this test to avoid confounding.)
-        // The data-expanded check here is: it should still be absent (no keyDown yet).
-        expect(ta.hasAttribute('data-expanded')).toBe(false);
+        const editExpandedRef = editExpandedRefHolder.current!;
+        expect(editExpandedRef, 'editExpandedRef should be captured').toBeDefined();
 
-        // Now Cmd+Enter (commit+close).
+        // Precondition: collapsed (no keyDown yet, so not expanded).
+        expect(editExpandedRef.current, 'editExpandedRef.current must be false before Cmd+Enter').toBe(false);
+
+        // Fire Cmd+Enter (leave key = commit chord).
         await act(async () => {
             fireEvent.keyDown(ta, { key: 'Enter', metaKey: true });
         });
 
-        // data-expanded was never set.
-        expect(ta.hasAttribute('data-expanded'), 'Cmd+Enter must not expand').toBe(false);
+        // Binding assertion: Cmd+Enter must NOT set editExpandedRef.
+        expect(editExpandedRef.current, 'Cmd+Enter must NOT set editExpandedRef').toBe(false);
 
-        // Vacuity guard: setAst was called (commit fired).
+        // Vacuity guard: setAst called (commit fired) + editor closed.
         expect(setAst, 'setAst must be called (commit fired)').toHaveBeenCalled();
-        // Editor is closed.
         expect(container.querySelector('textarea'), 'editor must be closed after Cmd+Enter').toBeNull();
+
+        // ── Positive control ────────────────────────────────────────────────
+        // Re-open tile A via pointer.
+        const tileA = container.querySelector<HTMLElement>('[data-block-pool-id="0"]');
+        expect(tileA).not.toBeNull();
+        await act(async () => {
+            fireEvent(tileA!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
+            fireEvent(tileA!, ptrEvent('pointerup', { pointerType: 'mouse' }));
+        });
+        const ta2 = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(ta2, 'editor should reopen').not.toBeNull();
+        expect(editExpandedRef.current, 'editExpandedRef reset to false on re-open').toBe(false);
+        fireEvent.keyDown(ta2!, { key: 'a' });
+        expect(editExpandedRef.current, 'printable key MUST set editExpandedRef (positive control)').toBe(true);
     });
 });
 
-/* ─── Test 7.d: floor holds (scrollHeight < contentHeight) ───────────────────
+/* ─── Test 7.d: floor holds AND grow holds ────────────────────────────────────
  *
- * When expanded and scrollHeight < contentHeight, height must be clamped to
- * contentHeight (never smaller than the replaced element).
+ * Two cases, both verifying Math.max(contentHeight, ta.scrollHeight):
  *
- * In jsdom, scrollHeight=0 always. To prove the floor, we need contentHeight > 0.
- * We stub getBoundingClientRect to return height=100, which becomes contentHeight=100.
- * Then after expansion: style.height must equal '100px' (max(100, 0) = 100).
+ * GROW case: scrollHeight=200 > contentHeight=100 → height must be 200px.
+ *   Reverting Math.max(...) → contentHeight → height becomes 100px (won't grow) → RED.
+ *
+ * FLOOR case: scrollHeight=40 < contentHeight=100 → height must be 100px.
+ *   Reverting Math.max(...) → ta.scrollHeight (bare) → height becomes 40px (shrinks) → RED.
+ *
+ * Both reverts are needed to fully bind Math.max in both directions.
  *
  * FAIL-ON-REVERT:
- *   Revert `Math.max(contentHeight, ta.scrollHeight)` to bare `ta.scrollHeight`:
- *   → height becomes '0px' (scrollHeight=0), not '100px' → RED.
+ *   - Revert `Math.max(contentHeight, ta.scrollHeight)` → `contentHeight`:
+ *     GROW case fails: height stays 100px instead of 200px → RED.
+ *   - Revert `Math.max(contentHeight, ta.scrollHeight)` → `ta.scrollHeight`:
+ *     FLOOR case fails: height becomes 40px instead of 100px → RED.
  */
-describe('§7.d — floor: expanded height clamped to contentHeight when scrollHeight < contentHeight', () => {
-    it('style.height = contentHeight px when scrollHeight < contentHeight', async () => {
+describe('§7.d — height = Math.max(contentHeight, scrollHeight): floor and grow', () => {
+    it('GROW: scrollHeight(200) > contentHeight(100) → style.height = 200px', async () => {
         const { container } = mountPreviewRoot();
         await act(async () => {});
 
-        // Mock tile rect with height=100 so getComputedStyle sees real dimensions.
-        // The contentHeight is derived from getBoundingClientRect().height minus padding/border.
-        // In jsdom, getComputedStyle returns empty string for padding/border, so contentHeight = rect.height.
+        // Mock tile A with height=100 → contentHeight=100.
         const tile = container.querySelector<HTMLElement>('[data-block-pool-id="0"]');
         expect(tile).not.toBeNull();
-
-        // Mock the rect with height=100.
         vi.spyOn(tile!, 'getBoundingClientRect').mockReturnValue({
             left: 0, top: 0, right: 200, bottom: 100,
             width: 200, height: 100, x: 0, y: 0, toJSON: () => ({}),
         } as DOMRect);
-
-        // Also mock the host's rect for other tiles.
+        // Mock other tiles (tile B).
         container.querySelectorAll<HTMLElement>('[data-block-pool-id]').forEach((el) => {
             if (el !== tile) {
                 const pid = Number(el.getAttribute('data-block-pool-id'));
@@ -417,19 +534,14 @@ describe('§7.d — floor: expanded height clamped to contentHeight when scrollH
             }
         });
 
-        // Click-activate tile A (contentHeight will be ~100 due to the mocked rect).
+        // Click-activate tile A (contentHeight=100).
         const ta = await clickActivateTile(container, 0);
 
-        // Verify contentHeight of 100 was captured.
-        // The textarea's initial style.height should reflect contentHeight.
-        // In jsdom, the style prop sets height to the number value.
-        // After click-activate with mocked height=100, contentHeight should be ~100.
-        // (getComputedStyle returns '' for padding/border in jsdom, so contentHeight = 100.)
+        // Stub scrollHeight=200 on the textarea BEFORE firing the key that
+        // triggers the layoutEffect that reads scrollHeight.
+        Object.defineProperty(ta, 'scrollHeight', { value: 200, configurable: true });
 
-        // In jsdom, scrollHeight is always 0.
-        expect(ta.scrollHeight).toBe(0);
-
-        // Fire a printable key to trigger expansion.
+        // Fire a printable key to trigger expansion and the layoutEffect.
         await act(async () => {
             fireEvent.keyDown(ta, { key: 'a' });
         });
@@ -437,9 +549,49 @@ describe('§7.d — floor: expanded height clamped to contentHeight when scrollH
         // After expansion: data-expanded must be set.
         expect(ta.hasAttribute('data-expanded'), 'must be expanded after key').toBe(true);
 
-        // The layout effect runs: height = max(contentHeight=100, scrollHeight=0) + 'px'
-        // = '100px'.
-        expect(ta.style.height, 'height must be clamped to contentHeight (100px)').toBe('100px');
+        // GROW: height = max(contentHeight=100, scrollHeight=200) = 200 → '200px'.
+        // Reverting Math.max → contentHeight gives '100px' → RED.
+        expect(ta.style.height, 'GROW: height must be scrollHeight (200px) when scrollHeight > contentHeight').toBe('200px');
+    });
+
+    it('FLOOR: scrollHeight(40) < contentHeight(100) → style.height = 100px', async () => {
+        const { container } = mountPreviewRoot();
+        await act(async () => {});
+
+        // Mock tile A with height=100 → contentHeight=100.
+        const tile = container.querySelector<HTMLElement>('[data-block-pool-id="0"]');
+        expect(tile).not.toBeNull();
+        vi.spyOn(tile!, 'getBoundingClientRect').mockReturnValue({
+            left: 0, top: 0, right: 200, bottom: 100,
+            width: 200, height: 100, x: 0, y: 0, toJSON: () => ({}),
+        } as DOMRect);
+        container.querySelectorAll<HTMLElement>('[data-block-pool-id]').forEach((el) => {
+            if (el !== tile) {
+                const pid = Number(el.getAttribute('data-block-pool-id'));
+                vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
+                    left: 0, top: pid * 60, right: 200, bottom: pid * 60 + 40,
+                    width: 200, height: 40, x: 0, y: pid * 60, toJSON: () => ({}),
+                } as DOMRect);
+            }
+        });
+
+        // Click-activate tile A (contentHeight=100).
+        const ta = await clickActivateTile(container, 0);
+
+        // Stub scrollHeight=40 (below contentHeight) on the textarea.
+        Object.defineProperty(ta, 'scrollHeight', { value: 40, configurable: true });
+
+        // Fire a printable key to trigger expansion and the layoutEffect.
+        await act(async () => {
+            fireEvent.keyDown(ta, { key: 'a' });
+        });
+
+        // After expansion: data-expanded must be set.
+        expect(ta.hasAttribute('data-expanded'), 'must be expanded after key').toBe(true);
+
+        // FLOOR: height = max(contentHeight=100, scrollHeight=40) = 100 → '100px'.
+        // Reverting Math.max → ta.scrollHeight (bare) gives '40px' → RED.
+        expect(ta.style.height, 'FLOOR: height must be clamped to contentHeight (100px) when scrollHeight < contentHeight').toBe('100px');
     });
 });
 
@@ -483,72 +635,32 @@ describe('§7.g — hop to B: B opens collapsed even after A was expanded', () =
 
 /* ─── Test 7.h: self-heal remount preserves expanded state ───────────────────
  *
- * Open A and expand it. Then trigger a self-heal REMOUNT by re-rendering with
- * new astJson/renderedContent where A's content is UNCHANGED but pool indices shift
- * (collaborator inserts a block above) — this triggers a KEEP re-anchor.
+ * Open A via POINTER (click), then expand it via a real in-surface printable
+ * key (so setExpanded(true) fires and editExpandedRef.current=true). Then trigger
+ * a collaborator-shift REMOUNT (array-index key change from block inserted above).
+ * After the remount, the textarea must still be expanded.
  *
- * The offset-shifted KEEP scenario from p2-3b-real §3(b):
- *   - Original pool: [r=[0,6] "para0\n", r=[6,12] "para1\n"]
- *   - We open editor on tile A (pool[0], r0=0, "para0")
- *   - Collaborator inserts a block BEFORE para0
- *   - New pool: [NEW r=[0,4], r=[4,10] "para0\n" (shifted), r=[10,16] "para1\n"]
- *   - findReanchorCandidate: exact at r0=0? → pool[0]="NEW\n" ≠ "para0" miss
- *     nearest at/after r0=0 → pool[0] at r0=0 "NEW\n" ≠ "para0"
- *   Actually: nearest = the entry with smallest r0 >= 0, which is pool[0] r0=0 "NEW" ≠ "para0"
- *   → null → DROP!
- *
- * We need a different fixture: collaborator inserts block BETWEEN para0 and para1,
- * so para0 stays at r0=0, but the AST JSON string changes (causing deps to update).
- * This is the "content-preserving" KEEP scenario (section 2 in p2-3b-real).
- *
- * But that doesn't cause a remount — the KEEP re-anchor just calls setEditTargetRaw(same),
- * which triggers a re-render, not an unmount+remount.
- *
- * The actual remount of EditTextarea happens when the REACT KEY of the Block component
- * changes — which happens when a new block is inserted and the `s` attribute (pool index)
- * of A's node changes. In the `dispatch.tsx` Node renderer, blocks are keyed by their
- * position in the blocks array (index). When a new block is prepended, A moves from
- * index 0 to index 1, causing React to unmount the old instance and mount a new one.
- *
- * For 7.h we use the offset-unchanged KEEP scenario but with a pool-index shift:
- *   - A (pool[0] initially) stays at r0=0 with same content "para0\n"
- *   - Collaborator changes pool[1] ("para1\n" → "CHANGED\n")
- *   - A's position in the AST (index 0) is UNCHANGED, so no key change for A
- *   - findReanchorCandidate: exact at r0=0, content "para0" matches → KEEP
- *   - Self-heal calls setEditTargetRaw(same) → re-render (not unmount+remount)
- *
- * Actually, the important test for 7.h is:
- *   When the editTarget changes (setEditTargetRaw(reanchored)) while the editor is open,
- *   the textarea re-renders with new ctx.editTarget but does NOT unmount. The expanded
- *   state is preserved in local React state (no reset).
- *
- * For a TRUE remount test, we need an approach like p2-3b-real §3(b) where the
- * AST block index SHIFTS (new block prepended → A moves from index 0 to 1 → key change).
- * But in §3(b), A shifts from r0=6 to r0=10 (opening was on pool[1], "para1").
- * Let's use the same fixture but opening on pool[0] ("para0"), and the shift makes
- * para0 go from index 0 in the AST to index 1 (new block prepended).
- *
- * New fixture:
- *   - Original: [pool[0] r=[0,6] "para0\n", pool[1] r=[6,12] "para1\n"]
- *   - Open A = pool[0], "para0", r0=0
- *   - Collaborator inserts "NEW\n" before para0:
- *     New content: "NEW\npara0\npara1\n"
- *     New pool: [pool[0] r=[0,4] "NEW\n", pool[1] r=[4,10] "para0\n", pool[2] r=[10,16] "para1\n"]
- *   - findReanchorCandidate: exact at r0=0 → pool[0] "NEW" ≠ "para0" miss;
- *     nearest at/after r0=0 → pool[0] r0=0 "NEW" ≠ "para0" → null → DROP!
- *
- * The issue: "nearest" finds pool[0] at r0=0, but content doesn't match.
- * findReanchorCandidate returns null (no match) → DROP.
- *
- * So we cannot easily test a remount via an "insert above" scenario where A was pool[0].
- * Instead, use A = pool[1] (like p2-3b-real §3b), keyboard-activate, then shift.
+ * This test isolates the remount-preserve from §7.b (keyboard-open) by opening
+ * via POINTER + expand-by-typing. If the test's open step depended on keyboard
+ * activation (like the old §7.h), a revert of the useState initializer would
+ * fail at the OPEN step, not at the REMOUNT step — making the binding ambiguous.
+ * With pointer-open + expand-by-typing, the ONLY thing that preserves expansion
+ * across the remount is `useState(() => ctx.editExpandedRef?.current ?? false)`.
  *
  * FAIL-ON-REVERT:
- *   Remove the `useState(() => ctx.editExpandedRef?.current ?? false)` initializer
- *   reading from editExpandedRef → remount resets to false → data-expanded absent → RED.
+ *   `useState(() => ctx.editExpandedRef?.current ?? false)` → `useState(false)`:
+ *   After the remount, the new EditTextarea instance initializes collapsed.
+ *   The POST-REMOUNT assertion (`data-expanded` present) fails → RED.
+ *   Because the open was POINTER + expand-by-typing (not keyboard-open), the test
+ *   REACHES the remount step — so the RED is specifically at the remount binding.
+ *
+ * Scenario uses the offset-shifted KEEP fixture from p2-3b-real §3(b):
+ *   A = pool[1] ("para1"), collaborator inserts NEW block before para0.
+ *   A shifts from AST index 1 to index 2 → React key change → EditTextarea remounts.
+ *   Self-heal re-anchors: KEEP (content "para1" found at new r0=10).
  */
 describe('§7.h — self-heal remount preserves expanded state', () => {
-    it('A (pool[1]) stays expanded after a collaborator inserts block above para0 (KEEP+remount)', async () => {
+    it('A stays expanded after pointer-open + expand-by-typing + collaborator remount', async () => {
         // Use 3-tile content to match p2-3b-real §3(b):
         //   para0: pool[0] r=[0,6]   "para0\n"   line 0
         //   para1: pool[1] r=[6,12]  "para1\n"   line 1  ← A (edit target)
@@ -562,8 +674,7 @@ describe('§7.h — self-heal remount preserves expanded state', () => {
 
         // Shifted content: NEW block prepended before para0.
         // A (para1) was at r0=6, now at r0=10.
-        // findReanchorCandidate: exact at r0=6? → pool[1] r0=4 ("para0") miss
-        //   → nearest at/after r0=6 → pool[2] r0=10 "para1" matches → KEEP (re-anchor to r0=10).
+        // findReanchorCandidate: nearest at/after r0=6 → pool[2] r0=10 "para1" matches → KEEP.
         const SHIFTED_CONTENT = 'NEW\npara0\npara1\npara2\n\n';
         const SHIFTED_POOL = [
             { t: 0, r: [0, 4], d: 0 },   // pool[0]: "NEW\n" (new block)
@@ -573,7 +684,11 @@ describe('§7.h — self-heal remount preserves expanded state', () => {
         ];
 
         const setAst = vi.fn();
-        const astJson = makeAstJson(BASE_POOL_3, BASE_CONTENT_3);
+        const astJson = makeAstJson(BASE_POOL_3 as typeof POOL_AB, BASE_CONTENT_3);
+
+        // Build the ContextCapturePara probe to capture editExpandedRef.
+        const { holder, ContextCapturePara } = makeContextCapture();
+
         const props = {
             astJson,
             untransformedAstJson: astJson,
@@ -582,6 +697,7 @@ describe('§7.h — self-heal remount preserves expanded state', () => {
             assetManifest: {},
             setAst,
             onNavigateToDocument: () => {},
+            customRegistry: { Para: ContextCapturePara },
         };
         const { container, rerender } = render(<PreviewRoot {...props} />);
         await act(async () => {});
@@ -595,14 +711,29 @@ describe('§7.h — self-heal remount preserves expanded state', () => {
             } as DOMRect);
         });
 
-        // Open A (pool[1] = "para1") via KEYBOARD → expanded.
-        const taA = await keyboardActivateTile(container, 1);
-        expect(taA.hasAttribute('data-expanded'), 'A opens expanded via keyboard').toBe(true);
+        // ── Step 1: Open A (pool[1] = "para1") via POINTER (click) → collapsed. ──
+        const taA = await clickActivateTile(container, 1);
+        expect(taA.hasAttribute('data-expanded'), 'A opens collapsed via pointer').toBe(false);
 
-        // Collaborator inserts NEW block before para0 → A shifts from r0=6 to r0=10.
-        // React key of A's block (AST index 1 → 2) changes → EditTextarea remounts.
-        // Self-heal re-anchors: KEEP (content "para1" matches at new r0=10).
-        const newAstJson = makeAstJson(SHIFTED_POOL, SHIFTED_CONTENT);
+        // Confirm editExpandedRef was captured by the probe.
+        const editExpandedRef = holder.current!;
+        expect(editExpandedRef, 'editExpandedRef must be captured').toBeDefined();
+        expect(editExpandedRef.current, 'editExpandedRef.current must be false after pointer open').toBe(false);
+
+        // ── Step 2: Expand via a real in-surface keystroke. ────────────────────
+        // Fire a printable key → setExpanded(true) + editExpandedRef.current=true.
+        await act(async () => {
+            fireEvent.keyDown(taA, { key: 'a' });
+        });
+
+        // Confirm expanded via DOM attribute.
+        expect(taA.hasAttribute('data-expanded'), 'A must be expanded after printable key').toBe(true);
+        // Confirm via ref (synchronously set by onKeyDown).
+        expect(editExpandedRef.current, 'editExpandedRef.current must be true after printable key').toBe(true);
+
+        // ── Step 3: Collaborator inserts NEW block → A shifts (REMOUNT). ───────
+        // A (para1) was AST index 1 → now AST index 2 → React key change → remount.
+        const newAstJson = makeAstJson(SHIFTED_POOL as typeof POOL_AB, SHIFTED_CONTENT);
         await act(async () => {
             rerender(
                 <PreviewRoot
@@ -613,17 +744,25 @@ describe('§7.h — self-heal remount preserves expanded state', () => {
                     assetManifest={{}}
                     setAst={setAst}
                     onNavigateToDocument={() => {}}
+                    customRegistry={{ Para: ContextCapturePara }}
                 />,
             );
         });
 
-        // After the self-heal re-anchor, EditTextarea remounts with the new AST.
-        // It should still be expanded (editExpandedRef.current = true, preserved).
+        // ── Step 4: POST-REMOUNT assertion — the binding step. ─────────────────
+        // The new EditTextarea instance must initialize with expanded=true
+        // because `useState(() => ctx.editExpandedRef?.current ?? false)` reads
+        // editExpandedRef.current=true (set in step 2, preserved across the remount).
+        //
+        // With revert (`useState(false)`): the new instance starts collapsed →
+        // data-expanded absent → this assertion FAILS → RED.
+        // The RED is specifically at THIS step (not earlier) because the open was
+        // pointer + expand-by-typing, not keyboard-open.
         const taAfter = container.querySelector<HTMLTextAreaElement>('textarea');
         expect(taAfter, 'textarea must still be open after self-heal remount').not.toBeNull();
         expect(
             taAfter!.hasAttribute('data-expanded'),
-            'A must stay expanded after self-heal remount (editExpandedRef preserved)',
+            'A must stay expanded after self-heal remount (editExpandedRef.current=true preserved)',
         ).toBe(true);
     });
 });

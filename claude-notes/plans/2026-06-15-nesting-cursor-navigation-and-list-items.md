@@ -129,6 +129,35 @@ All eight sections (§0–§7) are implemented and green at the jsdom/Rust tier:
   assertion contradicting the §2 commit-and-reland design) and **filed as a braid bug** (`-l block-editing`,
   needs a product decision). Left RED on purpose; not in scope for this plan.
 
+### Fail-on-revert audit (Mode B, adversarial — `audit/fail-on-revert` worktree, 2026-06-17)
+
+Cold, no-trust re-derivation: revert *only* the production hunk each test should protect, rebuild,
+confirm RED, restore, confirm GREEN.
+
+**jsdom/Rust tier** — found **4 theater/weak bindings**, each fixed in its own commit on
+`audit/fail-on-revert` (revert-proven): **§7.c** was total theater (asserted `data-expanded` on a
+textarea that unmounts in the same React batch → now asserts the synchronously-set `editExpandedRef.current`);
+**§7.d** was theater on the grow path (jsdom `scrollHeight=0` → now stubs scrollHeight both directions);
+**§7.h** conflated remount-preserve with keyboard-open (→ pointer-open + expand-by-typing); **§0 0.c-wiring**
+bound "a Range was used" but not "excludes the sublist" (→ boundary-sensitive `intersectsNode` stub).
+§4 p3-3, §2 roving LI/DD, and Rust 6.b were spot-checked and confirmed solidly bound.
+
+**e2e tier** — spot-checked the **two most vacuity-prone** specs (the geometry/tolerance tests; the
+discrete-assertion specs `item-edit-size`/`delete-by-emptying` read as bound). Both went RED on revert
+— **no theater**:
+- **`breadcrumb-geometry` 4b** (revert hunk 3a: host→`surface.offsetParent` + drop `#quarto-content{position:relative}`):
+  RED — chip froze at y=336.70 while the surface scrolled −400px (gap delta −400 ≫ 3px tol). The author's
+  documented vacuity trap (a no-op `#root` scroll) is confirmed *absent* — the logs show the surface really
+  moved. Clean, decisive bind.
+- **`nesting-size-in`** (revert §1: force `snap=undefined` → pre-§1 stale-box fallback): RED, but at the
+  nest-**OUT** checkpoint (line 127), *before* the headline nest-**IN** assertion (line 142) — §1's snapshot
+  map serves both directions, so the fallback breaks nest-out sizing first. Verdict: genuinely bound to §1
+  (red, not green), but this revert proves *snapshot-consumption is wired*, not that the nest-in assertion
+  isolates; no clean one-line hunk breaks only nest-in (shared map). Provenance note, not a fix.
+
+All reverts restored; `audit/fail-on-revert` tree clean. Conclusion: real-browser distant-state e2e tests
+held up at their two weakest points; only the jsdom tier needed repairs.
+
 ### Remaining (deferred e2e — tracked, not blocking)
 - **0.e** (text-with-sublist nest-in), **1.d** (unlock arrow into sublist + caret col + doc-end no-op),
   **6.h** (bullet delete leaves empty `<li>`), **7.f** (roving-Enter opens expanded) — not yet written.
