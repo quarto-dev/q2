@@ -257,6 +257,40 @@ describe('P2.5a — arrow move (unmodified): synchronous hop to destination', ()
         expect(textareaA).not.toBeNull();
         expect(textareaA!.value).toBe('para1');
     });
+
+    /* ─────────────────────────────────────────────────────────────────────────
+     * Arrow move sizes the destination editor from the REAL measured box.
+     *
+     * resolveLanding returns box:{ measure: destTile } for an arrow move, and
+     * openEditTarget sizes the editor via measureBlockBox(destTile). This is the
+     * production behavior the retired p2-4b "Fix 1" BoxMeasureHarness only
+     * *simulated* — that harness reimplemented requestMove and asserted on its
+     * own measureBlockBox call, so it stayed green when PreviewRoot's real
+     * measurement was neutralized.
+     *
+     * Fail-on-revert: neutralizing the measureBlockBox call in openEditTarget's
+     * box:{measure} branch opens the editor at height 0 → this test reddens.
+     * Verified no other test in the integration suite binds that hunk.
+     * ───────────────────────────────────────────────────────────────────────── */
+    it('sizes B from the measured destination tile (non-zero height), not height:0', async () => {
+        vi.spyOn(caretGeometry, 'isOnLastVisualLine').mockReturnValue(true);
+        vi.spyOn(caretGeometry, 'isOnFirstVisualLine').mockReturnValue(false);
+
+        const { container } = mountPreviewRoot();
+        await act(async () => {});
+        mockTileRects(container); // every tile's getBoundingClientRect is 40px tall
+
+        const textarea = await activateTileA(container);
+        await act(async () => {
+            fireEvent.keyDown(textarea, { key: 'ArrowDown' });
+        });
+
+        const textareaB = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(textareaB).not.toBeNull();
+        expect(textareaB!.value).toBe('para2');
+        // Sized from measureBlockBox(destTile): mocked rect.height 40 − 0 paddings.
+        expect(textareaB!.style.height).toBe('40px');
+    });
 });
 
 /* ─────────────────────────────────────────────────────────────────────────────

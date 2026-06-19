@@ -2,25 +2,43 @@
  * Tests for diffToEditorChanges (bd-ov4gqk3m).
  *
  * The contract under test: the returned splice operations, applied **in
- * order against the evolving string** (exactly how
+ * order against the evolving document** (exactly how
  * `applyEditorOperations` splices them into the Automerge text), must
- * transform `currentContent` into `targetContent`.
+ * transform `currentContent` into `targetContent` — and must do so
+ * *minimally*, expressing offsets against the evolving document rather
+ * than rewriting shared content.
+ *
+ * The round-trips drive the REAL automerge text splice — the same
+ * `splice(doc, ['text'], rangeOffset, rangeLength, text)` primitive the
+ * sync client's `applyEditorOperations` runs inside `handle.change`. This
+ * replaces an earlier hand-rolled string-slice mirror of that consumer (a
+ * fail-on-revert pass found the mirror could drift from the real splice,
+ * and that the round-trips alone did not bind offset correctness — a
+ * degenerate "replace the whole document" producer round-tripped too).
  */
 
 import { describe, it, expect } from 'vitest';
+import * as Automerge from '@automerge/automerge';
 import { diffToEditorChanges } from './diffToEditorChanges';
 import type { EditorContentChange } from '@quarto/quarto-sync-client';
 
-/** Mirror of the splice loop in quarto-sync-client's applyEditorOperations. */
-function applyChanges(content: string, changes: EditorContentChange[]): string {
-  let result = content;
-  for (const change of changes) {
-    result =
-      result.slice(0, change.rangeOffset) +
-      change.text +
-      result.slice(change.rangeOffset + change.rangeLength);
-  }
-  return result;
+/**
+ * Apply the changes through the real automerge text splice (the primitive
+ * `applyEditorOperations` uses), against a fresh doc seeded with `content`.
+ */
+function applyViaAutomerge(content: string, changes: EditorContentChange[]): string {
+  let doc = Automerge.from<{ text: string }>({ text: content });
+  doc = Automerge.change(doc, (d) => {
+    for (const change of changes) {
+      Automerge.splice(d, ['text'], change.rangeOffset, change.rangeLength, change.text);
+    }
+  });
+  return doc.text;
+}
+
+/** Total characters inserted across all changes (0 for a pure deletion). */
+function insertedChars(changes: EditorContentChange[]): number {
+  return changes.reduce((n, c) => n + c.text.length, 0);
 }
 
 describe('diffToEditorChanges', () => {
@@ -45,22 +63,30 @@ describe('diffToEditorChanges', () => {
     const current = 'abc def ghi';
     const target = 'abcX def ghiY';
     const changes = diffToEditorChanges(current, target);
-    expect(applyChanges(current, changes)).toBe(target);
+    expect(applyViaAutomerge(current, changes)).toBe(target);
     expect(changes).toEqual([
       { rangeOffset: 3, rangeLength: 0, text: 'X' },
       { rangeOffset: 12, rangeLength: 0, text: 'Y' },
     ]);
   });
 
-  it('round-trips a realistic QMD paragraph edit', () => {
+  it('localizes a small edit instead of rewriting shared content', () => {
     const current = '---\ntitle: Doc\n---\n\nFirst paragraph.\n\nSecond paragraph.\n';
     const target = '---\ntitle: Doc\n---\n\nFirst paragraph, *edited*.\n\nSecond paragraph.\n';
     const changes = diffToEditorChanges(current, target);
-    expect(changes.length).toBeGreaterThan(0);
-    expect(applyChanges(current, changes)).toBe(target);
+
+    // Round-trips through the real automerge splice…
+    expect(applyViaAutomerge(current, changes)).toBe(target);
+
+    // …but a "delete everything, insert the whole target" producer would
+    // round-trip too. Bind offset correctness: the shared prefix is left
+    // untouched (first change starts past byte 0) and only the inserted
+    // fragment is written — not the entire ~65-char document.
+    expect(changes[0].rangeOffset).toBeGreaterThan(0);
+    expect(insertedChars(changes)).toBeLessThanOrEqual(', *edited*'.length);
   });
 
-  it('round-trips mixed insert/delete/replace edits', () => {
+  it('round-trips mixed insert/delete/replace edits through the real splice', () => {
     const cases: Array<[string, string]> = [
       ['hello world', 'world'],
       ['world', 'hello world'],
@@ -75,11 +101,11 @@ describe('diffToEditorChanges', () => {
     ];
     for (const [current, target] of cases) {
       const changes = diffToEditorChanges(current, target);
-      expect(applyChanges(current, changes), `'${current}' → '${target}'`).toBe(target);
+      expect(applyViaAutomerge(current, changes), `'${current}' → '${target}'`).toBe(target);
     }
   });
 
-  it('round-trips unicode and emoji content (UTF-16 offsets)', () => {
+  it('round-trips unicode and emoji content (UTF-16 offsets) through the real splice', () => {
     const cases: Array<[string, string]> = [
       ['hello 世界', 'hello 世界!'],
       ['hello 👋', 'hello 👋🌍'],
@@ -87,7 +113,7 @@ describe('diffToEditorChanges', () => {
     ];
     for (const [current, target] of cases) {
       const changes = diffToEditorChanges(current, target);
-      expect(applyChanges(current, changes), `'${current}' → '${target}'`).toBe(target);
+      expect(applyViaAutomerge(current, changes), `'${current}' → '${target}'`).toBe(target);
     }
   });
 });
