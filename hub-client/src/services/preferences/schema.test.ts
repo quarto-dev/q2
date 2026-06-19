@@ -40,6 +40,6 @@ describe('validatePreferences', () => {
     expect(result.errorOverlayCollapsed).toBe(false);
     expect(result.colorScheme).toBe('dark');
     // Must fill in the missing field with its default:
-    expect(result.unlockNestingCursor).toBe(false);
+    expect(result.unlockNestingCursor).toBe(true);
   });
 });

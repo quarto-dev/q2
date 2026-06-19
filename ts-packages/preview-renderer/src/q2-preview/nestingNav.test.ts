@@ -1093,3 +1093,71 @@ describe('surfaceAtLine (§1 C1/A2 — pure unit)', () => {
     expect(surfaceAtLine(ml2, 0, mlContent, mlMap)).toBeNull();
   });
 });
+
+// ── G16 blockquote-wrapped loose list: surfaceLineSpan + surfaceAtLine ────────
+//
+// Minimal repro:
+//   > and can we actually   (line 0)
+//   >                       (line 1, blank blockquote line with trailing space)
+//   > 1.  oh                (line 2)
+//   >                       (line 3, blank blockquote line with trailing space)
+//   > 2.  dear              (line 4)
+//   >                       (line 5, blank blockquote line with trailing space)
+//   > 3.  > > god           (line 6)
+//
+// Offsets derived from the real pampa binary (see plan G16):
+//   BlockQuote [0,65]   Para [2,24]   OrderedList [27,65]
+//   Plain(oh)  [31,39]  Plain(dear)  [43,53]  (item-3 nested BQ/Para [57,65]…[61,65])
+//
+// Root cause: the old whitespace-only trim left the `>` blockquote continuation
+// marker at r1, so Plain(oh)'s trimmed span was [2,4] instead of [2,2], and
+// surfaceAtLine(destLine=3) re-resolved to `oh` (the "caught" bug).
+
+// 65 bytes. Blank blockquote lines are "> " (trailing space) — see plan warning.
+const BQLOOSE_CONTENT =
+  '> and can we actually\n> \n> 1.  oh\n> \n> 2.  dear\n> \n> 3.  > > god\n';
+
+describe('G16 surfaceLineSpan (blockquote-wrapped loose list — `>` trim)', () => {
+  const map = buildByteLineMap(BQLOOSE_CONTENT);
+
+  it('G16-span: oh [31,39] trims to [2,2] (not [2,4] with old whitespace-only trim)', () => {
+    expect(surfaceLineSpan({ r0: 31, r1: 39 }, BQLOOSE_CONTENT, map)).toEqual([2, 2]);
+  });
+
+  it('G16-span: dear [43,53] trims to [4,4] (not [4,6] with old trim)', () => {
+    expect(surfaceLineSpan({ r0: 43, r1: 53 }, BQLOOSE_CONTENT, map)).toEqual([4, 4]);
+  });
+
+  it('G16-span: leading Para [2,24] trims to [0,0] (shape guard — passes either way)', () => {
+    expect(surfaceLineSpan({ r0: 2, r1: 24 }, BQLOOSE_CONTENT, map)).toEqual([0, 0]);
+  });
+
+  it('G16-span: outer BlockQuote [0,65] trims to [0,6] (shape guard — passes either way)', () => {
+    expect(surfaceLineSpan({ r0: 0, r1: 65 }, BQLOOSE_CONTENT, map)).toEqual([0, 6]);
+  });
+});
+
+describe('G16 surfaceAtLine (down-nav consequence — `oh` must not be "caught")', () => {
+  // Surface set used by down-nav from inside the blockquote loose list.
+  // BlockQuote [0,65], OrderedList [27,65], Plain(oh) [31,39], Plain(dear) [43,53]
+  const bqSet: NestingSurface[] = [
+    { r0: 0,  r1: 65 },  // BlockQuote (outermost)
+    { r0: 27, r1: 65 },  // OrderedList (container)
+    { r0: 31, r1: 39 },  // Plain(oh)
+    { r0: 43, r1: 53 },  // Plain(dear)
+  ];
+  const map = buildByteLineMap(BQLOOSE_CONTENT);
+  const at = (s: NestingSurface | null) => (s ? [s.r0, s.r1] : null);
+
+  it('G16-at: line 3 (between oh/dear) → null (container-gap, not "oh" the old overlap)', () => {
+    expect(surfaceAtLine(bqSet, 3, BQLOOSE_CONTENT, map)).toBeNull();
+  });
+
+  it('G16-at: line 4 → dear [43,53] (not oh [31,39] due to old overlap)', () => {
+    expect(at(surfaceAtLine(bqSet, 4, BQLOOSE_CONTENT, map))).toEqual([43, 53]);
+  });
+
+  it('G16-at: line 2 → oh [31,39]', () => {
+    expect(at(surfaceAtLine(bqSet, 2, BQLOOSE_CONTENT, map))).toEqual([31, 39]);
+  });
+});

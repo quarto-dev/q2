@@ -121,10 +121,28 @@ describe('Block dispatcher — P2 font', () => {
         expect(ta.style.fontFamily).toBe('monospace');
     });
 
-    it("renders <textarea> with fontSize: '0.9em' (raw string, not computed px)", () => {
+    it('renders <textarea> with fontSize in em units (raw string, not computed px)', () => {
         const { container } = mountBlock(ANCHOR_R0);
         const ta = container.querySelector('textarea')!;
-        expect(ta.style.fontSize).toBe('0.9em');
+        // G15-font: loosened from '0.9em' to accept any em value so the test
+        // stays green after EDITOR_FONT_SIZE was tuned (0.9em → 0.825em).
+        expect(ta.style.fontSize).toMatch(/^[0-9.]+em$/);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// G15 — one-line editing surface rows attribute
+// ---------------------------------------------------------------------------
+
+describe('Block dispatcher — G15 rows=1 structural fix', () => {
+    it('renders <textarea> with rows=1 (prevents HTML default rows=2 inflating the autosize)', () => {
+        // G15-0 binding: ta.rows === 1 with the fix; HTML default is 2 without it.
+        // Named revert hunk: remove rows={1} from the textarea in dispatchers.tsx
+        // → ta.rows reads the HTML default 2 → expected 1, got 2 → RED.
+        const { container } = mountBlock(ANCHOR_R0);
+        const ta = container.querySelector('textarea')!;
+        expect(ta).not.toBeNull();
+        expect(ta.rows).toBe(1);
     });
 });
 

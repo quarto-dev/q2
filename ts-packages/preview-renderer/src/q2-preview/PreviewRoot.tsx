@@ -21,7 +21,7 @@ import type { PreviewNodeEditPayload } from '../types/diagnostic';
 import { previewRegistry, PreviewContext } from '.';
 import { buildSourceIndex, serializeSourceEntry } from './sourceIndex';
 import type { ResolvedSource } from './sourceIndex';
-import { outerBlockForAnchorR0, findReanchorCandidate, enumerateOuterBlocks, captureEditTarget, measureBlockBox, seedForRange, snapshotOuterBlockGeometry } from './outerBlocks';
+import { outerBlockForAnchorR0, findReanchorCandidate, enumerateOuterBlocks, captureEditTarget, measureBlockBox, seedForRange, snapshotOuterBlockGeometry, isDirty } from './outerBlocks';
 import { buildByteLineMap } from '../utils/byteLineMap';
 import { normalizeLineEndings } from '../utils/normalizeLineEndings';
 import { AssetManifestContext } from './AssetManifestContext';
@@ -229,6 +229,8 @@ function walkForNoteNumbers(ast: PandocAST): WeakMap<NoteInline, number> {
 
 /** G6+G7: gate time for the reland backstop timer (ms). */
 const RELAND_BACKSTOP_MS = 250;
+/** G14: watchdog fallback — force-clears the reland fade if the land hangs (ms). */
+const FADE_WATCHDOG_MS = 1000;
 
 export function PreviewRoot(props: PreviewRootProps) {
     const [editTarget, setEditTargetRaw] = useState<{
@@ -253,6 +255,8 @@ export function PreviewRoot(props: PreviewRootProps) {
     // The editor-close useLayoutEffect reads this to add `q2-reland-fade` to that
     // cell's DOM element during the reland gap.
     const fadeSourceR0Ref = useRef<number | null>(null);
+    // G14: watchdog timer ref for the reland fade fallback (D).
+    const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Ref pointing to the inner wrapper div of the currently active edit
     // region (set by renderMeasuredEdit in dispatchers.tsx). Used by
     // useBlockEditHover's onPointerUp to suppress the parent-climb bug:
@@ -428,13 +432,31 @@ export function PreviewRoot(props: PreviewRootProps) {
      * Called at the top of `openEditTarget` (destination editor opens) and in
      * `cancelPendingLand` (reland aborted — no destination opens).
      * Declared before `openEditTarget` to avoid the temporal dead zone.
+     *
+     * G14 (A): also cancels the watchdog and resets `fadeSourceR0Ref` to null
+     * so the apply effect cannot re-fade a stale source on a later close.
      */
     const clearRelandFade = useCallback(() => {
+        if (fadeTimeoutRef.current !== null) {
+            clearTimeout(fadeTimeoutRef.current);
+            fadeTimeoutRef.current = null;
+        }
+        fadeSourceR0Ref.current = null;                 // A: ref never lingers
         if (!previewHostRef.current) return;
         previewHostRef.current.querySelectorAll('.q2-reland-fade').forEach((el) => {
             (el as HTMLElement).classList.remove('q2-reland-fade');
         });
     }, []);
+
+    /**
+     * G14 (B): tear down the settle-gate and the reland fade together.
+     * Routes through every reland-conclusion site (land, cancel, focus branch)
+     * so the gate and fade lifecycle are unified and cannot diverge.
+     */
+    const closeSettleGate = useCallback(() => {
+        preCommitContentRef.current = null;
+        clearRelandFade();
+    }, [clearRelandFade]);
 
     /**
      * Open (or re-open) the editor on a source range — the single canonical opener
@@ -467,10 +489,8 @@ export function PreviewRoot(props: PreviewRootProps) {
             keepExpanded?: boolean;
         },
     ) => {
-        // G6+G7: clear the pre-commit snapshot on land — editor is now open on current content.
-        preCommitContentRef.current = null;
-        // G9: clear the fade class — the destination editor is about to open.
-        clearRelandFade();
+        // G6+G7 + G9 + G14 (B): tear down settle-gate and fade together on land.
+        closeSettleGate();
         const et = editTargetRef.current;
         const content = renderedContentRef.current;
         const { anchorSlice, seededDraft } = seedForRange(range, content, nestedEditBuffersRef.current);
@@ -520,7 +540,7 @@ export function PreviewRoot(props: PreviewRootProps) {
             seededDraft,
             leafAnchorR0: opts.leafAnchorR0 ?? range.r0,
         });
-    }, [clearRelandFade]);
+    }, [closeSettleGate]);
 
     /**
      * §2 Phase 0: the landing-resolution dispatcher. Given a `ResolverSpec`,
@@ -755,6 +775,8 @@ export function PreviewRoot(props: PreviewRootProps) {
     ) => {
         // P2.4c: intent:'focus' — return focus to the edited outer block without opening an editor.
         if (pl.intent === 'focus') {
+            // G14 (B): tear down settle-gate + fade on every exit of this branch.
+            closeSettleGate();
             // Don't steal focus if a new edit has already started.
             if (editTargetRef.current !== null) {
                 pendingLandingRef.current = null;
@@ -783,7 +805,7 @@ export function PreviewRoot(props: PreviewRootProps) {
         // G5: carry expansion only for nest moves (not crumb jumps, not outerByLine hops).
         const carryExpanded = pl.spec.kind === 'nest';
         openFromResolved(r, pl.caret, carryExpanded);
-    }, [resolveLanding, openFromResolved]);
+    }, [resolveLanding, openFromResolved, closeSettleGate]);
 
     /**
      * G6+G7: arm the reland backstop timer. Cancels any existing timer, then
@@ -841,18 +863,28 @@ export function PreviewRoot(props: PreviewRootProps) {
     useLayoutEffect(() => {
         if (editTarget !== null) return; // editor open — no fade needed
         if (!pendingLandingRef.current) return; // no reland pending — nothing to fade
+        // G14 (A): the ref IS the whole guard. A non-null r0 always belongs to an
+        // in-flight open-reland (commitAndArmReland is the sole arming site;
+        // every land/cancel/focus-branch nulls it via clearRelandFade). No
+        // intent-check needed — it would be redundant with the reset.
         const r0 = fadeSourceR0Ref.current;
-        if (r0 === null) return; // no source recorded (shouldn't happen, but guard)
+        if (r0 === null) return;
         if (!previewHostRef.current) return;
 
         const pool = poolRef.current;
+        let faded = false;
         previewHostRef.current.querySelectorAll<HTMLElement>('[data-block-pool-id]').forEach((el) => {
             const pid = Number(el.getAttribute('data-block-pool-id'));
             const entry = pool[pid] as { r: [number, number] } | undefined;
-            if (entry?.r[0] === r0) {
-                el.classList.add('q2-reland-fade');
-            }
+            if (entry?.r[0] === r0) { el.classList.add('q2-reland-fade'); faded = true; }
         });
+        if (faded) {                                        // D: watchdog
+            if (fadeTimeoutRef.current !== null) clearTimeout(fadeTimeoutRef.current);
+            fadeTimeoutRef.current = setTimeout(() => {
+                fadeTimeoutRef.current = null;
+                clearRelandFade();
+            }, FADE_WATCHDOG_MS);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [editTarget]);
 
@@ -952,13 +984,12 @@ export function PreviewRoot(props: PreviewRootProps) {
     const cancelPendingLand = useCallback(() => {
         pendingLandingRef.current = null;
         pendingCaretRef.current = null;
-        preCommitContentRef.current = null;
         if (fallbackTimerRef.current !== null) {
             clearTimeout(fallbackTimerRef.current);
             fallbackTimerRef.current = null;
         }
-        clearRelandFade(); // G9: remove the fade class if the reland is cancelled.
-    }, [clearRelandFade]);
+        closeSettleGate(); // G14 (B): tear down settle-gate + fade together.
+    }, [closeSettleGate]);
 
     /**
      * P2.4c: stash a plain-close focus landing (intent:'focus') and arm the
@@ -991,7 +1022,6 @@ export function PreviewRoot(props: PreviewRootProps) {
     // ---------------------------------------------------------------------------
 
     const clickSwitchRef = useRef<ClickSwitchRecord | null>(null);
-    const dirtySwitchHandledRef = useRef<boolean>(false);
 
     /**
      * P2.4d: record a pending click-switch to outer block B.
@@ -1003,7 +1033,6 @@ export function PreviewRoot(props: PreviewRootProps) {
         const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
         if (!entry || entry.t !== 0) return;
         clickSwitchRef.current = { blockEl, anchorR0: entry.r[0] };
-        dirtySwitchHandledRef.current = false;
     }, []);
 
     /**
@@ -1026,43 +1055,19 @@ export function PreviewRoot(props: PreviewRootProps) {
             return false;
         }
 
-        const normalized = normalizeLineEndings(draft).trimEnd();
-        const isDirty = !!normalized && normalized !== et.anchorSlice;
-
-        if (!isDirty) {
+        if (!isDirty(draft, et)) {
             // Unmodified: clear click-switch; blur takes the normal commitIfDirty path.
             // onPointerUp's activate(B) proceeds as usual.
             clickSwitchRef.current = null;
-            dirtySwitchHandledRef.current = false;
             return false;
         }
 
-        // Dirty: commit A, stash pendingLanding for B, suppress focus-restore + pointerup activate.
-        const currentContent = renderedContentRef.current;
-        const map = buildByteLineMap(currentContent);
-        const L_A = map.lineOf(et.anchorR0);
-        const L_B = map.lineOf(cs.anchorR0);
-
-        // Compute line delta from draft vs. original anchorSlice.
-        const draftLineCount = normalizeLineEndings(draft).split('\n').length;
-        const anchorSliceLineCount = et.anchorSlice.split('\n').length;
-        const delta = draftLineCount - anchorSliceLineCount;
-
-        // direction is always 'down':
-        //   B >= A: project forward (destLine = L_B + delta, executeLanding finds first outer block at line >= destLine).
-        //   B < A:  B's bytes unchanged (destLine = L_B, first outer block at line >= L_B = B itself).
-        const direction = 'down';
-        const destLine = L_B >= L_A ? L_B + delta : L_B;
-
-        // Cancel any prior pending land before stashing B's landing.
-        cancelPendingLand();
-
-        pendingLandingRef.current = {
-            intent: 'open',
-            spec: { kind: 'outerByLine', direction, destLine },
-            caret: { edge: direction === 'down' ? 'first' : 'last', column: 0 },
-            fromFile: currentFilePathRef.current,
-        };
+        // Dirty: commit A fire-and-forget and close directly.
+        // G18 Layer 1: do NOT stash a pendingLanding. onPointerUp activates B
+        // unconditionally at its clicked position; self-heal re-anchors B after A's
+        // commit round-trips (B's content is unchanged by A's edit). With no landing
+        // stashed and no deferred-activation path, both the "two-click" and "dead
+        // nesting" symptoms are impossible by construction.
 
         // Commit A (same wire format as requestMove's dirty path).
         // Use the LIVE identity from editTargetRef.current (via buildNestingCommitDestination)
@@ -1071,50 +1076,21 @@ export function PreviewRoot(props: PreviewRootProps) {
         // For editable blocks (t=0, d=0) the two are string-identical
         // (see commit-destination-equivalence.test.ts), but the live form anchors to
         // the self-healed identity in every reachable commit state.
-        const destA = buildNestingCommitDestination(editTargetRef.current);
-        if (destA === null) {
-            // No active target — skip commit and clean up.
-            editDraftRef.current = null;
-            setEditTargetRaw(null);
-            dirtySwitchHandledRef.current = true;
-            clickSwitchRef.current = null;
-            return true;
+        clickSwitchRef.current = null;
+        const destA = buildNestingCommitDestination(et);
+        if (destA !== null) {
+            setAstRef.current({
+                __isPreviewNodeEdit: true,
+                channel: 'text',
+                destinationSourceInfoJson: destA,
+                newText: normalizeLineEndings(draft),
+            } as unknown as PandocAST);
         }
-        const payload: PreviewNodeEditPayload = {
-            __isPreviewNodeEdit: true,
-            channel: 'text',
-            destinationSourceInfoJson: destA,
-            newText: normalizeLineEndings(draft),
-        };
-        // G6+G7: snapshot before commit so the settle-gate knows which render
-        // to wait for.
-        preCommitContentRef.current = renderedContentRef.current;
-        setAstRef.current(payload as unknown as PandocAST);
-
-        // Close the editor WITHOUT a focus-restore (landing will open B).
         editDraftRef.current = null;
         setEditTargetRaw(null);
-
-        // Arm the byte-identical timeout fallback (same pattern as requestMove).
-        armRelandBackstop();
-
-        // Mark dirty switch handled so onPointerUp skips activate(B).
-        dirtySwitchHandledRef.current = true;
-        clickSwitchRef.current = null;
-
-        return true; // consumed — blur handler must not also call requestFocusRestore/commitIfDirty
+        return true; // committed here; blur must not also focus-restore/commitIfDirty.
+                     // onPointerUp then activates B unconditionally.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cancelPendingLand, armRelandBackstop]);
-
-    /**
-     * P2.4d: check and clear the dirty-switch-handled flag.
-     */
-    const consumeDirtySwitchHandled = useCallback((): boolean => {
-        if (dirtySwitchHandledRef.current) {
-            dirtySwitchHandledRef.current = false;
-            return true;
-        }
-        return false;
     }, []);
 
     /**
@@ -1258,12 +1234,8 @@ export function PreviewRoot(props: PreviewRootProps) {
         const Ls = live ? map.lineOf(et.anchorR0) + live.bufferLine : null;
 
         // Dirty check (mirrors dispatchers' baseline: seededDraft ?? anchorSlice).
-        const baseline = normalizeLineEndings(et.seededDraft ?? et.anchorSlice).trimEnd();
         const draftSrc = live ? live.draft : (editDraftRef.current ?? '');
-        const draftNorm = normalizeLineEndings(draftSrc).trimEnd();
-        const isDirty = !!draftNorm && draftNorm !== baseline;
-
-        if (!isDirty) {
+        if (!isDirty(draftSrc, et)) {
             // ── CLEAN sync hop: source unchanged, resolve + open synchronously ──
             const next = direction === 'out'
                 ? parentSurface(surfaces, et.anchorR0, et.anchorR1)
@@ -1320,12 +1292,8 @@ export function PreviewRoot(props: PreviewRootProps) {
         const live = readLiveCaret();
         const Ls = live ? map.lineOf(et.anchorR0) + live.bufferLine : null;
 
-        const baseline = normalizeLineEndings(et.seededDraft ?? et.anchorSlice).trimEnd();
         const draftSrc = live ? live.draft : (editDraftRef.current ?? '');
-        const draftNorm = normalizeLineEndings(draftSrc).trimEnd();
-        const isDirty = !!draftNorm && draftNorm !== baseline;
-
-        if (!isDirty) {
+        if (!isDirty(draftSrc, et)) {
             // CLEAN sync jump: preserve the caret's source position into the target.
             const caret = cleanCaretHint(et.anchorR0, et.anchorR1, r0, r1, live, Ls, content, map);
             applyNestingRetarget({ r0, r1 }, et.leafAnchorR0 ?? et.anchorR0, caret);
@@ -1519,7 +1487,6 @@ export function PreviewRoot(props: PreviewRootProps) {
                 requestFocusRestore,
                 requestClickSwitch,
                 handleClickSwitchBlur,
-                consumeDirtySwitchHandled,
                 commitNestingEdit,
                 requestNestingMove,
                 requestNestingSelect,

@@ -269,3 +269,130 @@ describe('G9 T7 ★ — reland-fade applies to nested source cell and clears on 
         ).toBe(0);
     });
 });
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * G14-1 ★ (fail-on-revert — reset hunk A):
+ *
+ * Stale `fadeSourceR0Ref` re-fades an unrelated cell on a plain close.
+ *
+ * Flow:
+ *  1–6. Same dirty nest-out + settled rerender as T7 (arms fadeSourceR0Ref=2,
+ *       then T7's openEditTarget clears the fade class but — pre-fix — leaves
+ *       fadeSourceR0Ref.current = 2, sticky).
+ *  7. Blockquote editor is now open. PLAIN BLUR it (no dirty edit): fires
+ *     requestFocusRestore → stashes intent:'focus' landing → closes editor.
+ *  8. Editor close render: editTarget becomes null + pendingLanding is set →
+ *     G9 apply useLayoutEffect fires. With stale r0=2 and pool[1].r[0]===2
+ *     still in DOM, the unfixed code re-fades pool[1].
+ *  9. executeLanding(focus) runs (IMMEDIATELY, no timer advance needed — it
+ *     fires synchronously in the same act), focuses the outer block, nulls
+ *     pendingLandingRef — but does NOT call clearRelandFade() → class lingers.
+ * 10. Assert immediately: 0 elements with .q2-reland-fade.
+ *     Unfixed: expected 0, got 1 → RED (proven 2026-06-18).
+ *     Fixed (A: fadeSourceR0Ref.current = null in clearRelandFade): r0===null
+ *     → apply effect early-returns → no re-fade → GREEN.
+ *
+ * Exercise precondition: the settled pool must keep an entry with r[0]===2 so
+ * the stale ref has a DOM target to re-fade (settledPool[1].r=[2,30] satisfies
+ * this). The dirty nest-out in steps 1–4 arms the ref; the T7-phase clears the
+ * class but (pre-fix) leaves the ref set.
+ *
+ * Named revert hunk → RED: remove `fadeSourceR0Ref.current = null` from
+ * `clearRelandFade` → ref never reset → apply effect re-fades pool[1] →
+ * `expected 0, got 1`.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+describe('G14-1 ★ — stale fadeSourceR0Ref does not re-fade on plain close', () => {
+    it('no .q2-reland-fade after plain blur of blockquote editor (no timer advance)', async () => {
+        vi.useFakeTimers();
+
+        const setAst = vi.fn();
+        const { container, rerender } = mountFixture({ setAst });
+
+        await act(async () => {});
+        mockTileRects(container);
+
+        // ── Steps 1–4 (replicate T7's dirty nest-out) ──────────────────────
+        // Activate the nested ChildPara (pool[1]).
+        const childPara = container.querySelector<HTMLElement>('[data-block-pool-id="1"]');
+        expect(childPara).not.toBeNull();
+        await act(async () => {
+            fireEvent(childPara!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
+            fireEvent(childPara!, ptrEvent('pointerup', { pointerType: 'mouse' }));
+        });
+
+        const textarea = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(textarea).not.toBeNull();
+        expect(textarea!.value).toBe(CLEAN_BUFFER);
+
+        // Dirty the draft.
+        const DIRTY_EDIT = 'line one edited\nline two';
+        await act(async () => {
+            fireEvent.change(textarea!, { target: { value: DIRTY_EDIT } });
+        });
+
+        // Nest-out (dirty path → commitAndArmReland → arms fadeSourceR0Ref=2).
+        await act(async () => {
+            fireEvent.keyDown(
+                container.querySelector<HTMLTextAreaElement>('textarea')!,
+                nestingChord('ArrowLeft'),
+            );
+        });
+
+        // Editor closed; commit fired.
+        expect(setAst).toHaveBeenCalledOnce();
+        expect(container.querySelector('textarea')).toBeNull();
+
+        // ── Step 5: settled rerender → openEditTarget fires → clearRelandFade called ──
+        // (Pre-fix: clears the class but leaves fadeSourceR0Ref.current=2 sticky.)
+        const SETTLED_CONTENT = '> line one edited\n> line two\n\npara2\n\n';
+        const settledPool = [
+            { t: 0, r: [0, 31], d: 0 },   // BlockQuote (larger)
+            { t: 0, r: [2, 30], d: 0 },   // ChildPara (r[0]===2 — still present for precondition)
+            { t: 0, r: [31, 38], d: 0 },  // Para2
+        ];
+        const settledAstJson = makeAstJson(settledPool);
+
+        await act(async () => {
+            rerender(
+                <PreviewRoot
+                    astJson={settledAstJson}
+                    untransformedAstJson={settledAstJson}
+                    renderedContent={SETTLED_CONTENT}
+                    currentFilePath="/test.qmd"
+                    assetManifest={{}}
+                    setAst={setAst}
+                    unlockNestingCursor
+                    nestedEditBuffers={{ [CHILD_SI_KEY]: CLEAN_BUFFER }}
+                    onNavigateToDocument={() => {}}
+                />,
+            );
+        });
+        mockTileRects(container);
+
+        // Blockquote editor should now be open (T7 confirmed this).
+        const bqTextarea = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(bqTextarea, 'blockquote editor must be open after settled rerender').not.toBeNull();
+
+        // No fade class at this point (T7 verified this).
+        expect(container.querySelectorAll('.q2-reland-fade').length).toBe(0);
+
+        // ── Step 6: PLAIN BLUR the blockquote editor (no dirty edit) ───────
+        // This fires requestFocusRestore → stashes intent:'focus' landing →
+        // closes the editor → G9 apply effect fires with stale r0=2.
+        await act(async () => {
+            fireEvent.blur(bqTextarea!);
+        });
+
+        // ── Step 7: Assert IMMEDIATELY (no timer advance) ───────────────────
+        // The 'focus' landing runs synchronously in executeLanding.
+        // Fixed: fadeSourceR0Ref.current was reset to null in clearRelandFade →
+        //        apply effect early-returns → no re-fade → 0 elements.
+        // Unfixed: stale r0=2 → pool[1].r[0]===2 → re-faded → 1 element.
+        const fadedElsAfterBlur = container.querySelectorAll('.q2-reland-fade');
+        expect(
+            fadedElsAfterBlur.length,
+            'no .q2-reland-fade should exist after plain blur (stale ref must not re-fade)',
+        ).toBe(0);
+    });
+});

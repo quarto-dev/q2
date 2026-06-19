@@ -622,6 +622,33 @@ export function seedForRange(
 }
 
 /**
+ * The canonical dirty baseline for an open edit target: the value the draft was
+ * seeded with at open (`seededDraft`), falling back to `anchorSlice` for
+ * non-nested blocks (or pre-P3.3 activation paths that never set `seededDraft`).
+ *
+ * G19 (Layer 2): this is the SINGLE source of the baseline. For a nested block
+ * the raw `anchorSlice` carries the ancestor `> `/indent prefix, while the clean
+ * `seededDraft` does not — comparing a draft against the raw slice reads an
+ * untouched clean-buffer editor as dirty. Every draft-vs-baseline comparison
+ * MUST route through this helper so no site can drift to the raw slice again.
+ */
+export function editBaseline(et: { seededDraft?: string; anchorSlice: string }): string {
+    return normalizeLineEndings(et.seededDraft ?? et.anchorSlice).trimEnd();
+}
+
+/**
+ * Whether `draft` differs from the edit target's canonical baseline, treating an
+ * empty draft as NOT dirty (the policy shared by the click-switch + nesting-move
+ * sites). Sites with delete-by-emptying semantics (commitIfDirty, arrow step-off)
+ * keep their own three-way empty handling but still source the baseline from
+ * `editBaseline`.
+ */
+export function isDirty(draft: string, et: { seededDraft?: string; anchorSlice: string }): boolean {
+    const draftNorm = normalizeLineEndings(draft).trimEnd();
+    return !!draftNorm && draftNorm !== editBaseline(et);
+}
+
+/**
  * §1 geometry snapshot — capture the rendered geometry of an opened block's
  * whole top-level subtree, keyed BLOCK-RELATIVE to the top-level block's start
  * byte, so a later nest move can size its destination from the ORIGINAL render

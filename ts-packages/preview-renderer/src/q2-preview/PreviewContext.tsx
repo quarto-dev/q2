@@ -247,10 +247,11 @@ export interface PreviewContextValue {
      * a click-switch is pending. The implementation in `PreviewRoot.tsx` checks
      * whether the draft is dirty and branches:
      *
-     *   - **Dirty:** commit A, stash a projected `pendingLanding` for B, suppress
-     *     the normal focus-restore, mark `dirtySwitchHandled` so `onPointerUp`
-     *     skips `activate(B)`. Returns `true` (consumed, blur handler must NOT
-     *     call `requestFocusRestore` or `commitIfDirty`).
+     *   - **Dirty:** commit A and close its editor directly (G18 Layer 1 — no
+     *     `pendingLanding` is stashed; `onPointerUp` then activates B
+     *     unconditionally and self-heal re-anchors it). Returns `true`
+     *     (consumed, blur handler must NOT call `requestFocusRestore` or
+     *     `commitIfDirty`).
      *   - **Unmodified:** clear the click-switch record, let A close without a
      *     landing, let `onPointerUp`'s `activate(B)` proceed normally. Returns
      *     `false` (not consumed — blur handler still calls the normal
@@ -263,14 +264,6 @@ export interface PreviewContextValue {
      *                         that `commitTextEdit` receives.
      */
     handleClickSwitchBlur?: (draft: string) => boolean;
-    /**
-     * P2.4d: check and clear the dirty-switch-handled flag.
-     *
-     * Called by `useBlockEditHover`'s `onPointerUp`. Returns `true` if a dirty
-     * click-switch was handled in `onBlur` (so the landing for B is already
-     * stashed and `activate(B)` must be suppressed). Clears the flag.
-     */
-    consumeDirtySwitchHandled?: () => boolean;
     /**
      * P3.3 §3c nested-block commit. Builds the destination from the LIVE
      * editTargetRef.current ({t:0,r:[anchorR0,anchorR1],d:0}); no-ops if null.

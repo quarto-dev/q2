@@ -365,16 +365,33 @@ export function surfaceLineSpan(
   content: string,
   map: ByteLineMap,
 ): [number, number] {
-  const text = sliceUtf8(content, surface.r0, surface.r1);
-  const leadingWs = text.length - text.trimStart().length;   // ASCII ws → byte count
-  const trailingWs = text.length - text.trimEnd().length;    // ASCII ws → byte count
-  // Degenerate all-whitespace surface: fall back to the raw byte span.
-  if (leadingWs + trailingWs >= text.length) {
-    return [map.lineOf(surface.r0), map.lineOf(Math.max(surface.r0, surface.r1 - 1))];
+  const startLine = map.lineOf(surface.r0);
+  const endLine = map.lineOf(Math.max(surface.r0, surface.r1 - 1));
+
+  // Span the lines that carry the surface's *visible content*. A content
+  // character is anything that is neither whitespace NOR a blockquote marker
+  // (`>`). This generalises the old `trimStart`/`trimEnd` (which stripped only
+  // whitespace): a node range absorbs the next line's leading indent / blockquote
+  // prefix at `r1`, and inside a blockquote that prefix is `> ` — whose `>` a
+  // whitespace trim cannot strip, so the span bled one line past its content and
+  // overlapped the next item's content line (the loose-list-in-blockquote
+  // down-nav "caught" bug). Outside a blockquote there are no `>` markers, so this
+  // is byte-for-byte the prior behaviour. One pass over the surface text,
+  // counting newlines to track the line.
+  let line = startLine;
+  let first = -1;
+  let last = -1;
+  for (const ch of sliceUtf8(content, surface.r0, surface.r1)) {
+    if (ch === '\n') { line++; continue; }
+    if (!/\s/.test(ch) && ch !== '>') {
+      if (first === -1) first = line;
+      last = line;
+    }
   }
-  const startByte = surface.r0 + leadingWs;
-  const endByte = surface.r1 - 1 - trailingWs;
-  return [map.lineOf(startByte), map.lineOf(endByte)];
+
+  // Degenerate all-blank surface (only whitespace / `>`): fall back to the raw
+  // line span, matching the prior degenerate guard.
+  return first === -1 ? [startLine, endLine] : [first, last];
 }
 
 // ── childSurfaceTowardLine ──────────────────────────────────────────────────────

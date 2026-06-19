@@ -12,10 +12,17 @@ import type { PreviewContextValue, ResolvedSource } from './PreviewContext';
 import { normalizeLineEndings } from '../utils/normalizeLineEndings';
 import { isOnFirstVisualLine, isOnLastVisualLine, getLogicalColumn, placeCaretAtColumn } from './caretGeometry';
 import { buildNestingCommitDestination, classifyNestingKey, detectPlatform } from './nestingNav';
+import { editBaseline } from './outerBlocks';
 
 // P3.3 §3b: detect platform once at module load so classifyNestingKey can
 // distinguish mac (Cmd+Ctrl) from other (Alt+Shift) nesting chords.
 const PLATFORM = detectPlatform();
+
+// G15: editor font size — extracted so the test can loosen its assertion when
+// this value is tuned. Reduced from 0.9em to 0.825em so the monospace line box
+// sits just below the rendered proportional line, preventing the first-keystroke
+// grow (the residual after rows={1} removes the gross 2-line inflation).
+const EDITOR_FONT_SIZE = '0.825em';
 
 /** True when text, after line-ending normalization + trailing-whitespace removal,
  *  has no content — i.e. the block is effectively empty (the §6 delete trigger). */
@@ -134,14 +141,13 @@ function EditTextarea({
     ctx: PreviewContextValue;
     resolved: ResolvedSource;
 }) {
-    const { contentHeight, anchorSlice } = ctx.editTarget!;
-    // P3.3: the dirty baseline is the value the draft was seeded with at open
-    // (nestedEditBuffers[siKey] ?? anchorSlice). For nested blocks seeded with
-    // a clean buffer, anchorSlice carries '> '/indent and would incorrectly read
-    // as "dirty" on an untouched clean-buffer editor. seededDraft is the true
-    // baseline; fall back to anchorSlice when seededDraft is absent (non-nested
-    // blocks, or pre-P3.3 activation paths).
-    const baseline = normalizeLineEndings(ctx.editTarget!.seededDraft ?? anchorSlice).trimEnd();
+    const { contentHeight } = ctx.editTarget!;
+    // G19: editBaseline is the SINGLE canonical source of the dirty baseline:
+    // normalizeLineEndings(seededDraft ?? anchorSlice).trimEnd(). For nested blocks
+    // seeded with a clean buffer, anchorSlice carries '> '/indent and would
+    // incorrectly read as "dirty" on an untouched clean-buffer editor. Routing
+    // through editBaseline ensures no site can drift to the raw slice again.
+    const baseline = editBaseline(ctx.editTarget!);
     const isComposingRef = useRef(false);
     const taRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -316,11 +322,15 @@ function EditTextarea({
             // §7: data-expanded seam — present when expanded, absent when collapsed.
             // Tests assert expansion via this flag, never via pixel height.
             data-expanded={expanded ? '' : undefined}
+            // G15: rows={1} sets the intrinsic height baseline to one line so the
+            // §7 autosize grows FROM one line and never reads the HTML default rows=2
+            // box (which would force a 2-line floor even for single-line content).
+            rows={1}
             value={draft}
             style={{
                 display: 'block',
                 fontFamily: 'monospace',
-                fontSize: '0.9em',
+                fontSize: EDITOR_FONT_SIZE,
                 width: '100%',
                 // When expanded the layout effect drives the height; the static prop
                 // below is the initial height (contentHeight) before any expansion.

@@ -2,21 +2,16 @@
  * P2.4d integration tests: click-switch between tiles.
  *
  * These tests exercise the REAL production path through PreviewRoot —
- * the actual requestClickSwitch / handleClickSwitchBlur / consumeDirtySwitchHandled
- * / executeLanding / reland machinery in PreviewRoot.tsx, the real onPointerDown /
+ * the actual requestClickSwitch / handleClickSwitchBlur / activate
+ * machinery in PreviewRoot.tsx, the real onPointerDown /
  * onPointerUp classification in useBlockEditHover.tsx, and the real onBlur /
  * commitIfDirty flow in EditTextarea (dispatchers.tsx).
- *
- * Reverting any of the P2.4d production changes (entry.tsx → PreviewRoot.tsx,
- * dispatchers.tsx, useBlockEditHover.tsx, PreviewContext.tsx) must cause
- * the dirty click-switch test to FAIL (verified during TDD).
  *
  * Coverage:
  *
  *  1. Dirty click-switch (B after A): edit tile A, type (dirty), click tile B →
- *     A is committed (setAst spy called), after re-render B opens via projected
- *     landing. B's anchorR0 shifts because A grew; projection must land on B,
- *     NOT on the wrong tile.
+ *     A is committed (setAst spy called), B opens DIRECTLY via pointerup activate
+ *     (no deferred reland). Assert immediately after pointerup(B).
  *
  *  2. Unmodified click-switch: edit A (no typing), click B → B opens directly
  *     via pointerup activate; no setAst call (no commit).
@@ -26,9 +21,6 @@
  *
  *  4. Click to empty area is plain close (P2.4c preserved): click outside any
  *     tile while editing A → plain close, no switch, focus restored.
- *
- *  5. Byte-identical dirty click-switch: commit produces byte-identical output
- *     (props unchanged) → timeout fallback still relands B.
  *
  * jsdom gotchas:
  *  - getBoundingClientRect returns zeroes by default. Must be mocked on tile
@@ -179,22 +171,29 @@ function mockTileRects(container: HTMLElement) {
     });
 }
 
-/* ─── 1. Dirty click-switch: B after A (projected landing) ──────────────────
+/* ─── 1. Dirty click-switch: B after A (direct activation — G18 Layer 1) ────
  *
- * The must-have test. Verifies:
- *  - P2.4d in useBlockEditHover: onPointerDown while editing calls requestClickSwitch.
- *  - P2.4d in PreviewRoot: requestClickSwitch records B.
- *  - P2.4d in dispatchers: onBlur calls handleClickSwitchBlur → commits A (setAst),
- *    stashes pendingLanding, closes without focus-restore.
- *  - P2.4d in useBlockEditHover: onPointerUp calls consumeDirtySwitchHandled → suppresses activate.
- *  - Reland layout effect (PreviewRoot): on re-render with new pool/content, opens B.
+ * G18 fix: when A is dirty and B is clicked, handleClickSwitchBlur commits A
+ * fire-and-forget and closes A directly — it does NOT stash a pendingLanding.
+ * onPointerUp then activates B unconditionally (the old deferred-reland path
+ * and its dirtySwitchHandledRef flag were removed entirely, so "B opens on the
+ * first click" is now true by construction).
  *
- * Mandatory fail-on-revert: reverting any P2.4d production change breaks this test.
+ * Sequence: pointerdown(A)/up(A) → type → pointerdown(B) → blur(A) → pointerup(B)
+ * Assertions: B's textarea present IMMEDIATELY after pointerup(B), value==="para2",
+ *             setAst called exactly once for A's commit.
+ *
+ * Fail-on-revert (the load-bearing binding): delete the `setAstRef.current({...})`
+ * commit in the isDirty branch of handleClickSwitchBlur → A is never committed →
+ * `expect(setAst).toHaveBeenCalledOnce()` fails with `expected 1, got 0` → RED.
+ * This binds the actual G18 contract (a dirty click-switch commits A exactly
+ * once). The "B present" assertion is a by-construction regression guard: with
+ * the deferred-reland machinery gone there is no code path that can withhold B.
  */
-describe('P2.4d — dirty click-switch: B after A (projected landing)', () => {
-    it('commits A and opens B after re-render using projected destLine', async () => {
+describe('P2.4d — dirty click-switch: B after A (direct activation, no deferred reland)', () => {
+    it('commits A and opens B directly on pointerup (no deferred reland)', async () => {
         const setAst = vi.fn();
-        const { container, rerender, pool, content } = mountPreviewRoot({ setAst });
+        const { container } = mountPreviewRoot({ setAst });
 
         // Wait for initial render to settle, then mock tile rects.
         await act(async () => {});
@@ -216,14 +215,13 @@ describe('P2.4d — dirty click-switch: B after A (projected landing)', () => {
         // The textarea is seeded with A's anchorSlice ("para1").
         expect(textarea!.value).toBe('para1');
 
-        // Step 2: type into A's textarea to make it dirty (add "\nextra").
+        // Step 2: type into A's textarea to make it dirty.
         await act(async () => {
-            fireEvent.change(textarea!, { target: { value: 'para1\nextra' } });
+            fireEvent.change(textarea!, { target: { value: 'para1edited' } });
         });
 
-        // Re-query textarea (same element, value updated).
         textarea = container.querySelector('textarea')!;
-        expect(textarea!.value).toBe('para1\nextra');
+        expect(textarea!.value).toBe('para1edited');
 
         // Step 3: pointerdown on B (pool[2], r0=12). This fires BEFORE blur.
         // useBlockEditHover.onPointerDown classifies it as click-switch → calls requestClickSwitch.
@@ -237,75 +235,35 @@ describe('P2.4d — dirty click-switch: B after A (projected landing)', () => {
         // setAst not yet called (pointerdown alone doesn't commit).
         expect(setAst).not.toHaveBeenCalled();
 
-        // Step 4: blur on A's textarea. The real handleClickSwitchBlur:
-        //   - detects dirty draft ("para1\nextra" !== "para1")
-        //   - commits A via setAst (PreviewNodeEditPayload)
-        //   - stashes pendingLanding for B
-        //   - sets dirtySwitchHandledRef
-        //   - closes editor (textarea disappears)
+        // Step 4: blur on A's textarea. G18 handleClickSwitchBlur (direct-activate path):
+        //   - detects dirty draft ("para1edited" !== "para1")
+        //   - commits A via setAst
+        //   - does NOT stash a pendingLanding
+        //   - closes editor (setEditTargetRaw(null))
         await act(async () => {
             fireEvent.blur(textarea!);
         });
 
-        // Commit happened: setAst was called once with the edited text.
+        // Commit happened: setAst was called exactly once with A's edit.
         expect(setAst).toHaveBeenCalledOnce();
         const commitPayload = setAst.mock.calls[0][0] as any;
         expect(commitPayload.__isPreviewNodeEdit).toBe(true);
         expect(commitPayload.channel).toBe('text');
-        // The committed text should be the dirty draft (normalized).
-        expect(commitPayload.newText).toContain('para1');
-        expect(commitPayload.newText).toContain('extra');
+        expect(commitPayload.newText).toContain('para1edited');
 
         // Editor is now closed — no textarea in the DOM.
         expect(container.querySelector('textarea')).toBeNull();
 
-        // Step 5: pointerup on B. The real consumeDirtySwitchHandled returns true
-        // → activate(B) is suppressed. B does NOT open yet.
+        // Step 5: pointerup on B → activate(B) proceeds unconditionally →
+        // B opens IMMEDIATELY (no reland needed).
         await act(async () => {
             fireEvent(tileB!, ptrEvent('pointerup', { pointerType: 'mouse' }));
         });
 
-        // Still no textarea (landing pending, not relanded yet).
-        expect(container.querySelector('textarea')).toBeNull();
-
-        // Step 6: Simulate the commit re-render. A expanded by 1 line (+6 bytes).
-        // Post-commit pool: tile 2 (B) shifts to r=[18,25], line 3.
-        const newPool = [
-            { t: 0, r: [0, 6], d: 0 },    // para0 (unchanged)
-            { t: 0, r: [6, 18], d: 0 },   // para1\nextra (A expanded)
-            { t: 0, r: [18, 25], d: 0 },  // para2\n\n (B shifted)
-            { t: 0, r: [25, 32], d: 0 },  // para3\n\n
-        ] as typeof POOL;
-        const newContent = 'para0\npara1\nextra\npara2\n\npara3\n\n';
-        const newAstJson = makeAstJson(newPool, newContent);
-
-        await act(async () => {
-            rerender(
-                <PreviewRoot
-                    astJson={newAstJson}
-                    untransformedAstJson={newAstJson}
-                    renderedContent={newContent}
-                    currentFilePath="/test.qmd"
-                    assetManifest={{}}
-                    setAst={setAst}
-                    onNavigateToDocument={() => {}}
-                />,
-            );
-        });
-
-        // Re-mock rects for the new tile elements.
-        mockTileRects(container);
-
-        // Reland layout effect fires → B's editor opens.
-        // B (tile 2 in new pool) has anchorR0=18.
-        const textareaAfterReland = container.querySelector('textarea');
-        expect(textareaAfterReland).not.toBeNull();
-
-        // B's tile (data-block-pool-id="2") should be in edit mode.
-        // The pool entry for pool[2] in the NEW pool is r=[18,25] → anchorSlice="para2".
-        // The textarea value is seeded from anchorSlice.
-        expect(textareaAfterReland!.value).toBe('para2');
-
+        // B's textarea must be present immediately (no re-render/reland needed).
+        const textareaB = container.querySelector('textarea');
+        expect(textareaB).not.toBeNull();
+        expect(textareaB!.value).toBe('para2');
     });
 });
 
@@ -351,7 +309,7 @@ describe('P2.4d — unmodified click-switch', () => {
         // A's editor closed.
         expect(container.querySelector('textarea')).toBeNull();
 
-        // pointerup on B — activate(B) proceeds (consumeDirtySwitchHandled returns false).
+        // pointerup on B — activate(B) proceeds (no pending click-switch was consumed).
         await act(async () => {
             fireEvent(tileB!, ptrEvent('pointerup', { pointerType: 'mouse' }));
         });
@@ -451,325 +409,5 @@ describe('P2.4d — click to empty area is plain close (P2.4c preserved)', () =>
         await act(async () => {
             vi.advanceTimersByTime(300);
         });
-    });
-});
-
-/* ─── 6. Dirty click-switch delta off-by-one discriminator ──────────────────
- *
- * Fixture geometry is designed so that the wrong delta (0, produced by the
- * `+ '\n'` bug in anchorSliceLineCount) and the correct delta (+1, produced
- * by the fix) resolve to DIFFERENT tiles in the post-commit pool.
- *
- * Pre-commit pool (4 tiles):
- *   pool[0]: "para0\n"   r=[0,6]   line 0
- *   pool[1]: "paraA\n"   r=[6,12]  line 1  ← A (1-line anchorSlice)
- *   pool[2]: "paraX\n"   r=[12,18] line 2  ← undershoot tile (wrong delta lands here)
- *   pool[3]: "paraB\n\n" r=[18,26] line 3  ← B (correct landing target)
- *
- * Draft of A → "paraA\nextra" (2 lines). draftLineCount=2, anchorSliceLineCount=1.
- *   Correct delta = +1.
- *   L_B (pre-commit) = 3 (line of pool[3].r[0]=18 in "para0\nparaA\nparaX\nparaB\n\n")
- *   With wrong  delta (0): destLine = L_B + 0 = 3
- *   With correct delta (1): destLine = L_B + 1 = 4
- *
- * Post-commit pool (A grew by 1 line):
- *   pool[0]: [0,6]   line 0
- *   pool[1]: [6,18]  line 1  ("paraA\nextra\n" — spans lines 1-2)
- *   pool[2]: [18,24] line 3  ("paraX\n" — undershoot tile)
- *   pool[3]: [24,32] line 4  ("paraB\n\n" — B)
- *
- * executeLanding(direction='down', destLine=3, newContent) → first tile at
- *   line >= 3 = pool[2] (line 3) — WRONG (anchorSlice = "paraX")
- * executeLanding(direction='down', destLine=4, newContent) → first tile at
- *   line >= 4 = pool[3] (line 4) — CORRECT (anchorSlice = "paraB")
- *
- * This test FAILS with the `+ '\n'` bug (opens paraX instead of paraB)
- * and PASSES after the fix (opens paraB correctly).
- */
-describe('P2.4d — dirty click-switch delta: off-by-one discriminator', () => {
-    it('lands on B (not the undershoot tile) when A grows by 1 line', async () => {
-        const setAst = vi.fn();
-
-        // Pre-commit content and pool.
-        const content = 'para0\nparaA\nparaX\nparaB\n\n';
-        const pool = [
-            { t: 0, r: [0, 6],  d: 0 },   // pool[0]: para0\n   line 0
-            { t: 0, r: [6, 12], d: 0 },   // pool[1]: paraA\n   line 1  (A)
-            { t: 0, r: [12, 18], d: 0 },  // pool[2]: paraX\n   line 2  (undershoot)
-            { t: 0, r: [18, 26], d: 0 },  // pool[3]: paraB\n\n line 3  (B)
-        ] as typeof POOL;
-
-        const { container, rerender } = mountPreviewRoot({ setAst, pool, content });
-        await act(async () => {});
-        mockTileRects(container);
-
-        // Activate A (pool[1]).
-        const tileA = container.querySelector<HTMLElement>('[data-block-pool-id="1"]');
-        expect(tileA).not.toBeNull();
-        await act(async () => {
-            fireEvent(tileA!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
-            fireEvent(tileA!, ptrEvent('pointerup', { pointerType: 'mouse' }));
-        });
-
-        const textarea = container.querySelector('textarea');
-        expect(textarea).not.toBeNull();
-        expect(textarea!.value).toBe('paraA');
-
-        // Make A dirty: 1-line → 2-line (delta should be +1, not 0).
-        await act(async () => {
-            fireEvent.change(textarea!, { target: { value: 'paraA\nextra' } });
-        });
-
-        // pointerdown on B (pool[3]).
-        const tileB = container.querySelector<HTMLElement>('[data-block-pool-id="3"]');
-        expect(tileB).not.toBeNull();
-        await act(async () => {
-            fireEvent(tileB!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
-        });
-
-        // blur — dirty switch: commits A, stashes pendingLanding for B, closes.
-        const ta = container.querySelector('textarea')!;
-        await act(async () => {
-            fireEvent.blur(ta);
-        });
-
-        expect(setAst).toHaveBeenCalledOnce();
-        expect(container.querySelector('textarea')).toBeNull();
-
-        // pointerup on B — suppressed (dirty switch handled).
-        await act(async () => {
-            fireEvent(tileB!, ptrEvent('pointerup', { pointerType: 'mouse' }));
-        });
-
-        // Simulate re-render: A grew by 1 line.
-        // New content: "para0\nparaA\nextra\nparaX\nparaB\n\n"
-        // New pool:
-        //   pool[0]: [0,6]   line 0
-        //   pool[1]: [6,18]  line 1  (paraA\nextra)
-        //   pool[2]: [18,24] line 3  (paraX — undershoot tile if delta=0)
-        //   pool[3]: [24,32] line 4  (paraB — correct if delta=+1)
-        const newContent = 'para0\nparaA\nextra\nparaX\nparaB\n\n';
-        const newPool = [
-            { t: 0, r: [0, 6],  d: 0 },   // para0
-            { t: 0, r: [6, 18], d: 0 },   // paraA\nextra
-            { t: 0, r: [18, 24], d: 0 },  // paraX (undershoot)
-            { t: 0, r: [24, 32], d: 0 },  // paraB (B)
-        ] as typeof POOL;
-        const newAstJson = makeAstJson(newPool, newContent);
-
-        await act(async () => {
-            rerender(
-                <PreviewRoot
-                    astJson={newAstJson}
-                    untransformedAstJson={newAstJson}
-                    renderedContent={newContent}
-                    currentFilePath="/test.qmd"
-                    assetManifest={{}}
-                    setAst={setAst}
-                    onNavigateToDocument={() => {}}
-                />,
-            );
-        });
-        mockTileRects(container);
-
-        // Reland fires. Correct delta=+1 → destLine=4 → lands on paraB (pool[3]).
-        // Bug delta=0 → destLine=3 → lands on paraX (pool[2]).
-        const textareaAfter = container.querySelector('textarea');
-        expect(textareaAfter).not.toBeNull();
-
-        // Must be B (paraB), NOT the undershoot tile (paraX).
-        expect(textareaAfter!.value).toBe('paraB');
-    });
-});
-
-/* ─── 5. Dirty click-switch — settle-gate then re-render ────────────────────
- *
- * Dirty click-switch from A (pool[1]) to B (pool[2]).
- * G6+G7 settle-gate: the 250ms backstop is deferred when renderedContent has
- * not yet advanced past the pre-commit snapshot. The pending landing is
- * consumed only after a re-render (with content reflecting the commit) arrives.
- *
- * Draft "para1x" is dirty (≠ "para1") and same line count → delta=0,
- * destLine=L_B=2. executeLanding in the updated pool lands on pool[2]
- * (r0=12, "para2"). ✓
- */
-describe('P2.4d — dirty click-switch: settle-gate defers then re-render lands B', () => {
-    it('gate defers stale timer, props-change effect lands B after re-render', async () => {
-        vi.useFakeTimers();
-        const setAst = vi.fn();
-        const { container, rerender, content } = mountPreviewRoot({ setAst });
-
-        await act(async () => {});
-        mockTileRects(container);
-
-        // Activate A (pool[1]).
-        const tileA = container.querySelector<HTMLElement>('[data-block-pool-id="1"]');
-        await act(async () => {
-            fireEvent(tileA!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
-            fireEvent(tileA!, ptrEvent('pointerup', { pointerType: 'mouse' }));
-        });
-
-        let textarea = container.querySelector('textarea');
-        expect(textarea).not.toBeNull();
-        expect(textarea!.value).toBe('para1');
-
-        // Type dirty text (same line count as anchorSlice → delta=0).
-        await act(async () => {
-            fireEvent.change(textarea!, { target: { value: 'para1x' } });
-        });
-        textarea = container.querySelector('textarea')!;
-
-        // pointerdown on B.
-        const tileB = container.querySelector<HTMLElement>('[data-block-pool-id="2"]');
-        await act(async () => {
-            fireEvent(tileB!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
-        });
-
-        // blur — dirty switch → commit + stash landing + close.
-        await act(async () => {
-            fireEvent.blur(textarea!);
-        });
-
-        expect(setAst).toHaveBeenCalledOnce();
-        expect(container.querySelector('textarea')).toBeNull();
-
-        // pointerup — suppressed.
-        await act(async () => {
-            fireEvent(tileB!, ptrEvent('pointerup', { pointerType: 'mouse' }));
-        });
-
-        // Settle-gate defers: content hasn't changed yet, timer fires but gate blocks.
-        await act(async () => {
-            vi.advanceTimersByTime(300);
-        });
-        expect(container.querySelector('textarea')).toBeNull();
-
-        // Re-render with updated content reflecting the commit ("para1" → "para1x").
-        // Pool byte-ranges shift because A grew by 1 byte.
-        const updatedContent = content.replace('para1\n', 'para1x\n');
-        const updatedPool = [
-            { t: 0, r: [0, 6], d: 0 },     // para0\n
-            { t: 0, r: [6, 13], d: 0 },    // para1x\n (1 byte longer)
-            { t: 0, r: [13, 20], d: 0 },   // para2\n\n (shifted)
-            { t: 0, r: [20, 27], d: 0 },   // para3\n\n (shifted)
-        ];
-        const updatedAstJson = makeAstJson(updatedPool, updatedContent);
-        await act(async () => {
-            rerender(
-                <PreviewRoot
-                    astJson={updatedAstJson}
-                    untransformedAstJson={updatedAstJson}
-                    renderedContent={updatedContent}
-                    currentFilePath="/test.qmd"
-                    assetManifest={{}}
-                    setAst={setAst}
-                    onNavigateToDocument={() => {}}
-                />,
-            );
-        });
-        mockTileRects(container);
-
-        // Props-change effect fires → B opens.
-        const textareaB = container.querySelector('textarea');
-        expect(textareaB).not.toBeNull();
-        expect(textareaB!.value).toBe('para2');
-    });
-});
-
-/* ─── T3a: G6+G7 settle-gate defers dirty click-switch until content advances ──
- *
- * Verifies that `preCommitContentRef` is snapshotted in `handleClickSwitchBlur`
- * and that the settle-gate in `executeLanding` defers the 250ms backstop timer
- * when renderedContent hasn't changed.
- *
- * FAIL-ON-REVERT: Remove `preCommitContentRef.current = renderedContentRef.current`
- * from `handleClickSwitchBlur` → gate sees null → lands immediately on stale timer
- * → premature textarea opens after advanceTimersByTime → "no premature land" assertion RED.
- */
-describe('P2.4d T3a ★ — settle-gate defers dirty click-switch until content advances', () => {
-    it('defers the 250ms backstop when content is stale, then lands after settled rerender', async () => {
-        vi.useFakeTimers();
-        const setAst = vi.fn();
-        const { container, rerender } = mountPreviewRoot({ setAst });
-
-        await act(async () => {});
-        mockTileRects(container);
-
-        // Activate A (pool[1]).
-        const tileA = container.querySelector<HTMLElement>('[data-block-pool-id="1"]');
-        expect(tileA).not.toBeNull();
-        await act(async () => {
-            fireEvent(tileA!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
-            fireEvent(tileA!, ptrEvent('pointerup', { pointerType: 'mouse' }));
-        });
-
-        let textarea = container.querySelector('textarea')!;
-        expect(textarea).not.toBeNull();
-        expect(textarea!.value).toBe('para1');
-
-        // Dirty A (multi-line so B shifts post-commit).
-        await act(async () => {
-            fireEvent.change(textarea!, { target: { value: 'para1\nextra' } });
-        });
-        textarea = container.querySelector('textarea')!;
-
-        // pointerdown on B.
-        const tileB = container.querySelector<HTMLElement>('[data-block-pool-id="2"]');
-        expect(tileB).not.toBeNull();
-        await act(async () => {
-            fireEvent(tileB!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
-        });
-
-        // blur → dirty click-switch: commits A, stashes pendingLanding for B.
-        await act(async () => {
-            fireEvent.blur(textarea!);
-        });
-
-        expect(setAst).toHaveBeenCalledOnce();
-        expect(container.querySelector('textarea')).toBeNull();
-
-        // pointerup on B — suppressed.
-        await act(async () => {
-            fireEvent(tileB!, ptrEvent('pointerup', { pointerType: 'mouse' }));
-        });
-
-        // Advance 250ms with STALE content (no re-render yet).
-        // The settle-gate must defer: preCommitContentRef === renderedContentRef → return.
-        await act(async () => {
-            vi.advanceTimersByTime(300);
-        });
-
-        // No premature landing.
-        expect(container.querySelector('textarea')).toBeNull();
-
-        // Settled re-render: A expanded → B shifts.
-        const newPool = [
-            { t: 0, r: [0, 6], d: 0 },
-            { t: 0, r: [6, 18], d: 0 },   // para1\nextra
-            { t: 0, r: [18, 25], d: 0 },  // para2\n\n (B shifted)
-            { t: 0, r: [25, 32], d: 0 },
-        ] as typeof POOL;
-        const newContent = 'para0\npara1\nextra\npara2\n\npara3\n\n';
-        const newAstJson = makeAstJson(newPool, newContent);
-
-        await act(async () => {
-            rerender(
-                <PreviewRoot
-                    astJson={newAstJson}
-                    untransformedAstJson={newAstJson}
-                    renderedContent={newContent}
-                    currentFilePath="/test.qmd"
-                    assetManifest={{}}
-                    setAst={setAst}
-                    onNavigateToDocument={() => {}}
-                />,
-            );
-        });
-        mockTileRects(container);
-
-        // Reland layout effect fires → B opens.
-        const textareaB = container.querySelector('textarea');
-        expect(textareaB).not.toBeNull();
-        expect(textareaB!.value).toBe('para2');
     });
 });

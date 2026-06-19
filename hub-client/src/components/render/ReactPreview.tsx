@@ -306,7 +306,7 @@ export default function ReactPreview({
   // overlay itself is package-internal in @quarto/preview-renderer and
   // takes the value via props (controlled component).
   const [errorOverlayCollapsed, setErrorOverlayCollapsed] = usePreference('errorOverlayCollapsed');
-  // P3.2: nesting-cursor mode preference (default-off). When true, the
+  // P3.2: nesting-cursor mode preference (default-ON). When true, the
   // nestedEditBuffers memo below calls regenerateNestedBuffers to produce
   // a per-siKey clean QMD buffer table; when off, that WASM pass is
   // completely unreachable.
@@ -336,7 +336,7 @@ export default function ReactPreview({
   const nestedEditBuffers = useMemo(
     () =>
       computeNestedEditBuffers(
-        unlockNestingCursor ?? false,
+        unlockNestingCursor ?? true,
         rendered.renderedContent,
         rendered.untransformedAstJson,
         regenerateNestedBuffers,

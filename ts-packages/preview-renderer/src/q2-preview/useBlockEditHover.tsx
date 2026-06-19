@@ -81,6 +81,12 @@ export function useBlockEditHover(): {
         // Dedup: if this block is already the active edit target (same byte range), do nothing.
         if (ctx?.editTarget?.anchorR0 === anchorR0) return;
 
+        // G18 clear-on-open invariant: a fresh activation supersedes any pending landing.
+        // The reland paths never reach activate, so a landing present here is orphaned.
+        // Clearing it ensures pendingLandingRef is always null while an editor is open,
+        // so the nesting guard can never brick nesting regardless of upstream state.
+        ctx.cancelPendingLand?.();
+
         // P2.4b: use measureBlockBox (shared with the move-open paths in entry.tsx)
         // so click-activation and move-opened editors both receive real box geometry.
         const { contentHeight, boxStyle } = measureBlockBox(outerBlock);
@@ -241,11 +247,9 @@ export function useBlockEditHover(): {
         if (ctx?.activeEditRegionRef?.current?.contains(e.target as Node)) {
             return;
         }
-        // P2.4d: if a dirty click-switch was handled in blur (landing for B is pending),
-        // skip activate(B) — the reland will open B with the projected anchorR0.
-        if (ctx?.consumeDirtySwitchHandled?.()) {
-            return;
-        }
+        // G18 Layer 1: a dirty click-switch commits A in handleClickSwitchBlur and
+        // closes its editor; B is then activated here unconditionally (no deferred
+        // reland). self-heal re-anchors B after A's commit round-trips.
         // Mouse click: activate.
         const el = findEditTarget(e);
         if (el) {
