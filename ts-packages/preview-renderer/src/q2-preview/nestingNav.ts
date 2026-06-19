@@ -179,12 +179,27 @@ export function depthOfSurface(surfaces: NestingSurface[], r0: number, r1: numbe
 }
 
 /**
+ * Maximum start-line drift (in lines) tolerated when relocating a committed
+ * surface after a commit RESERIALIZED the structure around it. The motivating
+ * case is a tight div (a `Plain` body) committing to a loose div (`Para`): the
+ * writer inserts a blank line BEFORE the paragraph, shifting its start line down
+ * by one. The reland captured the PRE-commit `fromStartLine`, so an exact-line
+ * match misses the surface and the editor fails to reland (no edit surface). A
+ * small window absorbs that deterministic ±1 shift; it is kept small so a far-off
+ * stale line still returns null rather than mis-targeting an unrelated surface.
+ */
+const RELOCATE_LINE_WINDOW = 2;
+
+/**
  * Relocate a committed surface in a (possibly rewritten) source index by its
- * commit-stable `(startLine, depth)`. Returns the first surface whose start line
- * is `startLine` AND whose containment depth is `depth`, or null when none match.
- * The depth filter is what disambiguates a container from its first child when
- * the two share a start line (Reflection: dirty crumb-jump relocation ambiguity).
- * Pure (no DOM); `map` is any byte→line lookup.
+ * commit-stable `(startLine, depth)`. Prefers an EXACT start-line match (the
+ * depth filter disambiguates a container from its same-start-line first child —
+ * Reflection: dirty crumb-jump relocation ambiguity). When no exact match exists,
+ * falls back to the depth-matching surface NEAREST `startLine` within
+ * `RELOCATE_LINE_WINDOW`, which survives a commit that reserialized structure and
+ * shifted the surface's start line a little (e.g. tight-div → loose-div on edit).
+ * Returns null when nothing matches in range. Pure (no DOM); `map` is any
+ * byte→line lookup.
  */
 export function relocateSurface(
   surfaces: NestingSurface[],
@@ -192,11 +207,24 @@ export function relocateSurface(
   startLine: number,
   depth: number,
 ): NestingSurface | null {
+  // Exact-line match first (commit-stable case; preferred so a same-start-line
+  // container/child pair resolves by depth exactly as before).
   for (const s of surfaces) {
     if (map.lineOf(s.r0) !== startLine) continue;
     if (depthOfSurface(surfaces, s.r0, s.r1) === depth) return s;
   }
-  return null;
+  // Fallback: nearest depth-matching surface within the shift window.
+  let best: NestingSurface | null = null;
+  let bestDist = Infinity;
+  for (const s of surfaces) {
+    if (depthOfSurface(surfaces, s.r0, s.r1) !== depth) continue;
+    const dist = Math.abs(map.lineOf(s.r0) - startLine);
+    if (dist > 0 && dist <= RELOCATE_LINE_WINDOW && dist < bestDist) {
+      bestDist = dist;
+      best = s;
+    }
+  }
+  return best;
 }
 
 // ── surfaceAtLine ─────────────────────────────────────────────────────────────

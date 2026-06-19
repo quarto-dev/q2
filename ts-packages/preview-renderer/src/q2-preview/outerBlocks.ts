@@ -635,20 +635,33 @@ export function findReanchorCandidate(
 ): { r0: number; r1: number } | null {
     const orig = (pool as unknown[]).filter(isOriginalEntry);
 
-    const exact = orig.find((e) => e.r[0] === anchorR0);
-    const atAfter = orig.filter((e) => e.r[0] >= anchorR0);
-    const nearest = atAfter.length > 0
-        ? atAfter.reduce((a, b) => b.r[0] < a.r[0] ? b : a)
-        : undefined;
-
-    const cand = exact ?? nearest;
-    if (!cand) return null;
-
-    const sliced = normalizeLineEndings(sliceBytes(content, cand.r[0], cand.r[1])).trimEnd();
-    if (sliced === anchorSlice) {
-        return { r0: cand.r[0], r1: cand.r[1] };
+    // Content-first re-anchor: among the entries whose (normalized, trimmed) source
+    // slice equals anchorSlice, pick the one whose r[0] is nearest anchorR0 in
+    // EITHER direction. An exact-offset survivor wins (distance 0).
+    //
+    // Why content-first and symmetric (not "nearest at/after, then content-verify"):
+    // an edit that SHRINKS the document ABOVE the active block moves it to a LOWER
+    // offset, so a strictly-at/after search (r[0] >= anchorR0) excludes the survivor
+    // and the editor is spuriously dropped. That was the click-switch B-drop bug
+    // (q2-preview-block-nav-p2-5b ":453"): committing A "...original."→"...edited."
+    // shifts B back 2 bytes, so the self-heal could not re-anchor B at/after its old
+    // anchorR0 and closed B's editor. Matching on content first is symmetric under
+    // ± shifts; it also re-anchors a block that a different-length edit displaced
+    // onto a NEW block's old offset (the old exact-then-verify path returned null
+    // there, dropping a survivor). The content check is still the arbiter — a block
+    // edited out from under us (no slice equals anchorSlice) yields null → drop.
+    let best: OriginalPoolEntry | null = null;
+    let bestDist = Infinity;
+    for (const e of orig) {
+        const sliced = normalizeLineEndings(sliceBytes(content, e.r[0], e.r[1])).trimEnd();
+        if (sliced !== anchorSlice) continue;
+        const dist = Math.abs(e.r[0] - anchorR0);
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = e;
+        }
     }
-    return null;
+    return best ? { r0: best.r[0], r1: best.r[1] } : null;
 }
 
 /**

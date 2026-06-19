@@ -187,6 +187,20 @@ test.describe('P2.5b — Block navigation & locked resolution (real browser)', (
         if (testInfo.workerIndex > 0) {
             await page.waitForTimeout(1000);
         }
+        // This suite asserts LOCKED-mode (whole-block / prefixing-atomic)
+        // resolution. The nesting cursor is ON by default (P3.2, commit
+        // ace639c8), so pin it OFF here as the suite baseline. The two
+        // unlock-mode tests (T21a/T21b) register their own addInitScript with
+        // unlockNestingCursor:true AFTER this beforeEach, so they override it.
+        await page.addInitScript(() => {
+            localStorage.setItem('quarto-hub:preferences', JSON.stringify({
+                version: 1,
+                scrollSyncEnabled: true,
+                errorOverlayCollapsed: true,
+                colorScheme: 'auto',
+                unlockNestingCursor: false,
+            }));
+        });
     });
 
     // ── Diagnostic: isOnLastVisualLine geometry ──────────────────────────────

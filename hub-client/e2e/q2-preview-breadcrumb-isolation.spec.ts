@@ -92,10 +92,22 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
         }
     });
 
-    // ── Test A: chip ◀ button does NOT blur-commit the open editor ──────────
-
-    test('clicking the chip ◀ button does not blur-commit the open editor', async ({ page }) => {
-        // Enable nesting cursor BEFORE navigation so addInitScript applies to the iframe too.
+    // ── Test A: tight-div nest-out commits, reserializes to loose, and RELANDS ──
+    //
+    // Regression guard for the tight-div nest-out reland bug (fixed 2026-06-19).
+    // Editing the body of a TIGHT div (a `Plain` body — no blank lines) makes the
+    // writer reserialize it LOOSE (`Para`, blank lines added), which shifts the
+    // paragraph's source line down by one. The nest-out reland relocates its
+    // destination by the PRE-commit `(startLine, depth)`; the old exact-line match
+    // then missed the shifted surface → `resolveLanding` returned null → the editor
+    // failed to reland, leaving NO edit surface after nest-out. Fixed by making
+    // `relocateSurface` (nestingNav.ts) tolerant of the small structural shift —
+    // unit-bound by nestingNav.test.ts "start line shifted by one".
+    //
+    // (Note: an earlier version of this test asserted "◀ does NOT commit / editor
+    // stays open" — that encoded a superseded model. The shipped design COMMITS and
+    // relands a dirty nest move; the real-browser behaviour is verified below.)
+    test('tight-div nest-out commits, reserializes to loose, and relands on the div', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('quarto-hub:preferences', JSON.stringify({
                 version: 1,
@@ -115,53 +127,48 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
 
         const iframe = await openFile(page, serverUrl, docId, filename);
 
-        // Open the inner paragraph (leaf block).
+        // Open the inner paragraph of the TIGHT div.
         await iframe.locator('div.outer p[data-block-pool-id]').first().click();
-        await iframe.locator('textarea').first().waitFor({ timeout: 10_000 });
+        const ta = iframe.locator('textarea').first();
+        await ta.waitFor({ timeout: 10_000 });
+        await iframe.locator('[data-testid="q2-breadcrumb-chip"]').waitFor({ timeout: 5000 });
 
-        // Confirm the chip is visible (unlockNestingCursor took effect).
-        const chip = iframe.locator('[data-testid="q2-breadcrumb-chip"]');
-        await chip.waitFor({ timeout: 5000 });
-        await expect(chip, 'BreadcrumbChip must be visible — unlockNestingCursor did not propagate').toBeVisible();
-
-        // Snapshot original file content (pre-edit).
         const contentBefore = await getFileContent(page, filename);
-        expect(contentBefore, 'fixture content should be readable').not.toBeNull();
         expect(contentBefore).toContain('Inner paragraph.');
-        expect(contentBefore).not.toContain('ISOLATION_PROBE_XYZ');
+        expect(contentBefore).not.toContain('EDITED');
+        // Precondition: the fixture really is a TIGHT div (no blank line after opener).
+        expect(contentBefore, 'fixture must start tight').toContain('{.outer}\nInner');
 
-        // Type a distinctive probe into the textarea — makes it DIRTY.
-        await iframe.locator('textarea').first().fill('ISOLATION_PROBE_XYZ inner');
+        // Edit the paragraph. Type like a human (pressSequentially, NOT fill) so the
+        // draft settles before the nest-out — matching the real interaction.
+        await ta.evaluate((el: HTMLTextAreaElement) => { el.selectionStart = el.selectionEnd = el.value.length; });
+        await ta.pressSequentially(' EDITED', { delay: 30 });
 
-        // Click the ◀ out button.
+        // Nest OUT via the ◀ button.
         await iframe.locator('.q2-breadcrumb-out').click();
 
-        // ASSERTION 1: editor stays open (textarea still visible) — the chip click
-        // did NOT tear it down.
+        // (a) the edit COMMITTED (the shipped design commits a dirty nest move).
+        await expect
+            .poll(async () => getFileContent(page, filename),
+                { timeout: 8000, message: 'edit must commit on nest-out' })
+            .toContain('EDITED');
+
+        // (b) the div reserialized TIGHT → LOOSE (a blank line follows the opener).
+        const after = await getFileContent(page, filename);
+        expect(after, 'tight div must reserialize to loose on edit').toContain('{.outer}\n\n');
+
+        // (c) THE GUARD: the editor RELANDED on the now-loose div — an edit surface is
+        //     present and holds the div source. Before the relocateSurface fix the
+        //     reland found nothing (line-shifted) and there was NO edit surface.
         await expect(
             iframe.locator('textarea').first(),
-            'textarea must still be visible after clicking the ◀ button',
+            'editor must reland on the div after nest-out (no-reland was the tight-div bug)',
         ).toBeVisible();
-
-        // ASSERTION 2: nesting moved OUT — the textarea now contains the div source (:::).
         await expect
-            .poll(
-                async () => iframe.locator('textarea').first().inputValue(),
-                { timeout: 8000, message: 'textarea must contain ::: (nesting moved out to the Div)' },
-            )
+            .poll(async () => iframe.locator('textarea').first().inputValue(),
+                { timeout: 8000, message: 'relanded editor must hold the div source (:::)' })
             .toContain(':::');
 
-        // ASSERTION 3: no blur-commit — after a 1s settle, the file content must NOT
-        // contain the probe. (With isolation: button press → focus kept → no blur →
-        // no commit; nesting move re-seeds the draft, discarding the probe.)
-        await page.waitForTimeout(1000);
-        const contentAfter = await getFileContent(page, filename);
-        expect(
-            contentAfter,
-            'file content must NOT contain ISOLATION_PROBE_XYZ — blur-commit must not have fired',
-        ).not.toContain('ISOLATION_PROBE_XYZ');
-
-        // Close the editor.
         await iframe.locator('textarea').first().press('Escape');
     });
 

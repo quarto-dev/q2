@@ -944,7 +944,24 @@ describe('relocateSurface (commit-stable (startLine, depth) lookup)', () => {
 
   it('returns null when no surface matches (startLine, depth)', () => {
     expect(relocateSurface(surfaces, map, 0, 5)).toBeNull(); // no depth-5 surface at line 0
-    expect(relocateSurface(surfaces, map, 9, 0)).toBeNull(); // no surface starts at line 9
+    expect(relocateSurface(surfaces, map, 9, 0)).toBeNull(); // no surface starts at line 9 (far — outside the shift window)
+  });
+
+  it('relocates a surface whose start line shifted by one (tight-div → loose reserialization)', () => {
+    // The tight-div nest-out reland bug: committing a tight div (Plain body) makes
+    // the writer reserialize it LOOSE (Para), inserting a blank line BEFORE the
+    // paragraph — so the surface the reland is hunting for is now one line LOWER
+    // than the PRE-commit `fromStartLine` the reland captured. Exact-line matching
+    // returns null → resolveLanding returns null → no reland → no edit surface.
+    // relocateSurface must tolerate the small structural shift and still find it.
+    const content2 = 'AAAA\nBBBB\nCCCC\nDDDD\n';
+    const map2 = buildByteLineMap(content2);
+    const shifted: NestingSurface[] = [
+      { r0: 0, r1: 20 },   // div, start line 0, depth 0
+      { r0: 10, r1: 14 },  // the paragraph — now at line 2 (was line 1 pre-commit)
+    ];
+    // Reland captured fromStartLine=1 (pre-commit); the para shifted to line 2.
+    expect(relocateSurface(shifted, map2, 1, 1)).toEqual({ r0: 10, r1: 14 });
   });
 });
 

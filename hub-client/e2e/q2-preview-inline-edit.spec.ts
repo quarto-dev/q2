@@ -116,6 +116,19 @@ test.describe('q2-preview inline editing', () => {
         if (testInfo.workerIndex > 0) {
             await page.waitForTimeout(1000);
         }
+        // These tests predate the nesting-cursor feature and assert LOCKED-mode
+        // editing (e.g. activating a list opens the WHOLE list at the text
+        // column). The nesting cursor is ON by default (P3.2, commit ace639c8),
+        // so pin it OFF to exercise the locked behaviour these tests describe.
+        await page.addInitScript(() => {
+            localStorage.setItem('quarto-hub:preferences', JSON.stringify({
+                version: 1,
+                scrollSyncEnabled: true,
+                errorOverlayCollapsed: true,
+                colorScheme: 'auto',
+                unlockNestingCursor: false,
+            }));
+        });
     });
 
     test('editing a paragraph updates the Automerge document', async ({ page }) => {

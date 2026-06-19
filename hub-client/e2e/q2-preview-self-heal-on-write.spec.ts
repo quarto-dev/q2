@@ -123,7 +123,7 @@ async function getFileContent(page: Page, filename: string): Promise<string | nu
 // Test suite
 // ---------------------------------------------------------------------------
 
-test.describe('self-heal KEEP (browser tier) — currently a known-failing tripwire for bd-k1evg0g1', () => {
+test.describe('self-heal KEEP (browser tier) — green regression guard (bd-k1evg0g1, fixed 2026-06-19)', () => {
     test.setTimeout(120000);
 
     test.beforeEach(async ({ page }, testInfo) => {
@@ -133,29 +133,22 @@ test.describe('self-heal KEEP (browser tier) — currently a known-failing tripw
     });
 
     test('self-heal KEEP: editor survives a real collaborator shift (real browser, real blur) without corruption', async ({ page }) => {
-        // ⚠ KNOWN-FAILING TRIPWIRE (deferred 2026-06-13, braid bd-k1evg0g1).
+        // GREEN REGRESSION GUARD (was a known-failing tripwire for bd-k1evg0g1,
+        // deferred 2026-06-13; FIXED 2026-06-19).
         //
-        // This test is CORRECT — it asserts the real browser-tier self-heal-KEEP
-        // guarantee and was NOT weakened to chase green. It currently FAILS because
-        // it EXPOSED a genuine production bug in findReanchorCandidate
-        // (lockedTiles.ts ~409): on a collaborator insert-above large enough that a
-        // PRECEDING block shifts to >= the active block's OLD anchorR0, the single
-        // "nearest r[0] >= anchorR0" candidate is the wrong (preceding) block,
-        // content-verify fails, and the editor DROPs instead of re-anchoring (KEEP)
-        // → KEEP-1 (textarea visible) and KEEP-2 (draft preserved) fail.
-        //
-        // This affects TOP-LEVEL Phase-2 blocks, not just nested children — see the
-        // corrected "Nested-child self-heal DROP" watch-item in
-        // claude-notes/plans/2026-06-11-block-editing-improvements.md and bd-k1evg0g1.
-        // The jsdom KEEP test (p2-3b-real §3 case b) passes only because its tiny
-        // fixture's insert is smaller than the inter-block gap — a fixture artifact
-        // that masked this bug; the realistic-sized fixture here triggers it.
-        //
-        // When findReanchorCandidate is fixed (scan onward for the first
-        // content-verifying candidate), this test PASSES — Playwright then reports an
-        // "unexpected pass", at which point DELETE the test.fail() below and this
-        // becomes the green regression guard it was written to be.
-        test.fail();
+        // This test asserts the real browser-tier self-heal-KEEP guarantee. It used
+        // to FAIL because findReanchorCandidate (outerBlocks.ts) chose its re-anchor
+        // candidate by OFFSET ("nearest r[0] >= anchorR0") and then content-verified:
+        // on a collaborator insert-above large enough that a PRECEDING block shifts to
+        // >= the active block's OLD anchorR0, that nearest candidate was the wrong
+        // (preceding) block, content-verify failed, and the editor DROPPED instead of
+        // re-anchoring (KEEP). The fix made findReanchorCandidate CONTENT-first (match
+        // anchorSlice, then pick the nearest offset in either direction), which both
+        // scans past the wrong-content preceding block (this tripwire) AND handles a
+        // shrinking edit that shifts the active block to a LOWER offset (the
+        // click-switch B-drop, q2-preview-block-nav-p2-5b ":453"). The test.fail() has
+        // been removed now that the bug is fixed; see also the negative-shift unit
+        // case in outerBlocks-p2-3b.integration.test.ts.
 
         const serverUrl = getServerUrl();
         const filename = 'self-heal.qmd';

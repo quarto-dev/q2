@@ -433,7 +433,7 @@ test.describe('Phase 4 — Breadcrumb chip geometry (real browser)', () => {
     // rightmost crumb right no longer meets textarea position → RED.
     // -------------------------------------------------------------------------
 
-    test('4c — gutter-fill: crumb row spans from column margin to surface left for indented block (guards 3b)', async ({ page }) => {
+    test('4c — shallow indent: ◀ clamps at the page edge and the crumb band spills left into the margin (G1 left-spill)', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('quarto-hub:preferences', JSON.stringify({
                 version: 1,
@@ -503,6 +503,7 @@ test.describe('Phase 4 — Breadcrumb chip geometry (real browser)', () => {
             const outRect = outArrow.getBoundingClientRect();
             const crumbRects = crumbs.map((el) => el.getBoundingClientRect());
             return {
+                outArrowLeft: outRect.left,
                 outArrowRight: outRect.right,
                 crumbLeft: Math.min(...crumbRects.map((r) => r.left)),
                 crumbRight: Math.max(...crumbRects.map((r) => r.right)),
@@ -514,81 +515,79 @@ test.describe('Phase 4 — Breadcrumb chip geometry (real browser)', () => {
 
         console.log(
             `4c: colLeft=${colLeft.toFixed(2)}, surfaceLeft=${surfaceLeft.toFixed(2)}, ` +
-            `outArrowRight=${chipGeom.outArrowRight.toFixed(2)}, ` +
+            `outArrowLeft=${chipGeom.outArrowLeft.toFixed(2)}, outArrowRight=${chipGeom.outArrowRight.toFixed(2)}, ` +
             `crumbLeft=${chipGeom.crumbLeft.toFixed(2)}, crumbRight=${chipGeom.crumbRight.toFixed(2)}`,
         );
 
-        // (a) ◀ right edge ≈ colLeft (±3px): ◀ sits in the outer margin, flush
-        //     at the text-column left. Guards the margin-anchor positioning logic.
-        const TOL_COL = 3;
-        expect(
-            chipGeom.outArrowRight,
-            `◀ right (${chipGeom.outArrowRight.toFixed(2)}) must be ≈ colLeft (${colLeft.toFixed(2)}) ±${TOL_COL}px. ` +
-            `Guards ◀ anchored flush at the text-column margin.`,
-        ).toBeGreaterThanOrEqual(colLeft - TOL_COL);
-        expect(
-            chipGeom.outArrowRight,
-            `◀ right (${chipGeom.outArrowRight.toFixed(2)}) must be ≈ colLeft (${colLeft.toFixed(2)}) ±${TOL_COL}px. ` +
-            `Guards ◀ anchored flush at the text-column margin.`,
-        ).toBeLessThanOrEqual(colLeft + TOL_COL);
+        // G1 left-spill model (NOT the pre-G1 "3b" ◀-at-colLeft model — that was
+        // superseded in the same commit and never browser-validated). A loose
+        // list item's indent gutter (here ~34px) is narrower than the comfortable
+        // 2-crumb band (2·CRUMB_W = 44px), so computeChipGeometry pushes the chip
+        // LEFT until ◀ clamps at the page edge (chipLeft = 0). See the unit suite
+        // BreadcrumbChip.geometry.test.ts cases (b)/(c) for the blessed contract.
+        const TOL = 3;
 
-        // (b) leftmost .q2-crumb left ≈ colLeft (±3px): crumbs never enter the
-        //     outer margin. Guards the crumb band starting at colLeft.
+        // (a) ◀ is clamped at the page edge (chipLeft ≈ 0), NOT anchored at colLeft.
+        //     This is THE binding assertion for the left-spill clamp: reverting to
+        //     the ◀-at-colLeft anchor moves outArrowLeft to ≈ colLeft − MIN_GLYPH_W
+        //     (~9.5px), failing this.
+        expect(
+            chipGeom.outArrowLeft,
+            `◀ left (${chipGeom.outArrowLeft.toFixed(2)}) must be ≈ 0 (clamped at the page edge). ` +
+            `Guards the G1 left-spill clamp for a shallow indent gutter.`,
+        ).toBeLessThanOrEqual(TOL);
+        expect(chipGeom.outArrowLeft).toBeGreaterThanOrEqual(-TOL);
+
+        // (b) the crumbs spill LEFT into the outer margin (crumbLeft < colLeft) and
+        //     start right at ◀'s right edge — the band is pushed left of the column.
         expect(
             chipGeom.crumbLeft,
-            `leftmost crumb left (${chipGeom.crumbLeft.toFixed(2)}) must be ≈ colLeft (${colLeft.toFixed(2)}) ±${TOL_COL}px. ` +
-            `Guards crumbs staying out of the outer margin.`,
-        ).toBeGreaterThanOrEqual(colLeft - TOL_COL);
+            `leftmost crumb left (${chipGeom.crumbLeft.toFixed(2)}) must be < colLeft (${colLeft.toFixed(2)}): ` +
+            `the shallow-gutter band spills into the outer margin (G1).`,
+        ).toBeLessThan(colLeft - TOL);
         expect(
             chipGeom.crumbLeft,
-            `leftmost crumb left (${chipGeom.crumbLeft.toFixed(2)}) must be ≈ colLeft (${colLeft.toFixed(2)}) ±${TOL_COL}px. ` +
-            `Guards crumbs staying out of the outer margin.`,
-        ).toBeLessThanOrEqual(colLeft + TOL_COL);
+            `leftmost crumb left (${chipGeom.crumbLeft.toFixed(2)}) must meet ◀ right (${chipGeom.outArrowRight.toFixed(2)}).`,
+        ).toBeGreaterThanOrEqual(chipGeom.outArrowRight - TOL);
 
-        // (c) rightmost .q2-crumb right ≈ surfaceLeft (±10px): the crumb band meets
-        //     the textarea anchor for indented blocks. Generous tolerance —
-        //     "close in common cases", not pixel-perfect.
-        //     Guards the textarea-anchor: reverting to the region-wrapper anchor →
-        //     surfaceLeft = colLeft (no indent) → crumb right no longer meets textarea.
+        // (c) the band's right edge still reaches the pivot (surfaceLeft) for this
+        //     shallow-but-nonzero gutter — the band width equals the comfortable
+        //     natural width, which here ≈ the gutter, so it lands at the surface.
         const TOL_SURF = 10;
         expect(
             chipGeom.crumbRight,
             `rightmost crumb right (${chipGeom.crumbRight.toFixed(2)}) must be ≈ surfaceLeft (${surfaceLeft.toFixed(2)}) ±${TOL_SURF}px. ` +
-            `Guards textarea-anchor + gutter band meeting the indented surface.`,
+            `Guards the band meeting the indented surface (textarea anchor).`,
         ).toBeGreaterThanOrEqual(surfaceLeft - TOL_SURF);
-        expect(
-            chipGeom.crumbRight,
-            `rightmost crumb right (${chipGeom.crumbRight.toFixed(2)}) must be ≈ surfaceLeft (${surfaceLeft.toFixed(2)}) ±${TOL_SURF}px. ` +
-            `Guards textarea-anchor + gutter band meeting the indented surface.`,
-        ).toBeLessThanOrEqual(surfaceLeft + TOL_SURF);
+        expect(chipGeom.crumbRight).toBeLessThanOrEqual(surfaceLeft + TOL_SURF);
 
         await iframe.locator('textarea').first().press('Escape');
     });
 
     // -------------------------------------------------------------------------
-    // 4d — Zero-indent Div: ◀ anchored at colLeft, crumbs stay out of margin.
+    // 4d — Zero-indent Div under the G1 left-spill model.
     //
-    // Fixture: a fenced-Div-wrapped paragraph (zero indent).
-    // Non-indenting containers (Div) get 0-width indent gutter → the crumb
-    // band overshoots right into the content (never into the margin).
+    // Fixture: a fenced-Div-wrapped paragraph (zero indent gutter).
     //
-    // New design contract (all coords iframe-relative via .evaluate()):
-    //   - ◀ right edge ≈ colLeft (±3px): ◀ sits in the outer margin, flush at
-    //     the text-column left.
-    //   - leftmost .q2-crumb left ≥ colLeft − 3: crumbs never enter the outer
-    //     margin even for zero-indent blocks.
+    // G1 design contract (all coords iframe-relative via .evaluate()):
+    //   - ◀ clamps at the page edge: outArrowLeft ≈ 0 (chipLeft = 0). The chip
+    //     cannot fit its comfortable band in a zero gutter, so it is pushed all
+    //     the way left until ◀ hits x=0.
+    //   - crumbs spill LEFT into the outer margin: crumbLeft < colLeft. (A zero-
+    //     indent block's crumbs DO enter the margin — the "where you came from"
+    //     direction; see BreadcrumbChip's layout-model doc.)
+    //   - the band overshoots RIGHT past the pivot into content: crumbRight >
+    //     surfaceLeft (geometry unit-test case (c)).
     //
-    // For zero-indent blocks the crumb band's right edge OVERSHOOTS into the
-    // content (rightmost crumb right > surfaceLeft) — that is correct and
-    // intentional; do NOT assert meets-surface here.
+    // Real browser sample (run 2026-06-19):
+    //   colLeft=25.5, ◀=[0,16], crumbs=[16,60], surfaceLeft≈25.5 (no indent).
     //
-    // Confirmed sample numbers (run 2026-06-16):
-    //   colLeft=25.5, ◀=[9.5,25.5], crumbs=[25.5,41.5], surfaceLeft≈25.5 (no indent).
-    //
-    // Guards: the ◀-at-colLeft anchor and the crumbs-stay-out-of-margin invariant.
+    // This REPLACES the pre-G1 "3b" expectations (◀ at colLeft, crumbs out of the
+    // margin) that the old assertions encoded — superseded in the G1 commit and
+    // never browser-validated before now.
     // -------------------------------------------------------------------------
 
-    test('4d — zero-indent Div: ◀ anchored at colLeft, crumbs stay out of margin (guards ◀-anchor + no-margin-spill for crumbs)', async ({ page }) => {
+    test('4d — zero-indent Div: ◀ clamps at the page edge, crumbs spill left into margin and band overshoots right (G1 left-spill)', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('quarto-hub:preferences', JSON.stringify({
                 version: 1,
@@ -643,6 +642,7 @@ test.describe('Phase 4 — Breadcrumb chip geometry (real browser)', () => {
             const outRect = outArrow.getBoundingClientRect();
             const crumbRects = crumbs.map((el) => el.getBoundingClientRect());
             return {
+                outArrowLeft: outRect.left,
                 outArrowRight: outRect.right,
                 crumbLeft: Math.min(...crumbRects.map((r) => r.left)),
                 crumbRight: Math.max(...crumbRects.map((r) => r.right)),
@@ -652,41 +652,52 @@ test.describe('Phase 4 — Breadcrumb chip geometry (real browser)', () => {
         expect(chipGeom, 'chip geometry must be non-null').not.toBeNull();
         if (!chipGeom) throw new Error('impossible — asserted above');
 
-        // surfaceLeft for logging only (zero-indent → ≈ colLeft).
+        // surfaceLeft (zero-indent Div → ≈ colLeft; the band overshoots right of it).
         const surfaceLeft = await iframe.locator('textarea').first().evaluate((el) => {
             return el.getBoundingClientRect().left;
         });
 
         console.log(
             `4d: colLeft=${colLeft.toFixed(2)}, surfaceLeft=${surfaceLeft.toFixed(2)}, ` +
-            `outArrowRight=${chipGeom.outArrowRight.toFixed(2)}, ` +
+            `outArrowLeft=${chipGeom.outArrowLeft.toFixed(2)}, outArrowRight=${chipGeom.outArrowRight.toFixed(2)}, ` +
             `crumbLeft=${chipGeom.crumbLeft.toFixed(2)}, crumbRight=${chipGeom.crumbRight.toFixed(2)}`,
         );
 
-        // (i) ◀ right edge ≈ colLeft (±3px): ◀ sits in the outer margin, flush
-        //     at the text-column left. Guards the ◀-at-colLeft anchor logic.
-        const TOL_COL = 3;
-        expect(
-            chipGeom.outArrowRight,
-            `◀ right (${chipGeom.outArrowRight.toFixed(2)}) must be ≈ colLeft (${colLeft.toFixed(2)}) ±${TOL_COL}px. ` +
-            `Guards ◀ anchored flush at the text-column margin.`,
-        ).toBeGreaterThanOrEqual(colLeft - TOL_COL);
-        expect(
-            chipGeom.outArrowRight,
-            `◀ right (${chipGeom.outArrowRight.toFixed(2)}) must be ≈ colLeft (${colLeft.toFixed(2)}) ±${TOL_COL}px. ` +
-            `Guards ◀ anchored flush at the text-column margin.`,
-        ).toBeLessThanOrEqual(colLeft + TOL_COL);
+        // G1 left-spill model for a ZERO-indent Div (gutter = 0). The comfortable
+        // band (2·CRUMB_W) cannot fit a zero gutter, so the chip is pushed left
+        // until ◀ clamps at the page edge (chipLeft = 0) and the band spills RIGHT
+        // past the pivot into the content (BreadcrumbChip.geometry.test.ts case (c)).
+        // NB: this REPLACES the pre-G1 "3b" expectations (◀ at colLeft, crumbs
+        // out of the margin) — those were superseded in the same commit and never
+        // browser-validated. Under G1, a zero-indent block's crumbs DO enter the
+        // margin (the "where you came from" direction).
+        const TOL = 3;
 
-        // (ii) leftmost .q2-crumb left ≥ colLeft − 3: crumbs do NOT enter the
-        //      outer margin even for zero-indent blocks. The gutter is zero so the
-        //      band overshoots right (into content), never left.
-        //      Guards: crumbs-stay-out-of-margin invariant.
+        // (i) ◀ is clamped at the page edge (chipLeft ≈ 0), NOT anchored at colLeft.
+        //     Binding assertion for the clamp: the ◀-at-colLeft revert moves
+        //     outArrowLeft to ≈ colLeft − MIN_GLYPH_W (~9.5px), failing this.
+        expect(
+            chipGeom.outArrowLeft,
+            `◀ left (${chipGeom.outArrowLeft.toFixed(2)}) must be ≈ 0 (clamped at the page edge) for a zero-indent block.`,
+        ).toBeLessThanOrEqual(TOL);
+        expect(chipGeom.outArrowLeft).toBeGreaterThanOrEqual(-TOL);
+
+        // (ii) the crumbs spill LEFT into the outer margin (crumbLeft < colLeft) —
+        //      the zero gutter forces the band left of the column.
         expect(
             chipGeom.crumbLeft,
-            `leftmost crumb left (${chipGeom.crumbLeft.toFixed(2)}) must be ≥ colLeft (${colLeft.toFixed(2)}) − 3. ` +
-            `Crumbs must never enter the outer page margin. ` +
-            `For zero-indent blocks the gutter overshoots right (into content), not left.`,
-        ).toBeGreaterThanOrEqual(colLeft - 3);
+            `leftmost crumb left (${chipGeom.crumbLeft.toFixed(2)}) must be < colLeft (${colLeft.toFixed(2)}): ` +
+            `a zero-indent block's band spills into the outer margin (G1).`,
+        ).toBeLessThan(colLeft - TOL);
+
+        // (iii) the band overshoots RIGHT past the pivot into the content
+        //       (crumbRight > surfaceLeft) — the comfortable width has nowhere to go
+        //       but right once ◀ is pinned at x=0.
+        expect(
+            chipGeom.crumbRight,
+            `rightmost crumb right (${chipGeom.crumbRight.toFixed(2)}) must overshoot surfaceLeft (${surfaceLeft.toFixed(2)}): ` +
+            `the comfortable band spills right past the pivot for a zero gutter (G1 case c).`,
+        ).toBeGreaterThan(surfaceLeft + TOL);
 
         await iframe.locator('textarea').first().press('Escape');
     });

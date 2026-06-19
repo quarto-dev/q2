@@ -263,6 +263,22 @@ describe('findReanchorCandidate — re-anchor nearest when anchorR0 absent from 
         expect(result).toEqual({ r0: 110, r1: 116 });
     });
 
+    it('re-anchors when the block shifted to a LOWER offset (shrinking edit above)', () => {
+        // Regression for the click-switch B-drop bug (q2-preview-block-nav-p2-5b
+        // ":453"). Editing block A above us from "...original." to "...edited."
+        // SHRINKS the document by 2 bytes, so our block moves from r0=100 to r0=98.
+        // A strictly-at/after search (r[0] >= 100) excludes the survivor → spurious
+        // DROP. Content-first re-anchor finds it at the nearest offset, either side.
+        const bigContent = 'X'.repeat(98) + 'hello\n' + 'Y'.repeat(20);
+        const pool: unknown[] = [
+            { t: 0, r: [0, 98], d: 0 },     // filler block (shrunk under us)
+            { t: 0, r: [98, 104], d: 0 },   // 'hello\n' → our block (was at r0=100)
+            { t: 0, r: [104, 124], d: 0 },  // another block after
+        ];
+        const result = findReanchorCandidate(pool, bigContent, 100, 'hello');
+        expect(result).toEqual({ r0: 98, r1: 104 });
+    });
+
     it('exact at anchorR0 fails content check → null (no fallback to nearest)', () => {
         // anchorR0=0 has an exact entry but its content is 'world', not 'hello'.
         // A block at r0=6 has content 'hello' but nearest is not tried after exact fails.
@@ -276,13 +292,30 @@ describe('findReanchorCandidate — re-anchor nearest when anchorR0 absent from 
     });
 });
 
-describe('findReanchorCandidate — no candidate at/after → null', () => {
-    it('returns null when no pool entry has r[0] >= anchorR0', () => {
+describe('findReanchorCandidate — no content match → null', () => {
+    it('re-anchors to the surviving content block even when anchorR0 is past every entry', () => {
+        // Content-first semantics (negative-shift fix): a stale anchorR0 beyond the
+        // current doc is NOT itself a drop signal — the survivor is located by its
+        // content slice, nearest offset. Here 'hello' survives at [0,6] so the block
+        // re-anchors there. (Previously this returned null because the offset-only
+        // search required r[0] >= anchorR0 — the same asymmetry that dropped a block
+        // shifted to a lower offset; see the LOWER-offset regression above.)
         const pool: unknown[] = [
             { t: 0, r: [0, 6], d: 0 },
             { t: 0, r: [6, 12], d: 0 },
         ];
         const result = findReanchorCandidate(pool, SIMPLE_CONTENT, 999, 'hello');
+        expect(result).toEqual({ r0: 0, r1: 6 });
+    });
+
+    it('returns null when the block content is gone (edited out from under us)', () => {
+        // The content check is the real arbiter: no entry's slice equals anchorSlice
+        // → the block did not survive → drop.
+        const pool: unknown[] = [
+            { t: 0, r: [0, 6], d: 0 },   // 'hello'
+            { t: 0, r: [6, 12], d: 0 },  // 'world'
+        ];
+        const result = findReanchorCandidate(pool, SIMPLE_CONTENT, 0, 'GONE');
         expect(result).toBeNull();
     });
 

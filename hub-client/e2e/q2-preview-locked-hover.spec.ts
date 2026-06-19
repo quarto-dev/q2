@@ -74,13 +74,17 @@ test.describe('§3 — locked-mode hover outlines the outer block (real browser)
     });
 
     test('hovering a deep list leaf outlines a <ul> (outer block), never the leaf <p>', async ({ page }) => {
-        // LOCKED mode: unlockNestingCursor is intentionally absent (the default).
+        // LOCKED mode: nesting cursor is ON by default (P3.2, commit ace639c8),
+        // so this locked-mode test must explicitly OPT OUT by pinning
+        // unlockNestingCursor:false. (Before the default flip, omitting the key
+        // was enough; it no longer is.)
         await page.addInitScript(() => {
             localStorage.setItem('quarto-hub:preferences', JSON.stringify({
                 version: 1,
                 scrollSyncEnabled: true,
                 errorOverlayCollapsed: true,
                 colorScheme: 'auto',
+                unlockNestingCursor: false,
             }));
         });
 
