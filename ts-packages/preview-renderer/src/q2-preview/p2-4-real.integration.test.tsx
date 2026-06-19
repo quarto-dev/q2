@@ -648,14 +648,23 @@ describe('P2.5a — Esc: focus-restoration via real 250ms timeout fallback', () 
 });
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * 6. Arrow wrap: ArrowDown on last tile → first tile (real production wrap logic)
+ * 6. §1 Test 1.e — Arrow clamp: ArrowDown on last tile / ArrowUp on first tile
+ *    are no-ops (CLAMP, not WRAP).
  *
- * Ported from DirectMoveHarness "wrap" tests in p2-4b (which exercised a
- * reimplementation). These verify the real requestMove wrap path in PreviewRoot.
+ * Intentional behavior change in §1: the old wrap-to-first / wrap-to-last
+ * fallbacks are replaced by clamp (no-op when there is no destination in the
+ * travel direction). These tests replace the former "wrap" tests.
+ *
+ * Changed from the old tests:
+ *   - describe titles: "wrap" → "clamp"
+ *   - The assertion changes from "opens [first/last] tile" to "stays on the
+ *     current tile (editor remains open, no change, no commit)".
+ *
+ * All other assertions are identical (setAst not called, no crash).
  * ──────────────────────────────────────────────────────────────────────────── */
 
-describe('P2.5a — arrow move wrap: ArrowDown on last tile wraps to first tile', () => {
-    it('opens pool[0] (para0) when ArrowDown fires from the last tile (pool[3])', async () => {
+describe('P2.5a §1 — arrow clamp (LOCKED): ArrowDown on last tile is a no-op (was: wrap to first)', () => {
+    it('stays on pool[3] (para3) when ArrowDown fires from the last tile — no wrap', async () => {
         vi.spyOn(caretGeometry, 'isOnLastVisualLine').mockReturnValue(true);
         vi.spyOn(caretGeometry, 'isOnFirstVisualLine').mockReturnValue(false);
 
@@ -665,7 +674,7 @@ describe('P2.5a — arrow move wrap: ArrowDown on last tile wraps to first tile'
         await act(async () => {});
         mockTileRects(container);
 
-        // Activate tile 3 (pool[3], r0=19, "para3").
+        // Activate tile 3 (pool[3], r0=19, "para3") — the LAST tile.
         const tileC = container.querySelector<HTMLElement>('[data-block-pool-id="3"]');
         expect(tileC).not.toBeNull();
         await act(async () => {
@@ -677,20 +686,21 @@ describe('P2.5a — arrow move wrap: ArrowDown on last tile wraps to first tile'
         expect(textarea).not.toBeNull();
         expect(textarea!.value).toBe('para3');
 
-        // ArrowDown from last tile → wrap to first (pool[0], "para0").
+        // ArrowDown from last tile → clamp: no-op (no wrap to first).
         await act(async () => {
             fireEvent.keyDown(textarea!, { key: 'ArrowDown' });
         });
 
-        expect(setAst).not.toHaveBeenCalled();
+        expect(setAst).not.toHaveBeenCalled(); // no commit
+        // Editor stays on para3 (clamp: same textarea, same value).
         const textareaAfter = container.querySelector<HTMLTextAreaElement>('textarea');
         expect(textareaAfter).not.toBeNull();
-        expect(textareaAfter!.value).toBe('para0');
+        expect(textareaAfter!.value).toBe('para3');
     });
 });
 
-describe('P2.5a — arrow move wrap: ArrowUp on first tile wraps to last tile', () => {
-    it('opens pool[3] (para3) when ArrowUp fires from the first tile (pool[0])', async () => {
+describe('P2.5a §1 — arrow clamp (LOCKED): ArrowUp on first tile is a no-op (was: wrap to last)', () => {
+    it('stays on pool[0] (para0) when ArrowUp fires from the first tile — no wrap', async () => {
         vi.spyOn(caretGeometry, 'isOnFirstVisualLine').mockReturnValue(true);
         vi.spyOn(caretGeometry, 'isOnLastVisualLine').mockReturnValue(false);
 
@@ -700,7 +710,7 @@ describe('P2.5a — arrow move wrap: ArrowUp on first tile wraps to last tile', 
         await act(async () => {});
         mockTileRects(container);
 
-        // Activate tile 0 (pool[0], r0=0, "para0").
+        // Activate tile 0 (pool[0], r0=0, "para0") — the FIRST tile.
         const tileFirst = container.querySelector<HTMLElement>('[data-block-pool-id="0"]');
         expect(tileFirst).not.toBeNull();
         await act(async () => {
@@ -712,15 +722,16 @@ describe('P2.5a — arrow move wrap: ArrowUp on first tile wraps to last tile', 
         expect(textarea).not.toBeNull();
         expect(textarea!.value).toBe('para0');
 
-        // ArrowUp from first tile → wrap to last (pool[3], "para3").
+        // ArrowUp from first tile → clamp: no-op (no wrap to last).
         await act(async () => {
             fireEvent.keyDown(textarea!, { key: 'ArrowUp' });
         });
 
-        expect(setAst).not.toHaveBeenCalled();
+        expect(setAst).not.toHaveBeenCalled(); // no commit
+        // Editor stays on para0 (clamp: same textarea, same value).
         const textareaAfter = container.querySelector<HTMLTextAreaElement>('textarea');
         expect(textareaAfter).not.toBeNull();
-        expect(textareaAfter!.value).toBe('para3');
+        expect(textareaAfter!.value).toBe('para0');
     });
 });
 
@@ -1401,5 +1412,90 @@ describe('§2 Phase 0 characterization — dirty multiline ArrowUp uses L0 (Refl
         const relanded = container.querySelector<HTMLTextAreaElement>('textarea');
         expect(relanded).not.toBeNull();
         expect(relanded!.value).toBe('para0');
+    });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * §1 Test 1.b — LOCKED-mode characterization (guard through the §1 refactor).
+ *
+ * Pins the CURRENT outer-block up/down travel behavior in LOCKED mode
+ * (unlockNestingCursor not set → false). The §1 refactor generalizes the
+ * outerByLine resolver into a mode-switched function; this test verifies
+ * LOCKED mode is behavior-preserving through that refactor.
+ *
+ * Fixture: the standard 4-tile document (same as the rest of this file):
+ *   para0 pool[0] line 0
+ *   para1 pool[1] line 1   ← A (edit target)
+ *   para2 pool[2] line 2
+ *   para3 pool[3] line 4
+ *
+ * Assertions:
+ *   (a) Down from A (line 1) → B (para2, line 2). Next outer block after A.
+ *   (b) Up from B (line 2) → A (para1, line 1). Previous outer block before B.
+ *   Both are CLEAN (unmodified) moves → synchronous hop (no commit).
+ *
+ * Fail-on-revert contract: if the generalized resolver's LOCKED branch uses
+ * `surfaceAtLine` (the UNLOCK leaf-finder) instead of `enumerateOuterBlocks`,
+ * it would open the innermost leaf within the outer block — but in a flat
+ * 4-paragraph document there are no nested blocks, so the result happens to be
+ * the same. The REAL fail-on-revert lever is test 1.e (wrap→clamp), which is
+ * a separate, intentional behavior change. This test exists to guarantee that
+ * the direction/destLine arithmetic and the basic find-by-line logic survive
+ * the refactor unchanged.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+describe('§1 Test 1.b — LOCKED-mode up/down characterization (behavior-preserving guard)', () => {
+    it('(a) ArrowDown from A (line 1) lands on B (para2, line 2) — LOCKED mode', async () => {
+        vi.spyOn(caretGeometry, 'isOnLastVisualLine').mockReturnValue(true);
+        vi.spyOn(caretGeometry, 'isOnFirstVisualLine').mockReturnValue(false);
+
+        const setAst = vi.fn();
+        const { container } = mountPreviewRoot({ setAst });
+        await act(async () => {});
+        mockTileRects(container);
+
+        // Activate A (pool[1], "para1").
+        const textarea = await activateTileA(container);
+
+        // ArrowDown → synchronous hop to B (para2).
+        await act(async () => {
+            fireEvent.keyDown(textarea, { key: 'ArrowDown' });
+        });
+
+        expect(setAst).not.toHaveBeenCalled(); // clean move, no commit
+        const ta = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(ta).not.toBeNull();
+        expect(ta!.value).toBe('para2');
+    });
+
+    it('(b) ArrowUp from B (line 2) lands on A (para1, line 1) — LOCKED mode', async () => {
+        vi.spyOn(caretGeometry, 'isOnFirstVisualLine').mockReturnValue(true);
+        vi.spyOn(caretGeometry, 'isOnLastVisualLine').mockReturnValue(false);
+
+        const setAst = vi.fn();
+        const { container } = mountPreviewRoot({ setAst });
+        await act(async () => {});
+        mockTileRects(container);
+
+        // Activate B (pool[2], "para2").
+        const tileB = container.querySelector<HTMLElement>('[data-block-pool-id="2"]');
+        expect(tileB).not.toBeNull();
+        await act(async () => {
+            fireEvent(tileB!, ptrEvent('pointerdown', { pointerType: 'mouse' }));
+            fireEvent(tileB!, ptrEvent('pointerup', { pointerType: 'mouse' }));
+        });
+        const textareaB = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(textareaB).not.toBeNull();
+        expect(textareaB!.value).toBe('para2');
+
+        // ArrowUp → synchronous hop to A (para1).
+        await act(async () => {
+            fireEvent.keyDown(textareaB!, { key: 'ArrowUp' });
+        });
+
+        expect(setAst).not.toHaveBeenCalled();
+        const ta = container.querySelector<HTMLTextAreaElement>('textarea');
+        expect(ta).not.toBeNull();
+        expect(ta!.value).toBe('para1');
     });
 });

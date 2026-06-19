@@ -7,6 +7,7 @@ import type {
     NodeArgs,
 } from '../../framework';
 import { PreviewContext } from '../PreviewContext';
+import { isLeadingBlockBorrowable } from './listBorrow';
 
 /**
  * DefinitionList → `<dl><dt>term</dt><dd>def</dd>...</dl>`. Pandoc
@@ -22,9 +23,10 @@ export const DefinitionList = (args: NodeArgs<DefinitionListBlock>) => {
     const ctx = useContext(PreviewContext);
     const poolId = (args.node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
-    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
+    const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined && !ctx?.editingDisabled;
     const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {};
     const { node, setLocalAst, onNavigateToDocument } = args;
+
     return (
         <dl {...affordanceAttr}>
             {node.c.flatMap(([term, defs], i) => {
@@ -46,26 +48,37 @@ export const DefinitionList = (args: NodeArgs<DefinitionListBlock>) => {
                         ))}
                     </dt>
                 );
-                const dds = defs.map((blocks, k) => (
-                    <dd key={`dd-${i}-${k}`}>
-                        {blocks.map((b, m) => (
-                            <Node
-                                key={m}
-                                node={b}
-                                onNavigateToDocument={onNavigateToDocument}
-                                setLocalAst={(newBlock: BlockNode | InlineNode) => {
-                                    const newBlocks = blocks.slice();
-                                    newBlocks[m] = newBlock as BlockNode;
-                                    const newDefs = defs.slice();
-                                    newDefs[k] = newBlocks;
-                                    const newItems = node.c.slice();
-                                    newItems[i] = [term, newDefs];
-                                    setLocalAst({ t: 'DefinitionList', c: newItems });
-                                }}
-                            />
-                        ))}
-                    </dd>
-                ));
+                const dds = defs.map((blocks, k) => {
+                    // §0 Pool-id borrow: if the first block is a Plain and editable,
+                    // borrow its pool-id onto the <dd> (empty-guard: skip borrow if blocks is empty).
+                    const leadingBlock = blocks.length > 0 ? (blocks[0] as any) : null;
+                    const borrowPoolId = leadingBlock && isLeadingBlockBorrowable(leadingBlock, ctx)
+                        ? (leadingBlock.s as string | number)
+                        : undefined;
+                    const ddProps = borrowPoolId !== undefined
+                        ? { 'data-block-pool-id': borrowPoolId, tabIndex: -1 as const }
+                        : {};
+                    return (
+                        <dd key={`dd-${i}-${k}`} {...ddProps}>
+                            {blocks.map((b, m) => (
+                                <Node
+                                    key={m}
+                                    node={b}
+                                    onNavigateToDocument={onNavigateToDocument}
+                                    setLocalAst={(newBlock: BlockNode | InlineNode) => {
+                                        const newBlocks = blocks.slice();
+                                        newBlocks[m] = newBlock as BlockNode;
+                                        const newDefs = defs.slice();
+                                        newDefs[k] = newBlocks;
+                                        const newItems = node.c.slice();
+                                        newItems[i] = [term, newDefs];
+                                        setLocalAst({ t: 'DefinitionList', c: newItems });
+                                    }}
+                                />
+                            ))}
+                        </dd>
+                    );
+                });
                 return [dt, ...dds] as React.ReactNode[];
             })}
         </dl>

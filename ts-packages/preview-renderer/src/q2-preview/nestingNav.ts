@@ -199,6 +199,78 @@ export function relocateSurface(
   return null;
 }
 
+// ── surfaceAtLine ─────────────────────────────────────────────────────────────
+
+/**
+ * §1 C1/A2: Find the innermost navigable surface at source line L.
+ *
+ * Algorithm:
+ *   1. Among all surfaces in `set` whose TRIMMED line-span (`surfaceLineSpan`)
+ *      contains `L`, find the one with the GREATEST containment depth
+ *      (`depthOfSurface`). This is the innermost surface that "covers" L.
+ *   2. Amendment A2 — container-gap check: if that deepest surface is a
+ *      CONTAINER (it has at least one other surface in `set` strictly contained
+ *      within it) AND line L lies in NONE of those contained surfaces' trimmed
+ *      spans, then L is a container-gap line (inter-item marker, empty item,
+ *      blank-in-container, `<dt>` term). Return null so the caller can skip it.
+ *   3. Only a true LEAF at L (no descendant surface contains L) is a valid
+ *      landing. Return null when no surface's trimmed span contains L at all.
+ *
+ * Pure (no DOM). `content` and `map` are the document source and its byte→line
+ * map, used by `surfaceLineSpan` for trimmed-span computation.
+ */
+export function surfaceAtLine(
+  set: NestingSurface[],
+  L: number,
+  content: string,
+  map: ByteLineMap,
+): NestingSurface | null {
+  // Local helper: true when `other` is strictly contained within `parent`
+  // (same as "other is a descendant of parent" in the nesting hierarchy).
+  const isStrictlyContainedBy = (other: NestingSurface, parent: NestingSurface): boolean =>
+    other.r0 >= parent.r0 &&
+    other.r1 <= parent.r1 &&
+    !(other.r0 === parent.r0 && other.r1 === parent.r1);
+
+  // Step 1: collect all surfaces whose trimmed span contains L.
+  interface Candidate { s: NestingSurface; depth: number }
+  const candidates: Candidate[] = [];
+  for (const s of set) {
+    const [s0, s1] = surfaceLineSpan(s, content, map);
+    if (s0 <= L && L <= s1) {
+      candidates.push({ s, depth: depthOfSurface(set, s.r0, s.r1) });
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Pick the deepest (greatest depth); tiebreak by smallest r0 (determinism).
+  candidates.sort((a, b) => {
+    if (b.depth !== a.depth) return b.depth - a.depth; // descending depth
+    return a.s.r0 - b.s.r0;
+  });
+  const deepest = candidates[0].s;
+
+  // Step 2: A2 container-gap check.
+  // The deepest surface is a CONTAINER if any other surface in `set` is
+  // strictly contained within it.
+  const hasDescendants = set.some(
+    (other) => other !== deepest && isStrictlyContainedBy(other, deepest),
+  );
+
+  if (hasDescendants) {
+    // Check whether L lies in ANY of the strictly-contained surfaces' spans.
+    const liesInDescendant = set.some((other) => {
+      if (other === deepest || !isStrictlyContainedBy(other, deepest)) return false;
+      const [d0, d1] = surfaceLineSpan(other, content, map);
+      return d0 <= L && L <= d1;
+    });
+    if (!liesInDescendant) return null; // container-gap line
+  }
+
+  return deepest;
+}
+
 // ── childSurfaceToward ────────────────────────────────────────────────────────
 
 /**

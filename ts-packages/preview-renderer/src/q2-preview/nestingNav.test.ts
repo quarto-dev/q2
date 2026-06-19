@@ -13,6 +13,7 @@ import {
   childSurfaceToward,
   childSurfaceTowardLine,
   surfaceLineSpan,
+  surfaceAtLine,
   classifyNestingKey,
   detectPlatform,
   buildNestingCommitDestination,
@@ -944,5 +945,151 @@ describe('relocateSurface (commit-stable (startLine, depth) lookup)', () => {
   it('returns null when no surface matches (startLine, depth)', () => {
     expect(relocateSurface(surfaces, map, 0, 5)).toBeNull(); // no depth-5 surface at line 0
     expect(relocateSurface(surfaces, map, 9, 0)).toBeNull(); // no surface starts at line 9
+  });
+});
+
+// ── §1 surfaceAtLine (C1/A2): line-anchored surface resolution ─────────────────
+//
+// Test 1.a — pure unit test for surfaceAtLine.
+//
+// Worked example (from the §1 spec): a bullet list with sublist
+//   - one      (line 0)
+//   - two      (line 1)
+//     [sub] alpha   (line 2)
+//     beta          (line 3)
+//   - three    (line 4)
+//
+// Encoded as:
+//   content:
+//     "- one\n- two\n  alpha\n  beta\n- three\n"
+//      0    5  6   11  12   19  20  25  26     33
+//   lines: 0="- one", 1="- two", 2="  alpha", 3="  beta", 4="- three"
+//
+// Surfaces (UNLOCK mode — includes nested item surfaces):
+//   List [0,34]      depth 0  trimmed span [0,4]
+//   Item1 [2,6]      depth 1  trimmed span [0,0]   "one"   (leaf — no children)
+//   Item2 [8,34]     depth 1  trimmed span [1,4]   "two\n  alpha\n  beta" (container — has sub)
+//   Sub [14,26]      depth 2  trimmed span [2,3]   "alpha\n  beta"        (leaf — no children)
+//
+// Note: "three" at line 4 is inside Item2 in this simplified model.
+// For the worked example, we model a simpler fixture that still exercises the
+// key behaviors: leaf resolution, container-gap → null, multi-line leaf.
+//
+// Simpler fixture (3 flat-ish surfaces plus a container):
+//   content = "one\ntwo\nalpha\nbeta\nthree\n"
+//   lines: 0="one", 1="two", 2="alpha", 3="beta", 4="three"
+//
+//   Surfaces:
+//     Container [0,26]  depth 0  trimmed span [0,4]  (has children)
+//     Leaf_one  [0,3]   depth 1  trimmed span [0,0]  leaf at line 0
+//     Leaf_sub  [8,21]  depth 1  trimmed span [2,3]  leaf spanning lines 2-3
+//     Leaf_three [22,27] depth 1 trimmed span [4,4]  leaf at line 4
+//
+//   Expected results:
+//     L=0 → Leaf_one [0,3]    (leaf, depth 1)
+//     L=1 → null              (container-gap: Container covers it but no leaf child at L=1)
+//     L=2 → Leaf_sub [8,21]  (leaf, depth 1; covers lines 2-3)
+//     L=3 → Leaf_sub [8,21]  (same leaf)
+//     L=4 → Leaf_three [22,27] (leaf)
+//     L=5 → null              (no surface covers L=5)
+
+describe('surfaceAtLine (§1 C1/A2 — pure unit)', () => {
+  // content: "one\ntwo\nalpha\nbeta\nthree\n" (27 bytes)
+  //   line 0: "one"   bytes [0,3)
+  //   line 1: "two"   bytes [4,7)
+  //   line 2: "alpha" bytes [8,13)
+  //   line 3: "beta"  bytes [14,18)
+  //   line 4: "three" bytes [19,24)
+  const SAL_CONTENT = 'one\ntwo\nalpha\nbeta\nthree\n';
+  const salMap = buildByteLineMap(SAL_CONTENT);
+
+  // Surfaces:
+  //   Container [0,25] depth 0 trimmed span [0,4] (has children → is a container)
+  //   Leaf_one  [0,3]  depth 1 trimmed span [0,0]
+  //   Leaf_sub  [8,19] depth 1 trimmed span [2,3]  ("alpha\nbeta")
+  //   Leaf_three [19,25] depth 1 trimmed span [4,4]
+  const salSet: NestingSurface[] = [
+    { r0: 0,  r1: 25 },  // Container (outer)
+    { r0: 0,  r1: 3  },  // Leaf_one  (same r0 as container, smaller r1 → depth 1)
+    { r0: 8,  r1: 19 },  // Leaf_sub  (lines 2-3)
+    { r0: 19, r1: 25 },  // Leaf_three (line 4)
+  ];
+  const at = (s: NestingSurface | null) => (s ? [s.r0, s.r1] : null);
+
+  it('L=0: returns Leaf_one [0,3] (deepest surface whose span contains L=0)', () => {
+    // Both Container and Leaf_one span line 0; Leaf_one has greater depth (1) → wins.
+    expect(at(surfaceAtLine(salSet, 0, SAL_CONTENT, salMap))).toEqual([0, 3]);
+  });
+
+  it('L=1: returns null (container-gap: Container spans line 1 but no leaf child does)', () => {
+    // Container [0,25] spans line 1 (trimmed [0,4]). Its children at depth 1:
+    //   Leaf_one  spans [0,0] → does not contain L=1
+    //   Leaf_sub  spans [2,3] → does not contain L=1
+    //   Leaf_three spans [4,4] → does not contain L=1
+    // No child at L=1 → container-gap → null.
+    expect(surfaceAtLine(salSet, 1, SAL_CONTENT, salMap)).toBeNull();
+  });
+
+  it('L=2: returns Leaf_sub [8,19] (spans lines 2-3)', () => {
+    expect(at(surfaceAtLine(salSet, 2, SAL_CONTENT, salMap))).toEqual([8, 19]);
+  });
+
+  it('L=3: returns Leaf_sub [8,19] (same leaf, spans lines 2-3)', () => {
+    expect(at(surfaceAtLine(salSet, 3, SAL_CONTENT, salMap))).toEqual([8, 19]);
+  });
+
+  it('L=4: returns Leaf_three [19,25]', () => {
+    expect(at(surfaceAtLine(salSet, 4, SAL_CONTENT, salMap))).toEqual([19, 25]);
+  });
+
+  it('L=5: returns null (no surface spans line 5)', () => {
+    expect(surfaceAtLine(salSet, 5, SAL_CONTENT, salMap)).toBeNull();
+  });
+
+  it('flat set (no container): every line returns its leaf', () => {
+    // Two disjoint leaves, no container.
+    const flatSet: NestingSurface[] = [
+      { r0: 0, r1: 4 },  // "aaa\n" → trim [0,0]
+      { r0: 4, r1: 8 },  // "bbb\n" → trim [1,1]
+    ];
+    const flatContent = 'aaa\nbbb\n';
+    const flatMap = buildByteLineMap(flatContent);
+    expect(at(surfaceAtLine(flatSet, 0, flatContent, flatMap))).toEqual([0, 4]);
+    expect(at(surfaceAtLine(flatSet, 1, flatContent, flatMap))).toEqual([4, 8]);
+  });
+
+  it('A2: a container whose child spans [2,3] covers a gap on lines 0-1 and 4+', () => {
+    // Container [0,20] depth 0 spans lines [0,4] (trimmed)
+    // Single child [8,13] depth 1 spans line [2,2]  ("alpha")
+    // Lines 0,1,3,4 are all container-gap → null.
+    const gapContent = 'one\ntwo\nalpha\nbeta\nfive\n';
+    const gapMap = buildByteLineMap(gapContent);
+    const gapSet: NestingSurface[] = [
+      { r0: 0,  r1: 25 },  // Container depth 0 trimmed [0,4]
+      { r0: 8,  r1: 13 },  // Child "alpha" depth 1 trimmed [2,2]
+    ];
+    expect(surfaceAtLine(gapSet, 0, gapContent, gapMap)).toBeNull(); // gap
+    expect(surfaceAtLine(gapSet, 1, gapContent, gapMap)).toBeNull(); // gap
+    expect(at(surfaceAtLine(gapSet, 2, gapContent, gapMap))).toEqual([8, 13]); // leaf
+    expect(surfaceAtLine(gapSet, 3, gapContent, gapMap)).toBeNull(); // gap (child only at 2)
+    expect(surfaceAtLine(gapSet, 4, gapContent, gapMap)).toBeNull(); // gap
+  });
+
+  it('multi-level: inner leaf wins over its parent container', () => {
+    // Three levels: outer [0,20] > mid [4,16] > inner [6,12]
+    // All span line 1.
+    // trimmed spans (all single bytes 'a') → just use tiny content
+    const mlContent = 'AAAA\nBBBB\nCCCC\n';
+    const mlMap = buildByteLineMap(mlContent);
+    // No dedupe here; test with 2 distinct surfaces sharing a line.
+    const ml2: NestingSurface[] = [
+      { r0: 0,  r1: 15 },  // outer depth 0 spans all
+      { r0: 5,  r1: 9  },  // inner depth 1 spans line 1 only
+    ];
+    // L=1: inner [5,9] has depth 1, outer depth 0 → inner wins
+    expect(at(surfaceAtLine(ml2, 1, mlContent, mlMap))).toEqual([5, 9]);
+    // But [5,9] is a leaf (no sub-surfaces) so NOT a container-gap
+    // L=0: only outer covers it; outer HAS a descendant [5,9] that does NOT cover L=0 → gap
+    expect(surfaceAtLine(ml2, 0, mlContent, mlMap)).toBeNull();
   });
 });

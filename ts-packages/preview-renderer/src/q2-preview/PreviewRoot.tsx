@@ -28,7 +28,7 @@ import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';
 import { RevealDeck } from './RevealDeck';
 import { installLinkHandlers } from '../utils/iframeLinkHandlers';
-import { buildNestingCommitDestination, buildNestingSurfaces, parentSurface, childSurfaceToward, childSurfaceTowardLine, topBlockR0, depthOfSurface, relocateSurface } from './nestingNav';
+import { buildNestingCommitDestination, buildNestingSurfaces, parentSurface, childSurfaceToward, childSurfaceTowardLine, topBlockR0, depthOfSurface, relocateSurface, surfaceAtLine } from './nestingNav';
 import type { NestingSurface } from './nestingNav';
 import type { CaretHint } from './caretGeometry';
 import { prefixWidth } from './caretGeometry';
@@ -566,10 +566,81 @@ export function PreviewRoot(props: PreviewRootProps) {
             return { range: { r0: target.r0, r1: target.r1 }, caret, box: 'snapshot', captureFrom };
         }
 
+        const map = buildByteLineMap(currentContent);
+
+        // ── UNLOCK mode: surface-at-line navigation (Rule B, §1 C1/A2) ──────────
+        // In unlock mode the active surface set is buildNestingSurfaces (the full
+        // nesting partition including §0 list-item proxies). Navigate by finding
+        // the innermost leaf at the target line; skip container-gap lines by
+        // advancing L one step in the travel direction; clamp at document ends.
+        if (unlockNestingCursorRef.current) {
+            const surfaces = buildNestingSurfaces(sourceIndexRef.current);
+            if (surfaces.length === 0) return null;
+
+            // Determine the document line range from the surface set (min r0, max r1).
+            // Bounds use raw byte spans (conservative); surfaceAtLine resolves via trimmed
+            // spans, so trailing gap lines simply return null and are skipped by the loop below.
+            let docStartLine = Infinity;
+            let docEndLine = 0;
+            for (const s of surfaces) {
+                const [s0, s1] = [map.lineOf(s.r0), map.lineOf(Math.max(s.r0, s.r1 - 1))];
+                if (s0 < docStartLine) docStartLine = s0;
+                if (s1 > docEndLine) docEndLine = s1;
+            }
+            if (docStartLine === Infinity) return null;
+
+            // Walk from the start line in the travel direction, skipping container-gap
+            // lines (surfaceAtLine returns null), until we find a leaf or clamp.
+            //
+            // Down: start at spec.destLine (= L0 + draftLineCount, already past the
+            //   current block's last line — correct starting point).
+            // Up: start at spec.destLine - 1.
+            //   For UP, spec.destLine = L0 (the CURRENT block's anchor line, NOT
+            //   L0+draftLineCount as DOWN uses). Starting at spec.destLine would
+            //   re-find the current surface via surfaceAtLine, so we subtract 1 to
+            //   reach the line just above it.
+            //   Do NOT "align" UP's start with DOWN's (i.e. L0+draftLineCount-1) —
+            //   that would skip over blocks between L0 and L0+draftLineCount and
+            //   break UP navigation entirely.
+            const step = spec.direction === 'down' ? 1 : -1;
+            let L = spec.direction === 'down' ? spec.destLine : spec.destLine - 1;
+            let resolved = null;
+            for (;;) {
+                // Termination: L moves by ±1 each iteration; docStartLine/docEndLine are
+                // finite bounds derived from the surface set, so the clamp break is always reached.
+                if (L < docStartLine || L > docEndLine) break; // clamped
+                resolved = surfaceAtLine(surfaces, L, currentContent, map);
+                if (resolved !== null) break;
+                L += step;
+            }
+            if (!resolved) return null; // clamped — no valid destination in this direction
+
+            // Find the DOM element whose pool entry has r[0] === resolved.r0.
+            // UNLOCK targets a potentially NESTED leaf surface (e.g. a Para inside a
+            // BlockQuote, or a list item's leading block), so we search ALL pool elements
+            // with querySelectorAll('[data-block-pool-id]'), not just outer blocks via
+            // enumerateOuterBlocks (which only returns top-level blocks and would miss nested surfaces).
+            if (!previewHostRef.current) return null;
+            const allPoolEls = Array.from(
+                previewHostRef.current.querySelectorAll<Element>('[data-block-pool-id]'),
+            );
+            let destEl: Element | null = null;
+            for (const el of allPoolEls) {
+                const pidAttr = el.getAttribute('data-block-pool-id');
+                if (pidAttr === null) continue;
+                const entry = currentPool[Number(pidAttr)] as { t: number; r: [number, number]; d: number } | undefined;
+                if (!entry || entry.t !== 0) continue;
+                if (entry.r[0] === resolved.r0) { destEl = el; break; }
+            }
+            if (!destEl) return null;
+
+            return { range: { r0: resolved.r0, r1: resolved.r1 }, box: { measure: destEl } };
+        }
+
+        // ── LOCKED mode: outer-block navigation (clamp at ends, no wrap) ─────────
         const blocks = enumerateOuterBlocks(previewHostRef.current);
         if (blocks.length === 0) return null;
 
-        const map = buildByteLineMap(currentContent);
         let destBlock: Element | null = null;
 
         if (spec.direction === 'down') {
@@ -581,7 +652,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 if (!entry || entry.t !== 0) continue;
                 if (map.lineOf(entry.r[0]) >= spec.destLine) { destBlock = outerBlock; break; }
             }
-            if (!destBlock) destBlock = blocks[0]; // wrap to first
+            // Clamp: no block found in the down direction → no-op (was: wrap to first)
         } else {
             // Last outer block with start line < destLine
             for (let i = blocks.length - 1; i >= 0; i--) {
@@ -592,7 +663,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 if (!entry || entry.t !== 0) continue;
                 if (map.lineOf(entry.r[0]) < spec.destLine) { destBlock = outerBlock; break; }
             }
-            if (!destBlock) destBlock = blocks[blocks.length - 1]; // wrap to last
+            // Clamp: no block found in the up direction → no-op (was: wrap to last)
         }
 
         if (!destBlock) return null;

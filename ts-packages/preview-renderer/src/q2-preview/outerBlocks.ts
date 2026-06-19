@@ -211,20 +211,75 @@ export function enumerateOuterBlocks(host: Element): Element[] {
 }
 
 /**
- * §3: enumerate the nesting-mode LEAVES of `host` — visible `[data-block-pool-id]`
- * elements with no `[data-block-pool-id]` descendant — in DOM pre-order.
+ * Enumerate the strict DOM-leaf nesting surfaces of `host` — visible
+ * `[data-block-pool-id]` elements that have **no** `[data-block-pool-id]`
+ * descendant — in DOM pre-order.
  *
- * This is the nesting-mode counterpart of `enumerateOuterBlocks`: roving-tabindex
- * in unlock mode should focus/activate the same deepest surfaces the mouse does
- * (a single click in unlock mode opens the leaf, not the outer block). A container
- * (e.g. a `<ul>` that holds `<li>`s with pool-ids) is excluded; only the innermost
- * pool-id elements are returned. Pure (no React); visibility via `isVisibleBlock`.
+ * This is the **strict leaf** variant. It is NOT the roving enumerator for
+ * §2 unlock mode — use `enumerateNestingSurfaces` for roving.
+ *
+ * Why `enumerateNestingSurfaces` is the roving enumerator (and this is not):
+ *   A multi-block `<li>`/`<dd>` proxy (text + sublist) owns leading text but
+ *   also has a nested `[data-block-pool-id]` descendant (the sublist).
+ *   `enumerateNestingLeaves` would DROP that proxy (fails the "no pool-id
+ *   descendant" test), making its leading text unreachable by keyboard roving.
+ *   `enumerateNestingSurfaces` re-includes `<li>`/`<dd>` proxies via its
+ *   LI/DD clause (case b), so all landable surfaces remain reachable.
+ *
+ * Use this function only when you specifically need strict DOM-leaves (no
+ * container with nested pool-id children). See `enumerateNestingSurfaces`
+ * for the §2 C1 partition that roving-tabindex uses.
+ *
+ * Pure (no React); visibility via `isVisibleBlock`.
  */
 export function enumerateNestingLeaves(host: Element): Element[] {
     const all = Array.from(host.querySelectorAll<Element>('[data-block-pool-id]'));
     return all.filter(
         (el) => isVisibleBlock(el) && el.querySelector('[data-block-pool-id]') === null,
     );
+}
+
+/**
+ * §2: enumerate the C1 visible-surface partition of `host` — the landable
+ * surfaces in unlock mode — in DOM pre-order.
+ *
+ * Definition: include `el` iff `isVisibleBlock(el)` AND one of:
+ *   (a) `el` has no `[data-block-pool-id]` descendant — it is a DOM-leaf
+ *       (same as `enumerateNestingLeaves`); OR
+ *   (b) `el.tagName` is `LI` or `DD` — it is a §0 proxy that owns leading
+ *       text before its first nested block.
+ *
+ * Rationale for the LI/DD clause:
+ *   A single-block `<li>` has no pool-id descendant → already a DOM-leaf (case a).
+ *   A multi-block `<li>`/`<dd>` proxy (text + sublist) has the sublist as a
+ *   descendant pool-id element but OWNS its leading text (the Plain block whose
+ *   id was borrowed). Without the LI/DD clause, `enumerateNestingLeaves` would
+ *   drop the multi-block proxy (it has a pool-id descendant), making the leading
+ *   text unreachable by roving. The LI/DD clause re-includes it.
+ *
+ * Pure containers are correctly EXCLUDED:
+ *   - A `<ul>`/`<ol>`/`<dl>`/`<blockquote>` with pool-id children: NOT LI/DD,
+ *     HAS pool-id descendants → excluded (case a fails, case b fails).
+ *
+ * Consistency with §1's navigable surfaces:
+ *   §1's UNLOCK resolver (`resolveLanding` in PreviewRoot.tsx) uses
+ *   `buildNestingSurfaces(sourceIndex)` — the source-index partition — and then
+ *   searches `querySelectorAll('[data-block-pool-id]')` for the DOM element whose
+ *   pool entry matches the resolved surface's byte range. `buildNestingSurfaces`
+ *   includes §0 proxies (list item leading blocks), so both surfaces agree:
+ *   this DOM enumerator includes the LI/DD proxies that §1 can land on.
+ *
+ * Returns elements in DOM pre-order (same order `querySelectorAll` yields).
+ * Pure (no React); visibility via `isVisibleBlock`.
+ */
+export function enumerateNestingSurfaces(host: Element): Element[] {
+    const all = Array.from(host.querySelectorAll<Element>('[data-block-pool-id]'));
+    return all.filter((el) => {
+        if (!isVisibleBlock(el)) return false;
+        const hasPoolDescendant = el.querySelector('[data-block-pool-id]') !== null;
+        if (!hasPoolDescendant) return true; // DOM-leaf (case a)
+        return el.tagName === 'LI' || el.tagName === 'DD'; // §0 proxy with leading text (case b)
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -243,21 +298,111 @@ export function enumerateNestingLeaves(host: Element): Element[] {
  * - `boxStyle`: full computed box (margin + padding + per-side border longhands)
  *   for the measure-and-set wrapper to replicate the element's exact box.
  *
- * Returns `{ contentHeight: 0, boxStyle: {} }` if `getComputedStyle` or
- * `getBoundingClientRect` is unavailable (jsdom test environments that don't
- * provide layout). Callers should still open the editor — the textarea will
- * auto-focus and the draft is set; size can be corrected by a subsequent
- * `activate` call.
+ * ## Delegation
+ *
+ * This function delegates entirely to `measureLeadingBlockBox`, which provides:
+ * - Range-aware measurement for `<li>` / `<dd>` elements with nested
+ *   `[data-block-pool-id]` children (Amendment A4 — captures only the leading
+ *   text run, not the sublist height).
+ * - Element-rect measurement for all other elements.
+ * - jsdom-safe behaviour (never throws; `contentHeight` is 0 in zero-layout
+ *   environments). See `measureLeadingBlockBox` for the full jsdom guarantees.
+ *
+ * The `rangeUsed` diagnostic flag returned by `measureLeadingBlockBox` is
+ * stripped before returning — it is an internal test-only detail.
  */
 export function measureBlockBox(blockEl: Element): {
     contentHeight: number;
     boxStyle: Record<string, string>;
 } {
-    const rect = blockEl.getBoundingClientRect();
+    // Delegate to measureLeadingBlockBox, which handles:
+    //   - Range-aware measurement for <li>/<dd> with nested pool-id children (Amendment A4)
+    //   - Element-rect measurement for all other elements
+    // Strip the diagnostic `rangeUsed` flag before returning.
+    const { contentHeight, boxStyle } = measureLeadingBlockBox(blockEl);
+    return { contentHeight, boxStyle };
+}
+
+/**
+ * Measure the content height of an `<li>` or `<dd>` element's LEADING block
+ * (the text run before any nested block children), or fall back to the element's
+ * own box for non-list elements.
+ *
+ * ## Why a Range?
+ *
+ * A tight list item whose leading block is a `Plain` borrows the Plain's pool-id
+ * onto the `<li>` element. When the item also contains a nested block (e.g. a
+ * sub-list), the `<li>`'s `getBoundingClientRect()` includes the sublist height —
+ * but the editor should only occupy the leading text run's extent. A DOM `Range`
+ * from the element's start to its first `[data-block-pool-id]` descendant
+ * (exclusive) captures exactly the leading text run.
+ *
+ * ## When Range is used
+ *
+ * 1. `blockEl` is an `<li>` or `<dd>`.
+ * 2. The element has at least one `[data-block-pool-id]` descendant.
+ *
+ * Otherwise, the element's own box is measured (identical to `measureBlockBox`).
+ *
+ * ## jsdom behaviour
+ *
+ * `Range.getBoundingClientRect()` always returns a zero rect in jsdom; tests
+ * must stub `Range.prototype.getBoundingClientRect` to assert the Range path.
+ * The function never throws in a zero-layout environment — `contentHeight`
+ * will simply be 0.
+ *
+ * Returns `{ contentHeight, boxStyle, rangeUsed }`. `rangeUsed` is a diagnostic
+ * flag exposed only for unit tests to assert which measurement path was taken.
+ * `measureBlockBox` strips this flag before returning; it does NOT read it to
+ * dispatch between paths.
+ *
+ * This is an internal helper called by `measureBlockBox`. It is exported only for
+ * the 0.a unit tests that need to assert `rangeUsed` directly. Production code
+ * should call `measureBlockBox` instead.
+ */
+export function measureLeadingBlockBox(blockEl: Element): {
+    contentHeight: number;
+    boxStyle: Record<string, string>;
+    rangeUsed: boolean;
+} {
+    const tagName = blockEl.tagName.toLowerCase();
+    const isListItem = tagName === 'li' || tagName === 'dd';
+    const nestedPoolChild = isListItem
+        ? blockEl.querySelector('[data-block-pool-id]')
+        : null;
+
+    if (isListItem && nestedPoolChild !== null) {
+        // Range path: measure from the element's start to its first nested
+        // block child (exclusive), capturing only the leading text run.
+        const range = document.createRange();
+        range.setStart(blockEl, 0);
+        range.setEndBefore(nestedPoolChild);
+        // jsdom does not implement Range.getBoundingClientRect — guard gracefully.
+        const rangeRect: DOMRect | null = typeof range.getBoundingClientRect === 'function'
+            ? range.getBoundingClientRect()
+            : null;
+        const px = (v: string) => parseFloat(v) || 0;
+        // A Plain fragment has no padding/border of its own; the leading-text
+        // contentHeight is simply the range rect height.
+        const contentHeight = rangeRect !== null ? px(String(rangeRect.height)) : 0;
+        // The boxStyle for the range proxy is the trivial/empty box — no
+        // padding or border on the Plain fragment itself.
+        const emptyBoxStyle: Record<string, string> = {
+            marginTop: '', marginRight: '', marginBottom: '', marginLeft: '',
+            paddingTop: '', paddingRight: '', paddingBottom: '', paddingLeft: '',
+            borderTopWidth: '', borderRightWidth: '', borderBottomWidth: '', borderLeftWidth: '',
+            borderTopStyle: '', borderRightStyle: '', borderBottomStyle: '', borderLeftStyle: '',
+            borderTopColor: '', borderRightColor: '', borderBottomColor: '', borderLeftColor: '',
+        };
+        return { contentHeight, boxStyle: emptyBoxStyle, rangeUsed: true };
+    }
+
+    // Element path: measure the element's bounding rect minus padding/border,
+    // identical to the element-rect branch in measureBlockBox.
+    const elRect = blockEl.getBoundingClientRect();
     const cs = getComputedStyle(blockEl);
-    // parseFloat returns NaN for empty strings (jsdom) — treat NaN as 0.
     const px = (v: string) => parseFloat(v) || 0;
-    const contentHeight = rect.height
+    const contentHeight = elRect.height
         - px(cs.paddingTop) - px(cs.paddingBottom)
         - px(cs.borderTopWidth) - px(cs.borderBottomWidth);
     const boxStyle: Record<string, string> = {
@@ -272,7 +417,7 @@ export function measureBlockBox(blockEl: Element): {
         borderTopColor: cs.borderTopColor, borderRightColor: cs.borderRightColor,
         borderBottomColor: cs.borderBottomColor, borderLeftColor: cs.borderLeftColor,
     };
-    return { contentHeight, boxStyle };
+    return { contentHeight, boxStyle, rangeUsed: false };
 }
 
 /**

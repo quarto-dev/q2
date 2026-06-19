@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useRef } from 'react';
 import { PreviewContext } from './PreviewContext';
-import { resolveOuterBlock, enumerateOuterBlocks, enumerateNestingLeaves, captureEditTarget, measureBlockBox, seedForRange } from './outerBlocks';
+import { resolveOuterBlock, enumerateOuterBlocks, enumerateNestingSurfaces, captureEditTarget, measureBlockBox, seedForRange } from './outerBlocks';
 
 const HOLD_MS = 500;
 const MOVE_THRESHOLD_PX = 8;
@@ -255,11 +255,12 @@ export function useBlockEditHover(): {
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
             const host = e.currentTarget;
-            // §3 mode-aware roving: focus the same surfaces the mouse activates —
-            // outer blocks in locked mode, nesting leaves in unlock mode — so the
-            // two input paths agree.
+            // §2 mode-aware roving: focus the C1 visible-surface partition in unlock
+            // mode (incl. <li>/<dd> proxies for §0 multi-block leading text), or
+            // outer blocks in locked mode — so roving visits exactly what a click
+            // would activate.
             const blocks = (ctx?.unlockNestingCursor
-                ? enumerateNestingLeaves(host)
+                ? enumerateNestingSurfaces(host)
                 : enumerateOuterBlocks(host)) as HTMLElement[];
             if (!blocks.length) return;
             const idx = blocks.indexOf(document.activeElement as HTMLElement);
