@@ -170,12 +170,6 @@ export interface PreviewRootProps {
      */
     customRegistry?: Record<string, React.ComponentType<any>>;
     /**
-     * Optional callback called when the document format switches to/from
-     * slides. In production, `entry.tsx` passes `setDocIsSlides` to
-     * reconcile the Bootstrap CSS link. Tests can ignore it (default no-op).
-     */
-    onDocIsSlides?: (isSlides: boolean) => void;
-    /**
      * Optional callback called when `scrollToAnchorInDocument` would be called.
      * In production, `entry.tsx` provides the real scroll logic.
      * Tests can ignore it (default no-op).
@@ -1400,12 +1394,6 @@ export function PreviewRoot(props: PreviewRootProps) {
     // `format: revealjs` previews as the `q2-slides` pseudo-format.
     const previewFormat = parsed ? extractMetaString(parsed.meta?.format) : undefined;
     const isSlides = previewFormat === 'q2-slides' || previewFormat === 'revealjs';
-
-    // Notify caller (entry.tsx) about format switch so it can reconcile the Bootstrap CSS link.
-    const onDocIsSlides = props.onDocIsSlides;
-    useEffect(() => {
-        onDocIsSlides?.(isSlides);
-    }, [isSlides, onDocIsSlides]);
 
     // Build SourceInfo-value index from the untransformed AST (Plan 2a).
     const sourceIndex = useMemo(

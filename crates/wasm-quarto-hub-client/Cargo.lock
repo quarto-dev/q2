@@ -377,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "comrak-to-pandoc"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "comrak",
  "hashlink",
@@ -2072,7 +2072,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-analysis"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-pandoc-types",
@@ -2094,7 +2094,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-brand"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -2103,7 +2103,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-citeproc"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "glob",
  "hashlink",
@@ -2134,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-core"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2184,7 +2184,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-csl"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
@@ -2220,7 +2220,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-error-reporting"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "ariadne",
  "once_cell",
@@ -2234,7 +2234,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "once_cell",
  "quarto-highlight-encoding",
@@ -2260,7 +2260,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight-encoding"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2268,13 +2268,14 @@ dependencies = [
 
 [[package]]
 name = "quarto-lsp-core"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "pampa",
  "pollster",
  "quarto-analysis",
  "quarto-core",
  "quarto-error-reporting",
+ "quarto-highlight",
  "quarto-pandoc-types",
  "quarto-source-map",
  "quarto-system-runtime",
@@ -2282,11 +2283,13 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "tree-sitter",
+ "tree-sitter-qmd",
 ]
 
 [[package]]
 name = "quarto-navigation"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "quarto-config",
  "quarto-pandoc-types",
@@ -2321,7 +2324,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-project-create"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "quarto-doctemplate",
  "serde",
@@ -2330,7 +2333,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-sass"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "include_dir",
  "once_cell",
@@ -2348,7 +2351,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-source-map"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2357,7 +2360,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-system-runtime"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "base64",
@@ -2374,7 +2377,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-trace"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "flate2",
  "serde",
@@ -2392,7 +2395,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-util"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -2400,7 +2403,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-xml"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
@@ -2410,7 +2413,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-yaml"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "quarto-source-map",
  "serde",
@@ -3997,7 +4000,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-printf-fmt"
-version = "0.1.1"
+version = "0.4.0"
 
 [[package]]
 name = "wasm-quarto-hub-client"

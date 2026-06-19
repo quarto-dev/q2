@@ -246,29 +246,20 @@ function applyTheme(cssUrl: string | null): void {
     link.setAttribute('href', cssUrl);
 }
 
-// bd-ibqkf9ry: the HTML-theme (Bootstrap) CSS must NOT reach a reveal deck.
-// A deck ships its own complete CSS (`resources/revealjs/…`, imported by
-// `RevealDeck`), exactly like `q2 render`'s standalone deck — so leaking the
-// HTML theme (e.g. Bootstrap's `h2 { border-bottom }`) onto slides is a render/
-// preview divergence. `UPDATE_THEME` (theme bytes) and `UPDATE_AST` (which
-// reveals the format) arrive on separate messages in either order, so we
-// remember the last theme URL + whether the active doc is a slide deck and
-// reconcile: attach the `data-q2-theme` link only for non-slide documents.
+// bd-y259zb57: the `UPDATE_THEME` channel carries the active document's
+// *compiled theme*. For an HTML page that's Bootstrap; for a `format: revealjs`
+// deck it's the compiled Quarto reveal theme, delivered through the SAME
+// `css:theme:<fp>` → styles.css transport. Both must be applied as the
+// `<link data-q2-theme>` so preview matches render.
+//
+// (Previously this suppressed the theme link on slides, because the preview
+// only ever produced Bootstrap CSS — never the reveal theme — and reveal decks
+// fell back to a hard-coded stock `white.css` import in `RevealDeck`. That was
+// the centered/uppercase render↔preview divergence this strand fixes.)
 let lastThemeCssUrl: string | null = null;
-let currentDocIsSlides = false;
 
 function reconcileThemeLink(): void {
-    applyTheme(currentDocIsSlides ? null : lastThemeCssUrl);
-}
-
-/**
- * Record whether the active document is a reveal deck and re-reconcile the
- * HTML-theme link. Driven by the render component's `isSlides` effect, so a
- * format switch (html ⇄ revealjs) re-applies or removes the theme correctly.
- */
-function setDocIsSlides(isSlides: boolean): void {
-    currentDocIsSlides = isSlides;
-    reconcileThemeLink();
+    applyTheme(lastThemeCssUrl);
 }
 
 /**
@@ -354,7 +345,6 @@ function updateAst(payload: UpdateAstPayload) {
                 unlockNestingCursor={unlockNestingCursor}
                 nestedEditBuffers={nestedEditBuffers}
                 customRegistry={customRegistry}
-                onDocIsSlides={setDocIsSlides}
                 scrollToAnchor={scrollToAnchorInDocument}
                 onNavigateToDocument={(path, anchor) => {
                     window.parent.postMessage(
