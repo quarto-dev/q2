@@ -48,3 +48,6 @@ CLAUDE.local.md
 # Release signing keypair — NEVER commit (secret half lives in GH secrets + password manager)
 /q2-release.key
 /q2-release.pub
+
+# Visual brainstorming companion scratch files
+.superpowers/

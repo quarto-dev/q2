@@ -524,7 +524,22 @@ export function PreviewRoot(props: PreviewRootProps) {
                       ?? childSurfaceToward(surfaces, relocated.r0, relocated.r1, spec.leafAnchorR0);
             if (!next) return null; // clamp — no parent / leaf
             const destLine = Math.max(0, projectedLine - map.lineOf(next.r0));
-            const caret: CaretHint = { line: destLine, column: spec.caretBufferCol };
+            // §4 Principle A: route the column through prefixWidth, mirroring
+            // cleanCaretHint. Compute the invariant source column Cs from the
+            // from-surface's buffer column, then project it into the destination
+            // surface's buffer column. Both surfaces go through prefixWidth so
+            // clean and dirty paths share the same column semantics (Reflection #20).
+            const curClean = nestedEditBuffersRef.current?.[
+                serializeSourceEntry({ t: 0, r: [relocated.r0, relocated.r1], d: 0 })
+            ];
+            const destClean = nestedEditBuffersRef.current?.[
+                serializeSourceEntry({ t: 0, r: [next.r0, next.r1], d: 0 })
+            ];
+            // projectedLine is the absolute source line here — same role as Ls in cleanCaretHint.
+            const Cs = spec.caretBufferCol + prefixWidth(projectedLine, relocated.r0, currentContent, map, curClean);
+            const destCol = Math.max(0, Cs - prefixWidth(projectedLine, next.r0, currentContent, map, destClean));
+            // Same (bufferCol → Cs → destCol) projection as cleanCaretHint; factor after §6 lands.
+            const caret: CaretHint = { line: destLine, column: destCol };
             // Element to snapshot the destination subtree from (its top block).
             const topR0 = topBlockR0(surfaces, next.r0, next.r1);
             const captureFrom =

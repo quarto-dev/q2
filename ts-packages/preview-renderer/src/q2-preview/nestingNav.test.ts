@@ -384,7 +384,7 @@ import { beforeAll } from 'vitest';
 // ── buildAncestorPath / labelForSourceNode ────────────────────────────────────
 
 import { buildSourceIndex } from './sourceIndex';
-import { buildAncestorPath, labelForSourceNode } from './nestingNav';
+import { buildAncestorPath, labelForSourceNode, abbrevForSourceNode, categoryForSourceNode } from './nestingNav';
 
 // Fixture AST: Div#sec ⊃ BlockQuote ⊃ Para
 // Pool ranges are strictly nested: Div[0,40] ⊃ BlockQuote[10,38] ⊃ Para[12,36]
@@ -419,22 +419,22 @@ const SI = buildSourceIndex(JSON.stringify(ANCESTOR_AST))!;
 describe('buildAncestorPath', () => {
   it('cursor=Para(12,36) → full path [Div#sec, BlockQuote, Para]', () => {
     expect(buildAncestorPath(SI, 12, 36)).toEqual([
-      { label: 'Div#sec',    r0: 0,  r1: 40, isCurrent: false },
-      { label: 'BlockQuote', r0: 10, r1: 38, isCurrent: false },
-      { label: 'Para',       r0: 12, r1: 36, isCurrent: true  },
+      { label: 'Div#sec',    r0: 0,  r1: 40, isCurrent: false, abbrev: 'Dv', category: 'container' },
+      { label: 'BlockQuote', r0: 10, r1: 38, isCurrent: false, abbrev: '❝', category: 'quote' },
+      { label: 'Para',       r0: 12, r1: 36, isCurrent: true,  abbrev: '¶', category: 'leaf-text' },
     ]);
   });
 
   it('cursor=Div(0,40) (outermost) → single crumb [Div#sec]', () => {
     expect(buildAncestorPath(SI, 0, 40)).toEqual([
-      { label: 'Div#sec', r0: 0, r1: 40, isCurrent: true },
+      { label: 'Div#sec', r0: 0, r1: 40, isCurrent: true, abbrev: 'Dv', category: 'container' },
     ]);
   });
 
   it('cursor=BlockQuote(10,38) → [Div#sec(false), BlockQuote(true)]', () => {
     expect(buildAncestorPath(SI, 10, 38)).toEqual([
-      { label: 'Div#sec',    r0: 0,  r1: 40, isCurrent: false },
-      { label: 'BlockQuote', r0: 10, r1: 38, isCurrent: true  },
+      { label: 'Div#sec',    r0: 0,  r1: 40, isCurrent: false, abbrev: 'Dv', category: 'container' },
+      { label: 'BlockQuote', r0: 10, r1: 38, isCurrent: true,  abbrev: '❝', category: 'quote' },
     ]);
   });
 
@@ -470,6 +470,118 @@ describe('labelForSourceNode', () => {
 
   it('BlockQuote with no Attr slot → "BlockQuote"', () => {
     expect(labelForSourceNode({ t: 'BlockQuote', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('BlockQuote');
+  });
+});
+
+// ── abbrevForSourceNode ────────────────────────────────────────────────────────
+
+describe('abbrevForSourceNode', () => {
+  it('Header level 1 → "H1"', () => {
+    expect(abbrevForSourceNode({ t: 'Header', c: [1, ['', [], []], []] } as unknown as import('../framework/types').BlockNode)).toBe('H1');
+  });
+
+  it('Header level 2 → "H2"', () => {
+    expect(abbrevForSourceNode({ t: 'Header', c: [2, ['', [], []], []] } as unknown as import('../framework/types').BlockNode)).toBe('H2');
+  });
+
+  it('Header level 6 → "H6"', () => {
+    expect(abbrevForSourceNode({ t: 'Header', c: [6, ['', [], []], []] } as unknown as import('../framework/types').BlockNode)).toBe('H6');
+  });
+
+  it('Div → "Dv"', () => {
+    expect(abbrevForSourceNode({ t: 'Div', c: [['', [], []], []] } as unknown as import('../framework/types').BlockNode)).toBe('Dv');
+  });
+
+  it('BlockQuote → "❝"', () => {
+    expect(abbrevForSourceNode({ t: 'BlockQuote', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('❝');
+  });
+
+  it('BulletList → "•"', () => {
+    expect(abbrevForSourceNode({ t: 'BulletList', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('•');
+  });
+
+  it('OrderedList → "1."', () => {
+    expect(abbrevForSourceNode({ t: 'OrderedList', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('1.');
+  });
+
+  it('DefinitionList → "DL"', () => {
+    expect(abbrevForSourceNode({ t: 'DefinitionList', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('DL');
+  });
+
+  it('CodeBlock → "Cd"', () => {
+    expect(abbrevForSourceNode({ t: 'CodeBlock', c: [['', [], []], ''] } as unknown as import('../framework/types').BlockNode)).toBe('Cd');
+  });
+
+  it('Figure → "Fg"', () => {
+    expect(abbrevForSourceNode({ t: 'Figure', c: [['', [], []], null, []] } as unknown as import('../framework/types').BlockNode)).toBe('Fg');
+  });
+
+  it('Table → "Tb"', () => {
+    expect(abbrevForSourceNode({ t: 'Table', c: [['', [], []], [], null, null, []] } as unknown as import('../framework/types').BlockNode)).toBe('Tb');
+  });
+
+  it('Para → "¶"', () => {
+    expect(abbrevForSourceNode({ t: 'Para', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('¶');
+  });
+
+  it('Plain → "¶"', () => {
+    expect(abbrevForSourceNode({ t: 'Plain', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('¶');
+  });
+
+  it('unknown type "RawBlock" → first 2 chars "Ra"', () => {
+    expect(abbrevForSourceNode({ t: 'RawBlock', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('Ra');
+  });
+});
+
+// ── categoryForSourceNode ──────────────────────────────────────────────────────
+
+describe('categoryForSourceNode', () => {
+  it('Div → "container"', () => {
+    expect(categoryForSourceNode({ t: 'Div', c: [['', [], []], []] } as unknown as import('../framework/types').BlockNode)).toBe('container');
+  });
+
+  it('BulletList → "list"', () => {
+    expect(categoryForSourceNode({ t: 'BulletList', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('list');
+  });
+
+  it('OrderedList → "list"', () => {
+    expect(categoryForSourceNode({ t: 'OrderedList', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('list');
+  });
+
+  it('DefinitionList → "list"', () => {
+    expect(categoryForSourceNode({ t: 'DefinitionList', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('list');
+  });
+
+  it('BlockQuote → "quote"', () => {
+    expect(categoryForSourceNode({ t: 'BlockQuote', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('quote');
+  });
+
+  it('Para → "leaf-text"', () => {
+    expect(categoryForSourceNode({ t: 'Para', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('leaf-text');
+  });
+
+  it('Plain → "leaf-text"', () => {
+    expect(categoryForSourceNode({ t: 'Plain', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('leaf-text');
+  });
+
+  it('Header → "leaf-text"', () => {
+    expect(categoryForSourceNode({ t: 'Header', c: [2, ['', [], []], []] } as unknown as import('../framework/types').BlockNode)).toBe('leaf-text');
+  });
+
+  it('CodeBlock → "embed"', () => {
+    expect(categoryForSourceNode({ t: 'CodeBlock', c: [['', [], []], ''] } as unknown as import('../framework/types').BlockNode)).toBe('embed');
+  });
+
+  it('Figure → "embed"', () => {
+    expect(categoryForSourceNode({ t: 'Figure', c: [['', [], []], null, []] } as unknown as import('../framework/types').BlockNode)).toBe('embed');
+  });
+
+  it('Table → "embed"', () => {
+    expect(categoryForSourceNode({ t: 'Table', c: [['', [], []], [], null, null, []] } as unknown as import('../framework/types').BlockNode)).toBe('embed');
+  });
+
+  it('unlisted type "RawBlock" → "leaf-text" (default fallback)', () => {
+    expect(categoryForSourceNode({ t: 'RawBlock', c: [] } as unknown as import('../framework/types').BlockNode)).toBe('leaf-text');
   });
 });
 
@@ -574,6 +686,38 @@ describe('childSurfaceTowardLine (caret-aware descent, Reflection #17)', () => {
     expect(at(childSurfaceTowardLine(surfaces, 0, 69, 4, map, NEST3_CONTENT))).toEqual([20, 69]);
   });
 
+  // §5 regression guard — one-level descent (Q1 preference, must never regress)
+  //
+  // NEST3_CONTENT is a 3-level structure:
+  //   depth 0: top-level list [0,69]   (the outermost surface)
+  //   depth 1: level-1 sub-list [20,69] (direct child of [0,69])
+  //   depth 2: sub-sub-item list [39,60] (grandchild of [0,69])
+  //   depth 3: "sub-sub-item" leaf [43,60]
+  //
+  // Descending from the depth-0 surface [0,69] toward line 3 (which has
+  // "sub-sub-item" deep inside) must land on the DIRECT child [20,69] (depth 1),
+  // NOT on [39,60] (depth 2) or [43,60] (depth 3).
+  // The wrong answer — depth-2 surface [39,60] — would mean multi-level descent.
+  it('descends exactly one level, never to the deepest leaf (§5 regression guard)', () => {
+    // From the outermost surface [0,69], heading toward line 3 ("* sub-sub-item"):
+    // correct: depth-1 direct child [20,69]
+    // wrong:   depth-2 grandchild [39,60] or depth-3 leaf [43,60]
+    const result3 = at(childSurfaceTowardLine(surfaces, 0, 69, 3, map, NEST3_CONTENT));
+    expect(result3).toEqual([20, 69]);
+    // Verify the wrong answer ([39,60]) is not returned:
+    expect(result3).not.toEqual([39, 60]);
+    expect(result3).not.toEqual([43, 60]);
+    // Same holds for lines 2 and 4 (other deep targets):
+    // line 2 → depth-1 [20,69], NOT depth-2 surface [24,39]
+    const result2 = at(childSurfaceTowardLine(surfaces, 0, 69, 2, map, NEST3_CONTENT));
+    expect(result2).toEqual([20, 69]);
+    expect(result2).not.toEqual([24, 39]);
+    // line 4 → depth-1 [20,69], NOT depth-2 surface [62,69]
+    const result4 = at(childSurfaceTowardLine(surfaces, 0, 69, 4, map, NEST3_CONTENT));
+    expect(result4).toEqual([20, 69]);
+    expect(result4).not.toEqual([62, 69]);
+  });
+
   it('descends from the top list toward each top-level item line', () => {
     expect(at(childSurfaceTowardLine(surfaces, 0, 69, 0, map, NEST3_CONTENT))).toEqual([2, 10]);
     expect(at(childSurfaceTowardLine(surfaces, 0, 69, 1, map, NEST3_CONTENT))).toEqual([12, 20]);
@@ -602,6 +746,156 @@ describe('childSurfaceTowardLine (caret-aware descent, Reflection #17)', () => {
     ];
     // Both spans contain line 1; childB begins on line 1 → start-line tiebreak picks it.
     expect(at(childSurfaceTowardLine(surf, 0, 10, 1, m, content))).toEqual([5, 8]);
+  });
+});
+
+// ── §3 trailing-whitespace descent consistency ──────────────────────────────────
+//
+// Symptom: nest-in gives different results from the beginning of a line vs inside
+// it (or vs the same logical position with trailing whitespace). Candidate causes:
+//   1. Two positions are on different source lines → expected divergence, not a bug.
+//   2. Ls overshoots past the container's trimmed end → falls to nearest-child fallback
+//      which may pick a different child than an in-range Ls.
+//   3. Byte-space fallback (childSurfaceToward) disagrees with trim-aware path.
+//
+// These tests build the exact scenario and identify which cause fires.
+//
+// Fixture: two-paragraph blockquote, whose buffer has a trailing newline
+// (anchorSlice includes the trailing \n from the source).
+//
+//   content = '> alpha\n>\n> gamma\n'  (18 bytes)
+//   line 0: '> alpha'  bytes 0-6   (\n @7)
+//   line 1: '>'        byte  8     (\n @9)
+//   line 2: '> gamma'  bytes 10-16 (\n @17)
+//   line 3: (virtual — position 18, after the trailing \n)
+//
+// Container [0,18]: trimmed span [0,2]   (lines 0–2)
+// child1 Para alpha [2,7]:  trimmed span [0,0]
+// child2 Para gamma [12,17]: trimmed span [2,2]
+//
+// Caret at the beginning of the buffer (Ls=0) → child1 (inside span [0,0]).
+// Caret on the blank source line 1 (Ls=1) → nearest fallback (tie) → child1 (by r0).
+// Caret on source line 2 (Ls=2) → child2 (inside span [2,2]).
+// Caret in trailing blank (Ls=3, overshoot past trimmed end 2) → nearest → child2 (distance 1).
+//
+// The key assertion for §3: Ls=3 (trailing blank overshoot) should give SAME result as
+// Ls=2 (last content line). This tests whether trailing whitespace produces consistent
+// descent relative to the last content position.
+
+const TRAIL_CONTENT = '> alpha\n>\n> gamma\n';
+const trailMap = buildByteLineMap(TRAIL_CONTENT);
+
+const trailIndex = makeIndex([
+  ['0:0-18:0',  'TopLevel'],   // container BlockQuote
+  ['0:2-7:0',   'Descendable'], // child1 Para alpha
+  ['0:12-17:0', 'Descendable'], // child2 Para gamma
+]);
+const trailSurfaces = buildNestingSurfaces(trailIndex);
+const atT = (s: ReturnType<typeof childSurfaceTowardLine>) => (s ? [s.r0, s.r1] : null);
+
+describe('§3 trailing-whitespace descent consistency', () => {
+  // Verify the fixture's trimmed spans match what the test comments claim.
+  it('fixture: container trimmed span is [0,2], child1 is [0,0], child2 is [2,2]', () => {
+    expect(surfaceLineSpan({ r0: 0, r1: 18 }, TRAIL_CONTENT, trailMap)).toEqual([0, 2]);
+    expect(surfaceLineSpan({ r0: 2, r1: 7 }, TRAIL_CONTENT, trailMap)).toEqual([0, 0]);
+    expect(surfaceLineSpan({ r0: 12, r1: 17 }, TRAIL_CONTENT, trailMap)).toEqual([2, 2]);
+  });
+
+  it('Ls at last content line (2) descends to child2 gamma [12,17]', () => {
+    // This is the "correct" reference result: caret on the gamma line.
+    expect(atT(childSurfaceTowardLine(trailSurfaces, 0, 18, 2, trailMap, TRAIL_CONTENT)))
+      .toEqual([12, 17]);
+  });
+
+  it('§3 repro: Ls past trimmed end (3, trailing blank) must give same result as Ls=2 → child2 [12,17]', () => {
+    // CAUSE 2 SCENARIO: bufferLine=3 when caret is after the trailing '\n' in the
+    // anchorSlice (> alpha\n>\n> gamma\n has a trailing \n so position 18 → bufferLine=3).
+    // Ls = map.lineOf(anchorR0=0) + bufferLine=3 = 3.
+    // With Ls=3: no child's trimmed span contains 3. Nearest fallback:
+    //   child1 [0,0] distance 3; child2 [2,2] distance 1 → child2 [12,17].
+    // PASSES today. If the distance comparison ever changes (e.g. equidistant case or
+    // additional blank lines make it equidistant), the tie-break by r0 picks child1
+    // (WRONG). Clamping Ls to surfaceLineSpan(container)[1]=2 avoids the fallback
+    // entirely and uses the "containing" path → child2 regardless.
+    // This test pins the current correct behavior and will catch future regressions
+    // when trailing whitespace happens to land Ls equidistant from two children.
+    expect(atT(childSurfaceTowardLine(trailSurfaces, 0, 18, 3, trailMap, TRAIL_CONTENT)))
+      .toEqual([12, 17]);
+  });
+
+  it('§3 equidistant/overshoot: Ls in the gap ties to child1 by r0; Ls past all children picks child2 by distance', () => {
+    // The equidistant case is where cause 2 ACTUALLY fires: two children at [0,0] and [2,2],
+    // Ls=1 (equidistant, distance 1 each). The current "nearest" fallback breaks ties by
+    // smallest r0 → child1 (which is the tie-break behavior when Ls is inside the container range).
+    //
+    // Fixture: content 'AAA\n\nBBB\n' (9 bytes)
+    //   line 0: 'AAA' [0,3]
+    //   line 1: ''   [4,4]
+    //   line 2: 'BBB' [5,8]
+    //   (no line 3, just trailing \n at byte 8)
+    //
+    // Container [0,9]: trimmed span [0,2]
+    // child1 'AAA' [0,3]: trimmed span [0,0]
+    // child2 'BBB' [5,8]: trimmed span [2,2]
+    //
+    // Ls=1 (blank middle line, inside container): equidistant (distance 1 from each child).
+    // Current behavior: tie → child1 (by r0). After clamping to container trimmed end (2):
+    // Ls would be 1 (not overshooting), still tie → child1.
+    // Note: clamping doesn't help the equidistant-inside-range case; it only helps when
+    // Ls overshoots PAST the container's trimmed end. When Ls is between children (inside
+    // the container range), the tie → child1 is arguably acceptable (the blank line IS
+    // between the two children, closer semantically to neither).
+    //
+    // REAL OVERSHOOT CASE: if the container buffer ends with a blank line making bufferLine=3
+    // (Ls=3), that's past child2's span [2,2] by distance 1, and child1 is past by distance 3.
+    // → child2 wins clearly. No tie. Nearest picks the correct last child.
+    //
+    // CONCLUSION: the "nearest fallback" already picks the right child (last child) when
+    // Ls overshoots past ALL children. The equidistant-tie case only arises when Ls is
+    // BETWEEN children (in a gap), which is a rare edge case where both child1 and child2
+    // are equidistant. For this case, tie→child1 is the current behavior.
+    //
+    // This test documents the equidistant-gap behavior (cause 2 edge case):
+    const content2 = 'AAA\n\nBBB\n';
+    const map2 = buildByteLineMap(content2);
+    const idx2 = makeIndex([
+      ['0:0-9:0', 'TopLevel'],
+      ['0:0-3:0', 'Descendable'], // child1 AAA
+      ['0:5-8:0', 'Descendable'], // child2 BBB
+    ]);
+    const surf2 = buildNestingSurfaces(idx2);
+    // Ls=1 (blank gap between children): equidistant → child1 (current behavior via r0 tie)
+    expect(atT(childSurfaceTowardLine(surf2, 0, 9, 1, map2, content2))).toEqual([0, 3]);
+    // Ls=3 (overshoot past container trimmed end 2): child2 is nearer (distance 1 vs 3) → child2
+    expect(atT(childSurfaceTowardLine(surf2, 0, 9, 3, map2, content2))).toEqual([5, 8]);
+    // Ls=2 (at child2's trimmed span): child2 contains → child2
+    expect(atT(childSurfaceTowardLine(surf2, 0, 9, 2, map2, content2))).toEqual([5, 8]);
+  });
+
+  it('§3 cause-1 vs cause-2 determination: same buffer line different columns give same Ls, same result', () => {
+    // NOTE: Both calls pass the same Ls; this test cannot fail by construction.
+    // It documents WHY column position is irrelevant at the unit level: Ls already
+    // loses column information before childSurfaceTowardLine is called. The actual
+    // column-invariance is enforced by readLiveCaret's '\n'-counting (production).
+    //
+    // "Beginning of a line vs inside it" on the SAME buffer line:
+    // bufferLine is the count of '\n' before the cursor, independent of column.
+    // Col 0 and col 5 on line 2 both give bufferLine=2, Ls=2.
+    // childSurfaceTowardLine(Ls=2) → child2. No divergence.
+    // This test DOCUMENTS that cause 1 (same-line same-Ls) is NOT a bug — there is
+    // no mechanism for same-line positions to give different descent results.
+    // The actual symptom "beginning vs inside" refers to different BUFFER LINES
+    // (beginning of buffer line 0 vs caret in trailing blank line 3).
+    const Ls_col0_line2 = 2;   // col 0 of source line 2 → bufferLine=2
+    const Ls_col5_line2 = 2;   // col 5 of source line 2 → same bufferLine=2 (same Ls)
+    expect(atT(childSurfaceTowardLine(trailSurfaces, 0, 18, Ls_col0_line2, trailMap, TRAIL_CONTENT)))
+      .toEqual([12, 17]);
+    expect(atT(childSurfaceTowardLine(trailSurfaces, 0, 18, Ls_col5_line2, trailMap, TRAIL_CONTENT)))
+      .toEqual([12, 17]);
+    // These are trivially the same because the input (Ls) is the same.
+    // Confirms: cause 1 (different source lines → different results) is correct behavior.
+    // The "bug" (if any) is only about trailing whitespace giving an UNEXPECTED different result,
+    // not about column position on the same line.
   });
 });
 

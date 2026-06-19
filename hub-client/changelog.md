@@ -24,6 +24,10 @@ be in reverse chronological order (latest first).
 
 - [`ff31c8ea`](https://github.com/quarto-dev/q2/commits/ff31c8ea): RevealJS presentations now apply their configured theme through Quarto's SCSS theme system on reveal.js 6, instead of always rendering the white theme.
 - [`37061765`](https://github.com/quarto-dev/q2/commits/37061765): RevealJS preview now matches the render path's Quarto-1 defaults — slides top-align (no vertical centering), slide transitions are off by default, and the deck uses a 0.1 margin with linear navigation and edge controls.
+### 2026-06-16
+
+- [`2efb0bde`](https://github.com/quarto-dev/q2/commits/2efb0bde): Fix dirty nest-in/out caret column to apply `prefixWidth` adjustment (Principle A), matching the clean path so the column lands at the same source position after a dirty round-trip.
+
 ### 2026-06-13
 
 - [`1a93c5f0`](https://github.com/quarto-dev/q2/commits/1a93c5f0): Add P3.5 real-browser e2e tests for the nesting-cursor breadcrumb: chip clicks don't blur-commit or switch the editor, and the platform nesting key-chords (mac Cmd+Ctrl, Win/Linux Alt+Shift) move the nesting cursor without breaking native text selection.

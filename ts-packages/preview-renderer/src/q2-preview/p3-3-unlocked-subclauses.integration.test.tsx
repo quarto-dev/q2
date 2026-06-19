@@ -259,10 +259,12 @@ describe('P3.3 §3b test 2 ★ — ancestor-only change re-derives path, cursor 
         expect(chipEl, 'breadcrumb chip should be visible').not.toBeNull();
 
         const crumbs1 = Array.from(chipEl!.querySelectorAll<HTMLElement>('.q2-crumb'));
-        expect(crumbs1.map(c => c.textContent)).toEqual(['Div.a', 'Para']);
+        expect(crumbs1.map(c => c.textContent)).toEqual(['Dv', '¶']);
+        // Discriminate by full label via title (abbreviation collapses both Div.a and Div.b to 'Dv').
+        expect(crumbs1[0].getAttribute('title')).toBe('Div.a');
         const currentCrumb1 = crumbs1.find(c => c.getAttribute('aria-current') === 'true');
         expect(currentCrumb1, 'Para crumb should be aria-current').not.toBeUndefined();
-        expect(currentCrumb1!.textContent).toBe('Para');
+        expect(currentCrumb1!.textContent).toBe('¶');
 
         // Step 3: external re-render — ancestor-only change (Div class: 'a' → 'b').
         // Same CONTENT_2 and POOL_2 (child range [6,9] unchanged).
@@ -297,9 +299,11 @@ describe('P3.3 §3b test 2 ★ — ancestor-only change re-derives path, cursor 
         expect(chipAfter, 'breadcrumb chip should still be visible').not.toBeNull();
 
         const crumbs2 = Array.from(chipAfter!.querySelectorAll<HTMLElement>('.q2-crumb'));
-        expect(crumbs2.map(c => c.textContent)).toEqual(['Div.b', 'Para']);
+        expect(crumbs2.map(c => c.textContent)).toEqual(['Dv', '¶']);
+        // Discriminate by full label via title — after rerender the ancestor is now Div.b.
+        expect(crumbs2[0].getAttribute('title')).toBe('Div.b');
         const currentCrumb2 = crumbs2.find(c => c.getAttribute('aria-current') === 'true');
         expect(currentCrumb2, 'Para crumb should remain aria-current').not.toBeUndefined();
-        expect(currentCrumb2!.textContent).toBe('Para');
+        expect(currentCrumb2!.textContent).toBe('¶');
     });
 });

@@ -18,8 +18,12 @@ export interface NestingSurface {
   r1: number;
 }
 
+export type CrumbCategory = 'container' | 'list' | 'quote' | 'leaf-text' | 'embed';
+
 export interface AncestorCrumb {
   label: string;
+  abbrev: string;
+  category: CrumbCategory;
   r0: number;
   r1: number;
   isCurrent: boolean;
@@ -485,6 +489,89 @@ export function labelForSourceNode(node: BlockNode): string {
   return t;
 }
 
+// ── abbrevForSourceNode ───────────────────────────────────────────────────────
+
+/**
+ * Return a short abbreviation string for a source node, used as a compact
+ * label in breadcrumb chips.
+ *
+ * Mirrors `labelForSourceNode`'s defensive coding style: safely reads
+ * `node.t` as a string and `node.c` as an array, guarding with
+ * `Array.isArray` and typeof checks before dereferencing.
+ */
+export function abbrevForSourceNode(node: BlockNode): string {
+  if (!node || typeof node.t !== 'string') return '';
+  const t = node.t;
+
+  switch (t) {
+    case 'Header': {
+      // Header level is c[0]; Attr is c[1] (same layout as labelForSourceNode)
+      const c = (node as unknown as { c?: unknown }).c;
+      const level = Array.isArray(c) ? (c as unknown[])[0] : undefined;
+      if (typeof level === 'number') return `H${level}`;
+      return 'H';
+    }
+    case 'Div':
+      return 'Dv';
+    case 'BlockQuote':
+      return '❝';
+    case 'BulletList':
+      return '•';
+    case 'OrderedList':
+      return '1.';
+    case 'DefinitionList':
+      return 'DL';
+    case 'CodeBlock':
+      return 'Cd';
+    case 'Figure':
+      return 'Fg';
+    case 'Table':
+      return 'Tb';
+    case 'Para':
+    case 'Plain':
+      return '¶';
+    default:
+      // Fallback: first 2 characters of the type string
+      return t.slice(0, 2);
+  }
+}
+
+// ── categoryForSourceNode ─────────────────────────────────────────────────────
+
+/**
+ * Return the CrumbCategory for a source node. Category drives color only —
+ * indent/layout behavior is keyed on node *type* elsewhere (e.g. in the
+ * nesting surface logic), not on category. Do not conflate the two.
+ *
+ * Mirrors `labelForSourceNode`'s defensive coding style.
+ */
+export function categoryForSourceNode(node: BlockNode): CrumbCategory {
+  if (!node || typeof node.t !== 'string') return 'leaf-text';
+  const t = node.t;
+
+  switch (t) {
+    case 'Div':
+      return 'container';
+    case 'BulletList':
+    case 'OrderedList':
+    case 'DefinitionList':
+      return 'list';
+    case 'BlockQuote':
+      return 'quote';
+    case 'Para':
+    case 'Plain':
+    case 'Header':
+      return 'leaf-text';
+    case 'CodeBlock':
+    case 'Figure':
+    case 'Table':
+      return 'embed';
+    default:
+      // Unlisted types (e.g. RawBlock) default to leaf-text
+      return 'leaf-text';
+  }
+}
+
 // ── buildAncestorPath ─────────────────────────────────────────────────────────
 
 /**
@@ -527,6 +614,8 @@ export function buildAncestorPath(
 
   return items.map(({ r0, r1, sourceNode }) => ({
     label: labelForSourceNode(sourceNode),
+    abbrev: abbrevForSourceNode(sourceNode),
+    category: categoryForSourceNode(sourceNode),
     r0,
     r1,
     isCurrent: r0 === cursorR0 && r1 === cursorR1,

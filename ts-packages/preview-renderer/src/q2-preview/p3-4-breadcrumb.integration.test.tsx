@@ -201,7 +201,10 @@ describe('P3.4 test 3 — chip shown when unlocked + editor open', () => {
 
         await openEditor(container, '2'); // ParaB
 
-        expect(chip(container)).not.toBeNull();
+        const chipEl = chip(container);
+        expect(chipEl).not.toBeNull();
+        // Forward-crumb placeholder must exist (guards successor plan's drop-in contract).
+        expect(chipEl!.querySelector('.q2-breadcrumb-future')).not.toBeNull();
     });
 });
 
@@ -224,7 +227,17 @@ describe('P3.4 test 4 — ancestor path rendered in chip', () => {
         expect(chipEl).not.toBeNull();
 
         const crumbs = Array.from(chipEl!.querySelectorAll<HTMLElement>('.q2-crumb'));
-        expect(crumbs.map(c => c.textContent)).toEqual(['Div.d', 'Para']);
+        // Crumbs show abbreviated glyphs as textContent.
+        expect(crumbs.map(c => c.textContent)).toEqual(['Dv', '¶']);
+
+        // Full labels are exposed via title and aria-label attributes.
+        expect(crumbs[0].getAttribute('title')).toBe('Div.d');
+        expect(crumbs[0].getAttribute('aria-label')).toBe('Div.d');
+        expect(crumbs[1].getAttribute('title')).toBe('Para');
+        expect(crumbs[1].getAttribute('aria-label')).toBe('Para');
+
+        // Category class on the Div crumb.
+        expect(crumbs[0].className).toContain('q2-crumb-cat-container');
 
         // Current node (Para) carries aria-current="true"
         expect(crumbs[1].getAttribute('aria-current')).toBe('true');
@@ -305,7 +318,7 @@ describe('P3.4 test 6 ★ — after a crumb jump, ▶ follows the live caret (no
         // Click the 'Div.d' crumb → jump to (0,18)
         const chipEl = chip(container)!;
         const divCrumb = Array.from(chipEl.querySelectorAll<HTMLElement>('.q2-crumb'))
-            .find(c => c.textContent === 'Div.d')!;
+            .find(c => c.getAttribute('title') === 'Div.d')!;
         expect(divCrumb).not.toBeUndefined();
 
         await act(async () => { fireEvent.click(divCrumb); });
@@ -359,7 +372,7 @@ describe('P3.4 test 7 ★ — a dirty crumb jump commits, then relands on the ta
 
         // Click the 'Div.d' crumb → must COMMIT, then close.
         const divCrumb = Array.from(chip(container)!.querySelectorAll<HTMLElement>('.q2-crumb'))
-            .find(c => c.textContent === 'Div.d')!;
+            .find(c => c.getAttribute('title') === 'Div.d')!;
         await act(async () => { fireEvent.click(divCrumb); });
         expect(setAst).toHaveBeenCalledOnce();
         const payload = setAst.mock.calls[0][0] as unknown as { newText: string };
