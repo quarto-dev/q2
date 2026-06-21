@@ -390,10 +390,15 @@ New barrel `framework/coreServices/index.ts`, re-exported from
     `DocumentStore.commit` consults the **same** instance to choose re-wrap vs
     flat write — so the seed and the re-wrap can never diverge.
   - `editableTextFor(node)` semantics (ports `seedForRange`'s `seededDraft`
-    branch): when `isGenerated(node, resolved)` → return the pushed buffer at
-    `editBufferKey(node)` (raw-slice fallback if the push hasn't arrived — "never
-    leaks not-ready"); else → return the raw source slice
-    `normalizeLineEndings(sliceBytes(content, r0, r1)).trimEnd()`.
+    branch) — the **detect-router**: when `isGenerated(node, resolved)` →
+    return the *generated* buffer: the pushed buffer at `editBufferKey(node)` for
+    deep-nested blocks, **OR for an outermost prefixing container (which the
+    push does NOT key) the cache's own TS de-prefixing** (**option B**, the
+    in-production mechanism — pure-TS, no iframe WASM, no `pampa` change). Else →
+    return the raw source slice
+    `normalizeLineEndings(sliceBytes(content, r0, r1)).trimEnd()` (kept because it
+    is un-reformatted). Modes never choose — they just call `editableTextFor`.
+    **Option A (extend `pampa` to emit the container buffer) is out of scope.**
 
 ### Primitives on the renderer API surface — `window.__Q2_PREVIEW_RENDERER__`
 Added in `q2-preview/entry.tsx` (the explicit object at `:107-126`):

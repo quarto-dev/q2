@@ -228,6 +228,17 @@ on; `editableTextFor` is **synchronous** (lookup or in-thread WASM both are). Th
 **generated-vs-raw decision is a single shared predicate** the cache and
 `DocumentStore.commit` both consult, so the seed and the re-wrap can't diverge.
 
+**The detect-router (modes never decide).** `editableTextFor(node)` routes on
+`isPrefixed(node)` (the shared predicate): **prefixed** → the *generated* branch
+(the WASM-pushed buffer for deep-nested blocks; for the **outermost** prefixing
+container the cache produces the de-prefixed buffer **in TS** — **option B**, the
+mechanism in production since mid-June, which needs no iframe WASM); **flush-left**
+→ the **raw source slice** (the user's exact, un-reformatted markdown — kept
+*because* it is unreformatted). The cache holds both sources (raw content + pushed
+map); `DocumentStore.commit`'s re-wrap is the exact inverse of the generated
+branch. (We do **not** extend `pampa` to emit the container buffer — option A is
+out of scope.)
+
 ## 8. Disposition of `render-components`
 
 Not removed. (1) **Delivery rail — kept, generalized:** Plan 2 adds extension
