@@ -306,6 +306,16 @@ New barrel `framework/surface/index.ts`, re-exported from `framework/index.ts`:
     surface provides** (e.g. `isOnFirstVisualLine()`, `isOnLastVisualLine()`,
     `getLogicalColumn()` — surfaced on the handle, NOT imported from
     `caretGeometry` by the mode).
+    > **Plan 7 note (Proposed contract notes #1) — caret queries must be
+    > best-effort/optional.** `getLogicalColumn()` is a textarea-internal
+    > *source-text* column. A rich surface (Plan 7's `tiptap`) lives in *rendered*
+    > text space and can only report a best-effort/approximate column (or none).
+    > Type the cross-surface landing column as an **advisory hint** the mode
+    > tolerates approximately, and define `CaretHint`'s `column` as **advisory** (a
+    > surface MAY approximate to a line edge). Prefer neutral edge-query names
+    > (`isAtFirstLine()`/`isAtLastLine()`) over textarea-internal ones. Do NOT make
+    > `getLogicalColumn`-style exact source columns a *required* handle method —
+    > that would make the contract textarea-only and uncompilable for tiptap.
   - `export type EditingSurfaceComponent = React.ForwardRefExoticComponent<
     EditingSurfaceProps & React.RefAttributes<EditingSurfaceHandle>>`.
   - `export type MeasuredBox` — the measure-and-set geometry the surface sizes
@@ -402,6 +412,18 @@ New barrel `framework/coreServices/index.ts`, re-exported from
 
 ### Primitives on the renderer API surface — `window.__Q2_PREVIEW_RENDERER__`
 Added in `q2-preview/entry.tsx` (the explicit object at `:107-126`):
+> **Plan 7 note (Proposed contract notes #2) — surfaces may need heavy npm deps.**
+> A surface is a React component delivered through the globals-only
+> transpile→blob-import rail (it cannot resolve npm imports). Plan 6 already
+> requires React be exposed here for transpiled surfaces; Plan 7's `tiptap`
+> surface *escalates* this — it needs **additional heavy npm deps**
+> (`@tiptap/core`/`@tiptap/pm`/`@tiptap/react`/`@tiptap/markdown`) that this rail
+> cannot deliver. So this renderer-API surface (Plan 1) + the delivery rail
+> (Plan 2) will eventually need a **dependency-provisioning seam for surfaces**,
+> not just React. Plan 7 v1 stopgaps with a global-injection accessor
+> (`window.__Q2_TIPTAP__`, lazy/code-split, materialized by the host only when the
+> tiptap surface is selected); the durable mechanism is the in-flight
+> sandbox/package-import work. **Deferred, not blocking** for Plan 1's textarea path.
 - `renderMeasuredEdit` — the **reusable** measure-and-set wrapper (extracted from
   `dispatchers.tsx:60-83`); now lives inside / alongside `TextareaSurface`.
 - `caretGeometry` — the module namespace (`isOnFirstVisualLine`,

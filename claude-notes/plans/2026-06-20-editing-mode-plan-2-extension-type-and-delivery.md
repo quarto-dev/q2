@@ -821,6 +821,20 @@ discipline in `iframeMessageDispatch.ts`) with zero benefit.
 **separate** existing prop channel (keystone §7.1), not part of this rail and
 not re-plumbed by Plan 2 (see "EditBufferCache delivery note").
 
+> **Plan 7 note (Proposed contract notes #2) — heavy-dependency surfaces.** This
+> rail delivers `.tsx` *source* and resolves only globals (React/katex on
+> `window`); it **cannot resolve npm imports**. That is fine for modes and for the
+> textarea surface (globals-only). But Plan 7's `tiptap` surface needs heavy npm
+> deps (`@tiptap/core`/`@tiptap/pm`/`@tiptap/react`/`@tiptap/markdown`) the rail
+> cannot deliver. **Plan 2 does not solve this** — Plan 7 v1 stopgaps with a
+> global-injection accessor (`window.__Q2_TIPTAP__`), which the host materializes
+> **lazily (code-split) only when the tiptap surface is the selected surface**
+> (the surface-axis selection this plan builds is the trigger). The durable
+> mechanism — a real **dependency-provisioning seam for surfaces** — is the
+> in-flight sandbox/package-import work and is **deferred, not in Plan 2's scope**.
+> The only Plan-2 touch-point is the selection→lazy-provision hook (see pending
+> integration point #6 below).
+
 ---
 
 ## Integration points left pending on Plan 1
@@ -845,6 +859,15 @@ not re-plumbed by Plan 2 (see "EditBufferCache delivery note").
 5. **EditBufferCache `acceptPushedBuffers`** — Plan 1's port on the existing
    `nestedEditBuffers` channel. Plan 2 does not redesign it; touched only if the
    H6 decision rule fires (default: untouched).
+6. **Heavy-surface dependency provisioning (Plan 7 / sandbox work).** When the
+   selected **surface** needs heavy npm deps the globals-only rail cannot resolve
+   (Plan 7's `tiptap`), the host must lazily (code-split) materialize them as a
+   global before the surface activates — keyed on the surface-axis selection this
+   plan builds. Plan 7 v1 uses `window.__Q2_TIPTAP__`; the durable
+   dependency-provisioning seam is the in-flight sandbox/package-import work. Plan
+   2 owns only the **selection→provision trigger** wiring (a small additive hook in
+   the surface-selection path); it does NOT own the bundling/import mechanism.
+   Mark `// PLAN7:`/`// SANDBOX:` at the trigger; deferred, not blocking.
 
 ---
 

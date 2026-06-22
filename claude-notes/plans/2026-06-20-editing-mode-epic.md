@@ -53,7 +53,7 @@ transpile, Vite, Automerge VFS, Playwright + Vitest + `cargo nextest`.
 | 4 | `nesting-cursor` bundled mode (tree-aware) | TS | `…-plan-4-nesting-cursor-extension.md` |
 | 5 | `block-editing` bundled mode (flat) | TS | `…-plan-5-block-editing-extension.md` |
 | 6 | `textarea` bundled editing-surface (extract Plan 1's reference) | TS | `…-plan-6-textarea-surface-extension.md` |
-| 7 | `tiptap` bundled editing-surface (embedded WYSIWYG) | TS | *drafted by the hand-off agent* |
+| 7 | `tiptap` bundled editing-surface (embedded WYSIWYG) | TS | `…-plan-7-tiptap-surface-extension.md` |
 
 ### Dependency graph
 
@@ -137,9 +137,24 @@ cross-surface arrows, delete-by-emptying, expand-on-edit, activation).
 bundled `editing-surface` extension implementing the contract; `caretGeometry`
 lives here. Pins the surface-level geometry/caret tests.
 
-**Plan 7 (tiptap surface):** embedded per-block WYSIWYG `EditingSurface` — drafted
-by the hand-off agent, which may also propose edits to Plan 6/others if tiptap
-surfaces unanticipated contract consequences.
+**Plan 7 (tiptap surface):** embedded per-block WYSIWYG `EditingSurface` (drafted
+2026-06-21). Embeds TipTap/ProseMirror behind the contract: parse one block's
+clean markdown → PM doc → WYSIWYG edit → serialize → `onCommit`. **Locked design:**
+a **CommonMark subset** edited richly + a **verbatim NodeView ("code mode")** for
+every other qmd construct (semantic/AST-preserving via pampa's re-parse on commit,
+NOT byte-preserving); the markdown↔doc bridge sits behind a **`MarkdownEngine`
+port** (v1 = `marked`-based; future "Engine B" = `pampa.wasm`-in-iframe, a drop-in
+replacement — out of scope); TipTap acquired via a **pluggable accessor** (a
+`window.__Q2_TIPTAP__` global-injection stopgap, lazy/code-split; durable mechanism
+deferred to the sandbox/package-import work); caret landing **approximated to the
+line edge** via `endOfTextblock`. The **sync `EditingSurface` contract survives
+unchanged** (TipTap construct/parse/serialize are synchronous). Plan 7 applied
+three **contract notes** to Plans 1/2/6 (no new fields, no reshaped lifecycle):
+(1) caret/exit-column queries are best-effort/advisory (not exact source columns);
+(2) Plans 1/2 will need a heavy-dependency provisioning seam for surfaces (deferred
+to sandbox work); (3) `MeasuredBox` should carry the block type (strengthens Plan 6
+open-Q #1). Pins the surface-level WYSIWYG/verbatim/edge tests + the orthogonality
+(any mode × this surface) and textarea↔tiptap swap proofs.
 
 ---
 
