@@ -49,7 +49,7 @@ coherent line-ending policy at all.
   | code-fence trailing strip | `treesitter_utils/fenced_code_block.rs:70` | `if content.ends_with('\n') { content.pop() }` pops **only `\n`**, leaving a **lone trailing `\r`** in `CodeBlock`/`RawBlock.text`. **Half-strip bug.** Direct cause of the stray `\r` in snapshot `native/007`. |
   | inline math soft-breaks | `treesitter.rs:476` | rewrites soft-break to `\n` — **silently normalizes** |
   | `strip_continuation_prefix` (lists/quotes) | `treesitter.rs:422,428` | splits on `\n`, rejoins with `\n` — **silently normalizes** CRLF→LF inside nested content |
-  | grid-table offset math | `treesitter.rs:1371` | `offset += line.len() + 1` assumes 1-byte `\n`; on CRLF the `+1` is wrong → **latent source-offset drift** (exactly the #329 hazard, already present) |
+  | grid-table offset math | `treesitter.rs:1371,1381` | `raw_text.split('\n')` then `offset += line.len() + 1`. **Byte-correct on CRLF** — `split('\n')` retains the `\r` in each substring, so `line.len()` already counts it and `+1` accounts for the lone `\n`. (Initially mis-flagged as offset drift; verified safe 2026-06-25 against tree-sitter's byte-accurate Points.) |
   | commonmark reader | `readers/commonmark.rs` (comrak) | comrak normalizes CRLF→LF per CommonMark spec — **silently normalizes** |
   | YAML / XML readers | quarto-yaml, quarto-xml | pass verbatim; quick-xml may apply XML-spec `\r\n`→`\n` internally |
   | Lua file I/O | `lua/io_wasm.rs:171` | strips trailing `\r` from `file:read("*l")` — intentional, local to Lua |
@@ -155,8 +155,11 @@ source maps honest.
   - `treesitter.rs:476` inline-math soft-break → `\n`
   - `strip_continuation_prefix` (`treesitter.rs:422,428`) rejoin → `\n`
   - `readers/commonmark.rs` (comrak) CRLF→LF
-- `treesitter.rs:1371` offset drift is the exact source-map damage the
-  policy exists to prevent — a priority bug.
+- (Correction) `treesitter.rs:1371` is **not** an offset-drift bug —
+  `split('\n')` keeps the `\r`, so byte offsets stay accurate on CRLF.
+  tree-sitter core itself is byte-accurate on CRLF (row on `\n` only,
+  `\r` counted in column + byte range), so the parse tree's positions are
+  sound; the bugs are purely in our post-extraction string handling.
 - **No writer choosing EOL from input convention** is the largest gap.
   Under preserve, content `\r\n` must round-trip; the qmd writer in
   particular must emit the input convention rather than forcing `\n`.
@@ -197,8 +200,8 @@ failure as a genuine bug"):
    - Kill the silent CRLF→LF rewrites: `treesitter.rs:476` (inline math),
      `strip_continuation_prefix` (`treesitter.rs:422,428`), and decide how
      to handle comrak's spec-mandated normalization in `commonmark.rs`.
-   - **Fix the offset drift** at `treesitter.rs:1371` (`+1` vs `+2` on
-     CRLF) — top priority, it is the source-map damage the policy guards.
+     (`treesitter.rs:1371` is **not** in this list — verified byte-correct
+     on CRLF.)
 4. **Writers emit the input convention** (the largest gap): no writer
    currently chooses EOL from input. The qmd writer especially must
    round-trip CRLF rather than forcing `\n`. Likely needs a writer-side
