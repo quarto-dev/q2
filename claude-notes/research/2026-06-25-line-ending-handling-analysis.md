@@ -135,50 +135,81 @@ needs the path fix regardless of EOL.
 
 ---
 
-## The decision Chris owns (policy for *real* user CRLF documents)
+## Policy decision: PRESERVE (settled)
 
-Pinning fixtures makes tests green but says nothing about what happens
-when a real Windows user feeds a CRLF `.qmd`. Two coherent positions:
+Decided 2026-06-25: the policy is **preserve, do not normalize**,
+declared repo-wide (extend #329 from doctemplate to all of q2). The
+approach is to declare the policy first, then treat each line-ending
+failure it surfaces as a genuine bug; only if review proves a real need
+to normalize somewhere do we clarify the policy.
 
-- **A — Preserve (extend #329 to pampa).** Make reader+writer chain
-  CRLF-transparent: strip the *full* `\r\n` where a trailing newline is
-  removed (fix `fenced_code_block.rs:70`), escape `\r` faithfully in
-  native, and have writers emit the input convention. Faithful, matches
-  doctemplate, but a real lift (writers hardcode `\n` everywhere,
-  structural newlines included) and needs the offset-drift spots
-  (`treesitter.rs:1371`) audited.
+Rationale: the less we touch a `.qmd` text, the cleaner the diffs and the
+better the source maps work — and the better the source maps, the better
+quarto-hub.com works. Preserving the byte stream is what keeps Windows
+source maps honest.
 
-- **B — Normalize content to LF, deliberately and documented, with
-  offsets kept correct.** This is what comrak + inline-math already do
-  de facto. Simpler output, but **contradicts the stated #329
-  precedent** and re-opens the offset-drift risk #157 rejected.
+**Consequences for this analysis:**
 
-These are independent of the green-tests work. My read: do the safe
-decomposition now (below), and decide A-vs-B as a separate design call —
-but stop treating "fix the snapshots" as if it answers the policy
-question.
+- The "silently normalize" reader paths are now **genuine bugs**, not
+  acceptable behavior:
+  - `treesitter.rs:476` inline-math soft-break → `\n`
+  - `strip_continuation_prefix` (`treesitter.rs:422,428`) rejoin → `\n`
+  - `readers/commonmark.rs` (comrak) CRLF→LF
+- `treesitter.rs:1371` offset drift is the exact source-map damage the
+  policy exists to prevent — a priority bug.
+- **No writer choosing EOL from input convention** is the largest gap.
+  Under preserve, content `\r\n` must round-trip; the qmd writer in
+  particular must emit the input convention rather than forcing `\n`.
+  (This is just unfinished pampa, not intended behavior.)
+- The half-strip (`fenced_code_block.rs:70`) and the missing native
+  `\r` escape remain bugs, now framed as "faithfully preserve the
+  byte stream" rather than "harden against CRLF".
+
+The escape hatch (normalize *somewhere* if review proves a genuine need,
+then clarify the policy) stays open but is not the default for any
+finding here.
 
 ---
 
-## Recommended decomposition (independent, smallest-first)
+## Recommended decomposition (under the preserve policy)
+
+*Determinism* (test infrastructure, orthogonal to engine policy):
 
 1. **`.gitattributes` LF pin** for pampa fixtures + snapshots (mirror the
-   doctemplate precedent). Requires `git add --renormalize` (or re-checkout)
-   since the working tree is already CRLF. Fixes the content-driven
-   failures the #329 way. *Determinism, not normalization.*
+   doctemplate precedent). Requires `git add --renormalize` (or
+   re-checkout) since the working tree is already CRLF. Keeps committed
+   fixtures LF so LF-asserting tests are deterministic; the CRLF path is
+   covered by in-source tests (the #329 pattern). *Not normalization.*
+
+*Genuine bugs surfaced by declaring the policy* (Carlos: "recognize each
+failure as a genuine bug"):
+
 2. **Forward-slash the filename** in ASTContext / JSON writer via
-   `quarto_util::to_forward_slashes`. Fixes `json/001`. Safe — metadata,
-   no offset impact. (Best applied at ingress in `with_filename` so
-   diagnostics also get a stable path.)
-3. **Writer/reader correctness, defense-in-depth** (so real CRLF content
-   never produces garbage even when not pinned):
-   - `write_safe_string`: add `'\r' => write!(buf, "\\r")`.
-   - `fenced_code_block.rs:70`: strip a full `\r\n` line-ending unit, not
-     a bare `\n`.
-4. **Policy decision A-vs-B** for real CRLF documents — separate design
-   doc; do not bundle.
-5. **Incidental:** error-corpus snapshot tests are no-ops (stale glob);
-   file a strand.
+   `quarto_util::to_forward_slashes`. Fixes `json/001`. Consistent with
+   the policy — it is file-name *metadata*, not `.qmd` text, and does not
+   shift source offsets. Best applied at ingress in `with_filename` so
+   diagnostics also get a stable path.
+3. **Faithful byte-stream preservation in the parse→AST path:**
+   - `fenced_code_block.rs:70`: consume a full `\r\n` line-ending unit
+     (not a bare `\n`), so no lone `\r` is left and internal CRLF content
+     is preserved intact.
+   - `write_safe_string` (native): add `'\r' => write!(buf, "\\r")`.
+   - Kill the silent CRLF→LF rewrites: `treesitter.rs:476` (inline math),
+     `strip_continuation_prefix` (`treesitter.rs:422,428`), and decide how
+     to handle comrak's spec-mandated normalization in `commonmark.rs`.
+   - **Fix the offset drift** at `treesitter.rs:1371` (`+1` vs `+2` on
+     CRLF) — top priority, it is the source-map damage the policy guards.
+4. **Writers emit the input convention** (the largest gap): no writer
+   currently chooses EOL from input. The qmd writer especially must
+   round-trip CRLF rather than forcing `\n`. Likely needs a writer-side
+   EOL setting (the future `--eol` override #329 mentioned). Larger
+   design; scope separately.
+
+*Incidental:*
+
+5. Error-corpus snapshot tests are no-ops (stale glob `resources/error-corpus/*.qmd`
+   matches zero files; missing `file_count > 0` guard); 84 `.snap` are
+   unexercised. File a strand.
 
 ## Strands
 
