@@ -275,6 +275,7 @@ mod tests {
             },
             needs_postprocess: true,
             html_dependencies: Vec::new(),
+            ..Default::default()
         };
 
         let result_value = serde_json::to_value(&original).unwrap();

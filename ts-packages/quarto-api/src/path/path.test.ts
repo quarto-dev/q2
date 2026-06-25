@@ -6,7 +6,7 @@
  *   - path.absolute: binding is the JOIN logic (cwd + relative), not the
  *     injected cwd value. Revert join → RED.
  *   - Stubs (runtime/resource/dataDir): assert they THROW with the exact
- *     "requires launch context" substring.
+ *     "not yet implemented" substring.
  *
  * Named reverts that reden each test are noted inline.
  * No Deno.* / node:* anywhere.
@@ -160,21 +160,21 @@ describe("path.absolute", () => {
 
 // ─── path stubs (runtime / resource / dataDir) ────────────────────────────────
 
-describe("path stubs — requires launch context", () => {
+describe("path stubs — not yet implemented (Plan 2)", () => {
   const host = { cwd: () => "/work" };
   const pathHost = makePathHost(host);
 
-  it("runtime() throws with 'requires launch context'", () => {
+  it("runtime() throws with 'not yet implemented'", () => {
     // Revert to returning a string → RED
-    expect(() => pathHost.runtime()).toThrow(/requires launch context/);
+    expect(() => pathHost.runtime()).toThrow(/not yet implemented/);
   });
 
-  it("resource() throws with 'requires launch context'", () => {
-    expect(() => pathHost.resource()).toThrow(/requires launch context/);
+  it("resource() throws with 'not yet implemented'", () => {
+    expect(() => pathHost.resource()).toThrow(/not yet implemented/);
   });
 
-  it("dataDir() throws with 'requires launch context'", () => {
-    expect(() => pathHost.dataDir()).toThrow(/requires launch context/);
+  it("dataDir() throws with 'not yet implemented'", () => {
+    expect(() => pathHost.dataDir()).toThrow(/not yet implemented/);
   });
 
   it("runtime() error message names the method", () => {

@@ -82,8 +82,9 @@ export interface PlatformHost {
 
   /**
    * Read environment variables.
-   * Reserved: `env.get` is used by the deferred real bodies of `path.runtime` and
-   * `path.dataDir` (currently stubbed) to locate Quarto's share/data directories.
+   * Reserved seam: `env.get` is the interface point for the real bodies of
+   * `path.runtime` and `path.dataDir`, which are deferred to Plan 2 Phase A.
+   * Those bodies will use it to locate Quarto's share/data directories.
    * Host authors must implement it even though nothing calls it yet.
    */
   env: {
@@ -106,8 +107,9 @@ export interface PlatformHost {
    * Resolve a path to its canonical absolute form (follows symlinks).
    * Equivalent to `Deno.realPathSync` / `fs.realpathSync`.
    *
-   * Reserved: used by the deferred real body of `path.runtime` (locating the
-   * Quarto binary's own directory). Host authors must implement it even though
+   * Reserved seam: `realPath` is the interface point for the real body of
+   * `path.runtime` (locating the Quarto binary's own directory), which is
+   * deferred to Plan 2 Phase A. Host authors must implement it even though
    * nothing calls it yet.
    */
   realPath(path: string): string;

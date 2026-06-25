@@ -79,14 +79,17 @@ the failure model — is the design contract
 the "Engine Discovery and Language Claiming" section below summarizes the parts
 the protocol and trait surfaces depend on. Engine **resolution runs in Pass 2**
 (engine `claims_*` must not load expensive TS engines merely to index a doc in
-Pass 1); only the pre-parse **file-claim** half runs in Pass 1.
+Pass 1); only the pre-parse **file-claim** half runs in Pass 1. A future
+**per-doc lift** of resolution into Pass 1 (for docs whose engines all resolve
+load-free) is researched in
+[Plan 6](2026-06-29-plan6-pass1-engine-resolution.md) — additive, post-1c.
 
 ### Shared subprocess lifecycle (one Deno process per project render)
 
 All TS engine extensions share one Deno subprocess. Engine lifecycle in the
 subprocess is **two-step**: `LoadEngine` runs the engine module's `import()`
 and exposes the discovery surface (~10–50 ms); `LaunchEngine` calls
-`engine.launch(context)`, which **constructs the `ExecutionEngineInstance`
+`engine.launch(project)`, which **constructs the `ExecutionEngineInstance`
 object — cheap (~0)**, matching Quarto 1, where `launch()` is a synchronous
 object-literal construction that starts no daemon. The expensive engine startup
 (Julia control server / Jupyter kernel: 5+ s) happens **lazily inside the
@@ -102,11 +105,14 @@ carry `engine: "<name>"` for routing.
 q2 (Rust)                              engine-host (shared Deno subprocess)
 ─────────                              ────────────────────────────────────
 spawn deno engine-host-deno.js ─────→  start, wait for messages
+send: { type: "init",        ──────→  store process-stable global config
+        global: { ... } }              (resource/runtime/data dirs, pandoc, …)
 
 send: { type: "loadEngine",  ──────→  await import("julia-engine.js")
         enginePath: "julia..." }       call engine.init(quartoAPI) if present
-recv: { type: "loaded",      ←──────  return discovery surface
-        discovery: { name: "julia", validExtensions: [...], ... } }
+recv: { type: "loaded",      ←──────  return discovery surface (static)
+        discovery: { name: "julia", validExtensions: [...],
+                     generatesFigures, canFreeze, quartoRequired } }
 
 send: { type: "claimsLanguage", ───→  route to julia discovery (no launch)
         engine: "julia",               call julia.claimsLanguage("julia")
@@ -114,20 +120,26 @@ send: { type: "claimsLanguage", ───→  route to julia discovery (no launc
 recv: { type: "claimsLanguageResult", ←── return result
         result: 1 }
 
-send: { type: "launchEngine", ─────→  call julia.launch(context)
+send: { type: "launchEngine", ─────→  call julia.launch(project)
         engine: "julia",               (cheap object construction, ~0;
-        context: { ... } }              no daemon starts here)
+        project: { ... } }             no daemon starts here)
 recv: { type: "launched",    ←──────  return instance metadata
-        instance: { canFreeze: true, generatesFigures: true } }
+        instance: { canFreeze: true } }
 
-send: { type: "execute",     ──────→  route to julia instance
-        engine: "julia",               call julia.execute(opts) — Julia daemon
-        options: { ... } }             starts lazily on first execute (~5s),
-                                       reused after; then julia.dependencies(...)
-                                       inline if result has engineDependencies
-recv: { type: "executeResult", ←────  return q2-shaped result with
-        result: { markdown, ...,        htmlDependencies (resolved)
-                  htmlDependencies: [...] } }
+send: { type: "execute",       ────→  route to julia instance — Julia daemon
+        engine: "julia",               starts lazily on first execute (~5s),
+        options: { ..., dependencies } } reused after
+recv: { type: "executeResult", ←────  htmlDependencies resolved inline when
+        result: { markdown, ...,        dependencies:true; else a deferred
+                  htmlDependencies,      engineDependencies map the orchestrator
+                  engineDependencies } }  resolves via a "dependencies" message
+
+(deferred-deps path, book/project only — orchestrator-driven:)
+send: { type: "dependencies", ─────→  call julia.dependencies(opts) at the
+        engine: "julia",               merged output
+        options: { ... } }
+recv: { type: "dependenciesResult", ←─ return { includes }
+        result: { includes } }
 
 send: { type: "shutdown" }   ──────→  clean up all engines, exit
 ```
@@ -178,6 +190,10 @@ q2 repo
 
 ## Protocol Design
 
+The full per-surface map (every Q1 engine field/method and its q2 disposition) is
+`claude-notes/designs/engine-api-surface.md`; the actionable protocol items live in RTQ
+(`2026-06-25-plan1a-return-to-q1.md`: Item A, ENG-1, FC-1, FC-2).
+
 ### Message format
 
 All messages are JSON objects exchanged as **newline-framed `Request`/`Response`
@@ -188,9 +204,12 @@ be in flight at once. The shapes below show the inner `msg`.
 
 **Rust → Deno (`Request.msg`):**
 ```typescript
+// One-time process init (sent once at spawn, before any loadEngine)
+{ type: "init", global: HostGlobalConfig }   // process-stable: resource/runtime/data dirs, pandoc, version, interactive/CI
+
 // Two-step lifecycle
-{ type: "loadEngine", enginePath: string }                     // cheap: import()
-{ type: "launchEngine", engine: string, context: EngineHostContext }  // cheap: launch() builds the instance (~0); daemon starts later, in execute()
+{ type: "loadEngine", enginePath: string }                                // cheap: import()
+{ type: "launchEngine", engine: string, project: EngineProjectContext }   // cheap: launch() builds the instance (~0); daemon starts later, in execute()
 
 // Discovery (only requires loadEngine)
 { type: "claimsLanguage", engine: string, language: string, firstClass?: string }
@@ -198,7 +217,8 @@ be in flight at once. The shapes below show the inner `msg`.
 
 // Instance methods (require launchEngine)
 { type: "markdownForFile", engine: string, file: string }
-{ type: "execute", engine: string, options: TsExecuteOptions }
+{ type: "execute", engine: string, options: TsExecuteOptions }            // options.dependencies selects inline vs deferred
+{ type: "dependencies", engine: string, options: TsDependenciesOptions }  // deferred-deps round-trip, orchestrator-driven at the merged output
 { type: "intermediateFiles", engine: string, input: string }
 
 // Lifecycle + cancellation
@@ -209,8 +229,8 @@ be in flight at once. The shapes below show the inner `msg`.
 **Deno → Rust (`Response.msg`):**
 ```typescript
 // Lifecycle responses
-{ type: "loaded",   discovery: { name, validExtensions } }
-{ type: "launched", instance:  { canFreeze, generatesFigures } }
+{ type: "loaded",   discovery: { name, validExtensions, generatesFigures, canFreeze, quartoRequired } }  // static, discovery-tier (ENG-1/DQ-4)
+{ type: "launched", instance:  { canFreeze } }                                                           // canFreeze also rides the instance (Q1 has both tiers)
 
 // Discovery responses
 { type: "claimsLanguageResult", result: { kind: "primary" | "interop" | "fallback", priority?: number } | null }  // null=no claim. Harness normalizes the boolean|number shorthand: false→null, true→Primary(1), number n→Primary(n) (negative = low-priority primary, NEVER interop). Interop/Fallback only via the object. See engine-resolution.md §3.
@@ -218,7 +238,8 @@ be in flight at once. The shapes below show the inner `msg`.
 
 // Instance method responses
 { type: "markdownForFileResult", result: { value: string, fileName?: string, sourceMap: TsSourceMapEntry[] } }
-{ type: "executeResult", result: TsExecuteResult }       // includes resolved htmlDependencies
+{ type: "executeResult", result: TsExecuteResult }       // htmlDependencies inline, or a deferred engineDependencies map
+{ type: "dependenciesResult", result: { includes: TsPandocIncludes } }
 { type: "intermediateFilesResult", result: string[] | undefined }
 
 // Cancellation + errors
@@ -231,11 +252,13 @@ be in flight at once. The shapes below show the inner `msg`.
   if so, uses the result (including opaque `data` cookie like kernelspec) to
   build `ExecutionTarget` for `execute()`. All Deno-side. Falls back to
   constructing from `TsExecuteOptions` fields.
-- `dependencies()` — Q1's deferred-deps resolution. The harness folds it
-  into the `execute` round-trip: when an engine returns `engineDependencies`,
-  the harness immediately calls `engine.dependencies(...)`, materializes
-  files to `lib_dir`, and returns a q2-shaped `htmlDependencies` array on
-  the `executeResult`. q2 receives the resolved form, not the deferred map.
+
+`dependencies()` is **not** harness-internal: it is a first-class wire verb
+(`dependencies` above), driven by q2's render orchestrator at the merged output —
+mirroring Q1 `render.ts:90-109`. The harness is a thin pass-through to
+`instance.dependencies(opts)`; it does **not** fold the call into `execute`
+(that earlier design was un-Q1 and could not resolve at a merged output — see
+RTQ FC-2).
 
 **Deferred until q2 grows callers** (no q2 caller exists yet, so neither a
 trait method nor a protocol message is added now):
@@ -259,52 +282,48 @@ See plan1a-protocol for the full protocol type definitions and rationale.
 
 ### TsExecuteResult
 
-The execution response is the **q2-shaped** form, after the harness has folded
-in `engine.dependencies()` resolution:
+The execution response forwards Q1's full `ExecuteResult` shape. q2 honors the
+fields it has a consumer for; the rest ride as `#[serde(default)]` **carriers**
+(FC-1/FC-2), inert until a feature reads them — "defer the feature, not the
+infrastructure."
 
 ```typescript
 interface TsExecuteResult {
   markdown: string;
   supporting: string[];
   filters: string[];
-  includes?: {
-    inHeader: string[];
-    beforeBody: string[];
-    afterBody: string[];
-  };
-  needsPostprocess: boolean;
-  // Resolved by the harness from engineDependencies + dependencies():
-  // each entry has files already on disk (lib_dir) and absolute paths.
-  htmlDependencies: Array<{ name: string; stylesheets: string[]; scripts: string[] }>;
+  includes?: { inHeader: string[]; beforeBody: string[]; afterBody: string[] };
+  htmlDependencies: Array<{ name: string; stylesheets: string[]; scripts: string[] }>;  // q2-native structured deps
+  // Carried per FC-1/FC-2, inert until a consumer reads them:
+  engineDependencies?: Record<string, unknown[]>;  // deferred-deps map (FC-2)
+  metadata?: Record<string, unknown>;
+  pandoc?: Record<string, unknown>;                // loose map — NOT a typed FormatPandoc
+  resourceFiles?: string[];
+  preserve?: Record<string, string>;
+  postProcess?: boolean;
 }
 ```
 
-**What the harness collapses:** Q1's `engine.execute()` returns a deferred
-`engineDependencies: Record<string, Array<unknown>>` map plus a separate
-`dependencies(opts)` callback that resolves it into `PandocIncludes`-style
-data. The harness, on the TS side, calls `dependencies()` itself when
-`engineDependencies` is present, materializes widget files to `lib_dir`, and
-emits `htmlDependencies` in the q2-native shape (which mirrors q2's existing
-`HtmlDependency` type used by Lua filters). q2 receives only the resolved
-form. Engines that don't implement `dependencies()` but return
-`engineDependencies` get a diagnostic and an empty `htmlDependencies`.
-
-**Deferred Q1 fields** — not currently on `TsExecuteResult` because q2 has
-no consumer:
-- `preserve` + `postProcess` — would require a post-Pandoc HTML restore
-  stage in q2.
-- `pandoc` — format-affecting options to merge; conflates with the q2
-  format pipeline, which is upstream of execute.
-When q2 grows the consumers, the harness will translate from Q1's shapes
-into q2-native fields. See `claude-notes/plans/2026-04-18-html-js-deps-design.md`
-for the broader JS-deps story.
+**Deferred-deps are orchestrator-driven, not folded.** With `dependencies:true`
+(the v1 default) the engine resolves deps inline into `includes` and
+`engineDependencies` stays empty. With `dependencies:false` the engine **returns**
+the deferred `engineDependencies` map, and q2's render orchestrator later sends a
+`dependencies` message per engine **at the merged output** and merges each
+`DependenciesResult.includes` — mirroring Q1 `render.ts:90-109`. The harness does
+not call `dependencies()` itself (RTQ FC-2). No v1/Julia caller sends `false`; the
+deferred path is present-but-unexercised until book/project rendering and Plan 3E's
+`quarto.jupyter.widgetDependencyIncludes` land.
 
 **`html_dependencies` on q2's `ExecuteResult` struct** is the q2-native
 landing site (plan1a-engine Phase 3). It reuses the existing
 `quarto-core::dependency::HtmlDependency` type — same producer-side shape
 that Lua filters already emit, same `store_html_dependencies` consumer path
-in `EngineExecutionStage`. `metadata` (from Quarto 1's `ExecuteResult`) is
-NOT included — the Julia engine doesn't populate it.
+in `EngineExecutionStage`. `metadata`/`pandoc`/`resourceFiles`/`preserve`/
+`postProcess` are **carried but inert** (FC-1) — Julia populates none of them;
+their consumers (e.g. a `preserve`-reading AST transform for `postprocess`
+recovery) land with the features that need them. See
+`claude-notes/plans/2026-04-18-html-js-deps-design.md` for the broader JS-deps
+story.
 
 **Note on TsExecuteOptions:** q2 provides pre-extracted `metadata` (from the
 AST) and a `source_map` (byte-range entries from Plan 0's SourceInfo) in the
@@ -331,40 +350,51 @@ harness captures `Deno.stdout` for protocol writes and does not override
 after which stdout is diagnostic-only and `console.log` is harmless. See Plans
 1a and 1b for the full contract.
 
-### EngineHostContext (sent with each LaunchEngine)
+### Init and LaunchEngine payloads (Item A)
 
-This is a q2 invention — Quarto 1 engines run in-process and don't need serialized
-context. `EngineHostContext` carries only static/global and project-level info.
-Per-document and per-format info arrives in per-call messages (`TsExecuteOptions`, etc.).
+Serialized context is a q2 invention — Quarto 1 engines run in-process. q2 splits
+the bootstrap info Q1 keeps as process globals + project context into **two frames,
+each on the lifetime it matches** (RTQ Item A / DQ-7):
 
-Sent **once per engine launch**, not once per subprocess. In practice all
-engines in a project render share the same context, but the protocol doesn't
-enforce identity.
+- **`Init { global: HostGlobalConfig }`** — sent **once at spawn**, before any
+  `loadEngine`. Process-stable config q2 owns and Deno can't derive. The
+  `@quarto/api` `path`/`system` factories close over it, so
+  `path.runtime`/`resource`/`dataDir`/`system.pandoc` resolve **immediately**
+  (ambient, like Q1's `resourcePath()`/`quartoRuntimeDir()` — never gated).
 
-In Quarto 1, `QuartoAPI` is a global singleton with mostly stateless utility
-functions (format helpers take `Format` as parameter, not global state). The
-`EngineProjectContext` passed to `launch()` carries project dir and config.
-`EngineHostContext` combines the bootstrap info for both.
+  ```typescript
+  interface HostGlobalConfig {
+    resourceDir: string;          // q2's bundled resources
+    runtimeDir: string;           // q2's runtime directory
+    dataDir: string;
+    pandocPath: string;           // absolute path to pandoc binary
+    isInteractiveSession: boolean;
+    runningInCI: boolean;
+    quartoVersion: string;
+  }
+  ```
 
-```typescript
-interface EngineHostContext {
-  // Project info (→ EngineProjectContext for launch())
-  projectDir?: string;
-  isSingleFile: boolean;
+- **`LaunchEngine { engine, project: EngineProjectContext }`** — sent **per render**,
+  captured in the launched instance's closure (pure Q1 — `engine.launch(EngineProjectContext)`).
 
-  // Paths for QuartoAPI construction (q2-specific, can't be derived by Deno)
-  resourceDir: string;    // q2's bundled resources
-  runtimeDir: string;     // q2's runtime directory
-  pandocPath: string;     // absolute path to pandoc binary
+  ```typescript
+  interface EngineProjectContext {
+    projectDir?: string;
+    isSingleFile: boolean;
+    config?: { engines?: string[]; project?: { "output-dir"?: string } };  // values, not callbacks (DQ-5)
+    outputDir?: string;
+  }
+  ```
 
-  // System info for QuartoAPI (q2 is source of truth)
-  isInteractiveSession: boolean;
-  runningInCI: boolean;
-  quartoVersion: string;
-}
-```
+`Init` = process-stable global config; `LaunchEngine` = render-scoped project context.
+The engine-facing API stays exactly Q1; only the wire is split. This is the enabler for
+reusing one subprocess across renders (`Init` once, project per `launchEngine`). The
+earlier single combined `EngineHostContext` — one shared mutable `HostState.context` slot
+gated until first launch — is removed: it conflated process-global with project-scoped state
+and had no Q1 basis (RTQ Item A).
 
-Most QuartoAPI methods are implemented in TypeScript using `context` + the platform host. No callbacks to Rust needed.
+Most QuartoAPI methods are implemented in TypeScript using the `Init` global + the launch
+`project` + the platform host. No callbacks to Rust needed.
 
 ## QuartoAPI Implementation Strategy
 
@@ -376,7 +406,7 @@ through `PlatformHost` (see Plan 2) so the same package works under
 
 | Namespace | Source | Host use |
 |-----------|--------|----------|
-| `quarto.path` | `@quarto/api/path` — pure string helpers + `createPath(host)` | `host.realPath` for `absolute()`; otherwise none. Engine-host-deno layer adds `runtime(subdir)` / `resource(...parts)` closures over `context.runtimeDir` / `context.resourceDir`. |
+| `quarto.path` | `@quarto/api/path` — pure string helpers + `createPath(host)` | `host.realPath` for `absolute()`; otherwise none. The `runtime(subdir)` / `resource(...parts)` closures close over the `Init` global config's `runtimeDir` / `resourceDir`. |
 | `quarto.format` | `@quarto/api/format` — pure computation from `format.pandoc.to` | None. Format info arrives per-call in `TsExecuteOptions.format`, not at init time. Matches Quarto 1 (stateless). |
 | `quarto.system` | `@quarto/api/system` — `createSystem(host)` | `host.process.exec` for `execProcess`; `host.fs` for `tempContext`. Throws "not available" in environments where `host.process` is undefined. Engine-host-deno wraps `execProcess` with a `pandoc(args, stdin?)` convenience that uses `context.pandocPath`. |
 | `quarto.console` | `@quarto/api/console` — pure, writes to stderr with level prefixes | None. |
@@ -480,8 +510,8 @@ to make room for a future `@quarto/engine-host-wasm` sibling.
 - `deno-host.ts` — the `PlatformHost` implementation backed by Deno APIs
   (`Deno.readTextFileSync`, `Deno.Command`, `Deno.realPathSync`, etc.)
 - `quarto-api.ts` — imports `@quarto/api/*` submodules, threads `denoHost`
-  through the host-taking factories, assembles the `QuartoAPI` object from
-  `EngineHostContext`. Wires both `quarto.text` and `quarto.mappedString`
+  through the host-taking factories, assembles the `QuartoAPI` object from the
+  `Init` global config (and the launch `project`). Wires both `quarto.text` and `quarto.mappedString`
   from the same `@quarto/api/text` module.
 - `mapped-source.ts` — rehydrates a `MappedString` from the `source_map`
   byte-range entries in `TsExecuteOptions`. Uses a base-per-file cache so
@@ -509,13 +539,29 @@ abstraction in Plan 2 is what enables it without rework to `@quarto/api`.
 | [Plan 1a-protocol: JSON message types](2026-04-16-plan1a-protocol.md) | 1 | Plan 0 | After Plan 0 |
 | [Plan 1a-host: Subprocess + transport](2026-04-16-plan1a-host.md) | 1 | plan1a-protocol | After plan1a-protocol |
 | [Plan 1a-engine: TsEngine + trait extensions](2026-04-16-plan1a-engine.md) | 1 | plan1a-protocol, plan1a-host | After plan1a-host |
-| [Plan 1b: @quarto/engine-host-deno (Deno harness)](2026-04-16-plan1b-engine-host-deno.md) | 1 | plan1a-protocol (frozen schema), Plan 2A | After plan1a-protocol + Plan 2A |
+| [**RTQ: plan1a Return-to-Q1 (course correction over the 1a series)**](2026-06-25-plan1a-return-to-q1.md) | running (plan-only) | amends plan1a-protocol/host/engine | Running — see note below |
+| [**Plan 1a-host bugs (q2-introduced defects, HOST-1/2)**](2026-06-26-plan1a-host-bugs.md) | <1 | **none** (independent) | **now / parallel** |
+| [Plan 1b: @quarto/engine-host-deno (Deno harness)](2026-04-16-plan1b-engine-host-deno.md) | 2-3 | plan1a-protocol, **RTQ (Item A + ENG-1 + FC-1 + FC-2, incl. B3 code half)**, Plan 2A | Pure-TS layer now; **Rust-facing surface + E2E after RTQ lands** the post-RTQ wire |
 | [Plan 1c: Extension Integration & E2E](2026-04-16-plan1c-extension-integration.md) | 1-2 | plan1a-engine, plan1a-host, Plan 1b | After plan1a-engine + Plan 1b |
 | [Plan 2A: TS package foundations (@quarto/api skeleton+config, @quarto/types vendor)](2026-04-16-plan2a-quarto-api-foundation.md) | ~1 | Nothing (npm workspace only) | Now |
 | [Plan 2: @quarto/api deferred launch-context bodies + @quarto/types refinements](2026-04-16-quarto-markdown-and-api.md) | ~1 | Plan 2A §2aa + Plan 1b | After §2aa (namespaces) |
 | [Plan 3: @quarto/api/jupyter](2026-04-16-quarto-jupyter.md) | 2-3 | Plan 2A | After Plan 2A |
 | [Plan 4: Julia Validation](2026-04-16-julia-validation.md) | 1-2 | Plans 1a, 1b, 1c, 2, 3 | After all others |
+| [**Plan 5: engine-host pooling (preview re-compute warmth)**](2026-06-26-plan5-engine-host-pooling.md) | research stub | full stack (1a–c, 2, 4) + preview-wiring (plan1c R5) + DQ-7 | **last** (post-4; orthogonal to Plan 3) |
+| [**Plan 6: Pass-1 engine resolution (per-doc lift)**](2026-06-29-plan6-pass1-engine-resolution.md) | research stub | plan1a-engine + plan1c (resolution machinery) | **additive**, post-1c; orthogonal to Plans 3/4/5 |
+| [**Plan 7: native percent/spin conversion + precise SourceInfo**](2026-06-27-plan7-native-percent-spin-sourceinfo.md) | 2-3 | plan1c (`claims_file`/`markdown_for_file`) + Plan 0 (SourceInfo) + Plan 3 (jupyter percent helpers); **not** Plan 5/6 | post-1c (default after 4); pullable earlier; orthogonal to Plans 5/6 |
 | **Total** | **10-16** (Plan 0 done; **~8-13 remaining**) | | |
+
+> **Course correction — RTQ (`plan1a-return-to-q1`).** A running, **plan-only** correction layer
+> over the whole 1a series, added after the first 1a implementations landed. Its thesis: *the q2 wire
+> is the framework between q2 and **all** engine features, not the Julia render subset the original 1a
+> scoped to — defer features, never the infrastructure they need.* It carries Q1-divergence
+> corrections (Item A: ambient `Init` global vs per-launch gating; ENG-1: discovery-tier statics),
+> the framework Surface-coverage audit (provided **and** consumed halves), and the
+> `#[serde(default)]` carrier seams (FC-1/FC-2). It **amends** the three 1a sub-plans; an
+> implementing agent applies it on topic branches off this integration line. (The q2-introduced host
+> bugs HOST-1/2 were carved out to `plan1a-host-bugs.md` — a separate, independent plan with its own
+> row above.)
 
 ### Dependency graph
 
@@ -531,7 +577,9 @@ the roots**.
 Plan 0 ✓ complete (Include Expansion & SourceInfo)
   │
   ├─ plan1a-protocol ─┬─ plan1a-host ─ plan1a-engine ─┐  (Rust side, parallel with 1b)
-  │                   └───────────────────────────┐   │
+  │                   │                               │
+  │                   └─ RTQ (Item A/ENG-1/FC-1/FC-2) ┤  (post-RTQ wire — GATES 1b's
+  │                                               │   │   Rust-facing surface + E2E)
   │                                               │   │
 Plan 2A ──┬─ §2aa (namespaces) ─┬─ Plan 1b ───────────┴───┴─ Plan 1c ─┐
 (@quarto/api                    │                                     │
@@ -541,6 +589,13 @@ Plan 2A ──┬─ §2aa (namespaces) ─┬─ Plan 1b ───────�
 ```
 
 - `plan1a-host` and `plan1a-engine` run **in parallel with Plan 1b** (Rust side).
+- **RTQ gates Plan 1b.** 1b's pure-TS layer (`framing.ts`, `mapped-source.ts`,
+  the dispatch loop + T1/T3/T4/T5/T6/T7) can start against a 1b-authored
+  `src/types.ts`, but the Rust-facing surface (ambient-API tests, execute
+  step-6 field routing, the deferred-deps wire seam) and any Plan-1c E2E need
+  RTQ's protocol edits (`Dependencies` verb, `engineDependencies`,
+  `Init`/`EngineProjectContext`, ENG-1 statics, FC-1 carriers, B3 stub relabel)
+  landed first. RTQ ENG-2 is *not* a gate (already landed).
 - `Plan 1c` depends on `plan1a-host`, `plan1a-engine`, and Plan 1b.
 - Plan 2A blocks Plan 1b (imports `@quarto/api/config` **and** typechecks
   against the vendored `@quarto/types`, both provided at the foundation; its
@@ -559,7 +614,8 @@ touch the Rust engine interface. plan1a-protocol depends on Plan 0 because
 the protocol types must account for source mapping decisions made in Plan 0.
 
 **Plan 1a** delivers the Rust-side infrastructure, split into three sub-plans:
-- **plan1a-protocol** — JSON message types, `EngineHostContext`,
+- **plan1a-protocol** — JSON message types, the `Init`/`LaunchEngine` payloads
+  (`HostGlobalConfig` + `EngineProjectContext`),
   `TsExecuteOptions`, format mapping, source-map flattening, path
   conventions, `ConfigValue → TsMetadataValue` rules. Pure data, no
   behavior. Foundation for everything else.
@@ -622,6 +678,44 @@ stubbed plus the `@quarto/types` refinements (formerly Phase 2E).
 - Plan 3E (wire jupyter into engine-host) replaces Plan 1b's jupyter stub
 
 Plan 4 integrates everything and depends on all plans being complete.
+
+**Plans 5, 6, and 7 are post-Plan-4 additive layers** — none is on the critical
+path; all are explored after the core stack is validated (5 and 6 are research
+stubs; 7 has a finalized design backing):
+- **Plan 5** (engine-host pooling) keeps the Deno host **warm across preview
+  re-computes** so a TS-engine re-execute doesn't respawn the subprocess +
+  re-`import()` the module. Single-project, session-scoped behind
+  `EngineTransport`; gated by a **measure-first** check (the kernel already
+  survives a respawn via its transport file, so pooling only saves the
+  Deno-spawn + import, ~hundreds of ms). Depends on the full stack plus the
+  preview↔TS-engine wiring (plan1c R5 in RTQ) and DQ-7.
+- **Plan 6** (Pass-1 engine resolution) lifts `resolve_engines` from Pass 2 into
+  Pass 1 **per-doc**, for docs whose engines all resolve load-free (static
+  `_extension.yml` claims, hint exclusion, or tier dominance), with clean
+  fall-through to Pass 2 otherwise — preserving back-compat for legacy Q1
+  engines that need a load. Relaxes the design's all-or-nothing "every engine
+  static" gate (engine-resolution.md §7/§3.3/§12) to a per-doc partial lift;
+  stamps `EngineResolution` on `DocumentProfile` (version bump) for engine-aware
+  indexing, kernel pooling, and freeze. Additive on top of plan1a-engine +
+  plan1c; orthogonal to Plans 3/4/5.
+- **Plan 7** (native percent/spin + precise SourceInfo) implements the one thing
+  the epic has only **deferred in pieces**: **percent scripts** (`.py`/`.jl`/`.r`
+  `# %%`) and **R spin** (`.R`) converted to qmd **natively in Rust**, wired into
+  built-in jupyter/knitr via `claims_file`/`markdown_for_file`, with **column-precise
+  `SourceInfo`** for every supported language (per the finalized
+  `2025-12-15-source-info-for-structured-formats.md`: per-line `Original` `Concat`
+  for plain-text scripts; first-class `NotebookCell` for ipynb; sidecar storage). It
+  **supersedes Plan 0's "percent conversion loses provenance" framing**, consolidates
+  the scattered deferrals (1c Future Work, the knitr-plan spin deferral, Plan 0), and
+  delivers the TS-engine **A′** faithful remap so Julia/marimo percent errors point at
+  the original file with columns — adding the `.jl` percent-script case Plan 4
+  currently excludes. The validation target (`.qmd`) masks this whole surface, so it
+  is the clearest instance of the "carry the whole engine surface, not the validation
+  target" mandate (`designs/engine-api-surface.md` § Governing principle). Depends on
+  plan1c + Plan 0 + Plan 3; **independent of Plans 5/6** (pullable earlier). The
+  *intra-line* column problem (re-serialization through the qmd writer) is the
+  complementary, deferred concern of `2026-06-18-qmd-per-line-provenance.md` — Plan 7
+  owns the input/converter half, that plan the output/writer half.
 
 ### Critical path
 

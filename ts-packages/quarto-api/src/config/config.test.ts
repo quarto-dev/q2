@@ -123,33 +123,37 @@ describe("@quarto/api/config — key-list parity (STRONG mode)", () => {
     expect(q1.kExecuteDefaultsKeys.length).toBeGreaterThan(0);
   });
 
-  it("kExecuteDefaultsKeys matches Q1 set exactly — removing a key turns this RED", () => {
-    expect(new Set(kExecuteDefaultsKeys)).toEqual(
-      new Set(q1.kExecuteDefaultsKeys),
+  // Sorted-array compare (not Set): catches a removed/added key, a value
+  // mutation, AND a lost duplicate (multiplicity) — the duplicate language
+  // keys the port deliberately preserves. Order is functionally irrelevant
+  // (these back a membership lookup), so sorting avoids spurious failures.
+  it("kExecuteDefaultsKeys matches Q1 as a sorted list — removing a key or losing a duplicate turns this RED", () => {
+    expect([...kExecuteDefaultsKeys].sort()).toEqual(
+      [...q1.kExecuteDefaultsKeys].sort(),
     );
   });
 
-  it("kRenderDefaultsKeys matches Q1 set exactly — removing a key turns this RED", () => {
-    expect(new Set(kRenderDefaultsKeys)).toEqual(
-      new Set(q1.kRenderDefaultsKeys),
+  it("kRenderDefaultsKeys matches Q1 as a sorted list — removing a key or losing a duplicate turns this RED", () => {
+    expect([...kRenderDefaultsKeys].sort()).toEqual(
+      [...q1.kRenderDefaultsKeys].sort(),
     );
   });
 
-  it("kPandocDefaultsKeys matches Q1 set exactly — removing a key turns this RED", () => {
-    expect(new Set(kPandocDefaultsKeys)).toEqual(
-      new Set(q1.kPandocDefaultsKeys),
+  it("kPandocDefaultsKeys matches Q1 as a sorted list — removing a key or losing a duplicate turns this RED", () => {
+    expect([...kPandocDefaultsKeys].sort()).toEqual(
+      [...q1.kPandocDefaultsKeys].sort(),
     );
   });
 
-  it("kIdentifierDefaultsKeys matches Q1 set exactly — removing a key turns this RED", () => {
-    expect(new Set(kIdentifierDefaultsKeys)).toEqual(
-      new Set(q1.kIdentifierDefaultsKeys),
+  it("kIdentifierDefaultsKeys matches Q1 as a sorted list — removing a key or losing a duplicate turns this RED", () => {
+    expect([...kIdentifierDefaultsKeys].sort()).toEqual(
+      [...q1.kIdentifierDefaultsKeys].sort(),
     );
   });
 
-  it("kLanguageDefaultsKeys matches Q1 set exactly — removing a key turns this RED", () => {
-    expect(new Set(kLanguageDefaultsKeys)).toEqual(
-      new Set(q1.kLanguageDefaultsKeys),
+  it("kLanguageDefaultsKeys matches Q1 as a sorted list — removing a key or losing a duplicate turns this RED", () => {
+    expect([...kLanguageDefaultsKeys].sort()).toEqual(
+      [...q1.kLanguageDefaultsKeys].sort(),
     );
   });
 });

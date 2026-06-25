@@ -219,6 +219,7 @@ impl ExecutionEngine for KnitrEngine {
             includes,
             needs_postprocess: result.post_process,
             html_dependencies: Vec::new(),
+            ..Default::default()
         })
     }
 

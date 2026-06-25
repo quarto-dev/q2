@@ -125,10 +125,13 @@ contributes:
       name: julia                 # complete static name (registration + YAML lookup, zero load)
       claims:
         julia: { kind: primary, priority: 1 }
-        # reticulate-style: r: {kind: primary}, python: {kind: interop}
-        # universal:        fallback: { priority: 0 }
-      file-extensions: [".jl"]     # valid_extensions — complete static
-      claims-files: [".jl"]        # optional: unconditional claims_file (extension-only engines)
+        # reticulate-style:        r: { kind: primary }, python: { kind: interop }
+        # first_class-conditional: python: { whenClass: marimo, kind: primary }
+        # universal fallback:      fallback: { priority: 0 }
+      file-extensions: [".jl"]     # valid_extensions — complete static (the pre-filter)
+      # NOTE: julia does NOT declare `claims-files` — its `claimsFile` inspects
+      # file content (isPercentScript / `# %%`), so it loads to decide. `.jl` in
+      # `file-extensions` is the pre-filter; the precise file-claim is dynamic.
 ```
 
 A static declaration is a **complete** replacement for its dynamic method
@@ -140,15 +143,29 @@ answer:
 |---|---|---|---|
 | `name()` / registration | `name:` | declared | omitted (lazy alias map) |
 | `valid_extensions()` | `file-extensions:` | always (it *is* the list) | — |
-| `claims_file()` | `claims-files:` (unconditional) | extension-only logic | content inspection (e.g. Julia `# %%`) |
-| `claims_language()` | `claims:` (kind/priority/fallback) | language-only logic | `first_class`/runtime logic |
+| `claims_file()` | `claims-files:` (unconditional) | extension-only logic | **content inspection** (e.g. Julia `# %%`) — *the one genuine must-load case* |
+| `claims_language()` | `claims:` (kind/priority/`whenClass`) | language **and** `first_class` logic (both finite/known) | only genuine runtime/global-state logic |
+
+**`first_class` is statically expressible — it is *not* a must-load case.**
+`claims_language(language, first_class)` is a pure function of its two
+arguments, so a `claims:` entry may carry `whenClass: <class>`: the claim then
+applies **only** when the cell's first class equals `<class>` (absent
+`whenClass` = any/no first class). A marimo engine therefore declares
+`python: { whenClass: marimo, kind: primary }` and is **fully static** —
+`{python .marimo}` → `Primary`, plain `{python}` / `{python .other}` → no
+claim. (One rule per language key in v1; a multi-class engine would use a list,
+deferred.) The **only** dynamic-method power that static resolution genuinely
+cannot reach is **content-inspecting `claims_file`** (Julia's `isPercentScript`
+reads the file's bytes for `# %%`) — that engine loads to decide, using
+`file-extensions` as its pre-filter. Everything else — language, `first_class`,
+kind/priority, fallback — is statically declarable.
 
 A statically-declared claim used for resolution is validated against the
 dynamic method **only if/when the engine loads to execute** (mismatch → hard
 error, like the `name` check). Static claims are **authoritative for
 resolution**; authors who declare them own their accuracy. `Fallback` cannot
 be a finite language list, so a universal-fallback engine declares
-`fallback:` rather than a `languages:` hint. Full-static resolution requires a
+`fallback:` rather than a per-language entry. Full-static resolution requires a
 declared `name` (zero-load needs the name to place the engine in the
 sequence). When *every* engine a project uses is fully static, resolution
 loads nothing and can move to Pass-1 (§7) — that lift is the payoff of static
@@ -157,11 +174,14 @@ claims.
 ## 4. Resolution algorithm
 
 `resolve_engines` is a **pure function** (§9) of merged metadata, the parsed
-AST, the registry, and the file-claim seed:
+AST, the registry, and the file-claim engine. **If `claimed = Some(engine)`
+the tiers below are skipped entirely — a claimed file resolves to that single
+engine (§8, Q1-faithful).** The tiers run only for the implicit/explicit
+`.qmd` path (`claimed = None`):
 
 ```
 languages = computational languages of the doc        // §4.1
-present    = explicitly-listed engines                // claimed file seed counts as a Primary (§8)
+present    = explicitly-listed engines
 
 T1 Primary:           per language, highest-priority Primary wins → owns it; add to `present`.
 T2 explicit Fallback: language with no Primary → an explicitly-listed engine that returned
@@ -327,21 +347,51 @@ and lifting resolution to Pass-1 is a **zero-cost future move** (§10), enabled
 once a project's engines are all fully-static (§3.3) so resolution loads
 nothing.
 
-## 8. File-claim semantics (sticky → Primary-seed + resolve)
+## 8. File-claim semantics (Q1-faithful: claimed file → single engine)
 
-Conversion and execution are **separate axes**. `claims_file` →
-`markdown_for_file` runs pre-parse (Pass 1) and is always the converter. It
-does **not** preempt resolution; instead it **seeds the claiming engine as a
-`Primary` owner of the converted content** (above extensions for the file's
-native language, so a generic python extension can't *steal* a `.ipynb` jupyter
-just converted) and then resolution runs normally. Consequences:
+`claims_file` → `markdown_for_file` runs pre-parse (Pass 1) and is the
+converter. **A file claim resolves to that one engine, full stop** — exactly
+Q1's `fileExecutionEngine`, which `return`s the first engine whose `claimsFile`
+matches and never consults anything else (`engine.ts:320-325`, verified
+2026-06-28). When `resolve_engines` is called with `claimed = Some(engine)` it
+**short-circuits the tiers** and returns a single-engine resolution: that
+engine is the whole `sequence`. No tiers, no seed, no native-language
+inference. As the **sole** engine it is handed the whole converted document
+(`handled_languages` = just `HANDLED_LANGUAGES`, the standard cell-handlers)
+and **self-selects** — it runs the cells it recognizes and passes the rest
+through. There is no ownership handoff, so **§10 case-4 does not apply** (case-4
+is a *multi-engine* behavior — see below).
 
-- The converter runs its own notebook (Q1-faithful, no theft).
-- Other languages in the converted content get their owners → **secondary
-  engines participate** (a stray `{bash}` cell, or an explicit
-  `engine: [jupyter, X]`).
-- This replaces Plan 1c's original "if claimed, skip resolution" with "if
-  claimed, **seed `Primary` + resolve**."
+- **The `engine:` YAML inside a claimed file is ignored** — Q1's `claimsFile`
+  match preempts the YAML-engine reader entirely (it is only reachable for
+  `.md`/`.qmd`; `engine.ts:329-350`). q2 matches this: a claimed file does not
+  consult its own front-matter `engine:`.
+- **Non-executed languages pass through, they do not fail.** The claiming
+  engine executes the cells it recognizes (its kernel/native language) and
+  **passes the rest through unexecuted** — emitted as display code — exactly
+  Q1, whose `quartoMdToJupyter` converts a non-kernel `{bash}` cell to a
+  markdown cell that the kernel never runs (`core/jupyter/jupyter.ts:321-324`,
+  verified 2026-06-28). This is **not** a §10 case-4 loud failure: **case-4 is
+  gated on `|sequence| > 1`** (multi-engine, `engine: [knitr, jupyter]` +
+  `{sql}` → jupyter, where the user *chose* the owner). A single-engine sequence
+  — a claimed file *or* a `.qmd` resolving to one engine — runs what it can and
+  passes the rest through, exactly Q1. **NB this is a landed-code change**: the
+  enforcement in `engine/jupyter/text_execute.rs` (`partition_cells`) currently
+  errors on *any* owned-but-unrunnable cell regardless of sequence length; it
+  must gate the loud branch on multi-engine (single-engine → pass through).
+
+**Why this replaced the "seed `Primary` + resolve" design (reverted
+2026-06-28).** The earlier draft tried to make a claimed file participate in
+multi-engine resolution by seeding the claiming engine as a synthetic `Primary`
+and re-running the tiers — to let a stray `{bash}` cell reach a secondary
+engine. That required the resolver to know the file's *native* language (which
+it can't infer from an engine name alone), and the landed `resolution.rs`
+silently never implemented the seed (it only marked the seed "present"),
+leaving a real theft hole (a generic `Primary(1)` python extension would steal
+a jupyter-`Fallback(0)` `.ipynb`'s cells). The single-engine rule is simpler,
+removes that hole by construction, needs no native-language plumbing, and is
+what Q1 actually does. Multi-engine remains a **`.qmd`-authoring** feature
+(`engine: [a, b]`); converted non-`.qmd` files are single-engine.
 
 ## 9. Resolution as an artifact
 
@@ -424,6 +474,23 @@ re-route to a fallback — Q1 parity). Two distinct kinds, at two distinct times
      started computing), so it does **not** poison the instance — it behaves
      like `ExecutionFailed`, not `Cancelled`/`Timeout` (plan1a-engine poison
      policy).
+     **Scope: case 4 is gated on `|sequence| > 1` (multi-engine only).** It
+     fires only when the tiers / `engine:` list routed a language to an owner
+     that is one of *several* engines — the case where silent-skip betrays the
+     user's explicit composition. A **single-engine sequence** — a claimed file
+     (§8) *or* a `.qmd` resolving to one engine — is handed the whole document
+     and **self-selects**: it runs what it can and **passes the rest through
+     unexecuted** (Q1's `quartoMdToJupyter` makes a non-kernel `{bash}` cell a
+     display-only markdown cell — verified 2026-06-28), never a loud failure.
+     This is full Q1 parity (Q1 is always single-engine and always passes
+     through); case 4 is the deliberate q2 *multi-engine* divergence.
+     **Landed-code consequence:** `engine/jupyter/text_execute.rs`'s
+     `partition_cells` currently raises `NoHandlerForLanguage` for *any*
+     owned-but-unrunnable cell regardless of sequence length — it must gate the
+     loud branch on `|sequence| > 1`, ceding (passing through) in the
+     single-engine case. The TS-engine "must error, never silently pass
+     through" obligation likewise applies **only** to a TS engine that is a
+     non-sole participant in a multi-engine sequence.
 - **Multi-engine:** any unavailable **owner** in a sequence → fail the whole
   render loudly, naming the engine/language. Q1 never degrades; neither do we.
 

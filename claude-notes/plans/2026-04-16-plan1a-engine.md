@@ -131,6 +131,11 @@ filter-aware notebook conversion folds into `markdown_for_file`. See
   fn valid_extensions(&self) -> Vec<String> { Vec::new() }
   fn claims_language(&self, _language: &str, _first_class: Option<&str>) -> LanguageClaim { LanguageClaim::None }
   fn claims_file(&self, _file: &str, _ext: &str) -> bool { false }
+  // FORWARD-NOTE (Plan 1c / D2): also add
+  //   fn quarto_required(&self) -> Option<&str> { None }
+  // here — the engine's `quartoRequired` version constraint (Q1
+  // `types.ts:65`), enforced at registry-build / first load against the
+  // spoofed compat version. See plan1c "Enforce engine version requirements".
   ```
   **All new trait methods ship with a default body, so no existing
   `ExecutionEngine` impl is forced to change and there is no compile
@@ -219,6 +224,8 @@ filter-aware notebook conversion folds into `markdown_for_file`. See
     folds this into `execute` (see plan1a-protocol Phase 1 protocol notes); q2 receives a
     resolved q2-shaped `Vec<HtmlDependency>` on `ExecuteResult`, not the
     deferred map.
+
+    > **⚠ Correction — RTQ §FC-2:** the harness no longer folds `dependencies()` into `execute`. `dependencies` is a first-class wire verb driven by q2's render orchestrator at the merged output, with `engineDependencies` carried on the execute result (deferred) when `dependencies:false`. (Text above is the as-built fold RTQ removes.)
 
 - [x] **Fix the `intermediate_files` doc-comment on the trait.** The
   existing `intermediate_files` doc-comment in
@@ -363,7 +370,12 @@ filter-aware notebook conversion folds into `markdown_for_file`. See
   `quarto.htmlDependency()` helper). Engines populate one or both;
   q2 routes each to its own sink without dedup logic at the boundary.
 
+  > **⚠ Correction — RTQ §PROTO-2/ENG-3:** `quarto.htmlDependency()` is a per-`Execute` closure-local **value-constructor** whose output is **returned** on the execute result's `html_dependencies` field — not a shared/cross-render "registration API." (Wording correction; the channel is as-built.)
+
 - [x] **Dedup `HtmlDependency` by `name` in `store_html_dependencies`.**
+
+  > **⚠ Correction — RTQ §ENG-2:** the as-built guard is name-keyed first-wins **plus a content-equality check** — identical re-registration is skipped **silently** (no warning); only **differing** content under the same `name` drops + warns. The "always warns on duplicate" framing below is imprecise (the as-built behavior is correct; ENG-2 fixes the docs + adds the silent-arm test).
+
   This is a **different** dedup from the one q2 already does, and the two
   must not be conflated. `store_html_dependencies` stores under
   `ArtifactScope::Project`, which dedupes the **same** artifact shared across
@@ -426,7 +438,12 @@ they don't own. Full model: `claude-notes/designs/engine-resolution.md`
   The four tiers (Primary → explicit-Fallback → Interop → implicit-Fallback),
   presence-gating, kind-dominates-priority, the implicit-only gate on T4, and
   the per-language ownership rule all live here. `claimed` is the file-claim
-  `Primary`-seed (§8 of `engine-resolution.md`). The result is a pure
+  engine. (**Superseded by plan1c §8 revert, 2026-06-28:** the original
+  `Primary`-seed semantics — seed the claimer as a synthetic `Primary` and
+  re-run the tiers — were reverted to Q1-faithful **single-engine**: when
+  `claimed = Some(engine)`, `resolve_engines` **short-circuits the tiers** and
+  returns that one engine. plan1c deletes the `explicit_with_seed` logic this
+  landed code carries; see engine-resolution.md §8.) The result is a pure
   function of `(meta, ast, registry, claimed)` — no I/O — so the future
   Pass-1 lift (stamp it on `DocumentProfile`) is a zero-cost move.
 
@@ -511,6 +528,15 @@ they don't own. Full model: `claude-notes/designs/engine-resolution.md`
   kernel — whereas knitr's `eng_sql` does. The owning engine MUST fail with a
   clear `ExecutionError` naming **engine + language** ("engine `jupyter` has no
   kernel for `sql`"), **not** silently skip the cell or emit it unexecuted.
+  - **GATE (plan1c, 2026-06-28): case 4 fires only for `|sequence| > 1`.** As
+    landed, `partition_cells` raises `NoHandlerForLanguage` for *any*
+    owned-but-unrunnable cell. plan1c gates the loud branch on **multi-engine**:
+    a **single-engine** sequence (a claimed file, §8, or a `.qmd` resolving to
+    one engine) is handed the whole document and **passes through** what it
+    can't run — full Q1 parity (Q1 is always single-engine and never errors on a
+    non-kernel cell; `quartoMdToJupyter` makes it display-only). The loud failure
+    here is the deliberate q2 *multi-engine* divergence. See engine-resolution.md
+    §8/§10 and plan1c's failure-model item.
   - **This is an execute-time failure by design, NOT a pre-execute capability
     probe (decided 2026-06-24).** Resolution stays capability-blind so engine
     *selection* is a deterministic, environment-independent pure function —
@@ -552,6 +578,8 @@ they don't own. Full model: `claude-notes/designs/engine-resolution.md`
 ### Phase 4: TsEngine struct
 
 The Rust struct that implements `ExecutionEngine` by delegating to the shared subprocess.
+
+> **⚠ Correction — RTQ §ENG-1:** the discovery/instance tier split below is being corrected. `generates_figures` moves off the instance `LaunchEngineResult` onto the discovery `LoadEngineResult`; `can_freeze` is added to `LoadEngineResult` too (kept on the instance — Q1 has both); and `quarto_required: Option<String>` joins the discovery tier (load-time semver gate deferred to grand-plan Phase 12). Target shape: discovery `LoadEngineResult { name, valid_extensions, generates_figures, can_freeze, quarto_required }`; instance `LaunchEngineResult { can_freeze }`. The as-built `{ can_freeze, generates_figures }` instance pair shown below is what RTQ corrects.
 
 - [x] Create `crates/quarto-core/src/engine/ts_engine.rs`:
   ```rust
@@ -612,6 +640,15 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
       // is loaded only to *execute*, never to resolve.
       language_hints: Option<Vec<String>>,
       file_extension_hints: Option<Vec<String>>,
+      // FORWARD-NOTE (Plan 1c / D1): the "complete static form" above is now
+      // in scope. Plan 1c replaces `language_hints` with an authoritative
+      // `claims: Option<HashMap<String, LanguageClaim>>` (kind/priority) and
+      // adds `claims_files: Option<Vec<String>>` (unconditional claims_file),
+      // keeping `file_extension_hints` as `valid_extensions`. `claims_language`
+      // / `claims_file` then answer from the static declaration *without*
+      // loading when it is authoritative (language-only / extension-only),
+      // use the keys as a pre-filter otherwise, and validate against the
+      // dynamic method on the first execute-time load. See plan1c Phase 1.
   }
   ```
   `TsEngine` does NOT own the subprocess — it shares `TsEngineHost` with other
@@ -1185,6 +1222,8 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
       `TsEngineHost::with_transport(Box<dyn EngineTransport>, EngineHostContext)`
       — which **starts the real reader thread** so tests run the production demux
       path (not a synchronous shortcut).
+
+      > **⚠ Correction — RTQ §Item A:** `EngineHostContext` is being split into a process-stable `Init { global: HostGlobalConfig }` (sent once at `ensure_started`) and a per-render `LaunchEngine { project: EngineProjectContext }`; the shared `HostState.context` slot + launch-gating are removed. This constructor's signature will take the `global` config (project supplied at launch).
     - **plan1a-host** owns `MockTransport` — a test-only impl of the
       `EngineTransport` trait (under `#[cfg(test)]` in `ts_process.rs`). It is
       **id-keyed, delay-capable, and BLOCKS in `recv()`** until a paired/scripted
@@ -1257,7 +1296,7 @@ the prose; this table binds them. Tiers: **claim** (pure trait method),
 | 10 | Hint-validation warning | registry | load-time `file_extension_hints ⊇ valid_extensions` check | `TsEngine` whose hints omit an ext `LoadEngine` reports | Revert the validation+push → assert `registry.diagnostics` contains a `warning` naming **the engine and the missing extension** RED. **Vacuity:** assert the diagnostic *content* (both names), not "diagnostics non-empty." |
 | 11 | Hint pre-filter (no load) | engine | `claims_language` `language_hints` pre-filter | `MockTransport` load-counter; `language_hints=Some(["python"])` | Revert the pre-filter short-circuit → assert `claims_language("ruby",_)==None` **and** `sent_messages()` has **zero** `LoadEngine` RED. **Vacuity + path-exercised:** the no-load (zero `LoadEngine`) is the binding assertion (the trait default also returns `None` but *would* load); `"ruby"` must be outside the hint list so the pre-filter actually fires. |
 | 12 | Claims cache (success cached) | engine | `claims_language_cache` write-on-success | `MockTransport` answers one `ClaimsLanguage` | Revert the cache write → assert two `claims_language(same key)` calls issue **exactly one** `ClaimsLanguage` on the wire RED. **Vacuity:** assert the **wire count** (1 query / 2 calls), not the returned claim (which is equal either way). |
-| 13 | `store_html_dependencies` name dedup | dep | the first-wins name-collision guard + warning | — (two `HtmlDependency`, same `name`, different content) | Revert the name guard → assert the **first** content survives (second dropped) **and** exactly one `DiagnosticMessage::warning` naming **both** registrants RED. **Vacuity:** same `name` + *different* content; assert **which** content won (first), not "one survived." |
+| 13 | `store_html_dependencies` name dedup | dep | the first-wins name-collision guard + warning | — (two `HtmlDependency`, same `name`, different content) | Revert the name guard → assert the **first** content survives (second dropped) **and** exactly one `DiagnosticMessage::warning` naming **both** registrants RED. **Vacuity:** same `name` + *different* content; assert **which** content won (first), not "one survived." *(RTQ §ENG-2: also bind the silent arm — identical re-registration → no warning, one stored copy.)* |
 | 14 | `HtmlDependency` serde round-trip | dep | the new `Serialize`/`Deserialize` derives | — | Revert the derives (or remove `ExecuteResult.html_dependencies`) → assert an `ExecuteResult` carrying a non-empty `html_dependencies` round-trips through `serde_json` (the `EngineCapture` path) with deps intact RED. **Vacuity:** the input `html_dependencies` must be **non-empty** and asserted equal post-round-trip, not just "`ExecuteResult` serializes." |
 
 (The `execute.timeout` tri-state bound test is already frozen in the
@@ -1313,6 +1352,8 @@ absent→`Some(300s)`; revert the `get_path`/`as_bool`/`as_int` branch → RED.)
 - [x] An owner that is handed a language it cannot execute fails **loudly**
   (clear `ExecutionError` naming engine + language), never silently — design
   doc §10 case 4; verified for the `[knitr, jupyter]` + `{sql}` routing
+> **⚠ Correction — RTQ §FC-2 / §ENG-2:** the two success criteria below describe the as-built code RTQ corrects: (FC-2) `dependencies()` is no longer a harness fold — it is an orchestrator-driven `dependencies` wire verb, with `engineDependencies` carried; (ENG-2) `store_html_dependencies` is name-keyed first-wins **with a content-equality check** (identical → silent skip; differing content → drop + one warning), not "warns on every duplicate."
+
 - [x] `ExecuteResult.html_dependencies: Vec<HtmlDependency>` is populated
   by `TsEngine::execute` from harness-emitted structured deps; the
   Q1-shaped `dependencies()` resolution path populates `ExecuteResult.includes`

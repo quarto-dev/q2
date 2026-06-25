@@ -7,7 +7,7 @@
  *   - runningInCI:          core/ci-info.ts:10 — from host.isCI
  *   - tempContext:          core/temp.ts — via host.fs.makeTempDir/makeTempFile
  *   - onCleanup:            core/cleanup.ts — via host.process.onExit
- *   - pandoc:               STUB (requires launch context)
+ *   - pandoc:               STUB (not yet implemented (Plan 2))
  *   - checkRender:          STUB (Plan 2)
  *   - runExternalPreviewServer: STUB (Plan 2)
  *
@@ -137,12 +137,6 @@ export interface SystemNamespace {
 }
 
 // ─── Stub error helpers ───────────────────────────────────────────────────────
-
-function requiresLaunchContextError(method: string): Error {
-  return new Error(
-    `@quarto/api: system.${method}() requires launch context (resolved by the engine host at launchEngine)`,
-  );
-}
 
 function notYetImplementedError(method: string): Error {
   return new Error(
@@ -303,7 +297,7 @@ export function makeSystem(
   // `.catch()` or `await` will see the error; a synchronous `throw` would
   // fire before `.catch` attaches (unhandled-rejection risk).
   async function pandoc(_args: string[], _stdin?: string): Promise<ProcessResult> {
-    throw requiresLaunchContextError("pandoc");
+    throw notYetImplementedError("pandoc");
   }
 
   // ── checkRender (STUB) ─────────────────────────────────────────────────────

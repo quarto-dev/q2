@@ -7,7 +7,7 @@
  *   - isQmdFile (pure): core/path.ts:95
  *   - inputFilesDir (pure): core/render.ts:13
  *   - absolute (host-only, via factory): core/path.ts:319 (normalizePath)
- *   - runtime, resource, dataDir (stubs, throw "requires launch context")
+ *   - runtime, resource, dataDir (stubs, throw "not yet implemented (Plan 2)")
  *
  * No Deno.* / node:* used anywhere — pure ops use JS string/path logic,
  * and host-only ops go through the injected PlatformHost.cwd().
@@ -20,16 +20,16 @@
  *   import { makePathHost } from "@quarto/api/path";
  *   const pathHost = makePathHost(host);
  *   pathHost.absolute("./relative/path");  // → resolved via host.cwd()
- *   pathHost.runtime();                    // → throws "requires launch context"
+ *   pathHost.runtime();                    // → throws "not yet implemented (Plan 2)"
  */
 
 import type { PlatformHost } from "../platform/index.js";
 
-// ─── Shared error message (§2aa stub contract) ────────────────────────────────
+// ─── Stub error helper (§2aa stub contract) ───────────────────────────────────
 
-function requiresLaunchContextError(method: string): Error {
+function notYetImplementedError(method: string): Error {
   return new Error(
-    `@quarto/api: path.${method}() requires launch context (resolved by the engine host at launchEngine)`,
+    `@quarto/api: path.${method}() is not yet implemented (Plan 2)`,
   );
 }
 
@@ -165,15 +165,15 @@ export function makePathHost(
   }
 
   function runtime(_subdir?: string): string {
-    throw requiresLaunchContextError("runtime");
+    throw notYetImplementedError("runtime");
   }
 
   function resource(..._parts: string[]): string {
-    throw requiresLaunchContextError("resource");
+    throw notYetImplementedError("resource");
   }
 
   function dataDir(_subdir?: string, _roaming?: boolean): string {
-    throw requiresLaunchContextError("dataDir");
+    throw notYetImplementedError("dataDir");
   }
 
   return { absolute, runtime, resource, dataDir };

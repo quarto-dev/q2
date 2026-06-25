@@ -25,11 +25,12 @@ elsewhere** and is no longer in scope here:
   `readTextFileSync`/`writeFileSync`/`exists`/`makeTempFile`/`makeTempDir`,
   `process.exec` via `ExecOptions`/`ExecResult`, `realPath`, `env`,
   `isInteractive`, `isCI`). Do **not** re-spec it; read the source.
-- `denoHost: PlatformHost` and the state-machine `buildQuartoAPI(...)` assembly
-  **with gating** live in **`@quarto/engine-host-deno`** (Plan 1b:
-  `deno-host.ts`, `quarto-api.ts`). The old "Plan 2 wires the namespaces /
-  replaces Plan 1b's stubs" model is gone: §2aa ships real namespace bodies and
-  Plan 1b wires + gates them. Plan 2 does **not** own the assembly.
+- `denoHost: PlatformHost` and the `buildQuartoAPI(global, host)` assembly live
+  in **`@quarto/engine-host-deno`** (Plan 1b: `deno-host.ts`, `quarto-api.ts`).
+  The old "Plan 2 wires the namespaces / replaces Plan 1b's stubs" model is gone:
+  §2aa ships real namespace bodies and Plan 1b assembles them over the
+  `Init { global }` config (ambient — **no launch-gating**, RTQ Item A). Plan 2
+  does **not** own the assembly.
 
 What **remains** in Plan 2 is two things, below.
 
@@ -42,29 +43,37 @@ What **remains** in Plan 2 is two things, below.
 ## Phase A — deferred launch-context bodies (fill §2aa's stubs)
 
 §2aa shipped these methods as `async` "not yet implemented" stubs (they reject
-rather than throw synchronously — see the §2aa final-review fixes) because they
-need render-service or environment/filesystem context. Give them real bodies.
-They plug into the existing §2aa namespace modules and take their IO through the
-injected `PlatformHost`. **These are exactly the methods Plan 1b gates until
-`launchEngine`** — Phase A is the "returns a real value after launch" side of
-Plan 1b's gated-method contract test.
+rather than throw synchronously — see the §2aa final-review fixes) because their
+*bodies* need environment/filesystem (or, for the preview probes, render-service)
+context. Give them real bodies. They plug into the existing §2aa namespace
+modules and take their IO through the injected `PlatformHost`. **These are not
+gated** (RTQ Item A removed the launch-gating): `path.runtime`/`resource`/
+`dataDir` and `system.pandoc` resolve from the `Init { global }` config the
+harness injects at assembly, so they are available **pre-launch** — Phase A just
+fills the stub bodies that read that config.
 
 - [ ] `system.pandoc` — locate and invoke the pandoc binary (Q1:
-  `pandocBinaryPath` + `execProcess`), routed through `PlatformHost.process.exec`.
-- [ ] `system.checkRender` — the `quarto check` render probe; needs a
-  render-service/launch context, so it stays behind the gate.
+  `pandocBinaryPath` + `execProcess`), routed through `PlatformHost.process.exec`
+  (the pandoc path comes from the `Init { global }`).
+- [ ] `system.checkRender` — the `quarto check` render probe; no q2 caller yet,
+  so it stays a `notYetImplementedError` stub.
 - [ ] `system.runExternalPreviewServer` — spawn the external preview server via
-  the host's `process.exec`. No q2 caller yet; keep for Q1 parity, gated.
-- [ ] `path.runtime`, `path.resource`, `path.dataDir` — resolve the quarto
-  runtime/resource/data directories via `PlatformHost.env`/`realPath` (the §2aa
-  `platform/index.ts` comment reserves `env.get` + `realPath` for exactly these).
-  Q1: `quartoRuntimeDir` / `resourcePath` / `quartoDataDir`.
-- [ ] Unit tests for each, injecting a fake `PlatformHost` (mirrors §2aa's
-  namespace tests).
+  the host's `process.exec`. No q2 caller yet; stays a `notYetImplementedError`
+  stub (kept for Q1 parity).
+- [ ] `path.runtime`, `path.resource`, `path.dataDir` — resolve from the
+  `Init { global }` config (`runtimeDir`/`resourceDir`/`dataDir`) the harness
+  injects at assembly, so they resolve **immediately**, pre-launch (ambient, like
+  Q1's `quartoRuntimeDir`/`resourcePath`/`quartoDataDir`). Not gated.
+- [ ] Unit tests for each, injecting a fake `PlatformHost` / `Init` config
+  (mirrors §2aa's namespace tests).
 
 > The pure/host-only methods these sit beside (`path.absolute`,
 > `path.dirAndStem`, `system.execProcess`, `system.tempContext`, …) are already
 > real in §2aa; only the context-dependent bodies above are deferred here.
+> (Per **B1** below, `system.execProcess` carries Q1's `mergeOutput`/
+> `stderrFilter` — knitr uses both, `rmd.ts:440` — via the flatten-into-
+> `ExecProcessOptions` fix; the runtime and vendored `@quarto/types` signatures
+> are reconciled. B1 was relocated here from RTQ by the Option A split.)
 
 ## Phase B — @quarto/types and import map (was Phase 2E)
 
@@ -89,12 +98,13 @@ referenced by the import map.
     a `primary`, never interop), and `interop`/`fallback` are reachable only via
     the object. This is the one deliberate Q1-API extension in the epic; see
     plan1b's normalization and `claude-notes/designs/engine-resolution.md` §3.2.
-- [ ] **Anchor the pure/host-only/gated classification as jsdoc on `QuartoAPI`.**
+- [ ] **Anchor the pure/host-only/ambient classification as jsdoc on `QuartoAPI`.**
   Plan 1b's "Engine API contract" table (which methods are pure, host-only, or
-  gated-until-`launchEngine`) is currently the sole source of truth. Record it
-  as jsdoc on the `QuartoAPI` type here so the harness's gating (Plan 1b) and
-  the namespace bodies (§2aa) agree against a written contract rather than by
-  convention. Plan 1b's table remains canonical; this mirrors it.
+  ambient — resolving from the `Init { global }` config) is the source of truth.
+  Record it as jsdoc on the `QuartoAPI` type here so the harness assembly (Plan 1b)
+  and the namespace bodies (§2aa) agree against a written contract rather than by
+  convention. Plan 1b's table remains canonical; this mirrors it. (There is **no
+  gated class** — RTQ Item A.)
 - [ ] **Claim constructors live in `@quarto/api` (runtime), not `@quarto/types`
   (erased).** Add tiny helpers `primary(priority?)`, `interop(priority?)`,
   `fallback(priority?)` that return the corresponding `LanguageClaim` objects,
@@ -104,27 +114,27 @@ referenced by the import map.
   dependency.
 - [ ] For compatibility with Quarto 1 extensions: our type names should match
   Quarto 1's.
-- [ ] **Document the state-machine init() timing in the
-  `ExecutionEngineDiscovery.init` jsdoc.** Plan 1b introduces a
-  q2-specific lifecycle deviation from Q1: the QuartoAPI is built once
-  at `loadEngine` over a shared `HostState`, but its
-  context-dependent methods are gated until the first `launchEngine`.
+- [ ] **Document the init() timing in the `ExecutionEngineDiscovery.init`
+  jsdoc.** Plan 1b builds the QuartoAPI over the `Init { global }` config at
+  harness assembly (RTQ Item A — no shared mutable `HostState`, no launch-gating).
   Update the `init?` jsdoc to spell out:
   - When `init()` runs (during `loadEngine` handling, after the
     module's exports are validated).
-  - What's available immediately (pure namespaces — `text`,
-    `markdownRegex`, `console`, `crypto` — and host-only namespaces —
-    `mappedString`, most of `path`, most of `system`).
-  - What's gated until `launchEngine` (`path.runtime`,
-    `path.resource`, `system.pandoc`, and `format.*` when called
-    without an explicit format argument).
+  - What's available immediately — **everything the engine needs pre-launch**:
+    the pure namespaces (`text`, `markdownRegex`, `console`, `crypto`), the
+    host-only namespaces (`mappedString`, `path`, `system`), and the ambient
+    `path.runtime`/`resource`/`dataDir` + `system.pandoc` (they resolve from the
+    injected `Init { global }`). `format.*` is always available too — every
+    predicate takes a `Format` arg, so it is never gated.
   - The contract that engines may NOT access `quarto.*` at module
     top-level — only from inside methods.
   - That `init()` is sync per Q1's contract, but the harness `await`s
     its return defensively, so an `async init()` works correctly.
   - That throwing/rejecting from `init()` is a fatal load failure.
+  - That the per-render **project** context arrives separately on each
+    `launchEngine` (captured in the instance closure), not via `init()`.
   Cross-reference Plan 1b's "Engine API contract" section as the
-  canonical source for the gated/available method table.
+  canonical method table.
 - [ ] Create a template `resources/extension-build/deno.json` that engine
   authors copy/extend. Its imports reference the **published** SDK and std lib
   (no q2-local import map for the SDK):
@@ -143,6 +153,51 @@ referenced by the import map.
   Within the q2 repo, a workspace mapping resolves `@quarto/api` /
   `@quarto/types` to `ts-packages/…` for dev builds against unpublished
   changes.
+
+## B1 — restore `system.execProcess` `mergeOutput`/`stderrFilter` (return-to-Q1; relocated from RTQ)
+
+**Relocated from `2026-06-25-plan1a-return-to-q1.md` by the Option A split (2026-06-29).** B1 is a
+standalone return-to-Q1 correction of **landed §2aa code** — it touches no 1a file, only
+`@quarto/api` + the vendored types — so it belongs with Plan 2's `@quarto/api` work, not with RTQ's
+landed-1a corrections. It is testable **now** against a fake `PlatformHost` (no Deno harness
+needed).
+
+**Severity:** Low–Moderate · **Necessary?:** unforced reduction (return-to-Q1) · **Touches:**
+`@quarto/api` (`system/index.ts`, `platform/index.ts`), vendored `@quarto/types`
+(`quarto-api.ts`).
+
+**Verified (2026-06-26):** Q1 `core/api/types.ts:165-172` declares `execProcess(options, stdin?,
+mergeOutput?: "stderr>stdout"|"stdout>stderr", stderrFilter?, respectStreams?, timeout?)` (6-param).
+knitr `rmd.ts:440-458` calls it with `"stdout>stderr"` **and** a `stderrFilter` closure — real
+engine-author use. q2 runtime `system/index.ts:97-100` is 2-param `(options, stdin?)`;
+`ExecProcessOptions` (`:43-58`) and `platform/index.ts:25-32`'s `ExecOptions = {cwd?, env?, stdin?}`
+carry **neither** knob — they have no home below the seam. The vendored
+`@quarto/types/quarto-api.ts:606-613` keeps the full 6-param signature → **runtime and vendored
+signatures disagree**, so the `QuartoAPI` aggregation can't typecheck until reconciled. Engine
+survey: only knitr (`rmd.ts:440`, the 2 knobs) and `jupyter-kernel.ts:181` (2-arg, unaffected) call
+`execProcess`; julia/marimo use raw `Deno.Command`. **`respectStreams`/`timeout` are used by no
+engine → safe to leave dropped;** `mergeOutput`/`stderrFilter` are the real gap.
+
+**Decision (2026-06-26): restore-now — in scope.** No *in-scope* TS engine uses these today
+(knitr/jupyter are native Rust in q2; julia/marimo bypass the seam), but the framework must carry
+them: future TS engines + the grand plan's "consumable by Q1 itself" portability (Q1's own knitr
+breaks on the reduced signature), and it unblocks the `QuartoAPI` aggregation typecheck. Fix is the
+plan-compliant *flatten into the options object* (not new positional params):
+
+- [ ] **Runtime (`@quarto/api`).** Add `mergeOutput?: "stderr>stdout"|"stdout>stderr"` and
+  `stderrFilter?: (output: string) => string` to `ExecProcessOptions` (`system/index.ts:43-58`);
+  thread them through `PlatformHost.ExecOptions` (`platform/index.ts:25-32`) → `host.process.exec`
+  (their home below the seam, where they're applied). `respectStreams`/`timeout`: leave dropped (no
+  engine uses them) or add for completeness.
+- [ ] **Types (Phase B reconciliation).** Align the vendored `@quarto/types`
+  `QuartoAPI.system.execProcess` (+ `ProcessResult`/`ExecProcessOptions`) so **runtime == vendored**.
+  (Folds into Phase B's `@quarto/types` reconciliation — this is one of the signatures it syncs.)
+- [ ] **Test seam T-B1 (TS/vitest, frozen).** Mount `makeSystem(fakeHost)` with a fake
+  `PlatformHost` that records the `ExecOptions` it receives; call `execProcess({cmd, mergeOutput:
+  "stdout>stderr", stderrFilter: f}, stdin)`; assert the recorded `ExecOptions` carries `mergeOutput`
+  **and** the `stderrFilter` ref. *Named revert:* drop the two fields from the `ExecProcessOptions →
+  ExecOptions` threading → the fake never sees them → RED. *(Mount the real `makeSystem` unit; mock
+  only the genuine environment dep — the host.)*
 
 ## Portability constraints
 
@@ -230,22 +285,26 @@ assembly with gating, and `fromSourceMap` source-map rehydration are **Plan 1b**
 
 This plan:
 
-- [ ] **Phase A:** `system.pandoc`, `system.checkRender`,
-  `system.runExternalPreviewServer`, and `path.runtime`/`path.resource`/
-  `path.dataDir` have real implementations (no longer "not yet implemented"
-  stubs), each routed through `PlatformHost` and covered by a fake-host unit
-  test. After these land, Plan 1b's gated-method contract test sees real values
-  post-`launchEngine`.
+- [ ] **Phase A:** `system.pandoc` and `path.runtime`/`path.resource`/
+  `path.dataDir` have real bodies (no longer "not yet implemented" stubs),
+  reading the injected `Init { global }` config / routed through `PlatformHost`
+  and covered by fake-host unit tests — and resolve **pre-launch** (ambient,
+  RTQ Item A). (`checkRender`/`runExternalPreviewServer` stay
+  `notYetImplementedError` until a caller exists.)
 - [ ] **Phase B:** `@quarto/types` carries the q2-refined signatures
   (`ExecutionEngineDiscovery`/`Instance`, `ExecuteOptions`/`Result`/`Target`,
-  `QuartoAPI` with namespace signatures + the pure/host-only/gated jsdoc
+  `QuartoAPI` with namespace signatures + the pure/host-only/ambient jsdoc
   classification, `MappedString`, `EngineProjectContext`, `LanguageClaim`).
+- [ ] **B1 (return-to-Q1, relocated from RTQ):** `system.execProcess` carries
+  `mergeOutput`/`stderrFilter` (flattened into `ExecProcessOptions`, threaded through
+  `PlatformHost.ExecOptions`); runtime and vendored `@quarto/types` signatures reconciled; T-B1
+  fake-host vitest seam green.
 - [ ] `LanguageClaim` claim constructors (`primary`/`interop`/`fallback`)
   exported from `@quarto/api`.
-- [ ] `ExecutionEngineDiscovery.init` jsdoc documents the q2 state-machine
-  timing (loadEngine call site, available-immediately vs. gated-until-launch
-  namespaces, module-top-level prohibition, sync/defensive-await behavior,
-  load-failure-on-throw).
+- [ ] `ExecutionEngineDiscovery.init` jsdoc documents the q2 init timing
+  (loadEngine call site, everything-available-pre-launch from the `Init { global }`
+  config — no gating, RTQ Item A — module-top-level prohibition,
+  sync/defensive-await behavior, load-failure-on-throw).
 - [ ] A published-SDK `resources/extension-build/deno.json` template referencing
   `jsr:@quarto/api` / `jsr:@quarto/types`.
 - [ ] All tests pass.

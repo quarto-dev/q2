@@ -39,8 +39,8 @@ use tracing::{error, info, warn};
 
 use crate::engine::error::ExecutionError;
 use crate::engine::ts_protocol::{
-    EngineHostContext, FromEngine, LaunchEngineResult, LoadEngineResult, Request, Response,
-    ToEngine,
+    EngineProjectContext, FromEngine, HostGlobalConfig, LaunchEngineResult, LoadEngineResult,
+    Request, Response, ToEngine,
 };
 use crate::stage::cancellation::Cancellation;
 
@@ -393,8 +393,8 @@ pub struct TsEngineHost {
     stderr_reader: Mutex<Option<JoinHandle<()>>>,
     /// Bounded ring of recent stderr lines (cap ~100) for crash diagnostics.
     recent_stderr: Arc<Mutex<VecDeque<String>>>,
-    /// Static context sent verbatim with every `LaunchEngine`.
-    host_context: EngineHostContext,
+    /// Process-stable global config sent once via `Init` at spawn.
+    global: HostGlobalConfig,
 }
 
 const RECENT_STDERR_CAP: usize = 100;
@@ -402,9 +402,9 @@ const CANCEL_TICK: Duration = Duration::from_millis(250);
 const DISCOVERY_WINDOW: Duration = Duration::from_secs(10);
 
 impl TsEngineHost {
-    /// Construct with the project's static context.  Cheap — no subprocess
+    /// Construct with the process-stable global config.  Cheap — no subprocess
     /// spawn yet.
-    pub fn new(host_context: EngineHostContext) -> Self {
+    pub fn new(global: HostGlobalConfig) -> Self {
         Self {
             write: OnceLock::new(),
             child: Arc::new(Mutex::new(None)),
@@ -414,7 +414,7 @@ impl TsEngineHost {
             reader: Mutex::new(None),
             stderr_reader: Mutex::new(None),
             recent_stderr: Arc::new(Mutex::new(VecDeque::with_capacity(RECENT_STDERR_CAP))),
-            host_context,
+            global,
         }
     }
 
@@ -429,9 +429,9 @@ impl TsEngineHost {
     pub fn with_transport(
         write: Arc<dyn EngineTransport>,
         read: Box<dyn EngineReadHalf>,
-        host_context: EngineHostContext,
+        global: HostGlobalConfig,
     ) -> Self {
-        let host = Self::new(host_context);
+        let host = Self::new(global);
 
         // Capture field-clones for the reader thread (NEVER Arc<Self>).
         let pending = Arc::clone(&host.pending);
@@ -459,9 +459,9 @@ impl TsEngineHost {
     #[cfg(test)]
     pub fn start_with_command(
         cmd: Command,
-        host_context: EngineHostContext,
+        global: HostGlobalConfig,
     ) -> Result<Self, ExecutionError> {
-        let host = Self::new(host_context);
+        let host = Self::new(global);
         let child_arc = Arc::clone(&host.child);
         host.ensure_started_inner(|| {
             let (write, read, stderr) = spawn_into(cmd, child_arc)?;
@@ -558,6 +558,19 @@ impl TsEngineHost {
 
         // Commit: set write LAST.
         let _ = self.write.set(write);
+
+        // Fire-and-forget Init frame — sent exactly once at spawn, before any
+        // LoadEngine request.  No pending slot; id u64::MAX matches Shutdown's
+        // throwaway convention.
+        let init_frame = Request {
+            id: u64::MAX,
+            msg: ToEngine::Init {
+                global: self.global.clone(),
+            },
+        };
+        if let Some(w) = self.write.get() {
+            let _ = w.send(&init_frame);
+        }
 
         Ok(())
     }
@@ -693,12 +706,13 @@ impl TsEngineHost {
     pub fn launch_engine(
         &self,
         engine: &str,
+        project: EngineProjectContext,
         cancellation: &Cancellation,
     ) -> Result<LaunchEngineResult, ExecutionError> {
         self.ensure_started()?;
         let msg = ToEngine::LaunchEngine {
             engine: engine.to_string(),
-            context: self.host_context.clone(),
+            project,
         };
         let response = self.request(msg, Some(DISCOVERY_WINDOW), cancellation)?;
         match response {
@@ -950,6 +964,7 @@ fn stderr_loop(stderr: std::process::ChildStderr, recent_stderr: Arc<Mutex<VecDe
 /// `PendingSlot` and error reporting).
 fn engine_name_for(msg: &ToEngine) -> &str {
     match msg {
+        ToEngine::Init { .. } => "init",
         ToEngine::LoadEngine { engine_path } => engine_path.as_str(),
         ToEngine::LaunchEngine { engine, .. } => engine.as_str(),
         ToEngine::ClaimsLanguage { engine, .. } => engine.as_str(),
@@ -957,6 +972,7 @@ fn engine_name_for(msg: &ToEngine) -> &str {
         ToEngine::MarkdownForFile { engine, .. } => engine.as_str(),
         ToEngine::Execute { engine, .. } => engine.as_str(),
         ToEngine::IntermediateFiles { engine, .. } => engine.as_str(),
+        ToEngine::Dependencies { engine, .. } => engine.as_str(),
         ToEngine::Shutdown => "shutdown",
         ToEngine::Cancel { .. } => "cancel",
     }
@@ -965,6 +981,7 @@ fn engine_name_for(msg: &ToEngine) -> &str {
 /// Return a short operation name for timeout error messages.
 fn operation_name_for(msg: &ToEngine) -> &str {
     match msg {
+        ToEngine::Init { .. } => "init",
         ToEngine::LoadEngine { .. } => "loadEngine",
         ToEngine::LaunchEngine { .. } => "launchEngine",
         ToEngine::ClaimsLanguage { .. } => "claimsLanguage",
@@ -972,6 +989,7 @@ fn operation_name_for(msg: &ToEngine) -> &str {
         ToEngine::MarkdownForFile { .. } => "markdownForFile",
         ToEngine::Execute { .. } => "execute",
         ToEngine::IntermediateFiles { .. } => "intermediateFiles",
+        ToEngine::Dependencies { .. } => "dependencies",
         ToEngine::Shutdown => "shutdown",
         ToEngine::Cancel { .. } => "cancel",
     }
@@ -1045,6 +1063,9 @@ mod mock {
                     discovery: LoadEngineResult {
                         name: engine_path.clone(),
                         valid_extensions: vec![],
+                        generates_figures: false,
+                        can_freeze: false,
+                        quarto_required: None,
                     },
                 };
                 state.ready.push_back(Response {
@@ -1245,12 +1266,11 @@ mod tests {
     use super::*;
     use std::sync::Barrier;
 
-    fn make_host_context() -> EngineHostContext {
-        EngineHostContext {
-            project_dir: None,
-            is_single_file: true,
+    fn make_host_global_config() -> HostGlobalConfig {
+        HostGlobalConfig {
             resource_dir: "/res".to_string(),
             runtime_dir: "/rt".to_string(),
+            data_dir: "/data".to_string(),
             pandoc_path: None,
             is_interactive_session: false,
             running_in_ci: false,
@@ -1269,6 +1289,9 @@ mod tests {
             discovery: LoadEngineResult {
                 name: name.to_string(),
                 valid_extensions: vec![],
+                generates_figures: false,
+                can_freeze: false,
+                quarto_required: None,
             },
         }
     }
@@ -1318,7 +1341,7 @@ mod tests {
             let host = Arc::new(TsEngineHost::with_transport(
                 write,
                 read,
-                make_host_context(),
+                make_host_global_config(),
             ));
             let barrier = Arc::new(Barrier::new(N as usize));
             let mut handles = vec![];
@@ -1369,7 +1392,7 @@ mod tests {
             let host = Arc::new(TsEngineHost::with_transport(
                 write,
                 read,
-                make_host_context(),
+                make_host_global_config(),
             ));
 
             let (b_done_tx, b_done_rx) = mpsc::sync_channel::<()>(1);
@@ -1447,7 +1470,7 @@ mod tests {
             let host = Arc::new(TsEngineHost::with_transport(
                 write,
                 read,
-                make_host_context(),
+                make_host_global_config(),
             ));
 
             // A: withheld, short window (id = 0).
@@ -1513,7 +1536,7 @@ mod tests {
     fn test_cancel_distinguishable_and_prompt() {
         watchdog(Duration::from_secs(15), || {
             let (write, read, mock) = MockTransport::pair_with_handle();
-            let host = TsEngineHost::with_transport(write, read, make_host_context());
+            let host = TsEngineHost::with_transport(write, read, make_host_global_config());
 
             let cancel = Cancellation::new();
             let cancel_clone = cancel.clone();
@@ -1561,7 +1584,7 @@ mod tests {
     fn test_none_window_still_cancellable() {
         watchdog(Duration::from_secs(10), || {
             let (write, read, _mock) = MockTransport::pair_with_handle();
-            let host = TsEngineHost::with_transport(write, read, make_host_context());
+            let host = TsEngineHost::with_transport(write, read, make_host_global_config());
 
             let cancel = Cancellation::new();
             let cancel_clone = cancel.clone();
@@ -1609,7 +1632,7 @@ mod tests {
             let host = Arc::new(TsEngineHost::with_transport(
                 write,
                 read,
-                make_host_context(),
+                make_host_global_config(),
             ));
 
             // A: short window → times out, abandons slot (id = 0).
@@ -1671,7 +1694,7 @@ mod tests {
             let host = Arc::new(TsEngineHost::with_transport(
                 write,
                 read,
-                make_host_context(),
+                make_host_global_config(),
             ));
 
             // Seed crash stderr into the host's recent_stderr ring.
@@ -1732,7 +1755,7 @@ mod tests {
             let host = Arc::new(TsEngineHost::with_transport(
                 write,
                 read,
-                make_host_context(),
+                make_host_global_config(),
             ));
 
             let host_req = Arc::clone(&host);
@@ -1791,7 +1814,7 @@ mod tests {
         use std::sync::atomic::AtomicUsize;
 
         watchdog(Duration::from_secs(10), || {
-            let host = Arc::new(TsEngineHost::new(make_host_context()));
+            let host = Arc::new(TsEngineHost::new(make_host_global_config()));
             let spawn_count = Arc::new(AtomicUsize::new(0));
             let barrier = Arc::new(Barrier::new(2));
 
@@ -1833,12 +1856,11 @@ mod proc_tests {
     use super::*;
     use std::sync::mpsc;
 
-    fn make_host_context() -> EngineHostContext {
-        EngineHostContext {
-            project_dir: None,
-            is_single_file: true,
+    fn make_host_global_config() -> HostGlobalConfig {
+        HostGlobalConfig {
             resource_dir: "/res".to_string(),
             runtime_dir: "/rt".to_string(),
+            data_dir: "/data".to_string(),
             pandoc_path: None,
             is_interactive_session: false,
             running_in_ci: false,
@@ -1876,7 +1898,7 @@ mod proc_tests {
         watchdog(Duration::from_secs(10), || {
             let mut cmd = Command::new("sleep");
             cmd.arg("60");
-            let host = TsEngineHost::start_with_command(cmd, make_host_context())
+            let host = TsEngineHost::start_with_command(cmd, make_host_global_config())
                 .expect("start_with_command failed");
 
             // Capture PID before dropping.
@@ -1922,7 +1944,7 @@ mod proc_tests {
                     cmd.arg("-c").arg("cat >/dev/null");
                     cmd
                 },
-                make_host_context(),
+                make_host_global_config(),
             )
             .expect("start_with_command failed");
 
@@ -1952,7 +1974,7 @@ mod proc_tests {
                     cmd.arg("-c").arg("cat >/dev/null");
                     cmd
                 },
-                make_host_context(),
+                make_host_global_config(),
             )
             .expect("start_with_command failed");
 
@@ -2026,7 +2048,7 @@ await readLines();
             cmd.arg("run").arg("--allow-all").arg(&script_path);
 
             let host = Arc::new(
-                TsEngineHost::start_with_command(cmd, make_host_context())
+                TsEngineHost::start_with_command(cmd, make_host_global_config())
                     .expect("start_with_command failed"),
             );
 
@@ -2086,7 +2108,7 @@ await readLines();
                             .arg("echo 'fatal: boom' >&2; sleep 0.3; kill -9 \"$$\"");
                         cmd
                     },
-                    make_host_context(),
+                    make_host_global_config(),
                 )
                 .expect("start_with_command failed"),
             );

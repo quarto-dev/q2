@@ -64,9 +64,13 @@ use crate::stage::PandocIncludes;
 ///   [`DiagnosticMessage::warning`] naming the dependency `name`.
 ///
 /// The warning string contains the dependency `name` so users can
-/// track down which extensions are in conflict. Improving on Q1's
-/// behaviour (which silently drops later registrations — see
-/// `pandoc-dependencies-html.ts:228-237`), q2 always warns.
+/// track down which extensions are in conflict. Q1 deduplicates by
+/// name only — content-blind, first-wins, always silent
+/// (`pandoc-dependencies-html.ts:228-237`). q2 adds a content-equality
+/// check because the artifact store is a name-keyed on-disk sink where
+/// a silent overwrite would corrupt output: q2 warns on a name
+/// collision with *differing* content, and skips identical
+/// re-registration silently.
 pub fn store_html_dependencies(
     deps: Vec<HtmlDependency>,
     artifacts: &mut ArtifactStore,

@@ -7,6 +7,7 @@
 
 //! Execution context and result types for engines.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,6 +16,7 @@ use pampa::lua::HtmlDependency;
 use quarto_pandoc_types::ConfigValue;
 use quarto_source_map::{By, SourceContext, SourceInfo};
 
+use crate::engine::ts_protocol::TsMetadataValue;
 use crate::engine::{DEFAULT_EXECUTE_TIMEOUT, HANDLED_LANGUAGES};
 use crate::stage::PandocIncludes;
 use crate::stage::cancellation::Cancellation;
@@ -247,6 +249,34 @@ pub struct ExecuteResult {
     /// becomes an empty `Vec`).
     #[serde(default)]
     pub html_dependencies: Vec<HtmlDependency>,
+
+    /// Engine-produced document metadata (carried-and-ignored until a consumer lands).
+    ///
+    /// `#[serde(default)]` allows stored engine-capture fixtures that
+    /// pre-date this field to deserialize successfully.
+    #[serde(default)]
+    pub metadata: Option<HashMap<String, TsMetadataValue>>,
+
+    /// Engine-produced pandoc options (carried-and-ignored until a consumer lands).
+    ///
+    /// `#[serde(default)]` allows stored engine-capture fixtures that
+    /// pre-date this field to deserialize successfully.
+    #[serde(default)]
+    pub pandoc: Option<HashMap<String, TsMetadataValue>>,
+
+    /// Resource files produced by the engine (carried-and-ignored until a consumer lands).
+    ///
+    /// `#[serde(default)]` allows stored engine-capture fixtures that
+    /// pre-date this field to deserialize successfully.
+    #[serde(default)]
+    pub resource_files: Vec<String>,
+
+    /// Key→value preserve map from the engine (carried-and-ignored until a consumer lands).
+    ///
+    /// `#[serde(default)]` allows stored engine-capture fixtures that
+    /// pre-date this field to deserialize successfully.
+    #[serde(default)]
+    pub preserve: HashMap<String, String>,
 }
 
 impl ExecuteResult {

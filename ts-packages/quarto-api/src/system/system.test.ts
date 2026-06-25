@@ -8,7 +8,7 @@
  *   - isInteractiveSession/runningInCI: inject both ways; assert reads the right source.
  *   - tempContext/onCleanup: spy on fs.makeTempDir, fs.makeTempFile,
  *     fs.writeFileSync, process.onExit — assert dispatch (count ≥ 1).
- *   - pandoc: throws + /requires launch context/.
+ *   - pandoc: throws + /not yet implemented/.
  *   - checkRender/runExternalPreviewServer: assert they throw.
  *
  * ECHO TRAP AVOIDED: tests assert the TRANSFORMATION / DISPATCH, not that
@@ -442,10 +442,10 @@ describe("system.onCleanup", () => {
 // ─── pandoc (STUB) ────────────────────────────────────────────────────────────
 
 describe("system.pandoc (stub)", () => {
-  it("rejects with 'requires launch context' (async stub binding)", async () => {
+  it("rejects with 'not yet implemented' (async stub binding)", async () => {
     const sys = makeSystem(makeFakeHost());
     // Revert to returning a ProcessResult → RED
-    await expect(sys.pandoc(["--version"])).rejects.toThrow(/requires launch context/);
+    await expect(sys.pandoc(["--version"])).rejects.toThrow(/not yet implemented/);
   });
 
   it("error message names the 'pandoc' method (method-name binding)", async () => {

@@ -77,6 +77,12 @@ Define the message types used between Rust and Deno. Both sides need matching de
   because Julia is bundled, so anyone with an additional TS engine has at least
   two. See plan1a-host's "Shared subprocess" design note.
 
+  > **⚠ Correction — RTQ §FC-2:** `dependencies()` is **no longer** folded into `execute`. It is a
+  > first-class wire verb (`ToEngine::Dependencies` → `FromEngine::DependenciesResult`) plus a
+  > `dependencies` flag on `execute` and an `engineDependencies` field on the result; q2's render
+  > orchestrator drives the deferred resolution at the merged output (mirrors Q1 `render.ts:90-109`).
+  > (Text below is the as-built 1a code RTQ corrects.)
+
   **Lifecycle methods removed from the protocol.** `dependencies`,
   `postprocess`, `postRender`, `canKeepSource`, `filterFormat`, and
   `executeTargetSkipped` are **not** protocol messages. Q1's `dependencies()`
@@ -87,6 +93,11 @@ Define the message types used between Rust and Deno. Both sides need matching de
   response as a q2-shaped `htmlDependencies` array. The other Q1 lifecycle
   hooks have no q2 callers and are deferred until they do; when added, they'll
   appear as both protocol messages and trait methods using q2-native types.
+
+  > **⚠ Correction — RTQ §Item A:** `LaunchEngine` no longer carries `EngineHostContext`. The context
+  > splits into a process-stable `ToEngine::Init { global: HostGlobalConfig }` (sent once at spawn)
+  > and a per-render `LaunchEngine { engine, project: EngineProjectContext }`; there is no shared
+  > `HostState.context` and no launch-gating. (Text below is the as-built 1a code RTQ corrects.)
 
   ```rust
   // Rust → Deno messages
@@ -171,6 +182,10 @@ Define the message types used between Rust and Deno. Both sides need matching de
   }
   ```
 
+  > **⚠ Correction — RTQ §FC-2:** the `execute` / `dependencies` rows below describe the old
+  > harness-internal fold. `dependencies` is now a wire verb (not harness-internal) and `execute`
+  > does not fold it in — see the §FC-2 note above. (Text below is the as-built 1a code RTQ corrects.)
+
   **Quarto 1 `ExecutionEngineInstance` coverage:**
 
   | Method | Protocol message | Notes |
@@ -183,8 +198,14 @@ Define the message types used between Rust and Deno. Both sides need matching de
   | `execute(options)` | `Execute` → `ExecuteResult` | Core execution. Harness folds `dependencies()` into this round-trip — see the dependencies translation note below. |
   | `dependencies(options)` | **Harness-internal** | Q1's deferred `engineDependencies` → `PandocIncludes` resolution. The harness calls `engine.dependencies(...)` itself when an execute response includes `engineDependencies`, and merges the returned `DependenciesResult.includes` into `executeResult.includes` (the `PandocIncludes` channel — `inHeader`/`beforeBody`/`afterBody` file paths). For Q1-shaped engines, `executeResult.htmlDependencies` is left empty; structured deps via `htmlDependencies` are a separate Q2-native opt-in channel — see the "Two disjoint dep channels" note below. Not a protocol message; q2 receives the resolved q2-shaped form. **Failure semantics:** if `engine.dependencies(...)` throws after a successful `execute(...)`, the harness reports the failure as a hard error via `FromEngine::Error` (not a partial `executeResult`). q2 surfaces it as `ExecutionError::ExecutionFailed` and the render fails. This matches Q1's behavior — Q1 bubbles `dependencies()` errors up the same way. No partial-result shape is defined. |
   | `intermediateFiles(input)` | `IntermediateFiles` → `IntermediateFilesResult` | Instance tier (needs LaunchEngine), but cheap — `LaunchEngine` only constructs the instance object. **Semantics:** a pure prediction of intermediate file paths derived from the input path — NOT post-execution introspection of what `execute()` produced. The argument is the original source path; the return lists paths the engine will produce alongside the primary output (e.g. a generated `.ipynb`, `.html.md` backups). The result is used to **exclude those paths from the project's input-file set** so they are not treated as separate render targets. |
-  | `filterFormat`, `executeTargetSkipped`, `postprocess`, `canKeepSource`, `postRender` | **Deferred** | No q2 caller exists. When q2 grows callers, they'll appear as both trait methods (q2-native types) and protocol messages. |
+  | `filterFormat`, `executeTargetSkipped`, `canKeepSource`, `postRender` | **Deferred** | No q2 caller exists. When q2 grows callers, they'll appear as both trait methods (q2-native types) and protocol messages. |
+  | `postprocess` | **Drop → AST transform** | **Not** resurrected as a hook/trait method. q2 has no post-write DOM stage (the No-DOM-postprocessor rule); the only real Q1 `postprocess` work is `postProcessRestorePreservedHtml`. The Q1 preserve/restore is re-expressed as an **AST transform** reading FC-1's already-carried `preserve` field — see **RTQ B2** (the single recovery story) and **FC-1** (which carries `preserve`/`post_process` on the wire). |
   | `run(options)` | **Not included** | Interactive mode — fundamentally different (long-running, not request/response). Defer to a future plan. |
+> **⚠ Correction — RTQ §Item A:** `EngineHostContext` is split into `HostGlobalConfig` (on a
+> once-per-spawn `Init` frame) + `EngineProjectContext` (on each per-render `LaunchEngine`). It is
+> **not** sent "once per engine launch" as one combined bundle. (Text below is the as-built 1a code
+> RTQ corrects.)
+
 - [x] Define `EngineHostContext` struct. This is a q2 invention (Quarto 1 engines
   run in-process and don't need serialized context). It carries only static/global
   and project-level information — per-document and per-format info arrives in
@@ -245,6 +266,12 @@ Define the message types used between Rust and Deno. Both sides need matching de
   - `resourceDir`, `tempDir`, `libDir`, `projectDir`, `cwd`, `params`, `quiet`
 
   The Deno harness bridges this: it receives `TsExecuteOptions` from q2, wraps the QMD text as a `MappedString`, and constructs the `ExecutionTarget` and `Format` objects the engine expects. The harness does NOT need to call `quarto.markdownRegex.extractYaml()` — q2 provides the pre-extracted metadata directly.
+
+  > **⚠ Correction — RTQ §FC-2 / §Item A:** `dependencies: boolean` is **no longer omitted** — it
+  > rides the wire (default `true`) so the orchestrator can drive the deferred-deps path; the harness
+  > no longer hardcodes `true`. The `is_single_file`/`project` discussion below now refers to
+  > `EngineProjectContext` on `LaunchEngine`, not `EngineHostContext`. (Text below is the as-built 1a
+  > code RTQ corrects.)
 
   **Q1 `ExecuteOptions` fields the protocol intentionally omits:**
   - `dependencies: boolean` — the harness sets `dependencies: true` unconditionally when invoking Q1-shaped engines, so widget/HTML dependencies resolve inline during `execute`; q2 never sees the flag. Q1 passes `false` in one scenario — single-file book formats (PDF/EPUB), where it batches dependency resolution across chapters before the final Pandoc pass (`book-render.ts` sets `resolveDependencies: isMultiFileBookFormat(format)`). q2 renders a file at a time and does not implement that deferred path; when q2 grows single-file book formats, carry the flag on the wire then.
@@ -330,6 +357,11 @@ Define the message types used between Rust and Deno. Both sides need matching de
   - The whole `format.pandoc` map (passed to format detection helpers)
   
   See `external-sources/quarto-cli/src/resources/extension-subtrees/julia-engine/src/julia-engine.ts`.
+
+  > **⚠ Correction — RTQ §PROTO-2/§ENG-3:** `quarto.htmlDependency()` is a per-`Execute`
+  > closure-local **value-constructor**, not a "registration API"/shared accumulator; its output
+  > rides the execute result's `html_dependencies` return field. (The two-channel split itself is
+  > unchanged.) (Text below is the as-built 1a code RTQ corrects.)
 
   **Two disjoint dep channels.** `TsExecuteResult.includes` carries
   Q1-shaped pre-rendered fragments (HTML wrapper file paths,
@@ -442,10 +474,21 @@ and are constructed/consumed only inside `ts_engine.rs` and
 ```rust
 // === Lifecycle response payloads ===
 
+// ⚠ CORRECTION — RTQ §ENG-1 (DQ-4): the discovery tier is completed. `generates_figures` MOVES
+// from `LaunchEngineResult` to `LoadEngineResult`; `can_freeze` and `quarto_required` are ADDED to
+// `LoadEngineResult` (`can_freeze` stays on the instance too — Q1 has both tiers). The FORWARD-NOTE
+// below is now owned by ENG-1; the engine-version gate is deferred to grand-plan Phase 12.
+// (Code below is the as-built 1a code RTQ corrects.)
+
 // Response to LoadEngine — discovery surface (cheap to obtain).
 struct LoadEngineResult {
     name: String,
     valid_extensions: Vec<String>,
+    // FORWARD-NOTE (Plan 1c / D2): add `quarto_required: Option<String>` with
+    // `#[serde(default)]` here (and on the harness `loaded.discovery` shape) so
+    // a TS engine module can report its `quartoRequired` version constraint.
+    // Additive — today's engines omit it. Enforced at first LoadEngine; see
+    // plan1c "Enforce engine version requirements (quartoRequired)".
     // Note: target() is harness-internal — the harness detects it by
     // checking the loaded engine module directly, no flag needed.
     // partitionedMarkdown() is not in the protocol — q2's
@@ -487,6 +530,12 @@ enum TsLanguageClaim {
 }
 
 // === Engine host context (sent with each LaunchEngine) ===
+//
+// ⚠ CORRECTION — RTQ §Item A: this struct is replaced by TWO carriers — `HostGlobalConfig`
+// (resource/runtime/data dirs, pandoc, version, interactive/CI — on a once-per-spawn `Init` frame)
+// and `EngineProjectContext` (`project_dir`, `is_single_file`, `config`, `output_dir` — on each
+// per-render `LaunchEngine`). No shared mutable `HostState.context` slot, no launch-gating.
+// (Code below is the as-built 1a code RTQ corrects.)
 //
 // q2 invention — Quarto 1 engines run in-process and don't need this.
 // Carries only static/global and project-level info. Per-document and
@@ -783,6 +832,12 @@ struct TsExecuteOptions {
 
 // === Execute result (Deno → Rust) ===
 
+// ⚠ CORRECTION — RTQ §FC-1/§FC-2/§PROTO-1: `TsExecuteResult` is NO LONGER the post-fold shape. It
+// carries `engineDependencies` (FC-2) and `metadata`/`pandoc`/`resource_files`/`preserve`/
+// `post_process` as `#[serde(default)]` inert carriers (FC-1); `needs_postprocess` becomes wire-fed
+// (no longer hardcoded `false`); the definition site gains a full field-disposition table (PROTO-1).
+// (Code below is the as-built 1a code RTQ corrects.)
+//
 // Note: this is the response shape AFTER the harness has folded in
 // `engine.dependencies()` resolution. The two dep channels are disjoint
 // (see Phase 1's "Two disjoint dep channels" note):
@@ -942,6 +997,10 @@ implementation handles both via `isAbsolute(script) ? script :
 basename(script)` (`jupyter-filters.ts:74`). If q2's metadata-merge
 already resolves `!path` here, the engine still works. No q2 protocol
 constraint either way.
+
+> **⚠ Correction — RTQ §FC-2:** `TsDependenciesOptions` / `TsDependenciesResult` **are now
+> included** — the `dependencies` round-trip is a wire verb (not "collapsed into Execute"). The list
+> below is the as-built 1a code RTQ corrects.
 
 **Q1 lifecycle types intentionally NOT included:** `TsPartitionedMarkdown`,
 `TsExecutionTarget`, `TsRenderOptions`, `TsRenderResultFile`,

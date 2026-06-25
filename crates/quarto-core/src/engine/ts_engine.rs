@@ -41,8 +41,9 @@ use crate::engine::error::ExecutionError;
 use crate::engine::traits::ExecutionEngine;
 use crate::engine::ts_process::{TsEngineHost, is_available as deno_is_available};
 use crate::engine::ts_protocol::{
-    FromEngine, LaunchEngineResult, LoadEngineResult, ToEngine, TsExecuteOptions,
-    TsFormatIdentifier, TsFormatInfo, TsHtmlDependency, TsLanguageClaim,
+    EngineProjectContext, FromEngine, LaunchEngineResult, LoadEngineResult, ToEngine,
+    TsExecuteOptions, TsExecuteResult, TsFormatIdentifier, TsFormatInfo, TsHtmlDependency,
+    TsLanguageClaim,
 };
 use crate::extension::types::ExtensionId;
 use crate::stage::PandocIncludes;
@@ -116,6 +117,11 @@ pub struct TsEngine {
     /// Instance result — `Mutex<Option>` to allow poisoning.
     instance: Mutex<Option<LaunchEngineResult>>,
 
+    /// Per-render project context. Set by `set_project` before `ensure_launched`.
+    /// Consumed by `ensure_launched` via `unwrap_or_default()`.
+    /// TODO(plan1c): add production call site + render-boundary reset.
+    project: Mutex<Option<EngineProjectContext>>,
+
     // ── Caches ───────────────────────────────────────────────────────────────
     claims_language_cache: Mutex<HashMap<(String, Option<String>), LanguageClaim>>,
     claims_file_cache: Mutex<HashMap<PathBuf, bool>>,
@@ -153,6 +159,7 @@ impl TsEngine {
             host,
             discovery: OnceLock::new(),
             instance: Mutex::new(None),
+            project: Mutex::new(None),
             claims_language_cache: Mutex::new(HashMap::new()),
             claims_file_cache: Mutex::new(HashMap::new()),
             language_hints,
@@ -219,6 +226,12 @@ impl TsEngine {
         Ok(self.discovery.get().unwrap())
     }
 
+    /// Set the per-render project context for the next `ensure_launched` call.
+    /// Production call site + render-boundary reset owned by plan1c.
+    pub fn set_project(&self, project: EngineProjectContext) {
+        *self.project.lock().unwrap() = Some(project);
+    }
+
     fn ensure_launched(&self, c: &Cancellation) -> Result<LaunchEngineResult, ExecutionError> {
         self.ensure_loaded(c)?;
 
@@ -226,7 +239,8 @@ impl TsEngine {
         if let Some(ref result) = *guard {
             return Ok(result.clone());
         }
-        let result = self.host.launch_engine(&self.name, c)?;
+        let project = self.project.lock().unwrap().clone().unwrap_or_default();
+        let result = self.host.launch_engine(&self.name, project, c)?;
         *guard = Some(result.clone());
         Ok(result)
     }
@@ -284,6 +298,9 @@ impl TsEngine {
             handled_languages: ctx.handled_languages.clone(),
             params: None,
             source_map,
+            // v1/Julia always resolves dependencies inline; deferred consumer
+            // (render orchestrator) is RTQ FC-2 and not yet wired.
+            dependencies: true,
         }
     }
 
@@ -305,6 +322,32 @@ impl TsEngine {
                 include_before: inc.before_body.unwrap_or_default(),
                 include_after: inc.after_body.unwrap_or_default(),
             },
+        }
+    }
+
+    /// Map a wire `TsExecuteResult` to the internal `ExecuteResult`.
+    ///
+    /// Extracted for direct unit-testability (F1 test seam).
+    fn map_execute_result(result: TsExecuteResult) -> ExecuteResult {
+        let html_dependencies = result
+            .html_dependencies
+            .into_iter()
+            .map(Self::translate_html_dep)
+            .collect();
+        let includes = Self::translate_includes(result.includes);
+        let supporting_files = result.supporting.into_iter().map(PathBuf::from).collect();
+
+        ExecuteResult {
+            markdown: result.markdown,
+            supporting_files,
+            filters: result.filters,
+            includes,
+            needs_postprocess: result.post_process,
+            html_dependencies,
+            metadata: result.metadata,
+            pandoc: result.pandoc,
+            resource_files: result.resource_files,
+            preserve: result.preserve,
         }
     }
 }
@@ -486,24 +529,7 @@ impl ExecutionEngine for TsEngine {
             })?;
 
         match response {
-            FromEngine::ExecuteResult { result } => {
-                let html_dependencies = result
-                    .html_dependencies
-                    .into_iter()
-                    .map(Self::translate_html_dep)
-                    .collect();
-                let includes = Self::translate_includes(result.includes);
-                let supporting_files = result.supporting.into_iter().map(PathBuf::from).collect();
-
-                Ok(ExecuteResult {
-                    markdown: result.markdown,
-                    supporting_files,
-                    filters: result.filters,
-                    includes,
-                    needs_postprocess: false,
-                    html_dependencies,
-                })
-            }
+            FromEngine::ExecuteResult { result } => Ok(Self::map_execute_result(result)),
             other => Err(ExecutionError::other(format!(
                 "unexpected response to Execute: {other:?}"
             ))),
@@ -610,17 +636,17 @@ mod tests {
     use super::*;
     use crate::engine::ts_process::{MockTransport, MockWriteHalf, TsEngineHost};
     use crate::engine::ts_protocol::{
-        EngineHostContext, FromEngine, LaunchEngineResult, LoadEngineResult, ToEngine,
+        FromEngine, HostGlobalConfig, LaunchEngineResult, LoadEngineResult, ToEngine,
+        TsExecuteResult,
     };
 
     // ── Test helpers ─────────────────────────────────────────────────────────
 
-    fn make_host_context() -> EngineHostContext {
-        EngineHostContext {
-            project_dir: None,
-            is_single_file: true,
+    fn make_host_global_config() -> HostGlobalConfig {
+        HostGlobalConfig {
             resource_dir: "/res".to_string(),
             runtime_dir: "/rt".to_string(),
+            data_dir: "/data".to_string(),
             pandoc_path: None,
             is_interactive_session: false,
             running_in_ci: false,
@@ -633,16 +659,16 @@ mod tests {
             discovery: LoadEngineResult {
                 name: name.to_string(),
                 valid_extensions: exts.into_iter().map(str::to_string).collect(),
+                generates_figures: false,
+                can_freeze: false,
+                quarto_required: None,
             },
         }
     }
 
     fn launched_response() -> FromEngine {
         FromEngine::Launched {
-            instance: LaunchEngineResult {
-                can_freeze: false,
-                generates_figures: false,
-            },
+            instance: LaunchEngineResult { can_freeze: false },
         }
     }
 
@@ -662,7 +688,7 @@ mod tests {
         file_extension_hints: Option<Vec<String>>,
     ) -> (TsEngine, Arc<MockWriteHalf>) {
         let (write, read, mock) = MockTransport::pair_with_handle();
-        let ctx = make_host_context();
+        let ctx = make_host_global_config();
         let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
         let aliases = Arc::new(Mutex::new(HashMap::new()));
         let diag = Arc::new(Mutex::new(Vec::new()));
@@ -700,7 +726,7 @@ mod tests {
     fn test_mock_transport_round_trip_smoke() {
         watchdog(Duration::from_secs(10), || {
             let (write, read, mock) = MockTransport::pair_with_handle();
-            let ctx = make_host_context();
+            let ctx = make_host_global_config();
             let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
 
             mock.script_response(0, loaded_response("julia", vec!["jl"]));
@@ -790,7 +816,7 @@ mod tests {
     fn test_race_free_instance_exclusive() {
         watchdog(Duration::from_secs(15), || {
             let (write, read, mock) = MockTransport::pair_with_handle();
-            let ctx = make_host_context();
+            let ctx = make_host_global_config();
             let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
             mock.enable_auto_echo();
 
@@ -878,7 +904,7 @@ mod tests {
     fn test_race_free_discovery_convergence() {
         watchdog(Duration::from_secs(15), || {
             let (write, read, mock) = MockTransport::pair_with_handle();
-            let ctx = make_host_context();
+            let ctx = make_host_global_config();
             let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
 
             let aliases = Arc::new(Mutex::new(HashMap::new()));
@@ -969,7 +995,7 @@ mod tests {
     fn test_poison_policy_timeout_poisons() {
         watchdog(Duration::from_secs(15), || {
             let (write, read, mock) = MockTransport::pair_with_handle();
-            let ctx = make_host_context();
+            let ctx = make_host_global_config();
             let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
             let aliases = Arc::new(Mutex::new(HashMap::new()));
             let diag = Arc::new(Mutex::new(Vec::new()));
@@ -1035,10 +1061,7 @@ mod tests {
                             FromEngine::ExecuteResult {
                                 result: crate::engine::ts_protocol::TsExecuteResult {
                                     markdown: "# done".to_string(),
-                                    supporting: vec![],
-                                    filters: vec![],
-                                    includes: None,
-                                    html_dependencies: vec![],
+                                    ..Default::default()
                                 },
                             },
                         );
@@ -1079,7 +1102,7 @@ mod tests {
     fn test_poison_policy_execution_failed_does_not_poison() {
         watchdog(Duration::from_secs(10), || {
             let (write, read, mock) = MockTransport::pair_with_handle();
-            let ctx = make_host_context();
+            let ctx = make_host_global_config();
             let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
             let aliases = Arc::new(Mutex::new(HashMap::new()));
             let diag = Arc::new(Mutex::new(Vec::new()));
@@ -1162,7 +1185,7 @@ mod tests {
     fn test_hint_validation_warning_on_missing_ext() {
         watchdog(Duration::from_secs(10), || {
             let (write, read, mock) = MockTransport::pair_with_handle();
-            let ctx = make_host_context();
+            let ctx = make_host_global_config();
             let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
 
             let aliases = Arc::new(Mutex::new(HashMap::new()));
@@ -1188,6 +1211,9 @@ mod tests {
                     discovery: LoadEngineResult {
                         name: "julia".to_string(),
                         valid_extensions: vec!["jl".to_string(), "julia".to_string()],
+                        generates_figures: false,
+                        can_freeze: false,
+                        quarto_required: None,
                     },
                 },
             );
@@ -1246,7 +1272,7 @@ mod tests {
     fn test_claims_language_cache_hit() {
         watchdog(Duration::from_secs(10), || {
             let (write, read, mock) = MockTransport::pair_with_handle();
-            let ctx = make_host_context();
+            let ctx = make_host_global_config();
             let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
 
             let aliases = Arc::new(Mutex::new(HashMap::new()));
@@ -1303,6 +1329,24 @@ mod tests {
         assert_eq!(
             LanguageClaim::from(Some(TsLanguageClaim::Fallback { priority: -1 })),
             LanguageClaim::Fallback(-1)
+        );
+    }
+
+    // ── FC-1: map_execute_result wires post_process → needs_postprocess ───────
+    //
+    // Named revert (a): re-hardcode `needs_postprocess: false` in
+    // `map_execute_result` → this assertion REDS (behavioral bind).
+
+    #[test]
+    fn test_map_execute_result_wires_post_process() {
+        let ts_result = TsExecuteResult {
+            post_process: true,
+            ..Default::default()
+        };
+        let result = TsEngine::map_execute_result(ts_result);
+        assert!(
+            result.needs_postprocess,
+            "post_process: true must wire-feed needs_postprocess: true via map_execute_result"
         );
     }
 }

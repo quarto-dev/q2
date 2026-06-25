@@ -616,22 +616,45 @@ integration that was originally scoped here.
 
 ### Phase 12: Semver Validation for `quarto-required`
 
-**Goal**: Validate the `quarto-required` field in `_extension.yml` against the
-running Quarto version, warning or erroring when an extension requires a version
-the user doesn't have.
+**Goal**: Validate `quarto-required` against the running Quarto version. q2 has **two surfaces that
+share one semver gate**: (1) the **extension-package** field `quarto-required` in `_extension.yml`
+(applies to every extension type; Q1 `extension.ts` `validateExtension`); (2) the
+**engine-discovery** `quarto_required` an engine module declares (carried on `LoadEngineResult` by
+RTQ ENG-1; Q1 `engine.ts` `checkEngineVersionRequirement`). Both check a semver range against
+`cli_version()`.
 
 - [ ] Add `semver` crate dependency (dtolnay's — the de facto Rust standard)
-- [ ] Parse `quarto-required` as `VersionReq` during `read_extension()`
-- [ ] Check against `quarto_util::version::cli_version()` during extension discovery
-- [ ] Emit a diagnostic when version doesn't satisfy the requirement
-- [ ] Optionally parse and store `version` field as `semver::Version`
-- [ ] Tests
+- [ ] **Extension-package gate:** parse `quarto-required` as `VersionReq` during `read_extension()`;
+      check against `quarto_util::version::cli_version()` during extension discovery; emit a
+      diagnostic when unsatisfied.
+- [ ] **Engine-discovery gate:** when `LoadEngineResult.quarto_required` (RTQ ENG-1) is set, check it
+      at engine registration — the q2 analogue of Q1's `checkEngineVersionRequirement` (`engine.ts:62`).
+      Reuse the same `VersionReq` / `cli_version()` helper.
+- [ ] Optionally parse and store the extension's `version` field as `semver::Version`
+- [ ] Tests (both gates)
 
 **Notes**:
 - `cli_version()` returns `"99.9.9-dev"` during development. Under strict semver,
   prereleases don't satisfy range constraints like `>=1.4.0`. Either strip the
   `-dev` suffix before checking or use `99.9.9` as the dev version.
-- TS Quarto warns (not hard error) on version mismatch.
+- **Engine-gate compat version (the 0.x problem).** Released q2 is `0.x`, but Q1 engine modules
+  declare Quarto-**1** ranges (e.g. julia's `quartoRequired: ">=1.9"`). Enforcing the *engine* gate
+  with q2's real version would reject **every** Q1 engine. So the engine gate must check against a
+  **Q1-compatible "engine compat version"** (e.g. `"1.11.0"`), distinct from q2's own
+  `cli_version()` — a deliberate spoof q2 presents to engine `quarto_required` checks. (Surfaced
+  while consolidating plan1c, which originally built this gate in 1c with the spoof; the gate + spoof
+  now live here.) **Compat-version source/value — DECIDED (lifted from plan1c, 2026-06-29):** use a
+  fixed `"1.11.0"`, isolated behind a single `fn engine_compat_version() -> &str { "1.11.0" }` so
+  there is exactly one place to revisit; do **not** scatter the literal. The engine gate compares the
+  engine's `quartoRequired` against `engine_compat_version()` (the spoof), **not** `cli_version()`;
+  `cli_version()` stays the source for the *extension-package* gate. This is a clearly-commented
+  stopgap until q2 settles its real version-compat story with the Q1 engine ecosystem.
+- **Severity — decide deliberately.** Current Q1 source **throws** on *both* surfaces — the
+  extension gate (`extension.ts` `validateExtension`: "… is incompatible with this quarto version")
+  and the engine gate (`engine.ts` `checkEngineVersionRequirement`: hard `throw`). (An earlier note
+  here claimed Q1 *warns*; that is **stale** — the only `…AndWarn` path is for deprecated-now-built-in
+  extensions, not version mismatch.) q2 may keep throw for the engine gate (an unrunnable engine is a
+  hard failure) and choose warn-vs-throw for non-engine contributions.
 - The extension's own `version` field is currently stored as a plain string.
   Could optionally be parsed as `semver::Version` for consistency.
 

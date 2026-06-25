@@ -3,8 +3,8 @@
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** the npm workspace (no epic dependency — independent root, peer of plan1a-protocol)
 **Blocks:** Plan 1b (imports `@quarto/api/config`; depends on `@quarto/types` to typecheck/bundle; its contract tests need the §2aa runtime surface below), Plan 2 (rest of `@quarto/api`; Plan 2E refines `@quarto/types`), Plan 3 (`@quarto/api/jupyter` needs the skeleton)
-**Estimated sessions:** ~1 for the foundation (done) + ~1 for §2aa (the runtime surface, not yet built)
-**Status:** the **foundation** (config + `@quarto/types` + package shell) is implemented on `feature/ts-engine-extensions`. The **§2aa** runtime surface below — the `platform` seam + pure/host-only namespaces — is **not yet built**.
+**Estimated sessions:** ~1 for the foundation (done) + ~1 for §2aa (the runtime surface, **landed**)
+**Status:** the **foundation** (config + `@quarto/types` + package shell) **and** the **§2aa** runtime surface below — the `platform` seam + pure/host-only namespaces — are **landed** on `feature/ts-engine-extensions` (npm build clean; 217 tests pass / 1 skip).
 
 ## Overview
 
@@ -25,7 +25,7 @@ The runtime `@quarto/api` surface that Plan 1b's contract tests exercise — the
 `platform` seam (the q2-original `PlatformHost`) and the pure/host-only
 namespaces (`text`, `markdownRegex`, `mappedString`, `format`, `path`,
 `system`, `console`, `crypto`) — is **§2aa** (the "Section 2aa" below in this
-same plan), and is not yet built. `jupyter` and launch-context method bodies
+same plan), and is **landed**. `jupyter` and launch-context method bodies
 are Plan 3 / Plan 2; the q2-specific `@quarto/types` refinements are Plan 2E.
 The foundation lands first because Plan 1b needs *both* `@quarto/api/config`
 and `@quarto/types` present before it can typecheck.
@@ -137,12 +137,25 @@ them.
 
 ## Section 2aa — `@quarto/api` runtime surface (platform + pure/host-only namespaces)
 
-**Status: not yet built.** Everything above (the `@quarto/api` shell + `config`,
+**Status: landed.** Everything above (the `@quarto/api` shell + `config`,
 and the vendored `@quarto/types`) is the **complete foundation**. This section
 is the runtime `@quarto/api` surface Plan 1b's contract tests require — carved
 out as a distinct section so the foundation's checklist can be marked done
 while this stays open work. It is **not** a separate plan; it is the remaining
 scope of Plan 2A.
+
+> **⚠ Correction — RTQ §Item A (+ B3):** §2aa below describes
+> `path.runtime`/`resource`/`dataDir` and `system.pandoc` as **gated** — throwing
+> `requiresLaunchContextError` until a launch context arrives. RTQ **removes that
+> gate**: under the `Init { global }` / `LaunchEngine { project }` split, the
+> `@quarto/api` `path`/`system` factories close over the process-stable global
+> config injected at harness assembly, so these methods are **ambient** —
+> available before any `launchEngine`, never gated (matching Q1's
+> `resourcePath()`/`quartoRuntimeDir()`). The four `requiresLaunchContextError`
+> stubs are relabeled `notYetImplementedError("Plan 2")` (their *bodies* are
+> deferred to Plan 2, but they are not gated on launch), and the `format.*`
+> "gated without a format argument" claim is debunked. Read every reference to
+> "gated §2aa methods" below in that light. (Text below is the as-built 2A code RTQ corrects.)
 
 Why it's a 1b prerequisite: Plan 1b's contract tests call concrete namespace
 methods (`quarto.text.lines`, `quarto.markdownRegex.*`, `quarto.console.error`,
@@ -192,8 +205,9 @@ subpath and a `// parity:` header. **Pure** namespaces are straight ports (no
 IO); **host-only** namespaces take their IO through `PlatformHost`.
 
 - [x] `src/text/` (**pure**) — `lines`, `trimEmptyLines`, `lineColToIndex`,
-  `executeInlineCodeHandler`, `asYamlText`, `postProcessRestorePreservedHtml`
-  (from `core/lib/text.ts`).
+  `executeInlineCodeHandler`, `asYamlText` (from `core/lib/text.ts`).
+  (`postProcessRestorePreservedHtml` is **deferred** — it does file I/O, not pure;
+  see resolved-decision #3. The landed `text/index.ts` correctly omits it.)
 - [x] `src/markdownRegex/` (**pure**) — `extractYaml`, `partition`,
   `getLanguages`, `getLanguagesWithClasses`, `breakQuartoMd` (from
   `core/lib/break-quarto-md.ts` etc.).
@@ -228,6 +242,13 @@ IO); **host-only** namespaces take their IO through `PlatformHost`.
   `format.isHtmlCompatible` (pure; the gate is only on the
   default-format-from-context path). See the §2aa→1b sequencing note in Plan 1b's
   gated-method tests.
+
+  > **⚠ Correction — RTQ §B1:** the landed `execProcess` reduced Q1's 6-param
+  > signature to `(options, stdin?)`, dropping `mergeOutput`/`stderrFilter` —
+  > which knitr (`rmd.ts:440`) uses. RTQ B1 restores them by flattening into
+  > `ExecProcessOptions` (threaded through `PlatformHost.ExecOptions`). Also,
+  > per the head-of-section correction, `path.runtime`/`resource`/`dataDir` and
+  > `system.pandoc` are **not** gated — they are ambient over the `Init` global.
 - [x] Unit tests per namespace (pure ones: direct input/output; host-only
   ones: inject a fake `PlatformHost`). These back Plan 1b's contract tests —
   if a namespace 1b calls isn't real here, 1b's tests can't pass.

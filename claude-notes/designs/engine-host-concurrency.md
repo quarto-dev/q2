@@ -119,9 +119,11 @@ murders sibling documents). So:
    Rust cannot distinguish "ambiguous" from "clean" (the daemon is a separate
    process; aborting the JS-side `AbortSignal` never proves it went idle). So
    don't classify — scope by which request was interrupted. **`Execute` is the
-   only daemon-engaging request**, so cancel/timeout of an `Execute` **always
-   poisons that engine instance**; every other request engages no daemon and is
-   just failed. Poison = invalidate the instance on both sides (harness drops
+   only daemon-engaging request v1 issues** (this is a v1 fact, not an absolute:
+   Q1's `dependencies()`/`run()` also spawn subprocesses — knitr's `Rscript`,
+   `rmd.ts:407-489` — so the poison scope must be revisited if/when those
+   requests are added), so cancel/timeout of an `Execute` **always poisons that
+   engine instance**; every other request engages no daemon and is just failed. Poison = invalidate the instance on both sides (harness drops
    its `instance` entry; `TsEngine` clears its cached launched-state — which is
    why that cache is a clearable `Mutex<Option<…>>`, not a `OnceLock`), so the
    next instance request re-runs `LaunchEngine` (~0) and gets a fresh
@@ -145,7 +147,29 @@ murders sibling documents). So:
    no special-casing needed. This is plan1b's harness contract; q2 is unaware.
 4. **Whole-subprocess SIGKILL is reserved** for what genuinely affects everyone:
    subprocess crash, a compromised/unparseable control channel, and final
-   teardown.
+   teardown. **This is safe only because execution daemons are spawned truly
+   detached** (own process group / `Deno.Command … detached`; Q1: julia control
+   server, `julia-engine.ts:377`), so SIGKILL of the subprocess never cascades to
+   the daemon. A harness that spawns a daemon *inside* the subprocess's process
+   group breaks this **silently** — lost daemon warmth, a perf regression that
+   won't surface in tests. Spawning execution daemons detached is therefore a
+   **plan1b harness contract.**
+
+**Two invariants this poison/relaunch design rests on.**
+
+- **The cached launched-instance is stateless.** It holds no
+  kernel/socket/dependency state; all durable execution state lives in the
+  detached, transport-file-keyed daemon (model §4.2). That is *why* poison can
+  drop the instance and re-`LaunchEngine` cheaply, and why the cache is a
+  clearable `Mutex<Option<…>>` rather than a `OnceLock`. If a cached instance
+  ever starts holding durable state, this cache (and the poison design) must be
+  revisited.
+- **q2 never touches engine transport files.** Survive-respawn — a re-launched
+  instance reconnecting to its still-running daemon — is delegated wholly to the
+  engine via its on-disk transport file (Q1: `jupyter-kernel.ts:305-324`,
+  `julia-engine.ts:962-964`). q2 never reads, writes, deletes, or keys on those
+  files; it owns only the subprocess lifecycle. This hands-off contract is what
+  makes the cheap drop-and-relaunch above correct.
 
 This reverses the original plan's "no cooperative cancel; SIGKILL is the honest
 path" stance. That reasoning was sound only because SIGKILL was assumed to
