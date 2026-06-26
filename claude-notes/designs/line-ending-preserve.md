@@ -192,7 +192,20 @@ cannot be done responsibly.
 ## Open items
 
 - **Column semantics** (`bd-hn2ddyhf`) is unresolved — it gates the
-  line/col implementations and decides what their tests assert.
+  line/col implementations and decides what their tests assert. The
+  2026-06-26 probes sharpen it: `astContext.line_breaks` omits bare CRs
+  entirely (it is LF-only), so the failure is a missing line break, not a
+  miscounted column. See
+  [`../research/2026-06-26-line-ending-gap-characterization.md`](../research/2026-06-26-line-ending-gap-characterization.md).
+- **BOM** — resolved as preserve-correct at ingress (offsets count it, no
+  leak); not a separate strand. Writer re-emit folds into `bd-3ecwq37k`.
+- **YAML / XML readers** — newly characterized boundaries (YAML block
+  scalars consume CRLF → `SoftBreak`; XML unprobed). Catalog rows added in
+  byte-offset-invariant.md; XML needs an in-crate probe strand, YAML needs
+  offset-validity confirmation before classification.
+- **bare-CR-at-EOF injection** — `ends_with('\n')`-only check appends `\n`
+  after a trailing bare `\r`. Low priority; candidate to fold into
+  `bd-qmtp61ms`.
 
 ## Dev workflow notes
 
