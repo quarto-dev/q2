@@ -3995,27 +3995,12 @@ dependencies = [
 
 [[package]]
 name = "quarto-yaml"
-version = "0.7.0"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c32ab7b39ffa5c43c8aa6abf7eff392678acee63bad5d21680fe295e69b7c2e0"
 dependencies = [
  "quarto-source-map",
- "regex",
  "serde",
- "thiserror 2.0.18",
- "yaml-rust2",
-]
-
-[[package]]
-name = "quarto-yaml-validation"
-version = "0.7.0"
-dependencies = [
- "anyhow",
- "insta",
- "quarto-error-reporting",
- "quarto-source-map",
- "quarto-yaml",
- "regex",
- "serde",
- "serde_json",
  "thiserror 2.0.18",
  "yaml-rust2",
 ]
@@ -6005,19 +5990,6 @@ dependencies = [
  "serde_core",
  "sha1_smol",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "validate-yaml"
-version = "0.7.0"
-dependencies = [
- "anyhow",
- "clap",
- "quarto-error-reporting",
- "quarto-source-map",
- "quarto-yaml",
- "quarto-yaml-validation",
- "serde_json",
 ]
 
 [[package]]
