@@ -15,6 +15,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-06-30
+
+- [`42fa84de`](https://github.com/quarto-dev/q2/commits/42fa84de): The live preview now shows recorded code-execution output (when a project has it) instead of raw `{r}`/`{python}` source, and a "Clear results" control lets you remove that output for the document (and all collaborators) when you want a clean source view.
+
 ### 2026-06-25
 
 - [`d6066dc9`](https://github.com/quarto-dev/q2/commits/d6066dc9): The editing toolbar (and breadcrumb navigator) no longer gets cut off when you edit the very first block of a document with no title — it now flips below the block when there isn't room above.
