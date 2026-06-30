@@ -1366,6 +1366,18 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
+   * Get the index DocHandle for project-scoped ephemeral messaging
+   * (bd-sfet3264). Unlike `getFileHandle` (per-file), the index handle is
+   * the natural carrier for the execution beacon/request protocol: every
+   * peer subscribes to the index doc, so a single ephemeral channel reaches
+   * all of them regardless of which file is active. Returns null before
+   * connect.
+   */
+  function getIndexHandle(): DocHandle<IndexDocument> | null {
+    return state.indexHandle;
+  }
+
+  /**
    * Get all file paths.
    */
   function getFilePaths(): string[] {
@@ -1618,6 +1630,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     clearCapture,
     isConnected,
     getFileHandle,
+    getIndexHandle,
     getFilePaths,
     getUnavailableFiles,
     createNewProject,

@@ -308,6 +308,16 @@ export function getFileHandle(path: string) {
 }
 
 /**
+ * Get the index DocHandle for project-scoped ephemeral messaging
+ * (bd-sfet3264). The execution beacon/request channel broadcasts here so a
+ * single channel reaches every peer regardless of the active file. Returns
+ * null before connect.
+ */
+export function getIndexHandle() {
+  return client?.getIndexHandle() ?? null;
+}
+
+/**
  * Get all current file paths that have handles.
  */
 export function getFilePaths(): string[] {

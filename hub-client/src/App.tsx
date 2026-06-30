@@ -37,6 +37,7 @@ import { useRouting } from './hooks/useRouting';
 import { useProjectSet } from './hooks/useProjectSet';
 import { useAuth } from './hooks/useAuth';
 import { useAuthProbe } from './hooks/useAuthProbe';
+import { useExecutionChannel } from './hooks/useExecutionChannel';
 import { resolveActorId as resolveActorIdRequest } from './services/authService';
 import type { Route, ShareRoute, LinkProjectSetRoute } from './utils/routing';
 import './App.css';
@@ -106,6 +107,12 @@ function App() {
   // preview so recorded engine output can be spliced into the rendered AST.
   const [captures, setCaptures] = useState<Record<string, CaptureRef>>({});
   const [isOnline, setIsOnline] = useState<boolean>(false);
+
+  // bd-sfet3264 (Phase 2D): track which q2 executors are online for the
+  // connected project (via the index-handle capability beacon). No executor
+  // produces beacons until Phase 4, so this is [] in practice today; the
+  // wiring + a read-only indicator are in place for when it lands.
+  const liveExecutors = useExecutionChannel(isOnline, project?.indexDocId ?? null);
 
   // While a project's sync is disconnected, check whether the disconnect is
   // actually an auth rejection (browsers hide the WS upgrade status). Only
@@ -686,6 +693,7 @@ function App() {
               }}
               identities={identities}
               captures={captures}
+              executorsOnline={liveExecutors.length > 0}
               isOnline={isOnline}
             />
           </ErrorBoundary>

@@ -61,6 +61,12 @@ interface Props {
   identities?: Record<string, import('@quarto/preview-runtime').ActorIdentity>;
   /** Path -> recorded engine capture sidecar entry (bd-sfet3264). */
   captures?: Record<string, import('@quarto/preview-runtime').CaptureRef>;
+  /**
+   * Whether at least one q2 executor is currently online for this project
+   * (bd-sfet3264 Phase 2). Read-only indicator for now; the Run affordance
+   * that uses it lands in Phase 4.
+   */
+  executorsOnline?: boolean;
   /** Whether the project is connected to the sync server */
   isOnline: boolean;
 }
@@ -139,7 +145,7 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, isOnline }: Props) {
+export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, isOnline }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
   const { effectiveTheme } = useTheme();
@@ -1086,6 +1092,12 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             >
               ✕
             </button>
+          )}
+          {executorsOnline && (
+            <div className="executor-online-bar" title="A connected q2 client can execute this project's code">
+              <span className="executor-online-dot" aria-hidden="true" />
+              Executor online
+            </div>
           )}
           <ClearCaptureControl
             path={currentFile?.path ?? null}

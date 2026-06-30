@@ -248,6 +248,28 @@ describe('createSyncClient captures (Phase C.3)', () => {
   });
 });
 
+describe('createSyncClient getIndexHandle (bd-sfet3264 Phase 2A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns null before connect and the index DocHandle after connect', async () => {
+    const indexDoc: IndexDocument = { files: {}, version: 2, identities: {} };
+    const { handle } = createMockHandle(indexDoc);
+    installMockRepo(handle, handle);
+
+    const client = createSyncClient(noopCallbacks());
+    // Before connect there is no index handle to broadcast on.
+    expect(client.getIndexHandle()).toBeNull();
+
+    await client.connect('ws://localhost:9999', 'mock-doc-id', 'actor-1', 'Alice', '#FF0000');
+
+    // After connect the index handle is exposed (the ephemeral channel
+    // carrier for the execution beacon/request protocol).
+    expect(client.getIndexHandle()).toBe(handle);
+  });
+});
+
 describe('createSyncClient clearCapture (D6 / bd-sfet3264)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

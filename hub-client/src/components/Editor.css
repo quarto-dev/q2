@@ -311,6 +311,26 @@
   color: #a12d2d;
 }
 
+/* bd-sfet3264 Phase 2: read-only "an executor is online" indicator. */
+.executor-online-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  background: #eefaf0;
+  border-bottom: 1px solid #c7e8cf;
+  color: #1f5130;
+}
+
+.executor-online-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2ea043;
+  flex: 0 0 auto;
+}
+
 .preview-pane.fullscreen {
   flex: 1;
   width: 100%;

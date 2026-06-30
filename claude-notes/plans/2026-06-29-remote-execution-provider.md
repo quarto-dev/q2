@@ -664,9 +664,56 @@ case asserts capture+attribution coexist. Browser wiring
 deferred to Phase 4 (see 1G).
 
 - **Phase 2 — Request + capability channel.** Implement the D2 channel
-  (ephemeral capability beacon + execute request). Expose the needed
-  handle/broadcast API on `SyncClient`. Unit-test the wire format;
-  E2E two browser peers exchanging a request with a stub responder.
+  (ephemeral capability beacon + execute request).
+
+### Phase 2 — decisions locked (2026-06-30) + checklist (TDD)
+
+Resolved with the user:
+- **Q-A — scope:** channel + `SyncClient` API + capability detection +
+  stub-responder tests. The user-facing **Run** affordance is deferred
+  to **Phase 4** (no executor exists yet, so a Run button would be
+  dormant). hub-client *does* consume beacons into a live-executor state
+  in this phase.
+- **Q-B — claims (D5 heartbeat/`--force`/generation):** deferred to
+  **Phase 4** (claims only matter once a real executor can collide).
+- **Q-C — carrier:** the **index `DocHandle`** (project-scoped),
+  exposed via `SyncClient.getIndexHandle()` (mirrors the existing
+  `getFileHandle()` ephemeral surface). Per-file handles would fragment
+  the channel.
+- **Q-D — wire format** (cross-language contract; Rust executor mirrors
+  it in Phase 4): `kind`-discriminated, `exec/`-namespaced JSON on the
+  index handle's ephemeral channel:
+  - beacon → `{ kind: 'exec/beacon', actorId, engines: string[], generation }`
+  - request → `{ kind: 'exec/request', path, requestId, requesterActorId }`
+- **Q-E — timing:** `BEACON_INTERVAL_MS = 3000`,
+  `BEACON_TIMEOUT_MS = 4500` (the locked `TIMEOUT = 1.5 × INTERVAL`).
+
+- **2A — `SyncClient.getIndexHandle()` + preview-runtime export.** ✅ done.
+  - [x] Returns `state.indexHandle` (or null); re-exported from
+        `automergeSync.ts`. RED→GREEN unit test: index handle null
+        before connect, the handle after.
+- **2B — execution-channel wire format + pure helpers.** ✅ done.
+  - [x] `hub-client/src/services/executionChannel.ts`: message types +
+        `makeBeacon`/`makeExecuteRequest`, `parseExecMessage`
+        (validate/discriminate untrusted payloads), `applyBeacon`/
+        `pruneExecutors` (live-executor map keyed on actorId, `1.5×`
+        staleness). RED→GREEN pure unit tests (13).
+- **2C — execution-channel service (stateful).** ✅ done.
+  - [x] `createExecutionChannel({ getIndexHandle, onExecutorsChange,
+        now, ... })`: subscribes to index ephemeral messages →
+        live-executor set + prune timer; `requestExecution(path)`
+        broadcasts an `exec/request`. RED→GREEN stub-responder tests (5)
+        against a fake DocHandle (records broadcasts; injects messages):
+        beacon appears/expires; request shape round-trips through
+        `parseExecMessage`; self-beacon ignored; null when not connected.
+- **2D — wire into hub-client (capability state, no Run UI).** ✅ done.
+  - [x] `useExecutionChannel(isOnline, indexDocId)` hook starts/stops the
+        channel with the connection/project and returns `liveExecutors`
+        (integration test: beacon→executor, teardown). App holds it and
+        passes `executorsOnline` to Editor, which shows a minimal
+        read-only "Executor online" bar (no Run button). Minimal CSS.
+- **2E — verify.** ✅ hub-client unit 680 / integration 86; sync-client
+  108; preview-runtime 74; `tsc -b` + vite build green; typecheck green.
 - **Phase 3 — Rust client peer + BearerDialer (D1=C).** New subcommand
   opens a samod client `Repo`, dials a remote hub with a `BearerDialer`
   fed a token from the auth bridge, `find()`s the index doc. Verify it
