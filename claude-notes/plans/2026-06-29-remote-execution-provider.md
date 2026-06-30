@@ -718,6 +718,62 @@ Resolved with the user:
   opens a samod client `Repo`, dials a remote hub with a `BearerDialer`
   fed a token from the auth bridge, `find()`s the index doc. Verify it
   joins an authenticated session and reads the file list.
+
+### Phase 3 — BearerDialer feasibility spike ✅ (2026-06-30)
+
+De-risked **before** committing to the plan (per user). **Verified
+against the actual dependency** — note it's the **quarto-dev git fork
+`samod@q2` (v0.9.0)**, not crates.io 0.10 — and the
+`BearerDialer` approach is viable with **zero fork changes**:
+
+- `Repo::dial(backoff, Arc<dyn Dialer>)` is **public**
+  (`samod/src/lib.rs:671`); `dial_websocket` is just a convenience
+  wrapper that constructs a `TungsteniteDialer` and calls it
+  (`samod/src/websocket.rs:223`).
+- The `Dialer` trait (`samod/src/dialer.rs`) is public and its
+  `connect()` is documented as called "on the initial dial and on each
+  reconnection attempt after backoff" → a `BearerDialer::connect()`
+  can fetch a **fresh** token from the auth bridge on every (re)connect
+  (exactly the per-connect refresh D2/D1 want).
+- `Transport` + `Transport::new(stream, sink)` are public
+  (`pub use transport::Transport`; `transport.rs:32`). `new` accepts a
+  `Stream<Item=Result<Vec<u8>, E>>` + `Sink<Vec<u8>, Error=E>`.
+- The only non-public helper is the ~25-line `ws_to_bytes`
+  (`websocket.rs:91`) mapping tungstenite `Message` ↔ bytes; we
+  replicate it in our crate (filter Binary, drop Close/Ping/Pong, error
+  on Text). Trivial.
+- Header injection is standard tokio-tungstenite:
+  `url.into_client_request()` → insert `AUTHORIZATION: Bearer <jwt>` →
+  `tokio_tungstenite::connect_async(request)`. Our crate uses its own
+  tokio-tungstenite internally (it only has to *produce* a samod
+  `Transport`), so there's **no tungstenite/http version coupling**
+  with samod beyond the `Transport` boundary.
+
+Recipe (mirrors `TungsteniteDialer::connect`, + auth header + fresh
+token):
+```rust
+impl Dialer for BearerDialer {
+    fn url(&self) -> Url { self.url.clone() }
+    fn connect(&self) -> BoxFuture<'static, Result<Transport, BoxErr>> {
+        let url = self.url.clone();
+        let token_source = self.token_source.clone(); // async fresh-token getter
+        Box::pin(async move {
+            let token = token_source.fresh_bearer().await?;
+            let mut req = url.into_client_request()?;
+            req.headers_mut().insert(AUTHORIZATION, format!("Bearer {token}").parse()?);
+            let (ws, _resp) = tokio_tungstenite::connect_async(req).await?;
+            let (stream, sink) = ws_to_bytes_local(ws); // our replica
+            Ok(Transport::new(stream, sink))
+        })
+    }
+}
+// repo.dial(BackoffConfig::default(), Arc::new(BearerDialer::new(url, token_source)))
+```
+Optional future cleanup: upstream a `dial_websocket_with_request` (or
+`TungsteniteDialer::with_request`) into our fork to avoid the
+`ws_to_bytes` replica — but that needs a fork bump, so not for v1.
+
+**Verdict: no plan change. Proceed with D1=C as designed.**
 - **Phase 4 — Execute-on-request.** Wire the request channel to
   `record_capture_cached`; write the capture doc + sidecar with the
   existing Rust functions; add the capability beacon. E2E: a browser
