@@ -3421,6 +3421,7 @@ dependencies = [
  "quarto-error-catalog",
  "quarto-error-reporting",
  "quarto-hub",
+ "quarto-hub-provider",
  "quarto-lsp",
  "quarto-mcp-launcher",
  "quarto-preview",
@@ -3440,6 +3441,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
  "walkdir",
 ]
 
@@ -3718,6 +3720,7 @@ version = "0.7.0"
 dependencies = [
  "futures",
  "quarto-hub",
+ "quarto-mcp-launcher",
  "samod",
  "serde",
  "serde_json",

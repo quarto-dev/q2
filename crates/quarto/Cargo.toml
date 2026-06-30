@@ -33,8 +33,10 @@ quarto-system-runtime.workspace = true
 quarto-doctemplate.workspace = true
 quarto-lsp = { workspace = true }
 quarto-hub.workspace = true
+quarto-hub-provider = { path = "../quarto-hub-provider" }
 quarto-mcp-launcher = { path = "../quarto-mcp-launcher" }
 quarto-preview = { path = "../quarto-preview" }
+url = "2.5"
 quarto-publish.workspace = true
 quarto-sass.workspace = true
 quarto-test.workspace = true

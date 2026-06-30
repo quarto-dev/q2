@@ -459,6 +459,22 @@ enum Commands {
         args: Vec<String>,
     },
 
+    /// Connect to a hub session as a code-execution provider.
+    ///
+    /// Authenticates with the hub (opening a browser the first time) and
+    /// joins the project's collaborative session, offering this machine to
+    /// run the project's code on request. For now it connects and lists the
+    /// project's files (execution-on-request is coming).
+    ProvideHub {
+        /// A quarto-hub share URL or a bare project index-document id.
+        project: String,
+
+        /// Hub websocket URL (defaults to $QUARTO_HUB_SERVER, else the
+        /// canonical hub).
+        #[arg(long, env = "QUARTO_HUB_SERVER")]
+        server: Option<String>,
+    },
+
     /// Start collaborative hub server for real-time editing.
     /// By default, watches the current directory (or --project path).
     /// Use --no-project to run as a standalone sync server.
@@ -727,6 +743,13 @@ fn main() -> Result<()> {
             compact,
         }),
         Commands::Mcp { args } => commands::mcp::run(&args),
+
+        Commands::ProvideHub { project, server } => {
+            commands::provide_hub::execute(commands::provide_hub::ProvideHubArgs {
+                project,
+                server,
+            })
+        }
 
         Commands::Hub {
             project,

@@ -17,6 +17,8 @@ path = "src/lib.rs"
 samod = { version = "0.9.0", git = "https://github.com/quarto-dev/samod.git", branch = "q2", features = ["tokio", "tungstenite"] }
 # Reused index-document model (file list, capture sidecar) for the join+list path.
 quarto-hub = { path = "../quarto-hub" }
+# Node discovery + the embedded hub-mcp bundle (we spawn its auth-stream entry).
+quarto-mcp-launcher = { path = "../quarto-mcp-launcher" }
 
 # Our own websocket dial with an Authorization: Bearer header. We construct the
 # transport ourselves (producing raw bytes for samod's Transport), so the

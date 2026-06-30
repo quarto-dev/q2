@@ -15,10 +15,12 @@
 mod dialer;
 mod join;
 mod token;
+mod token_bridge;
 
 pub use dialer::BearerDialer;
 pub use join::{JoinConfig, join_and_list_files};
 pub use token::{StaticTokenSource, TokenSource};
+pub use token_bridge::NodeBridge;
 
 /// Errors from joining a hub as an execution provider.
 #[derive(Debug, thiserror::Error)]

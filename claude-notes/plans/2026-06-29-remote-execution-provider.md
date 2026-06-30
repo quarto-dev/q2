@@ -826,16 +826,66 @@ before the Node auth helper:
         `quarto-hub`'s `auth_bearer` tests + the Phase 3C real-binary
         run.) Clippy `-D warnings` clean.
 - **3C — `q2 provide-hub` subcommand + Node auth bridge.**
-  - [ ] clap subcommand in `crates/quarto/src/commands/provide_hub.rs`;
-        takes a share URL / index-doc id + server.
-  - [ ] Thin Node auth-helper entry (in `quarto-hub-mcp` or a sibling)
-        that runs the OAuth loopback + RefreshManager and streams
-        Bearers on stdout; spawned via `quarto-mcp-launcher`. Rust reads
-        the stdout token stream into a `TokenSource` feeding the
-        `BearerDialer`; `{"type":"refresh"}` on stdin pulls a token.
-  - [ ] Tests: token-stream line parser; helper smoke (`--help` /
-        a fake-token mode); end-to-end against the canonical hub
-        (manual, documented per CLAUDE.md).
+
+  Implementation notes (verified 2026-06-30):
+  - **Bearer = the OIDC `id_token`** (a JWT) from
+    `RefreshManager.getValidIdToken()` — byte-identical to what
+    `connection-manager.ts` sends and the hub validates.
+  - **Reuse** `auth/{credential-store,refresh-manager,oauth-config}.ts`
+    + `AuthToolsState` (the OAuth-loopback flow lives there, not in the
+    MCP shim; URL/logs already go to stderr). Boot order mirrors
+    `index.ts:185-265`: `resolveIssuer` → `authServer = () =>
+    discoverAuthorizationServer(issuer)` → `loadOAuthConfigFromEnv` →
+    `new CredentialStore({issuer, clientId})` → `new RefreshManager` →
+    `new AuthToolsState({…, connectionManager: <stub returning
+    'requires-auth'>})`. `handleAuthenticate()` signs in; then stream
+    `getValidIdToken()`; on stdin `{"type":"refresh"}` call
+    `forceRefresh()`.
+  - **Env**: the auth code reads `QUARTO_HUB_MCP_CLIENT_ID` /
+    `QUARTO_HUB_MCP_CLIENT_SECRET` (issuer defaults to Google). The
+    launcher's `defaults::injections` already injects exactly those
+    (compiled-in when not in user env) — so spawning Node with the
+    injected env supplies the creds; dev sets them in their shell.
+  - **Bundle**: `scripts/bundle.mjs` is imperative esbuild (single entry
+    `src/index.ts` → `dist-bundle/index.mjs`). Add `src/auth-stream.ts`
+    as a **second** esbuild entry → `dist-bundle/auth-stream.mjs`; it
+    rides the existing `$QUARTO_HUB_MCP_EMBED_DIR` include_dir.
+  - **Spawn**: the provider reuses `quarto-mcp-launcher`
+    (`bundle::embedded_files`/`content_hash`, `cache::extract_and_lock`,
+    `node::find_node`, `defaults::injections`) to get a Node + the
+    extracted dir, then `tokio::process::Command` runs
+    `node <dir>/auth-stream.mjs` with piped stdin/stdout (holding the
+    `ExtractedBundle` keeps the lifetime lock — we spawn, not exec).
+
+  Steps:
+  - [x] Testable TS protocol core `runTokenStream` (`auth-stream/protocol.ts`)
+        + 7 vitest cases (initial token, refresh, ignore junk, fatal initial
+        error, non-fatal refresh error). `auth-stream.ts` wires it to the real
+        auth boot (reuses `auth/*`; stub `connectionManager`; sign-in on
+        `ReauthRequired`).
+  - [x] `scripts/bundle.mjs`: shared esbuild options + a **second entry** →
+        `dist-bundle/auth-stream.mjs`. Bundle builds; the helper boots and
+        emits the correct error frame on stdout when creds are absent.
+  - [x] Rust `token_bridge.rs` (`NodeBridge`): reuses the launcher
+        (`embedded_files`/`content_hash`/`extract_and_lock`/`find_node`/
+        `injections` — exposed via small new `pub use`s) to spawn
+        `node auth-stream.mjs` with piped stdio (stderr inherited for the
+        sign-in URL); a stdout-reader task parses frames into a token cache;
+        `impl TokenSource`. 4 unit tests on the frame parser. **Integration
+        test** spawns the *real* bundled helper with no creds and asserts the
+        bridge surfaces the error frame (ran, not skipped). `await`-holding-lock
+        fixed (async mutex on stdin).
+  - [x] `q2 provide-hub` clap subcommand: share-URL/index-doc-id + `--server`
+        → `NodeBridge` → `join_and_list_files`. 3 unit tests (share-URL parse,
+        server resolution); help renders; wired in `main.rs`.
+  - [ ] **E2E (real binary) — manual, can't automate interactive Google
+        OAuth.** `q2 hub` (auth on) + `q2 provide-hub <share-url>` →
+        browser sign-in → prints the file list. Coverage standing in for it:
+        `join.rs` (real BearerDialer sync+list) + `auth_bridge.rs` (real
+        Rust↔Node helper plumbing) + the protocol unit tests. (Note: like
+        `q2 mcp`, `q2 provide-hub` needs the hub-mcp bundle built — `cargo
+        xtask build-hub-mcp-bundle`; otherwise it errors at runtime and the
+        gated test skips.)
 - **3D — verify.** `cargo xtask verify`; update checklist; commit.
 - **Phase 4 — Execute-on-request.** Wire the request channel to
   `record_capture_cached`; write the capture doc + sidecar with the
