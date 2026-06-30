@@ -934,21 +934,37 @@ Phase 1 consumption path).
    Reflect `CaptureRef.state` (running/error) + staleness (reuse the
    q2-preview-spa `StaleCaptureOverlay` pattern).
 
-**Open decisions for Phase 4 (need user input — see session):**
-- **D4 authz posture for v1.** Default-open (any player may request;
-  the volunteer opted in by running `provide-hub`; consent surfaced on
-  the provider terminal + the editor's "Executor online" badge) vs
-  gating to **owner-only** from the start. (RCE on the volunteer's
-  machine — the locked D4 was "allow-all + optional owner-only follow-on".)
-- **D5 claims now or later.** Ship **single-executor v1** (no
-  claim/heartbeat/`--force`) to land the payoff, then add the claim
-  protocol when multi-executor is real — vs build claims in Phase 4.
-- **Phase 4 sub-split.** 4a = provider executes + writes capture
-  (verifiable by a *scripted* request, no UI) → 4b = hub-client Run UI.
-  This lets us prove the execution half end-to-end before UI.
-- **Re-execution vs cache.** An explicit Run: force a fresh run, or let
-  `record_capture_cached` skip when `input_qmd` is unchanged? (Lean:
-  respect the cache — unchanged ⇒ instant, changed ⇒ runs.)
+**Decisions locked (2026-06-30):**
+- **D4 — provider-only by default, `--allow-all` to open up.** Default:
+  only the **providing user's own per-project actor id** may trigger
+  execution (same user across their devices — the per-project actor id
+  is stable per `(sub, project)`). The provider fetches its own actor id
+  from the hub's `GET /auth/actor?project=<id>` (with its Bearer) and
+  honors an `exec/request` only when `requesterActorId == self.actorId`.
+  An affirmative **`--allow-all`** flag on `q2 provide-hub` opens
+  execution to **everyone with access to the document**. Noun is
+  **"provider"**, not "owner" (avoid confusion with document ownership).
+  This is the *safe default* — running `provide-hub` does not silently
+  expose your machine to the whole room. Consent is still surfaced (the
+  provider terminal states the mode; the editor's "Executor online"
+  badge shows availability).
+- **D5 — single-executor v1; document the double-execution behavior.**
+  No claim/heartbeat/`--force` yet. **Two providers on one project would
+  *both* execute every request** (duplicate side effects), with the
+  CRDT sidecar converging to one capture and the other orphaned. True
+  single-execution mutual exclusion is *not* achievable peer-to-peer
+  (no atomic CAS across peers) — it needs the hub server as arbiter,
+  which is **deferred to Phase 6**. v1 assumes one provider per project;
+  the editor shows multiple beacons so the situation is visible.
+- **#3 — split 4a/4b.** 4a = provider executes + writes the capture
+  (verifiable by a *scripted* request — no UI, fully testable against a
+  local hub) → 4b = hub-client Run button.
+- **#4 — always force a fresh run.** Use the uncached `record_capture`
+  (never the staleness cache): code may have side effects, and we will
+  not be in the business of proving code is side-effect-free. (Note: this
+  means every Run creates a new capture doc and orphans the prior one —
+  reinforcing that D3 server-side GC is needed for long-lived projects;
+  Phase 5/6.)
 
 - **Phase 5 — Retention (D3) + authorization (D4).** Content-addressed
 - **Phase 5 — Retention (D3) + authorization (D4).** Content-addressed
