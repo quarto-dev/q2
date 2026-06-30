@@ -3713,6 +3713,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-hub-provider"
+version = "0.7.0"
+dependencies = [
+ "futures",
+ "quarto-hub",
+ "samod",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-tungstenite 0.27.0",
+ "tracing",
+ "tungstenite 0.27.0",
+ "url",
+]
+
+[[package]]
 name = "quarto-lsp"
 version = "0.7.0"
 dependencies = [

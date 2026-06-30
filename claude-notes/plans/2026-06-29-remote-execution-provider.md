@@ -804,22 +804,27 @@ the index doc, list the project files. No execution / beacon / temp-dir
 materialization yet (Phase 4). Decomposed to de-risk the Rust sync path
 before the Node auth helper:
 
-- **3A — `BearerDialer` + `TokenSource` (Rust).**
-  - [ ] New crate `quarto-hub-provider` (or module) with `BearerDialer`
-        (impl `samod::Dialer`; the spike recipe + the `ws_to_bytes`
-        replica) and a `TokenSource` trait (`async fresh_bearer()`).
-  - [ ] Unit tests: `ws_to_bytes` replica maps Binary↔bytes / drops
-        Close-Ping-Pong / errors on Text; the client request carries
-        `Authorization: Bearer <token>`.
-- **3B — Rust client peer joins + lists (dev token source).**
-  - [ ] Open a samod `Repo` (memory storage), `repo.dial(backoff,
-        BearerDialer)`, `find()` the index doc, enumerate `files`.
-        Drive it with a **dev token source** (token via env/flag, or a
-        keyring read) so the sync+dialer path is proven before the Node
-        helper exists.
-  - [ ] E2E: against a local `q2 hub` with auth enabled, the provider
-        connects and prints the file list. (The narrow Phase-3 success
-        criterion.)
+- **3A — `BearerDialer` + `TokenSource` (Rust).** ✅ done.
+  - [x] New crate `crates/quarto-hub-provider` with `BearerDialer`
+        (impl `samod::Dialer`; the spike recipe + an in-crate
+        `ws_to_bytes` replica via `inbound_to_bytes`/`outbound_to_ws`)
+        and a `TokenSource` trait (`fresh_bearer() -> BearerFuture`) +
+        `StaticTokenSource`. Uses tokio-tungstenite 0.27 (matches the
+        samod fork).
+  - [x] Unit tests (6): mapping (Binary↔bytes / drop Close-Ping-Pong /
+        error on Text) + the request carries `Authorization: Bearer
+        <token>` and rejects a token with illegal header bytes.
+- **3B — Rust client peer joins + lists (dev token source).** ✅ done.
+  - [x] `join_and_list_files(JoinConfig, Arc<dyn TokenSource>)`: memory
+        `Repo`, `repo.dial(backoff, BearerDialer)`, `handle.established()`
+        with timeout, `IndexDocument::load` → sorted `get_all_files()`.
+  - [x] Integration test (`tests/integration/join.rs`): a bare samod
+        acceptor behind a real tungstenite ws server + a seeded index
+        doc; the provider connects **over the real `BearerDialer`
+        transport**, syncs, and lists the files. (No auth — the header
+        is sent and ignored; the authenticated-acceptance path is
+        `quarto-hub`'s `auth_bearer` tests + the Phase 3C real-binary
+        run.) Clippy `-D warnings` clean.
 - **3C — `q2 provide-hub` subcommand + Node auth bridge.**
   - [ ] clap subcommand in `crates/quarto/src/commands/provide_hub.rs`;
         takes a share URL / index-doc id + server.
