@@ -774,6 +774,64 @@ Optional future cleanup: upstream a `dial_websocket_with_request` (or
 `ws_to_bytes` replica — but that needs a fork bump, so not for v1.
 
 **Verdict: no plan change. Proceed with D1=C as designed.**
+
+### Phase 3 — decisions locked (2026-06-30) + checklist
+
+- **Auth-bridge hand-off (cross-platform):** **Node child's stdout/stdin
+  pipes**, not a Unix-only extra inherited fd. Topology: the Rust
+  `q2 provide-hub` process is the long-running parent; it spawns the
+  Node auth helper as a child (same direction as the `q2 mcp`
+  launcher). Node emits newline-delimited JSON Bearer tokens on
+  **stdout** (`{"type":"token","bearer":…,"expiresAt":…}`) on initial
+  auth + every refresh; logs/auth-URL go to **stderr**; Rust may write
+  `{"type":"refresh"}` to Node **stdin** to pull a token before a
+  reconnect. stdio pipes are identical on Windows/macOS/Linux,
+  process-private (not in argv/env), and stream refreshes. Reuses
+  `quarto-mcp-launcher` (Node discovery + bundle extraction) to spawn
+  the helper; the helper is thin (OAuth loopback + RefreshManager from
+  `quarto-hub-mcp`'s `auth/`, streaming Bearers — it does **not**
+  connect to the hub; that's Rust's job).
+- **File materialization (for Phase 4 execution):** the executor
+  materializes the project to a **fresh temp dir from the VFS each
+  run** (clean, self-contained, safer). Large-file/perf optimizations
+  deferred until usage patterns are known. (Implemented in Phase 4; the
+  decision is recorded here.)
+- **Subcommand name:** working name `q2 provide-hub` (final TBD; avoid
+  `connect` — Posit Connect collision).
+
+Phase 3 deliverable is **narrow**: join an *authenticated* hub, `find()`
+the index doc, list the project files. No execution / beacon / temp-dir
+materialization yet (Phase 4). Decomposed to de-risk the Rust sync path
+before the Node auth helper:
+
+- **3A — `BearerDialer` + `TokenSource` (Rust).**
+  - [ ] New crate `quarto-hub-provider` (or module) with `BearerDialer`
+        (impl `samod::Dialer`; the spike recipe + the `ws_to_bytes`
+        replica) and a `TokenSource` trait (`async fresh_bearer()`).
+  - [ ] Unit tests: `ws_to_bytes` replica maps Binary↔bytes / drops
+        Close-Ping-Pong / errors on Text; the client request carries
+        `Authorization: Bearer <token>`.
+- **3B — Rust client peer joins + lists (dev token source).**
+  - [ ] Open a samod `Repo` (memory storage), `repo.dial(backoff,
+        BearerDialer)`, `find()` the index doc, enumerate `files`.
+        Drive it with a **dev token source** (token via env/flag, or a
+        keyring read) so the sync+dialer path is proven before the Node
+        helper exists.
+  - [ ] E2E: against a local `q2 hub` with auth enabled, the provider
+        connects and prints the file list. (The narrow Phase-3 success
+        criterion.)
+- **3C — `q2 provide-hub` subcommand + Node auth bridge.**
+  - [ ] clap subcommand in `crates/quarto/src/commands/provide_hub.rs`;
+        takes a share URL / index-doc id + server.
+  - [ ] Thin Node auth-helper entry (in `quarto-hub-mcp` or a sibling)
+        that runs the OAuth loopback + RefreshManager and streams
+        Bearers on stdout; spawned via `quarto-mcp-launcher`. Rust reads
+        the stdout token stream into a `TokenSource` feeding the
+        `BearerDialer`; `{"type":"refresh"}` on stdin pulls a token.
+  - [ ] Tests: token-stream line parser; helper smoke (`--help` /
+        a fake-token mode); end-to-end against the canonical hub
+        (manual, documented per CLAUDE.md).
+- **3D — verify.** `cargo xtask verify`; update checklist; commit.
 - **Phase 4 — Execute-on-request.** Wire the request channel to
   `record_capture_cached`; write the capture doc + sidecar with the
   existing Rust functions; add the capability beacon. E2E: a browser
