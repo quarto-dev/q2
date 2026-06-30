@@ -502,6 +502,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path("/project/posts/index.qmd")],
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         }
     }
 
@@ -552,6 +554,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path(host_input)],
             output_dir: project_dir.join("_site"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path(host_input);
         let format = Format::html();

@@ -33,8 +33,7 @@ use quarto_error_reporting::DiagnosticMessage;
 use std::time::Duration;
 
 use crate::engine::{
-    DEFAULT_EXECUTE_TIMEOUT, EngineRegistry, ExecutionContext, ExecutionEngine,
-    detect_engine_sequence, resolve_engines,
+    DEFAULT_EXECUTE_TIMEOUT, EngineRegistry, ExecutionContext, ExecutionEngine, resolve_engines,
 };
 use crate::stage::{
     DocumentAst, EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage,
@@ -79,9 +78,6 @@ pub const ENGINE_CAPTURE_KIND: &str = "EngineCapture";
 /// let pipeline = Pipeline::new(stages)?;
 /// ```
 pub struct EngineExecutionStage {
-    /// Engine registry for looking up engines by name
-    registry: Arc<EngineRegistry>,
-
     /// Engine names whose post-engine output was already provided to the
     /// pipeline out-of-band — specifically, spliced into the AST by
     /// [`CaptureSpliceStage`](super::CaptureSpliceStage) in the q2-preview
@@ -101,23 +97,14 @@ pub struct EngineExecutionStage {
 }
 
 impl EngineExecutionStage {
-    /// Create a new EngineExecutionStage with the default registry.
+    /// Create a new `EngineExecutionStage`.
     ///
-    /// The default registry includes:
-    /// - `markdown` (all platforms) - no-op passthrough
-    /// - `knitr` (native only) - R code execution
-    /// - `jupyter` (native only) - Python/Julia code execution
+    /// The engine registry is **not** stored on the stage — it is read at
+    /// runtime from `ctx.registry`, which `run_pipeline` populates from
+    /// `project.registry` (or an override supplied via
+    /// `RenderContext.engine_registry_override`). See Task 8 of Plan 1c.
     pub fn new() -> Self {
         Self {
-            registry: Arc::new(EngineRegistry::new()),
-            spliced_engines: HashSet::new(),
-        }
-    }
-
-    /// Create with a custom registry (primarily for testing).
-    pub fn with_registry(registry: Arc<EngineRegistry>) -> Self {
-        Self {
-            registry,
             spliced_engines: HashSet::new(),
         }
     }
@@ -138,27 +125,53 @@ impl EngineExecutionStage {
 
     /// Get the engine to use, with fallback behavior.
     ///
-    /// If the requested engine is not available (e.g., jupyter in WASM),
-    /// this returns the markdown engine and adds a warning.
+    /// Looks up `engine_name` in `registry` (which the caller supplies
+    /// from `ctx.registry`). If the requested engine is not available
+    /// (e.g., jupyter in WASM), returns the markdown engine and adds a
+    /// warning.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the engine is **registered** (resolved as an owning
+    /// engine) but its runtime is absent (`is_available() == false`) and its
+    /// output has **not** been spliced in out-of-band (i.e. it is not in
+    /// `spliced_engines`). This is P2-12: a resolved owning engine with no
+    /// available runtime must fail loudly so the user knows the document was
+    /// not executed.
+    ///
+    /// Unregistered engines (the `else` branch) and spliced-but-unavailable
+    /// engines still fall back to markdown silently (the latter's output
+    /// was already recorded server-side).
     fn get_engine_with_fallback(
         &self,
         engine_name: &str,
+        registry: &Arc<EngineRegistry>,
         warnings: &mut Vec<DiagnosticMessage>,
-    ) -> Arc<dyn ExecutionEngine> {
-        if let Some(engine) = self.registry.get(engine_name) {
+    ) -> Result<Arc<dyn ExecutionEngine>, PipelineError> {
+        if let Some(engine) = registry.get(engine_name) {
             // Engine found - check if it's actually available
             if engine.is_available() {
-                return engine;
+                return Ok(engine);
             }
 
-            // Engine exists but isn't available (e.g., R not installed).
-            // Suppress the "(no execution)" warning if this engine's output
-            // was already spliced in out-of-band (bd-sauc9iiq).
-            if !self.spliced_engines.contains(engine_name) {
-                warnings.push(DiagnosticMessage::warning(format!(
-                    "Engine '{}' is not available (runtime not found), using markdown (no execution)",
-                    engine_name
-                )));
+            // Engine exists but its runtime is absent (e.g. R not installed).
+            //
+            // P2-12: if this engine's output was NOT spliced in out-of-band
+            // (q2-preview capture replay), fail loudly so the user learns
+            // their document was not executed. A silent markdown fallback
+            // would silently produce wrong output.
+            if self.spliced_engines.contains(engine_name) {
+                // Output was captured server-side; falling back to markdown
+                // is safe and expected — suppress the warning.
+            } else {
+                return Err(PipelineError::stage_error(
+                    "engine-execution",
+                    format!(
+                        "Engine '{engine_name}' is registered but its runtime is not available. \
+                         Install the required runtime to render this document, or remove the \
+                         engine declaration from the front matter."
+                    ),
+                ));
             }
         } else if !self.spliced_engines.contains(engine_name) {
             // Engine not registered (e.g., jupyter in WASM). Same
@@ -171,7 +184,7 @@ impl EngineExecutionStage {
             )));
         }
 
-        self.registry.default_engine()
+        Ok(registry.default_engine())
     }
 }
 
@@ -208,45 +221,37 @@ impl PipelineStage for EngineExecutionStage {
             ));
         };
 
-        // Step 1: Detect the (ordered, de-duplicated) engine sequence.
-        // bd-5yff4: `engine:` may be an array; engines run in declared
-        // order, each consuming the AST the previous engine produced.
-        let sequence = detect_engine_sequence(&doc_ast.ast.meta);
-
-        // Distinct engines are required; report any duplicates the merge
-        // produced (first occurrence kept). See `EngineSequence`.
-        for dropped in &sequence.dropped_duplicates {
-            ctx.add_diagnostics(vec![DiagnosticMessage::warning(format!(
-                "Duplicate engine '{dropped}' in engine sequence ignored \
-                 (engines must be distinct; the first occurrence is kept — \
-                 use the !prefer merge tag to replace the list)"
-            ))]);
-        }
+        // Step 1: Resolve the engine sequence via the pure resolver.
+        // `claimed_engine_name` is set by Task 10 when a file is claimed by an
+        // extension engine; it short-circuits all tier evaluation and returns
+        // exactly that engine. Registry comes from ctx.registry (threaded from
+        // project.registry in Task 8; may be overridden via
+        // RenderContext.engine_registry_override).
+        let resolution = resolve_engines(
+            &doc_ast.ast.meta,
+            &doc_ast.ast,
+            &ctx.registry,
+            ctx.claimed_engine_name.as_deref(),
+        );
+        ctx.engine_resolution = Some(resolution.clone());
 
         trace_event!(
             ctx,
             EventLevel::Debug,
-            "detected engine sequence: [{}]",
-            sequence
-                .engines
+            "resolved engine sequence: [{}]",
+            resolution
+                .sequence
                 .iter()
                 .map(|e| e.name.as_str())
                 .collect::<Vec<_>>()
                 .join(", ")
         );
 
-        // Step 1b: Run the pure resolver to build the ownership map.
-        // `claimed = None`: file-claim seeding is Plan 1c's job.
-        // The resolution is stashed on StageContext so later stages (profile
-        // lift, etc.) can consume it without re-running the resolver.
-        let resolution = resolve_engines(&doc_ast.ast.meta, &doc_ast.ast, &self.registry, None);
-        ctx.engine_resolution = Some(resolution.clone());
-
         // Resolve the execute.timeout tri-state from metadata.
         let execute_timeout = resolve_execute_timeout(&doc_ast.ast.meta);
 
-        // Step 2: Resolve each detected engine to an implementation (with
-        // fallback), dropping markdown — it's a no-op, so a markdown
+        // Step 2: Resolve each engine in the sequence to an implementation
+        // (with fallback), dropping markdown — it's a no-op, so a markdown
         // engine anywhere in the sequence is skipped (this also covers
         // unavailable engines that fall back to markdown).
         let mut engine_warnings = Vec::new();
@@ -254,8 +259,9 @@ impl PipelineStage for EngineExecutionStage {
             Arc<dyn ExecutionEngine>,
             Option<quarto_pandoc_types::ConfigValue>,
         )> = Vec::new();
-        for detected in &sequence.engines {
-            let engine = self.get_engine_with_fallback(&detected.name, &mut engine_warnings);
+        for detected in &resolution.sequence {
+            let engine =
+                self.get_engine_with_fallback(&detected.name, &ctx.registry, &mut engine_warnings)?;
             if engine.name() == "markdown" {
                 trace_event!(
                     ctx,
@@ -308,6 +314,10 @@ impl PipelineStage for EngineExecutionStage {
         // follow-up.
         let source_context_arc = std::sync::Arc::new(source_context.clone());
 
+        // P2-13: multi-engine flag for partition_cells (must be captured
+        // before `to_run.into_iter()` moves the vec).
+        let multi_engine = to_run.len() > 1;
+
         for (run_index, (engine, engine_config)) in to_run.into_iter().enumerate() {
             // Serialize the current AST to QMD for this engine.
             let (qmd, qmd_source_info) = serialize_ast_to_qmd(&ast)?;
@@ -341,7 +351,10 @@ impl PipelineStage for EngineExecutionStage {
             .with_source_info(qmd_source_info, source_context_arc.clone())
             .with_handled_languages(handled_languages)
             .with_cancellation(ctx.cancellation.clone())
-            .with_execute_timeout(execute_timeout);
+            .with_execute_timeout(execute_timeout)
+            // P2-13: loud "owned-but-unrunnable" gate in partition_cells
+            // fires only in a multi-engine sequence (|sequence| > 1).
+            .with_multi_engine(multi_engine);
 
             trace_event!(ctx, EventLevel::Info, "executing engine: {}", engine.name());
             let mut result = engine
@@ -777,6 +790,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -867,10 +882,10 @@ mod tests {
 
         let result = output.into_document_ast().expect("Should be DocumentAst");
 
-        // Should fall back to markdown and produce a warning
+        // With resolution-driven execution (Task 9): no code cells in the
+        // document → resolve_engines returns an empty sequence → no engine
+        // runs, no diagnostic emitted. The document still passes through.
         assert!(!result.ast.blocks.is_empty());
-        assert!(!ctx.diagnostics.is_empty());
-        assert!(ctx.diagnostics[0].title.contains("not available"));
     }
 
     #[tokio::test]
@@ -889,13 +904,149 @@ mod tests {
         assert!(matches!(err, PipelineError::UnexpectedInput { .. }));
     }
 
+    // ──────────────────────────────────────────────────────────────────────────
+    // P2-12: registered OWNING engine whose runtime is absent must LOUD-ERROR,
+    // not silently fall back to markdown.
+    //
+    // Binding test: end-to-end through `run()` with a registered-but-unavailable
+    // engine. Currently (before P2-12) the stage warns + falls back to markdown
+    // (Ok). After P2-12 it must Err loudly.
+    //
+    // Vacuity revert: remove the after-resolution availability gate (always
+    // fall back to markdown) ⇒ this test goes RED (result is Ok, not Err).
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /// Helper: an engine that is registered in the registry (so resolution
+    /// puts it in the sequence) but whose runtime is absent (`is_available =
+    /// false`). Used by P2-12 tests.
+    struct RegisteredUnavailableEngine;
+
+    impl crate::engine::ExecutionEngine for RegisteredUnavailableEngine {
+        fn name(&self) -> &str {
+            "registered-unavailable"
+        }
+        fn execute(
+            &self,
+            _input: &str,
+            _ctx: &crate::engine::ExecutionContext,
+        ) -> std::result::Result<crate::engine::ExecuteResult, crate::engine::ExecutionError>
+        {
+            unreachable!("registered-unavailable is never invoked")
+        }
+        fn is_available(&self) -> bool {
+            false
+        }
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "registered-unavailable" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
+            }
+        }
+    }
+
+    /// P2-12: a registered engine with `is_available()=false` and no spliced
+    /// capture must cause `run()` to return a loud `PipelineError`, not Ok.
+    #[tokio::test]
+    async fn test_p2_12_owning_engine_unavailable_fails_loudly() {
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(RegisteredUnavailableEngine));
+
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+
+        // Document declares the engine + has a cell so resolution puts it in
+        // the sequence (resolution-driven execution, Task 9).
+        let content =
+            b"---\nengine: registered-unavailable\n---\n\n```{registered-unavailable}\nx\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        let result = stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await;
+
+        // P2-12: must be a loud error, NOT a silent markdown fallback (Ok +
+        // warning). The render must halt with an actionable message.
+        assert!(
+            result.is_err(),
+            "P2-12: registered but unavailable owning engine must loud-error through pipeline; \
+             got Ok (old silent-fallback behaviour)"
+        );
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("registered-unavailable"),
+            "P2-12: error message must name the engine; got: {err_msg}"
+        );
+        // No "not available" warning diagnostic (the hard error IS the signal).
+        assert!(
+            !ctx.diagnostics
+                .iter()
+                .any(|d| d.title.contains("not available")),
+            "P2-12: error path must not also emit a warning; got: {:?}",
+            ctx.diagnostics
+                .iter()
+                .map(|d| d.title.clone())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// P2-12 guard: a registered unavailable engine that IS in `spliced_engines`
+    /// must still fall back silently (the output was recorded server-side).
+    #[tokio::test]
+    async fn test_p2_12_spliced_unavailable_engine_still_silent() {
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(RegisteredUnavailableEngine));
+
+        // Mark as spliced — preview pipeline with a server-recorded capture.
+        let stage = EngineExecutionStage::new()
+            .with_spliced_engines(["registered-unavailable".to_string()]);
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+
+        let content =
+            b"---\nengine: registered-unavailable\n---\n\n```{registered-unavailable}\nx\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        // Must NOT fail — spliced capture means the output is already present.
+        let result = stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await;
+        assert!(
+            result.is_ok(),
+            "spliced + unavailable must still fall back silently, not loud-error; \
+             got: {:?}",
+            result.unwrap_err()
+        );
+        // No warning about availability either.
+        assert!(
+            !ctx.diagnostics
+                .iter()
+                .any(|d| d.title.contains("not available")),
+            "spliced engine must suppress the availability warning; got: {:?}",
+            ctx.diagnostics
+                .iter()
+                .map(|d| d.title.clone())
+                .collect::<Vec<_>>()
+        );
+    }
+
     #[test]
     fn test_engine_fallback_with_unavailable_engine() {
         let stage = EngineExecutionStage::new();
+        let registry = Arc::new(EngineRegistry::new());
         let mut warnings = Vec::new();
 
-        // Request an engine that doesn't exist
-        let engine = stage.get_engine_with_fallback("nonexistent-engine", &mut warnings);
+        // Request an engine that doesn't exist (UNREGISTERED — different from
+        // P2-12 which targets REGISTERED-but-unavailable engines).
+        // Unregistered engines still warn + fall back to markdown (unchanged).
+        let engine = stage
+            .get_engine_with_fallback("nonexistent-engine", &registry, &mut warnings)
+            .expect("unregistered engine falls back to markdown (not a loud error)");
 
         // Should fall back to markdown
         assert_eq!(engine.name(), "markdown");
@@ -911,9 +1062,12 @@ mod tests {
     fn test_spliced_engine_suppresses_fallback_warning() {
         let stage =
             EngineExecutionStage::new().with_spliced_engines(["nonexistent-engine".to_string()]);
+        let registry = Arc::new(EngineRegistry::new());
         let mut warnings = Vec::new();
 
-        let engine = stage.get_engine_with_fallback("nonexistent-engine", &mut warnings);
+        let engine = stage
+            .get_engine_with_fallback("nonexistent-engine", &registry, &mut warnings)
+            .expect("unregistered spliced engine falls back to markdown (not a loud error)");
 
         // Still falls back to markdown (the engine isn't registered)...
         assert_eq!(engine.name(), "markdown");
@@ -932,15 +1086,20 @@ mod tests {
     fn test_unspliced_engine_still_warns_when_sibling_spliced() {
         let stage =
             EngineExecutionStage::new().with_spliced_engines(["spliced-engine".to_string()]);
+        let registry = Arc::new(EngineRegistry::new());
         let mut warnings = Vec::new();
 
         // The spliced one is silent.
-        let e1 = stage.get_engine_with_fallback("spliced-engine", &mut warnings);
+        let e1 = stage
+            .get_engine_with_fallback("spliced-engine", &registry, &mut warnings)
+            .expect("spliced unregistered engine falls back silently (not a loud error)");
         assert_eq!(e1.name(), "markdown");
         assert!(warnings.is_empty());
 
         // A different, un-spliced engine still warns as before.
-        let e2 = stage.get_engine_with_fallback("other-engine", &mut warnings);
+        let e2 = stage
+            .get_engine_with_fallback("other-engine", &registry, &mut warnings)
+            .expect("unregistered unspliced engine falls back with warning (not a loud error)");
         assert_eq!(e2.name(), "markdown");
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].title.contains("not available"));
@@ -1003,11 +1162,27 @@ mod tests {
     }
 
     /// Mock engine that returns includes to test the knitr gap fix.
+    ///
+    /// Declares `claims_language` Primary(1) for "mock-includes" so the
+    /// resolver includes it in the sequence when a `{mock-includes}` cell
+    /// is present (resolution-driven execution, Task 9).
     struct MockIncludesEngine;
 
     impl crate::engine::ExecutionEngine for MockIncludesEngine {
         fn name(&self) -> &str {
             "mock-includes"
+        }
+
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "mock-includes" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
+            }
         }
 
         fn execute(
@@ -1036,11 +1211,27 @@ mod tests {
     /// Mock engine that appends a fresh paragraph to the input — lets us
     /// verify that blocks added by the engine get the intermediate FileId
     /// while original blocks keep their `.qmd` FileId.
+    ///
+    /// Declares `claims_language` Primary(1) for "mock-appending" so the
+    /// resolver includes it in the sequence when a `{mock-appending}` cell
+    /// is present (resolution-driven execution, Task 9).
     struct MockAppendingEngine;
 
     impl crate::engine::ExecutionEngine for MockAppendingEngine {
         fn name(&self) -> &str {
             "mock-appending"
+        }
+
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "mock-appending" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
+            }
         }
 
         fn execute(
@@ -1133,10 +1324,13 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(MockAppendingEngine));
 
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
 
-        let content = b"---\nengine: mock-appending\n---\n\n# Hello\n\nOriginal paragraph.";
+        // A {mock-appending} cell is required so resolution-driven execution
+        // (Task 9) includes the engine in the sequence.
+        let content = b"---\nengine: mock-appending\n---\n\n# Hello\n\nOriginal paragraph.\n\n```{mock-appending}\nx\n```\n";
         let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1189,19 +1383,25 @@ mod tests {
         use crate::engine::FixtureEngine;
 
         let mut registry = EngineRegistry::new();
+        // Under resolution-driven execution (Task 9), the engine sequence is
+        // determined from the ORIGINAL AST — so both {fixture-a} and {fixture-b}
+        // cells must be present from the start for both engines to run.
+        // fixture-a processes its own cell; fixture-b processes the pre-existing
+        // {fixture-b} cell (not a handoff generated by fixture-a at runtime).
         registry.register(Arc::new(FixtureEngine::with_results(
             "fixture-a",
-            vec!["```{fixture-b}\nhanded-off\n```".to_string()],
+            vec!["from A".to_string()],
         )));
         registry.register(Arc::new(FixtureEngine::with_results(
             "fixture-b",
             vec!["Final output from B.".to_string()],
         )));
 
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
 
-        let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\n```{fixture-a}\nseed\n```\n";
+        let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\n```{fixture-a}\nseed\n```\n\n```{fixture-b}\nseed-b\n```\n";
         let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1241,8 +1441,9 @@ mod tests {
             vec!["Para from B.".to_string()],
         )));
 
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
 
         // One kept prose block + one cell per engine (both present from
         // the start; fixture-a leaves fixture-b's cell untouched).
@@ -1294,8 +1495,9 @@ mod tests {
             vec!["spliced once".to_string()],
         )));
 
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
 
         // engine declared twice; one fixture-a cell. If dedup failed,
         // fixture-a would run twice and the second run's count check
@@ -1310,14 +1512,11 @@ mod tests {
         let qmd = serialize_ast_to_qmd(&result.ast).unwrap().0;
         assert!(qmd.contains("spliced once"), "got:\n{qmd}");
         // Only one intermediate slot — the engine ran exactly once.
+        // With resolution-driven execution (Task 9), dedup is silent: the
+        // duplicate engine name is collapsed in `candidate_engines`, so no
+        // "Duplicate engine" diagnostic is emitted. The observable behavior
+        // (one run, one intermediate slot) is the same as before.
         assert_eq!(result.ast_context.filenames.len(), 2);
-        assert!(
-            ctx.diagnostics
-                .iter()
-                .any(|d| d.title.contains("Duplicate engine 'fixture-a'")),
-            "expected a duplicate-engine diagnostic; got: {:?}",
-            ctx.diagnostics
-        );
     }
 
     /// A markdown engine anywhere in the sequence is skipped (no-op),
@@ -1332,8 +1531,9 @@ mod tests {
             vec!["from A".to_string()],
         )));
 
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
 
         let content = b"---\nengine: [markdown, fixture-a]\n---\n\n```{fixture-a}\nx\n```\n";
         let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
@@ -1385,19 +1585,23 @@ mod tests {
         ));
 
         let mut registry = EngineRegistry::new();
+        // Under resolution-driven execution (Task 9), both cells must be present
+        // in the original AST so both engines appear in the sequence.
         registry.register(Arc::new(FixtureEngine::with_results(
             "fixture-a",
-            vec!["```{fixture-b}\nfrom-a\n```".to_string()],
+            vec!["from A".to_string()],
         )));
         registry.register(Arc::new(FixtureEngine::with_results(
             "fixture-b",
             vec!["Final B".to_string()],
         )));
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
         ctx.observer = observer.clone();
 
-        let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\n```{fixture-a}\nseed\n```\n";
+        let content =
+            b"---\nengine: [fixture-a, fixture-b]\n---\n\n```{fixture-a}\nseed\n```\n\n```{fixture-b}\nseed-b\n```\n";
         let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
         stage
             .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
@@ -1440,7 +1644,9 @@ mod tests {
         use crate::stage::JsonTraceObserver;
         use quarto_trace::RenderInfo;
 
-        let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\n```{fixture-a}\nseed\n```\n";
+        // Under resolution-driven execution (Task 9), both cells must be present
+        // in the original AST so both engines appear in the sequence.
+        let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\n```{fixture-a}\nseed\n```\n\n```{fixture-b}\nseed-b\n```\n";
 
         // --- Record pass: real fixture engines + trace observer. ---
         let dir = std::env::temp_dir().join(format!(
@@ -1460,14 +1666,15 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(FixtureEngine::with_results(
             "fixture-a",
-            vec!["```{fixture-b}\nfrom-a\n```".to_string()],
+            vec!["from A".to_string()],
         )));
         registry.register(Arc::new(FixtureEngine::with_results(
             "fixture-b",
             vec!["Final B".to_string()],
         )));
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
         ctx.observer = observer.clone();
 
         let output_recorded = stage
@@ -1492,8 +1699,9 @@ mod tests {
         for capture in captures {
             replay_registry.register(Arc::new(ReplayEngine::new(capture)));
         }
-        let replay_stage = EngineExecutionStage::with_registry(Arc::new(replay_registry));
+        let replay_stage = EngineExecutionStage::new();
         let mut replay_ctx = make_test_context();
+        replay_ctx.registry = Arc::new(replay_registry);
 
         let output_replayed = replay_stage
             .run(
@@ -1523,11 +1731,15 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(MockIncludesEngine));
 
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
 
-        // Force engine: mock-includes via metadata
-        let content = b"---\ntitle: Test\nengine: mock-includes\n---\n\n# Hello\n\nWorld";
+        // Force engine: mock-includes via metadata. A {mock-includes} cell is
+        // required so resolution-driven execution (Task 9) includes the engine
+        // in the sequence (MockIncludesEngine claims Primary(1) for its name).
+        let content =
+            b"---\ntitle: Test\nengine: mock-includes\n---\n\n# Hello\n\nWorld\n\n```{mock-includes}\nx\n```\n";
         let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1551,11 +1763,14 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(MockIncludesEngine));
 
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
 
-        // Force engine: mock-includes via metadata
-        let content = b"---\ntitle: Test\nengine: mock-includes\n---\n\n# Hello\n\nWorld";
+        // Force engine: mock-includes via metadata. A {mock-includes} cell is
+        // required so resolution-driven execution (Task 9) includes the engine
+        // in the sequence (MockIncludesEngine claims Primary(1) for its name).
+        let content = b"---\ntitle: Test\nengine: mock-includes\n---\n\n# Hello\n\nWorld\n\n```{mock-includes}\nx\n```\n";
         let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1704,7 +1919,10 @@ mod tests {
         // Document declares the replay engine's name verbatim. The
         // stage will serialize this AST to QMD and hand it to the
         // engine, so we record the serialized form as input_qmd.
-        let content = b"---\nengine: mock-replay-engine\n---\n\n# Hello\n\nWorld\n";
+        // A {mock-replay-engine} cell is required so resolution-driven
+        // execution (Task 9) includes the engine in the sequence.
+        let content =
+            b"---\nengine: mock-replay-engine\n---\n\n# Hello\n\nWorld\n\n```{mock-replay-engine}\nx\n```\n";
         let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
         let (serialized_qmd, _) = serialize_ast_to_qmd(&doc_ast.ast).unwrap();
 
@@ -1728,8 +1946,9 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(ReplayEngine::new(capture)));
 
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
 
         let input = PipelineData::DocumentAst(doc_ast);
         let _output = stage.run(input, &mut ctx).await.unwrap();
@@ -1813,11 +2032,15 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(MockIncludesEngine));
 
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
         ctx.observer = observer.clone();
 
-        let content = b"---\nengine: mock-includes\n---\n\n# Hello\n\nWorld\n";
+        // A {mock-includes} cell is required so resolution-driven execution
+        // (Task 9) includes the engine in the sequence and the capture is emitted.
+        let content =
+            b"---\nengine: mock-includes\n---\n\n# Hello\n\nWorld\n\n```{mock-includes}\nx\n```\n";
         let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1889,12 +2112,16 @@ mod tests {
 
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(MockIncludesEngine));
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
 
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
         ctx.observer = observer.clone();
 
-        let content = b"---\nengine: mock-includes\n---\n\n# Hello\n\nWorld\n";
+        // A {mock-includes} cell is required so resolution-driven execution
+        // (Task 9) includes the engine in the sequence and the capture is emitted.
+        let content =
+            b"---\nengine: mock-includes\n---\n\n# Hello\n\nWorld\n\n```{mock-includes}\nx\n```\n";
         let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1971,7 +2198,10 @@ mod tests {
         // something to collapse — three identical snapshots become one
         // entry in the `asts` map. We go through the public observer
         // API (`on_stage_data`) to mirror exactly what real stages do.
-        let content = b"---\nengine: mock-includes\n---\n\n# Hello\n\nWorld\n";
+        // A {mock-includes} cell is required so resolution-driven execution
+        // (Task 9) includes the engine in the sequence and the capture fires.
+        let content =
+            b"---\nengine: mock-includes\n---\n\n# Hello\n\nWorld\n\n```{mock-includes}\nx\n```\n";
         let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
         let pipeline_data = PipelineData::DocumentAst(doc_ast.clone());
         for (i, stage_name) in ["metadata-merge", "include-expansion", "unwrap-profile"]
@@ -1992,8 +2222,9 @@ mod tests {
         // populated engine_capture.
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(MockIncludesEngine));
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
         ctx.observer = observer.clone();
 
         stage
@@ -2089,7 +2320,11 @@ mod tests {
         use crate::engine::{EngineRegistry, ReplayEngine};
         use quarto_trace::EngineCapture;
 
-        let content = b"---\nengine: mock-replay-engine\n---\n\n# Real\n";
+        // A {mock-replay-engine} cell is required so resolution-driven execution
+        // (Task 9) includes the engine in the sequence. The capture's input_qmd
+        // is deliberately different — that's what causes the miss.
+        let content =
+            b"---\nengine: mock-replay-engine\n---\n\n# Real\n\n```{mock-replay-engine}\nx\n```\n";
         let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
 
         // Capture deliberately recorded against different input.
@@ -2113,8 +2348,9 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(ReplayEngine::new(capture)));
 
-        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
+        let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
 
         let input = PipelineData::DocumentAst(doc_ast);
         let err = stage

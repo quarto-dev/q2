@@ -310,6 +310,33 @@ enum Commands {
         target: Vec<String>,
     },
 
+    /// Build a TypeScript engine extension into a deployable .js bundle.
+    ///
+    /// Extension authors run this after editing TypeScript source; `q2` never
+    /// runs it during render. The output path is read from the `path` field in
+    /// `_extension.yml`.
+    ///
+    /// Config precedence (highest to lowest):
+    ///   1. `--config <path>` — explicit override.
+    ///   2. `deno.json` in the extension directory — committed alongside the extension.
+    ///   3. Workspace `deno.workspace.json` — auto-detected (or `--workspace`).
+    ///   4. Shipped published template (`resources/extension-build/deno.json`).
+    #[command(name = "build-ts-extension")]
+    BuildTsExtension {
+        /// Path to the extension directory or `_extension.yml`.
+        /// Defaults to the current working directory.
+        path: Option<PathBuf>,
+
+        /// Explicit deno.json config (wins over all auto-detected configs).
+        #[arg(long)]
+        config: Option<PathBuf>,
+
+        /// Use the in-repo workspace deno.workspace.json (for building before
+        /// packages are published — e.g. the q2 echo fixture).
+        #[arg(long)]
+        workspace: bool,
+    },
+
     /// Convert documents to alternate representations
     Convert {
         /// Input file to convert
@@ -762,6 +789,17 @@ fn main() -> Result<()> {
         Commands::Add { .. } => commands::add::execute(),
         Commands::Update { .. } => commands::update::execute(),
         Commands::Remove { .. } => commands::remove::execute(),
+        Commands::BuildTsExtension {
+            path,
+            config,
+            workspace,
+        } => commands::build_ts_extension::execute(
+            commands::build_ts_extension::BuildTsExtensionArgs {
+                path,
+                config,
+                workspace,
+            },
+        ),
         Commands::Convert { .. } => commands::convert::execute(),
         Commands::Pandoc { .. } => commands::pandoc::execute(),
         Commands::Typst { .. } => commands::typst::execute(),

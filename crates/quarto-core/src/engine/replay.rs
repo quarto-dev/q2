@@ -46,6 +46,7 @@ use std::sync::Arc;
 
 use quarto_trace::EngineCapture;
 
+use super::LanguageClaim;
 use super::context::{ExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use super::traits::ExecutionEngine;
@@ -90,6 +91,25 @@ impl ExecutionEngine for ReplayEngine {
         // Surface the recorded engine's name so the registry slot
         // matches what the document's `engine:` metadata declares.
         &self.capture.engine_name
+    }
+
+    /// Claim Primary(1) for the recorded engine's own name as a language.
+    ///
+    /// In test fixtures the cell language equals the engine name (e.g.
+    /// `{mock-replay-engine}` cells are handled by a `ReplayEngine` named
+    /// "mock-replay-engine"). This makes the resolver include the replay
+    /// engine in the resolution sequence so the stage actually calls it.
+    ///
+    /// For real-world engines whose cell languages differ from their engine
+    /// name (e.g. knitr uses `{r}` cells), this claim is harmless — there
+    /// are no `{knitr}` cells, so the claim never fires. Those engines are
+    /// reached via the explicit `engine:` list + T2 Fallback instead.
+    fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        if language == self.capture.engine_name {
+            LanguageClaim::Primary(1)
+        } else {
+            LanguageClaim::None
+        }
     }
 
     fn execute(

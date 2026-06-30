@@ -18,3 +18,15 @@ export type PandocIncludeLocation =
 export type PandocIncludes = {
   [K in PandocIncludeLocation]?: string[];
 };
+
+/**
+ * Structured HTML dependency manifest.
+ * Mirrors the Rust `TsHtmlDependency` wire type from `ts_protocol.rs`.
+ * `stylesheets` and `scripts` are optional here (the harness normalizes to []
+ * at serialization time when needed).
+ */
+export interface HtmlDependency {
+  name: string;
+  stylesheets?: string[];
+  scripts?: string[];
+}

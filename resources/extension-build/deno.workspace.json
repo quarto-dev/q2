@@ -1,0 +1,14 @@
+{
+  "nodeModulesDir": "auto",
+  "imports": {
+    "@quarto/api":    "../../ts-packages/quarto-api/src/index.ts",
+    "@quarto/api/":   "../../ts-packages/quarto-api/src/",
+    "@quarto/types":  "../../ts-packages/quarto-types/src/index.ts",
+    "@quarto/types/": "../../ts-packages/quarto-types/src/",
+    "@std/":          "jsr:/@std/"
+  },
+  "compilerOptions": {
+    "strict": true,
+    "lib": ["deno.ns", "DOM", "ES2021"]
+  }
+}

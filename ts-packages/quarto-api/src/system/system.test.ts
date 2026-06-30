@@ -64,6 +64,10 @@ function makeFakeHost(overrides?: {
       makeTempDir: makeTempDirSpy,
       makeTempFile: makeTempFileSpy,
       remove: removeSpy,
+      walk: vi.fn(
+        (_root: string, _opts?: { maxDepth?: number; includeDirs?: boolean }) =>
+          [] as Array<{ path: string; isFile: boolean; isDirectory: boolean }>,
+      ),
     },
     // Expose spies for assertion
     spies: {

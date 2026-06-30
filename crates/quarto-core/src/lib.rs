@@ -88,6 +88,14 @@ pub use transforms::{
     ResourceCollectorTransform, TitleBlockTransform,
 };
 
+/// Return the current `quarto-core` crate version (from `Cargo.toml`).
+///
+/// Used by `build_engine_registry` to populate `HostGlobalConfig.quarto_version`.
+/// `quarto-core`'s version tracks the overall Quarto release version.
+pub fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
 // Re-export render-to-file types (native only)
 #[cfg(not(target_arch = "wasm32"))]
 pub use render_to_file::{

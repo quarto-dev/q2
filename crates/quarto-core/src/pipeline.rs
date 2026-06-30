@@ -60,10 +60,10 @@ use crate::stage::stages::BootstrapJsStage;
 use crate::stage::stages::ClipboardJsStage;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
-    DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage,
-    LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage, LoadedSource, MathJsStage,
-    MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
-    PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, StageContext,
+    DocumentProfileStage, EngineClaimsFileStage, EngineExecutionStage, IncludeExpansionStage,
+    IncludeResolveStage, LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage,
+    LoadedSource, MathJsStage, MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData,
+    PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, StageContext,
     UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
@@ -255,31 +255,25 @@ pub fn build_html_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
 pub fn build_html_pipeline_stages_with_apply_config(
     apply_config: Option<ApplyTemplateConfig>,
 ) -> Vec<Box<dyn PipelineStage>> {
-    build_html_pipeline_stages_with_options(apply_config, None)
+    build_html_pipeline_stages_with_options(apply_config)
 }
 
 /// Like [`build_html_pipeline_stages_with_apply_config`], but also
-/// accepts an optional [`crate::engine::EngineRegistry`] override for
-/// the [`EngineExecutionStage`].
-///
-/// When `engine_registry` is `Some`, the stage is constructed via
-/// [`EngineExecutionStage::with_registry`] using the caller's
-/// registry — this is the seam the orchestrator/CLI replay path uses
-/// to substitute a [`crate::engine::ReplayEngine`] without touching
-/// the rest of the pipeline (bd-45yw).
-///
-/// When `engine_registry` is `None`, the stage builds its own default
-/// registry (markdown + native engines), preserving pre-bd-45yw
-/// behavior for every existing call site.
+/// accepts an optional `ApplyTemplateConfig`.  The engine registry is
+/// now carried on [`crate::stage::StageContext`] (Task 8 of the
+/// ts-engine-extensions plan) — callers that need a non-default
+/// registry set `ctx.engine_registry_override` (or equivalently
+/// `HtmlRenderConfig.engine_registry`) before calling `run_pipeline`,
+/// which applies it after constructing the `StageContext`.
 pub fn build_html_pipeline_stages_with_options(
     apply_config: Option<ApplyTemplateConfig>,
-    engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
 ) -> Vec<Box<dyn PipelineStage>> {
-    let engine_stage = match engine_registry {
-        Some(reg) => EngineExecutionStage::with_registry(reg),
-        None => EngineExecutionStage::new(),
-    };
+    let engine_stage = EngineExecutionStage::new();
     let mut stages: Vec<Box<dyn PipelineStage>> = vec![
+        // Convert non-QMD files (e.g. .echo, .jl, .ipynb) to QMD before parse.
+        // First engine in deterministic order that claims the file wins.
+        // .qmd / .md files pass through unchanged; unclaimed non-QMD files error.
+        Box::new(EngineClaimsFileStage::new()),
         Box::new(ParseDocumentStage::new()),
         Box::new(MetadataMergeStage::new()),
         // Resolve localized terms (`lang` + `language:` → `quarto.language`
@@ -415,16 +409,15 @@ const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &["math-js", "render-html-body", "app
 /// See `crates/quarto-core/src/engine/capture_splice.rs` and
 /// `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
 pub fn build_q2_preview_pipeline_stages(
-    engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
     captures: Vec<quarto_trace::EngineCapture>,
 ) -> Vec<Box<dyn PipelineStage>> {
-    // Build the base list *without* threading the engine registry through;
-    // insert_capture_splice_stage reconstructs the engine-execution stage with
-    // it (so it can also carry the spliced-engine set, bd-sauc9iiq). Passing
-    // `None` here avoids both a registry clone and a discarded-registry bug.
-    let mut stages = build_html_pipeline_stages_with_options(None, None);
+    // Build the base list; the engine registry comes from ctx.registry
+    // (set by run_pipeline from project.registry or the override seam).
+    // We still reconstruct the engine-execution stage ourselves so it can
+    // carry the spliced-engine set (bd-sauc9iiq).
+    let mut stages = build_html_pipeline_stages_with_options(None);
     stages.retain(|s| !Q2_PREVIEW_STAGE_EXCLUDED.contains(&s.name()));
-    insert_capture_splice_stage(&mut stages, engine_registry, captures);
+    insert_capture_splice_stage(&mut stages, captures);
     stages
 }
 
@@ -446,16 +439,15 @@ pub fn build_q2_preview_pipeline_stages(
 /// with the registry, so callers may invoke this unconditionally.
 fn insert_capture_splice_stage(
     stages: &mut Vec<Box<dyn PipelineStage>>,
-    engine_registry: Option<crate::engine::EngineRegistry>,
     captures: Vec<quarto_trace::EngineCapture>,
 ) {
     let spliced_engine_names: std::collections::HashSet<String> =
         captures.iter().map(|c| c.engine_name.clone()).collect();
-    let engine_stage = match engine_registry {
-        Some(reg) => EngineExecutionStage::with_registry(reg),
-        None => EngineExecutionStage::new(),
-    }
-    .with_spliced_engines(spliced_engine_names);
+
+    // Reconstruct the engine-execution stage with the spliced-engine set.
+    // The registry is no longer a stage-level concern — it is read from
+    // ctx.registry at run time (Task 8 of ts-engine-extensions).
+    let engine_stage = EngineExecutionStage::new().with_spliced_engines(spliced_engine_names);
     let engine_idx = stages
         .iter()
         .position(|s| s.name() == "engine-execution")
@@ -478,13 +470,13 @@ fn insert_capture_splice_stage(
 /// (`build_capture_pipeline_stages`).
 pub fn build_html_pipeline_stages_with_captures(
     apply_config: Option<ApplyTemplateConfig>,
-    engine_registry: Option<crate::engine::EngineRegistry>,
     captures: Vec<quarto_trace::EngineCapture>,
 ) -> Vec<Box<dyn PipelineStage>> {
-    // Base with None registry — the helper rebuilds the engine stage with the
-    // registry (mirrors the q2-preview builder; avoids a second registry build).
-    let mut stages = build_html_pipeline_stages_with_options(apply_config, None);
-    insert_capture_splice_stage(&mut stages, engine_registry, captures);
+    // The engine registry is not a builder concern — it flows via
+    // `ctx.registry` at run time (Task 8 of ts-engine-extensions). This helper
+    // rebuilds the engine stage only to carry the spliced-engine set.
+    let mut stages = build_html_pipeline_stages_with_options(apply_config);
+    insert_capture_splice_stage(&mut stages, captures);
     stages
 }
 
@@ -761,6 +753,14 @@ pub async fn run_pipeline(
     // copies collected by AST transforms). The outer renderer drains
     // these into the sink after the pipeline returns.
     stage_ctx.resource_copies = std::mem::take(&mut ctx.resource_copies);
+    // Apply the engine registry override when the caller has supplied one
+    // (test seam / replay path).  Mirrors how `project_index` and
+    // `resource_resolver` are threaded at the lines above — the default
+    // project registry is already in `stage_ctx.registry` from
+    // `StageContext::new()`; this replaces it only when an override is set.
+    if let Some(override_reg) = &ctx.engine_registry_override {
+        stage_ctx.registry = override_reg.clone();
+    }
 
     // Create input from content
     let input = PipelineData::LoadedSource(LoadedSource::new(
@@ -896,27 +896,26 @@ pub async fn render_qmd_to_html(
     // `EngineExecutionStage` runs against a replay-substituted
     // registry (bd-45yw).
     //
-    // Note: the engine_registry override is consumed (via Option::take
-    // on a clone path) — `HtmlRenderConfig` is borrowed `&`, so we
-    // clone the registry. EngineRegistry itself stores Arc<dyn
-    // ExecutionEngine>, so cloning is cheap.
+    // Thread the optional engine registry override from `HtmlRenderConfig`
+    // onto `RenderContext` so `run_pipeline` can apply it to `StageContext`
+    // after `StageContext::new()` populates the default project registry.
+    // Cloning the Arc is cheap; `HtmlRenderConfig` is borrowed `&`.
+    ctx.engine_registry_override = config.engine_registry.clone();
     let apply_config = config
         .resolver
         .clone()
         .map(|r| ApplyTemplateConfig::new().with_resolver(r));
-    let engine_registry = config.engine_registry.clone();
     // bd-uy4uygha: when the caller supplies server-recorded captures (hub-client
     // executing via a connected `q2 provide-hub`), splice them into the HTML.
     // Empty captures take the unchanged builder — byte-identical for every
     // existing caller (`q2 render`, which runs the real engine natively).
+    // The engine registry is NOT threaded through the builders — it flows via
+    // `ctx.engine_registry_override` (set above) into `ctx.registry` at run time
+    // (Task 8 of ts-engine-extensions).
     let stages = if config.captures.is_empty() {
-        build_html_pipeline_stages_with_options(apply_config, engine_registry)
+        build_html_pipeline_stages_with_options(apply_config)
     } else {
-        build_html_pipeline_stages_with_captures(
-            apply_config,
-            engine_registry,
-            config.captures.clone(),
-        )
+        build_html_pipeline_stages_with_captures(apply_config, config.captures.clone())
     };
 
     let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
@@ -981,21 +980,22 @@ pub async fn render_qmd_to_preview_ast(
     // source-info pool) and independent of the main pipeline's run.
     let untransformed_ast_json = capture_untransformed_ast_json(content, source_name);
 
+    // Thread the optional engine registry override onto `RenderContext` so
+    // `run_pipeline` can apply it to `StageContext` after populating the
+    // default project registry (same seam as `HtmlRenderConfig.engine_registry`
+    // in `render_qmd_to_html`).  Production callers leave it `None`.
+    ctx.engine_registry_override = engine_registry;
+
     // The q2-preview stage list excludes `CodeHighlightStage` /
     // `RenderHtmlBodyStage` / `ApplyTemplateStage`, so the
     // pipeline returns `DocumentAst`, not `RenderedOutput`.
     //
-    // Phase C.4 (bd-kw93.3): `engine_registry` is threaded through so
-    // callers can substitute a `ReplayEngine` for regression-testing
-    // contexts (bd-45yw); production preview consumers leave it `None`.
-    //
-    // bd-lucp: `capture` is the new preview-time consumer. When
-    // present, [`CaptureSpliceStage`] inside the pipeline splices the
-    // recorded engine output into the live AST before
-    // `EngineExecutionStage` runs (which then no-ops via the WASM
-    // markdown fallback). See
+    // bd-lucp: `captures` is the preview-time consumer. When non-empty,
+    // [`CaptureSpliceStage`] inside the pipeline splices the recorded
+    // engine output into the live AST before `EngineExecutionStage` runs
+    // (which then no-ops via the WASM markdown fallback). See
     // `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
-    let stages = build_q2_preview_pipeline_stages(engine_registry, captures);
+    let stages = build_q2_preview_pipeline_stages(captures);
 
     let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
     let ast = output.into_document_ast().ok_or_else(|| {
@@ -1561,6 +1561,8 @@ mod tests {
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/test.qmd")],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         }
     }
 
@@ -2020,63 +2022,71 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 23);
-        assert_eq!(stages[0].name(), "parse-document");
-        assert_eq!(stages[1].name(), "metadata-merge");
+        // Merged pipeline (ts-engine-extensions rebase): both new stages are
+        // present — EngineClaimsFileStage at [0] (Task 10 / plan1c, branch) and
+        // LanguageResolveStage after metadata-merge (bd-llhlzd7p, main) — so the
+        // length is 24, not the 23 either side had alone.
+        assert_eq!(stages.len(), 24);
+        // Pre-parse file-claim/convert (Task 10).
+        assert_eq!(stages[0].name(), "engine-claims-file");
+        assert_eq!(stages[1].name(), "parse-document");
+        assert_eq!(stages[2].name(), "metadata-merge");
         // Localized-term resolution (bd-llhlzd7p) directly follows the
         // metadata merge so `quarto.language` is present for every
         // downstream consumer, including the profile checkpoint.
-        assert_eq!(stages[2].name(), "language-resolve");
+        assert_eq!(stages[3].name(), "language-resolve");
         // Include expansion runs before the profile checkpoint (bd-xfwx)
         // so profiles reflect content spliced in via `{{< include ... >}}`.
-        assert_eq!(stages[3].name(), "include-expansion");
+        assert_eq!(stages[4].name(), "include-expansion");
         // include-resolve (bd-8kp3) sits between include-expansion and
         // the profile checkpoint so file-slot include dependencies are
         // recorded into `profile.includes` for cache invalidation.
-        assert_eq!(stages[4].name(), "include-resolve");
+        assert_eq!(stages[5].name(), "include-resolve");
         // Listings auto-fill (bd-izqh, L1) sits between include-resolve
         // and the profile checkpoint so `meta.listing-item.*` enrichment
         // is visible to `DocumentProfile.listing_item`.
-        assert_eq!(stages[5].name(), "listing-item-info");
+        assert_eq!(stages[6].name(), "listing-item-info");
         // Profile checkpoint (Phase 0 website epic, bd-f3jc).
-        assert_eq!(stages[6].name(), "document-profile");
+        assert_eq!(stages[7].name(), "document-profile");
         // Cross-doc body-link resolution (Phase 8 sub-phase 8.0d).
-        assert_eq!(stages[7].name(), "link-resolution");
-        assert_eq!(stages[8].name(), "unwrap-profile");
-        assert_eq!(stages[9].name(), "pre-engine-sugaring");
-        assert_eq!(stages[10].name(), "engine-execution");
-        assert_eq!(stages[11].name(), "compile-theme-css");
+        assert_eq!(stages[8].name(), "link-resolution");
+        assert_eq!(stages[9].name(), "unwrap-profile");
+        assert_eq!(stages[10].name(), "pre-engine-sugaring");
+        assert_eq!(stages[11].name(), "engine-execution");
+        assert_eq!(stages[12].name(), "compile-theme-css");
         // Bootstrap JS (bd-4eyf) sits immediately after CompileThemeCssStage
         // so the same theme predicate gates JS and CSS together.
-        assert_eq!(stages[12].name(), "bootstrap-js");
+        assert_eq!(stages[13].name(), "bootstrap-js");
         // ClipboardJsStage (Phase 2 of bd-1tl09) sits next to
         // bootstrap-js because both ship a Project-scoped JS payload
         // gated on minimal-HTML. clipboard-js additionally gates on
         // `code-copy != false`.
-        assert_eq!(stages[13].name(), "clipboard-js");
+        assert_eq!(stages[14].name(), "clipboard-js");
         // Attribution-generate runs before user filters so the
         // `quarto.attribution.*` Lua host binding sees a populated
         // sidecar (bd-0fd0). No-op when no provider is installed.
-        assert_eq!(stages[14].name(), "attribution-generate");
-        assert_eq!(stages[15].name(), "user-filters-pre");
-        assert_eq!(stages[16].name(), "ast-transforms");
-        assert_eq!(stages[17].name(), "user-filters-post");
+        assert_eq!(stages[15].name(), "attribution-generate");
+        assert_eq!(stages[16].name(), "user-filters-pre");
+        assert_eq!(stages[17].name(), "ast-transforms");
+        assert_eq!(stages[18].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[18].name(), "resource-report");
-        assert_eq!(stages[19].name(), "code-highlight");
+        assert_eq!(stages[19].name(), "resource-report");
+        assert_eq!(stages[20].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, crossref `\tag{N}`) is visible.
-        assert_eq!(stages[20].name(), "math-js");
-        assert_eq!(stages[21].name(), "render-html-body");
-        assert_eq!(stages[22].name(), "apply-template");
+        assert_eq!(stages[21].name(), "math-js");
+        assert_eq!(stages[22].name(), "render-html-body");
+        assert_eq!(stages[23].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 23);
+        // Merged pipeline carries both EngineClaimsFileStage (Task 10, branch)
+        // and LanguageResolveStage (bd-llhlzd7p, main) → 24 stages.
+        assert_eq!(pipeline.len(), 24);
     }
 
     #[test]
@@ -2231,6 +2241,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path("/project/test.qmd")],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         }
     }
 
@@ -2461,8 +2473,7 @@ mod tests {
         // covers — without replay substitution, the stage falls back
         // to markdown with a warning, which would yield different
         // output than the recorded one.
-        let content =
-            b"---\nengine: replay-only-engine\n---\n\n# Original Heading\n\nOriginal body.\n";
+        let content = b"---\nengine: replay-only-engine\n---\n\n# Original Heading\n\nOriginal body.\n\n```{replay-only-engine}\ncode\n```\n";
 
         // The recorded ExecuteResult deliberately replaces the body
         // with a distinct marker. Asserting the marker reaches the
@@ -2500,6 +2511,17 @@ mod tests {
             }
             fn is_available(&self) -> bool {
                 true
+            }
+            fn claims_language(
+                &self,
+                language: &str,
+                _first_class: Option<&str>,
+            ) -> crate::engine::LanguageClaim {
+                if language == "replay-only-engine" {
+                    crate::engine::LanguageClaim::Primary(1)
+                } else {
+                    crate::engine::LanguageClaim::None
+                }
             }
         }
 
@@ -2641,11 +2663,53 @@ mod tests {
     }
 
     /// Companion to the test above: with *no* capture for the engine, the
-    /// "(no execution)" warning is still emitted. Guards against the
-    /// suppression over-firing and silencing genuinely-unexecuted documents.
+    /// render must **fail loudly** (P2-12). Guarding against the suppression
+    /// over-firing — a registered-but-unavailable engine with no capture means
+    /// the document was never executed, and a silent markdown fallback would
+    /// silently produce wrong output. The render must surface an error the user
+    /// can act on.
     #[test]
-    fn q2_preview_without_capture_still_warns_unavailable_engine() {
-        let content = b"---\ntitle: Test\nengine: replay-only-engine\n---\n\n# Heading\n\nBody.\n";
+    fn q2_preview_without_capture_errors_unavailable_engine() {
+        use crate::engine::EngineRegistry;
+
+        // A fake engine that is always unavailable, claims its own language as
+        // Primary. Provides a deterministic "engine unavailable" warning without
+        // depending on whether R/Python runtimes are installed (unlike
+        // knitr/jupyter). Under Task 9, an engine only warns when it appears in
+        // the resolution sequence — so the document must have a cell for it.
+        struct AlwaysUnavailableEngine;
+        impl crate::engine::ExecutionEngine for AlwaysUnavailableEngine {
+            fn name(&self) -> &str {
+                "always-unavailable"
+            }
+            fn execute(
+                &self,
+                _input: &str,
+                _ctx: &crate::engine::ExecutionContext,
+            ) -> std::result::Result<crate::engine::ExecuteResult, crate::engine::ExecutionError>
+            {
+                unreachable!("always-unavailable is never invoked")
+            }
+            fn is_available(&self) -> bool {
+                false
+            }
+            fn claims_language(
+                &self,
+                language: &str,
+                _first_class: Option<&str>,
+            ) -> crate::engine::LanguageClaim {
+                if language == "always-unavailable" {
+                    crate::engine::LanguageClaim::Primary(1)
+                } else {
+                    crate::engine::LanguageClaim::None
+                }
+            }
+        }
+
+        let content = b"---\ntitle: Test\nengine: always-unavailable\n---\n\n# Heading\n\n```{always-unavailable}\nx\n```\n";
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(AlwaysUnavailableEngine));
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/test.qmd");
@@ -2654,27 +2718,27 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
         let runtime = make_test_runtime();
 
-        let output = pollster::block_on(render_qmd_to_preview_ast(
+        let result = pollster::block_on(render_qmd_to_preview_ast(
             content,
             "test.qmd",
             &mut ctx,
             runtime,
-            None,
+            Some(Arc::new(registry)),
             Vec::new(),
-        ))
-        .expect("q2-preview render");
+        ));
 
+        // P2-12: a registered engine with no available runtime and no spliced
+        // capture must fail loudly so the user knows their document was not
+        // executed. A silent markdown fallback would silently produce wrong output.
         assert!(
-            output
-                .diagnostics
-                .iter()
-                .any(|d| d.title.contains("not available")),
-            "without a capture, the engine-unavailable warning must still fire; got: {:?}",
-            output
-                .diagnostics
-                .iter()
-                .map(|d| d.title.clone())
-                .collect::<Vec<_>>()
+            result.is_err(),
+            "P2-12: without a spliced capture, a registered-but-unavailable engine \
+             must loud-error; got Ok (old silent-fallback behaviour)"
+        );
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("always-unavailable"),
+            "error message must name the engine; got: {err_msg}"
         );
     }
 
@@ -2933,6 +2997,8 @@ mod tests {
             is_single_file: true,
             files: vec![DocumentInfo::from_path(root.join("deck.qmd"))],
             output_dir: root.clone(),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path(root.join("deck.qmd"));
         let format = Format::from_format_string("q2-slides").unwrap();
@@ -3171,7 +3237,7 @@ mod tests {
     /// Python / etc. cells; `q2 render` keeps highlighting.
     #[test]
     fn q2_preview_pipeline_includes_code_highlight() {
-        let stages = build_q2_preview_pipeline_stages(None, Vec::new());
+        let stages = build_q2_preview_pipeline_stages(Vec::new());
         let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
         assert!(
             names.contains(&"code-highlight"),
@@ -3356,7 +3422,7 @@ mod tests {
     /// but at the stage level.
     #[test]
     fn q2_preview_stage_excluded_names_exist_in_html_pipeline() {
-        let html_stages = build_html_pipeline_stages_with_options(None, None);
+        let html_stages = build_html_pipeline_stages_with_options(None);
         let html_names: Vec<&str> = html_stages.iter().map(|s| s.name()).collect();
 
         let unknown: Vec<&&str> = Q2_PREVIEW_STAGE_EXCLUDED

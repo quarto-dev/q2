@@ -92,7 +92,20 @@ impl PipelineStage for ParseDocumentStage {
         // This contains the file content needed for ariadne to show source snippets.
         let mut source_context = SourceContext::new();
         let content_str = source.content_string();
-        let source_name = source.path.display().to_string();
+
+        // C′ — when an engine converted this file, register the converted QMD
+        // content under an engine-reflecting synthetic name so that AST nodes
+        // get honest `SourceInfo::Original(qmd_id, range)` positions into the
+        // converted buffer.  The synthetic name makes it clear the bytes are
+        // from the engine's output, not the original file.
+        //
+        // When `conversion` is None the stage behaves exactly as before (A′
+        // dual-registration / faithful remap is deferred — see plan1c §1060).
+        let source_name = if let Some(ref conv) = source.conversion {
+            format!("<{} (converted by {})>", source.path.display(), conv.engine)
+        } else {
+            source.path.display().to_string()
+        };
         source_context.add_file(source_name.clone(), Some(content_str));
 
         // Parse the QMD content
@@ -307,6 +320,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -324,6 +339,219 @@ mod tests {
         let doc_ast = output.into_document_ast().expect("Should be DocumentAst");
         assert_eq!(doc_ast.path, PathBuf::from("/project/test.qmd"));
         // The AST should have at least one block (the paragraph)
+        assert!(!doc_ast.ast.blocks.is_empty());
+    }
+
+    /// **ParseDocumentStage C′ — synthetic source name** (seam).
+    ///
+    /// When `source.conversion` is `Some(ConversionProvenance { engine })`,
+    /// `ParseDocumentStage` must register the converted content under the
+    /// synthetic name `"<{path} (converted by {engine})>"` in the
+    /// `source_context`, so AST nodes carry honest `Original(qmd_id)` positions
+    /// into the converted buffer.
+    ///
+    /// Named revert: remove the `if let Some(ref conv) = source.conversion { … }`
+    /// branch in `run()` and always use `source.path.display().to_string()` —
+    /// the synthetic name is absent and this test goes RED.
+    #[tokio::test]
+    async fn test_parse_document_c_prime_synthetic_name() {
+        use crate::format::Format;
+        use crate::project::{DocumentInfo, ProjectContext};
+        use crate::stage::{ConversionProvenance, LoadedSource, StageContext};
+        use quarto_system_runtime::TempDir;
+        use std::sync::Arc;
+
+        struct MockRuntime;
+
+        #[async_trait::async_trait]
+        impl quarto_system_runtime::SystemRuntime for MockRuntime {
+            fn file_read(
+                &self,
+                _path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<Vec<u8>> {
+                Ok(vec![])
+            }
+            fn file_write(
+                &self,
+                _path: &std::path::Path,
+                _contents: &[u8],
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn path_exists(
+                &self,
+                _path: &std::path::Path,
+                _kind: Option<quarto_system_runtime::PathKind>,
+            ) -> quarto_system_runtime::RuntimeResult<bool> {
+                Ok(true)
+            }
+            fn canonicalize(
+                &self,
+                path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+                Ok(path.to_path_buf())
+            }
+            fn path_metadata(
+                &self,
+                _path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::PathMetadata>
+            {
+                unimplemented!()
+            }
+            fn file_copy(
+                &self,
+                _src: &std::path::Path,
+                _dst: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn path_rename(
+                &self,
+                _old: &std::path::Path,
+                _new: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn file_remove(
+                &self,
+                _path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn dir_create(
+                &self,
+                _path: &std::path::Path,
+                _recursive: bool,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn dir_remove(
+                &self,
+                _path: &std::path::Path,
+                _recursive: bool,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn dir_list(
+                &self,
+                _path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<Vec<PathBuf>> {
+                Ok(vec![])
+            }
+            fn cwd(&self) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+                Ok(PathBuf::from("/"))
+            }
+            fn temp_dir(&self, _template: &str) -> quarto_system_runtime::RuntimeResult<TempDir> {
+                Ok(TempDir::new(PathBuf::from("/tmp/test")))
+            }
+            fn exec_pipe(
+                &self,
+                _command: &str,
+                _args: &[&str],
+                _stdin: &[u8],
+            ) -> quarto_system_runtime::RuntimeResult<Vec<u8>> {
+                Ok(vec![])
+            }
+            fn exec_command(
+                &self,
+                _command: &str,
+                _args: &[&str],
+                _stdin: Option<&[u8]>,
+            ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::CommandOutput>
+            {
+                Ok(quarto_system_runtime::CommandOutput {
+                    code: 0,
+                    stdout: vec![],
+                    stderr: vec![],
+                })
+            }
+            fn env_get(&self, _name: &str) -> quarto_system_runtime::RuntimeResult<Option<String>> {
+                Ok(None)
+            }
+            fn env_all(
+                &self,
+            ) -> quarto_system_runtime::RuntimeResult<std::collections::HashMap<String, String>>
+            {
+                Ok(std::collections::HashMap::new())
+            }
+            async fn fetch_url(
+                &self,
+                _url: &str,
+            ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+                Err(quarto_system_runtime::RuntimeError::NotSupported(
+                    "mock".to_string(),
+                ))
+            }
+            fn os_name(&self) -> &'static str {
+                "mock"
+            }
+            fn arch(&self) -> &'static str {
+                "mock"
+            }
+            fn cpu_time(&self) -> quarto_system_runtime::RuntimeResult<u64> {
+                Ok(0)
+            }
+            fn xdg_dir(
+                &self,
+                _kind: quarto_system_runtime::XdgDirKind,
+                _subpath: Option<&std::path::Path>,
+            ) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+                Ok(PathBuf::from("/xdg"))
+            }
+            fn stdout_write(&self, _data: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn stderr_write(&self, _data: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+        }
+
+        let runtime = Arc::new(MockRuntime);
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: crate::project::ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.echo");
+        let format = Format::html();
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+
+        let stage = ParseDocumentStage::new();
+        let content = b"---\ntitle: Converted\n---\n\nHello from echo engine.\n";
+
+        // Build a LoadedSource that looks like it came through EngineClaimsFileStage.
+        let mut source = LoadedSource::new(PathBuf::from("/project/test.echo"), content.to_vec());
+        source.conversion = Some(ConversionProvenance {
+            engine: "echo-engine".to_string(),
+        });
+
+        let output = stage
+            .run(PipelineData::LoadedSource(source), &mut ctx)
+            .await
+            .unwrap();
+        let doc_ast = output.into_document_ast().expect("Should be DocumentAst");
+
+        // The source_context must contain the synthetic name, not the bare path.
+        // ParseDocumentStage creates a fresh SourceContext and adds exactly one
+        // file — so FileId(0) is the one registered for this document.
+        // `source.path.display()` for `/project/test.echo` → `/project/test.echo`,
+        // so the synthetic name is `</project/test.echo (converted by echo-engine)>`.
+        let expected_synthetic = "</project/test.echo (converted by echo-engine)>";
+        let file0 = doc_ast
+            .source_context
+            .get_file(quarto_source_map::FileId(0))
+            .expect("source_context must have FileId(0)");
+        assert_eq!(
+            file0.path, expected_synthetic,
+            "source_context FileId(0) must be the C′ synthetic name; got: {}",
+            file0.path
+        );
+        // Original path is preserved on the DocumentAst.
+        assert_eq!(doc_ast.path, PathBuf::from("/project/test.echo"));
+        // AST must be non-empty.
         assert!(!doc_ast.ast.blocks.is_empty());
     }
 }

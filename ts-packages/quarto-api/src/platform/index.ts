@@ -68,6 +68,16 @@ export interface PlatformHost {
     makeTempFile(opts?: { prefix?: string; suffix?: string; dir?: string }): string;
     /** Remove a file or directory (synchronous). */
     remove(path: string, opts?: { recursive?: boolean }): void;
+    /**
+     * Walk a directory tree and return an entry for each file/directory found.
+     * Synchronous; mirrors Deno's `walkSync` / Node's `readdirSync`-recursive pattern.
+     * The Deno implementation is a later task (Plan 1b Phase 2+); add `walk: () => []`
+     * to any mock `PlatformHost` until the real implementation lands.
+     */
+    walk(
+      root: string,
+      opts?: { maxDepth?: number; includeDirs?: boolean },
+    ): Array<{ path: string; isFile: boolean; isDirectory: boolean }>;
   };
 
   /** Process / subprocess operations. */

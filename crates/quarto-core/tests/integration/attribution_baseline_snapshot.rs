@@ -35,6 +35,8 @@ async fn attribution_off_html_baseline() -> Result<(), QuartoError> {
         is_single_file: true,
         files: vec![DocumentInfo::from_path(qmd_path.clone())],
         output_dir: dir.clone(),
+
+        ..Default::default()
     };
     let doc = DocumentInfo::from_path(qmd_path.clone());
     let format = Format::html();

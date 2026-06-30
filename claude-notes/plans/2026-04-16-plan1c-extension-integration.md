@@ -2,13 +2,17 @@
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** plan1a-protocol, plan1a-host, plan1a-engine (Rust core: protocol, subprocess, trait, `TsEngine`),
-**RTQ / `plan1a-return-to-q1` (Item A — the `EngineHostContext` split into
-`Init { global }` at spawn + per-render `LaunchEngine { project }`; DQ-7)**, and
+**RTQ / `plan1a-return-to-q1` (Item A — the old single `EngineHostContext` split
+into `Init { global: HostGlobalConfig }` at spawn + per-render
+`LaunchEngine { project: EngineProjectContext }`; DQ-7)**, and
 Plan 1b (Deno harness: `@quarto/engine-host-deno`, which **now also depends on
 RTQ**). The Phase-2 construction sequence is written against the RTQ-amended
 protocol, so **1c must run after RTQ Item A** — it can no longer start from the
 plan1a sub-plans alone (the earlier "Phases 1–2 from plan1a alone" note is
-void). Phase 3 (echo engine E2E test) additionally requires Plan 1b fully built.
+void). Phase 3 (echo engine E2E test) additionally requires Plan 1b fully built,
+and **softly depends on `@quarto/types` (Plan 2A)** — the echo engine imports its
+interfaces; mitigated by the Phase-3 inline-stub fallback and by
+`ts-packages/quarto-types` already existing, so it is a soft dep, not a hard gate.
 **Blocks:** Plan 4 (Julia Validation)
 **Estimated sessions:** 1-2
 
@@ -57,7 +61,7 @@ intent unambiguous and consistent with what landed in plan1a. Changes:
   `global` (host-held) and a per-render `LaunchEngine.project`
   (`EngineProjectContext`); the launch cadence and pooling-ready ownership are
   stated explicitly (see the construction sequence). Forward-notes point at
-  `plan5-engine-host-pooling.md`.
+  `2026-06-26-plan5-engine-host-pooling.md`.
 - **Drift fixes** (1C-1/1C-2/1C-7/1C-8): "following Q1" overclaims corrected
   to name q2's deliberate departures.
 
@@ -203,7 +207,13 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
     (Julia's `# %%`): such an engine omits `claims-files` and loads to decide,
     using `file-extensions` as its pre-filter. Authors who declare static
     claims own their accuracy — each is validated against the dynamic method on
-    the first execute-time load (mismatch → hard error, like `name`).
+    the first execute-time load (mismatch → hard error, like `name`). **This
+    guard is one-directional:** it catches an engine that *over*-claims and then
+    loads to execute. An engine that *under*-declares (omits a claim its dynamic
+    method would make) just loses that language, never wins ownership, never
+    loads — so the discrepancy is never caught. That is consistent with static
+    claims being *authoritative* (the declaration **is** the truth), but the
+    validation is not a safety net against under-declaration.
   - `file-extensions` (`valid_extensions`) is the complete handled-extension
     set — always static, the pre-filter before any `claims_file`.
 
@@ -353,28 +363,70 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
     `LoadEngine` + call the dynamic `claimsLanguage` over the wire, cache it.
     When a static claim was used and the engine later loads to execute, validate
     it against the dynamic method (mismatch → hard error, like `name`).
+    **Bookkeeping for that validation:** record each statically-answered key in
+    a `static_answers: Mutex<Vec<(String, Option<String>)>>` field (and a
+    `static_file_answers: Mutex<Vec<String>>` for `claims_file` extensions). The
+    validation fires in `ensure_loaded`, in the **existing** post-`LoadEngine`
+    validation block (ts_engine.rs:198, where `name` and the file-extension
+    hints are already checked): for each recorded key, send the dynamic
+    `ClaimsLanguage`/`ClaimsFile` over the wire and compare to the static
+    answer; mismatch → the same hard error shape as the `name` check. For a
+    fully-static engine this block runs at its **first execute-time load**
+    (resolution was zero-load), which is exactly "when the engine later loads to
+    execute."
   - **`claims_file(file, ext)`:** if `ext ∉ file_extensions` (when `Some`),
     short-circuit to `false` (pre-filter, no load). Else if `claims_files` is
     `Some`, answer `ext ∈ claims_files` without loading. Else `LoadEngine` + call
     the dynamic `claimsFile` (content-inspecting engines, e.g. Julia `# %%`);
     cache per canonical path (`claims_file_cache`).
   - **`valid_extensions()`:** return `file_extensions` directly when `Some`.
-  consistent with "Distribution" below). Note `resources/extension-build/` does
-  **not** exist yet — this item creates it.
-  - **Shipped author template** (`resources/extension-build/deno.json`, the file
-    `q2 build-ts-extension` falls back to) whose imports reference the
-    **published** SDK + std lib:
-    - `@quarto/api` → `jsr:@quarto/api` (real code, inlined by `deno bundle`;
-      each compiled `julia-engine.js` freezes the `@quarto/api` version it
-      built against — managed by semver on the published package)
-    - `@quarto/types` → `jsr:@quarto/types` (type-only, erased)
-    - `@std/*` → `jsr:@std/*`
-    Engine authors copy/extend this in their extension.
-  - **In-repo dev build** uses a **workspace mapping** resolving `@quarto/api` /
-    `@quarto/types` to `ts-packages/…`, so q2's own `build-ts-extension` (and the
-    Phase-3 echo E2E) bundle against workspace source **without the registry** —
-    this is what unblocks Phase 3 before the packages are published. See the
-    grand plan's "Distribution of the engine-author SDK".
+
+- [ ] **Create the `resources/extension-build/` build config** (directory +
+  `deno.json`). It does **not** exist yet — this item creates it. It is the
+  config `q2 build-ts-extension` passes to `deno bundle`. One specifier, two
+  import resolutions (consistent with "Distribution" below and the grand plan's
+  "Distribution of the engine-author SDK"):
+  - **Shipped author template** (`resources/extension-build/deno.json`, scaffolded
+    into a new extension; the default config) — imports reference the **published**
+    SDK + std lib. Map **both** the bare specifier and the `…/` subpath form (the
+    packages export subpaths like `./mappedString`, `./platform`):
+    ```jsonc
+    { "imports": {
+        "@quarto/api":   "jsr:@quarto/api",   "@quarto/api/":   "jsr:/@quarto/api/",
+        "@quarto/types": "jsr:@quarto/types", "@quarto/types/": "jsr:/@quarto/types/",
+        "@std/": "jsr:/@std/" },
+      "compilerOptions": { "strict": true, "lib": ["deno.ns", "DOM", "ES2021"] } }
+    ```
+    `@quarto/api` is **real code inlined by `deno bundle`** (each compiled
+    `julia-engine.js` freezes the `@quarto/api` version it built against — semver
+    on the published package); `@quarto/types` is type-only/erased. Authors
+    copy/extend this in their extension.
+  - **In-repo workspace override** (`resources/extension-build/deno.workspace.json`)
+    — same shape, but `@quarto/*` resolve to **workspace source**. Paths are
+    relative to *this file* (`resources/extension-build/` is two levels deep):
+    ```jsonc
+    { "imports": {
+        "@quarto/api":    "../../ts-packages/quarto-api/src/index.ts",
+        "@quarto/api/":   "../../ts-packages/quarto-api/src/",
+        "@quarto/types":  "../../ts-packages/quarto-types/src/index.ts",
+        "@quarto/types/": "../../ts-packages/quarto-types/src/",
+        "@std/": "jsr:/@std/" } /* compilerOptions as above */ }
+    ```
+    Map **both** packages: the inlined `@quarto/api` source imports `@quarto/types`
+    transitively (Plan 1b.1 §0). `deno bundle` inlines the workspace TS, so q2's
+    own `build-ts-extension` and the **Phase-3 echo E2E bundle without the
+    registry** — this is what unblocks Phase 3 pre-publish. (Mirrors the existing
+    root `deno.jsonc`, which already maps `@quarto/api/platform` → workspace src.)
+  - **Selection — the config travels with the extension; `q2 build-ts-extension`
+    does NOT branch in-repo-vs-published.** Config precedence: (1) an explicit
+    `--config <path>`; (2) a `deno.json` committed in the extension dir; (3) the
+    shipped published template. Behavior is identical from a clone or an installed
+    binary (no embedded build assets). The Phase-3 echo E2E is then **not** a
+    special code path — its test harness invokes the build with
+    `--config resources/extension-build/deno.workspace.json` (or a thin
+    `build-ts-extension --workspace` alias that selects it). Real authors get the
+    `jsr:` template; q2's own fixtures get the workspace override; one `--config`
+    precedence rule, no conditional resolution logic in the binary.
 
 - [ ] Implement a `q2 build-ts-extension` subcommand. CLI subcommands are
   defined using `clap` in `crates/quarto/src/main.rs` — add a new variant to
@@ -383,22 +435,39 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
   - Optional path argument; defaults to cwd-detected `_extension.yml`.
   - Reads the TS entry by convention (e.g., `src/<name>.ts` adjacent to
     `_extension.yml`).
-  - Runs `deno bundle --config=resources/extension-build/deno.json <entry.ts>`,
-    writing the output to the location referenced by `path` in `_extension.yml`.
+  - Runs `deno bundle --config=<resolved deno.json> <entry.ts>` (config resolved by
+    the precedence above: explicit `--config` > the extension's own `deno.json` >
+    the shipped published template), writing the output to the location referenced
+    by `path` in `_extension.yml`.
   - This mirrors Quarto 1's `quarto call build-ts-extension`.
   - Extension authors run this after editing TS source. q2 never runs it
     during render.
 
-  **Distribution scope.** `q2 build-ts-extension` resolves `@quarto/api` and
-  `@quarto/types` from the registry (jsr/npm) via the engine's `deno.json`, so
-  it works identically from an installed binary and from a q2 clone — no build
-  assets are embedded in or extracted from the q2 binary. See the grand plan's
-  "Distribution of the engine-author SDK".
+  **Distribution scope — two modes, selected by in-repo detection.**
+  `q2 build-ts-extension` chooses which `deno.json` it hands `deno bundle`:
+  - **In-repo (a q2 clone / the Phase-3 echo E2E):** walk up from the extension
+    dir (or cwd) for a workspace root containing `ts-packages/quarto-api`
+    (the same probe `cargo xtask` uses, `project_root.join("ts-packages/…")`);
+    if found, use the **workspace** `deno.json` (the workspace mapping that
+    resolves `@quarto/api`/`@quarto/types` to `ts-packages/…`). This is what
+    lets the echo E2E build **before the packages are published**.
+  - **Installed binary (external author):** no workspace found → use the
+    **shipped** `resources/extension-build/deno.json` that resolves
+    `jsr:@quarto/api` / `jsr:@quarto/types` from the registry.
+  Either way, no build assets are embedded in or extracted from the q2 binary.
+  *(This supersedes the earlier "always resolves from the registry" wording,
+  which contradicted the workspace-build requirement the echo E2E depends on.)*
+  See the grand plan's "Distribution of the engine-author SDK".
 
 - [ ] Scan `_extensions/` for engine contributions during project initialization.
   **Quarto 1 reference:** `resolveEngineExtensions()` in `external-sources/quarto-cli/src/project/project-context.ts` discovers extensions with `contributes.engines`, merges them into `projectConfig.engines`. Then `resolveEngines()` in `external-sources/quarto-cli/src/execute/engine.ts` imports and registers them.
 
-- [ ] For each discovered engine:
+- [ ] For each discovered engine (these registration **semantics** are
+  *executed* by Phase 2's construction sequence — steps 4–8 — which is where
+  the registry is actually built once on `ProjectContext`. This Phase-1 item
+  specifies the rules; its tests (P1-1, P1-4, P1-5, …) run under the Phase-2
+  registry-on-`ProjectContext` harness, **not** a throwaway Phase-1 registry.
+  Phase 2 owns registry *construction*; Phase 1 owns the *rules* it applies):
   1. Check if the bundled `.js` referenced by `path` exists.
   2. If not, fail extension load with: `Engine extension '{name}' has no
      bundled .js file at {expected_path}. Run 'q2 build-ts-extension' in
@@ -407,17 +476,24 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
      parsed `name` / `claims` / `file_extensions` / `claims_files`
      (all `Option<...>` — the authoritative static-claim declarations,
      `None` meaning "fall back to dynamic load" for that facet).
-  4. **Determine the registry key.** If `name` is `Some(name)`,
-     register the `TsEngine` under that name immediately — no subprocess
-     spawn. If `name` is `None`, register under the extension id
-     (e.g., the extension directory name like `julia-engine`) as a
-     placeholder, and remember the engine in a separate
-     `runtime_name → extension_id` alias map on the registry. The alias
-     map is empty on registration; it's populated when `LoadEngine` runs
-     and resolves the engine's true name.
-  5. Register it in the `EngineRegistry`. **On collision** (another
+  4. **Determine the registry key — via `TsEngine::name()`, not a key arg.**
+     The landed `EngineRegistry::register(&mut self, engine: Arc<dyn
+     ExecutionEngine>)` is **keyless** (registry.rs:99) — it keys by
+     `engine.name()`. So set the `TsEngine`'s `name` field **at construction**
+     to the registration key: the declared `name` if `Some` (no subprocess
+     spawn), else the **extension-id placeholder** (e.g. the extension dir name
+     like `julia-engine`). `TsEngine::name()` returns that field
+     (ts_engine.rs:388), so `register(engine)` keys correctly either way. When
+     `name` is `None`, also remember the engine in the registry's
+     `runtime_name → extension_id` alias map; the map is empty at registration
+     and is populated when `LoadEngine` resolves the engine's true name
+     (`try_insert_alias`, ts_engine.rs:193).
+  5. Register it via `registry.register(engine)`. **On collision** (another
      engine — built-in or extension — already registered under the
-     chosen key) emit a hard error naming both contributors. q2 chooses
+     chosen key) emit a hard error naming both contributors. **NB the landed
+     `register` silently *replaces* on a duplicate name (registry.rs:99) — 1c
+     adds the collision hard-error (in `register`, or a checked wrapper that
+     `has_engine()`s first).** q2 chooses
      a stricter behavior than Q1, which silently replaces external
      engines (Q1's `resolveEngines` uses raw `kEngines.set()` for
      externals while `registerExecutionEngine` throws for built-ins —
@@ -438,8 +514,15 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
      engines... but it is not a valid engine. Available engines are
      ...`). No silent skip.
   4. **Final order:** user-specified entries first (deduplicated, in
-     listed order), then the remaining built-ins in their registration
-     order: `knitr → jupyter → markdown` (matching Q1 engine.ts:49–53).
+     listed order), then the remaining built-ins in the fixed
+     `BUILTIN_ORDER` tiebreak `["knitr", "jupyter", "markdown"]`
+     (`resolution.rs:57`, Q1-faithful per engine.ts:49–53), then any
+     remaining (extension) registry engines sorted by name. **NB the
+     built-in tiebreak is this `BUILTIN_ORDER` constant in `resolution.rs`
+     (consulted by `candidate_engines`), NOT `EngineRegistry::new()`'s
+     registration order** — that order is `markdown → knitr → jupyter` and
+     is irrelevant, because the registry stores engines in a `HashMap`, so
+     registration order is neither preserved nor consulted by resolution.
   5. **Auto-promotion:** because `External` (object-form) engines push
      their name into the user-specified order during registration, an
      installed extension's engine ends up **at position 0 only when
@@ -478,10 +561,18 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
   `extension/read.rs:105`) is **enforced nowhere**. Per the consolidated decision
   (**field → RTQ ENG-1; gate → grand-plan Phase 12**), 1c carries the field but
   does **not** build the gate:
-  1. **Carrier (RTQ ENG-1).** `quarto_required: Option<String>` (`#[serde(default)]`)
-     on `LoadEngineResult`, plus a default `fn quarto_required(&self) -> Option<&str>
-     { None }` on the `ExecutionEngine` trait. ENG-1 lands these; 1c just consumes
-     the carried value. Additive — today's engines send `None`.
+  1. **Carrier.** The wire field `quarto_required: Option<String>`
+     (`#[serde(default)]`) on `LoadEngineResult` **already landed** (RTQ ENG-1 —
+     `ts_protocol.rs:201`, an inert wire field). **The trait-level accessor did
+     NOT land**, so **1c adds it** (the "wire it up in readiness for Phase 12"
+     decision): a default `fn quarto_required(&self) -> Option<&str> { None }`
+     on the `ExecutionEngine` trait (`engine/traits.rs`), plus a `TsEngine`
+     override that returns the carried `LoadEngineResult.quarto_required` (from
+     its loaded `discovery`, or `None` if unloaded). This is additive and inert
+     — today's engines send `None` and **no gate reads it in 1c** — but it puts
+     the value on the trait surface so **Phase 12 only adds the `satisfies(...)`
+     checks at the two call sites, not the accessor**. No 1c test asserts
+     enforcement.
   2. **Gate + version-spoof → Phase 12 (NOT 1c).** Both check sites (extension-level
      at registry-build; engine-level at `LoadEngine`), the shared
      `semver`/`VersionReq`/`cli_version()` machinery, and the **Q1-compat version
@@ -537,12 +628,14 @@ artifact (design doc §9), not a single engine.
 **Current state (post-rebase main):** `detect_engine_sequence(meta) ->
 EngineSequence` already exists (multi-engine, bd-5yff4) but is **metadata-only**
 — it reads the `engine:` array / top-level key and has no language-based or
-claims-based resolution (`detection.rs` still carries a "Future Enhancements"
-comment for language/extension detection). `EngineExecutionStage` owns the
-`EngineRegistry` as a direct field plus a `spliced_engines: HashSet<String>`
-(bd-sauc9iiq, preview capture-splice) and its `run()` takes `&self`, so it
-cannot mutate the registry. This phase upgrades `detect_engine_sequence` into
-the claims-based `resolve_engines` and moves the registry off the stage.
+claims-based resolution (`detection.rs`'s old "Future Enhancements" comment has
+since been amended to point at `resolution.rs`). `EngineExecutionStage` owns the
+`EngineRegistry` (an `Arc<EngineRegistry>` field) plus a `spliced_engines:
+HashSet<String>` (bd-sauc9iiq, preview capture-splice) and its `run()` takes
+`&self`, so it cannot mutate the registry. This phase **retargets call sites**
+from the metadata-only `detect_engine_sequence` to the already-landed
+claims-based `resolve_engines` (`resolution.rs:323`) and moves the registry off
+the stage.
 
 **The model** — claim interface (`LanguageClaim` = `Primary`/`Interop`/
 `Fallback`/`None`), the four resolution tiers (Primary → explicit-Fallback →
@@ -597,9 +690,27 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   shared subprocess host inside it — must live above `StageContext` to be
   shared across passes and across files.
 
-  Build them once at `ProjectContext` construction time. Extension discovery
-  is already a `ProjectContext` concern (`ctx.extensions`), so registry
-  construction is the natural pairing for that data.
+  Build them once at `ProjectContext` construction time. **Extension
+  discovery is NOT yet a `ProjectContext` concern today** — `StageContext::new`
+  calls `discover_extensions(...)` **per-document** (`stage/context.rs:240`)
+  and stores the result on `StageContext.extensions`; `ProjectContext`
+  (`project/mod.rs:410`) carries no `extensions` field. So this plan must
+  **also hoist extension discovery to the project level**: call
+  `discover_extensions` once at `ProjectContext` construction (it is already
+  project-scoped on input — it takes `project.dir` + the builtin path), store
+  the `Vec<Extension>` on `ProjectContext` alongside `registry`, build the
+  registry from it, and have `StageContext` read the project copy instead of
+  re-discovering per file. Pairing the hoist with registry construction is the
+  right shape, but it is **net-new work**, not a pre-existing `ctx.extensions`.
+  (This is the "make extension discovery consumable from the orchestrator"
+  seam the website epic deferred — `orchestrator.rs:1619` passes **empty**
+  format-extension contributions into the Pass-1 cache key, with `--clean` as
+  the escape hatch; see `2026-04-27-websites-phase-8.md` §Decision 2. **Decision
+  (2026-06-30): the Pass-1 / freeze cache-key treatment of engine contributions
+  is owned by [Plan 6 — Pass-1 engine resolution](2026-06-29-plan6-pass1-engine-resolution.md)**
+  (its cache key hashes the resolved engine set). 1c's only hard constraint is
+  that it **must not silently change Pass-1 cache keys**; whether TS-engine
+  contributions feed that key is Plan 6's call, not 1c's.)
 
   Construction sequence (executed by `ProjectContext::new` or its caller,
   after extensions are discovered and `BinaryDependencies::discover()`
@@ -610,8 +721,12 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
      host holds only the *global*). Fields: `resource_dir`, `runtime_dir`
      (via `quarto_util::quarto_runtime_dir()` — plan1a-host), `data_dir`
      (via `quarto_util::quarto_data_dir()` — **prerequisite: this leaf does not
-     exist yet; add it to `quarto-util` mirroring `runtime_dir.rs`, honoring a
-     `QUARTO_DATA_DIR` override for Q1 faithfulness**), `pandoc_path: Option<String>`
+     exist yet; add it to `quarto-util` mirroring `runtime_dir.rs`'s *shape* (a
+     pure `*_dir_from(...)` branch helper + `create_dir_all`), resolving via
+     `dirs::data_dir()` namespaced under `quarto`. Unlike `runtime_dir.rs`,
+     which has no env override, `quarto_data_dir()` checks a `QUARTO_DATA_DIR`
+     env override first, for Q1 faithfulness (Q1's `quartoDataDir()` honors
+     `QUARTO_DATA_DIR`)**), `pandoc_path: Option<String>`
      (from `BinaryDependencies.pandoc`,
      stringified if `Some`), `is_interactive_session`, `running_in_ci`,
      `quarto_version` (`env!("CARGO_PKG_VERSION")`). This is process-stable
@@ -624,8 +739,11 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
      is cheap; first `ensure_started()` (triggered by the first protocol
      round-trip) sends `Init { global }` and launches Deno.
   2a. **Build the per-render `EngineProjectContext` at render time, not
-     here** (DQ-7). It carries `project_dir`, `is_single_file`, and `config`
-     (the `engines` list + `output-dir`), sourced from `ProjectContext` /
+     here** (DQ-7). It carries `project_dir`, `is_single_file`, `config`
+     (project `engines` settings, as values), and a **separate `output_dir`**
+     value (Q1 `getOutputDirectory()`, NOT folded into `config` — DQ-5; matches
+     the landed RTQ `EngineProjectContext { project_dir, is_single_file, config,
+     output_dir }`), sourced from `ProjectContext` /
      `project.config`. It is **set on the selected `TsEngine` instance at
      engine-selection (render-setup), *before* its first instance method runs**
      (RTQ provides the instance setter); `ensure_launched` then reads it and
@@ -642,7 +760,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
      render: the first file to need the engine launches it (capturing that
      render's project context), the rest reuse it. The invariant is keyed to
      the **project render, not the subprocess** — under Plan 5 pooling
-     (`plan5-engine-host-pooling.md`) one subprocess outlives the render, the
+     (`2026-06-26-plan5-engine-host-pooling.md`) one subprocess outlives the render, the
      cache resets at the render boundary, and the next render re-launches
      with its own project context. That is *why* DQ-7 moves `project` onto
      `LaunchEngine`.
@@ -656,9 +774,14 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
      feeds `launch()` — once-per-engine-per-project-render with instance caching
      is the *faithful* Q1 form (per-file launch would wrongly reset that cache),
      not merely a permitted one.
-  3. Start with `EngineRegistry::new()` (built-in engines: knitr,
-     jupyter, markdown — registered in that order to match Q1's
-     tie-break order in engine.ts:49–53). The registry struct shape
+  3. Start with `EngineRegistry::new()` (built-in engines: markdown,
+     knitr, jupyter — markdown is registered unconditionally;
+     knitr/jupyter are `#[cfg(not(target_arch = "wasm32"))]`, so WASM gets
+     markdown only). Registration order does **not** drive resolution: the
+     built-in tiebreak is the fixed
+     `BUILTIN_ORDER = ["knitr", "jupyter", "markdown"]` constant in
+     `resolution.rs:57` (Q1-faithful per engine.ts:49–53), consulted by
+     `candidate_engines`. The registry struct shape
      (the immutable `engines` map plus `aliases` and `diagnostics`
      mutex-protected fields) is defined in plan1a-engine alongside
      the code that mutates the fields; `EngineRegistry::new()`
@@ -673,6 +796,12 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
      extension id (if not). On collision, hard error.
   6. For each `EngineContribution::Reorder { name }`, add the name to
      the user-specified ordering list (does not register anything).
+     **This ordering list — `External` engine names (step 5) followed by
+     `Reorder` names, in declared order — is stored as
+     `registry.contribution_order: Vec<String>` and consumed by
+     `candidate_engines` for auto-promotion** (see the `resolve_engines`
+     wiring item, "Project engine-order threading"). It does **not** feed
+     `meta["engine"]`, so it never flips a doc to "explicit."
   7. Apply Q1-faithful ordering (see the dedicated step further below).
   8. Validate every name in the user-specified order is registered;
      hard error if not.
@@ -708,7 +837,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
 
   **Pooling-ready ownership (forward-note — do NOT build here, R3).** Write this
   move so the host/registry is a **borrowable shared root**. A future
-  `plan5-engine-host-pooling.md` lifts the host *above* a single
+  `2026-06-26-plan5-engine-host-pooling.md` lifts the host *above* a single
   `ProjectContext` — into a process- or preview-server-scoped pool that each
   `ProjectContext` borrows — for preview re-compute warmth across renders
   (enabled by DQ-7's per-render `LaunchEngine.project`). Keeping the
@@ -735,8 +864,10 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   **Resolution artifact on `StageContext`.** `EngineExecutionStage::run`
   calls `resolve_engines(meta, ast, &ctx.registry, ctx.claimed_engine_name)`
   once at the top and stashes the resulting `EngineResolution { sequence,
-  ownership }` on `StageContext` (`pub engine_resolution:
-  Option<EngineResolution>`), mirroring `project_index`. The execution loop
+  ownership }` on `StageContext.engine_resolution`. **This field already
+  exists** (`pub engine_resolution: Option<EngineResolution>`,
+  `stage/context.rs:160`, landed with the multi-engine work) — reuse it, do
+  **not** re-add it. It mirrors `project_index`. The execution loop
   reads `ownership` to build each engine's `handled_languages` via
   `EngineResolution::handled_languages_for`; the trace records `sequence`.
   `resolve_engines` is a pure function in `crates/quarto-core/src/engine/
@@ -755,6 +886,28 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   reachable for both flows without `ProjectPipeline` having to be
   the only constructor. Single-doc renders go through
   `DefaultProjectType` and pick up the registry the same way.
+
+- [ ] **Add `TsEngineHost` test-observability (assertion surface for the
+  zero-load / lifecycle seams).** Several *frozen* seams (P1-5 "no spawn",
+  P1-12 "loaded once vs static", P2-17 "one conversion", P3-3 "process gone")
+  assert a negative that needs an observable; 1c **commits to building** these
+  rather than leaving them "maybe expose":
+  - `pub fn is_alive(&self) -> bool` (non-`cfg(test)`): true while the host
+    holds a live child handle. After `shutdown()` `.take()`s the child it
+    returns false — the surface for P3-3 (gone after teardown) and the R5
+    teardown verification. The host already owns
+    `child: Arc<Mutex<Option<Child>>>` (ts_process.rs:289), so this reads that.
+  - `#[cfg(test)]` per-verb request counters incremented in the request path —
+    at minimum `load_engine_count()` (bumped in `load_engine`/`ensure_started`)
+    and `markdown_for_file_count()`, plus a spawn observable (a `spawn_count`,
+    mirroring the existing test-local `AtomicUsize` pattern at
+    ts_process.rs:1992). `AtomicU64`s on the host; cheap.
+  These give P1-5 (`spawn_count==0`), P1-12 (legacy `load_engine_count==1` vs
+  static `==0`), P2-17 (`markdown_for_file_count==1`), and P3-3
+  (`is_alive()` true mid-render → false after teardown) their committed
+  assertion surfaces. (If a per-verb counter proves genuinely infeasible, P2-17
+  may fall back to its already-documented accepted-untested path — but the
+  default is to build it.)
 
 - [ ] **Finish the registry move into the preview capture path (R5).** The
   registry-ownership move above wires TS engines into the **render** path, but
@@ -779,13 +932,15 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   the eager driver.** All three thread an `engine_registry:
   Option<Arc<EngineRegistry>>` override into the **common funnel**
   `cache.rs::record_capture_cached` (`cache.rs:150`) → `record_capture`
-  (`cache.rs:181`); each currently passes the production default **`None`
+  (defined in `engine/preview_record.rs:130`, called from `cache.rs:181`); each
+  currently passes the production default **`None`
   (built-ins only)**. The funnel is one chokepoint, but the override is *chosen*
   at three distinct source sites — fix it at each:
   1. **`record_eager_captures`** (startup capture) — `capture_driver.rs:57`,
      from `lib.rs:214`.
   2. **`recompute_staleness`** (on-edit; when `EnginePolicy::Auto && is_stale`)
-     → `trigger_auto_re_execute` (`capture_driver.rs:311`), from `lib.rs:260`.
+     → `trigger_auto_re_execute` (defined in `re_execute.rs:179`; called from
+     `capture_driver.rs:312`), from `lib.rs:260`.
   3. **`re_execute.rs`** (live re-execution / the `/api/preview/re-execute`
      handler) — `record_capture_cached` call at `re_execute.rs:309`; production
      passes `None`.
@@ -842,8 +997,12 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
 
   **Teardown scope under DQ-7 vs. Plan 5 (forward-note, R4 — keep distinct).**
   Under DQ-7 alone, teardown is **unchanged**: per-`ProjectContext`, the
-  orchestrator calls `registry.shutdown_all()` → `host.shutdown()` (which kills
-  the child, `ts_process.rs:716`) at end-of-render. Under Plan 5 pooling the
+  orchestrator calls `registry.shutdown_all()` → `host.shutdown()` (graceful:
+  closes stdin so Deno exits, broadcasts `Cancelled` to pending slots, then
+  `child.wait()` + joins reader threads — **it does not kill**;
+  `ts_process.rs:733`. The forced `child.kill()` + `wait()` is the host's
+  `Drop` backstop at `ts_process.rs:789`, not `shutdown()`) at end-of-render.
+  Under Plan 5 pooling the
   subprocess outlives a single render, so per-render `shutdown()` becomes
   **drain-only** (no kill) or moves to `Drop`, and the actual reap happens at
   q2-process exit / pool eviction. **1c keeps the per-`ProjectContext` teardown
@@ -852,9 +1011,10 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
 - [ ] **`StageContext` plumbing for `BinaryDependencies`.** The
   the `global` config built in step 1 of registry construction reads
   `BinaryDependencies.pandoc` for `pandoc_path`. Today
-  `BinaryDependencies` is constructed in
-  `crates/quarto-core/src/render.rs:53-60` per render and is not on any
-  shared context. Move (or alias) it onto `ProjectContext` alongside
+  `BinaryDependencies` is constructed via `BinaryDependencies::discover` in
+  `crates/quarto-core/src/render_to_file.rs:285` per render (and re-discovered
+  per-stage at `attribution_generate.rs:118` / `ast_transforms.rs:164`) and is
+  not on any shared context. Move (or alias) it onto `ProjectContext` alongside
   `registry`, so both registry construction (step 1) and any future
   stage that needs binary discovery (sass, esbuild, typst) can read
   from one source. Single-doc renders constructing
@@ -905,19 +1065,25 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   This is the carrier from `EngineClaimsFileStage` to `ParseDocumentStage`.
 
 - [ ] **Create `EngineClaimsFileStage`** — a new `LoadedSource → LoadedSource`
-  pipeline stage inserted before `ParseDocumentStage`. **It must be inserted in
-  BOTH builders:** the full per-file pipeline (`build_html_pipeline_stages`)
-  **and the Pass-1 indexing builder** (`pass1_profile_single_file_live` in
-  `crates/quarto-core/src/project/orchestrator.rs`). This is load-bearing: Pass 1
-  advances every file to the `DocumentProfile` checkpoint, so a non-QMD input
-  (`.ipynb`, `.jl`) that isn't converted before parse yields a **garbage
-  `DocumentProfile`** (and a garbage `ProjectIndex` entry). The Pass-1 builder
-  currently also omits `IncludeResolveStage` / `ListingItemInfoStage` that the
-  full pipeline runs before the profile checkpoint — reconcile the two stage
-  lists when inserting (the profile should observe the same pre-mutation state
-  in both passes). Resolution itself stays Pass-2-only (design doc §7); only the
-  file-claim/convert half runs in Pass 1, and it spawns an engine only when a
-  doc genuinely needs conversion.
+  pipeline stage inserted **immediately before `ParseDocumentStage`**. **It must
+  be inserted in BOTH builders:** the full per-file pipeline
+  (`build_html_pipeline_stages_with_options`, `pipeline.rs:252`) **and the
+  Pass-1 indexing builder** (`pass1_profile_single_file_live`,
+  `crates/quarto-core/src/project/orchestrator.rs:1689`). This is load-bearing:
+  Pass 1 advances every file to the `DocumentProfile` checkpoint, so a non-QMD
+  input (`.ipynb`, `.jl`) that isn't converted before parse yields a **garbage
+  `DocumentProfile`** (and a garbage `ProjectIndex` entry). **Scope note:** this
+  item adds *only* `EngineClaimsFileStage` to both lists. Separately, the Pass-1
+  builder already omits `IncludeResolveStage` / `ListingItemInfoStage` that the
+  full builder runs before the profile checkpoint (verified: Pass-1 runs Parse →
+  MetadataMerge → IncludeExpansion → DocumentProfile → LinkResolution; the full
+  builder adds IncludeResolve + ListingItemInfo before the checkpoint). That
+  pre-existing divergence is **orthogonal to engine claims** and touches Pass-1
+  profile + cache-key semantics — do **not** fold it into this item; if the two
+  profiles genuinely must match, file it as its own scoped task (a website-epic
+  concern), not buried here. Resolution itself stays Pass-2-only (design doc §7);
+  only the file-claim/convert half runs in Pass 1, and it spawns an engine only
+  when a doc genuinely needs conversion.
   **Cache the conversion across passes.** Because the stage runs in *both*
   builders, a non-QMD file would otherwise be converted twice (a second
   `markdown_for_file` subprocess round-trip per TS-engine file). Cache the
@@ -925,6 +1091,12 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   lifetime/keying as `claims_file_cache` — file content is fixed within a
   render, so the two passes get byte-identical QMD). Pass 1 populates it; Pass 2
   hits the cache. (One conversion per file per render, not two.)
+  **Owner:** add a `conversion_cache: Mutex<HashMap<PathBuf, String>>` field on
+  `TsEngine`, sibling to the landed `claims_file_cache` (ts_engine.rs:127). A
+  file is converted by exactly the **one** claiming engine, so per-engine
+  keying is correct, and both passes reach the *same* `TsEngine` instance
+  through the registry's `Arc` — which is what makes the cache shared across the
+  two separate `StageContext`s.
   This stage:
   1. Gets the file extension from `LoadedSource.path`. **Normalize
      the path** to absolute + lexically normalized (no symlink
@@ -990,7 +1162,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   That is the whole v1 path — no dual-registration of the original, no remap.
   When `source.conversion.is_none()`, `ParseDocumentStage` runs as today.
 
-- [ ] **(A′ — DEFERRED, not these plans) byte-range AST source_info remap.**
+- **(A′ — DEFERRED — seam note, NOT a v1 work item) byte-range AST source_info remap.**
   Faithful converted-cell → original-cell positions would: register the
   original bytes under `source.path` (a second FileId `original_id`); add a
   `remap_via_source_info` walker (extend `quarto_ast_reconcile::remap_file_ids`
@@ -1007,8 +1179,10 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   `["markdown", "knitr", "jupyter"]`. With extension engines, the set
   of known engines is dynamic — it's whatever's in the registry.
   Replace usage with a query against the registry's engine names:
-  `registry.engine_names()`. `is_known_engine` had no callers outside
-  detection itself; just delete it.
+  `registry.engine_names()`. `is_known_engine` had no functional callers
+  outside detection itself (only a re-export and its own test); just delete it
+  — along with its re-export in `engine/mod.rs:135-136` and the
+  `test_is_known_engine` test (see the test-deletion obligation below).
 
 - [ ] **Wire `resolve_engines` into the stage** (§2B — *the function already
   landed in plan1a-engine*: `crates/quarto-core/src/engine/resolution.rs`
@@ -1031,7 +1205,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   - **File-claim short-circuit**: when `claimed` is `Some(name)`,
     `resolve_engines` returns that single engine as the whole sequence and does
     **not** run the tiers (design doc §8, Q1-faithful). *(This replaces the
-    landed `resolution.rs` seed handling — `:354-411`, which marks the seed
+    landed `resolution.rs` seed handling — ~`:344-414`, which marks the seed
     "present" + disables T4 but never short-circuits, leaving a theft hole; the
     revert is a net deletion of the `explicit_with_seed`/seed-present logic.)*
   - **AST language extraction**: extract `(language, first_class)` of executable
@@ -1041,6 +1215,23 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
     registered engine name (e.g. `julia: 1.10`) selects that engine, scanning
     `registry.engine_names()` (replacing the deleted `KNOWN_ENGINES`). Same as
     Q1 `markdownExecutionEngine` (engine.ts:161–169); document for users.
+  - **Project engine-order threading (auto-promotion — the step-4 "Final
+    order").** `resolve_engines` today derives its candidate order **only** from
+    `meta["engine"]` (resolution.rs:344–352), and `candidate_engines` orders
+    unlisted registry engines **after** `BUILTIN_ORDER` (alphabetically) — so an
+    installed-but-unlisted extension engine lands *behind* the built-ins, the
+    opposite of step-4 auto-promotion. **1c must thread the project engine order
+    in:** consume `registry.contribution_order` (Phase-2 step 6 — `External`
+    names + `Reorder` hints) in `candidate_engines`, splicing it **between** the
+    `meta`-explicit list and `BUILTIN_ORDER` (de-duped via the existing `seen`
+    set). **Critical: keep `is_implicit` gated on `meta["engine"]` only**
+    (resolution.rs:344/370) — auto-promotion via `contribution_order` must NOT
+    set `has_explicit_engine_key` or disable T4, or a `{python}`-only doc with
+    an installed-but-unclaiming extension would lose its implicit jupyter
+    fallback. Add a seam (distinct from P1-2, which lists the engine
+    explicitly): an *unlisted* extension engine with a same-kind/same-priority
+    claim wins/loses the tiebreak vs a built-in purely by `contribution_order`
+    position.
   - **Built-ins**: knitr `Primary(1)` for `r` + `Interop` for reticulate-reachable
     languages; jupyter `Fallback(0)`; markdown `None`. No built-in implements
     `claims_file` in Plans 1a/1c scope (TS extensions do — Julia for `.jl`); the
@@ -1087,15 +1278,17 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   → **loud** error `"Can't determine execution engine for <file>"` (Q1
   `engine.ts:317→366`); `.qmd`/`.md` always resolve. Fired in
   `EngineClaimsFileStage`. Write test.
-- [ ] A resolved **owning** engine whose runtime is unavailable (`is_available()`
+- [x] A resolved **owning** engine whose runtime is unavailable (`is_available()`
   false) → **loud**, actionable error naming the engine + what's missing + how
   to install (Q1 style: *"Unable to locate an installed version of R / Python 3…"*).
   Availability checked **after** resolution; **no** silent re-route to a fallback,
   **no** degradation. In a multi-engine sequence, any unavailable owner fails the
   whole render loudly, naming the engine/language. Write tests.
+  **(P2-12 done — Task 11; `get_engine_with_fallback` returns Err for
+  registered+unavailable+not-spliced; `spliced_engines` suppression preserved.)**
 - [ ] Language with no claim → **graceful** jupyter/markdown fallback (not an
   error). Already covered by the fallback tests above.
-- [ ] **A resolved owner is available but owns a language it cannot execute**
+- [x] **A resolved owner is available but owns a language it cannot execute**
   (design doc §10 case 4 — added 2026-06-24). The tiers can route a language to
   an engine that owns it but has no handler/kernel: `engine: [knitr, jupyter]`
   with `{sql}` routes `sql → jupyter` via explicit-`Fallback`, but jupyter has
@@ -1124,12 +1317,18 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   **Landed-code change (1c owns it, alongside the `resolution.rs` revert):**
   `engine/jupyter/text_execute.rs`'s `partition_cells` currently raises
   `NoHandlerForLanguage` for *any* owned-but-unrunnable cell regardless of
-  sequence length — gate the loud branch on `|sequence| > 1`, ceding
+  sequence length. Note it has **no sequence parameter today** —
+  `partition_cells(blocks, handled_languages)` — so gating on `|sequence| > 1`
+  is a **signature change** (thread the sequence length, or a `multi_engine:
+  bool`, in), not just a branch edit — gate the loud branch on `|sequence| > 1`, ceding
   (passing through) in the single-engine case; reconcile plan1a-engine's
   case-4 / jupyter-enforcement prose to match.
   Write tests: the `[knitr, jupyter]` + `{sql}` route (multi-engine → loud);
   **and** a single-engine `{python}`-in-a-claimed-`.echo` case (→ pass-through,
   no error) — the echo fixture's appended `{python}` cell exercises exactly this.
+  **(P2-13 done — Task 11; `partition_cells` signature change: `multi_engine:
+  bool` parameter added; `ExecutionContext` carries `multi_engine`; stage
+  computes `to_run.len() > 1`. Unit tests: P2-13a kept GREEN, P2-13b added.)**
 
 ### Phase 3: Echo engine integration test
 
@@ -1187,14 +1386,17 @@ Plan 2 Phase B lands.
           // can't execute (§8).
           markdownForFile: async (file) => {
               const text = await Deno.readTextFile(file);
-              return {
-                  value: "```{echo}\n" + text + "\n```\n\n" +
-                         "```{python}\nprint('not run by echo')\n```\n",
-                  fileName: file,
-                  sourceMap: [],   // q2 protocol's flattened source-map, empty here (1C-2).
-                                   // NOT Q1's shape — Q1's markdownForFile returns a
-                                   // MappedString { value, fileName?, map() }, no sourceMap field.
-              };
+              const wrapped = "```{echo}\n" + text + "\n```\n\n" +
+                              "```{python}\nprint('not run by echo')\n```\n";
+              // Return a REAL @quarto/types MappedString (has `.map()`), built
+              // via the SDK — NOT a bare `{ value, fileName, sourceMap }` literal.
+              // The harness serializes provenance via `serializeMappedString(ms)`
+              // and IGNORES any `sourceMap` field, so the literal form was a no-op
+              // bug. A trivial identity string is the C′ case (positions resolve
+              // into the converted buffer); faithful original-file mapping (A′) is
+              // deferred — when built, the engine returns a multi-piece MappedString
+              // instead (which needs the MappedString `segments()`/public-builder work).
+              return quarto.mappedString.fromString(wrapped, file);
           },
           execute: async (opts) => ({
               engine: "echo",
@@ -1213,7 +1415,11 @@ Plan 2 Phase B lands.
   };
   export default echoEngine;
   ```
-- [ ] Write Rust integration test covering **both fixtures**:
+- [x] Write Rust integration test covering **both fixtures**
+  (`crates/quarto-core/tests/integration/echo_engine_e2e.rs`, Deno-gated,
+  RAN + passed; the `.echo` single-engine pass-through asserted via output —
+  `{python}` cell present unexecuted; conversion proved by the render
+  succeeding at all):
   1. Set up project with echo engine extension.
   2. Render `lang.qmd` (a `.qmd` with `{echo}` blocks). Verify output
      contains `ECHO_EXECUTED`. This exercises:
@@ -1236,11 +1442,17 @@ Plan 2 Phase B lands.
      crate is the main CLI binary) or a Rust test that programmatically
      drives the render pipeline through `render_document_to_file` —
      check existing tests in `crates/quarto/tests/` for patterns.
-- [ ] This pair of tests validates the full pipeline for both discovery
+- [x] This pair of tests validates the full pipeline for both discovery
   paths: discovery → subprocess spawn → `LoadEngine` → discovery query
   (claimsLanguage / claimsFile) → `LaunchEngine` → markdownForFile (for
-  the `.echo` case) → execute → result.
-- [ ] **Verify teardown end-to-end (this is the home plan1a-host defers to).**
+  the `.echo` case) → execute → result. (Also drove the real `q2 render`
+  binary on `file.echo`/`lang.qmd`/`{echolegacy}` — output inspected: see
+  `.superpowers/sdd/1c-task-14-report.md`.) **Two production bugs surfaced
+  and fixed:** (a) `EngineClaimsFileStage` passed an undotted `ext` (`echo`)
+  while the dotted convention (`.echo`) is used everywhere else — no engine
+  claimed `.echo` files; (b) unnamed dynamic engines addressed wire frames by
+  ext-id instead of the harness's runtime name (`engine not loaded: echo-legacy`).
+- [x] **Verify teardown end-to-end (this is the home plan1a-host defers to).**
   plan1a-host unit-tests teardown via `MockTransport`/the spike but explicitly
   defers the *real* shutdown-on-render-end verification to Plan 1c ("Lifecycle
   caller is Plan 1c"). So after the render completes, assert the Deno subprocess
@@ -1248,6 +1460,11 @@ Plan 2 Phase B lands.
   after `ProjectContext` teardown assert the process is gone (no zombie). This
   exercises the orchestrator's explicit `registry.shutdown_all()` → `host.shutdown()`
   → close-stdin → child-exit → reader-thread-join path that no other test covers.
+  (Done: `p3_3_orchestrator_teardown_reaps_subprocess` — added the
+  `registry.shutdown_all()` call site in `ProjectPipeline::run`, exposed
+  `ExecutionEngine::is_alive()` (TsEngine → `host.is_alive()`), asserted the
+  child is gone after `run()` with `project` still in scope. Fail-on-revert
+  confirmed: disabling the call turns the test RED.)
 - [ ] **(Optional, lower priority) crash-path E2E.** A third fixture whose echo
   engine `Deno.exit(1)`s (or is killed) mid-`execute` → assert the render fails
   with a `ProcessCrashed`-shaped error carrying the captured stderr, and that no
@@ -1295,9 +1512,9 @@ send and `TsEngine::launch` are implementable.
 |---|---|---|
 | `quarto_version` | `env!("CARGO_PKG_VERSION")` from the `quarto` crate, exposed via a `quarto_core::version()` const | one-liner |
 | `resource_dir` | `crate::extension::BUILTIN_EXTENSIONS.path()` (existing `ResourceBundle.path()`) | narrower than Q1's "all bundled resources"; document the scope |
-| `runtime_dir` | `{project_dir}/.quarto/cache/engines/`, created on demand | reuses the existing `.quarto/cache/` convention; no new persistent-state infra needed for Plan 1c |
-| `data_dir` | q2 data-dir convention (alongside `runtime_dir`) | mirror `runtime_dir`'s resolution |
-| `pandoc_path` | `ctx.runtime.find_binary("pandoc", "QUARTO_PANDOC")` (already exists in render.rs:51 via `BinaryDependencies::discover`) | `Option<String>` — `None` is fine; engines that need pandoc fail with a clear error only if they actually call it. q2 itself does not invoke pandoc on the main render path (pampa replaces it). |
+| `runtime_dir` | `quarto_util::quarto_runtime_dir()` (plan1a-host — user-level XDG/cache dir, **not** project-relative; matches construction step 1) | created on demand by the helper. (`project_dir` is per-render under DQ-7, so it cannot live in the process-stable `global`.) |
+| `data_dir` | `quarto_util::quarto_data_dir()` (NEW — `dirs::data_dir()` namespaced under `quarto`, `QUARTO_DATA_DIR` override first; see step 1) | mirrors `quarto_runtime_dir()`'s shape |
+| `pandoc_path` | `ProjectContext`'s `BinaryDependencies.pandoc` (the `pandoc: Option<PathBuf>` field at `render.rs:130`), stringified — discovered by `BinaryDependencies::discover` (`render.rs:150`, which internally calls `runtime.find_binary("pandoc", "QUARTO_PANDOC")` at `render.rs:154`); matches construction step 1 | `Option<String>` — `None` is fine; engines that need pandoc fail with a clear error only if they actually call it. q2 itself does not invoke pandoc on the main render path (pampa replaces it). |
 | `is_interactive_session` | new `SystemRuntime::is_interactive(&self) -> bool` (NativeRuntime checks `IsTerminal` on stdin; WasmRuntime returns `false`) | small new method; ~10 lines |
 | `running_in_ci` | new `SystemRuntime::running_in_ci(&self) -> bool` (reads `CI` env var via existing `env_get`) | small new method; ~5 lines |
 
@@ -1419,6 +1636,147 @@ file is worked out in
 `claude-notes/plans/2025-12-15-source-info-for-structured-formats.md` (status
 "Design finalized"). So this is a scoped-out-with-a-plan deferral, not an
 open question — it lands when a built-in engine grows `claims_file`.
+
+## Test Seam Spec (frozen)
+
+This section **binds** every `Write test:` bullet scattered through Phases 1–3 into a seam with a
+*named revert hunk* — the one production change whose reversal turns a *named assertion* RED. Once a
+seam goes green its harness + assertions are frozen (never edited to go green). Authored against the
+real code (anchors re-verified 2026-06-30: `resolution.rs:323` `resolve_engines`, seed logic `:357-414`;
+`jupyter/text_execute.rs:150` `partition_cells` + existing test
+`test_partition_cells_owned_unrunnable_fails_loudly` at `:401` (P2-13a keeps it green through the
+signature change); `preview.rs:216` `engine_registry: None`; `detection.rs:34/89`
+`KNOWN_ENGINES`/`is_known_engine` + existing test `test_is_known_engine` at `:360` (deleted per the
+test-deletion obligation); `read.rs:159` `parse_contributes`).
+
+**Tiering policy (lowest faithful tier).**
+- **Rust in-process, no Deno** — Phase-1 parse/register/warn, and *all* of Phase-2 resolution +
+  failure-model. Static-claims resolution is **zero-load by design**, so these mount a real
+  `EngineRegistry` + real pampa-parsed AST and spawn **no** subprocess. Several "zero-load" seams assert
+  against the **TsEngineHost test-observability** surface that 1c commits to building (see the dedicated
+  work item in Phase 2): a non-`cfg(test)` `is_alive()` plus `#[cfg(test)]` per-verb request counters
+  (`load_engine_count()`, `markdown_for_file_count()`) and a spawn observable. P1-5/P1-12/P2-17/P3-3
+  assert against these committed surfaces — they are no longer "maybe expose."
+- **Pure mock-table tier lives with `resolve_engines`, NOT here.** The plan already says the
+  tier/priority pure-logic tests live with the function (`resolution.rs` unit tests, line ~1092). 1c's
+  resolution seams are the **integration** tier (real registry + real AST). Do **not** restate the
+  mock-table priority tests in 1c — P2-3 below is logged as covered-there, not duplicated.
+- **Deno subprocess required** — Phase-3 echo E2E, dynamic-fallback, teardown, crash. These are the
+  *real-process* home (plan1a-host did the `MockTransport` versions; §1260 defers the real ones here).
+  All Deno-gated seams early-return under `!has_deno()` (success-criterion §1505), matching the pandoc
+  pattern.
+
+### Table A — Phase 1: discovery / parse / register / warn (Rust, in-process)
+
+| ID | Real unit (not mocked) | Seam: call → assertion surface | Named revert hunk → which assertion reddens |
+|----|------------------------|--------------------------------|---------------------------------------------|
+| P1-1 | discovery loop → `EngineRegistry` | fixture ext dir → discover → `registry.engine_names()` contains the engine | Drop the `registry.register(engine)` in discovery step 5 ⇒ `engine_names()` lacks it RED |
+| P1-2 | ordering step (Phase-1 "Final order") | `_quarto.yml engines:[echo]` + built-ins → resolved order is `[echo, knitr, jupyter, markdown]` | Remove the user-specified-order-first sort (step 4) ⇒ order is registration-order ⇒ `echo` not at index 0 RED |
+| P1-3 | order-validation (step 8) | `engines:[foo]`, `foo` unregistered → hard error **listing available engines** | Remove the "every name in order is registered" check ⇒ no error RED (assert on the message naming `foo` + the live list, not just `is_err`) |
+| P1-4 | collision check (step 5) | two exts both `name: julia` → hard error **naming both contributors** | Replace the collision hard-error with silent overwrite ⇒ `is_err` + both-names-in-message RED |
+| P1-5 | `name`-declared registration | ext `name: julia` → `engine: julia` resolves **with `host.is_alive()==false`** (no spawn) | Remove immediate register-under-`name`; force alias-map lazy path ⇒ a spawn occurs ⇒ `is_alive()==false` RED. *(Exercised-guard: assert the engine DID resolve — else "no spawn" passes vacuously when nothing resolves.)* |
+| P1-6 | alias-map lazy populate | ext omits `name` → `engine: <runtime-name>` → resolves AND `host` loaded once (alias populated) | Remove the alias-map populate on first `LoadEngine` ⇒ lookup miss RED |
+| P1-7 | `LoadEngineResult.name` assert | ext `name: julia`, load returns `name:"jupyter"` → hard error pointing at YAML | Remove the `result.name == declared` assertion ⇒ no error RED |
+| P1-8 | `parse_contributes` `.js` check (`read.rs:159`) | `path: src/engine.ts` → parse `Err` w/ `build-ts-extension` hint | Remove the lowercase-`.js` validation ⇒ `.ts` accepted ⇒ `is_err` RED |
+| P1-9 | same hunk as P1-8 | `path: bundle.JS` and `path: bundle.mjs` → both `Err`, same hint | Same revert as P1-8 ⇒ uppercase/`.mjs` accepted RED. *(Distinct inputs, shared hunk — keep both rows so the case-fold + ext-set are each pinned.)* |
+| P1-10 | bundle-exists check (discovery step 2) | declared `.js` missing on disk → registration `Err` w/ `build-ts-extension` hint | Remove the `path.exists()` check ⇒ registers a non-existent bundle RED |
+| P1-11 | missing-static-fields warning emitter | matrix: each of `name`/`claims`/`file-extensions`/`claims-files` absent → **warning naming exactly that field**; `Some([])`/`Some({})` → **silent** | Remove the `any-field-None` emit branch ⇒ "warning names `claims`" RED. **Vacuity:** assert the warning *content* (which field), not just count — a generic warning must not satisfy it. Second half: revert "treat `Some(empty)` as present" ⇒ spurious warning ⇒ "no warning for `[]`" RED |
+| P1-12 | `TsEngine::claims_language` static branch | static-`claims` engine resolves its lang with `is_alive()==false`; a `path`-only legacy engine resolves the SAME lang with `is_alive()==true` (loaded); both reach identical ownership | Remove the "answer from `claims` map without loading" branch ⇒ static engine also spawns ⇒ `is_alive()==false` RED. **Exercised-guard:** assert the legacy arm DID load (`is_alive()==true`) — else the contrast is vacuous |
+| P1-13 | static-vs-dynamic validation | declared `claims` disagreeing with dynamic `claims_language` at first execute-load → hard error naming engine+language | Remove the load-time static-vs-dynamic compare ⇒ no error RED |
+| P1-14 | `when_class` branch of `StaticLanguageClaim`→`LanguageClaim` conversion (the `first_class`-conditional claim) | engine declares `claims: { python: { kind: primary, whenClass: marimo } }`: a `{python .marimo}` cell → engine claims `Primary(python)`; a **bare** `{python}` cell → engine returns `None` → falls to jupyter. Assert **both** directions | Remove the `when_class` match guard (convert regardless of `first_class`, `:183-187`) ⇒ the bare `{python}` is wrongly claimed by the marimo engine ⇒ the "bare `{python}` → jupyter, NOT the marimo engine" assertion RED. **Exercised-guard:** the positive arm (`{python .marimo}` IS claimed) must also be asserted — a one-directional test passes when `when_class` is ignored (always-claim) |
+
+### Table B — Phase 2: resolution (Rust, in-process; real registry + real AST)
+
+| ID | Real unit | Seam: call → assertion surface | Named revert hunk |
+|----|-----------|--------------------------------|-------------------|
+| P2-1 | `resolve_engines` T1 (`resolution.rs:323`) | doc with `{julia}` cells + julia `Primary(1)` → `sequence==[julia]` | Stub the T1 Primary emit ⇒ julia unselected RED |
+| P2-2 | explicit-key short-circuit | **`engine: markdown`** on a doc with `{r}` cells → `sequence==[markdown]` (explicit beats the knitr tier) | Remove the explicit-engine-key selection ⇒ knitr wins via T1 ⇒ `[markdown]` RED. *(Respec'd from "engine: julia" — that didn't discriminate, since julia would win the tiers anyway; the contradicting explicit pick is the real discriminator.)* |
+| P2-3 | — | priority scoring (higher wins) | **Covered by `resolution.rs` mock-table unit tests; not duplicated in 1c** (see tiering policy). Logged, not re-spec'd. |
+| P2-4 | `resolve_engines` T4 | `{notaknownlang}` computational cell, no claimer → `sequence==[jupyter]` (implicit-Fallback) | Stub the implicit-Fallback (T4) tier ⇒ language unowned ⇒ `[jupyter]` RED |
+| P2-5 | empty-sequence path | doc with no executable cells → `sequence==[markdown]` (empty) | Remove the no-executable→markdown handling ⇒ wrong/non-empty RED |
+| P2-6 | — | "extension engine registered, discoverable by name" | **Duplicate of P1-1/P1-5**; logged, not a separate seam |
+| P2-7 | knitr Interop(python) | `{r}`+`{python}` → `sequence==[knitr]`, `ownership[python]==knitr` | Remove knitr's Interop-python claim ⇒ python → jupyter dragged in ⇒ `[knitr]` RED |
+| P2-8 | `handled_languages_for` | explicit `[knitr,jupyter]` + `{r}`+`{python}` → `sequence==[knitr,jupyter]`, `ownership=={r→knitr,python→jupyter}`, `knitr.handled_languages ⊇ {python}` | Stub `EngineResolution::handled_languages_for` to owner-only ⇒ `handled_languages ⊉ {python}` RED |
+| P2-9 | presence-gating | pure `{python}`, no python extension → `sequence==[jupyter]` (knitr **absent**) | Remove presence-gating (knitr present only if `{r}`) ⇒ knitr included ⇒ `[jupyter]` RED |
+| P2-10 | claimed-file short-circuit | `claimed=Some("echo")`, converted content has `{echo}`+`{python}`, front-matter `engine: knitr` → `sequence==[echo]`; `{python}` not owned by a 2nd engine; the `engine: knitr` ignored | **Restore the `explicit_with_seed`/seed-present logic (`resolution.rs:357-414`)** removing the short-circuit ⇒ the file's `engine:` is consulted / a 2nd engine appears ⇒ `sequence==[echo]` RED. *(Plan-named net deletion; this is its binding test.)* |
+
+### Table C — Phase 2: failure model + case-4 gate (Rust; case-4 single-engine via echo fixture)
+
+| ID | Real unit | Seam: call → assertion surface | Named revert hunk |
+|----|-----------|--------------------------------|-------------------|
+| P2-11 | `EngineClaimsFileStage` no-claimer branch | `.echo` with **no** engine declaring `.echo` → loud `Err("Can't determine execution engine for …")`; `.qmd`/`.md` never error | Remove the no-claimer loud-error branch ⇒ silent pass RED |
+| P2-12 | post-resolution availability check | resolved **owning** engine with `is_available()==false` → loud actionable error; **no** silent re-route to fallback | Remove the after-resolution availability gate ⇒ silent fallback/degradation RED |
+| P2-13a | `partition_cells` multi-engine (`text_execute.rs:150`) | `[knitr,jupyter]` + `{sql}` → `Err(NoHandlerForLanguage{jupyter,sql})` | **Existing test `text_execute.rs:400-425`** (`test_partition_cells_owned_unrunnable_fails_loudly`) — preserve it; thread the new sequence-length arg so it stays GREEN. Revert: remove the loud branch ⇒ existing test RED |
+| P2-13b | `partition_cells` `|sequence|>1` gate (**new in 1c**) | single-engine claimed `.echo` whose converted body has a `{python}` cell jupyter-ownable-but-unrunnable → **pass-through, NO error**; `print('not run by echo')` present, unexecuted | Remove the `|sequence|>1` gate (raise unconditionally) ⇒ single-engine case raises ⇒ "no error / cell passed through" RED. **This is the binding test for the signature change**; without it the gate is half-bound (only the loud side tested) |
+
+### Table D — Phase 2: R5 preview capture (Deno-gated; 3 call sites)
+
+| ID | Real unit | Seam: call → assertion surface | Named revert hunk |
+|----|-----------|--------------------------------|-------------------|
+| P2-14 | `record_capture` funnel reading `project.registry` | extension echo engine runs in a `q2 preview` **eager** capture → captured output contains `ECHO_EXECUTED` | Drop the `project.registry` read at the eager site (`capture_driver.rs:57`) → falls to `None`/built-ins → `ECHO_EXECUTED` absent RED |
+| P2-15 | sites 2 **and** 3 (`recompute_staleness`, `re_execute.rs:309`) | echo doc captured, then an **on-edit re-execution** is triggered → `ECHO_EXECUTED` **still** present after the edit | Repoint **only** the eager site, leave sites 2/3 = `None` ⇒ engine vanishes on edit ⇒ the **post-re-execute** assertion RED. **Vacuity:** the test MUST trigger an actual re-execute (assert the capture re-ran), else it collapses into P2-14 and sites 2/3 stay unbound |
+
+### Table E — Phase 3: echo E2E + lifecycle (Deno-gated)
+
+| ID | Real unit | Seam: call → assertion surface | Named revert hunk |
+|----|-----------|--------------------------------|-------------------|
+| P3-1a | full render path, language-claim | render `lang.qmd` (`{echo}` blocks) via `render_document_to_file` → output contains `ECHO_EXECUTED` | Stub echo's `Primary(echo)` resolution (T1) ⇒ echo not selected ⇒ `ECHO_EXECUTED` absent RED |
+| P3-1b | full render path, file-claim + §8 | render `file.echo` → `ECHO_EXECUTED` present, the appended `{python}` cell present **unexecuted** (`print('not run by echo')` as listing, no output), and resolution `sequence==[echo]`. **Exercised-guard:** assert `LoadedSource.conversion.is_some()` (the file really went through `markdown_for_file`) | Restore seed-present logic (`resolution.rs:357-414`) ⇒ sequence≠`[echo]` or `{python}` executed/stolen RED |
+| P3-2 | dynamic-fallback (`echo-legacy`) | `path`-only legacy ext, `{echolegacy}` doc → resolves via **dynamic `LoadEngine`+`claimsLanguage`**, alias map populated | Remove the `claims==None → LoadEngine` dynamic fallback in `claims_language` ⇒ `{echolegacy}` unresolved RED |
+| P3-3 | orchestrator teardown | after render+`ProjectContext` teardown → subprocess **gone** (`host.is_alive()==false` / pid reaped). **Exercised-guard:** assert `is_alive()==true` mid-render first | Remove the orchestrator's `registry.shutdown_all()` call ⇒ process lingers ⇒ "gone after teardown" RED (this path is covered by no other test) |
+| P3-4 | reader-thread EOF→broadcast (real process) | **(optional, lower priority)** echo `Deno.exit(1)` mid-`execute` → render `Err` of `ProcessCrashed` shape carrying captured stderr; no leaked child | Remove the reader-thread EOF→error-broadcast ⇒ hang or wrong error RED. Marked optional per §1268 |
+
+### Refactor-induced vacuity check (the collisions that bite)
+
+- **`[]` / "no error" / "no spawn" passing vacuously.** P1-5, P1-12, P3-3 all assert a *negative*
+  (no spawn / process gone). Each carries an **exercised-guard** (the positive thing actually happened:
+  engine resolved, legacy arm loaded, host was alive mid-render) so the negative can't pass when nothing
+  ran. Do not drop these guards in a later refactor.
+- **P2-2 explicit-engine.** Must use an explicit pick that *contradicts* the tier result
+  (`engine: markdown` over `{r}`), or "explicit skips discovery" is indistinguishable from "tiers picked
+  the same engine."
+- **P2-13a vs P2-13b.** The gate is only fully bound when **both** rows exist: 13a (multi-engine, stays
+  loud — the *existing* test, kept green through the signature change) and 13b (single-engine, now
+  pass-through — RED on removing the gate). Testing only one leaves half the branch vacuous.
+- **P2-14 vs P2-15.** R5 fails most dangerously when the eager site works but sites 2/3 don't (engine
+  vanishes the instant the user edits). P2-15's *post-re-execute* assertion is the discriminator; it must
+  trigger a real re-execution, not re-assert the eager capture.
+
+### Missing-test pass (reasoned across the change; bound or accepted-untested)
+
+- **P2-16 (NEW seam) — `EngineClaimsFileStage` runs in Pass 1, not only Pass 2.** §918-931 makes the
+  stage load-bearing in *both* `build_html_pipeline_stages` **and** `pass1_profile_single_file_live`; if
+  it's omitted from the Pass-1 builder a non-QMD file yields a **garbage `DocumentProfile`/`ProjectIndex`
+  entry**. No `Write test:` covers this. *Seam:* a `.echo` file in a **project** render → its
+  `ProjectIndex` entry has the converted doc's title/outline, not garbage. *Revert:* remove the stage
+  from `pass1_profile_single_file_live` ⇒ Pass-1 profile is garbage ⇒ the "index title == converted-doc
+  title" assertion RED. (Deno-gated.)
+- **P2-17 (NEW seam) — one conversion per file per render (cross-pass cache).** §932-938 caches
+  `markdown_for_file` so the two passes don't each convert. No test. *Seam:* render a `.echo` and assert
+  the `markdown_for_file` round-trip count == 1 (reuse the load/round-trip probe). *Revert:* drop the
+  per-render conversion cache ⇒ count == 2 ⇒ RED. *(If a round-trip counter is too invasive, log as
+  accepted-untested with that rationale — do not silently omit.)*
+- **P2-18 (NEW seam) — `q2 build-ts-extension` actually produces a loadable bundle.** The success
+  criterion "`q2 build-ts-extension` … produces a working bundle" has **no `Write test:`**, and the
+  Phase-3 E2E (P3-1) loads the fixture's **committed pre-built** `.js` (the build model commits
+  bundles), so the build *command* is exercised by **nothing**. *Seam:* invoke `q2 build-ts-extension`
+  on the echo fixture's `src/echo-engine.ts` with `--config resources/extension-build/deno.workspace.json`
+  → assert the `.js` at the `path` location is produced and `deno check`-clean (or `import()`-loadable).
+  *Revert:* make the handler skip the `deno bundle` invocation ⇒ no/stale `.js` ⇒ the "output exists +
+  loadable" assertion RED. (Deno-gated; if driving the real bundler in CI is too heavy, log
+  accepted-untested **with that rationale** rather than omitting — the criterion must not read as covered
+  when nothing exercises the command.)
+- **Test-deletion obligation — `detection.rs:359-366` `test_is_known_engine`.** Removing
+  `KNOWN_ENGINES`/`is_known_engine` (§1016-1022) breaks this existing test at compile time. It must be
+  **deleted** as part of the item (not left dangling). Call it out so the removal compiles.
+- **Accepted-untested (logged, with rationale):**
+  - **A′ byte-range remap** (§1004-1014, §1500-1502) — explicitly out of v1; no consumer. Lands with
+    A′, tested then. Silent omission would read as covered; this is the explicit non-omission.
+  - **`quarto_required` enforcement** (§477-504) — 1c carries the field **inert**; the gate is grand-plan
+    Phase 12. The plan already states "No 1c test asserts enforcement"; echoed here so the gap is on the
+    record, not a forgotten seam.
+  - **Pure tier/priority mock-table tests** (P2-3) — live with `resolve_engines` in `resolution.rs`;
+    duplicating them in 1c's integration tier adds cost without a distinct revert.
 
 ## Success Criteria
 

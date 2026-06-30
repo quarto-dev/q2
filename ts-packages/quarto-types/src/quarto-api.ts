@@ -5,7 +5,7 @@
  * Copyright (C) 2023 Posit Software, PBC
  */
 
-import type { MappedString } from "./text.js";
+import type { MappedString, StringChunk, EitherString } from "./text.js";
 import type { Metadata } from "./metadata.js";
 import type { Format } from "./format.js";
 import type { PartitionedMarkdown } from "./markdown.js";
@@ -143,6 +143,16 @@ export interface QuartoAPI {
       str: MappedString,
       offset: number,
     ) => { line: number; column: number };
+
+    /**
+     * Build a MappedString from a source + an array of chunks (string | MappedString | Range).
+     * A Range slices `source` faithfully (carrying provenance); a bare string is synthetic.
+     */
+    mappedStringFromChunks: (
+      source: EitherString,
+      pieces: StringChunk[],
+      fileName?: string,
+    ) => MappedString;
   };
 
   /**

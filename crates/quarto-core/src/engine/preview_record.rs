@@ -113,10 +113,12 @@ impl PipelineObserver for CaptureCollector {
 /// extensions, etc.) automatically flow into capture recording — no
 /// drift between the server-side record path and the in-browser
 /// replay path.
-fn build_capture_pipeline_stages(
-    engine_registry: Option<Arc<EngineRegistry>>,
-) -> Vec<Box<dyn PipelineStage>> {
-    let mut stages = build_html_pipeline_stages_with_options(None, engine_registry);
+///
+/// The engine registry is no longer a stage-level concern (Task 8 of
+/// ts-engine-extensions); `record_capture` sets `ctx.registry` directly
+/// on the `StageContext` after construction.
+fn build_capture_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_html_pipeline_stages_with_options(None);
     if let Some(idx) = stages.iter().position(|s| s.name() == "engine-execution") {
         stages.truncate(idx + 1);
     }
@@ -154,8 +156,15 @@ pub async fn record_capture(
 
     let mut ctx = StageContext::new(runtime, format, project.clone(), document)?
         .with_observer(Arc::new(collector));
+    // Apply the engine registry override when supplied (test seam); otherwise
+    // the project's default registry (already on ctx.registry from
+    // StageContext::new()) is used.  This mirrors the run_pipeline pattern:
+    // StageContext::new() sets the default; callers override via the field.
+    if let Some(reg) = engine_registry {
+        ctx.registry = reg;
+    }
 
-    let stages = build_capture_pipeline_stages(engine_registry);
+    let stages = build_capture_pipeline_stages();
     let pipeline =
         Pipeline::new(stages).expect("preview-record pipeline stages should be compatible");
 
@@ -175,7 +184,7 @@ pub async fn record_capture(
 /// check serializes the same AST and compares byte-for-byte against
 /// the existing capture's `input_qmd`.
 fn build_pre_engine_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
-    let mut stages = build_html_pipeline_stages_with_options(None, None);
+    let mut stages = build_html_pipeline_stages_with_options(None);
     if let Some(idx) = stages
         .iter()
         .position(|s| s.name() == "pre-engine-sugaring")
@@ -268,6 +277,18 @@ mod tests {
             let mut out = String::from(input);
             out.push_str("\n<!-- test-passthrough -->\n");
             Ok(ExecuteResult::passthrough(&out))
+        }
+
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "test-passthrough" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
+            }
         }
     }
 

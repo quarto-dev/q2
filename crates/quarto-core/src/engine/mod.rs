@@ -133,8 +133,7 @@ pub const DEFAULT_EXECUTE_TIMEOUT: Duration = Duration::from_secs(300);
 // Re-export public types
 pub use context::{ExecuteResult, ExecutionContext};
 pub use detection::{
-    DetectedEngine, EngineSequence, KNOWN_ENGINES, detect_engine, detect_engine_sequence,
-    detect_engines, is_known_engine,
+    DetectedEngine, EngineSequence, detect_engine, detect_engine_sequence, detect_engines,
 };
 pub use error::ExecutionError;
 #[cfg(not(target_arch = "wasm32"))]

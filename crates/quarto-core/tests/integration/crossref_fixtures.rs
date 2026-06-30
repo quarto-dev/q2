@@ -68,6 +68,8 @@ async fn run_crossref(
         is_single_file: true,
         files: vec![],
         output_dir: PathBuf::from("/p"),
+
+        ..Default::default()
     };
     let doc = DocumentInfo::from_path("/p/t.qmd");
     let format = Format::html();
@@ -810,6 +812,8 @@ async fn run_crossref_rendered(
         is_single_file: true,
         files: vec![],
         output_dir: PathBuf::from("/p"),
+
+        ..Default::default()
     };
     let doc = DocumentInfo::from_path("/p/t.qmd");
     let format = Format::html();

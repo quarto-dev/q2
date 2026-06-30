@@ -40,12 +40,16 @@ pub mod website_config;
 pub mod website_post_render;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::config_value::ConfigValueKind;
 use quarto_system_runtime::SystemRuntime;
 
+use crate::engine::EngineRegistry;
 use crate::error::{QuartoError, Result};
+use crate::extension::Extension;
+use crate::render::BinaryDependencies;
 
 /// Default output directory for a project when `project.output-dir`
 /// is unset.
@@ -411,8 +415,258 @@ impl DocumentInfo {
     }
 }
 
+// ── Engine registry construction ──────────────────────────────────────────────
+
+/// Returns `true` if any extension contributes an `External` engine (i.e.
+/// requires a `TsEngineHost` to be constructed).
+///
+/// A `Reorder`-only or empty extension list returns `false`, which means
+/// `build_engine_registry` can skip the IO-creating `quarto_runtime_dir()` /
+/// `quarto_data_dir()` calls entirely — restoring the pre-Task-7b behavior for
+/// the common single-file / no-extension case.
+#[cfg(not(target_arch = "wasm32"))]
+fn any_external_engine(extensions: &[Extension]) -> bool {
+    use crate::extension::types::EngineContribution;
+    extensions.iter().any(|e| {
+        e.contributes
+            .engines
+            .iter()
+            .any(|c| matches!(c, EngineContribution::External { .. }))
+    })
+}
+
+/// Build the project's engine registry: built-ins + every extension-contributed
+/// engine, plus the shared `TsEngineHost` (constructed lazily — only when at
+/// least one `External` engine contribution is present).
+///
+/// Errors on: missing .js bundle, name collision, or a `Reorder` hint naming an
+/// unregistered engine.
+///
+/// Native-only: `TsEngine` / `TsEngineHost` are not available on wasm32.
+#[cfg(not(target_arch = "wasm32"))]
+fn build_engine_registry(
+    extensions: &[Extension],
+    binary_dependencies: &BinaryDependencies,
+    runtime: &dyn SystemRuntime,
+) -> Result<Arc<EngineRegistry>> {
+    use std::collections::{HashMap, HashSet};
+
+    use crate::engine::TsEngine;
+    use crate::engine::ts_process::TsEngineHost;
+    use crate::engine::ts_protocol::HostGlobalConfig;
+    use crate::extension::BUILTIN_EXTENSIONS;
+    use crate::extension::types::{EngineContribution, engine_contribution_missing_fields_warning};
+
+    // ── Needs-host check ──────────────────────────────────────────────────────
+    // Skip HostGlobalConfig / TsEngineHost construction — and the directory-
+    // creating quarto_runtime_dir() / quarto_data_dir() calls they imply — when
+    // no extension contributes an External engine. A Reorder hint alone only
+    // references an existing built-in and is validated in step 6 without a host.
+    let needs_host = any_external_engine(extensions);
+
+    // ── Step 1: Built-ins registry (markdown / knitr / jupyter) ──────────────
+    let mut registry = EngineRegistry::new();
+
+    // Track key → contributor label for collision detection.
+    let mut key_to_contributor: HashMap<String, String> = {
+        let mut m = HashMap::new();
+        m.insert("markdown".to_string(), "built-in".to_string());
+        m.insert("knitr".to_string(), "built-in".to_string());
+        m.insert("jupyter".to_string(), "built-in".to_string());
+        m
+    };
+
+    let mut order: Vec<String> = Vec::new();
+
+    if needs_host {
+        // ── Step 2: Build the process-stable HostGlobalConfig ────────────────
+        let resource_dir = BUILTIN_EXTENSIONS
+            .path()
+            .ok()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+
+        let runtime_dir = quarto_util::quarto_runtime_dir()
+            .map_err(|e| QuartoError::Other(format!("failed to locate Quarto runtime dir: {}", e)))?
+            .display()
+            .to_string();
+
+        let data_dir = quarto_util::quarto_data_dir()
+            .map_err(|e| QuartoError::Other(format!("failed to locate Quarto data dir: {}", e)))?
+            .display()
+            .to_string();
+
+        let pandoc_path = binary_dependencies
+            .pandoc
+            .as_ref()
+            .map(|p| p.display().to_string());
+
+        let global = HostGlobalConfig {
+            resource_dir,
+            runtime_dir,
+            data_dir,
+            pandoc_path,
+            is_interactive_session: runtime.is_interactive(),
+            running_in_ci: runtime.running_in_ci(),
+            quarto_version: crate::version().to_string(),
+        };
+
+        // ── Step 3: Build the shared host (NOT spawned; first round-trip spawns) ──
+        let host = Arc::new(TsEngineHost::new(global));
+
+        // ── Step 4: Process each extension's engine contributions ─────────────────
+        for ext in extensions {
+            let ext_label = ext.id.to_string();
+
+            for contribution in &ext.contributes.engines {
+                match contribution {
+                    // Reorder hint: record in order list, do NOT register
+                    EngineContribution::Reorder { name } => {
+                        order.push(name.clone());
+                    }
+
+                    EngineContribution::External {
+                        path,
+                        name,
+                        claims,
+                        file_extensions,
+                        claims_files,
+                    } => {
+                        // Step 4a: Bundle-exists check
+                        if !path.exists() {
+                            return Err(QuartoError::Other(format!(
+                                "Engine extension '{}' has no bundled .js file at {}. \
+                                Run 'q2 build-ts-extension' in {} to build it.",
+                                ext_label,
+                                path.display(),
+                                ext.path.display()
+                            )));
+                        }
+
+                        // Step 4b: Registry key and name_declared flag
+                        let key = name.clone().unwrap_or_else(|| ext.id.to_string());
+                        let name_declared = name.is_some();
+
+                        // Step 4c: Collision check (P1-4)
+                        if registry.has_engine(&key) {
+                            let prev = key_to_contributor
+                                .get(&key)
+                                .map_or("unknown", |s| s.as_str());
+                            return Err(QuartoError::Other(format!(
+                                "Engine name collision: both '{}' and '{}' register engine '{}'. \
+                                Engine names must be unique.",
+                                prev, ext_label, key
+                            )));
+                        }
+
+                        // Step 4d: Construct TsEngine and register
+                        let engine = TsEngine::new(
+                            key.clone(),
+                            name_declared,
+                            path.clone(),
+                            Arc::clone(&host),
+                            claims.clone(),
+                            file_extensions.clone(),
+                            claims_files.clone(),
+                            ext.id.clone(),
+                            registry.aliases.clone(),
+                            registry.diagnostics.clone(),
+                        );
+                        registry.register(Arc::new(engine));
+                        key_to_contributor.insert(key.clone(), ext_label.clone());
+
+                        // External engines push their name into the user-specified order.
+                        order.push(key.clone());
+
+                        // Step 4e: Missing-static-fields warning
+                        if let Some(w) =
+                            engine_contribution_missing_fields_warning(&ext_label, contribution)
+                        {
+                            registry.diagnostics.lock().unwrap().push(w);
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // No External contributions. Collect only Reorder hints into the order
+        // vec. No host construction, no subprocess, no quarto_runtime_dir() /
+        // quarto_data_dir() IO — zero additional disk operations vs. pre-Task-7b.
+        for ext in extensions {
+            for contribution in &ext.contributes.engines {
+                if let EngineContribution::Reorder { name } = contribution {
+                    order.push(name.clone());
+                }
+            }
+        }
+    }
+
+    // ── Step 5: Set contribution_order (dedup, first-occurrence wins) ─────────
+    let mut seen = HashSet::new();
+    registry.contribution_order = order
+        .into_iter()
+        .filter(|n| seen.insert(n.clone()))
+        .collect();
+    // Task 9: splice _quarto.yml engines: list here for full resolution ordering.
+
+    // ── Step 6: Validate every name in contribution_order is registered (P1-3) ─
+    for name in &registry.contribution_order {
+        if !registry.has_engine(name) {
+            let mut available = registry.engine_names();
+            available.sort_unstable();
+            return Err(QuartoError::Other(format!(
+                "'{}' was specified in the list of engines but it is not a valid engine. \
+                Available engines are: {}",
+                name,
+                available.join(", ")
+            )));
+        }
+    }
+
+    // ── Step 7: Return ────────────────────────────────────────────────────────
+    // Task: drain registry.diagnostics at orchestrator (plan step 10)
+    Ok(Arc::new(registry))
+}
+
+/// Discover extensions and build the engine registry in one step.
+///
+/// Shared by `ProjectContext::discover` and `ProjectContext::single_file` to
+/// avoid duplicating the `builtin_dir` / `discover_extensions` /
+/// `build_engine_registry` block.
+fn discover_extensions_and_build_registry(
+    discovery_anchor: &Path,
+    project_dir: Option<&Path>,
+    binary_dependencies: &BinaryDependencies,
+    runtime: &dyn SystemRuntime,
+) -> Result<(Vec<Extension>, Arc<EngineRegistry>)> {
+    // Builtin extensions dir — present on native, irrelevant on WASM (VFS path).
+    #[cfg(not(target_arch = "wasm32"))]
+    let builtin_dir = crate::extension::BUILTIN_EXTENSIONS
+        .path()
+        .ok()
+        .map(|p| p.to_path_buf());
+    #[cfg(target_arch = "wasm32")]
+    let builtin_dir: Option<PathBuf> = None;
+
+    let extensions = crate::extension::discover_extensions(
+        discovery_anchor,
+        project_dir,
+        builtin_dir.as_deref(),
+        runtime,
+    );
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let registry = build_engine_registry(&extensions, binary_dependencies, runtime)?;
+    #[cfg(target_arch = "wasm32")]
+    let registry = Arc::new(EngineRegistry::new());
+
+    Ok((extensions, registry))
+}
+
+// ── Project context ────────────────────────────────────────────────────────────
+
 /// Project context for rendering
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ProjectContext {
     /// Project root directory (directory containing `_quarto.yml`, or input file directory)
     pub dir: PathBuf,
@@ -431,6 +685,18 @@ pub struct ProjectContext {
 
     /// Output directory (resolved, absolute path)
     pub output_dir: PathBuf,
+
+    /// Engine registry built once at project construction (built-ins now; Task 7b adds
+    /// extension engines). Shared via `Arc` so per-file `StageContext` clones are cheap.
+    pub registry: Arc<EngineRegistry>,
+
+    /// Extensions discovered at the project level (Task 7b uses these to build the registry;
+    /// hoisted from per-document discovery in a later task).
+    pub extensions: Vec<Extension>,
+
+    /// Discovered binary dependencies (pandoc/dart-sass/esbuild). Task 7b reads `pandoc` for the
+    /// engine host's global config.
+    pub binary_dependencies: BinaryDependencies,
 }
 
 impl ProjectContext {
@@ -490,6 +756,9 @@ impl ProjectContext {
                 |o| dir.join(o),
             );
 
+        // Capture single-file input path for extension discovery before it's consumed below.
+        let single_file_input = input_file.clone();
+
         // Build file list
         let files = if let Some(input) = input_file {
             vec![DocumentInfo::from_path(input)]
@@ -509,12 +778,33 @@ impl ProjectContext {
             paths.into_iter().map(DocumentInfo::from_path).collect()
         };
 
+        let binary_dependencies = BinaryDependencies::discover(runtime);
+
+        // Anchor for `discover_extensions`:
+        // - single-file: use the actual input file so start_dir = its parent.
+        // - project: use `dir/_quarto.yml` so start_dir = dir (searches dir/_extensions).
+        let discovery_anchor: PathBuf = if is_single_file {
+            single_file_input.unwrap_or_else(|| dir.clone())
+        } else {
+            dir.join("_quarto.yml")
+        };
+
+        let (extensions, registry) = discover_extensions_and_build_registry(
+            &discovery_anchor,
+            if is_single_file { None } else { Some(&dir) },
+            &binary_dependencies,
+            runtime,
+        )?;
+
         Ok(Self {
             dir,
             config: config.unwrap_or_default(),
             is_single_file,
             files,
             output_dir,
+            registry,
+            extensions,
+            binary_dependencies,
         })
     }
 
@@ -531,12 +821,21 @@ impl ProjectContext {
             .ok_or_else(|| QuartoError::Other("Input file has no parent directory".into()))?
             .to_path_buf();
 
+        let binary_dependencies = BinaryDependencies::discover(runtime);
+
+        // Single-file: no project_dir, search only input's directory.
+        let (extensions, registry) =
+            discover_extensions_and_build_registry(&input, None, &binary_dependencies, runtime)?;
+
         Ok(Self {
             dir: dir.clone(),
             config: ProjectConfig::default(),
             is_single_file: true,
             files: vec![DocumentInfo::from_path(input)],
             output_dir: dir,
+            registry,
+            extensions,
+            binary_dependencies,
         })
     }
 
@@ -841,6 +1140,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         };
 
         assert_eq!(context.project_kind(), ProjectKind::Website);
@@ -854,6 +1155,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
 
         assert_eq!(context.project_kind(), ProjectKind::Default);
@@ -870,6 +1173,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         };
 
         assert!(context.is_multi_document());
@@ -886,6 +1191,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project/_book"),
+
+            ..Default::default()
         };
 
         assert!(context.is_multi_document());
@@ -902,6 +1209,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project/_manuscript"),
+
+            ..Default::default()
         };
 
         assert!(context.is_multi_document());
@@ -919,6 +1228,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
 
         assert!(!context.is_multi_document());
@@ -936,6 +1247,8 @@ mod tests {
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/index.qmd")],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
 
         assert!(!context.is_multi_document());
@@ -950,9 +1263,91 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
 
         assert!(!context.is_multi_document());
+    }
+
+    // === any_external_engine predicate tests ===
+    //
+    // These unit tests bind the needs_host predicate used in build_engine_registry
+    // to gate the IO-creating quarto_runtime_dir()/quarto_data_dir() calls.
+    // The predicate is false when no extension contributes an External engine, so
+    // a no-extension or Reorder-only project does zero extra IO.
+
+    #[cfg(not(target_arch = "wasm32"))]
+    mod needs_host_tests {
+        use std::collections::HashMap;
+        use std::path::PathBuf;
+
+        use crate::extension::Extension;
+        use crate::extension::types::{Contributes, EngineContribution, ExtensionId};
+
+        use super::any_external_engine;
+
+        fn make_ext(contributions: Vec<EngineContribution>) -> Extension {
+            Extension {
+                id: ExtensionId::new("test-ext"),
+                title: "Test".to_string(),
+                author: "Test".to_string(),
+                version: None,
+                quarto_required: None,
+                path: PathBuf::from("/test"),
+                contributes: Contributes {
+                    engines: contributions,
+                    ..Default::default()
+                },
+            }
+        }
+
+        #[test]
+        fn needs_host_false_for_no_extensions() {
+            // Empty extension list → no host IO needed.
+            assert!(!any_external_engine(&[]));
+        }
+
+        #[test]
+        fn needs_host_false_for_reorder_only() {
+            // A Reorder hint is just a priority annotation — no subprocess or
+            // dir-creation is needed to process it.
+            let ext = make_ext(vec![EngineContribution::Reorder {
+                name: "knitr".to_string(),
+            }]);
+            assert!(!any_external_engine(&[ext]));
+        }
+
+        #[test]
+        fn needs_host_true_for_external_engine() {
+            // An External contribution requires TsEngineHost → needs_host = true.
+            let ext = make_ext(vec![EngineContribution::External {
+                path: PathBuf::from("/test/engine.js"),
+                name: Some("test-engine".to_string()),
+                claims: Some(HashMap::new()),
+                file_extensions: Some(vec![]),
+                claims_files: Some(vec![]),
+            }]);
+            assert!(any_external_engine(&[ext]));
+        }
+
+        #[test]
+        fn needs_host_true_when_external_mixed_with_reorder() {
+            // Even one External among multiple Reorders → true.
+            let ext = make_ext(vec![
+                EngineContribution::Reorder {
+                    name: "knitr".to_string(),
+                },
+                EngineContribution::External {
+                    path: PathBuf::from("/test/engine.js"),
+                    name: None,
+                    claims: None,
+                    file_extensions: None,
+                    claims_files: None,
+                },
+            ]);
+            assert!(any_external_engine(&[ext]));
+        }
     }
 
     // === ProjectContext::discover and ::single_file tests ===
@@ -1015,6 +1410,8 @@ mod tests {
                 is_single_file: false,
                 files: vec![],
                 output_dir: canonical,
+
+                ..Default::default()
             }
         }
 
@@ -1225,6 +1622,8 @@ mod tests {
                 is_single_file: true,
                 files: vec![],
                 output_dir: temp.path().to_path_buf(),
+
+                ..Default::default()
             };
             let doc_path = chapters.join("doc.qmd");
 

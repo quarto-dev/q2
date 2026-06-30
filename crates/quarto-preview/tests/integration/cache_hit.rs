@@ -45,6 +45,17 @@ impl ExecutionEngine for CountingPassthroughEngine {
         out.push_str("\n<!-- counted -->\n");
         Ok(ExecuteResult::passthrough(&out))
     }
+    fn claims_language(
+        &self,
+        language: &str,
+        _first_class: Option<&str>,
+    ) -> quarto_core::engine::LanguageClaim {
+        if language == "test-passthrough" {
+            quarto_core::engine::LanguageClaim::Primary(1)
+        } else {
+            quarto_core::engine::LanguageClaim::None
+        }
+    }
 }
 
 fn registry_with_counter(calls: Arc<AtomicUsize>) -> Arc<EngineRegistry> {

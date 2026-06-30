@@ -21,33 +21,10 @@
 
 import type { PlatformHost } from "../platform/index.js";
 
-// ── Types (ported from Q1 core/lib/text-types.ts) ──────────────────────────
+// ── Types (single owner: @quarto/types) ────────────────────────────────────
 
-export type StringMapResult =
-  | { index: number; originalString: MappedString }
-  | undefined;
-
-/**
- * MappedString — a string that carries provenance information back to its
- * original source.  Ported faithfully from Q1 `core/lib/text-types.ts`.
- *
- * The `map` function maps an offset within `value` back to an offset in the
- * original (base) string.  When `closest=true` it clamps out-of-range
- * accesses to the nearest valid offset instead of returning undefined.
- */
-export interface MappedString {
-  readonly value: string;
-  readonly fileName?: string;
-  readonly map: (index: number, closest?: boolean) => StringMapResult;
-}
-
-export type EitherString = string | MappedString;
-export type StringChunk = string | MappedString | Range;
-
-export interface Range {
-  start: number;
-  end: number;
-}
+import type { MappedString, StringMapResult, EitherString, Range, StringChunk } from "@quarto/types";
+export type { MappedString, StringMapResult, EitherString, Range, StringChunk } from "@quarto/types";
 
 export interface RangedSubstring {
   readonly substring: string;
@@ -173,6 +150,53 @@ function unmappedIndexToLineCol(
 // ── Internal core mapped-string machinery ───────────────────────────────────
 // (ported from Q1 core/lib/mapped-text.ts)
 
+/** Local alias for the element type of the segments() array (not exported). */
+type Segment = {
+  start: number;
+  length: number;
+  source: { file: string; fileOffset: number } | null;
+};
+
+/**
+ * Clip source segments to the window [winStart, winEnd), rebase start to be
+ * window-relative, and shift fileOffset by the truncation amount.
+ */
+function clipRebaseSegments(
+  srcSegs: ReadonlyArray<Segment>,
+  winStart: number,
+  winEnd: number,
+): Segment[] {
+  const result: Segment[] = [];
+  for (const seg of srcSegs) {
+    const lo = Math.max(seg.start, winStart);
+    const hi = Math.min(seg.start + seg.length, winEnd);
+    if (lo >= hi) continue;
+    result.push({
+      start: lo - winStart,
+      length: hi - lo,
+      source: seg.source
+        ? {
+            file: seg.source.file,
+            fileOffset: seg.source.fileOffset + (lo - seg.start),
+          }
+        : null,
+    });
+  }
+  return result;
+}
+
+/**
+ * Shift each segment's start by `off` (child-local → concat-level offset).
+ * source/fileOffset are already file-absolute — unchanged.
+ */
+function shiftSegments(childSegs: ReadonlyArray<Segment>, off: number): Segment[] {
+  return childSegs.map((seg) => ({
+    start: seg.start + off,
+    length: seg.length,
+    source: seg.source,
+  }));
+}
+
 /** Create a MappedString from a substring range of source. */
 function mappedSubstringInternal(
   source: MappedString,
@@ -193,13 +217,23 @@ function mappedSubstringInternal(
       if (index < 0 || index >= value.length) return undefined;
       return source.map(index + start, closest);
     },
+    ...(source.segments
+      ? {
+          segments: () =>
+            clipRebaseSegments(
+              source.segments!(),
+              start,
+              end ?? source.value.length,
+            ),
+        }
+      : {}),
   };
 }
 
 /** Concatenate an array of MappedStrings into one. */
 function mappedConcatInternal(strings: MappedString[]): MappedString {
   if (strings.length === 0) {
-    return { value: "", map: (_index, _closest) => undefined };
+    return { value: "", map: (_index, _closest) => undefined, segments: () => [] };
   }
   if (strings.every((s) => typeof s === "string")) {
     return fromString((strings as unknown as string[]).join(""));
@@ -212,6 +246,8 @@ function mappedConcatInternal(strings: MappedString[]): MappedString {
     offsets.push(currentOffset);
   }
   const value = strings.map((s) => s.value).join("");
+
+  const allHaveSegments = strings.every((s) => s.segments !== undefined);
 
   return {
     value,
@@ -226,11 +262,17 @@ function mappedConcatInternal(strings: MappedString[]): MappedString {
       const ix = glb(offsets, offset);
       return strings[ix].map(offset - offsets[ix]);
     },
+    ...(allHaveSegments
+      ? {
+          segments: () =>
+            strings.flatMap((s, i) => shiftSegments(s.segments!(), offsets[i])),
+        }
+      : {}),
   };
 }
 
 /** Build a MappedString from an EitherString source + array of chunks. */
-function mappedStringFromChunks(
+export function mappedStringFromChunks(
   source: EitherString,
   pieces: StringChunk[],
   fileName?: string,
@@ -281,6 +323,13 @@ export function fromString(
         if (index < 0 || index >= str.length) return undefined;
         return { index, originalString: this };
       },
+      segments: () => [
+        {
+          start: 0,
+          length: str.length,
+          source: fileName ? { file: fileName, fileOffset: 0 } : null,
+        },
+      ],
     };
   } else if (fileName !== undefined) {
     throw new Error("can't change the fileName of an existing MappedString");

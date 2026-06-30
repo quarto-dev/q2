@@ -1,0 +1,15 @@
+title: Echo Engine
+author: Test
+version: 0.1.0
+contributes:
+  engines:
+    - path: dist/echo-engine.js
+      name: echo
+      claims:
+        echo:
+          kind: primary
+          priority: 1
+      file-extensions:
+        - .echo
+      claims-files:
+        - .echo

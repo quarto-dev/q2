@@ -262,6 +262,10 @@ describe("mappedString.fromFile (host-only via makeMappedStringHost)", () => {
         makeTempDir: vi.fn((): string => "/tmp/fake"),
         makeTempFile: vi.fn((): string => "/tmp/fake-file"),
         remove: vi.fn((_path: string, _opts?: { recursive?: boolean }): void => {}),
+        walk: vi.fn(
+          (_root: string, _opts?: { maxDepth?: number; includeDirs?: boolean }) =>
+            [] as Array<{ path: string; isFile: boolean; isDirectory: boolean }>,
+        ),
       },
       cwd: vi.fn((): string => "/project"),
     };

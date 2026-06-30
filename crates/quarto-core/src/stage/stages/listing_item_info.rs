@@ -515,6 +515,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let document = DocumentInfo::from_path("/project/test.qmd");
         StageContext::new(runtime, Format::html(), project, document).expect("ctx")

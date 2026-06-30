@@ -184,6 +184,36 @@ pub trait ExecutionEngine: Send + Sync {
     fn is_available(&self) -> bool {
         true
     }
+
+    /// The engine's `quartoRequired` version constraint, if it reported one.
+    ///
+    /// Returns the constraint string declared by the engine module (e.g. `">=1.9"`).
+    /// Inert in Plan 1c — no gate reads it; Phase 12 adds the `satisfies()` checks.
+    ///
+    /// Default: `None` (no constraint declared or not yet loaded).
+    fn quarto_required(&self) -> Option<&str> {
+        None
+    }
+
+    /// Shut down any subprocess / daemon backing this engine. Default is a no-op
+    /// (built-in engines have no subprocess). MUST be idempotent — `shutdown_all`
+    /// may call it more than once when several engines share one host. Called by
+    /// `EngineRegistry::shutdown_all` at end-of-render (q2 uses explicit shutdown,
+    /// not Drop).
+    fn shutdown(&self) -> Result<(), ExecutionError> {
+        Ok(())
+    }
+
+    /// Whether this engine currently holds a live backing subprocess.
+    ///
+    /// Default `false`: built-in engines (markdown / knitr / jupyter) have no
+    /// persistent subprocess, so "alive" is meaningless for them. A `TsEngine`
+    /// overrides this to report its shared host's real child-process state, so
+    /// callers (and the orchestrator-teardown E2E) can observe that
+    /// `shutdown_all` actually reaped the Deno subprocess.
+    fn is_alive(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]

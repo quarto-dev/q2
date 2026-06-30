@@ -1,0 +1,9 @@
+---
+title: Echo Engine Test
+---
+
+This document uses the echo language engine.
+
+```{echo}
+Hello from echo!
+```

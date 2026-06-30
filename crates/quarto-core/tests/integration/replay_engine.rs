@@ -67,6 +67,17 @@ fn capture_engine_input(content: &[u8], source_name: &str, engine_name: &str) ->
         fn is_available(&self) -> bool {
             true
         }
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> quarto_core::engine::LanguageClaim {
+            if language == self.name.as_str() {
+                quarto_core::engine::LanguageClaim::Primary(1)
+            } else {
+                quarto_core::engine::LanguageClaim::None
+            }
+        }
     }
 
     let captured = Arc::new(Mutex::new(None::<String>));
@@ -83,6 +94,8 @@ fn capture_engine_input(content: &[u8], source_name: &str, engine_name: &str) ->
         is_single_file: true,
         files: vec![],
         output_dir: std::path::PathBuf::from("/project"),
+
+        ..Default::default()
     };
     let doc = DocumentInfo::from_path("/project/dummy.qmd");
     let format = Format::html();
@@ -131,7 +144,7 @@ fn replay_capture_in_options_overrides_engine_through_render_to_file() {
     let qmd_path = project_dir.join("test.qmd");
     write_file(
         &qmd_path,
-        "---\nengine: replay-only-engine-4b\ntitle: Test\n---\n\n# Original\n\nOriginal body line.\n",
+        "---\nengine: replay-only-engine-4b\ntitle: Test\n---\n\n# Original\n\nOriginal body line.\n\n```{replay-only-engine-4b}\ncode\n```\n",
     );
 
     // Capture the QMD that the stage will pass to execute().
@@ -201,7 +214,7 @@ fn replay_capture_miss_surfaces_as_render_error() {
     let qmd_path = project_dir.join("test.qmd");
     write_file(
         &qmd_path,
-        "---\nengine: replay-only-engine-4b\n---\n\n# Real document\n",
+        "---\nengine: replay-only-engine-4b\n---\n\n# Real document\n\n```{replay-only-engine-4b}\ncode\n```\n",
     );
 
     let capture = EngineCapture {

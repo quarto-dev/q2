@@ -39,6 +39,12 @@ const fakeHost: PlatformHost = {
       return "/tmp/fake-file";
     },
     remove(_path: string, _opts?: { recursive?: boolean }): void {},
+    walk(
+      _root: string,
+      _opts?: { maxDepth?: number; includeDirs?: boolean },
+    ): Array<{ path: string; isFile: boolean; isDirectory: boolean }> {
+      return [];
+    },
   },
 
   process: {

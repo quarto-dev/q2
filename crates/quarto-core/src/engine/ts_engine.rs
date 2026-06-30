@@ -45,7 +45,9 @@ use crate::engine::ts_protocol::{
     TsExecuteOptions, TsExecuteResult, TsFormatIdentifier, TsFormatInfo, TsHtmlDependency,
     TsLanguageClaim,
 };
-use crate::extension::types::ExtensionId;
+use crate::extension::types::{
+    ExtensionId, StaticLanguageClaim, lookup_static_claim, static_claim_to_language_claim,
+};
 use crate::stage::PandocIncludes;
 use crate::stage::cancellation::Cancellation;
 
@@ -126,12 +128,24 @@ pub struct TsEngine {
     claims_language_cache: Mutex<HashMap<(String, Option<String>), LanguageClaim>>,
     claims_file_cache: Mutex<HashMap<PathBuf, bool>>,
 
-    // ── Static hints from `_extension.yml` ───────────────────────────────────
-    /// Language hints (pre-filter for `claims_language`).
-    language_hints: Option<Vec<String>>,
-
-    /// File-extension hints (pre-filter for `claims_file` / `valid_extensions`).
-    file_extension_hints: Option<Vec<String>>,
+    // ── Static claims from `_extension.yml` ──────────────────────────────────
+    /// Authoritative static language claims (from `_extension.yml`). `Some` → answer
+    /// claims_language from this map WITHOUT loading; `None` → legacy dynamic load.
+    claims: Option<HashMap<String, StaticLanguageClaim>>,
+    /// Complete handled-extension set; the claims_file pre-filter. `Some` → authoritative
+    /// for valid_extensions; pre-filters claims_file (ext ∉ set ⇒ false, no load).
+    file_extensions: Option<Vec<String>>,
+    /// Unconditional static claims_file. `Some` → answer ext∈claims_files without loading;
+    /// `None` → content-inspecting engine, dynamic claims_file load.
+    claims_files: Option<Vec<String>>,
+    /// Records each statically-answered claims_language key for execute-time validation.
+    static_answers: Mutex<Vec<(String, Option<String>)>>,
+    /// Records each statically-answered claims_file extension for execute-time validation.
+    static_file_answers: Mutex<Vec<String>>,
+    /// Per-render markdown_for_file conversion cache (canonical path → converted QMD).
+    /// Field added here; CONSUMED by Task 10's EngineClaimsFileStage — unused for now.
+    #[allow(dead_code)] // Task 10 consumes this
+    conversion_cache: Mutex<HashMap<PathBuf, String>>,
 
     // ── Registry sinks (leaf-Arc sharing; no cycle back to EngineRegistry) ───
     extension_id: ExtensionId,
@@ -146,8 +160,9 @@ impl TsEngine {
         name_declared: bool,
         engine_path: PathBuf,
         host: Arc<TsEngineHost>,
-        language_hints: Option<Vec<String>>,
-        file_extension_hints: Option<Vec<String>>,
+        claims: Option<HashMap<String, StaticLanguageClaim>>,
+        file_extensions: Option<Vec<String>>,
+        claims_files: Option<Vec<String>>,
         extension_id: ExtensionId,
         aliases: Arc<Mutex<HashMap<String, ExtensionId>>>,
         diagnostics: Arc<Mutex<Vec<DiagnosticMessage>>>,
@@ -162,8 +177,12 @@ impl TsEngine {
             project: Mutex::new(None),
             claims_language_cache: Mutex::new(HashMap::new()),
             claims_file_cache: Mutex::new(HashMap::new()),
-            language_hints,
-            file_extension_hints,
+            claims,
+            file_extensions,
+            claims_files,
+            static_answers: Mutex::new(Vec::new()),
+            static_file_answers: Mutex::new(Vec::new()),
+            conversion_cache: Mutex::new(HashMap::new()),
             extension_id,
             aliases,
             diagnostics,
@@ -173,6 +192,26 @@ impl TsEngine {
     // ========================================================================
     // Two-step lazy lifecycle helpers
     // ========================================================================
+
+    /// The name the *harness* addresses this engine by on the wire.
+    ///
+    /// The Deno harness keys every loaded engine by its runtime `discovery.name`
+    /// (returned in `LoadEngineResult`). For a statically-declared engine that
+    /// equals `self.name` (validated in [`Self::ensure_loaded`]); but for an
+    /// **unnamed** engine `self.name` is the extension-id registry key
+    /// (e.g. `echo-legacy`) while the harness keyed the module under its runtime
+    /// name (e.g. `echolegacy`). So every wire frame sent *after* LoadEngine —
+    /// `ClaimsLanguage`, `ClaimsFile`, `LaunchEngine`, `Execute`, … — must address
+    /// the engine by this runtime name, not the registry key, or the harness
+    /// rejects it with `engine not loaded: <ext-id>`.
+    ///
+    /// Falls back to `self.name` before the first load completes (no frame that
+    /// depends on the runtime name is sent in that window).
+    fn wire_name(&self) -> String {
+        self.discovery
+            .get()
+            .map_or_else(|| self.name.clone(), |d| d.name.clone())
+    }
 
     fn ensure_loaded(&self, c: &Cancellation) -> Result<&LoadEngineResult, ExecutionError> {
         self.host.ensure_started()?;
@@ -193,28 +232,98 @@ impl TsEngine {
                 try_insert_alias(&self.aliases, &result.name, &self.extension_id)?;
             }
 
-            // Hint validation: file_extension_hints must superset valid_extensions.
-            if let Some(hints) = &self.file_extension_hints
-                && !hints.is_empty()
+            // Static-vs-dynamic validation: compare each statically-answered claim to
+            // the dynamic result from the now-loaded module. A mismatch is a hard error
+            // because the extension author declared something the module contradicts.
+            // One-directional: catches over-claiming (declared but wrong); under-declaration
+            // is never caught (the engine never loads those paths).
+            let static_language_answers: Vec<(String, Option<String>)> =
+                self.static_answers.lock().unwrap().clone();
+
+            if !static_language_answers.is_empty()
+                && let Some(claims_map) = &self.claims
             {
-                let missing: Vec<&String> = result
-                    .valid_extensions
-                    .iter()
-                    .filter(|ext| !hints.contains(ext))
-                    .collect();
-                if !missing.is_empty() {
-                    let msg = format!(
-                        "Engine '{}' declares file_extension_hints {:?} but LoadEngine \
-                         reports additional extensions {:?}. The pre-filter will silently \
-                         miss those extensions. Declare them in _extension.yml or remove \
-                         file_extension_hints.",
-                        self.name, hints, missing
-                    );
-                    let mut diag = self.diagnostics.lock().unwrap();
-                    // Idempotent: only push once per engine.
-                    let already_pushed = diag.iter().any(|d| format!("{d:?}").contains(&self.name));
-                    if !already_pushed {
-                        diag.push(DiagnosticMessage::warning(msg));
+                for (language, first_class) in &static_language_answers {
+                    // Recompute what the static map says (same logic as claims_language static branch).
+                    let mut static_claim =
+                        lookup_static_claim(claims_map, language, first_class.as_deref());
+                    if static_claim == LanguageClaim::None
+                        && let Some(fb) = claims_map.get("fallback")
+                    {
+                        static_claim = static_claim_to_language_claim(fb, first_class.as_deref());
+                    }
+
+                    // Send the dynamic wire call. Address the harness by the
+                    // runtime name it keyed the just-loaded module under.
+                    let msg = ToEngine::ClaimsLanguage {
+                        engine: result.name.clone(),
+                        language: language.clone(),
+                        first_class: first_class.clone(),
+                    };
+                    let dynamic_claim: LanguageClaim = match self.host.request(
+                        msg,
+                        Some(Duration::from_secs(10)),
+                        c,
+                    ) {
+                        Ok(FromEngine::ClaimsLanguageResult { result }) => {
+                            LanguageClaim::from(result)
+                        }
+                        Ok(other) => {
+                            return Err(ExecutionError::other(format!(
+                                "unexpected response to ClaimsLanguage during validation: {other:?}"
+                            )));
+                        }
+                        Err(e) => return Err(e),
+                    };
+
+                    if static_claim != dynamic_claim {
+                        return Err(ExecutionError::other(format!(
+                            "Engine '{}' statically declares claim {:?} for language '{}' but \
+                             the loaded module's claimsLanguage reports {:?}. Update \
+                             _extension.yml or the engine module.",
+                            self.name, static_claim, language, dynamic_claim
+                        )));
+                    }
+                }
+            }
+
+            // Validate static claims_file answers similarly.
+            let static_file_answer_list: Vec<String> =
+                self.static_file_answers.lock().unwrap().clone();
+
+            if !static_file_answer_list.is_empty() {
+                for ext in &static_file_answer_list {
+                    let static_claimed = self
+                        .claims_files
+                        .as_ref()
+                        .is_some_and(|cf| cf.iter().any(|e| e == ext));
+
+                    // Synthetic filename "x<ext>" — declaring claims_files is an assertion
+                    // that the engine claims every file of that extension unconditionally,
+                    // regardless of content. The filename itself doesn't matter; the ext does.
+                    let msg = ToEngine::ClaimsFile {
+                        engine: result.name.clone(),
+                        file: format!("x{ext}"),
+                        ext: ext.clone(),
+                    };
+                    let dynamic_claimed: bool =
+                        match self.host.request(msg, Some(Duration::from_secs(10)), c) {
+                            Ok(FromEngine::ClaimsFileResult { result }) => result,
+                            Ok(other) => {
+                                return Err(ExecutionError::other(format!(
+                                    "unexpected response to ClaimsFile during validation: {other:?}"
+                                )));
+                            }
+                            Err(e) => return Err(e),
+                        };
+
+                    if static_claimed != dynamic_claimed {
+                        return Err(ExecutionError::other(format!(
+                            "Engine '{}' statically declares claims_file {:?} for extension \
+                             '{}' but the loaded module's claimsFile reports {:?}. Update \
+                             _extension.yml or the engine module.",
+                            self.name, static_claimed, ext, dynamic_claimed
+                        )));
                     }
                 }
             }
@@ -240,7 +349,7 @@ impl TsEngine {
             return Ok(result.clone());
         }
         let project = self.project.lock().unwrap().clone().unwrap_or_default();
-        let result = self.host.launch_engine(&self.name, project, c)?;
+        let result = self.host.launch_engine(&self.wire_name(), project, c)?;
         *guard = Some(result.clone());
         Ok(result)
     }
@@ -399,9 +508,11 @@ impl ExecutionEngine for TsEngine {
     }
 
     fn valid_extensions(&self) -> Vec<String> {
-        if let Some(hints) = &self.file_extension_hints {
-            return hints.clone();
+        // Authoritative static answer — no load.
+        if let Some(exts) = &self.file_extensions {
+            return exts.clone();
         }
+        // Legacy: load and discover.
         let c = Cancellation::new();
         match self.ensure_loaded(&c) {
             Ok(discovery) => discovery.valid_extensions.clone(),
@@ -410,15 +521,6 @@ impl ExecutionEngine for TsEngine {
     }
 
     fn claims_language(&self, language: &str, first_class: Option<&str>) -> LanguageClaim {
-        if let Some(hints) = &self.language_hints {
-            if hints.is_empty() {
-                return LanguageClaim::None;
-            }
-            if !hints.contains(&language.to_string()) {
-                return LanguageClaim::None;
-            }
-        }
-
         let cache_key = (language.to_string(), first_class.map(str::to_string));
         {
             let guard = self.claims_language_cache.lock().unwrap();
@@ -427,43 +529,68 @@ impl ExecutionEngine for TsEngine {
             }
         }
 
-        let c = Cancellation::new();
-        let result = (|| -> Result<LanguageClaim, ExecutionError> {
-            self.ensure_loaded(&c)?;
-            let msg = ToEngine::ClaimsLanguage {
-                engine: self.name.clone(),
-                language: language.to_string(),
-                first_class: first_class.map(str::to_string),
-            };
-            let response = self.host.request(msg, Some(Duration::from_secs(10)), &c)?;
-            match response {
-                FromEngine::ClaimsLanguageResult { result } => Ok(LanguageClaim::from(result)),
-                other => Err(ExecutionError::other(format!(
-                    "unexpected response to ClaimsLanguage: {other:?}"
-                ))),
+        if let Some(map) = &self.claims {
+            // AUTHORITATIVE static answer — no load.
+            let mut claim = lookup_static_claim(map, language, first_class);
+            if claim == LanguageClaim::None {
+                // Universal fallback: a `fallback` map key claims any otherwise-unclaimed language.
+                if let Some(fb) = map.get("fallback") {
+                    claim = static_claim_to_language_claim(fb, first_class);
+                }
             }
-        })();
-
-        match result {
-            Ok(claim) => {
-                self.claims_language_cache
+            // Record for execute-time validation — positive answers only.
+            // Validation is one-directional (catches over-claiming); recording None answers
+            // would turn tolerated under-declaration into a spurious hard render error.
+            if claim != LanguageClaim::None {
+                self.static_answers
                     .lock()
                     .unwrap()
-                    .insert(cache_key, claim);
-                claim
+                    .push((language.to_string(), first_class.map(str::to_string)));
             }
-            Err(_) => LanguageClaim::None,
+            // Cache and return.
+            self.claims_language_cache
+                .lock()
+                .unwrap()
+                .insert(cache_key, claim);
+            claim
+        } else {
+            // Legacy dynamic path — ensure_loaded + ClaimsLanguage wire call + cache.
+            let c = Cancellation::new();
+            let result = (|| -> Result<LanguageClaim, ExecutionError> {
+                self.ensure_loaded(&c)?;
+                let msg = ToEngine::ClaimsLanguage {
+                    engine: self.wire_name(),
+                    language: language.to_string(),
+                    first_class: first_class.map(str::to_string),
+                };
+                let response = self.host.request(msg, Some(Duration::from_secs(10)), &c)?;
+                match response {
+                    FromEngine::ClaimsLanguageResult { result } => Ok(LanguageClaim::from(result)),
+                    other => Err(ExecutionError::other(format!(
+                        "unexpected response to ClaimsLanguage: {other:?}"
+                    ))),
+                }
+            })();
+
+            match result {
+                Ok(claim) => {
+                    self.claims_language_cache
+                        .lock()
+                        .unwrap()
+                        .insert(cache_key, claim);
+                    claim
+                }
+                Err(_) => LanguageClaim::None,
+            }
         }
     }
 
     fn claims_file(&self, file: &str, ext: &str) -> bool {
-        if let Some(hints) = &self.file_extension_hints {
-            if hints.is_empty() {
-                return false;
-            }
-            if !hints.contains(&ext.to_string()) {
-                return false;
-            }
+        // 1. Pre-filter: if file_extensions is Some and ext ∉ it ⇒ false, no load.
+        if let Some(exts) = &self.file_extensions
+            && !exts.iter().any(|e| e == ext)
+        {
+            return false;
         }
 
         let path_key = PathBuf::from(file);
@@ -474,11 +601,31 @@ impl ExecutionEngine for TsEngine {
             }
         }
 
+        // 2. Authoritative static claims_file: if claims_files is Some ⇒ answer ext ∈ claims_files, no load.
+        if let Some(cf) = &self.claims_files {
+            let claimed = cf.iter().any(|e| e == ext);
+            // Record positive answers for execute-time validation, de-duped by ext.
+            // Only true answers are recorded: false means unclaimed — no validation needed.
+            // De-dup because a render probes many files of the same ext; each ext at most once.
+            if claimed {
+                let mut file_answers = self.static_file_answers.lock().unwrap();
+                if !file_answers.contains(&ext.to_string()) {
+                    file_answers.push(ext.to_string());
+                }
+            }
+            self.claims_file_cache
+                .lock()
+                .unwrap()
+                .insert(path_key, claimed);
+            return claimed;
+        }
+
+        // 3. Dynamic path — cache per canonical path + ClaimsFile wire call.
         let c = Cancellation::new();
         let result = (|| -> Result<bool, ExecutionError> {
             self.ensure_loaded(&c)?;
             let msg = ToEngine::ClaimsFile {
-                engine: self.name.clone(),
+                engine: self.wire_name(),
                 file: file.to_string(),
                 ext: ext.to_string(),
             };
@@ -512,7 +659,7 @@ impl ExecutionEngine for TsEngine {
 
         let options = Self::build_execute_options(input, ctx);
         let msg = ToEngine::Execute {
-            engine: self.name.clone(),
+            engine: self.wire_name(),
             options,
         };
 
@@ -541,7 +688,7 @@ impl ExecutionEngine for TsEngine {
         let result = (|| -> Result<Vec<PathBuf>, ExecutionError> {
             self.ensure_launched(&c)?;
             let msg = ToEngine::IntermediateFiles {
-                engine: self.name.clone(),
+                engine: self.wire_name(),
                 input: input_path.to_string_lossy().into_owned(),
             };
             let response = self.host.request(msg, Some(Duration::from_secs(10)), &c)?;
@@ -576,21 +723,52 @@ impl ExecutionEngine for TsEngine {
         file: &Path,
         _runtime: &Arc<dyn SystemRuntime>,
     ) -> Result<(String, SourceInfo), ExecutionError> {
+        // P2-17: cache the converted QMD per canonical path so both passes of a
+        // two-pass (website) render share one conversion, not two subprocess
+        // round-trips.  The key is the file path as supplied by the caller (already
+        // normalized to absolute + lexically clean by `EngineClaimsFileStage`).
+        {
+            let guard = self.conversion_cache.lock().unwrap();
+            if let Some(cached) = guard.get(file) {
+                return Ok((cached.clone(), SourceInfo::generated(By::unknown())));
+            }
+        }
+
         let c = Cancellation::new();
         self.ensure_launched(&c)?;
         let msg = ToEngine::MarkdownForFile {
-            engine: self.name.clone(),
+            engine: self.wire_name(),
             file: file.to_string_lossy().into_owned(),
         };
         let response = self.host.request(msg, Some(Duration::from_secs(30)), &c)?;
         match response {
             FromEngine::MarkdownForFileResult { result } => {
-                Ok((result.value, SourceInfo::generated(By::unknown())))
+                let qmd = result.value;
+                self.conversion_cache
+                    .lock()
+                    .unwrap()
+                    .insert(file.to_path_buf(), qmd.clone());
+                Ok((qmd, SourceInfo::generated(By::unknown())))
             }
             other => Err(ExecutionError::other(format!(
                 "unexpected response to MarkdownForFile: {other:?}"
             ))),
         }
+    }
+
+    fn quarto_required(&self) -> Option<&str> {
+        // Read the OnceLock only — do NOT trigger a load.
+        self.discovery
+            .get()
+            .and_then(|d| d.quarto_required.as_deref())
+    }
+
+    fn shutdown(&self) -> Result<(), ExecutionError> {
+        self.host.shutdown()
+    }
+
+    fn is_alive(&self) -> bool {
+        self.host.is_alive()
     }
 }
 
@@ -639,6 +817,7 @@ mod tests {
         FromEngine, HostGlobalConfig, LaunchEngineResult, LoadEngineResult, ToEngine,
         TsExecuteResult,
     };
+    use crate::extension::types::{ClaimKind, StaticLanguageClaim};
 
     // ── Test helpers ─────────────────────────────────────────────────────────
 
@@ -684,8 +863,9 @@ mod tests {
 
     fn make_engine_with_mock(
         name: &str,
-        language_hints: Option<Vec<String>>,
-        file_extension_hints: Option<Vec<String>>,
+        claims: Option<HashMap<String, StaticLanguageClaim>>,
+        file_extensions: Option<Vec<String>>,
+        claims_files: Option<Vec<String>>,
     ) -> (TsEngine, Arc<MockWriteHalf>) {
         let (write, read, mock) = MockTransport::pair_with_handle();
         let ctx = make_host_global_config();
@@ -698,13 +878,32 @@ mod tests {
             false,
             PathBuf::from(format!("/engines/{name}.ts")),
             host,
-            language_hints,
-            file_extension_hints,
+            claims,
+            file_extensions,
+            claims_files,
             ext_id,
             aliases,
             diag,
         );
         (engine, mock)
+    }
+
+    /// Build a simple single-language static claims map for tests.
+    fn single_claim(
+        language: &str,
+        kind: ClaimKind,
+        priority: Option<i32>,
+    ) -> HashMap<String, StaticLanguageClaim> {
+        let mut m = HashMap::new();
+        m.insert(
+            language.to_string(),
+            StaticLanguageClaim {
+                kind,
+                priority,
+                when_class: None,
+            },
+        );
+        m
     }
 
     fn watchdog<F, R>(timeout: Duration, f: F) -> R
@@ -776,7 +975,7 @@ mod tests {
     #[test]
     fn test_two_step_lifecycle_no_launch_on_discovery() {
         watchdog(Duration::from_secs(10), || {
-            let (engine, mock) = make_engine_with_mock("julia", None, None);
+            let (engine, mock) = make_engine_with_mock("julia", None, None, None);
 
             mock.script_response(0, loaded_response("julia", vec!["jl"]));
             mock.script_response(1, claims_none_response());
@@ -828,6 +1027,7 @@ mod tests {
                 false,
                 PathBuf::from("/engines/julia.ts"),
                 Arc::clone(&host),
+                None,
                 None,
                 None,
                 ext_id,
@@ -915,6 +1115,7 @@ mod tests {
                 false,
                 PathBuf::from("/engines/julia.ts"),
                 Arc::clone(&host),
+                None,
                 None,
                 None,
                 ext_id,
@@ -1005,6 +1206,7 @@ mod tests {
                 false,
                 PathBuf::from("/engines/julia.ts"),
                 Arc::clone(&host),
+                None,
                 None,
                 None,
                 ext_id,
@@ -1114,6 +1316,7 @@ mod tests {
                 Arc::clone(&host),
                 None,
                 None,
+                None,
                 ext_id,
                 aliases,
                 diag,
@@ -1181,15 +1384,19 @@ mod tests {
 
     // ── Row 10: Hint-validation warning ──────────────────────────────────────
 
+    // Row 10 previously tested a file_extension_hints superset-check warning that was
+    // removed in Task 4. The new authoritative `file_extensions` field has no superset
+    // validation — it IS the answer. This test verifies that `valid_extensions()` returns
+    // the static list without triggering a load.
     #[test]
-    fn test_hint_validation_warning_on_missing_ext() {
+    fn test_file_extensions_static_no_load() {
         watchdog(Duration::from_secs(10), || {
             let (write, read, mock) = MockTransport::pair_with_handle();
             let ctx = make_host_global_config();
             let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
 
             let aliases = Arc::new(Mutex::new(HashMap::new()));
-            let diag: Arc<Mutex<Vec<DiagnosticMessage>>> = Arc::new(Mutex::new(Vec::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
             let ext_id = ExtensionId::new("julia");
 
             let engine = TsEngine::new(
@@ -1198,52 +1405,44 @@ mod tests {
                 PathBuf::from("/engines/julia.ts"),
                 Arc::clone(&host),
                 None,
-                Some(vec!["jl".to_string()]), // hints declare only "jl"
+                Some(vec!["jl".to_string()]), // file_extensions declared statically
+                None,
                 ext_id,
                 Arc::clone(&aliases),
                 Arc::clone(&diag),
             );
 
-            // LoadEngine reports both "jl" and "julia".
-            mock.script_response(
+            // valid_extensions returns the static list without any load.
+            let exts = engine.valid_extensions();
+            assert_eq!(
+                exts,
+                vec!["jl"],
+                "static file_extensions must be returned directly"
+            );
+            assert_eq!(
+                host.load_engine_count(),
                 0,
-                FromEngine::Loaded {
-                    discovery: LoadEngineResult {
-                        name: "julia".to_string(),
-                        valid_extensions: vec!["jl".to_string(), "julia".to_string()],
-                        generates_figures: false,
-                        can_freeze: false,
-                        quarto_required: None,
-                    },
-                },
-            );
-
-            let c = Cancellation::new();
-            let _ = engine.ensure_loaded(&c);
-
-            let diag_guard = diag.lock().unwrap();
-            assert!(
-                !diag_guard.is_empty(),
-                "diagnostics must be non-empty after hint mismatch"
-            );
-
-            let warning_text = format!("{:?}", &*diag_guard);
-            assert!(
-                warning_text.contains("julia"),
-                "warning must name the engine; got: {warning_text}"
+                "static valid_extensions must not issue LoadEngine"
             );
 
             mock.signal_eof();
         });
     }
 
-    // ── Row 11: Hint pre-filter (no load) ────────────────────────────────────
+    // ── Row 11: Static claims — unknown language returns None without load ───────
+    // Named revert: replacing the static claims lookup with an unconditional load
+    // would make load_count ≥ 1 → assertion RED.
 
     #[test]
     fn test_hint_prefilter_no_load() {
         watchdog(Duration::from_secs(10), || {
-            let (engine, mock) =
-                make_engine_with_mock("julia", Some(vec!["python".to_string()]), None);
+            // Engine claims only "python"; "ruby" is absent → None, no load.
+            let (engine, mock) = make_engine_with_mock(
+                "julia",
+                Some(single_claim("python", ClaimKind::Primary, None)),
+                None,
+                None,
+            );
 
             let claim = engine.claims_language("ruby", None);
             assert_eq!(
@@ -1283,6 +1482,7 @@ mod tests {
                 false,
                 PathBuf::from("/engines/julia.ts"),
                 Arc::clone(&host),
+                None,
                 None,
                 None,
                 ext_id,
@@ -1348,5 +1548,535 @@ mod tests {
             result.needs_postprocess,
             "post_process: true must wire-feed needs_postprocess: true via map_execute_result"
         );
+    }
+
+    // ── P1-12: static zero-load vs legacy loaded ──────────────────────────────
+    //
+    // Named revert: removing the `if let Some(map) = &self.claims` branch and
+    // always taking the dynamic path would make the static engine call ensure_loaded,
+    // bumping load_engine_count to ≥ 1 → assertion RED.
+
+    #[test]
+    fn test_p1_12_static_zero_load() {
+        watchdog(Duration::from_secs(10), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("echo");
+            let engine = TsEngine::new(
+                "echo",
+                false,
+                PathBuf::from("/engines/echo.ts"),
+                Arc::clone(&host),
+                Some(single_claim("echo", ClaimKind::Primary, Some(1))),
+                None,
+                None,
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            let claim = engine.claims_language("echo", None);
+            assert_eq!(
+                claim,
+                LanguageClaim::Primary(1),
+                "static engine must return Primary(1)"
+            );
+            assert!(!host.is_alive(), "static answer must not spawn subprocess");
+            assert_eq!(
+                host.load_engine_count(),
+                0,
+                "static answer must not issue LoadEngine"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    #[test]
+    fn test_p1_12_legacy_does_load() {
+        // Named revert (exercised guard): if the legacy branch were removed, load_engine_count
+        // would stay 0 → the "DID load" assertion RED.
+        watchdog(Duration::from_secs(10), || {
+            let (engine, mock) = make_engine_with_mock("echo", None, None, None);
+
+            mock.script_response(0, loaded_response("echo", vec![]));
+            mock.script_response(1, claims_primary_response(1));
+
+            let claim = engine.claims_language("echo", None);
+            assert_eq!(
+                claim,
+                LanguageClaim::Primary(1),
+                "legacy dynamic engine must return Primary(1)"
+            );
+            // EXERCISED GUARD: the legacy arm DID load (contrast with static arm above).
+            assert_eq!(
+                engine.host.load_engine_count(),
+                1,
+                "legacy engine must issue exactly 1 LoadEngine"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── P1-14: whenClass at TsEngine level (both directions, NO load) ─────────
+    //
+    // Named revert: removing the when_class guard in static_claim_to_language_claim
+    // would make the bare/other cases wrongly return Primary(1) → assertion RED.
+
+    #[test]
+    fn test_p1_14_when_class_at_engine_level() {
+        watchdog(Duration::from_secs(10), || {
+            let mut claims_map = HashMap::new();
+            claims_map.insert(
+                "python".to_string(),
+                StaticLanguageClaim {
+                    kind: ClaimKind::Primary,
+                    priority: None,
+                    when_class: Some("marimo".to_string()),
+                },
+            );
+
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("marimo-engine");
+            let engine = TsEngine::new(
+                "marimo-engine",
+                false,
+                PathBuf::from("/engines/marimo.ts"),
+                Arc::clone(&host),
+                Some(claims_map),
+                None,
+                None,
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            // Matching whenClass → Primary(1), zero-load.
+            let claim = engine.claims_language("python", Some("marimo"));
+            assert_eq!(
+                claim,
+                LanguageClaim::Primary(1),
+                "matching whenClass must give Primary(1)"
+            );
+            assert!(!host.is_alive(), "whenClass match must be zero-load");
+            assert_eq!(
+                host.load_engine_count(),
+                0,
+                "whenClass match must not issue LoadEngine"
+            );
+
+            // No whenClass → None (mismatch).
+            let claim2 = engine.claims_language("python", None);
+            assert_eq!(claim2, LanguageClaim::None, "no whenClass must give None");
+
+            // Other whenClass → None (mismatch).
+            let claim3 = engine.claims_language("python", Some("other"));
+            assert_eq!(
+                claim3,
+                LanguageClaim::None,
+                "other whenClass must give None"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── claims_file: pre-filter and static (no load) ──────────────────────────
+
+    #[test]
+    fn test_claims_file_pre_filter_and_static() {
+        watchdog(Duration::from_secs(10), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("echo");
+            let engine = TsEngine::new(
+                "echo",
+                false,
+                PathBuf::from("/engines/echo.ts"),
+                Arc::clone(&host),
+                None,
+                Some(vec![".echo".to_string()]),
+                Some(vec![".echo".to_string()]),
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            // Claimed extension → true, no load.
+            assert!(
+                engine.claims_file("x.echo", ".echo"),
+                "declared ext must return true"
+            );
+            assert_eq!(
+                host.load_engine_count(),
+                0,
+                "static claims_file must not issue LoadEngine"
+            );
+
+            // Undeclared extension → false (pre-filtered), no load.
+            assert!(
+                !engine.claims_file("x.py", ".py"),
+                "undeclared ext must return false (pre-filtered)"
+            );
+            assert_eq!(
+                host.load_engine_count(),
+                0,
+                "pre-filter must not issue LoadEngine"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── valid_extensions: static (no load) ────────────────────────────────────
+
+    #[test]
+    fn test_valid_extensions_static_no_load() {
+        watchdog(Duration::from_secs(10), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("echo");
+            let engine = TsEngine::new(
+                "echo",
+                false,
+                PathBuf::from("/engines/echo.ts"),
+                Arc::clone(&host),
+                None,
+                Some(vec![".echo".to_string()]),
+                None,
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            let exts = engine.valid_extensions();
+            assert_eq!(
+                exts,
+                vec![".echo"],
+                "static file_extensions must be returned directly"
+            );
+            assert_eq!(
+                host.load_engine_count(),
+                0,
+                "static valid_extensions must not issue LoadEngine"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── Universal fallback key lookup (no load) ───────────────────────────────
+
+    #[test]
+    fn test_universal_fallback_lookup() {
+        watchdog(Duration::from_secs(10), || {
+            let mut claims_map = HashMap::new();
+            claims_map.insert(
+                "fallback".to_string(),
+                StaticLanguageClaim {
+                    kind: ClaimKind::Fallback,
+                    priority: Some(0),
+                    when_class: None,
+                },
+            );
+
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("fallback-engine");
+            let engine = TsEngine::new(
+                "fallback-engine",
+                false,
+                PathBuf::from("/engines/fallback.ts"),
+                Arc::clone(&host),
+                Some(claims_map),
+                None,
+                None,
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            // Any language not in the map falls through to the "fallback" key.
+            let claim = engine.claims_language("anylang", None);
+            assert_eq!(
+                claim,
+                LanguageClaim::Fallback(0),
+                "universal fallback key must apply for unrecognised language"
+            );
+            assert_eq!(
+                host.load_engine_count(),
+                0,
+                "universal fallback must not issue LoadEngine"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── P1-13: static-vs-dynamic validation (MockTransport) ──────────────────
+    //
+    // Named revert: removing the static-vs-dynamic validation loop from
+    // `ensure_loaded` ⇒ no mismatch error → `result.is_err()` assertion RED.
+
+    #[test]
+    fn test_p1_13_static_vs_dynamic_validation_mismatch() {
+        watchdog(Duration::from_secs(10), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("echo");
+            let engine = TsEngine::new(
+                "echo",
+                false,
+                PathBuf::from("/engines/echo.ts"),
+                Arc::clone(&host),
+                Some(single_claim("echo", ClaimKind::Primary, Some(1))),
+                None,
+                None,
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            // Script: LoadEngine succeeds, but ClaimsLanguage("echo") answers None (mismatch).
+            mock.script_response(0, loaded_response("echo", vec![]));
+            mock.script_response(1, claims_none_response()); // contradicts static Primary(1)
+
+            // Step 1: static claims_language records ("echo", None) in static_answers.
+            let static_claim = engine.claims_language("echo", None);
+            assert_eq!(
+                static_claim,
+                LanguageClaim::Primary(1),
+                "static claim must be Primary(1) before loading"
+            );
+
+            // Step 2: ensure_loaded sends LoadEngine (id=0) then validates static claims
+            // by sending ClaimsLanguage (id=1) → gets None → mismatch → hard error.
+            let c = Cancellation::new();
+            let result = engine.ensure_loaded(&c);
+
+            assert!(
+                result.is_err(),
+                "static-vs-dynamic mismatch must produce an error"
+            );
+            let err_msg = format!("{:?}", result.unwrap_err());
+            assert!(
+                err_msg.contains("echo"),
+                "error message must name the engine; got: {err_msg}"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── Important #1: Under-declaration is tolerated (one-directional validation) ──
+    //
+    // Validation must catch OVER-claiming only. A language that the module claims
+    // dynamically but that the YAML never declared (under-declaration) must NOT
+    // cause a hard render error — `ensure_loaded` must simply never validate it.
+    //
+    // Named revert: recording None answers in `static_answers` (the bug) would
+    // cause "ruby" to be validated, producing a None-vs-Primary(1) mismatch →
+    // hard Err. With the fix, "ruby" is never recorded → never validated → Ok.
+
+    #[test]
+    fn test_under_declaration_is_tolerated() {
+        watchdog(Duration::from_secs(10), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("echo");
+            let engine = TsEngine::new(
+                "echo",
+                false,
+                PathBuf::from("/engines/echo.ts"),
+                Arc::clone(&host),
+                Some(single_claim("echo", ClaimKind::Primary, Some(1))),
+                None,
+                None,
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            // Probe "echo" → positive claim, must be recorded in static_answers.
+            let claim_echo = engine.claims_language("echo", None);
+            assert_eq!(
+                claim_echo,
+                LanguageClaim::Primary(1),
+                "static 'echo' must be Primary(1)"
+            );
+
+            // Probe "ruby" → None (not in claims map). Must NOT be recorded because
+            // recording None answers is what turns under-declaration into a hard error.
+            let claim_ruby = engine.claims_language("ruby", None);
+            assert_eq!(
+                claim_ruby,
+                LanguageClaim::None,
+                "absent 'ruby' must return None"
+            );
+
+            // Script responses:
+            //   id=0 LoadEngine → success
+            //   id=1 ClaimsLanguage("echo") → Primary(1) (matches static → ok)
+            //   id=2 ClaimsLanguage("ruby") → Primary(1) (under-declared; only reached if bug is present)
+            // With the fix, id=2 is never sent. With the bug, id=2 is sent, static says None
+            // but dynamic says Primary(1) → mismatch → Err.
+            mock.script_response(0, loaded_response("echo", vec![]));
+            mock.script_response(1, claims_primary_response(1)); // "echo" validation
+            mock.script_response(2, claims_primary_response(1)); // "ruby" — only buggy code reaches this
+
+            let c = Cancellation::new();
+            let result = engine.ensure_loaded(&c);
+            assert!(
+                result.is_ok(),
+                "under-declaration of 'ruby' must NOT produce an error; got: {:?}",
+                result.err()
+            );
+
+            // Confirm only "echo" was validated: exactly 1 ClaimsLanguage wire call.
+            let sent = mock.sent_messages();
+            let claims_wire_count = sent
+                .iter()
+                .filter(|m| matches!(m, ToEngine::ClaimsLanguage { .. }))
+                .count();
+            assert_eq!(
+                claims_wire_count, 1,
+                "exactly 1 ClaimsLanguage wire call expected (echo only, not ruby); sent: {sent:?}"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── Minor: claims_file pre-filter binding (claims_files: None, file_extensions only) ──
+    //
+    // The existing test has both file_extensions and claims_files set to [".echo"], so
+    // deleting the pre-filter doesn't turn the .py→false assertion RED (the static
+    // claims_files branch returns false too). This test uses claims_files: None — the
+    // engine is content-inspecting (dynamic) for .echo files. With ONLY file_extensions
+    // set, .py must be rejected purely by the pre-filter.
+    //
+    // Named revert: removing the pre-filter would fall through to the dynamic path
+    // (ensure_loaded → ClaimsFile wire call), making load_engine_count ≥ 1 → RED.
+
+    #[test]
+    fn test_claims_file_pre_filter_binding() {
+        watchdog(Duration::from_secs(10), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("echo-prefilter");
+            let engine = TsEngine::new(
+                "echo-prefilter",
+                false,
+                PathBuf::from("/engines/echo-prefilter.ts"),
+                Arc::clone(&host),
+                None,
+                Some(vec![".echo".to_string()]), // file_extensions only — pre-filter guard
+                None, // claims_files: None → content-inspecting (dynamic)
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            // .py is not in file_extensions → pre-filter returns false immediately, no load.
+            assert!(
+                !engine.claims_file("x.py", ".py"),
+                ".py must be rejected by pre-filter (false)"
+            );
+            assert_eq!(
+                host.load_engine_count(),
+                0,
+                "pre-filter must not trigger a load; if this fails, the pre-filter is missing"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── quarto_required: carrier (inert in 1c) ────────────────────────────────
+
+    #[test]
+    fn test_quarto_required_carrier() {
+        watchdog(Duration::from_secs(10), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("julia");
+            let engine = TsEngine::new(
+                "julia",
+                false,
+                PathBuf::from("/engines/julia.ts"),
+                Arc::clone(&host),
+                None,
+                None,
+                None,
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            // Unloaded → None.
+            assert_eq!(
+                engine.quarto_required(),
+                None,
+                "unloaded engine must return None for quarto_required"
+            );
+
+            // Script a LoadEngine response that includes quarto_required.
+            mock.script_response(
+                0,
+                FromEngine::Loaded {
+                    discovery: LoadEngineResult {
+                        name: "julia".to_string(),
+                        valid_extensions: vec![],
+                        generates_figures: false,
+                        can_freeze: false,
+                        quarto_required: Some(">=1.9".to_string()),
+                    },
+                },
+            );
+
+            // Trigger load.
+            let c = Cancellation::new();
+            engine
+                .ensure_loaded(&c)
+                .expect("ensure_loaded must succeed");
+
+            // After load → quarto_required returns the loaded value.
+            assert_eq!(
+                engine.quarto_required(),
+                Some(">=1.9"),
+                "loaded engine must report quarto_required from LoadEngineResult"
+            );
+
+            mock.signal_eof();
+        });
     }
 }

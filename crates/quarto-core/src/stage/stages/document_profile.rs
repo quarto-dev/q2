@@ -314,6 +314,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/sub/page.qmd");
         let format = Format::html();

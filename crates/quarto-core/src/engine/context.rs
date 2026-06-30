@@ -108,6 +108,19 @@ pub struct ExecutionContext {
     /// Defaults to `Some(DEFAULT_EXECUTE_TIMEOUT)` so existing call sites
     /// (tests, knitr, jupyter) are unaffected.
     pub execute_timeout: Option<Duration>,
+
+    /// Whether this engine is running in a multi-engine sequence
+    /// (`|resolution.sequence| > 1`).
+    ///
+    /// Used by jupyter's `partition_cells` to gate the "owned-but-unrunnable →
+    /// loud error" branch (P2-13): in a multi-engine sequence, a cell jupyter
+    /// owns but cannot execute (e.g. `{sql}`) raises `NoHandlerForLanguage`;
+    /// in a single-engine sequence the cell is passed through unexecuted
+    /// (display-only, Q1's `quartoMdToJupyter` behaviour for non-kernel cells).
+    ///
+    /// Defaults to `false`; set by `EngineExecutionStage` from
+    /// `resolution.sequence.len() > 1`.
+    pub multi_engine: bool,
 }
 
 impl ExecutionContext {
@@ -136,6 +149,8 @@ impl ExecutionContext {
             handled_languages: HANDLED_LANGUAGES.iter().map(|s| s.to_string()).collect(),
             cancellation: Cancellation::new(),
             execute_timeout: Some(DEFAULT_EXECUTE_TIMEOUT),
+            // Default false; EngineExecutionStage sets true when |sequence| > 1.
+            multi_engine: false,
         }
     }
 
@@ -188,6 +203,16 @@ impl ExecutionContext {
     /// `Some(d)` — abort after `d`; `None` — no timeout.
     pub fn with_execute_timeout(mut self, timeout: Option<Duration>) -> Self {
         self.execute_timeout = timeout;
+        self
+    }
+
+    /// Set whether this engine runs in a multi-engine sequence.
+    ///
+    /// `true` iff `|resolution.sequence| > 1`. Used by jupyter's
+    /// `partition_cells` to gate the "owned-but-unrunnable → loud error"
+    /// branch (P2-13).
+    pub fn with_multi_engine(mut self, multi: bool) -> Self {
+        self.multi_engine = multi;
         self
     }
 }

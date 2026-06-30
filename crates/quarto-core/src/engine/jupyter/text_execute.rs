@@ -61,9 +61,11 @@ pub fn execute_qmd(
 
     // Apply the handled_languages enforcement gate:
     //   - cells in handled_languages are ceded (dropped from the executable set)
-    //   - cells jupyter owns but cannot execute → loud Err(NoHandlerForLanguage)
+    //   - cells jupyter owns but cannot execute:
+    //     multi_engine=true  → loud Err(NoHandlerForLanguage)  (§10 case 4, P2-13)
+    //     multi_engine=false → pass through unexecuted (display-only, P2-13)
     //   - remaining cells are executable
-    let executable = partition_cells(all_blocks, &ctx.handled_languages)?;
+    let executable = partition_cells(all_blocks, &ctx.handled_languages, ctx.multi_engine)?;
 
     if executable.is_empty() {
         // All cells were ceded — passthrough unchanged.
@@ -151,19 +153,21 @@ fn parse_code_blocks(input: &str) -> Vec<CodeBlock> {
 ///   These cells are NOT returned in the `Ok` set.
 /// * `lang ∉ handled_languages` **AND** jupyter can execute it
 ///   (`is_executable_language`) → **execute**: returned in `Ok`.
-/// * `lang ∉ handled_languages` **AND** jupyter *cannot* execute it → jupyter
-///   **owns** this language (it is not in the leave-alone set) but has no
-///   kernel for it: **loud failure** — `Err(NoHandlerForLanguage)`.
-///
-/// This is the §10 case-4 "owned but unrunnable" gate. It fires before any
-/// kernel is started, so the render halts with a named, actionable error
-/// rather than silently emitting an unexecuted cell.
+/// * `lang ∉ handled_languages` **AND** jupyter *cannot* execute it:
+///   - `multi_engine=true`  (`|sequence| > 1`): jupyter **owns** this
+///     language but has no kernel — **loud failure** `Err(NoHandlerForLanguage)`
+///     (§10 case 4). The render halts with a named, actionable error.
+///   - `multi_engine=false` (`|sequence| == 1`): **pass through unexecuted**.
+///     The cell is left verbatim (like a ceded cell) so a single-kernel
+///     doc can still contain display-only cells for other languages — the
+///     Q1 `quartoMdToJupyter` display-only treatment.
 ///
 /// `NoHandlerForLanguage` is a **clean refusal** and does NOT poison the
 /// engine instance. See `ExecutionError::NoHandlerForLanguage`.
 fn partition_cells(
     blocks: Vec<CodeBlock>,
     handled_languages: &[String],
+    multi_engine: bool,
 ) -> Result<Vec<CodeBlock>, ExecutionError> {
     let mut executable = Vec::new();
 
@@ -187,13 +191,20 @@ fn partition_cells(
         if is_executable_language(&block.language) {
             // Jupyter owns this language and can execute it.
             executable.push(block);
-        } else {
-            // Jupyter owns this language (not in handled_languages) but has
-            // no handler/kernel for it. Fail loudly — §10 case 4.
+        } else if multi_engine {
+            // Multi-engine sequence: jupyter owns this language (not in
+            // handled_languages) but has no handler/kernel for it. Fail
+            // loudly — §10 case 4 (P2-13).
             return Err(ExecutionError::no_handler_for_language(
                 "jupyter",
                 block.language,
             ));
+        } else {
+            // Single-engine sequence: pass the cell through unexecuted.
+            // It is left verbatim just like a ceded cell — the block text
+            // falls into the `input[last_end..]` passthrough in
+            // `execute_blocks_inner`. Q1's display-only treatment (P2-13).
+            continue;
         }
     }
 
@@ -802,8 +813,8 @@ mod tests {
     // but jupyter has no SQL kernel → Err(NoHandlerForLanguage{engine="jupyter",
     // language="sql"}).
     //
-    // Vacuity: sql is NOT in is_executable_language (checked separately), and
-    // the test asserts the exact variant + field values — not just Err(_).
+    // P2-13a: the loud branch is gated on multi_engine=true (multi-engine
+    // sequence). Vacuity revert: remove the loud branch ⇒ this test goes RED.
     // -----------------------------------------------------------------------
     #[test]
     fn test_partition_cells_owned_unrunnable_fails_loudly() {
@@ -812,12 +823,13 @@ mod tests {
             vec!["ojs".to_string(), "mermaid".to_string(), "dot".to_string()];
 
         let blocks = vec![make_block("sql", "SELECT 1;")];
-        let result = partition_cells(blocks, &handled);
+        // multi_engine=true: |sequence| > 1 → owned-but-unrunnable → loud error.
+        let result = partition_cells(blocks, &handled, true);
 
         // Must be a loud Err, not Ok.
         assert!(
             result.is_err(),
-            "sql owned by jupyter but not executable → must Err"
+            "sql owned by jupyter but not executable in multi-engine sequence → must Err"
         );
         let err = result.unwrap_err();
         // Exact variant check (not just any error).
@@ -830,6 +842,39 @@ mod tests {
             assert_eq!(engine, "jupyter", "error must name the engine");
             assert_eq!(language, "sql", "error must name the language");
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // P2-13b (NEW): single-engine sequence with owned-but-unrunnable cell
+    // passes through verbatim — no error, not in executable set.
+    //
+    // Binding: gated on multi_engine flag (NOT unconditional raise).
+    // Vacuity revert: remove the |sequence|>1 gate (always raise) ⇒ this
+    // test goes RED because single-engine now raises.
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_partition_cells_single_engine_owned_unrunnable_passthrough() {
+        // handled_languages does NOT contain "sql" → jupyter owns sql.
+        let handled: Vec<String> =
+            vec!["ojs".to_string(), "mermaid".to_string(), "dot".to_string()];
+
+        let blocks = vec![make_block("sql", "SELECT 1;")];
+        // multi_engine=false: |sequence| == 1 → owned-but-unrunnable → pass through, no error.
+        let result = partition_cells(blocks, &handled, false);
+
+        assert!(
+            result.is_ok(),
+            "single-engine: owned-but-unrunnable must pass through unexecuted, not error; \
+             got: {:?}",
+            result.unwrap_err()
+        );
+        let executable = result.unwrap();
+        assert!(
+            executable.is_empty(),
+            "single-engine: sql must NOT be in the executable set \
+             (it passes through verbatim in the surrounding text); len={}",
+            executable.len()
+        );
     }
 
     // Vacuity guard for row 4: sql is genuinely not executable (would be
@@ -862,7 +907,8 @@ mod tests {
 
         let python_block = make_block("python", "x = 1");
         let sql_block = make_block("sql", "SELECT 1;");
-        let result = partition_cells(vec![python_block, sql_block], &handled);
+        // multi_engine doesn't matter here (cede path, not the loud-error path).
+        let result = partition_cells(vec![python_block, sql_block], &handled, false);
 
         assert!(result.is_ok(), "should not error — sql is ceded, not owned");
         let executable = result.unwrap();
@@ -894,7 +940,8 @@ mod tests {
         let handled: Vec<String> = HANDLED_LANGUAGES.iter().map(|s| s.to_string()).collect();
 
         let ojs_block = make_block("ojs", "viewof slider = Inputs.range([0, 100])");
-        let result = partition_cells(vec![ojs_block], &handled);
+        // multi_engine doesn't matter here (cede path, not the loud-error path).
+        let result = partition_cells(vec![ojs_block], &handled, false);
 
         assert!(
             result.is_ok(),
@@ -912,12 +959,14 @@ mod tests {
     fn test_partition_cells_mermaid_dot_default_passthrough() {
         let handled: Vec<String> = HANDLED_LANGUAGES.iter().map(|s| s.to_string()).collect();
 
+        // multi_engine doesn't matter here (cede path, not the loud-error path).
         let result = partition_cells(
             vec![
                 make_block("mermaid", "graph TD; A-->B"),
                 make_block("dot", "digraph G { a -> b }"),
             ],
             &handled,
+            false,
         );
 
         assert!(result.is_ok(), "mermaid/dot must not error");

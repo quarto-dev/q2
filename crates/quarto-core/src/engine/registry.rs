@@ -18,6 +18,7 @@ use quarto_error_reporting::DiagnosticMessage;
 
 use crate::extension::types::ExtensionId;
 
+use super::ExecutionError;
 use super::markdown::MarkdownEngine;
 use super::traits::ExecutionEngine;
 
@@ -55,6 +56,10 @@ pub struct EngineRegistry {
     /// warnings from `TsEngine` lazy init). Drained by the stage at
     /// end-of-render and forwarded to the pipeline's diagnostic sink.
     pub diagnostics: Arc<Mutex<Vec<DiagnosticMessage>>>,
+    /// User-/extension-specified engine ordering: External engine names (registration order)
+    /// followed by Reorder hints, in declared order. Consumed by resolution's auto-promotion
+    /// (candidate_engines). Empty for a built-ins-only registry.
+    pub contribution_order: Vec<String>,
 }
 
 impl EngineRegistry {
@@ -69,6 +74,7 @@ impl EngineRegistry {
             engines: HashMap::new(),
             aliases: Arc::new(Mutex::new(HashMap::new())),
             diagnostics: Arc::new(Mutex::new(Vec::new())),
+            contribution_order: Vec::new(),
         };
 
         // Always register markdown engine
@@ -90,6 +96,7 @@ impl EngineRegistry {
             engines: HashMap::new(),
             aliases: Arc::new(Mutex::new(HashMap::new())),
             diagnostics: Arc::new(Mutex::new(Vec::new())),
+            contribution_order: Vec::new(),
         }
     }
 
@@ -138,6 +145,56 @@ impl EngineRegistry {
     /// Check if the registry is empty.
     pub fn is_empty(&self) -> bool {
         self.engines.is_empty()
+    }
+
+    /// Iterate engines in a deterministic order suitable for `claims_file` queries.
+    ///
+    /// Order: `contribution_order` (TS/extension engines, registration order) →
+    /// built-in names (`markdown`, `knitr`, `jupyter`) → remaining engines
+    /// alphabetically. Engines absent from the registry are skipped.
+    ///
+    /// This mirrors the candidate-engine ordering used by `resolve_engines` so
+    /// `EngineClaimsFileStage` picks the same first-claimer that language
+    /// resolution would.
+    pub fn engines_in_order(&self) -> Vec<Arc<dyn ExecutionEngine>> {
+        const BUILTIN_ORDER: &[&str] = &["markdown", "knitr", "jupyter"];
+
+        let mut order: Vec<Arc<dyn ExecutionEngine>> = Vec::new();
+        let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+
+        // Extension engines in registration order.
+        for name in &self.contribution_order {
+            if !seen.contains(name.as_str())
+                && let Some(engine) = self.engines.get(name.as_str())
+            {
+                seen.insert(name.as_str());
+                order.push(Arc::clone(engine));
+            }
+        }
+
+        // Built-in engines in declared order.
+        for builtin in BUILTIN_ORDER {
+            if !seen.contains(*builtin)
+                && let Some(engine) = self.engines.get(*builtin)
+            {
+                seen.insert(builtin);
+                order.push(Arc::clone(engine));
+            }
+        }
+
+        // Remaining engines alphabetically.
+        let mut extra: Vec<(&str, &Arc<dyn ExecutionEngine>)> = self
+            .engines
+            .iter()
+            .filter(|(name, _)| !seen.contains(name.as_str()))
+            .map(|(name, engine)| (name.as_str(), engine))
+            .collect();
+        extra.sort_unstable_by_key(|(name, _)| *name);
+        for (_, engine) in extra {
+            order.push(Arc::clone(engine));
+        }
+
+        order
     }
 
     /// Get an engine by name, falling back to default with a warning.
@@ -196,6 +253,7 @@ impl EngineRegistry {
             engines: HashMap::new(),
             aliases: Arc::new(Mutex::new(HashMap::new())),
             diagnostics: Arc::new(Mutex::new(Vec::new())),
+            contribution_order: Vec::new(),
         };
         // Start from the default engine set, then overlay replay engines.
         registry.register(Arc::new(MarkdownEngine::new()));
@@ -222,6 +280,24 @@ impl EngineRegistry {
     /// hold it without a cycle back to `EngineRegistry`.
     pub fn diagnostics(&self) -> Arc<Mutex<Vec<DiagnosticMessage>>> {
         Arc::clone(&self.diagnostics)
+    }
+
+    /// Shut down every registered engine's backing subprocess. Best-effort: attempts ALL
+    /// engines even if one errors, returning the first error encountered (the caller logs and
+    /// continues — the host's Drop backstop reaps anything left). Idempotent.
+    pub fn shutdown_all(&self) -> Result<(), ExecutionError> {
+        let mut first_err = None;
+        for engine in self.engines.values() {
+            if let Err(e) = engine.shutdown()
+                && first_err.is_none()
+            {
+                first_err = Some(e);
+            }
+        }
+        match first_err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
     }
 }
 
@@ -353,5 +429,111 @@ mod tests {
         // Register again (should replace, not add)
         registry.register(Arc::new(MarkdownEngine::new()));
         assert_eq!(registry.len(), 1);
+    }
+
+    // ── Task 6 tests ──────────────────────────────────────────────────────────
+
+    /// `shutdown_all` on a built-ins-only registry is a no-op `Ok`.
+    /// Markdown, knitr, and jupyter all use the default no-op shutdown, so
+    /// calling shutdown_all on a fresh registry must succeed without error.
+    #[test]
+    fn test_shutdown_all_noop_on_builtins() {
+        let registry = EngineRegistry::new();
+        assert!(
+            registry.shutdown_all().is_ok(),
+            "shutdown_all on built-ins-only registry must return Ok"
+        );
+    }
+
+    /// `contribution_order` field stores names in declaration order.
+    #[test]
+    fn test_contribution_order_roundtrip() {
+        let mut registry = EngineRegistry::new();
+        registry.contribution_order.push("julia".to_string());
+        registry.contribution_order.push("r-custom".to_string());
+        assert_eq!(
+            registry.contribution_order,
+            vec!["julia", "r-custom"],
+            "contribution_order must preserve insertion order"
+        );
+    }
+
+    /// Real TsEngine shutdown via `shutdown_all` (Deno-gated).
+    ///
+    /// Registers a TsEngine whose host is backed by a real subprocess,
+    /// asserts the host is alive before calling shutdown_all, then asserts
+    /// it is dead after.  If `shutdown_all` does not call `engine.shutdown()`
+    /// (or `TsEngine::shutdown` is the default no-op), the host stays alive
+    /// and the second assertion fails.
+    ///
+    /// Exercised-guard: `is_alive()==true` before shutdown prevents a vacuously
+    /// passing test where the process never started.
+    #[test]
+    // Spawns `sh` (Unix-only); gate on unix so a future Windows runner with Deno doesn't panic.
+    #[cfg(all(not(target_arch = "wasm32"), unix))]
+    fn test_shutdown_all_kills_ts_engine() {
+        use crate::engine::ts_engine::TsEngine;
+        use crate::engine::ts_process::{TsEngineHost, is_available as deno_is_available};
+        use crate::engine::ts_protocol::HostGlobalConfig;
+        use crate::extension::types::ExtensionId;
+        use std::path::PathBuf;
+        use std::process::Command;
+
+        if !deno_is_available() {
+            return;
+        }
+
+        let global = HostGlobalConfig {
+            resource_dir: "/res".to_string(),
+            runtime_dir: "/rt".to_string(),
+            data_dir: "/data".to_string(),
+            pandoc_path: None,
+            is_interactive_session: false,
+            running_in_ci: false,
+            quarto_version: "0.1.0".to_string(),
+        };
+
+        // Spawn a simple subprocess that reads stdin indefinitely (exits on EOF,
+        // which shutdown() triggers by closing stdin).
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg("cat >/dev/null");
+
+        let host = Arc::new(
+            TsEngineHost::start_with_command(cmd, global).expect("start_with_command failed"),
+        );
+
+        // Exercised-guard: host must be alive before we call shutdown.
+        assert!(
+            host.is_alive(),
+            "host must be alive immediately after start_with_command"
+        );
+
+        let aliases = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let diag = Arc::new(Mutex::new(Vec::new()));
+        let ext_id = ExtensionId::new("test-ts-engine");
+        let engine = Arc::new(TsEngine::new(
+            "test-ts-engine",
+            false,
+            PathBuf::from("/test/engine.ts"),
+            Arc::clone(&host),
+            None,
+            None,
+            None,
+            ext_id,
+            aliases,
+            diag,
+        ));
+
+        let mut registry = EngineRegistry::empty();
+        registry.register(engine);
+
+        registry
+            .shutdown_all()
+            .expect("shutdown_all must return Ok");
+
+        assert!(
+            !host.is_alive(),
+            "host must be dead after shutdown_all delegated to TsEngine::shutdown"
+        );
     }
 }

@@ -1,1 +1,9 @@
-{}
+{
+  // Import map for workspace packages used by Deno-only modules.
+  // Paths are relative to this file (the repo root).
+  // The @quarto/api/platform specifier is used as `import type` in
+  // deno-host.ts — erased at runtime, but needs resolution for deno check.
+  "imports": {
+    "@quarto/api/platform": "./ts-packages/quarto-api/src/platform/index.ts"
+  }
+}

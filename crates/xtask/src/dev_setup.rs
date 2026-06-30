@@ -147,6 +147,7 @@ pub fn run() -> Result<()> {
 
     check_cmake();
     check_pandoc();
+    check_deno();
 
     Ok(())
 }
@@ -232,6 +233,35 @@ fn check_pandoc() {
              Four tests will fail. Update from https://pandoc.org/installing.html"
         );
     }
+}
+
+/// Check for Deno (optional — needed for `quarto-engine-host-deno` tests and the
+/// Deno engine execution path). Warn-only; does NOT auto-install.
+fn check_deno() {
+    let Ok(output) = Command::new("deno").arg("--version").output() else {
+        println!(
+            "\n  Warning: deno not found. Engine-host-deno tests and the Deno execution\n  \
+             path will be skipped or unavailable.\n  \
+             Install: brew install deno  (macOS) or https://deno.land/"
+        );
+        return;
+    };
+    if !output.status.success() {
+        println!(
+            "\n  Warning: `deno --version` returned non-zero. Engine-host-deno\n  \
+             integration will be unavailable.\n  \
+             Install: brew install deno  (macOS) or https://deno.land/"
+        );
+        return;
+    }
+
+    let first_line = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .next()
+        .unwrap_or("deno")
+        .trim()
+        .to_string();
+    println!("\n  {first_line} — detected");
 }
 
 /// Parse the first line of `pandoc --version` output into `(major, minor)`.

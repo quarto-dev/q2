@@ -1,0 +1,13 @@
+{
+  "imports": {
+    "@quarto/api":    "jsr:@quarto/api",
+    "@quarto/api/":   "jsr:/@quarto/api/",
+    "@quarto/types":  "jsr:@quarto/types",
+    "@quarto/types/": "jsr:/@quarto/types/",
+    "@std/":          "jsr:/@std/"
+  },
+  "compilerOptions": {
+    "strict": true,
+    "lib": ["deno.ns", "DOM", "ES2021"]
+  }
+}

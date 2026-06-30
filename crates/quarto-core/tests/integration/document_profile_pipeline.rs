@@ -62,6 +62,8 @@ fn make_project() -> ProjectContext {
         is_single_file: true,
         files: vec![DocumentInfo::from_path(test_project_dir().join("test.qmd"))],
         output_dir: test_project_dir(),
+
+        ..Default::default()
     }
 }
 
@@ -347,6 +349,8 @@ async fn run_head_pipeline_in_dir(
         is_single_file: true,
         files: vec![DocumentInfo::from_path(parent_path)],
         output_dir: project_dir.to_path_buf(),
+
+        ..Default::default()
     };
     let doc = DocumentInfo::from_path(parent_path);
     let format = Format::html();

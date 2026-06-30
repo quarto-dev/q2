@@ -200,18 +200,41 @@ impl SourceType {
     }
 }
 
+/// Provenance of a file-to-QMD conversion performed by `EngineClaimsFileStage`.
+///
+/// v1 / C′ scope: carries only the converting engine's name, which is used to
+/// build the synthetic intermediate-file label
+/// `"<{original} (converted by {engine})>"` consumed by `ParseDocumentStage`.
+///
+/// A′ (deferred): faithful byte-range back-mapping would add `original_content`
+/// and a `source_info` (converted→original map) here. Out of scope for this
+/// plan; see plan1c §1060-1063.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConversionProvenance {
+    /// Name of the engine that produced the converted QMD.
+    pub engine: String,
+}
+
 /// Loaded file with detected source type.
 ///
 /// This is the entry point for the pipeline - a file has been read
 /// from disk (or VFS in WASM) and its type has been detected.
+///
+/// After `EngineClaimsFileStage` runs, `content` may have been replaced with
+/// the QMD bytes produced by the claiming engine, and `conversion` records
+/// which engine performed the conversion. `path` always stays as the user's
+/// original input path.
 #[derive(Debug)]
 pub struct LoadedSource {
-    /// Path to the source file
+    /// Path to the source file (user's original path; never rewritten)
     pub path: PathBuf,
-    /// Raw file content
+    /// File content — QMD bytes after engine conversion, raw bytes otherwise
     pub content: Vec<u8>,
-    /// Detected source type
+    /// Detected (or post-conversion) source type
     pub source_type: SourceType,
+    /// Set by `EngineClaimsFileStage` when an engine converts this file to QMD.
+    /// `None` for `.qmd` / `.md` inputs (pass-through path).
+    pub conversion: Option<ConversionProvenance>,
 }
 
 impl LoadedSource {
@@ -222,6 +245,7 @@ impl LoadedSource {
             path,
             content,
             source_type,
+            conversion: None,
         }
     }
 
@@ -231,6 +255,7 @@ impl LoadedSource {
             path,
             content,
             source_type,
+            conversion: None,
         }
     }
 

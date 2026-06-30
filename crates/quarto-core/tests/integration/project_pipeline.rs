@@ -420,6 +420,8 @@ fn default_project_type_single_file_produces_output() {
             qmd_path.clone(),
         )],
         output_dir: project_dir.clone(),
+
+        ..Default::default()
     };
 
     let options = RenderToFileOptions::default();

@@ -59,8 +59,9 @@ const BUILTIN_ORDER: &[&str] = &["knitr", "jupyter", "markdown"];
 /// Build the candidate engine list in a deterministic order.
 ///
 /// Result = `explicit_engines` (in listed order, de-duplicated by name,
-/// first occurrence wins) followed by any registry engines NOT already in the
-/// explicit list, in `BUILTIN_ORDER` then alphabetically by name.
+/// first occurrence wins) followed by extension engines in
+/// `registry.contribution_order` (deduped, only those in registry), then
+/// `BUILTIN_ORDER`, then any remaining registry engines alphabetically.
 fn candidate_engines<'a>(
     explicit: &'a [DetectedEngine],
     registry: &'a EngineRegistry,
@@ -73,6 +74,16 @@ fn candidate_engines<'a>(
     for e in explicit {
         if seen.insert(e.name.as_str()) {
             order.push(e.name.as_str());
+        }
+    }
+
+    // contribution_order: extension engines in registration order, before
+    // BUILTIN_ORDER. Only names present in the registry are included.
+    for name in &registry.contribution_order {
+        let name = name.as_str();
+        if !seen.contains(name) && registry.has_engine(name) {
+            seen.insert(name);
+            order.push(name);
         }
     }
 
@@ -326,6 +337,17 @@ pub fn resolve_engines(
     registry: &EngineRegistry,
     claimed: Option<&str>,
 ) -> EngineResolution {
+    // --- CLAIMED SHORT-CIRCUIT (§8 / P2-10) ---
+    // A file claimed by an engine resolves to exactly that engine.
+    // All tiers and the `engine:` YAML are bypassed; ownership is
+    // intentionally empty (the claiming engine processes everything).
+    if let Some(name) = claimed {
+        return EngineResolution {
+            sequence: vec![DetectedEngine::new(name)],
+            ownership: LinkedHashMap::new(),
+        };
+    }
+
     // --- Step 0: scan languages ---
     let languages = computational_languages(ast);
 
@@ -341,39 +363,56 @@ pub fn resolve_engines(
     // `detect_engines` returns a one-element [markdown] default when no
     // `engine:` key is present. We distinguish "user gave an explicit list"
     // from "we got the markdown default" by checking for the `engine:` key.
-    let has_explicit_engine_key = meta.get("engine").is_some();
-    let raw_explicit: Vec<DetectedEngine> = if has_explicit_engine_key {
+    let has_engine_key = meta.get("engine").is_some();
+    let raw_explicit: Vec<DetectedEngine> = if has_engine_key {
         detect_engines(meta)
             .into_iter()
             .filter(|e| e.name != "markdown") // markdown is never a real explicit owner
             .collect()
     } else {
-        Vec::new()
-    };
-
-    // The file-claim seed (§8): if `claimed` is set, it counts as a Primary
-    // for any language that otherwise has no Primary claimant. We add it to
-    // the explicit list if not already there (so T2 can also apply to it).
-    let explicit_with_seed: Vec<DetectedEngine> = {
-        let mut list = raw_explicit.clone();
-        if let Some(seed) = claimed
-            && !list.iter().any(|e| e.name == seed)
-        {
-            list.push(DetectedEngine::new(seed));
+        // Top-level engine key shorthand (e.g. `knitr: ...` or `julia: ...`).
+        // Scan registry engine names — a key matching any registered engine
+        // (other than markdown) acts like `engine: {<name>: <config>}`.
+        // Single engine only (the shorthand has no array form). First match wins.
+        let mut found: Vec<DetectedEngine> = Vec::new();
+        let mut names = registry.engine_names();
+        names.sort_unstable(); // deterministic scan order
+        for name in names {
+            if name == "markdown" {
+                continue;
+            }
+            if let Some(config) = meta.get(name) {
+                found.push(DetectedEngine::with_config(
+                    name.to_string(),
+                    config.clone(),
+                ));
+                break;
+            }
         }
-        list
+        found
     };
 
-    // Whether T4 is allowed: only for implicit sequences (no `engine:` key
-    // and no claimed seed — the claimed seed counts as an explicit intent).
-    // §4.3: an explicit [knitr] + {julia} does NOT add jupyter.
-    let is_implicit = !has_explicit_engine_key && claimed.is_none();
+    // P2-2: explicit `engine: markdown` (raw_explicit empty after filter +
+    // has an engine key) → user opted out of execution entirely. Return
+    // [markdown] immediately so the stage skips execution while downstream
+    // stages still see an engine in the sequence.
+    if has_engine_key && raw_explicit.is_empty() {
+        return EngineResolution {
+            sequence: vec![DetectedEngine::new("markdown")],
+            ownership: LinkedHashMap::new(),
+        };
+    }
+
+    // Whether T4 is allowed: only for implicit sequences — no `engine:` key
+    // and no top-level engine key shorthand. §4.3: an explicit [knitr] +
+    // {julia} does NOT add jupyter via T4.
+    let is_implicit = !has_engine_key && raw_explicit.is_empty();
 
     // --- Step 2: build candidate engine order ---
-    // explicit_with_seed first (in declared order), then remaining registry
-    // engines in BUILTIN_ORDER then alpha. This is the stable iteration order
-    // for all tier evaluations.
-    let candidates: Vec<&str> = candidate_engines(&explicit_with_seed, registry);
+    // explicit first (in declared order), then contribution_order, then
+    // BUILTIN_ORDER, then remaining registry engines alpha. This is the stable
+    // iteration order for all tier evaluations.
+    let candidates: Vec<&str> = candidate_engines(&raw_explicit, registry);
 
     // --- Step 3: ownership resolution —
     // `ownership` maps language → owner name (insertion-ordered: first
@@ -385,8 +424,8 @@ pub fn resolve_engines(
 
     // Seed `present` with explicitly-listed engines (they are present by
     // declaration, even if they claim no language in this doc).
-    for e in &explicit_with_seed {
-        if registry.has_engine(&e.name) || claimed == Some(e.name.as_str()) {
+    for e in &raw_explicit {
+        if registry.has_engine(&e.name) {
             present.insert(e.name.clone());
         }
     }
@@ -402,10 +441,6 @@ pub fn resolve_engines(
             {
                 best = Some((name, p));
             }
-            // Note: if `name` is the claimed seed but not in the registry,
-            // we skip — the seed's effect is disabling T4, not injecting a
-            // spurious Primary claim. The seed engine would need to be in the
-            // registry to actually win T1.
         }
         if let Some((winner, _)) = best {
             ownership.insert(lang.clone(), winner.to_string());
@@ -422,7 +457,7 @@ pub fn resolve_engines(
         }
         let mut best: Option<(&str, i32)> = None;
         // Only consider explicitly-listed engines for T2.
-        for e in &explicit_with_seed {
+        for e in &raw_explicit {
             let name = e.name.as_str();
             if let Some(engine) = registry.get(name)
                 && let LanguageClaim::Fallback(p) =
@@ -500,7 +535,7 @@ pub fn resolve_engines(
         &str,
         Option<&quarto_pandoc_types::ConfigValue>,
     > = std::collections::HashMap::new();
-    for e in &explicit_with_seed {
+    for e in &raw_explicit {
         explicit_config
             .entry(e.name.as_str())
             .or_insert(e.config.as_ref());
@@ -1144,6 +1179,158 @@ mod tests {
         assert_eq!(
             python_count, 1,
             "python should appear exactly once in ownership"
+        );
+    }
+
+    // ── Task-9 seam tests (TDD — written RED first) ───────────────────────────
+
+    /// P2-10: claimed short-circuit must bypass ALL tiers and the explicit engine
+    /// list — it returns exactly `[claimed]` with an empty ownership map.
+    ///
+    /// Named revert (vacuity guard): restore the old seed logic (add claimed to
+    /// explicit list instead of returning early) — ownership gains "echo"→"echo"
+    /// from T1, so `res.ownership.is_empty()` goes RED, proving the assertion
+    /// binds to the short-circuit.
+    #[test]
+    fn test_p2_10_claimed_short_circuit_ignores_engine_key_and_tiers() {
+        let echo_eng = MockEngine::new("echo", |lang, _| {
+            if lang == "echo" {
+                LanguageClaim::Primary(1)
+            } else {
+                LanguageClaim::None
+            }
+        });
+        // Registry also has knitr; doc declares `engine: knitr` explicitly.
+        let registry = mock_registry(vec![mock_knitr(), echo_eng]);
+        let ast = ast_with_blocks(vec![engine_cell("echo"), engine_cell("python")]);
+        let meta = map_config(vec![("engine", string_config("knitr"))]);
+
+        // claimed = "echo" — short-circuit must bypass knitr and return [echo].
+        let res = resolve_engines(&meta, &ast, &registry, Some("echo"));
+
+        assert_eq!(
+            res.sequence
+                .iter()
+                .map(|e| e.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["echo"],
+            "claimed short-circuit must return exactly [claimed]"
+        );
+        assert!(
+            res.ownership.is_empty(),
+            "claimed short-circuit: tiers must not run — ownership must be empty; \
+             got: {:?}",
+            res.ownership
+        );
+    }
+
+    /// P2-2: `engine: markdown` (explicit) with `{r}` cells → sequence == [markdown].
+    ///
+    /// Named revert: remove the markdown short-circuit → knitr wins T1 for "r",
+    /// making the `names == ["markdown"]` assertion go RED.
+    #[test]
+    fn test_p2_2_explicit_markdown_suppresses_tiers() {
+        let registry = mock_registry(vec![mock_knitr(), mock_jupyter()]);
+        let ast = ast_with_blocks(vec![engine_cell("r")]);
+        let meta = map_config(vec![("engine", string_config("markdown"))]);
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        let names: Vec<_> = res.sequence.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["markdown"],
+            "explicit `engine: markdown` must short-circuit to [markdown], suppressing tier eval"
+        );
+        assert!(
+            res.ownership.is_empty(),
+            "explicit markdown short-circuit: no tier ran, no language ownership; \
+             got: {:?}",
+            res.ownership
+        );
+    }
+
+    /// contribution_order splice: extension engines declared in `contribution_order`
+    /// come BEFORE BUILTIN_ORDER and alpha. Engines NOT in contribution_order are
+    /// still sorted alpha after it.
+    ///
+    /// Named revert: comment out the contribution_order splice in `candidate_engines`
+    /// → "aaa-ext" appears before "zzz-ext" (alphabetical), making the assertion RED.
+    #[test]
+    fn test_contribution_order_promotes_extensions_before_alpha() {
+        // "zzz-ext" is declared first in contribution_order; "aaa-ext" second.
+        // Without the splice, alpha order would yield ["aaa-ext", "zzz-ext"].
+        let zzz = MockEngine::new("zzz-ext", |lang, _| {
+            if lang == "zzz" {
+                LanguageClaim::Primary(1)
+            } else {
+                LanguageClaim::None
+            }
+        });
+        let aaa = MockEngine::new("aaa-ext", |lang, _| {
+            if lang == "aaa" {
+                LanguageClaim::Primary(1)
+            } else {
+                LanguageClaim::None
+            }
+        });
+        let mut registry = EngineRegistry::empty();
+        registry.register(Arc::new(zzz));
+        registry.register(Arc::new(aaa));
+        registry.contribution_order = vec!["zzz-ext".to_string(), "aaa-ext".to_string()];
+
+        let ast = ast_with_blocks(vec![engine_cell("zzz"), engine_cell("aaa")]);
+        let meta = empty_meta();
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        let names: Vec<_> = res.sequence.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["zzz-ext", "aaa-ext"],
+            "contribution_order must position zzz-ext before aaa-ext (not alphabetical)"
+        );
+    }
+
+    /// Top-level engine key detected via registry names (not KNOWN_ENGINES).
+    ///
+    /// A `julia: {{kernel: "julia-1.11"}}` top-level key (no `engine:` key) must
+    /// be detected when "julia" is in the registry. The config must be attached to
+    /// the sequence entry (same provenance as an explicit `engine: {{julia: ...}}`
+    /// declaration).
+    ///
+    /// Named revert: keep the top-level scan in `detect_engines` using KNOWN_ENGINES
+    /// (not registry names) → "julia" is not in KNOWN_ENGINES → config is None →
+    /// `julia_entry.config.is_some()` goes RED.
+    #[test]
+    fn test_top_level_engine_key_detected_via_registry() {
+        let julia_eng = MockEngine::new("julia", |lang, _| {
+            if lang == "julia" {
+                LanguageClaim::Primary(1)
+            } else {
+                LanguageClaim::None
+            }
+        });
+        let registry = mock_registry(vec![julia_eng]);
+
+        let julia_config = map_config(vec![("kernel", string_config("julia-1.11"))]);
+        let meta = map_config(vec![("julia", julia_config)]);
+        let ast = ast_with_blocks(vec![engine_cell("julia")]);
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        let julia_entry = res
+            .sequence
+            .iter()
+            .find(|e| e.name == "julia")
+            .expect("julia must be in sequence");
+        assert!(
+            julia_entry.config.is_some(),
+            "top-level `julia:` config must be attached to the sequence entry"
+        );
+        assert!(
+            julia_entry.config.as_ref().unwrap().get("kernel").is_some(),
+            "kernel config must be preserved from top-level key"
         );
     }
 }

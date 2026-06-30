@@ -45,6 +45,17 @@ impl ExecutionEngine for FailingTestEngine {
             "synthetic test-failing engine failure".to_string(),
         ))
     }
+    fn claims_language(
+        &self,
+        language: &str,
+        _first_class: Option<&str>,
+    ) -> quarto_core::engine::LanguageClaim {
+        if language == "test-failing" {
+            quarto_core::engine::LanguageClaim::Primary(1)
+        } else {
+            quarto_core::engine::LanguageClaim::None
+        }
+    }
 }
 
 fn pick_free_port() -> u16 {

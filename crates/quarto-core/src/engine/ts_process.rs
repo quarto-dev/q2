@@ -58,10 +58,6 @@ static EMBEDDED_BUNDLE: &str = include_str!(concat!(
     "/../../ts-packages/quarto-engine-host-deno/dist/engine-host-deno.js"
 ));
 
-/// Cache for the once-extracted bundle path.
-/// `None` = not yet extracted; `Some(Ok(path))` = extracted; `Some(Err(msg))` = failed.
-static EXTRACTED_BUNDLE_PATH: Mutex<Option<Result<PathBuf, String>>> = Mutex::new(None);
-
 /// Compute the 16-hex-char content hash (first 8 bytes of SHA-256) of a
 /// byte slice.  Used for the content-hash-keyed filename under `bundles/`.
 fn bundle_content_hash(bytes: &[u8]) -> String {
@@ -104,42 +100,48 @@ fn extract_bundle_to(bundles_dir: &Path) -> std::io::Result<PathBuf> {
     Ok(dest)
 }
 
+/// Cache for the once-extracted bundle path. Successes only.
+/// `None` = not yet extracted (or last attempt failed); `Some(path)` = extracted.
+static EXTRACTED_BUNDLE_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+/// Return the cached path, or run `extract` (with the lock released) and cache
+/// only a successful result. A failed extraction is NOT cached — the next call
+/// retries. Race-safe: `extract` is idempotent write-if-absent and the final
+/// insert is double-checked.
+fn cached_extract(
+    cache: &Mutex<Option<PathBuf>>,
+    extract: impl FnOnce() -> Result<PathBuf, ExecutionError>,
+) -> Result<PathBuf, ExecutionError> {
+    // Fast path: already cached.
+    {
+        let guard = cache.lock().unwrap();
+        if let Some(ref path) = *guard {
+            return Ok(path.clone());
+        }
+    } // guard dropped — lock released for extract()
+
+    let path = extract()?; // Err returns early, never cached
+
+    let mut guard = cache.lock().unwrap();
+    // Another thread may have inserted while we extracted; eager get_or_insert
+    // (NOT get_or_insert_with — that would run I/O under the guard).
+    Ok(guard.get_or_insert(path).clone())
+}
+
 /// Extract the embedded bundle once, caching the result.
 ///
 /// Writes to `<quarto_runtime_dir>/bundles/engine-host-deno-<sha8>.js`.
 /// Subsequent calls return a clone of the cached path without I/O.
-///
-/// Errors are also cached: a failed extraction returns the same error message
-/// on subsequent calls until the process restarts.
+/// A failed extraction is NOT cached — the next call retries.
 fn extracted_bundle_path() -> Result<PathBuf, ExecutionError> {
-    // Fast path: already cached.
-    {
-        let guard = EXTRACTED_BUNDLE_PATH.lock().unwrap();
-        if let Some(ref cached) = *guard {
-            return cached
-                .clone()
-                .map_err(|e| ExecutionError::other(format!("bundle extraction failed: {e}")));
-        }
-    }
-
-    // Slow path: extract.
-    let result = (|| -> Result<PathBuf, String> {
+    cached_extract(&EXTRACTED_BUNDLE_PATH, || {
         let runtime_dir = quarto_util::quarto_runtime_dir()
-            .map_err(|e| format!("could not locate runtime dir: {e}"))?;
+            .map_err(|e| ExecutionError::other(format!("could not locate runtime dir: {e}")))?;
         let bundles_dir = runtime_dir.join("bundles");
-        extract_bundle_to(&bundles_dir)
-            .map_err(|e| format!("failed to extract engine-host bundle: {e}"))
-    })();
-
-    let mut guard = EXTRACTED_BUNDLE_PATH.lock().unwrap();
-    // Another thread may have extracted while we waited for the lock.
-    if let Some(ref cached) = *guard {
-        return cached
-            .clone()
-            .map_err(|e| ExecutionError::other(format!("bundle extraction failed: {e}")));
-    }
-    *guard = Some(result.clone());
-    result.map_err(|e| ExecutionError::other(format!("bundle extraction failed: {e}")))
+        extract_bundle_to(&bundles_dir).map_err(|e| {
+            ExecutionError::other(format!("failed to extract engine-host bundle: {e}"))
+        })
+    })
 }
 
 /// Check whether `deno` is available on PATH.
@@ -395,6 +397,15 @@ pub struct TsEngineHost {
     recent_stderr: Arc<Mutex<VecDeque<String>>>,
     /// Process-stable global config sent once via `Init` at spawn.
     global: HostGlobalConfig,
+    /// Number of real subprocess spawns (incremented in `ensure_started_inner`).
+    #[cfg(test)]
+    spawn_count: AtomicU64,
+    /// Number of `LoadEngine` verbs sent through `request()`.
+    #[cfg(test)]
+    load_engine_count: AtomicU64,
+    /// Number of `MarkdownForFile` verbs sent through `request()`.
+    #[cfg(test)]
+    markdown_for_file_count: AtomicU64,
 }
 
 const RECENT_STDERR_CAP: usize = 100;
@@ -415,6 +426,12 @@ impl TsEngineHost {
             stderr_reader: Mutex::new(None),
             recent_stderr: Arc::new(Mutex::new(VecDeque::with_capacity(RECENT_STDERR_CAP))),
             global,
+            #[cfg(test)]
+            spawn_count: AtomicU64::new(0),
+            #[cfg(test)]
+            load_engine_count: AtomicU64::new(0),
+            #[cfg(test)]
+            markdown_for_file_count: AtomicU64::new(0),
         }
     }
 
@@ -533,10 +550,15 @@ impl TsEngineHost {
 
         let (write, read, stderr_opt) = init()?;
 
+        // Record the spawn for test assertions (one real spawn = one increment).
+        #[cfg(test)]
+        self.spawn_count.fetch_add(1, Ordering::Relaxed);
+
         // Spawn the stderr reader thread (real path only; mocks pass None).
         if let Some(stderr) = stderr_opt {
             let recent_stderr = Arc::clone(&self.recent_stderr);
-            let stderr_handle = std::thread::spawn(move || stderr_loop(stderr, recent_stderr));
+            let stderr_handle =
+                std::thread::spawn(move || stderr_loop(BufReader::new(stderr), recent_stderr));
             *self.stderr_reader.lock().unwrap() = Some(stderr_handle);
         }
 
@@ -597,6 +619,18 @@ impl TsEngineHost {
             .ok_or_else(|| ExecutionError::other("engine host not started"))?;
 
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+
+        // Count per-verb calls for test assertions (no-op in non-test builds).
+        #[cfg(test)]
+        match &msg {
+            ToEngine::LoadEngine { .. } => {
+                self.load_engine_count.fetch_add(1, Ordering::Relaxed);
+            }
+            ToEngine::MarkdownForFile { .. } => {
+                self.markdown_for_file_count.fetch_add(1, Ordering::Relaxed);
+            }
+            _ => {}
+        }
 
         // Extract engine name and operation for error reporting BEFORE consuming msg.
         let engine_name = engine_name_for(&msg).to_string();
@@ -772,6 +806,32 @@ impl TsEngineHost {
     pub fn is_shutting_down(&self) -> bool {
         self.shutting_down.load(Ordering::Relaxed)
     }
+
+    /// True while the host holds a live child process handle.  Returns false
+    /// before the subprocess is spawned and after `shutdown()`/`Drop` reaps
+    /// the child.  A mock-transport host has no real `Child`, so this is
+    /// always false for mocks — it reflects the REAL subprocess only.
+    pub fn is_alive(&self) -> bool {
+        self.child.lock().unwrap().is_some()
+    }
+
+    /// Number of real subprocess spawns recorded by `ensure_started_inner`.
+    #[cfg(test)]
+    pub fn spawn_count(&self) -> u64 {
+        self.spawn_count.load(Ordering::Relaxed)
+    }
+
+    /// Number of `LoadEngine` verbs dispatched through `request()`.
+    #[cfg(test)]
+    pub fn load_engine_count(&self) -> u64 {
+        self.load_engine_count.load(Ordering::Relaxed)
+    }
+
+    /// Number of `MarkdownForFile` verbs dispatched through `request()`.
+    #[cfg(test)]
+    pub fn markdown_for_file_count(&self) -> u64 {
+        self.markdown_for_file_count.load(Ordering::Relaxed)
+    }
 }
 
 impl Drop for TsEngineHost {
@@ -908,14 +968,34 @@ fn handle_crash(
     // Best-effort wait (~250ms) for the stderr thread to drain.
     std::thread::sleep(Duration::from_millis(250));
 
-    // Snapshot recent_stderr.
-    let stderr_snap: String = {
+    // Drain pending FIRST so the roster is known when building the label.
+    // Reordering drain-before-snapshot is safe: ring and pending are independent.
+    let slots: Vec<PendingSlot> = pending.lock().unwrap().drain().map(|(_, v)| v).collect();
+
+    // Build the roster of in-flight engine names (sorted + deduped for stable output).
+    let mut roster: Vec<String> = slots.iter().map(|s| s.engine.clone()).collect();
+    roster.sort_unstable();
+    roster.dedup();
+
+    // Snapshot the stderr ring.
+    let ring_join: String = {
         let ring = recent_stderr.lock().unwrap();
         ring.iter().cloned().collect::<Vec<_>>().join("\n")
     };
 
-    // Broadcast to every in-flight slot.
-    let slots: Vec<PendingSlot> = pending.lock().unwrap().drain().map(|(_, v)| v).collect();
+    // When more than one slot was in flight, the ring is shared across engines —
+    // label it honestly so callers know the tail may not originate from their engine.
+    let stderr_snap = if slots.len() > 1 {
+        format!(
+            "recent subprocess stderr (shared across in-flight engines: [{}]):\n{}",
+            roster.join(", "),
+            ring_join
+        )
+    } else {
+        ring_join
+    };
+
+    // Broadcast to every in-flight slot (each slot still carries its OWN engine name).
     for slot in slots {
         let err = ExecutionError::process_crashed(&slot.engine, code, &stderr_snap);
         let _ = slot.tx.send(Err(err));
@@ -928,8 +1008,7 @@ fn handle_crash(
 
 /// Drain the child's stderr, parse level prefixes, route to tracing, and fill
 /// the bounded `recent_stderr` ring.
-fn stderr_loop(stderr: std::process::ChildStderr, recent_stderr: Arc<Mutex<VecDeque<String>>>) {
-    let reader = BufReader::new(stderr);
+fn stderr_loop(reader: impl BufRead, recent_stderr: Arc<Mutex<VecDeque<String>>>) {
     for line_result in reader.lines() {
         let line = match line_result {
             Ok(l) => l,
@@ -937,12 +1016,17 @@ fn stderr_loop(stderr: std::process::ChildStderr, recent_stderr: Arc<Mutex<VecDe
         };
 
         // Route to tracing by level prefix.
+        // INFO lines are trace-only: they are NOT pushed into the crash ring.
+        // The skip is keyed on the literal "[INFO]" prefix, not on info-level
+        // routing — bare lines also route to info! but must still be ringed.
         if let Some(rest) = line.strip_prefix("[ERROR]") {
             error!(target: "engine_host", "{}", rest.trim());
         } else if let Some(rest) = line.strip_prefix("[WARN]") {
             warn!(target: "engine_host", "{}", rest.trim());
         } else if let Some(rest) = line.strip_prefix("[INFO]") {
             info!(target: "engine_host", "{}", rest.trim());
+            // INFO is chatter, not crash evidence — skip the ring push.
+            continue;
         } else {
             info!(target: "engine_host", "{}", line);
         }
@@ -1797,6 +1881,153 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
+    // H1-a — crash names shared roster when >1 in-flight
+    // -----------------------------------------------------------------------
+    //
+    // Named revert: remove the `slots.len() > 1` label branch (always emit
+    // bare ring_join) → "alpha"/"shared" absent from stderr → RED.
+    // `glitch` is the path-exercised assertion: confirms the ring snapshot is
+    // still attached even when the label is present.
+    #[test]
+    fn test_crash_shared_roster_label() {
+        watchdog(Duration::from_secs(5), || {
+            // Pre-fill ring with an engine-name-free WARN line.
+            let recent_stderr: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
+            recent_stderr
+                .lock()
+                .unwrap()
+                .push_back("[WARN] glitch".to_string());
+
+            // Two in-flight slots: alpha + beta.
+            let (tx_alpha, rx_alpha) = mpsc::sync_channel::<Result<FromEngine, ExecutionError>>(1);
+            let (tx_beta, rx_beta) = mpsc::sync_channel::<Result<FromEngine, ExecutionError>>(1);
+            let mut pending_map: HashMap<u64, PendingSlot> = HashMap::new();
+            pending_map.insert(
+                1u64,
+                PendingSlot {
+                    engine: "alpha".to_string(),
+                    tx: tx_alpha,
+                },
+            );
+            pending_map.insert(
+                2u64,
+                PendingSlot {
+                    engine: "beta".to_string(),
+                    tx: tx_beta,
+                },
+            );
+            let pending = Arc::new(Mutex::new(pending_map));
+            let child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
+            let shutting_down = Arc::new(AtomicBool::new(false));
+
+            handle_crash(pending, child, recent_stderr, shutting_down);
+
+            // Both receivers must see ProcessCrashed with honest shared label.
+            for (name, rx) in [("alpha_rx", rx_alpha), ("beta_rx", rx_beta)] {
+                match rx.recv().unwrap() {
+                    Err(ExecutionError::ProcessCrashed { stderr, .. }) => {
+                        assert!(
+                            stderr.contains("shared"),
+                            "{name}: crash stderr should contain 'shared': {stderr:?}"
+                        );
+                        assert!(
+                            stderr.contains("alpha"),
+                            "{name}: crash stderr should contain 'alpha': {stderr:?}"
+                        );
+                        assert!(
+                            stderr.contains("glitch"),
+                            "{name}: crash stderr should contain 'glitch': {stderr:?}"
+                        );
+                    }
+                    other => panic!("{name}: expected ProcessCrashed, got: {other:?}"),
+                }
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // H1-c — INFO lines not pushed into ring; WARN/ERROR/bare are
+    // -----------------------------------------------------------------------
+    //
+    // Named reverts:
+    //   (1) remove [INFO]-skip guard → `!ring.contains("hello")` RED
+    //   (2) broaden skip to all `[`-prefixed lines → "careful" absent → RED
+    //   (3) key skip on info-level routing rather than literal [INFO] prefix
+    //       (bare lines also route to info!) → "bare" absent → RED
+    #[test]
+    fn test_stderr_loop_info_not_ringed() {
+        let ring: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
+        let input = b"[INFO] hello\n[WARN] careful\n[ERROR] boom\nbare\n";
+        stderr_loop(std::io::Cursor::new(&input[..]), Arc::clone(&ring));
+        let contents: Vec<String> = ring.lock().unwrap().iter().cloned().collect();
+
+        assert!(
+            !contents.iter().any(|l| l.contains("hello")),
+            "[INFO] hello should NOT be in ring, but got: {contents:?}"
+        );
+        assert!(
+            contents.iter().any(|l| l.contains("careful")),
+            "[WARN] careful should be in ring: {contents:?}"
+        );
+        assert!(
+            contents.iter().any(|l| l.contains("boom")),
+            "[ERROR] boom should be in ring: {contents:?}"
+        );
+        assert!(
+            contents.iter().any(|l| l.contains("bare")),
+            "bare line should be in ring: {contents:?}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // H1-b — single in-flight slot: no shared label, ring body preserved
+    // -----------------------------------------------------------------------
+    //
+    // Named revert: drop the `slots.len() > 1` guard (label unconditional) →
+    // single-slot path shows "shared across" → `!stderr.contains("shared")` RED.
+    // `contains("x")` is the path-exercised co-assertion: reddens a fix that
+    // returns empty/contentless stderr on the solo path.
+    #[test]
+    fn test_crash_single_slot_no_shared_label() {
+        watchdog(Duration::from_secs(5), || {
+            let recent_stderr: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
+            recent_stderr
+                .lock()
+                .unwrap()
+                .push_back("[WARN] x".to_string());
+
+            let (tx_solo, rx_solo) = mpsc::sync_channel::<Result<FromEngine, ExecutionError>>(1);
+            let mut pending_map: HashMap<u64, PendingSlot> = HashMap::new();
+            pending_map.insert(
+                1u64,
+                PendingSlot {
+                    engine: "solo".to_string(),
+                    tx: tx_solo,
+                },
+            );
+            let pending = Arc::new(Mutex::new(pending_map));
+            let child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
+            let shutting_down = Arc::new(AtomicBool::new(false));
+
+            handle_crash(pending, child, recent_stderr, shutting_down);
+
+            match rx_solo.recv().unwrap() {
+                Err(ExecutionError::ProcessCrashed { stderr, .. }) => {
+                    assert!(
+                        !stderr.contains("shared"),
+                        "single-slot crash should not label stderr as shared: {stderr:?}"
+                    );
+                    assert!(
+                        stderr.contains('x'),
+                        "single-slot crash stderr should still carry ring body: {stderr:?}"
+                    );
+                }
+                other => panic!("expected ProcessCrashed, got: {other:?}"),
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------------
     // Row 16 — Race-free ensure_started (spawn count == 1)
     // -----------------------------------------------------------------------
     //
@@ -1841,6 +2072,88 @@ mod tests {
                 spawn_count.load(Ordering::Relaxed),
                 1,
                 "init must run exactly once across concurrent callers"
+            );
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 3 — TsEngineHost observability: is_alive + per-verb/spawn counters
+    // -----------------------------------------------------------------------
+
+    // P3-1a: freshly constructed host has no child → is_alive() == false.
+    // This assertion is unconditional (no Deno gate) — the method must exist
+    // and return false before any subprocess is started.
+    //
+    // Named revert hunk: `is_alive()` method on `TsEngineHost`.
+    // Revert → compile error ("no method named `is_alive`") → RED.
+    #[test]
+    fn test_is_alive_new_false() {
+        let host = TsEngineHost::new(make_host_global_config());
+        assert!(
+            !host.is_alive(),
+            "freshly constructed host must not be alive (child is None)"
+        );
+    }
+
+    // P3-2: load_engine_count increments once per LoadEngine verb via mock.
+    // Also confirms spawn_count stays 0 (mock has no real child process).
+    //
+    // Named revert hunk: `#[cfg(test)] load_engine_count` increment in `request`.
+    // Revert → count stays 0 → `load_engine_count() == 1` assertion fails RED.
+    #[test]
+    fn test_load_engine_count_via_mock() {
+        watchdog(Duration::from_secs(10), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            // Auto-echo: any LoadEngine is answered with Loaded immediately.
+            mock.enable_auto_echo();
+            let host = TsEngineHost::with_transport(write, read, make_host_global_config());
+            let cancel = Cancellation::new();
+            let result = host.load_engine(Path::new("/engine.ts"), &cancel);
+            assert!(result.is_ok(), "load_engine should succeed: {result:?}");
+            assert_eq!(
+                host.load_engine_count(),
+                1,
+                "one LoadEngine request must increment load_engine_count to 1"
+            );
+            assert_eq!(
+                host.spawn_count(),
+                0,
+                "mock-transport host has no real subprocess; spawn_count must stay 0"
+            );
+        });
+    }
+
+    // P3-3: markdown_for_file_count increments once per MarkdownForFile verb.
+    //
+    // Named revert hunk: `#[cfg(test)] markdown_for_file_count` increment in
+    // `request`. Revert → count stays 0 → assertion fails RED.
+    #[test]
+    fn test_markdown_for_file_count_via_mock() {
+        use crate::engine::ts_protocol::TsMappedStringWithMap;
+        watchdog(Duration::from_secs(10), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            // Script MarkdownForFileResult for id 0 (first request on this host).
+            mock.script_response(
+                0,
+                FromEngine::MarkdownForFileResult {
+                    result: TsMappedStringWithMap {
+                        value: "output".to_string(),
+                        file_name: None,
+                        source_map: vec![],
+                    },
+                },
+            );
+            let host = TsEngineHost::with_transport(write, read, make_host_global_config());
+            let cancel = Cancellation::new();
+            let msg = ToEngine::MarkdownForFile {
+                engine: "my_engine".to_string(),
+                file: "/test.ts".to_string(),
+            };
+            let _ = host.request(msg, Some(Duration::from_secs(5)), &cancel);
+            assert_eq!(
+                host.markdown_for_file_count(),
+                1,
+                "one MarkdownForFile request must increment markdown_for_file_count to 1"
             );
         });
     }
@@ -2145,6 +2458,97 @@ await readLines();
             }
         });
     }
+
+    // -----------------------------------------------------------------------
+    // Task 3 — is_alive lifecycle (real child, Unix proc-tier)
+    // -----------------------------------------------------------------------
+    //
+    // Named revert hunk: `is_alive()` — `child.lock().unwrap().is_some()`.
+    // Revert (always false) → `assert!(host.is_alive())` after start → RED.
+    //
+    // Child: `sh -c 'cat >/dev/null'` — stays alive until stdin closes (i.e.
+    // until shutdown).  No Deno gate needed: uses only sh/cat.
+    #[test]
+    fn test_is_alive_lifecycle_real_spawn() {
+        watchdog(Duration::from_secs(10), || {
+            let host = TsEngineHost::start_with_command(
+                {
+                    let mut cmd = Command::new("sh");
+                    cmd.arg("-c").arg("cat >/dev/null");
+                    cmd
+                },
+                make_host_global_config(),
+            )
+            .expect("start_with_command failed");
+
+            assert!(
+                host.is_alive(),
+                "host must report is_alive()==true after start_with_command"
+            );
+
+            host.shutdown().expect("shutdown failed");
+
+            assert!(
+                !host.is_alive(),
+                "host must report is_alive()==false after shutdown()"
+            );
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 3 — spawn_count increments once (Deno-gated)
+    // -----------------------------------------------------------------------
+    //
+    // Named revert hunk: `#[cfg(test)] spawn_count` increment in
+    // `ensure_started_inner`.
+    // Revert → count stays 0 → `spawn_count() == 1` assertion fails RED.
+    //
+    // Gate: skip if Deno is absent.  Uses a trivial `cat >/dev/null`-style
+    // deno script so we exercise the real spawn path via `start_with_command`.
+    #[test]
+    fn test_spawn_count_increments_once() {
+        if !is_available() {
+            return;
+        }
+        watchdog(Duration::from_secs(30), || {
+            use std::io::Write as _;
+            use tempfile::NamedTempFile;
+
+            // Minimal Deno script: reads stdin until EOF, then exits.
+            let script = r#"
+const buf = new Uint8Array(1024);
+while (true) {
+    const n = await Deno.stdin.read(buf);
+    if (n === null) break;
+}
+"#;
+            let mut tmp = NamedTempFile::new().expect("tempfile");
+            tmp.write_all(script.as_bytes()).expect("write script");
+            let script_path = tmp.path().to_path_buf();
+
+            let mut cmd = Command::new("deno");
+            cmd.arg("run").arg("--allow-all").arg(&script_path);
+            let host = TsEngineHost::start_with_command(cmd, make_host_global_config())
+                .expect("start_with_command failed");
+
+            assert_eq!(
+                host.spawn_count(),
+                1,
+                "after first start, spawn_count must be 1"
+            );
+
+            // ensure_started is idempotent — write is already set, init never runs.
+            host.ensure_started()
+                .expect("second ensure_started must succeed");
+            assert_eq!(
+                host.spawn_count(),
+                1,
+                "ensure_started idempotent: spawn_count must stay 1"
+            );
+
+            let _ = host.shutdown();
+        });
+    }
 }
 
 // ============================================================================
@@ -2154,6 +2558,7 @@ await readLines();
 #[cfg(test)]
 mod bundle_tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use tempfile::TempDir;
 
     // -----------------------------------------------------------------------
@@ -2210,5 +2615,77 @@ mod bundle_tests {
             alt_filename, fname,
             "different bytes must produce different filename"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Err-not-cached / Ok-cached / cache-hit skips extractor
+    // -----------------------------------------------------------------------
+    //
+    // Named revert hunk: `cached_extract` — drop the `?` early-return so
+    // `extract()` errors are inserted into the cache (e.g. unconditional
+    // `*guard = Some(...)` or caching the error path).
+    //
+    // RED: after call 1 the cache holds a value (error was cached), so call 2
+    // returns without running the extractor — `count` stays at 1 and `r2` is
+    // Err or the wrong path.
+    // GREEN: Err is not cached; call 2 runs the extractor and returns "/x";
+    // call 3 hits the cache and skips the extractor entirely.
+    #[test]
+    fn test_cached_extract_err_not_cached_ok_is_and_hit_skips() {
+        let cache: Mutex<Option<PathBuf>> = Mutex::new(None);
+        let count = AtomicUsize::new(0);
+
+        // Call 1: extractor fails — result is Err, cache stays empty.
+        let r1 = cached_extract(&cache, || {
+            count.fetch_add(1, Ordering::Relaxed);
+            Err(ExecutionError::other("boom"))
+        });
+        assert!(r1.is_err(), "call 1 must propagate the error");
+        assert!(
+            cache.lock().unwrap().is_none(),
+            "Err must NOT be cached; cache must remain None after call 1"
+        );
+
+        // Call 2: extractor succeeds — result is Ok("/x"), cache populated.
+        let r2 = cached_extract(&cache, || {
+            count.fetch_add(1, Ordering::Relaxed);
+            Ok(PathBuf::from("/x"))
+        });
+        assert_eq!(r2.unwrap(), PathBuf::from("/x"), "call 2 must return /x");
+        assert_eq!(
+            count.load(Ordering::Relaxed),
+            2,
+            "call 2 must have run the extractor (count must be 2)"
+        );
+
+        // Call 3: cache hit — extractor never called, returns cached "/x".
+        let r3 = cached_extract(&cache, || {
+            count.fetch_add(1, Ordering::Relaxed);
+            Ok(PathBuf::from("/other"))
+        });
+        assert_eq!(
+            r3.unwrap(),
+            PathBuf::from("/x"),
+            "call 3 must return cached /x, not /other"
+        );
+        assert_eq!(
+            count.load(Ordering::Relaxed),
+            2,
+            "call 3 must skip the extractor (count stays 2)"
+        );
+    }
+
+    /// When QUARTO_CI=1 (set in test-suite.yml), Deno MUST be on PATH — turns the
+    /// otherwise-silent `is_available()` skip into a hard CI failure if provisioning
+    /// regresses. Locally with no QUARTO_CI set, this is a no-op pass.
+    #[test]
+    fn deno_available_when_quarto_ci() {
+        if std::env::var("QUARTO_CI").as_deref() == Ok("1") {
+            assert!(
+                is_available(),
+                "QUARTO_CI=1 but `deno --version` failed — CI must provision Deno \
+                 (test-suite.yml 'Set up Deno' step)"
+            );
+        }
     }
 }

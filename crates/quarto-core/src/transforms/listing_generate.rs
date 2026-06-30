@@ -245,6 +245,8 @@ mod tests {
                 .map(|p| DocumentInfo::from_path(format!("/project/{}", p.source_path.display())))
                 .collect(),
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         };
         let index = Arc::new(ProjectIndex::new(profiles));
         (project, index)

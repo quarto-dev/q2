@@ -706,6 +706,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path(project_dir.join("posts.qmd"))],
             output_dir: project_dir.join("_site"),
+
+            ..Default::default()
         }
     }
 

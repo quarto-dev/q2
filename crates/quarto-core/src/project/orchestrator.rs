@@ -858,6 +858,21 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
     /// pre/post hooks). Native and WASM share the same body — only
     /// the renderer and project-type implementations differ.
     pub async fn run(&mut self) -> Result<ProjectRenderSummary<R::Output>> {
+        // Wrap the render body so the orchestrator-driven engine shutdown fires
+        // on *every* exit path — success, the fail-fast early return, or a
+        // `?`-propagated hook/resource error — before `ProjectContext` (and its
+        // `registry`) drops. This is the caller Plan 1a-host deferred to: q2 uses
+        // explicit `registry.shutdown_all()` (not Drop) to reap TS-engine Deno
+        // subprocesses at end-of-render. Best-effort: log at WARN and continue;
+        // the host's own Drop is the backstop if this errs.
+        let result = self.run_inner().await;
+        if let Err(e) = self.project.registry.shutdown_all() {
+            tracing::warn!("engine registry shutdown_all failed at end of project render: {e}");
+        }
+        result
+    }
+
+    async fn run_inner(&mut self) -> Result<ProjectRenderSummary<R::Output>> {
         let initial_diagnostics = self.empty_render_set_diagnostic();
 
         let (profiles, pass1_failures) = self.pass_one().await;
@@ -1725,8 +1740,8 @@ async fn pass1_profile_single_file_live(
     use crate::pipeline::run_pipeline;
     use crate::render::{BinaryDependencies, RenderContext};
     use crate::stage::{
-        DocumentProfileStage, IncludeExpansionStage, LinkResolutionStage, MetadataMergeStage,
-        ParseDocumentStage, PipelineStage,
+        DocumentProfileStage, EngineClaimsFileStage, IncludeExpansionStage, LinkResolutionStage,
+        MetadataMergeStage, ParseDocumentStage, PipelineStage,
     };
 
     let source_name = doc_info.input.to_string_lossy().to_string();
@@ -1734,6 +1749,10 @@ async fn pass1_profile_single_file_live(
     let mut ctx = RenderContext::new(project, doc_info, format, &binaries);
 
     let stages: Vec<Box<dyn PipelineStage>> = vec![
+        // Convert non-QMD files to QMD before parse.  A non-QMD input
+        // without conversion would yield a garbage DocumentProfile /
+        // ProjectIndex entry in Pass 1 (plan1c §1067-1086).
+        Box::new(EngineClaimsFileStage::new()),
         Box::new(ParseDocumentStage::new()),
         Box::new(MetadataMergeStage::new()),
         // Include-expansion threads child content through the
@@ -1789,6 +1808,8 @@ mod tests {
             is_single_file: true,
             files: Vec::new(),
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let t = DefaultProjectType;
         let index = ProjectIndex::default();
@@ -2078,6 +2099,8 @@ mod tests {
             is_single_file: false,
             files: Vec::new(),
             output_dir: PathBuf::from("/p"),
+
+            ..Default::default()
         };
         assert_eq!(
             project_type_for(&make(ProjectKind::Default)).kind(),
