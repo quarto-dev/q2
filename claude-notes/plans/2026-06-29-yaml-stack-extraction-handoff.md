@@ -107,7 +107,24 @@ the crate's filesystem home — q2 root — even inside the WASM build). So:
   resolve `quarto-yaml`, add a direct `quarto-yaml = "0.1.0"` to the wasm crate (as
   was needed for source-map).
 
-## 6. The one design task: error codes (needs a user decision)
+## 6. The one design task: error codes (RESOLVED 2026-06-29 → option B)
+
+> **DECISION (2026-06-29, user):** Option **(B)** — ship `Q-1-x` as-is in `0.1.0`,
+> defer the origin-code migration (`yaml-schema/*`) to `0.2.0`. Rationale: keep
+> `0.1.0` **non-breaking** for the invisible internal Posit consumers that
+> currently key on `Q-1-x`; cut over to discipline-conformant origin codes in a
+> coordinated `0.2.0`.
+>
+> **Consequence:** `quarto-yaml-validation/src/error.rs` is shipped **unchanged**
+> for `0.1.0` — the 14 `ValidationErrorKind::error_code()` mappings (`Q-1-10` …
+> `Q-1-99`) and the ~15 tests asserting them stay exactly as-is and stay green. No
+> error-code work in this phase. With no catalog installed in the standalone repo,
+> diagnostics render **code-only** (`EmptyCatalog`); tests assert on the
+> `error_code()` string, not on rendered catalog text, so they are unaffected.
+> A `0.2.0` TODO carries the `Q-1-x` → `yaml-schema/*` migration (see §6-original
+> below for the proposed mapping).
+>
+> ### Original analysis (kept for the deferred 0.2.0 work)
 
 `quarto-yaml-validation/src/error.rs` `ValidationErrorKind::error_code()` currently
 returns **Quarto presentation codes** `Q-1-10`, `Q-1-11`, … These do **not** belong
@@ -138,60 +155,87 @@ the origin codes and may remap to their own presentation codes.
 ## 7. Execution checklist
 
 ### Phase A — `quarto-yaml` (the leaf; publish first)
-- [ ] Create `/Users/cscheid/repos/github/posit-dev/quarto-yaml/` as a **workspace**;
-      copy `crates/quarto-yaml/` → `crates/quarto-yaml/`; add `LICENSE` (from q2
-      root), `.gitignore` (`/target`), `.gitattributes` (`* text=auto eol=lf`),
-      `README.md` (write fresh — the crate is a YAML parser with source tracking).
-- [ ] Workspace `Cargo.toml`: `[workspace] members=["crates/*"]`,
+> **Status 2026-06-29:** local scaffolding + verification DONE; committed locally
+> on `main` of `posit-dev/quarto-yaml` (commit `06c6dd3`). Stopped at the outward
+> gate (`gh repo create` + user `cargo publish`).
+- [x] Create `/Users/cscheid/repos/github/posit-dev/quarto-yaml/` as a **workspace**;
+      copied `crates/quarto-yaml/` (src + benches) → `crates/quarto-yaml/`; added
+      `LICENSE` (from q2 root), `.gitignore` (`/target`), `.gitattributes`
+      (`* text=auto eol=lf`), repo `README.md` + crate `README.md`.
+- [x] Workspace `Cargo.toml`: `[workspace] resolver="3" members=["crates/*"]`,
       `[workspace.package]` (version `0.1.0`, edition `2024`, license `MIT`,
-      `repository = https://github.com/posit-dev/quarto-yaml`, authors), and
-      `[workspace.dependencies]` with `quarto-source-map = "0.1.0"` + the shared
-      crates.io deps (pin versions to match q2's `[workspace.dependencies]`:
-      `yaml-rust2`, `serde`, `thiserror`, …). Drop `[lints] workspace = true` or
-      add a `[workspace.lints]` block (q2 has none).
-- [ ] Build + `cargo test` + `cargo clippy --all-targets -- -D warnings` + `cargo
-      fmt --check` + `cargo publish --dry-run -p quarto-yaml`. Fix any stable-clippy
-      lints (see §4).
-- [ ] External-consumer smoke test (separate crate, path dep, parse a YAML string,
-      assert source info) — proves the public API is usable standalone.
-- [ ] `gh repo create posit-dev/quarto-yaml --public --source=. --push`
-      (public; mirror Phase 1/3). Confirm CI green on all 3 OSes.
-- [ ] **USER**: `cargo publish -p quarto-yaml` (from the new repo).
+      `repository`/`homepage` = posit-dev/quarto-yaml, authors), and
+      `[workspace.dependencies]` with `quarto-source-map = "0.1.0"` + shared deps
+      pinned to q2 (`yaml-rust2 0.11`, `serde 1.0.228`, `thiserror 2.0`,
+      `serde_json 1.0.149`, `anyhow 1.0.101`, `regex 1.12`). Added a minimal
+      `[workspace.lints.clippy]` (`result_large_err`/`large_enum_variant` = allow,
+      to preserve the public `Result`/`Error` API — not q2's full allow-list).
+- [x] Build + `cargo test` (44: 39 unit + 5 doctest) + `cargo clippy
+      --all-targets -- -D warnings` (clean after the lints block) + `cargo fmt
+      --check` + `cargo publish --dry-run -p quarto-yaml` (10 files) — all green on
+      stable rustc 1.95.
+- [x] External-consumer smoke test (separate crate, path dep, parsed
+      `title: My Document`, asserted the value's `source_info.start_offset() == 7`)
+      — public API usable standalone. ✅
+- [x] `gh repo create posit-dev/quarto-yaml --public --source=. --push` — done
+      2026-06-29 (https://github.com/posit-dev/quarto-yaml). **CI green on all 3
+      OSes** (run 28377015391: ubuntu 26s, macos 22s, windows 1m4s, fmt+clippy 22s).
+- [x] **USER:** `cargo publish -p quarto-yaml` — **DONE** (live on crates.io as
+      `quarto-yaml 0.1.0`, 2026-06-29).
 
 ### Phase B — `quarto-yaml-validation` (second crate, same repo)
-- [ ] Copy `crates/quarto-yaml-validation/` (incl. `test-fixtures/`) into the
-      workspace. Its `quarto-yaml` dep = `{ version = "0.1.0", path =
-      "../quarto-yaml" }` (path for local dev, version so `cargo publish` resolves
-      the now-published `quarto-yaml`); `quarto-source-map` / `quarto-error-reporting`
-      = `"0.1.0"`.
-- [ ] **Apply the error-code change** from §6 (after the user's A/B decision) +
-      update the `error.rs` tests.
-- [ ] If yaml-validation tests render diagnostics and asserted `Q-1-x` text, update
-      them; with no catalog installed in the standalone repo, diagnostics render
-      **code-only** (`EmptyCatalog`) — assert on the origin codes.
-- [ ] Build + test + clippy + `cargo publish --dry-run -p quarto-yaml-validation` +
-      smoke test (validate a doc against a schema, assert a `yaml-schema/*` code).
-- [ ] CI green (3 OSes). **USER**: `cargo publish -p quarto-yaml-validation`
-      (after `quarto-yaml` is live so the dep resolves).
+> **Status 2026-06-29:** local work + CI DONE; committed `ac8d72b`, pushed to
+> `main`, **CI green on all 3 OSes** (run 28377797754: ubuntu 30s, macos 37s,
+> windows 2m44s, fmt+clippy 28s). Awaiting user `cargo publish`.
+- [x] Copied `crates/quarto-yaml-validation/` (src + integration tests +
+      `test-fixtures/` + the 4 design `.md`s) into the workspace. `quarto-yaml`
+      dep = `{ workspace = true }`, where the workspace entry carries both
+      `path = "crates/quarto-yaml"` (local dev) and `version = "0.1.0"` (so
+      `cargo publish` resolves the registry crate); `quarto-source-map` /
+      `quarto-error-reporting` = `"0.1.0"` (default features — no json/coalesce
+      use, so json feature not needed).
+- [x] **Error codes:** NO change for `0.1.0` (decision **B** — keep `Q-1-x`).
+      `error.rs` shipped verbatim; the 14 mappings + ~15 tests stay green.
+- [x] No `Q-1-x` test/snapshot edits needed: the render path never consults the
+      catalog (title "YAML Validation Failed" is hardcoded; no docs URL surfaced),
+      so the diagnostic snapshot reproduced **byte-for-byte** with no catalog
+      installed. One stable-clippy fix: moved the test module to end-of-file in
+      `schema/parsers/combinators.rs` (`items_after_test_module`).
+- [x] Build + test (330 incl. snapshot; 5 pre-existing ignored doctests) + clippy
+      `-D warnings` + fmt + `cargo publish --dry-run -p quarto-yaml-validation`
+      (39 files) + external smoke test (validated a doc → `Q-1-11` standalone,
+      rendered `[Q-1-11] age: Expected number, got string`). All green.
+- [x] CI green (3 OSes). **USER (pending):** `cargo publish -p
+      quarto-yaml-validation` (`quarto-yaml 0.1.0` is already live, so the dep
+      resolves).
 
 ### Phase C — q2 cutover (one PR, like #348/#350)
-- [ ] Branch `braid/bd-egcyeym9-yaml-cutover` off updated main.
-- [ ] `[workspace.dependencies.quarto-yaml]` `path` → `version = "0.1.0"`.
-- [ ] Convert `quarto-yaml` path-deps (`pampa`, `quarto-config`) →
-      `{ workspace = true }`; leave the existing `{ workspace = true }` ones.
-- [ ] **Delete** `crates/quarto-yaml-validation/` and `crates/validate-yaml/` (and
-      drop `[workspace.dependencies.quarto-yaml-validation]` from root `Cargo.toml`;
-      check for any stray refs to `validate-yaml` in `xtask`/docs/CI).
-- [ ] Delete in-tree `crates/quarto-yaml/`.
-- [ ] `cargo build --workspace` → confirm Cargo.lock resolves `quarto-yaml 0.1.0`
-      from the registry. `cargo nextest run --workspace`. **Full `cargo xtask
-      verify`** (the WASM leg is the real gate — see §5 WASM gotcha; do NOT pipe it
-      through `tail`, which masks the exit code — a Phase 1 lesson).
-- [ ] Update `CLAUDE.md`: move `quarto-yaml` into the "Externalized foundation
-      crates" section; remove `quarto-yaml-validation` and `validate-yaml` from the
-      binaries/crate lists; the `validate-yaml` line under **Binaries** must go.
-- [ ] Commit, push to `feature/…`, open PR against `main`, watch CI (5 checks),
-      report. Merge is the user's call.
+> **Status 2026-06-29:** all local steps DONE on branch
+> `braid/bd-egcyeym9-yaml-cutover`; **full `cargo xtask verify` GREEN (all 14
+> steps incl. WASM build + hub tests)**. Awaiting commit/push/PR.
+- [x] Branch `braid/bd-egcyeym9-yaml-cutover` off updated main (HEAD `df029875`).
+- [x] `[workspace.dependencies.quarto-yaml]` `path` → `version = "0.1.0"`.
+- [x] Converted `quarto-yaml` path-deps (`pampa`, `quarto-config`) →
+      `{ workspace = true }`; left the existing `{ workspace = true }` ones
+      (`quarto-core`, `quarto-lsp-core`).
+- [x] **Deleted** `crates/quarto-yaml-validation/` and `crates/validate-yaml/`;
+      dropped `[workspace.dependencies.quarto-yaml-validation]`. No stray
+      `validate-yaml` refs in xtask/CI/docs — only historical `claude-notes/`
+      design docs (left as-is); one prose comment in
+      `quarto-core/src/attribution/mode.rs` mentions the crate as a hypothetical
+      consumer (left — design rationale, not a dep).
+- [x] Deleted in-tree `crates/quarto-yaml/`.
+- [x] `cargo build --workspace` clean; **`Cargo.lock` resolves `quarto-yaml 0.1.0`
+      from the registry** (checksum `c32ab7b3…`); `quarto-yaml-validation` /
+      `validate-yaml` absent. `cargo nextest run --workspace` **9855 passed**.
+      **Full `cargo xtask verify` GREEN (14/14)** — the WASM crate resolved
+      `quarto-yaml` *transitively* (no direct dep needed, per §5); its own
+      `Cargo.lock` flipped `0.7.0` path → `0.1.0` registry.
+- [x] Updated `CLAUDE.md`: `quarto-yaml` moved to the "Externalized foundation
+      crates" section; `quarto-yaml-validation` reframed as published-but-not-a-q2-
+      dep; `validate-yaml` binary line removed.
+- [ ] Commit, push to `feature/bd-egcyeym9-yaml-cutover`, open PR against `main`,
+      watch CI, report. Merge is the user's call.
 
 ## 8. Proven gotchas (from Phases 1 & 3 — don't rediscover them)
 
@@ -205,12 +249,15 @@ the origin codes and may remap to their own presentation codes.
 - **crates.io / GitHub are user/identity-gated and irreversible** → you prep & dry-
   run; the user publishes and (optionally) `cargo owner --add github:posit-dev:<team>`.
 
-## 9. Open items to raise with the user
+## 9. Open items — RESOLVED 2026-06-29
 
-1. **Error-code policy (§6 A vs B)** — the one blocking decision.
-2. Confirm the repo is `posit-dev/quarto-yaml` (workspace, two crates) — decided
-   2026-06-29, but re-confirm before `gh repo create`.
-3. Reuse the Phase-1 visibility/ownership choices (public repo; personal crates.io
-   account now, `cargo owner --add posit-dev` on a weekday) unless told otherwise.
-4. Whether to also relocate the deleted **`CONTRIBUTING-ERRORS.md`** intent / any
-   q2-internal YAML docs (low priority).
+1. **Error-code policy (§6 A vs B)** — **RESOLVED: option B** (keep `Q-1-x` in
+   `0.1.0`, defer origin codes to `0.2.0`). See §6.
+2. **Repo = `posit-dev/quarto-yaml` (workspace, two crates)** — **CONFIRMED**.
+3. **Process choices** — **CONFIRMED: mirror Phase 1/3.** Public repo; agent preps
+   + dry-runs; **user** runs each `cargo publish` (leaf `quarto-yaml` first);
+   personal crates.io account now, `cargo owner --add posit-dev` deferred to a
+   weekday.
+4. **Relocate `CONTRIBUTING-ERRORS.md` / q2 YAML docs** — low priority; default to
+   **skip** unless the user asks. (Phase 3 dropped its `CONTRIBUTING-ERRORS.md`;
+   the Quarto catalog policy lives with `quarto-error-catalog`.)

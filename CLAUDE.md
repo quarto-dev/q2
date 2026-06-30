@@ -291,7 +291,6 @@ When fixing ANY bug:
 - `hub`: collaborative editing server for Quarto projects (also available as `quarto hub`)
 - `pampa`: parse qmd text and produce Pandoc AST and other formats
 - `qmd-syntax-helper`: help users convert qmd files to the new syntax
-- `validate-yaml`: exercise `quarto-yaml-validation`
 
 **Core libraries:**
 - `quarto-core`: core rendering infrastructure for Quarto
@@ -301,10 +300,10 @@ When fixing ANY bug:
 **Externalized foundation crates** (published to crates.io from their own `posit-dev/` repos; consumed here as version deps, no longer in `crates/`):
 - `quarto-error-reporting`: uniform, helpful, beautiful error messages — now **catalog-agnostic** (the `Q-*` data lives in the in-tree `quarto-error-catalog`). Repo: `posit-dev/quarto-error-reporting`. The `json` wire shape is behind a default-off `json` feature; q2's wire-shape consumers enable it.
 - `quarto-source-map`: maintain source location information for data structures. Repo: `posit-dev/quarto-source-map`. (See `claude-notes/plans/2026-06-26-extract-error-reporting-foundation.md` for the extraction.)
+- `quarto-yaml`: YAML parser with accurate fine-grained source locations. Repo: `posit-dev/quarto-yaml` (a two-crate workspace). q2 consumes it as a version dep. (See `claude-notes/plans/2026-06-29-yaml-stack-extraction-handoff.md` for the extraction.)
+- `quarto-yaml-validation`: schema validation for YAML objects. Published from the same `posit-dev/quarto-yaml` workspace, but **q2 does not depend on it** — it was extracted purely for external Posit consumers; the demo binary `validate-yaml` was its only in-tree consumer and was deleted at cutover.
 
 **Parsing libraries:**
-- `quarto-yaml`: YAML parser with accurate fine-grained source locations
-- `quarto-yaml-validation`: validate YAML objects using schemas
 - `quarto-xml`: source-tracked XML parsing
 - `quarto-parse-errors`: parse error infrastructure
 

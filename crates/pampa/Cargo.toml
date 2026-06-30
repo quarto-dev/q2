@@ -42,7 +42,7 @@ comrak = { version = "0.52.0", default-features = false }
 comrak-to-pandoc = { path = "../comrak-to-pandoc" }
 quarto-error-reporting = { workspace = true }
 quarto-source-map = { workspace = true }
-quarto-yaml = { path = "../quarto-yaml" }
+quarto-yaml = { workspace = true }
 quarto-config = { path = "../quarto-config" }
 quarto-parse-errors = { path = "../quarto-parse-errors" }
 quarto-treesitter-ast = { workspace = true }
