@@ -886,12 +886,71 @@ before the Node auth helper:
         `q2 mcp`, `q2 provide-hub` needs the hub-mcp bundle built — `cargo
         xtask build-hub-mcp-bundle`; otherwise it errors at runtime and the
         gated test skips.)
-- **3D — verify.** `cargo xtask verify`; update checklist; commit.
-- **Phase 4 — Execute-on-request.** Wire the request channel to
-  `record_capture_cached`; write the capture doc + sidecar with the
-  existing Rust functions; add the capability beacon. E2E: a browser
-  "Run" makes the connected `q2` execute and the executed output
-  appears for *all* players.
+- **3D — verify.** ✅ `cargo xtask verify` green (Phase 3A/3B checkpoint);
+  3C committed (`5b31827f`). Phase 3 complete.
+
+### Phase 4 — Execute-on-request (the payoff) — DESIGN (2026-06-30)
+
+The connected `q2 provide-hub` finally runs code. End-to-end target: a
+player clicks **Run** → the editor broadcasts `exec/request` → the
+provider materializes the project, runs the engines, writes the capture
+doc + sidecar → every player's preview shows the executed output (the
+Phase 1 consumption path).
+
+**Architecture (provider side, all native Rust — reuses Phases 1–3):**
+1. After `join`, subscribe to the index `DocHandle` ephemeral channel
+   (the Phase 2 channel) and **broadcast the `exec/beacon`** every
+   `BEACON_INTERVAL`, advertising the host's *available* engines
+   (probe via the registry's `is_available` — `KnitrEngine`/`JupyterEngine`).
+2. On an `exec/request { path }`: set `CaptureRef.state = running`
+   (durable status, Phase 1), then on a blocking worker:
+   a. **Materialize the project to a fresh temp dir from the VFS** — for
+      each path in `index.files`, `repo.find(doc_id)` → read `text`
+      (`TextDocumentContent`) or `content` (`resource::read_binary_content`)
+      → write under `<tmp>/<path>`. (A dedicated read-only materializer;
+      `sync_all_documents` is bidirectional + sync-state-heavy, so we
+      write a lean one reusing `resource::*`.)
+   b. `ProjectContext::discover(<tmp>/<path>)` →
+      `record_capture_cached(cache_dir, abs, project, runtime, registry)`
+      → `Vec<EngineCapture>` (the **same native engine path `q2 preview`
+      uses**).
+   c. Write the capture binary doc (`create_binary_document` +
+      `CAPTURE_MIME_TYPE` + `repo.create`) and `index.set_capture(path,
+      CaptureRef{ capture_doc_id, staleness:false, state:idle })` — the
+      exact functions `quarto-preview`'s `re_execute.rs` uses. A client
+      peer's `repo.create` + index mutation **sync to the hub and every
+      peer**, so the editor sees it via `onCapturesChange`.
+   d. On error: `CaptureRef.state = error` + `last_error` (Phase 1
+      surfaces it).
+3. **Retention (D3):** content-address the capture doc (hash its bytes /
+   `input_qmd`) and reuse an existing doc when unchanged, so repeated
+   runs of an unchanged doc don't orphan docs. (Server-GC of truly
+   unreferenced docs is a separate follow-up.)
+
+**hub-client (editor side):**
+4. **Run UI** (deferred from Phases 1–2): a "Run" affordance — shown when
+   an executor beacon is live (`useExecutionChannel`) and the active doc
+   has executable cells — that calls `channel.requestExecution(path)`.
+   Reflect `CaptureRef.state` (running/error) + staleness (reuse the
+   q2-preview-spa `StaleCaptureOverlay` pattern).
+
+**Open decisions for Phase 4 (need user input — see session):**
+- **D4 authz posture for v1.** Default-open (any player may request;
+  the volunteer opted in by running `provide-hub`; consent surfaced on
+  the provider terminal + the editor's "Executor online" badge) vs
+  gating to **owner-only** from the start. (RCE on the volunteer's
+  machine — the locked D4 was "allow-all + optional owner-only follow-on".)
+- **D5 claims now or later.** Ship **single-executor v1** (no
+  claim/heartbeat/`--force`) to land the payoff, then add the claim
+  protocol when multi-executor is real — vs build claims in Phase 4.
+- **Phase 4 sub-split.** 4a = provider executes + writes capture
+  (verifiable by a *scripted* request, no UI) → 4b = hub-client Run UI.
+  This lets us prove the execution half end-to-end before UI.
+- **Re-execution vs cache.** An explicit Run: force a fresh run, or let
+  `record_capture_cached` skip when `input_qmd` is unchanged? (Lean:
+  respect the cache — unchanged ⇒ instant, changed ⇒ runs.)
+
+- **Phase 5 — Retention (D3) + authorization (D4).** Content-addressed
 - **Phase 5 — Retention (D3) + authorization (D4).** Content-addressed
   capture dedup; per-project opt-in + (if chosen) requester gating +
   consent UX. File server-GC follow-up.
