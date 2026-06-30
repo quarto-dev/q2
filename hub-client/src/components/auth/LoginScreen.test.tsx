@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
@@ -18,7 +18,10 @@ beforeEach(() => {
   mock = createMockAuthProvider();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
 
 function withProvider(children: ReactNode) {
   return (
@@ -36,6 +39,13 @@ describe('LoginScreen', () => {
     // loginUri threaded through to the provider.
     expect(mock.lastLoginUri).not.toBeNull();
     expect(mock.lastLoginUri).toBe(window.location.origin + '/auth/callback');
+  });
+
+  it('prefixes the callback with the hub base path under a subpath mount', () => {
+    vi.stubEnv('VITE_HUB_BASE_PATH', '/subpath');
+    render(withProvider(<LoginScreen />));
+
+    expect(mock.lastLoginUri).toBe(window.location.origin + '/subpath/auth/callback');
   });
 
   it('renders the default copy when error is false/absent', () => {

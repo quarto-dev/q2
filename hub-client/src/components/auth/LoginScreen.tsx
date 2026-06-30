@@ -12,6 +12,7 @@
  */
 
 import { useAuthProvider } from '../../auth/AuthProvider';
+import { hubPath } from '../../utils/routing';
 
 export function LoginScreen({ error, message }: { error?: boolean; message?: string }) {
   const provider = useAuthProvider();
@@ -35,7 +36,7 @@ export function LoginScreen({ error, message }: { error?: boolean; message?: str
           </p>
         )}
         <provider.SignInButton
-          loginUri={window.location.origin + '/auth/callback'}
+          loginUri={window.location.origin + hubPath('/auth/callback')}
         />
       </div>
     </div>

@@ -14,6 +14,7 @@ import type { DocHandle, DocumentId } from '@automerge/automerge-repo';
 import { from as automergeFrom, save as automergeSerialize } from '@automerge/automerge';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 import { IndexedDBStorageAdapter } from '@automerge/automerge-repo-storage-indexeddb';
+import { resolveSyncServerUrl } from '../utils/routing';
 
 import type {
   ProjectSetDocument,
@@ -124,7 +125,7 @@ export async function connect(
 ): Promise<ProjectSetEntry[]> {
   await disconnect();
 
-  wsAdapter = new BrowserWebSocketClientAdapter(syncServerUrl);
+  wsAdapter = new BrowserWebSocketClientAdapter(resolveSyncServerUrl(syncServerUrl));
   repo = new Repo({
     network: [wsAdapter],
     storage: new IndexedDBStorageAdapter(),
@@ -192,7 +193,7 @@ export async function createProjectSet(
 ): Promise<string> {
   await disconnect();
 
-  wsAdapter = new BrowserWebSocketClientAdapter(syncServerUrl);
+  wsAdapter = new BrowserWebSocketClientAdapter(resolveSyncServerUrl(syncServerUrl));
   repo = new Repo({
     network: [wsAdapter],
     storage: new IndexedDBStorageAdapter(),

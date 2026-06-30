@@ -8,6 +8,8 @@
  * `AuthProvider`'s concern, not this module's.
  */
 
+import { hubPath } from '../utils/routing';
+
 /** User info returned by GET /auth/me. */
 export interface AuthState {
   email: string;
@@ -28,7 +30,7 @@ interface AuthMeResponse {
 
 /** Fetch user info from the server. Returns null on 401 (not authenticated). */
 export async function fetchAuthMe(): Promise<AuthState | null> {
-  const res = await fetch('/auth/me', { credentials: 'same-origin' });
+  const res = await fetch(hubPath('/auth/me'), { credentials: 'same-origin' });
   if (res.status === 401 || res.status === 403) return null;
   if (!res.ok) throw new Error(`/auth/me failed: ${res.status}`);
   const data = await res.json() as AuthMeResponse;
@@ -56,7 +58,7 @@ interface AuthActorResponse {
  */
 export async function fetchActorId(projectId: string): Promise<string | null> {
   const res = await fetch(
-    `/auth/actor?project=${encodeURIComponent(projectId)}`,
+    hubPath(`/auth/actor?project=${encodeURIComponent(projectId)}`),
     { credentials: 'same-origin' },
   );
   if (res.status === 401 || res.status === 403) return null;
@@ -93,7 +95,7 @@ export async function resolveActorId(
 
 /** Clear the auth cookie server-side. */
 export async function logout(): Promise<void> {
-  await fetch('/auth/logout', {
+  await fetch(hubPath('/auth/logout'), {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -105,7 +107,7 @@ export async function logout(): Promise<void> {
  * Returns the updated user info on success, null on auth failure.
  */
 export async function refreshToken(credential: string): Promise<AuthState | null> {
-  const res = await fetch('/auth/refresh', {
+  const res = await fetch(hubPath('/auth/refresh'), {
     method: 'POST',
     credentials: 'same-origin',
     headers: {
