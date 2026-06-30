@@ -13,7 +13,8 @@ import {
   exportProjectAsZip,
   type EditorContentChange,
 } from '@quarto/preview-runtime';
-import { vfsAddFile, isWasmReady } from '@quarto/preview-runtime';
+import { vfsAddFile, isWasmReady, clearCapture } from '@quarto/preview-runtime';
+import { ClearCaptureControl } from './render/ClearCaptureControl';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
 import { registerQmdLanguage } from './quartoTheme';
@@ -58,6 +59,8 @@ interface Props {
   onNavigateToFile: (filePath: string, options?: { anchor?: string; replace?: boolean }) => void;
   /** Actor ID -> identity mapping from the IndexDocument */
   identities?: Record<string, import('@quarto/preview-runtime').ActorIdentity>;
+  /** Path -> recorded engine capture sidecar entry (bd-sfet3264). */
+  captures?: Record<string, import('@quarto/preview-runtime').CaptureRef>;
   /** Whether the project is connected to the sync server */
   isOnline: boolean;
 }
@@ -136,7 +139,7 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, isOnline }: Props) {
+export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, isOnline }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
   const { effectiveTheme } = useTheme();
@@ -1084,6 +1087,11 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               ✕
             </button>
           )}
+          <ClearCaptureControl
+            path={currentFile?.path ?? null}
+            hasCapture={!!(currentFile && captures?.[currentFile.path])}
+            onClear={(p) => clearCapture(p)}
+          />
           <PreviewRouter
             content={displayContent}
             currentFile={currentFile}
@@ -1106,6 +1114,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onFormatChange={handleFormatChange}
             onContentRewrite={handleContentRewrite}
             identities={identities}
+            captures={captures}
             attributionOn={attributionOn}
             onAttributionGeneratingChange={setAttributionGenerating}
           />

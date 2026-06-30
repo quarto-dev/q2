@@ -3,11 +3,12 @@ import type { CSSProperties } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import type { Diagnostic, PreviewNodeEditPayload } from '@quarto/preview-renderer/types/diagnostic';
-import type { ActorIdentity } from '@quarto/preview-runtime';
+import type { ActorIdentity, CaptureRef } from '@quarto/preview-runtime';
 import {
   parseQmdToAstWithAttribution,
   renderPageInProjectWithAttribution,
   renderPageForPreview,
+  getBinaryDocById,
   isWasmReady,
   incrementalWriteQmd,
   applyNodeEdit,
@@ -111,6 +112,14 @@ interface PreviewProps {
    */
   identities?: Record<string, ActorIdentity>;
   /**
+   * Path → recorded engine capture sidecar entry (bd-sfet3264). The
+   * active document's entry (if any) points at a capture binary doc;
+   * ReactPreview fetches its gzipped `EngineCapture[]` bytes and threads
+   * them into the render so executed engine output is spliced into the
+   * AST. Absent/empty ⇒ source-only rendering (today's behaviour).
+   */
+  captures?: Record<string, CaptureRef>;
+  /**
    * Attribution overlay on/off. Session-only, owned by `Editor.tsx`
    * and driven by the toggle in the replay bar. When false,
    * `useAttribution` short-circuits and the WASM call falls through
@@ -186,6 +195,11 @@ async function doRender(
     documentPath?: string;
     format: string;
     attributionJson: string | null;
+    // bd-sfet3264: gzipped-JSON `EngineCapture[]` for the active document
+    // (fetched from the capture binary doc). When present, the q2-preview
+    // pipeline splices the recorded engine output into the AST. `undefined`
+    // renders code cells as source.
+    captureGzJson?: Uint8Array;
   }
 ): Promise<RenderResult> {
   if (!isWasmReady()) {
@@ -223,11 +237,12 @@ async function doRender(
     // performs the preview format substitution but does not yet thread
     // attribution — slides have no attribution overlay today (follow-up).
     const result = isSlidesPreview
-      ? await renderPageForPreview(options.documentPath, undefined, undefined)
+      ? await renderPageForPreview(options.documentPath, undefined, options.captureGzJson)
       : await renderPageInProjectWithAttribution(
           options.documentPath,
           undefined,
           options.attributionJson,
+          options.captureGzJson,
         );
     const allDiagnostics: Diagnostic[] = [
       ...(result.diagnostics ?? []),
@@ -429,6 +444,7 @@ export default function ReactPreview({
   onRegisterReplayScroll,
   format,
   identities,
+  captures,
   attributionOn,
   onAttributionGeneratingChange,
 }: PreviewProps) {
@@ -553,6 +569,41 @@ export default function ReactPreview({
     return () => onAttributionGeneratingChange?.(false);
   }, [attributionGenerating, onAttributionGeneratingChange]);
 
+  // bd-sfet3264 (Phase 1D): recorded engine capture for the active document.
+  //
+  // The `captures` sidecar (threaded down from App.tsx) maps each path to a
+  // CaptureRef pointing at a capture binary doc. Here we fetch that doc's
+  // gzipped `EngineCapture[]` bytes for the *active* file and hold them so
+  // `doRender` can splice the recorded engine output into the AST. The fetch
+  // is keyed on the active file's `captureDocId` (not on content), so it only
+  // re-runs when a capture is added / re-executed / cleared — not on every
+  // keystroke. A freshly-arrived capture updates `captureBytes`, which is a
+  // render input below, so the preview re-renders to show executed output.
+  const activeCaptureDocId = currentFile?.path
+    ? captures?.[currentFile.path]?.captureDocId
+    : undefined;
+  const [captureBytes, setCaptureBytes] = useState<Uint8Array | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeCaptureDocId) {
+      setCaptureBytes(undefined);
+      return;
+    }
+    (async () => {
+      try {
+        const doc = await getBinaryDocById(activeCaptureDocId);
+        if (!cancelled) setCaptureBytes(doc?.content);
+      } catch {
+        // A dangling / unreachable capture doc falls back to source-only
+        // rendering — same as the no-capture path.
+        if (!cancelled) setCaptureBytes(undefined);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCaptureDocId]);
+
   // Debounce rendering
   const renderTimeoutRef = useRef<number | null>(null);
   const lastContentRef = useRef<string>('');
@@ -635,6 +686,7 @@ export default function ReactPreview({
       documentPath,
       format,
       attributionJson: attributionPayload,
+      captureGzJson: captureBytes,
     });
     if (qmdContent !== lastContentRef.current) return;
 
@@ -678,7 +730,7 @@ export default function ReactPreview({
         setPreviewState('ERROR_FROM_GOOD');
       }
     }
-  }, [scrollSyncEnabled, onDiagnosticsChange, onAstChange, format, attributionPayload]);
+  }, [scrollSyncEnabled, onDiagnosticsChange, onAstChange, format, attributionPayload, captureBytes]);
 
   // Immediate render update (no debounce)
   const updatePreview = useCallback((newContent: string, documentPath?: string) => {
@@ -713,6 +765,7 @@ export default function ReactPreview({
     currentFile?.path,
     onDiagnosticsChange,
     attributionPayload,
+    captureBytes,
   ]);
 
   // Reset preview state when file changes

@@ -75,6 +75,10 @@ interface WasmModuleExtended {
     path: string,
     user_grammars?: unknown,
     attribution_json?: string,
+    // bd-sfet3264 (Phase 1A): optional gzipped-JSON `EngineCapture[]`. When
+    // present, the q2-preview pipeline's CaptureSpliceStage folds the recorded
+    // engine output into the AST — alongside attribution, not instead of it.
+    capture_gz_json?: Uint8Array,
   ) => Promise<string>;
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
@@ -488,6 +492,11 @@ export async function renderPageInProjectWithAttribution(
   path: string,
   userGrammars: unknown,
   attributionJson: string | null,
+  // bd-sfet3264 (Phase 1A): optional gzipped-JSON `EngineCapture[]` from the
+  // project's capture sidecar. When provided, the q2-preview pipeline splices
+  // the recorded engine output into the AST alongside attribution. Omit (or
+  // `undefined`) to render code cells as source.
+  captureGzJson?: Uint8Array,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
   return JSON.parse(
@@ -495,6 +504,7 @@ export async function renderPageInProjectWithAttribution(
       path,
       userGrammars,
       attributionJson ?? undefined,
+      captureGzJson,
     ),
   );
 }

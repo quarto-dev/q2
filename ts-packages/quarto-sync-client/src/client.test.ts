@@ -248,6 +248,56 @@ describe('createSyncClient captures (Phase C.3)', () => {
   });
 });
 
+describe('createSyncClient clearCapture (D6 / bd-sfet3264)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('clearCapture removes the CaptureRef sidecar entry for the path, leaving siblings intact', async () => {
+    const indexDoc: IndexDocument = {
+      files: { 'index.qmd': 'doc1', 'other.qmd': 'doc2' },
+      version: 2,
+      identities: {},
+      captures: {
+        'index.qmd': { captureDocId: 'cap-1', state: 'idle' },
+        'other.qmd': { captureDocId: 'cap-2', state: 'idle' },
+      },
+    };
+    const { handle, getDoc } = createMockHandle(indexDoc);
+    installMockRepo(handle, handle);
+
+    const client = createSyncClient(noopCallbacks());
+    await client.connect('ws://localhost:9999', 'mock-doc-id', 'actor-1', 'Alice', '#FF0000');
+
+    client.clearCapture('index.qmd');
+
+    const doc = getDoc();
+    expect(doc.captures?.['index.qmd']).toBeUndefined();
+    // The sibling's capture must be untouched — clear is per-document.
+    expect(doc.captures?.['other.qmd']).toEqual({ captureDocId: 'cap-2', state: 'idle' });
+  });
+
+  it('clearCapture is a no-op (no throw, no sibling change) when the path has no capture', async () => {
+    const indexDoc: IndexDocument = {
+      files: { 'index.qmd': 'doc1' },
+      version: 2,
+      identities: {},
+      captures: {
+        'index.qmd': { captureDocId: 'cap-1', state: 'idle' },
+      },
+    };
+    const { handle, getDoc } = createMockHandle(indexDoc);
+    installMockRepo(handle, handle);
+
+    const client = createSyncClient(noopCallbacks());
+    await client.connect('ws://localhost:9999', 'mock-doc-id', 'actor-1', 'Alice', '#FF0000');
+
+    expect(() => client.clearCapture('nonexistent.qmd')).not.toThrow();
+    // The existing capture is left intact.
+    expect(getDoc().captures?.['index.qmd']).toEqual({ captureDocId: 'cap-1', state: 'idle' });
+  });
+});
+
 // ─── bd-4uvv: getBinaryDocById prefix normalization ──────────────────
 //
 // samod's TS `repo.find()` rejects bare docIds with

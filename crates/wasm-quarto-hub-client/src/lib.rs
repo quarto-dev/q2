@@ -1050,12 +1050,12 @@ pub async fn render_qmd_content(
 ///
 /// Phase 9 entry point used by the hub-client live preview.
 /// Equivalent to
-/// [`render_page_in_project_with_attribution(path, user_grammars, None)`](render_page_in_project_with_attribution).
+/// [`render_page_in_project_with_attribution(path, user_grammars, None, None)`](render_page_in_project_with_attribution).
 /// Kept as a separate entry point for callers that have no
-/// attribution payload to ship and want the simpler signature.
+/// attribution payload or capture to ship and want the simpler signature.
 #[wasm_bindgen]
 pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
-    render_page_in_project_with_attribution(path, user_grammars, None).await
+    render_page_in_project_with_attribution(path, user_grammars, None, None).await
 }
 
 /// Render a single page **in the context of its surrounding project**,
@@ -1093,8 +1093,9 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
 ///
 /// `render_page_in_project(path, user_grammars)` is byte-identical
 /// to `render_page_in_project_with_attribution(path, user_grammars,
-/// None)` for every fixture. A regression on the `None` branch
-/// would break *all* q2-preview renders, not just attributed ones.
+/// None, None)` for every fixture. A regression on the all-`None`
+/// branch would break *all* q2-preview renders, not just attributed
+/// or capture-spliced ones.
 ///
 /// In both branches the response shape is the same `RenderResponse`
 /// JSON `render_qmd` returns today — the JS layer doesn't need a
@@ -1107,6 +1108,11 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
 /// * `attribution_json` - Optional serialized transport JSON. Same
 ///   shape as the payload accepted by
 ///   [`parse_qmd_to_ast_with_attribution`].
+/// * `capture_gz_json` - Optional gzipped-JSON `EngineCapture[]`
+///   (bd-sfet3264), same wire format as [`render_page_for_preview`].
+///   When present, the q2-preview pipeline's `CaptureSpliceStage`
+///   folds the recorded engine output into the AST. `None` renders
+///   code cells as source.
 ///
 /// [`PreBuiltAttributionProvider`]:
 ///     quarto_core::attribution::PreBuiltAttributionProvider
@@ -1115,6 +1121,13 @@ pub async fn render_page_in_project_with_attribution(
     path: &str,
     user_grammars: Option<JsUserGrammars>,
     attribution_json: Option<String>,
+    // bd-sfet3264 (Phase 1A): optional recorded engine capture sequence,
+    // gzipped JSON of `EngineCapture[]` — the same wire format the capture
+    // binary doc holds and that `render_page_for_preview` consumes. hub-client
+    // threads it from the IndexDocument's capture sidecar so executed engine
+    // output is spliced in *without* losing attribution. `None` is
+    // byte-identical to the pre-feature behaviour for every existing caller.
+    capture_gz_json: Option<Vec<u8>>,
 ) -> String {
     let runtime = get_runtime();
     let path_buf = std::path::PathBuf::from(path);
@@ -1125,6 +1138,17 @@ pub async fn render_page_in_project_with_attribution(
         Ok(bytes) => bytes,
         Err(e) => {
             return error_response(format!("Failed to read file: {}", e));
+        }
+    };
+
+    // Deserialize the gzipped JSON capture sequence (empty when absent).
+    // Both render branches thread it into the q2-preview pipeline's
+    // `CaptureSpliceStage` alongside attribution; the non-preview branch
+    // ignores it. Same parsing as `render_page_for_preview`.
+    let captures = match parse_capture_from(capture_gz_json) {
+        Ok(caps) => caps,
+        Err(e) => {
+            return error_response(format!("Failed to parse capture: {}", e));
         }
     };
 
@@ -1148,7 +1172,7 @@ pub async fn render_page_in_project_with_attribution(
             &project,
             user_grammars,
             false,
-            Vec::new(),
+            captures,
             attribution_json,
         )
         .await;
@@ -1172,7 +1196,7 @@ pub async fn render_page_in_project_with_attribution(
         project,
         user_grammars,
         false,
-        Vec::new(),
+        captures,
         attribution_json,
     )
     .await
