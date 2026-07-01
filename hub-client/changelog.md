@@ -15,6 +15,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-07-01
+
+- [`76a01167`](https://github.com/quarto-dev/q2/commits/76a01167): When a `q2` client is online to execute the project's code, documents with executable cells now show a **Run** button in the preview — click it to run the code on the connected machine and see the executed output; the button reflects progress ("Executing…"), errors, and when the code has changed since the last run.
+
 ### 2026-06-30
 
 - [`7b823876`](https://github.com/quarto-dev/q2/commits/7b823876): The editor now detects when a connected `q2` client is available to execute the project's code and shows an "Executor online" indicator (groundwork for running code from the shared editor; running it is not wired up yet).
