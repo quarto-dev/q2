@@ -463,8 +463,12 @@ enum Commands {
     ///
     /// Authenticates with the hub (opening a browser the first time) and
     /// joins the project's collaborative session, offering this machine to
-    /// run the project's code on request. For now it connects and lists the
-    /// project's files (execution-on-request is coming).
+    /// run the project's code on request.
+    ///
+    /// Execution is DISABLED by default (fail-closed): the command connects,
+    /// lists the files, and exits. Pass --allow-all to serve execution
+    /// requests — this project's code then runs on THIS machine on request
+    /// from any collaborator.
     ProvideHub {
         /// A quarto-hub share URL or a bare project index-document id.
         project: String,
@@ -473,6 +477,12 @@ enum Commands {
         /// canonical hub).
         #[arg(long, env = "QUARTO_HUB_SERVER")]
         server: Option<String>,
+
+        /// Serve execution requests from any collaborator with access to the
+        /// document. Their code runs on THIS machine. Without this flag the
+        /// command is fail-closed (connect + list + exit).
+        #[arg(long = "allow-all")]
+        allow_all: bool,
     },
 
     /// Start collaborative hub server for real-time editing.
@@ -744,12 +754,15 @@ fn main() -> Result<()> {
         }),
         Commands::Mcp { args } => commands::mcp::run(&args),
 
-        Commands::ProvideHub { project, server } => {
-            commands::provide_hub::execute(commands::provide_hub::ProvideHubArgs {
-                project,
-                server,
-            })
-        }
+        Commands::ProvideHub {
+            project,
+            server,
+            allow_all,
+        } => commands::provide_hub::execute(commands::provide_hub::ProvideHubArgs {
+            project,
+            server,
+            allow_all,
+        }),
 
         Commands::Hub {
             project,

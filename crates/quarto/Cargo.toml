@@ -20,7 +20,8 @@ tracing-subscriber.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 pollster.workspace = true
-tokio.workspace = true
+# `signal` for the `provide-hub` serve loop's Ctrl-C shutdown.
+tokio = { workspace = true, features = ["signal"] }
 
 quarto-core = { workspace = true, features = ["clap"] }
 quarto-error-catalog.workspace = true

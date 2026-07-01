@@ -17,8 +17,28 @@ path = "src/lib.rs"
 samod = { version = "0.9.0", git = "https://github.com/quarto-dev/samod.git", branch = "q2", features = ["tokio", "tungstenite"] }
 # Reused index-document model (file list, capture sidecar) for the join+list path.
 quarto-hub = { path = "../quarto-hub" }
+# Read file documents out of the VFS during materialization (must match the
+# version quarto-hub uses so DocHandle::with_document hands us the same type).
+automerge = { version = "0.8.0", features = ["utf16-indexing"] }
 # Node discovery + the embedded hub-mcp bundle (we spawn its auth-stream entry).
 quarto-mcp-launcher = { path = "../quarto-mcp-launcher" }
+
+# Phase 4: run engines natively and write the capture back into automerge.
+quarto-core = { workspace = true }
+quarto-system-runtime = { workspace = true }
+quarto-trace = { workspace = true }
+# Gzip the capture JSON before storing it as a binary automerge doc (same wire
+# format q2-preview uses; see CAPTURE_MIME_TYPE in execute.rs).
+flate2 = { workspace = true }
+# CBOR for the ephemeral exec channel. The browser's DocHandle.broadcast
+# CBOR-encodes payloads (cbor-x, useRecords:false → standard CBOR maps), so we
+# mirror it with ciborium for cross-language interop.
+ciborium = "0.2"
+# Per-run project materialization into a fresh temp dir from the VFS.
+tempfile = "3"
+# Drive the async capture write-back on a blocking worker (mirrors
+# quarto-preview/re_execute.rs: engine execution must not block the reactor).
+pollster = { workspace = true }
 
 # Our own websocket dial with an Authorization: Bearer header. We construct the
 # transport ourselves (producing raw bytes for samod's Transport), so the

@@ -2,9 +2,13 @@
 
 **Strand:** bd-sfet3264 (feature, P1).
 **Date:** 2026-06-29.
-**Status:** Phases 1–3 implemented + `cargo xtask verify`-green on
-`feature/hub-execution-provider`. Phase 4 designed + decisions locked;
-implementation pending (to be picked up in a separate session).
+**Status:** Phases 1–3 + **Phase 4a** implemented + `cargo xtask verify`-green
+on `feature/hub-execution-provider`. Phase 4a (2026-07-01): the native provider
+now executes on request — subscribes to the `exec/request` ephemeral channel,
+materializes the VFS to a temp dir, runs the uncached `record_capture`, and
+writes the capture doc + sidecar back over automerge (verified E2E). `q2
+provide-hub --allow-all` serves; the default is fail-closed. **Next: Phase 4b**
+(hub-client Run button).
 
 ## Known limitations (v1) — READ THIS
 
@@ -988,6 +992,108 @@ Phase 1 consumption path).
   means every Run creates a new capture doc and orphans the prior one —
   reinforcing that D3 server-side GC is needed for long-lived projects;
   Phase 5/6.)
+
+#### Phase 4a — authz scope (DECIDED 2026-07-01: mechanism-first, fail closed)
+
+The full D4 default (provider-only, gated on the provider's own
+per-project actor id) needs the provider to learn that actor id from
+`GET /auth/actor?project=<id>` — but that endpoint is **cookie-only**
+today (`server.rs:796` reads `cookie_token` exclusively) and the provider
+authenticates with a **Bearer** id_token. Making provider-only real
+therefore needs a hub-side change (teach `/auth/actor` to accept Bearer)
+plus an HTTPS fetch from the provider. Per the phase list, "authorization
+(D4)" already lives in **Phase 5**.
+
+**Decision (user, 2026-07-01): 4a is mechanism-first and fails closed.**
+- 4a ships the execute loop + capability beacon + Rust wire-format mirror
+  + an `--allow-all` flag on `q2 provide-hub`.
+- The execute loop takes a pluggable `AuthzPolicy`. In 4a it is one of
+  `AllowAll` (opened by `--allow-all`) or `Deny` (the default): **without
+  `--allow-all` the provider refuses every request and prints guidance**
+  (safe default; does nothing rather than exposing the machine).
+- The scripted E2E runs with `AllowAll`.
+- Real provider-only actor-gating (hub `/auth/actor` Bearer support +
+  provider HTTPS actor-id fetch + `ProviderOnly { self_actor_id }` policy)
+  lands in **Phase 5** with the consent UX. The `AuthzPolicy` enum is the
+  seam it slots into.
+
+#### Phase 4a — implementation checklist (TDD), crate `quarto-hub-provider`
+
+- [x] **4a-1 — exec wire-format mirror + CBOR (`exec_channel.rs`).** ✅ done.
+      `ExecMessage` internally-tagged enum + `to_cbor`/`parse_exec_message`
+      via ciborium; 6 unit tests green, incl. a CBOR-shape assertion proving
+      the bytes are a standard map with the exact camelCase keys the TS
+      `parseExecMessage` checks (ciborium ↔ cbor-x interop confirmed).
+      `ExecMessage` enum mirroring the TS contract (internally tagged on
+      `kind`; camelCase field renames). CBOR encode/decode via `ciborium`
+      (the browser's `DocHandle.broadcast` CBOR-encodes the payload with
+      cbor-x `{useRecords:false}` → standard CBOR maps, so ciborium
+      interops). `BEACON_INTERVAL`/`BEACON_TIMEOUT` consts. Unit tests:
+      round-trip; CBOR shape is a map with the exact keys the TS
+      `parseExecMessage` checks; junk/unknown-kind → None.
+- [x] **4a-2 — VFS→temp-dir materializer (`materialize.rs`).** ✅ done.
+      `materialize_project(repo, index, dest)` reads each file doc (text via
+      `doc.text`, binary via `resource::read_binary_content`), `safe_join`
+      guards against `..`/absolute traversal, writes under `<tmp>/<path>`.
+      2 unit tests (safe_join) + 1 integration test (text + nested binary →
+      on-disk bytes) green.
+- [x] **4a-3 — execute loop + capability beacon (`execute.rs`).** ✅ done.
+      `AuthzPolicy` (`AllowAll`/`Deny`, seam for Phase 5 `ProviderOnly`),
+      `Provider` (Arc-shared) with `run` = concurrent beacon-broadcast +
+      ephemeral request-listen until a shutdown future fires;
+      `execute_document` (materialize → `ProjectContext::discover` →
+      **uncached** `record_capture` → `write_capture_doc` gzip+binary-doc →
+      `set_capture` idle; running/error status on an existing capture;
+      in-flight dedup; path-safety guard). Local `CAPTURE_MIME_TYPE` with a
+      cross-ref comment (avoids the heavy quarto-preview dep). `join`
+      refactored to return the live `(Repo, IndexDocument)`. 4 unit tests
+      (authz gating, path safety, engine list).
+- [x] **4a-4 — integration test (`tests/integration/execute.rs`).** ✅ done.
+      Bare samod acceptor + passthrough-engine qmd; the editor side
+      re-broadcasts an `exec/request` on the index handle; the provider
+      (`AllowAll`) materializes, runs the passthrough engine, and writes a
+      capture binary doc + `idle` sidecar that **syncs back to the server**
+      (verified by gunzipping the synced capture doc → `EngineCapture` with
+      `engine_name == "test-passthrough"`). Second test: `Deny` writes no
+      capture over a 3 s broadcast window. Both green.
+- [x] **4a-5 — wire `--allow-all` into `q2 provide-hub` + verify.** ✅ done.
+      `--allow-all` clap flag; fail-closed default (connect, list files, print
+      guidance, exit); with the flag the command builds a `Provider` (beacon
+      actorId = samod peer id) and runs the serve loop until Ctrl-C
+      (`tokio::signal`). Help renders; 3 unit tests green. **Full
+      `cargo xtask verify` green** (all 14 steps, incl. WASM rebuild + hub-client
+      tests). Two pre-existing environment issues surfaced and were fixed en
+      route — both unrelated to this work: `npm install` (the branch had added
+      uninstalled tiptap/prosemirror deps for `preview-renderer`) and a stale
+      WASM artifact (`captureSplice.wasm.test.ts` needed `npm run build:wasm`).
+
+### Phase 4a — end-to-end evidence (2026-07-01)
+
+Per CLAUDE.md's end-to-end rule. The scripted integration test
+(`tests/integration/execute.rs`) drives the **real** provider loop against a
+**real** samod acceptor:
+
+```
+cargo nextest run -p quarto-hub-provider --test integration execute
+```
+
+Observed: `provider_executes_an_allowed_request_and_writes_a_capture` — the
+editor side broadcasts an `exec/request` on the index handle; the provider
+(joined over the real `BearerDialer` transport) materializes the project, runs
+the passthrough engine via the uncached `record_capture`, and writes a capture
+binary doc + `idle` `CaptureRef`. The test then reads the capture doc back
+**from the server repo** (proving it synced to peers), gunzips it, and asserts
+a `Vec<EngineCapture>` with `engine_name == "test-passthrough"`. The `Deny`
+companion asserts no capture is written over a 3 s broadcast window.
+
+The interactive `q2 provide-hub --allow-all <share-url>` against a real
+quarto-hub.com session is **manual** (same as Phase 3C — can't automate Google
+OAuth). Coverage standing in for it: the scripted execute loop above +
+`join.rs` (real authenticated sync path) + `auth_bridge.rs` (real Node↔Rust
+token plumbing).
+
+**Phase 4a complete.** Remaining in Phase 4: **4b** — the hub-client Run
+button (gated on a live beacon, reflecting `CaptureRef.state`/staleness).
 
 - **Phase 5 — Retention (D3) + authorization (D4).** Content-addressed
 - **Phase 5 — Retention (D3) + authorization (D4).** Content-addressed

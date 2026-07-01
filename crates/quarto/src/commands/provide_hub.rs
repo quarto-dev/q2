@@ -1,8 +1,14 @@
 //! `provide-hub` — connect to a hub session as a code-execution provider.
 //!
 //! Joins an existing hub project's automerge session (authenticating via the
-//! Node auth bridge) and — for Phase 3 — lists the project's files, proving
-//! the authenticated sync path. Execution-on-request lands in Phase 4.
+//! Node auth bridge), lists the files, and — with `--allow-all` (Phase 4a) —
+//! serves execution requests: it materializes the project, runs the engines
+//! natively, and writes the results back as capture docs every collaborator's
+//! editor consumes.
+//!
+//! Execution is **fail-closed** by default: without `--allow-all` the command
+//! connects, lists files, and exits. The provider-only default (gate on the
+//! provider's own actor id) lands in Phase 5.
 //!
 //! See `claude-notes/plans/2026-06-29-remote-execution-provider.md` (bd-sfet3264).
 
@@ -10,7 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use quarto_hub_provider::{JoinConfig, NodeBridge, join_and_list_files};
+use quarto_hub_provider::{AuthzPolicy, JoinConfig, NodeBridge, Provider, join};
 
 /// Arguments for `q2 provide-hub`.
 pub struct ProvideHubArgs {
@@ -20,6 +26,9 @@ pub struct ProvideHubArgs {
     /// Hub websocket URL. Defaults to `$QUARTO_HUB_SERVER`, else the canonical
     /// hub.
     pub server: Option<String>,
+    /// Serve execution requests from any collaborator. Without this the command
+    /// is fail-closed (connect + list + exit).
+    pub allow_all: bool,
 }
 
 const DEFAULT_SERVER_WS: &str = "wss://quarto-hub.com/ws";
@@ -60,7 +69,7 @@ async fn run(args: ProvideHubArgs) -> Result<()> {
     let bridge = NodeBridge::spawn().context("starting the auth bridge")?;
 
     eprintln!("Connecting to project {index_doc_id} at {server_ws_url}…");
-    let files = join_and_list_files(
+    let (repo, index) = join(
         JoinConfig {
             server_ws_url,
             index_doc_id,
@@ -71,10 +80,36 @@ async fn run(args: ProvideHubArgs) -> Result<()> {
     .await
     .context("joining the hub session")?;
 
+    let mut files: Vec<String> = index.get_all_files().into_keys().collect();
+    files.sort();
     println!("Connected. {} file(s) in the project:", files.len());
     for file in &files {
         println!("  {file}");
     }
+
+    if !args.allow_all {
+        eprintln!();
+        eprintln!("Execution is DISABLED (fail-closed default).");
+        eprintln!("Serving requests would run this project's code on THIS machine.");
+        eprintln!("Re-run with --allow-all to let collaborators execute this project's");
+        eprintln!("code here. (A safer provider-only default is coming in a later release.)");
+        return Ok(());
+    }
+
+    // The beacon's actorId in Phase 4a is the samod peer id (stable for this
+    // process); Phase 5 swaps in the per-project actor id from /auth/actor.
+    let self_actor_id = repo.peer_id().to_string();
+    let provider = Provider::new(repo, index, self_actor_id, AuthzPolicy::AllowAll, None);
+
+    eprintln!();
+    eprintln!("Execution ENABLED for all collaborators (--allow-all).");
+    eprintln!("This project's code will run on THIS machine on request. Press Ctrl-C to stop.");
+    provider
+        .run(async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .await;
+    eprintln!("Provider stopped.");
     Ok(())
 }
 
