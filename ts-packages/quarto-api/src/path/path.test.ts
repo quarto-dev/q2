@@ -5,14 +5,16 @@
  *   - Pure ops: real value assertions (not "returns a string").
  *   - path.absolute: binding is the JOIN logic (cwd + relative), not the
  *     injected cwd value. Revert join → RED.
- *   - Stubs (runtime/resource/dataDir): assert they THROW with the exact
- *     "not yet implemented" substring.
+ *   - runtime/dataDir: assert ensureDir is called with the joined path.
+ *   - resource: assert ensureDir is NOT called (read-only).
+ *   - global-seam: assert runtime/dataDir/resource resolve from global config.
  *
- * Named reverts that reden each test are noted inline.
+ * Named reverts that turn each test RED are noted inline.
  * No Deno.* / node:* anywhere.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import type { HostGlobalConfig } from "../platform/index.js";
 import {
   toForwardSlashes,
   dirAndStem,
@@ -20,6 +22,39 @@ import {
   inputFilesDir,
   makePathHost,
 } from "./index.js";
+
+// ─── Shared fake builders ─────────────────────────────────────────────────────
+
+/** Minimal HostGlobalConfig for tests that don't exercise pandoc. */
+const fakeGlobal: HostGlobalConfig = {
+  resourceDir: "/rs",
+  runtimeDir: "/rt",
+  dataDir: "/dt",
+};
+
+/** Build a fake host with a full fs shape (all methods) and a cwd spy. */
+function makeFakePathHost(cwd = "/work") {
+  const ensureDirSpy = vi.fn((_p: string): void => {});
+  return {
+    host: {
+      cwd: () => cwd,
+      fs: {
+        readTextFileSync: vi.fn((_p: string) => ""),
+        writeFileSync: vi.fn((_p: string, _c: string | Uint8Array) => {}),
+        exists: vi.fn((_p: string) => false),
+        ensureDir: ensureDirSpy,
+        makeTempDir: vi.fn((_o?: { prefix?: string; dir?: string }) => "/tmp/d"),
+        makeTempFile: vi.fn((_o?: { prefix?: string; suffix?: string; dir?: string }) => "/tmp/f"),
+        remove: vi.fn((_p: string, _o?: { recursive?: boolean }) => {}),
+        walk: vi.fn(
+          (_r: string, _o?: { maxDepth?: number; includeDirs?: boolean }) =>
+            [] as Array<{ path: string; isFile: boolean; isDirectory: boolean }>,
+        ),
+      },
+    },
+    spies: { ensureDir: ensureDirSpy },
+  };
+}
 
 // ─── toForwardSlashes ─────────────────────────────────────────────────────────
 
@@ -129,8 +164,8 @@ describe("path.inputFilesDir", () => {
 // ─── path.absolute (host-only) ────────────────────────────────────────────────
 
 describe("path.absolute", () => {
-  const host = { cwd: () => "/work" };
-  const pathHost = makePathHost(host);
+  const { host } = makeFakePathHost("/work");
+  const pathHost = makePathHost(host, fakeGlobal);
 
   it("joins cwd with a relative path (the JOIN is the binding)", () => {
     // Revert join to return just cwd → RED (result would be "/work")
@@ -152,41 +187,86 @@ describe("path.absolute", () => {
 
   it("uses the host's cwd (not a hardcoded default)", () => {
     // Inject a different cwd to confirm the join uses the host value
-    const otherHost = { cwd: () => "/other" };
-    const otherPath = makePathHost(otherHost);
+    const { host: otherHost } = makeFakePathHost("/other");
+    const otherPath = makePathHost(otherHost, fakeGlobal);
     expect(otherPath.absolute("x")).toBe("/other/x");
   });
 });
 
-// ─── path stubs (runtime / resource / dataDir) ────────────────────────────────
+// ─── path.runtime / path.dataDir — ensureDir dispatch ────────────────────────
 
-describe("path stubs — not yet implemented (Plan 2)", () => {
-  const host = { cwd: () => "/work" };
-  const pathHost = makePathHost(host);
+describe("path.runtime / path.dataDir — ensureDir dispatch (Plan 2 Phase A)", () => {
+  it("runtime(subdir) calls fs.ensureDir with the joined path (ensureDir-dispatch binding)", () => {
+    const { host, spies } = makeFakePathHost();
+    const pathHost = makePathHost(host, fakeGlobal);
 
-  it("runtime() throws with 'not yet implemented'", () => {
-    // Revert to returning a string → RED
-    expect(() => pathHost.runtime()).toThrow(/not yet implemented/);
+    pathHost.runtime("julia");
+
+    // Revert → RED: remove the ensureDir call from runtime
+    expect(spies.ensureDir).toHaveBeenCalledWith("/rt/julia");
   });
 
-  it("resource() throws with 'not yet implemented'", () => {
-    expect(() => pathHost.resource()).toThrow(/not yet implemented/);
+  it("dataDir(subdir) calls fs.ensureDir with the joined path (ensureDir-dispatch binding)", () => {
+    const { host, spies } = makeFakePathHost();
+    const pathHost = makePathHost(host, fakeGlobal);
+
+    pathHost.dataDir("x");
+
+    // Revert → RED: remove the ensureDir call from dataDir
+    expect(spies.ensureDir).toHaveBeenCalledWith("/dt/x");
   });
 
-  it("dataDir() throws with 'not yet implemented'", () => {
-    expect(() => pathHost.dataDir()).toThrow(/not yet implemented/);
+  it("resource(...parts) does NOT call fs.ensureDir (read-only — no dir creation)", () => {
+    const { host, spies } = makeFakePathHost();
+    const pathHost = makePathHost(host, fakeGlobal);
+
+    pathHost.resource("a", "b");
+
+    // Revert → RED: add ensureDir call to resource body
+    expect(spies.ensureDir).not.toHaveBeenCalled();
+  });
+});
+
+// ─── path.runtime — ensureDir error propagation ───────────────────────────────
+
+describe("path.runtime — ensureDir error propagation (Plan 2 Phase A)", () => {
+  it("propagates ensureDir errors — no try/catch (error-propagation binding)", () => {
+    const err = new Error("permission denied");
+    const { host, spies } = makeFakePathHost();
+    spies.ensureDir.mockImplementation((_p: string): void => { throw err; });
+    const pathHost = makePathHost(host, fakeGlobal);
+
+    // Revert → RED: wrap the ensureDir call in try/catch so error is swallowed
+    expect(() => pathHost.runtime("x")).toThrow("permission denied");
+  });
+});
+
+// ─── path — global-seam (config-derived paths) ────────────────────────────────
+
+describe("path — global-seam (config-derived paths) (Plan 2 Phase A)", () => {
+  it("runtime/dataDir/resource resolve from global config values (global-seam binding)", () => {
+    const { host } = makeFakePathHost();
+    const pathHost = makePathHost(host, { runtimeDir: "/rt", dataDir: "/dt", resourceDir: "/rs" });
+
+    // Revert → RED: don't read global (body reads undefined base → throws or wrong path)
+    expect(pathHost.runtime("j")).toBe("/rt/j");
+    expect(pathHost.dataDir("d")).toBe("/dt/d");
+    expect(pathHost.resource("a")).toBe("/rs/a");
   });
 
-  it("runtime() error message names the method", () => {
-    // Revert to a generic message → RED
-    expect(() => pathHost.runtime()).toThrow(/path\.runtime/);
+  it("runtime() with no subdir returns the base runtimeDir (edge-case binding)", () => {
+    const { host } = makeFakePathHost();
+    const pathHost = makePathHost(host, fakeGlobal);
+
+    // Revert → RED: make pathJoin require ≥2 parts (so no-subdir returns "" or throws) → RED
+    expect(pathHost.runtime()).toBe("/rt");
   });
 
-  it("resource() error message names the method", () => {
-    expect(() => pathHost.resource()).toThrow(/path\.resource/);
-  });
+  it("resource with multiple parts joins them all (multi-part binding)", () => {
+    const { host } = makeFakePathHost();
+    const pathHost = makePathHost(host, fakeGlobal);
 
-  it("dataDir() error message names the method", () => {
-    expect(() => pathHost.dataDir()).toThrow(/path\.dataDir/);
+    // Revert → RED: join only the first part (drop the rest) → returns /rs/a not /rs/a/b/c → RED
+    expect(pathHost.resource("a", "b", "c")).toBe("/rs/a/b/c");
   });
 });

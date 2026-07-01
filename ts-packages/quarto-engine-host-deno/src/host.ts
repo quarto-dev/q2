@@ -29,6 +29,7 @@ import type {
   ExecutionTarget,
   PandocIncludes,
   HtmlDependency,
+  LanguageClaim,
 } from "@quarto/types";
 import type { PlatformHost } from "@quarto/api/platform";
 
@@ -46,7 +47,7 @@ import type {
 } from "./types.js";
 import { readFrames, writeFrame, type FrameWriter } from "./framing.js";
 import { rehydrateMappedString, serializeMappedString } from "./mapped-source.js";
-import { metadataAsFormat } from "./metadata-as-format.js";
+import { applyExecuteDefaults, metadataAsFormat } from "./metadata-as-format.js";
 import { buildQuartoAPI } from "./quarto-api.js";
 import { loadEngineModule as defaultLoadEngineModule } from "./engine-loader.js";
 
@@ -148,23 +149,32 @@ function resolveHtmlDepPath(libDir: string, filePath: string): string {
 }
 
 /**
- * Map Q1's `boolean | number` language claim to the wire `TsLanguageClaim | null`.
+ * Map a `claimsLanguage` return value to the wire `TsLanguageClaim | null`.
  *
- * Mapping:
+ * Mapping (§3.2 of claude-notes/designs/engine-resolution.md):
  *   false/null/undefined → null
  *   true → { kind: 'primary', priority: 1 }
  *   number n → { kind: 'primary', priority: n }  (negative = low-priority primary, NEVER interop)
- *
- * The `interop` and `fallback` kinds are only reachable via a LanguageClaim object
- * (not present in Q1's boolean|number return type).
+ *   LanguageClaim object → wire TsLanguageClaim, filling §3.2 default priorities:
+ *     primary → priority ?? 1
+ *     interop → priority ?? 0
+ *     fallback → priority ?? 0
+ *   An explicit `priority` on the object is passed through unchanged (including 0 / negatives).
  */
 function mapLanguageClaim(
-  raw: boolean | number | null | undefined,
+  raw: boolean | number | LanguageClaim | null | undefined,
 ): TsLanguageClaim | null {
   if (raw === false || raw === null || raw === undefined) return null;
   if (raw === true) return { kind: "primary", priority: 1 };
+  // Object form: LanguageClaim — fill §3.2 defaults (primary→1, interop/fallback→0).
+  if (typeof raw === "object") {
+    return {
+      kind: raw.kind,
+      priority: raw.priority ?? (raw.kind === "primary" ? 1 : 0),
+    };
+  }
   // raw is a number (positive or negative — always 'primary', never interop)
-  return { kind: "primary", priority: raw as number };
+  return { kind: "primary", priority: raw };
 }
 
 /**
@@ -649,8 +659,11 @@ export async function runHost(
               data: undefined,
             };
 
-            // Step 3: Partition format metadata into Q1 Format shape.
-            const format = metadataAsFormat(opts.format);
+            // Step 3: Partition format metadata into Q1 Format shape, then fill
+            // absent execute-visibility keys with Q1's base defaults (q2 has no
+            // writer-format-defaults merge, so without this every executed cell
+            // is dropped by the engine's includeCell/includeOutput gates).
+            const format = applyExecuteDefaults(metadataAsFormat(opts.format));
 
             // Step 4: Assemble ExecuteOptions.
             const executeOptions: ExecuteOptions = {
@@ -838,7 +851,7 @@ export async function runHost(
           };
         }
 
-        const format = metadataAsFormat(opts.format);
+        const format = applyExecuteDefaults(metadataAsFormat(opts.format));
 
         const depOptions: DependenciesOptions = {
           target,

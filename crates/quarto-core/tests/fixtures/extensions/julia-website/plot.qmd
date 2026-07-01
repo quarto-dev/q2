@@ -1,0 +1,40 @@
+---
+title: Plot
+engine: julia
+execute:
+  daemon: false
+---
+
+# A Julia Figure
+
+The cell below renders a Plots.jl figure as a PNG **file** (not an inline
+base64 data-URI). Three things make that happen:
+
+1. `ENV["GKSwstype"] = "100"` (set before `using Plots`) forces GR's GKS
+   backend to the headless cairo-PNG workstation, so no interactive `gksqt`
+   Qt workstation is spawned. In a windowed macOS session GR would otherwise
+   default to `gksqt`, which blocks the notebook worker.
+2. `savefig(p, path)` renders the plot to a PNG file through that headless
+   workstation.
+3. The cell returns a `PngFigure` wrapper that is showable **only** as
+   `image/png` (no `text/html` show method). QuartoNotebookRunner captures
+   only the `image/png` MIME; q2's `displayDataMimeType` then selects
+   `image/png` (a default Plots plot is `text/html`-showable and would be
+   emitted inline instead — see the 4CD MIME finding), and the jupyter
+   `toMarkdown` image branch (`mdImageOutput`) writes the figure to
+   `plot_files/figure-html/*.png` and references it via `<img src=...>`.
+
+```{julia}
+ENV["GKSwstype"] = "100"
+using Plots
+p = plot(1:10, rand(10))
+path = tempname() * ".png"
+savefig(p, path)
+
+struct PngFigure
+    bytes::Vector{UInt8}
+end
+Base.show(io::IO, ::MIME"image/png", f::PngFigure) = write(io, f.bytes)
+
+PngFigure(read(path))
+```

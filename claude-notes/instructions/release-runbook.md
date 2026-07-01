@@ -228,6 +228,14 @@ still matches.
   and `install.sh` parse `${output##* }`. `q2 --version` prints
   `q2 (quarto 2) X.Y.Z`; anything appended to that string must keep the
   version last (guarded by `crates/quarto/tests/integration/version_cli.rs`).
+- **Pin the embedded TS-extension-build jsr specifiers before shipping.**
+  `resources/extension-build/deno.json` (the shipped tier-4 config `q2
+  build-ts-extension` embeds via `include_str!` for installed binaries —
+  see `crates/quarto/src/commands/build_ts_extension.rs`) currently
+  imports unpinned `jsr:@quarto/api` / `jsr:@quarto/types`. Once those
+  packages are published to JSR, pin them to a version
+  (`jsr:@quarto/api@^X.Y`) as part of cutting a release, so installed
+  binaries resolve a stable, tested API surface instead of latest.
 
 ## Files involved
 

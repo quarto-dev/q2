@@ -7,55 +7,32 @@
  *   - runningInCI:          core/ci-info.ts:10 — from host.isCI
  *   - tempContext:          core/temp.ts — via host.fs.makeTempDir/makeTempFile
  *   - onCleanup:            core/cleanup.ts — via host.process.onExit
- *   - pandoc:               STUB (not yet implemented (Plan 2))
+ *   - pandoc:               routes through host.process.exec at global.pandocPath
  *   - checkRender:          STUB (Plan 2)
  *   - runExternalPreviewServer: STUB (Plan 2)
  *
  * All I/O goes through the injected PlatformHost — never Deno.* / node:*.
  *
- * Factory: makeSystem(host: Pick<PlatformHost, "process" | "fs" | "isInteractive" | "isCI">)
+ * Factory: makeSystem(host: Pick<PlatformHost, "process" | "fs" | "isInteractive" | "isCI">, global: HostGlobalConfig)
  */
 
-import type { ExecOptions, ExecResult, PlatformHost } from "../platform/index.js";
+import type { ExecOptions, ExecResult, HostGlobalConfig, PlatformHost } from "../platform/index.js";
+import type {
+  QuartoAPI,
+  PreviewServer,
+  CheckRenderOptions,
+  CheckRenderResult,
+  ExecProcessOptions,
+  ProcessResult,
+} from "@quarto/types";
 
 // ─── Re-export types used by callers ────────────────────────────────────────
 
 export type { ExecOptions, ExecResult };
 
-// ─── Q1 return types ─────────────────────────────────────────────────────────
-
-/**
- * Result of executing an external process.
- * Mirrors Q1 `core/process-types.ts::ProcessResult`.
- * stdout/stderr are optional strings (undefined if not captured).
- */
-export interface ProcessResult {
-  success: boolean;
-  code: number;
-  stdout?: string;
-  stderr?: string;
-}
-
-/**
- * Options for execProcess.
- * Mirrors the subset of Q1's `ExecProcessOptions` that is platform-neutral.
- */
-export interface ExecProcessOptions {
-  /** The command to execute. */
-  cmd: string;
-  /** Arguments to the command. */
-  args?: string[];
-  /** Working directory for the child process. */
-  cwd?: string;
-  /** Environment variables to set for the child process. */
-  env?: Record<string, string>;
-  /** Text content to write to stdin (if any). */
-  stdin?: string;
-  /** stdout mode: "piped" captures output, "inherit" passes through, "null" discards. */
-  stdout?: "piped" | "inherit" | "null";
-  /** stderr mode: "piped" captures output, "inherit" passes through, "null" discards. */
-  stderr?: "piped" | "inherit" | "null";
-}
+// ExecProcessOptions and ProcessResult are re-exported from @quarto/types
+// (single owner — no local duplicate; the vendored definition is the contract).
+export type { ExecProcessOptions, ProcessResult };
 
 /**
  * A context for creating temporary files and directories.
@@ -86,58 +63,24 @@ export interface TempContext {
   onCleanup(handler: () => void): void;
 }
 
-// ─── SystemNamespace interface ────────────────────────────────────────────────
+// ─── SystemNamespace (derived from the SDK contract) ──────────────────────────
+//
+// Fully-host namespace: `makeSystem` returns the WHOLE namespace, so we DERIVE
+// it from the vendored SDK contract (`QuartoAPI["system"]`) rather than redefine
+// it (Plan 2 B2, Fix B). A future SDK method addition then becomes a compile
+// error here until the factory implements it — the whole point of B2.
+//
+// Clean direct derive (no carve-outs). The B2 finding M-B2-stdin is resolved:
+// `ExecProcessOptions.stdin` is now the Q1-faithful stream MODE (`"piped" |
+// "inherit" | "null"`), sourced from @quarto/types. Content belongs on the
+// 2nd positional param (`stdin?: string`), which is how Q1/knitr calls it.
+// Full stdin mode-honoring (inherit/null) has no in-scope caller and is out
+// of scope (advisory, same as options.stdout/stderr).
+export type SystemNamespace = QuartoAPI["system"];
 
-/** The system namespace interface returned by makeSystem. */
-export interface SystemNamespace {
-  /**
-   * Execute an external process and return its result.
-   * Marshals to host.process.exec.
-   */
-  execProcess(
-    options: ExecProcessOptions,
-    stdin?: string,
-  ): Promise<ProcessResult>;
+// ─── Stub error helper ────────────────────────────────────────────────────────
 
-  /** Return true iff the process is running interactively. */
-  isInteractiveSession(): boolean;
-
-  /** Return true iff the process is running inside a CI environment. */
-  runningInCI(): boolean;
-
-  /**
-   * Create and return a TempContext backed by the host's fs.
-   * Registers cleanup with host.process.onExit.
-   */
-  tempContext(): TempContext;
-
-  /**
-   * Register a cleanup handler to be called when the process exits.
-   * Routes to host.process.onExit.
-   */
-  onCleanup(handler: () => void): void;
-
-  /**
-   * Execute pandoc with the given arguments.
-   * STUB — throws until the engine host provides the pandoc binary path.
-   */
-  pandoc(args: string[], stdin?: string): Promise<ProcessResult>;
-
-  /**
-   * Run a check render.
-   * STUB — not yet implemented (Plan 2).
-   */
-  checkRender(...args: unknown[]): Promise<unknown>;
-
-  /**
-   * Run an external preview server.
-   * STUB — not yet implemented (Plan 2).
-   */
-  runExternalPreviewServer(...args: unknown[]): Promise<unknown>;
-}
-
-// ─── Stub error helpers ───────────────────────────────────────────────────────
-
+// Used by checkRender and runExternalPreviewServer stubs (pandoc is now real).
 function notYetImplementedError(method: string): Error {
   return new Error(
     `@quarto/api: system.${method}() is not yet implemented (Plan 2)`,
@@ -149,34 +92,50 @@ function notYetImplementedError(method: string): Error {
 /**
  * Build the system namespace backed by the given host.
  *
- * @param host - A PlatformHost (or minimal fake) with process, fs,
- *               isInteractive, and isCI.
+ * @param host   - A PlatformHost (or minimal fake) with process, fs,
+ *                 isInteractive, and isCI.
+ * @param global - Process-stable host config (pandoc path, dirs, etc.).
  */
 export function makeSystem(
   host: Pick<PlatformHost, "process" | "fs" | "isInteractive" | "isCI">,
+  global: HostGlobalConfig,
 ): SystemNamespace {
   // ── execProcess ────────────────────────────────────────────────────────────
   //
-  // Marshal Q1's ExecProcessOptions into PlatformHost's ExecOptions, delegate
-  // to host.process.exec, then map the raw ExecResult into Q1's ProcessResult.
+  // Marshal Q1's six-positional ExecProcessOptions + knobs into PlatformHost's
+  // ExecOptions, delegate to host.process.exec, then map the raw ExecResult
+  // into Q1's ProcessResult.
   //
   // Mapping:
-  //   ExecProcessOptions.cmd        → first positional arg (cmd)
-  //   ExecProcessOptions.args       → second positional arg (args)
-  //   ExecProcessOptions.{cwd,env,stdin} → ExecOptions
-  //   ExecProcessOptions.stdout/stderr (mode strings) are advisory; the host
-  //     always captures stdout/stderr as strings — the caller uses stdout/stderr
-  //     fields of ProcessResult iff they requested "piped" mode.
+  //   ExecProcessOptions.cmd           → first positional arg (cmd)
+  //   ExecProcessOptions.args          → second positional arg (args)
+  //   ExecProcessOptions.{cwd,env}     → ExecOptions
+  //   positional stdin param           → ExecOptions.stdin (content only)
+  //   mergeOutput / stderrFilter / respectStreams / timeout → ExecOptions
+  //   ExecProcessOptions.stdin/stdout/stderr (mode strings) are advisory — the
+  //     host always captures both streams; ProcessResult.stdout/stderr are
+  //     included iff the caller requested "piped" mode. Full stdin mode-honoring
+  //     (inherit/null) has no in-scope caller and is out of scope. When
+  //     mergeOutput is active, the host sets the source stream's field to ""
+  //     (empty), which passes through the gating correctly.
   //
   // ProcessResult.stdout/stderr are optional (undefined unless mode was "piped").
   async function execProcess(
     options: ExecProcessOptions,
     stdin?: string,
+    mergeOutput?: "stderr>stdout" | "stdout>stderr",
+    stderrFilter?: (output: string) => string,
+    respectStreams?: boolean,
+    timeout?: number,
   ): Promise<ProcessResult> {
     const execOpts: ExecOptions = {
       cwd: options.cwd,
       env: options.env,
-      stdin: stdin ?? options.stdin,
+      stdin: stdin,
+      mergeOutput,
+      stderrFilter,
+      respectStreams,
+      timeout,
     };
 
     const raw: ExecResult = await host.process.exec(
@@ -187,6 +146,8 @@ export function makeSystem(
 
     // Map ExecResult → ProcessResult
     // stdout/stderr are included iff the caller requested "piped" capture.
+    // When mergeOutput is active, the host sets the source stream's field to ""
+    // (empty) — the gating below correctly surfaces that empty string.
     return {
       success: raw.success,
       code: raw.code,
@@ -292,23 +253,44 @@ export function makeSystem(
     host.process.onExit(handler);
   }
 
-  // ── pandoc (STUB) ──────────────────────────────────────────────────────────
-  // `async` so the function returns a REJECTED Promise — callers using
-  // `.catch()` or `await` will see the error; a synchronous `throw` would
-  // fire before `.catch` attaches (unhandled-rejection risk).
-  async function pandoc(_args: string[], _stdin?: string): Promise<ProcessResult> {
-    throw notYetImplementedError("pandoc");
+  // ── pandoc ─────────────────────────────────────────────────────────────────
+  // Routes through host.process.exec at global.pandocPath. When pandocPath is
+  // absent (null/undefined), rejects with a distinct "pandoc unavailable" error
+  // — q2 requires ambient pandoc resolved in Rust; if Rust couldn't find it, TS
+  // won't do better. `async` ensures callers using `.catch()` see the error
+  // even on the None path.
+  async function pandoc(args: string[], stdin?: string): Promise<ProcessResult> {
+    if (global.pandocPath == null) {
+      throw new Error(
+        `@quarto/api: pandoc unavailable (no pandoc path was provided by the host)`,
+      );
+    }
+    const raw = await host.process.exec(global.pandocPath, args, { stdin });
+    return { success: raw.success, code: raw.code, stdout: raw.stdout, stderr: raw.stderr };
   }
 
   // ── checkRender (STUB) ─────────────────────────────────────────────────────
-  // `async` for the same reason as pandoc above.
-  async function checkRender(..._args: unknown[]): Promise<unknown> {
+  // STAYS `async` — throws as a rejected promise so `.catch()`-style callers are
+  // protected (the §2aa stub contract). A throwing body satisfies any declared
+  // return, so the real SDK signature is honored while it remains a stub. The
+  // real body (renders a check doc via PlatformHost) lands in a later plan.
+  async function checkRender(
+    _options: CheckRenderOptions,
+  ): Promise<CheckRenderResult> {
     throw notYetImplementedError("checkRender");
   }
 
   // ── runExternalPreviewServer (STUB) ────────────────────────────────────────
-  // `async` for the same reason as pandoc above.
-  async function runExternalPreviewServer(..._args: unknown[]): Promise<unknown> {
+  // SYNCHRONOUS throwing stub. Q1 returns `PreviewServer` synchronously; the
+  // Plan-1b async-ization was itself a Q1 divergence that B2 removes — re-adding
+  // `async` would re-break conformance under the derive. A throwing body
+  // satisfies the declared `PreviewServer` return while it remains a stub.
+  function runExternalPreviewServer(_options: {
+    cmd: string[];
+    readyPattern: RegExp;
+    env?: Record<string, string>;
+    cwd?: string;
+  }): PreviewServer {
     throw notYetImplementedError("runExternalPreviewServer");
   }
 

@@ -182,3 +182,59 @@ export function metadataAsFormat(formatInfo: TsFormatInfo): Format {
 
   return format;
 }
+
+// ---------------------------------------------------------------------------
+// Execute-visibility defaults
+// ---------------------------------------------------------------------------
+
+/**
+ * Q1's base execute-visibility defaults (`format/formats-shared.ts:210-217`):
+ * the keys that gate whether a cell — and its code / output / warnings — is
+ * rendered. Values are the format-agnostic BASE (`error:false`, everything else
+ * `true`).
+ *
+ * Why this exists in the host: `metadataAsFormat` is a faithful port of Q1's
+ * partition-only `metadataAsFormat` (config/metadata.ts) — Q1 merges the writer
+ * format's `execute` defaults into the document metadata during *format
+ * resolution*, BEFORE that partition runs, so its engines always see a Format
+ * with these keys populated. q2 has no writer-format-defaults merge yet, so the
+ * engine-visible `format.execute` arrives with only the keys present in the
+ * document frontmatter. The Julia engine (the first real consumer of
+ * `jupyterToMarkdown`) then finds `format.execute.include` / `.output` /
+ * `.echo` undefined, and `includeCell` / `includeOutput` (tags.ts `shouldInclude`)
+ * drop every executed cell — the rendered body comes out empty.
+ *
+ * Applying the base defaults here — only for keys the document did not set —
+ * restores Q1's "cells render by default" behaviour without touching the
+ * partition port.
+ *
+ * KNOWN DIVERGENCE (documented for Plan 4 Phase 4F/4G): Q1's per-writer overrides
+ * (HTML / PDF set `echo:false`, `warning:false`) are NOT applied here — only the
+ * format-agnostic base. Under q2 an HTML render therefore currently echoes cell
+ * source by default (`echo:true`) where Q1's HTML would hide it. Closing that gap
+ * belongs with a real writer-format-defaults layer, not this host shim.
+ */
+const kExecuteVisibilityDefaults: Record<string, boolean> = {
+  eval: true,
+  echo: true,
+  output: true,
+  warning: true,
+  include: true,
+  error: false,
+};
+
+/**
+ * Fill absent execute-visibility keys on `format.execute` with Q1's base
+ * defaults (see {@link kExecuteVisibilityDefaults}). Mutates and returns
+ * `format`. Keys the document already set (any value, including `false`) are
+ * left untouched.
+ */
+export function applyExecuteDefaults(format: Format): Format {
+  const execute = format.execute as Record<string, unknown>;
+  for (const [key, value] of Object.entries(kExecuteVisibilityDefaults)) {
+    if (execute[key] === undefined) {
+      execute[key] = value;
+    }
+  }
+  return format;
+}

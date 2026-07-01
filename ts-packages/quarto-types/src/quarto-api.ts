@@ -36,7 +36,57 @@ import type {
 import type { QuartoMdChunks, QuartoMdCell } from "./markdown.js";
 
 /**
- * Global Quarto API interface
+ * Global Quarto API interface — the object passed to every engine's `init(quarto)`.
+ *
+ * ## Namespace classification
+ *
+ * Namespaces are classified by their host dependency so engine authors know
+ * what is safe to call without a live Deno or Node environment. The
+ * canonical source for this table is the "Engine API contract"
+ * section in `claude-notes/plans/2026-04-16-plan1b-engine-host-deno.md`;
+ * this comment mirrors it.
+ *
+ * ### Pure — no PlatformHost required; work in any JavaScript environment
+ *
+ * | Namespace        | Provided by             | Notes                                             |
+ * |------------------|-------------------------|---------------------------------------------------|
+ * | `text`           | `@quarto/api/text`      | String utilities (lines, trimEmptyLines, etc.)    |
+ * | `markdownRegex`  | `@quarto/api/markdownRegex` | extractYaml, partition, getLanguages, breakQuartoMd |
+ * | `format`         | `@quarto/api/format`    | Stateless predicates over `format.pandoc.to`       |
+ * | `crypto`         | `@quarto/api/crypto`    | md5Hash via Web Crypto; works in Deno/Node/browser |
+ *
+ * ### Host-only — backed by PlatformHost I/O; built via factory
+ *
+ * | Namespace        | Factory                 | Host surface used                                 |
+ * |------------------|-------------------------|---------------------------------------------------|
+ * | `console`        | `makeConsole(host)`     | `host.log.{info,warning,error,clearLine}`         |
+ * | `system`         | `makeSystem(host, global)` | `host.process.exec` (execProcess, pandoc), `host.fs` (tempContext), `host.process.onExit` (onCleanup), `host.env.get` + `host.isCI` + `host.isInteractive` |
+ *
+ * ### Mixed — host factory for I/O methods + pure exports for helpers
+ *
+ * | Namespace        | I/O factory             | I/O method       | Pure helpers                                  |
+ * |------------------|-------------------------|------------------|-----------------------------------------------|
+ * | `mappedString`   | `makeMappedStringHost(host)` | `fromFile` (via `host.fs.readTextFileSync`) | `fromString`, `normalizeNewlines`, `splitLines`, `indexToLineCol`, `mappedStringFromChunks` |
+ * | `path`           | `makePathHost(host, global)` | `absolute` (via `host.cwd()`) + ambient methods | `dirAndStem`, `toForwardSlashes`, `isQmdFile`, `inputFilesDir` |
+ *
+ * ### Ambient — resolved from `Init { global }` config at harness startup
+ *
+ * These methods are fully functional after `init()` because the harness injects
+ * the host global config (`runtimeDir`, `resourceDir`, `dataDir`, `pandocPath`)
+ * before any engine module is loaded.
+ *
+ * | Method               | Resolved from `global` field | Notes                                          |
+ * |----------------------|------------------------------|------------------------------------------------|
+ * | `path.runtime()`     | `global.runtimeDir`          | calls `host.fs.ensureDir` (creates dir)        |
+ * | `path.resource()`    | `global.resourceDir`         | pure config-read (no ensureDir)                |
+ * | `path.dataDir()`     | `global.dataDir`             | calls `host.fs.ensureDir` (creates dir)        |
+ * | `system.pandoc()`    | `global.pandocPath`          |                                                |
+ *
+ * ### Deferred (Plan 3)
+ *
+ * `jupyter` — the entire namespace is a throwing Proxy stub until Plan 3 lands
+ * the real `@quarto/api/jupyter` implementation. Any call to a jupyter method
+ * before Plan 3 will throw a clear "not yet implemented" error.
  */
 export interface QuartoAPI {
   /**
@@ -638,9 +688,18 @@ export interface QuartoAPI {
     /**
      * Register a cleanup handler to run on process exit
      *
-     * @param handler - Function to run on cleanup (can be async)
+     * The handler is SYNCHRONOUS (`() => void`). This is Q1-faithful: Q1's
+     * cleanup registry (`core/cleanup.ts`) types the handler `VoidFunction`
+     * and calls it without `await`; denoHost's `onExit` registers an `unload`
+     * listener Deno does not await. The former `() => void | Promise<void>`
+     * was an aspirational type Q1 never honored (pruned in Plan 2 B2). Note:
+     * TS void-return assignability still lets a `() => Promise<void>` handler
+     * satisfy `() => void`, so no caller breaks — this only narrows the
+     * *declared* type; it does NOT make async handlers awaited.
+     *
+     * @param handler - Function to run on cleanup (synchronous)
      */
-    onCleanup: (handler: () => void | Promise<void>) => void;
+    onCleanup: (handler: () => void) => void;
 
     /**
      * Get global temporary context for managing temporary files and directories

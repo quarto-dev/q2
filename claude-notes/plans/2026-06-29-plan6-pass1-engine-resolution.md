@@ -51,7 +51,8 @@ Replace the project-wide "every engine static" gate with a **per-doc
   `file-extensions` / superset language hint doesn't match) **or** dominated by
   a static higher-tier claim (kind dominates priority, §3.1: a static `Primary`
   beats any `Interop`/`Fallback` a non-static engine could declare, so we need
-  not load it to know it loses).
+  not load it to know it loses) **or** fully specified by a metadata claim
+  override (§"Two static-metadata inputs" below), which needs no load at all.
 - Otherwise **fall through to Pass-2** for that doc only — exactly today's path.
 
 Two shapes for the genuinely-contested case (a non-static engine that can't be
@@ -65,6 +66,131 @@ ruled out), to be chosen **per consumer**:
   "pending" set) and complete it in Pass-2 where the load happens anyway.
   Cheaper, but only safe for consumers that tolerate an incomplete set.
 
+## Two static-metadata inputs that keep resolution load-free
+
+Both keys below are **static metadata** consumed by `resolve_engines` (which
+already takes `meta`). Because they are static, they preserve the pure-function
+property (§9) — no engine load, no runtime re-resolution — so they *extend* the
+set of docs that resolve completely at Pass-1. That is why they belong in Plan 6:
+each adds a third satisfier to the "resolution provably needs no load" test —
+*"…or the metadata itself fully specifies it."* (Design decisions ratified with
+Gordon 2026-07-02.)
+
+### 1. Claim overrides in `engine:` (Carlos's syntax)
+
+Let the merged metadata declare language claims per engine, overriding the
+static/dynamic claim table:
+
+```yaml
+engine:
+  - knitr:
+      claims:
+        r: primary            # or { kind: primary, priority: 2 }
+        sql: interop
+        python: interop
+  - jupyter:
+      claims: [r]             # list shorthand → Primary(1) each
+```
+
+- **This is `engine-resolution.md` §12's "project-level claim overrides,"** now
+  requested for real. It's the *static portion* of language claiming, expressed
+  as config instead of engine code.
+- **Model (settled 2026-07-02):** an override just **edits the claim table the
+  tiers consume**; *both* selection and division fall out of the resulting
+  ownership map (the sequence is "distinct owners" — `resolution.rs:544-547`).
+  There is no separate "listing selects / claims divide" split — one lever.
+- **Schema:** reuse the `_extension.yml` claim schema and its parser
+  (`parse_claims_map` / `parse_static_language_claim` in `extension/read.rs`) —
+  one claim schema in three places (`_extension.yml`, `_quarto.yml`, doc
+  frontmatter). Widen it to accept the **list shorthand** (`[a, b]` → `Primary(1)`
+  each, matching §3.2's `true`/number normalization) in addition to the
+  per-language map + top-level `fallback:`.
+- **Authoritative, NOT validated (the one real divergence from `_extension.yml`
+  claims).** §3.3 validates an engine author's static claims against the dynamic
+  method on first load. A metadata override is the *user* deliberately
+  reassigning ownership (`jupyter: claims: [r]`), so it must **win by fiat and
+  skip §3.3 validation.** A nonsensical override resolves fine and **fails loudly
+  at execute** via §10 case 4 ("owner cannot execute an owned language") — no new
+  failure mode; the capability-blind model already covers it.
+- **Precedence:** per-language granularity; override > `_extension.yml` static >
+  dynamic `claims_language`.
+- **Merge (Q5, 2026-07-02):** `engine:` is an **array**, and the default
+  `MergeOp` is **`Concat`** (`config_value.rs:75`), so project + document
+  `engine:` layers **concatenate (append)** by default — project-level claim
+  overrides *survive* into a document that also sets `engine:` (unless `!prefer`).
+  **Open sub-question:** `detect_engines` dedups repeated engine names
+  (first-occurrence wins); since Concat appends the document layer *after* the
+  project layer, a same-named engine declared in both may resolve to the
+  **project's** claims winning over the document's — backwards from the usual
+  "document overrides project." Verify the layer-application + dedup direction and
+  decide (a warning on conflicting same-name claim entries may be the pragmatic
+  answer).
+- **Bad references (Q6, 2026-07-02):** an override naming an engine not in the
+  sequence/registry → **warn, ignore** (don't silently expand the sequence). An
+  override for a language the doc doesn't contain → harmless no-op.
+- **Pass-1 payoff:** a doc whose `engine:` block claims every computational
+  language resolves with **zero engine loading — even for non-static engines**.
+  Metadata claims are the maximally-load-free claim source.
+
+### 2. `generated-languages` (declare handoff targets statically)
+
+Declares languages that will exist *after* an engine runs, even though the
+original source has no executable cells for them:
+
+```yaml
+engine: [my-codegen, jupyter]     # explicit list controls order (Q2)
+generated-languages: [python]     # "python will be present; give it an owner"
+```
+
+- **This lifts the T9-ratified limitation for the declarable case.**
+  `engine-resolution.md` §6.1 ("Resolution-driven handoff loss — RATIFIED
+  2026-07-01") rules out injected-cell handoff to an engine *absent from the
+  sequence*, because the sequence is fixed from the original AST and the fix
+  would need **runtime sequence growth** (mid-execute re-resolution), which breaks
+  the determinism guard + replay + freeze key (§6.2). `generated-languages`
+  sidesteps that entirely: the language becomes a **static input**, so
+  `languages = computational_languages(ast) ∪ meta.generated-languages`,
+  resolution stays pure/once, and the consumer engine is selected pre-execution.
+  Determinism, replay, and the resolved-set freeze key are all preserved (the
+  declaration is part of the metadata → part of the input). The empty-code-block
+  workaround does the same thing crudely by injecting into the AST; this is the
+  declarative form.
+- **Consumer-only, by design (Q1, 2026-07-02).** Execution engines are *not*
+  markdown-in/markdown-out — they must claim real executable cells to run and
+  can't start from nothing. So the *generator* is always in the sequence by
+  owning its own original cells; it is never the dropped-ownerless case.
+  `generated-languages` therefore only needs to bring in the **consumer** of the
+  generated language. (You *could* abuse it to make an engine fire "from nothing"
+  by declaring a language that isn't really there — discouraged, and the key's
+  name deliberately doesn't advertise that use.) → **flat top-level list**, no
+  per-engine `generates:` attribution needed.
+- **Ordering (Q2, 2026-07-02):** when generator-before-consumer order matters,
+  use the explicit `engine:` list (the same top-level ordered list the `claims:`
+  override lives in). `generated-languages` does not encode order.
+- **Declared-but-unclaimed (Q3, 2026-07-02):** a `generated-languages` entry no
+  engine claims → **polite warning**, harmless (nothing runs it).
+- **Merge (Q5, 2026-07-02):** as an array it inherits the default `Concat` =
+  union/append across layers (the desired behavior); **dedup on read** (it's a
+  presence set).
+- **`HANDLED_LANGUAGES` (Q4, 2026-07-02):** an epic goal is that **languages are
+  no longer hard-coded anywhere.** Merging #241 reframes `mermaid` as an ordinary
+  built-in Rust engine (implicit-claiming), removing it from `HANDLED_LANGUAGES`;
+  `ojs`/`dot` follow. As that set empties, there is no hard-coded exclusion to
+  apply to `generated-languages` and no need to pre-declare handler languages
+  statically. Near-term, apply the same exclusion for consistency, but treat it
+  as transitional. **This depends on [Plan 8](2026-07-02-plan8-mermaid-absorption-graphviz-ts-extension.md) (see below).**
+
+## Prerequisite: absorb #241 (mermaid as a built-in engine)
+
+Q4 above depends on **[Plan 8](2026-07-02-plan8-mermaid-absorption-graphviz-ts-extension.md)**,
+which merges PR #241 (`feature/mermaid-engine`) into the epic and reframes its
+`MermaidEngine` as an ordinary built-in that *implicitly claims* the `mermaid`
+language (add `claims_language("mermaid") → Primary(1)`, remove `mermaid` from
+`HANDLED_LANGUAGES`, loosen the `info == "{mermaid}"` scanner to tolerate cell
+attributes). Plan 8 also ports Quarto 1's graphviz handler as a **TS engine
+extension** that statically claims `dot`, draining a second
+`HANDLED_LANGUAGES` entry. `ojs` follows in a later step. Not part of Plan 6.
+
 ## Affected artifacts (blast radius)
 
 **Design contracts (primary — define the behavior):**
@@ -72,9 +198,13 @@ ruled out), to be chosen **per consumer**:
 - `claude-notes/designs/engine-resolution.md` — **§7 (Pass placement)** is the
   core edit (per-doc lift + fall-through); **§3.3** relax the project-wide gate
   to per-engine/per-doc "needs-no-load"; **§9** allow a *partial*
-  `EngineResolution` (a "pending" concept); **§12** promote the "Pass-1
-  resolution" bullet from future to partly-in-scope and restate the freeze-key
-  caveat (forces option A for freeze).
+  `EngineResolution` (a "pending" concept); **§12** promote *both* the "Pass-1
+  resolution" **and** "project-level claim overrides" bullets from future to
+  in-scope, and restate the freeze-key caveat (forces option A for freeze).
+  Also: **§3.2/§3.3** document the metadata claim-override source + list
+  shorthand; **§4.1** document `languages = scan(ast) ∪ generated-languages`;
+  **§6.1** note that `generated-languages` is the static escape from the T9
+  handoff-loss limitation (no runtime re-resolution).
 - `claude-notes/designs/document-profile-contract.md` — add
   `engine_resolution: Option<EngineResolution>` (+ a complete/partial marker)
   to the fields table; reconcile the "no engine output on the profile" wording
@@ -95,6 +225,19 @@ ruled out), to be chosen **per consumer**:
   decision; the "zero-cost Pass-1 lift" assertions (lines 436, 522) and the
   `ProjectContext`-ownership notes (1009, 1079) tighten from "zero-cost" to
   "per-doc, partial-capable."
+
+**Implementation touchpoints for the two metadata keys:**
+
+- `crates/quarto-core/src/engine/resolution.rs` — `resolve_engines` reads the
+  per-engine `claims:` from `DetectedEngine.config` (already carried) as an
+  overlay on the claim table, and augments `languages` with
+  `meta.generated-languages`. Both are pure/static inputs — no signature change.
+- `crates/quarto-core/src/engine/detection.rs` — parse `generated-languages`;
+  the `engine:` per-entry `claims:` already lands in `config`.
+- `crates/quarto-core/src/extension/read.rs` — reuse `parse_claims_map` /
+  `parse_static_language_claim`; widen to accept the **list shorthand**.
+- Landing plan: fold these into **plan1c** (it owns the claim parser + the
+  `resolve_engines` wiring), cross-referenced from here as Pass-1 enablers.
 
 **Plans (secondary — references to reconcile):**
 
@@ -132,6 +275,16 @@ this, and that's future).
    load-free at Pass-1 vs. fall through? If most docs contend a non-static
    engine, the lift buys little — quantify before committing. This gates the
    plan, same as Plan 5's measurement gate.
+5. **Verify the `engine:` concat + dedup-by-name precedence** (Q5). Confirm the
+   metadata-layer application order and `detect_engines` dedup direction, then
+   decide whether a same-named engine's claims override resolves project-wins or
+   document-wins — and whether to warn on a conflict. Affects claim-override
+   semantics but not the Pass-1 mechanics.
+6. **Sequence the `HANDLED_LANGUAGES` elimination** (Q4). The
+   `generated-languages` `HANDLED_LANGUAGES`-exclusion question is transitional —
+   it resolves once [Plan 8](2026-07-02-plan8-mermaid-absorption-graphviz-ts-extension.md)
+   reframes `mermaid` and `dot` (then `ojs` later) as ordinary claiming engines.
+   Track Plan 8 as the real dependency.
 
 ## Non-blocking note
 

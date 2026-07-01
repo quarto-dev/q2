@@ -1,22 +1,57 @@
 /**
  * @quarto/engine-host-deno — Deno-native PlatformHost implementation.
  *
- * This module is DENO-ONLY: it imports from `jsr:@std/fs` and calls
- * `Deno.*` APIs directly. It is intentionally excluded from the
+ * This module is DENO-ONLY: it imports from `jsr:@std/fs`, `jsr:@std/async`,
+ * and calls `Deno.*` APIs directly. It is intentionally excluded from the
  * tsconfig.json compile graph and the vitest test runner.
  *
  * Typecheck with:  deno check ts-packages/quarto-engine-host-deno/src/deno-host.ts
  * Test with:       deno test --allow-all ts-packages/quarto-engine-host-deno/src/deno-host.deno-test.ts
  *
  * The `import type` below is erased at runtime; the Deno runtime
- * never resolves `@quarto/api/platform` — only `jsr:@std/fs` and
- * the built-in `Deno.*` namespace are needed at runtime.
+ * never resolves `@quarto/api/platform` — only `jsr:@std/fs`, `jsr:@std/async`,
+ * and the built-in `Deno.*` namespace are needed at runtime.
  */
-import type { PlatformHost } from "@quarto/api/platform";
+import type { ExecOptions, PlatformHost } from "@quarto/api/platform";
 import { walkSync } from "jsr:@std/fs";
+import { MuxAsyncIterator } from "jsr:@std/async";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+
+// ─── exec helpers (Q1 port: core/process.ts:224-259) ──────────────────────
+
+/**
+ * Accumulate an async iterable of byte chunks into a string, optionally
+ * writing each chunk through to a synchronous Deno stream (for respectStreams).
+ * Port of Q1 `processOutput` (process.ts:238-259).
+ */
+async function processOutput(
+  iterator: AsyncIterable<Uint8Array>,
+  writeThrough?: { writeSync(p: Uint8Array): number },
+): Promise<string> {
+  let text = "";
+  for await (const chunk of iterator) {
+    if (writeThrough) {
+      writeThrough.writeSync(chunk);
+    }
+    text += dec.decode(chunk);
+  }
+  return text;
+}
+
+/**
+ * Wrap an async iterable of byte chunks, mapping each through a string filter.
+ * Port of Q1 `filteredAsyncIterator` (process.ts:224-235).
+ */
+async function* filteredAsyncIterator(
+  iterator: AsyncIterable<Uint8Array>,
+  filter: (output: string) => string,
+): AsyncGenerator<Uint8Array> {
+  for await (const chunk of iterator) {
+    yield enc.encode(filter(dec.decode(chunk)));
+  }
+}
 
 /** Write a diagnostic message to stderr (never stdout — stdout is the protocol channel). */
 function writeStderr(msg: string): void {
@@ -93,46 +128,108 @@ export const denoHost: PlatformHost = {
   // ── Process / subprocess operations ────────────────────────────────
 
   process: {
-    exec: async (cmd, args, opts) => {
+    /**
+     * Spawn an external process and return its captured output.
+     *
+     * Port of Q1 `execProcess` (core/process.ts:46-215) — spawn + per-stream
+     * processing model with four knobs: mergeOutput, stderrFilter,
+     * respectStreams, timeout.  ExecOptions carries all knobs from the
+     * marshalling layer (makeSystem) so this host implementation stays thin.
+     */
+    exec: async (cmd, args, opts?: ExecOptions) => {
+      // Always spawn with piped streams; we implement inherit/null behaviour
+      // ourselves (via respectStreams write-through) so we can capture text.
+      const command = new Deno.Command(cmd, {
+        args,
+        cwd: opts?.cwd,
+        env: opts?.env,
+        stdin: opts?.stdin !== undefined ? "piped" : "null",
+        stdout: "piped",
+        stderr: "piped",
+      });
+      const child = command.spawn();
+
+      // Write stdin if provided (safe to access child.stdin: mode is "piped").
       if (opts?.stdin !== undefined) {
-        // Piped-stdin path: use spawn() so we can write to stdin before
-        // collecting output. We know stdin is WritableStream<Uint8Array>
-        // because we set stdin: "piped" — the non-null assertion is safe.
-        const command = new Deno.Command(cmd, {
-          args,
-          cwd: opts.cwd,
-          env: opts.env,
-          stdin: "piped",
-          stdout: "piped",
-          stderr: "piped",
-        });
-        const child = command.spawn();
         const writer = child.stdin!.getWriter();
         await writer.write(enc.encode(opts.stdin));
         await writer.close();
-        const output = await child.output();
-        return {
-          code: output.code,
-          success: output.success,
-          stdout: dec.decode(output.stdout),
-          stderr: dec.decode(output.stderr),
-        };
-      } else {
-        const command = new Deno.Command(cmd, {
-          args,
-          cwd: opts?.cwd,
-          env: opts?.env,
-          stdout: "piped",
-          stderr: "piped",
-        });
-        const { code, success, stdout, stderr } = await command.output();
-        return {
-          code,
-          success,
-          stdout: dec.decode(stdout),
-          stderr: dec.decode(stderr),
-        };
       }
+
+      const mergeOutput = opts?.mergeOutput;
+      const stderrFilter = opts?.stderrFilter;
+      const respectStreams = opts?.respectStreams;
+      const timeout = opts?.timeout;
+
+      // Build a timeout-and-kill wrapper.
+      // Port of Q1 `withTimeout` (process.ts:54-63).
+      function withTimeout<T>(promise: Promise<T>): Promise<T> {
+        if (!timeout) return promise;
+        let timerId: ReturnType<typeof setTimeout>;
+        return new Promise<T>((resolve, reject) => {
+          timerId = setTimeout(() => {
+            try {
+              child.kill();
+            } catch {
+              /* child may already be dead */
+            }
+            reject(new Error("Process timed out"));
+          }, timeout);
+          promise.then(
+            (v) => {
+              clearTimeout(timerId);
+              resolve(v);
+            },
+            (e: unknown) => {
+              clearTimeout(timerId);
+              reject(e);
+            },
+          );
+        });
+      }
+
+      let stdoutText = "";
+      let stderrText = "";
+
+      if (mergeOutput) {
+        // Merge both stdout and stderr into one multiplexed stream.
+        // Port of Q1 merge branch (process.ts:115-157).
+        const mux = new MuxAsyncIterator<Uint8Array>();
+        mux.add(child.stdout);
+        const stderrIter: AsyncIterable<Uint8Array> = stderrFilter
+          ? filteredAsyncIterator(child.stderr, stderrFilter)
+          : child.stderr;
+        mux.add(stderrIter);
+
+        const allOutput = await withTimeout(processOutput(mux));
+
+        if (mergeOutput === "stderr>stdout") {
+          stdoutText = allOutput; // all output → stdout field
+        } else {
+          stderrText = allOutput; // "stdout>stderr" → all output → stderr field
+        }
+      } else {
+        // Process stdout and stderr independently (parallel).
+        // Port of Q1 independent-streams branch (process.ts:159-191).
+        const stderrIter: AsyncIterable<Uint8Array> = stderrFilter
+          ? filteredAsyncIterator(child.stderr, stderrFilter)
+          : child.stderr;
+
+        [stdoutText, stderrText] = await withTimeout(Promise.all([
+          processOutput(child.stdout, respectStreams ? Deno.stdout : undefined),
+          processOutput(stderrIter, respectStreams ? Deno.stderr : undefined),
+        ]));
+      }
+
+      // Await exit status — streams are already fully consumed above.
+      const status = await withTimeout(child.status);
+
+      return {
+        code: status.code,
+        success: status.success,
+        stdout: stdoutText,
+        stderr: stderrText,
+      };
     },
 
     /** Register a handler to call when the process is about to exit.

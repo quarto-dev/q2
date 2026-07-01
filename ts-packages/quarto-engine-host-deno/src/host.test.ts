@@ -19,6 +19,7 @@ import type {
   DependenciesResult,
   EngineProjectContext as RichProjectContext,
   QuartoAPI,
+  LanguageClaim,
 } from "@quarto/types";
 import type { PlatformHost } from "@quarto/api/platform";
 import type { HtmlDependency, TsExecuteResult, TsPandocIncludes } from "./types.js";
@@ -473,6 +474,129 @@ describe("T3 — handler dispatch and id correlation", () => {
 
     const result = responses.find((r) => r.msg.type === "claimsLanguageResult");
     expect(result?.msg).toEqual({ type: "claimsLanguageResult", result: null });
+  });
+
+  // ── object-form normalization (mapLanguageClaim object case) ────────────────
+
+  it("maps LanguageClaim {kind:'primary'} → {kind:'primary', priority:1} (default)", async () => {
+    const engine = makeFakeEngine("myEngine");
+    const customDiscovery: ExecutionEngineDiscovery = {
+      ...engine.discovery,
+      claimsLanguage: (_language: string): LanguageClaim => ({ kind: "primary" }),
+    };
+    const loader = async (_path: string) => customDiscovery;
+
+    // Named revert → RED: remove the object case from mapLanguageClaim → priority
+    // becomes the raw object value (not 1), so this assertion fails.
+    const { responses } = await runWithFrames(
+      [
+        { id: 1, msg: { type: "loadEngine", enginePath: "/engines/my.ts" } },
+        { id: 23, msg: { type: "claimsLanguage", engine: "myEngine", language: "julia" } },
+      ],
+      { loadEngineModule: loader },
+    );
+
+    const result = responses.find((r) => r.msg.type === "claimsLanguageResult");
+    expect(result?.msg).toEqual({
+      type: "claimsLanguageResult",
+      result: { kind: "primary", priority: 1 },
+    });
+  });
+
+  it("maps LanguageClaim {kind:'interop'} → {kind:'interop', priority:0} (default)", async () => {
+    const engine = makeFakeEngine("myEngine");
+    const customDiscovery: ExecutionEngineDiscovery = {
+      ...engine.discovery,
+      claimsLanguage: (_language: string): LanguageClaim => ({ kind: "interop" }),
+    };
+    const loader = async (_path: string) => customDiscovery;
+
+    // Named revert → RED: remove the object case → wrong kind and priority.
+    const { responses } = await runWithFrames(
+      [
+        { id: 1, msg: { type: "loadEngine", enginePath: "/engines/my.ts" } },
+        { id: 24, msg: { type: "claimsLanguage", engine: "myEngine", language: "python" } },
+      ],
+      { loadEngineModule: loader },
+    );
+
+    const result = responses.find((r) => r.msg.type === "claimsLanguageResult");
+    expect(result?.msg).toEqual({
+      type: "claimsLanguageResult",
+      result: { kind: "interop", priority: 0 },
+    });
+  });
+
+  it("maps LanguageClaim {kind:'interop', priority:3} → {kind:'interop', priority:3} (explicit)", async () => {
+    const engine = makeFakeEngine("myEngine");
+    const customDiscovery: ExecutionEngineDiscovery = {
+      ...engine.discovery,
+      claimsLanguage: (_language: string): LanguageClaim => ({ kind: "interop", priority: 3 }),
+    };
+    const loader = async (_path: string) => customDiscovery;
+
+    // Named revert → RED: remove the object case → wrong kind/priority shape.
+    const { responses } = await runWithFrames(
+      [
+        { id: 1, msg: { type: "loadEngine", enginePath: "/engines/my.ts" } },
+        { id: 25, msg: { type: "claimsLanguage", engine: "myEngine", language: "python" } },
+      ],
+      { loadEngineModule: loader },
+    );
+
+    const result = responses.find((r) => r.msg.type === "claimsLanguageResult");
+    expect(result?.msg).toEqual({
+      type: "claimsLanguageResult",
+      result: { kind: "interop", priority: 3 },
+    });
+  });
+
+  it("maps LanguageClaim {kind:'fallback'} → {kind:'fallback', priority:0} (default)", async () => {
+    const engine = makeFakeEngine("myEngine");
+    const customDiscovery: ExecutionEngineDiscovery = {
+      ...engine.discovery,
+      claimsLanguage: (_language: string): LanguageClaim => ({ kind: "fallback" }),
+    };
+    const loader = async (_path: string) => customDiscovery;
+
+    // Named revert → RED: remove the object case → wrong kind/priority shape.
+    const { responses } = await runWithFrames(
+      [
+        { id: 1, msg: { type: "loadEngine", enginePath: "/engines/my.ts" } },
+        { id: 26, msg: { type: "claimsLanguage", engine: "myEngine", language: "python" } },
+      ],
+      { loadEngineModule: loader },
+    );
+
+    const result = responses.find((r) => r.msg.type === "claimsLanguageResult");
+    expect(result?.msg).toEqual({
+      type: "claimsLanguageResult",
+      result: { kind: "fallback", priority: 0 },
+    });
+  });
+
+  it("maps LanguageClaim {kind:'primary', priority:0} → {kind:'primary', priority:0} (explicit 0 preserved)", async () => {
+    const engine = makeFakeEngine("myEngine");
+    const customDiscovery: ExecutionEngineDiscovery = {
+      ...engine.discovery,
+      claimsLanguage: (_language: string): LanguageClaim => ({ kind: "primary", priority: 0 }),
+    };
+    const loader = async (_path: string) => customDiscovery;
+
+    // Revert → RED: change `?? (kind==='primary'?1:0)` to `|| ...` → explicit 0 becomes 1.
+    const { responses } = await runWithFrames(
+      [
+        { id: 1, msg: { type: "loadEngine", enginePath: "/engines/my.ts" } },
+        { id: 27, msg: { type: "claimsLanguage", engine: "myEngine", language: "python" } },
+      ],
+      { loadEngineModule: loader },
+    );
+
+    const result = responses.find((r) => r.msg.type === "claimsLanguageResult");
+    expect(result?.msg).toEqual({
+      type: "claimsLanguageResult",
+      result: { kind: "primary", priority: 0 },
+    });
   });
 
   it("dispatches claimsFile → claimsFileResult with matching id", async () => {
@@ -2309,14 +2433,16 @@ describe("T-A2 — project context threading", () => {
 });
 
 // ===========================================================================
-// T-A1 — ambient API pre-launch stub
+// T-A1 — ambient API accessible pre-launch (Plan 2 Phase A: path.runtime real)
 // ===========================================================================
 
-describe("T-A1 — ambient API pre-launch stub", () => {
-  it("path.runtime() throws Plan-2 stub error pre-launch, NOT a launch-gating error", async () => {
+describe("T-A1 — ambient API accessible pre-launch", () => {
+  it("path.runtime() is callable pre-launch and returns the runtime path (no error)", async () => {
     // Engine stores the QuartoAPI from init() then calls path.runtime() inside claimsLanguage().
-    // Without any launchEngine, the error must be the Plan-2 stub, not a gate error.
+    // path.runtime() is now a real implementation (Plan 2 Phase A) — it must work pre-launch,
+    // returning the runtimeDir path from the init global config, NOT throw a gating error.
     let ta1API: QuartoAPI | undefined;
+    let capturedRuntimePath: string | undefined;
 
     const ta1Instance: ExecutionEngineInstance = {
       name: "ta1Engine",
@@ -2336,9 +2462,9 @@ describe("T-A1 — ambient API pre-launch stub", () => {
       defaultContent: () => [],
       validExtensions: () => [".qmd"],
       claimsFile: () => false,
-      // claimsLanguage calls path.runtime() — should throw the Plan-2 stub
+      // claimsLanguage calls path.runtime() — now returns the runtime path, does not throw
       claimsLanguage: () => {
-        ta1API!.path.runtime(); // throws Plan-2 stub
+        capturedRuntimePath = ta1API!.path.runtime();
         return false;
       },
       canFreeze: false,
@@ -2351,7 +2477,7 @@ describe("T-A1 — ambient API pre-launch stub", () => {
 
     const ta1Loader = async (_p: string) => ta1Discovery;
 
-    // No launchEngine — path.runtime() must still throw the stub, not a gating error
+    // No launchEngine — path.runtime() must work (not throw), returning the global runtimeDir
     const { responses } = await runWithFrames(
       [
         { id: 1, msg: { type: "loadEngine", enginePath: "/e/ta1.ts" } },
@@ -2360,16 +2486,16 @@ describe("T-A1 — ambient API pre-launch stub", () => {
       { loadEngineModule: ta1Loader },
     );
 
+    // Named revert: introduce a launch-state gate on path.runtime → returns an error
+    // response instead of a claimsLanguageResult → RED (err would be defined, result undefined)
     const err = responses.find((r) => r.msg.type === "error" && r.id === 2);
+    expect(err).toBeUndefined(); // No error — path.runtime() succeeded
 
-    // Named revert: re-introduce a launch-state gate on path.runtime → error becomes
-    // a gating error message, NOT the Plan-2 stub → the regex assertions RED
-    expect(err).toBeDefined();
-    const msg = (err?.msg as { type: string; message: string }).message;
-    expect(msg).toMatch(/not yet implemented/i);
-    expect(msg).toMatch(/Plan 2/);
-    // Must NOT be a "not launched" style gating error
-    expect(msg).not.toMatch(/engine not launched/);
+    const result = responses.find((r) => r.msg.type === "claimsLanguageResult" && r.id === 2);
+    expect(result).toBeDefined(); // Got a valid claimsLanguageResult
+
+    // path.runtime() returned the runtimeDir from the init global config ("/run" from INIT_REQUEST)
+    expect(capturedRuntimePath).toBe("/run");
   });
 });
 
@@ -2455,16 +2581,17 @@ describe("execute projectDir from launch context", () => {
 });
 
 // ===========================================================================
-// T-A4 — no shared cross-engine state
+// T-A4 — no shared cross-engine state (Plan 2 Phase A: path.runtime real)
 // ===========================================================================
 
 describe("T-A4 — no shared cross-engine state", () => {
-  it("engine B path.runtime() throws identical stub error before and after engine A launches", async () => {
+  it("engine B path.runtime() returns the same path before and after engine A launches (no shared mutable state)", async () => {
     // Two independent engines; each captures the QuartoAPI it received in init().
     // Engine B calls path.runtime() inside claimsLanguage().
-    // We test that before A launches and after A launches, B gets the SAME stub error
-    // (not a gating error that changes state with A's launch).
+    // We test that before A launches and after A launches, B gets the SAME path result —
+    // demonstrating no shared mutable context between engines.
     let apiB: QuartoAPI | undefined;
+    const capturedPaths: string[] = [];
 
     const minimalInstance = (engineName: string): ExecutionEngineInstance => ({
       name: engineName,
@@ -2497,9 +2624,9 @@ describe("T-A4 — no shared cross-engine state", () => {
       defaultContent: () => [],
       validExtensions: () => [".qmd"],
       claimsFile: () => false,
-      // claimsLanguage calls path.runtime() on B's API — throws Plan-2 stub
+      // claimsLanguage calls path.runtime() on B's API — now returns the runtime path
       claimsLanguage: () => {
-        apiB!.path.runtime();
+        capturedPaths.push(apiB!.path.runtime());
         return false;
       },
       canFreeze: false,
@@ -2522,9 +2649,9 @@ describe("T-A4 — no shared cross-engine state", () => {
 
     // Sequence:
     //   id=1: loadA, id=2: loadB
-    //   id=3: claimsLanguageB (pre-A-launch) → error1
+    //   id=3: claimsLanguageB (pre-A-launch) → result1
     //   id=4: launchA
-    //   id=5: claimsLanguageB (post-A-launch) → error2
+    //   id=5: claimsLanguageB (post-A-launch) → result2
     const { responses } = await runWithFrames(
       [
         { id: 1, msg: { type: "loadEngine", enginePath: "/e/ta4-a.ts" } },
@@ -2536,21 +2663,19 @@ describe("T-A4 — no shared cross-engine state", () => {
       { loadEngineModule: ta4Loader },
     );
 
+    // No errors from engine B's claimsLanguage calls
     const err3 = responses.find((r) => r.msg.type === "error" && r.id === 3);
     const err5 = responses.find((r) => r.msg.type === "error" && r.id === 5);
-
-    expect(err3).toBeDefined();
-    expect(err5).toBeDefined();
-
-    const msg3 = (err3?.msg as { message: string }).message;
-    const msg5 = (err5?.msg as { message: string }).message;
+    expect(err3).toBeUndefined();
+    expect(err5).toBeUndefined();
 
     // Named revert: introduce a shared mutable context slot set by A's launch() + a gate
-    // consulting it → B's pre-A-launch call throws a gating error while post-A-launch
-    // throws the stub → msg3 !== msg5 → RED
-    expect(msg3).toBe(msg5);
-    expect(msg3).toMatch(/not yet implemented/i);
-    expect(msg3).toMatch(/Plan 2/);
+    // consulting it → B's pre-A-launch and post-A-launch calls return different values
+    // → capturedPaths[0] !== capturedPaths[1] → RED
+    expect(capturedPaths).toHaveLength(2);
+    expect(capturedPaths[0]).toBe("/run"); // runtimeDir from INIT_REQUEST
+    expect(capturedPaths[1]).toBe("/run"); // same after engine A launches
+    expect(capturedPaths[0]).toBe(capturedPaths[1]); // no shared mutable state
   });
 });
 

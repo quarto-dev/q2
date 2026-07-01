@@ -35,6 +35,25 @@ jitter. Plan 5 keeps the host warm across re-computes.
 - **Invalidation (single-project):** reuse the warm instance unless (a) project config changed
   (`_quarto.yml` → new `EngineProjectContext` → **DQ-7's per-`launchEngine` project context is the
   re-launch trigger**), or (b) crash (existing poison/relaunch).
+  - **Granularity + mechanism (design note, 2026-07-02).** The invalidation unit is the **launched
+    instance**, not the host: drop the stale `launchedByName` entry and re-`launchEngine` — the
+    subprocess, module `import()`s, and engine daemons all stay warm. Cost ≈ zero **by design**:
+    DQ-7 made `launch()` cheap closure construction precisely so project context could ride
+    per-launch. The **detector already exists in code**: the host's project-identity mismatch check
+    on a repeated `launchEngine` (`host.ts` launched-instance cache) — today it warns and returns
+    the stale instance; Plan 5 promotes it to drop-and-relaunch (or compares identity host-side
+    before reusing).
+  - **Why field-level reset is NOT the lever** (see the reworded comment at `ts_engine.rs`
+    `project:` field, 1c.2 P1): a launched instance holds its `EngineProjectContext` in its
+    closure behind **two** caches — Rust `ensure_launched`'s instance cache and the host's
+    `launchedByName` — so `set_project`-style writes can never reach it. Rebuilding the
+    registry per re-compute (the session-owns-host model above) does **not** refresh instances
+    either: the host cache keys by engine name and returns the old closure.
+  - **Hazard if skipped — split-brain by launch time:** previously-launched engines keep stale
+    context (e.g. old `output-dir` → jupyter shiny `postRender` computes the wrong
+    `appScriptDir`; stale `config.engines` is currently read by no engine) while engines
+    newly added to `_quarto.yml engines:` launch with *current* context. A removed engine
+    leaves an orphaned warm instance — cover it in the same drop pass.
 - **Concurrency:** single-flight re-computes (one kernel, single-threaded) — compose with preview's
   existing debounce + the per-engine serialization queue.
 - **Graceful degradation:** a dead warm subprocess re-spawns on the next re-compute

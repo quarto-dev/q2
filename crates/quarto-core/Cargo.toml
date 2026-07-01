@@ -124,6 +124,7 @@ quarto-error-catalog = { workspace = true }
 tempfile = "3"
 walkdir.workspace = true
 tokio = { version = "1", features = ["rt", "macros"] }
+tracing-subscriber.workspace = true
 
 [lints]
 workspace = true

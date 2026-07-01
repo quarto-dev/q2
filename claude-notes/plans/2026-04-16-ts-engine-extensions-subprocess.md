@@ -536,23 +536,29 @@ abstraction in Plan 2 is what enables it without rework to `@quarto/api`.
 | Plan | Sessions | Dependencies | Can start |
 |------|----------|-------------|-----------|
 | [Plan 0: Include Expansion & SourceInfo](2026-04-18-plan0-include-expansion-and-source-info.md) | 2-3 | Nothing | ✓ **Complete** |
-| [Plan 1a-protocol: JSON message types](2026-04-16-plan1a-protocol.md) | 1 | Plan 0 | After Plan 0 |
-| [Plan 1a-host: Subprocess + transport](2026-04-16-plan1a-host.md) | 1 | plan1a-protocol | After plan1a-protocol |
-| [Plan 1a-engine: TsEngine + trait extensions](2026-04-16-plan1a-engine.md) | 1 | plan1a-protocol, plan1a-host | After plan1a-host |
-| [**RTQ: plan1a Return-to-Q1 (course correction over the 1a series)**](2026-06-25-plan1a-return-to-q1.md) | running (plan-only) | amends plan1a-protocol/host/engine | Running — see note below |
-| [**Plan 1a-host bugs (q2-introduced defects, HOST-1/2)**](2026-06-26-plan1a-host-bugs.md) | <1 | **none** (independent) | **now / parallel** |
-| [Plan 1b: @quarto/engine-host-deno (Deno harness)](2026-04-16-plan1b-engine-host-deno.md) | 2-3 | plan1a-protocol, **RTQ (Item A + ENG-1 + FC-1 + FC-2, incl. B3 code half)**, Plan 2A | Pure-TS layer now; **Rust-facing surface + E2E after RTQ lands** the post-RTQ wire |
-| [Plan 1c: Extension Integration & E2E](2026-04-16-plan1c-extension-integration.md) | 1-2 | plan1a-engine, plan1a-host, Plan 1b | After plan1a-engine + Plan 1b |
-| [Plan 2A: TS package foundations (@quarto/api skeleton+config, @quarto/types vendor)](2026-04-16-plan2a-quarto-api-foundation.md) | ~1 | Nothing (npm workspace only) | Now |
-| [Plan 2: @quarto/api deferred launch-context bodies + @quarto/types refinements](2026-04-16-quarto-markdown-and-api.md) | ~1 | Plan 2A §2aa + Plan 1b | After §2aa (namespaces) |
+| [Plan 2A: TS package foundations (@quarto/api skeleton+config, @quarto/types vendor)](2026-04-16-plan2a-quarto-api-foundation.md) | ~1 + §2aa | Nothing (npm workspace only) — **independent root, peer of plan1a-protocol; blocks Plan 1b, 1b.1, 2, 3** | ✓ **Complete** (foundation + §2aa runtime surface landed long ago) |
+| [Plan 1a-protocol: JSON message types](2026-04-16-plan1a-protocol.md) | 1 | Plan 0 | ✓ **Complete** (lone open box is a cross-ref note) |
+| [Plan 1a-host: Subprocess + transport](2026-04-16-plan1a-host.md) | 1 | plan1a-protocol | ✓ **Complete** (LANDED host-side 2026-06-24; 46/46) |
+| [Plan 1a-engine: TsEngine + trait extensions](2026-04-16-plan1a-engine.md) | 1 | plan1a-protocol, plan1a-host | ✓ **Complete** (open boxes are a 1c-exercised E2E gate + a cross-ref note) |
+| [**RTQ: plan1a Return-to-Q1 (course correction over the 1a series)**](2026-06-25-plan1a-return-to-q1.md) | done | amends plan1a-protocol/host/engine | ✓ **Complete** (all 6 items landed + reviewed READY TO MERGE, 2026-06-29; lone open box = deferred book-feature consumer) |
+| [**Plan 1a-host bugs (q2-introduced defects, HOST-1/2)**](2026-06-26-plan1a-host-bugs.md) | <1 | **none** (independent) | ✓ **Complete** (2026-06-30; 5/5) |
+| [Plan 1b: @quarto/engine-host-deno (Deno harness)](2026-04-16-plan1b-engine-host-deno.md) | 2-3 | plan1a-protocol, **RTQ (Item A + ENG-1 + FC-1 + FC-2, incl. B3 code half)**, Plan 2A | ✓ **Complete** (2026-06-30; 74/74, whole-branch review READY TO MERGE) |
+| [**Plan 1b.1: MappedString `segments()` accessor (foundation fix)**](2026-06-30-mapped-string-segments.md) | <1 | Plan 2A §2aa (mappedString) + Plan 1b | ✓ **Complete** (landed 2026-06-30; independent of Plan 1c) |
+| [Plan 1c: Extension Integration & E2E](2026-04-16-plan1c-extension-integration.md) | 1-2 | plan1a-engine, plan1a-host, Plan 1b | ✓ **Complete** (T1–T15 + downstream fix, review-clean READY TO MERGE; 4 disclosed deferrals tracked in Plan 1c.2) |
+| [**Plan 1c.2: TS engine-extensions loose ends (deferred follow-ups from 1c)**](2026-07-01-plan1c2-engine-extensions-loose-ends.md) | TBD | Plan 1c (parent) | **post-1c**; not started (disclosed 1c deferrals — **not** 1c merge-blockers) |
+| [Plan 2: @quarto/api deferred launch-context bodies + @quarto/types refinements](2026-04-16-quarto-markdown-and-api.md) | 2-3 | Plan 2A §2aa + Plan 1b | ✓ **Complete** (impl + `cargo xtask verify` green; the one open box is a deliberate forward gate verified at Plan 3, not Plan 2 work) |
 | [Plan 3: @quarto/api/jupyter](2026-04-16-quarto-jupyter.md) | 2-3 | Plan 2A | After Plan 2A |
 | [Plan 4: Julia Validation](2026-04-16-julia-validation.md) | 1-2 | Plans 1a, 1b, 1c, 2, 3 | After all others |
+| [**Plan 4b: Shadow-engine feature validation**](2026-07-01-plan4b-shadow-engine-features.md) | 2-3 | Plan 4 | **after Plan 4**; validates tier model + inert surfaces a single-Primary Julia can't reach; implements the `_quarto.yml engines:` splice (Task 9). Excludes Plan 5/6/7/Phase 12/1.6 work. |
+| [**Plan 4c: Marimo engine validation**](2026-07-02-plan4c-marimo-validation.md) | 1-2 | Plans 1a–c, 1b, 2A, 2 (**not** Plan 3); reuses Plan 4's build scaffolding | parallel to 4b; adds `first_class` + shared-language (`{python .marimo}` vs `{python}`) coverage Julia can't reach; canonical non-fully-static engine (Plan 6) |
 | [**Plan 5: engine-host pooling (preview re-compute warmth)**](2026-06-26-plan5-engine-host-pooling.md) | research stub | full stack (1a–c, 2, 4) + preview-wiring (plan1c R5) + DQ-7 | **last** (post-4; orthogonal to Plan 3) |
 | [**Plan 6: Pass-1 engine resolution (per-doc lift)**](2026-06-29-plan6-pass1-engine-resolution.md) | research stub | plan1a-engine + plan1c (resolution machinery) | **additive**, post-1c; orthogonal to Plans 3/4/5 |
 | [**Plan 7: native percent/spin conversion + precise SourceInfo**](2026-06-27-plan7-native-percent-spin-sourceinfo.md) | 2-3 | plan1c (`claims_file`/`markdown_for_file`) + Plan 0 (SourceInfo) + Plan 3 (jupyter percent helpers); **not** Plan 5/6 | post-1c (default after 4); pullable earlier; orthogonal to Plans 5/6 |
-| **Total** | **10-16** (Plan 0 done; **~8-13 remaining**) | | |
+| [**Plan 8: HANDLED_LANGUAGES → claiming engines (absorb #241 mermaid + graphviz TS extension)**](2026-07-02-plan8-mermaid-absorption-graphviz-ts-extension.md) | 2-3 | Part A: #241 + plan1a-engine; Part B: full TS-engine stack (1a–c, 1b, 2A) + `build-ts-extension` | Part A independent/now; Part B post-1c; enables Plan 6 Q4 |
+| **Total** | **10-16** — **everything through Plan 2 is ✓ complete** (Plan 0, 2A, 1a-protocol/host/engine, RTQ, 1a-host-bugs, 1b, 1b.1, 1c, 2). **Remaining:** Plan 3, 4, 4b, 5, 6, 7, 8, and 1c.2. | | |
 
-> **Course correction — RTQ (`plan1a-return-to-q1`).** A running, **plan-only** correction layer
+> **Course correction — RTQ (`plan1a-return-to-q1`).** A **now-complete** (all 6 code items
+> landed + reviewed READY TO MERGE, 2026-06-29), originally plan-only correction layer
 > over the whole 1a series, added after the first 1a implementations landed. Its thesis: *the q2 wire
 > is the framework between q2 and **all** engine features, not the Julia render subset the original 1a
 > scoped to — defer features, never the infrastructure they need.* It carries Q1-divergence
@@ -597,6 +603,12 @@ Plan 2A ──┬─ §2aa (namespaces) ─┬─ Plan 1b ───────�
   `Init`/`EngineProjectContext`, ENG-1 statics, FC-1 carriers, B3 stub relabel)
   landed first. RTQ ENG-2 is *not* a gate (already landed).
 - `Plan 1c` depends on `plan1a-host`, `plan1a-engine`, and Plan 1b.
+- **Plan 1b.1** (`mapped-string-segments`, ✓ complete) hangs off the
+  `Plan 2A §2aa (mappedString) → Plan 1b` edge — a foundation fix to the
+  `MappedString` surface, landed **independently of Plan 1c** (not on the path
+  to Plan 3/4; it also corrects Plan 1b's `mapped-source.ts` serializer).
+- **Plan 1c.2** (`loose ends`, not started) hangs off **Plan 1c** as a post-1c
+  continuation collecting 1c's disclosed deferrals; it does **not** gate Plan 4.
 - Plan 2A blocks Plan 1b (imports `@quarto/api/config` **and** typechecks
   against the vendored `@quarto/types`, both provided at the foundation; its
   contract tests also need §2aa's namespaces + `platform`), and Plan 3

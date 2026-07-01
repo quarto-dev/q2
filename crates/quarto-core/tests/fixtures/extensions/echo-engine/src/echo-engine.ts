@@ -44,7 +44,51 @@ const echoEngine: ExecutionEngineDiscovery = {
     return ext === ".echo";
   },
 
-  launch(_context: EngineProjectContext): ExecutionEngineInstance {
+  launch(context: EngineProjectContext): ExecutionEngineInstance {
+    // P1.1: capture the per-render project context so execute() can echo it
+    // back. This binds the `LaunchEngine { project }` wiring: the value read
+    // here is whatever `TsEngine::set_project` stored before the FIRST launch.
+    const capturedContext = context;
+    const contextMarker = (): string => {
+      // JSON.stringify drops the function members (getOutputDirectory, …), so
+      // echo an EXPLICIT object that CALLS getOutputDirectory() — this carries
+      // the RESOLVED absolute output dir alongside the RAW relative
+      // config.project.outputDir, letting the e2e assert raw-vs-resolved.
+      const echoed = {
+        dir: capturedContext.dir,
+        isSingleFile: capturedContext.isSingleFile,
+        config: capturedContext.config ?? null,
+        outputDir: capturedContext.getOutputDirectory
+          ? capturedContext.getOutputDirectory()
+          : null,
+      };
+      // Emit inside a fenced code block so Pandoc renders it verbatim (no
+      // smart-quoting / escaping of the JSON's double quotes).
+      return (
+        "\n\n```\nCONTEXT_JSON_START" +
+        JSON.stringify(echoed) +
+        "CONTEXT_JSON_END\n```\n"
+      );
+    };
+    // P1.1b: echo the per-execute Format bin (post-`metadataAsFormat`
+    // partition on the host side) so the e2e can assert that merged
+    // document metadata reached the engine. Echoes the whole `execute`
+    // bin (so a non-default binned value like `daemon: false` round-trips)
+    // plus ONE asserted `format.metadata` key — NOT the whole format
+    // object (the brief is explicit: don't dump the whole format).
+    const formatMarker = (opts: ExecuteOptions): string => {
+      const echoed = {
+        execute: opts.format.execute,
+        customKey: (opts.format.metadata as Record<string, unknown>)[
+          "echo-custom-key"
+        ],
+      };
+      return (
+        "\n\n```\nFORMAT_JSON_START" +
+        JSON.stringify(echoed) +
+        "FORMAT_JSON_END\n```\n"
+      );
+    };
     return {
       name: "echo",
       canFreeze: false,
@@ -98,15 +142,25 @@ const echoEngine: ExecutionEngineDiscovery = {
       },
 
       async execute(opts: ExecuteOptions): Promise<ExecuteResult> {
-        // Transform only {echo} fenced blocks → **ECHO_EXECUTED**;
+        // Transform only {echo} fenced blocks → an executed-cell wrapper;
         // leave every other cell (e.g. {python}) untouched (pass-through).
+        //
+        // The output wraps `**ECHO_EXECUTED**` in a `::: {.cell}` Div carrying a
+        // `.cell-output` child — the SAME shape real engines (jupyter/julia via
+        // the engine-host's `mdFromCodeCell`) emit for an executed cell. This is
+        // load-bearing for the q2-preview capture-splice path: the splice
+        // (`derive_cell_outputs` / `is_cell_wrapper`) maps each engine cell to
+        // the next `.cell` wrapper in the executed markdown. A bare paragraph
+        // (the fixture's earlier shape) has no wrapper, so the splice can't
+        // match it and the preview pane stays inert (bd-h4rhohhy / Bug B).
         const input = opts.target.markdown.value;
         const executed = input.replace(
           /```\{echo\}[\s\S]*?```/g,
-          "**ECHO_EXECUTED**",
+          "::: {.cell}\n::: {.cell-output .cell-output-stdout}\n" +
+            "**ECHO_EXECUTED**\n:::\n:::",
         );
         return {
-          markdown: executed,
+          markdown: executed + contextMarker() + formatMarker(opts),
           supporting: [],
           filters: [],
         };

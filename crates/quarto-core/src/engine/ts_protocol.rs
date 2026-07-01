@@ -262,6 +262,14 @@ pub struct TsMappedStringWithMap {
 
 // ==================== Pandoc types ====================
 
+/// Wire values are file PATHS, not content — this mirrors Q1's
+/// `--include-in-header`/`--include-before-body`/`--include-after-body`
+/// contract, which marimo, jupyter, and knitr's TS engines all code against
+/// (marimo-engine.ts writes a temp file and sends its path "like Jupyter
+/// does"). `TsEngine::translate_includes` (`ts_engine.rs`) reads each path
+/// into content at the wire boundary before it reaches q2's internal
+/// `PandocIncludes` (content) contract; a value that isn't a readable file
+/// is treated as an engine protocol violation, not silently passed through.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TsPandocIncludes {
@@ -359,6 +367,27 @@ pub struct TsExecuteOptions {
     pub project_dir: Option<String>,
     pub lib_dir: String,
     pub quiet: bool,
+    /// The **leave-alone set** for this engine, not a positive "languages
+    /// assigned to me" set. Mirrors
+    /// `EngineResolution::handled_languages_for` (`resolution.rs:292`):
+    /// q2's built-in `HANDLED_LANGUAGES` ∪ every language this render
+    /// assigned to a DIFFERENT engine. A TS engine that wants to know
+    /// "did q2 assign ME ownership of language L for this render" must
+    /// infer it as the *complement* — L present in the document AND L
+    /// absent from `handled_languages` — not by looking for its own name
+    /// inside the array (it never appears there). This is sound because
+    /// q2's resolver assigns every language present in the document an
+    /// owner, or hard-fails, before `execute()` ever runs, so "L absent
+    /// from this set" and "L owned by me" coincide for any L the engine
+    /// actually has to make a decision about.
+    ///
+    /// Got this backwards once already: the marimo TS engine's bare-`sql`
+    /// Interop gate (`bareSqlOwned`) read `handled_languages.includes("sql")`
+    /// as a positive-ownership check, so it evaluated `true` exactly when
+    /// q2 had left `sql` alone for some OTHER engine — precisely when
+    /// marimo does NOT own it — and the bare-sql interop feature never
+    /// fired (q2 plan4c FINDING #4, fixed 2026-07-02 upstream in
+    /// `quarto-marimo`).
     pub handled_languages: Vec<String>,
     pub params: Option<HashMap<String, TsMetadataValue>>,
     pub source_map: Vec<TsSourceMapEntry>,
@@ -1555,5 +1584,161 @@ mod tests {
         // 16d — wrong type (string where bool expected for canFreeze) → Err
         let result = from_str::<LaunchEngineResult>(r#"{"canFreeze": "yes"}"#);
         assert!(result.is_err());
+    }
+
+    // ==========================================================
+    // T-Gate-parity — TS↔Rust wire-dual parity (Plan 2 Phase B gate)
+    //
+    // tsc proves TS-internal coherence only; it cannot see a Rust rename of a
+    // dual-defined wire field, and TS interface keys are erased at runtime. So
+    // we mechanize a TWO-SIDED parity check for the four wire-dual types:
+    //
+    //   Rust side (here): serialize one canonical instance of each wire-dual
+    //     type to JSON via serde and compare to a committed fixture. The fixture
+    //     is a real serde ARTIFACT — NOT a hand-maintained key list — so a Rust
+    //     wire-key rename actually changes the fixture's key-set (defeating the
+    //     "two hand lists survive their own revert" Dv/Dv collapse trap).
+    //
+    //   Deno side (src/wire-parity.deno-test.ts): reads the same fixture and
+    //     set-equates each instance's `Object.keys(...)` against a `KEYS` list
+    //     pinned to the TS wire type via `satisfies readonly (keyof T)[]` + an
+    //     `_Exhaustive` compile guard. Symmetric set-equality binds Rust shape
+    //     (fixture), TS shape (type), and the runtime KEYS list together.
+    //
+    // The fixture lives at `tests/fixtures/ts_wire_parity.json` (relative to
+    // this crate). This test WRITES it (under regen); the deno test READS it.
+    //
+    // Idiomatic invocation (schema_drift.rs-style):
+    //
+    //   # Verify (default — what CI does):
+    //   cargo nextest run -p quarto-core -E \
+    //     'test(ts_protocol::tests::test_ts_wire_parity_fixture)'
+    //
+    //   # Regenerate after a wire-shape change to any of the four types:
+    //   QUARTO_REGEN_WIRE_FIXTURES=1 cargo nextest run -p quarto-core -E \
+    //     'test(ts_protocol::tests::test_ts_wire_parity_fixture)'
+    //
+    // VACUITY GUARD: each canonical instance populates EVERY optional field.
+    // Note: the four wire-dual structs here carry bare `Option<T>` fields with
+    // NO `#[serde(skip_serializing_if)]`, so serde serializes `None` as
+    // `"key": null` — the key IS retained. Populating all optionals with
+    // `Some(...)` is therefore belt-and-suspenders (the key-set gate would not
+    // drop a `None` key anyway), but it keeps the fixture representative and
+    // makes the intent of each field visible at a glance.
+    // ==========================================================
+
+    /// Recursively sort the keys of every JSON object so the committed fixture
+    /// is stable regardless of the workspace-wide `serde_json/preserve_order`
+    /// feature (see schema_drift.rs for the same rationale). Key ORDER does not
+    /// matter to the deno set-equality, but a stable file avoids spurious diffs.
+    fn canonicalize_keys(value: serde_json::Value) -> serde_json::Value {
+        use serde_json::Value;
+        match value {
+            Value::Object(map) => {
+                let mut entries: Vec<(String, Value)> = map.into_iter().collect();
+                entries.sort_by(|a, b| a.0.cmp(&b.0));
+                let mut out = serde_json::Map::new();
+                for (k, v) in entries {
+                    out.insert(k, canonicalize_keys(v));
+                }
+                Value::Object(out)
+            }
+            Value::Array(arr) => Value::Array(arr.into_iter().map(canonicalize_keys).collect()),
+            other => other,
+        }
+    }
+
+    /// Build the canonical wire-dual instances, one per type, ALL optionals
+    /// populated. Returns the pretty-printed JSON object (type name → instance)
+    /// with a trailing newline, keys canonically sorted.
+    fn render_wire_parity_fixture() -> String {
+        let host_global = HostGlobalConfig {
+            resource_dir: "/res".to_string(),
+            runtime_dir: "/rt".to_string(),
+            data_dir: "/data".to_string(),
+            pandoc_path: Some("/usr/bin/pandoc".to_string()), // optional → Some
+            is_interactive_session: false,
+            running_in_ci: true,
+            quarto_version: "0.7.0".to_string(),
+        };
+
+        let pandoc_includes = TsPandocIncludes {
+            in_header: Some(vec!["<style></style>".to_string()]), // optional → Some
+            before_body: Some(vec!["<header/>".to_string()]),     // optional → Some
+            after_body: Some(vec!["<footer/>".to_string()]),      // optional → Some
+        };
+
+        let mut config = HashMap::new();
+        config.insert(
+            "output-dir".to_string(),
+            TsMetadataValue::String("_out".to_string()),
+        );
+        let project_ctx = EngineProjectContext {
+            project_dir: Some("/proj".to_string()), // optional → Some
+            is_single_file: false,
+            config: Some(config),                       // optional → Some
+            output_dir: Some("/proj/_out".to_string()), // optional → Some
+        };
+
+        // Wire claim: required `priority`, no optionals. One variant suffices —
+        // all three variants share the same key-set {kind, priority}.
+        let language_claim = TsLanguageClaim::Primary { priority: 5 };
+
+        let obj = serde_json::json!({
+            "HostGlobalConfig": to_value(&host_global).unwrap(),
+            "TsPandocIncludes": to_value(&pandoc_includes).unwrap(),
+            "EngineProjectContext": to_value(&project_ctx).unwrap(),
+            "TsLanguageClaim": to_value(&language_claim).unwrap(),
+        });
+
+        let canonical = canonicalize_keys(obj);
+        let mut s = serde_json::to_string_pretty(&canonical).expect("fixture must serialize");
+        s.push('\n');
+        s
+    }
+
+    #[test]
+    fn test_ts_wire_parity_fixture() {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join("ts_wire_parity.json");
+        let generated = render_wire_parity_fixture();
+        let regen = std::env::var("QUARTO_REGEN_WIRE_FIXTURES").is_ok_and(|v| v == "1");
+
+        let existing = std::fs::read_to_string(&path).ok();
+        if existing.as_deref() == Some(&generated) {
+            return;
+        }
+
+        if regen {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).expect("create tests/fixtures/ dir");
+            }
+            std::fs::write(&path, &generated)
+                .unwrap_or_else(|e| panic!("failed to write fixture to {}: {}", path.display(), e));
+            eprintln!("regenerated {}", path.display());
+            return;
+        }
+
+        let existing_summary = match &existing {
+            None => "(no file on disk)".to_string(),
+            Some(s) => format!("({} bytes)", s.len()),
+        };
+        panic!(
+            "TS↔Rust wire-parity fixture drift.\n\
+             The checked-in fixture {} {} does not match the JSON serialized from\n\
+             the current wire-dual types in this file. This fixture is the Rust\n\
+             half of the T-Gate-parity check (the deno half is\n\
+             src/wire-parity.deno-test.ts). To regenerate, run:\n\
+             \n\
+             \tQUARTO_REGEN_WIRE_FIXTURES=1 cargo nextest run -p quarto-core -E \\\n\
+             \t  'test(ts_protocol::tests::test_ts_wire_parity_fixture)'\n\
+             \n\
+             Then review the diff AND update the matching TS type in\n\
+             ts-packages/quarto-engine-host-deno/src/types.ts before committing.",
+            path.display(),
+            existing_summary,
+        );
     }
 }

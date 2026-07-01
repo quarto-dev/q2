@@ -121,6 +121,22 @@ pub struct ExecutionContext {
     /// Defaults to `false`; set by `EngineExecutionStage` from
     /// `resolution.sequence.len() > 1`.
     pub multi_engine: bool,
+
+    /// Merged document metadata, lowered to the wire's flat
+    /// `Record<string, TsMetadataValue>` shape (P1.1b).
+    ///
+    /// Populated by `EngineExecutionStage` from `doc_ast.ast.meta` via
+    /// [`crate::project::document_metadata_to_ts_map`] (the same recursive
+    /// `ConfigValue → TsMetadataValue` lowering P1.1 built for the `engines`
+    /// subtree, called here over the full merged map). `TsEngine::execute`
+    /// carries this into `TsExecuteOptions.format.metadata`, which the Deno
+    /// host's `metadataAsFormat` partitions into Q1's six-bin `Format`
+    /// (`execute`/`render`/`pandoc`/`identifier`/`language`/`metadata`).
+    /// Built-in engines (knitr/jupyter) ignore this field.
+    ///
+    /// Defaults to empty so existing call sites (tests, knitr, jupyter) are
+    /// unaffected.
+    pub metadata: HashMap<String, TsMetadataValue>,
 }
 
 impl ExecutionContext {
@@ -151,6 +167,9 @@ impl ExecutionContext {
             execute_timeout: Some(DEFAULT_EXECUTE_TIMEOUT),
             // Default false; EngineExecutionStage sets true when |sequence| > 1.
             multi_engine: false,
+            // Default empty; EngineExecutionStage sets this from the merged
+            // document metadata (P1.1b).
+            metadata: HashMap::new(),
         }
     }
 
@@ -213,6 +232,14 @@ impl ExecutionContext {
     /// branch (P2-13).
     pub fn with_multi_engine(mut self, multi: bool) -> Self {
         self.multi_engine = multi;
+        self
+    }
+
+    /// Set the lowered merged document metadata (P1.1b).
+    ///
+    /// See the `metadata` field doc for the wire path this feeds.
+    pub fn with_metadata(mut self, metadata: HashMap<String, TsMetadataValue>) -> Self {
+        self.metadata = metadata;
         self
     }
 }

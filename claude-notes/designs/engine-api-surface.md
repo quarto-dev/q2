@@ -199,8 +199,10 @@ consolidation pass.
   `quartoRequired?` on `ExecutionEngineDiscovery` (`execute/types.ts:65`), gated by
   `checkEngineVersionRequirement` (`engine.ts:61`, **hard throw**; cf. Phase 12's extension-YAML
   `quarto-required`, which **warns** — q2 must pick one severity).
-- [ ] **DQ-5** — carry `config` (`engines` + project `output-dir`) and the output directory as
-  *values* on `LaunchEngine.project` — *RTQ Item A*
+- [x] **DQ-5** — carry `config` (`engines` + project `output-dir`) and the output directory as
+  *values* on `LaunchEngine.project` — *RTQ Item A* (Plan 1c.2 P1.1, 2026-07-02: wired in
+  `build_engine_registry`; wire `config` carries `engines` + **flat** top-level `output-dir` —
+  the host's `reconstructRichProject` bridges it into the rich `config.project.outputDir`)
 - [ ] **DQ-7** — `Init { global }` once per subprocess; project context on `LaunchEngine` per render
   — *RTQ Item A (sequence its `ts_protocol.rs` edit with ENG-1)*
 

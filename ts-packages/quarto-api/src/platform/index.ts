@@ -1,5 +1,5 @@
 /**
- * @quarto/api — platform seam (PlatformHost interface)
+ * @quarto/api — platform seam (PlatformHost interface + HostGlobalConfig)
  *
  * q2-ORIGINAL ABSTRACTION — Q1 (quarto-cli) has no equivalent seam;
  * it calls Deno.* APIs directly at module scope. This interface is the
@@ -10,7 +10,7 @@
  * Design decisions:
  *   - Generic platform abstraction only — no quarto-specific paths
  *     (quartoSharePath, pandocBinaryPath) on this interface.  Those
- *     belong in the resource/system namespace stubs (§2aa plan decision #2).
+ *     belong in the config param (`HostGlobalConfig`) passed to each factory.
  *   - ExecOptions.stdin is a string (piped content), not a Deno stream mode.
  *     PlatformHost is a higher-level seam than Deno.Command; callers pass
  *     text content, and the host impl decides how to pipe it.
@@ -21,6 +21,20 @@
  *     cleanup is needed in a later task, this signature can be widened then.
  */
 
+/**
+ * Process-stable host config consumed by the ambient path/system bodies.
+ * @quarto/api's own copy of the subset it reads — deliberately NOT imported
+ * from @quarto/engine-host-deno (portability: @quarto/api is standalone).
+ * The engine-host wire `HostGlobalConfig` is structurally compatible (it has
+ * these fields plus more), so `buildQuartoAPI` can pass its wire object here.
+ */
+export interface HostGlobalConfig {
+  resourceDir: string;
+  runtimeDir: string;
+  dataDir: string;
+  pandocPath?: string | null;
+}
+
 /** Options for executing an external process. */
 export interface ExecOptions {
   /** Working directory for the child process. */
@@ -29,6 +43,29 @@ export interface ExecOptions {
   env?: Record<string, string>;
   /** Text to write to the child process's stdin. */
   stdin?: string;
+  /**
+   * Merge stdout and stderr into a single stream before accumulation.
+   * "stderr>stdout": all output (stdout + stderr) is collected into ExecResult.stdout; ExecResult.stderr = "".
+   * "stdout>stderr": all output (stdout + stderr) is collected into ExecResult.stderr; ExecResult.stdout = "".
+   */
+  mergeOutput?: "stderr>stdout" | "stdout>stderr";
+  /**
+   * Apply a per-chunk filter function to stderr output before accumulation.
+   * Called once per stderr chunk with the chunk's decoded string; return value
+   * replaces the chunk. Not a cross-wire import — execProcess is in-process.
+   */
+  stderrFilter?: (output: string) => string;
+  /**
+   * When true, write captured stdout/stderr through to the host process's
+   * stdout/stderr respectively while still capturing them as strings.
+   * Has no effect when mergeOutput is set (merge processes the combined stream).
+   */
+  respectStreams?: boolean;
+  /**
+   * Timeout in milliseconds. If the process does not complete within this
+   * duration it is killed and exec rejects with an error containing "timed out".
+   */
+  timeout?: number;
 }
 
 /** Result returned after an external process completes. */
@@ -71,8 +108,9 @@ export interface PlatformHost {
     /**
      * Walk a directory tree and return an entry for each file/directory found.
      * Synchronous; mirrors Deno's `walkSync` / Node's `readdirSync`-recursive pattern.
-     * The Deno implementation is a later task (Plan 1b Phase 2+); add `walk: () => []`
-     * to any mock `PlatformHost` until the real implementation lands.
+     * The Deno implementation has landed (`@quarto/engine-host-deno` `deno-host.ts`,
+     * delegating to `jsr:@std/fs` `walkSync`). Mock `PlatformHost`s in tests still
+     * need to stub it — `walk: () => []` is the usual no-op.
      */
     walk(
       root: string,
@@ -92,10 +130,8 @@ export interface PlatformHost {
 
   /**
    * Read environment variables.
-   * Reserved seam: `env.get` is the interface point for the real bodies of
-   * `path.runtime` and `path.dataDir`, which are deferred to Plan 2 Phase A.
-   * Those bodies will use it to locate Quarto's share/data directories.
-   * Host authors must implement it even though nothing calls it yet.
+   * General-purpose env access — can be used by engine authors who need to
+   * read the process environment (e.g. for conditional behavior or debugging).
    */
   env: {
     get(key: string): string | undefined;
@@ -116,11 +152,6 @@ export interface PlatformHost {
   /**
    * Resolve a path to its canonical absolute form (follows symlinks).
    * Equivalent to `Deno.realPathSync` / `fs.realpathSync`.
-   *
-   * Reserved seam: `realPath` is the interface point for the real body of
-   * `path.runtime` (locating the Quarto binary's own directory), which is
-   * deferred to Plan 2 Phase A. Host authors must implement it even though
-   * nothing calls it yet.
    */
   realPath(path: string): string;
 

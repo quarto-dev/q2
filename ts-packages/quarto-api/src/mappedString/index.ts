@@ -23,13 +23,26 @@ import type { PlatformHost } from "../platform/index.js";
 
 // ── Types (single owner: @quarto/types) ────────────────────────────────────
 
-import type { MappedString, StringMapResult, EitherString, Range, StringChunk } from "@quarto/types";
+import type { MappedString, StringMapResult, EitherString, Range, StringChunk, QuartoAPI } from "@quarto/types";
 export type { MappedString, StringMapResult, EitherString, Range, StringChunk } from "@quarto/types";
 
 export interface RangedSubstring {
   readonly substring: string;
   readonly range: Range;
 }
+
+/**
+ * The host-dependent mappedString methods returned by `makeMappedStringHost`.
+ *
+ * Mostly-pure namespace: the factory returns only the HOST SUBSET (`fromFile`,
+ * which reads the file via the host); the pure functions (`fromString`,
+ * `normalizeNewlines`, `splitLines`, `indexToLineCol`, `mappedStringFromChunks`)
+ * are direct exports mixed in by `buildQuartoAPI`. We derive the SUBSET via
+ * `Pick` (Plan 2 B2, Fix B) — deriving the whole `QuartoAPI["mappedString"]`
+ * here would force the factory to also return the pure functions.
+ * `buildQuartoAPI` enforces the full shape with `... satisfies QuartoAPI["mappedString"]`.
+ */
+export type MappedStringHostNamespace = Pick<QuartoAPI["mappedString"], "fromFile">;
 
 // ── Internal helpers (ported from Q1 core/lib/binary-search.ts) ─────────────
 
@@ -430,9 +443,7 @@ export function indexToLineCol(
  */
 export function makeMappedStringHost(
   host: Pick<PlatformHost, "fs" | "cwd">,
-): {
-  fromFile(path: string): MappedString;
-} {
+): MappedStringHostNamespace {
   return {
     fromFile(path: string): MappedString {
       const value = host.fs.readTextFileSync(path);

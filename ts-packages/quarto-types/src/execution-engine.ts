@@ -47,16 +47,70 @@ export interface ExecutionTarget {
 }
 
 /**
+ * Kind-tagged language claim returned by {@link ExecutionEngineDiscovery.claimsLanguage}.
+ *
+ * `priority` is **optional** — the harness fills in defaults at normalization time
+ * (primary defaults to 1, interop and fallback default to 0).
+ * Use the constructors in `@quarto/api` (`primary()`, `interop()`, `fallback()`)
+ * rather than hand-writing this shape.
+ *
+ * `interop` is presence-gated: it only extends engine ownership to a language when
+ * the engine is already in the sequence via a `primary` claim. `fallback` is a
+ * universal-kernel signal (lowest precedence). A bare `number` return is always
+ * treated as `primary` — `interop` and `fallback` are reachable **only** via this
+ * object form.
+ */
+export interface LanguageClaim {
+  kind: "primary" | "interop" | "fallback";
+  priority?: number;
+}
+
+/**
  * Interface for execution engine discovery
  * Responsible for the static aspects of engine discovery (not requiring project context)
  */
 export interface ExecutionEngineDiscovery {
   /**
-   * Initialize the engine with the Quarto API (optional)
-   * May be called multiple times but always with the same QuartoAPI object.
-   * Engines should store the reference to use throughout their lifecycle.
+   * Initialize the engine with the Quarto API (optional).
    *
-   * @param quarto - The Quarto API for accessing utilities
+   * **Timing:** called during `loadEngine` handling, after the engine module's
+   * exports have been validated and before `launch()` is ever called.
+   *
+   * **What is available at init time (everything the engine needs pre-launch):**
+   *
+   * - *Pure namespaces* (no host I/O; correct in any environment):
+   *   `quarto.text`, `quarto.markdownRegex`, `quarto.format`, `quarto.crypto`.
+   * - *Host-only namespaces* (backed by `PlatformHost` I/O; built via factory):
+   *   `quarto.console`, `quarto.mappedString`, `quarto.path`, `quarto.system`.
+   * - *Ambient methods* (resolved from the `Init { global }` config injected at
+   *   harness startup): `quarto.path.runtime`, `quarto.path.resource`,
+   *   `quarto.path.dataDir`, `quarto.system.pandoc`. These reflect the host
+   *   environment's runtime directories and Pandoc binary path.
+   * - `quarto.format.*` — format predicates take a `Format` argument on every
+   *   call; they are never gated by init state.
+   *
+   * **Usage contract:**
+   * - Engines **MUST NOT** access `quarto.*` at module top-level — only from
+   *   inside `init()` or other method bodies. The `quarto` object is not yet
+   *   available until `init()` is called by the harness.
+   * - Store the received `quarto` reference in the module or closure scope for
+   *   reuse in all other engine methods.
+   * - May be called multiple times, but always with the same `QuartoAPI` object.
+   *
+   * **Async behaviour:** `init()` is synchronous per Q1's contract; the harness
+   * defensively `await`s its return value, so an `async init()` also works.
+   *
+   * **Error handling:** throwing or rejecting from `init()` is a fatal load
+   * failure — the engine will not proceed to `launch()`.
+   *
+   * **Project context:** the per-render project context (`EngineProjectContext`)
+   * arrives separately on each `launch()` call (captured in the returned
+   * `ExecutionEngineInstance` closure). It is **not** passed via `init()`.
+   *
+   * For the canonical namespace × host-use table see the "Engine API contract"
+   * section in `claude-notes/plans/2026-04-16-plan1b-engine-host-deno.md`.
+   *
+   * @param quarto - The fully assembled Quarto API object for this engine
    */
   init?: (quarto: QuartoAPI) => void;
 
@@ -95,13 +149,21 @@ export interface ExecutionEngineDiscovery {
   claimsFile: (file: string, ext: string) => boolean;
 
   /**
-   * Whether this engine can handle the given language
+   * Whether this engine can handle the given language.
    *
    * @param language - The language identifier (e.g., "python", "r", "julia")
-   * @param firstClass - Optional first class from code block attributes (e.g., "marimo" from {python .marimo})
-   * @returns false to skip (don't claim), true to claim with priority 1, or any number for custom priority (higher wins)
+   * @param firstClass - Optional first class from code block attributes (e.g., "marimo" from `{python .marimo}`)
+   * @returns
+   *   - `false` / `null` — don't claim this language.
+   *   - `true` — claim as primary with priority 1 (Q1-compatible shorthand).
+   *   - `number n` — claim as primary with priority n. Negative values are
+   *     low-priority primary claims; a bare number is **always** primary, never interop.
+   *   - `LanguageClaim` object — use the object form to return `interop` or `fallback`
+   *     kinds, or to pass an explicit priority alongside the kind. `priority` is optional;
+   *     the harness fills defaults (primary→1, interop/fallback→0). Use the constructors
+   *     in `@quarto/api` (`primary()`, `interop()`, `fallback()`) to build this shape.
    */
-  claimsLanguage: (language: string, firstClass?: string) => boolean | number;
+  claimsLanguage: (language: string, firstClass?: string) => boolean | number | LanguageClaim | null;
 
   /**
    * Whether this engine supports freezing

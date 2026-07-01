@@ -1,0 +1,10 @@
+---
+engine: julia
+execute:
+  daemon: false
+---
+
+```{julia}
+using Plots
+plot(1:10, rand(10))
+```

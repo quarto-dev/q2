@@ -146,6 +146,20 @@ answer:
 | `claims_file()` | `claims-files:` (unconditional) | extension-only logic | **content inspection** (e.g. Julia `# %%`) — *the one genuine must-load case* |
 | `claims_language()` | `claims:` (kind/priority/`whenClass`) | language **and** `first_class` logic (both finite/known) | only genuine runtime/global-state logic |
 
+> **Rename decided 2026-07-02 (Gordon), lands with plan 1c.2 P4:**
+> `claims-files:` → **`claims-extensions:`** (Rust field `claims_extensions`).
+> The value semantics are and always were an **extension set** — the match is
+> `ext ∈ list` (`ts_engine.rs`), never a filename/glob, and a survey of every
+> Q1 engine (knitr, jupyter, markdown, julia, marimo, test fixtures) found no
+> filename-literal or glob file-claim anywhere: every Q1 `claimsFile` is an
+> extension test, an extension-gated content sniff, or `false`. A
+> filename-claim surface, if ever wanted, will be a new field. Normalization
+> decided with the rename: YAML accepts dotted or undotted; parse stores
+> canonical **undotted lowercase** for both `file-extensions` and
+> `claims-extensions`; the **JS/wire contract stays dotted** (Q1 `extname()`
+> convention) — re-dot at the two Rust→TS seams (`ToEngine::ClaimsFile`
+> construction and the synthetic-file load validation).
+
 **`first_class` is statically expressible — it is *not* a must-load case.**
 `claims_language(language, first_class)` is a pure function of its two
 arguments, so a `claims:` entry may carry `whenClass: <class>`: the claim then
@@ -153,12 +167,43 @@ applies **only** when the cell's first class equals `<class>` (absent
 `whenClass` = any/no first class). A marimo engine therefore declares
 `python: { whenClass: marimo, kind: primary }` and is **fully static** —
 `{python .marimo}` → `Primary`, plain `{python}` / `{python .other}` → no
-claim. (One rule per language key in v1; a multi-class engine would use a list,
-deferred.) The **only** dynamic-method power that static resolution genuinely
+claim. The **only** dynamic-method power that static resolution genuinely
 cannot reach is **content-inspecting `claims_file`** (Julia's `isPercentScript`
 reads the file's bytes for `# %%`) — that engine loads to decide, using
 `file-extensions` as its pre-filter. Everything else — language, `first_class`,
 kind/priority, fallback — is statically declarable.
+
+**Vec-per-language claims (4c0).** A `claims:` entry's value is a **list** of
+claim objects — `Vec<StaticLanguageClaim>` in Rust, a YAML sequence or a
+single scalar/bool/int/object (back-compat 1-element-Vec shorthand) on the
+wire:
+
+```yaml
+claims:
+  sql:
+    - { whenClass: marimo, kind: primary, priority: 2 }  # {sql .marimo} self-activates
+    - { kind: interop }                                   # bare {sql} rides along
+```
+
+This is what lets one language key carry **both** a `whenClass`-conditioned
+primary claim and an unconditional interop claim — marimo's bare-`{sql}`
+feature: `{sql .marimo}` is `Primary` (tagged, self-activating), while a bare
+`{sql}` is `Interop(0)` (rides along only when marimo already owns another
+language via a positive claim). A plain scalar/object value (`echo: true`,
+`fallback: { priority: 0 }`) still parses to a 1-element Vec — the pre-4c0
+single-claim shape is unaffected.
+
+**Combine rule.** `lookup_static_claim` maps every element of a language's Vec
+through `static_claim_to_language_claim` (which returns `LanguageClaim::None`
+on a `whenClass` mismatch), drops the `None`s, and reduces the survivors with
+a dedicated per-Vec comparator (`ClaimKind::combine_rank` in
+`extension/types.rs`): kind dominates priority — Primary > Interop > Fallback,
+`priority` breaking ties within a kind — the same *shape* of ordering as the
+cross-engine "kind dominates priority" rule below, but a separate, explicit
+implementation scoped to one language key's Vec, not a reuse of the
+cross-engine tiering. The universal `fallback:` key is combined the identical
+way (`ts_engine.rs`'s two fallback call sites both route through the Vec
+combiner), so a fallback engine can itself carry more than one claim.
 
 A statically-declared claim used for resolution is validated against the
 dynamic method **only if/when the engine loads to execute** (mismatch → hard
@@ -305,6 +350,41 @@ without ceding, an earlier engine executes cells before they reach their owner.
 Because knitr's cede re-emits at **top level**, ceded cells land where the next
 engine (and the preview splicer) can reach them.
 
+**Resolution-driven handoff loss — RATIFIED 2026-07-01 (Gordon; T9).** The
+engine sequence is derived **once, from the original parsed AST** — an engine
+is in the sequence only if it owns ≥1 language actually present in the source.
+This is intended behavior, not a bug. Documented here so it is not re-litigated
+(cross-refs: §4.3 fallback gating, §8 file-claim single-engine, §11/bd-r8n4r
+nested-handoff splice).
+
+*Scenarios this rules OUT (documented, accepted):*
+1. **Injected-cell handoff to an engine absent from the sequence.** Engine A,
+   *at execution time*, emits a cell in language L whose only would-be owner is
+   engine B — but B was excluded because the *original* source had no L cells.
+   The sequence is fixed pre-execution, so B never runs and the injected L cell
+   is not executed by B (it passes through as display code — §8/§10
+   non-enforcement).
+2. **An explicitly-listed engine that owns nothing originally is dropped.**
+   `engines: [knitr, customX]` where customX's language never appears in the
+   source: customX contributes nothing to the sequence and cannot receive
+   runtime-injected cells in its language. The fallback net does **not** save
+   this: per §4.3, T4 only adds jupyter for *implicit* sequences, so an
+   explicit `[knitr]` with a runtime-injected `{python}` does not auto-add
+   jupyter either.
+
+*Scenarios that still WORK (unaffected):* handoff between engines that both own
+something in the original AST (knitr re-emits `{python}`, jupyter executes it,
+*because the doc already had `{python}` cells*); knitr↔reticulate interop;
+jupyter-as-`Fallback(0)` catching the remainder in implicit docs.
+
+*Why acceptable / why not "just fix it":* resolving (1)/(2) would require
+**runtime sequence growth** — re-resolving mid-execution as new cells appear —
+which the resolution-driven + replay model deliberately avoids (§6.2: replay
+drives from recorded captures, not re-resolution; mid-execute re-resolution
+would break the determinism guard and the eventual freeze cache-key). Tracked
+as a live-preview limitation (bd-r8n4r); the valuable common handoffs are all
+in the "still works" set.
+
 ### 6.2 Replay drives from recorded captures, not re-resolution
 
 On `main`, replay re-runs `detect_engine_sequence(meta)` and looks up
@@ -375,10 +455,10 @@ is a *multi-engine* behavior — see below).
   gated on `|sequence| > 1`** (multi-engine, `engine: [knitr, jupyter]` +
   `{sql}` → jupyter, where the user *chose* the owner). A single-engine sequence
   — a claimed file *or* a `.qmd` resolving to one engine — runs what it can and
-  passes the rest through, exactly Q1. **NB this is a landed-code change**: the
-  enforcement in `engine/jupyter/text_execute.rs` (`partition_cells`) currently
-  errors on *any* owned-but-unrunnable cell regardless of sequence length; it
-  must gate the loud branch on multi-engine (single-engine → pass through).
+  passes the rest through, exactly Q1. *(The gating landed as P2-13/P2-13a:
+  `engine/jupyter/text_execute.rs` `partition_cells` takes `multi_engine` and
+  errors only when it is true; single-engine passes through, with binding
+  tests in both directions.)*
 
 **Why this replaced the "seed `Primary` + resolve" design (reverted
 2026-06-28).** The earlier draft tried to make a claimed file participate in
@@ -436,7 +516,17 @@ re-route to a fallback — Q1 parity). Two distinct kinds, at two distinct times
 - **Capability** — can the chosen owner actually *run* language L? An
   **execute-time** failure (cases 3–4): q2 starts kernels **lazily** inside
   `execute()`, and — more fundamentally — keeping capability out of resolution
-  is what buys deterministic selection. **Deliberate divergence from Q1's eager
+  is what buys deterministic selection.
+
+**Capability is judged from declarations, never from execution results
+(ratified 2026-07-02, Gordon).** Every check in this section fires off
+*declared* data — `handled_languages`, static claims, `is_available()` — at
+resolution/partition time. q2 does **not** verify post-hoc that an engine
+actually executed the cells of a language it owns: an engine that runs and
+leaves cells unexecuted produces display code blocks, not an error (§8
+pass-through). The capture data would support such a post-execution check, but
+it is explicitly out of scope — do not add one under the banner of "enforcing"
+case-4. **Deliberate divergence from Q1's eager
   kernel check (decided 2026-06-24):** a `[knitr, jupyter]`+`{sql}` doc runs
   knitr's `{r}` cells, *then* halts loudly at the `{sql}` cell — partial work
   before the halt, **traded for deterministic, Pass-1-liftable engine

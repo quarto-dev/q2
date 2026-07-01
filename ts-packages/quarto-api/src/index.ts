@@ -18,6 +18,7 @@
  * with the namespace's pure exports to produce the combined surface).
  */
 
+export * from "./claims/index.js";
 export * from "./config/index.js";
 export * from "./platform/index.js";
 export * from "./text/index.js";
@@ -28,3 +29,4 @@ export * from "./markdownRegex/index.js";
 export * from "./console/index.js";
 export * from "./path/index.js";
 export * from "./system/index.js";
+export * from "./jupyter/index.js";

@@ -1,7 +1,7 @@
 # Plan 3: @quarto/api/jupyter
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
-**Depends on:** Plan 2A (the `@quarto/api` package skeleton). Phases 3A-3D and 3F otherwise independent, **except** `assets()` (Phase 3D) consumes the `PlatformHost.fs.walk` seam op that **Plan 1b** owns (interface member + `denoHost` impl, in lockstep) — **already landed** on the integration line (see *Platform dependencies*). Phase 3E (wiring into engine-host) requires Plan 1b to have created the `@quarto/engine-host-deno` package.
+**Depends on:** Plan 2A (the `@quarto/api` package skeleton). Phases 3A-3D and 3F otherwise independent, **except** `assets()` (Phase 3D) consumes the `PlatformHost.fs.walk` seam op that **Plan 1b** owns (interface member + `denoHost` impl, in lockstep) — **already landed** on the integration line (see *Platform dependencies*). Phase 3E (wiring into engine-host) targets `buildQuartoAPI` — the assembly that **Plan 2 Phase A** landed inside the `@quarto/engine-host-deno` package (the package itself was created by Plan 1b). Both have landed.
 **Blocks:** Plan 4 (Julia Validation)
 **Estimated sessions:** 2-3
 
@@ -16,6 +16,41 @@
 > `executeOptions`/`figPos` drop) and is now redundant because the real types
 > are vendored. Sections below have been updated; the Phase 3B/3C mechanism
 > descriptions were also corrected against Q1 source.
+
+> **Follow-up review (2026-07-01).** A second pass ground three items against
+> source that the 2026-06-29 reconciliation had left on assumption:
+> (a) **`pandoc` field** — the *vendored* Q1 `jupyterToMarkdown`
+> (`jupyter.ts:713-874`) never populates `pandoc`; it always returns
+> `undefined`. So `toMarkdown` must return `pandoc: undefined` for **exact
+> parity** — the earlier "emit `{}` / port the accumulation" guidance described
+> *mainline* Quarto, not the vendored subtree, and is out of scope (Phase 3C).
+> (b) **Figure naming is now pinned** to Q1's concrete scheme (Phase 3C/3D) —
+> Q2's resolver and Plan 4's assertions already expect it. (c)
+> **`notebookExtensions` is a real value** (`[".ipynb"]`, Q1
+> `kJupyterNotebookExtensions`), not a `NotImplemented` stub; the full remaining
+> roster is enumerated in Phase 3E. Also called out: the
+> `mdRawOutput`/`mdFormatOutput` export seam (Phase 3C) and the canonical
+> `kLangCommentChars` source (Phase 3A).
+
+> **Blank-slate implementer audit (2026-07-01).** A fresh read against the
+> *landed* code corrected the Phase 3E wiring and factory naming: (a) the
+> package's factory convention is `make<Ns>(host)` — `makeConsole`/`makeSystem`/
+> `makePathHost`/`makeMappedStringHost` — there is **no `create*`**, so the
+> factory is `makeJupyter(host)` (the earlier `createJupyter` + its
+> `createPath`/`createSystem` "precedent" were fabricated). (b) `buildQuartoAPI`
+> is **Plan 2** work (already landed), not Plan 1b; Phase 3E replaces its
+> throwing `jupyterStub` Proxy with `makeJupyter(host)` and drops the
+> `notYetImplementedError` helper + cast — it does **not** import `denoHost`
+> directly. (c) `resultEngineDependencies` **wraps** (`deps ? [deps] :
+> undefined`), not a bare pass-through. (d) `displayDataLatexIsMath` is a
+> `string[]→bool` **predicate**; the `{=tex}`-vs-math routing is a separate
+> `displayDataWithMarkdownMath` (Test Row 3 rebound). (e) `./jupyter` must be
+> added to `@quarto/api`'s `exports` map (2A landed without it); `@quarto/types`
+> stays a `devDependency` (type-only imports). (f) `cell-options.ts` given a
+> signature + the `JupyterCell→JupyterCellWithOptions` upgrade that must run
+> **before** `tags.*` in the walk. No design questions — one convention call
+> (`makeJupyter`, single-factory, by analogy to `makeSystem`) is flagged for the
+> user in the session.
 
 ## Overview
 
@@ -65,7 +100,8 @@ below):
 
 > **Seam-name mapping (don't grep for `*Sync`).** The Q1 references above use
 > Deno's `*Sync` names; the landed `PlatformHost.fs`
-> (`ts-packages/quarto-api/src/platform/index.ts:56-71`) uses bare,
+> (`ts-packages/quarto-api/src/platform/index.ts`, the `fs` block ~93-119;
+> `walk` ~115-118) uses bare,
 > all-synchronous names: `readTextFileSync`, `writeFileSync(string |
 > Uint8Array)`, `exists`, `ensureDir`, `makeTempDir`, `makeTempFile`, `remove`.
 > Map Q1 → seam: `readTextFileSync`→`readTextFileSync`,
@@ -87,12 +123,20 @@ internal supporting modules (`display-data`, `tags`, `labels`, `preserve`,
 `widgets`, `pandoc-id`, `cell-options`) are pure.
 
 Public shape: `src/jupyter/index.ts` exports a single factory
-`createJupyter(host: PlatformHost)` that returns the full namespace. The host
+`makeJupyter(host)` that returns the full namespace. The host
 is bound once and threaded into every FS-touching method (including `assets`,
-`resultIncludes`, and `widgetDependencyIncludes`). This matches the
-`createPath` / `createSystem` / `createMappedStringFromFile` pattern in
-Plan 2: one entry point per subpath, consistent wiring in
-`@quarto/engine-host-deno`.
+`resultIncludes`, and `widgetDependencyIncludes`). This matches the **landed**
+`@quarto/api` factory convention — `makeConsole(host)`,
+`makeSystem(host, global)`, `makePathHost(host, global)`,
+`makeMappedStringHost(host)` (there is **no** `create*` factory in the package;
+each factory takes a **`Pick<PlatformHost, …>`** of the subset it uses, and
+`global: HostGlobalConfig` **only if** it reads process-stable config): one
+`make<Ns>(host[, global])` entry point per subpath, wired in
+`@quarto/engine-host-deno`'s `buildQuartoAPI(global, host)` (**note: `global`
+first**). Jupyter reads only `host.fs` (no `global`), so `makeJupyter(host)`
+takes one arg — unlike `makeSystem(host, global)`. (Optionally narrow to
+`makeJupyter(host: Pick<PlatformHost, "fs">)` to match the sibling `Pick`
+convention; the internal impls would then take the same `Pick`.)
 
 ## What the namespace methods do
 
@@ -106,7 +150,7 @@ The first 6 are Julia's **execute-path** calls; the 7th
 | `percentScriptToMarkdown(file)` | Convert percent script → markdown | Low–Med (host) — reads file; **couples to the to-markdown module** (imports `mdRawOutput`/`mdFormatOutput`), not a self-contained regex pass |
 | `assets(input, to)` | Compute + **create** asset directories for figures | Low (host) — path computation **plus** `ensureDirSync` + `walkSync` |
 | `resultIncludes(tempDir, deps)` | Extract pandoc includes from widget deps — **inline execute path** (Julia calls it when `options.dependencies` is true, `julia:256`) | Low (host) — **writes widget temp files to disk** |
-| `resultEngineDependencies(deps)` | Extract engine-specific deps | Low — pass-through (pure) |
+| `resultEngineDependencies(deps)` | Extract engine-specific deps | Low — **wraps** `deps ? [deps] : undefined` (pure, no host; **NOT** a bare pass-through — Q1 `executeResultEngineDependencies`, `jupyter.ts:2177-2185`) |
 | `widgetDependencyIncludes(deps, tempDir)` | Produce `PandocIncludes` from widget deps for the **deferred-deps path** (RTQ FC-2 `Dependencies` verb). **The only producer of that wire** — a stub here makes the whole deferred-deps protocol inert (see note below) | Low (host) — same temp-file writes as `resultIncludes` |
 
 > **The 7th method — `widgetDependencyIncludes` (real body, not a stub).** RTQ
@@ -151,18 +195,37 @@ original "no 30-dep type explosion" benefit **and** are the actual contract the
 `@quarto/types` is itself vendored-from-Q1/shared (not q2-specific), so
 importing it satisfies the portability constraint ("no q2-specific imports").
 
-- [ ] Confirm `@quarto/api` package skeleton from Plan 2A is in place. If
-  Plan 2A hasn't landed, create the minimal package scaffolding first
-  (`package.json`, `tsconfig.json`, `exports` map including `./jupyter`).
+- [x] Confirm `@quarto/api` package skeleton from Plan 2A is in place (it **has**
+  landed). If it hadn't, you would create the minimal scaffolding first
+  (`package.json`, `tsconfig.json`, `exports` map).
 
-- [ ] Add `@quarto/types` as a dependency of `@quarto/api` (if not already
-  pulled in by Plan 2A). All `jupyter/` modules import their public types from
-  there — `import type { JupyterNotebook, JupyterToMarkdownOptions,
+- [x] **Add the `./jupyter` subpath to `@quarto/api`'s `exports` map**
+  (unconditional — 2A landed *without* a `./jupyter` entry; `package.json`
+  currently has none). Mirror the sibling entries, e.g.:
+  ```json
+  "./jupyter": {
+    "types": "./src/jupyter/index.ts",
+    "source": "./src/jupyter/index.ts",
+    "import": "./dist/jupyter/index.js"
+  }
+  ```
+  Without this, `import … from "@quarto/api/jupyter"` (used by engine-host in
+  Phase 3E and by tests) won't resolve.
+
+- [x] `@quarto/types` is **already a `devDependency`** of `@quarto/api` (spec
+  `"*"`). Since every `jupyter/` type reference is `import type` (erased at
+  runtime), a devDep is sufficient — do **not** add it as a runtime
+  `dependency`. All `jupyter/` modules import their public types from there —
+  `import type { JupyterNotebook, JupyterToMarkdownOptions,
   JupyterToMarkdownResult, JupyterCellOutput, JupyterNotebookAssetPaths,
   JupyterWidgetDependencies } from "@quarto/types"`. **Do not create a
-  `src/jupyter/types.ts` that re-declares these.**
+  `src/jupyter/types.ts` that re-declares these.** (Note: `index.ts` *re-exports*
+  these types; that's a type-only re-export through a devDep. It resolves in this
+  monorepo because downstream consumers — engine-host — carry `@quarto/types`
+  themselves. If a future external consumer relied on the re-export without its
+  own `@quarto/types`, promote it to a `dependency` then.)
 
-- [ ] *(Optional, implementer's discretion.)* The vendored `JupyterOutput` is
+- [x] *(Optional, implementer's discretion.)* The vendored `JupyterOutput` is
   loose (`output_type: string; [key: string]: unknown`). For ergonomics inside
   the output-formatting switch in `to-markdown.ts`, an **internal-only**
   discriminated union (`stream | display_data | execute_result | error`) may be
@@ -171,21 +234,34 @@ importing it satisfies the portability constraint ("no q2-specific imports").
   return values stay vendored. (Skip it and narrow inline if preferred; it
   changes no contract.)
 
-- [ ] Create `src/jupyter/constants.ts` — MIME type constants, cell option
+- [x] Create `src/jupyter/constants.ts` — MIME type constants, cell option
   keys, etc. Reference: Quarto 1's `external-sources/quarto-cli/src/config/constants.ts` (just the
-  subset we need). Include `kQuartoMimeType` (injected into widget `<script>`
-  tags, see P3-10) and the language-comment-char table `kLangCommentChars`
-  (needed by percent-script detection, see P3-14).
+  subset we need). Include `kQuartoMimeType = "quarto_mimetype"`
+  (`jupyter.ts:187`; injected into widget `<script>` tags, see P3-10) and the
+  language-comment-char table `kLangCommentChars` (needed by percent-script
+  detection, see P3-14). **Port `kLangCommentChars` from the canonical exported
+  copy at `core/lib/partition-cell-options.ts:310`** — NOT the stale
+  non-exported duplicate at `jupyter.ts:1208` (the two tables diverge in several
+  entries — e.g. `ojs`, `prql`, `scss`, `tikz`, `mermaid` — so pick the canonical
+  one deliberately rather than whichever is nearer). **Value type is `string |
+  [string, string]`** (a `[open, close]` tuple for block-comment langs like `c`);
+  py/jl/r are all plain `"#"`, so the percent regex's `${cms}` interpolation is
+  fine for the languages we care about, but the type must be handled (don't assume
+  every value is a bare string).
 
 ### Phase 3B: Supporting modules
 
 Small, focused modules that `toMarkdown` depends on. Each is self-contained.
 
-- [ ] Create `src/jupyter/display-data.ts` — MIME bundle dispatch:
+- [x] Create `src/jupyter/display-data.ts` — MIME bundle dispatch:
   - `displayDataMimeType(output, options)` — select best MIME type from bundle
-  - `displayDataIsImage(output)`, `displayDataIsTextPlain(output)`, etc.
+  - **Predicate signatures take the selected `mimeType: string`, NOT the output**
+    (verified against Q1): `displayDataIsImage(mimeType)` (`display-data.ts:156`),
+    `displayDataIsJson(mimeType)` (`:176`), `displayDataIsMarkdown`/`IsLatex`/
+    `IsHtml(mimeType)`. There is **no** `displayDataIsTextPlain` export in Q1 — do
+    not invent one. (The earlier `displayDataIsImage(output)` shape was wrong.)
   - **MIME priority is computed DYNAMICALLY from the target format — NOT a fixed
-    list** (corrected, P3-9, `display-data.ts:45-97`):
+    list** (corrected, P3-9, `display-data.ts:45-106`):
     - Base order is `[text/markdown, image/svg+xml, image/png, image/jpeg]` —
       `text/markdown` is the **highest base** (the earlier draft inverted this,
       ranking `text/html` first).
@@ -196,19 +272,33 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
       widgets never render.)
     - `text/latex` is added **only** for `toLatex`.
     - An html-table special case force-adds `text/html`.
+    - The splices listed here are **illustrative, not exhaustive** — the function
+      also handles `application/pdf` (added on `toLatex`; also matched by
+      `displayDataIsImage`) and pushes `text/html` for `toMarkdown`-only, among
+      others. **Port the whole `displayDataMimeType` algorithm from source; do
+      not re-derive the set from this list.**
   - `displayDataIsJson(output)` matches **only the widget MIME types**
     (`display-data.ts:176-179`) and emits a `<script type=…>` tag with
     `kQuartoMimeType` injected first (falling back to a json code block only for
     `toIpynb`). There is **no generic `application/json → code block` path**
     (corrected, P3-10).
-  - `displayDataLatexIsMath(output)` (`display-data.ts:108-137`) decides whether
-    `text/latex` routes into the markdown slot as math, **else** it emits a
-    `{=tex}` raw block. `text/latex` is not unconditionally math (corrected,
-    P3-10).
+  - **Two functions + a downstream emitter — do not conflate (P3-10):**
+    `displayDataLatexIsMath(latex: string[])` (`display-data.ts:108-120`) is a
+    **pure predicate** returning `boolean` (does the latex start with `$` /
+    `\begin{`?); it does not route or emit. `displayDataWithMarkdownMath(output)`
+    (`display-data.ts:122-137`) is a **pre-transform**: when the predicate holds
+    (and there is no existing `text/markdown` slot) it **hoists the latex into
+    `data["text/markdown"]`** so it later renders as math; for non-math latex it
+    returns the output **unchanged**. It does **not** emit `{=tex}`. The `{=tex}`
+    raw block for non-math latex is emitted **downstream** by the output emitter
+    (`mdLatexOutput` → `mdFormatOutput("tex")`, Q1 `jupyter.ts:2084-2086` /
+    `1062-1065`) once `displayDataMimeType` selects `text/latex`. Net: **math
+    latex → markdown slot → math; non-math latex → stays latex → `{=tex}`
+    block.** `text/latex` is not unconditionally math.
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/display-data.ts`
   - ~150 lines
 
-- [ ] Create `src/jupyter/tags.ts` — cell visibility logic:
+- [x] Create `src/jupyter/tags.ts` — cell visibility logic:
   - `hideCell(options)`, `hideCode(options)`, `hideOutput(options)`, `hideWarnings(options)`
   - `includeCell(cell, options)`, `includeCode(cell, options)`, `includeOutput(cell, options)`
   - **Also `echoFenced` (drives `echo: fenced`, `tags.ts:68-75`) and
@@ -220,7 +310,7 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/tags.ts`
   - ~100 lines
 
-- [ ] Create `src/jupyter/labels.ts` — cell label and caption handling
+- [x] Create `src/jupyter/labels.ts` — cell label and caption handling
   (corrected roster, P3-11 — the earlier draft invented `cellLabelClass`, which
   does not exist in Q1, and omitted the three real consumer-needed exports):
   - `cellLabel(cell)` — extract label from cell metadata or options
@@ -236,13 +326,18 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/labels.ts`
   - ~100 lines
 
-- [ ] Create `src/jupyter/preserve.ts` — HTML preservation (corrected
+- [x] Create `src/jupyter/preserve.ts` — HTML preservation (corrected
   signature, P3-13, `preserve.ts:12-42`):
   - `removeAndPreserveHtml(nb: JupyterNotebook) => Record<string, string> |
-    undefined` — takes the **whole notebook**, **mutates cell output bundles in
-    place** (swaps `text/html` for a markdown placeholder), and returns the
-    preserve map (or `undefined`). It is **not** a per-output pure
-    `(output) => { output, preserved }` transform as the earlier draft had it.
+    undefined` — takes the **whole notebook** and returns the preserve map (or
+    `undefined`). Its per-output swap (`data[text/markdown]=[key]; delete
+    data[text/html]`, `preserve.ts:24-31`) **mutates cell output bundles in place
+    — but only when `isPreservedHtml(htmlText)` holds**. Since `isPreservedHtml`
+    is constant-`false` today (`:58-60`), **the swap never fires**: no bundle is
+    mutated, `htmlPreserve` comes back empty, and `text/html` passes through
+    literally (this is why Test Row 9 asserts the literal `<table>`). It is
+    **not** a per-output pure `(output) => { output, preserved }` transform as the
+    earlier draft had it. Port the gated swap anyway for parity — it stays inert.
   - `isPreservedHtml(_html) => false` — **port as the constant-`false` no-op it
     is in Q1 today** (`preserve.ts:58-60`). Q1's producer preserves nothing
     currently, so `htmlPreserve` is always empty and the `preserve`/`postProcess`
@@ -256,7 +351,7 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/preserve.ts`
   - ~80 lines
 
-- [ ] Create `src/jupyter/widgets.ts` — Jupyter widget dependency extraction:
+- [x] Create `src/jupyter/widgets.ts` — Jupyter widget dependency extraction:
   - `widgetDependencies(nb)` — find widget state in output MIME bundles. In Q1
     (`extractJupyterWidgetDependencies`, `widgets.ts:47-62`) this **mutates
     `cell.outputs` in place** to strip hoisted HTML libraries before the
@@ -272,6 +367,12 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
     `PandocIncludes`, whose keys are **kebab-case with an `include-` prefix**
     (`pandoc.ts:9-12`): `{ "include-in-header"?: string[]; "include-before-body"?:
     string[]; "include-after-body"?: string[] }`.
+    - **Input arity (verified — wrap in an array):** Q1's
+      `includesForJupyterWidgetDependencies(dependencies: JupyterWidgetDependencies[],
+      tempDir)` takes an **array** (`widgets.ts:73-75`), but the namespace method
+      passes a **single** dep (`widgetDependencyIncludes(deps, tempDir)`,
+      `quarto-api.ts:345-348`). The port body must call it as
+      `includesForJupyterWidgetDependencies([deps], tempDir)`.
     - **Port shape adaptation (verified — do NOT copy Q1's keys verbatim):** Q1's
       `includesForJupyterWidgetDependencies` returns a *different* local shape —
       `{ inHeader: string, afterBody: string }` (**camelCase, scalar** strings).
@@ -279,11 +380,16 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
       `inHeader`→`"include-in-header"`, `afterBody`→`"include-after-body"`, and
       wrap each scalar temp-file path in an **array** (`string[]`).
     - **Wire contract (verified):** once in vendored `PandocIncludes` form, the
-      return type is *identical* to `DependenciesResult.includes: PandocIncludes`
-      (`execution.ts:132`) — the field the harness's `Dependencies`-verb handler
-      forwards. No further adaptation at the wire boundary; the q2 method's return
-      type **is** the wire payload type.
-    - **MUST be exported from the `createJupyter` factory** (P3-7) with the host
+      method's return type is *identical* to `DependenciesResult.includes:
+      PandocIncludes` (`execution.ts:132`) — so **the method itself needs no
+      further adaptation**. There *is* still a kebab→camelCase rename at the wire,
+      but the **harness** performs it, not this method: `PandocIncludes`
+      (kebab, `include-in-header`…) → `TsPandocIncludes` (camelCase
+      `inHeader`/`beforeBody`/`afterBody`) via the harness's `renameIncludes()`
+      (defined in `@quarto/engine-host-deno`'s `host.ts`; the `TsPandocIncludes`
+      shape + rename are described at `pandoc.ts:18-25`). Return kebab
+      `PandocIncludes`; let the harness convert.
+    - **MUST be exported from the `makeJupyter` factory** (P3-7) with the host
       bound, so the namespace's `widgetDependencyIncludes` and RTQ's FC-2
       deferred-deps fold reach it via `quarto.jupyter.*`. The earlier draft built
       it inside `widgets.ts` but never exposed it. (Its array-vs-singular *type*
@@ -292,11 +398,13 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/widgets.ts`
   - ~100 lines
 
-- [ ] Create `src/jupyter/pandoc-id.ts` — identifier generation:
-  - `pandocAutoIdentifier(text, asciiOnly)` — generate Pandoc-style IDs from
-    heading text. **Note the 2nd boolean arg** (`asciiOnly`) — Q1 calls it with
-    two args (`jupyter.ts:1548`); the earlier draft's 1-arg signature dropped it
-    (P3-11).
+- [x] Create `src/jupyter/pandoc-id.ts` — identifier generation:
+  - `pandocAutoIdentifier(text, asciify)` — generate Pandoc-style IDs from
+    heading text. **Note the 2nd boolean arg** — Q1 names it `asciify`
+    (`pandoc-id.ts:9`) and calls it with two args (`jupyter.ts:1548`); the
+    earlier draft's 1-arg signature dropped it (P3-11). (Distinct from
+    `asHtmlId` in `core/html.ts:16`, which is single-arg — used for cell-label
+    id normalization, see labels.ts.)
   - Pure string manipulation, no dependencies
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/pandoc/pandoc-id.ts`
   - Note: lives under `jupyter/` for now because jupyter is the only
@@ -304,11 +412,24 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
     subpath — cheap move, cheap rename.
   - ~50 lines
 
-- [ ] Create `src/jupyter/cell-options.ts` — simplified cell options parsing:
-  - Parse YAML from code cell comments (`#| key: value` lines)
-  - Use `yaml` package directly (no schema validation)
-  - Extract cell-level execution options
-  - **Simplified from Quarto 1**: no schema validation, no tree-sitter
+- [x] Create `src/jupyter/cell-options.ts` — simplified cell options parsing:
+  - **Signature/return shape (specify — the earlier draft left this blank):**
+    `parseCellOptions(source: string[], language: string): { options:
+    Record<string, unknown>; optionsSource: string[] }`. Strip the
+    language-comment prefix + `| ` from each leading option line (the comment
+    char comes from `kLangCommentChars[language]`, see Phase 3A / `constants.ts`),
+    collect the contiguous `#| …` block, `yaml`-parse it to `options`, and return
+    the raw lines as `optionsSource`. Reference Q1's `partitionCellOptions` /
+    `partition-cell-options.ts` for the prefix-strip logic.
+  - Use `yaml` package directly (`import { parse } from "yaml"`) — no schema
+    validation, no tree-sitter (**Simplified from Quarto 1**).
+  - **Type-upgrade + ordering (load-bearing):** the vendored `JupyterCell`
+    (`jupyter.ts:97-109`) has **no `.options` field** — `.options` /
+    `.optionsSource` live on `JupyterCellWithOptions` (`jupyter.ts:88-92`). The
+    `tags.*` visibility checks read `cell.options[…]`, so the cell walk must
+    **run `parseCellOptions` first and upgrade `JupyterCell → JupyterCellWithOptions`
+    per code cell BEFORE calling `tags.*`**. State this ordering in the walk
+    (Phase 3C) so tags never read an absent `.options`.
   - ~100 lines
 
 ### Phase 3C: Core toMarkdown function
@@ -318,7 +439,7 @@ The main conversion function. Takes a `JupyterNotebook` and options, returns a
 `notebookOutputs`/`pandoc`) — **not** a bare markdown string; the caller joins
 `cellOutputs.map(o => o.markdown)` (as Julia does, `julia:272`).
 
-- [ ] Create `src/jupyter/to-markdown.ts`. **Use the vendored
+- [x] Create `src/jupyter/to-markdown.ts`. **Use the vendored
   `JupyterToMarkdownOptions` and `JupyterToMarkdownResult` from `@quarto/types`
   — do not redraft them.** The earlier draft's redraft is broken against the
   Julia consumer in four places (P3-1/2/3/4); the vendored types are correct and
@@ -335,7 +456,10 @@ The main conversion function. Takes a `JupyterNotebook` and options, returns a
   //     notebookOutputs?: { prefix?; suffix? }                       (P3-5)
   //     dependencies?, htmlPreserve?, pandoc?
   //   JupyterCellOutput = { id; markdown; metadata; options }
-  //   assets: JupyterNotebookAssetPaths   // snake_case base_dir/... (P3-2)
+  //   NB: `assets: JupyterNotebookAssetPaths` is an INPUT field of
+  //     JupyterToMarkdownOptions (jupyter.ts:250) — snake_case base_dir/... ,
+  //     the dir the writer writes figures into — NOT a JupyterToMarkdownResult
+  //     field (P3-2).
 
   // toMarkdown is ASYNC — the quarto.jupyter namespace types it
   // Promise<JupyterToMarkdownResult> (quarto-api.ts). The internal impl takes
@@ -357,25 +481,30 @@ The main conversion function. Takes a `JupyterNotebook` and options, returns a
   - `notebookOutputs?` is read behind `if (result.notebookOutputs)` (`julia:273`)
     — absence degrades gracefully (lost ipynb prefix/suffix), but include it for
     fidelity (P3-5).
-  - `pandoc?` **is consumed** — Julia forwards `result.pandoc` to the host
-    verbatim (`julia:289`), so it is not optional in practice for the validation
-    target. Populate it with the pandoc metadata Q1's `jupyterToMarkdown`
-    accumulates (front-matter / cell-promoted `pandoc` options merged across
-    cells; see `jupyter.ts`). If a full port is deferred, emit an **empty
-    object** rather than omitting the field, and note the gap — do not silently
-    leave document-level metadata unpopulated, which would diverge from Q1 on
-    any notebook that sets it.
+  - `pandoc?` — Julia forwards `result.pandoc` to the host verbatim
+    (`julia:289`), but the **vendored** Q1 `jupyterToMarkdown`
+    (`jupyter.ts:713-874`) **never populates it**: its `return` omits the field,
+    there is no front-matter promotion, no cell-`pandoc` hoisting, and no
+    cross-cell accumulator, so at runtime `result.pandoc` is always `undefined`.
+    **Return `pandoc: undefined` for exact parity with the vendored source.**
+    The cross-cell metadata accumulation the earlier draft described is
+    *mainline* Quarto behavior that is NOT in the vendored subtree q2 ports
+    against — it is **out of scope, not a deferred gap**. (Emitting `{}` would be
+    harmless downstream — the render merge is guarded by
+    `if (executeResult.pandoc)` and `mergeConfigs(x, {})` is a no-op — but
+    `undefined` is the faithful port.)
 
-- [ ] **Pre-walk pass (runs BEFORE the cell walk — ordering is load-bearing).**
+- [x] **Pre-walk pass (runs BEFORE the cell walk — ordering is load-bearing).**
   Q1 computes `dependencies` and `htmlPreserve` at `jupyter.ts:738-741`, *then*
-  starts the `cellOutputs` walk at `:744`. Both **mutate `nb` in place** — most
+  walks the cells: `:744` declares the `cellOutputs` array; the `for` loop over
+  `nb.cells` begins at `:754`. Both pre-walk calls **mutate `nb` in place** — most
   importantly `widgetDependencies(nb)` strips hoisted HTML libraries (P3-17). If
   the walk runs first, those libs are already emitted and get double-emitted.
   Run this pass first; see the result-assembly item below for the exact
   assignments. (Test row 10 guards this ordering — the plotly `<script>` must
   appear exactly once.)
 
-- [ ] Implement cell walking logic. **Each iteration produces one
+- [x] Implement cell walking logic. **Each iteration produces one
   `JupyterCellOutput` — not a bare string.** The per-cell markdown computed by
   the steps below is the `markdown` field; assemble the rest of the
   `JupyterCellOutput` (`{ id, markdown, metadata, options }`) from the cell:
@@ -385,16 +514,20 @@ The main conversion function. Takes a `JupyterNotebook` and options, returns a
   1. Iterate notebook cells
   2. For each markdown cell: `markdown` = source as-is
   3. For each code cell:
-     a. Check visibility (echo, include, output options via tags.ts). Honor
+     a. **Extract options + label FIRST** (→ `options`, → `id`): run
+        `parseCellOptions` (cell-options.ts) and upgrade `JupyterCell →
+        JupyterCellWithOptions`; derive `id` via `cellLabel`/`asHtmlId`
+        (labels.ts, falls back to a counter). This MUST precede visibility —
+        `tags.*` reads `cell.options`.
+     b. Check visibility (echo, include, output options via tags.ts). Honor
         `options.keepHidden`: when set, hidden cells are still emitted (marked
         hidden) rather than dropped — Q1 branches on it in the walk.
-     b. Extract cell label (→ `id`) and options (→ `options`)
      c. Emit code fence with language and options
      d. Format each output (see below)
      e. Handle figure outputs (write to disk, emit `![]()` reference)
   4. For each raw cell: `markdown` = source with format marker
 
-- [ ] **Assemble the rest of the result object.** `cellOutputs` (above) is not
+- [x] **Assemble the rest of the result object.** `cellOutputs` (above) is not
   the only field — `JupyterToMarkdownResult` also carries `dependencies?`,
   `notebookOutputs?`, `htmlPreserve?`, and `pandoc?`, and Q1 computes them inside
   `jupyterToMarkdown`. Don't omit them (the earlier checklist only covered the
@@ -412,10 +545,11 @@ The main conversion function. Takes a `JupyterNotebook` and options, returns a
       constant-`false` (P3-15), so this is `{}`/`undefined` in practice; port it
       anyway for parity.
   - **Post-walk (independent of cell ordering):** `notebookOutputs`
-    (prefix/suffix) and `pandoc` (accumulated document metadata) — populate per
-    the interface notes above (P3-5 / `julia:289`).
+    (prefix/suffix) per the interface notes above (P3-5). **`pandoc` is
+    `undefined`** — the vendored Q1 producer never sets it (see the `pandoc?`
+    note above); do not synthesize a value.
 
-- [ ] Implement output formatting:
+- [x] Implement output formatting:
   - **stream output** (stdout/stderr): emit as text, strip ANSI codes
   - **display_data / execute_result**: dispatch by MIME type (display-data.ts)
     - `text/html` → emit as raw HTML block (the preserve/restore path is inert
@@ -431,21 +565,38 @@ The main conversion function. Takes a `JupyterNotebook` and options, returns a
       **There is no generic `application/json → code block` path** (corrected,
       P3-10)
   - **error output**: format traceback, strip ANSI codes
+  - **Export `mdRawOutput` and `mdFormatOutput` from this module** — they are
+    internal helpers in Q1's `jupyter.ts`, but `percentScriptToMarkdown`
+    (Phase 3D) imports them (`percent.ts:12`), so they must be public here or the
+    percent-script module seam won't compile.
 
-- [ ] Implement figure handling:
+- [x] Implement figure handling:
   - Write image data to `assets.figures_dir` (snake_case, from the vendored
     `JupyterNotebookAssetPaths` — P3-2) via `host.fs.writeFileSync`
     (base64 decode for PNG/JPEG, write as bytes; SVG written as text). The
     target dir is the one `assets()` creates with `host.fs.ensureDir` — these two
     must agree, which is why `assets` is host-dependent (P3-2).
-    The host is captured via the `createJupyter(host)` factory closure —
+    The host is captured via the `makeJupyter(host)` factory closure —
     `to-markdown.ts` itself takes `host` as a parameter on the internal
     implementation function.
-  - Generate filename from cell label or counter
+  - **Filename scheme — port Q1 exactly (verified, do not invent).** Q1 builds
+    the base as `[<outputPrefix>-]<labelName>-output`, where `labelName` is the
+    cell label with a leading `#` stripped and `:`→`-`, else `cell-<cellIndex+1>`
+    (`jupyter.ts:1541-1548`); each display-data image appends `-<outputIndex+1>`
+    (`:1693`) and the extension from `extensionForMimeImageType(mime)`, and the
+    final path is `figures_dir + "/" + name + "." + ext` (`jupyter.ts:1998`). Net
+    template: **`<stem>_files/figure-<to>/[<prefix>-]<label|cell-N>-output-<m>.<ext>`**
+    (e.g. `notebook_files/figure-html/cell-2-output-1.png`). This is load-bearing:
+    Q2's resolver already expects `<stem>_files/figure-html/…`
+    (`resource_resolver.rs:561,578`) and Plan 4 4C/4H assert
+    `plot_files/figure-html/...`. (The native Rust jupyter engine does NOT write
+    figures — `output.rs:172-197` emits an `[Image output: <ext>]` placeholder
+    (literal `"[Image output: {}]"`) + TODO — so Q1 is the only reference
+    implementation to match.)
   - Emit markdown image reference with optional caption, width/height
   - Handle `fig-format` option (request specific format from kernel)
 
-- [ ] Implement HTML preservation (faithful port — **inert today**, P3-15):
+- [x] Implement HTML preservation (faithful port — **inert today**, P3-15):
   - Port `removeAndPreserveHtml(nb)` (gated `isHtml`, see result-assembly above)
     and `isPreservedHtml`. Because `isPreservedHtml` returns constant-`false`,
     nothing is actually protected — `htmlPreserve` ends up empty and html outputs
@@ -455,7 +606,7 @@ The main conversion function. Takes a `JupyterNotebook` and options, returns a
     on it being non-empty (`julia:292-294`), so today `postProcess` is always
     false — matching Q1 end-to-end.
 
-- [ ] ANSI code handling (deliberate simplification — documented divergence,
+- [x] ANSI code handling (deliberate simplification — documented divergence,
   P3-16):
   - Strip ANSI escape codes from text outputs via simple regex replacement.
   - **This matches Q1 exactly for `toLatex`/`toMarkdown`/`toIpynb` targets.** It
@@ -467,13 +618,13 @@ The main conversion function. Takes a `JupyterNotebook` and options, returns a
     bold-class swap; add later if HTML-output color fidelity is wanted. (Earlier
     notes that "Q1 uses ansi_up, not deno-dom" were inaccurate — Q1 uses both.)
 
-- [ ] Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/jupyter.ts` function `jupyterToMarkdown` (~lines 380-700)
+- [x] Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/jupyter.ts` function `jupyterToMarkdown` (~lines 380-700)
 
 ### Phase 3D: Utility functions
 
 The simpler methods that the Julia engine also calls.
 
-- [ ] Create `src/jupyter/percent-script.ts` — host-dependent (reads files):
+- [x] Create `src/jupyter/percent-script.ts` — host-dependent (reads files):
   - Internal functions take `host: PlatformHost` as first parameter:
     ```typescript
     export function isPercentScript(host: PlatformHost, file: string, exts?: string[]): boolean;
@@ -486,7 +637,10 @@ The simpler methods that the Julia engine also calls.
     `%%` run and a `[markdown]` or `[raw]` marker. A `.jl` with only `# %%`
     *code* markers is **not** detected. This feeds Julia's `claimsFile` →
     `isPercentScript(file, [".jl"])` (`julia:95,164,167`), so getting it wrong
-    mis-claims (or fails to claim) Julia percent files.
+    mis-claims (or fails to claim) Julia percent files. (Q1's *default* `exts`
+    when omitted is `[".py", ".jl", ".r", ".q"]` — includes `.q` — `percent.ts:16-21`;
+    the plan/namespace doc-comment's `['.py','.jl','.r']` is imprecise, but Julia
+    always passes `[".jl"]` explicitly, so the default rarely matters.)
   - `percentScriptToMarkdown` — read file + convert percent-format to markdown:
     - language-comment `%%+ [markdown]` → markdown cells; `[raw]` → raw cells
     - other `%%`-delimited content → code cells
@@ -494,13 +648,15 @@ The simpler methods that the Julia engine also calls.
       `markdownFromJupyterPercentScript` imports `mdRawOutput`/`mdFormatOutput`
       from `jupyter.ts` (`percent.ts:12`), so percent-script **couples to the
       to-markdown module**. Plan accordingly (shared output-formatting helpers,
-      not a duplicate).
-  - The public `createJupyter(host)` factory binds `host` so callers see the
+      not a duplicate). **Import them via `../to-markdown.js`** — they must be
+      exported there (the Phase 3C output-formatting item adds that export);
+      without it the coupling cannot compile.
+  - The public `makeJupyter(host)` factory binds `host` so callers see the
     natural 1-arg / 2-arg signatures.
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/percent.ts`
   - ~80-120 lines
 
-- [ ] Create `src/jupyter/assets.ts` — **host-dependent** (P3-2). It is not a
+- [x] Create `src/jupyter/assets.ts` — **host-dependent** (P3-2). It is not a
   pure path computation: Q1's `jupyterAssets` (`jupyter.ts:665-696`) does FS I/O
   (`ensureDirSync(figures_dir)` + `walkSync` to promote the supporting dir) and
   returns the **snake_case 4-field** `JupyterNotebookAssetPaths` from
@@ -508,6 +664,23 @@ The simpler methods that the Julia engine also calls.
   `base_dir` absolute, the rest relative + forward-slashed). The earlier draft's
   pure, camelCase 3-field shape broke Julia, which reads
   `join(assets.base_dir, assets.supporting_dir)` (`julia:287`).
+  - **Concrete field values (port Q1, `jupyter.ts:665-696`):** `base_dir` =
+    `dirname(input)`; `files_dir` = `<stem>_files` (Q1 `inputFilesDir`,
+    `render.ts:13-16`); `figures_dir` = `<files_dir>/figure-<to>`, where the
+    `figure-<to>` segment comes from Q1 `figuresDir(to)` (`render.ts:20-26`):
+    normalize `html4`→`html`, strip any `+…`/`-…` suffix from the pandoc `to`,
+    prefix `figure-`, and **default to `figure-html` when `to` is undefined**.
+    `supporting_dir` = `files_dir`, unless `files_dir` already holds other
+    subdirs (the `walkSync` check, `jupyter.ts:680-687`), in which case it is
+    `figures_dir`. The `figures_dir` computed here MUST equal the dir the
+    figure-write step in `to-markdown.ts` writes into (Phase 3C figure handling).
+  - **Q1-faithful cwd coupling (eyes-open, verify at the `.ipynb` smoke test):**
+    the returned `figures_dir` is **relative** (forward-slashed,
+    `pathWithForwardSlashes(relative(base_dir, figures_dir))`, `jupyter.ts:690-694`)
+    while `ensureDir` runs on the **absolute** path. `to-markdown` then writes to
+    the returned *relative* `assets.figures_dir`, so the write lands in the dir
+    `ensureDir` created **only when cwd == `base_dir`**. This mirrors Q1 exactly;
+    don't "fix" it, but confirm the smoke test runs with cwd at the input's dir.
   ```typescript
   import type { JupyterNotebookAssetPaths } from "@quarto/types";
   function assets(
@@ -525,17 +698,24 @@ The simpler methods that the Julia engine also calls.
     host that stubs `walk`.
   - ~40 lines (incl. the dir creation + supporting-dir walk)
 
-- [ ] Create `src/jupyter/result-helpers.ts`:
-  - `resultIncludes(host, tempDir, deps?)` — **host-dependent** (P3-3). It routes
-    through `includesForJupyterWidgetDependencies` → `widgetTempFile`
-    (`widgets.ts:148-154`), which materializes widget includes to disk via
-    `Deno.makeTempFileSync` + `writeTextFileSync`. Needs `host.fs`. Julia calls
-    it on the widget hot path (`julia:256`).
-  - `resultEngineDependencies(deps?)` — pass-through or wrap engine deps (the one
-    genuinely pure method; no host).
+- [x] Create `src/jupyter/result-helpers.ts`:
+  - `resultIncludes(host, tempDir, deps?)` — **host-dependent** (P3-3). It reuses
+    the same widget includes-builder as `widgetDependencyIncludes` — **import it
+    from `../widgets.js`** (do not duplicate): call
+    `includesForJupyterWidgetDependencies([deps], tempDir)` (array-wrap, as in the
+    widgets.ts item), which routes through `widgetTempFile` (`widgets.ts:148-154`)
+    to materialize widget includes to disk via `makeTempFile` + `writeFileSync`.
+    Needs `host.fs`. **When `deps` is `undefined`, return an empty
+    `PandocIncludes` (`{}`)** — do not call the builder. Julia calls it on the
+    widget hot path (`julia:256`).
+  - `resultEngineDependencies(deps?)` — **wrap** a single deps object in an array:
+    `return deps ? [deps] : undefined` (Q1 `executeResultEngineDependencies`,
+    `jupyter.ts:2177-2185`). Return type is `Array<JupyterWidgetDependencies> |
+    undefined` (namespace `quarto-api.ts:368-370`) — a bare `return deps` is both
+    a type error and wrong behavior. The one genuinely pure method; no host.
   - ~50 lines
 
-- [ ] Create `src/jupyter/index.ts` — exports the `createJupyter(host)`
+- [x] Create `src/jupyter/index.ts` — exports the `makeJupyter(host)`
   factory and **re-exports the public types from `@quarto/types`**
   (`JupyterNotebook`, `JupyterCell`, `JupyterToMarkdownOptions`,
   `JupyterToMarkdownResult`, `JupyterCellOutput`, `JupyterNotebookAssetPaths`,
@@ -560,7 +740,7 @@ The simpler methods that the Julia engine also calls.
       resultIncludes as _resultIncludes, resultEngineDependencies,
   } from "./result-helpers.js";
 
-  export function createJupyter(host: PlatformHost) {
+  export function makeJupyter(host: PlatformHost) {
       return {
           toMarkdown: (nb, opts) => _toMarkdown(host, nb, opts),   // async → Promise
           isPercentScript: (file, exts) => _isPercent(host, file, exts),
@@ -571,8 +751,10 @@ The simpler methods that the Julia engine also calls.
           widgetDependencyIncludes: (deps, tempDir) =>             // host (P3-7, RTQ FC-2 producer)
               _widgetIncludes(host, deps, tempDir),
           resultEngineDependencies,                               // pure, no host
-          // ...plus NotImplemented stubs for the remaining quarto.jupyter
-          // members (see Phase 3E) so the object satisfies the namespace type.
+          // ...plus `notebookExtensions: [".ipynb"]` (a real Q1 value, NOT a
+          // stub) and NotImplemented throwers for the other 15 remaining
+          // quarto.jupyter members (see Phase 3E) so the object satisfies the
+          // namespace type.
       };
   }
   export type { /* public types re-exported from @quarto/types */ };
@@ -583,41 +765,59 @@ The simpler methods that the Julia engine also calls.
 Wire `@quarto/api/jupyter` into the `quarto.jupyter` namespace in
 `@quarto/engine-host-deno`.
 
-- [ ] Update `@quarto/engine-host-deno/src/quarto-api.ts` to call the
-  `createJupyter` factory with the same `denoHost` used for the other
-  namespaces in Plan 1b's `buildQuartoAPI(global, host)` assembly:
-  ```typescript
-  import { createJupyter } from "@quarto/api/jupyter";
-  import { denoHost } from "./deno-host.js";
-
-  function buildJupyterNamespace() {
-      return createJupyter(denoHost);
-  }
-  ```
-  The factory returns the implemented methods directly; the
-  engine-host layer just forwards it. Any per-call wrappers
-  (e.g. supplying the per-execute `tempDir` to `resultIncludes`) can be
-  composed around the factory output. (RTQ Item A removed the combined
-  `EngineHostContext`: process-stable config is the ambient `Init`
-  `global`, and per-render project context arrives on `launchEngine`.)
-- [ ] **State the namespace seam (P3-6).** The `quarto.jupyter` namespace
-  (`quarto-types/src/quarto-api.ts`) is a wide interface (~20+ members);
-  this plan implements 7 of them (`toMarkdown`, `isPercentScript`,
+- [x] Wire `makeJupyter` into `@quarto/engine-host-deno/src/quarto-api.ts`.
+  **`buildQuartoAPI` is Plan 2 work (Phase A / B2), not Plan 1b** — and it has
+  **already landed**. Match the pattern the file actually uses today: every
+  namespace factory takes the **`host` parameter** of
+  `buildQuartoAPI(global, host)` (**global first, host second**) — e.g.
+  `makeConsole(host)`, `makeSystem(host, global)`, `makePathHost(host, global)` —
+  **not** a directly-imported `denoHost`. So the
+  change is:
+  - `import { makeJupyter } from "@quarto/api/jupyter";`
+  - **Replace the `jupyterStub` `Proxy`** (a throwing placeholder that raises
+    `notYetImplementedError("jupyter.<prop>", "Plan 3")`) with
+    `const jupyterNs = makeJupyter(host);`, and set `jupyter: jupyterNs` in the
+    returned object.
+  - **Delete** the now-dead `notYetImplementedError` helper and the
+    `jupyterStub`'s `as unknown as QuartoAPI["jupyter"]` cast (it was the last
+    remaining cast in the file).
+  (Cite by symbol, not line number — `quarto-api.ts` is actively churning as
+  Plan 2 lands.) Any per-call wrappers (e.g. supplying the per-execute `tempDir`
+  to `resultIncludes`) can be composed around the factory output. (RTQ Item A
+  removed the combined `EngineHostContext`: process-stable config is the ambient
+  `Init` `global`, and per-render project context arrives on `launchEngine`.)
+- [x] **State the namespace seam (P3-6).** The `quarto.jupyter` namespace
+  (`quarto-types/src/quarto-api.ts`) is a **23-member** interface; this plan
+  implements **7** with real bodies (`toMarkdown`, `isPercentScript`,
   `percentScriptToMarkdown`, `assets`, `resultIncludes`,
-  `resultEngineDependencies`, and `widgetDependencyIncludes` — all real bodies).
-  A partial object **won't typecheck** against the full namespace type. The
-  remaining members
-  (`isJupyterNotebook`, `notebookExtensions`, `kernelspecFromMarkdown`,
-  `kernelspecForLanguage`, `fromJSON`, `markdownFromNotebookFile`,
-  `markdownFromNotebookJSON`, `quartoMdToJupyter`, `notebookFiltered`, …) are
-  **jupyter-built-in-only** — q2's jupyter engine is native-Rust and marimo uses
-  `system.pandoc`, so **no current q2 TS runtime consumer needs them**. Provide
-  them in `createJupyter` as `NotImplemented` throwers (defer-with-seam, not
-  drop) so the object satisfies the namespace type and a future jupyter port has
-  named slots. Do **not** silently narrow the `JupyterNamespace` type instead —
-  that's undiscussed and loses the contract.
-- [ ] `@quarto/api` is already a dependency of `@quarto/engine-host-deno`
-  (added in Plan 1b) — no new dependency needed.
+  `resultEngineDependencies`, `widgetDependencyIncludes`). A partial object
+  **won't typecheck** against the full namespace type (guarded by test row 19).
+  Handle the **16 remaining members by deriving each from the Q1 interface** —
+  most are stubs, but not all:
+  - **`notebookExtensions` is a REAL value, not a stub.** Q1 exposes it as
+    `kJupyterNotebookExtensions = [".ipynb"]` (`jupyter.ts:191`), assigned
+    directly. Implement it as `notebookExtensions: [".ipynb"]`. A
+    `NotImplemented` *thrower* is a function, which is not assignable to the
+    `string[]` property type → row 19 RED. This is the one non-function member,
+    so the blanket "stub the rest" rule does not apply to it.
+  - **The other 15 are `NotImplemented` throwers** (defer-with-seam, not drop;
+    all are function-typed, so throwers satisfy the type). All are
+    jupyter-built-in-only — q2's jupyter engine is native-Rust and marimo uses
+    `system.pandoc`, so **no current q2 TS runtime consumer needs them**:
+    - *Detection/introspection:* `isJupyterNotebook`, `kernelspecFromMarkdown`,
+      `kernelspecForLanguage`, `fromJSON`
+    - *Conversion:* `markdownFromNotebookFile`, `markdownFromNotebookJSON`,
+      `quartoMdToJupyter`
+    - *Processing:* `notebookFiltered`
+    - *Runtime & Environment (the cluster the earlier draft elided with "…"):*
+      `pythonExec`, `capabilities`, `capabilitiesMessage`, `capabilitiesJson`,
+      `installationMessage`, `unactivatedEnvMessage`, `pythonInstallationMessage`
+  Do **not** silently narrow the `JupyterNamespace` type instead — that's
+  undiscussed and loses the contract.
+- [x] `@quarto/api` is already a dependency of `@quarto/engine-host-deno`
+  (it is consumed by `buildQuartoAPI`, landed in Plan 2 Phase A) — no new
+  dependency needed. **But add the `./jupyter` subpath export** (see Phase 3A):
+  without it, `import … from "@quarto/api/jupyter"` here won't resolve.
 
 ### Phase 3F: Testing — frozen Test Seam Spec
 
@@ -642,11 +842,20 @@ named assertion (the impl doesn't exist yet, so hunks are named by behavior +
 the Q1 line they port). The "discriminator" column is the input state that must
 differ across the two sides of the behavior, or the row goes vacuous.
 
+> **Prevalidation provenance.** This spec was prevalidated with
+> `prevalidating-test-seams` (commit `8ee687e83`). Rows edited **after** that
+> freeze were re-prevalidated 2026-07-01: **Row 3** (rebound to the to-markdown
+> `{=tex}` emission path — the interim "the router emits `{=tex}`" wording was a
+> mis-attribution: `displayDataWithMarkdownMath` only hoists *math* latex; the
+> `{=tex}` for non-math latex is emitted downstream by `mdLatexOutput`) and
+> **Row 19** (`createJupyter`→`makeJupyter` rename only — seam logic unchanged,
+> still binds).
+
 | # | Real unit · assertion surface | Mock boundary | Named revert → assertion RED · discriminator |
 |---|---|---|---|
 | 1 | `displayDataMimeType` — bundle `{text/markdown, text/html}`, opts `{toMarkdown:true}` ⇒ returns `'text/markdown'` | none (pure) | Revert dynamic base-order → fixed html-first list ⇒ returns `'text/html'`. **Disc:** bundle must hold *both* md+html (P3-9) |
 | 2 | `displayDataIsJson` / `displayDataMimeType` — bundle w/ `…widget-view+json`, `{toHtml:true}` ⇒ widget MIME selected + `<script>` path | none | Revert the conditional widget-cluster splice ⇒ widget MIME never chosen (P3-9) |
-| 3 | `displayDataLatexIsMath` — a **non-math** `text/latex` ⇒ emitted as `{=tex}` raw block | none | Revert the is-math test (unconditional latex→math) ⇒ emitted as math. **Disc:** latex must be non-math (P3-10) |
+| 3 | **to-markdown output path** for a display_data output whose sole data is a **non-math** `text/latex` ⇒ emitted cell markdown contains a `` ```{=tex} `` raw block (from the `mdLatexOutput`→`mdFormatOutput("tex")`-equivalent), **not** a math/markdown rendering. (`displayDataLatexIsMath` is the pivot predicate returning `false`; the `{=tex}` emission is **downstream**, **not** in `displayDataWithMarkdownMath` — that pre-transform only hoists *math* latex into the markdown slot and leaves non-math unchanged; P3-10.) | recording `host.fs` (unused on the latex path) | Revert `displayDataLatexIsMath`'s is-math test → `return true` ⇒ `displayDataWithMarkdownMath` hoists the non-math latex into the markdown slot ⇒ `displayDataMimeType` picks `text/markdown` ⇒ emitted as math, **no** `{=tex}` ⇒ RED. **Disc:** input latex must be **non-math** — a math latex is hoisted either way, so it can't discriminate (P3-10) |
 | 4 | `includeWarnings` — cell `{global warning:false, local warning:true}` ⇒ included | none | Revert the global-false+local-true override branch ⇒ excluded. **Disc:** global≠local (P3-12) |
 | 5 | `tags` `echoFenced` — cell `echo: fenced` ⇒ fenced-echo path | none | Revert the `echoFenced` branch ⇒ plain echo (P3-12) |
 | 6 | `cellLabelValidator` — two cells, same label ⇒ duplicate flagged | none | Revert the dedup check ⇒ no flag (P3-11) |
@@ -660,20 +869,21 @@ differ across the two sides of the behavior, or the row goes vacuous.
 | 14 | error traceback (`to-markdown`) — error output w/ ANSI ⇒ traceback text present, ANSI escape bytes absent | recording `host.fs` | Revert the ANSI strip ⇒ escape bytes present RED |
 | 15 | **Julia-consumer-shape** (`to-markdown`) — `result.cellOutputs[0].markdown` is a defined string; `assets.base_dir`/`supporting_dir` present + snake_case; `notebookOutputs` (when present) has `prefix`/`suffix` | recording `host.fs` | Revert `cellOutputs` type `JupyterCellOutput[]`→`string[]` ⇒ `o.markdown` undefined RED (P3-1/2/5) |
 | 16 | **percent-script detection** (`percent-script`) — `# %%` code-only `.jl` ⇒ `false`; `# %% [markdown]` ⇒ `true` | recording `host.fs` (reads file) | Revert the `[markdown\|raw]`-marker requirement (loosen to bare `%%`) ⇒ code-only detected `true` RED. **Disc:** the `false` case is the discriminator — assert both polarities (P3-14) |
-| 17 | `percentScriptToMarkdown` (`percent-script`) — `# %% [markdown]\n# Hello` ⇒ a **markdown** cell (`# Hello`), not a code fence | recording `host.fs` | Revert the `[markdown]` branch ⇒ emitted as code RED |
+| 17 | `percentScriptToMarkdown` (`percent-script`) — `# %% [markdown]\n# Hello` ⇒ a **markdown** cell (`# Hello`), not a code fence | recording `host.fs` | **Merge the `[markdown]` case into the code branch** ⇒ emitted as a `` ``` ``-fenced code cell ⇒ RED. (Impl-verified wording fix: a *literal* "delete the `[markdown]` branch" falls through to the **raw** path, which is byte-identical to markdown for a metadata-less cell and does **not** redden — the binding axis is markdown-vs-**code**, not markdown-vs-raw.) |
 | 18 | `assets(host, input, to)` — returns snake_case 4-field; recorded `host.fs.ensureDir(figures_dir)` + `host.fs.walk(...)` | recording `host.fs` | Revert the `ensureDir` call ⇒ mock has no `ensureDir` RED. **(Missing-test add)** (P3-2) |
-| 19 | **Contract-conformance (tsc)** — `createJupyter(host)` is assignable to the full `quarto.jupyter` namespace type | n/a (compile-time) | Revert (delete) one `NotImplemented` stub ⇒ `tsc` build error RED (P3-6) |
+| 19 | **Contract-conformance (tsc)** — `makeJupyter(host)` is assignable to the full `quarto.jupyter` namespace type | n/a (compile-time) | Revert (delete) one `NotImplemented` stub ⇒ `tsc` build error RED (P3-6) |
 
-- [ ] Smoke/shape (not discriminators — the rows above carry the binding):
+- [x] Smoke/shape (not discriminators — the rows above carry the binding):
   convert a simple notebook JSON (2 code, 1 markdown) → markdown; and run a real
   `.ipynb` fixture through `toMarkdown` end-to-end (real temp dir) to catch gross
   integration breakage.
 
 **Accepted-untested (logged, with rationale — not silently omitted):**
-- **`pandoc` field population** — only guarded for *presence* (vendored type +
-  row 19). The Q1 metadata-accumulation port is deferred; the plan allows
-  emitting `{}` with a noted gap (Phase 3C), so there is no behavior to bind
-  yet. Re-spec a bound row when the accumulation is actually ported.
+- **`pandoc` field population** — **not applicable.** The vendored Q1
+  `jupyterToMarkdown` never populates `pandoc` (always `undefined`,
+  `jupyter.ts:713-874`), so returning `undefined` is exact parity and there is no
+  behavior to bind. The cross-cell accumulation is mainline-Quarto-only and out
+  of scope (Phase 3C `pandoc?` note), not a deferred gap.
 - **`executeOptions`/`figPos` fixup-profile selection** (P3-4) — the
   book/single-file/minimal fixup behavior is exercised only under project
   renders (no v1 caller); field *presence* is guarded by the vendored type + row
@@ -687,7 +897,9 @@ differ across the two sides of the behavior, or the row goes vacuous.
 
 Key simplifications in our rewrite:
 
-1. **No YAML schema validation** for cell options — just parse with js-yaml
+1. **No YAML schema validation** for cell options — just parse with the `yaml`
+   package's `parse()` (already a runtime dep; **not** `js-yaml`/`load()` — see
+   the cell-options item in Phase 3B)
 2. **No deno-dom** for ANSI→HTML — just strip ANSI codes (matches Q1 except on
    HTML output; can add conversion later — see Phase 3C ANSI note / P3-16)
 3. **No tree-sitter** — cell options parsing uses regex/yaml
@@ -739,7 +951,7 @@ Same rules as Plan 2 (see "Portability constraints" in that plan):
 
 1. No q2-specific imports from `jupyter/`.
 2. **No `Deno.*` or `node:*` references inside `jupyter/`.** All I/O goes
-   through the `PlatformHost` passed to `createJupyter(host)`. The **six**
+   through the `PlatformHost` passed to `makeJupyter(host)`. The **six**
    FS-touching methods (`toMarkdown`'s figure writes, `isPercentScript`,
    `percentScriptToMarkdown`, `assets`'s `ensureDir`/`walk`,
    `resultIncludes`'s widget temp writes, and `widgetDependencyIncludes`'s temp
@@ -765,28 +977,80 @@ false — disproven by `julia:272,287,231,245`; it has been removed.)
 
 ## Success Criteria
 
-- [ ] `@quarto/api/jupyter` populated with all **7 methods** (the 6 Julia
+- [x] `@quarto/api/jupyter` populated with all **7 methods** (the 6 Julia
   execute-path calls + `widgetDependencyIncludes`), exposed via
-  `createJupyter(host)` factory
-- [ ] `widgetDependencyIncludes` is a **real host-bound body**, not a
+  `makeJupyter(host)` factory
+- [x] `widgetDependencyIncludes` is a **real host-bound body**, not a
   `NotImplemented` stub — returns `PandocIncludes` assignable to
   `DependenciesResult.includes`, so the RTQ FC-2 deferred-deps wire has its
   producer (unit-tested in isolation; book renderer lights it up later)
-- [ ] **Public types come from `@quarto/types`** — no redrafted
+- [x] **Public types come from `@quarto/types`** — no redrafted
   `JupyterToMarkdownOptions`/`Result`/notebook types inside `jupyter/`
-- [ ] `createJupyter(host)` typechecks against the full `quarto.jupyter`
+- [x] `makeJupyter(host)` typechecks against the full `quarto.jupyter`
   namespace type (remaining members are `NotImplemented` stubs — P3-6)
-- [ ] No `Deno.*` or `node:*` references inside `@quarto/api/jupyter`; `assets`,
+- [x] No `Deno.*` or `node:*` references inside `@quarto/api/jupyter`; `assets`,
   `resultIncludes`, and `widgetDependencyIncludes` take the host (not pure —
   P3-2/P3-3/P3-7)
-- [ ] `toMarkdown` is async, returns `cellOutputs: JupyterCellOutput[]` (not
+- [x] `toMarkdown` is async, returns `cellOutputs: JupyterCellOutput[]` (not
   `string[]`), and round-trips through the Julia consumer (P3-1)
-- [ ] `toMarkdown` correctly converts notebooks with code, markdown, and raw cells
-- [ ] Image outputs write files to disk (via `host.fs.writeFileSync`) into
+- [x] `toMarkdown` correctly converts notebooks with code, markdown, and raw cells
+- [x] Image outputs write files to disk (via `host.fs.writeFileSync`) into
   `assets.figures_dir` and emit correct markdown references
-- [ ] HTML preservation ports `isPreservedHtml` as the constant-`false` no-op it
+- [x] HTML preservation ports `isPreservedHtml` as the constant-`false` no-op it
   is in Q1 today; no live restore mechanism is claimed (P3-15)
-- [ ] Error outputs format tracebacks readably
-- [ ] All tests pass (unit tests can pass a mock host with in-memory FS)
-- [ ] Integrated into `@quarto/engine-host-deno`'s QuartoAPI via
-  `createJupyter(denoHost)` in `buildJupyterNamespace`
+- [x] Error outputs format tracebacks readably
+- [x] All tests pass (unit tests can pass a mock host with in-memory FS)
+- [x] Integrated into `@quarto/engine-host-deno`'s QuartoAPI: `makeJupyter(host)`
+  wired **inside `buildQuartoAPI(global, host)`** — replacing the throwing
+  `jupyterStub` Proxy, with the `notYetImplementedError` helper + `as unknown as`
+  cast deleted (Phase 3E). (There is no separate `buildJupyterNamespace`
+  function, and it does **not** import `denoHost` directly.)
+
+## Completion status (2026-07-01)
+
+**COMPLETE** — executed via superpowers subagent-driven-development (one implementer
++ a spec+quality review per task; an Opus whole-branch review at the end).
+All 13 tasks landed review-clean on `feature/ts-engine-extensions`; every frozen
+Phase 3F row was RED-verified via its named revert then GREEN.
+
+Commit range (Plan 3): `99c1fed2b..3fcade285`
+- T1 `adbe1229a` ./jupyter export + constants (MIME, kLangCommentChars canonical)
+- T2 `57483bd99` display-data (Rows 1,2 + latex predicates)
+- T3 `921eed33b` tags (Rows 4,5)
+- T4 `9e8e3daf0` labels + pandoc-id (Rows 6,7)
+- T5 `dde5fa65f` cell-options (Row 8)
+- T6 `899b9ff11` preserve (inert, faithful Q1)
+- T7 `8db70b881` widgets — in-place strip + kebab/array `widgetDependencyIncludes` (Row 11)
+- T8 `5c5d94927` **to-markdown core** (Rows 3,9,10,12,13,14,15) + `mdRawOutput`/`mdFormatOutput`
+- T9 `0cc59eed1` percent-script (Rows 16,17)
+- T10 `f9ec2bf5b` assets (Row 18)
+- T11 `0099d45f4` result-helpers
+- T12 `6da1d9597` `makeJupyter` factory (7 real + `notebookExtensions` value + 15 NotImplemented) + Row 19 conformance + smoke
+- T13 `3fcade285` wire `makeJupyter` into `buildQuartoAPI`; **dropped the last cast** → cast-free `: QuartoAPI`
+
+**Verification:** per-package `tsc --noEmit` clean (quarto-api, quarto-types [zero
+edits], engine-host-deno cast-free); vitest green (quarto-api incl. 118 jupyter
+tests; engine-host-deno); deno leg green (deno-host, wire-parity `--sloppy-imports`).
+Full `cargo xtask verify` run at wrap-up (see session/branch).
+
+**End-to-end status (honest):** there is **no CLI end-to-end caller for the jupyter
+namespace yet — by design.** No v1 engine calls `quarto.jupyter.*` (the native
+jupyter engine is Rust; Julia — Plan 4 — is the first real consumer, and RTQ FC-2's
+deferred-deps path lights up only under the project/book renderer). Plan 3 is
+verified by unit/integration tests against the real `jupyter/` modules (mock
+`PlatformHost` only), the Row-19 tsc conformance gate, the engine-host wiring
+compiling cast-free, and the `.ipynb` smoke through `makeJupyter` (in-memory
+recording host, per the Phase 3F tier's "may use a real temp dir"). Full
+`cargo xtask verify` exercises the whole workspace + hub build + the embedded
+engine-host bundle, confirming the wiring breaks nothing downstream.
+
+**Deferred follow-ups (surfaced to the user; neither blocks merge):**
+1. **Helper consolidation.** `isDisplayData` is copied verbatim (zero drift) in
+   `to-markdown.ts`/`labels.ts`/`widgets.ts`/`preserve.ts`; `isCaptionableData` in
+   `to-markdown.ts`/`labels.ts`; `pandocAttrKeyvalueFromText` in `percent-script.ts`.
+   Q1 exports these from `display-data.ts`/`markdownRegex`; each local copy carries a
+   self-documenting GAP NOTE. Consolidate by exporting once + importing.
+2. **Q1 upstream quirk** (do **not** "fix" here — faithful REWRITE parity):
+   `to-markdown.ts` guards on `cap-location` but reads `fig-cap-location` for the
+   `caption-<loc>` class — a byte-faithful port of Q1 `jupyter.ts:1408-1409`. Note
+   upstream separately.

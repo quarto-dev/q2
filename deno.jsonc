@@ -3,7 +3,13 @@
   // Paths are relative to this file (the repo root).
   // The @quarto/api/platform specifier is used as `import type` in
   // deno-host.ts — erased at runtime, but needs resolution for deno check.
+  //
+  // @quarto/types is used as `import type` by the wire-parity deno test
+  // (src/wire-parity.deno-test.ts) via ./types.ts. quarto-types' index.ts uses
+  // `.js` internal specifiers, so that test is run with `--sloppy-imports`
+  // (see .github/workflows/ts-test-suite.yml). Erased at runtime.
   "imports": {
-    "@quarto/api/platform": "./ts-packages/quarto-api/src/platform/index.ts"
+    "@quarto/api/platform": "./ts-packages/quarto-api/src/platform/index.ts",
+    "@quarto/types": "./ts-packages/quarto-types/src/index.ts"
   }
 }

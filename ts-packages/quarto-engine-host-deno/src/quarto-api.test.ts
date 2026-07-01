@@ -174,34 +174,37 @@ describe("buildQuartoAPI — host-wired namespaces", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Plan-2 stub assertions (ambient, reachable, but no body)
+// Plan 2 Phase A — path/pandoc implementations (landed, no longer stubs)
 // ---------------------------------------------------------------------------
 
-describe("buildQuartoAPI — Plan-2 stubs throw", () => {
-  it("path.runtime() throws 'not yet implemented' + Plan 2", () => {
+describe("buildQuartoAPI — Plan 2 Phase A implementations", () => {
+  it("path.runtime() returns the runtimeDir path from global config (no longer a stub)", () => {
     const api = buildQuartoAPI(makeFakeGlobal(), makeFakeHost());
-    expect(() => api.path.runtime()).toThrow(/not yet implemented/i);
-    expect(() => api.path.runtime()).toThrow(/plan 2/i);
+    // Named revert: remove global.runtimeDir read → returns wrong path → RED
+    expect(api.path.runtime()).toBe("/fake/runtime");
+    expect(api.path.runtime("sub")).toBe("/fake/runtime/sub");
   });
 
-  it("path.resource() throws 'not yet implemented' + Plan 2", () => {
+  it("path.resource() returns the resourceDir path from global config (no longer a stub)", () => {
     const api = buildQuartoAPI(makeFakeGlobal(), makeFakeHost());
-    expect(() => api.path.resource("a")).toThrow(/not yet implemented/i);
-    expect(() => api.path.resource("a")).toThrow(/plan 2/i);
+    // Named revert: remove global.resourceDir read → returns wrong path → RED
+    expect(api.path.resource("a")).toBe("/fake/resources/a");
   });
 
-  it("path.dataDir() throws 'not yet implemented' + Plan 2", () => {
+  it("path.dataDir() returns the dataDir path from global config (no longer a stub)", () => {
     const api = buildQuartoAPI(makeFakeGlobal(), makeFakeHost());
-    expect(() => api.path.dataDir()).toThrow(/not yet implemented/i);
-    expect(() => api.path.dataDir()).toThrow(/plan 2/i);
+    // Named revert: remove global.dataDir read → returns wrong path → RED
+    expect(api.path.dataDir()).toBe("/fake/data");
+    expect(api.path.dataDir("sub")).toBe("/fake/data/sub");
   });
 
-  it("system.pandoc() rejects with 'not yet implemented' + Plan 2", async () => {
+  it("system.pandoc() rejects with 'pandoc unavailable' when pandocPath is null (no longer 'not yet implemented')", async () => {
+    // makeFakeGlobal() sets pandocPath: null
     const api = buildQuartoAPI(makeFakeGlobal(), makeFakeHost());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect((api.system as any).pandoc([])).rejects.toThrow(/not yet implemented/i);
+    await expect((api.system as any).pandoc([])).rejects.toThrow(/pandoc unavailable/i);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect((api.system as any).pandoc([])).rejects.toThrow(/plan 2/i);
+    await expect((api.system as any).pandoc([])).rejects.not.toThrow(/not yet implemented/i);
   });
 
   it("text.postProcessRestorePreservedHtml throws 'not yet implemented' + Plan 2", () => {
@@ -216,33 +219,38 @@ describe("buildQuartoAPI — Plan-2 stubs throw", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Plan-3 stub (jupyter)
+// Plan-3 jupyter (real namespace — Task 13 wired makeJupyter(host))
 // ---------------------------------------------------------------------------
 
-describe("buildQuartoAPI — jupyter stub throws Plan 3", () => {
-  it("jupyter.assets() throws 'not yet implemented' + Plan 3", () => {
+describe("buildQuartoAPI — jupyter (real namespace)", () => {
+  it("exposes the real notebookExtensions value (not a stub)", () => {
     const api = buildQuartoAPI(makeFakeGlobal(), makeFakeHost());
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(() => (api.jupyter as any).assets("input.qmd")).toThrow(/not yet implemented/i);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(() => (api.jupyter as any).assets("input.qmd")).toThrow(/plan 3/i);
+    expect(api.jupyter.notebookExtensions).toEqual([".ipynb"]);
   });
 
-  it("jupyter.capabilities() throws 'not yet implemented' + Plan 3", () => {
+  it("wires the 7 implemented methods as callable functions", () => {
     const api = buildQuartoAPI(makeFakeGlobal(), makeFakeHost());
+    // These are the real host-bound / pure methods landed in Plan 3 — they are
+    // functions on the namespace, not deferred throwers.
+    expect(typeof api.jupyter.toMarkdown).toBe("function");
+    expect(typeof api.jupyter.isPercentScript).toBe("function");
+    expect(typeof api.jupyter.percentScriptToMarkdown).toBe("function");
+    expect(typeof api.jupyter.assets).toBe("function");
+    expect(typeof api.jupyter.resultIncludes).toBe("function");
+    expect(typeof api.jupyter.widgetDependencyIncludes).toBe("function");
+    expect(typeof api.jupyter.resultEngineDependencies).toBe("function");
+  });
+
+  it("deferred members (Phase 3E) throw 'not implemented' + Plan 3", () => {
+    const api = buildQuartoAPI(makeFakeGlobal(), makeFakeHost());
+    // capabilities and fromJSON are among the 15 NotImplemented throwers that
+    // @quarto/api/jupyter fills in for the deferred seam.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(() => (api.jupyter as any).capabilities()).toThrow(/not yet implemented/i);
+    expect(() => (api.jupyter as any).capabilities()).toThrow(/not implemented/i);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(() => (api.jupyter as any).capabilities()).toThrow(/plan 3/i);
-  });
-
-  it("any jupyter property access throws 'not yet implemented' + Plan 3", () => {
-    const api = buildQuartoAPI(makeFakeGlobal(), makeFakeHost());
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const j = api.jupyter as any;
-    // Access any property — the Proxy get returns a throwing function
-    expect(() => j.fromJSON("{}")).toThrow(/not yet implemented/i);
-    expect(() => j.fromJSON("{}")).toThrow(/plan 3/i);
+    expect(() => api.jupyter.fromJSON("{}")).toThrow(/not implemented/i);
+    expect(() => api.jupyter.fromJSON("{}")).toThrow(/plan 3/i);
   });
 });
 

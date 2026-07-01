@@ -46,7 +46,7 @@ use crate::engine::ts_protocol::{
     TsLanguageClaim,
 };
 use crate::extension::types::{
-    ExtensionId, StaticLanguageClaim, lookup_static_claim, static_claim_to_language_claim,
+    ExtensionId, StaticLanguageClaim, combine_claims, lookup_static_claim,
 };
 use crate::stage::PandocIncludes;
 use crate::stage::cancellation::Cancellation;
@@ -119,9 +119,16 @@ pub struct TsEngine {
     /// Instance result — `Mutex<Option>` to allow poisoning.
     instance: Mutex<Option<LaunchEngineResult>>,
 
-    /// Per-render project context. Set by `set_project` before `ensure_launched`.
-    /// Consumed by `ensure_launched` via `unwrap_or_default()`.
-    /// TODO(plan1c): add production call site + render-boundary reset.
+    /// Per-render project context. Set by `set_project` before `ensure_launched`
+    /// (production call site: `build_engine_registry` at TsEngine construction),
+    /// consumed by `ensure_launched` via `unwrap_or_default()`.
+    ///
+    /// First-write-wins per engine/host lifetime — launch caches make later
+    /// writes inert by design. Every render builds a fresh registry+host, so the
+    /// single write at registry build is complete. If engines ever outlive a
+    /// ProjectContext (warm-host pooling), staleness is handled by invalidating
+    /// the launched instance, not by resetting this field — see Plan 5
+    /// §Invalidation.
     project: Mutex<Option<EngineProjectContext>>,
 
     // ── Caches ───────────────────────────────────────────────────────────────
@@ -131,7 +138,7 @@ pub struct TsEngine {
     // ── Static claims from `_extension.yml` ──────────────────────────────────
     /// Authoritative static language claims (from `_extension.yml`). `Some` → answer
     /// claims_language from this map WITHOUT loading; `None` → legacy dynamic load.
-    claims: Option<HashMap<String, StaticLanguageClaim>>,
+    claims: Option<HashMap<String, Vec<StaticLanguageClaim>>>,
     /// Complete handled-extension set; the claims_file pre-filter. `Some` → authoritative
     /// for valid_extensions; pre-filters claims_file (ext ∉ set ⇒ false, no load).
     file_extensions: Option<Vec<String>>,
@@ -160,7 +167,7 @@ impl TsEngine {
         name_declared: bool,
         engine_path: PathBuf,
         host: Arc<TsEngineHost>,
-        claims: Option<HashMap<String, StaticLanguageClaim>>,
+        claims: Option<HashMap<String, Vec<StaticLanguageClaim>>>,
         file_extensions: Option<Vec<String>>,
         claims_files: Option<Vec<String>>,
         extension_id: ExtensionId,
@@ -250,7 +257,7 @@ impl TsEngine {
                     if static_claim == LanguageClaim::None
                         && let Some(fb) = claims_map.get("fallback")
                     {
-                        static_claim = static_claim_to_language_claim(fb, first_class.as_deref());
+                        static_claim = combine_claims(fb, first_class.as_deref());
                     }
 
                     // Send the dynamic wire call. Address the harness by the
@@ -336,7 +343,13 @@ impl TsEngine {
     }
 
     /// Set the per-render project context for the next `ensure_launched` call.
-    /// Production call site + render-boundary reset owned by plan1c.
+    ///
+    /// First-write-wins per engine/host lifetime — launch caches make later
+    /// writes inert by design. Every render builds a fresh registry+host, so the
+    /// single write at registry build (in `build_engine_registry`) is complete.
+    /// If engines ever outlive a ProjectContext (warm-host pooling), staleness is
+    /// handled by invalidating the launched instance, not by resetting this
+    /// field — see Plan 5 §Invalidation.
     pub fn set_project(&self, project: EngineProjectContext) {
         *self.project.lock().unwrap() = Some(project);
     }
@@ -364,8 +377,6 @@ impl TsEngine {
     // ========================================================================
 
     fn build_execute_options(input: &str, ctx: &ExecutionContext) -> TsExecuteOptions {
-        use crate::engine::ts_protocol::TsSourceMapEntry;
-
         let identifier = TsFormatIdentifier {
             base_format: ctx.format.clone(),
             target_format: ctx.format.clone(),
@@ -375,10 +386,15 @@ impl TsEngine {
 
         let format_info = TsFormatInfo {
             identifier,
-            metadata: HashMap::new(),
+            // P1.1b: merged document metadata, lowered by
+            // `EngineExecutionStage` via `document_metadata_to_ts_map` and
+            // threaded through `ExecutionContext.metadata`. The Deno host's
+            // `metadataAsFormat` partitions this flat map into the six-bin
+            // `Format` the engine's `execute(opts)` receives.
+            metadata: ctx.metadata.clone(),
         };
 
-        let source_map: Vec<TsSourceMapEntry> = Vec::new();
+        let source_map = build_source_map(input, ctx);
 
         let lib_dir = ctx.source_path.file_stem().map_or_else(
             || "lib".to_string(),
@@ -421,32 +437,72 @@ impl TsEngine {
         }
     }
 
+    /// Read each wire include value as a file path and return its content.
+    ///
+    /// The TS-engine wire contract puts temp-file PATHS in `includes`
+    /// (mirroring Q1's `--include-in-header` contract that marimo/jupyter's
+    /// TS engines all code against — see `TsPandocIncludes`'s doc comment).
+    /// q2's internal `PandocIncludes` contract is CONTENT: `include_resolve.rs`
+    /// folds these values verbatim, and the native knitr engine
+    /// (`engine/knitr/mod.rs::convert_includes`) already reads its include
+    /// files before populating the struct. No content-vs-path sniffing: a
+    /// wire value that isn't a readable file is an engine protocol violation
+    /// and fails loudly, naming the engine, the include key, and the
+    /// offending value.
+    fn read_include_contents(
+        engine: &str,
+        key: &str,
+        paths: Option<Vec<String>>,
+    ) -> Result<Vec<String>, ExecutionError> {
+        paths
+            .unwrap_or_default()
+            .into_iter()
+            .map(|path| {
+                std::fs::read_to_string(&path).map_err(|e| {
+                    ExecutionError::other(format!(
+                        "engine '{engine}': include '{key}' value '{path}' is not a readable file: {e}"
+                    ))
+                })
+            })
+            .collect()
+    }
+
     fn translate_includes(
+        engine: &str,
         ts: Option<crate::engine::ts_protocol::TsPandocIncludes>,
-    ) -> PandocIncludes {
+    ) -> Result<PandocIncludes, ExecutionError> {
         match ts {
-            None => PandocIncludes::default(),
-            Some(inc) => PandocIncludes {
-                header_includes: inc.in_header.unwrap_or_default(),
-                include_before: inc.before_body.unwrap_or_default(),
-                include_after: inc.after_body.unwrap_or_default(),
-            },
+            None => Ok(PandocIncludes::default()),
+            Some(inc) => Ok(PandocIncludes {
+                header_includes: Self::read_include_contents(engine, "in_header", inc.in_header)?,
+                include_before: Self::read_include_contents(
+                    engine,
+                    "before_body",
+                    inc.before_body,
+                )?,
+                include_after: Self::read_include_contents(engine, "after_body", inc.after_body)?,
+            }),
         }
     }
 
     /// Map a wire `TsExecuteResult` to the internal `ExecuteResult`.
     ///
-    /// Extracted for direct unit-testability (F1 test seam).
-    fn map_execute_result(result: TsExecuteResult) -> ExecuteResult {
+    /// Extracted for direct unit-testability (F1 test seam). Fallible because
+    /// `translate_includes` reads engine-reported include paths from disk —
+    /// see its doc comment.
+    fn map_execute_result(
+        engine: &str,
+        result: TsExecuteResult,
+    ) -> Result<ExecuteResult, ExecutionError> {
         let html_dependencies = result
             .html_dependencies
             .into_iter()
             .map(Self::translate_html_dep)
             .collect();
-        let includes = Self::translate_includes(result.includes);
+        let includes = Self::translate_includes(engine, result.includes)?;
         let supporting_files = result.supporting.into_iter().map(PathBuf::from).collect();
 
-        ExecuteResult {
+        Ok(ExecuteResult {
             markdown: result.markdown,
             supporting_files,
             filters: result.filters,
@@ -457,8 +513,61 @@ impl TsEngine {
             pandoc: result.pandoc,
             resource_files: result.resource_files,
             preserve: result.preserve,
-        }
+        })
     }
+}
+
+// ============================================================================
+// Execute source-map construction
+// ============================================================================
+
+/// Build the wire source map for the execute `input`, one entry per line, from
+/// the per-render source provenance in `ctx.source_info` / `ctx.source_context`.
+///
+/// The engine-host rehydrates these entries into the `MappedString` the engine
+/// receives (`rehydrateMappedString`). Engines that consume provenance require a
+/// non-empty, correctly-mapped source map: the Julia engine's `buildSourceRanges`
+/// maps every input line back to its origin, and an all-unmappable input would
+/// make it send an *empty* `sourceRanges` array to QuartoNotebookRunner, which
+/// crashes QNR's `compute_line_file_lookup` (`maximum` over an empty collection).
+/// Previously this was stubbed to `Vec::new()`, which only worked for engines
+/// (like echo) that never inspect the markdown's provenance.
+///
+/// Each line becomes one entry `{ start, length, source }`, where `source` maps
+/// the line's start offset in `input` to its original file + byte offset via the
+/// existing `SourceInfo::map_offset`. Lines with no recoverable origin (e.g.
+/// `Generated`) get `source: None`, which the host treats as a synthetic segment.
+/// The per-line entries tile `input` contiguously, so the host's greatest-lower-
+/// bound `.map` lookup resolves any offset within a line.
+fn build_source_map(
+    input: &str,
+    ctx: &ExecutionContext,
+) -> Vec<crate::engine::ts_protocol::TsSourceMapEntry> {
+    use crate::engine::ts_protocol::{TsSourceMapEntry, TsSourcePosition};
+
+    let mut entries = Vec::new();
+    let mut offset = 0usize;
+    for line in input.split_inclusive('\n') {
+        let length = line.len();
+        let source = ctx
+            .source_info
+            .map_offset(offset, &ctx.source_context)
+            .and_then(|mapped| {
+                ctx.source_context
+                    .get_file(mapped.file_id)
+                    .map(|file| TsSourcePosition {
+                        file: file.path.clone(),
+                        file_offset: mapped.location.offset,
+                    })
+            });
+        entries.push(TsSourceMapEntry {
+            start: offset,
+            length,
+            source,
+        });
+        offset += length;
+    }
+    entries
 }
 
 // ============================================================================
@@ -534,8 +643,11 @@ impl ExecutionEngine for TsEngine {
             let mut claim = lookup_static_claim(map, language, first_class);
             if claim == LanguageClaim::None {
                 // Universal fallback: a `fallback` map key claims any otherwise-unclaimed language.
+                // The key's value is a Vec (4c0) — combine it the same way as any other
+                // language key, so a fallback engine can itself carry e.g. a
+                // whenClass-conditioned entry alongside an unconditional one.
                 if let Some(fb) = map.get("fallback") {
-                    claim = static_claim_to_language_claim(fb, first_class);
+                    claim = combine_claims(fb, first_class);
                 }
             }
             // Record for execute-time validation — positive answers only.
@@ -676,7 +788,9 @@ impl ExecutionEngine for TsEngine {
             })?;
 
         match response {
-            FromEngine::ExecuteResult { result } => Ok(Self::map_execute_result(result)),
+            FromEngine::ExecuteResult { result } => {
+                Self::map_execute_result(&self.wire_name(), result)
+            }
             other => Err(ExecutionError::other(format!(
                 "unexpected response to Execute: {other:?}"
             ))),
@@ -863,7 +977,7 @@ mod tests {
 
     fn make_engine_with_mock(
         name: &str,
-        claims: Option<HashMap<String, StaticLanguageClaim>>,
+        claims: Option<HashMap<String, Vec<StaticLanguageClaim>>>,
         file_extensions: Option<Vec<String>>,
         claims_files: Option<Vec<String>>,
     ) -> (TsEngine, Arc<MockWriteHalf>) {
@@ -888,22 +1002,36 @@ mod tests {
         (engine, mock)
     }
 
-    /// Build a simple single-language static claims map for tests.
+    /// Build a simple single-language static claims map for tests (1-element
+    /// Vec per language — the pre-4c0 shape, still the common case).
     fn single_claim(
         language: &str,
         kind: ClaimKind,
         priority: Option<i32>,
-    ) -> HashMap<String, StaticLanguageClaim> {
+    ) -> HashMap<String, Vec<StaticLanguageClaim>> {
         let mut m = HashMap::new();
         m.insert(
             language.to_string(),
-            StaticLanguageClaim {
+            vec![StaticLanguageClaim {
                 kind,
                 priority,
                 when_class: None,
-            },
+            }],
         );
         m
+    }
+
+    /// Build a static claims map with an explicit multi-claim Vec per
+    /// language (4c0 combine-rule test cases — e.g. a language key carrying
+    /// both a `whenClass`-conditioned primary claim and an unconditional
+    /// interop claim).
+    fn multi_claim(
+        entries: Vec<(&str, Vec<StaticLanguageClaim>)>,
+    ) -> HashMap<String, Vec<StaticLanguageClaim>> {
+        entries
+            .into_iter()
+            .map(|(lang, claims)| (lang.to_string(), claims))
+            .collect()
     }
 
     fn watchdog<F, R>(timeout: Duration, f: F) -> R
@@ -1543,10 +1671,102 @@ mod tests {
             post_process: true,
             ..Default::default()
         };
-        let result = TsEngine::map_execute_result(ts_result);
+        let result = TsEngine::map_execute_result("julia", ts_result)
+            .expect("no includes present, so mapping must succeed");
         assert!(
             result.needs_postprocess,
             "post_process: true must wire-feed needs_postprocess: true via map_execute_result"
+        );
+    }
+
+    // ── Fix #2: TS-engine wire includes are file paths — read into content ────
+    //
+    // Root cause: `translate_includes` mapped `TsPandocIncludes` string values
+    // (temp-file PATHS, per the Q1 engine contract marimo/jupyter/knitr all
+    // code against) verbatim into `PandocIncludes` (q2's internal CONTENT
+    // contract). Named revert: reverting `read_include_contents` to pass the
+    // path string straight through (instead of `std::fs::read_to_string`-ing
+    // it) → the content assertions below RED because they'd observe the raw
+    // path instead of the file's content.
+
+    #[test]
+    fn test_translate_includes_reads_in_header_file_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("header.html");
+        std::fs::write(&path, "<marimo-code data-test>").unwrap();
+
+        let ts_result = TsExecuteResult {
+            includes: Some(crate::engine::ts_protocol::TsPandocIncludes {
+                in_header: Some(vec![path.to_string_lossy().into_owned()]),
+                before_body: None,
+                after_body: None,
+            }),
+            ..Default::default()
+        };
+
+        let result = TsEngine::map_execute_result("marimo", ts_result)
+            .expect("a readable include path must map successfully");
+
+        assert_eq!(
+            result.includes.header_includes,
+            vec!["<marimo-code data-test>".to_string()],
+            "header_includes must contain the file's CONTENT, not its path"
+        );
+    }
+
+    #[test]
+    fn test_translate_includes_reads_before_and_after_body_file_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let before_path = dir.path().join("before.html");
+        let after_path = dir.path().join("after.html");
+        std::fs::write(&before_path, "<div>before</div>").unwrap();
+        std::fs::write(&after_path, "<div>after</div>").unwrap();
+
+        let ts_result = TsExecuteResult {
+            includes: Some(crate::engine::ts_protocol::TsPandocIncludes {
+                in_header: None,
+                before_body: Some(vec![before_path.to_string_lossy().into_owned()]),
+                after_body: Some(vec![after_path.to_string_lossy().into_owned()]),
+            }),
+            ..Default::default()
+        };
+
+        let result = TsEngine::map_execute_result("marimo", ts_result)
+            .expect("readable include paths must map successfully");
+
+        assert_eq!(
+            result.includes.include_before,
+            vec!["<div>before</div>".to_string()],
+            "include_before must contain the file's CONTENT, not its path"
+        );
+        assert_eq!(
+            result.includes.include_after,
+            vec!["<div>after</div>".to_string()],
+            "include_after must contain the file's CONTENT, not its path"
+        );
+    }
+
+    #[test]
+    fn test_translate_includes_nonexistent_path_errs_loudly() {
+        let ts_result = TsExecuteResult {
+            includes: Some(crate::engine::ts_protocol::TsPandocIncludes {
+                in_header: Some(vec!["/nonexistent/does-not-exist.html".to_string()]),
+                before_body: None,
+                after_body: None,
+            }),
+            ..Default::default()
+        };
+
+        let err = TsEngine::map_execute_result("marimo", ts_result)
+            .expect_err("a nonexistent include path must fail loudly, not pass through silently");
+        let message = err.to_string();
+        assert!(
+            message.contains("in_header"),
+            "error must name the offending include key; got: {message}"
+        );
+        assert!(
+            message.contains("/nonexistent/does-not-exist.html"),
+            "error must name the offending value; got: {message}"
         );
     }
 
@@ -1633,11 +1853,11 @@ mod tests {
             let mut claims_map = HashMap::new();
             claims_map.insert(
                 "python".to_string(),
-                StaticLanguageClaim {
+                vec![StaticLanguageClaim {
                     kind: ClaimKind::Primary,
                     priority: None,
                     when_class: Some("marimo".to_string()),
-                },
+                }],
             );
 
             let (write, read, mock) = MockTransport::pair_with_handle();
@@ -1787,11 +2007,11 @@ mod tests {
             let mut claims_map = HashMap::new();
             claims_map.insert(
                 "fallback".to_string(),
-                StaticLanguageClaim {
+                vec![StaticLanguageClaim {
                     kind: ClaimKind::Fallback,
                     priority: Some(0),
                     when_class: None,
-                },
+                }],
             );
 
             let (write, read, mock) = MockTransport::pair_with_handle();
@@ -1824,6 +2044,66 @@ mod tests {
                 host.load_engine_count(),
                 0,
                 "universal fallback must not issue LoadEngine"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── SC3: fallback-key Vec combine (claims_language, ts_engine.rs:604-607) ──
+    //
+    // Named revert: reverting the `map.get("fallback")` site back to the
+    // pre-Vec single-claim `static_claim_to_language_claim(fb, …)` call is a
+    // compile-error against the Vec-typed `claims` map — a compile failure
+    // counts as RED per the plan's SC3 spec (the type change forces the
+    // production site to route through the Vec combiner).
+
+    #[test]
+    fn sc3_fallback_key_vec_combine_zero_load() {
+        watchdog(Duration::from_secs(10), || {
+            // A registry with a real parsed-shape claims map: a normal
+            // language claim ("python") alongside a "fallback" key, both
+            // built from real `StaticLanguageClaim` Vecs (no closures/mocks
+            // in the claim data itself — only the transport is mocked).
+            let claims_map = multi_claim(vec![
+                (
+                    "python",
+                    vec![StaticLanguageClaim {
+                        kind: ClaimKind::Primary,
+                        priority: Some(1),
+                        when_class: None,
+                    }],
+                ),
+                (
+                    "fallback",
+                    vec![StaticLanguageClaim {
+                        kind: ClaimKind::Fallback,
+                        priority: Some(-5),
+                        when_class: None,
+                    }],
+                ),
+            ]);
+
+            let (engine, mock) =
+                make_engine_with_mock("jupyter-like", Some(claims_map), None, None);
+
+            // "ruby" has no direct entry — must fall through to the
+            // "fallback" key's Vec, combined via the same reducer as any
+            // other language key, entirely without loading.
+            let claim = engine.claims_language("ruby", None);
+            assert_eq!(
+                claim,
+                LanguageClaim::Fallback(-5),
+                "unclaimed language must resolve via the fallback-key Vec combine"
+            );
+            assert!(
+                !engine.host.is_alive(),
+                "fallback Vec combine must not spawn a subprocess"
+            );
+            assert_eq!(
+                engine.host.load_engine_count(),
+                0,
+                "fallback Vec combine must not issue LoadEngine"
             );
 
             mock.signal_eof();
@@ -2078,5 +2358,87 @@ mod tests {
 
             mock.signal_eof();
         });
+    }
+
+    // ── build_source_map: per-line provenance mapping ──────────────────────
+
+    /// `build_source_map` must resolve each line's *file* offset (not just
+    /// its local offset in `input`) through the real `SourceInfo::map_offset`
+    /// chain — this is the seam the Plan 4B task review flagged as
+    /// native-untested: only the julia+deno-gated e2e exercised it before
+    /// this test.
+    ///
+    /// Fixture: a file with a leading "before\n" line, so the engine's
+    /// `input` (which covers only "line1\nline2\n", starting at file byte
+    /// offset 7) has line-start file offsets that are *not* equal to their
+    /// local offsets in `input`. An identity/stub mapping (e.g. the
+    /// pre-6a5f80fc4 `Vec::new()`) cannot produce these values by accident.
+    #[test]
+    fn test_build_source_map_maps_lines_to_file_provenance() {
+        use quarto_source_map::{Location, Range, SourceContext, SourceInfo};
+
+        let mut source_context = SourceContext::new();
+        let file_content = "before\nline1\nline2\n";
+        let file_id =
+            source_context.add_file("test.qmd".to_string(), Some(file_content.to_string()));
+
+        // The engine's `input` is the substring "line1\nline2\n", which
+        // starts at file byte offset 7 ("before\n".len()).
+        let input = "line1\nline2\n";
+        assert_eq!(&file_content[7..], input);
+
+        let source_info = SourceInfo::from_range(
+            file_id,
+            Range {
+                start: Location {
+                    offset: 7,
+                    row: 1,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 7 + input.len(),
+                    row: 3,
+                    column: 0,
+                },
+            },
+        );
+
+        let ctx = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/tmp"),
+            PathBuf::from("test.qmd"),
+            "html",
+        )
+        .with_source_info(source_info, Arc::new(source_context));
+
+        let entries = build_source_map(input, &ctx);
+
+        assert_eq!(entries.len(), 2, "expected one source-map entry per line");
+
+        // Line 1: "line1\n" — local [0, 6), file offset 7 (start of "line1").
+        assert_eq!(entries[0].start, 0);
+        assert_eq!(entries[0].length, 6);
+        let source0 = entries[0]
+            .source
+            .as_ref()
+            .expect("line 1 must resolve to real provenance, not None");
+        assert_eq!(source0.file, "test.qmd");
+        assert_eq!(
+            source0.file_offset, 7,
+            "line 1's file offset must be its real position in the file, not its local offset (0)"
+        );
+
+        // Line 2: "line2\n" — local [6, 12), file offset 13 (start of "line2").
+        assert_eq!(entries[1].start, 6);
+        assert_eq!(entries[1].length, 6);
+        let source1 = entries[1]
+            .source
+            .as_ref()
+            .expect("line 2 must resolve to real provenance, not None");
+        assert_eq!(source1.file, "test.qmd");
+        assert_eq!(
+            source1.file_offset, 13,
+            "line 2's file offset must be its real position in the file, not its local offset (6)"
+        );
     }
 }

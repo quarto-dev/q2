@@ -7,10 +7,10 @@
  *   - isQmdFile (pure): core/path.ts:95
  *   - inputFilesDir (pure): core/render.ts:13
  *   - absolute (host-only, via factory): core/path.ts:319 (normalizePath)
- *   - runtime, resource, dataDir (stubs, throw "not yet implemented (Plan 2)")
+ *   - runtime, resource, dataDir (config-derived, via factory with HostGlobalConfig)
  *
  * No Deno.* / node:* used anywhere — pure ops use JS string/path logic,
- * and host-only ops go through the injected PlatformHost.cwd().
+ * and host-only ops go through the injected PlatformHost and HostGlobalConfig.
  *
  * Usage:
  *   // Pure exports — import and call directly:
@@ -18,20 +18,15 @@
  *
  *   // Host-dependent — build with makePathHost:
  *   import { makePathHost } from "@quarto/api/path";
- *   const pathHost = makePathHost(host);
+ *   const pathHost = makePathHost(host, global);
  *   pathHost.absolute("./relative/path");  // → resolved via host.cwd()
- *   pathHost.runtime();                    // → throws "not yet implemented (Plan 2)"
+ *   pathHost.runtime("subdir");            // → global.runtimeDir + "/subdir", dir created
+ *   pathHost.resource("a", "b");           // → global.resourceDir + "/a/b" (no dir creation)
+ *   pathHost.dataDir("subdir");            // → global.dataDir + "/subdir", dir created
  */
 
-import type { PlatformHost } from "../platform/index.js";
-
-// ─── Stub error helper (§2aa stub contract) ───────────────────────────────────
-
-function notYetImplementedError(method: string): Error {
-  return new Error(
-    `@quarto/api: path.${method}() is not yet implemented (Plan 2)`,
-  );
-}
+import type { HostGlobalConfig, PlatformHost } from "../platform/index.js";
+import type { QuartoAPI } from "@quarto/types";
 
 // ─── Pure direct exports ──────────────────────────────────────────────────────
 
@@ -87,45 +82,41 @@ export function inputFilesDir(input: string): string {
   return stem + "_files";
 }
 
-// ─── Host-only interface ──────────────────────────────────────────────────────
+// ─── Host-only subset (derived from the SDK contract) ─────────────────────────
 
-/** The host-dependent path methods returned by makePathHost. */
-export interface PathHostNamespace {
-  /**
-   * Resolve a (possibly relative) path to an absolute path using `host.cwd()`.
-   * Mirrors Q1 `core/path.ts:319` (`normalizePath`): if path is already
-   * absolute it is returned as-is (after normalizing separators); otherwise it
-   * is joined with cwd. Windows drive-letter normalisation (uppercase) is also
-   * applied to match Q1.
-   */
-  absolute(path: string | URL): string;
-
-  /**
-   * Return the platform-specific runtime directory for quarto.
-   * STUB — throws until the engine host is initialized at launchEngine.
-   */
-  runtime(subdir?: string): string;
-
-  /**
-   * Return a resource path within quarto's share directory.
-   * STUB — throws until the engine host is initialized at launchEngine.
-   */
-  resource(...parts: string[]): string;
-
-  /**
-   * Return the platform-specific data directory for quarto.
-   * STUB — throws until the engine host is initialized at launchEngine.
-   */
-  dataDir(subdir?: string, roaming?: boolean): string;
-}
+/**
+ * The host-dependent path methods returned by `makePathHost`.
+ *
+ * Mostly-pure namespace: the factory returns only the HOST SUBSET
+ * (`absolute`/`runtime`/`resource`/`dataDir`); the pure functions
+ * (`toForwardSlashes`/`dirAndStem`/`isQmdFile`/`inputFilesDir`) are direct
+ * exports mixed in by `buildQuartoAPI`. So we derive the SUBSET via `Pick`
+ * (Plan 2 B2, Fix B) — deriving the whole `QuartoAPI["path"]` here would be a
+ * category error (it would force the factory to also return the pure functions).
+ * `buildQuartoAPI` enforces the full shape with `... satisfies QuartoAPI["path"]`.
+ *
+ * Behavioural notes (unchanged from the prior hand-written interface):
+ *   - `absolute`: mirrors Q1 `core/path.ts:319` (`normalizePath`) — absolute
+ *     paths pass through (separators normalised); relative paths join `cwd()`;
+ *     Windows drive letters are uppercased.
+ *   - `runtime`/`dataDir`: create the dir (recursively) before returning;
+ *     `ensureDir` errors propagate. `resource`: does NOT create (read-only).
+ *   - `dataDir`'s `roaming` is a no-op — `global` ships one resolved dir.
+ */
+export type PathHostNamespace = Pick<
+  QuartoAPI["path"],
+  "absolute" | "runtime" | "resource" | "dataDir"
+>;
 
 /**
  * Build the host-dependent path methods.
  *
- * @param host - A PlatformHost (or minimal fake) with a `cwd()` method.
+ * @param host   - A PlatformHost (or minimal fake) with `cwd()` and `fs`.
+ * @param global - Process-stable host config (resource/runtime/data dirs, pandoc path).
  */
 export function makePathHost(
-  host: Pick<PlatformHost, "cwd">,
+  host: Pick<PlatformHost, "cwd" | "fs">,
+  global: HostGlobalConfig,
 ): PathHostNamespace {
   function absolute(path: string | URL): string {
     // Handle URL objects (mirrors Q1's fromFileUrl branch)
@@ -164,22 +155,43 @@ export function makePathHost(
     return file;
   }
 
-  function runtime(_subdir?: string): string {
-    throw notYetImplementedError("runtime");
+  // ── runtime ────────────────────────────────────────────────────────────────
+  // Resolves from global.runtimeDir, creates the dir (mirrors Q1 quartoDir).
+  // Errors from ensureDir propagate — no try/catch (Q1: throw = "permission issue").
+  function runtime(subdir?: string): string {
+    const p = pathJoin(global.runtimeDir, subdir);
+    host.fs.ensureDir(p);
+    return p;
   }
 
-  function resource(..._parts: string[]): string {
-    throw notYetImplementedError("resource");
+  // ── resource ───────────────────────────────────────────────────────────────
+  // Resolves from global.resourceDir, does NOT create (resources are read-only;
+  // creating one would mask a missing-resource bug — Q1 parity).
+  function resource(...parts: string[]): string {
+    return pathJoin(global.resourceDir, ...parts);
   }
 
-  function dataDir(_subdir?: string, _roaming?: boolean): string {
-    throw notYetImplementedError("dataDir");
+  // ── dataDir ────────────────────────────────────────────────────────────────
+  // Resolves from global.dataDir, creates the dir (mirrors Q1 quartoDir).
+  // `roaming` is a no-op: global ships one resolved dataDir (#6 Q1-source compat).
+  function dataDir(subdir?: string, _roaming?: boolean): string {
+    const p = pathJoin(global.dataDir, subdir);
+    host.fs.ensureDir(p);
+    return p;
   }
 
   return { absolute, runtime, resource, dataDir };
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Join non-empty path parts with "/" (portability: no node:path or @std/path).
+ * Filters out undefined and empty-string parts before joining.
+ */
+function pathJoin(...parts: (string | undefined)[]): string {
+  return parts.filter((p): p is string => p !== undefined && p !== "").join("/");
+}
 
 /**
  * Normalize path segments: resolve `.` and `..`, collapse duplicate

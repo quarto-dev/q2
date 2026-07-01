@@ -166,6 +166,18 @@ jobs:
         shell: bash
         run: deno test --allow-all ts-packages/quarto-engine-host-deno/src/deno-host.deno-test.ts
 
+      # T-Gate-parity: TS↔Rust wire-dual parity (Plan 2 Phase B gate). Reads the
+      # Rust-serialized fixture (crates/quarto-core/tests/fixtures/ts_wire_parity.json,
+      # produced by the regen-gated #[test] in ts_protocol.rs) and set-equates each
+      # instance's keys against a KEYS list pinned to the TS wire type via
+      # `satisfies`/`_Exhaustive`. `--sloppy-imports` lets deno's type-checker
+      # resolve @quarto/types' `.js` internal specifiers (so the compile guards
+      # are checked here, not just the runtime set-equality). @quarto/types is
+      # mapped in the repo-root deno.jsonc.
+      - name: Run engine-host-deno wire-parity deno test
+        shell: bash
+        run: deno test --allow-all --sloppy-imports ts-packages/quarto-engine-host-deno/src/wire-parity.deno-test.ts
+
       # Bundle freshness gate: rebuild engine-host-deno.js from source and assert
       # the committed bytes are unchanged.  Fails if someone edited TS but forgot
       # to run `npm run bundle`.  build-info.json is gitignored (volatile builtAt);

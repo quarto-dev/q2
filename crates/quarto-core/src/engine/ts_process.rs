@@ -184,7 +184,10 @@ pub trait EngineReadHalf: Send {
     /// - `Ok(Response)` — a well-formed frame.
     /// - `Err(RecvError::Eof)` — channel closed (process exit or crash).
     /// - `Err(RecvError::Malformed(line))` — a line that fails to parse as
-    ///   `Response` (the v1 stdout-protocol footgun).
+    ///   `Response` (the v1 stdout-protocol footgun). `reader_loop`'s caller
+    ///   does NOT treat a single one of these as fatal — see
+    ///   `MAX_CONSECUTIVE_MALFORMED_LINES` and the `Malformed` arm in
+    ///   `reader_loop` for the bounded log-and-skip policy.
     /// - `Err(RecvError::Io(e))` — OS-level I/O error on the pipe.
     fn recv(&mut self) -> Result<Response, RecvError>;
 }
@@ -412,6 +415,13 @@ const RECENT_STDERR_CAP: usize = 100;
 const CANCEL_TICK: Duration = Duration::from_millis(250);
 const DISCOVERY_WINDOW: Duration = Duration::from_secs(10);
 
+/// Maximum number of *consecutive* non-JSON stray lines `reader_loop` will
+/// log-and-skip before concluding the stdout channel is genuinely
+/// compromised (not just carrying one leaked banner) and falling back to the
+/// kill-everything escalation. The counter resets to 0 on every well-formed
+/// frame — see `reader_loop`'s `Malformed` arm for the full contract.
+const MAX_CONSECUTIVE_MALFORMED_LINES: u32 = 5;
+
 impl TsEngineHost {
     /// Construct with the process-stable global config.  Cheap — no subprocess
     /// spawn yet.
@@ -553,6 +563,23 @@ impl TsEngineHost {
         // Record the spawn for test assertions (one real spawn = one increment).
         #[cfg(test)]
         self.spawn_count.fetch_add(1, Ordering::Relaxed);
+
+        // Net-new production observability (J8): one INFO event per real spawn.
+        // The `#[cfg(test)] spawn_count` above is invisible to integration tests
+        // (they compile without `cfg(test)`), so this tracing event is the only
+        // surface a project-level render can key a spawn count off — J6 asserts
+        // exactly one across a two-page render, J9 asserts it orders after
+        // resolution-complete. `pid` is 0 for mock-transport hosts (no real
+        // `Child`); the real deno subprocess reports its OS pid.
+        let pid = self.child.lock().unwrap().as_ref().map(|c| c.id());
+        // NOTE: the `engine_host` target is shared with the child-stderr
+        // forwarding below (reader thread). J6/J9's exactly-one-event counts
+        // hold because this event fires synchronously on the caller thread
+        // BEFORE the reader thread exists, and the tests' thread-local
+        // subscriber never observes the reader thread. A refactor to a
+        // global/dispatch subscriber would break that isolation — re-check
+        // J6/J9 if you change subscriber scoping here.
+        tracing::info!(target: "engine_host", pid = pid.unwrap_or(0), "engine-host spawned");
 
         // Spawn the stderr reader thread (real path only; mocks pass None).
         if let Some(stderr) = stderr_opt {
@@ -889,9 +916,15 @@ fn reader_loop(
     recent_stderr: Arc<Mutex<VecDeque<String>>>,
     shutting_down: Arc<AtomicBool>,
 ) {
+    // Consecutive non-JSON stray lines seen since the last well-formed frame
+    // (or since the reader started). See the `Malformed` arm below for the
+    // full bounded-skip contract; reset to 0 whenever a frame parses.
+    let mut consecutive_malformed: u32 = 0;
+
     loop {
         match read.recv() {
             Ok(Response { id, msg }) => {
+                consecutive_malformed = 0;
                 // Route by id; drop late/unknown ids silently.
                 let slot = pending.lock().unwrap().remove(&id);
                 if let Some(slot) = slot {
@@ -911,14 +944,66 @@ fn reader_loop(
                 break;
             }
             Err(RecvError::Malformed(line)) => {
-                // Set shutting_down FIRST so the kill below doesn't re-enter
-                // the crash path (finding #7 — one terminal error per exit).
+                // Bug C reader-side resilience (2026-07-02, plan
+                // 2026-07-02-preview-capture-delivery.md, seam PC-C): a stray
+                // non-JSON line on stdout — e.g. a leaked child banner from an
+                // engine that (transiently, or due to an upstream bug) shares
+                // the engine-host's stdout fd — used to be treated as proof
+                // the whole channel was compromised: it killed the ENTIRE
+                // subprocess and broadcast an error to EVERY pending slot,
+                // discarding every in-flight capture over one leaked line
+                // (the original design's finding #7, "one terminal error per
+                // exit"). That was too aggressive: one stray line is not
+                // evidence the channel is actually corrupted.
+                //
+                // New policy: log-and-skip up to
+                // MAX_CONSECUTIVE_MALFORMED_LINES consecutive stray lines —
+                // the counter resets on every well-formed frame (the `Ok`
+                // arm above) — so a single leaked banner no longer takes down
+                // the host or fails any in-flight request. Beyond the bound,
+                // the channel IS treated as compromised and the original
+                // kill-everything behavior fires unchanged, preserving the
+                // original protection against a genuinely broken wire (wrong
+                // binary spawned, protocol mismatch, a child that never stops
+                // writing to the shared fd).
+                //
+                // Residual (documented, not fixed — ratified trade-off): if a
+                // request's own response frame IS the line that gets skipped
+                // here (below the bound), that request no longer gets the
+                // old incidental kill-all error to wake it up. A caller that
+                // sent with an explicit `timeout: false` (no window) can then
+                // wait indefinitely for a response that will never arrive.
+                // Callers that pass a per-request `window` timeout are
+                // unaffected — they still time out on schedule; only the
+                // unbounded-wait case is exposed by this change.
+                consecutive_malformed += 1;
+                let excerpt: String = line.chars().take(200).collect();
+
+                if consecutive_malformed <= MAX_CONSECUTIVE_MALFORMED_LINES {
+                    // Bounded log-and-skip: leave shutting_down/pending/child
+                    // untouched and go back to reading the next line. Only
+                    // log "skipping" here — the escalation branch below logs
+                    // its own, accurate "channel considered compromised"
+                    // message instead.
+                    error!(
+                        "engine-host protocol error: non-JSON line on stdout \
+                         (likely a stray console.log/console.info in the engine, \
+                         or a leaked child process's stdout — {consecutive_malformed}/\
+                         {MAX_CONSECUTIVE_MALFORMED_LINES} consecutive, skipping): {excerpt:?}"
+                    );
+                    continue;
+                }
+
+                // Bound exceeded: no longer a single leaked banner — treat the
+                // channel as genuinely compromised. Set shutting_down FIRST so
+                // the kill below doesn't re-enter the crash path (finding #7
+                // — one terminal error per exit).
                 shutting_down.store(true, Ordering::Relaxed);
 
                 let msg = format!(
-                    "engine-host protocol error: non-JSON line on stdout \
-                     (likely a stray console.log/console.info in the engine): {:?}",
-                    line
+                    "engine-host protocol error: {consecutive_malformed} consecutive \
+                     non-JSON lines on stdout — channel considered compromised, \
+                     terminating engine host (last line: {excerpt:?})"
                 );
                 error!("{}", msg);
 
@@ -1099,8 +1184,11 @@ mod mock {
         ready: VecDeque<Response>,
         /// `true` once `signal_eof()` / `shutdown()` is called.
         eof: bool,
-        /// Set to return `RecvError::Malformed` on next recv.
-        malformed: Option<String>,
+        /// Queue of lines to return as `RecvError::Malformed`, oldest first.
+        /// A queue (not a single slot) so tests can script N *consecutive*
+        /// stray lines atomically — see `signal_malformed_many` — without a
+        /// delivery race against the reader thread draining them one at a time.
+        malformed: VecDeque<String>,
         /// When true, automatically echo `LoadEngine` messages back as
         /// `Loaded { name: engine_path }` — avoids the pre-scripted-id
         /// assumption in concurrent tests where id assignment order is
@@ -1115,7 +1203,7 @@ mod mock {
                 scripted: HashMap::new(),
                 ready: VecDeque::new(),
                 eof: false,
-                malformed: None,
+                malformed: VecDeque::new(),
                 auto_echo_load_engine: false,
             }
         }
@@ -1241,7 +1329,22 @@ mod mock {
         /// `RecvError::Malformed(line)`.
         pub fn signal_malformed(&self, line: &str) {
             let mut state = self.inner.state.lock().unwrap();
-            state.malformed = Some(line.to_string());
+            state.malformed.push_back(line.to_string());
+            self.inner.cvar.notify_all();
+        }
+
+        /// Queue several malformed lines at once: the read half's next N
+        /// `recv()` calls return `RecvError::Malformed` for each, in order,
+        /// before falling through to any queued `ready` responses or EOF.
+        /// All N are enqueued atomically under one lock, so — unlike calling
+        /// `signal_malformed` N times — there is no race against the reader
+        /// thread draining entries between calls. Used to test the reader's
+        /// bounded consecutive-stray-line policy.
+        pub fn signal_malformed_many(&self, lines: &[&str]) {
+            let mut state = self.inner.state.lock().unwrap();
+            for &line in lines {
+                state.malformed.push_back(line.to_string());
+            }
             self.inner.cvar.notify_all();
         }
 
@@ -1285,7 +1388,7 @@ mod mock {
             let mut state = self.inner.state.lock().unwrap();
             loop {
                 // Check malformed first (takes priority over EOF).
-                if let Some(line) = state.malformed.take() {
+                if let Some(line) = state.malformed.pop_front() {
                     return Err(RecvError::Malformed(line));
                 }
                 // Return next ready response if any (drain before EOF).
@@ -1826,14 +1929,108 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Row 10 — Malformed ≠ crash
+    // Row 10a — Stray lines below the bound: log-and-skip, not fatal
     // -----------------------------------------------------------------------
     //
-    // Named revert hunk: `RecvError::Malformed` branch in `reader_loop`.
-    // Revert → falls through to EOF/crash path → assertion `matches!(Other(_))`
-    // fails.
+    // Bug C resilience (plan 2026-07-02-preview-capture-delivery.md, seam
+    // PC-C, resilience leg): a stray non-JSON line on the shared engine-host
+    // stdout — e.g. a leaked child banner — must NOT kill the host and must
+    // NOT fail an UNRELATED in-flight request; the real response each request
+    // is waiting on must still be delivered to its own slot afterwards.
+    //
+    // Named revert hunk: the bounded log-and-skip early-continue in the
+    // `RecvError::Malformed` arm of `reader_loop`. Revert it → the first
+    // stray line broadcasts an error to every pending slot and kills the
+    // channel → both A and B fail immediately with the malformed-channel
+    // error instead of their real responses → RED.
     #[test]
-    fn test_malformed_distinct_from_crash() {
+    fn test_stray_lines_below_bound_are_skipped_not_fatal() {
+        watchdog(Duration::from_secs(15), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let host = Arc::new(TsEngineHost::with_transport(
+                write,
+                read,
+                make_host_global_config(),
+            ));
+
+            // A and B: two unrelated in-flight requests (ids 0 and 1).
+            let host_a = Arc::clone(&host);
+            let a_handle = std::thread::spawn(move || {
+                let cancel = Cancellation::new();
+                host_a.request(
+                    make_load_engine_msg(),
+                    Some(Duration::from_secs(10)),
+                    &cancel,
+                )
+            });
+            std::thread::sleep(Duration::from_millis(30));
+
+            let host_b = Arc::clone(&host);
+            let b_handle = std::thread::spawn(move || {
+                let cancel = Cancellation::new();
+                host_b.request(
+                    ToEngine::LoadEngine {
+                        engine_path: "/engine-b.ts".to_string(),
+                    },
+                    Some(Duration::from_secs(10)),
+                    &cancel,
+                )
+            });
+            std::thread::sleep(Duration::from_millis(30));
+
+            // A couple of stray non-JSON lines (below the bound) — must be
+            // logged and skipped, not escalated.
+            mock.signal_malformed_many(&[
+                "[ Info: Log started at 2026-07-02T13:11:20.379",
+                "console.log('another stray line')",
+            ]);
+
+            // Let the reader drain both stray lines before the real
+            // responses arrive.
+            std::thread::sleep(Duration::from_millis(50));
+
+            // Both A and B's real responses still arrive normally,
+            // out of order, via deliver_late (both requests' `send()`
+            // already happened before we could pre-script by id).
+            mock.deliver_late(1, make_loaded_response("engine-b"));
+            mock.deliver_late(0, make_loaded_response("engine-a"));
+
+            let a_result = a_handle.join().unwrap();
+            let b_result = b_handle.join().unwrap();
+
+            assert!(
+                matches!(a_result, Ok(FromEngine::Loaded { .. })),
+                "A must still receive its own response after unrelated stray lines: {a_result:?}"
+            );
+            assert!(
+                matches!(b_result, Ok(FromEngine::Loaded { .. })),
+                "B (unrelated in-flight request) must not fail because of stray lines \
+                 on the shared channel: {b_result:?}"
+            );
+            assert!(
+                !host.is_shutting_down(),
+                "a below-bound run of stray lines must not tear down the channel"
+            );
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Row 10b — Beyond the bound: still escalates, still distinct from crash
+    // -----------------------------------------------------------------------
+    //
+    // The bound is enforced, not decorative: MAX_CONSECUTIVE_MALFORMED_LINES+1
+    // consecutive stray lines (no valid frame in between to reset the
+    // counter) must still fall back to the pre-existing kill-everything
+    // behavior — broadcast an `Other` error (NOT `ProcessCrashed` — this is a
+    // distinct failure mode from a real subprocess crash) and mark
+    // `shutting_down`.
+    //
+    // Named revert hunk: the escalation branch (`consecutive_malformed >
+    // MAX_CONSECUTIVE_MALFORMED_LINES`) in the `RecvError::Malformed` arm.
+    // Revert it to unconditional skip → this request never resolves →
+    // watchdog fires RED (the bound would be decorative).
+    #[test]
+    fn test_malformed_beyond_bound_escalates_distinct_from_crash() {
         watchdog(Duration::from_secs(10), || {
             let (write, read, mock) = MockTransport::pair_with_handle();
             let host = Arc::new(TsEngineHost::with_transport(
@@ -1855,8 +2052,13 @@ mod tests {
             // Let the request register.
             std::thread::sleep(Duration::from_millis(50));
 
-            // Signal a malformed line.
-            mock.signal_malformed("console.log('hello world')");
+            // One MORE than the bound of consecutive stray lines, with no
+            // valid frame in between to reset the counter.
+            let lines: Vec<String> = (0..=MAX_CONSECUTIVE_MALFORMED_LINES)
+                .map(|i| format!("console.log('stray {i}')"))
+                .collect();
+            let line_refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+            mock.signal_malformed_many(&line_refs);
 
             let result = request_handle.join().unwrap();
 
@@ -1865,17 +2067,11 @@ mod tests {
                 matches!(result, Err(ExecutionError::Other(_))),
                 "expected Other, got: {result:?}"
             );
-            if let Err(ExecutionError::Other(msg)) = &result {
-                assert!(
-                    msg.contains("console.log"),
-                    "message should mention console.log: {msg}"
-                );
-            }
 
-            // shutting_down must be set.
+            // shutting_down must be set once the bound is exceeded.
             assert!(
                 host.is_shutting_down(),
-                "shutting_down should be set after malformed"
+                "shutting_down should be set once the consecutive-stray-line bound is exceeded"
             );
         });
     }
@@ -2072,6 +2268,125 @@ mod tests {
                 spawn_count.load(Ordering::Relaxed),
                 1,
                 "init must run exactly once across concurrent callers"
+            );
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // J8 — engine-host spawn observability event (Plan 4H / Test Seam Spec J8)
+    // -----------------------------------------------------------------------
+    //
+    // Net-new PRODUCTION line: `tracing::info!(target: "engine_host", pid, …)`
+    // in `ensure_started_inner`, fired once per REAL spawn. Integration tests
+    // (J6/J9) compile WITHOUT `cfg(test)`, so the `#[cfg(test)] spawn_count`
+    // counter above is invisible to them — this tracing event is the only
+    // observable surface a project-level render can key off.
+    //
+    // Named revert (Test Seam Spec J8): remove the `tracing::info!` line in
+    // `ensure_started_inner` → the capture sees zero `engine_host` events →
+    // both of these unit rows AND the J6/J9 integration captures go RED.
+
+    /// A minimal tracing-capture layer recording the `target` of every event,
+    /// in arrival order, shared across threads via `Arc<Mutex<Vec<String>>>`.
+    #[derive(Clone, Default)]
+    struct TargetCapture {
+        targets: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for TargetCapture {
+        fn on_event(
+            &self,
+            event: &tracing::Event<'_>,
+            _ctx: tracing_subscriber::layer::Context<'_, S>,
+        ) {
+            self.targets
+                .lock()
+                .unwrap()
+                .push(event.metadata().target().to_string());
+        }
+    }
+
+    impl TargetCapture {
+        fn count(&self, target: &str) -> usize {
+            self.targets
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|t| t.as_str() == target)
+                .count()
+        }
+    }
+
+    // J8-a: exactly one `engine_host` event per real spawn; the idempotent
+    // second `ensure_started_inner` (fast-path, no init) fires NONE.
+    #[test]
+    fn test_j8_spawn_event_fires_once_per_spawn() {
+        use tracing_subscriber::layer::SubscriberExt;
+        watchdog(Duration::from_secs(10), || {
+            let host = TsEngineHost::new(make_host_global_config());
+            let capture = TargetCapture::default();
+            let subscriber = tracing_subscriber::registry().with(capture.clone());
+            tracing::subscriber::with_default(subscriber, || {
+                host.ensure_started_inner(|| {
+                    let (write, read) = MockTransport::pair();
+                    Ok((write, read, None))
+                })
+                .expect("first ensure_started_inner");
+                // Idempotent: write is already committed → init never runs →
+                // no second spawn event.
+                host.ensure_started_inner(|| {
+                    let (write, read) = MockTransport::pair();
+                    Ok((write, read, None))
+                })
+                .expect("second ensure_started_inner (idempotent)");
+            });
+            assert_eq!(
+                capture.count("engine_host"),
+                1,
+                "exactly one engine_host spawn event per real spawn (the idempotent \
+                 second call must fire none)"
+            );
+        });
+    }
+
+    // J8-b: exactly one `engine_host` event under the concurrent-spawn Barrier
+    // race — init runs once (coarse lock), so the event fires once. A shared
+    // `Dispatch` is installed on BOTH spawn threads (the event fires on
+    // whichever thread wins the init) so the capture sees it regardless.
+    #[test]
+    fn test_j8_spawn_event_once_under_concurrent_spawn() {
+        use tracing_subscriber::layer::SubscriberExt;
+        watchdog(Duration::from_secs(10), || {
+            let host = Arc::new(TsEngineHost::new(make_host_global_config()));
+            let capture = TargetCapture::default();
+            let dispatch =
+                tracing::Dispatch::new(tracing_subscriber::registry().with(capture.clone()));
+            let barrier = Arc::new(Barrier::new(2));
+
+            let mut handles = vec![];
+            for _ in 0..2 {
+                let host = Arc::clone(&host);
+                let barrier = Arc::clone(&barrier);
+                let dispatch = dispatch.clone();
+                handles.push(std::thread::spawn(move || {
+                    tracing::dispatcher::with_default(&dispatch, || {
+                        barrier.wait();
+                        host.ensure_started_inner(|| {
+                            let (write, read) = MockTransport::pair();
+                            Ok((write, read, None))
+                        })
+                    })
+                }));
+            }
+            for h in handles {
+                h.join().unwrap().expect("ensure_started_inner failed");
+            }
+
+            assert_eq!(
+                capture.count("engine_host"),
+                1,
+                "exactly one engine_host spawn event even under concurrent spawn \
+                 (init runs once behind the coarse lock)"
             );
         });
     }

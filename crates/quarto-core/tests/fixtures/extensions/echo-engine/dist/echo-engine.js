@@ -19,7 +19,24 @@ var echoEngine = {
   claimsFile(_file, ext) {
     return ext === ".echo";
   },
-  launch(_context) {
+  launch(context) {
+    const capturedContext = context;
+    const contextMarker = () => {
+      const echoed = {
+        dir: capturedContext.dir,
+        isSingleFile: capturedContext.isSingleFile,
+        config: capturedContext.config ?? null,
+        outputDir: capturedContext.getOutputDirectory ? capturedContext.getOutputDirectory() : null
+      };
+      return "\n\n```\nCONTEXT_JSON_START" + JSON.stringify(echoed) + "CONTEXT_JSON_END\n```\n";
+    };
+    const formatMarker = (opts) => {
+      const echoed = {
+        execute: opts.format.execute,
+        customKey: opts.format.metadata["echo-custom-key"]
+      };
+      return "\n\n```\nFORMAT_JSON_START" + JSON.stringify(echoed) + "FORMAT_JSON_END\n```\n";
+    };
     return {
       name: "echo",
       canFreeze: false,
@@ -51,9 +68,9 @@ var echoEngine = {
       },
       async execute(opts) {
         const input = opts.target.markdown.value;
-        const executed = input.replace(/```\{echo\}[\s\S]*?```/g, "**ECHO_EXECUTED**");
+        const executed = input.replace(/```\{echo\}[\s\S]*?```/g, "::: {.cell}\n::: {.cell-output .cell-output-stdout}\n**ECHO_EXECUTED**\n:::\n:::");
         return {
-          markdown: executed,
+          markdown: executed + contextMarker() + formatMarker(opts),
           supporting: [],
           filters: []
         };

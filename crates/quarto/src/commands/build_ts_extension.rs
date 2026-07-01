@@ -10,9 +10,16 @@
 //! 2. `deno.json` committed in the extension directory.
 //! 3. Workspace override — when `workspace_root` is `Some` (auto-detected
 //!    or `--workspace`): `<root>/resources/extension-build/deno.workspace.json`.
-//! 4. Shipped published template (`shipped_config` arg) — the fallback
-//!    used by installed binaries where no workspace is present.
+//! 4. Shipped published template — embedded at compile time
+//!    (`SHIPPED_DENO_JSON`, via `include_str!`) and materialized to a temp
+//!    file *only when this tier is actually reached* (see
+//!    [`materialize_shipped_config`]). This is the fallback used by
+//!    installed binaries where no workspace is present; resolution is
+//!    lazy so `--config` / an ext-dir `deno.json` / `--workspace` short-
+//!    circuit before it, and an installed binary never touches it unless
+//!    tiers 1-3 are all absent.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -34,8 +41,13 @@ pub struct BuildTsExtensionArgs {
 
 /// Resolves which deno.json config to pass to `deno bundle`.
 ///
-/// This function is **pure**: it performs no filesystem I/O.  Callers are
-/// responsible for probing the filesystem (does `ext_dir/deno.json` exist?
+/// Tiers 1-3 are **pure**: no filesystem I/O, no fallibility. Tier 4
+/// (`shipped_config`) is a **lazy provider closure**, invoked only when
+/// tiers 1-3 are all absent — this function owns the eager/lazy boundary.
+/// That laziness is the whole point: an installed binary with `--config`
+/// set (or an ext-dir `deno.json`, or `--workspace`) must never touch tier
+/// 4, even if materializing it would fail. Callers are responsible for
+/// probing the filesystem for tiers 1-3 (does `ext_dir/deno.json` exist?
 /// is there a workspace root?) and passing the results as arguments.
 ///
 /// # Precedence
@@ -44,31 +56,34 @@ pub struct BuildTsExtensionArgs {
 /// 2. `ext_deno_json` — `Some` when a `deno.json` exists in the extension dir.
 /// 3. `workspace_root` — `Some` when a q2 workspace was detected (or
 ///    `--workspace` forced): returns `<root>/resources/extension-build/deno.workspace.json`.
-/// 4. `shipped_config` — absolute path to the shipped published template;
-///    the final fallback.
-pub fn resolve_build_config(
+/// 4. `shipped_config` — lazy provider for the embedded shipped template;
+///    the final fallback, invoked only when 1-3 are all absent.
+pub fn resolve_build_config<F>(
     explicit: Option<&Path>,
     ext_deno_json: Option<&Path>,
     workspace_root: Option<&Path>,
-    shipped_config: &Path,
-) -> PathBuf {
+    shipped_config: F,
+) -> Result<PathBuf>
+where
+    F: FnOnce() -> Result<PathBuf>,
+{
     // 1. Explicit --config wins.
     if let Some(p) = explicit {
-        return p.to_path_buf();
+        return Ok(p.to_path_buf());
     }
     // 2. Extension-committed deno.json.
     if let Some(p) = ext_deno_json {
-        return p.to_path_buf();
+        return Ok(p.to_path_buf());
     }
     // 3. In-repo workspace override.
     if let Some(root) = workspace_root {
-        return root
+        return Ok(root
             .join("resources")
             .join("extension-build")
-            .join("deno.workspace.json");
+            .join("deno.workspace.json"));
     }
-    // 4. Shipped published template.
-    shipped_config.to_path_buf()
+    // 4. Shipped published template — lazy: only materialized when reached.
+    shipped_config()
 }
 
 // ============================================================================
@@ -93,32 +108,52 @@ pub fn find_workspace_root(start_dir: &Path) -> Option<PathBuf> {
 }
 
 // ============================================================================
-// Shipped-config path resolution
+// Shipped-config embed (tier 4 — installed-binary fallback)
 // ============================================================================
 
-/// Returns the path to the shipped `resources/extension-build/deno.json`
-/// template.
+/// The shipped `resources/extension-build/deno.json` template (repo root),
+/// embedded at compile time.
 ///
-/// At runtime the shipped configs live adjacent to the binary in the q2 layout
-/// (`<install-prefix>/resources/extension-build/`).  During development and
-/// tests we fall back to the workspace root detected from the current executable
-/// path, then from `CARGO_MANIFEST_DIR` (available only at compile time, exposed
-/// here via a compile-time constant).
+/// Fully self-contained: its imports are `jsr:@quarto/api` /
+/// `jsr:@quarto/types` / `jsr:/@std/` specifiers only — no relative paths —
+/// so it works unmodified from a materialized temp file regardless of
+/// working directory. This is what makes embedding (rather than an
+/// exe-adjacent resource probe) the right shape: the release tarball is
+/// single-member (just the `q2` binary), so there is no adjacent
+/// `resources/` directory to probe at runtime. Contrast the workspace
+/// variant (`deno.workspace.json`, tier 3), which has `../../ts-packages/…`
+/// relative imports and therefore stays in-repo-only, resolved via
+/// `workspace_root` rather than embedded.
+const SHIPPED_DENO_JSON: &str = include_str!("../../../../resources/extension-build/deno.json");
+
+/// Materializes the embedded shipped `deno.json` to a temp file and returns
+/// a drop guard for it alongside its path, for use as
+/// `deno bundle --config=<path>`.
 ///
-/// The caller passes the workspace root so the function stays pure and
-/// unit-testable; in production the caller uses [`find_workspace_root`] or the
-/// executable parent.
-fn shipped_config_path(workspace_root: Option<&Path>) -> Option<PathBuf> {
-    if let Some(root) = workspace_root {
-        let p = root
-            .join("resources")
-            .join("extension-build")
-            .join("deno.json");
-        if p.exists() {
-            return Some(p);
-        }
-    }
-    None
+/// Called only when tier 4 is actually selected — see the laziness
+/// contract on [`resolve_build_config`].
+///
+/// Returns a [`tempfile::TempPath`] guard rather than persisting the file
+/// via `NamedTempFile::keep()`. `keep()` detaches the file from RAII
+/// cleanup entirely — the file handle it returns is not itself a live
+/// guard, so a caller that discards it (as this function's previous form
+/// did) leaks one `q2-shipped-deno-*.json` into the OS temp dir on every
+/// installed-binary invocation that reaches tier 4, unboundedly. The
+/// caller (`execute()`) instead holds the `TempPath` for exactly as long
+/// as the file needs to exist — through the `deno bundle` subprocess run —
+/// and lets it drop afterward, on every exit path (success or `deno
+/// bundle` failure alike), which deletes the file.
+fn materialize_shipped_config() -> Result<(tempfile::TempPath, PathBuf)> {
+    let mut tmp = tempfile::Builder::new()
+        .prefix("q2-shipped-deno-")
+        .suffix(".json")
+        .tempfile()
+        .context("Failed to create a temp file for the shipped deno.json config")?;
+    tmp.write_all(SHIPPED_DENO_JSON.as_bytes())
+        .context("Failed to write the shipped deno.json config to a temp file")?;
+    let path = tmp.into_temp_path();
+    let path_buf = path.to_path_buf();
+    Ok((path, path_buf))
 }
 
 // ============================================================================
@@ -149,22 +184,30 @@ pub fn execute(args: BuildTsExtensionArgs) -> Result<()> {
         if p.exists() { Some(p) } else { None }
     };
 
-    // Shipped config (fallback for installed-binary users).
-    let shipped = shipped_config_path(auto_workspace.as_deref()).with_context(|| {
-        format!(
-            "Could not locate shipped resources/extension-build/deno.json. \
-                 If you are running from a q2 source clone, ensure the workspace root \
-                 contains resources/extension-build/. Current ext_dir: {}",
-            ext_dir.display()
-        )
-    })?;
-
+    // Tier 4 (the shipped template) is resolved lazily: `resolve_build_config`
+    // only calls `materialize_shipped_config` when tiers 1-3 are all absent,
+    // so an installed binary with `--config` set (or an ext-dir deno.json,
+    // or `--workspace`) never touches it. No eager resolution happens ahead
+    // of this call — that's the P1.2 fix.
+    //
+    // `shipped_guard` holds tier 4's temp-file drop guard for the rest of
+    // this function, if tier 4 was selected (`None` otherwise). It is
+    // declared here, before `config`, so it stays alive through the
+    // `run_deno_bundle` call below and is dropped — deleting the temp
+    // file — when `execute()` returns, on every exit path (success or
+    // `deno bundle` failure alike). This is what stops the materialized
+    // shipped `deno.json` from leaking into the OS temp dir.
+    let mut shipped_guard: Option<tempfile::TempPath> = None;
     let config = resolve_build_config(
         args.config.as_deref(),
         ext_deno.as_deref(),
         auto_workspace.as_deref(),
-        &shipped,
-    );
+        || {
+            let (guard, path) = materialize_shipped_config()?;
+            shipped_guard = Some(guard);
+            Ok(path)
+        },
+    )?;
 
     // Locate the TS entry point.
     let entry_ts = find_entry_ts(&ext_dir)?;
@@ -172,7 +215,9 @@ pub fn execute(args: BuildTsExtensionArgs) -> Result<()> {
     // Locate the output path from _extension.yml.
     let output_js = find_output_path(&ext_dir)?;
 
-    // Run deno bundle.
+    // Run deno bundle. `shipped_guard` (if `Some`) remains in scope through
+    // this call and is dropped when `execute()` returns, cleaning up the
+    // tier-4 temp file regardless of whether the bundle succeeds or fails.
     run_deno_bundle(&config, &entry_ts, &output_js)
 }
 
@@ -327,6 +372,14 @@ mod tests {
 
     // ---- resolve_build_config tests ------------------------------------
 
+    /// Panic-if-called stub for the tier-4 provider, for tests where tiers
+    /// 1-3 must short-circuit before it. Also doubles as an assertion that
+    /// `resolve_build_config` really is lazy: a mechanical signature update
+    /// that dropped the laziness would call this and fail the test.
+    fn unreachable_shipped_provider() -> Result<PathBuf> {
+        panic!("shipped_config provider must not be called when an earlier tier is selected")
+    }
+
     /// P3-config-1: explicit --config wins over everything else.
     #[test]
     fn explicit_config_wins() {
@@ -334,10 +387,14 @@ mod tests {
         let explicit = dir.path().join("custom.json");
         let ext_deno = dir.path().join("ext/deno.json");
         let workspace = dir.path().join("workspace");
-        let shipped = dir.path().join("shipped/deno.json");
 
-        let result =
-            resolve_build_config(Some(&explicit), Some(&ext_deno), Some(&workspace), &shipped);
+        let result = resolve_build_config(
+            Some(&explicit),
+            Some(&ext_deno),
+            Some(&workspace),
+            unreachable_shipped_provider,
+        )
+        .unwrap();
         assert_eq!(result, explicit, "explicit --config must win");
     }
 
@@ -347,14 +404,14 @@ mod tests {
         let dir = make_dir();
         let ext_deno = dir.path().join("ext/deno.json");
         let workspace = dir.path().join("workspace");
-        let shipped = dir.path().join("shipped/deno.json");
 
         let result = resolve_build_config(
             None, // no explicit
             Some(&ext_deno),
             Some(&workspace),
-            &shipped,
-        );
+            unreachable_shipped_provider,
+        )
+        .unwrap();
         assert_eq!(
             result, ext_deno,
             "extension deno.json must win over workspace"
@@ -362,18 +419,22 @@ mod tests {
     }
 
     /// P3-config-3: workspace override is selected when no explicit/ext-deno.
+    ///
+    /// This also covers the `--workspace` leg's needed behavior described in
+    /// the P1.2 plan item: `workspace_root = Some(root)` selects tier 3, and
+    /// the shipped provider is never touched.
     #[test]
     fn workspace_override_selected_when_no_ext_deno() {
         let dir = make_dir();
         let workspace = dir.path().join("workspace");
-        let shipped = dir.path().join("shipped/deno.json");
 
         let result = resolve_build_config(
             None, // no explicit
             None, // no ext deno.json
             Some(&workspace),
-            &shipped,
-        );
+            unreachable_shipped_provider,
+        )
+        .unwrap();
         let expected = workspace
             .join("resources")
             .join("extension-build")
@@ -391,8 +452,9 @@ mod tests {
             None, // no explicit
             None, // no ext deno.json
             None, // no workspace
-            &shipped,
-        );
+            || Ok(shipped.clone()),
+        )
+        .unwrap();
         assert_eq!(result, shipped, "shipped template must be final fallback");
     }
 
@@ -402,9 +464,14 @@ mod tests {
         let dir = make_dir();
         let explicit = dir.path().join("explicit.json");
         let ext_deno = dir.path().join("deno.json");
-        let shipped = dir.path().join("shipped/deno.json");
 
-        let result = resolve_build_config(Some(&explicit), Some(&ext_deno), None, &shipped);
+        let result = resolve_build_config(
+            Some(&explicit),
+            Some(&ext_deno),
+            None,
+            unreachable_shipped_provider,
+        )
+        .unwrap();
         assert_ne!(
             result, ext_deno,
             "explicit must beat extension deno.json (not be equal to ext_deno)"
@@ -417,17 +484,115 @@ mod tests {
     fn workspace_beats_shipped() {
         let dir = make_dir();
         let workspace = dir.path().join("workspace");
-        let shipped = dir.path().join("shipped/deno.json");
 
-        let result = resolve_build_config(None, None, Some(&workspace), &shipped);
-        assert_ne!(
-            result, shipped,
-            "workspace override must beat the shipped template"
-        );
+        let result =
+            resolve_build_config(None, None, Some(&workspace), unreachable_shipped_provider)
+                .unwrap();
         assert!(
             result.ends_with("deno.workspace.json"),
             "workspace result must end with deno.workspace.json, got: {}",
             result.display()
+        );
+    }
+
+    // ---- T4/T5 (P1.2, frozen 2026-07-02) --------------------------------
+
+    /// T4: `--config X` wins with `workspace_root = None`, and the lazy
+    /// shipped-config provider is never invoked.
+    ///
+    /// **Why this binds the real fix (vacuity note from the P1.2 seam
+    /// spec):** before the fix, `execute()` resolved the shipped config
+    /// *eagerly* via `shipped_config_path(...).with_context()?` **before**
+    /// calling `resolve_build_config` at all — so an installed binary (no
+    /// workspace root, thus no on-disk shipped config to find) hard-errored
+    /// even when `--config` was passed, regardless of what
+    /// `resolve_build_config`'s own precedence logic said. Unit-testing the
+    /// old `resolve_build_config` (which took `shipped_config: &Path`,
+    /// already resolved) could never catch that bug — it only tested logic
+    /// that was already correct. The fix moves the eager/lazy boundary
+    /// *into* `resolve_build_config` itself (the `shipped_config: F`
+    /// closure parameter) and removes the separate eager call from
+    /// `execute()`, so this function is now literally the seam `execute()`
+    /// routes through with nothing eager ahead of it — testing it directly
+    /// binds the fix.
+    #[test]
+    fn config_wins_without_workspace_and_never_touches_shipped_provider() {
+        let dir = make_dir();
+        let explicit = dir.path().join("custom.json");
+
+        let result = resolve_build_config(
+            Some(&explicit),
+            None, // no ext deno.json
+            None, // no workspace root — the installed-binary case
+            unreachable_shipped_provider,
+        )
+        .unwrap();
+
+        assert_eq!(result, explicit);
+    }
+
+    /// T5: when tiers 1-3 are all absent, tier 4 is selected and the lazy
+    /// provider materializes the embedded `resources/extension-build/deno.json`
+    /// to a temp file. Assert the materialized file's content matches the
+    /// embedded source exactly and parses as JSON — proving the embed
+    /// round-trips through `include_str!` + the temp-file write, not just
+    /// that *some* file got created.
+    ///
+    /// Plumbing note: `materialize_shipped_config` now returns
+    /// `(TempPath, PathBuf)` instead of a bare `PathBuf` (see the temp-file
+    /// leak fix below), so this test wraps it in a closure that stashes the
+    /// guard in a local `Option` — mechanical adaptation only. The asserted
+    /// behavior (content equality + JSON parse) is unchanged, and the guard
+    /// is kept alive across those assertions so the file still exists when
+    /// they run.
+    #[test]
+    fn tier4_materializes_embedded_shipped_config() {
+        let mut guard: Option<tempfile::TempPath> = None;
+        let result = resolve_build_config(None, None, None, || {
+            let (g, path) = materialize_shipped_config()?;
+            guard = Some(g);
+            Ok(path)
+        })
+        .unwrap();
+
+        let content = std::fs::read_to_string(&result).expect("materialized temp file must exist");
+        assert_eq!(
+            content, SHIPPED_DENO_JSON,
+            "materialized content must match the embedded deno.json source"
+        );
+
+        let _: serde_json::Value =
+            serde_json::from_str(&content).expect("materialized shipped config must parse as JSON");
+
+        // Guard stays alive through the assertions above; drop it explicitly
+        // here so the cleanup-on-drop behavior is exercised within the test.
+        drop(guard);
+    }
+
+    /// P1.2-followup: the materialized shipped-config temp file must be
+    /// removed once its drop guard goes out of scope — it must not leak
+    /// into the OS temp dir on every installed-binary invocation that
+    /// reaches tier 4 (the exact path the P1.2 fix exists to unblock).
+    ///
+    /// RED against the pre-fix `.keep()`-based implementation: `.keep()`
+    /// detaches the file from RAII cleanup entirely, so nothing removes it
+    /// when the returned path falls out of scope — this assertion failed
+    /// before the fix. GREEN once `materialize_shipped_config` returns a
+    /// `TempPath` guard instead of persisting via `.keep()`.
+    #[test]
+    fn shipped_config_temp_file_removed_after_guard_drops() {
+        let path_buf = {
+            let (_guard, path_buf) = materialize_shipped_config().unwrap();
+            assert!(
+                path_buf.exists(),
+                "materialized file must exist while its guard is alive"
+            );
+            path_buf
+            // `_guard` (TempPath) drops here, deleting the file.
+        };
+        assert!(
+            !path_buf.exists(),
+            "materialized shipped-config temp file must be removed once its guard drops"
         );
     }
 

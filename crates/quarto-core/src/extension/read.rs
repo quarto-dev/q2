@@ -433,20 +433,47 @@ fn parse_external_engine(item: &ConfigValue, ext_dir: &Path) -> Result<EngineCon
     })
 }
 
-/// Parse a `claims` map value into a `HashMap<String, StaticLanguageClaim>`.
+/// Parse a `claims` map value into a `HashMap<String, Vec<StaticLanguageClaim>>`
+/// (4c0 Vec-per-language form).
 ///
-/// Returns an empty map for `claims: {}`. Entries with `false`/null values are skipped.
-fn parse_claims_map(cv: &ConfigValue) -> HashMap<String, StaticLanguageClaim> {
+/// Returns an empty map for `claims: {}`. A language key's value may be:
+/// - a YAML **sequence** of claim objects → each element parsed via
+///   `parse_static_language_claim`, collected into the Vec (elements that parse
+///   to `None`, e.g. `false`/null, are dropped);
+/// - a scalar/bool/int/single-object value (pre-4c0 shape) → parsed via the
+///   same single-claim path and wrapped as a 1-element Vec (back-compat).
+///
+/// A key whose value produces zero claims (an empty sequence, or a
+/// scalar/object that parses to `None`) is omitted from the map entirely —
+/// matching the pre-4c0 "false/null → skip" behavior.
+fn parse_claims_map(cv: &ConfigValue) -> HashMap<String, Vec<StaticLanguageClaim>> {
     let ConfigValueKind::Map(entries) = &cv.value else {
         return HashMap::new();
     };
     let mut map = HashMap::new();
     for entry in entries {
-        if let Some(claim) = parse_static_language_claim(&entry.key, &entry.value) {
-            map.insert(entry.key.clone(), claim);
+        let claims = parse_static_language_claims(&entry.key, &entry.value);
+        if !claims.is_empty() {
+            map.insert(entry.key.clone(), claims);
         }
     }
     map
+}
+
+/// Parse one `claims` map entry's value into a `Vec<StaticLanguageClaim>`.
+///
+/// A YAML sequence parses each element via `parse_static_language_claim` and
+/// collects the `Some` results (order-preserving; dropped `None` elements do
+/// not shift the rest). Any other shape (scalar/object) delegates to the
+/// single-claim parser and wraps a `Some` result as a 1-element Vec.
+fn parse_static_language_claims(key: &str, cv: &ConfigValue) -> Vec<StaticLanguageClaim> {
+    if let ConfigValueKind::Array(items) = &cv.value {
+        return items
+            .iter()
+            .filter_map(|item| parse_static_language_claim(key, item))
+            .collect();
+    }
+    parse_static_language_claim(key, cv).into_iter().collect()
 }
 
 /// Parse one entry in the `claims` map.
@@ -1313,7 +1340,13 @@ contributes:
                 );
                 assert_eq!(name.as_deref(), Some("echo"));
                 let claims = claims.as_ref().unwrap();
-                let echo_claim = claims.get("echo").unwrap();
+                let echo_claims = claims.get("echo").unwrap();
+                assert_eq!(
+                    echo_claims.len(),
+                    1,
+                    "single object claim value must parse to a 1-element Vec"
+                );
+                let echo_claim = &echo_claims[0];
                 assert_eq!(echo_claim.kind, ClaimKind::Primary);
                 assert_eq!(echo_claim.priority, Some(1));
                 assert!(echo_claim.when_class.is_none());
@@ -1409,7 +1442,8 @@ contributes:
     }
 
     /// Shorthand claim values: `true` → Primary(None), number → Primary(Some(n)),
-    /// `fallback: { priority: 0 }` → Fallback entry.
+    /// `fallback: { priority: 0 }` → Fallback entry. Each still parses to a
+    /// 1-element Vec (4c0 back-compat for the scalar/single-object shape).
     #[test]
     fn test_engine_claims_shorthand_forms() {
         let tmp = TempDir::new().unwrap();
@@ -1436,17 +1470,80 @@ contributes:
             EngineContribution::External { claims, .. } => {
                 let claims = claims.as_ref().unwrap();
 
-                let echo = claims.get("echo").unwrap();
-                assert_eq!(echo.kind, ClaimKind::Primary);
-                assert_eq!(echo.priority, None);
+                let echo_claims = claims.get("echo").unwrap();
+                assert_eq!(
+                    echo_claims.len(),
+                    1,
+                    "scalar `true` must parse to a 1-element Vec"
+                );
+                assert_eq!(echo_claims[0].kind, ClaimKind::Primary);
+                assert_eq!(echo_claims[0].priority, None);
 
-                let fast = claims.get("fast").unwrap();
-                assert_eq!(fast.kind, ClaimKind::Primary);
-                assert_eq!(fast.priority, Some(3));
+                let fast_claims = claims.get("fast").unwrap();
+                assert_eq!(
+                    fast_claims.len(),
+                    1,
+                    "scalar integer must parse to a 1-element Vec"
+                );
+                assert_eq!(fast_claims[0].kind, ClaimKind::Primary);
+                assert_eq!(fast_claims[0].priority, Some(3));
 
-                let fallback = claims.get("fallback").unwrap();
-                assert_eq!(fallback.kind, ClaimKind::Fallback);
-                assert_eq!(fallback.priority, Some(0));
+                let fallback_claims = claims.get("fallback").unwrap();
+                assert_eq!(
+                    fallback_claims.len(),
+                    1,
+                    "single fallback object must parse to a 1-element Vec"
+                );
+                assert_eq!(fallback_claims[0].kind, ClaimKind::Fallback);
+                assert_eq!(fallback_claims[0].priority, Some(0));
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
+    /// SC2: a YAML **sequence** value for a `claims` key parses to a
+    /// multi-element Vec — one `StaticLanguageClaim` per sequence element,
+    /// preserving each element's kind/priority/whenClass (the marimo
+    /// bare-`{sql}` shape: a whenClass-conditioned primary claim alongside
+    /// an unconditional interop claim, both under the `sql` key).
+    #[test]
+    fn sc2_engine_claims_sequence_form_parses_multi_element_vec() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims:
+        sql:
+          - kind: primary
+            priority: 2
+            whenClass: marimo
+          - kind: interop
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims, .. } => {
+                let claims = claims.as_ref().unwrap();
+                let sql = claims.get("sql").unwrap();
+                assert_eq!(
+                    sql.len(),
+                    2,
+                    "a 2-element YAML sequence must parse to a 2-element Vec"
+                );
+                assert_eq!(sql[0].kind, ClaimKind::Primary);
+                assert_eq!(sql[0].priority, Some(2));
+                assert_eq!(sql[0].when_class.as_deref(), Some("marimo"));
+                assert_eq!(sql[1].kind, ClaimKind::Interop);
+                assert_eq!(sql[1].priority, None);
+                assert!(sql[1].when_class.is_none());
             }
             other => panic!("expected External, got {:?}", other),
         }

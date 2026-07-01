@@ -105,7 +105,14 @@ pub enum EngineContribution {
         /// Authoritative static language claims, keyed by language
         /// (engine-resolution.md §3.3 `claims:` map). `None` = undeclared
         /// (fall back to dynamic load). `Some(map)` = resolve without loading.
-        claims: Option<HashMap<String, StaticLanguageClaim>>,
+        ///
+        /// Each language key holds a **Vec** of claims (4c0): a YAML sequence
+        /// value parses to one claim per element; a scalar/bool/int/single-object
+        /// value (pre-4c0 shape) still parses to a 1-element Vec. This lets one
+        /// language key carry both a `whenClass`-conditioned primary claim and an
+        /// unconditional interop claim (e.g. marimo's bare-`{sql}` case). See
+        /// `lookup_static_claim`/`combine_claims` for the reduction rule.
+        claims: Option<HashMap<String, Vec<StaticLanguageClaim>>>,
         /// `valid_extensions` — file extensions this engine handles (e.g. [".jl"]).
         /// `None` undeclared; `Some(vec![])` handles none; `Some(...)` the set.
         file_extensions: Option<Vec<String>>,
@@ -138,6 +145,24 @@ pub enum ClaimKind {
     Fallback,
 }
 
+impl ClaimKind {
+    /// Explicit combine-rule rank for the 4c0 Vec-per-language reducer:
+    /// Primary > Interop > Fallback. This is **deliberately new, bespoke
+    /// code** — it is NOT a reuse of the cross-engine resolution-tier
+    /// ordering documented at `resolution.rs:321` ("kind dominates priority").
+    /// That note describes *emergent* behavior of running the T1→T4
+    /// cross-engine tiers in sequence; it is a doc comment, not a reusable
+    /// function. This method is the per-Vec (single-language-key) reducer's
+    /// own, independent comparator.
+    fn combine_rank(self) -> u8 {
+        match self {
+            ClaimKind::Primary => 2,
+            ClaimKind::Interop => 1,
+            ClaimKind::Fallback => 0,
+        }
+    }
+}
+
 /// Convert a single static claim to a `LanguageClaim`, honoring `when_class`.
 /// Returns `LanguageClaim::None` when `when_class` is `Some(c)` and `c != first_class`.
 pub fn static_claim_to_language_claim(
@@ -158,18 +183,61 @@ pub fn static_claim_to_language_claim(
     }
 }
 
-/// Look up `language` in a static `claims` map and convert, honoring `first_class`.
-/// Returns `LanguageClaim::None` if the language has no entry, or its entry's
-/// `when_class` doesn't match.
+/// Look up `language` in a static `claims` map and combine its Vec of claims,
+/// honoring `first_class`. Returns `LanguageClaim::None` if the language has
+/// no entry, or none of its entries' `when_class` match.
+///
+/// See `combine_claims` for the reduction rule applied to a language's Vec.
 pub fn lookup_static_claim<S: ::std::hash::BuildHasher>(
-    claims: &HashMap<String, StaticLanguageClaim, S>,
+    claims: &HashMap<String, Vec<StaticLanguageClaim>, S>,
     language: &str,
     first_class: Option<&str>,
 ) -> crate::engine::LanguageClaim {
     match claims.get(language) {
         None => crate::engine::LanguageClaim::None,
-        Some(claim) => static_claim_to_language_claim(claim, first_class),
+        Some(claim_vec) => combine_claims(claim_vec, first_class),
     }
+}
+
+/// Extract the `(kind_rank, priority)` pair used to rank a non-`None`
+/// `LanguageClaim` for the combine-rule reducer. Panics if given `None` —
+/// callers must filter those out first (a `None` claim carries no kind to
+/// rank).
+fn claim_rank(claim: &crate::engine::LanguageClaim) -> (u8, i32) {
+    use crate::engine::LanguageClaim;
+    match claim {
+        LanguageClaim::Primary(p) => (ClaimKind::Primary.combine_rank(), *p),
+        LanguageClaim::Interop(p) => (ClaimKind::Interop.combine_rank(), *p),
+        LanguageClaim::Fallback(p) => (ClaimKind::Fallback.combine_rank(), *p),
+        LanguageClaim::None => {
+            unreachable!("claim_rank must only be called on non-None claims")
+        }
+    }
+}
+
+/// Combine a Vec of static claims for one language key into the single
+/// strongest applicable `LanguageClaim` (the 4c0 combine rule).
+///
+/// Maps each claim through `static_claim_to_language_claim` (which returns
+/// `LanguageClaim::None` on a `whenClass` mismatch), drops the `None`s, and
+/// reduces the survivors by `ClaimKind::combine_rank` (kind dominates
+/// priority: Primary > Interop > Fallback, `priority` breaking ties within a
+/// kind). Returns `LanguageClaim::None` if every claim mismatches or the Vec
+/// is empty.
+///
+/// Order-independent by construction: the reducer never looks at Vec
+/// position, only at each element's converted kind/priority.
+pub fn combine_claims(
+    claims: &[StaticLanguageClaim],
+    first_class: Option<&str>,
+) -> crate::engine::LanguageClaim {
+    use crate::engine::LanguageClaim;
+    claims
+        .iter()
+        .map(|c| static_claim_to_language_claim(c, first_class))
+        .filter(|c| *c != LanguageClaim::None)
+        .max_by_key(claim_rank)
+        .unwrap_or(LanguageClaim::None)
 }
 
 /// Returns a warning if an External engine omits any static-declaration field
@@ -367,11 +435,16 @@ mod tests {
         );
     }
 
-    // --- lookup_static_claim tests ---
+    // --- lookup_static_claim tests (migrated to Vec-per-language, 4c0) ---
+    //
+    // Migration note: each map value became `Vec<StaticLanguageClaim>`. These
+    // three tests keep their original 1-element-Vec discriminators verbatim
+    // (absent key / matching whenClass / mismatched whenClass) so the
+    // pre-4c0 single-claim behavior is proven to survive the widening.
 
     #[test]
     fn lookup_absent_language_returns_none() {
-        let claims: HashMap<String, StaticLanguageClaim> = HashMap::new();
+        let claims: HashMap<String, Vec<StaticLanguageClaim>> = HashMap::new();
         assert_eq!(
             lookup_static_claim(&claims, "python", None),
             crate::engine::LanguageClaim::None
@@ -383,7 +456,7 @@ mod tests {
         let mut claims = HashMap::new();
         claims.insert(
             "python".to_string(),
-            make_claim(ClaimKind::Primary, None, Some("marimo")),
+            vec![make_claim(ClaimKind::Primary, None, Some("marimo"))],
         );
         assert_eq!(
             lookup_static_claim(&claims, "python", Some("marimo")),
@@ -396,11 +469,60 @@ mod tests {
         let mut claims = HashMap::new();
         claims.insert(
             "python".to_string(),
-            make_claim(ClaimKind::Primary, None, Some("marimo")),
+            vec![make_claim(ClaimKind::Primary, None, Some("marimo"))],
         );
         assert_eq!(
             lookup_static_claim(&claims, "python", Some("python")),
             crate::engine::LanguageClaim::None
+        );
+    }
+
+    // --- SC1: Vec combine rule — order-independent, kind dominates priority ---
+    //
+    // The discriminator: `sql`'s Vec lists Interop FIRST, then the
+    // whenClass-conditioned Primary. A naive "return the first non-None
+    // claim" reducer would answer `lookup(sql, Some("marimo"))` with
+    // `Interop(0)` (the first element always converts, since Interop has no
+    // whenClass guard); the correct strongest-kind reducer must instead
+    // combine to `Primary(2)`. This is why Interop is listed first here, not
+    // as an arbitrary ordering choice.
+    #[test]
+    fn sc1_lookup_static_claim_combines_by_strongest_kind_not_vec_order() {
+        let mut claims: HashMap<String, Vec<StaticLanguageClaim>> = HashMap::new();
+        claims.insert(
+            "sql".to_string(),
+            vec![
+                make_claim(ClaimKind::Interop, None, None),
+                make_claim(ClaimKind::Primary, Some(2), Some("marimo")),
+            ],
+        );
+        // All-claims-mismatch case: two Primary claims, both whenClass-gated,
+        // neither matching a `None` first_class.
+        claims.insert(
+            "python".to_string(),
+            vec![
+                make_claim(ClaimKind::Primary, None, Some("marimo")),
+                make_claim(ClaimKind::Primary, None, Some("other")),
+            ],
+        );
+
+        assert_eq!(
+            lookup_static_claim(&claims, "sql", Some("marimo")),
+            crate::engine::LanguageClaim::Primary(2),
+            "tagged sql: the whenClass-matching Primary claim must win over \
+             the always-applicable Interop claim, even though Interop is \
+             listed first in the Vec"
+        );
+        assert_eq!(
+            lookup_static_claim(&claims, "sql", None),
+            crate::engine::LanguageClaim::Interop(0),
+            "bare sql: only the Interop claim applies (the Primary claim's \
+             whenClass mismatches a None first_class)"
+        );
+        assert_eq!(
+            lookup_static_claim(&claims, "python", None),
+            crate::engine::LanguageClaim::None,
+            "every claim in the Vec mismatches whenClass → None"
         );
     }
 

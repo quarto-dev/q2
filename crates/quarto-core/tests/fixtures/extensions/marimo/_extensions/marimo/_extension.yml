@@ -1,0 +1,18 @@
+title: Quarto Marimo Extension
+author: marimo-team
+version: 0.4.5
+quarto-required: ">=1.9.20"
+contributes:
+  engines:
+    - path: marimo-engine.js
+      name: marimo
+      claims:
+        python:
+          - { whenClass: marimo, kind: primary, priority: 2 }
+        "python.marimo":
+          - { kind: primary, priority: 1 }
+        sql:
+          - { whenClass: marimo, kind: primary, priority: 2 }
+          - { kind: interop }
+        "sql.marimo":
+          - { kind: primary, priority: 1 }

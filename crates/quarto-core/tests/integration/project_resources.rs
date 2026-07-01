@@ -425,6 +425,7 @@ mod orchestrator_engine_channel {
             report.add_engine_files(
                 "mock-engine",
                 &doc_info.input,
+                runtime.as_ref(),
                 self.engine_files_per_doc
                     .iter()
                     .map(|(rel, _)| project.dir.join(rel)),

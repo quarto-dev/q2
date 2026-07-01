@@ -337,6 +337,26 @@ pub fn resolve_engines(
     registry: &EngineRegistry,
     claimed: Option<&str>,
 ) -> EngineResolution {
+    let resolution = resolve_engines_inner(meta, ast, registry, claimed);
+    // Net-new production observability (Plan 4H, consumed by Phase 4I / J9):
+    // one INFO event marking resolution-complete. The engine-host spawn event
+    // (`target: "engine_host"`, J8) must order AFTER this — engines resolve
+    // lazily and only spawn at first execute, never during resolution. Fires
+    // on EVERY return path (the wrapper wraps all four of `_inner`'s exits).
+    tracing::info!(
+        target: "engine_resolution",
+        engine_count = resolution.sequence.len(),
+        "engine resolution complete"
+    );
+    resolution
+}
+
+fn resolve_engines_inner(
+    meta: &ConfigValue,
+    ast: &Pandoc,
+    registry: &EngineRegistry,
+    claimed: Option<&str>,
+) -> EngineResolution {
     // --- CLAIMED SHORT-CIRCUIT (§8 / P2-10) ---
     // A file claimed by an engine resolves to exactly that engine.
     // All tiers and the `engine:` YAML are bypassed; ownership is
@@ -1331,6 +1351,63 @@ mod tests {
         assert!(
             julia_entry.config.as_ref().unwrap().get("kernel").is_some(),
             "kernel config must be preserved from top-level key"
+        );
+    }
+
+    // ── J9 substrate: resolution-complete observability event ──────────────────
+    //
+    // Net-new PRODUCTION line: `tracing::info!(target: "engine_resolution", …)`
+    // fired once at the end of every `resolve_engines` call. Added NOW (Plan 4H)
+    // so Phase 4I's J9 (ordering: engine-host spawn must order AFTER
+    // resolution-complete) consumes it without touching production again.
+    //
+    // Named revert (J9's other half): remove that `tracing::info!` line →
+    // the capture sees zero `engine_resolution` events → this row AND J9's
+    // both-events-present check go RED.
+
+    /// A minimal tracing-capture layer recording each event's `target`.
+    #[derive(Clone, Default)]
+    struct TargetCapture {
+        targets: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for TargetCapture {
+        fn on_event(
+            &self,
+            event: &tracing::Event<'_>,
+            _ctx: tracing_subscriber::layer::Context<'_, S>,
+        ) {
+            self.targets
+                .lock()
+                .unwrap()
+                .push(event.metadata().target().to_string());
+        }
+    }
+
+    #[test]
+    fn test_resolution_complete_event_fires_once() {
+        use tracing_subscriber::layer::SubscriberExt;
+
+        let registry = mock_registry(vec![mock_knitr(), mock_jupyter()]);
+        let ast = ast_with_blocks(vec![engine_cell("r")]);
+        let meta = empty_meta();
+
+        let capture = TargetCapture::default();
+        let subscriber = tracing_subscriber::registry().with(capture.clone());
+        tracing::subscriber::with_default(subscriber, || {
+            let _ = resolve_engines(&meta, &ast, &registry, None);
+        });
+
+        let count = capture
+            .targets
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|t| t.as_str() == "engine_resolution")
+            .count();
+        assert_eq!(
+            count, 1,
+            "exactly one engine_resolution event must fire per resolve_engines call"
         );
     }
 }

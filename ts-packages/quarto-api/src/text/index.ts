@@ -6,15 +6,18 @@
  *   - executeInlineCodeHandler: core/execute-inline.ts
  *   - asYamlText: core/jupyter/jupyter-fixups.ts:137
  *
- * postProcessRestorePreservedHtml is DEFERRED — it does file I/O (reads and
- * writes files via Deno.readTextFileSync / Deno.writeTextFileSync) and cannot
- * live in a pure namespace. See task-2aa-2-brief.md plan decision #3.
+ * postProcessRestorePreservedHtml is a real-typed STUB (Plan 2 B2). Its real
+ * body does file I/O (reads/writes via PlatformHost) — a natural future
+ * Phase-A-style body — so it currently throws `notYetImplementedError`. It is
+ * exported here (rather than left to the harness) so `buildQuartoAPI` can drop
+ * its local stub and the assembled `text` namespace conforms to `QuartoAPI["text"]`
+ * without a cast. See task-2aa-2-brief.md plan decision #3.
  *
- * No Deno.* / node:* used here — all pure string operations.
+ * Aside from that stub, no Deno.* / node:* used here — all pure string operations.
  */
 
 import { stringify } from "yaml";
-import type { Metadata } from "@quarto/types";
+import type { Metadata, PostProcessOptions } from "@quarto/types";
 
 // ─── lines ────────────────────────────────────────────────────────────────────
 
@@ -135,4 +138,26 @@ export function asYamlText(metadata: Metadata): string {
     indent: 2,
     lineWidth: -1,
   });
+}
+
+// ─── postProcessRestorePreservedHtml (real-typed STUB) ─────────────────────────
+
+function notYetImplementedError(method: string): Error {
+  return new Error(
+    `@quarto/api: text.${method}() is not yet implemented (Plan 2)`,
+  );
+}
+
+/**
+ * Restore preserved HTML blocks in a rendered output file during post-processing.
+ * Mirrors Q1 `core/text.ts` (does file I/O via the platform host in its real body).
+ *
+ * STUB — throws `notYetImplementedError` until the file-IO body lands (Plan 2 B2).
+ * Typed to the real SDK signature (`PostProcessOptions`) so the `text` namespace
+ * conforms to `QuartoAPI["text"]` and the harness can drop its local stub.
+ */
+export function postProcessRestorePreservedHtml(
+  _options: PostProcessOptions,
+): void {
+  throw notYetImplementedError("postProcessRestorePreservedHtml");
 }

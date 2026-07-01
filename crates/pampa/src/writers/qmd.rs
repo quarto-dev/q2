@@ -442,6 +442,52 @@ fn write_attr<W: std::io::Write + ?Sized>(
     Ok(())
 }
 
+/// Like `write_attr`, but for the two attr sites (code fences, inline
+/// code spans) where the parser encodes a space-separated `{lang .cls}`
+/// language token as a literal bracket-wrapped class string
+/// (`"{python}"` — see `test_code_block_attributes.rs` and
+/// `engine_cell_lang` in `quarto-core::engine::capture_splice`, the
+/// reader-side unwrap this mirrors). Such a class is written back as a
+/// bare, unprefixed token instead of being dot-prefixed like a normal
+/// class, so `{python .marimo}` round-trips instead of becoming
+/// `{.{python} .marimo}`.
+///
+/// Divs/spans/links/images/tables never receive bracket-wrapped classes
+/// from the parser, so they keep using plain `write_attr`.
+fn write_code_attr<W: std::io::Write + ?Sized>(
+    attr: &crate::pandoc::Attr,
+    writer: &mut W,
+    _ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
+    let (id, classes, keyvals) = attr;
+    let mut wrote_something = false;
+    write!(writer, "{{")?;
+    if !id.is_empty() {
+        write!(writer, "#{}", id)?;
+        wrote_something = true;
+    }
+    for class in classes {
+        if wrote_something {
+            write!(writer, " ")?;
+        }
+        if let Some(lang) = class.strip_prefix('{').and_then(|s| s.strip_suffix('}')) {
+            write!(writer, "{}", lang)?;
+        } else {
+            write!(writer, ".{}", class)?;
+        }
+        wrote_something = true;
+    }
+    for (key, value) in keyvals {
+        if wrote_something {
+            write!(writer, " ")?;
+        }
+        write!(writer, "{}=\"{}\"", key, escape_quotes(value))?;
+        wrote_something = true;
+    }
+    write!(writer, "}}")?;
+    Ok(())
+}
+
 fn write_blockquote(
     blockquote: &BlockQuote,
     buf: &mut dyn std::io::Write,
@@ -709,8 +755,11 @@ fn write_codeblock(
         // Single class, no other attributes: write as bare word
         write!(buf, "{}", classes[0])?;
     } else if !id.is_empty() || !classes.is_empty() || !keyvals.is_empty() {
-        // Has attributes: write full attribute block (no space before it)
-        write_attr(&codeblock.attr, buf, ctx)?;
+        // Has attributes: write full attribute block (no space before it).
+        // Uses write_code_attr (not write_attr) because a class here may
+        // be the bracket-wrapped language pseudo-class — see its doc
+        // comment.
+        write_code_attr(&codeblock.attr, buf, ctx)?;
     }
 
     writeln!(buf)?;
@@ -1687,8 +1736,11 @@ fn write_code(
     }
     write!(buf, "{}", backticks)?;
     // TODO: Handle attributes if non-empty
+    // Uses write_code_attr (not write_attr): inline code shares the
+    // parser's bracket-wrapped language-class encoding with code fences
+    // — see write_code_attr's doc comment.
     if !is_empty_attr(&code.attr) {
-        write_attr(&code.attr, buf, _ctx)?;
+        write_code_attr(&code.attr, buf, _ctx)?;
     }
     Ok(())
 }

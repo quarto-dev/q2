@@ -1,0 +1,8 @@
+---
+title: "Marimo Widget"
+---
+
+```{python .marimo}
+import marimo as mo
+mo.ui.slider(1, 10, value=5)
+```

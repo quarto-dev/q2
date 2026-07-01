@@ -138,9 +138,18 @@ impl CellOutputMap {
 /// - Engine cell at `A1[i]` → consume the next cell wrapper at
 ///   `B1[j]` (matched by `is_cell_wrapper`). Record `(key, B1[j])`,
 ///   advance both pointers.
-/// - Prose at `A1[i]` → must match `B1[j]` structurally; advance
-///   both pointers. Divergence stops the walk (fail-soft); whatever
-///   pairs were collected before the divergence remain valid.
+/// - A pair of `Div`s at `A1[i]` / `B1[j]` → recurse into their
+///   contents with the same walk (sharing the occurrence counter),
+///   then advance both pointers. This is what lets a cell *nested*
+///   in a Div — e.g. the `::: {#fig-...}` float that pre-engine
+///   sugaring wraps around a `#| label: fig-*` cell — reach its
+///   captured output. Without the recursion the two Divs compare
+///   structurally unequal (one holds raw source, the other the
+///   executed wrapper) and the whole walk used to stop there.
+/// - Other prose at `A1[i]` → must match `B1[j]` structurally;
+///   advance both pointers. Divergence stops the walk at that
+///   nesting level (fail-soft); whatever pairs were collected
+///   before the divergence remain valid.
 ///
 /// Skipped cell wrappers in `B1` (which can happen if a cell was
 /// emitted at a position A1 didn't expect — e.g. an engine that
@@ -150,10 +159,20 @@ impl CellOutputMap {
 pub fn derive_cell_outputs(a1: &Pandoc, b1: &Pandoc) -> CellOutputMap {
     let mut map = CellOutputMap::default();
     let mut occurrences: HashMap<u64, usize> = HashMap::new();
+    derive_cell_outputs_walk(&a1.blocks, &b1.blocks, &mut map, &mut occurrences);
+    map
+}
 
-    let a_blocks = &a1.blocks;
-    let b_blocks = &b1.blocks;
-
+/// One nesting level of the [`derive_cell_outputs`] walk. `map` and
+/// `occurrences` are shared across all levels so `(hash, occurrence)`
+/// keys are assigned in document order — the same order
+/// [`splice_blocks`] assigns them on the A2 side.
+fn derive_cell_outputs_walk(
+    a_blocks: &[Block],
+    b_blocks: &[Block],
+    map: &mut CellOutputMap,
+    occurrences: &mut HashMap<u64, usize>,
+) {
     let mut i = 0usize;
     let mut j = 0usize;
 
@@ -201,6 +220,16 @@ pub fn derive_cell_outputs(a1: &Pandoc, b1: &Pandoc) -> CellOutputMap {
                 *occurrences.entry(hash).or_insert(0) += 1;
             }
             i += 1;
+        } else if let (Block::Div(a_div), Some(Block::Div(b_div))) = (a_block, b_blocks.get(j)) {
+            // A pair of Divs: recurse so cells nested inside (fig
+            // floats, margin/column divs, callouts, tabset panels)
+            // are keyed and mapped. Recursing even when the two Divs
+            // are structurally equal keeps the shared occurrence
+            // counter aligned with the A2-side splice walk, which
+            // visits every nested engine cell in document order.
+            derive_cell_outputs_walk(&a_div.content, &b_div.content, map, occurrences);
+            i += 1;
+            j += 1;
         } else {
             // Prose block. Should match B1[j] structurally — but the
             // engine sometimes inserts a `Div.cell` here if e.g. a
@@ -217,14 +246,12 @@ pub fn derive_cell_outputs(a1: &Pandoc, b1: &Pandoc) -> CellOutputMap {
                 j += 1;
             } else {
                 // Walk diverged. Conservative: stop building the
-                // map — what we've collected so far is still valid
-                // for those earlier cells.
+                // map at this nesting level — what we've collected
+                // so far is still valid for those earlier cells.
                 break;
             }
         }
     }
-
-    map
 }
 
 /// Convenience wrapper: `structural_eq_block` lives in
@@ -256,6 +283,21 @@ pub fn splice_cells(mut a2: Pandoc, map: &CellOutputMap, engine_name: &str) -> P
 
 fn splice_blocks(blocks: Blocks, map: &CellOutputMap, engine_name: &str) -> Blocks {
     let mut occurrences: HashMap<u64, usize> = HashMap::new();
+    splice_blocks_walk(blocks, map, engine_name, &mut occurrences)
+}
+
+/// One nesting level of the A2 splice walk. Recurses into `Div`
+/// content (fig floats, margin/column divs, callouts, tabset panels)
+/// so nested engine cells are reached; `occurrences` is shared across
+/// levels so keys are assigned in document order, mirroring
+/// [`derive_cell_outputs_walk`]. Replacement blocks (the captured
+/// `Div.cell` wrappers) are pushed as-is, never descended into.
+fn splice_blocks_walk(
+    blocks: Blocks,
+    map: &CellOutputMap,
+    engine_name: &str,
+    occurrences: &mut HashMap<u64, usize>,
+) -> Blocks {
     let mut out = Vec::with_capacity(blocks.len());
     for block in blocks {
         match engine_cell_lang(&block) {
@@ -273,7 +315,15 @@ fn splice_blocks(blocks: Blocks, map: &CellOutputMap, engine_name: &str) -> Bloc
                     out.push(block);
                 }
             }
-            _ => out.push(block),
+            _ => {
+                if let Block::Div(mut div) = block {
+                    let content = std::mem::take(&mut div.content);
+                    div.content = splice_blocks_walk(content, map, engine_name, occurrences);
+                    out.push(Block::Div(div));
+                } else {
+                    out.push(block);
+                }
+            }
         }
     }
     out
@@ -318,11 +368,12 @@ pub fn apply_capture_splice(a2: Pandoc, a1: &Pandoc, b1: &Pandoc, engine_name: &
 /// and `capture.engine_name`).
 ///
 /// Like a single splice, this is fail-soft per engine: a capture whose
-/// cells don't match leaves those cells as raw source. **Limitation:**
-/// `splice_cells` walks top-level blocks only, so if engine 1 emits
-/// engine 2's cell *inside* a `Div.cell` wrapper, engine 2's splice
-/// won't reach it (the cell renders as raw source). The common case —
-/// each engine's cells at top level — folds correctly.
+/// cells don't match leaves those cells as raw source. The splice walk
+/// recurses into `Div` content (fig floats, callouts, tabsets — and
+/// previously-spliced `Div.cell` wrappers), so engine 2's cell is
+/// reached even when engine 1's output nests it inside a Div. Cells
+/// nested in non-Div containers (e.g. list items) are still not
+/// reached and render as raw source.
 pub fn apply_capture_splices(mut a2: Pandoc, splices: &[(Pandoc, Pandoc, String)]) -> Pandoc {
     for (a1, b1, engine_name) in splices {
         a2 = apply_capture_splice(a2, a1, b1, engine_name);
@@ -599,6 +650,77 @@ mod tests {
         let out = apply_capture_splices(a2.clone(), &[]);
         assert_eq!(out.blocks.len(), 2);
         assert!(matches!(out.blocks[1], Block::CodeBlock(_)));
+    }
+
+    /// Build a figure-float Div (`::: {#fig-...}`) wrapping arbitrary
+    /// blocks — the shape pre-engine sugaring produces for a cell
+    /// carrying `#| label: fig-*`.
+    fn fig_div(id: &str, content: Vec<Block>) -> Block {
+        Block::Div(Div {
+            attr: (id.to_string(), Vec::new(), LinkedHashMap::new()),
+            content,
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    #[test]
+    fn cell_nested_in_figure_div_splices() {
+        // Regression: a cell with `#| label: fig-*` is wrapped in a
+        // `::: {#fig-...}` Div by pre-engine sugaring, so it is NOT a
+        // top-level block. The splice walk must recurse into Div
+        // content on both the derive side (A1/B1) and the splice side
+        // (A2), or the cell silently renders as raw source (the
+        // julia-figure preview bug: server records the capture, pane
+        // never shows the plot).
+        let cell = code_cell("julia", "plot(1:10)");
+        let a1 = pandoc_of(vec![
+            prose("intro"),
+            fig_div("fig-violin", vec![cell.clone()]),
+            prose("outro"),
+        ]);
+        let b1 = pandoc_of(vec![
+            prose("intro"),
+            fig_div("fig-violin", vec![cell_wrapper("X1")]),
+            prose("outro"),
+        ]);
+        let a2 = a1.clone();
+
+        let out = apply_capture_splice(a2, &a1, &b1, "julia-engine");
+
+        assert_eq!(out.blocks.len(), 3);
+        let Block::Div(fig) = &out.blocks[1] else {
+            panic!("expected fig div, got {:?}", &out.blocks[1]);
+        };
+        assert_eq!(
+            first_div_marker(&fig.content[0]),
+            Some("X1"),
+            "nested cell must be replaced by the captured .cell wrapper; got {:?}",
+            &fig.content[0]
+        );
+    }
+
+    #[test]
+    fn nested_and_top_level_cells_share_occurrence_ordering() {
+        // Two byte-identical cells: one nested in a fig div, one at
+        // top level. The (hash, occurrence) keys must be assigned in
+        // the same document order on the derive side and the splice
+        // side, so each cell receives ITS OWN captured output.
+        let cell = code_cell("julia", "plot(1:10)");
+        let a1 = pandoc_of(vec![fig_div("fig-a", vec![cell.clone()]), cell.clone()]);
+        let b1 = pandoc_of(vec![
+            fig_div("fig-a", vec![cell_wrapper("NESTED")]),
+            cell_wrapper("TOP"),
+        ]);
+        let a2 = a1.clone();
+
+        let out = apply_capture_splice(a2, &a1, &b1, "julia-engine");
+
+        let Block::Div(fig) = &out.blocks[0] else {
+            panic!("expected fig div, got {:?}", &out.blocks[0]);
+        };
+        assert_eq!(first_div_marker(&fig.content[0]), Some("NESTED"));
+        assert_eq!(first_div_marker(&out.blocks[1]), Some("TOP"));
     }
 
     #[test]

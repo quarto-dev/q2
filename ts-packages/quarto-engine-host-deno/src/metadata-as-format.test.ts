@@ -7,8 +7,9 @@
  * Parity source: external-sources/quarto-cli/src/config/metadata.ts:165-239
  */
 import { describe, it, expect } from "vitest";
-import { metadataAsFormat } from "./metadata-as-format.js";
+import { applyExecuteDefaults, metadataAsFormat } from "./metadata-as-format.js";
 import type { TsFormatInfo } from "./types.js";
+import type { Format } from "@quarto/types";
 
 // ---------------------------------------------------------------------------
 // T1.1 — nested-bin peel
@@ -188,5 +189,59 @@ describe("T1.10 explicit identifier wins over flat-key classified", () => {
     expect(fmt.identifier["target-format"]).toBe("revealjs");
     // Explicit-only field present
     expect(fmt.identifier["base-format"]).toBe("html");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T1.11 — applyExecuteDefaults fills Q1 base execute-visibility defaults
+//
+// The Julia engine (first real jupyterToMarkdown consumer) drops every cell
+// when format.execute.include / .output / .eval are undefined. applyExecuteDefaults
+// fills the Q1 base defaults (formats-shared.ts:210-217) for absent keys only.
+//
+// Named revert: make applyExecuteDefaults a no-op (return format unchanged) →
+// include/output/eval undefined → the "defaults present" expectations go RED.
+// ---------------------------------------------------------------------------
+describe("T1.11 applyExecuteDefaults", () => {
+  it("fills absent execute-visibility keys with Q1 base defaults", () => {
+    // A doc that only set execute.daemon (like the Plan-4B minimal doc).
+    const fmt = applyExecuteDefaults(
+      metadataAsFormat({
+        identifier: { "base-format": "html", "target-format": "", "display-name": "" },
+        metadata: { execute: { daemon: false } },
+      }),
+    );
+    // Base defaults filled (these gate includeCell / includeCode / includeOutput).
+    expect(fmt.execute["include"]).toBe(true);
+    expect(fmt.execute["eval"]).toBe(true);
+    expect(fmt.execute["output"]).toBe(true);
+    expect(fmt.execute["echo"]).toBe(true);
+    expect(fmt.execute["warning"]).toBe(true);
+    expect(fmt.execute["error"]).toBe(false);
+    // The document's own value is preserved (not clobbered by a default).
+    expect(fmt.execute["daemon"]).toBe(false);
+  });
+
+  it("does not override a document-set visibility key (echo: false wins)", () => {
+    const fmt = applyExecuteDefaults(
+      metadataAsFormat({
+        identifier: { "base-format": "html", "target-format": "", "display-name": "" },
+        metadata: { execute: { echo: false } },
+      }),
+    );
+    // Explicit echo:false is preserved; the other defaults are still filled.
+    expect(fmt.execute["echo"]).toBe(false);
+    expect(fmt.execute["include"]).toBe(true);
+  });
+
+  it("is a pure fill — leaves a fully-specified execute block unchanged", () => {
+    const full: Format["execute"] = {
+      include: false, eval: false, output: false, echo: false, warning: false, error: true,
+    };
+    const fmt: Format = {
+      identifier: {}, render: {}, execute: { ...full }, pandoc: {}, language: {}, metadata: {},
+    };
+    applyExecuteDefaults(fmt);
+    expect(fmt.execute).toEqual(full);
   });
 });

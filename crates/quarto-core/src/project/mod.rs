@@ -435,6 +435,129 @@ fn any_external_engine(extensions: &[Extension]) -> bool {
     })
 }
 
+/// Lower a project-config [`ConfigValue`] subtree to its wire
+/// [`TsMetadataValue`](crate::engine::ts_protocol::TsMetadataValue) mirror
+/// (a plain JSON value).
+///
+/// - maps/arrays recurse (map keys stringified),
+/// - bool / integer / float / null scalars map directly,
+/// - every string-like value (`Scalar(String)`, `Path`, `Glob`, `Expr`, and
+///   `PandocInlines`) goes through [`ConfigValue::as_plain_text`] — the
+///   metadata-as-str lint lesson: a bare front-matter string can be stored as
+///   `PandocInlines`, for which `as_str()` returns `None`.
+///
+/// Source info is dropped. Invoked on the `engines` subtree by
+/// [`build_engine_config_map`] (DQ-5) and over the full merged document
+/// metadata by [`document_metadata_to_ts_map`] (Plan 1c.2 P1.1b).
+#[cfg(not(target_arch = "wasm32"))]
+fn config_value_to_ts_metadata(cv: &ConfigValue) -> crate::engine::ts_protocol::TsMetadataValue {
+    use crate::engine::ts_protocol::TsMetadataValue;
+    use yaml_rust2::Yaml;
+
+    if let Some(entries) = cv.as_map_entries() {
+        let mut map = std::collections::HashMap::new();
+        for entry in entries {
+            map.insert(entry.key.clone(), config_value_to_ts_metadata(&entry.value));
+        }
+        return TsMetadataValue::Map(map);
+    }
+    if let Some(items) = cv.as_array() {
+        return TsMetadataValue::Array(items.iter().map(config_value_to_ts_metadata).collect());
+    }
+    match cv.as_yaml() {
+        Some(Yaml::Boolean(b)) => return TsMetadataValue::Bool(*b),
+        Some(Yaml::Integer(i)) => return TsMetadataValue::Number(*i as f64),
+        Some(Yaml::Real(r)) => {
+            if let Ok(f) = r.parse::<f64>() {
+                return TsMetadataValue::Number(f);
+            }
+        }
+        Some(Yaml::Null) => return TsMetadataValue::Null,
+        _ => {}
+    }
+    // String-like: Scalar(String), Path, Glob, Expr, PandocInlines.
+    match cv.as_plain_text() {
+        Some(s) => TsMetadataValue::String(s),
+        None => TsMetadataValue::Null,
+    }
+}
+
+/// Flatten a document's merged metadata (e.g. `doc_ast.ast.meta` — always a
+/// top-level mapping) into the wire's flat `Record<string, TsMetadataValue>`
+/// shape used by `TsFormatInfo.metadata` (P1.1b — the execute-options half of
+/// DQ-5's metadata threading; distinct from [`build_engine_config_map`],
+/// which populates the launch-time `config`).
+///
+/// Reuses [`config_value_to_ts_metadata`] — the same recursive lowering P1.1
+/// built for the `engines` subtree — over the FULL merged map, and unwraps
+/// its top-level `Map` variant; non-mapping input (shouldn't occur for
+/// document metadata) degrades to an empty map rather than panicking.
+///
+/// Callable from any target: `ExecutionContext.metadata` (the field this
+/// feeds) is not itself wasm-gated — only the TS-engine *consumer*
+/// (`TsEngine::build_execute_options`) is native-only. On wasm32 there is no
+/// TS engine to consume the value, so this returns an empty map without
+/// invoking the native-only converter.
+pub(crate) fn document_metadata_to_ts_map(
+    meta: &ConfigValue,
+) -> std::collections::HashMap<String, crate::engine::ts_protocol::TsMetadataValue> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        match config_value_to_ts_metadata(meta) {
+            crate::engine::ts_protocol::TsMetadataValue::Map(m) => m,
+            _ => std::collections::HashMap::new(),
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = meta;
+        std::collections::HashMap::new()
+    }
+}
+
+/// Build the wire `config` map carried on `LaunchEngine.project` (DQ-5).
+///
+/// Returns `None` when the project has no parsed metadata (single-file renders
+/// use `ProjectConfig::default()`, matching Q1's `context.config ? … :
+/// undefined`). Otherwise builds `{ "engines": Array(…), "output-dir":
+/// String(…) }`, **omitting** a key when its source is absent:
+/// - `engines` ← `metadata.get("engines")` lowered via
+///   [`config_value_to_ts_metadata`] (the only ConfigValue lowering),
+/// - `output-dir` ← the RAW relative typed `ProjectConfig.output_dir`.
+///
+/// # Wire shape note (top-level `output-dir`, not nested under `project`)
+///
+/// The engine-host-deno harness's `reconstructRichProject` reads a
+/// **top-level** `config["output-dir"]` (or `config["outputDir"]`) and *bridges*
+/// it into the rich Q1 `EngineProjectContext.config.project.outputDir` the
+/// engine actually sees. So the wire carries `output-dir` flat; the host
+/// produces the nested `project.outputDir` on the engine side. (This differs
+/// from Plan 1c.2's "Shape: `project: { output-dir }`" prose and the wire-spec
+/// interface annotation, which describe the *rich* nesting; the shipped host is
+/// the authoritative consumer. See the P1.1 report for the discrepancy.)
+#[cfg(not(target_arch = "wasm32"))]
+fn build_engine_config_map(
+    config: &ProjectConfig,
+) -> Option<std::collections::HashMap<String, crate::engine::ts_protocol::TsMetadataValue>> {
+    use crate::engine::ts_protocol::TsMetadataValue;
+
+    let metadata = config.metadata.as_ref()?;
+    let mut map = std::collections::HashMap::new();
+
+    if let Some(engines) = metadata.get("engines") {
+        map.insert("engines".to_string(), config_value_to_ts_metadata(engines));
+    }
+
+    if let Some(output_dir) = &config.output_dir {
+        map.insert(
+            "output-dir".to_string(),
+            TsMetadataValue::String(output_dir.to_string_lossy().into_owned()),
+        );
+    }
+
+    Some(map)
+}
+
 /// Build the project's engine registry: built-ins + every extension-contributed
 /// engine, plus the shared `TsEngineHost` (constructed lazily — only when at
 /// least one `External` engine contribution is present).
@@ -444,8 +567,13 @@ fn any_external_engine(extensions: &[Extension]) -> bool {
 ///
 /// Native-only: `TsEngine` / `TsEngineHost` are not available on wasm32.
 #[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::too_many_arguments)]
 fn build_engine_registry(
     extensions: &[Extension],
+    project_dir: Option<&Path>,
+    is_single_file: bool,
+    output_dir: &Path,
+    config: Option<&ProjectConfig>,
     binary_dependencies: &BinaryDependencies,
     runtime: &dyn SystemRuntime,
 ) -> Result<Arc<EngineRegistry>> {
@@ -453,9 +581,21 @@ fn build_engine_registry(
 
     use crate::engine::TsEngine;
     use crate::engine::ts_process::TsEngineHost;
-    use crate::engine::ts_protocol::HostGlobalConfig;
+    use crate::engine::ts_protocol::{EngineProjectContext, HostGlobalConfig};
     use crate::extension::BUILTIN_EXTENSIONS;
     use crate::extension::types::{EngineContribution, engine_contribution_missing_fields_warning};
+
+    // ── Per-render project context (P1.1 / DQ-5) ─────────────────────────────
+    // Built once from the ProjectContext fields the caller resolved and set on
+    // every TsEngine at construction (the concrete type is erased at
+    // registry.register, so the TsEngine::new site is the dominating write
+    // point). First-write-wins: launch caches make any later write inert.
+    let engine_project_context = EngineProjectContext {
+        project_dir: project_dir.map(|p| p.to_string_lossy().into_owned()),
+        is_single_file,
+        output_dir: Some(output_dir.to_string_lossy().into_owned()),
+        config: config.and_then(build_engine_config_map),
+    };
 
     // ── Needs-host check ──────────────────────────────────────────────────────
     // Skip HostGlobalConfig / TsEngineHost construction — and the directory-
@@ -572,6 +712,11 @@ fn build_engine_registry(
                             registry.aliases.clone(),
                             registry.diagnostics.clone(),
                         );
+                        // P1.1: thread the per-render project context in before the
+                        // engine is launched. Construction time is the dominating
+                        // write point — the registry erases the concrete type at
+                        // `register`, and launch caches make later writes inert.
+                        engine.set_project(engine_project_context.clone());
                         registry.register(Arc::new(engine));
                         key_to_contributor.insert(key.clone(), ext_label.clone());
 
@@ -633,9 +778,13 @@ fn build_engine_registry(
 /// Shared by `ProjectContext::discover` and `ProjectContext::single_file` to
 /// avoid duplicating the `builtin_dir` / `discover_extensions` /
 /// `build_engine_registry` block.
+#[allow(clippy::too_many_arguments)]
 fn discover_extensions_and_build_registry(
     discovery_anchor: &Path,
     project_dir: Option<&Path>,
+    is_single_file: bool,
+    output_dir: &Path,
+    config: Option<&ProjectConfig>,
     binary_dependencies: &BinaryDependencies,
     runtime: &dyn SystemRuntime,
 ) -> Result<(Vec<Extension>, Arc<EngineRegistry>)> {
@@ -656,9 +805,24 @@ fn discover_extensions_and_build_registry(
     );
 
     #[cfg(not(target_arch = "wasm32"))]
-    let registry = build_engine_registry(&extensions, binary_dependencies, runtime)?;
+    let registry = build_engine_registry(
+        &extensions,
+        project_dir,
+        is_single_file,
+        output_dir,
+        config,
+        binary_dependencies,
+        runtime,
+    )?;
     #[cfg(target_arch = "wasm32")]
-    let registry = Arc::new(EngineRegistry::new());
+    let registry = {
+        // WASM has no subprocess engine host, so binary_dependencies (used only
+        // to build the host's global config on native) is unused here — and the
+        // per-render project-context fields are consumed only by native
+        // TsEngines, so they are inert here too.
+        let _ = (binary_dependencies, is_single_file, output_dir, config);
+        Arc::new(EngineRegistry::new())
+    };
 
     Ok((extensions, registry))
 }
@@ -792,6 +956,9 @@ impl ProjectContext {
         let (extensions, registry) = discover_extensions_and_build_registry(
             &discovery_anchor,
             if is_single_file { None } else { Some(&dir) },
+            is_single_file,
+            &output_dir,
+            config.as_ref(),
             &binary_dependencies,
             runtime,
         )?;
@@ -824,8 +991,18 @@ impl ProjectContext {
         let binary_dependencies = BinaryDependencies::discover(runtime);
 
         // Single-file: no project_dir, search only input's directory.
-        let (extensions, registry) =
-            discover_extensions_and_build_registry(&input, None, &binary_dependencies, runtime)?;
+        // (No production callers — grep 2026-07-02 — but keep the per-render
+        // context consistent with `discover`'s single-file branch: no project
+        // dir, single-file true, output dir = the input's directory, no config.)
+        let (extensions, registry) = discover_extensions_and_build_registry(
+            &input,
+            None,
+            true,
+            &dir,
+            None,
+            &binary_dependencies,
+            runtime,
+        )?;
 
         Ok(Self {
             dir: dir.clone(),
@@ -1912,6 +2089,191 @@ mod tests {
                 css_value.as_str(),
                 Some("../../shared/styles.css"),
                 "Nested path should be adjusted"
+            );
+        }
+    }
+
+    // === P1.1 T3: ConfigValue → TsMetadataValue helper + config-map builder ===
+    //
+    // Native-only: the helper + builder are gated cfg(not(wasm32)) (they build the
+    // per-render EngineProjectContext for TsEngine, which is native-only).
+    #[cfg(not(target_arch = "wasm32"))]
+    mod engine_context_lowering {
+        use quarto_source_map::{By, SourceInfo};
+
+        use super::super::{
+            build_engine_config_map, config_value_to_ts_metadata, document_metadata_to_ts_map,
+        };
+        use crate::engine::ts_protocol::TsMetadataValue;
+        use crate::project::{ProjectConfig, ProjectKind};
+        use quarto_pandoc_types::ConfigValue;
+        use quarto_pandoc_types::config_value::ConfigMapEntry;
+        use std::path::PathBuf;
+
+        fn si() -> SourceInfo {
+            SourceInfo::generated(By::unknown())
+        }
+
+        /// `engines: ["knitr", {path: "x.js"}]` as a ConfigValue array.
+        fn engines_value() -> ConfigValue {
+            ConfigValue::new_array(
+                vec![
+                    ConfigValue::new_string("knitr", si()),
+                    ConfigValue::new_map(
+                        vec![ConfigMapEntry {
+                            key: "path".to_string(),
+                            key_source: si(),
+                            value: ConfigValue::new_string("x.js", si()),
+                        }],
+                        si(),
+                    ),
+                ],
+                si(),
+            )
+        }
+
+        /// Metadata map `{ engines: [...] }`.
+        fn metadata_with_engines() -> ConfigValue {
+            ConfigValue::new_map(
+                vec![ConfigMapEntry {
+                    key: "engines".to_string(),
+                    key_source: si(),
+                    value: engines_value(),
+                }],
+                si(),
+            )
+        }
+
+        // ── helper: string scalar arm (as_plain_text) + Mapping arm ──────────────
+        //
+        // Named revert (as_plain_text arm): `"knitr"` drops to Null → RED.
+        // Named revert (Map arm): the `{path: "x.js"}` map drops/misshapes → RED.
+        #[test]
+        fn config_value_to_ts_metadata_lowers_array_of_string_and_map() {
+            let lowered = config_value_to_ts_metadata(&engines_value());
+
+            let mut path_map = std::collections::HashMap::new();
+            path_map.insert(
+                "path".to_string(),
+                TsMetadataValue::String("x.js".to_string()),
+            );
+
+            assert_eq!(
+                lowered,
+                TsMetadataValue::Array(vec![
+                    TsMetadataValue::String("knitr".to_string()),
+                    TsMetadataValue::Map(path_map),
+                ]),
+                "string scalar must lower via as_plain_text; the {{path}} entry must lower to a Map"
+            );
+        }
+
+        // ── builder: two-key config map from a real project config ───────────────
+        #[test]
+        fn build_engine_config_map_builds_two_key_map() {
+            let config = ProjectConfig {
+                project_kind: ProjectKind::Default,
+                output_dir: Some(PathBuf::from("out")),
+                render_patterns: Vec::new(),
+                resources: Vec::new(),
+                metadata: Some(metadata_with_engines()),
+                config_path: None,
+            };
+
+            let map = build_engine_config_map(&config).expect("config map must be Some");
+
+            // engines key present, lowered from metadata.get("engines").
+            let mut path_map = std::collections::HashMap::new();
+            path_map.insert(
+                "path".to_string(),
+                TsMetadataValue::String("x.js".to_string()),
+            );
+            assert_eq!(
+                map.get("engines"),
+                Some(&TsMetadataValue::Array(vec![
+                    TsMetadataValue::String("knitr".to_string()),
+                    TsMetadataValue::Map(path_map),
+                ])),
+                "engines key must be lowered from metadata"
+            );
+
+            // output-dir carries the RAW relative typed field value, flat at the
+            // top of the wire config map (the host bridges it to the rich
+            // project.outputDir the engine sees).
+            assert_eq!(
+                map.get("output-dir"),
+                Some(&TsMetadataValue::String("out".to_string())),
+                "output-dir must carry the raw relative ProjectConfig.output_dir"
+            );
+        }
+
+        // ── builder: absent engines ⇒ key omitted ────────────────────────────────
+        #[test]
+        fn build_engine_config_map_omits_absent_engines() {
+            let config = ProjectConfig {
+                output_dir: Some(PathBuf::from("out")),
+                // Metadata present but has NO `engines` key.
+                metadata: Some(ConfigValue::new_map(Vec::new(), si())),
+                ..ProjectConfig::default()
+            };
+
+            let map = build_engine_config_map(&config).expect("config map must be Some");
+            assert!(
+                !map.contains_key("engines"),
+                "absent engines ⇒ engines key omitted"
+            );
+            assert!(map.contains_key("output-dir"), "output-dir still present");
+        }
+
+        // ── builder: no metadata ⇒ config: None ──────────────────────────────────
+        //
+        // Named revert ("builder returns Some(map) unconditionally"): this REDs.
+        #[test]
+        fn build_engine_config_map_none_when_no_metadata() {
+            let config = ProjectConfig::default();
+            assert_eq!(
+                build_engine_config_map(&config),
+                None,
+                "a config with no metadata (single-file default) ⇒ config: None"
+            );
+        }
+
+        // === P1.1b: document_metadata_to_ts_map — flattens the top-level Map ====
+        //
+        // Unit-level coverage of the flatten/unwrap step T14 (e2e) exercises
+        // end-to-end. Not itself a frozen seam row (T14 is e2e-only in the
+        // spec) — additive defense-in-depth isolating the unwrap logic.
+        //
+        // Named revert: return `HashMap::new()` unconditionally (as if the
+        // unwrap always hit the `_ => HashMap::new()` fallback arm) → this
+        // goes RED (the "engines" key would be missing).
+        #[test]
+        fn document_metadata_to_ts_map_flattens_top_level_mapping() {
+            let map = document_metadata_to_ts_map(&metadata_with_engines());
+
+            let mut path_map = std::collections::HashMap::new();
+            path_map.insert(
+                "path".to_string(),
+                TsMetadataValue::String("x.js".to_string()),
+            );
+            assert_eq!(
+                map.get("engines"),
+                Some(&TsMetadataValue::Array(vec![
+                    TsMetadataValue::String("knitr".to_string()),
+                    TsMetadataValue::Map(path_map),
+                ])),
+                "top-level 'engines' key must be flattened directly into the \
+                 returned map, not left wrapped in an outer TsMetadataValue::Map"
+            );
+        }
+
+        // ── non-mapping input degrades to empty (not a panic) ────────────────────
+        #[test]
+        fn document_metadata_to_ts_map_non_mapping_input_is_empty() {
+            let map = document_metadata_to_ts_map(&ConfigValue::new_string("not-a-map", si()));
+            assert!(
+                map.is_empty(),
+                "non-mapping document metadata must degrade to an empty map, not panic"
             );
         }
     }

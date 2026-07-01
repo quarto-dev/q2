@@ -178,7 +178,7 @@ function partitionYamlFrontMatter(
 // ── pandocAttrParseText (internal) ───────────────────────────────────────────
 // Ported from Q1 core/pandoc/pandoc-attr.ts
 
-function pandocAttrKeyvalueFromText(
+export function pandocAttrKeyvalueFromText(
   text: string,
   separator: " " | "\n",
 ): Array<[string, string]> {

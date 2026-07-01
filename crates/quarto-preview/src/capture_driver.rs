@@ -463,6 +463,252 @@ mod tests {
         Arc::new(reg)
     }
 
+    // ──────────────────────────────────────────────────────────────
+    // R5 seam tests (P2-14 / P2-15): the preview capture path runs a
+    // real *extension* engine (the Task-13 echo TS engine) because
+    // record_capture uses the DISCOVERED project.registry (Task 8),
+    // not built-ins. Deno-gated — the echo engine spawns a Deno
+    // engine-host subprocess (see crates/quarto-core tests/integration
+    // /echo_engine_e2e.rs).
+    // ──────────────────────────────────────────────────────────────
+
+    /// `true` when `deno` is on PATH (the echo engine's subprocess
+    /// runtime). A skip on a Deno-present machine is a signal something
+    /// is wrong, per the Task-15 brief.
+    fn deno_available() -> bool {
+        std::process::Command::new("deno")
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    }
+
+    /// Recursively copy `src` into `dst` (dst is created).
+    fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
+        std::fs::create_dir_all(dst).unwrap();
+        for entry in std::fs::read_dir(src).unwrap() {
+            let entry = entry.unwrap();
+            let from = entry.path();
+            let to = dst.join(entry.file_name());
+            if from.is_dir() {
+                copy_dir(&from, &to);
+            } else {
+                std::fs::copy(&from, &to).unwrap();
+            }
+        }
+    }
+
+    /// Absolute path to the committed echo-engine fixture extension
+    /// (lives under the sibling `quarto-core` crate's test fixtures).
+    fn echo_engine_fixture_dir() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../quarto-core/tests/fixtures/extensions/echo-engine")
+    }
+
+    /// Build a HubContext over a temp project that has the echo
+    /// extension installed under `_extensions/echo-engine/` and a single
+    /// `.qmd` at `rel` with `content`. `ProjectContext::discover` (run
+    /// inside `record_one` / `recompute_staleness`) walks up to
+    /// `_extensions/` and builds the echo engine into `project.registry`.
+    async fn build_ctx_with_echo_extension(
+        rel: &str,
+        content: &str,
+    ) -> (TempDir, Arc<HubContext>, Arc<dyn SystemRuntime>) {
+        let project = TempDir::with_prefix("r5-echo-preview-").unwrap();
+        copy_dir(
+            &echo_engine_fixture_dir(),
+            &project.path().join("_extensions").join("echo-engine"),
+        );
+        let doc_path = project.path().join(rel);
+        if let Some(parent) = doc_path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&doc_path, content).unwrap();
+
+        let storage = StorageManager::new(project.path()).unwrap();
+        let ctx = Arc::new(
+            HubContext::new(storage, HubConfig::default())
+                .await
+                .unwrap(),
+        );
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        (project, ctx, runtime)
+    }
+
+    /// P2-14 — the EAGER preview capture path runs the echo *extension*
+    /// engine server-side. Production passes `engine_registry: None`, so
+    /// `record_capture` uses the discovered `project.registry` (which,
+    /// post-Task-7b, contains the echo engine built from the installed
+    /// `_extensions/echo-engine/`). The recorded capture's result
+    /// markdown must contain the engine's `ECHO_EXECUTED` sentinel.
+    ///
+    /// Fail-on-revert (recorded in the Task-15 report): overwrite
+    /// `ctx.registry` with a built-ins `EngineRegistry::new()` right
+    /// after `StageContext::new()` in `record_capture` ⇒ echo absent ⇒
+    /// `ECHO_EXECUTED` missing ⇒ RED. This binds "the eager preview
+    /// capture uses the project registry (with extension engines)".
+    #[tokio::test]
+    async fn p2_14_eager_capture_runs_extension_engine() {
+        if !deno_available() {
+            eprintln!("SKIP: deno not on PATH — p2_14_eager_capture_runs_extension_engine");
+            return;
+        }
+        let (_tmp, ctx, runtime) = build_ctx_with_echo_extension(
+            "doc.qmd",
+            "---\ntitle: Echo Preview\n---\n\n```{echo}\nHello from preview!\n```\n",
+        )
+        .await;
+
+        // engine_registry = None ⇒ the production path: the discovered
+        // project.registry (with the echo extension engine) is used.
+        let count = record_eager_captures(
+            ctx.clone(),
+            runtime,
+            None,
+            EnginePolicy::Manual,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(count, 1, "echo doc should produce exactly one capture");
+
+        let entry = ctx.index().get_capture("doc.qmd").expect("sidecar entry");
+        let captures = read_capture_from_doc(&ctx, &entry.capture_doc_id)
+            .await
+            .expect("capture doc round-trips");
+        assert_eq!(captures.len(), 1);
+        assert_eq!(
+            captures[0].engine_name, "echo",
+            "the extension engine (echo), not built-in markdown, must own the capture"
+        );
+        let markdown = captures[0]
+            .result
+            .get("markdown")
+            .and_then(|v| v.as_str())
+            .expect("capture result.markdown");
+        assert!(
+            markdown.contains("ECHO_EXECUTED"),
+            "eager preview capture must run the echo extension engine server-side \
+             (ECHO_EXECUTED sentinel); got: {markdown}"
+        );
+    }
+
+    /// P2-15 — the echo extension engine survives an ON-EDIT
+    /// re-execution (capture sites 2/3: `recompute_staleness` Auto →
+    /// `trigger_auto_re_execute` → `perform_re_execute`). After the
+    /// eager capture, a changed cell body forces a cache miss and a
+    /// genuinely fresh capture; the new capture must STILL contain
+    /// `ECHO_EXECUTED`, and — the vacuity guard — must reflect the
+    /// edited body (`SECOND`) with a new `captureDocId`, proving a REAL
+    /// re-execute happened rather than a re-assertion of the P2-14
+    /// eager capture.
+    ///
+    /// RED (fail-on-revert): if sites 2/3 fell back to a built-ins
+    /// registry, the echo engine would vanish on edit ⇒ the
+    /// post-re-execute `ECHO_EXECUTED` assertion goes RED.
+    #[tokio::test]
+    async fn p2_15_on_edit_re_execution_keeps_extension_engine() {
+        if !deno_available() {
+            eprintln!("SKIP: deno not on PATH — p2_15_on_edit_re_execution_keeps_extension_engine");
+            return;
+        }
+        crate::re_execute::reset_in_flight_for_tests();
+
+        // One shared cache dir across eager + re-execute so the cache is
+        // real: the edited body must MISS it (proving a genuine re-run),
+        // not silently reuse the eager capture.
+        let cache_dir = cache_dir_for_test();
+
+        let (tmp, ctx, runtime) = build_ctx_with_echo_extension(
+            "doc.qmd",
+            "---\ntitle: Echo Preview\n---\n\n```{echo}\nFIRST\n```\n",
+        )
+        .await;
+
+        // Eager capture (production path, None registry) seeds the sidecar.
+        let count = record_eager_captures(
+            ctx.clone(),
+            runtime.clone(),
+            None,
+            EnginePolicy::Manual,
+            &cache_dir,
+        )
+        .await
+        .unwrap();
+        assert_eq!(count, 1, "eager echo capture must seed the sidecar");
+        let initial_doc_id = ctx
+            .index()
+            .get_capture("doc.qmd")
+            .unwrap()
+            .capture_doc_id
+            .clone();
+
+        // Edit the cell body ⇒ different canonical QMD ⇒ cache miss ⇒
+        // real re-execute.
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            "---\ntitle: Echo Preview\n---\n\n```{echo}\nSECOND\n```\n",
+        )
+        .unwrap();
+
+        let flipped = recompute_staleness(
+            ctx.clone(),
+            runtime,
+            "doc.qmd",
+            EnginePolicy::Auto,
+            None,
+            &cache_dir,
+        )
+        .await
+        .unwrap();
+        assert!(flipped, "editing the cell must flip staleness");
+
+        // Auto spawned a blocking re-execute worker; poll for the fresh
+        // capture (state: idle, new captureDocId).
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        let new_entry = loop {
+            let entry = ctx.index().get_capture("doc.qmd").unwrap();
+            if entry.state == Some(quarto_hub::index::CaptureState::Idle)
+                && entry.capture_doc_id != initial_doc_id
+            {
+                break entry;
+            }
+            if std::time::Instant::now() >= deadline {
+                panic!(
+                    "Auto re-execute did not produce a new capture within 30s; entry = {entry:?}"
+                );
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        };
+        assert_eq!(
+            new_entry.staleness,
+            Some(false),
+            "Auto re-execute must clear staleness"
+        );
+
+        let captures = read_capture_from_doc(&ctx, &new_entry.capture_doc_id)
+            .await
+            .expect("re-executed capture doc round-trips");
+        assert_eq!(captures.len(), 1);
+        assert_eq!(captures[0].engine_name, "echo");
+        // Vacuity guard: the re-executed capture reflects the EDITED body
+        // — a genuine cache-miss re-run, not the eager capture replayed.
+        assert!(
+            captures[0].input_qmd.contains("SECOND"),
+            "re-executed capture must reflect the edited cell body (SECOND); got: {}",
+            captures[0].input_qmd
+        );
+        let markdown = captures[0]
+            .result
+            .get("markdown")
+            .and_then(|v| v.as_str())
+            .expect("capture result.markdown");
+        assert!(
+            markdown.contains("ECHO_EXECUTED"),
+            "the echo extension engine must STILL run after an on-edit re-execute \
+             (sites 2/3 use project.registry); got: {markdown}"
+        );
+    }
+
     /// Each test invocation gets a process-unique cache directory so
     /// cross-test pollution can't accidentally turn a cache miss into
     /// a hit (or vice versa). The OS cleans up on process exit; we
@@ -667,6 +913,133 @@ mod tests {
             .and_then(|v| v.as_str())
             .expect("result.markdown");
         assert!(markdown.contains("<!-- test-passthrough -->"));
+    }
+
+    /// PC3 — a failing engine on one doc must not stop the eager loop
+    /// from recording the NEXT doc's capture, and must emit
+    /// `Q-PREVIEW-CAP-1` to the diagnostic sink for the failing doc.
+    ///
+    /// Mock boundary: only the failing engine is a test double (mirrors
+    /// `FailingTestEngine` in `diagnostics_capture_failure.rs`); the
+    /// driver and samod context are real, pattern-matched off
+    /// `capture_binary_doc_round_trips_through_samod` above. `qmd_files`
+    /// is sorted (`discovery.rs:154`), so the `a-`/`b-` filename prefixes
+    /// guarantee the failing doc is processed BEFORE the working one —
+    /// otherwise a loop-return-on-Err regression could slip through
+    /// undetected if the working doc happened to run first.
+    ///
+    /// Fail-on-revert binding (see task-p3-report.md for the transcript):
+    /// (a) commenting out the `sink.emit(...)` call turns the
+    /// diagnostics-count assertion RED (diagnostic absent);
+    /// (b) replacing the loop's `Err(e) => { ... }` arm with
+    /// `Err(e) => return Err(RecordError::RecordFailed(format!("{e}")))`
+    /// turns the doc-B assertions RED (loop stops at the first failure,
+    /// B's capture is never recorded).
+    struct FailingTestEngine;
+    impl ExecutionEngine for FailingTestEngine {
+        fn name(&self) -> &str {
+            "test-failing"
+        }
+        fn execute(
+            &self,
+            _input: &str,
+            _ctx: &ExecutionContext,
+        ) -> Result<ExecuteResult, ExecutionError> {
+            Err(ExecutionError::Other(
+                "synthetic PC3 failing engine failure".to_string(),
+            ))
+        }
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> quarto_core::engine::LanguageClaim {
+            if language == "test-failing" {
+                quarto_core::engine::LanguageClaim::Primary(1)
+            } else {
+                quarto_core::engine::LanguageClaim::None
+            }
+        }
+    }
+
+    fn make_registry_with_failing_and_passthrough() -> Arc<EngineRegistry> {
+        let mut reg = EngineRegistry::new();
+        reg.register(Arc::new(FailingTestEngine));
+        reg.register(Arc::new(PassthroughTestEngine));
+        Arc::new(reg)
+    }
+
+    #[tokio::test]
+    async fn pc3_failing_engine_does_not_block_next_doc_capture() {
+        let (_tmp, ctx, runtime) = build_ctx_with_files(&[
+            (
+                "a-failing.qmd",
+                "---\nengine: test-failing\n---\n\n```{test-failing}\nboom\n```\n",
+            ),
+            (
+                "b-echo.qmd",
+                "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nSENTINEL\n```\n",
+            ),
+        ])
+        .await;
+
+        // Fresh sink for this test process (nextest runs each test in
+        // its own process, so this is the first writer — see
+        // diagnostics.rs's `set_sink` doc comment).
+        let sink = Arc::new(diagnostics::DiagnosticSink::new());
+        diagnostics::set_sink(sink.clone());
+
+        let count = record_eager_captures(
+            ctx.clone(),
+            runtime,
+            Some(make_registry_with_failing_and_passthrough()),
+            EnginePolicy::Manual,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            count, 1,
+            "only b-echo.qmd should have recorded a capture (a-failing.qmd's engine fails)"
+        );
+
+        // Positive assertion (mandatory — binds continue-on-error):
+        // doc B's capture WAS recorded despite doc A's failure.
+        assert!(
+            ctx.index().has_capture("b-echo.qmd"),
+            "doc B's capture must be recorded even though doc A's engine failed"
+        );
+        let b_entry = ctx.index().get_capture("b-echo.qmd").unwrap();
+        let b_captures = read_capture_from_doc(&ctx, &b_entry.capture_doc_id)
+            .await
+            .expect("doc B's capture doc round-trips");
+        assert_eq!(b_captures.len(), 1);
+        assert_eq!(b_captures[0].engine_name, "test-passthrough");
+
+        // Doc A: no capture recorded, and Q-PREVIEW-CAP-1 reached the
+        // diagnostic sink.
+        assert!(
+            !ctx.index().has_capture("a-failing.qmd"),
+            "doc A's capture must NOT be recorded — its engine failed"
+        );
+        let a_diags = sink.get_for_page("a-failing.qmd");
+        assert_eq!(
+            a_diags.len(),
+            1,
+            "exactly one diagnostic expected for a-failing.qmd; got {a_diags:?}"
+        );
+        assert_eq!(a_diags[0].code.as_deref(), Some("Q-PREVIEW-CAP-1"));
+        let problem = a_diags[0]
+            .problem
+            .as_ref()
+            .expect("diagnostic should carry the engine's error message");
+        assert!(
+            problem
+                .as_str()
+                .contains("synthetic PC3 failing engine failure"),
+            "problem field should surface the engine's error; got: {}",
+            problem.as_str()
+        );
     }
 
     #[tokio::test]

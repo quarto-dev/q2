@@ -35,6 +35,7 @@ pub mod test_blockquote_multiline_attrs;
 pub mod test_citeproc_integration;
 pub mod test_cli_input_arg;
 pub mod test_code_block_attributes;
+pub mod test_code_block_writer_roundtrip;
 pub mod test_code_span;
 pub mod test_diagnostic_determinism;
 pub mod test_diagnostic_path_normalization;

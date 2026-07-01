@@ -250,6 +250,13 @@ impl PipelineStage for EngineExecutionStage {
         // Resolve the execute.timeout tri-state from metadata.
         let execute_timeout = resolve_execute_timeout(&doc_ast.ast.meta);
 
+        // P1.1b: lower the FULL merged document metadata to the wire's flat
+        // shape once (it doesn't vary per engine within this stage, same as
+        // execute_timeout above), for TS engines' `TsFormatInfo.metadata`.
+        // Do NOT re-merge metadata here — `doc_ast.ast.meta` is already the
+        // merged map (MetadataMergeStage ran upstream).
+        let document_metadata = crate::project::document_metadata_to_ts_map(&doc_ast.ast.meta);
+
         // Step 2: Resolve each engine in the sequence to an implementation
         // (with fallback), dropping markdown — it's a no-op, so a markdown
         // engine anywhere in the sequence is skipped (this also covers
@@ -354,7 +361,8 @@ impl PipelineStage for EngineExecutionStage {
             .with_execute_timeout(execute_timeout)
             // P2-13: loud "owned-but-unrunnable" gate in partition_cells
             // fires only in a multi-engine sequence (|sequence| > 1).
-            .with_multi_engine(multi_engine);
+            .with_multi_engine(multi_engine)
+            .with_metadata(document_metadata.clone());
 
             trace_event!(ctx, EventLevel::Info, "executing engine: {}", engine.name());
             let mut result = engine
@@ -439,9 +447,11 @@ impl PipelineStage for EngineExecutionStage {
                 .include_after
                 .extend(result.includes.include_after);
             if !result.supporting_files.is_empty() {
+                let runtime = Arc::clone(&ctx.runtime);
                 ctx.resource_report.add_engine_files(
                     engine.name(),
                     &path,
+                    runtime.as_ref(),
                     std::mem::take(&mut result.supporting_files),
                 );
             }
@@ -653,9 +663,18 @@ mod tests {
         fn path_exists(
             &self,
             _path: &std::path::Path,
-            _kind: Option<quarto_system_runtime::PathKind>,
+            kind: Option<quarto_system_runtime::PathKind>,
         ) -> quarto_system_runtime::RuntimeResult<bool> {
-            Ok(true)
+            // This mock models a filesystem with no real directories
+            // (tests assert on plain-file supporting paths like
+            // "fig1.png" / "data/table.csv" — none of them are
+            // directories). Discriminating on `kind` matters now that
+            // `DocumentResourceReport::add_engine_files` calls
+            // `runtime.is_dir(..)` (bd-677297ca) to decide whether to
+            // expand a supporting entry; a blanket `Ok(true)` made
+            // every reported path look like an existing directory,
+            // which `dir_list` then "expanded" into nothing.
+            Ok(kind != Some(quarto_system_runtime::PathKind::Directory))
         }
         fn canonicalize(
             &self,

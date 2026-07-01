@@ -348,8 +348,382 @@ fn p3_3_orchestrator_teardown_reaps_subprocess() {
     );
 }
 
+/// Extract and parse the `CONTEXT_JSON_START{…}CONTEXT_JSON_END` marker the echo
+/// engine emits in `execute()` (a JSON snapshot of the `EngineProjectContext`
+/// captured at `launch()`). Panics with a body excerpt if the marker is absent.
+fn extract_context_json(html: &str) -> serde_json::Value {
+    const START: &str = "CONTEXT_JSON_START";
+    const END: &str = "CONTEXT_JSON_END";
+    let start = html
+        .find(START)
+        .unwrap_or_else(|| panic!("CONTEXT_JSON marker absent; got:\n{}", body_excerpt(html)));
+    let after = &html[start + START.len()..];
+    let end = after.find(END).unwrap_or_else(|| {
+        panic!(
+            "CONTEXT_JSON_END marker absent; got:\n{}",
+            body_excerpt(html)
+        )
+    });
+    // The marker rides inside a `<pre><code>` block, so Pandoc HTML-escapes the
+    // JSON's structural characters. Unescape the entities that can appear.
+    let json = after[..end]
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&");
+    serde_json::from_str(&json)
+        .unwrap_or_else(|e| panic!("failed to parse echoed context JSON ({e}):\n{json}"))
+}
+
+// ── P1.1 T1: per-render EngineProjectContext (project leg) ────────────────────
+//
+// A temp project with a `_quarto.yml` (`project.output-dir: out` + top-level
+// `engines: [echo]`) and a `page.qmd` with an `{echo}` cell. `render_to_file`
+// goes through `ProjectContext::discover` (the only live path) → the threaded
+// context reaches `TsEngine::set_project` at registry build → launch → execute
+// echoes the context back.
+//
+// Binds the project_dir / output_dir / config field-source lines of the P1.1
+// threading hunk. RED (revert the `set_project(engine_project_context.clone())`
+// call at the TsEngine::new site): dir "" / outputDir "" / config null → these
+// discriminators go RED. Exercised-guard: the CONTEXT_JSON marker is present.
+#[test]
+fn p1_1_project_context_threaded_project_leg() {
+    if !deno_available() {
+        eprintln!("SKIP: deno not on PATH — p1_1_project_context_threaded_project_leg");
+        return;
+    }
+    let tmp = setup_project(&["echo-engine"]);
+    // Project config: raw relative output-dir under `project`, registered engine
+    // name in the top-level `engines` list (Plan 4b-safe).
+    write_file(
+        &tmp.path().join("_quarto.yml"),
+        "project:\n  output-dir: out\nengines:\n  - echo\n",
+    );
+    let input = tmp.path().join("page.qmd");
+    write_file(
+        &input,
+        "---\ntitle: Echo Ctx\n---\n\n```{echo}\nHello!\n```\n",
+    );
+
+    let html = render_html(&input);
+    let ctx = extract_context_json(&html);
+
+    // project_dir threaded (default would be "").
+    let dir = ctx["dir"].as_str().expect("dir must be a string");
+    assert!(
+        !dir.is_empty(),
+        "project_dir must be threaded (non-empty); ctx: {ctx}"
+    );
+
+    // Resolved output_dir: absolute, ends with the project output-dir name, and
+    // is NOT the raw relative value (raw-vs-resolved discriminator).
+    let resolved = ctx["outputDir"]
+        .as_str()
+        .expect("outputDir must be a string");
+    assert!(
+        resolved.ends_with("out") && resolved != "out" && resolved.len() > "out".len(),
+        "outputDir must be the RESOLVED absolute dir ending in 'out', not the raw \
+         relative value; got {resolved:?}"
+    );
+
+    // config.engines carries the registered engine name (the only ConfigValue
+    // lowering).
+    assert_eq!(
+        ctx["config"]["engines"],
+        serde_json::json!(["echo"]),
+        "config.engines must be lowered from metadata; ctx: {ctx}"
+    );
+
+    // config.project.outputDir carries the RAW relative value (the host bridges
+    // the flat wire `output-dir` into this rich nested key).
+    assert_eq!(
+        ctx["config"]["project"]["outputDir"],
+        serde_json::json!("out"),
+        "config.project.outputDir must carry the raw relative output-dir; ctx: {ctx}"
+    );
+}
+
+// ── P1.1 T2: per-render EngineProjectContext (single-file `.echo` leg) ─────────
+//
+// A temp dir with NO `_quarto.yml` and a whole-file `.echo`. `render_to_file` →
+// `ProjectContext::discover`'s single-file branch (is_single_file computed at
+// :744, project_dir None, config None). markdownForFile converts the file to an
+// `{echo}` cell; execute (reading the context captured before the FIRST launch)
+// echoes it.
+//
+// Binds the is_single_file field-source line. RED (revert the is_single_file
+// source): stays false → the `isSingleFile: true` discriminator goes RED.
+// `config: null` is a shape assertion (guards the builder's absent-config
+// branch). Exercised-guard: the CONTEXT_JSON marker is present.
+#[test]
+fn p1_1_project_context_threaded_single_file_leg() {
+    if !deno_available() {
+        eprintln!("SKIP: deno not on PATH — p1_1_project_context_threaded_single_file_leg");
+        return;
+    }
+    let tmp = setup_project(&["echo-engine"]);
+    let input = tmp.path().join("file.echo");
+    write_file(&input, "Single-file echo body.\n");
+
+    let html = render_html(&input);
+    let ctx = extract_context_json(&html);
+
+    // is_single_file threaded (default false).
+    assert_eq!(
+        ctx["isSingleFile"],
+        serde_json::json!(true),
+        "is_single_file must be true on the single-file leg; ctx: {ctx}"
+    );
+
+    // Shape: single-file renders carry no project config.
+    assert_eq!(
+        ctx["config"],
+        serde_json::Value::Null,
+        "single-file config must be null (no project config); ctx: {ctx}"
+    );
+}
+
+/// Extract and parse the `FORMAT_JSON_START{…}FORMAT_JSON_END` marker the echo
+/// engine emits in `execute()` (a JSON snapshot of `{ execute, customKey }`
+/// derived from the per-execute `Format` the host builds via
+/// `metadataAsFormat`). Panics with a body excerpt if the marker is absent.
+fn extract_format_json(html: &str) -> serde_json::Value {
+    const START: &str = "FORMAT_JSON_START";
+    const END: &str = "FORMAT_JSON_END";
+    let start = html
+        .find(START)
+        .unwrap_or_else(|| panic!("FORMAT_JSON marker absent; got:\n{}", body_excerpt(html)));
+    let after = &html[start + START.len()..];
+    let end = after.find(END).unwrap_or_else(|| {
+        panic!(
+            "FORMAT_JSON_END marker absent; got:\n{}",
+            body_excerpt(html)
+        )
+    });
+    // The marker rides inside a `<pre><code>` block, so Pandoc HTML-escapes the
+    // JSON's structural characters. Unescape the entities that can appear.
+    let json = after[..end]
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&");
+    serde_json::from_str(&json)
+        .unwrap_or_else(|e| panic!("failed to parse echoed format JSON ({e}):\n{json}"))
+}
+
+// ── P1.1b T14: merged document metadata reaches TsFormatInfo.metadata ─────────
+//
+// A single-file `.qmd` (no `_quarto.yml`) whose frontmatter carries
+// `execute: {daemon: false}` (a non-default binned value) plus a custom
+// top-level key `echo-custom-key`. `EngineExecutionStage` resolves the merged
+// document metadata (`doc_ast.ast.meta`) and — per the P1.1b threading —
+// lowers it into `ExecutionContext.metadata`, which `build_execute_options`
+// now carries into `TsFormatInfo.metadata` instead of hardcoding
+// `HashMap::new()`. The Deno host's `metadataAsFormat` (already complete,
+// untouched here) partitions that flat map into the six-bin `Format`; the
+// echo fixture's `execute()` echoes `opts.format.execute` +
+// `opts.format.metadata["echo-custom-key"]` back via the FORMAT_JSON marker.
+//
+// Binds the metadata-threading half of `build_execute_options`
+// (`ts_engine.rs:~367-414`, the `metadata: HashMap::new()` line).
+//
+// RED (named revert: restore `metadata: HashMap::new()` in
+// `build_execute_options`): `format.execute` arrives empty (no `daemon` key)
+// and `format.metadata["echo-custom-key"]` is absent (`customKey: undefined`
+// → JSON `null`) — both discriminators go RED. Exercised-guard: the
+// FORMAT_JSON marker itself is present (proves the engine ran and the
+// marker channel works, independent of the threading).
+#[test]
+fn p1_1b_document_metadata_threaded_into_format() {
+    if !deno_available() {
+        eprintln!("SKIP: deno not on PATH — p1_1b_document_metadata_threaded_into_format");
+        return;
+    }
+    let tmp = setup_project(&["echo-engine"]);
+    let input = tmp.path().join("page.qmd");
+    write_file(
+        &input,
+        "---\n\
+         title: Echo Format\n\
+         execute:\n\
+         \x20 daemon: false\n\
+         echo-custom-key: hello-from-frontmatter\n\
+         ---\n\n\
+         ```{echo}\nHello!\n```\n",
+    );
+
+    let html = render_html(&input);
+    let format = extract_format_json(&html);
+
+    // Exercised-guard: the marker fired at all.
+    assert!(
+        html.contains("FORMAT_JSON_START"),
+        "exercised-guard: the FORMAT_JSON marker must be present; got:\n{}",
+        body_excerpt(&html)
+    );
+
+    // Discriminator 1: `execute: {daemon: false}` — a non-default binned
+    // value — must round-trip through the wire and the host's six-bin
+    // partition into `format.execute.daemon`.
+    assert_eq!(
+        format["execute"]["daemon"],
+        serde_json::json!(false),
+        "format.execute.daemon must round-trip from frontmatter execute.daemon; format: {format}"
+    );
+
+    // Discriminator 2: a custom top-level frontmatter key (not in any of the
+    // four Q1 key-lists) must fall through to `format.metadata`.
+    assert_eq!(
+        format["customKey"],
+        serde_json::json!("hello-from-frontmatter"),
+        "format.metadata['echo-custom-key'] must round-trip from frontmatter; format: {format}"
+    );
+}
+
 /// First ~600 chars of the `<body>` for assertion failure messages.
 fn body_excerpt(html: &str) -> String {
     let start = html.find("<body").unwrap_or(0);
     html[start..].chars().take(600).collect()
+}
+
+// ── J9: zero-load resolution ordering (Phase 4I) ────────────────────────────
+//
+// Pass 1 advances every project file to the `DocumentProfile` checkpoint
+// without running engines; Pass-2 resolution (`resolve_engines`) then decides
+// which engine owns each document WITHOUT spawning a subprocess — echo's
+// claims are static (`Primary(echo)` answered from the `claims` map, no
+// dynamic load), so the discriminating property is "no spawn during
+// resolution": the `engine_host` spawn event (J8) must order strictly AFTER
+// the `engine_resolution` "resolution complete" event (added at the end of
+// `resolve_engines`, `resolution.rs:~334`), i.e. the subprocess spawns lazily
+// at the first execute, never during resolution.
+//
+// Seam check (2026-07-02): "spawn happens after Pass 1" alone is vacuous — a
+// legacy DYNAMIC-claims engine also spawns after Pass 1 (during resolution,
+// not execute). The discriminating assertion is ordering relative to
+// resolution-complete, and — critically — that the resolution-complete event
+// actually fired: a naive "assert spawn index > 0" would vacuously pass if
+// the resolution-complete event were missing entirely (no event to compare
+// against). So this test asserts BOTH events are present (exactly one
+// resolution-complete, exactly one spawn) before comparing their order.
+//
+// Named revert (Test Seam Spec J9): remove the static early-answer branch in
+// `claims_language` (`ts_engine.rs:~592` — the `if let Some(map) = &self.claims`
+// branch), falling through unconditionally to the dynamic wire-call path
+// (`ClaimsLanguage` request over the wire, which itself requires
+// `ensure_loaded`/`ensure_started` — i.e. a spawn — before it can answer).
+// With the static branch removed, the very first `claims_language` call
+// during resolution spawns the host, so the spawn event fires DURING
+// resolution, before the resolution-complete event → ordering assertion RED.
+#[test]
+fn j9_resolution_before_spawn_zero_load() {
+    use tracing_subscriber::layer::SubscriberExt;
+    if !deno_available() {
+        eprintln!("SKIP: deno not on PATH — j9_resolution_before_spawn_zero_load");
+        return;
+    }
+    // SAFETY/scope: process-local under nextest (one process per test) — same
+    // QUARTO_JOBS=1 lesson as J6 (`julia_engine_e2e.rs`): keeps the whole
+    // render on the test thread the tracing capture is scoped to, so a
+    // rayon Pass-2 worker thread (which never sees a thread-local
+    // subscriber override) can't silently swallow the events.
+    unsafe {
+        std::env::set_var("QUARTO_JOBS", "1");
+    }
+    let tmp = setup_project(&["echo-engine"]);
+    let input = tmp.path().join("zero_load.qmd");
+    write_file(
+        &input,
+        "---\ntitle: Echo Zero Load\n---\n\nIntro.\n\n```{echo}\nHello from echo!\n```\n",
+    );
+
+    let capture = OrderedCapture::default();
+    let subscriber = tracing_subscriber::registry().with(capture.clone());
+    let html = tracing::subscriber::with_default(subscriber, || render_html(&input));
+
+    // Exercised-guard: the render actually executed the echo cell (so the
+    // spawn/resolution events below reflect a real render, not a no-op).
+    assert!(
+        html.contains("ECHO_EXECUTED"),
+        "exercised-guard: rendered HTML must contain ECHO_EXECUTED; got:\n{}",
+        body_excerpt(&html)
+    );
+
+    let resolution_indices = capture.indices_of("engine_resolution");
+    let spawn_indices = capture.indices_of("engine_host");
+
+    // A missing resolution-complete event must FAIL the test outright, not
+    // vacuously pass the ordering check below.
+    assert_eq!(
+        resolution_indices.len(),
+        1,
+        "expected exactly one engine_resolution (resolution-complete) event; saw {} \
+         (all captured targets: {:?})",
+        resolution_indices.len(),
+        capture.all_targets()
+    );
+    assert_eq!(
+        spawn_indices.len(),
+        1,
+        "expected exactly one engine_host spawn event (zero-load resolution — the \
+         subprocess spawns lazily at first execute, not during resolution); saw {} \
+         (all captured targets: {:?})",
+        spawn_indices.len(),
+        capture.all_targets()
+    );
+
+    let resolution_index = resolution_indices[0];
+    let spawn_index = spawn_indices[0];
+    assert!(
+        spawn_index > resolution_index,
+        "engine_host spawn (index {spawn_index}) must order AFTER engine_resolution \
+         resolution-complete (index {resolution_index}) — a subprocess spawn during \
+         resolution means the zero-load property is broken; all captured targets in \
+         order: {:?}",
+        capture.all_targets()
+    );
+}
+
+/// A tracing-capture layer recording each event's `target` IN THE ORDER
+/// they fired (the underlying `Vec` push is serialized by the mutex, so
+/// insertion order reflects temporal firing order even across threads).
+/// Mirrors `TargetCapture` in `julia_engine_e2e.rs` / `ts_process.rs`, plus
+/// an `indices_of` accessor J9 needs to compare event ORDER, not just count.
+#[derive(Clone, Default)]
+struct OrderedCapture {
+    targets: Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for OrderedCapture {
+    fn on_event(
+        &self,
+        event: &tracing::Event<'_>,
+        _ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        self.targets
+            .lock()
+            .unwrap()
+            .push(event.metadata().target().to_string());
+    }
+}
+
+impl OrderedCapture {
+    /// Indices (in firing order) of every event whose target equals `target`.
+    fn indices_of(&self, target: &str) -> Vec<usize> {
+        self.targets
+            .lock()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.as_str() == target)
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    fn all_targets(&self) -> Vec<String> {
+        self.targets.lock().unwrap().clone()
+    }
 }

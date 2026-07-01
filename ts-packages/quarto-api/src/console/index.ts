@@ -17,6 +17,7 @@
  */
 
 import type { PlatformHost } from "../platform/index.js";
+import type { QuartoAPI } from "@quarto/types";
 
 // Q1 spinner completion marker chars (from core/console.ts)
 const kSpinnerCompleteContainerOpen = "[";
@@ -30,17 +31,17 @@ export interface LogMessageOptions {
   format?: (msg: string) => string;
 }
 
-/** The console namespace interface returned by makeConsole. */
-export interface ConsoleNamespace {
-  info(message: string, options?: LogMessageOptions): void;
-  warning(message: string, options?: LogMessageOptions): void;
-  error(message: string, options?: LogMessageOptions): void;
-  withSpinner<T>(
-    options: { message: string | (() => string); doneMessage?: string | boolean },
-    fn: () => Promise<T>,
-  ): Promise<T>;
-  completeMessage(message: string): void;
-}
+/**
+ * The console namespace returned by `makeConsole`.
+ *
+ * Fully-host namespace: derived from the vendored SDK contract
+ * (`QuartoAPI["console"]`) rather than redefined (Plan 2 B2, Fix B). The impl
+ * functions below keep the local `LogMessageOptions`/inline spinner-options
+ * signatures; they conform to the derived shape (the SDK's option types are
+ * structurally compatible), and a future SDK method addition becomes a compile
+ * error in `makeConsole` until implemented.
+ */
+export type ConsoleNamespace = QuartoAPI["console"];
 
 /**
  * Build the console namespace backed by the given host.

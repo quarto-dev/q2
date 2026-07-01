@@ -28,6 +28,7 @@
 use std::path::{Path, PathBuf};
 
 use quarto_source_map::{By, SourceInfo};
+use quarto_system_runtime::SystemRuntime;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -466,20 +467,102 @@ impl DocumentResourceReport {
 
     /// Append every supporting-file path produced by an engine,
     /// tagged with that engine's name.
+    ///
+    /// Some engines (e.g. julia-engine, a faithful Q1 port) report a
+    /// supporting *directory* rather than individual files — Q1's
+    /// `supporting: [<stem>_files]` convention. [`DocumentResourceReport`]
+    /// stays file-only (downstream `resolve_reported_resources` /
+    /// `copy_resources_to_output_dir` never learned to walk directories,
+    /// and `SystemRuntime::file_copy` errors on a directory source), so
+    /// any reported path that resolves to an on-disk directory is
+    /// expanded here into its contained files (recursively), each
+    /// added as its own entry with the same [`ResourceOrigin::Engine`]
+    /// origin. Plain files and non-existent paths are added unchanged
+    /// (existing behavior) — bd-677297ca.
     pub fn add_engine_files(
         &mut self,
         engine_name: &str,
         doc_source: &Path,
+        runtime: &dyn SystemRuntime,
         files: impl IntoIterator<Item = PathBuf>,
     ) {
-        for file in files {
-            self.entries.push(ReportedResource {
-                raw_path: file,
+        let doc_dir = doc_source
+            .parent()
+            .map_or_else(|| PathBuf::from(""), Path::to_path_buf);
+        let push_file = |entries: &mut Vec<ReportedResource>, raw_path: PathBuf| {
+            entries.push(ReportedResource {
+                raw_path,
                 origin: ResourceOrigin::Engine {
                     engine: engine_name.to_string(),
                     source: doc_source.to_path_buf(),
                 },
             });
+        };
+        for file in files {
+            let absolute = if file.is_absolute() {
+                file.clone()
+            } else {
+                doc_dir.join(&file)
+            };
+            match runtime.is_dir(&absolute) {
+                Ok(true) => {
+                    // Expand recursively into contained FILES — the
+                    // report stays file-only. Walk with an explicit
+                    // stack (not recursion) so depth is unbounded by
+                    // the call stack.
+                    //
+                    // `is_dir` follows symlinks, so a cyclic symlink
+                    // inside the reported dir (e.g. one pointing back at
+                    // its own parent) would otherwise make this loop
+                    // pathologically (bounded only by the OS's symlink
+                    // ELOOP limit, but still visiting the same real
+                    // directory dozens of times). Guard by canonicalizing
+                    // each directory before pushing it and skipping
+                    // anything already visited.
+                    let mut visited = std::collections::HashSet::new();
+                    if let Ok(canon) = runtime.canonicalize(&absolute) {
+                        visited.insert(canon);
+                    }
+                    let mut stack = vec![absolute];
+                    while let Some(dir) = stack.pop() {
+                        let Ok(children) = runtime.dir_list(&dir) else {
+                            // Unreadable directory: nothing to expand;
+                            // skip rather than fail the whole report.
+                            tracing::warn!(
+                                dir = %dir.display(),
+                                "add_engine_files: skipping unreadable supporting subdirectory"
+                            );
+                            continue;
+                        };
+                        for child in children {
+                            match runtime.is_dir(&child) {
+                                Ok(true) => {
+                                    let already_visited = match runtime.canonicalize(&child) {
+                                        Ok(canon) => !visited.insert(canon),
+                                        // Can't resolve (e.g. a broken or
+                                        // directly self-referencing
+                                        // symlink) — don't recurse into
+                                        // it, but don't silently drop it
+                                        // as a "file" either.
+                                        Err(_) => true,
+                                    };
+                                    if !already_visited {
+                                        stack.push(child);
+                                    }
+                                }
+                                _ => push_file(&mut self.entries, child),
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    // Not a directory (a plain file, or doesn't exist
+                    // on disk — `resolve_reported_resources` / the
+                    // copy step surface a clear error for that case).
+                    // Preserve the original (possibly relative) path.
+                    push_file(&mut self.entries, file);
+                }
+            }
         }
     }
 
@@ -951,6 +1034,7 @@ pub fn write_render_manifest(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quarto_system_runtime::NativeRuntime;
     use tempfile::TempDir;
 
     fn touch(path: &Path) {
@@ -1157,7 +1241,8 @@ mod tests {
         // `supporting` is filesystem-absolute (e.g. /tmp/.../posts/foo_files/data.png)
         // — the engine channel uses it as-is.
         let mut report = DocumentResourceReport::new();
-        report.add_engine_files("stub", &doc, [supporting.clone()]);
+        let runtime = NativeRuntime::new();
+        report.add_engine_files("stub", &doc, &runtime, [supporting.clone()]);
 
         let resolved = resolve_reported_resources(&root, &report).unwrap();
         assert_eq!(resolved.len(), 1);
@@ -1594,7 +1679,8 @@ mod tests {
         touch(&supporting);
 
         let mut report = DocumentResourceReport::new();
-        report.add_engine_files("knitr", &doc, [supporting.clone()]);
+        let runtime = NativeRuntime::new();
+        report.add_engine_files("knitr", &doc, &runtime, [supporting.clone()]);
 
         let resolved = resolve_reported_resources(&root, &report).unwrap();
         assert_eq!(resolved.len(), 1);
@@ -1619,9 +1705,11 @@ mod tests {
         touch(&supporting);
 
         let mut report = DocumentResourceReport::new();
+        let runtime = NativeRuntime::new();
         report.add_engine_files(
             "stub",
             &doc,
+            &runtime,
             [PathBuf::from("extras/data.csv")], // relative
         );
 
@@ -1656,9 +1744,163 @@ mod tests {
         let doc = root.join("a.qmd");
 
         let mut report = DocumentResourceReport::new();
-        report.add_engine_files("stub", &doc, [PathBuf::from("../escape.csv")]);
+        let runtime = NativeRuntime::new();
+        report.add_engine_files("stub", &doc, &runtime, [PathBuf::from("../escape.csv")]);
 
         let err = resolve_reported_resources(&root, &report).unwrap_err();
         assert!(matches!(err, ResourceError::OutOfProject { .. }));
+    }
+
+    // === Directory supporting entries expand into their contained files ===
+    //
+    // julia-engine (a faithful Q1 port) reports its supporting entry as a
+    // whole `<stem>_files` DIRECTORY (Q1's `supporting: [dir]` convention),
+    // not individual files. `DocumentResourceReport` is file-only —
+    // `resolve_reported_resources` never walks directories, and
+    // `copy_resources_to_output_dir` calls `SystemRuntime::file_copy` on
+    // each resolved entry, which errors on a directory source ("the source
+    // path is neither a regular file nor a symlink"). `add_engine_files`
+    // must expand any reported directory into its contained files
+    // (recursively) at report time so the report — and everything
+    // downstream — stays file-only. bd-677297ca.
+    #[test]
+    fn add_engine_files_expands_supporting_directory_into_contained_files() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let doc = root.join("plot.qmd");
+        // Nested two levels deep, mirroring julia-engine's real layout:
+        // plot_files/figure-html/cell-1.png.
+        let nested_file = root.join("plot_files/figure-html/cell-1.png");
+        touch(&nested_file);
+        // A second file directly inside the reported dir (one level deep)
+        // so the walk is proven to collect files at multiple depths, not
+        // just the deepest one.
+        let shallow_file = root.join("plot_files/direct.txt");
+        touch(&shallow_file);
+
+        let mut report = DocumentResourceReport::new();
+        let runtime = NativeRuntime::new();
+        // The engine reports the DIRECTORY, not the files inside it —
+        // this is julia-engine's actual `supporting_files` shape.
+        report.add_engine_files(
+            "julia",
+            &doc,
+            &runtime,
+            [PathBuf::from("plot_files")], // relative dir, anchored at doc_dir
+        );
+
+        let mut raw_paths: Vec<PathBuf> =
+            report.entries.iter().map(|e| e.raw_path.clone()).collect();
+        raw_paths.sort();
+        assert_eq!(
+            raw_paths,
+            vec![shallow_file.clone(), nested_file.clone()],
+            "the reported directory must be expanded into its contained \
+             FILES, not kept as a single directory entry"
+        );
+        for entry in &report.entries {
+            assert!(
+                matches!(
+                    &entry.origin,
+                    ResourceOrigin::Engine { engine, source } if engine == "julia" && source == &doc
+                ),
+                "expanded entries must keep the originating engine + doc source"
+            );
+        }
+
+        // And resolution must succeed end-to-end (this is exactly what
+        // previously failed downstream in copy_resources_to_output_dir).
+        let resolved = resolve_reported_resources(&root, &report).unwrap();
+        let mut resolved_relatives: Vec<String> =
+            resolved.iter().map(|r| r.output_relative.clone()).collect();
+        resolved_relatives.sort();
+        assert_eq!(
+            resolved_relatives,
+            vec![
+                "plot_files/direct.txt".to_string(),
+                "plot_files/figure-html/cell-1.png".to_string(),
+            ]
+        );
+    }
+
+    // === Symlink-cycle guard (Minor finding, 4H review) ===
+    //
+    // `NativeRuntime::is_dir` follows symlinks, and the explicit-stack walk
+    // above has no visited-set: a cyclic symlink inside an engine-reported
+    // supporting dir (e.g. a symlink that points back at its own parent
+    // directory) makes `dir_list` keep re-listing the same directory
+    // forever. Guarded by canonicalizing each directory before pushing it
+    // onto the walk stack and skipping any directory already visited.
+
+    /// Create a self-referencing symlink `dir/cycle -> dir`: walking into
+    /// `dir/cycle` lists `dir`'s own contents again (including `cycle`
+    /// itself), which is exactly the shape that makes a naive explicit-stack
+    /// walk loop forever.
+    #[cfg(unix)]
+    fn make_self_referencing_symlink(dir: &Path) {
+        std::os::unix::fs::symlink(dir, dir.join("cycle")).unwrap();
+    }
+
+    /// No-op on non-unix: creating directory symlinks typically requires
+    /// elevated privileges on Windows, so the cyclic-walk fixture is
+    /// unix-only (`.claude/rules/cross-platform.md`). The test below
+    /// degrades to a plain (non-cyclic) walk there, which still exercises
+    /// `add_engine_files` without proving the guard — the guard itself is
+    /// exercised on unix CI/dev machines.
+    #[cfg(not(unix))]
+    fn make_self_referencing_symlink(_dir: &Path) {}
+
+    #[test]
+    fn add_engine_files_terminates_on_self_referencing_symlink_cycle() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let doc = root.join("plot.qmd");
+        let supporting_dir = root.join("plot_files");
+        std::fs::create_dir_all(&supporting_dir).unwrap();
+        // A real file, so we can prove the walk still finds real content
+        // despite the cycle.
+        let real_file = supporting_dir.join("cell-1.png");
+        touch(&real_file);
+        make_self_referencing_symlink(&supporting_dir);
+
+        // Run the walk on a background thread and bound the wait: an
+        // unguarded walk loops forever on the cycle (proven RED below), so
+        // we must not let a regression hang the whole test process.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let doc_for_thread = doc.clone();
+        std::thread::spawn(move || {
+            let runtime = NativeRuntime::new();
+            let mut report = DocumentResourceReport::new();
+            report.add_engine_files(
+                "julia",
+                &doc_for_thread,
+                &runtime,
+                [PathBuf::from("plot_files")],
+            );
+            // Ignore send errors: if the receiver already timed out and
+            // dropped, there's nothing left to report to.
+            let _ = tx.send(report);
+        });
+
+        let report = rx.recv_timeout(std::time::Duration::from_secs(5)).expect(
+            "add_engine_files must terminate within 5s even with a \
+                 cyclic symlink in the reported supporting directory \
+                 (symlink-cycle guard regression — see bd-677297ca follow-up)",
+        );
+
+        let raw_paths: Vec<PathBuf> = report.entries.iter().map(|e| e.raw_path.clone()).collect();
+        #[cfg(unix)]
+        assert_eq!(
+            raw_paths,
+            vec![real_file],
+            "the walk must collect the real file and must NOT recurse into \
+             the self-referencing symlink"
+        );
+        #[cfg(not(unix))]
+        {
+            // No cycle was created on this platform; just confirm the real
+            // file is still found.
+            assert_eq!(raw_paths, vec![real_file]);
+        }
     }
 }

@@ -64,6 +64,16 @@
       "types": "./src/system/index.ts",
       "source": "./src/system/index.ts",
       "import": "./dist/system/index.js"
+    },
+    "./claims": {
+      "types": "./src/claims/index.ts",
+      "source": "./src/claims/index.ts",
+      "import": "./dist/claims/index.js"
+    },
+    "./jupyter": {
+      "types": "./src/jupyter/index.ts",
+      "source": "./src/jupyter/index.ts",
+      "import": "./dist/jupyter/index.js"
     }
   },
   "files": [
