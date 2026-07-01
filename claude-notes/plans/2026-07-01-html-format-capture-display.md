@@ -109,28 +109,31 @@ churn and keeps the empty-captures path byte-identical. **(Confirm during 1A.)**
 
 ### Phase 1 — Rust: captures-aware HTML pipeline (`quarto-core`)
 
-- [ ] **1A — captures-aware HTML stage builder.** Add captures to
-      `HtmlRenderConfig` (default empty). In `build_html_pipeline_stages_with_options`
-      (`pipeline.rs:249`), when captures are present, insert
-      `CaptureSpliceStage::new().with_captures(captures)` before the
-      `engine_stage` and rebuild the engine stage with `.with_spliced_engines(names)`
-      — lift the exact logic from `build_q2_preview_pipeline_stages`
-      (`pipeline.rs:406-433`), ideally into a shared helper so the two builders
-      don't drift. Thread the config's captures into `render_qmd_to_html`
-      (~`pipeline.rs:833`).
-      - **RED→GREEN (native):** a `quarto-core` test that runs
-        `render_qmd_to_html` on a one-`{r}`-cell doc with a hand-built
-        `EngineCapture` whose result markdown carries a capture-only marker;
-        assert the marker appears in the emitted HTML (`.cell-output`), and that
-        empty captures render source-only (byte-identical to today).
-- [ ] **1B — `RenderToHtmlRenderer::with_captures`.** Add it
-      (`crates/quarto-core/src/project/pass2_renderer.rs:727`), mirroring
-      `RenderToPreviewAstRenderer::with_captures` (`:991`); forward the captures
-      into the renderer's `render_qmd_to_html` call (`:825`) via the 1A config
-      field.
-      - **RED→GREEN (native):** a Pass-2 active-page render test (multi-file
-        project, `RenderMode::ActivePage`) with a capture → asserts the active
-        page's HTML has the spliced output and sibling pages are untouched.
+- [x] **1A — captures-aware HTML stage builder.** ✅ done. Added a
+      `captures: Vec<EngineCapture>` field + `with_captures` to `HtmlRenderConfig`
+      (default empty); extracted a shared `insert_capture_splice_stage` helper
+      (the splice-insert + engine-stage-rebuild-with-spliced-names, formerly
+      inline in `build_q2_preview_pipeline_stages`, now used by both);
+      `build_html_pipeline_stages_with_captures` variant; `render_qmd_to_html`
+      uses it when `config.captures` is non-empty (empty → unchanged builder,
+      byte-identical). RED→GREEN native test
+      `render_qmd_to_html_splices_captures` (hand-built `.cell`-wrapped capture
+      with a fictitious non-spawning engine, mirroring `captureSplice.wasm.test.ts`)
+      → the marker appears in the HTML as a `.cell` Div; empty captures render
+      source-only. Full quarto-core suite (2406) green, clippy clean.
+      **Note:** the raw-cell `input_qmd` hash-matches the doc's post-sugar cell
+      (as the WASM test already relied on); a real engine name spawns a
+      subprocess, so tests must use a fictitious engine + a `.cell`-wrapped
+      `result.markdown` (a bare passthrough echo isn't a `Div.cell` and won't
+      splice).
+- [x] **1B — `RenderToHtmlRenderer::with_captures`.** ✅ done. Added the
+      `captures` field + `with_captures` builder (mirrors
+      `RenderToPreviewAstRenderer`); `render` now builds the config with
+      `.with_captures(self.captures.clone())`. New integration test
+      `render_to_html_captures.rs`: a multi-file project (`_quarto.yml` +
+      index.qmd cell + about.qmd prose) rendered in `ActivePage` mode with a
+      capture → the active page's HTML has the spliced `.cell-output`; no
+      captures → source-only. Green (reuses the 1A `render_qmd_to_html` path).
 
 ### Phase 2 — WASM: use captures in both HTML branches (`wasm-quarto-hub-client`)
 
