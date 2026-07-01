@@ -137,18 +137,15 @@ churn and keeps the empty-captures path byte-identical. **(Confirm during 1A.)**
 
 ### Phase 2 — WASM: use captures in both HTML branches (`wasm-quarto-hub-client`)
 
-- [ ] **2A — thread the already-parsed `captures` into the HTML branches.**
-      `render_single_doc_to_response` `_ =>` arm (`lib.rs:1438`): build the
-      `HtmlRenderConfig` with the in-scope `captures`.
-      `render_project_active_page_to_response` `_ =>` arm (`lib.rs:1616`): call
-      `.with_captures(captures)` on the `RenderToHtmlRenderer`. No new WASM
-      export or wasm-bindgen signature is needed — the bytes already arrive via
-      `render_page_in_project_with_attribution` (`lib.rs:1148`).
-      - **RED→GREEN (WASM vitest):** a new test mirroring
-        `captureSplice.wasm.test.ts` but driving the **`render_page_in_project` /
-        html** path (a `format: html` doc + a real gzipped capture) → asserts the
-        spliced `.cell-output` marker is in the rendered HTML; no-capture ⇒
-        source-only.
+- [x] **2A — thread the already-parsed `captures` into the HTML branches.**
+      ✅ done. `render_single_doc_to_response` `_ =>` arm: config built with
+      `.with_captures(captures)`. `render_project_active_page_to_response` `_ =>`
+      arm: `renderer.with_captures(captures)`. No new wasm-bindgen signature —
+      the bytes already arrive via `render_page_in_project_with_attribution`.
+      RED→GREEN WASM vitest `captureSpliceHtml.wasm.test.ts` (a `format: html`
+      doc + a real gzipped capture → the marker appears in the rendered `html`;
+      no-capture ⇒ source-only). RED confirmed against the pre-rebuild WASM,
+      GREEN after `npm run build:wasm`. Full WASM suite (126) green.
 
 ### Phase 3 — preview-runtime: forward `captureGzJson` through `renderToHtml`
 

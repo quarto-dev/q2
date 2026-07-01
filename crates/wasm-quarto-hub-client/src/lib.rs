@@ -1436,7 +1436,10 @@ async fn render_single_doc_to_response(
             }
         }
         _ => {
-            let config = HtmlRenderConfig::with_resolver(resolver.clone());
+            // bd-uy4uygha: splice server-recorded captures into the HTML render
+            // (hub-client's default `format: html` preview), the same way the
+            // `preview` branch above does for the AST path.
+            let config = HtmlRenderConfig::with_resolver(resolver.clone()).with_captures(captures);
             match render_qmd_to_html(content, &source_name, &mut ctx, &config, runtime_arc).await {
                 Ok(out) => (
                     Some(out.html),
@@ -1618,6 +1621,9 @@ async fn render_project_active_page_to_response(
             if let Some(ref provider) = user_grammars_rc {
                 renderer = renderer.with_user_grammars(provider.clone());
             }
+            // bd-uy4uygha: splice the active page's captures into its HTML the
+            // same way the `preview` branch does for the AST path.
+            renderer = renderer.with_captures(captures);
             let mut pipeline = ProjectPipeline::with_renderer(
                 &mut project,
                 project_type,
