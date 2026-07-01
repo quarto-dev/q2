@@ -483,6 +483,11 @@ enum Commands {
         /// command is fail-closed (connect + list + exit).
         #[arg(long = "allow-all")]
         allow_all: bool,
+
+        /// Dev/testing: use this bearer token instead of the interactive OAuth
+        /// bridge. Only for a local, no-auth hub (`q2 hub`), which ignores it.
+        #[arg(long, env = "QUARTO_HUB_TOKEN")]
+        token: Option<String>,
     },
 
     /// Start collaborative hub server for real-time editing.
@@ -758,10 +763,12 @@ fn main() -> Result<()> {
             project,
             server,
             allow_all,
+            token,
         } => commands::provide_hub::execute(commands::provide_hub::ProvideHubArgs {
             project,
             server,
             allow_all,
+            token,
         }),
 
         Commands::Hub {

@@ -1134,6 +1134,24 @@ every peer's preview shows the executed output. Remaining is Phase 5
 (retention/dedup + real provider-only authz via `/auth/actor` Bearer support)
 and Phase 6 (hardening: reconnect/refresh, multi-executor claims).
 
+#### Local e2e harness + dev-token escape hatch (2026-07-01)
+
+To make the browser click-through testable without quarto-hub.com or Google
+OAuth, added a **dev escape hatch** to `q2 provide-hub`: `--token <bearer>` (or
+`QUARTO_HUB_TOKEN`) uses a `StaticTokenSource` instead of spawning the Node
+OAuth bridge. Intended for a **local, no-auth `q2 hub`**, which ignores the
+bearer entirely (`server.rs:944` — no `auth_config` ⇒ no credential check). The
+interactive OAuth path is unchanged when `--token` is absent.
+
+This unblocks a fully-local end-to-end test: `q2 hub --project` (no auth,
+`/health` returns the index-doc id) + hub-client dev (`VITE_DEFAULT_SYNC_SERVER`
++ no `VITE_GOOGLE_CLIENT_ID` ⇒ anonymous) + `q2 provide-hub --allow-all --token
+dev`. The runnable harness (example project + helper script + walkthrough) lives
+in **`claude-notes/hub-execution-e2e/`**. Verified directly: no-auth hub +
+`/health` id, provider connect over `--token`, and the Jupyter engine executing
+`2+3`→`5` (via `q2 render` with `engine: jupyter`); the browser Run-click is the
+manual last mile the harness drives.
+
 **Note (no faithful browser E2E in 4b, same as 1G):** a real end-to-end —
 click Run → provider executes → preview shows output — needs both a browser
 *and* a live provider against a shared hub, which can't be automated here

@@ -16,7 +16,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use quarto_hub_provider::{AuthzPolicy, JoinConfig, NodeBridge, Provider, join};
+use quarto_hub_provider::{
+    AuthzPolicy, JoinConfig, NodeBridge, Provider, StaticTokenSource, TokenSource, join,
+};
 
 /// Arguments for `q2 provide-hub`.
 pub struct ProvideHubArgs {
@@ -29,6 +31,11 @@ pub struct ProvideHubArgs {
     /// Serve execution requests from any collaborator. Without this the command
     /// is fail-closed (connect + list + exit).
     pub allow_all: bool,
+    /// Dev/testing escape hatch: use this bearer token verbatim instead of
+    /// running the interactive OAuth bridge. Intended for a **local, no-auth
+    /// hub** (`q2 hub`), which ignores the bearer entirely. Never needed
+    /// against quarto-hub.com.
+    pub token: Option<String>,
 }
 
 const DEFAULT_SERVER_WS: &str = "wss://quarto-hub.com/ws";
@@ -65,8 +72,16 @@ async fn run(args: ProvideHubArgs) -> Result<()> {
     let server_ws_url = url::Url::parse(&server_ws)
         .with_context(|| format!("invalid hub server URL: {server_ws}"))?;
 
-    eprintln!("Authenticating with the hub…");
-    let bridge = NodeBridge::spawn().context("starting the auth bridge")?;
+    // A dev `--token` bypasses the OAuth bridge with a static bearer — for a
+    // local no-auth hub, which ignores it. Otherwise spawn the Node auth
+    // bridge and sign in interactively.
+    let token_source: Arc<dyn TokenSource> = if let Some(token) = args.token {
+        eprintln!("Using a static bearer token (dev mode; the hub must not require auth).");
+        Arc::new(StaticTokenSource::new(token))
+    } else {
+        eprintln!("Authenticating with the hub…");
+        Arc::new(NodeBridge::spawn().context("starting the auth bridge")?)
+    };
 
     eprintln!("Connecting to project {index_doc_id} at {server_ws_url}…");
     let (repo, index) = join(
@@ -75,7 +90,7 @@ async fn run(args: ProvideHubArgs) -> Result<()> {
             index_doc_id,
             connect_timeout: Duration::from_secs(30),
         },
-        Arc::new(bridge),
+        token_source,
     )
     .await
     .context("joining the hub session")?;
