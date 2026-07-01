@@ -459,8 +459,14 @@ export async function renderQmd(
 export async function renderPageInProject(
   path: string,
   userGrammars?: unknown,
+  // bd-uy4uygha: optional gzipped-JSON `EngineCapture[]` from the project's
+  // capture sidecar. Forwarded to the capture-ready
+  // `renderPageInProjectWithAttribution`; the WASM HTML branch splices it so
+  // hub-client's default `format: html` preview shows executed output. Omit to
+  // render code cells as source.
+  captureGzJson?: Uint8Array,
 ): Promise<RenderResponse> {
-  return renderPageInProjectWithAttribution(path, userGrammars, null);
+  return renderPageInProjectWithAttribution(path, userGrammars, null, captureGzJson);
 }
 
 /**
@@ -979,6 +985,15 @@ export interface RenderToHtmlOptions {
    * Phase 4.5 of `claude-notes/plans/2026-04-21-syntax-highlighting-phase-4.md`.
    */
   userGrammars?: UserGrammarDiscoveryContext;
+
+  /**
+   * Optional gzipped-JSON `EngineCapture[]` from the project's capture sidecar
+   * (bd-uy4uygha). When present, the WASM HTML render splices the recorded
+   * engine output into the page, so hub-client's default `format: html` preview
+   * shows the output of a document executed by a connected `q2 provide-hub`.
+   * Absent → code cells render as source.
+   */
+  captureGzJson?: Uint8Array;
 }
 
 /**
@@ -1171,7 +1186,7 @@ async function renderToHtmlInner(
   try {
     await initWasm();
 
-    const { documentPath, userGrammars } = options;
+    const { documentPath, userGrammars, captureGzJson } = options;
 
     // Resolve and register any user-defined tree-sitter grammars
     // before the render. Cache + bridge live at module scope so
@@ -1189,6 +1204,7 @@ async function renderToHtmlInner(
     const result: RenderResponse = await renderPageInProject(
       documentPath,
       grammarsHandle,
+      captureGzJson,
     );
 
     if (result.success) {

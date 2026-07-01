@@ -149,13 +149,20 @@ churn and keeps the empty-captures path byte-identical. **(Confirm during 1A.)**
 
 ### Phase 3 — preview-runtime: forward `captureGzJson` through `renderToHtml`
 
-- [ ] **3A — thread captures through the convenience wrappers.** Add
-      `captureGzJson?: Uint8Array` to `RenderToHtmlOptions`
-      (`wasmRenderer.ts:959`); forward it from `renderToHtmlInner` (`:1189`) into
-      `renderPageInProject`; give `renderPageInProject` (`:459`) a captures param
-      that forwards to the already-capable `renderPageInProjectWithAttribution`
-      (`:503`). RED→GREEN unit test asserting the bytes reach the (mocked) WASM
-      binding.
+- [x] **3A — thread captures through the convenience wrappers.** ✅ done. Added
+      `captureGzJson?: Uint8Array` to `RenderToHtmlOptions`; `renderToHtmlInner`
+      forwards it into `renderPageInProject`; `renderPageInProject` gained a
+      captures param forwarding to the already-capable
+      `renderPageInProjectWithAttribution`. tsc clean; preview-runtime tests (74)
+      green.
+      - **Coverage note (deviation from the plan's mocked-unit-test idea):**
+        preview-runtime's render wrappers are exercised via *real* WASM in
+        `*.wasm.test.ts`, and `getWasm` has no injection seam;
+        `renderToHtml`→binding can't run in vitest because `initWasm()` calls
+        `wasm.default()` with no args (can't locate the `.wasm` in Node). So this
+        pure pass-through is covered by tsc + Phase 2 (the binding splices, real
+        WASM) + Phase 4 (Preview passes `captureGzJson` to `renderToHtml`) +
+        Phase 5 (browser e2e), rather than a standalone mock.
 
 ### Phase 4 — hub-client: feed captures to the default `<Preview>`
 
