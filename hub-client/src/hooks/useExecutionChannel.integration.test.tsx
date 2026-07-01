@@ -33,14 +33,15 @@ import { useExecutionChannel } from './useExecutionChannel';
 describe('useExecutionChannel (Phase 2D)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    fake.handle.broadcast.mockClear();
   });
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('returns [] when offline and does not subscribe', () => {
+  it('returns no executors when offline and does not subscribe', () => {
     const { result } = renderHook(() => useExecutionChannel(false, 'idx-1'));
-    expect(result.current).toEqual([]);
+    expect(result.current.executors).toEqual([]);
     expect(fake.handlerCount()).toBe(0);
   });
 
@@ -52,8 +53,28 @@ describe('useExecutionChannel (Phase 2D)', () => {
       fake.inject({ kind: 'exec/beacon', actorId: 'exec-1', engines: ['knitr'], generation: 0 });
     });
 
-    expect(result.current).toHaveLength(1);
-    expect(result.current[0]).toMatchObject({ actorId: 'exec-1', engines: ['knitr'] });
+    expect(result.current.executors).toHaveLength(1);
+    expect(result.current.executors[0]).toMatchObject({ actorId: 'exec-1', engines: ['knitr'] });
+  });
+
+  it('requestExecution broadcasts an exec/request while connected', () => {
+    const { result } = renderHook(() => useExecutionChannel(true, 'idx-1'));
+
+    let requestId: string | null = null;
+    act(() => {
+      requestId = result.current.requestExecution('doc.qmd');
+    });
+
+    expect(requestId).toBeTruthy();
+    expect(fake.handle.broadcast).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'exec/request', path: 'doc.qmd' }),
+    );
+  });
+
+  it('requestExecution returns null when offline', () => {
+    const { result } = renderHook(() => useExecutionChannel(false, 'idx-1'));
+    expect(result.current.requestExecution('doc.qmd')).toBeNull();
+    expect(fake.handle.broadcast).not.toHaveBeenCalled();
   });
 
   it('tears the channel down on unmount', () => {

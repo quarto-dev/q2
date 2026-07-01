@@ -1,29 +1,38 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getIndexHandle } from '@quarto/preview-runtime';
 import {
   createExecutionChannel,
+  type ExecutionChannel,
   type LiveExecutor,
 } from '../services/executionChannel';
 
+/** What {@link useExecutionChannel} exposes to the editor. */
+export interface UseExecutionChannel {
+  /** Executors currently believed online (refreshed by beacons, pruned stale). */
+  executors: LiveExecutor[];
+  /**
+   * Broadcast an "execute this document now" request on the index channel.
+   * Returns the request id, or `null` if not connected. Stable across renders.
+   */
+  requestExecution: (path: string) => string | null;
+}
+
 /**
- * Track which `q2` executors are currently online for the connected project
- * (bd-sfet3264, Phase 2D).
+ * Track which `q2` executors are online for the connected project and expose a
+ * way to ask one to run a document (bd-sfet3264, Phase 2D + Phase 4b).
  *
- * Starts an execution channel on the index DocHandle while connected and
- * returns the live-executor set (refreshed by capability beacons, pruned when
- * they go stale). The channel is torn down and rebuilt when the connection
- * drops/restores or the active project changes, so it always listens on the
- * current project's index handle.
- *
- * Phase 2 only *consumes* beacons (capability detection). No executor exists
- * yet to produce them — that's Phase 4 — so in practice this returns `[]`
- * today; the wiring is in place for when the executor lands.
+ * Starts an execution channel on the index DocHandle while connected: it
+ * surfaces the live-executor set (Phase 2) and, for Phase 4b, hands back a
+ * stable `requestExecution` the Run affordance calls. The channel is torn down
+ * and rebuilt when the connection drops/restores or the active project changes,
+ * so it always listens/broadcasts on the current project's index handle.
  */
 export function useExecutionChannel(
   isOnline: boolean,
   indexDocId: string | null,
-): LiveExecutor[] {
+): UseExecutionChannel {
   const [executors, setExecutors] = useState<LiveExecutor[]>([]);
+  const channelRef = useRef<ExecutionChannel | null>(null);
 
   useEffect(() => {
     if (!isOnline || !indexDocId) {
@@ -34,12 +43,19 @@ export function useExecutionChannel(
       getIndexHandle: () => getIndexHandle(),
       onExecutorsChange: setExecutors,
     });
+    channelRef.current = channel;
     channel.start();
     return () => {
       channel.stop();
+      channelRef.current = null;
       setExecutors([]);
     };
   }, [isOnline, indexDocId]);
 
-  return executors;
+  const requestExecution = useCallback(
+    (path: string) => channelRef.current?.requestExecution(path) ?? null,
+    [],
+  );
+
+  return { executors, requestExecution };
 }

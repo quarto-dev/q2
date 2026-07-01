@@ -15,6 +15,8 @@ import {
 } from '@quarto/preview-runtime';
 import { vfsAddFile, isWasmReady, clearCapture } from '@quarto/preview-runtime';
 import { ClearCaptureControl } from './render/ClearCaptureControl';
+import { RunControl } from './render/RunControl';
+import { hasExecutableCells } from '../services/executableCells';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
 import { registerQmdLanguage } from './quartoTheme';
@@ -63,10 +65,14 @@ interface Props {
   captures?: Record<string, import('@quarto/preview-runtime').CaptureRef>;
   /**
    * Whether at least one q2 executor is currently online for this project
-   * (bd-sfet3264 Phase 2). Read-only indicator for now; the Run affordance
-   * that uses it lands in Phase 4.
+   * (bd-sfet3264 Phase 2). Gates the Run affordance (Phase 4b).
    */
   executorsOnline?: boolean;
+  /**
+   * Broadcast an "execute this document now" request to a connected executor
+   * (bd-sfet3264 Phase 4b). Returns the request id, or null when not connected.
+   */
+  onRequestExecution?: (path: string) => string | null;
   /** Whether the project is connected to the sync server */
   isOnline: boolean;
 }
@@ -145,7 +151,7 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, isOnline }: Props) {
+export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
   const { effectiveTheme } = useTheme();
@@ -1093,12 +1099,18 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               ✕
             </button>
           )}
-          {executorsOnline && (
+          {executorsOnline && currentFile && hasExecutableCells(content) ? (
+            <RunControl
+              path={currentFile.path}
+              capture={captures?.[currentFile.path]}
+              onRun={(p) => { onRequestExecution?.(p); }}
+            />
+          ) : executorsOnline ? (
             <div className="executor-online-bar" title="A connected q2 client can execute this project's code">
               <span className="executor-online-dot" aria-hidden="true" />
               Executor online
             </div>
-          )}
+          ) : null}
           <ClearCaptureControl
             path={currentFile?.path ?? null}
             hasCapture={!!(currentFile && captures?.[currentFile.path])}

@@ -108,11 +108,14 @@ function App() {
   const [captures, setCaptures] = useState<Record<string, CaptureRef>>({});
   const [isOnline, setIsOnline] = useState<boolean>(false);
 
-  // bd-sfet3264 (Phase 2D): track which q2 executors are online for the
-  // connected project (via the index-handle capability beacon). No executor
-  // produces beacons until Phase 4, so this is [] in practice today; the
-  // wiring + a read-only indicator are in place for when it lands.
-  const liveExecutors = useExecutionChannel(isOnline, project?.indexDocId ?? null);
+  // bd-sfet3264 (Phase 2D + Phase 4b): track which q2 executors are online for
+  // the connected project (via the index-handle capability beacon) and expose
+  // a way to ask one to run a document. Beacons come from a connected
+  // `q2 provide-hub` (Phase 4).
+  const { executors: liveExecutors, requestExecution } = useExecutionChannel(
+    isOnline,
+    project?.indexDocId ?? null,
+  );
 
   // While a project's sync is disconnected, check whether the disconnect is
   // actually an auth rejection (browsers hide the WS upgrade status). Only
@@ -694,6 +697,7 @@ function App() {
               identities={identities}
               captures={captures}
               executorsOnline={liveExecutors.length > 0}
+              onRequestExecution={requestExecution}
               isOnline={isOnline}
             />
           </ErrorBoundary>

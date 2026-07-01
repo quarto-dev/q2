@@ -1095,6 +1095,45 @@ token plumbing).
 **Phase 4a complete.** Remaining in Phase 4: **4b** — the hub-client Run
 button (gated on a live beacon, reflecting `CaptureRef.state`/staleness).
 
+#### Phase 4b — implementation checklist (TDD), hub-client
+
+The trigger is the ephemeral `channel.requestExecution(path)` (not q2-preview's
+HTTP POST), so we reuse the *pattern* of `q2-preview-spa`'s
+`StaleCaptureOverlay` (state-reflecting label, disable-while-running, inline
+error) but not the component.
+
+- [x] **4b-1 — `hasExecutableCells(content)` helper.** Pure detector of
+      executable fenced code cells (```` ```{lang} ````) to gate the Run
+      affordance. Unit-tested.
+- [x] **4b-2 — expose `requestExecution` from `useExecutionChannel`.** Return
+      `{ executors, requestExecution }` (hold the channel in a ref so the
+      callback is stable across renders). Update the hook's integration test +
+      the two App.tsx call sites.
+- [x] **4b-3 — `RunControl` component (presentational).** Run/Re-run button →
+      `onRun(path)`; disabled + "Executing…" while a local pending flag or
+      `state === 'running'`; `state === 'error'` surfaces `lastError`;
+      `staleness` shows a "code changed" note. Local pending clears when the
+      `captureDocId` changes (new capture arrived), on `error`, or after a
+      timeout (ephemeral request may find no executor). Component test for the
+      states.
+- [x] **4b-4 — wire into App + Editor.** App destructures the hook and passes
+      `requestExecution` to Editor; Editor computes `hasExecutableCells(content)`
+      and renders `RunControl` in the preview pane when
+      `executorsOnline && hasExecutableCells`, keeping the plain
+      "Executor online" bar for non-executable docs.
+- [ ] **4b-5 — build + changelog.** `npm run build:all` (strict tsc -b + vite)
+      + hub-client tests green; `hub-client/changelog.md` entry (two-commit
+      workflow).
+
+**Note (no faithful browser E2E in 4b, same as 1G):** a real end-to-end —
+click Run → provider executes → preview shows output — needs both a browser
+*and* a live provider against a shared hub, which can't be automated here
+(interactive OAuth + a running executor). The scripted Phase 4a integration
+test already proves the provider half end-to-end; 4b's component/hook/unit tests
+prove the editor wiring (request broadcast, state reflection, gating). The full
+click-through is the manual verification the user can run with
+`q2 provide-hub --allow-all`.
+
 - **Phase 5 — Retention (D3) + authorization (D4).** Content-addressed
 - **Phase 5 — Retention (D3) + authorization (D4).** Content-addressed
   capture dedup; per-project opt-in + (if chosen) requester gating +
