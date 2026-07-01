@@ -2,8 +2,31 @@
 
 **Strand:** bd-sfet3264 (feature, P1).
 **Date:** 2026-06-29.
-**Status:** Design / investigation. **Implementation gated on explicit
-user approval after this plan is reviewed and iterated.**
+**Status:** Phases 1–3 implemented + `cargo xtask verify`-green on
+`feature/hub-execution-provider`. Phase 4 designed + decisions locked;
+implementation pending (to be picked up in a separate session).
+
+## Known limitations (v1) — READ THIS
+
+- **Single executor per project (no multi-executor arbitration).** If
+  **two `q2 provide-hub` processes connect to the same project**, they
+  will **both** receive every `exec/request` and **both execute it** —
+  duplicate runs with **duplicate side effects**. The `CaptureRef`
+  sidecar converges (CRDT last-write-wins) to one capture; the other's
+  capture doc is orphaned. True "only one runs" mutual exclusion is
+  **not achievable peer-to-peer** (no atomic compare-and-swap across
+  peers); it requires the hub server as an arbiter, which is **deferred
+  to Phase 6** (the D5 claim/heartbeat/`--force` protocol). v1 assumes
+  one provider per project; the editor shows a beacon per executor, so
+  the multi-provider situation is at least visible. **Accepted for v1
+  (user, 2026-06-30).**
+- **Capture-doc orphaning / no GC.** Every run (always fresh — see #4)
+  creates a new capture binary doc and orphans the previous one. samod
+  has no document-delete API, so long-lived projects accumulate orphaned
+  capture docs until server-side GC exists (D3 → Phase 5/6).
+- **Interactive-OAuth E2E is manual.** The real browser sign-in path
+  can't be automated; covered by unit/integration tests of the pieces
+  (see Phase 3).
 
 ## Goal
 
