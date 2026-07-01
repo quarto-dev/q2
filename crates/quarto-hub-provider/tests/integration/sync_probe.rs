@@ -79,6 +79,99 @@ async fn probe_live_doc_sync() {
     }
 }
 
+/// Schema-agnostic reader: dump the doc's ROOT keys over time. Works for any
+/// document (e.g. a bare `{ value: 42 }` from the interop repro), so "0 keys"
+/// unambiguously means "content never synced" rather than "wrong field".
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "needs network + a live PROBE_DOC_ID"]
+async fn probe_root_keys() {
+    use automerge::ReadDoc;
+
+    let server = std::env::var("PROBE_SERVER").expect("set PROBE_SERVER");
+    let doc_id = std::env::var("PROBE_DOC_ID").expect("set PROBE_DOC_ID");
+    let url: url::Url = server.parse().unwrap();
+    let repo = dial_bearer(&url).await;
+
+    let id = DocumentId::from_str(&doc_id).unwrap();
+    let handle = repo.find(id).await.unwrap().expect("find Some");
+    for i in 0..30 {
+        let dump = handle.with_document(|doc| {
+            let mut out = String::new();
+            for key in doc.keys(automerge::ROOT).collect::<Vec<_>>() {
+                match doc.get(automerge::ROOT, &key) {
+                    Ok(Some((automerge::Value::Object(automerge::ObjType::Map), obj))) => {
+                        let entries: Vec<String> = doc
+                            .keys(&obj)
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .map(|k| {
+                                let v = doc
+                                    .get(&obj, &k)
+                                    .ok()
+                                    .flatten()
+                                    .map(|(v, _)| format!("{v:?}"));
+                                format!("{k}={v:?}")
+                            })
+                            .collect();
+                        out.push_str(&format!(" {key}=map{{{}}}", entries.join(", ")));
+                    }
+                    Ok(Some((v, _))) => out.push_str(&format!(" {key}={v:?}")),
+                    _ => out.push_str(&format!(" {key}=?")),
+                }
+            }
+            out
+        });
+        eprintln!("[t={:>5}ms]{dump}", i * 500);
+        if !dump.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+}
+
+/// Validate the fix: read the `files` map treating each value as EITHER a
+/// scalar `Str` OR a `Text` object (which is how automerge 3.x / hub-client
+/// stores string map-values). If this recovers the doc ids, the fix for
+/// `IndexDocument::get_all_files` is "also read Text values".
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "needs network + a live PROBE_DOC_ID"]
+async fn probe_files_str_or_text() {
+    use automerge::{ReadDoc, Value};
+
+    let server = std::env::var("PROBE_SERVER").expect("set PROBE_SERVER");
+    let doc_id = std::env::var("PROBE_DOC_ID").expect("set PROBE_DOC_ID");
+    let url: url::Url = server.parse().unwrap();
+    let repo = dial_bearer(&url).await;
+
+    let id = DocumentId::from_str(&doc_id).unwrap();
+    let handle = repo.find(id).await.unwrap().expect("find Some");
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let files: Vec<(String, String)> = handle.with_document(|doc| {
+        let mut out = Vec::new();
+        if let Some((_, files_obj)) = doc.get(automerge::ROOT, "files").ok().flatten() {
+            for k in doc.keys(&files_obj).collect::<Vec<_>>() {
+                if let Some((v, vid)) = doc.get(&files_obj, &k).ok().flatten() {
+                    let s = match v {
+                        Value::Scalar(s) => s.to_str().map(str::to_string),
+                        Value::Object(automerge::ObjType::Text) => doc.text(&vid).ok(),
+                        _ => None,
+                    };
+                    if let Some(s) = s {
+                        out.push((k, s));
+                    }
+                }
+            }
+        }
+        out
+    });
+    eprintln!("RECOVERED {} file(s): {:?}", files.len(), files);
+    assert!(
+        !files.is_empty(),
+        "fix should recover the JS-authored file ids"
+    );
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "needs network (PROBE_SERVER)"]
 async fn probe_create_then_find() {
