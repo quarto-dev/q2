@@ -2,8 +2,9 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
-import { renderToHtml, isWasmReady, setScrollSyncEnabled, type Pass1Failure } from '@quarto/preview-runtime';
+import { renderToHtml, isWasmReady, setScrollSyncEnabled, type Pass1Failure, type CaptureRef } from '@quarto/preview-runtime';
 import { getFileContent, getBinaryFileContent } from '@quarto/preview-runtime';
+import { useActiveCaptureBytes } from '../../hooks/useActiveCaptureBytes';
 import { useScrollSync } from '../../hooks/useScrollSync';
 import { useSelectionSync } from '../../hooks/useSelectionSync';
 import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
@@ -53,6 +54,13 @@ interface PreviewProps {
   onFileChange: (file: FileEntry, anchor?: string) => void;
   onOpenNewFileDialog: (initialFilename: string) => void;
   onDiagnosticsChange: (diagnostics: Diagnostic[]) => void;
+  /**
+   * Path → recorded engine capture sidecar entry (bd-uy4uygha). The active
+   * file's capture (if any) is fetched and spliced into the html render so a
+   * document executed by a connected `q2 provide-hub` shows its output in the
+   * default `format: html` preview.
+   */
+  captures?: Record<string, CaptureRef>;
   /** Callback to register scrollToLine function for external use */
   onRegisterScrollToLine?: (fn: (line: number) => void) => void;
   /** Callback to register setScrollRatio function for external use */
@@ -91,6 +99,7 @@ function pass1FailuresBannerMessage(failures: Pass1Failure[]): string {
 async function doRender(
   documentPath: string,
   projectFilePaths: readonly string[],
+  captureGzJson: Uint8Array | undefined,
 ): Promise<RenderResult> {
   // Caller should check isWasmReady() before calling this
   if (!isWasmReady()) {
@@ -111,6 +120,9 @@ async function doRender(
           getBinaryFileContent(path)?.content ?? null,
         getTextContent: async (path) => getFileContent(path),
       },
+      // bd-uy4uygha: splice the active document's recorded engine output into
+      // the html (undefined ⇒ code cells render as source).
+      captureGzJson,
     });
 
     // Collect all diagnostics from both success and error paths
@@ -165,9 +177,15 @@ export default function Preview({
   onFileChange,
   onOpenNewFileDialog,
   onDiagnosticsChange,
+  captures,
   onRegisterScrollToLine,
   onRegisterSetScrollRatio,
 }: PreviewProps) {
+  // bd-uy4uygha: the active document's recorded capture bytes (if any), fetched
+  // from the capture sidecar. Threaded into `doRender` so the html render
+  // splices the executed output. A freshly-arrived capture updates this and, via
+  // the render-callback deps below, re-renders the preview.
+  const captureBytes = useActiveCaptureBytes(captures, currentFile?.path);
   // Preview state machine for error handling
   const [previewState, setPreviewState] = useState<PreviewState>('START');
   const [currentError, setCurrentError] = useState<CurrentError | null>(null);
@@ -275,7 +293,7 @@ export default function Preview({
     // any user-defined tree-sitter grammars under `_quarto/grammars/*`.
     // The discovery step is pure + cache-backed so this is ~free when
     // grammars haven't changed since the last render.
-    const result = await doRender(documentPath, projectFilePaths);
+    const result = await doRender(documentPath, projectFilePaths, captureBytes);
     if (qmdContent !== lastContentRef.current) return;
 
     // Update diagnostics
@@ -317,7 +335,7 @@ export default function Preview({
         setPreviewState('ERROR_FROM_GOOD');
       }
     }
-  }, [onDiagnosticsChange, projectFilePaths]);
+  }, [onDiagnosticsChange, projectFilePaths, captureBytes]);
 
   // Debounced render update
   const updatePreview = useCallback((newContent: string, documentPath: string) => {

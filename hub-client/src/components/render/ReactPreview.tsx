@@ -8,7 +8,6 @@ import {
   parseQmdToAstWithAttribution,
   renderPageInProjectWithAttribution,
   renderPageForPreview,
-  getBinaryDocById,
   isWasmReady,
   incrementalWriteQmd,
   applyNodeEdit,
@@ -18,6 +17,7 @@ import {
 } from '@quarto/preview-runtime';
 import { pipelineKindForFormat } from '@quarto/preview-runtime';
 import { useAttribution } from '../../hooks/useAttribution';
+import { useActiveCaptureBytes } from '../../hooks/useActiveCaptureBytes';
 import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
 import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
 import { usePreference } from '../../hooks/usePreference';
@@ -572,37 +572,12 @@ export default function ReactPreview({
   // bd-sfet3264 (Phase 1D): recorded engine capture for the active document.
   //
   // The `captures` sidecar (threaded down from App.tsx) maps each path to a
-  // CaptureRef pointing at a capture binary doc. Here we fetch that doc's
-  // gzipped `EngineCapture[]` bytes for the *active* file and hold them so
-  // `doRender` can splice the recorded engine output into the AST. The fetch
-  // is keyed on the active file's `captureDocId` (not on content), so it only
-  // re-runs when a capture is added / re-executed / cleared — not on every
-  // keystroke. A freshly-arrived capture updates `captureBytes`, which is a
-  // render input below, so the preview re-renders to show executed output.
-  const activeCaptureDocId = currentFile?.path
-    ? captures?.[currentFile.path]?.captureDocId
-    : undefined;
-  const [captureBytes, setCaptureBytes] = useState<Uint8Array | undefined>(undefined);
-  useEffect(() => {
-    let cancelled = false;
-    if (!activeCaptureDocId) {
-      setCaptureBytes(undefined);
-      return;
-    }
-    (async () => {
-      try {
-        const doc = await getBinaryDocById(activeCaptureDocId);
-        if (!cancelled) setCaptureBytes(doc?.content);
-      } catch {
-        // A dangling / unreachable capture doc falls back to source-only
-        // rendering — same as the no-capture path.
-        if (!cancelled) setCaptureBytes(undefined);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeCaptureDocId]);
+  // CaptureRef pointing at a capture binary doc. `useActiveCaptureBytes` fetches
+  // the active file's capture bytes so `doRender` can splice the recorded engine
+  // output into the AST; a freshly-arrived capture updates `captureBytes`, a
+  // render input below, so the preview re-renders to show executed output. The
+  // same hook feeds the default `format: html` renderer (`Preview`).
+  const captureBytes = useActiveCaptureBytes(captures, currentFile?.path);
 
   // Debounce rendering
   const renderTimeoutRef = useRef<number | null>(null);

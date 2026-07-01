@@ -160,7 +160,10 @@ export default function PreviewRouter(props: PreviewRouterProps) {
           // Phase 9 Decision 6: pass `fileContents` so any sibling
           // edit (including `_quarto.yml`) triggers a re-render via
           // the Map identity changing on every Automerge update.
-          <Preview {...commonProps} fileContents={fileContents} onRegisterScrollToLine={onRegisterScrollToLine} onRegisterSetScrollRatio={onRegisterSetScrollRatio} />
+          // bd-uy4uygha: `captures` threads the capture sidecar so the default
+          // `format: html` preview can splice executed output (previously only
+          // ReactPreview / q2-preview consumed captures).
+          <Preview {...commonProps} fileContents={fileContents} captures={captures} onRegisterScrollToLine={onRegisterScrollToLine} onRegisterSetScrollRatio={onRegisterSetScrollRatio} />
         )}
       </div>
     </div>

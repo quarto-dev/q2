@@ -166,19 +166,19 @@ churn and keeps the empty-captures path byte-identical. **(Confirm during 1A.)**
 
 ### Phase 4 — hub-client: feed captures to the default `<Preview>`
 
-- [ ] **4A — route captures to `<Preview>`.** `PreviewRouter.tsx:163` — pass
-      `captures` into `<Preview>` (stop dropping it at `:148`).
-- [ ] **4B — `<Preview>` consumes captures.** Replicate ReactPreview's
-      capture-doc resolution + fetch (`ReactPreview.tsx:582-605`): derive
-      `activeCaptureDocId` from `captures[path]?.captureDocId`, fetch bytes via
-      `getBinaryDocById`, and pass `captureGzJson` into the `renderToHtml({...})`
-      call (`Preview.tsx:106`). Add the render-trigger dep so a freshly-arrived
-      capture re-renders. Consider factoring the shared fetch hook out of
-      ReactPreview to avoid duplication.
-      - **RED→GREEN (integration):** a `Preview` test (mirroring
-        `ReactPreview.capture.integration.test.tsx`) — a capture in props is
-        fetched by id and its bytes reach the `renderToHtml` call; no-capture ⇒
-        no fetch.
+- [x] **4A — route captures to `<Preview>`.** ✅ done. `PreviewRouter` now
+      passes `captures={captures}` to `<Preview>`.
+- [x] **4B — `<Preview>` consumes captures.** ✅ done. Factored the shared
+      capture-fetch into `hub-client/src/hooks/useActiveCaptureBytes.ts` (derive
+      `captureDocId` from `captures[path]`, fetch via `getBinaryDocById`,
+      keyed on the doc id); `ReactPreview` refactored to use it (removing its
+      inline copy); `Preview` uses it and threads `captureGzJson` into
+      `renderToHtml` (with `captureBytes` in the render-callback deps so a fresh
+      capture re-renders). Tests: `useActiveCaptureBytes.integration.test.tsx`
+      (3), `Preview.capture.integration.test.tsx` (2, mirroring the ReactPreview
+      test); the existing ReactPreview capture test still passes after the
+      refactor. All render+hooks integration tests (65) green; strict
+      `build:all` green.
 
 ### Phase 5 — verify + end-to-end
 
