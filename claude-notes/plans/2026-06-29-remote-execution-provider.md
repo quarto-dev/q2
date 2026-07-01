@@ -2,13 +2,15 @@
 
 **Strand:** bd-sfet3264 (feature, P1).
 **Date:** 2026-06-29.
-**Status:** Phases 1–3 + **Phase 4a** implemented + `cargo xtask verify`-green
-on `feature/hub-execution-provider`. Phase 4a (2026-07-01): the native provider
-now executes on request — subscribes to the `exec/request` ephemeral channel,
-materializes the VFS to a temp dir, runs the uncached `record_capture`, and
-writes the capture doc + sidecar back over automerge (verified E2E). `q2
-provide-hub --allow-all` serves; the default is fail-closed. **Next: Phase 4b**
-(hub-client Run button).
+**Status:** Phases 1–4 implemented + `cargo xtask verify`-green on
+`feature/hub-execution-provider`. **Phase 4 complete (2026-07-01):** the native
+provider executes on request (4a — subscribe `exec/request` → materialize VFS →
+uncached `record_capture` → write capture doc + sidecar back over automerge;
+`q2 provide-hub --allow-all` serves, default fail-closed) and the hub-client
+editor drives it (4b — a Run button gated on a live capability beacon + the
+document having executable cells, reflecting `CaptureRef.state`/staleness).
+**Next: Phase 5** (retention/dedup + real provider-only authz) and **Phase 6**
+(hardening).
 
 ## Known limitations (v1) — READ THIS
 
@@ -1121,9 +1123,16 @@ error) but not the component.
       and renders `RunControl` in the preview pane when
       `executorsOnline && hasExecutableCells`, keeping the plain
       "Executor online" bar for non-executable docs.
-- [ ] **4b-5 — build + changelog.** `npm run build:all` (strict tsc -b + vite)
-      + hub-client tests green; `hub-client/changelog.md` entry (two-commit
-      workflow).
+- [x] **4b-5 — build + changelog.** ✅ done. `npm run build:all` green (strict
+      tsc -b + vite); full hub-client suite green (unit 685 / integration 95 /
+      wasm 124). Committed `76a01167` (code) + `6e279c8f` (changelog).
+
+**Phase 4b complete → Phase 4 (execute-on-request) complete.** The full loop
+works: a collaborator clicks Run → the editor broadcasts `exec/request` → a
+connected `q2 provide-hub --allow-all` executes and writes the capture back →
+every peer's preview shows the executed output. Remaining is Phase 5
+(retention/dedup + real provider-only authz via `/auth/actor` Bearer support)
+and Phase 6 (hardening: reconnect/refresh, multi-executor claims).
 
 **Note (no faithful browser E2E in 4b, same as 1G):** a real end-to-end —
 click Run → provider executes → preview shows output — needs both a browser
