@@ -36,6 +36,7 @@ pub mod test_cli_input_arg;
 pub mod test_code_block_attributes;
 pub mod test_code_span;
 pub mod test_diagnostic_determinism;
+pub mod test_diagnostic_path_normalization;
 pub mod test_editorial_mark_spacing;
 pub mod test_emphasis_opening_mark;
 pub mod test_error_corpus;

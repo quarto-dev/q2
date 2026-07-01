@@ -3,7 +3,7 @@
 **Date:** 2026-07-01
 **Braid:** bd-dff27o04
 **Worktree:** `.worktrees/bd-dff27o04-windows-json-writer-emits` (branch `braid/bd-dff27o04-windows-json-writer-emits`, based on `main` @ `b8fb38b0`)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design aligned (2026-07-01) — implementing.
 
 ## Triage verdict
 
@@ -42,19 +42,25 @@ Confirmed by direct inspection (not just re-reading the description):
 
 **Environment note (tangential, not part of this fix):** `cargo xtask verify --skip-hub-build` failed on first attempt in this fresh worktree with `aws-lc-sys` / `crypto-common` C-compile errors under `cl.exe` (unrelated to pampa/JSON — pulled in transitively via `quarto-hub → reqwest → rustls → aws-lc-rs → aws-lc-sys`). Rebuilding `aws-lc-sys` in isolation (`cargo build -p aws-lc-sys`) succeeded immediately after, confirming this was a parallel-build resource-contention flake in the fresh worktree's `target/`, not a real regression — historical measurement logs (`claude-notes/research/measurements/baseline-debug.log`) show this exact crate building fine on this machine before. A clean re-run of `cargo xtask verify --skip-hub-build` is in flight; if it comes back green, treat this as noise. If it recurs deterministically, it's a separate strand, not part of this fix.
 
-## Proposed phases (draft)
+## Phases — completed 2026-07-01
 
-- **Phase 0 — Test** (TDD, per project policy): add a unit test that constructs an `ASTContext` (or calls `qmd::read`) with a backslash-containing filename string (no `#[cfg(windows)]` needed — the input is a literal string, not a real OS path, so the test should run identically on all platforms) and asserts the JSON writer's `files[].name` (and the streaming variant) come out forward-slash-only. Run it first, confirm it fails against current `with_filename`.
-- **Phase 1 — Fix**: normalize in `ASTContext::with_filename` (`ast_context.rs:42`) via `quarto_util::to_forward_slashes(Path::new(&filename_str))`. Also normalize in `add_filename` (`ast_context.rs:70`) for consistency — same vector, same one-line fix, and leaving it inconsistent would silently reintroduce the bug the day a real second-file caller shows up (see design question 2, resolved below). Both writer sites and any diagnostics built from `ast_context.filenames`/`source_context` inherit the fix for free — no changes needed at the two writer call sites themselves.
-- **Phase 2 — Verify**: re-run `unit_test_snapshots_json` (and the sibling `unit_test_snapshots_native`/etc., since `with_filename` is shared) to confirm no snapshot regressions; full `cargo nextest run --workspace` per project policy. Then **end-to-end CLI check** (mandatory per this repo's "End-to-end verification before declaring success" policy — unit tests alone don't count as done for a CLI-visible feature): run `cargo run -p pampa -- -t json -i <path-with-backslash>` on Windows against a small fixture, and inspect the actual `astContext.files[0].name` in the printed JSON to confirm forward slashes. Also check whether CLI diagnostic/error output (which reads the same `SourceContext`) now shows the normalized path, and record what it shows.
-- **Phase 3 — Docs/changelog**: none expected beyond the fix itself — this is an internal writer-determinism bug, not a user-facing feature. The diagnostic-path side effect (see design question 4) may warrant a one-line changelog note if it changes what users see in error output.
+- **Phase 0 — Test** ✅: added `test_with_filename_normalizes_backslashes` and `test_add_filename_normalizes_backslashes` in `ast_context.rs`. Confirmed RED against unmodified `with_filename`/`add_filename` before implementing.
+- **Phase 1 — Fix** ✅: normalized in both `ASTContext::with_filename` and `add_filename` via `quarto_util::to_forward_slashes`. Confirmed GREEN.
+- **Phase 1b — scope extension (found during E2E verification)**: end-to-end CLI testing (`cargo run -p pampa -- -t json -i <backslash-path>`) surfaced a second, un-normalized ingress point: `main.rs:279`'s ad hoc fallback `SourceContext` (built directly from the raw CLI arg on the hard-parse-error path) feeds the same ariadne `-->` file:line label as the happy path, but bypasses `ASTContext` entirely. Confirmed with user this was in-scope (same bug class, same fix pattern) rather than deferred. Added `hard_parse_error_diagnostic_uses_forward_slashes` integration test (spawns the real `pampa` binary via `CARGO_BIN_EXE_pampa`, drives an unclosed-span hard error through a native-separator temp path) — RED confirmed via `git apply -R` on just the `main.rs` fix, then GREEN after reapplying. One iteration needed: the first version of this test asserted "no backslash anywhere in stderr," which false-positived on ariadne's OSC-8 hyperlink terminator (`ESC \`, an unrelated ANSI control byte) — tightened to check the specific path fragment instead.
+  - **Explicitly NOT fixed, by design**: `main.rs:217-225`'s "Missing Newline at End of File" warning, which interpolates the raw CLI arg into a plain sentence (`` File `{input_filename}` does not end with a newline ``). This isn't a portable identifier — it's echoing the user's own typed path back to them, which is standard CLI convention (matches `rustc`, `cat`, etc.). Normalizing it would be surprising, not helpful.
+- **Phase 2 — Verify** ✅: full `pampa` crate suite (`cargo nextest run -p pampa --no-fail-fast`) — 8 pre-existing failures confirmed via `git stash`/baseline re-run to be unrelated CRLF byte-offset issues (catalogued Windows issue, orthogonal to this fix), zero new regressions. Full `cargo nextest run --workspace` was intentionally skipped per user direction — CI covers workspace-wide verification, and known Windows-only CRLF failures aren't fully resolved yet, so a full run adds cost without new signal; instead did a targeted grep-based cross-crate check confirming no crate outside `pampa` reads `ASTContext.filenames` as a literal disk path (Windows file APIs accept forward slashes natively regardless). E2E CLI check done for both the JSON writer (`astContext.files[0].name`) and the diagnostics path (ariadne file:line label).
+- **Phase 3 — Docs/changelog**: none needed — internal writer-determinism bug, not a user-facing feature change beyond what's captured in the design questions above.
 
-## Open design questions for the user
+## Design questions — resolved 2026-07-01
 
-1. **Normalization point.** Description proposes normalizing at `ASTContext::with_filename` ingress (single point, covers both writer sites and diagnostics). Confirm that's preferred over normalizing at each of the two writer call sites individually (which would NOT fix diagnostics that also read `ast_context.filenames`).
-2. **`add_filename` (ast_context.rs:70).** Recommendation above is to normalize it too, for consistency with `with_filename` — same vector, same writer, no reason for the two ingress points to diverge even though `add_filename` has no production caller yet. Confirm, or push back if there's a reason to keep it scoped to `with_filename` only.
-3. **Test cfg.** Since the bug is reproducible with a literal `"tests\\snapshots\\json\\001.qmd"` string (no actual Windows path APIs involved), the regression test can run on every platform, not just Windows. Confirm that's the intent — a platform-gated test would under-cover this (CI on Linux/macOS would never catch a regression).
-4. **Diagnostic/error-message paths.** `with_filename` also seeds `SourceContext`, which CLI diagnostics read. Normalizing at ingress means Windows users will start seeing forward-slash paths in `pampa`/`q2` error messages too, not just JSON output — that's a small but real, user-visible behavior change beyond "fix the JSON writer." Confirm this is desired (it's consistent with the rest of the codebase's forward-slash convention), rather than leaving it as an unplanned side effect.
+All 4 confirmed by user, matching this plan's recommendations:
+
+1. **Normalization point:** `ASTContext::with_filename` ingress (single point, covers both writer sites and diagnostics). ✅ Confirmed.
+2. **`add_filename` (ast_context.rs:70):** normalize it too, for consistency with `with_filename`. ✅ Confirmed.
+3. **Test cfg:** regression test runs on all platforms (no `#[cfg(windows)]` gate) — reproducible via a literal backslash string, no real Windows path APIs needed. ✅ Confirmed.
+4. **Diagnostic/error-message paths:** Windows users will see forward-slash paths in CLI error output too, not just JSON — accepted as an intended, desired side effect (consistent with codebase + quarto-cli convention). ✅ Confirmed.
+
+**Status: design aligned. Proceeding to Phase 0 (TDD).**
 
 ## Ecosystem precedent
 
