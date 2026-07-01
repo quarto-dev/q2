@@ -4,7 +4,9 @@
  */
 
 use quarto_source_map::{FileId, SourceContext};
+use quarto_util::to_forward_slashes;
 use std::cell::Cell;
+use std::path::Path;
 
 /// Context passed through the parsing pipeline to provide information
 /// about the current parse operation and manage string ownership.
@@ -40,7 +42,7 @@ impl ASTContext {
     }
 
     pub fn with_filename(filename: impl Into<String>) -> Self {
-        let filename_str = filename.into();
+        let filename_str = to_forward_slashes(Path::new(&filename.into()));
         let mut source_context = SourceContext::new();
         // Add the file without content for now (content can be added later if needed)
         source_context.add_file(filename_str.clone(), None);
@@ -68,7 +70,8 @@ impl ASTContext {
 
     /// Add a filename to the context and return its index
     pub fn add_filename(&mut self, filename: String) -> usize {
-        self.filenames.push(filename);
+        self.filenames
+            .push(to_forward_slashes(Path::new(&filename)));
         self.filenames.len() - 1
     }
 
@@ -122,6 +125,24 @@ mod tests {
         let ctx = ASTContext::with_filename("test.qmd");
         assert_eq!(ctx.filenames.len(), 1);
         assert_eq!(ctx.filenames[0], "test.qmd");
+    }
+
+    #[test]
+    fn test_with_filename_normalizes_backslashes() {
+        let ctx = ASTContext::with_filename("tests\\snapshots\\json\\001.qmd");
+        assert_eq!(ctx.filenames[0], "tests/snapshots/json/001.qmd");
+
+        // SourceContext (used for CLI diagnostics) must see the same
+        // normalized path, not just the `filenames` vector used by writers.
+        let file = ctx.source_context.get_file(FileId(0)).unwrap();
+        assert_eq!(file.path, "tests/snapshots/json/001.qmd");
+    }
+
+    #[test]
+    fn test_add_filename_normalizes_backslashes() {
+        let mut ctx = ASTContext::new();
+        let idx = ctx.add_filename("sub\\dir\\second.qmd".to_string());
+        assert_eq!(ctx.filenames[idx], "sub/dir/second.qmd");
     }
 
     #[test]
