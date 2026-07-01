@@ -15,6 +15,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-07-01
+
+- [`21be266a`](https://github.com/quarto-dev/q2/commits/21be266a): Downloaded project ZIPs now use relative paths nested under a single project-name folder (e.g. `Demo-Playground/index.qmd`) instead of absolute paths — `unzip` no longer warns about "stripped absolute path spec" and the archive extracts into one tidy directory.
+
 ### 2026-06-25
 
 - [`d6066dc9`](https://github.com/quarto-dev/q2/commits/d6066dc9): The editing toolbar (and breadcrumb navigator) no longer gets cut off when you edit the very first block of a document with no title — it now flips below the block when there isn't room above.
