@@ -31,11 +31,14 @@ pub fn read(input: &str, filename: &str) -> (Pandoc, ASTContext) {
     // Parse with comrak
     let root = parse_document(&arena, input, &options);
 
-    // Set up source tracking
+    // Set up source tracking. Reuse the already-normalized filename from
+    // `context.filenames[0]` (set by `with_filename`) rather than the raw
+    // `filename` again, so this doesn't reintroduce backslashes on Windows.
     let mut context = ASTContext::with_filename(filename.to_string());
+    let normalized_filename = context.filenames[0].clone();
     context
         .source_context
-        .add_file(filename.to_string(), Some(input.to_string()));
+        .add_file(normalized_filename, Some(input.to_string()));
     let file_id = FileId(0); // First file added gets ID 0
 
     // Create source location context for conversion

@@ -6,18 +6,24 @@
  * must always use forward slashes, even on Windows where CLI arguments
  * and directory joins naturally produce backslash-separated paths.
  *
- * Two ingress points are covered:
+ * Ingress points covered:
  *   - ASTContext::with_filename / add_filename (unit-tested directly in
  *     crates/pampa/src/pandoc/ast_context.rs)
  *   - main.rs's own fallback SourceContext, built from the raw CLI arg
  *     when a *hard* parse error occurs (the `Err(diagnostics)` branch in
  *     main.rs, before ASTContext-based normalization ever runs)
+ *   - readers::qmd::read and readers::commonmark::read, which each
+ *     re-add the raw filename to `context.source_context` right after
+ *     `ASTContext::with_filename` normalized it (caught by roborev
+ *     review of the initial fix, job 1726) — the warnings/success path
+ *     for diagnostics, distinct from the hard-error fallback above.
  *
- * This test exercises the second ingress point end-to-end through the
- * real binary, since that logic lives in main.rs and has no library
- * seam to unit test directly.
+ * The main.rs case is exercised end-to-end through the real binary,
+ * since that logic has no library seam to unit test directly. The
+ * reader cases call the library API directly.
  */
 
+use quarto_source_map::FileId;
 use std::fs;
 use std::process::Command;
 
@@ -70,4 +76,35 @@ fn hard_parse_error_diagnostic_uses_forward_slashes() {
         "diagnostic must not contain backslash-separated path, got:\n{}",
         stderr
     );
+}
+
+#[test]
+fn qmd_reader_source_context_uses_forward_slashes() {
+    let (_, context, _) = pampa::readers::qmd::read(
+        b"hello\n",
+        false,
+        "tests\\snapshots\\json\\001.qmd",
+        &mut std::io::sink(),
+        true,
+        None,
+    )
+    .expect("parse should succeed");
+
+    let file = context
+        .source_context
+        .get_file(FileId(0))
+        .expect("file 0 should exist");
+    assert_eq!(file.path, "tests/snapshots/json/001.qmd");
+}
+
+#[test]
+fn commonmark_reader_source_context_uses_forward_slashes() {
+    let (_, context) =
+        pampa::readers::commonmark::read("hello\n", "tests\\snapshots\\commonmark\\001.qmd");
+
+    let file = context
+        .source_context
+        .get_file(FileId(0))
+        .expect("file 0 should exist");
+    assert_eq!(file.path, "tests/snapshots/commonmark/001.qmd");
 }
