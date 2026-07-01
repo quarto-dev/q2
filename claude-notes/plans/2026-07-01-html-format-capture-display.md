@@ -182,13 +182,19 @@ churn and keeps the empty-captures path byte-identical. **(Confirm during 1A.)**
 
 ### Phase 5 — verify + end-to-end
 
-- [ ] **5A — `cargo xtask verify`** (full, incl. WASM rebuild + hub-client
-      tests). `npm run build:wasm` so the browser picks up the new WASM.
-- [ ] **5B — browser e2e (manual, recorded).** A `format: html` document with a
-      `{r}`/`{python}` cell + a connected `q2 provide-hub --allow-all`: click Run
-      → the preview shows the executed output (no `format: q2-preview` needed).
-      Reuse the `interop-repro/` harness (create a project, run the provider) and
-      the Chrome DevTools flow used to diagnose this. Record the observed output.
+- [x] **5A — `cargo xtask verify`** ✅ full green (all 14 steps: Rust build +
+      workspace tests, WASM rebuild, ts-packages, hub-client build + tests).
+- [x] **5B — browser e2e (recorded).** ✅ verified live in Chrome DevTools. A
+      project with `engine: knitr` + a `{r}` cell and **no `format:` key** (i.e.
+      the default `format: html`), on `wss://sync.automerge.org`, with a
+      connected `q2 provide-hub --allow-all`. Clicked **Run** → the provider
+      wrote a capture (`capture_doc_id=MDTAUnea…`) → the preview iframe now shows
+      `cat(1, 2, 3)` **followed by `1 2 3`** in a real `.cell-output`
+      (`previewHasOutput: true`, `hasCellOutput: true`) — with **no
+      `format: q2-preview`**. The exact case that previously rendered source-only.
+
+**bd-uy4uygha COMPLETE.** All phases done; the default `format: html` preview
+displays executed engine output end-to-end.
 
 ## Risks / open questions
 
