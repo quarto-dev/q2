@@ -17,6 +17,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-07-01
 
+- [`465f41d2`](https://github.com/quarto-dev/q2/commits/465f41d2): The preview now shows executed code output for **regular documents** (the default `format: html`, including website pages), not only documents with `format: q2-preview` — so after running a document via a connected `q2` executor you see the results in the normal preview without changing the format.
 - [`76a01167`](https://github.com/quarto-dev/q2/commits/76a01167): When a `q2` client is online to execute the project's code, documents with executable cells now show a **Run** button in the preview — click it to run the code on the connected machine and see the executed output; the button reflects progress ("Executing…"), errors, and when the code has changed since the last run.
 
 ### 2026-06-30
