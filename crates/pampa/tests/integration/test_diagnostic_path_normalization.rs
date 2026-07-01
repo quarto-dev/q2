@@ -102,9 +102,14 @@ fn commonmark_reader_source_context_uses_forward_slashes() {
     let (_, context) =
         pampa::readers::commonmark::read("hello\n", "tests\\snapshots\\commonmark\\001.qmd");
 
+    // FileId(0) is the entry `ASTContext::with_filename` creates internally
+    // (already normalized, unrelated to this reader's own fix). The fix
+    // this test protects is commonmark::read's own second `add_file` call,
+    // which lands at FileId(1) — asserting FileId(0) here would pass
+    // regardless of whether that second call normalizes its filename.
     let file = context
         .source_context
-        .get_file(FileId(0))
-        .expect("file 0 should exist");
+        .get_file(FileId(1))
+        .expect("file 1 should exist");
     assert_eq!(file.path, "tests/snapshots/commonmark/001.qmd");
 }
