@@ -56,7 +56,25 @@ Confirmed by direct inspection (not just re-reading the description):
 3. **Test cfg.** Since the bug is reproducible with a literal `"tests\\snapshots\\json\\001.qmd"` string (no actual Windows path APIs involved), the regression test can run on every platform, not just Windows. Confirm that's the intent — a platform-gated test would under-cover this (CI on Linux/macOS would never catch a regression).
 4. **Diagnostic/error-message paths.** `with_filename` also seeds `SourceContext`, which CLI diagnostics read. Normalizing at ingress means Windows users will start seeing forward-slash paths in `pampa`/`q2` error messages too, not just JSON output — that's a small but real, user-visible behavior change beyond "fix the JSON writer." Confirm this is desired (it's consistent with the rest of the codebase's forward-slash convention), rather than leaving it as an unplanned side effect.
 
+## Ecosystem precedent
+
+Checked TypeScript Quarto (quarto-dev/quarto-cli) for how it handles this exact
+problem, since it's the sibling codebase with a decade of Windows mileage.
+Confirmed against source (not just DeepWiki's summary): `pathWithForwardSlashes`
+in `src/core/path.ts:199` does the identical `path.replace(/\\/g, "/")`, applied
+at the same class of boundary q2 needs — resource paths, project-cache keys
+(`FileInformationCacheMap`), and output emission (Pandoc metadata, TOML,
+generated JS for OJS). There's also a companion `normalizePath` that uppercases
+Windows drive letters for consistent cache-key comparison — out of scope here
+(no drive-letter-comparison need in `ASTContext`), but worth knowing exists if
+a future path-identity bug surfaces.
+
+This doesn't change any of the open design questions below — it confirms the
+proposed approach (normalize at ingress, forward slashes in output) matches the
+established convention in both codebases, not just q2's own prior art
+(`quarto_util::to_forward_slashes`).
+
 ## Risks / tradeoffs (draft)
 
-- Low risk: `to_forward_slashes` is already battle-tested elsewhere in the codebase for identical purposes (per the strand description). The change is additive (one call in one function) and doesn't touch byte offsets or the line-ending preserve policy.
+- Low risk: `to_forward_slashes` is already battle-tested elsewhere in the codebase for identical purposes (per the strand description), and the same pattern is independently proven in TypeScript Quarto (see Ecosystem precedent above). The change is additive (one call in one function) and doesn't touch byte offsets or the line-ending preserve policy.
 - Snapshot fallout: normalizing at ingress could change filenames embedded in *other* existing snapshots beyond `json/001` if any of them currently encode backslashes on non-Windows CI (unlikely, since CI presumably runs Linux/macOS) — worth a full snapshot diff check after the fix, not just the one known-failing file.
