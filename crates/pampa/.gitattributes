@@ -1,0 +1,8 @@
+# Pampa test fixtures and snapshot baselines must stay LF on every platform
+# so the snapshot/roundtrip/corpus tests are deterministic regardless of
+# core.autocrlf. The engine's line-ending *preserve* policy is exercised by
+# in-source CRLF tests (see claude-notes/designs/line-ending-preserve.md),
+# never by these on-disk fixtures.
+tests/** text eol=lf
+snapshots/** text eol=lf
+test-fixtures/** text eol=lf
