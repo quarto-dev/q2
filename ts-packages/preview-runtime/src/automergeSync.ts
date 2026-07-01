@@ -304,10 +304,14 @@ export function getFilePaths(): string[] {
 
 /**
  * Export all project files as a ZIP archive.
- * Returns a Uint8Array containing the ZIP file bytes.
+ *
+ * @param rootDir - Optional top-level folder to nest every entry under
+ *   (typically the project's name). See {@link exportZip} for the path
+ *   normalization applied (leading slashes stripped, folder sanitized).
+ * @returns a Uint8Array containing the ZIP file bytes.
  */
-export function exportProjectAsZip(): Uint8Array {
-  return exportZip(ensureClient());
+export function exportProjectAsZip(rootDir?: string): Uint8Array {
+  return exportZip(ensureClient(), rootDir);
 }
 
 /**

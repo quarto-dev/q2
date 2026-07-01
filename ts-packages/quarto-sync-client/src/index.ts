@@ -93,6 +93,7 @@ export { MemoryStorageAdapter } from './storage-adapter.js';
 export { computeSHA256 } from './hash.js';
 export { exportProjectAsZip } from './export-zip.js';
 export { parseProjectZip } from './import-zip.js';
+export { projectFolderName } from './project-folder-name.js';
 
 // Export replay API
 export { createReplaySession } from './replay.js';

@@ -9,13 +9,19 @@
  */
 
 import { useState, useCallback } from 'react';
+import { projectFolderName } from '@quarto/quarto-sync-client';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import './ProjectTab.css';
 
 interface ProjectTabProps {
   project: ProjectEntry;
   onChooseNewProject: () => void;
-  onExportZip: () => Uint8Array;
+  /**
+   * Produce the project ZIP, nesting every entry under `rootDir` (the
+   * project-name folder). Callers should pass the same value used for the
+   * download filename stem so the folder and filename stay in lock-step.
+   */
+  onExportZip: (rootDir: string) => Uint8Array;
 }
 
 export default function ProjectTab({ project, onChooseNewProject, onExportZip }: ProjectTabProps) {
@@ -37,12 +43,15 @@ export default function ProjectTab({ project, onChooseNewProject, onExportZip }:
     setExporting(true);
     setExportError(null);
     try {
-      const zipBytes = onExportZip();
+      // One slug drives both the in-archive top-level folder and the download
+      // filename stem, so they can never drift (GH #147).
+      const folderName = projectFolderName(project.description);
+      const zipBytes = onExportZip(folderName);
       const blob = new Blob([zipBytes.buffer as ArrayBuffer], { type: 'application/zip' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${(project.description || 'project').replace(/ /g, '-')}.zip`;
+      a.download = `${folderName}.zip`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
