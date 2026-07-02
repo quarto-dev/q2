@@ -12,7 +12,6 @@
 
 pub mod attribution_html_coalescing_test;
 pub mod attribution_json_wire_test;
-pub mod error_node_analysis;
 pub mod incremental_writer_investigation;
 pub mod incremental_writer_tests;
 pub mod inline_span_investigation;
