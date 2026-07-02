@@ -3973,6 +3973,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-c-shim"
+version = "0.0.0"
+dependencies = [
+ "wasm-printf-fmt",
+]
+
+[[package]]
 name = "wasm-encoder"
 version = "0.236.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4035,6 +4042,7 @@ dependencies = [
  "serde_yaml",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-c-shim",
  "wasm-printf-fmt",
  "web-sys",
  "yaml-rust2",

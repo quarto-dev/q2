@@ -6,3 +6,17 @@
 xtask = "run --package xtask --"
 dev-setup = "xtask dev-setup"
 create-worktree = "xtask create-worktree"
+
+[target.wasm32-unknown-unknown]
+runner = "wasm-bindgen-test-runner"
+# Mirror the rustflags used by wasm-quarto-hub-client/.cargo/config.toml so any
+# wasm32 build invoked from the workspace root (e.g. the pampa wasm_lua test)
+# gets the same panic strategy and ABI. Without panic=unwind plus the
+# exception-handling target feature, wasm-c-shim's catch_unwind-based
+# replacement for Lua's setjmp/longjmp can't catch panics, and any Lua throw
+# during mlua initialization aborts the wasm module.
+rustflags = [
+    "-C", "target-feature=+bulk-memory,+exception-handling",
+    "-C", "panic=unwind",
+    "-Zwasm-c-abi=spec",
+]
