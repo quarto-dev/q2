@@ -190,19 +190,45 @@ fn parity_expression_value() {
 }
 
 /// Error *output shape* parity, under the sanctioned "show errors in
-/// the output" mode (`#| error: true`). Without it, knitr fails the
-/// whole pipeline on a cell error (Q1's default `error: false`
-/// policy) and produces no capture at all, so there is no shape to
-/// compare — while q2's jupyter currently embeds the error and
-/// succeeds regardless. That *policy* divergence is a separate bug
-/// (jupyter should fail the render on cell error unless
-/// `error: true`), tracked as a follow-up strand; see the plan.
+/// the output" mode (`#| error: true`). Without it, both engines fail
+/// the whole pipeline on a cell error (Q1's default `error: false`
+/// policy — see `parity_error_policy_behavior` below and
+/// engine_error_policy.rs, bd-ohvl879u) and produce no capture, so
+/// there would be no shape to compare.
 #[test]
 fn parity_error_output() {
     assert_engine_parity(
         "#| error: true\nstop(\"boom\")",
         "#| error: true\nraise Exception(\"boom\")",
     );
+}
+
+/// Error-policy *behavior* parity (bd-ohvl879u): an un-annotated cell
+/// error must fail `record_capture` for BOTH engines — no capture is
+/// produced. (Shape parity above covers the `error: true` mode;
+/// this pins the default-deny policy itself.)
+#[test]
+fn parity_error_policy_behavior() {
+    if !both_engines_available() {
+        eprintln!("Skipping test: parity suite needs both knitr and jupyter installed");
+        return;
+    }
+    let knitr = try_record(&knitr_doc("stop(\"boom\")"));
+    let jupyter = try_record(&jupyter_doc("raise Exception(\"boom\")"));
+    assert!(
+        knitr.is_err(),
+        "knitr must fail the render for an un-annotated cell error"
+    );
+    assert!(
+        jupyter.is_err(),
+        "jupyter must fail the render for an un-annotated cell error (bd-ohvl879u)"
+    );
+}
+
+/// `record_capture` without unwrapping — for behavior (not shape) cases.
+fn try_record(content: &str) -> Result<Vec<quarto_trace::EngineCapture>, String> {
+    let (_tmp, path, project, runtime) = fixture(content);
+    pollster::block_on(record_capture(&path, &project, runtime, None)).map_err(|e| format!("{e:?}"))
 }
 
 #[test]

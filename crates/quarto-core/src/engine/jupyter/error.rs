@@ -64,6 +64,16 @@ pub enum JupyterError {
         traceback: Vec<String>,
     },
 
+    /// A code cell raised an error and error output is not allowed —
+    /// no `#| error: true` on the cell and no `execute: error: true`
+    /// on the document (bd-ohvl879u, matching knitr/Q1 policy).
+    #[error("{message}")]
+    CellExecutionFailed { message: String },
+
+    /// A cell's `#|` option lines are not valid YAML (bd-ohvl879u).
+    #[error("{message}")]
+    InvalidCellOptions { message: String },
+
     /// Error receiving message from kernel.
     #[error("failed to receive message: {0}")]
     ReceiveError(String),
