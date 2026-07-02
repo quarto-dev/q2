@@ -22,8 +22,8 @@ thiserror.workspace = true
 # Match quarto-hub's versions so `capture_driver::read_capture_from_doc`
 # can talk to samod directly (it reads back the binary doc Phase C.1
 # writes; Phase C.4 reuses the same wire format in the WASM/SPA layer).
-automerge = { version = "0.8.0", features = ["utf16-indexing"] }
-samod = { version = "0.9.0", git = "https://github.com/quarto-dev/samod.git", branch = "q2", features = ["tokio"] }
+automerge = { version = "0.10.0", features = ["utf16-indexing"] }
+samod = { version = "0.12.1", git = "https://github.com/quarto-dev/samod.git", branch = "access-policy", features = ["tokio"] }
 
 quarto-core.workspace = true
 quarto-error-reporting = { workspace = true, features = ["json"] }

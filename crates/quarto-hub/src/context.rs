@@ -210,6 +210,10 @@ pub struct HubContext {
     /// Populated by handle_websocket when auth is enabled; read by the
     /// AuditAccessPolicy for audit logging.
     peer_emails: Arc<StdMutex<HashMap<PeerId, String>>>,
+
+    /// The access policy installed on the repo. Held so the WebSocket handler
+    /// can prune a peer's audit-dedup entries on disconnect via `forget_peer`.
+    audit_policy: AuditAccessPolicy,
 }
 
 impl HubContext {
@@ -283,7 +287,7 @@ impl HubContext {
         let builder = Repo::build_tokio()
             .with_storage(samod_storage)
             .with_announce_policy(NeverAnnounce)
-            .with_access_policy(audit_policy);
+            .with_access_policy(audit_policy.clone());
 
         let repo = builder.load().await;
 
@@ -366,6 +370,7 @@ impl HubContext {
             register_root_ws,
             disk_write_policy,
             peer_emails,
+            audit_policy,
         })
     }
 
@@ -492,6 +497,12 @@ impl HubContext {
     /// Peer→email map for document access audit logging.
     pub fn peer_emails(&self) -> &Arc<StdMutex<HashMap<PeerId, String>>> {
         &self.peer_emails
+    }
+
+    /// Audit access policy, exposed so the WebSocket handler can prune a peer's
+    /// audit-dedup entries when it disconnects.
+    pub fn audit_policy(&self) -> &AuditAccessPolicy {
+        &self.audit_policy
     }
 
     /// Authenticate a request. If auth is disabled, always succeeds.
