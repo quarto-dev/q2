@@ -55,38 +55,59 @@ The two version-check sites **disagree on philosophy**: dev_setup wants a *floor
 2. **`pandoc-check` is print-only.** It does **not** auto-edit `test.rs` (avoids fighting the `cargo fmt` post-edit hook and needing a stable source anchor). On green it prints the exact ceiling to bump to; the human makes the one-line edit — matching the "manual verification ledger" spirit.
 3. **Closed range, not an explicit set.** Calibrated window is a closed range `(3,6)..=(3,9)`; bumping = raise the ceiling.
 4. **`pandoc-check` scope is narrow.** Runs just the 4 oracle tests against local pandoc + reports calibration. It does **not** also drive the dev-setup floor warning.
+5. **Gate bypass is an env var.** `has_good_pandoc_version()` returns `true` when `PAMPA_PANDOC_ORACLE_BYPASS_VERSION_GATE=1` is set (checked before parsing). This is the single seam `pandoc-check` uses to run the 4 tests against an off-range pandoc without weakening the assertion or duplicating test bodies. Normal local/CI runs never set it, so the hard-fail ledger signal is untouched. (Added from design review — this seam was previously implicit.)
+
+### Out of scope
+
+- **No-pandoc behavior is unchanged.** `has_good_pandoc_version()` currently `Command::new("pandoc")…expect(...)` → panics when pandoc is absent. That is pre-existing and not addressed here; this strand is about the version *range* gate, not pandoc discovery.
 
 ## Phases
 
 ### Phase 0 — Test plan (TDD, RED first)
 
-Unit-test `parse_pandoc_version` + the range check. Cases:
+Two pure functions to test (both spawn nothing → runnable via `cargo nextest run -p pampa`, unblocked by bd-nj9nnkn1):
+
+**a. `parse_pandoc_version(&str) -> (u32, u32)` + range check.** Cases:
 - `pandoc 3.10` → `(3,10)`, **out of range** (this is the bug: substring `contains` false-rejects; numeric `(3,10) > (3,9)` correctly out-of-range, not falsely-in).
 - `3.6` / `3.9` boundaries → in range; `3.5` → below floor; `4.0` → above ceiling.
 - Malformed / empty → `(0,0)`, out of range.
-- Mirror the same cases in xtask's existing `test_pandoc_version_at_least` module so both parsers share one contract.
 
-Run via `cargo nextest run -p pampa` (does not require clippy → unblocked by bd-nj9nnkn1). Confirm RED before implementing.
+**b. Diagnostic formatter** — a pure `fn format_gate_failure(raw_version: &str, range: …) -> String` that the `assert!` message uses. Assert it contains the raw detected version line, the calibrated range, and the `cargo xtask pandoc-check` command. This guards the *user-visible* improvement (M3 from design review) without depending on assertion-message brittleness.
 
-### Phase 1 — Replace the substring gate
+**Shared case table (M5).** Define the parse test vectors as one named `const` slice reused by both `test.rs` and xtask's `test_pandoc_version_at_least` module, with a comment on each requiring lockstep updates. Both parser copies are validated against the same table.
 
-In `test.rs`: replace `has_good_pandoc_version()`'s `contains("3.x")` chain with `parse_pandoc_version()` + closed-range check `(3,6)..=(3,9)`. Keep the hard-`assert!` at the 4 test call sites (ledger signal preserved); leave the 3 internal helpers' skip behavior unchanged.
+Confirm RED before implementing.
+
+### Phase 1 — Replace the gate + bypass seam
+
+In `test.rs`, rewrite `has_good_pandoc_version()`:
+1. First, if `PAMPA_PANDOC_ORACLE_BYPASS_VERSION_GATE=1`, return `true` (decision 5 — the calibration seam).
+2. Otherwise replace the `contains("3.x")` chain with `parse_pandoc_version()` + closed-range check `(3,6)..=(3,9)`.
+
+Keep the hard-`assert!` at the 4 test call sites (ledger signal preserved); leave the 3 internal helpers' skip behavior unchanged. The bypass lands **here**, not in Phase 3, so the xtask command layers cleanly on a finished seam (H4 — avoids Phase 3 rewriting Phase 2's assertions).
 
 ### Phase 2 — Actionable failure message
 
-On out-of-range, the `assert!` message prints: detected version, the calibrated range, and the exact command to verify+bump (`cargo xtask pandoc-check`).
+Wire the Phase 0b `format_gate_failure` into the 4 `assert!` sites so on out-of-range they print: the raw detected version line, the calibrated range, and `cargo xtask pandoc-check`.
 
 ### Phase 3 — `cargo xtask pandoc-check`
 
-New xtask subcommand (steps in `.claude/rules/xtask.md`). Runs the 4 oracle tests against local pandoc **bypassing the version gate**, narrow scope. On green: print the new ceiling to set in `test.rs`. On failure: report which test broke. Print-only — no source edit.
+New xtask subcommand (steps in `.claude/rules/xtask.md`). Sets `PAMPA_PANDOC_ORACLE_BYPASS_VERSION_GATE=1` and runs the 4 oracle tests against local pandoc, narrow scope. Print-only — no source edit. **Contract:**
+- **Exit 0** iff all 4 oracle tests pass under bypass; **nonzero** otherwise.
+- **Output** always: detected pandoc version, current calibrated range, and — on green with detected > ceiling — the proposed new ceiling plus the exact constant/line in `test.rs` to edit.
+- **On failure:** report which of the 4 tests broke (so an incompatible pandoc is diagnosable, not just "red").
 
 ### Phase 4 — Docs
 
 Ledger comment next to the range constant in `test.rs` describing the bump workflow; add `pandoc-check` to the xtask command list in `.claude/rules/xtask.md`.
 
+### Phase 5 — Final verification
+
+After **bd-nj9nnkn1** is green, run `cargo xtask verify --skip-hub-build` and confirm the full Rust leg passes (this is the step the pre-flight couldn't reach). Rust-only change → `--skip-hub-build` is sufficient.
+
 ## Prerequisite
 
-- **bd-nj9nnkn1** — `highest_version_node` Windows dead-code clippy failure blocks `cargo xtask verify` locally on Windows. One-line `#[cfg(not(windows))]` gate. Must be green for the final verify step; does not block Phase 0–3 iteration via `cargo nextest run -p pampa`.
+- **bd-nj9nnkn1** — `highest_version_node` Windows dead-code clippy failure blocks `cargo xtask verify` locally on Windows. One-line `#[cfg(not(windows))]` gate. Must be green for Phase 5; does not block Phase 0–4 iteration via `cargo nextest run -p pampa`.
 
 ## Risks / tradeoffs
 
