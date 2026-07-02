@@ -11,14 +11,16 @@
 //! It parses QMD input, executes code blocks via the Jupyter daemon, and returns
 //! markdown with outputs inserted.
 
-use std::path::PathBuf;
-
 use regex::Regex;
+
+use quarto_pandoc_types::config_value::{ConfigValue, InterpretationContext};
+use quarto_source_map::SourceInfo;
 
 use super::daemon::daemon;
 use super::error::JupyterError;
 use super::execute::{CellOutput, ExecuteResult as KernelExecuteResult, ExecuteStatus};
 use super::session::SessionKey;
+use crate::cell_options::{merge_cell_over_scope, options_to_config, partition_cell_options};
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::error::ExecutionError;
 
@@ -31,6 +33,9 @@ struct CodeBlock {
     start: usize,
     /// End byte offset in the input (exclusive).
     end: usize,
+    /// Start byte offset of the code content (the capture between the
+    /// fences) in the input — anchors per-cell source attribution.
+    code_start: usize,
     /// The language/engine specifier (e.g., "python", "julia").
     language: String,
     /// The code content.
@@ -56,7 +61,7 @@ pub fn execute_qmd(
     let kernel_name = map_language_to_kernel(&blocks[0].language);
 
     // Execute via async runtime
-    let result = execute_blocks_async(input, &blocks, &kernel_name, &ctx.cwd);
+    let result = execute_blocks_async(input, &blocks, &kernel_name, ctx);
 
     result.map_err(|e| ExecutionError::execution_failed("jupyter", e.to_string()))
 }
@@ -95,13 +100,15 @@ fn parse_code_blocks(input: &str) -> Vec<CodeBlock> {
     for cap in re.captures_iter(input) {
         let full_match = cap.get(0).unwrap();
         let language = cap.get(1).unwrap().as_str().to_string();
-        let code = cap.get(2).unwrap().as_str().to_string();
+        let code_match = cap.get(2).unwrap();
+        let code = code_match.as_str().to_string();
 
         // Only include executable languages (not plain code blocks)
         if is_executable_language(&language) {
             blocks.push(CodeBlock {
                 start: full_match.start(),
                 end: full_match.end(),
+                code_start: code_match.start(),
                 language,
                 code,
             });
@@ -137,7 +144,7 @@ fn execute_blocks_async(
     input: &str,
     blocks: &[CodeBlock],
     kernel_name: &str,
-    working_dir: &PathBuf,
+    ctx: &ExecutionContext,
 ) -> JupyterResult<ExecuteResult> {
     // Use tokio runtime to execute async code
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -145,12 +152,7 @@ fn execute_blocks_async(
         .build()
         .map_err(|e| JupyterError::RuntimeLibError(e.to_string()))?;
 
-    rt.block_on(execute_blocks_inner(
-        input,
-        blocks,
-        kernel_name,
-        working_dir,
-    ))
+    rt.block_on(execute_blocks_inner(input, blocks, kernel_name, ctx))
 }
 
 /// Inner async function that does the actual execution.
@@ -158,14 +160,18 @@ async fn execute_blocks_inner(
     input: &str,
     blocks: &[CodeBlock],
     kernel_name: &str,
-    working_dir: &PathBuf,
+    ctx: &ExecutionContext,
 ) -> JupyterResult<ExecuteResult> {
     let daemon = daemon();
 
     // Start or get existing kernel session
-    let key: SessionKey = daemon
-        .get_or_start_session(kernel_name, working_dir)
-        .await?;
+    let key: SessionKey = daemon.get_or_start_session(kernel_name, &ctx.cwd).await?;
+
+    // Document-level defaults for cell options (bd-ohvl879u): the
+    // input's front matter is the pipeline's fully merged metadata
+    // (MetadataMergeStage runs before engine execution), so its
+    // `execute` map is the scope cell options merge over.
+    let doc_scope = document_execute_scope(input, ctx);
 
     // Build output by processing blocks in order
     let mut output = String::new();
@@ -182,15 +188,55 @@ async fn execute_blocks_inner(
             output.push('\n');
         }
 
-        // Execute the code
+        // Partition the cell into `#|` options + code (bd-ohvl879u).
+        // `ctx.source_info` maps input offsets back to the original
+        // files, so option spans and diagnostics resolve to real
+        // source positions.
+        let body_source = SourceInfo::substring(
+            ctx.source_info.clone(),
+            block.code_start,
+            block.code_start + block.code.len(),
+        );
+        let cell = partition_cell_options(&block.language, &block.code, body_source.clone())
+            .map_err(|e| {
+                let at = e
+                    .location()
+                    .and_then(|loc| describe_location(loc, 0, ctx))
+                    .or_else(|| describe_location(&body_source, 0, ctx))
+                    .map(|l| format!(" at {l}"))
+                    .unwrap_or_default();
+                JupyterError::InvalidCellOptions {
+                    message: format!("cell options are not valid YAML{at}: {e}"),
+                }
+            })?;
+        let allow_errors = resolve_allow_errors(doc_scope.as_ref(), cell.options);
+
+        // Execute the code — the partitioned code only, without the
+        // option lines (Q1 strips them too, so cell magics work).
         let exec_result = daemon
-            .execute_in_session(&key, &block.code)
+            .execute_in_session(&key, &cell.code)
             .await
             .ok_or(JupyterError::NotConnected)??;
 
-        // Emit the whole cell — echoed source plus outputs — in the
-        // Quarto-canonical `::: {.cell}` shape.
-        output.push_str(&render_cell(block, &exec_result));
+        // Error policy (bd-ohvl879u, knitr/Q1 parity): a raising cell
+        // aborts the render unless the cell or the document allows
+        // errors in output.
+        if !allow_errors && let Some((ename, evalue)) = first_cell_error(&exec_result) {
+            let at = describe_location(&body_source, 0, ctx)
+                .map(|l| format!(" at {l}"))
+                .unwrap_or_default();
+            return Err(JupyterError::CellExecutionFailed {
+                message: format!(
+                    "code cell{at} raised {ename}: {evalue}\n\
+                     Use `#| error: true` on the cell (or `execute: error: true` in the \
+                     document metadata) to show the error in the output instead."
+                ),
+            });
+        }
+
+        // Emit the whole cell — echoed (option-stripped) source plus
+        // outputs — in the Quarto-canonical `::: {.cell}` shape.
+        output.push_str(&render_cell(&block.language, &cell.code, &exec_result));
 
         last_end = block.end;
     }
@@ -199,6 +245,102 @@ async fn execute_blocks_inner(
     output.push_str(&input[last_end..]);
 
     Ok(ExecuteResult::new(output))
+}
+
+/// The `execute` scope of the document's (already merged) metadata,
+/// read from the engine input's front matter. `None` when the input
+/// has no front matter or no `execute` map.
+fn document_execute_scope(input: &str, ctx: &ExecutionContext) -> Option<ConfigValue> {
+    let (start, end) = front_matter_range(input)?;
+    let parent = SourceInfo::substring(ctx.source_info.clone(), start, end);
+    let parsed = match quarto_yaml::parse_with_parent(&input[start..end], parent) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            // The front matter was serialized by our own pipeline; a
+            // parse failure here is an internal inconsistency, not a
+            // user error — don't take the render down over defaults.
+            tracing::warn!("engine input front matter did not re-parse: {e}");
+            return None;
+        }
+    };
+    let mut collector = pampa::utils::diagnostic_collector::DiagnosticCollector::new();
+    let config = pampa::pandoc::meta::yaml_to_config_value(
+        parsed,
+        InterpretationContext::DocumentMetadata,
+        &mut collector,
+    );
+    config.get("execute").cloned()
+}
+
+/// Byte range of the YAML between the input's leading `---` fence and
+/// its closing `---` line (exclusive of both delimiter lines).
+fn front_matter_range(input: &str) -> Option<(usize, usize)> {
+    let rest = input.strip_prefix("---")?;
+    let rest = rest
+        .strip_prefix("\r\n")
+        .or_else(|| rest.strip_prefix('\n'))?;
+    let fm_start = input.len() - rest.len();
+    let mut search = 0;
+    while let Some(pos) = rest[search..].find("\n---") {
+        let abs = search + pos;
+        let after = &rest[abs + 4..];
+        if after.is_empty() || after.starts_with('\n') || after.starts_with('\r') {
+            // Include the newline that ends the last YAML line.
+            return Some((fm_start, fm_start + abs + 1));
+        }
+        search = abs + 4;
+    }
+    None
+}
+
+/// Resolve the effective `error:` option for one cell: cell options
+/// merged over the document's `execute` scope (cell wins), absent
+/// everywhere = false (Q1's default `execute: error: false`).
+fn resolve_allow_errors(
+    doc_scope: Option<&ConfigValue>,
+    options: Option<quarto_yaml::YamlWithSourceInfo>,
+) -> bool {
+    let cell_config = options.map(|o| {
+        let (config, diagnostics) = options_to_config(o);
+        for d in diagnostics {
+            tracing::warn!("cell option conversion diagnostic: {d:?}");
+        }
+        config
+    });
+    merge_cell_over_scope(doc_scope, cell_config.as_ref())
+        .as_ref()
+        .and_then(|merged| merged.get("error"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+/// The first error a cell produced, from its outputs or its status.
+fn first_cell_error(result: &KernelExecuteResult) -> Option<(String, String)> {
+    for output in &result.outputs {
+        if let CellOutput::Error { ename, evalue, .. } = output {
+            return Some((ename.clone(), evalue.clone()));
+        }
+    }
+    if let ExecuteStatus::Error { ename, evalue, .. } = &result.status {
+        return Some((ename.clone(), evalue.clone()));
+    }
+    None
+}
+
+/// Render `info` + `offset` as `path:line:column` (1-based) through
+/// the execution context's source map, when it resolves.
+fn describe_location(info: &SourceInfo, offset: usize, ctx: &ExecutionContext) -> Option<String> {
+    let mapped = info.map_offset(offset, &ctx.source_context)?;
+    let path = ctx
+        .source_context
+        .get_file(mapped.file_id)
+        .map(|f| f.path.clone())?;
+    Some(format!(
+        "{}:{}:{}",
+        path,
+        mapped.location.row + 1,
+        mapped.location.column + 1
+    ))
 }
 
 /// Fence for `text`, sized so the fence can never collide with the
@@ -242,10 +384,10 @@ fn ticks_for_code(text: &str) -> String {
 /// engine cell with exactly one wrapper Div, and the Bootstrap CSS
 /// targets `.cell .cell-output-* pre code`. A cell with no outputs
 /// still gets the wrapper (knitr wraps output-less chunks too).
-fn render_cell(block: &CodeBlock, result: &KernelExecuteResult) -> String {
+fn render_cell(language: &str, code: &str, result: &KernelExecuteResult) -> String {
     format!(
         "::: {{.cell}}\n\n{}\n{}\n:::\n",
-        echoed_source_fence(block),
+        echoed_source_fence(language, code),
         format_outputs(result)
     )
 }
@@ -258,17 +400,14 @@ fn render_cell(block: &CodeBlock, result: &KernelExecuteResult) -> String {
 /// `{.python .cell-code}` — so the block is no longer scheduled for
 /// execution, the highlight stage resolves the language from the
 /// first class, and downstream consumers can target `.cell-code`
-/// (same classes knitr's hooks emit). Per-cell directives like
-/// `#| echo: false` travel inside `block.code` and are handled by
-/// whatever stage consumes them — this function only rewrites the
-/// fence.
-fn echoed_source_fence(block: &CodeBlock) -> String {
-    let code = block.code.trim_end_matches('\n');
+/// (same classes knitr's hooks emit). The caller passes the
+/// *partitioned* code — `#|` option lines are consumed by
+/// `crate::cell_options` before execution and are not echoed
+/// (knitr/Q1 parity).
+fn echoed_source_fence(language: &str, code: &str) -> String {
+    let code = code.trim_end_matches('\n');
     let ticks = ticks_for_code(code);
-    format!(
-        "{ticks}{{.{} .cell-code}}\n{}\n{ticks}",
-        block.language, code
-    )
+    format!("{ticks}{{.{language} .cell-code}}\n{code}\n{ticks}")
 }
 
 /// Wrap already-trimmed output text in a `::: {<classes>}` div around
@@ -526,15 +665,6 @@ print("hello")
     // purpose — this shape is a cross-engine contract (see the
     // engine_output_parity integration suite).
 
-    fn py_block(code: &str) -> CodeBlock {
-        CodeBlock {
-            start: 0,
-            end: 0,
-            language: "python".to_string(),
-            code: code.to_string(),
-        }
-    }
-
     fn ok_result(outputs: Vec<CellOutput>) -> KernelExecuteResult {
         KernelExecuteResult {
             status: ExecuteStatus::Ok,
@@ -555,9 +685,8 @@ print("hello")
         // source comes back as an attribute-form fence with the
         // language class first (the highlight stage resolves the
         // language from the first class) plus `.cell-code`.
-        let block = py_block("print(\"hi\")\n");
         assert_eq!(
-            echoed_source_fence(&block),
+            echoed_source_fence("python", "print(\"hi\")\n"),
             "```{.python .cell-code}\nprint(\"hi\")\n```"
         );
     }
@@ -567,8 +696,7 @@ print("hello")
         // Q1's ticksForCode rule: max(3, longest leading backtick
         // run + 1). Code containing a ``` line must get a 4-tick
         // fence or the emitted markdown is corrupt.
-        let block = py_block("s = \"\"\n```\n\"\"\n");
-        let fence = echoed_source_fence(&block);
+        let fence = echoed_source_fence("python", "s = \"\"\n```\n\"\"\n");
         assert!(
             fence.starts_with("````{.python .cell-code}\n"),
             "expected a 4-tick fence, got:\n{fence}"
@@ -658,14 +786,13 @@ print("hello")
 
     #[test]
     fn test_render_cell_wraps_source_and_outputs_in_cell_div() {
-        let block = py_block("2 + 3\n");
         let result = ok_result(vec![CellOutput::ExecuteResult {
             execution_count: 1,
             data: text_plain("5"),
             metadata: serde_json::json!({}),
         }]);
         assert_eq!(
-            render_cell(&block, &result),
+            render_cell("python", "2 + 3\n", &result),
             "::: {.cell}\n\n```{.python .cell-code}\n2 + 3\n```\n\n::: {.cell-output .cell-output-display}\n\n```\n5\n```\n\n:::\n\n:::\n"
         );
     }
@@ -732,10 +859,9 @@ print("hello")
         // gets the `.cell` wrapper — the splice must be able to
         // replace the live cell, and knitr wraps output-less chunks
         // too.
-        let block = py_block("x = 1\n");
         let result = ok_result(vec![]);
         assert_eq!(
-            render_cell(&block, &result),
+            render_cell("python", "x = 1\n", &result),
             "::: {.cell}\n\n```{.python .cell-code}\nx = 1\n```\n\n:::\n"
         );
     }

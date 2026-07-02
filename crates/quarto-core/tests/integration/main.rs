@@ -16,6 +16,7 @@ pub mod brand_render;
 pub mod capture_splice_engines;
 pub mod crossref_fixtures;
 pub mod document_profile_pipeline;
+pub mod engine_error_policy;
 pub mod engine_merge;
 pub mod engine_output_parity;
 pub mod fail_fast;
