@@ -164,6 +164,12 @@ enum Commands {
         /// When executed with many threads, many errors might still be reported.
         #[arg(long = "fail-fast")]
         fail_fast: bool,
+
+        /// Treat warnings as errors: warning diagnostics are reported
+        /// with error severity and any of them makes the command exit
+        /// non-zero. Useful in CI. Does not stop the render early.
+        #[arg(long)]
+        strict: bool,
     },
 
     /// Start a live preview of a Quarto document or project.
@@ -673,6 +679,7 @@ fn main() -> Result<()> {
             attribution,
             json_errors,
             fail_fast,
+            strict,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
             inputs,
@@ -686,6 +693,7 @@ fn main() -> Result<()> {
             attribution,
             json_errors,
             fail_fast,
+            strict,
         }),
         Commands::Preview {
             path,

@@ -8,6 +8,8 @@
 //! `discovery_from_env_finds_real_node` when node is present.
 
 use quarto_mcp_launcher::{Discovery, MIN_NODE_MAJOR, NodeError, find_node};
+// PathBuf is only named by the unix-only fake_node helper below.
+#[cfg(unix)]
 use std::path::PathBuf;
 
 fn empty_discovery() -> Discovery {

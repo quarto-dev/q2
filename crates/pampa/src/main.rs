@@ -7,7 +7,9 @@
 
 use clap::Parser;
 use quarto_error_reporting::DiagnosticMessageBuilder;
+use quarto_util::to_forward_slashes;
 use std::io::{self, Read, Write};
+use std::path::Path;
 
 mod attribution;
 mod citeproc_filter;
@@ -276,7 +278,10 @@ fn main() {
                     } else {
                         // Build a minimal source context for Ariadne rendering
                         let mut source_context = quarto_source_map::SourceContext::new();
-                        source_context.add_file(input_filename.to_string(), Some(input.clone()));
+                        source_context.add_file(
+                            to_forward_slashes(Path::new(input_filename)),
+                            Some(input.clone()),
+                        );
 
                         for diagnostic in diagnostics {
                             eprintln!("{}", diagnostic.to_text(Some(&source_context)));

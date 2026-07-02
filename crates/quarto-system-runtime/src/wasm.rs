@@ -39,6 +39,7 @@ use crate::vfs::{VirtualFileSystem, not_found_error};
 // The functions are expected to be provided via a module at the path specified.
 // In hub-client, this is at: /src/wasm-js-bridge/sass.js
 
+#[cfg(feature = "js-bridge")]
 #[wasm_bindgen(raw_module = "/src/wasm-js-bridge/sass.js")]
 extern "C" {
     /// Check if SASS compilation is available.
@@ -69,6 +70,27 @@ extern "C" {
     ) -> Result<JsValue, JsValue>;
 }
 
+#[cfg(not(feature = "js-bridge"))]
+mod sass_stubs {
+    use wasm_bindgen::prelude::*;
+    pub(super) fn js_sass_available_impl() -> bool {
+        false
+    }
+    #[allow(dead_code)]
+    pub(super) fn js_sass_compiler_name_impl() -> String {
+        "unavailable (js-bridge feature not enabled)".to_string()
+    }
+    pub(super) fn js_compile_sass_impl(
+        _scss: &str,
+        _style: &str,
+        _load_paths_json: &str,
+    ) -> Result<JsValue, JsValue> {
+        Err(JsValue::from_str("js-bridge feature not enabled"))
+    }
+}
+#[cfg(not(feature = "js-bridge"))]
+use sass_stubs::{js_compile_sass_impl, js_sass_available_impl, js_sass_compiler_name_impl};
+
 // =============================================================================
 // JavaScript Interop for Cache Operations
 // =============================================================================
@@ -79,6 +101,7 @@ extern "C" {
 // The functions are expected to be provided via a module at the path specified.
 // In hub-client, this is at: /src/wasm-js-bridge/cache.js
 
+#[cfg(feature = "js-bridge")]
 #[wasm_bindgen(raw_module = "/src/wasm-js-bridge/cache.js")]
 extern "C" {
     /// Get a cached value by namespace and key.
@@ -110,6 +133,31 @@ extern "C" {
     fn js_cache_clear_namespace_impl(namespace: &str) -> Result<JsValue, JsValue>;
 }
 
+#[cfg(not(feature = "js-bridge"))]
+mod cache_stubs {
+    use wasm_bindgen::prelude::*;
+    pub(super) fn js_cache_get_impl(_namespace: &str, _key: &str) -> Result<JsValue, JsValue> {
+        Err(JsValue::from_str("js-bridge feature not enabled"))
+    }
+    pub(super) fn js_cache_set_impl(
+        _namespace: &str,
+        _key: &str,
+        _value: &js_sys::Uint8Array,
+    ) -> Result<JsValue, JsValue> {
+        Err(JsValue::from_str("js-bridge feature not enabled"))
+    }
+    pub(super) fn js_cache_delete_impl(_namespace: &str, _key: &str) -> Result<JsValue, JsValue> {
+        Err(JsValue::from_str("js-bridge feature not enabled"))
+    }
+    pub(super) fn js_cache_clear_namespace_impl(_namespace: &str) -> Result<JsValue, JsValue> {
+        Err(JsValue::from_str("js-bridge feature not enabled"))
+    }
+}
+#[cfg(not(feature = "js-bridge"))]
+use cache_stubs::{
+    js_cache_clear_namespace_impl, js_cache_delete_impl, js_cache_get_impl, js_cache_set_impl,
+};
+
 // =============================================================================
 // JavaScript Interop for Network Fetch
 // =============================================================================
@@ -121,6 +169,7 @@ extern "C" {
 // Binary content is base64-encoded by the JS side to avoid complex type
 // marshalling. The Rust side decodes it with the base64 crate.
 
+#[cfg(feature = "js-bridge")]
 #[wasm_bindgen(raw_module = "/src/wasm-js-bridge/fetch.js")]
 extern "C" {
     /// Fetch content from a URL.
@@ -131,6 +180,11 @@ extern "C" {
     /// The Promise rejects if the request fails or the response status is not ok.
     #[wasm_bindgen(js_name = "jsFetchUrl", catch)]
     fn js_fetch_url_impl(url: &str) -> Result<JsValue, JsValue>;
+}
+
+#[cfg(not(feature = "js-bridge"))]
+fn js_fetch_url_impl(_url: &str) -> Result<JsValue, JsValue> {
+    Err(JsValue::from_str("js-bridge feature not enabled"))
 }
 
 // =============================================================================

@@ -221,6 +221,25 @@ fn default_well_known() -> Vec<PathBuf> {
         if let Some(home) = &home {
             paths.push(home.join("AppData/Local/Volta/bin/node.exe"));
         }
+        // fnm on Windows: <config>/fnm/{aliases/default,node-versions}.
+        // aliases/default is a junction straight to the version's
+        // `installation` dir (no `bin` subdir on Windows).
+        if let Some(config) = dirs::config_dir() {
+            let fnm_base = config.join("fnm");
+            paths.push(fnm_base.join("aliases/default/node.exe"));
+            paths.extend(highest_version_node(&fnm_base.join("node-versions")));
+        }
+        // nvm-windows: root is wherever NVM_HOME points (there's no
+        // fixed default the way unix nvm has ~/.nvm), flat
+        // <root>/vX.Y.Z/node.exe layout. A scoop-packaged install
+        // redirects its real root via settings.txt's `root:` line,
+        // which NVM_HOME alone won't see -- accepted gap; nvm-windows
+        // already persists its active version to PATH via the registry
+        // so this probe is defense-in-depth, not the confirmed-broken
+        // case.
+        if let Some(nvm_home) = std::env::var_os("NVM_HOME") {
+            paths.extend(highest_version_node(&PathBuf::from(nvm_home)));
+        }
     }
     let _ = home;
     paths
@@ -236,8 +255,18 @@ fn highest_version_node(root: &Path) -> Option<PathBuf> {
         let Some(version) = parse_version(&name.to_string_lossy()) else {
             continue;
         };
-        // nvm: <root>/vX.Y.Z/bin/node; fnm: <root>/vX.Y.Z/installation/bin/node
-        for sub in ["bin/node", "installation/bin/node"] {
+        // Layouts, unix subs first (unix behavior is unchanged):
+        //   unix nvm  <root>/vX.Y.Z/bin/node
+        //   unix fnm  <root>/vX.Y.Z/installation/bin/node
+        //   fnm-win   <root>/vX.Y.Z/installation/node.exe
+        //   nvm-win   <root>/vX.Y.Z/node.exe   (flat)
+        // A sub for the wrong OS simply isn't a file and is skipped.
+        for sub in [
+            "bin/node",
+            "installation/bin/node",
+            "installation/node.exe",
+            "node.exe",
+        ] {
             let candidate = entry.path().join(sub);
             if candidate.is_file() && best.as_ref().is_none_or(|(v, _)| version > *v) {
                 best = Some((version, candidate.clone()));
@@ -262,5 +291,65 @@ mod tests {
     fn rejects_garbage() {
         assert_eq!(parse_version(""), None);
         assert_eq!(parse_version("node"), None);
+    }
+
+    fn touch(path: &Path) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, b"").unwrap();
+    }
+
+    #[test]
+    fn highest_version_node_picks_newest_unix_style() {
+        let dir = tempfile::tempdir().unwrap();
+        touch(&dir.path().join("v22.1.0/bin/node"));
+        touch(&dir.path().join("v24.15.0/bin/node"));
+        assert_eq!(
+            highest_version_node(dir.path()),
+            Some(dir.path().join("v24.15.0/bin/node"))
+        );
+    }
+
+    #[test]
+    fn highest_version_node_picks_newest_fnm_unix_style() {
+        let dir = tempfile::tempdir().unwrap();
+        touch(&dir.path().join("v24.1.0/installation/bin/node"));
+        touch(&dir.path().join("v20.9.0/installation/bin/node"));
+        assert_eq!(
+            highest_version_node(dir.path()),
+            Some(dir.path().join("v24.1.0/installation/bin/node"))
+        );
+    }
+
+    #[test]
+    fn highest_version_node_picks_newest_flat_windows_style() {
+        // nvm-windows layout: <root>/vX.Y.Z/node.exe, no subdir.
+        let dir = tempfile::tempdir().unwrap();
+        touch(&dir.path().join("v22.11.0/node.exe"));
+        touch(&dir.path().join("v24.18.0/node.exe"));
+        assert_eq!(
+            highest_version_node(dir.path()),
+            Some(dir.path().join("v24.18.0/node.exe"))
+        );
+    }
+
+    #[test]
+    fn highest_version_node_picks_newest_fnm_windows_style() {
+        // fnm-on-Windows layout: <root>/vX.Y.Z/installation/node.exe.
+        let dir = tempfile::tempdir().unwrap();
+        touch(&dir.path().join("v24.18.0/installation/node.exe"));
+        assert_eq!(
+            highest_version_node(dir.path()),
+            Some(dir.path().join("v24.18.0/installation/node.exe"))
+        );
+    }
+
+    #[test]
+    fn highest_version_node_ignores_non_version_dirs_and_missing_root() {
+        let dir = tempfile::tempdir().unwrap();
+        touch(&dir.path().join("not-a-version/node.exe"));
+        assert_eq!(highest_version_node(dir.path()), None);
+
+        let missing = dir.path().join("does-not-exist");
+        assert_eq!(highest_version_node(&missing), None);
     }
 }

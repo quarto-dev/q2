@@ -21,10 +21,40 @@
  * sensitive indexDocId from appearing in browser history or bookmarks.
  */
 
-/** Default sync server URL used when not specified in shareable URLs.
- * Can be overridden at build time via the VITE_DEFAULT_SYNC_SERVER environment variable. */
+/** * Prefix a path with the hub's mount base path, if any. */
+export function hubPath(path: string): string {
+  return `${import.meta.env.VITE_HUB_BASE_PATH ?? ''}${path}`;
+}
+
+/**
+ * Default sync server URL used when not specified in shareable URLs.
+ *
+ * An explicit `VITE_DEFAULT_SYNC_SERVER` takes precedence, followed by a
+ * subpath-aware `<base>/ws`, and finally the public automerge.org sync server.
+ */
 export const DEFAULT_SYNC_SERVER =
-  import.meta.env.VITE_DEFAULT_SYNC_SERVER || 'wss://sync.automerge.org';
+  import.meta.env.VITE_DEFAULT_SYNC_SERVER ||
+  (import.meta.env.VITE_HUB_BASE_PATH ? hubPath('/ws') : 'wss://sync.automerge.org');
+
+/**
+ * Resolve a sync server URL to an absolute WebSocket URL.
+ *
+ * When the hub is mounted under a subpath, `DEFAULT_SYNC_SERVER` is a relative
+ * path such as `/subpath/ws` (derived from `VITE_HUB_BASE_PATH`).
+ * This function expands relative paths (those starting with `/`) against the
+ * current page origin at runtime so they become valid WebSocket URLs. Absolute
+ * URLs (starting with `wss://`, `ws://`, etc.) are returned unchanged.
+ *
+ * @param syncServer - The sync server value from config or a shareable URL.
+ * @returns An absolute WebSocket URL ready to pass to the WS adapter.
+ */
+export function resolveSyncServerUrl(syncServer: string): string {
+  if (!syncServer.startsWith('/')) {
+    return syncServer;
+  }
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}${syncServer}`;
+}
 
 // ============================================================================
 // Types

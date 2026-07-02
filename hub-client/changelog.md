@@ -23,8 +23,8 @@ be in reverse chronological order (latest first).
 
 ### 2026-06-30
 
-- [`7b823876`](https://github.com/quarto-dev/q2/commits/7b823876): The editor now detects when a connected `q2` client is available to execute the project's code and shows an "Executor online" indicator (groundwork for running code from the shared editor; running it is not wired up yet).
 - [`42fa84de`](https://github.com/quarto-dev/q2/commits/42fa84de): The live preview now shows recorded code-execution output (when a project has it) instead of raw `{r}`/`{python}` source, and a "Clear results" control lets you remove that output for the document (and all collaborators) when you want a clean source view.
+- [`21be266a`](https://github.com/quarto-dev/q2/commits/21be266a): Downloaded project ZIPs now use relative paths nested under a single project-name folder (e.g. `Demo-Playground/index.qmd`) instead of absolute paths — `unzip` no longer warns about "stripped absolute path spec" and the archive extracts into one tidy directory.
 
 ### 2026-06-25
 

@@ -5,6 +5,8 @@ interface ImportMetaEnv {
   readonly VITE_DEFAULT_SYNC_SERVER?: string
   /** Google OAuth2 client ID. When set, enables authentication. */
   readonly VITE_GOOGLE_CLIENT_ID?: string
+  /** Base path the hub is reverse-proxied at. */
+  readonly VITE_HUB_BASE_PATH?: string
 }
 
 interface ImportMeta {

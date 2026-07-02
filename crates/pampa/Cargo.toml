@@ -10,13 +10,19 @@ keywords.workspace = true
 license.workspace = true
 repository.workspace = true
 
+# Bins require terminal-support so they are skipped when building WASM tests
+# (which use --no-default-features --features lua-filter). Without this, cargo
+# builds bins alongside integration tests (rust-lang/cargo#12980) and they fail
+# to compile for wasm32 due to native-only dependencies (tokio, NativeRuntime).
 [[bin]]
 name = "pampa"
 path = "src/main.rs"
+required-features = ["terminal-support"]
 
 [[bin]]
 name = "ast-reconcile"
 path = "src/bin/ast_reconcile.rs"
+required-features = ["terminal-support"]
 
 [package.metadata]
 cargo-fuzz = true
@@ -42,7 +48,7 @@ comrak = { version = "0.52.0", default-features = false }
 comrak-to-pandoc = { path = "../comrak-to-pandoc" }
 quarto-error-reporting = { workspace = true }
 quarto-source-map = { workspace = true }
-quarto-yaml = { path = "../quarto-yaml" }
+quarto-yaml = { workspace = true }
 quarto-config = { path = "../quarto-config" }
 quarto-parse-errors = { path = "../quarto-parse-errors" }
 quarto-treesitter-ast = { workspace = true }
@@ -79,10 +85,20 @@ base64 = "0.22"
 tokio = { workspace = true }
 
 [dev-dependencies]
+quarto-util.workspace = true
+
+# Native-only dev-dependencies (proptest pulls in getrandom which doesn't
+# compile for wasm32-unknown-unknown; insta/tempfile/tokio are native-only too)
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 insta = { version = "1.46", features = ["json", "redactions"] }
 proptest = "1.10"
 tempfile = "3.24"
 tokio = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+mlua = { version = "0.11", features = ["lua54", "vendored", "serialize"] }
+wasm-bindgen-test = "0.3"
+wasm-c-shim = { path = "../wasm-c-shim" }
 
 [lints]
 workspace = true

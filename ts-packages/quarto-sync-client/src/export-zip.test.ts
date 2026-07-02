@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
 import { exportProjectAsZip } from './export-zip.js';
+import { parseProjectZip } from './import-zip.js';
 import type { SyncClient } from './client.js';
 
 /** Create a mock SyncClient with the given text and binary files. */
@@ -141,5 +142,86 @@ describe('exportProjectAsZip', () => {
 
     expect(Object.keys(entries)).toHaveLength(1);
     expect(strFromU8(entries['exists.qmd'])).toBe('content');
+  });
+
+  // --- Absolute-path bug (GH #147) --------------------------------------
+
+  it('strips a leading slash from stored paths (no rootDir)', () => {
+    const client = mockClient({
+      textFiles: {
+        '/cscheid/columns.qmd': 'col',
+        '/cscheid/crossrefs.qmd': 'xref',
+      },
+    });
+
+    const zip = exportProjectAsZip(client);
+    const entries = unzipSync(zip);
+
+    expect(entries['cscheid/columns.qmd']).toBeDefined();
+    expect(entries['cscheid/crossrefs.qmd']).toBeDefined();
+    // No entry may be absolute — unzip strips those with a warning.
+    expect(Object.keys(entries).every(k => !k.startsWith('/'))).toBe(true);
+  });
+
+  it('nests every entry under the rootDir folder and strips leading slashes', () => {
+    const client = mockClient({
+      textFiles: {
+        '/cscheid/columns.qmd': 'col',
+        '/index.qmd': 'root',
+      },
+      binaryFiles: {
+        '/images/logo.gif': {
+          content: new Uint8Array([0x47, 0x49, 0x46, 0x38]),
+          mimeType: 'image/gif',
+        },
+      },
+    });
+
+    const zip = exportProjectAsZip(client, 'Demo-Playground');
+    const entries = unzipSync(zip);
+
+    expect(entries['Demo-Playground/cscheid/columns.qmd']).toBeDefined();
+    expect(entries['Demo-Playground/index.qmd']).toBeDefined();
+    expect(entries['Demo-Playground/images/logo.gif']).toBeDefined();
+    // Every entry is under the single top-level folder; none is absolute.
+    const keys = Object.keys(entries);
+    expect(keys.every(k => k.startsWith('Demo-Playground/'))).toBe(true);
+    expect(keys.every(k => !k.startsWith('/'))).toBe(true);
+  });
+
+  it('normalizes a rootDir with stray slashes into one clean segment', () => {
+    const client = mockClient({
+      textFiles: { '/index.qmd': 'root' },
+    });
+
+    // Leading/trailing slashes on rootDir must not leak into entry keys.
+    const zip = exportProjectAsZip(client, '/My Project/');
+    const entries = unzipSync(zip);
+
+    const keys = Object.keys(entries);
+    expect(keys).toEqual(['My-Project/index.qmd']);
+    expect(keys.every(k => !k.startsWith('/') && !k.includes('//'))).toBe(true);
+  });
+
+  it('round-trips through parseProjectZip back to project-relative paths', () => {
+    const client = mockClient({
+      textFiles: {
+        '/cscheid/columns.qmd': 'col',
+        '/cscheid/crossrefs.qmd': 'xref',
+        '/index.qmd': 'root',
+      },
+    });
+
+    const zip = exportProjectAsZip(client, 'Demo-Playground');
+    const parsed = parseProjectZip(zip);
+    const paths = parsed.map(f => f.path).sort();
+
+    // The importer strips the common top-level folder, recovering the
+    // original project-relative paths (leading slash gone on both sides).
+    expect(paths).toEqual([
+      'cscheid/columns.qmd',
+      'cscheid/crossrefs.qmd',
+      'index.qmd',
+    ]);
   });
 });

@@ -40,6 +40,7 @@ import { useAuthProbe } from './hooks/useAuthProbe';
 import { useExecutionChannel } from './hooks/useExecutionChannel';
 import { resolveActorId as resolveActorIdRequest } from './services/authService';
 import type { Route, ShareRoute, LinkProjectSetRoute } from './utils/routing';
+import { resolveSyncServerUrl } from './utils/routing';
 import './App.css';
 
 /**
@@ -70,7 +71,7 @@ async function connectAndLoadContents(
   // time when the connection is genuinely slow — exactly the CI case we want to
   // wait out. Tree-shaken in production, so no offline-first UX change there.
   const peerTimeoutMs = import.meta.env.VITE_E2E === '1' ? 15000 : undefined;
-  const files = await connect(syncServer, indexDocId, actorId, screenName, color, peerTimeoutMs);
+  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, actorId, screenName, color, peerTimeoutMs);
   const contents = new Map<string, string>();
   for (const file of files) {
     const content = getFileContent(file.path);
@@ -542,8 +543,12 @@ function App() {
       // Create the Automerge documents. The resolveActorId callback is
       // called after the index doc is created (to derive the HMAC actor
       // ID from the indexDocId) but before any file docs are written.
+      //
+      // Resolve only the runtime connection value (the WS adapter needs an
+      // absolute ws(s):// URL); the portable `syncServer` is what we store
+      // and share below, so it stays origin-independent under a subpath.
       const result = await createNewProject({
-        syncServer,
+        syncServer: resolveSyncServerUrl(syncServer),
         files,
       }, undefined, screenName, cursorColor, resolveActorId);
 

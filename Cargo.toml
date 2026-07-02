@@ -107,10 +107,7 @@ path = "./crates/quarto-core"
 path = "./crates/quarto-util"
 
 [workspace.dependencies.quarto-yaml]
-path = "./crates/quarto-yaml"
-
-[workspace.dependencies.quarto-yaml-validation]
-path = "./crates/quarto-yaml-validation"
+version = "0.1.0"
 
 [workspace.dependencies.quarto-error-reporting]
 version = "0.1.0"
@@ -277,6 +274,13 @@ verbose_file_reads = "warn"
 
 [patch.crates-io]
 lua-src = { path = "crates/lua-src-wasm" }
+# Neutralize tree-sitter-language's upstream wasm32 stdio/stdlib/string C
+# stubs so wasm-c-shim is the single source of truth for C stdlib symbols
+# in workspace wasm32 builds (the pampa wasm_lua tests). Same patch as
+# wasm-quarto-hub-client's; identical Rust source on native targets, and
+# its build.rs is a no-op off-wasm32. See
+# claude-notes/plans/2026-04-20-wasm-shim-merge.md.
+tree-sitter-language = { path = "crates/tree-sitter-language-wasm-shim" }
 # Fork of runtimelib that adds venv-aware kernelspec discovery
 # (`data_dirs_with_jupyter_paths`, `find_kernelspec_with_jupyter_paths`)
 # and threads `searched_paths` through `RuntimeError::KernelNotFound`.

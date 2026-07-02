@@ -196,20 +196,23 @@ async fn test_kernel_execute_error() {
 }
 
 // =============================================================================
-// AST Transform Integration Tests
+// Shared fixtures for the pipeline tests below
 // =============================================================================
+//
+// Note (bd-gthycd33): the AST-path transform tests that used to live
+// here were retired together with `JupyterTransform` /
+// `outputs_to_blocks` — production jupyter execution goes through the
+// text path (`ExecutionEngine::execute` -> text_execute.rs), and the
+// parallel AST emitter was a latent shape-divergence source with no
+// production consumer. Kernel-state persistence is covered by
+// `test_full_pipeline_multiple_cells` below and the cross-engine
+// `engine_output_parity` suite; inline `{python} expr` evaluation
+// (which only the retired prototype supported) is tracked as a
+// follow-up strand.
 
-use quarto_core::engine::jupyter::JupyterTransform;
 use quarto_core::format::Format;
 use quarto_core::project::{DocumentInfo, ProjectConfig, ProjectContext};
 use quarto_core::render::{BinaryDependencies, RenderContext};
-use quarto_core::transform::AstTransform;
-use quarto_pandoc_types::ConfigValue;
-use quarto_pandoc_types::attr::AttrSourceInfo;
-use quarto_pandoc_types::block::{Block, CodeBlock, Paragraph};
-use quarto_pandoc_types::inline::{Inline, Str};
-use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
 
 fn make_test_project() -> ProjectContext {
     ProjectContext {
@@ -221,220 +224,6 @@ fn make_test_project() -> ProjectContext {
         )],
         output_dir: std::env::current_dir().unwrap(),
     }
-}
-
-fn make_python_code_block(code: &str) -> Block {
-    Block::CodeBlock(CodeBlock {
-        attr: (
-            String::new(),
-            vec!["{python}".to_string()],
-            Default::default(),
-        ),
-        text: code.to_string(),
-        source_info: SourceInfo::for_test(),
-        attr_source: AttrSourceInfo::empty(),
-    })
-}
-
-fn make_paragraph(text: &str) -> Block {
-    Block::Paragraph(Paragraph {
-        content: vec![Inline::Str(Str {
-            text: text.to_string(),
-            source_info: SourceInfo::for_test(),
-        })],
-        source_info: SourceInfo::for_test(),
-    })
-}
-
-/// Test that JupyterTransform executes code and transforms the AST.
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "requires ipykernel"]
-async fn test_jupyter_transform_print() {
-    if !python_kernel_available().await {
-        eprintln!("Python kernel not available, skipping test");
-        return;
-    }
-
-    // Create an AST with a Python code block
-    let mut ast = Pandoc {
-        meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
-        blocks: vec![
-            make_paragraph("Introduction"),
-            make_python_code_block("print('Hello from transform!')"),
-            make_paragraph("Conclusion"),
-        ],
-    };
-
-    // Set up context with execution enabled
-    let project = make_test_project();
-    let doc = DocumentInfo::from_path(std::env::current_dir().unwrap().join("test.qmd"));
-    let format = Format::html();
-    let binaries = BinaryDependencies::new();
-    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
-    ctx.options.execute = true;
-
-    // Run the transform
-    let transform = JupyterTransform::new();
-    transform
-        .transform(&mut ast, &mut ctx)
-        .await
-        .expect("Transform failed");
-
-    // The code block should be replaced with output
-    // We should still have 3 blocks: intro, output, conclusion
-    // (or possibly more if the output produces multiple blocks)
-    assert!(
-        ast.blocks.len() >= 2,
-        "Expected at least 2 blocks, got {}",
-        ast.blocks.len()
-    );
-
-    // First block should still be the intro paragraph
-    assert!(
-        matches!(&ast.blocks[0], Block::Paragraph(_)),
-        "First block should be paragraph"
-    );
-
-    // The code block should have been replaced - verify it's not a CodeBlock with {python} anymore
-    let _has_python_codeblock = ast.blocks.iter().any(|b| {
-        if let Block::CodeBlock(cb) = b {
-            cb.attr.1.iter().any(|c| c.contains("python"))
-        } else {
-            false
-        }
-    });
-
-    // The code block may still exist if we're preserving it with output
-    // For now, just verify the transform ran without error
-    println!("Transform completed. Block count: {}", ast.blocks.len());
-    for (i, block) in ast.blocks.iter().enumerate() {
-        match block {
-            Block::Paragraph(_) => println!("  {}: Paragraph", i),
-            Block::CodeBlock(cb) => println!("  {}: CodeBlock (classes: {:?})", i, cb.attr.1),
-            Block::Div(_) => println!("  {}: Div", i),
-            Block::RawBlock(rb) => println!("  {}: RawBlock ({})", i, rb.format),
-            _ => println!("  {}: Other block type", i),
-        }
-    }
-}
-
-/// Test that JupyterTransform handles expression output.
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "requires ipykernel"]
-async fn test_jupyter_transform_expression() {
-    if !python_kernel_available().await {
-        eprintln!("Python kernel not available, skipping test");
-        return;
-    }
-
-    let mut ast = Pandoc {
-        meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
-        blocks: vec![make_python_code_block("1 + 1")],
-    };
-
-    let project = make_test_project();
-    let doc = DocumentInfo::from_path(std::env::current_dir().unwrap().join("test.qmd"));
-    let format = Format::html();
-    let binaries = BinaryDependencies::new();
-    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
-    ctx.options.execute = true;
-
-    let transform = JupyterTransform::new();
-    transform
-        .transform(&mut ast, &mut ctx)
-        .await
-        .expect("Transform failed");
-
-    // Verify we got some output
-    assert!(!ast.blocks.is_empty(), "Expected output blocks");
-
-    println!("Expression transform completed. Blocks:");
-    for (i, block) in ast.blocks.iter().enumerate() {
-        match block {
-            Block::CodeBlock(cb) => {
-                println!(
-                    "  {}: CodeBlock text='{}'",
-                    i,
-                    cb.text.chars().take(50).collect::<String>()
-                );
-            }
-            _ => println!("  {}: {:?}", i, std::mem::discriminant(block)),
-        }
-    }
-}
-
-/// Test that daemon persists kernel across multiple transforms.
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "requires ipykernel"]
-async fn test_daemon_persistence() {
-    if !python_kernel_available().await {
-        eprintln!("Python kernel not available, skipping test");
-        return;
-    }
-
-    // Create first AST - set a variable
-    let mut ast1 = Pandoc {
-        meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
-        blocks: vec![make_python_code_block("test_var = 42")],
-    };
-
-    let project = make_test_project();
-    let doc = DocumentInfo::from_path(std::env::current_dir().unwrap().join("test.qmd"));
-    let format = Format::html();
-    let binaries = BinaryDependencies::new();
-    let mut ctx1 = RenderContext::new(&project, &doc, &format, &binaries);
-    ctx1.options.execute = true;
-
-    // Run first transform - creates kernel and sets variable
-    let transform = JupyterTransform::new();
-    transform
-        .transform(&mut ast1, &mut ctx1)
-        .await
-        .expect("First transform failed");
-
-    // Create second AST - read the variable
-    let mut ast2 = Pandoc {
-        meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
-        blocks: vec![make_python_code_block("print(test_var)")],
-    };
-
-    let mut ctx2 = RenderContext::new(&project, &doc, &format, &binaries);
-    ctx2.options.execute = true;
-
-    // Run second transform - should reuse kernel and see the variable
-    transform
-        .transform(&mut ast2, &mut ctx2)
-        .await
-        .expect("Second transform failed");
-
-    // Verify the second transform got the variable value
-    // Look for stdout containing "42"
-    let has_output_42 = ast2.blocks.iter().any(|b| {
-        if let Block::CodeBlock(cb) = b {
-            cb.text.contains("42")
-        } else {
-            false
-        }
-    });
-
-    println!("Second transform blocks:");
-    for (i, block) in ast2.blocks.iter().enumerate() {
-        match block {
-            Block::CodeBlock(cb) => {
-                println!(
-                    "  {}: CodeBlock text='{}'",
-                    i,
-                    cb.text.chars().take(100).collect::<String>()
-                );
-            }
-            _ => println!("  {}: {:?}", i, std::mem::discriminant(block)),
-        }
-    }
-
-    assert!(
-        has_output_42,
-        "Expected output containing '42' from persisted kernel state"
-    );
 }
 
 /// Test that matplotlib figures produce display_data outputs.
@@ -495,107 +284,6 @@ plt.show()
         .shutdown_session(&key)
         .await
         .expect("Shutdown failed");
-}
-
-// =============================================================================
-// Inline Expression Tests
-// =============================================================================
-
-use quarto_pandoc_types::inline::Code;
-
-/// Helper to create a paragraph with an inline expression.
-fn make_paragraph_with_inline_expr(prefix: &str, expr: &str, suffix: &str) -> Block {
-    Block::Paragraph(Paragraph {
-        content: vec![
-            Inline::Str(Str {
-                text: prefix.to_string(),
-                source_info: SourceInfo::for_test(),
-            }),
-            Inline::Code(Code {
-                attr: (String::new(), vec![], Default::default()),
-                text: expr.to_string(),
-                source_info: SourceInfo::for_test(),
-                attr_source: AttrSourceInfo::empty(),
-            }),
-            Inline::Str(Str {
-                text: suffix.to_string(),
-                source_info: SourceInfo::for_test(),
-            }),
-        ],
-        source_info: SourceInfo::for_test(),
-    })
-}
-
-/// Test that inline expressions like `{python} 1+1` are evaluated.
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "requires ipykernel"]
-async fn test_jupyter_transform_inline_expression() {
-    if !python_kernel_available().await {
-        eprintln!("Python kernel not available, skipping test");
-        return;
-    }
-
-    // Create an AST with an inline expression
-    // The text is: "The answer is `{python} 2+2`!"
-    let mut ast = Pandoc {
-        meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
-        blocks: vec![make_paragraph_with_inline_expr(
-            "The answer is ",
-            "{python} 2+2",
-            "!",
-        )],
-    };
-
-    let project = make_test_project();
-    let doc = DocumentInfo::from_path(std::env::current_dir().unwrap().join("test.qmd"));
-    let format = Format::html();
-    let binaries = BinaryDependencies::new();
-    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
-    ctx.options.execute = true;
-
-    let transform = JupyterTransform::new();
-    transform
-        .transform(&mut ast, &mut ctx)
-        .await
-        .expect("Transform failed");
-
-    // The paragraph should now contain the result "4" instead of the Code inline
-    println!("Inline expression transform completed. Blocks:");
-    for (i, block) in ast.blocks.iter().enumerate() {
-        match block {
-            Block::Paragraph(para) => {
-                println!("  {}: Paragraph with {} inlines:", i, para.content.len());
-                for (j, inline) in para.content.iter().enumerate() {
-                    match inline {
-                        Inline::Str(s) => println!("    {}: Str('{}')", j, s.text),
-                        Inline::Code(c) => println!("    {}: Code('{}')", j, c.text),
-                        _ => println!("    {}: {:?}", j, std::mem::discriminant(inline)),
-                    }
-                }
-            }
-            _ => println!("  {}: {:?}", i, std::mem::discriminant(block)),
-        }
-    }
-
-    // Verify the inline expression was replaced with result
-    let has_result_4 = ast.blocks.iter().any(|b| {
-        if let Block::Paragraph(para) = b {
-            para.content.iter().any(|inline| {
-                if let Inline::Str(s) = inline {
-                    s.text.contains('4')
-                } else {
-                    false
-                }
-            })
-        } else {
-            false
-        }
-    });
-
-    assert!(
-        has_result_4,
-        "Expected paragraph to contain '4' from inline expression evaluation"
-    );
 }
 
 // =============================================================================

@@ -181,3 +181,23 @@ cat input.qmd | cargo run -- -t json
 - When you're done editing a Rust file, run `cargo fmt` on it.
 - If I ask you to write notes to yourself, do it in markdown and write the output in the `claude-notes` directory.
 - If you need more information on the syntax differences, you are allowed to read the [syntax notes](../../docs/syntax-notes.md) file.
+
+## WASM Testing
+
+When modifying WASM-specific code paths (the `#[cfg(target_arch = "wasm32")]` blocks in
+`filter.rs`/`shortcode.rs`, `io_wasm.rs`, or `os_wasm.rs`), add or update smoke tests in
+`tests/wasm_lua.rs`.
+
+**Never add `test` to the `target_arch = "wasm32"` cfg guard.** Native tests must use
+`Lua::new()` with the real C stdlib. WASM-specific setup is validated by the dedicated
+WASM tests.
+
+WASM tests can't run on Windows. On Linux/macOS with LLVM:
+```
+CC_wasm32_unknown_unknown=clang \
+CFLAGS_wasm32_unknown_unknown="-isystem $PWD/crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin" \
+cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
+  --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind,panic_abort
+```
+
+See `dev-docs/wasm.md` for full WASM architecture and testing details.

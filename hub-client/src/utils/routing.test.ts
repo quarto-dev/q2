@@ -1,7 +1,7 @@
 /**
  * Tests for URL routing utilities.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import {
   parseHashRoute,
   buildHashRoute,
@@ -11,6 +11,8 @@ import {
   sameFile,
   savePreAuthHash,
   restorePreAuthHash,
+  resolveSyncServerUrl,
+  hubPath,
   type Route,
   type ShareRoute,
   type LinkProjectSetRoute,
@@ -572,6 +574,80 @@ describe('sameFile', () => {
         { type: 'file', projectId: 'abc', filePath: 'index.qmd' }
       )
     ).toBe(false);
+  });
+});
+
+// ── resolveSyncServerUrl ─────────────────────────────────────────
+
+describe('resolveSyncServerUrl', () => {
+  const originalWindow = globalThis.window;
+
+  afterEach(() => {
+    // @ts-expect-error - restoring window
+    globalThis.window = originalWindow;
+  });
+
+  function mockLocation(protocol: string, host: string) {
+    // @ts-expect-error - mocking window in node environment
+    globalThis.window = {
+      location: { protocol, host },
+    };
+  }
+
+  it('resolves a relative path to wss:// on an https origin', () => {
+    mockLocation('https:', 'hub.example.com');
+    expect(resolveSyncServerUrl('/subpath/ws')).toBe(
+      'wss://hub.example.com/subpath/ws'
+    );
+  });
+
+  it('resolves a relative path to ws:// on an http origin', () => {
+    mockLocation('http:', 'localhost:3939');
+    expect(resolveSyncServerUrl('/subpath/ws')).toBe(
+      'ws://localhost:3939/subpath/ws'
+    );
+  });
+
+  it('leaves an absolute wss:// URL unchanged', () => {
+    mockLocation('https:', 'hub.example.com');
+    expect(resolveSyncServerUrl('wss://sync.automerge.org')).toBe(
+      'wss://sync.automerge.org'
+    );
+  });
+
+  it('leaves an absolute ws:// URL unchanged', () => {
+    mockLocation('http:', 'localhost:3939');
+    expect(resolveSyncServerUrl('ws://localhost:3000')).toBe(
+      'ws://localhost:3000'
+    );
+  });
+
+  it('leaves an absolute https:// URL unchanged', () => {
+    mockLocation('https:', 'hub.example.com');
+    expect(resolveSyncServerUrl('https://sync.example.com')).toBe(
+      'https://sync.example.com'
+    );
+  });
+});
+
+// ── hubPath ──────────────────────────────────────────────────────
+//
+// Single source of truth for the subpath mount: prefixes auth REST
+// calls and derives the sync-server default (`hubPath('/ws')`).
+
+describe('hubPath', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('is a no-op when no base path is set (served from the hub origin)', () => {
+    expect(hubPath('/auth/me')).toBe('/auth/me');
+  });
+
+  it('prefixes the configured mount base (subpath deployment)', () => {
+    vi.stubEnv('VITE_HUB_BASE_PATH', '/subpath');
+    expect(hubPath('/auth/me')).toBe('/subpath/auth/me');
+    expect(hubPath('/ws')).toBe('/subpath/ws');
   });
 });
 

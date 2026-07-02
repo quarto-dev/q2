@@ -545,12 +545,20 @@ impl DiagnosticCounts {
 /// (native [`RenderToFileResult`] vs the WASM `WasmPassTwoOutput`).
 pub trait OutputDiagnostics {
     fn diagnostics(&self) -> &[DiagnosticMessage];
+
+    /// Mutable access to the same diagnostics, so severity-promotion
+    /// policies (`--strict`, bd-yjs54ptg) can rewrite `kind` in place.
+    fn diagnostics_mut(&mut self) -> &mut [DiagnosticMessage];
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl OutputDiagnostics for RenderToFileResult {
     fn diagnostics(&self) -> &[DiagnosticMessage] {
         &self.render_output.diagnostics
+    }
+
+    fn diagnostics_mut(&mut self) -> &mut [DiagnosticMessage] {
+        &mut self.render_output.diagnostics
     }
 }
 
@@ -560,6 +568,10 @@ impl OutputDiagnostics for RenderToFileResult {
         // The WASM placeholder never carries diagnostics (see the
         // `cfg(target_arch = "wasm32")` definition above).
         &[]
+    }
+
+    fn diagnostics_mut(&mut self) -> &mut [DiagnosticMessage] {
+        &mut []
     }
 }
 
@@ -598,6 +610,41 @@ impl<O: OutputDiagnostics> ProjectRenderSummary<O> {
         }
 
         counts
+    }
+
+    /// Promote every `Warning` diagnostic to `Error`, across all four
+    /// diagnostic sources (strict mode, bd-yjs54ptg / GH #220).
+    ///
+    /// This is the single seam through which every structured
+    /// diagnostic flows before anything is printed or counted, so a
+    /// warning emitted anywhere in the pipeline — stages, transforms,
+    /// Lua filters, project post-render — participates in strict mode
+    /// with no per-call-site opt-in. `Info` / `Note` are left alone.
+    ///
+    /// The orchestrator itself stays policy-free: this method is only
+    /// invoked by consumers that opt into strictness (the `--strict`
+    /// CLI flag); it does not run during the render and cannot change
+    /// what gets rendered.
+    pub fn promote_warnings_to_errors(&mut self) {
+        fn promote(diagnostics: &mut [DiagnosticMessage]) {
+            for diagnostic in diagnostics {
+                if diagnostic.kind == DiagnosticKind::Warning {
+                    diagnostic.kind = DiagnosticKind::Error;
+                }
+            }
+        }
+
+        for failure in self
+            .pass1_failures
+            .iter_mut()
+            .chain(&mut self.pass2_failures)
+        {
+            promote(&mut failure.diagnostics);
+        }
+        promote(&mut self.project_diagnostics);
+        for output in &mut self.outputs {
+            promote(output.diagnostics_mut());
+        }
     }
 }
 
@@ -1820,6 +1867,10 @@ mod tests {
         fn diagnostics(&self) -> &[DiagnosticMessage] {
             &self.diagnostics
         }
+
+        fn diagnostics_mut(&mut self) -> &mut [DiagnosticMessage] {
+            &mut self.diagnostics
+        }
     }
 
     fn failure(diagnostics: Vec<DiagnosticMessage>) -> FileFailure {
@@ -1946,6 +1997,74 @@ mod tests {
         assert_eq!(counts.errors, 3);
         assert_eq!(counts.warnings, 3);
         assert!(!counts.is_empty());
+    }
+
+    // === bd-yjs54ptg (GH #220): strict-mode warning promotion ===
+
+    #[test]
+    fn promote_warnings_covers_all_four_sources() {
+        let mut summary: ProjectRenderSummary<StubOutput> = ProjectRenderSummary {
+            pass1_failures: vec![failure(vec![DiagnosticMessage::warning("p1w")])],
+            pass2_failures: vec![failure(vec![
+                DiagnosticMessage::error("p2e"),
+                DiagnosticMessage::warning("p2w"),
+            ])],
+            project_diagnostics: vec![DiagnosticMessage::warning("pw")],
+            outputs: vec![output_with(vec![DiagnosticMessage::warning("ow")])],
+            stopped_early: false,
+        };
+        summary.promote_warnings_to_errors();
+
+        let counts = summary.diagnostic_counts();
+        assert_eq!(counts.warnings, 0, "no warnings may survive promotion");
+        assert_eq!(counts.errors, 5, "every former warning counts as an error");
+
+        // Kind is rewritten on the diagnostics themselves (printing
+        // reads `kind` directly, not the counts).
+        assert!(
+            summary
+                .pass1_failures
+                .iter()
+                .chain(&summary.pass2_failures)
+                .flat_map(|f| &f.diagnostics)
+                .chain(&summary.project_diagnostics)
+                .chain(summary.outputs.iter().flat_map(|o| o.diagnostics()))
+                .all(|d| d.kind == DiagnosticKind::Error)
+        );
+    }
+
+    #[test]
+    fn promote_warnings_leaves_info_and_note_alone() {
+        let mut summary: ProjectRenderSummary<StubOutput> = ProjectRenderSummary {
+            outputs: vec![output_with(vec![
+                DiagnosticMessage::info("i"),
+                DiagnosticMessage::new(DiagnosticKind::Note, "n"),
+                DiagnosticMessage::warning("w"),
+            ])],
+            ..Default::default()
+        };
+        summary.promote_warnings_to_errors();
+
+        let kinds: Vec<DiagnosticKind> = summary.outputs[0]
+            .diagnostics()
+            .iter()
+            .map(|d| d.kind)
+            .collect();
+        assert_eq!(
+            kinds,
+            vec![
+                DiagnosticKind::Info,
+                DiagnosticKind::Note,
+                DiagnosticKind::Error
+            ]
+        );
+    }
+
+    #[test]
+    fn promote_warnings_on_clean_summary_is_a_no_op() {
+        let mut summary: ProjectRenderSummary<StubOutput> = ProjectRenderSummary::default();
+        summary.promote_warnings_to_errors();
+        assert!(summary.diagnostic_counts().is_empty());
     }
 
     #[test]

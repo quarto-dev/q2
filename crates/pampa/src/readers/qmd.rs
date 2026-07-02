@@ -98,12 +98,16 @@ pub fn read<T: Write>(
     let mut context = ASTContext::with_filename(filename.to_string());
     // Store parent source info for recursive parses
     context.parent_source_info = parent_source_info;
-    // Add the input content to the SourceContext for proper error rendering
+    // Add the input content to the SourceContext for proper error rendering.
+    // Reuse the already-normalized filename from `context.filenames[0]`
+    // (set by `with_filename`) rather than the raw `filename` again, so this
+    // rebuilt SourceContext doesn't reintroduce backslashes on Windows.
     let input_str = String::from_utf8_lossy(input_bytes).to_string();
+    let normalized_filename = context.filenames[0].clone();
     context.source_context = quarto_source_map::SourceContext::new();
     context
         .source_context
-        .add_file(filename.to_string(), Some(input_str));
+        .add_file(normalized_filename, Some(input_str));
 
     if tree.had_parse_error() {
         parser.parser.set_logger(Some(Box::new(|log_type, message| {

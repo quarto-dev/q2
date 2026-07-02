@@ -19,6 +19,44 @@ describe('authService', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  // ── hub base path (subpath mount) ───────────────────────────
+
+  describe('VITE_HUB_BASE_PATH', () => {
+    it('prefixes auth requests with the configured mount base', async () => {
+      vi.stubEnv('VITE_HUB_BASE_PATH', '/subpath');
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ email: 'admin', name: 'admin', picture: null }),
+      } as Response);
+
+      await fetchAuthMe();
+      expect(fetch).toHaveBeenCalledWith('/subpath/auth/me', {
+        credentials: 'same-origin',
+      });
+
+      await fetchActorId('proj-1');
+      expect(fetch).toHaveBeenCalledWith(
+        '/subpath/auth/actor?project=proj-1',
+        { credentials: 'same-origin' },
+      );
+    });
+
+    it('leaves paths origin-absolute when unset (dev / standalone)', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ email: 'a@b.com', name: null, picture: null }),
+      } as Response);
+
+      await fetchAuthMe();
+      expect(fetch).toHaveBeenCalledWith('/auth/me', {
+        credentials: 'same-origin',
+      });
+    });
   });
 
   // ── fetchAuthMe ─────────────────────────────────────────────
