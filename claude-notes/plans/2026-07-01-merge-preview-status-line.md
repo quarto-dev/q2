@@ -248,9 +248,14 @@ end-to-end in a real browser session before declaring done.
       "End-to-end evidence" below). Drove the full status-bar lifecycle
       against the local Option-B harness; the merged single-row bar
       renders and transitions correctly in every state.
-- [ ] **8 — Changelog**: two-commit workflow — code commit, then a
-      `hub-client/changelog.md` entry under a `2026-07-01` header with
-      the short hash.
+- [x] **8 — Changelog** ✅ two-commit workflow: code `0b13dbcb`, then
+      `hub-client/changelog.md` entry `1eb0183e` under 2026-07-01.
+
+**Status: implementation complete on `feature/hub-execution-provider`
+(commits `0b13dbcb` + `1eb0183e`).** All 8 checklist items done; TS
+suite + strict build green; browser-verified. Not pushed (awaiting
+approval). A full `cargo xtask verify` should run before the eventual
+push, though this change is hub-client-only (TS/CSS); no Rust touched.
 
 ## End-to-end evidence (2026-07-01)
 
