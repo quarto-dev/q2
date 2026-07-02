@@ -44,7 +44,7 @@ use crate::create_worktree::{
 /// declaration is shared across all worktrees). The CLAUDE.local.md
 /// we want to rewrite is per-worktree, so we need the worktree's own
 /// toplevel.
-fn current_worktree_root() -> Result<PathBuf> {
+pub(crate) fn current_worktree_root() -> Result<PathBuf> {
     let output = Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
         .output()
