@@ -1,5 +1,7 @@
 # WASM Testing and Cleanup Implementation Plan
 
+**Status: COMPLETE.** Cleanup landed via PR #116 (merged 2026-04-23, squash `52968801`); WASM smoke tests + CI job landed via PR #109 (merged 2026-07-02, `e26a8b88`). Tracking strand bd-itj9 closed. Remaining checkboxes below reflect the original single-branch plan before the branch split (see design spec comments); not audited item-by-item post-split — treat as historical record, not a live tracker.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the cfg test proxy with real WASM tests, remove stale wasm-qmd-parser artifacts, and document the WASM testing convention.
