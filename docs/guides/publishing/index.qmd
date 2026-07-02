@@ -2,4 +2,25 @@
 title: Publishing
 ---
 
+## Rendering in CI
+
+When rendering as part of an automated pipeline, pass `--strict` to
+treat warnings as errors:
+
+```bash
+quarto render --strict
+```
+
+Under `--strict`, any diagnostic that would normally be reported as a
+warning — an unresolved cross-reference, an undefined template
+variable, a warning raised by a Lua filter — is reported as an error
+instead, and the command exits with a non-zero status. The render
+itself still runs to completion, so a single invocation reports every
+problem in the project rather than stopping at the first one.
+
+A render that produces no warnings behaves identically with and
+without the flag.
+
+## More
+
 TBD.
