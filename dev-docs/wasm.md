@@ -150,14 +150,13 @@ instead: `CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang`.
 - You must use `--test wasm_lua` to select only the WASM test file.
   Running `cargo test -p pampa --target wasm32` without `--test` will fail because
   native tests can't compile for wasm32.
-- The prebuilt `wasm32-unknown-unknown` target (installed by `rust-toolchain.toml`)
-  conflicts with `-Zbuild-std` when building within the workspace — both produce a
-  `core` crate, causing E0152 (duplicate lang item). The production build avoids this
-  because `wasm-quarto-hub-client` is excluded from the workspace. The CI job sets
-  `RUSTUP_TOOLCHAIN=nightly` to bypass `rust-toolchain.toml`, so the prebuilt target
-  is never installed. Locally, you can either set `RUSTUP_TOOLCHAIN=nightly` or
-  remove the target before testing (`rustup target remove wasm32-unknown-unknown`)
-  and re-add it afterward for the production build.
+- The pinned toolchain in `rust-toolchain.toml` (a nightly with `rust-src` and the
+  wasm32 target) is what both CI and local runs should use — no `RUSTUP_TOOLCHAIN`
+  override. Do not substitute a newer nightly: bd-at72 pinned the toolchain because
+  later nightlies SIGSEGV in LLVM ThinLTO when building this workspace for wasm32.
+  (An earlier iteration of this setup hit E0152 duplicate-lang-item conflicts
+  between the prebuilt wasm32 sysroot and `-Zbuild-std`; that no longer reproduces
+  on the pinned toolchain with the prebuilt target installed.)
 - The pampa `[[bin]]` targets (`pampa`, `ast-reconcile`) use `required-features` to
   prevent compilation when running WASM tests. Cargo builds bin targets alongside
   integration tests by default (rust-lang/cargo#12980); the `required-features` gate

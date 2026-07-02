@@ -9,5 +9,10 @@ edition = "2021"
 license.workspace = true
 description = "C stdlib shims for wasm32-unknown-unknown (no libc)"
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# snprintf/vsnprintf formatting engine used by the shim's printf-family
+# symbols (see the wasm-shim-merge plan, 2026-04-20).
+wasm-printf-fmt = { path = "../wasm-printf-fmt" }
+
 [lints]
 workspace = true

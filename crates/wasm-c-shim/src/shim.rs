@@ -655,12 +655,20 @@ pub unsafe extern "C" fn isxdigit(c: c_int) -> c_int {
 
 #[no_mangle]
 pub unsafe extern "C" fn toupper(c: c_int) -> c_int {
-    if islower(c) != 0 { c - 32 } else { c }
+    if islower(c) != 0 {
+        c - 32
+    } else {
+        c
+    }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn tolower(c: c_int) -> c_int {
-    if isupper(c) != 0 { c + 32 } else { c }
+    if isupper(c) != 0 {
+        c + 32
+    } else {
+        c
+    }
 }
 
 /* ====================================================================== */
@@ -669,7 +677,11 @@ pub unsafe extern "C" fn tolower(c: c_int) -> c_int {
 
 #[no_mangle]
 pub unsafe extern "C" fn abs(x: c_int) -> c_int {
-    if x < 0 { -x } else { x }
+    if x < 0 {
+        -x
+    } else {
+        x
+    }
 }
 
 #[no_mangle]

@@ -183,20 +183,17 @@ jobs:
   wasm-tests:
     name: WASM Tests
     runs-on: ubuntu-latest
-    # Override rust-toolchain.toml so the rustup proxy doesn't auto-install the
-    # prebuilt wasm32-unknown-unknown target. We need -Zbuild-std to rebuild
-    # core from source, and the prebuilt sysroot causes E0152 (duplicate lang
-    # item). The production WASM build avoids this because wasm-quarto-hub-client
-    # is excluded from the workspace and gets an isolated target/ directory.
-    env:
-      RUSTUP_TOOLCHAIN: nightly
+    # Uses the pinned toolchain from rust-toolchain.toml, which is already a
+    # nightly with rust-src (required by -Zbuild-std) and the wasm32 target.
+    # Do NOT override with latest nightly: bd-at72 pinned the toolchain because
+    # newer nightlies SIGSEGV in LLVM ThinLTO when building this workspace for
+    # wasm32-unknown-unknown. (The E0152 duplicate-lang-item conflict between
+    # the prebuilt wasm32 sysroot and -Zbuild-std that this job originally
+    # worked around no longer reproduces on the pinned toolchain.)
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
-      - name: Install Rust nightly with rust-src
-        run: rustup toolchain install nightly --component rust-src --profile minimal
 
       - name: Set up Clang
         uses: egor-tensin/setup-clang@v1

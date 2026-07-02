@@ -87,9 +87,9 @@ end
         blocks: vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: "hello".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
     let context = ASTContext::new();
@@ -100,6 +100,7 @@ end
         &[PathBuf::from("/project/uppercase.lua")],
         "html",
         runtime,
+        None,
     )
     .await
     .expect("filter execution failed");
@@ -198,9 +199,9 @@ end
         blocks: vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: "test".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
 
@@ -210,6 +211,7 @@ end
         &[PathBuf::from("/project/check_io.lua")],
         "html",
         runtime,
+        None,
     )
     .await
     .expect("filter with io checks failed — synthetic io may not be registered");
@@ -257,9 +259,9 @@ end
         blocks: vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: "test".to_string(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })],
     };
 
@@ -269,6 +271,7 @@ end
         &[PathBuf::from("/project/check_os.lua")],
         "html",
         runtime,
+        None,
     )
     .await
     .expect("filter with os checks failed — synthetic os may not be registered");
