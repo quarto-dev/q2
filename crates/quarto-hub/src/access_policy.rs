@@ -1,21 +1,38 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex as StdMutex};
 
 use samod::{AccessPolicy, DocumentId, PeerId};
 
 /// Audit-logging access policy for document sync.
 ///
-/// Always allows access (returns `true`), but logs the authenticated user's
-/// email the first time they request a document. When auth is disabled the
-/// `peer_emails` map is empty and no log entry is emitted.
+/// Always allows access (returns `true`), and logs the authenticated user's
+/// email the first time they touch a given document. samod consults the policy
+/// on every inbound sync message, so `is_allowed` fires several times per
+/// document open; the `logged` set collapses those into a single audit line per
+/// `(peer, document)` pair. When auth is disabled the `peer_emails` map is empty
+/// and no log entry is emitted. Call [`AuditAccessPolicy::forget_peer`] on
+/// disconnect to drop a peer's dedup entries.
 #[derive(Clone)]
 pub struct AuditAccessPolicy {
     peer_emails: Arc<StdMutex<HashMap<PeerId, String>>>,
+    /// `(peer, document)` pairs already audit-logged, so each first access is
+    /// logged exactly once. Pruned per-peer on disconnect via `forget_peer`.
+    logged: Arc<StdMutex<HashSet<(PeerId, DocumentId)>>>,
 }
 
 impl AuditAccessPolicy {
     pub fn new(peer_emails: Arc<StdMutex<HashMap<PeerId, String>>>) -> Self {
-        Self { peer_emails }
+        Self {
+            peer_emails,
+            logged: Arc::new(StdMutex::new(HashSet::new())),
+        }
+    }
+
+    /// Drop all dedup entries for `peer_id`, called when the peer disconnects.
+    /// Keeps the set bounded across connections and lets a reconnecting peer
+    /// audit-log its next access afresh.
+    pub fn forget_peer(&self, peer_id: &PeerId) {
+        self.logged.lock().unwrap().retain(|(p, _)| p != peer_id);
     }
 }
 
@@ -24,12 +41,21 @@ impl AccessPolicy for AuditAccessPolicy {
         let email = self.peer_emails.lock().unwrap().get(peer_id).cloned();
 
         if let Some(ref email) = email {
-            tracing::info!(
-                email = %email,
-                document_id = %doc_id,
-                peer_id = %peer_id,
-                "Document accessed"
-            );
+            // Log only the first access to this (peer, doc) pair. `insert`
+            // returns true when the pair was newly added.
+            let first_access = self
+                .logged
+                .lock()
+                .unwrap()
+                .insert((peer_id.clone(), doc_id.clone()));
+            if first_access {
+                tracing::info!(
+                    email = %email,
+                    document_id = %doc_id,
+                    peer_id = %peer_id,
+                    "Document accessed"
+                );
+            }
         }
 
         true
@@ -144,6 +170,87 @@ mod tests {
         assert!(
             logs.contains("user@example.com"),
             "audit log must include the peer's email; got: {logs}"
+        );
+    }
+
+    #[test]
+    fn logs_document_accessed_once_per_peer_doc_pair() {
+        // samod 0.12 consults the policy on every inbound sync message, so a
+        // single document open calls is_allowed several times. The audit line
+        // must be emitted only on the first access to a given (peer, doc) pair.
+        let peer_id = PeerId::from("known-peer");
+        let peer_emails = Arc::new(StdMutex::new(HashMap::new()));
+        peer_emails
+            .lock()
+            .unwrap()
+            .insert(peer_id.clone(), "user@example.com".to_string());
+        let policy = AuditAccessPolicy::new(peer_emails);
+        let doc_id = DocumentId::new(&mut rand::rng());
+
+        let logs = capture_logs(|| {
+            assert!(policy.is_allowed(&doc_id, &peer_id));
+            assert!(policy.is_allowed(&doc_id, &peer_id));
+            assert!(policy.is_allowed(&doc_id, &peer_id));
+        });
+
+        let count = logs.matches("Document accessed").count();
+        assert_eq!(
+            count, 1,
+            "repeated access to the same doc must log once; got {count}:\n{logs}"
+        );
+    }
+
+    #[test]
+    fn logs_each_distinct_document_once() {
+        // Dedup is per (peer, doc) pair, not per peer: a second document for the
+        // same peer is a distinct access and must be logged.
+        let peer_id = PeerId::from("known-peer");
+        let peer_emails = Arc::new(StdMutex::new(HashMap::new()));
+        peer_emails
+            .lock()
+            .unwrap()
+            .insert(peer_id.clone(), "user@example.com".to_string());
+        let policy = AuditAccessPolicy::new(peer_emails);
+        let doc_a = DocumentId::new(&mut rand::rng());
+        let doc_b = DocumentId::new(&mut rand::rng());
+
+        let logs = capture_logs(|| {
+            policy.is_allowed(&doc_a, &peer_id);
+            policy.is_allowed(&doc_a, &peer_id);
+            policy.is_allowed(&doc_b, &peer_id);
+        });
+
+        let count = logs.matches("Document accessed").count();
+        assert_eq!(
+            count, 2,
+            "two distinct docs must log twice; got {count}:\n{logs}"
+        );
+    }
+
+    #[test]
+    fn forget_peer_allows_relogging_after_disconnect() {
+        // On disconnect the hub calls forget_peer so a reconnection audit-logs
+        // afresh (and the dedup set can't grow unbounded across connections).
+        let peer_id = PeerId::from("known-peer");
+        let peer_emails = Arc::new(StdMutex::new(HashMap::new()));
+        peer_emails
+            .lock()
+            .unwrap()
+            .insert(peer_id.clone(), "user@example.com".to_string());
+        let policy = AuditAccessPolicy::new(peer_emails);
+        let doc_id = DocumentId::new(&mut rand::rng());
+
+        let logs = capture_logs(|| {
+            assert!(policy.is_allowed(&doc_id, &peer_id)); // logs
+            assert!(policy.is_allowed(&doc_id, &peer_id)); // deduped
+            policy.forget_peer(&peer_id); // simulate disconnect
+            assert!(policy.is_allowed(&doc_id, &peer_id)); // logs again
+        });
+
+        let count = logs.matches("Document accessed").count();
+        assert_eq!(
+            count, 2,
+            "forget_peer must let a later access re-log; got {count}:\n{logs}"
         );
     }
 }

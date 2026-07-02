@@ -990,9 +990,10 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, email: Option<S
                         connection_id: _,
                         reason,
                     } => {
-                        // Clean up mapping
+                        // Clean up mapping and audit-dedup entries for this peer.
                         if let Some(ref peer_id) = connected_peer_id {
                             ctx.peer_emails().lock().unwrap().remove(peer_id);
+                            ctx.audit_policy().forget_peer(peer_id);
                         }
 
                         debug!(
