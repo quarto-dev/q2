@@ -226,7 +226,9 @@ Nothing in `quarto-error-reporting` (external crate) changes.
 - [x] User-facing docs: "Rendering in CI" section in
       `docs/guides/publishing/index.qmd`; page verified to render via
       `q2 render docs/guides/publishing/index.qmd`.
-- [ ] Close the loop on GH #220 (comment linking strand + this plan).
+- [x] Close the loop on GH #220: PR
+      https://github.com/quarto-dev/q2/pull/362 closes it on merge and
+      links this plan + strand bd-yjs54ptg.
 
 ## Decisions (Carlos, 2026-07-02)
 
