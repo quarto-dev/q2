@@ -14,8 +14,7 @@ import {
   type EditorContentChange,
 } from '@quarto/preview-runtime';
 import { vfsAddFile, isWasmReady, clearCapture } from '@quarto/preview-runtime';
-import { ClearCaptureControl } from './render/ClearCaptureControl';
-import { RunControl } from './render/RunControl';
+import { PreviewStatusBar } from './render/PreviewStatusBar';
 import { hasExecutableCells } from '../services/executableCells';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
@@ -1099,21 +1098,12 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               ✕
             </button>
           )}
-          {executorsOnline && currentFile && hasExecutableCells(content) ? (
-            <RunControl
-              path={currentFile.path}
-              capture={captures?.[currentFile.path]}
-              onRun={(p) => { onRequestExecution?.(p); }}
-            />
-          ) : executorsOnline ? (
-            <div className="executor-online-bar" title="A connected q2 client can execute this project's code">
-              <span className="executor-online-dot" aria-hidden="true" />
-              Executor online
-            </div>
-          ) : null}
-          <ClearCaptureControl
+          <PreviewStatusBar
             path={currentFile?.path ?? null}
-            hasCapture={!!(currentFile && captures?.[currentFile.path])}
+            executorsOnline={!!executorsOnline}
+            hasExecutableCells={hasExecutableCells(content)}
+            capture={currentFile ? captures?.[currentFile.path] : undefined}
+            onRun={(p) => { onRequestExecution?.(p); }}
             onClear={(p) => clearCapture(p)}
           />
           <PreviewRouter
