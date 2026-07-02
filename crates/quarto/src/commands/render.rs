@@ -87,6 +87,16 @@ pub struct RenderArgs {
     /// [`ProjectPipeline::with_fail_fast`]. Useful for an iterative
     /// fix loop. Exit code is unchanged (any failure → non-zero).
     pub fail_fast: bool,
+    /// Treat warnings as errors (bd-yjs54ptg, GH #220). Warning
+    /// diagnostics are promoted to error severity on the completed
+    /// [`ProjectRenderSummary`](quarto_core::project::orchestrator::ProjectRenderSummary)
+    /// before anything is printed, so the text path, `--json-errors`,
+    /// the counts clause, and the exit code all see errors. The render
+    /// itself is unaffected: everything still renders, then the
+    /// command fails. Orthogonal to `fail_fast`, which keeps meaning
+    /// "stop at first *failure*" — a promoted warning does not stop
+    /// the render.
+    pub strict: bool,
 }
 
 /// What to render after argument classification.
@@ -700,7 +710,7 @@ fn execute_single_doc(
     .with_format_override(args.to.clone())
     .with_fail_fast(args.fail_fast);
 
-    let summary = match pollster::block_on(pipeline.run()) {
+    let mut summary = match pollster::block_on(pipeline.run()) {
         Ok(s) => s,
         Err(QuartoError::Parse(parse_error)) => {
             if args.json_errors {
@@ -712,6 +722,10 @@ fn execute_single_doc(
         }
         Err(e) => return Err(anyhow::anyhow!("{}", e)),
     };
+
+    if args.strict {
+        summary.promote_warnings_to_errors();
+    }
 
     print_render_diagnostics(&summary, args);
 
@@ -725,7 +739,7 @@ fn execute_single_doc(
         quarto_util::user_status!(args.quiet, "{}", clause);
     }
 
-    if should_exit_nonzero(&summary) {
+    if should_exit_nonzero(&summary, args.strict) {
         std::process::exit(1);
     }
     Ok(())
@@ -778,7 +792,7 @@ fn execute_project(
         pipeline = pipeline.with_mode(RenderMode::Subset(set));
     }
 
-    let summary = match pollster::block_on(pipeline.run()) {
+    let mut summary = match pollster::block_on(pipeline.run()) {
         Ok(s) => s,
         Err(QuartoError::Parse(parse_error)) => {
             if args.json_errors {
@@ -790,6 +804,10 @@ fn execute_project(
         }
         Err(e) => return Err(anyhow::anyhow!("{}", e)),
     };
+
+    if args.strict {
+        summary.promote_warnings_to_errors();
+    }
 
     print_render_diagnostics(&summary, args);
 
@@ -808,7 +826,7 @@ fn execute_project(
         quarto_util::user_status!(args.quiet, "{}", line);
     }
 
-    if should_exit_nonzero(&summary) {
+    if should_exit_nonzero(&summary, args.strict) {
         std::process::exit(1);
     }
     Ok(())
@@ -827,9 +845,27 @@ fn execute_project(
 /// previous behavior of "render the named file" rather than a silent
 /// zero-byte success. Warning / Info severity diagnostics are
 /// printed but do not affect the exit code.
-fn should_exit_nonzero(summary: &quarto_core::project::orchestrator::ProjectRenderSummary) -> bool {
+///
+/// Under `--strict` (bd-yjs54ptg), warnings have already been
+/// promoted to errors on the summary, and the gate additionally
+/// fails on *any* error diagnostic anywhere in the summary —
+/// including per-document diagnostics on successful outputs, which
+/// the non-strict gate does not consider. (Whether the non-strict
+/// gate *should* consider them is bd-zcjtaz78.)
+fn should_exit_nonzero(
+    summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
+    strict: bool,
+) -> bool {
     if !summary.pass1_failures.is_empty() || !summary.pass2_failures.is_empty() {
         return true;
+    }
+    if strict {
+        let counts = summary.diagnostic_counts();
+        // Post-promotion `warnings` is always 0; checking it anyway
+        // keeps the gate correct even if a caller forgets to promote.
+        if counts.errors > 0 || counts.warnings > 0 {
+            return true;
+        }
     }
     summary
         .project_diagnostics
@@ -1935,5 +1971,57 @@ mod tests {
     fn counts_clause_no_color_has_no_ansi() {
         let clause = format_counts_clause(&counts(2, 1), false).unwrap();
         assert!(!clause.contains('\x1b'), "got: {clause:?}");
+    }
+
+    // === bd-yjs54ptg (GH #220): --strict exit gate ===
+
+    use quarto_core::project::orchestrator::ProjectRenderSummary;
+    use quarto_error_reporting::DiagnosticMessage;
+
+    /// Build a summary carrying only project-level diagnostics.
+    /// `RenderToFileResult` (the default `O`) has no `Default`, so
+    /// the fields are spelled out; per-output coverage lives in the
+    /// orchestrator's own `promote_warnings_*` tests and the
+    /// strict_mode integration tests.
+    fn summary_with(project_diagnostics: Vec<DiagnosticMessage>) -> ProjectRenderSummary {
+        ProjectRenderSummary {
+            outputs: Vec::new(),
+            pass1_failures: Vec::new(),
+            pass2_failures: Vec::new(),
+            project_diagnostics,
+            stopped_early: false,
+        }
+    }
+
+    /// A warning-carrying summary: exit 0 without strict, exit
+    /// non-zero with it.
+    #[test]
+    fn exit_gate_warning_only_respects_strict() {
+        let summary = summary_with(vec![DiagnosticMessage::warning("w")]);
+        assert!(!should_exit_nonzero(&summary, false));
+        // The defensive warnings-arm bites even without promotion.
+        assert!(should_exit_nonzero(&summary, true));
+    }
+
+    #[test]
+    fn exit_gate_promoted_summary_fails_under_strict() {
+        let mut summary = summary_with(vec![DiagnosticMessage::warning("w")]);
+        summary.promote_warnings_to_errors();
+        assert!(should_exit_nonzero(&summary, true));
+        // Promotion produced a real error, so even the non-strict
+        // gate fails on it (project-level errors already gate).
+        assert!(should_exit_nonzero(&summary, false));
+    }
+
+    #[test]
+    fn exit_gate_clean_summary_passes_under_strict() {
+        let summary = summary_with(Vec::new());
+        assert!(!should_exit_nonzero(&summary, true));
+    }
+
+    #[test]
+    fn exit_gate_info_only_passes_under_strict() {
+        let summary = summary_with(vec![DiagnosticMessage::info("i")]);
+        assert!(!should_exit_nonzero(&summary, true));
     }
 }
