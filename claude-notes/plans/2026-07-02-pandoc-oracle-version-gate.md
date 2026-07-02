@@ -3,11 +3,11 @@
 **Date:** 2026-07-02
 **Braid:** bd-i9i5ad2t
 **Worktree:** `.worktrees/bd-i9i5ad2t-pampa-pandoc-oracle-tests` (branch `braid/bd-i9i5ad2t-pampa-pandoc-oracle-tests`, based on `main` @ `51cf3707`)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design aligned 2026-07-02 — ready to implement (TDD). One prerequisite: bd-nj9nnkn1 (Windows clippy blocker) must be green for the final `cargo xtask verify`.
 
 ## Triage verdict
 
-**Ready to design.** Root cause confirmed at HEAD, repro trivial, and Chris's strand already carries a detailed design ledger. Three real design decisions remain (cross-crate parser sharing, auto-edit-vs-print for the bump command, range-vs-allowlist representation) before the skeleton becomes a finished plan.
+**Ready to implement.** Root cause confirmed at HEAD, repro trivial. Four design decisions resolved with the user (below). Skeleton is now a real plan.
 
 ## Issue context
 
@@ -47,30 +47,48 @@ Both paths in the strand still exist with the described shape:
 
 **Pre-flight verify did NOT reach the pampa tests.** `cargo xtask verify --skip-hub-build` at HEAD (`51cf3707`) fails at the clippy stage on a **pre-existing, Windows-only, unrelated** dead-code error: `highest_version_node` in `crates/quarto-mcp-launcher/src/node.rs:231` is called only from the non-Windows branch of `node_search_paths` (lines 207-213); the `#[cfg(windows)]` branch doesn't call it and the fn itself is not cfg-gated, so on Windows it is dead code → `-D warnings`. CI (Linux/Mac) uses the fn, so it's green there; only Windows dev (Chris) hits it. Filed as a discovered strand linked to this one. It blocks running the pampa test leg locally until fixed or `#[allow]`/`#[cfg]`-gated.
 
-The two version-check sites **disagree on philosophy**: dev_setup wants a *floor* (`>=3.6`, forward-open), test.rs wants a *calibrated set* (3.6–3.9, closed). A shared parser can serve both, but the *policy* differs — see design questions.
+The two version-check sites **disagree on philosophy**: dev_setup wants a *floor* (`>=3.6`, forward-open), test.rs wants a *calibrated set* (3.6–3.9, closed). A shared parser body serves both, but each site keeps its own *policy* (floor in dev_setup, closed range in test.rs) — see decisions 1 and 3.
 
-## Proposed phases (draft)
+## Resolved design decisions (2026-07-02)
 
-Skeleton only — contents wait on the design discussion.
+1. **Parser home — duplicate, don't cross-crate-share.** xtask is bin-only (no `[lib]`, "not part of the library API"), so pampa's test binary can't import from it without converting xtask to lib+bin and pulling `syn`/`clap`/`walkdir`/`serde_yaml` into pampa's test build. Instead: keep a small `parse_pandoc_version(&str) -> (u32, u32)` in **both** `crates/pampa/tests/integration/test.rs` and `crates/xtask/src/dev_setup.rs`, pinned to identical behavior by matching unit tests. No `Cargo.toml` dep changes, no cycle.
+2. **`pandoc-check` is print-only.** It does **not** auto-edit `test.rs` (avoids fighting the `cargo fmt` post-edit hook and needing a stable source anchor). On green it prints the exact ceiling to bump to; the human makes the one-line edit — matching the "manual verification ledger" spirit.
+3. **Closed range, not an explicit set.** Calibrated window is a closed range `(3,6)..=(3,9)`; bumping = raise the ceiling.
+4. **`pandoc-check` scope is narrow.** Runs just the 4 oracle tests against local pandoc + reports calibration. It does **not** also drive the dev-setup floor warning.
 
-- **Phase 0 — Test plan (TDD).** Unit-test the new parser/gate for: `3.10` (numeric > 3.9, must be out-of-range not falsely-in), `3.6`/`3.9` boundaries, `4.0`, malformed/empty. Test lives where the shared parser lands (see Q1). RED first.
-- **Phase 1 — Shared parser.** Replace substring matching with `major.minor` parsing; unify with `dev_setup.rs`'s `pandoc_version_at_least`. Represent the calibrated range (see Q3).
-- **Phase 2 — Actionable failure message.** On out-of-range: print detected version, calibrated range, and the exact command to verify+bump.
-- **Phase 3 — `cargo xtask pandoc-check`.** Run the 4 oracle tests against local pandoc bypassing the gate; on green, self-heal the allowlist (or print the line to add) — see Q2.
-- **Phase 4 — Docs.** Note the bump workflow (dev-docs or the ledger comment near the allowlist).
+## Phases
 
-## Open design questions for the user
+### Phase 0 — Test plan (TDD, RED first)
 
-1. **Where does the shared parser live?** `dev_setup.rs` is in the `xtask` crate; `test.rs` is pampa's integration-test binary. xtask is not (and shouldn't become) a dependency of pampa's tests. Options: (a) a tiny shared crate / `quarto-util` helper both depend on; (b) accept a small duplicated `parse_pandoc_version()` in each place with a shared unit-test contract; (c) something else. The strand says "reuse/share logic" — but a cross-crate share may cost more than the ~8-line parser is worth. **Recommendation: (b) duplicate the parser, share the contract via matching unit tests** unless you want a util home for it.
+Unit-test `parse_pandoc_version` + the range check. Cases:
+- `pandoc 3.10` → `(3,10)`, **out of range** (this is the bug: substring `contains` false-rejects; numeric `(3,10) > (3,9)` correctly out-of-range, not falsely-in).
+- `3.6` / `3.9` boundaries → in range; `3.5` → below floor; `4.0` → above ceiling.
+- Malformed / empty → `(0,0)`, out of range.
+- Mirror the same cases in xtask's existing `test_pandoc_version_at_least` module so both parsers share one contract.
 
-2. **`pandoc-check`: auto-edit source, or print-only?** The ledger says "edits the allowlist in test.rs … (or at minimum prints the exact line to add)." Auto-editing a source file from an xtask is a codegen-touches-tracked-source pattern (needs a stable anchor in test.rs, risks fighting rustfmt/the fmt hook). Print-only is simpler and keeps the human in the ledger loop (matches the "manual verification ledger" spirit). **Recommendation: print-only for v1**, add auto-edit later if the chore is still annoying.
+Run via `cargo nextest run -p pampa` (does not require clippy → unblocked by bd-nj9nnkn1). Confirm RED before implementing.
 
-3. **How is the calibrated range represented?** Once parsing is numeric, is it (a) a floor+ceiling `(3,6)..=(3,9)`, or (b) an explicit set of known-good minors `{6,7,8,9}`? A closed range is one bump-the-ceiling edit; an explicit set matches "each version individually verified" but is more to maintain. Note the ledger semantics: a *gap* (e.g. 3.7 verified, 3.8 skipped, 3.9 verified) is only expressible with a set. Has any minor ever been skipped, or is it always contiguous? **Recommendation: closed range** unless gaps are real.
+### Phase 1 — Replace the substring gate
 
-4. **Scope of `pandoc-check` vs. the gate.** Should `pandoc-check` also drive the dev-setup floor warning (one command reporting both), or stay narrowly "run the 4 oracle tests + report calibration"? Keeps blast radius small if narrow.
+In `test.rs`: replace `has_good_pandoc_version()`'s `contains("3.x")` chain with `parse_pandoc_version()` + closed-range check `(3,6)..=(3,9)`. Keep the hard-`assert!` at the 4 test call sites (ledger signal preserved); leave the 3 internal helpers' skip behavior unchanged.
 
-## Risks / tradeoffs (draft)
+### Phase 2 — Actionable failure message
 
-- **Auto-editing test.rs** (Q2 option) is the highest-risk piece: fmt hook runs `cargo fmt` on any edited Rust file, so the xtask's edit and the hook could race/conflict; a print-only design sidesteps this entirely.
-- **Cross-crate sharing** (Q1) could pull a new dependency edge into pampa's test build for an 8-line function — likely not worth it.
-- Low blast radius overall: changes are test-harness + xtask only, no product code, CI already pinned and unaffected.
+On out-of-range, the `assert!` message prints: detected version, the calibrated range, and the exact command to verify+bump (`cargo xtask pandoc-check`).
+
+### Phase 3 — `cargo xtask pandoc-check`
+
+New xtask subcommand (steps in `.claude/rules/xtask.md`). Runs the 4 oracle tests against local pandoc **bypassing the version gate**, narrow scope. On green: print the new ceiling to set in `test.rs`. On failure: report which test broke. Print-only — no source edit.
+
+### Phase 4 — Docs
+
+Ledger comment next to the range constant in `test.rs` describing the bump workflow; add `pandoc-check` to the xtask command list in `.claude/rules/xtask.md`.
+
+## Prerequisite
+
+- **bd-nj9nnkn1** — `highest_version_node` Windows dead-code clippy failure blocks `cargo xtask verify` locally on Windows. One-line `#[cfg(not(windows))]` gate. Must be green for the final verify step; does not block Phase 0–3 iteration via `cargo nextest run -p pampa`.
+
+## Risks / tradeoffs
+
+- **Two parser copies** (decision 1): drift risk, mitigated by the shared unit-test contract in Phase 0.
+- Low blast radius: test-harness + xtask only, no product code. CI pins `PANDOC_VERSION=3.8.3` and is unaffected either way.
