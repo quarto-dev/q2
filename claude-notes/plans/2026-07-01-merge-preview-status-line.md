@@ -284,14 +284,20 @@ URL in a real browser and exercised the **single merged status bar**:
 Every transition matched the state→rendering table. Observed directly
 in the browser (screenshots captured in the session transcript).
 
-**Orthogonal observation (not this change):** the executor's computed
-value did not visibly splice into the preview cell in this harness (the
-`{python}` `2 + 3` cell still rendered as source, no `5`), even though
-the sidecar arrived and the bar correctly read "Showing executed
-output". That is the capture-**consumption/splice** path (bd-sfet3264
-Phase 1), untouched by this status-bar merge, and the parent plan notes
-the in-browser splice was never verified ("the manual last mile", 1G /
-4b notes). Flagged for the user; out of scope for bd-yai4w8ly.
+**Orthogonal bug found (not this change) → bd-gthycd33.** The
+executor's computed value did not splice into the preview for
+`engine: jupyter` (the `{python}` `2 + 3` cell rendered as source, no
+`5`), even though the sidecar arrived and the bar correctly read
+"Showing executed output". Re-testing with `engine: knitr` (added
+`claude-notes/hub-execution-e2e/project/r-demo.qmd`) **splices
+correctly**: `1 + 1` → `[1] 2`, `cat(…)` → the R version string,
+`sum(1:10)` → `[1] 55`. So the provider + consumption/splice path work;
+the defect is **jupyter-specific** (how the Jupyter engine's capture
+output is produced / matched by `CaptureSpliceStage`). Filed as
+bd-gthycd33; untouched by and out of scope for this status-bar merge.
+This browser session also served as the parent plan's deferred
+in-browser splice verification (1G / 4b "manual last mile") — confirmed
+working for knitr.
 
 ## References
 
