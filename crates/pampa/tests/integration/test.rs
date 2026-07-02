@@ -89,15 +89,189 @@ fn test_unnumbered_section_specifier() {
 }
 
 fn has_good_pandoc_version() -> bool {
+    if pandoc_oracle_bypass_active() {
+        return true;
+    }
     let output = Command::new("pandoc")
         .arg("--version")
         .output()
         .expect("Failed to execute pandoc command");
     let version_str = String::from_utf8_lossy(&output.stdout);
-    version_str.contains("3.6")
-        || version_str.contains("3.7")
-        || version_str.contains("3.8")
-        || version_str.contains("3.9")
+    is_pandoc_version_in_oracle_range(parse_pandoc_version(&version_str))
+}
+
+/// Ledger: calibrated pandoc oracle window. Each minor version in this
+/// closed range was manually verified against the 4 oracle tests
+/// (`test_html_writer`, `test_json_writer`,
+/// `unit_test_corpus_matches_pandoc_markdown`,
+/// `unit_test_corpus_matches_pandoc_commonmark`) before being added. A local
+/// pandoc outside this range hard-fails those 4 tests by design — it is not
+/// a bug, it means the range hasn't been calibrated against that version
+/// yet. To bump the ceiling: run `cargo xtask pandoc-check`, and if it
+/// reports green, edit `PANDOC_ORACLE_MAX_VERSION` to the value it prints.
+///
+/// Adding a 5th test that calls [`assert_good_pandoc_version`]? Also add its
+/// name to `ORACLE_TEST_NAMES` in `crates/xtask/src/pandoc_check.rs` — that
+/// list is hand-maintained, not derived from this file, so a new gated test
+/// silently isn't covered by `cargo xtask pandoc-check` until you do.
+const PANDOC_ORACLE_MIN_VERSION: (u32, u32) = (3, 6);
+const PANDOC_ORACLE_MAX_VERSION: (u32, u32) = (3, 9);
+
+/// Parse the first line of `pandoc --version` output into `(major, minor)`.
+/// Expects format like "pandoc 3.6.1" or "pandoc 3.6". Malformed or empty
+/// input parses as `(0, 0)`.
+///
+/// Duplicated (byte-for-byte identical behavior, pinned by
+/// [`PANDOC_VERSION_PARSE_CASES`]) in `crates/xtask/src/dev_setup.rs` —
+/// xtask is bin-only, so this test binary can't import it directly without
+/// pulling xtask's deps into the test build. See bd-i9i5ad2t.
+fn parse_pandoc_version(version_output: &str) -> (u32, u32) {
+    let first_line = version_output.lines().next().unwrap_or("");
+    let version_part = first_line.strip_prefix("pandoc ").unwrap_or(first_line);
+    let mut parts = version_part.split('.');
+    let major: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let minor: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    (major, minor)
+}
+
+fn is_pandoc_version_in_oracle_range(version: (u32, u32)) -> bool {
+    (PANDOC_ORACLE_MIN_VERSION..=PANDOC_ORACLE_MAX_VERSION).contains(&version)
+}
+
+/// Pure form of the bypass check, taking the raw env value directly so it's
+/// unit-testable without mutating the real environment.
+fn bypass_active_for(raw: Option<&str>) -> bool {
+    raw == Some("1")
+}
+
+/// Calibration seam for `cargo xtask pandoc-check`: when this env var is set
+/// to exactly `"1"`, the oracle version gate is bypassed. Any other value,
+/// or unset, leaves the gate active.
+fn pandoc_oracle_bypass_active() -> bool {
+    bypass_active_for(
+        std::env::var("PAMPA_PANDOC_ORACLE_BYPASS_VERSION_GATE")
+            .ok()
+            .as_deref(),
+    )
+}
+
+/// Hard-fail assertion for the 4 oracle tests: unlike `has_good_pandoc_version`
+/// (which the internal helpers treat as skip-if-false), this panics with an
+/// actionable message when the local pandoc isn't in the calibrated range.
+fn assert_good_pandoc_version() {
+    if pandoc_oracle_bypass_active() {
+        return;
+    }
+    let output = Command::new("pandoc")
+        .arg("--version")
+        .output()
+        .expect("Failed to execute pandoc command");
+    let raw_version = String::from_utf8_lossy(&output.stdout).to_string();
+    assert!(
+        is_pandoc_version_in_oracle_range(parse_pandoc_version(&raw_version)),
+        "{}",
+        format_gate_failure(
+            &raw_version,
+            PANDOC_ORACLE_MIN_VERSION,
+            PANDOC_ORACLE_MAX_VERSION
+        )
+    );
+}
+
+/// Actionable failure message for a hard-fail oracle test, containing the
+/// raw detected pandoc version line, the calibrated range, and the command
+/// to run to check a newer pandoc against the oracle tests.
+fn format_gate_failure(raw_version: &str, min: (u32, u32), max: (u32, u32)) -> String {
+    let first_line = raw_version.lines().next().unwrap_or("<no pandoc output>");
+    format!(
+        "Pandoc version not calibrated for oracle tests.\n  \
+         Detected: {first_line}\n  \
+         Calibrated range: {}.{}\u{2013}{}.{}\n  \
+         Run `cargo xtask pandoc-check` to check a newer pandoc against the oracle tests.",
+        min.0, min.1, max.0, max.1
+    )
+}
+
+/// Shared parse test vectors, duplicated identically in
+/// `crates/xtask/src/dev_setup.rs`. Keep both copies in lockstep.
+const PANDOC_VERSION_PARSE_CASES: &[(&str, (u32, u32))] = &[
+    ("pandoc 3.6\n...", (3, 6)),
+    ("pandoc 3.6.1\n...", (3, 6)),
+    ("pandoc 3.9\n...", (3, 9)),
+    ("pandoc 3.10\n...", (3, 10)),
+    ("pandoc 4.0\n...", (4, 0)),
+    ("pandoc 3.1.3\n...", (3, 1)),
+    ("pandoc 2.19\n...", (2, 19)),
+    ("garbage\n...", (0, 0)),
+    ("", (0, 0)),
+];
+
+const PANDOC_ORACLE_RANGE_CASES: &[((u32, u32), bool)] = &[
+    ((3, 5), false),
+    ((3, 6), true),
+    ((3, 7), true),
+    ((3, 9), true),
+    ((3, 10), false),
+    ((4, 0), false),
+    ((0, 0), false),
+];
+
+#[cfg(test)]
+mod pandoc_oracle_gate_tests {
+    use super::*;
+
+    #[test]
+    fn unit_test_parse_pandoc_version_cases() {
+        for (input, expected) in PANDOC_VERSION_PARSE_CASES {
+            assert_eq!(parse_pandoc_version(input), *expected, "parsing {input:?}");
+        }
+    }
+
+    #[test]
+    fn unit_test_pandoc_oracle_range_cases() {
+        for (version, expected) in PANDOC_ORACLE_RANGE_CASES {
+            assert_eq!(
+                is_pandoc_version_in_oracle_range(*version),
+                *expected,
+                "checking {version:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn unit_test_format_gate_failure_contains_required_info() {
+        let message = format_gate_failure(
+            "pandoc 3.10\nCompiled with pandoc-types 1.23.1",
+            PANDOC_ORACLE_MIN_VERSION,
+            PANDOC_ORACLE_MAX_VERSION,
+        );
+        assert!(
+            message.contains("pandoc 3.10"),
+            "message should contain the raw detected version line, got: {message}"
+        );
+        assert!(
+            message.contains("3.6") && message.contains("3.9"),
+            "message should contain the calibrated range, got: {message}"
+        );
+        assert!(
+            message.contains("cargo xtask pandoc-check"),
+            "message should point at the calibration command, got: {message}"
+        );
+    }
+
+    #[test]
+    fn unit_test_bypass_active_for_cases() {
+        let cases: &[(Option<&str>, bool)] = &[
+            (Some("1"), true),
+            (Some("0"), false),
+            (Some("true"), false),
+            (Some(""), false),
+            (None, false),
+        ];
+        for (raw, expected) in cases {
+            assert_eq!(bypass_active_for(*raw), *expected, "raw env value {raw:?}");
+        }
+    }
 }
 
 fn canonicalize_pandoc_ast(ast: &str, from: &str, to: &str) -> String {
@@ -223,10 +397,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
 
 #[test]
 fn unit_test_corpus_matches_pandoc_markdown() {
-    assert!(
-        has_good_pandoc_version(),
-        "Pandoc version is not suitable for testing"
-    );
+    assert_good_pandoc_version();
     let mut file_count = 0;
     for entry in
         glob("tests/pandoc-match-corpus/markdown/*.qmd").expect("Failed to read glob pattern")
@@ -253,10 +424,7 @@ fn unit_test_corpus_matches_pandoc_markdown() {
 
 #[test]
 fn unit_test_corpus_matches_pandoc_commonmark() {
-    assert!(
-        has_good_pandoc_version(),
-        "Pandoc version is not suitable for testing"
-    );
+    assert_good_pandoc_version();
     let mut file_count = 0;
     for entry in
         glob("tests/pandoc-match-corpus/commonmark/*.qmd").expect("Failed to read glob pattern")
@@ -434,10 +602,7 @@ fn remove_location_fields(json: &mut serde_json::Value) {
 
 #[test]
 fn test_json_writer() {
-    assert!(
-        has_good_pandoc_version(),
-        "Pandoc version is not suitable for testing"
-    );
+    assert_good_pandoc_version();
     let mut file_count = 0;
     for entry in glob("tests/writers/json/*.md").expect("Failed to read glob pattern") {
         match entry {
@@ -524,10 +689,7 @@ fn normalize_html(html: &str) -> String {
 
 #[test]
 fn test_html_writer() {
-    assert!(
-        has_good_pandoc_version(),
-        "Pandoc version is not suitable for testing"
-    );
+    assert_good_pandoc_version();
     let mut file_count = 0;
     for entry in glob("tests/writers/html/*.md").expect("Failed to read glob pattern") {
         match entry {

@@ -10,6 +10,7 @@
 //! - `lint`: Run custom lint checks on the codebase
 //! - `create-worktree`: Create git worktree with CLAUDE.local.md context stub
 //! - `braid-snapshot`: Write a backup-only `braid export` to `.braid/snapshot.jsonl`
+//! - `pandoc-check`: Check local pandoc against the pampa oracle tests
 //! - `test`: Run workspace tests with platform-appropriate crate exclusions
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
 //! - `build-all`: Fresh-clone build orchestration (npm install + hub-client + Rust workspace)
@@ -25,6 +26,7 @@ mod build_trace_viewer;
 mod create_worktree;
 mod dev_setup;
 mod lint;
+mod pandoc_check;
 mod stage_doc_examples;
 mod switch_task;
 mod test;
@@ -204,6 +206,17 @@ enum Command {
         no_deny_warnings: bool,
     },
 
+    /// Check the local `pandoc` against the pampa oracle tests.
+    ///
+    /// Print-only calibration tool for bd-i9i5ad2t's version-gated oracle
+    /// tests (`test_html_writer`, `test_json_writer`,
+    /// `unit_test_corpus_matches_pandoc_markdown`,
+    /// `unit_test_corpus_matches_pandoc_commonmark`). Runs those 4 tests
+    /// against the local pandoc under a bypass of the calibrated version
+    /// gate, then reports pass/fail and — on a green run past the current
+    /// ceiling — the exact line in `test.rs` to bump. Never edits the file.
+    PandocCheck {},
+
     /// Stage doc-example projects into the docs site for `.embed-example-iframe`.
     ///
     /// Renders each project listed in `examples/manifest.yml` with `q2` and
@@ -349,6 +362,7 @@ fn main() -> Result<()> {
             };
             verify::run(&config)
         }
+        Command::PandocCheck {} => pandoc_check::run(),
         Command::StageDocExamples {} => stage_doc_examples::run(),
         Command::BuildTraceViewer {} => build_trace_viewer::run(),
         Command::BuildQ2PreviewSpa {} => build_q2_preview_spa::run(),

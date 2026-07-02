@@ -234,21 +234,54 @@ fn check_pandoc() {
     }
 }
 
-/// Parse the first line of `pandoc --version` output and check if the version
-/// is at least `major.minor`. Expects format like "pandoc 3.6.1" or "pandoc 3.6".
-fn pandoc_version_at_least(version_output: &str, min_major: u32, min_minor: u32) -> bool {
+/// Parse the first line of `pandoc --version` output into `(major, minor)`.
+/// Expects format like "pandoc 3.6.1" or "pandoc 3.6". Malformed or empty
+/// input parses as `(0, 0)`.
+///
+/// Duplicated (byte-for-byte identical behavior, pinned by
+/// [`PANDOC_VERSION_PARSE_CASES`]) in
+/// `crates/pampa/tests/integration/test.rs` — xtask is bin-only, so pampa's
+/// test binary can't import this directly without pulling xtask's deps into
+/// the test build. See bd-i9i5ad2t.
+pub(crate) fn parse_pandoc_version(version_output: &str) -> (u32, u32) {
     let first_line = version_output.lines().next().unwrap_or("");
-    // Extract version string after "pandoc "
     let version_part = first_line.strip_prefix("pandoc ").unwrap_or(first_line);
     let mut parts = version_part.split('.');
     let major: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
     let minor: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
-    (major, minor) >= (min_major, min_minor)
+    (major, minor)
 }
+
+/// Check if a parsed pandoc `--version` output is at least `major.minor`.
+fn pandoc_version_at_least(version_output: &str, min_major: u32, min_minor: u32) -> bool {
+    parse_pandoc_version(version_output) >= (min_major, min_minor)
+}
+
+/// Shared parse test vectors, duplicated identically in
+/// `crates/pampa/tests/integration/test.rs`. Keep both copies in lockstep.
+#[cfg(test)]
+const PANDOC_VERSION_PARSE_CASES: &[(&str, (u32, u32))] = &[
+    ("pandoc 3.6\n...", (3, 6)),
+    ("pandoc 3.6.1\n...", (3, 6)),
+    ("pandoc 3.9\n...", (3, 9)),
+    ("pandoc 3.10\n...", (3, 10)),
+    ("pandoc 4.0\n...", (4, 0)),
+    ("pandoc 3.1.3\n...", (3, 1)),
+    ("pandoc 2.19\n...", (2, 19)),
+    ("garbage\n...", (0, 0)),
+    ("", (0, 0)),
+];
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_pandoc_version_cases() {
+        for (input, expected) in PANDOC_VERSION_PARSE_CASES {
+            assert_eq!(parse_pandoc_version(input), *expected, "parsing {input:?}");
+        }
+    }
 
     #[test]
     fn test_pandoc_version_at_least() {
