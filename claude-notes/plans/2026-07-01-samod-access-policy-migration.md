@@ -1,10 +1,17 @@
-# Migrate samod: `quarto-dev/samod@q2` → `shikokuchuo/samod@access-policy`
+# Migrate samod: `quarto-dev/samod@q2` → `quarto-dev/samod@access-policy`
 
 ## Overview
 
 Our vendored samod fork is moving from **`quarto-dev/samod` branch `q2`**
-(samod `0.9.0`, automerge `0.8.0`) to **`shikokuchuo/samod` branch
-`access-policy`** (samod `0.12.1`, automerge `0.10.0`).
+(samod `0.9.0`, automerge `0.8.0`) to the **`access-policy` branch**
+(samod `0.12.1`, automerge `0.10.0`).
+
+> **Fork location.** The `access-policy` branch was developed on the
+> `shikokuchuo/samod` fork and later relocated to its canonical long-term home
+> at **`quarto-dev/samod`** (same commit, same branch). The dependency now
+> points at `quarto-dev/samod` branch `access-policy`; earlier phase entries and
+> commits below that mention `shikokuchuo/samod` are the historical record of
+> the interim location. See "Post-migration follow-ups".
 
 The new fork = upstream samod `0.12.1` + a fresh "Implement access policy"
 commit. The *only* thing the old `q2` branch carried on top of its base was
@@ -236,8 +243,10 @@ the Rust test suite cannot cover on its own.
 
 ## References
 
-- New fork: `shikokuchuo/samod` branch `access-policy`, samod `0.12.1` /
+- Fork: `quarto-dev/samod` branch `access-policy`, samod `0.12.1` /
   samod-core `0.12.0` / automerge `0.10.0`. Access-policy commit `c5a06c3`.
+  (Developed on `shikokuchuo/samod`; relocated to `quarto-dev/samod` — same
+  commit — as the canonical home. See "Post-migration follow-ups".)
 - Old fork: `quarto-dev/samod` branch `q2`, rev `0b50c16` ("Implement access
   policy" on samod `0.9.0` / automerge `0.8.0`).
 - samod CHANGELOG (0.9→0.12): automerge 0.8→0.10; added `Repo::search` /
@@ -246,3 +255,32 @@ the Rust test suite cannot cover on its own.
 - Consumers: `crates/quarto-hub/src/{access_policy,context,server,sync,index,
   sync_state,resource,automerge_api_tests}.rs`,
   `crates/quarto-preview/src/capture_driver.rs`.
+
+## Post-migration follow-ups
+
+Discovered during review of the migration branch, after the Phase 0–6 work
+above landed as `bfcee64f`:
+
+- [x] **Audit-log dedup (`d1935ec7`).** samod 0.12 consults the access policy
+      *synchronously on every inbound sync message* (three gates in
+      `samod-core/hub/state.rs`; the inbound `handle_doc_message` gate is
+      un-memoized), whereas samod 0.9 memoized the check per `(peer, doc)`
+      connection (`AccessPolicyState`). `AuditAccessPolicy` logged
+      unconditionally, so a single document open emitted 2–3 identical
+      "Document accessed" lines. Restored once-per-`(peer, doc)` semantics with
+      a dedup `HashSet` in `AuditAccessPolicy`, pruned per-peer on disconnect
+      via `forget_peer` (called from `server.rs`'s `ClientDisconnected` arm next
+      to the existing `peer_emails` removal). Three tracing-capture tests cover
+      dedup, per-doc distinctness, and re-log-after-forget. Full workspace green
+      (9859 passed).
+
+- [x] **Fork relocated to `quarto-dev/samod` (`46f1da95`).** The `access-policy`
+      branch was pushed to `quarto-dev/samod` (same commit `c5a06c39`); the
+      `git = …` source in both `crates/quarto-hub/Cargo.toml` and
+      `crates/quarto-preview/Cargo.toml` now points there instead of
+      `shikokuchuo/samod`. The `Cargo.lock` change is exactly the two samod
+      `source =` lines — verified with `cargo check --locked` that no
+      re-resolution (e.g. transitive `windows-sys` churn) is needed; a stray
+      `cargo update -p samod` had incidentally normalized 11 unrelated
+      Windows-only `windows-sys` edges, which was reverted to keep the diff
+      minimal.
