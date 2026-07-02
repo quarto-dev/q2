@@ -17,6 +17,10 @@
 import * as http from 'node:http';
 import { once } from 'node:events';
 import { WebSocketServer } from 'ws';
+// cbor-x is automerge-repo's own wire codec (a direct dependency of
+// @automerge/automerge-repo); used here to decode frames for the
+// dropMessagesFor() lost-request switch.
+import { decode as cborDecode } from 'cbor-x';
 import { Repo, type DocumentId, type PeerId } from '@automerge/automerge-repo';
 import { WebSocketServerAdapter } from '@automerge/automerge-repo-network-websocket';
 
@@ -30,6 +34,17 @@ export interface TestHub {
   /** Allow queued + future websocket upgrades to proceed. */
   releaseUpgrades(): void;
   /**
+   * Silently drop incoming client messages that concern `docId`
+   * (request/sync), before the hub's repo ever sees them. Models the
+   * production "lost request" failure: the doc exists on the hub, but
+   * the client's request never arrives, so nothing is ever delivered
+   * unless the client RE-requests. Call {@link stopDroppingMessages}
+   * to restore normal delivery.
+   */
+  dropMessagesFor(docId: string): void;
+  /** Stop dropping; subsequent client messages flow normally. */
+  stopDroppingMessages(): void;
+  /**
    * True iff the hub holds the document (bounded wait). Uses the
    * repo's find with an overall deadline; "unavailable" or timeout
    * map to false.
@@ -41,11 +56,22 @@ export interface TestHub {
 export interface TestHubOptions {
   /** Queue websocket upgrades until releaseUpgrades() is called. */
   holdUpgrades?: boolean;
+  /**
+   * Whether the hub proactively announces its documents to connected
+   * peers (automerge-repo generous share). Default true, matching the
+   * JS reference hub. Set false to model the production samod hub's
+   * request-response shape: a document is only delivered when a client
+   * explicitly requests it — required by the stranded-doc recovery
+   * tests, where a generous announce would mask a client that never
+   * re-requests.
+   */
+  announce?: boolean;
 }
 
 export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> {
   let holding = opts.holdUpgrades ?? false;
   const queued: Array<() => void> = [];
+  let droppingDocId: string | null = null;
 
   const httpServer = http.createServer((req, res) => {
     if (req.url === '/health') {
@@ -66,7 +92,32 @@ export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> 
     const proceed = (): void => {
       // The socket may have died while queued.
       if (!socket.destroyed) {
-        wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          // Intercept incoming frames BEFORE the WebSocketServerAdapter's
+          // 'message' listener sees them, so dropMessagesFor() can model a
+          // lost request (see the TestHub interface doc). The adapter
+          // subscribes via ws.on('message', ...), which is driven by
+          // ws.emit — wrapping emit filters every listener uniformly.
+          const origEmit = ws.emit.bind(ws);
+          (ws as { emit: typeof ws.emit }).emit = ((event: string | symbol, ...args: unknown[]) => {
+            if (event === 'message' && droppingDocId !== null) {
+              try {
+                const raw = args[0] as Buffer;
+                const msg = cborDecode(new Uint8Array(raw)) as {
+                  type?: string;
+                  documentId?: string;
+                };
+                if (msg?.documentId === droppingDocId) {
+                  return true; // swallowed — the hub never learns of it
+                }
+              } catch {
+                // Not a decodable repo message — let it through.
+              }
+            }
+            return origEmit(event, ...(args as [unknown, unknown]));
+          }) as typeof ws.emit;
+          wss.emit('connection', ws, req);
+        });
       }
     };
     if (holding) {
@@ -79,7 +130,7 @@ export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> 
   const repo = new Repo({
     network: [new WebSocketServerAdapter(wss as never)],
     peerId: 'test-hub' as PeerId,
-    sharePolicy: async () => true,
+    sharePolicy: async () => opts.announce ?? true,
     // Storage gives the hub a storageId to announce in its handshake
     // metadata, like the real samod hub (which always announces one).
     // Clients key delivery confirmation off it (exit-drain,
@@ -101,6 +152,12 @@ export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> 
     releaseUpgrades(): void {
       holding = false;
       for (const proceed of queued.splice(0)) proceed();
+    },
+    dropMessagesFor(docId: string): void {
+      droppingDocId = docId;
+    },
+    stopDroppingMessages(): void {
+      droppingDocId = null;
     },
     async hubHasDoc(docId: string, timeoutMs = 5000): Promise<boolean> {
       const deadline = Date.now() + timeoutMs;

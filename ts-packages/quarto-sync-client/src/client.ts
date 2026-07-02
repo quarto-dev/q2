@@ -463,6 +463,34 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     return handle;
   }
 
+  // Helper: evict a poisoned DocHandle so the next `repo.find()` issues a
+  // FRESH network request. automerge-repo (2.5.6) never re-requests a doc on
+  // its own: a handle stuck in `requesting` (its request frame was lost in
+  // transit — the CI-contention case behind the smoke-all "Path not found"
+  // flakes) has `handle.request()` as a no-op on later finds, and a handle
+  // that reached `unavailable` is returned verbatim from the handle cache
+  // without ever contacting a peer. Either way every retry replays the
+  // poisoned verdict, so the retry loops above/below could never actually
+  // recover a stranded doc. `repo.delete()` is local-only (removes the
+  // cached handle + local storage; deletion is not propagated to peers), and
+  // both evicted states guarantee local storage held nothing for the doc
+  // (the request path is only entered after a null storage load), so no
+  // local edits can be discarded.
+  function evictStrandedHandle(repo: Repo, docId: DocumentId): void {
+    // `repo.handles` is keyed by the BARE document id; findDoc callers pass
+    // the `automerge:`-prefixed URL form (both are valid `repo.find()`
+    // inputs, which normalizes internally).
+    const docIdStr = String(docId);
+    const bareId = (docIdStr.startsWith('automerge:')
+      ? parseAutomergeUrl(docIdStr as Parameters<typeof parseAutomergeUrl>[0]).documentId
+      : docIdStr) as DocumentId;
+    const cached = repo.handles?.[bareId];
+    if (!cached) return;
+    if (cached.state === 'requesting' || cached.state === 'unavailable') {
+      repo.delete(docId);
+    }
+  }
+
   // Helper: find a document by ID, wait for it to be ready, and apply
   // actor ID. Retries the cold-start "unavailable" race (bd-jit6pdwq):
   // a doc can resolve unavailable when `handle.request()` fires before
@@ -502,6 +530,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           throw err;
         }
         if (state.connectedPeers.size === 0) throw err;
+        // A retry is pointless unless the next find actually re-contacts the
+        // network — evict the poisoned handle first (see evictStrandedHandle).
+        evictStrandedHandle(repo, docId);
         await new Promise((r) => setTimeout(r, baseDelayMs * 2 ** attempt));
         // The connection may have been torn down while we slept.
         if (state.repo !== repo) throw err;
