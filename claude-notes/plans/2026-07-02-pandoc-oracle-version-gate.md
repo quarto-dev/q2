@@ -55,7 +55,7 @@ The two version-check sites **disagree on philosophy**: dev_setup wants a *floor
 2. **`pandoc-check` is print-only.** It does **not** auto-edit `test.rs` (avoids fighting the `cargo fmt` post-edit hook and needing a stable source anchor). On green it prints the exact ceiling to bump to; the human makes the one-line edit — matching the "manual verification ledger" spirit.
 3. **Closed range, not an explicit set.** Calibrated window is a closed range `(3,6)..=(3,9)`; bumping = raise the ceiling.
 4. **`pandoc-check` scope is narrow.** Runs just the 4 oracle tests against local pandoc + reports calibration. It does **not** also drive the dev-setup floor warning.
-5. **Gate bypass is an env var.** `has_good_pandoc_version()` returns `true` when `PAMPA_PANDOC_ORACLE_BYPASS_VERSION_GATE=1` is set (checked before parsing). This is the single seam `pandoc-check` uses to run the 4 tests against an off-range pandoc without weakening the assertion or duplicating test bodies. Normal local/CI runs never set it, so the hard-fail ledger signal is untouched. (Added from design review — this seam was previously implicit.)
+5. **Gate bypass is an env var.** `has_good_pandoc_version()` returns `true` when `PAMPA_PANDOC_ORACLE_BYPASS_VERSION_GATE` is set to **exactly `1`** (checked before parsing); any other value, or unset, leaves the gate active. This is the single seam `pandoc-check` uses to run the 4 tests against an off-range pandoc without weakening the assertion or duplicating test bodies. Normal local/CI runs never set it, so the hard-fail ledger signal is untouched. (Added from design review — this seam was previously implicit.)
 
 ### Out of scope
 
@@ -65,7 +65,7 @@ The two version-check sites **disagree on philosophy**: dev_setup wants a *floor
 
 ### Phase 0 — Test plan (TDD, RED first)
 
-Two pure functions to test (both spawn nothing → runnable via `cargo nextest run -p pampa`, unblocked by bd-nj9nnkn1):
+Two pure functions to test (both spawn nothing → unblocked by bd-nj9nnkn1). The pampa copies run via `cargo nextest run -p pampa`; the mirrored xtask parser tests run via `cargo nextest run -p xtask` — run **both** to complete the RED/GREEN loop across the two copies.
 
 **a. `parse_pandoc_version(&str) -> (u32, u32)` + range check.** Cases:
 - `pandoc 3.10` → `(3,10)`, **out of range** (this is the bug: substring `contains` false-rejects; numeric `(3,10) > (3,9)` correctly out-of-range, not falsely-in).
@@ -74,7 +74,7 @@ Two pure functions to test (both spawn nothing → runnable via `cargo nextest r
 
 **b. Diagnostic formatter** — a pure `fn format_gate_failure(raw_version: &str, range: …) -> String` that the `assert!` message uses. Assert it contains the raw detected version line, the calibrated range, and the `cargo xtask pandoc-check` command. This guards the *user-visible* improvement (M3 from design review) without depending on assertion-message brittleness.
 
-**Shared case table (M5).** Define the parse test vectors as one named `const` slice reused by both `test.rs` and xtask's `test_pandoc_version_at_least` module, with a comment on each requiring lockstep updates. Both parser copies are validated against the same table.
+**Duplicated case table (M5).** Consistent with decision 1 (duplicate, don't cross-crate-share): put an **identical** named `const` slice of parse test vectors in *each* location — `test.rs` and xtask's `test_pandoc_version_at_least` module — not a single shared slice (no new crate dep). Each copy carries a comment requiring lockstep updates. Both parser copies are validated against their (identical) table.
 
 Confirm RED before implementing.
 
