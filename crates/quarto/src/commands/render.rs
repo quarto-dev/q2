@@ -839,38 +839,30 @@ fn execute_project(
 /// stays policy-free — partial-progress leniency lives in the
 /// `quarto preview` / hub-client consumer, not here.
 ///
-/// Project-level diagnostics with [`DiagnosticKind::Error`] severity
-/// (e.g. `Q-PROJECT-EMPTY` when the render set is empty — bd-h736)
-/// also force a non-zero exit; the user almost certainly wanted the
-/// previous behavior of "render the named file" rather than a silent
-/// zero-byte success. Warning / Info severity diagnostics are
-/// printed but do not affect the exit code.
+/// Beyond failures, the gate reads
+/// [`ProjectRenderSummary::diagnostic_counts`], which aggregates
+/// every diagnostic source: project-level diagnostics (e.g.
+/// `Q-PROJECT-EMPTY` — bd-h736), failure diagnostics, and
+/// per-document diagnostics on *successful* outputs (bd-zcjtaz78 —
+/// e.g. a duplicate crossref id, `Q-15-1`, where the render
+/// completes but the user was shown `Error:`). Any error-severity
+/// diagnostic anywhere forces a non-zero exit; the render output is
+/// still written, only the exit code reflects the reported error.
 ///
 /// Under `--strict` (bd-yjs54ptg), warnings have already been
-/// promoted to errors on the summary, and the gate additionally
-/// fails on *any* error diagnostic anywhere in the summary —
-/// including per-document diagnostics on successful outputs, which
-/// the non-strict gate does not consider. (Whether the non-strict
-/// gate *should* consider them is bd-zcjtaz78.)
-fn should_exit_nonzero(
-    summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
+/// promoted to errors on the summary, so they trip the same error
+/// check; the explicit warnings arm merely keeps the gate correct if
+/// a caller forgets to promote. `Info` / `Note` never affect the
+/// exit code.
+fn should_exit_nonzero<O: quarto_core::project::orchestrator::OutputDiagnostics>(
+    summary: &quarto_core::project::orchestrator::ProjectRenderSummary<O>,
     strict: bool,
 ) -> bool {
-    if !summary.pass1_failures.is_empty() || !summary.pass2_failures.is_empty() {
+    if summary.has_failures() {
         return true;
     }
-    if strict {
-        let counts = summary.diagnostic_counts();
-        // Post-promotion `warnings` is always 0; checking it anyway
-        // keeps the gate correct even if a caller forgets to promote.
-        if counts.errors > 0 || counts.warnings > 0 {
-            return true;
-        }
-    }
-    summary
-        .project_diagnostics
-        .iter()
-        .any(|d| d.kind == quarto_error_reporting::DiagnosticKind::Error)
+    let counts = summary.diagnostic_counts();
+    counts.errors > 0 || (strict && counts.warnings > 0)
 }
 
 fn print_render_diagnostics(
@@ -2022,6 +2014,65 @@ mod tests {
     #[test]
     fn exit_gate_info_only_passes_under_strict() {
         let summary = summary_with(vec![DiagnosticMessage::info("i")]);
+        assert!(!should_exit_nonzero(&summary, true));
+    }
+
+    // === bd-zcjtaz78: per-output error diagnostics gate the exit ===
+
+    use quarto_core::project::orchestrator::OutputDiagnostics;
+
+    /// Output stub carrying only diagnostics, so the gate can be
+    /// tested against per-document diagnostics on successful renders
+    /// without building a full `RenderToFileResult`.
+    struct StubOutput {
+        diagnostics: Vec<DiagnosticMessage>,
+    }
+
+    impl OutputDiagnostics for StubOutput {
+        fn diagnostics(&self) -> &[DiagnosticMessage] {
+            &self.diagnostics
+        }
+
+        fn diagnostics_mut(&mut self) -> &mut [DiagnosticMessage] {
+            &mut self.diagnostics
+        }
+    }
+
+    fn summary_with_output(
+        diagnostics: Vec<DiagnosticMessage>,
+    ) -> ProjectRenderSummary<StubOutput> {
+        ProjectRenderSummary {
+            outputs: vec![StubOutput { diagnostics }],
+            pass1_failures: Vec::new(),
+            pass2_failures: Vec::new(),
+            project_diagnostics: Vec::new(),
+            stopped_early: false,
+        }
+    }
+
+    /// The bd-zcjtaz78 fix: an error diagnostic on a *successful*
+    /// output fails the gate even without `--strict`.
+    #[test]
+    fn exit_gate_output_error_fails_without_strict() {
+        let summary = summary_with_output(vec![DiagnosticMessage::error("e")]);
+        assert!(should_exit_nonzero(&summary, false));
+        assert!(should_exit_nonzero(&summary, true));
+    }
+
+    /// Per-output warnings keep the pre-fix behavior: exit 0 unless
+    /// `--strict`.
+    #[test]
+    fn exit_gate_output_warning_gates_only_under_strict() {
+        let summary = summary_with_output(vec![DiagnosticMessage::warning("w")]);
+        assert!(!should_exit_nonzero(&summary, false));
+        assert!(should_exit_nonzero(&summary, true));
+    }
+
+    /// Per-output info/note never gate.
+    #[test]
+    fn exit_gate_output_info_never_gates() {
+        let summary = summary_with_output(vec![DiagnosticMessage::info("i")]);
+        assert!(!should_exit_nonzero(&summary, false));
         assert!(!should_exit_nonzero(&summary, true));
     }
 }
