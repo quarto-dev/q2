@@ -18,7 +18,6 @@ use regex::Regex;
 use super::daemon::daemon;
 use super::error::JupyterError;
 use super::execute::{CellOutput, ExecuteResult as KernelExecuteResult, ExecuteStatus};
-use super::output::strip_ansi_codes;
 use super::session::SessionKey;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::error::ExecutionError;
@@ -176,12 +175,12 @@ async fn execute_blocks_inner(
         // Append content before this block
         output.push_str(&input[last_end..block.start]);
 
-        // Echo the cell source as a *non-executable* fenced block.
-        // The `{lang}` fence carries execution semantics (the engine
-        // just ran it); after execution the echoed source should
-        // render as plain code so the highlight stage picks it up.
-        output.push_str(&echoed_source_fence(block));
-        output.push('\n');
+        // A fenced div cannot interrupt a paragraph — make sure the
+        // `::: {.cell}` opener starts its own block even when the
+        // source had no blank line before the cell.
+        if output.ends_with('\n') && !output.ends_with("\n\n") {
+            output.push('\n');
+        }
 
         // Execute the code
         let exec_result = daemon
@@ -189,11 +188,9 @@ async fn execute_blocks_inner(
             .await
             .ok_or(JupyterError::NotConnected)??;
 
-        // Format and append outputs
-        let output_md = format_outputs(&exec_result);
-        if !output_md.is_empty() {
-            output.push_str(&output_md);
-        }
+        // Emit the whole cell — echoed source plus outputs — in the
+        // Quarto-canonical `::: {.cell}` shape.
+        output.push_str(&render_cell(block, &exec_result));
 
         last_end = block.end;
     }
@@ -204,54 +201,122 @@ async fn execute_blocks_inner(
     Ok(ExecuteResult::new(output))
 }
 
+/// Fence for `text`, sized so the fence can never collide with the
+/// content: max(3, longest leading backtick run in `text` + 1)
+/// backticks. Mirrors Q1's `ticksForCode`
+/// (`external-sources/quarto-cli/src/core/jupyter/jupyter.ts`); a
+/// fixed ``` corrupts the emitted markdown whenever a cell or its
+/// output contains a line starting with three backticks.
+fn ticks_for_code(text: &str) -> String {
+    let longest = text
+        .lines()
+        .map(|line| line.trim_start().bytes().take_while(|b| *b == b'`').count())
+        .max()
+        .unwrap_or(0);
+    "`".repeat(std::cmp::max(3, longest + 1))
+}
+
+/// Render one executed cell — echoed source plus formatted outputs —
+/// in the Quarto-canonical cell shape shared with knitr's hooks and
+/// Q1's jupyter engine (bd-gthycd33):
+///
+/// ```markdown
+/// ::: {.cell}
+///
+/// ```{.python .cell-code}
+/// 2 + 3
+/// ```
+///
+/// ::: {.cell-output .cell-output-display}
+///
+/// ```
+/// 5
+/// ```
+///
+/// :::
+/// :::
+/// ```
+///
+/// The `Div.cell` wrapper is a cross-engine contract: the preview
+/// capture splice (`crate::engine::capture_splice`) replaces a live
+/// engine cell with exactly one wrapper Div, and the Bootstrap CSS
+/// targets `.cell .cell-output-* pre code`. A cell with no outputs
+/// still gets the wrapper (knitr wraps output-less chunks too).
+fn render_cell(block: &CodeBlock, result: &KernelExecuteResult) -> String {
+    format!(
+        "::: {{.cell}}\n\n{}\n{}\n:::\n",
+        echoed_source_fence(block),
+        format_outputs(result)
+    )
+}
+
 /// Reconstruct the echoed source fence for an executed cell.
 ///
 /// The parser captures code cells with a `{lang}` fence (the curly
 /// braces mean "the engine should execute this"). After the engine
-/// runs, we emit the source back into the output markdown so readers
-/// see it — but at that point the braces are misleading: the block is
-/// no longer scheduled for execution, and downstream stages treat
-/// `{lang}` as an opaque class (no highlighting, no language awareness).
-///
-/// Strip the braces; keep just the language and the code. Per-cell
-/// directives like `#| echo: false` travel inside `block.code` and are
-/// handled by whatever stage consumes them — this function only
-/// rewrites the fence.
+/// runs, we emit the source back as an *attribute-form* fence —
+/// `{.python .cell-code}` — so the block is no longer scheduled for
+/// execution, the highlight stage resolves the language from the
+/// first class, and downstream consumers can target `.cell-code`
+/// (same classes knitr's hooks emit). Per-cell directives like
+/// `#| echo: false` travel inside `block.code` and are handled by
+/// whatever stage consumes them — this function only rewrites the
+/// fence.
 fn echoed_source_fence(block: &CodeBlock) -> String {
     let code = block.code.trim_end_matches('\n');
-    format!("```{}\n{}\n```", block.language, code)
+    let ticks = ticks_for_code(code);
+    format!(
+        "{ticks}{{.{} .cell-code}}\n{}\n{ticks}",
+        block.language, code
+    )
+}
+
+/// Wrap already-trimmed output text in a `::: {<classes>}` div around
+/// a plain fence, with the fence sized to the content.
+fn fenced_output_div(classes: &str, text: &str) -> String {
+    let ticks = ticks_for_code(text);
+    format!("\n::: {{{classes}}}\n\n{ticks}\n{text}\n{ticks}\n\n:::\n")
 }
 
 /// Format kernel outputs as markdown.
+///
+/// Every output becomes a `::: {.cell-output .cell-output-<type>}`
+/// div wrapping a plain fence — the Q1/knitr class scheme
+/// (`outputTypeCssClass` in quarto-cli's `jupyter.ts`): streams are
+/// `-stdout` / `-stderr`, `execute_result` / `display_data` are
+/// `-display`, errors are `-error`.
 fn format_outputs(result: &KernelExecuteResult) -> String {
     let mut output = String::new();
 
     for cell_output in &result.outputs {
         match cell_output {
             CellOutput::Stream { name, text } => {
-                // Stream output as a code block with output class
-                output.push_str(&format!(
-                    "\n```{{.cell-output-{}}}\n{}\n```\n",
-                    name,
-                    text.trim_end()
+                output.push_str(&fenced_output_div(
+                    &format!(".cell-output .cell-output-{}", name),
+                    text.trim_end(),
                 ));
             }
             CellOutput::ExecuteResult { data, .. } | CellOutput::DisplayData { data, .. } => {
                 // Rich output - pick best format
                 if let Some(text) = data.get("text/plain") {
-                    if let Some(s) = text.as_str() {
-                        output.push_str(&format!("\n```{{.cell-output}}\n{}\n```\n", s.trim_end()));
-                    }
+                    let s = extract_text_content(text);
+                    output.push_str(&fenced_output_div(
+                        ".cell-output .cell-output-display",
+                        s.trim_end(),
+                    ));
                 } else if let Some(html) = data.get("text/html") {
-                    if let Some(s) = html.as_str() {
-                        output.push_str(&format!(
-                            "\n::: {{.cell-output-display}}\n```{{=html}}\n{}\n```\n:::\n",
-                            s
-                        ));
-                    }
+                    let s = extract_text_content(html);
+                    let ticks = ticks_for_code(&s);
+                    output.push_str(&format!(
+                        "\n::: {{.cell-output .cell-output-display}}\n\n{ticks}{{=html}}\n{}\n{ticks}\n\n:::\n",
+                        s
+                    ));
                 } else if data.contains_key("image/png") || data.contains_key("image/svg+xml") {
-                    // TODO: Save image to file and reference it
-                    output.push_str("\n::: {.cell-output-display}\n[Image output]\n:::\n");
+                    // TODO(bd-5t6wvu7m): save the image to a supporting
+                    // file and emit a real figure instead of a placeholder.
+                    output.push_str(
+                        "\n::: {.cell-output .cell-output-display}\n\n[Image output]\n\n:::\n",
+                    );
                 }
             }
             CellOutput::Error {
@@ -259,15 +324,9 @@ fn format_outputs(result: &KernelExecuteResult) -> String {
                 evalue,
                 traceback,
             } => {
-                // Error output
-                let mut error_text = format!("{}: {}\n", ename, evalue);
-                for line in traceback {
-                    error_text.push_str(&strip_ansi_codes(line));
-                    error_text.push('\n');
-                }
-                output.push_str(&format!(
-                    "\n```{{.cell-output-error}}\n{}\n```\n",
-                    error_text.trim_end()
+                output.push_str(&fenced_output_div(
+                    ".cell-output .cell-output-error",
+                    format_error_text(ename, evalue, traceback).trim_end(),
                 ));
             }
         }
@@ -282,19 +341,67 @@ fn format_outputs(result: &KernelExecuteResult) -> String {
     {
         // Only add if not already in outputs
         if result.outputs.is_empty() {
-            let mut error_text = format!("{}: {}\n", ename, evalue);
-            for line in traceback {
-                error_text.push_str(&strip_ansi_codes(line));
-                error_text.push('\n');
-            }
-            output.push_str(&format!(
-                "\n```{{.cell-output-error}}\n{}\n```\n",
-                error_text.trim_end()
+            output.push_str(&fenced_output_div(
+                ".cell-output .cell-output-error",
+                format_error_text(ename, evalue, traceback).trim_end(),
             ));
         }
     }
 
     output
+}
+
+/// `"<ename>: <evalue>"` plus the ANSI-stripped traceback lines.
+fn format_error_text(ename: &str, evalue: &str, traceback: &[String]) -> String {
+    let mut error_text = format!("{}: {}\n", ename, evalue);
+    for line in traceback {
+        error_text.push_str(&strip_ansi_codes(line));
+        error_text.push('\n');
+    }
+    error_text
+}
+
+/// Extract text content from a MIME-bundle JSON value. Jupyter can
+/// send text as either a single string or an array of line strings
+/// (the nbformat multiline convention).
+fn extract_text_content(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect::<Vec<_>>()
+            .join(""),
+        _ => String::new(),
+    }
+}
+
+/// Strip ANSI escape codes from a string (kernel tracebacks arrive
+/// colorized).
+fn strip_ansi_codes(s: &str) -> String {
+    // Simple pattern to remove ANSI escape sequences
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // Start of escape sequence
+            if chars.peek() == Some(&'[') {
+                chars.next(); // consume '['
+                // Skip until we hit a letter (end of sequence)
+                while let Some(&next) = chars.peek() {
+                    chars.next();
+                    if next.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]
@@ -406,54 +513,230 @@ print("hello")
         assert!(!is_executable_language("markdown"));
     }
 
-    #[test]
-    fn test_echoed_source_fence_strips_braces() {
-        // `{python}` fence means "execute"; after execution the echoed
-        // source must come back as a plain `python` fence so the
-        // highlight stage can pick it up.
-        let block = CodeBlock {
+    // ── Emission shape (bd-gthycd33): Quarto-canonical cells ──────
+    //
+    // The post-engine markdown must match the shape knitr's vendored
+    // Q1 hooks and Q1's own jupyter engine emit: every executed cell
+    // wrapped in `::: {.cell}`, echoed source as a
+    // `{.<lang> .cell-code}` fence, outputs as
+    // `::: {.cell-output .cell-output-*}` divs around plain fences.
+    // The preview capture splice keys on the `Div.cell` wrapper and
+    // the Bootstrap CSS keys on `.cell .cell-output-* pre code`;
+    // wrapper-less emission breaks both. Exact-string assertions on
+    // purpose — this shape is a cross-engine contract (see the
+    // engine_output_parity integration suite).
+
+    fn py_block(code: &str) -> CodeBlock {
+        CodeBlock {
             start: 0,
             end: 0,
             language: "python".to_string(),
-            code: "print(\"hi\")\n".to_string(),
-        };
-        assert_eq!(echoed_source_fence(&block), "```python\nprint(\"hi\")\n```");
+            code: code.to_string(),
+        }
     }
 
-    #[test]
-    fn test_format_outputs_stream() {
-        let result = KernelExecuteResult {
+    fn ok_result(outputs: Vec<CellOutput>) -> KernelExecuteResult {
+        KernelExecuteResult {
             status: ExecuteStatus::Ok,
-            outputs: vec![CellOutput::Stream {
-                name: "stdout".to_string(),
-                text: "Hello, World!\n".to_string(),
-            }],
+            outputs,
             execution_count: Some(1),
-        };
+        }
+    }
 
-        let output = format_outputs(&result);
-        assert!(output.contains("cell-output-stdout"));
-        assert!(output.contains("Hello, World!"));
+    fn text_plain(s: &str) -> std::collections::HashMap<String, serde_json::Value> {
+        let mut data = std::collections::HashMap::new();
+        data.insert("text/plain".to_string(), serde_json::json!(s));
+        data
     }
 
     #[test]
-    fn test_format_outputs_error() {
-        let result = KernelExecuteResult {
-            status: ExecuteStatus::Error {
-                ename: "NameError".to_string(),
-                evalue: "name 'x' is not defined".to_string(),
-                traceback: vec!["Traceback...".to_string()],
-            },
-            outputs: vec![CellOutput::Error {
-                ename: "NameError".to_string(),
-                evalue: "name 'x' is not defined".to_string(),
-                traceback: vec!["Traceback...".to_string()],
-            }],
-            execution_count: Some(1),
-        };
+    fn test_echoed_source_fence_emits_cell_code_class() {
+        // `{python}` fence means "execute"; after execution the echoed
+        // source comes back as an attribute-form fence with the
+        // language class first (the highlight stage resolves the
+        // language from the first class) plus `.cell-code`.
+        let block = py_block("print(\"hi\")\n");
+        assert_eq!(
+            echoed_source_fence(&block),
+            "```{.python .cell-code}\nprint(\"hi\")\n```"
+        );
+    }
 
-        let output = format_outputs(&result);
-        assert!(output.contains("cell-output-error"));
-        assert!(output.contains("NameError"));
+    #[test]
+    fn test_echoed_source_fence_grows_ticks_for_backtick_content() {
+        // Q1's ticksForCode rule: max(3, longest leading backtick
+        // run + 1). Code containing a ``` line must get a 4-tick
+        // fence or the emitted markdown is corrupt.
+        let block = py_block("s = \"\"\n```\n\"\"\n");
+        let fence = echoed_source_fence(&block);
+        assert!(
+            fence.starts_with("````{.python .cell-code}\n"),
+            "expected a 4-tick fence, got:\n{fence}"
+        );
+        assert!(fence.ends_with("\n````"), "got:\n{fence}");
+    }
+
+    #[test]
+    fn test_format_outputs_stream_stdout_is_cell_output_div() {
+        let result = ok_result(vec![CellOutput::Stream {
+            name: "stdout".to_string(),
+            text: "Hello, World!\n".to_string(),
+        }]);
+        assert_eq!(
+            format_outputs(&result),
+            "\n::: {.cell-output .cell-output-stdout}\n\n```\nHello, World!\n```\n\n:::\n"
+        );
+    }
+
+    #[test]
+    fn test_format_outputs_stream_stderr_is_cell_output_div() {
+        let result = ok_result(vec![CellOutput::Stream {
+            name: "stderr".to_string(),
+            text: "warning\n".to_string(),
+        }]);
+        assert_eq!(
+            format_outputs(&result),
+            "\n::: {.cell-output .cell-output-stderr}\n\n```\nwarning\n```\n\n:::\n"
+        );
+    }
+
+    #[test]
+    fn test_format_outputs_execute_result_is_display_div() {
+        // Q1: execute_result / display_data are `.cell-output-display`
+        // (not `-stdout` — they aren't streams).
+        let result = ok_result(vec![CellOutput::ExecuteResult {
+            execution_count: 1,
+            data: text_plain("5"),
+            metadata: serde_json::json!({}),
+        }]);
+        assert_eq!(
+            format_outputs(&result),
+            "\n::: {.cell-output .cell-output-display}\n\n```\n5\n```\n\n:::\n"
+        );
+    }
+
+    #[test]
+    fn test_format_outputs_html_is_display_div_with_raw_html() {
+        let mut data = std::collections::HashMap::new();
+        data.insert("text/html".to_string(), serde_json::json!("<b>5</b>"));
+        let result = ok_result(vec![CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }]);
+        assert_eq!(
+            format_outputs(&result),
+            "\n::: {.cell-output .cell-output-display}\n\n```{=html}\n<b>5</b>\n```\n\n:::\n"
+        );
+    }
+
+    #[test]
+    fn test_format_outputs_error_is_error_div() {
+        let result = ok_result(vec![CellOutput::Error {
+            ename: "NameError".to_string(),
+            evalue: "name 'x' is not defined".to_string(),
+            traceback: vec!["Traceback...".to_string()],
+        }]);
+        assert_eq!(
+            format_outputs(&result),
+            "\n::: {.cell-output .cell-output-error}\n\n```\nNameError: name 'x' is not defined\nTraceback...\n```\n\n:::\n"
+        );
+    }
+
+    #[test]
+    fn test_format_outputs_grows_ticks_for_backtick_output() {
+        // An output whose text contains a ``` line must get a wider
+        // fence, or the emitted markdown is corrupt.
+        let result = ok_result(vec![CellOutput::Stream {
+            name: "stdout".to_string(),
+            text: "```\n".to_string(),
+        }]);
+        assert_eq!(
+            format_outputs(&result),
+            "\n::: {.cell-output .cell-output-stdout}\n\n````\n```\n````\n\n:::\n"
+        );
+    }
+
+    #[test]
+    fn test_render_cell_wraps_source_and_outputs_in_cell_div() {
+        let block = py_block("2 + 3\n");
+        let result = ok_result(vec![CellOutput::ExecuteResult {
+            execution_count: 1,
+            data: text_plain("5"),
+            metadata: serde_json::json!({}),
+        }]);
+        assert_eq!(
+            render_cell(&block, &result),
+            "::: {.cell}\n\n```{.python .cell-code}\n2 + 3\n```\n\n::: {.cell-output .cell-output-display}\n\n```\n5\n```\n\n:::\n\n:::\n"
+        );
+    }
+
+    #[test]
+    fn test_format_outputs_image_placeholder_is_display_div() {
+        // Until bd-5t6wvu7m lands, image outputs render a placeholder —
+        // but it must already sit in the canonical display div.
+        let mut data = std::collections::HashMap::new();
+        data.insert("image/png".to_string(), serde_json::json!("base64…"));
+        let result = ok_result(vec![CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }]);
+        assert_eq!(
+            format_outputs(&result),
+            "\n::: {.cell-output .cell-output-display}\n\n[Image output]\n\n:::\n"
+        );
+    }
+
+    #[test]
+    fn test_strip_ansi_codes() {
+        let input = "\x1b[31mRed\x1b[0m Normal";
+        assert_eq!(strip_ansi_codes(input), "Red Normal");
+
+        let input = "No escape codes";
+        assert_eq!(strip_ansi_codes(input), "No escape codes");
+    }
+
+    #[test]
+    fn test_extract_text_content_string_and_array() {
+        assert_eq!(
+            extract_text_content(&serde_json::json!("Hello, World!")),
+            "Hello, World!"
+        );
+        // nbformat multiline convention: array of line strings.
+        assert_eq!(
+            extract_text_content(&serde_json::json!(["Hello, ", "World!"])),
+            "Hello, World!"
+        );
+        assert_eq!(extract_text_content(&serde_json::json!(42)), "");
+    }
+
+    #[test]
+    fn test_format_outputs_multiline_array_text_plain() {
+        // A kernel sending text/plain as an array of lines must not
+        // be silently dropped (the old `as_str()` path did that).
+        let mut data = std::collections::HashMap::new();
+        data.insert("text/plain".to_string(), serde_json::json!(["4", "2"]));
+        let result = ok_result(vec![CellOutput::ExecuteResult {
+            execution_count: 1,
+            data,
+            metadata: serde_json::json!({}),
+        }]);
+        assert_eq!(
+            format_outputs(&result),
+            "\n::: {.cell-output .cell-output-display}\n\n```\n42\n```\n\n:::\n"
+        );
+    }
+
+    #[test]
+    fn test_render_cell_without_output_still_wraps() {
+        // A source-only cell (assignment, `output: false`, …) still
+        // gets the `.cell` wrapper — the splice must be able to
+        // replace the live cell, and knitr wraps output-less chunks
+        // too.
+        let block = py_block("x = 1\n");
+        let result = ok_result(vec![]);
+        assert_eq!(
+            render_cell(&block, &result),
+            "::: {.cell}\n\n```{.python .cell-code}\nx = 1\n```\n\n:::\n"
+        );
     }
 }
