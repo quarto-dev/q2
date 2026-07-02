@@ -41,18 +41,14 @@ mod daemon;
 mod error;
 mod execute;
 mod kernelspec;
-mod output;
 mod session;
 mod text_execute;
-mod transform;
 
 pub use daemon::{JupyterDaemon, daemon};
 pub use error::{JupyterError, Result};
 pub use execute::{CellOutput, ExecuteResult, ExecuteStatus, MimeBundle};
 pub use kernelspec::{ResolvedKernel, find_kernelspec, is_jupyter_language, list_kernelspecs};
-pub use output::{OutputOptions, outputs_to_blocks};
 pub use session::{KernelInfo, KernelSession, SessionKey};
-pub use transform::JupyterTransform;
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
