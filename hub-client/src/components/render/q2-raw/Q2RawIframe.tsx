@@ -14,9 +14,40 @@ export function Q2RawIframe({ astJson }: Q2RawIframeProps) {
 
   // Handle messages from the iframe
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
+    const handleMessage = async (event: MessageEvent) => {
+      console.log('message received!!', event.data)
       if (event.data.type === 'IFRAME_READY') {
-        setIframeReady(true);
+        setIframeReady(true)
+      } else if (event.data.type === 'url' && event.data.path) {
+        // Read from VFS and respond
+        const wasm = await import('wasm-quarto-hub-client');
+
+        // Determine if this is a binary file based on extension
+        const isBinary = /\.(png|jpg|jpeg|gif|pdf|ico|webp|ttf|woff|woff2|zip|wasm)$/i.test(event.data.path);
+
+        const resultJson = isBinary
+          ? wasm.vfs_read_binary_file(event.data.path)
+          : wasm.vfs_read_file(event.data.path);
+
+        const result = JSON.parse(resultJson) as {
+          success: boolean;
+          content?: string;
+          error?: string;
+        };
+
+        if (iframeRef.current?.contentWindow) {
+          iframeRef.current.contentWindow.postMessage(
+            {
+              type: 'url_response',
+              path: event.data.path,
+              success: result.success,
+              content: result.content,
+              error: result.error,
+              isBinary,
+            },
+            '*'
+          );
+        }
       }
     };
 
@@ -35,6 +66,7 @@ export function Q2RawIframe({ astJson }: Q2RawIframeProps) {
       },
       '*'
     );
+
   }, [iframeReady, astJson]);
 
   return (
@@ -42,7 +74,7 @@ export function Q2RawIframe({ astJson }: Q2RawIframeProps) {
       ref={iframeRef}
       src="q2-raw.html"
       title="q2-raw Renderer"
-      sandbox="allow-scripts"
+      sandbox="allow-scripts allow-same-origin"
       style={{
         width: '99%',
         height: '100%',
