@@ -106,16 +106,17 @@ impl PipelineStage for EngineClaimsFileStage {
         // (the common case for virtual / in-memory documents).
         let is_qmd_or_md = ext.is_empty() || ext == "qmd" || ext == "md" || ext == "markdown";
 
-        // Engines declare and match extensions in *dotted* form (".echo"),
-        // matching `_extension.yml`'s `file-extensions:` / `claims-files:`, the
-        // engine's `claimsFile` JS contract (`ext === ".echo"`), and TsEngine's
-        // own unit tests. `Path::extension()` strips the leading dot, so re-add
-        // it for the engine-facing extension string. A file with no extension
-        // stays empty (never dotted).
+        // Extensions are undotted, lowercase everywhere on the Rust side
+        // (canonical form, established at parse time in `extension/read.rs`'s
+        // `normalize_ext`). `ext` (from `path.extension()`) is already in this
+        // form, so the candidate the stage asks engines about is passed through
+        // as-is. The dot is wire-only: `engine::ts_engine::to_wire_ext` re-adds
+        // it exactly at the Rust -> TS seam (the `ClaimsFile` wire message), not
+        // here. A file with no extension stays empty (never dotted).
         let ext_for_engine = if ext.is_empty() {
             String::new()
         } else {
-            format!(".{ext}")
+            ext.clone()
         };
 
         let file_str = path.to_string_lossy();
@@ -454,7 +455,7 @@ mod tests {
     /// claimed_engine_name) and this test goes RED.
     #[tokio::test]
     async fn test_claimed_file_is_converted() {
-        let mock = MockEngine::new("echo-engine", &[".echo"]);
+        let mock = MockEngine::new("echo-engine", &["echo"]);
         let mut reg = EngineRegistry::empty();
         reg.register(Arc::clone(&mock) as Arc<dyn ExecutionEngine>);
         reg.contribution_order.push("echo-engine".to_string());
@@ -503,7 +504,7 @@ mod tests {
     #[tokio::test]
     async fn test_qmd_passthrough() {
         // Registry with an engine that claims `.echo` only — NOT `.qmd`.
-        let mock = MockEngine::new("echo-engine", &[".echo"]);
+        let mock = MockEngine::new("echo-engine", &["echo"]);
         let mut reg = EngineRegistry::empty();
         reg.register(Arc::clone(&mock) as Arc<dyn ExecutionEngine>);
         reg.contribution_order.push("echo-engine".to_string());
@@ -540,7 +541,7 @@ mod tests {
     #[tokio::test]
     async fn test_p2_11_unclaimed_non_qmd_errors() {
         // Registry with an engine that claims `.echo` — NOT `.foo`.
-        let mock = MockEngine::new("echo-engine", &[".echo"]);
+        let mock = MockEngine::new("echo-engine", &["echo"]);
         let mut reg = EngineRegistry::empty();
         reg.register(Arc::clone(&mock) as Arc<dyn ExecutionEngine>);
         reg.contribution_order.push("echo-engine".to_string());
@@ -581,7 +582,7 @@ mod tests {
     /// markdown_for_file` so every call is counted, and this test goes RED.
     #[tokio::test]
     async fn test_p2_17_one_conversion_per_render() {
-        let mock = MockEngine::new("echo-engine", &[".echo"]);
+        let mock = MockEngine::new("echo-engine", &["echo"]);
         let mock_arc = Arc::clone(&mock) as Arc<dyn ExecutionEngine>;
 
         let mut reg = EngineRegistry::empty();
@@ -657,7 +658,7 @@ mod tests {
     async fn test_converted_source_parses_ok() {
         use crate::stage::stages::ParseDocumentStage;
 
-        let mock = MockEngine::new("echo-engine", &[".echo"]);
+        let mock = MockEngine::new("echo-engine", &["echo"]);
         let mut reg = EngineRegistry::empty();
         reg.register(Arc::clone(&mock) as Arc<dyn ExecutionEngine>);
         reg.contribution_order.push("echo-engine".to_string());
@@ -700,5 +701,56 @@ mod tests {
             !doc_ast.ast.blocks.is_empty(),
             "parsed AST must be non-empty"
         );
+    }
+
+    /// T10 (1c.2 Task 1, change C): the stage must pass the candidate
+    /// extension to `claims_file` **undotted**, mirroring the parse-time
+    /// normalized (undotted, lowercase) storage of a static `FileClaim {
+    /// extension: "echo" }` claims-files declaration. A file named `X.ECHO`
+    /// (mixed-case extension, no leading dot from `Path::extension()`) must
+    /// still be claimed by an engine whose claimed set is undotted-lowercase
+    /// "echo".
+    ///
+    /// Named revert: put the `:118` re-dot back (`format!(".{ext}")`) while
+    /// the engine's claimed set stays undotted ("echo") — the stage would ask
+    /// `claims_file(file, ".echo")`, which never equals the stored "echo" →
+    /// the file goes unclaimed → `.echo`/`.ECHO` isn't a QMD/MD extension →
+    /// the stage returns the P2-11 loud error instead of converting → this
+    /// test's `.unwrap()` panics → RED.
+    #[tokio::test]
+    async fn test_t10_claims_file_undotted_lowercase_candidate() {
+        // The engine's claimed set stores an UNDOTTED extension, mirroring a
+        // `FileClaim { extension: "echo" }` claims-files declaration after
+        // parse-time normalization (change B).
+        let mock = MockEngine::new("echo-engine", &["echo"]);
+        let mut reg = EngineRegistry::empty();
+        reg.register(Arc::clone(&mock) as Arc<dyn ExecutionEngine>);
+        reg.contribution_order.push("echo-engine".to_string());
+
+        let mut ctx = make_ctx_with_registry(reg);
+        // Mixed-case extension: the stage must lowercase it (already did,
+        // pre-change) AND pass it undotted (this task's change).
+        let doc = DocumentInfo::from_path("/project/X.ECHO");
+        ctx.document = doc;
+
+        let source = LoadedSource::new(
+            PathBuf::from("/project/X.ECHO"),
+            b"some echo content".to_vec(),
+        );
+        let input = PipelineData::LoadedSource(source);
+        let stage = EngineClaimsFileStage::new();
+
+        let output = stage.run(input, &mut ctx).await.unwrap();
+
+        let PipelineData::LoadedSource(result) = output else {
+            panic!("expected LoadedSource output");
+        };
+
+        assert_eq!(
+            result.source_type,
+            SourceType::Qmd,
+            "X.ECHO must be claimed and converted by the undotted-lowercase-'echo' engine"
+        );
+        assert_eq!(ctx.claimed_engine_name, Some("echo-engine".to_string()));
     }
 }

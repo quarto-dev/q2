@@ -1,6 +1,13 @@
 # Plan 8 — HANDLED_LANGUAGES → claiming engines: absorb #241 (mermaid) + graphviz TS extension
 
 **Status:** plan — ready to implement (two workstreams). **Created:** 2026-07-02.
+
+> **Plan 10 opportunity (noted 2026-07-04, bd-4qflzhwh):** once Plan 10 lands,
+> any TS engine implementing `checkInstallation` automatically becomes a
+> `q2 check <name>` target. Part B's graphviz extension should implement a
+> *real* `checkInstallation` (probe the `dot` binary + version) — it would be
+> the first non-stub TS-engine check and a strong e2e validation of the Plan 10
+> wire path. See `claude-notes/research/2026-07-03-plan10-check-installation-research.md`.
 **Sequence:** post-Plan-1c (needs static-claim resolution + the TS-engine
 extension stack for Part B). Part A (mermaid) is independent of the TS-engine
 subprocess and can land first; Part B (graphviz) needs Plans 1a–c + 1b + 2A.

@@ -42,7 +42,8 @@ var echoEngine = {
       canFreeze: false,
       async markdownForFile(file) {
         const text = Deno.readTextFileSync(file);
-        const wrapped = "```{echo}\n" + text + "\n```\n\n```{python}\nprint('not run by echo')\n```\n";
+        const basename = file.split(/[\\/]/).pop() ?? file;
+        const wrapped = "# Echoed: " + basename + "\n\n```{echo}\n" + text + "\n```\n\n```{python}\nprint('not run by echo')\n```\n";
         return _quarto.mappedString.fromString(wrapped, file);
       },
       async target(file, _quiet, markdown) {
@@ -68,6 +69,10 @@ var echoEngine = {
       },
       async execute(opts) {
         const input = opts.target.markdown.value;
+        if (input.includes("QUARTO_ECHO_CRASH")) {
+          console.error("ECHO_CRASH_MARKER: intentional crash for T13 crash-path e2e");
+          Deno.exit(1);
+        }
         const executed = input.replace(/```\{echo\}[\s\S]*?```/g, "::: {.cell}\n::: {.cell-output .cell-output-stdout}\n**ECHO_EXECUTED**\n:::\n:::");
         return {
           markdown: executed + contextMarker() + formatMarker(opts),

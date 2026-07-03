@@ -143,22 +143,29 @@ answer:
 |---|---|---|---|
 | `name()` / registration | `name:` | declared | omitted (lazy alias map) |
 | `valid_extensions()` | `file-extensions:` | always (it *is* the list) | — |
-| `claims_file()` | `claims-files:` (unconditional) | extension-only logic | **content inspection** (e.g. Julia `# %%`) — *the one genuine must-load case* |
+| `claims_file()` | `claims-files:` (extension + optional `content-pattern`) | extension-only claims **and** regex-expressible content sniffs (Plan 7a) | only a *non*-regex-expressible sniff — **empty across every known Q1 engine** |
 | `claims_language()` | `claims:` (kind/priority/`whenClass`) | language **and** `first_class` logic (both finite/known) | only genuine runtime/global-state logic |
 
-> **Rename decided 2026-07-02 (Gordon), lands with plan 1c.2 P4:**
-> `claims-files:` → **`claims-extensions:`** (Rust field `claims_extensions`).
-> The value semantics are and always were an **extension set** — the match is
-> `ext ∈ list` (`ts_engine.rs`), never a filename/glob, and a survey of every
-> Q1 engine (knitr, jupyter, markdown, julia, marimo, test fixtures) found no
-> filename-literal or glob file-claim anywhere: every Q1 `claimsFile` is an
-> extension test, an extension-gated content sniff, or `false`. A
-> filename-claim surface, if ever wanted, will be a new field. Normalization
-> decided with the rename: YAML accepts dotted or undotted; parse stores
-> canonical **undotted lowercase** for both `file-extensions` and
-> `claims-extensions`; the **JS/wire contract stays dotted** (Q1 `extname()`
-> convention) — re-dot at the two Rust→TS seams (`ToEngine::ClaimsFile`
-> construction and the synthetic-file load validation).
+> **Restructure decided 2026-07-07 (Gordon) — supersedes the 2026-07-02 rename.**
+> The earlier plan to rename `claims-files:` → `claims-extensions:` is
+> **withdrawn.** A full census of every Q1 engine `claimsFile` (knitr, jupyter,
+> markdown, julia) showed each is `extension-gate → read-file → **one regex**` —
+> the knitr `spin`→Rscript work is the *conversion*, run **after** the claim, not
+> part of it. So `claims-files` is a genuine **file-claim** surface (extension +
+> an optional content pattern), *not* a bare extension set, and the name is
+> correct. A content sniff is **data** (a regex), not a must-load operation, so it
+> is **statically declarable** — overturning the old "one genuine must-load case."
+> **Restructure:** `claims-files` entries become typed `{extension,
+> content-pattern?}` (bare-string shorthand `- .echo` still accepted). The
+> **extension-only** form lands in **plan 1c.2 P4**; the **`content-pattern`**
+> field + native Pass-1/claim-stage evaluation lands in
+> **[Plan 7a](../plans/2026-07-07-plan7a-static-content-pattern-claims.md)**.
+> Normalization: YAML accepts dotted or undotted; parse stores canonical
+> **undotted lowercase** for `file-extensions` and each `claims-files` entry's
+> `extension`; the **JS/wire contract stays dotted** (Q1 `extname()`) — re-dot at
+> the two Rust→TS seams (`ToEngine::ClaimsFile` construction and the
+> synthetic-file load validation). `content-pattern` is evaluated **natively in
+> Rust** and never crosses the wire.
 
 **`first_class` is statically expressible — it is *not* a must-load case.**
 `claims_language(language, first_class)` is a pure function of its two
@@ -167,11 +174,16 @@ applies **only** when the cell's first class equals `<class>` (absent
 `whenClass` = any/no first class). A marimo engine therefore declares
 `python: { whenClass: marimo, kind: primary }` and is **fully static** —
 `{python .marimo}` → `Primary`, plain `{python}` / `{python .other}` → no
-claim. The **only** dynamic-method power that static resolution genuinely
-cannot reach is **content-inspecting `claims_file`** (Julia's `isPercentScript`
-reads the file's bytes for `# %%`) — that engine loads to decide, using
-`file-extensions` as its pre-filter. Everything else — language, `first_class`,
-kind/priority, fallback — is statically declarable.
+claim. **Content-inspecting `claims_file` is *also* statically declarable**
+(corrected 2026-07-07): Julia's `isPercentScript` reading the file's bytes for
+`# %%` is a **pure regex over those bytes**, so it is expressed as a
+`content-pattern` on a `claims-files` entry and evaluated natively — no load
+(Plan 7a). `file-extensions` remains the can-handle pre-filter; the pattern is
+the definitive claim. The genuine dynamic residue — a sniff no regex can
+express — is **empty across every known Q1 engine**; the dynamic `claims_file`
+method survives only as a fallback for that hypothetical case. Everything —
+language, `first_class`, kind/priority, fallback, **and content sniffs** — is
+statically declarable.
 
 **Vec-per-language claims (4c0).** A `claims:` entry's value is a **list** of
 claim objects — `Vec<StaticLanguageClaim>` in Rust, a YAML sequence or a
@@ -308,6 +320,26 @@ handled_languages(k) = HANDLED_LANGUAGES ∪ { lang : ownership[lang] != k }
 
 threaded into execution via a new `ExecutionContext` field (and
 `TsExecuteOptions.handled_languages` for TS engines).
+
+**Positive projection (`owned_languages`, Plan 4d).** The same ownership map has
+a symmetric projection — the languages an engine *does* own:
+
+```
+owned_languages(k) = { lang : ownership[lang] == k }
+```
+
+carried beside the leave-alone set on the same `ExecutionContext` field pair (and
+`TsExecuteOptions.owned_languages` for TS engines). It is **informational, not
+enforcement**: `handled_languages` stays the execute-time gate (cede / re-emit),
+while `owned_languages` makes the resolution decision legible so an engine can
+select the cells it was chosen for directly (`owned_languages` membership) rather
+than inferring them as the complement of the leave-alone set — the latter is
+ambiguous because "not handled" conflates *owned by me* with *owned by nobody*.
+The two projections are disjoint over present languages; a language owned by
+**nobody** — present-but-unclaimed, or injected at execute time (§6.1) — is in
+neither set, which is exactly how such a cell reads as "not mine, pass through
+unexecuted." `owned_languages` does **not** re-resolve or execute injected
+languages; §6.1's ratified pass-through is unchanged.
 
 - **knitr** already enforces: `execute.R` does `knit_engines$set(lang = <re-emit
   verbatim>)` for each `handled_languages` entry, which **replaces** knitr's
@@ -482,7 +514,8 @@ pub struct EngineResolution {
     pub ownership: HashMap<String, String>,    // language -> owning engine name
 }
 impl EngineResolution {
-    pub fn handled_languages_for(&self, engine: &str) -> Vec<String>;  // §5
+    pub fn handled_languages_for(&self, engine: &str) -> Vec<String>;  // §5 (leave-alone)
+    pub fn owned_languages_for(&self, engine: &str) -> Vec<String>;    // §5 (positive; Plan 4d)
 }
 pub fn resolve_engines(
     meta: &ConfigValue, ast: &Pandoc, registry: &EngineRegistry, claimed: Option<&str>,
@@ -626,6 +659,10 @@ case-4. **Deliberate divergence from Q1's eager
   `{python}`) — relevant only if per-cell routing is ever adopted.
 - `python.reticulate: false` honoring (now that ceding python is via
   `handled_languages`).
+- `owned_languages` parity (Plan 4d): the positive projection carried on
+  `ExecutionContext`/`TsExecuteOptions.owned_languages` equals
+  `{ lang : ownership[lang] == k }` and is disjoint from `handled_languages`
+  over present languages (informational, not an enforcement change).
 - Conversion-provenance: **faithful** original-file mapping is **deferred** (no
   current consumer) — plan1a-engine scopes `markdown_for_file` to "C′": the
   converted text is registered as an ephemeral intermediate file under an

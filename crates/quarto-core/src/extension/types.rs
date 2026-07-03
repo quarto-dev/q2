@@ -118,11 +118,19 @@ pub enum EngineContribution {
         file_extensions: Option<Vec<String>>,
         /// Unconditional static `claims_file` — extensions claimed WITHOUT content
         /// inspection (§3.3 `claims-files:`). `None` = fall back to dynamic claims_file.
-        claims_files: Option<Vec<String>>,
+        claims_files: Option<Vec<FileClaim>>,
     },
     /// A bare engine name string — reordering hint that moves a previously
     /// registered engine to higher priority.
     Reorder { name: String },
+}
+
+/// One static file-claim entry. Extension is stored **undotted, lowercase**
+/// (agrees with `Path::extension()`). Plan 7a will grow this with an optional
+/// `content_pattern` field — additively, no second migration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileClaim {
+    pub extension: String,
 }
 
 /// One authoritative static language claim (§3.3). A pure tabulation of
@@ -180,6 +188,21 @@ pub fn static_claim_to_language_claim(
         ClaimKind::Primary => LanguageClaim::Primary(claim.priority.unwrap_or(1)),
         ClaimKind::Interop => LanguageClaim::Interop(claim.priority.unwrap_or(0)),
         ClaimKind::Fallback => LanguageClaim::Fallback(claim.priority.unwrap_or(0)),
+    }
+}
+
+/// The extensions an engine STATICALLY, UNCONDITIONALLY claims via `claims-files`
+/// (the admission axis -- definitively owns, unlike `file-extensions` = can-handle).
+/// Returns each `FileClaim`'s (already-normalized, undotted-lowercase) extension.
+/// Empty for `Reorder` and for `External { claims_files: None }` (fall-back-to-dynamic --
+/// such files are simply not discovered; do NOT invent a discovery-time fallback load).
+pub fn claimed_file_extensions(contribution: &EngineContribution) -> Vec<String> {
+    match contribution {
+        EngineContribution::External { claims_files, .. } => claims_files
+            .as_ref()
+            .map(|claims| claims.iter().map(|c| c.extension.clone()).collect())
+            .unwrap_or_default(),
+        EngineContribution::Reorder { .. } => Vec::new(),
     }
 }
 
@@ -637,5 +660,57 @@ mod tests {
             engine_contribution_missing_fields_warning("my-ext", &contrib).is_none(),
             "Reorder should never produce a warning"
         );
+    }
+
+    // --- T7b: claimed_file_extensions reads the claims-files axis, not
+    // file-extensions (Corollary 3 seam, plan 1c.2 P2). ---
+
+    fn make_external(
+        file_extensions: Option<Vec<&str>>,
+        claims_files: Option<Vec<&str>>,
+    ) -> EngineContribution {
+        EngineContribution::External {
+            path: std::path::PathBuf::from("/path/to/engine.js"),
+            name: Some("myengine".to_string()),
+            claims: Some(HashMap::new()),
+            file_extensions: file_extensions
+                .map(|exts| exts.into_iter().map(|s| s.to_string()).collect()),
+            claims_files: claims_files.map(|exts| {
+                exts.into_iter()
+                    .map(|s| FileClaim {
+                        extension: s.to_string(),
+                    })
+                    .collect()
+            }),
+        }
+    }
+
+    /// (a) file-extensions declared, claims-files undeclared (`None`) →
+    /// empty. `claims_files: None` is fall-back-to-dynamic, not "claim
+    /// nothing via file_extensions" -- the helper must not invent a
+    /// discovery-time fallback onto the other axis.
+    #[test]
+    fn t7b_claimed_file_extensions_none_claims_files_returns_empty() {
+        let contrib = make_external(Some(vec![".jl"]), None);
+        assert_eq!(claimed_file_extensions(&contrib), Vec::<String>::new());
+    }
+
+    /// (b) file-extensions and claims-files DISAGREE (`.py` vs. `echo`) →
+    /// only the claims-files extension is returned. This is the
+    /// wrong-field-read discriminator: a helper that unioned or read
+    /// file_extensions instead would return `["py", "echo"]` or `["py"]`.
+    #[test]
+    fn t7b_claimed_file_extensions_reads_claims_files_not_file_extensions() {
+        let contrib = make_external(Some(vec![".py"]), Some(vec!["echo"]));
+        assert_eq!(claimed_file_extensions(&contrib), vec!["echo".to_string()]);
+    }
+
+    /// (c) Reorder contributes no static file claims → empty.
+    #[test]
+    fn t7b_claimed_file_extensions_reorder_returns_empty() {
+        let contrib = EngineContribution::Reorder {
+            name: "jupyter".to_string(),
+        };
+        assert_eq!(claimed_file_extensions(&contrib), Vec::<String>::new());
     }
 }

@@ -1631,6 +1631,75 @@ mod tests {
         }
     }
 
+    /// Recursively copy `src` into `dst` (dst is created). Used by T8b to
+    /// install the committed echo-engine extension fixture
+    /// (`crates/quarto-core/tests/fixtures/extensions/echo-engine`) into a
+    /// temp project's `_extensions/`.
+    fn copy_dir(src: &Path, dst: &Path) {
+        std::fs::create_dir_all(dst).unwrap();
+        for entry in std::fs::read_dir(src).unwrap() {
+            let entry = entry.unwrap();
+            let from = entry.path();
+            let to = dst.join(entry.file_name());
+            if from.is_dir() {
+                copy_dir(&from, &to);
+            } else {
+                std::fs::copy(&from, &to).unwrap();
+            }
+        }
+    }
+
+    /// T8b (plan 1c.2 P2): `classify_inputs` given an explicit `a.echo` arg
+    /// in a project whose discovery admits `echo` (the echo-engine extension
+    /// is installed under `_extensions/`) must NOT reject the arg as
+    /// `NotInRenderList` (render.rs:318). Binds the explicit-file-arg entry
+    /// that T8's whole-project render (in `echo_engine_e2e.rs`) never
+    /// reaches: `project_files` here comes from
+    /// `ProjectContext::discover(...).files` (:284/:286), so this needs a
+    /// real `discover` over a temp project with the echo extension
+    /// available, same as the other `classify_*` tests in this module.
+    ///
+    /// Shares T8's revert hunk: reverting the discovery-set union (back to
+    /// `RenderableExtensions::fixed()` in `project/mod.rs`'s `discover`) drops
+    /// `a.echo` from `project.files` -> `NotInRenderList` -> RED. Demonstrated
+    /// live during this task: this test was RED against the base-commit
+    /// wiring (before the Corollary-0 split landed) for exactly that reason.
+    #[test]
+    fn classify_echo_file_admitted_by_extension_discovery_not_rejected() {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(&dir.join("_quarto.yml"), "project:\n  type: default\n");
+        write_file(
+            &dir.join("index.qmd"),
+            "---\ntitle: Index\n---\n\nContent.\n",
+        );
+        // Install the committed echo-engine extension fixture so discovery's
+        // FIXED_RENDERABLE union picks up `.echo` via its `claims-files`.
+        let fixture_ext = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../quarto-core/tests/fixtures/extensions/echo-engine");
+        assert!(
+            fixture_ext.exists(),
+            "echo-engine fixture missing: {}",
+            fixture_ext.display()
+        );
+        copy_dir(&fixture_ext, &dir.join("_extensions/echo-engine"));
+        write_file(&dir.join("a.echo"), "Whole-file echo body.\n");
+
+        let runtime = NativeRuntime::new();
+        let target = classify_inputs(&["a.echo".into()], &dir, &runtime)
+            .unwrap_or_else(|e| panic!("a.echo must NOT be rejected as NotInRenderList: {e:?}"));
+        match target {
+            RenderTarget::Subset {
+                project_dir,
+                targets,
+            } => {
+                assert_eq!(project_dir, dir);
+                assert_eq!(targets, vec![dir.join("a.echo")]);
+            }
+            other => panic!("expected Subset admitting a.echo, got {other:?}"),
+        }
+    }
+
     #[test]
     fn classify_underscore_qmd_errors() {
         // `_partial.qmd` is excluded by discovery's underscore rule

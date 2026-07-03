@@ -101,6 +101,18 @@ intent unambiguous and consistent with what landed in plan1a. Changes:
   resolution genuinely can't reach is a **content-inspecting `claims_file`**
   (Julia's `# %%`) — that engine omits `claims-files` and loads. (Corrects the
   earlier "first_class → must-load" framing and design-doc §3.3.)
+
+  > **Correction (2026-07-07), plan not reworked:** the "content-inspecting
+  > `claims_file` is the one dynamic power static resolution can't reach" claim —
+  > repeated a few times in this landed plan — was **overturned.** A full Q1
+  > census showed every engine content sniff is `extension → read-file → one
+  > regex`, i.e. **data, not a must-load operation**, so it *is* statically
+  > declarable as a `content-pattern` on a `claims-files` entry, evaluated
+  > natively (no load). Authoritative now: `engine-resolution.md §3.3`,
+  > `engine-api-surface.md`, and
+  > [Plan 7a](2026-07-07-plan7a-static-content-pattern-claims.md). Read every
+  > "only must-load case is content-inspecting `claims_file`" line in this plan
+  > through that correction.
 - **File-claim → single engine (Q1-faithful), the §8 revert.** A claimed file
   resolves to *exactly* the claiming engine; `resolve_engines` short-circuits
   the tiers. Non-kernel cells **pass through unexecuted** (verified Q1
@@ -1838,7 +1850,7 @@ test-deletion obligation); `read.rs:159` `parse_contributes`).
 - [x] When `name` is undeclared, the registry's `runtime_name → extension_id` alias map is populated lazily on first `LoadEngine`, and YAML `engine: foo` lookups succeed via that map
 - [x] No auto-build during render; missing `.js` bundle fails with actionable error pointing to `q2 build-ts-extension`
 - [x] `q2 build-ts-extension` subcommand exists and produces a working bundle (P2-18 green; --config/--workspace work in-clone; published `@quarto/api` / `@quarto/types` path available for external authors)
-- [ ] `q2 build-ts-extension` works from an installed binary — FOLLOW-UP: installed-binary path hard-errors on shipped-config probe before honoring --config — reorder precedence + exe-relative shipped lookup
+- [x] `q2 build-ts-extension` works from an installed binary **via `--config`** (Plan 1c.2 P1.2, landed 2026-07-02: lazy tier-4 + `include_str!` embed; `--config` short-circuits ahead of the shipped tier). Zero-config tier-4 builds await jsr publication of `@quarto/api`/`@quarto/types` — accepted deferral, not a blocker (Plan 1c.2 § JSR / offline test policy).
 - [x] Extension-contribution ordering matches Q1's tiebreak: `contributes.engines`
   object entries are auto-promoted into `contribution_order` ahead of the built-ins
   (`BUILTIN_ORDER` = knitr → jupyter → markdown). A `Reorder` hint (or any

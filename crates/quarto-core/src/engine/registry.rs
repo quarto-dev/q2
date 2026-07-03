@@ -59,7 +59,7 @@ pub struct EngineRegistry {
     /// User-/extension-specified engine ordering: External engine names (registration order)
     /// followed by Reorder hints, in declared order. Consumed by resolution's auto-promotion
     /// (candidate_engines). Empty for a built-ins-only registry.
-    pub contribution_order: Vec<String>,
+    pub(crate) contribution_order: Vec<String>,
 }
 
 impl EngineRegistry {
@@ -107,6 +107,13 @@ impl EngineRegistry {
         self.engines.insert(engine.name().to_string(), engine);
     }
 
+    /// Read-only view of the engine contribution order (registration/priority
+    /// order). Write access stays in-crate (direct field); a public write API is
+    /// deferred to Plan 4b-C.
+    pub fn contribution_order(&self) -> &[String] {
+        &self.contribution_order
+    }
+
     /// Get an engine by name.
     ///
     /// Returns `None` if no engine with the given name is registered.
@@ -150,14 +157,14 @@ impl EngineRegistry {
     /// Iterate engines in a deterministic order suitable for `claims_file` queries.
     ///
     /// Order: `contribution_order` (TS/extension engines, registration order) →
-    /// built-in names (`markdown`, `knitr`, `jupyter`) → remaining engines
+    /// built-in names (`knitr`, `jupyter`, `markdown`) → remaining engines
     /// alphabetically. Engines absent from the registry are skipped.
     ///
-    /// This mirrors the candidate-engine ordering used by `resolve_engines` so
-    /// `EngineClaimsFileStage` picks the same first-claimer that language
-    /// resolution would.
+    /// This mirrors the candidate-engine ordering used by `resolve_engines`
+    /// (the shared `resolution::BUILTIN_ORDER`) so `EngineClaimsFileStage`
+    /// picks the same first-claimer that language resolution would.
     pub fn engines_in_order(&self) -> Vec<Arc<dyn ExecutionEngine>> {
-        const BUILTIN_ORDER: &[&str] = &["markdown", "knitr", "jupyter"];
+        use super::resolution::BUILTIN_ORDER;
 
         let mut order: Vec<Arc<dyn ExecutionEngine>> = Vec::new();
         let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
@@ -535,5 +542,24 @@ mod tests {
             !host.is_alive(),
             "host must be dead after shutdown_all delegated to TsEngine::shutdown"
         );
+    }
+
+    #[test]
+    fn test_engines_in_order_builtins_match_resolver_order() {
+        // engines_in_order documents that it mirrors resolve_engines'
+        // candidate ordering; pin the built-in segment to the resolver's
+        // constant so the two orderings cannot diverge.
+        let registry = EngineRegistry::new();
+        let ordered: Vec<String> = registry
+            .engines_in_order()
+            .iter()
+            .map(|e| e.name().to_string())
+            .collect();
+        let builtins: Vec<&str> = ordered
+            .iter()
+            .map(|s| s.as_str())
+            .filter(|n| super::super::resolution::BUILTIN_ORDER.contains(n))
+            .collect();
+        assert_eq!(builtins, super::super::resolution::BUILTIN_ORDER);
     }
 }

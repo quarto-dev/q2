@@ -551,11 +551,42 @@ abstraction in Plan 2 is what enables it without rework to `@quarto/api`.
 | [Plan 4: Julia Validation](2026-04-16-julia-validation.md) | 1-2 | Plans 1a, 1b, 1c, 2, 3 | After all others |
 | [**Plan 4b: Shadow-engine feature validation**](2026-07-01-plan4b-shadow-engine-features.md) | 2-3 | Plan 4 | **after Plan 4**; validates tier model + inert surfaces a single-Primary Julia can't reach; implements the `_quarto.yml engines:` splice (Task 9). Excludes Plan 5/6/7/Phase 12/1.6 work. |
 | [**Plan 4c: Marimo engine validation**](2026-07-02-plan4c-marimo-validation.md) | 1-2 | Plans 1a–c, 1b, 2A, 2 (**not** Plan 3); reuses Plan 4's build scaffolding | parallel to 4b; adds `first_class` + shared-language (`{python .marimo}` vs `{python}`) coverage Julia can't reach; canonical non-fully-static engine (Plan 6) |
+| [**Plan 4d: `owned_languages` positive ownership wire field**](2026-07-06-plan4d-owned-languages.md) | 1 | TS-engine wire (1a–c, 2, 3, 4) | **additive, anytime post-wire; blocks nothing.** Carries the **positive** projection of the ownership map (`ownedLanguages`) beside the existing `handledLanguages` **leave-alone** set, completing the wire: an engine can select the cells q2 resolved it to own (honoring user `engine:`/`engines:` overrides) instead of inferring the complement — ambiguous, since "not handled" = owned-by-me **or** owned-by-nobody. Informational, not enforcement; backward-compatible (`#[serde(default)]`); q2 core does not consume it; native knitr/jupyter untouched. Also updates `engine-resolution.md` §5/§9 + `engine-api-surface.md`. |
 | [**Plan 5: engine-host pooling (preview re-compute warmth)**](2026-06-26-plan5-engine-host-pooling.md) | research stub | full stack (1a–c, 2, 4) + preview-wiring (plan1c R5) + DQ-7 | **last** (post-4; orthogonal to Plan 3) |
 | [**Plan 6: Pass-1 engine resolution (per-doc lift)**](2026-06-29-plan6-pass1-engine-resolution.md) | research stub | plan1a-engine + plan1c (resolution machinery) | **additive**, post-1c; orthogonal to Plans 3/4/5 |
 | [**Plan 7: native percent/spin conversion + precise SourceInfo**](2026-06-27-plan7-native-percent-spin-sourceinfo.md) | 2-3 | plan1c (`claims_file`/`markdown_for_file`) + Plan 0 (SourceInfo) + Plan 3 (jupyter percent helpers); **not** Plan 5/6 | post-1c (default after 4); pullable earlier; orthogonal to Plans 5/6 |
 | [**Plan 8: HANDLED_LANGUAGES → claiming engines (absorb #241 mermaid + graphviz TS extension)**](2026-07-02-plan8-mermaid-absorption-graphviz-ts-extension.md) | 2-3 | Part A: #241 + plan1a-engine; Part B: full TS-engine stack (1a–c, 1b, 2A) + `build-ts-extension` | Part A independent/now; Part B post-1c; enables Plan 6 Q4 |
-| **Total** | **10-16** — **everything through Plan 2 is ✓ complete** (Plan 0, 2A, 1a-protocol/host/engine, RTQ, 1a-host-bugs, 1b, 1b.1, 1c, 2). **Remaining:** Plan 3, 4, 4b, 5, 6, 7, 8, and 1c.2. | | |
+| [**Plan 9: `q2 call engine` — Q1-parity engine CLI surface (bd-m1jeqhhz)**](2026-07-03-plan9-call-engine.md) | 2-3 | full TS-engine stack (1a–c, 1b, 2A) + `build-ts-extension`; uses Plan 4's julia fixture | post-1c; **resolves the Plan-4E daemon-management gap** (`quarto call engine julia status/kill/log/close/stop`). One-shot `call-engine` host mode (vendored cliffy) + additive `call_engine_command` trait hook (default `NotSupported` ⇒ non-breaking for every other engine). **Overturns RTQ's `populateCommand` = "impossible/redundant" classification** — see the note below and §"populateCommand" in `claude-notes/designs/engine-api-surface.md`. |
+| [**Plan 10: engine `checkInstallation` → real `q2 check`**](2026-07-04-plan10-check-installation.md) | 2-3 | plan1a stack (1a–c, 1b) + fixture engines (4c marimo, julia); native part reuses knitr/jupyter probes | **design approved 2026-07-03** (strand bd-4qflzhwh; research + ratified decision points: [`../research/2026-07-03-plan10-check-installation-research.md`](../research/2026-07-03-plan10-check-installation-research.md)); plan file being authored. Adds `CheckInstallation`/`CheckProgress` wire verbs (streamed progress), `has_check_installation` on `LoadEngineResult`, optional `check_installation` trait method (naming/default-impl pattern follows Plan 9's `call_engine_command` precedent), full Q1-fidelity native knitr/jupyter checks incl. test renders. **Adjacent to Plan 9 only at the trait + CLI surface** — Plan 9 adds no wire verb (one-shot deno mode), so no protocol collision. |
+| **Total** | **13-22** — **everything through Plan 2 is ✓ complete** (Plan 0, 2A, 1a-protocol/host/engine, RTQ, 1a-host-bugs, 1b, 1b.1, 1c, 2). **Remaining:** Plan 3, 4, 4b, 4c, 4d, 5, 6, 7, 8, 9, 10, and 1c.2. | | |
+
+
+> **Plan 9 cross-plan impact (added 2026-07-03).** Plan 9 adds an optional
+> `call_engine_command` method to the `ExecutionEngine` trait with a default
+> `Err(NotSupported)` impl, and a **separate one-shot `deno` process** (the
+> `call-engine` bundle mode) — it does **not** route through the shared render
+> host. Consequences for still-unrun plans:
+> - **RTQ / `engine-api-surface.md`:** the audit filed `populateCommand` under
+>   "impossible or redundant (cliffy subcommands into a Rust CLI)". Plan 9 shows it
+>   is achievable by running the *same* cliffy the engine uses in a short-lived Deno
+>   process with inherited stdio (byte parity). That classification is now
+>   **corrected** (design-doc note updated); no protocol surgery was needed — Plan 9
+>   adds **no** wire verb.
+> - **Plan 5 (engine-host pooling):** `call-engine` is a deliberately **non-pooled**
+>   spawn. Pooling the render host must not try to serve `call engine` from the pool
+>   (the managed daemon is the detached julia control server, orthogonal to the Deno
+>   host; and a one-shot invocation must never disturb a warm render host). Design
+>   constraint for Plan 5, not a blocker.
+> - **Plan 6 (Pass-1 resolution):** Plan 9's `Available engines:` message hardcodes
+>   Q1's builtin order (`knitr, jupyter, markdown`) for byte parity (deviation D-6).
+>   Reworking `engines_in_order()` must preserve that message.
+> - **Plan 4 (Julia Validation):** Plan 9 resolves the "no management surface" gap
+>   Plan 4E documents; Plan 4's out-of-band transport-file→PID→SIGTERM teardown still
+>   works and need not change (Plan 9 *could* later simplify it to `call engine julia
+>   stop/kill`).
+> - **Plans 3, 4b, 4c, 7, 8:** unaffected — native engines and command-less TS
+>   engines (marimo, echo, mermaid/graphviz) inherit the default and correctly emit
+>   Q1's `Engine <name> does not support subcommands`.
 
 > **Course correction — RTQ (`plan1a-return-to-q1`).** A **now-complete** (all 6 code items
 > landed + reviewed READY TO MERGE, 2026-06-29), originally plan-only correction layer
@@ -590,9 +621,16 @@ Plan 0 ✓ complete (Include Expansion & SourceInfo)
 Plan 2A ──┬─ §2aa (namespaces) ─┬─ Plan 1b ───────────┴───┴─ Plan 1c ─┐
 (@quarto/api                    │                                     │
  foundation)                    ├─ Plan 2 (deferred bodies + types) ──── ┤
-                                │                                     ├─→ Plan 4
-                                └─ Plan 3 (@quarto/api/jupyter) ───────── ┘
+                                │                                     ├─→ Plan 4 ─→ Plan 9
+                                └─ Plan 3 (@quarto/api/jupyter) ───────── ┘   (call engine;
+                                                                               uses Plan 4's
+                                                                               julia fixture)
 ```
+
+Plan 9 is a **leaf** off the completed TS-engine stack (needs 1c's registry +
+`build-ts-extension` and Plan 4's julia fixture). It adds no wire verb and an
+additive trait default, so it neither gates nor is gated by Plans 5/6/7/8 —
+only the soft cross-plan constraints noted in the Plan 9 impact callout above.
 
 - `plan1a-host` and `plan1a-engine` run **in parallel with Plan 1b** (Rust side).
 - **RTQ gates Plan 1b.** 1b's pure-TS layer (`framing.ts`, `mapped-source.ts`,

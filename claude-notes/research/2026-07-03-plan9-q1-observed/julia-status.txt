@@ -1,0 +1,60 @@
+QuartoNotebookRunner server status:
+  started at: 7:59:0 (5 hours 36 minutes 45 seconds ago)
+  runner version: 0.18.1
+  environment: /Users/gordon/Library/Caches/quarto/julia/
+  pid: 52642
+  port: 8001
+  julia version: 1.11.7
+  timeout: 5 minutes
+  workers active: 5
+    worker 1:
+      path: /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpLCfyfe/error.qmd
+      state: Ready
+      run started: 7:59:53 (5 hours 35 minutes 52 seconds ago)
+      run finished: -
+      timeout: 0 seconds
+      pid: 57467
+      exe: `julia`
+      exeflags: ["--color=yes"]
+      env: ["JULIA_PROJECT=@."]
+    worker 2:
+      path: /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmp6v8NYx/error.qmd
+      state: Ready
+      run started: 13:2:6 (33 minutes 38 seconds ago)
+      run finished: -
+      timeout: 0 seconds
+      pid: 36931
+      exe: `julia`
+      exeflags: ["--color=yes"]
+      env: ["JULIA_PROJECT=@."]
+    worker 3:
+      path: /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpJ3Wq1e/error.qmd
+      state: Ready
+      run started: 13:5:36 (30 minutes 9 seconds ago)
+      run finished: -
+      timeout: 0 seconds
+      pid: 63673
+      exe: `julia`
+      exeflags: ["--color=yes"]
+      env: ["JULIA_PROJECT=@."]
+    worker 4:
+      path: /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpB0SyW9/error.qmd
+      state: Ready
+      run started: 9:37:53 (3 hours 57 minutes 52 seconds ago)
+      run finished: -
+      timeout: 0 seconds
+      pid: 62869
+      exe: `julia`
+      exeflags: ["--color=yes"]
+      env: ["JULIA_PROJECT=@."]
+    worker 5:
+      path: /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpEL5UEk/error.qmd
+      state: Ready
+      run started: 8:10:31 (5 hours 25 minutes 13 seconds ago)
+      run finished: -
+      timeout: 0 seconds
+      pid: 69537
+      exe: `julia`
+      exeflags: ["--color=yes"]
+      env: ["JULIA_PROJECT=@."]
+exit=0

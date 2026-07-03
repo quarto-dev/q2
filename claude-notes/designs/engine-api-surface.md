@@ -47,12 +47,15 @@ A third near-instance — **caught before landing**, recorded so the pattern sta
   was first shaped to the **echo** fixture (language-only + extension-only) and initially could not
   express marimo's `first_class`-conditional claim (`{python .marimo}`). Fixed before landing by
   adding `whenClass:` — `claims_language` is a pure function of `(language, first_class)`, so it
-  tabulates fully — so the static surface is **not** narrowed. The one genuine residue is
-  **content-inspecting `claims_file`** (Julia's `# %%`): it cannot be expressed as a *static* claim,
-  but the **dynamic `claims_file` method remains** as the fallback, so the engine *protocol* is
-  intact. That is an accepted static-vs-dynamic boundary, **not** a dropped surface — the only place
-  static resolution is strictly less powerful than the dynamic method, and it is documented as such
-  (engine-resolution.md §3.3).
+  tabulates fully — so the static surface is **not** narrowed. This review originally recorded a
+  residue — **content-inspecting `claims_file`** (Julia's `# %%`) — as the one place static resolution
+  was strictly less powerful. **Corrected 2026-07-07:** a full Q1 census showed every content sniff is
+  `extension-gate → read-file → one regex` (a pure function of file bytes), so it *is* statically
+  declarable — as a `content-pattern` on a `claims-files` entry, evaluated natively (Plan 7a). There is
+  **no** static-vs-dynamic residue in practice; the dynamic `claims_file` method survives only as a
+  fallback for a hypothetical non-regex-expressible sniff (empty across every known engine). See
+  engine-resolution.md §3.3 and
+  [Plan 7a](../plans/2026-07-07-plan7a-static-content-pattern-claims.md).
 
 **The author test.** For each Q1 engine method / field / flag, do **not** ask "does the Julia
 validation target need this?" Ask: *does the Q1 engine API expose it as protocol, and could a
@@ -83,9 +86,10 @@ impossible/redundant, reason given).
 | `projectDir?` | `project_dir` | present | |
 | `params?`/`quiet?` | `params`/`quiet` | present | |
 | `previewServer?` | — | defer | run/serve — deferred behind a seam (DQ-2) |
-| `handledLanguages` | `handled_languages` | present | |
+| `handledLanguages` | `handled_languages` | present | leave-alone set (§5); `HANDLED_LANGUAGES ∪ {lang owned by others}` |
 | `project: ProjectContext` | `project_dir` + launch `EngineProjectContext` | present | `config` + output-dir carried as values (DQ-5); the two callback members dropped (DQ-1) |
 | — | `source_map` | q2-native | provenance addition |
+| — | `owned_languages` | q2-native | positive projection of the ownership map (§5, Plan 4d) — `{lang owned by this engine}`; informational (not enforcement), so engines select owned cells directly instead of inferring the complement of `handledLanguages` |
 
 **`ExecutionTarget`** (Q1 cookie; q2 has **no `target()` step**):
 
@@ -119,7 +123,7 @@ impossible/redundant, reason given).
 | `ignoreDirs?` | — | out of scope | project file-walk — out of the render wire (DQ-6) |
 | `defaultExt`/`defaultYaml`/`defaultContent` | — | out of scope | scaffolding (`quarto create`) — own command surface (DQ-6) |
 | `checkInstallation?` | — | out of scope | `quarto check <engine>` — own command surface (DQ-6) |
-| `populateCommand?` | — | **drop** | cliffy subcommands into a Rust CLI — impossible |
+| `populateCommand?` | — | **own command surface** (was "drop") | `q2 call engine <name> …` — see Plan 9 correction below (DQ-6) |
 
 **Instance (`ExecutionEngineInstance`):**
 
@@ -165,10 +169,20 @@ outcomes inline. The actionable protocol/code changes live in RTQ
 - **DQ-5 — `EngineProjectContext` completeness → carry `config` (`engines` + project `output-dir`)
   and the output directory as values** on the launch context. The two callback members are DQ-1
   (dropped).
-- **DQ-6 — non-render surfaces → out of the render wire.** `populateCommand` is a hard drop;
+- **DQ-6 — non-render surfaces → out of the render wire.** `populateCommand`,
   `defaultExt`/`defaultYaml`/`defaultContent` (scaffolding), `checkInstallation` (check),
   `ignoreDirs` (project walk) belong to their own command surfaces — designed when those commands
   grow engine-awareness, not bolted onto the execute protocol.
+  - **`populateCommand` correction (Plan 9, 2026-07-03, bd-m1jeqhhz).** This was
+    originally filed a *hard drop* ("cliffy subcommands into a Rust CLI —
+    impossible"). That is wrong: `q2 call engine <name> …` runs the engine's
+    *own* cliffy `populateCommand` in a short-lived Deno process (the `call-engine`
+    host-bundle mode, vendored cliffy) with inherited stdio, giving byte-for-byte Q1
+    parity. It stays true to DQ-6 — it is its **own command surface**, off the render
+    wire (no new protocol verb; a separate one-shot process, not the shared render
+    host). The trait side is an additive `call_engine_command` default. See
+    `claude-notes/plans/2026-07-03-plan9-call-engine.md` and
+    `claude-notes/research/2026-07-03-plan9-call-engine-research.md`.
 - **DQ-7 — Init/launch split → `Init { global }` once per subprocess (process-stable config);
   project context rides `LaunchEngine` per render** (Item A). This **supersedes** the earlier
   "`Init { global, project }`" recommendation: moving project context to `LaunchEngine` is strictly

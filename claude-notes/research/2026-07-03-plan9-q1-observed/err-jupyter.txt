@@ -1,0 +1,2 @@
+Engine jupyter does not support subcommands
+exit=1

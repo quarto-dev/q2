@@ -54,7 +54,13 @@ use quarto_pandoc_types::ConfigValue;
 /// Explicitly-listed engines always come first (in their declared order).
 /// Remaining registry engines are visited in this order (built-in names first,
 /// then any unknown names sorted alphabetically).
-const BUILTIN_ORDER: &[&str] = &["knitr", "jupyter", "markdown"];
+///
+/// Shared with `EngineRegistry::engines_in_order` so file-claim iteration and
+/// language-claim candidate ordering cannot diverge. The load-bearing part is
+/// knitr-before-jupyter (same-kind claim ties); markdown's position is
+/// immaterial — it claims no languages and never co-occurs with another
+/// engine in a sequence.
+pub(crate) const BUILTIN_ORDER: &[&str] = &["knitr", "jupyter", "markdown"];
 
 /// Build the candidate engine list in a deterministic order.
 ///

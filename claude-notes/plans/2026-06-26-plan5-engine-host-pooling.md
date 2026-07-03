@@ -5,6 +5,24 @@
 **Depends on:** the full TS-engine stack (1a–c, Plan 2, validated by Plan 4), the
 **preview↔TS-engine wiring** (the plan1c gap, R5 in RTQ), and **DQ-7** (RTQ Item A).
 
+> **Interaction with Plan 9 (`q2 call engine`, bd-m1jeqhhz — added 2026-07-03).**
+> Plan 9's `call-engine` mode spawns a **separate, short-lived Deno process** with
+> inherited stdio; it is deliberately **not** pooled and must **not** be served from
+> this warm host. Two reasons: (1) the daemon it manages is the detached *julia
+> control server* (its own transport file), orthogonal to the Deno engine-host this
+> plan pools; (2) a one-shot management command must never disturb a warm render
+> host mid-preview. The pool this plan designs is render-path-only; `call engine`
+> stays a cold one-shot — no shared state, no eviction interaction, just don't route
+> it through the pool.
+
+> **Plan 10 interaction (noted 2026-07-04, bd-4qflzhwh):** Plan 10 extends the
+> transport core with **multi-response requests** — `CheckProgress` interim
+> frames delivered through the per-id pending slot before the final
+> `CheckInstallationResult`, plus an idle-based timeout variant. Pooling design
+> must treat "in-flight streaming request" as pinning its host connection (a
+> pooled/recycled host must not drop or interleave interim frames of a live
+> request). See `claude-notes/research/2026-07-03-plan10-check-installation-research.md`.
+
 ## Driver
 
 Interactive `q2 preview` **re-compute** for TS-engine extension users. Preview is capture+replay:

@@ -115,9 +115,13 @@ those changes back upstream is deferred (Gordon's call).
     `claimsFile` is content-inspecting — `# %%` percent scripts), so this
     does **not** cause Pass-1 subprocess spawning and Phase 4I's zero-spawn
     assertion stands unchanged. (The earlier worry conflated the two axes.)
-    Note: 1c.2 P4 renames the field `claims-files` → `claims-extensions`
-    (not landed as of 2026-07-02; `read.rs` still parses `claims-files`) —
-    since Julia never declares it, this plan is unaffected either way.
+    Note: 1c.2 P4 restructures `claims-files` into typed `{extension}` entries
+    (the earlier plan to rename it `claims-extensions` is **withdrawn** — the
+    name stays; not landed as of 2026-07-06). Julia declares no static
+    `claims-files` today, so this plan is unaffected. Forward: Plan 7a lets Julia
+    claim `.jl` statically via a `content-pattern` **evaluated natively as a
+    regex** — no Pass-1 spawn — so even that future change *preserves* Phase 4I's
+    zero-spawn assertion.
 - [x] Rebundle with `cargo run --bin q2 -- build-ts-extension src/julia-engine.ts`
   (run from the fixture dir, after the import-map parity item; verify the
   output lands at `_extensions/julia-engine/julia-engine.js` — q2 mirrors

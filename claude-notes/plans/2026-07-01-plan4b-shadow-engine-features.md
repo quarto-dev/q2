@@ -1,8 +1,11 @@
 # Plan 4b: Shadow-Engine Feature Validation
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
-**Depends on:** Plan 4 (Julia validation) complete — plus its dependency chain (1a/1b/1c/2/3)
-**Blocks:** Nothing (validation + gap-closing plan)
+**Depends on:** Plan 4 (Julia validation) — **✓ complete (2026-07-06); this plan
+is unblocked.** (The grand plan's sub-plans table still lists Plan 4 as
+remaining — stale, fix when touching that file.)
+**Blocks:** Plan 6 execution (ratified sequencing 2026-07-06: this plan runs
+first — see § Coordination with Plan 6 in Phase 4b-C). Otherwise nothing.
 **Estimated sessions:** 2–3
 
 ## Overview
@@ -91,10 +94,13 @@ The test substrate the rest of the plan builds on. Each mirrors `echo-engine`'s 
 - [ ] **`mismatch`** — declares static `claims: synth: {kind: primary}` but its dynamic
   `claimsLanguage("synth")` returns `interop()`. Exercises the static-vs-dynamic
   hard-error guard on first execute-time load.
-- [ ] **`content-claim`** — omits `claims-extensions` (né `claims-files`; rename lands in 1c.2
-  P4 — write the new key); implements a content-inspecting `claims_file` (e.g. first line
-  `# synth-claim`) on `.syn`. Exercises the "one genuine must-load" dynamic `claims_file` path
-  **generically** (NOT the `.jl` percent-script case — that specific conversion is Plan 7).
+- [ ] **`content-claim`** — omits `claims-files` (the typed-entry restructure lands in 1c.2 P4;
+  the earlier rename to `claims-extensions` is **withdrawn** — keep the name); implements a
+  content-inspecting *dynamic* `claims_file` (e.g. first line `# synth-claim`) on `.syn`. Exercises
+  the **dynamic-fallback** `claims_file` path **generically** — the case where an engine declares no
+  static claim and falls back to the wire round-trip. (A *static* `content-pattern` alternative is
+  Plan 7a; the `.jl` percent-script *conversion* is Plan 7. This fixture is NOT "the one genuine
+  must-load case" — that framing was overturned by the 2026-07-07 content-pattern census.)
 - [ ] **`claims-cant-run`** — `Primary`-claims `synth` but **declares** it cannot run it: empty
   `handled_languages`, so the mismatch is caught at partition time from declared data. (Wording
   tightened 2026-07-02: this is a declaration-driven capability mismatch, NOT a post-hoc check
@@ -150,12 +156,57 @@ observable in output.
 ## Phase 4b-C: `_quarto.yml engines:` project-key splice (implement + test)
 
 **This is the one phase with an implementation step, not just a test.** The project-level
-`_quarto.yml engines:` key is currently **read by nothing** — `contribution_order` is
-built only from `_extension.yml` `contributes.engines` (External names + `Reorder` hints).
-The `// Task 9: splice _quarto.yml engines: list here` marker sits at
-`crates/quarto-core/src/project/mod.rs:604`. Plan 1c's ordering item was reworded (this
-plan's prompt) to carve this out; here we finish it. Q1 semantics are already documented
-in Plan 1c's ordering item.
+`_quarto.yml engines:` key is currently **read by nothing** for ordering —
+`contribution_order` is built only from `_extension.yml` `contributes.engines` (External
+names + `Reorder` hints). The `// Task 9: splice _quarto.yml engines: list here` marker
+sits in `build_engine_registry` (`crates/quarto-core/src/project/mod.rs` — `:749` in the
+current tree; the file has grown since this plan was drafted, so grep for the marker text
+rather than trusting a line number). Plan 1c's ordering item was reworded (this plan's
+prompt) to carve this out; here we finish it. Q1 semantics are already documented in Plan
+1c's ordering item.
+
+### Coordination with Plan 6 (ratified sequencing, 2026-07-06)
+
+**4b executes before Plan 6.** Two reasons, one about this splice and one about the
+tier model:
+
+1. **This splice is the last deferred half of the `engines:` key.** Plan 6
+   (`2026-06-29-plan6-pass1-engine-resolution.md`) introduces the *other* half —
+   per-engine **claim tables** carried on `engines:` entries — and the two share one
+   key, one entry grammar, and one validation site. Landing 4b first means Plan 6
+   *extends* a live key rather than co-defining it, and the `engines:` key never ships
+   "half-alive" (ordering accepted-but-ignored) to users: Plan 6's Phase 6 is what first
+   documents `engines:` for end users, and it should describe full semantics.
+2. **4b validates the resolution tier machinery that Plan 6 then modifies.** Plan 6's
+   claim tables intercept the claim-consultation point of **all four tiers**; its
+   `tiers_unchanged_without_tables` regression pin is only meaningful against a baseline
+   that real extensions have exercised — which is exactly what Phases 4b-A/B do (Interop,
+   explicit-Fallback, presence-gating, `whenClass`, case-4). Prove the tiers green with
+   shadow engines first; then Plan 6 changes where one engine's claims come from.
+
+**Grammar this splice must accept (defined by Plan 6, decision 3 + design contract
+`claude-notes/designs/engine-and-engines-keys.md`).** `engines:` is a Q1-compatible array
+whose entries come in three forms, and the ordering splice must recognize all three:
+- **string** — `knitr` — an ordering entry (this phase's primary case);
+- **`{path: ...}` map** — Q1's external-engine loader — **reserved / skipped** by q2
+  (engines arrive via `_extensions/` discovery); it contributes no ordering entry;
+- **`{<name>: {claims: ...}}` single-key map** — Plan 6's claim-table entry — its **key
+  is the engine name**, so it *also* contributes an ordering entry (the same name).
+  Even though Plan 6 lands after this phase, the parser here must extract the name from
+  a single-key map, not assume every entry is a bare string.
+
+**Validation is shared, not duplicated.** The "unknown engine name → hard error at
+`build_engine_registry` construction, Q1 message" check this phase adds is the *same*
+check Plan 6 relies on for its map entries (Plan 6 decision 3, "Option B"). Land it here
+generically — validate the name of **every** entry form (string and single-key-map key)
+against the registry, once, at construction — and Plan 6 needs no second validation site.
+
+**Latent tie-flip note (for the changelog / a test comment).** Once this splice is live,
+a project that wrote `engines: [{legacy: {claims: [...]}}]` *purely* for a Plan-6 claim
+table also promotes `legacy` to the front of the candidate order — which can flip an
+equal-priority tie. Because 4b lands first, this is simply the key's behavior from day
+one (no retroactive surprise), but a co-located test comment noting that a name-map entry
+is dual-purpose (order + claims) will save a future reader the double-take.
 
 - [ ] **RED test first** — project `_quarto.yml` with `engines: [beta, alpha]` + both
   extensions installed, both `Primary(1)` on `synth`. Before the splice: resolved owner is
@@ -164,10 +215,18 @@ in Plan 1c's ordering item.
   (`project/mod.rs`) — it currently takes only `extensions`. Read the project config's
   `engines:` key and prepend those entries to `order` at the Task-9 site, **before**
   extension auto-promotion, matching Q1: user `_quarto.yml` entries first (deduped, in
-  listed order), then extension-contributed names, then `BUILTIN_ORDER`.
-- [ ] **Validation parity** — a name in `_quarto.yml engines:` that resolves to no
-  registered engine → the existing "not a valid engine … Available engines are: …" hard
-  error (same path as the `Reorder`-hint check, `project/mod.rs:606-618`).
+  listed order), then extension-contributed names, then `BUILTIN_ORDER`. **Parse all
+  three entry forms** (see § Coordination with Plan 6): a bare string is a name; a
+  single-key `{<name>: …}` map contributes its key as a name; a `{path: …}` map is
+  reserved/skipped (no ordering entry). A helper that maps an entry → `Option<name>`
+  keeps this phase and Plan 6's table reader consistent.
+- [ ] **Validation (shared with Plan 6)** — a name in `_quarto.yml engines:` that
+  resolves to no registered engine → the existing "not a valid engine … Available
+  engines are: …" hard error (same path as the `Reorder`-hint check,
+  `project/mod.rs:606-618`). Validate **every** entry form's name (string + single-key-map
+  key), once, at `build_engine_registry` construction — this is the single validation site
+  Plan 6 relies on for its claim-table map entries (Plan 6 decision 3 / Option B), so no
+  second check is added there.
 - [ ] **GREEN** — the RED test now passes (`beta` wins via project-key ordering).
 - [ ] **Cross-check** — the existing `p1_2` / `p1_3` extension-contribution tests still
   pass (the splice adds a *source* of order entries; it must not disturb the extension path).
@@ -293,13 +352,13 @@ permission set.
 
 | Capability | Owner | Why not 4b |
 |---|---|---|
-| Pass-1 per-doc engine-resolution lift | **Plan 6** | Additive on top of the shipping Pass-2 resolver; separate research plan. |
+| Pass-1 per-doc engine-resolution lift; per-engine **claim tables** on `engines:` | **Plan 6** | Additive on top of the shipping Pass-2 resolver. Plan 6 is a **reviewed implementation plan** that executes **after** this one (see § Coordination with Plan 6 in 4b-C); it *extends* the `engines:` key and validation site this plan lands. |
 | Subprocess pooling (cross-render warmth) | **Plan 5** | "MEASURE FIRST — win is bounded"; separate. Plan 4H already checks one PID *within* a render. |
 | Native percent/spin conversion; precise `SourceInfo`; A′ byte-range provenance | **Plan 7** | The `.jl` `# %%` content-claim + faithful provenance are Plan 7's core. 4b's `content-claim` fixture exercises the *generic* dynamic `claims_file` path only. |
 | `quarto_required` version gate + `engine_compat_version()` spoof | **Phase 12** | 1c/RTQ ship the field inert on purpose; the gate is Phase 12. |
 | Protocol off stdout → loopback TCP + one-time token auth | **Phase 1.6** | The `console.log` footgun and local-connect gap are Phase 1.6; 4b's security item only records the v1 decision. |
 | `@quarto/engine-host-wasm`; `EngineClaimsFileStage` in WASM pipeline; jsr/npm publish | future | Browser host + distribution, out of this epic. |
-| Multi-class engine (list of claims); per-cell routing; `_quarto.yml` claim overrides | future | Design-doc §12 "least urgent / deferred." |
+| Multi-class engine (list of claims); per-cell routing | future | Design-doc §12 "least urgent / deferred." (`_quarto.yml` claim overrides are **no longer future** — they are Plan 6's claim tables, row above.) |
 | `run()` interactive; `filterFormat`/`executeTargetSkipped`/`postRender`/`canKeepSource` | future | "Deferred until q2 grows callers." |
 
 ## Note: per-render project context (M1) is owned by Plan 1c.2 P1, not 4b

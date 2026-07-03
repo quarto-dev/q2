@@ -97,8 +97,15 @@ const echoEngine: ExecutionEngineDiscovery = {
         // Read the file content and wrap it as an {echo} fenced block,
         // plus a second {python} cell so the §8 single-engine pass-through
         // of a non-echo cell is exercised.
+        //
+        // Plan 1c.2 task 2b: prepend a level-1 heading naming the input
+        // file's basename, so a converted-vs-raw-fall-through render is
+        // distinguishable (the raw fixture body carries no heading of its
+        // own -- see the `t8_*` e2e test in echo_engine_e2e.rs).
         const text = Deno.readTextFileSync(file);
+        const basename = file.split(/[\\/]/).pop() ?? file;
         const wrapped =
+          "# Echoed: " + basename + "\n\n" +
           "```{echo}\n" +
           text +
           "\n```\n\n" +
@@ -154,6 +161,24 @@ const echoEngine: ExecutionEngineDiscovery = {
         // (the fixture's earlier shape) has no wrapper, so the splice can't
         // match it and the preview pane stays inert (bd-h4rhohhy / Bug B).
         const input = opts.target.markdown.value;
+
+        // T13 (plan 1c.2 P4, OPTIONAL): sentinel-gated crash branch for the
+        // real-process crash-path e2e (echo_engine_e2e.rs's
+        // t13_crash_mid_execute_yields_process_crashed_with_stderr). Fires
+        // ONLY when the document body carries the sentinel -- none of the
+        // other 9 echo E2E fixtures use it, so this branch is dead code for
+        // them. Writes an identifiable marker to stderr, THEN crashes via
+        // Deno.exit(1) BEFORE returning any ExecuteResult, i.e. mid-execute
+        // while the request is still in flight on the demux -- exercising
+        // the engine-host's reader-thread EOF -> ProcessCrashed broadcast
+        // path against a real Deno subprocess.
+        if (input.includes("QUARTO_ECHO_CRASH")) {
+          console.error(
+            "ECHO_CRASH_MARKER: intentional crash for T13 crash-path e2e",
+          );
+          Deno.exit(1);
+        }
+
         const executed = input.replace(
           /```\{echo\}[\s\S]*?```/g,
           "::: {.cell}\n::: {.cell-output .cell-output-stdout}\n" +

@@ -46,7 +46,7 @@ use crate::engine::ts_protocol::{
     TsLanguageClaim,
 };
 use crate::extension::types::{
-    ExtensionId, StaticLanguageClaim, combine_claims, lookup_static_claim,
+    ExtensionId, FileClaim, StaticLanguageClaim, combine_claims, lookup_static_claim,
 };
 use crate::stage::PandocIncludes;
 use crate::stage::cancellation::Cancellation;
@@ -143,8 +143,9 @@ pub struct TsEngine {
     /// for valid_extensions; pre-filters claims_file (ext ∉ set ⇒ false, no load).
     file_extensions: Option<Vec<String>>,
     /// Unconditional static claims_file. `Some` → answer ext∈claims_files without loading;
-    /// `None` → content-inspecting engine, dynamic claims_file load.
-    claims_files: Option<Vec<String>>,
+    /// `None` → content-inspecting engine, dynamic claims_file load. Entries are
+    /// undotted, lowercase (parse-time canonical form; see `extension::read::normalize_ext`).
+    claims_files: Option<Vec<FileClaim>>,
     /// Records each statically-answered claims_language key for execute-time validation.
     static_answers: Mutex<Vec<(String, Option<String>)>>,
     /// Records each statically-answered claims_file extension for execute-time validation.
@@ -169,7 +170,7 @@ impl TsEngine {
         host: Arc<TsEngineHost>,
         claims: Option<HashMap<String, Vec<StaticLanguageClaim>>>,
         file_extensions: Option<Vec<String>>,
-        claims_files: Option<Vec<String>>,
+        claims_files: Option<Vec<FileClaim>>,
         extension_id: ExtensionId,
         aliases: Arc<Mutex<HashMap<String, ExtensionId>>>,
         diagnostics: Arc<Mutex<Vec<DiagnosticMessage>>>,
@@ -303,15 +304,18 @@ impl TsEngine {
                     let static_claimed = self
                         .claims_files
                         .as_ref()
-                        .is_some_and(|cf| cf.iter().any(|e| e == ext));
+                        .is_some_and(|cf| cf.iter().any(|c| c.extension == *ext));
 
                     // Synthetic filename "x<ext>" — declaring claims_files is an assertion
                     // that the engine claims every file of that extension unconditionally,
                     // regardless of content. The filename itself doesn't matter; the ext does.
+                    // `ext` is the undotted canonical form; both wire fields go through
+                    // `to_wire_ext` — the engine-side `claimsFile(file, ext)` JS contract
+                    // compares `ext === ".echo"` (dotted), same as the dynamic path below.
                     let msg = ToEngine::ClaimsFile {
                         engine: result.name.clone(),
-                        file: format!("x{ext}"),
-                        ext: ext.clone(),
+                        file: format!("x{}", to_wire_ext(ext)),
+                        ext: to_wire_ext(ext),
                     };
                     let dynamic_claimed: bool =
                         match self.host.request(msg, Some(Duration::from_secs(10)), c) {
@@ -571,6 +575,29 @@ fn build_source_map(
 }
 
 // ============================================================================
+// Wire-only re-dot adapter (change C, Plan 1c.2 Task 1)
+// ============================================================================
+
+/// The single Rust -> TS wire adapter for file extensions.
+///
+/// The canonical Rust-side form is **undotted** everywhere (parse-time
+/// normalization in `extension::read::normalize_ext`; matching in
+/// `claims_file` / `EngineClaimsFileStage` compares undotted candidate
+/// against undotted stored extensions). The wire contract stays **dotted**
+/// (Q1 `extname()` parity; the engine-side JS contract compares
+/// `ext === ".echo"`, e.g. `echo-engine.ts`'s `claimsFile`). This is the
+/// *only* place that adds the dot back — call it at, and only at, a
+/// Rust -> TS `ClaimsFile` wire seam. Empty stays empty (a file with no
+/// extension was never dotted).
+fn to_wire_ext(ext: &str) -> String {
+    if ext.is_empty() {
+        String::new()
+    } else {
+        format!(".{ext}")
+    }
+}
+
+// ============================================================================
 // Identity-aware alias insertion
 // ============================================================================
 
@@ -715,7 +742,7 @@ impl ExecutionEngine for TsEngine {
 
         // 2. Authoritative static claims_file: if claims_files is Some ⇒ answer ext ∈ claims_files, no load.
         if let Some(cf) = &self.claims_files {
-            let claimed = cf.iter().any(|e| e == ext);
+            let claimed = cf.iter().any(|c| c.extension == ext);
             // Record positive answers for execute-time validation, de-duped by ext.
             // Only true answers are recorded: false means unclaimed — no validation needed.
             // De-dup because a render probes many files of the same ext; each ext at most once.
@@ -739,7 +766,7 @@ impl ExecutionEngine for TsEngine {
             let msg = ToEngine::ClaimsFile {
                 engine: self.wire_name(),
                 file: file.to_string(),
-                ext: ext.to_string(),
+                ext: to_wire_ext(ext),
             };
             let response = self.host.request(msg, Some(Duration::from_secs(10)), &c)?;
             match response {
@@ -979,7 +1006,7 @@ mod tests {
         name: &str,
         claims: Option<HashMap<String, Vec<StaticLanguageClaim>>>,
         file_extensions: Option<Vec<String>>,
-        claims_files: Option<Vec<String>>,
+        claims_files: Option<Vec<FileClaim>>,
     ) -> (TsEngine, Arc<MockWriteHalf>) {
         let (write, read, mock) = MockTransport::pair_with_handle();
         let ctx = make_host_global_config();
@@ -1927,7 +1954,9 @@ mod tests {
                 Arc::clone(&host),
                 None,
                 Some(vec![".echo".to_string()]),
-                Some(vec![".echo".to_string()]),
+                Some(vec![FileClaim {
+                    extension: ".echo".to_string(),
+                }]),
                 ext_id,
                 aliases,
                 diag,
@@ -1954,6 +1983,132 @@ mod tests {
                 0,
                 "pre-filter must not issue LoadEngine"
             );
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── T11 (1c.2 Task 1, change C): wire carries dotted lowercase ────────────
+    //
+    // The stage (and `claims_file`'s callers generally) now pass extensions
+    // UNDOTTED. `to_wire_ext` is the single adapter that re-dots at the two
+    // Rust -> TS `ClaimsFile` seams. Named revert: replace both `to_wire_ext(...)`
+    // call sites with the bare undotted value (`ext.to_string()`) → the
+    // captured wire message's `ext`/`file` fields go undotted → assertions
+    // below fail → RED.
+
+    #[test]
+    fn t11_wire_claims_file_messages_carry_dotted_lowercase_ext() {
+        // ── Part A: dynamic path — engine has NO static claims_files, so
+        // `claims_file` falls through to a real `ToEngine::ClaimsFile` wire
+        // round-trip. Assert the wire `ext` field is dotted.
+        watchdog(Duration::from_secs(10), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("echo-dynamic");
+            let engine = TsEngine::new(
+                "echo-dynamic",
+                false,
+                PathBuf::from("/engines/echo-dynamic.ts"),
+                Arc::clone(&host),
+                None,
+                None,
+                None, // claims_files: None → content-inspecting, dynamic wire call
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            mock.script_response(0, loaded_response("echo-dynamic", vec![]));
+            mock.script_response(1, FromEngine::ClaimsFileResult { result: true });
+
+            // Caller passes the candidate ext UNDOTTED (mirrors the stage post-change C).
+            let claimed = engine.claims_file("x.echo", "echo");
+            assert!(claimed, "engine must claim via the dynamic wire round-trip");
+
+            let sent = mock.sent_messages();
+            let claims_file_msg = sent
+                .iter()
+                .find(|m| matches!(m, ToEngine::ClaimsFile { .. }))
+                .expect("a ToEngine::ClaimsFile message must have been sent");
+            match claims_file_msg {
+                ToEngine::ClaimsFile { ext, .. } => {
+                    assert_eq!(
+                        ext, ".echo",
+                        "wire ext must be re-dotted by to_wire_ext even though the \
+                         candidate passed to claims_file was undotted"
+                    );
+                }
+                other => panic!("expected ToEngine::ClaimsFile, got {other:?}"),
+            }
+
+            mock.signal_eof();
+        });
+
+        // ── Part B: synthetic-file load-validation message — engine WITH a
+        // static claims_files declaration. Assert the wire `file` field is
+        // the dotted synthetic name ("x.echo", not "xecho").
+        watchdog(Duration::from_secs(10), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("echo-static");
+            let engine = TsEngine::new(
+                "echo-static",
+                false,
+                PathBuf::from("/engines/echo-static.ts"),
+                Arc::clone(&host),
+                None,
+                None,
+                Some(vec![FileClaim {
+                    extension: "echo".to_string(),
+                }]),
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            // Static claim, no load: records undotted "echo" in static_file_answers.
+            assert!(engine.claims_file("x.echo", "echo"));
+            assert_eq!(host.load_engine_count(), 0);
+
+            // ensure_loaded validates the recorded static answer against a
+            // (mocked) LoadEngine + ClaimsFile round-trip.
+            mock.script_response(0, loaded_response("echo-static", vec![]));
+            mock.script_response(1, FromEngine::ClaimsFileResult { result: true });
+
+            let c = Cancellation::new();
+            let result = engine.ensure_loaded(&c);
+            assert!(
+                result.is_ok(),
+                "validation must succeed when dynamic matches static; got {:?}",
+                result.err()
+            );
+
+            let sent = mock.sent_messages();
+            let claims_file_msg = sent
+                .iter()
+                .find(|m| matches!(m, ToEngine::ClaimsFile { .. }))
+                .expect("a ToEngine::ClaimsFile validation message must have been sent");
+            match claims_file_msg {
+                ToEngine::ClaimsFile { file, ext, .. } => {
+                    assert_eq!(
+                        file, "x.echo",
+                        "synthetic validation filename must be dotted (x.echo), not xecho"
+                    );
+                    assert_eq!(
+                        ext, ".echo",
+                        "validation wire ext must also be dotted (matches the engine-side \
+                         `ext === \".echo\"` JS contract, e.g. echo-engine.ts's claimsFile)"
+                    );
+                }
+                other => panic!("expected ToEngine::ClaimsFile, got {other:?}"),
+            }
 
             mock.signal_eof();
         });

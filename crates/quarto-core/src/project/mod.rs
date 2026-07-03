@@ -773,21 +773,16 @@ fn build_engine_registry(
     Ok(Arc::new(registry))
 }
 
-/// Discover extensions and build the engine registry in one step.
-///
-/// Shared by `ProjectContext::discover` and `ProjectContext::single_file` to
-/// avoid duplicating the `builtin_dir` / `discover_extensions` /
-/// `build_engine_registry` block.
-#[allow(clippy::too_many_arguments)]
-fn discover_extensions_and_build_registry(
+/// Discover extensions -- the cheap, host-free parse half of the old
+/// `discover_extensions_and_build_registry` (Corollary-0 split, plan 1c.2
+/// task 2b). Split out so `ProjectContext::discover`'s walk can consult
+/// contributed engine claims-files (via `RenderableExtensions::new`) BEFORE
+/// walking, instead of after.
+fn discover_extensions_only(
     discovery_anchor: &Path,
     project_dir: Option<&Path>,
-    is_single_file: bool,
-    output_dir: &Path,
-    config: Option<&ProjectConfig>,
-    binary_dependencies: &BinaryDependencies,
     runtime: &dyn SystemRuntime,
-) -> Result<(Vec<Extension>, Arc<EngineRegistry>)> {
+) -> Vec<Extension> {
     // Builtin extensions dir — present on native, irrelevant on WASM (VFS path).
     #[cfg(not(target_arch = "wasm32"))]
     let builtin_dir = crate::extension::BUILTIN_EXTENSIONS
@@ -797,16 +792,32 @@ fn discover_extensions_and_build_registry(
     #[cfg(target_arch = "wasm32")]
     let builtin_dir: Option<PathBuf> = None;
 
-    let extensions = crate::extension::discover_extensions(
+    crate::extension::discover_extensions(
         discovery_anchor,
         project_dir,
         builtin_dir.as_deref(),
         runtime,
-    );
+    )
+}
 
+/// Build the engine registry from already-discovered extensions -- the
+/// host-touching finalize half of the old `discover_extensions_and_build_registry`
+/// (Corollary-0 split, plan 1c.2 task 2b). Internally unchanged: still calls
+/// `build_engine_registry`, preserving P1.1's `set_project` threading
+/// (`build_engine_registry` -> `EngineProjectContext` -> `TsEngine::set_project`).
+#[allow(clippy::too_many_arguments)]
+fn build_registry(
+    extensions: &[Extension],
+    project_dir: Option<&Path>,
+    is_single_file: bool,
+    output_dir: &Path,
+    config: Option<&ProjectConfig>,
+    binary_dependencies: &BinaryDependencies,
+    runtime: &dyn SystemRuntime,
+) -> Result<Arc<EngineRegistry>> {
     #[cfg(not(target_arch = "wasm32"))]
     let registry = build_engine_registry(
-        &extensions,
+        extensions,
         project_dir,
         is_single_file,
         output_dir,
@@ -818,12 +829,50 @@ fn discover_extensions_and_build_registry(
     let registry = {
         // WASM has no subprocess engine host, so binary_dependencies (used only
         // to build the host's global config on native) is unused here — and the
-        // per-render project-context fields are consumed only by native
-        // TsEngines, so they are inert here too.
-        let _ = (binary_dependencies, is_single_file, output_dir, config);
+        // per-render project-context fields (plus the parsed `extensions`, which
+        // only `build_engine_registry` consumes on native) are inert here too.
+        let _ = (
+            extensions,
+            project_dir,
+            is_single_file,
+            output_dir,
+            config,
+            binary_dependencies,
+            runtime,
+        );
         Arc::new(EngineRegistry::new())
     };
 
+    Ok(registry)
+}
+
+/// Discover extensions and build the engine registry in one step.
+///
+/// Thin wrapper over [`discover_extensions_only`] + [`build_registry`],
+/// kept for `ProjectContext::single_file` -- which has no walk to interleave
+/// between the two halves, so the pre-2b one-step shape stays behaviorally
+/// identical. `ProjectContext::discover` calls the two halves directly
+/// (task 2b) so its walk can run between them.
+#[allow(clippy::too_many_arguments)]
+fn discover_extensions_and_build_registry(
+    discovery_anchor: &Path,
+    project_dir: Option<&Path>,
+    is_single_file: bool,
+    output_dir: &Path,
+    config: Option<&ProjectConfig>,
+    binary_dependencies: &BinaryDependencies,
+    runtime: &dyn SystemRuntime,
+) -> Result<(Vec<Extension>, Arc<EngineRegistry>)> {
+    let extensions = discover_extensions_only(discovery_anchor, project_dir, runtime);
+    let registry = build_registry(
+        &extensions,
+        project_dir,
+        is_single_file,
+        output_dir,
+        config,
+        binary_dependencies,
+        runtime,
+    )?;
     Ok((extensions, registry))
 }
 
@@ -923,6 +972,24 @@ impl ProjectContext {
         // Capture single-file input path for extension discovery before it's consumed below.
         let single_file_input = input_file.clone();
 
+        // Anchor for `discover_extensions`:
+        // - single-file: use the actual input file so start_dir = its parent.
+        // - project: use `dir/_quarto.yml` so start_dir = dir (searches dir/_extensions).
+        let discovery_anchor: PathBuf = if is_single_file {
+            single_file_input.unwrap_or_else(|| dir.clone())
+        } else {
+            dir.join("_quarto.yml")
+        };
+        let project_dir_for_extensions: Option<&Path> =
+            if is_single_file { None } else { Some(&dir) };
+
+        // 2b (Corollary-0 split): parse extensions BEFORE the walk, so the
+        // walk can consult contributed engine claims-files via
+        // `RenderableExtensions`. The registry (host-touching half) still
+        // builds AFTER the walk, unchanged in shape from pre-2b.
+        let extensions =
+            discover_extensions_only(&discovery_anchor, project_dir_for_extensions, runtime);
+
         // Build file list
         let files = if let Some(input) = input_file {
             vec![DocumentInfo::from_path(input)]
@@ -933,10 +1000,24 @@ impl ProjectContext {
                 .as_ref()
                 .map(|c| c.render_patterns.clone())
                 .unwrap_or_default();
+            // 2b: real FIXED_RENDERABLE union of engine claims-files
+            // extensions, computed from the extensions parsed above.
+            // Target-agnostic by construction: on WASM, `discover_extensions`
+            // naturally yields fewer/no External engines (no subprocess
+            // engine host there), so `claimed_file_extensions` returns `[]`
+            // for those and this degrades to `{qmd}` without a wasm #[cfg]
+            // branch of its own.
+            let renderable_extensions = discovery::RenderableExtensions::new(
+                extensions
+                    .iter()
+                    .flat_map(|e| &e.contributes.engines)
+                    .flat_map(crate::extension::types::claimed_file_extensions),
+            );
             let discovery_cfg = discovery::DiscoveryConfig {
                 project_dir: &dir,
                 output_dir: &output_dir,
                 render_patterns: &render_patterns,
+                renderable_extensions: &renderable_extensions,
             };
             let paths = discovery::discover_project_files(&discovery_cfg, runtime)?;
             paths.into_iter().map(DocumentInfo::from_path).collect()
@@ -944,18 +1025,9 @@ impl ProjectContext {
 
         let binary_dependencies = BinaryDependencies::discover(runtime);
 
-        // Anchor for `discover_extensions`:
-        // - single-file: use the actual input file so start_dir = its parent.
-        // - project: use `dir/_quarto.yml` so start_dir = dir (searches dir/_extensions).
-        let discovery_anchor: PathBuf = if is_single_file {
-            single_file_input.unwrap_or_else(|| dir.clone())
-        } else {
-            dir.join("_quarto.yml")
-        };
-
-        let (extensions, registry) = discover_extensions_and_build_registry(
-            &discovery_anchor,
-            if is_single_file { None } else { Some(&dir) },
+        let registry = build_registry(
+            &extensions,
+            project_dir_for_extensions,
             is_single_file,
             &output_dir,
             config.as_ref(),

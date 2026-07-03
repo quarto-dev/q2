@@ -15,7 +15,7 @@ use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
 use quarto_system_runtime::SystemRuntime;
 
 use super::types::{
-    ClaimKind, Contributes, EngineContribution, Extension, ExtensionFilter, ExtensionId,
+    ClaimKind, Contributes, EngineContribution, Extension, ExtensionFilter, ExtensionId, FileClaim,
     StaticLanguageClaim,
 };
 use crate::error::Result;
@@ -418,11 +418,14 @@ fn parse_external_engine(item: &ConfigValue, ext_dir: &Path) -> Result<EngineCon
     // Optional: `claims` — None if absent, Some(map) if present (including empty)
     let claims = item.get("claims").map(parse_claims_map);
 
-    // Optional: `file-extensions` — None if absent, Some(vec) if present
-    let file_extensions = item.get("file-extensions").map(parse_string_list);
+    // Optional: `file-extensions` — None if absent, Some(vec) if present.
+    // Each element is normalized to undotted lowercase at parse time (change B).
+    let file_extensions = item.get("file-extensions").map(parse_normalized_ext_list);
 
-    // Optional: `claims-files` — None if absent, Some(vec) if present
-    let claims_files = item.get("claims-files").map(parse_string_list);
+    // Optional: `claims-files` — None if absent, Some(vec) if present. Accepts
+    // bare-string shorthand AND `{extension: ...}` mapping form (change A);
+    // each element's extension is normalized to undotted lowercase (change B).
+    let claims_files = item.get("claims-files").map(parse_file_claims);
 
     Ok(EngineContribution::External {
         path: resolved_path,
@@ -541,16 +544,61 @@ fn parse_static_language_claim(key: &str, cv: &ConfigValue) -> Option<StaticLang
     }
 }
 
-/// Parse a YAML array of strings into a `Vec<String>`.
+/// Normalize a declared extension to the canonical Rust-side form: strip a
+/// single leading `.` if present, then lowercase. `".ECHO"` -> `"echo"`,
+/// `"Echo"` -> `"echo"`, `""` -> `""`.
+///
+/// Extensions are undotted everywhere on the Rust side (change C); the wire
+/// adapter (`to_wire_ext` in `engine/ts_engine.rs`) re-dots only at the
+/// Rust -> TS seam.
+fn normalize_ext(raw: &str) -> String {
+    let stripped = raw.strip_prefix('.').unwrap_or(raw);
+    stripped.to_lowercase()
+}
+
+/// Parse a YAML array of strings into a `Vec<String>`, normalizing each
+/// element via `normalize_ext` (undotted, lowercase).
 ///
 /// Non-string elements are silently skipped.
-fn parse_string_list(cv: &ConfigValue) -> Vec<String> {
+fn parse_normalized_ext_list(cv: &ConfigValue) -> Vec<String> {
     let ConfigValueKind::Array(items) = &cv.value else {
         return vec![];
     };
     items
         .iter()
-        .filter_map(|item| item.as_str().map(|s| s.to_string()))
+        .filter_map(|item| item.as_str().map(normalize_ext))
+        .collect()
+}
+
+/// Parse a `claims-files` array into `Vec<FileClaim>`.
+///
+/// Each element is either:
+/// - a **scalar** string (`.echo`) -> `FileClaim { extension: normalize_ext(...) }`
+/// - a **mapping** `{extension: ".echo"}` -> same, reading the `extension` key
+///
+/// Any other shape (or a mapping missing `extension`) is silently skipped,
+/// mirroring `parse_normalized_ext_list`'s non-string-skip behavior.
+fn parse_file_claims(cv: &ConfigValue) -> Vec<FileClaim> {
+    let ConfigValueKind::Array(items) = &cv.value else {
+        return vec![];
+    };
+    items
+        .iter()
+        .filter_map(|item| match &item.value {
+            ConfigValueKind::Scalar(_) | ConfigValueKind::PandocInlines(_) => {
+                item.as_str().map(|s| FileClaim {
+                    extension: normalize_ext(s),
+                })
+            }
+            ConfigValueKind::Map(_) => {
+                item.get("extension")
+                    .and_then(|v| v.as_str())
+                    .map(|s| FileClaim {
+                        extension: normalize_ext(s),
+                    })
+            }
+            _ => None,
+        })
         .collect()
 }
 
@@ -1350,8 +1398,20 @@ contributes:
                 assert_eq!(echo_claim.kind, ClaimKind::Primary);
                 assert_eq!(echo_claim.priority, Some(1));
                 assert!(echo_claim.when_class.is_none());
-                assert_eq!(file_extensions.as_deref(), Some(&[".echo".to_string()][..]));
-                assert_eq!(claims_files.as_deref(), Some(&[".echo".to_string()][..]));
+                assert_eq!(
+                    file_extensions.as_deref(),
+                    Some(&["echo".to_string()][..]),
+                    "file-extensions must normalize to undotted lowercase at parse time"
+                );
+                assert_eq!(
+                    claims_files.as_deref(),
+                    Some(
+                        &[FileClaim {
+                            extension: "echo".to_string()
+                        }][..]
+                    ),
+                    "claims-files bare-string shorthand must normalize to undotted lowercase"
+                );
             }
             other => panic!("expected External, got {:?}", other),
         }
@@ -1359,6 +1419,76 @@ contributes:
         match &ext.contributes.engines[1] {
             EngineContribution::Reorder { name } => assert_eq!(name, "jupyter"),
             other => panic!("expected Reorder, got {:?}", other),
+        }
+    }
+
+    /// T9 (1c.2 Task 1, changes A+B): `claims-files` parses BOTH the
+    /// bare-string shorthand (`.Echo`) AND the `{extension: ...}` mapping
+    /// form, and BOTH axes (`file-extensions`, `claims-files`) normalize to
+    /// undotted lowercase at parse time.
+    ///
+    /// REDs (manually verified — see task report):
+    /// 1. Revert `normalize_ext` to a no-op (identity fn) → stored values are
+    ///    `".ECHO"` / `".Echo"`, which != `"echo"` → assertions fail.
+    /// 2. Revert the `ConfigValueKind::Map` arm out of `parse_file_claims`
+    ///    (drop scalar-or-mapping accept) → the object-form element parses to
+    ///    `None` and is dropped → `claims.len()` is 1, not 2 → assertion fails.
+    #[test]
+    fn t9_claims_files_bare_and_object_forms_normalize_undotted_lowercase() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      file-extensions:
+        - ".ECHO"
+      claims-files:
+        - ".Echo"
+        - extension: ".Echo"
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        match &ext.contributes.engines[0] {
+            EngineContribution::External {
+                file_extensions,
+                claims_files,
+                ..
+            } => {
+                assert_eq!(
+                    file_extensions.as_deref(),
+                    Some(&["echo".to_string()][..]),
+                    "file-extensions must normalize undotted lowercase"
+                );
+                let claims = claims_files.as_ref().expect("claims-files must be Some");
+                assert_eq!(
+                    claims.len(),
+                    2,
+                    "both bare-string and object-map forms must parse to one entry each; got {:?}",
+                    claims
+                );
+                assert_eq!(
+                    claims[0],
+                    FileClaim {
+                        extension: "echo".to_string()
+                    },
+                    "bare-string form must normalize undotted lowercase"
+                );
+                assert_eq!(
+                    claims[1],
+                    FileClaim {
+                        extension: "echo".to_string()
+                    },
+                    "object-map form must normalize undotted lowercase"
+                );
+            }
+            other => panic!("expected External, got {:?}", other),
         }
     }
 

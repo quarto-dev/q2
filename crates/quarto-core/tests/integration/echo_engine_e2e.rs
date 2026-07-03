@@ -28,9 +28,13 @@ use std::sync::Arc;
 
 use tempfile::TempDir;
 
+use async_trait::async_trait;
+
 use quarto_core::Format;
 use quarto_core::project::ProjectContext;
-use quarto_core::project::orchestrator::{ProjectPipeline, project_type_for};
+use quarto_core::project::ProjectKind;
+use quarto_core::project::index::ProjectIndex;
+use quarto_core::project::orchestrator::{ProjectPipeline, ProjectType, project_type_for};
 use quarto_core::render_to_file::{RenderToFileOptions, render_to_file};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
@@ -725,5 +729,251 @@ impl OrderedCapture {
 
     fn all_targets(&self) -> Vec<String> {
         self.targets.lock().unwrap().clone()
+    }
+}
+
+// ── T8 (plan 1c.2 P2): discovery-set union + echo conversion, via the walk ────
+//
+// A temp PROJECT (`_quarto.yml`) with `a.echo` at the project root plus the
+// echo-engine extension installed under `_extensions/`. `ProjectContext::discover`
+// on the PROJECT DIRECTORY (not a single file, unlike every other test in this
+// file) exercises the walk in `discover_project_files`, which must admit
+// `a.echo` via the FIXED_RENDERABLE ∪ claimed_file_extensions union computed
+// BEFORE the walk (the Corollary-0 split of
+// `discover_extensions_and_build_registry`). A full `ProjectPipeline::run()`
+// then drives the real render→index flow (`pass2_renderer.rs` /
+// `orchestrator.rs`, same production path as `project_pipeline.rs`'s Test 14).
+//
+// Field asserted: the `ProjectIndex` entry's `outline[0].title`, NOT `title`.
+// This repo's `title_block` transform only goes `title:` metadata -> synthesized
+// H1 (crates/quarto-core/src/transforms/title_block.rs); there is no reverse
+// "H1 promotes to title" pass, so `DocumentProfile::extract` leaves `title`
+// `None` when frontmatter has no `title:` key (see
+// `profile_extract_handles_missing_title` in document_profile.rs) even though
+// the converted `a.echo` body has an H1. `outline` is populated from the AST's
+// real headings regardless of `title`, so it is the field that can actually
+// distinguish "converted" from "raw fall-through" here.
+//
+// Two named reverts, BOTH demonstrated live during this task's TDD sequencing
+// (not via a synthetic `git revert` — the plan's own step order walks through
+// both RED states before the final GREEN):
+// (1) discovery-set union reverted (`RenderableExtensions::fixed()` at the
+//     `discover` call site instead of the real union): `a.echo` never enters
+//     `project.files` -> the walk never sees it -> NO `ProjectIndex` entry for
+//     `a.echo` -> RED (proves *discovery*). This is the base-commit state this
+//     test was written against, before the Corollary-0 wiring landed.
+// (2) echo's `markdownForFile` heading reverted (dist rebuilt from the
+//     pre-2b `.ts`): the entry EXISTS (discovery still finds `a.echo`) but its
+//     converted body carries no heading of its own, so `outline` is empty ->
+//     `profile.outline.first()` is `None` -> RED (proves *conversion*). This
+//     is the state after step (1)'s wiring lands but before the echo heading
+//     edit, also walked through live during this task.
+#[test]
+fn t8_echo_file_discovered_and_converted_via_project_walk() {
+    if !deno_available() {
+        eprintln!(
+            "SKIP: deno not on PATH — t8_echo_file_discovered_and_converted_via_project_walk"
+        );
+        return;
+    }
+    let tmp = setup_project(&["echo-engine"]);
+    write_file(
+        &tmp.path().join("_quarto.yml"),
+        "project:\n  type: default\n",
+    );
+    write_file(&tmp.path().join("a.echo"), "Whole-file echo body.\n");
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let mut project = ProjectContext::discover(tmp.path(), runtime.as_ref())
+        .expect("ProjectContext::discover over the project dir");
+    assert!(
+        !project.is_single_file,
+        "a _quarto.yml-rooted directory input must NOT be single-file"
+    );
+    assert!(
+        project
+            .files
+            .iter()
+            .any(|f| f.input.file_name().and_then(|n| n.to_str()) == Some("a.echo")),
+        "a.echo must be admitted by the project walk (FIXED_RENDERABLE ∪ \
+         claimed_file_extensions); discovered files: {:?}",
+        project.files.iter().map(|f| &f.input).collect::<Vec<_>>()
+    );
+
+    let options = RenderToFileOptions::default();
+    let captured: std::rc::Rc<std::cell::RefCell<Option<ProjectIndex>>> =
+        std::rc::Rc::new(std::cell::RefCell::new(None));
+    let project_type: Box<dyn ProjectType> = Box::new(IndexCapture {
+        captured: captured.clone(),
+    });
+
+    let mut pipeline = ProjectPipeline::new(
+        &mut project,
+        project_type,
+        Format::html(),
+        "html",
+        &options,
+        runtime.clone(),
+    );
+    let summary = pollster::block_on(pipeline.run()).expect("orchestrator run");
+    assert_eq!(summary.outputs.len(), 1, "one page (a.echo) should render");
+
+    let index = captured
+        .borrow()
+        .clone()
+        .expect("pre_render must have observed the ProjectIndex");
+    let profile = index
+        .lookup_by_source(Path::new("a.echo"))
+        .unwrap_or_else(|| {
+            panic!(
+                "ProjectIndex must contain an entry for a.echo (discovery); \
+                 profiles: {:?}",
+                index.profiles()
+            )
+        });
+    let heading = profile.outline.first().unwrap_or_else(|| {
+        panic!(
+            "a.echo's outline must have at least one heading (echo's \
+             markdownForFile conversion prepends `# Echoed: <basename>`); \
+             profile: {:?}",
+            profile
+        )
+    });
+    assert_eq!(
+        heading.title, "Echoed: a.echo",
+        "a.echo's first outline heading must be the echo-conversion-added \
+         title; profile: {:?}",
+        profile
+    );
+}
+
+// ── T13 (plan 1c.2 P4, OPTIONAL): real-process crash mid-execute ─────────────
+//
+// Only the demux reader-thread's EOF->broadcast path -- real Deno subprocess,
+// real pipe EOF, real `handle_crash` -- is not yet covered by an E2E test (the
+// MockTransport unit tests in `ts_process.rs` exercise the broadcast logic
+// but never spawn a real child). T13 renders a `.qmd` whose `{echo}` cell
+// body carries the sentinel `QUARTO_ECHO_CRASH`; the echo fixture's
+// `execute()` recognizes it, writes an identifiable marker to stderr, then
+// calls `Deno.exit(1)` BEFORE returning any result -- i.e. mid-execute, while
+// the request is in flight on the demux. The engine-host's stdout pipe then
+// closes, the reader thread observes EOF, `handle_crash` reaps the child,
+// snapshots the stderr ring, and broadcasts `ExecutionError::ProcessCrashed`
+// to the in-flight slot.
+//
+// Shape assertion: `ExecutionError` does NOT survive as a structured type to
+// `render_to_file`'s caller -- `EngineExecutionStage::run`
+// (`stage/stages/engine_execution.rs:370`) converts it with
+// `.map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))`,
+// stringifying it into a `DiagnosticMessage` title before the pipeline error
+// is folded into `QuartoError::Parse` (`pipeline.rs`'s `run_pipeline`
+// `result.map_err` -- the `StageError { diagnostics, .. } if
+// !diagnostics.is_empty()` arm). So there is no `downcast`/`matches!` seam
+// left by the time the error reaches this test -- the strongest available
+// signal that `ProcessCrashed` (and not some other `ExecutionError` variant)
+// produced the failure is `ProcessCrashed`'s OWN `#[error(...)]` Display
+// text, which is unique among the enum's variants:
+// "engine host subprocess crashed while serving '{engine}' (exit code:
+// {code:?})\n{stderr}" (`engine/error.rs:109-111`). This test asserts that
+// substring is present (shape) AND that the captured stderr contains the
+// crash marker (content) -- together they rule out both "some other
+// execution error happened to mention 'crashed'" and "ProcessCrashed fired
+// but the stderr ring lost the marker."
+//
+// Named revert (reasoned, not live-forced -- see report): reverting the
+// reader thread's EOF->`handle_crash`->broadcast wiring in `ts_process.rs`
+// (i.e. `reader_loop`'s unexpected-EOF arm no longer calling `handle_crash`,
+// or `handle_crash` no longer draining+broadcasting to `pending`) leaves
+// every `PendingSlot` in the `pending` map un-notified: no `ProcessCrashed`
+// is ever delivered to the in-flight execute request. The request does NOT,
+// however, hang forever -- `TsEngineHost::request`'s tick loop independently
+// enforces the `execute_timeout` window (`ts_process.rs`, the
+// `start.elapsed() >= window` check), and this fixture sets no
+// `execute: timeout:` key, so `resolve_execute_timeout` supplies the 300s
+// default. So with the wiring reverted the request returns
+// `Err(ExecutionError::Timeout { .. })` after that bounded wait, via a code
+// path completely independent of the EOF->broadcast wiring under test. Either
+// way the test goes RED: `Timeout`'s Display text ("timed out during
+// execute") matches NEITHER the ProcessCrashed-identity assertion nor the
+// `ECHO_CRASH_MARKER` stderr assertion below -- so the crash-specific seam is
+// still discriminating (a non-crash outcome fails both assertions), just via
+// a bounded-timeout error rather than an infinite hang. (Note: `.config/
+// nextest.toml` sets no `slow-timeout.terminate-after`, so nextest would NOT
+// kill a genuine hang here -- which is exactly why the real revert-RED path
+// is the bounded `execute_timeout`, not a nextest-killed hang.) Reasoned from
+// the code rather than forced live because deliberately reverting production
+// crash-recovery code and waiting out a 300s timeout is a slow, disruptive
+// action reserved for the controller if independent confirmation is wanted.
+#[test]
+fn t13_crash_mid_execute_yields_process_crashed_with_stderr() {
+    if !deno_available() {
+        eprintln!(
+            "SKIP: deno not on PATH -- t13_crash_mid_execute_yields_process_crashed_with_stderr"
+        );
+        return;
+    }
+    let tmp = setup_project(&["echo-engine"]);
+    let input = tmp.path().join("crash.qmd");
+    write_file(
+        &input,
+        "---\ntitle: Echo Crash\n---\n\n```{echo}\nQUARTO_ECHO_CRASH\n```\n",
+    );
+
+    let options = RenderToFileOptions::default();
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(&input, "html", &options, runtime);
+
+    assert!(
+        result.is_err(),
+        "a mid-execute crash (stderr marker + Deno.exit(1) before returning) \
+         must fail the render, not succeed or panic"
+    );
+    let msg = format!("{:#}", result.unwrap_err());
+
+    // Shape: ProcessCrashed's own Display text is the only source of this
+    // exact phrase among ExecutionError's variants (see doc comment above).
+    assert!(
+        msg.contains("engine host subprocess crashed while serving"),
+        "error message must carry ProcessCrashed's uniquely-identifying \
+         Display text (proves the reader-thread EOF->broadcast path fired, \
+         not some other ExecutionError variant); got: {msg}"
+    );
+    // The crashed engine is named in the same Display text.
+    assert!(
+        msg.contains("'echo'"),
+        "ProcessCrashed's Display text must name the crashed engine \
+         ('echo'); got: {msg}"
+    );
+    // Content: the captured stderr ring must carry the marker the fixture
+    // wrote immediately before Deno.exit(1) -- proves handle_crash's stderr
+    // snapshot actually captured the child's last words, not an empty tail.
+    assert!(
+        msg.contains("ECHO_CRASH_MARKER"),
+        "error message must carry the captured stderr marker the crashing \
+         engine wrote before Deno.exit(1); got: {msg}"
+    );
+}
+
+/// A `ProjectType` that captures the `ProjectIndex` handed to `pre_render`,
+/// for tests that need to inspect the index the driver built (T8). Mirrors
+/// `IndexObserver` in `project_pipeline.rs` (Test 14), but clones the whole
+/// index (not just source paths) so the caller can `lookup_by_source`.
+struct IndexCapture {
+    captured: std::rc::Rc<std::cell::RefCell<Option<ProjectIndex>>>,
+}
+
+#[async_trait(?Send)]
+impl ProjectType for IndexCapture {
+    fn kind(&self) -> ProjectKind {
+        ProjectKind::Default
+    }
+
+    async fn pre_render(
+        &self,
+        _project: &mut ProjectContext,
+        index: &ProjectIndex,
+    ) -> quarto_core::Result<()> {
+        *self.captured.borrow_mut() = Some(index.clone());
+        Ok(())
     }
 }

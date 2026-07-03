@@ -117,9 +117,9 @@ contributes:
 
         // No extension-contributed engines, so contribution_order is empty.
         assert!(
-            project.registry.contribution_order.is_empty(),
+            project.registry.contribution_order().is_empty(),
             "contribution_order should be empty with no engine extensions; got: {:?}",
-            project.registry.contribution_order
+            project.registry.contribution_order()
         );
     }
 
@@ -327,10 +327,10 @@ contributes:
         assert!(
             project
                 .registry
-                .contribution_order
+                .contribution_order()
                 .contains(&"alpha".to_string()),
             "contribution_order should contain 'alpha'; got: {:?}",
-            project.registry.contribution_order
+            project.registry.contribution_order()
         );
     }
 
