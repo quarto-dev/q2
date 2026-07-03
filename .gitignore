@@ -51,3 +51,6 @@ CLAUDE.local.md
 
 # Visual brainstorming companion scratch files
 .superpowers/
+
+# playwright-mcp
+.playwright-mcp
