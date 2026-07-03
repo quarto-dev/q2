@@ -206,12 +206,23 @@ const PANDOC_VERSION_PARSE_CASES: &[(&str, (u32, u32))] = &[
     ("", (0, 0)),
 ];
 
+/// Boundary cases are derived from `PANDOC_ORACLE_MIN/MAX_VERSION` so bumping
+/// the ceiling doesn't require hand-editing this table too.
 const PANDOC_ORACLE_RANGE_CASES: &[((u32, u32), bool)] = &[
-    ((3, 5), false),
-    ((3, 6), true),
-    ((3, 7), true),
-    ((3, 9), true),
-    ((3, 10), false),
+    (
+        (PANDOC_ORACLE_MIN_VERSION.0, PANDOC_ORACLE_MIN_VERSION.1 - 1),
+        false,
+    ),
+    (PANDOC_ORACLE_MIN_VERSION, true),
+    (
+        (PANDOC_ORACLE_MIN_VERSION.0, PANDOC_ORACLE_MIN_VERSION.1 + 1),
+        true,
+    ),
+    (PANDOC_ORACLE_MAX_VERSION, true),
+    (
+        (PANDOC_ORACLE_MAX_VERSION.0, PANDOC_ORACLE_MAX_VERSION.1 + 1),
+        false,
+    ),
     ((4, 0), false),
     ((0, 0), false),
 ];
@@ -249,8 +260,16 @@ mod pandoc_oracle_gate_tests {
             message.contains("pandoc 3.10"),
             "message should contain the raw detected version line, got: {message}"
         );
+        let min_str = format!(
+            "{}.{}",
+            PANDOC_ORACLE_MIN_VERSION.0, PANDOC_ORACLE_MIN_VERSION.1
+        );
+        let max_str = format!(
+            "{}.{}",
+            PANDOC_ORACLE_MAX_VERSION.0, PANDOC_ORACLE_MAX_VERSION.1
+        );
         assert!(
-            message.contains("3.6") && message.contains("3.9"),
+            message.contains(&min_str) && message.contains(&max_str),
             "message should contain the calibrated range, got: {message}"
         );
         assert!(
