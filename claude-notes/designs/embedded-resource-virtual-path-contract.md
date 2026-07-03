@@ -139,7 +139,10 @@ exactly the proliferation to avoid — consolidate on the `quarto-util` one.
    virtual path (as grass produces on Windows) to `EmbeddedResources::is_file`
    / `read` and assert it resolves. Build the `\` path inline so the test
    exercises the corruption on any host. Confirm it fails before the fix.
-2. **GREEN:** add `to_virtual_key`, wire into `strip_prefix` + collectors.
+2. **GREEN:** add `quarto-util` as a `quarto-sass` dependency and call
+   `quarto_util::path::to_forward_slashes` at the top of `strip_prefix` and
+   in `collect_files`/`collect_directories`. Do **not** add a new
+   normalization function.
 3. **Regression:** full `cargo nextest run -p quarto-sass` — the 30
    `@import "vendor/rfs"` failures (uncovered once the parse_layer CRLF bug
    `bd-3fgnmlco` was fixed) must go to zero.
