@@ -260,16 +260,15 @@ mod pandoc_oracle_gate_tests {
             message.contains("pandoc 3.10"),
             "message should contain the raw detected version line, got: {message}"
         );
-        let min_str = format!(
-            "{}.{}",
-            PANDOC_ORACLE_MIN_VERSION.0, PANDOC_ORACLE_MIN_VERSION.1
-        );
-        let max_str = format!(
-            "{}.{}",
-            PANDOC_ORACLE_MAX_VERSION.0, PANDOC_ORACLE_MAX_VERSION.1
+        let range_str = format!(
+            "Calibrated range: {}.{}\u{2013}{}.{}",
+            PANDOC_ORACLE_MIN_VERSION.0,
+            PANDOC_ORACLE_MIN_VERSION.1,
+            PANDOC_ORACLE_MAX_VERSION.0,
+            PANDOC_ORACLE_MAX_VERSION.1
         );
         assert!(
-            message.contains(&min_str) && message.contains(&max_str),
+            message.contains(&range_str),
             "message should contain the calibrated range, got: {message}"
         );
         assert!(
