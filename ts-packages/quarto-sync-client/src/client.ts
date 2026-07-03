@@ -210,6 +210,38 @@ interface SyncClientState {
    * connected" loop, or null when idle. Cleared on disconnect.
    */
   unavailableRetryTimer: ReturnType<typeof setTimeout> | null;
+  /**
+   * Cumulative count of unavailable-retry poll ticks fired on this
+   * connection. Diagnostic only (see {@link getSyncDiagnostics}) — lets a
+   * failure snapshot show whether the poll actually ran, and how often,
+   * for a file that never recovered. Reset on disconnect.
+   */
+  unavailableRetryTicks: number;
+}
+
+/**
+ * One index-referenced file that has NOT loaded, as reported by
+ * `getSyncDiagnostics()`. `handleState` is the raw automerge-repo DocHandle
+ * state (`'loading'` / `'requesting'` / `'unavailable'` / …), or null when
+ * the repo holds no cached handle for the doc at all. `unavailableMarker`
+ * is this client's own dangling-entry marker (`markFileUnavailable`).
+ * The two disagree exactly when a stall mechanism is hiding: e.g. a handle
+ * stuck `requesting` with no marker means a find is still in flight (or
+ * hung), while marker-set + `unavailable` is the settled verdict.
+ */
+export interface StrandedFileDiagnostic {
+  path: string;
+  docId: string;
+  handleState: string | null;
+  unavailableMarker: boolean;
+}
+
+/** Snapshot returned by `getSyncDiagnostics()`. */
+export interface SyncDiagnostics {
+  connectedPeers: number;
+  unavailableRetryTicks: number;
+  retryTimerActive: boolean;
+  stranded: StrandedFileDiagnostic[];
 }
 
 const DEFAULT_FIND_DOC_RETRY: Required<FindDocRetryOptions> = {
@@ -279,6 +311,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     findDocRetry: DEFAULT_FIND_DOC_RETRY,
     initialLoadComplete: false,
     unavailableRetryTimer: null,
+    unavailableRetryTicks: 0,
   };
 
   // AST cache: last successful parse per file (for round-tripping)
@@ -681,6 +714,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     const deadline = Date.now() + UNAVAILABLE_RETRY_WINDOW_MS;
     const tick = async (): Promise<void> => {
       state.unavailableRetryTimer = null;
+      state.unavailableRetryTicks += 1;
       if (state.unavailableFiles.size === 0) return;
       if (state.connectedPeers.size > 0) {
         await retryUnavailableFilesOnce();
@@ -1049,6 +1083,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     state.connectedPeers = new Set();
     state.peerStorageIds = new Map();
     state.findDocRetry = DEFAULT_FIND_DOC_RETRY;
+    state.unavailableRetryTicks = 0;
     lastIdentities = {};
     lastCaptures = {};
 
@@ -1358,6 +1393,50 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
+   * Diagnostic snapshot of sync health for files the index references but
+   * that have NOT loaded (no entry in `fileHandles`). Built for the e2e
+   * smoke-diag classifier: the nightly suite's dominant failure is a render
+   * target that never lands in the VFS, and the *mechanism* differs by the
+   * stranded doc's automerge-repo DocHandle state — `requesting` (request
+   * frame lost in flight), `unavailable` (automerge-repo's terminal
+   * verdict), `loading` (storage load never finished), or null (no handle
+   * was ever created). Those are indistinguishable in the timeout symptom;
+   * this makes them observable. Reads only in-memory state — no network,
+   * no storage; safe to call at any time, including mid-connect (returns
+   * empty `stranded` before the index doc loads).
+   */
+  function getSyncDiagnostics(): SyncDiagnostics {
+    const repo = state.repo;
+    const indexDoc = state.indexHandle?.doc() as
+      | { files?: Record<string, string> }
+      | undefined;
+    const entries = indexDoc?.files ? Object.entries(indexDoc.files) : [];
+    const stranded: StrandedFileDiagnostic[] = entries
+      .filter(([path]) => !state.fileHandles.has(path))
+      .map(([path, docId]) => {
+        const raw = String(docId);
+        // `repo.handles` is keyed by the bare document id; index entries may
+        // carry the `automerge:`-prefixed URL form.
+        const bareId = raw.startsWith('automerge:')
+          ? raw.slice('automerge:'.length)
+          : raw;
+        const cached = repo?.handles?.[bareId as DocumentId];
+        return {
+          path,
+          docId: raw,
+          handleState: cached?.state ?? null,
+          unavailableMarker: state.unavailableFiles.has(path),
+        };
+      });
+    return {
+      connectedPeers: state.connectedPeers.size,
+      unavailableRetryTicks: state.unavailableRetryTicks,
+      retryTimerActive: state.unavailableRetryTimer !== null,
+      stranded,
+    };
+  }
+
+  /**
    * Create a new project with the given files.
    */
   async function createNewProject(
@@ -1592,6 +1671,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     getFileHandle,
     getFilePaths,
     getUnavailableFiles,
+    getSyncDiagnostics,
     createNewProject,
     getActorId,
   };

@@ -207,6 +207,30 @@ export interface PreviewStageDiagnostics {
    * render error is shown.
    */
   renderError: string;
+  /**
+   * Sync-layer view of the stall (from the sync client's
+   * `getSyncDiagnostics()` test hook): for every index-referenced file that
+   * never loaded, the underlying automerge-repo DocHandle state
+   * (`loading` / `requesting` / `unavailable` / `nohandle`) and whether the
+   * client's own unavailable marker was set, plus connected-peer count and
+   * the unavailable-retry poll's tick counter / timer state. This is the
+   * field that distinguishes the remaining stall *mechanisms* behind the
+   * uniform "Path not found: <target>" symptom — a request lost in flight
+   * (`requesting`), automerge-repo's terminal cached verdict
+   * (`unavailable`), or a storage load that never finished (`loading`).
+   * Null when the hook is unavailable (older bundle) or capture threw.
+   */
+  sync: {
+    connectedPeers: number;
+    unavailableRetryTicks: number;
+    retryTimerActive: boolean;
+    stranded: Array<{
+      path: string;
+      docId: string;
+      handleState: string | null;
+      unavailableMarker: boolean;
+    }>;
+  } | null;
   /** Single-line, key=value, grep-friendly form for the failure message. */
   line: string;
 }
@@ -259,6 +283,29 @@ export async function capturePreviewDiagnostics(
       renderError = msg.replace(/\s+/g, ' ').slice(0, 300);
     }
 
+    // Sync-layer stall mechanism (see the `sync` field doc on
+    // PreviewStageDiagnostics). Optional-called so a bundle predating the
+    // hook degrades to null instead of throwing inside the diag capture.
+    let sync: {
+      connectedPeers: number;
+      unavailableRetryTicks: number;
+      retryTimerActive: boolean;
+      stranded: Array<{
+        path: string;
+        docId: string;
+        handleState: string | null;
+        unavailableMarker: boolean;
+      }>;
+    } | null = null;
+    try {
+      const renderer = window.__quartoTest?.wasmRenderer as
+        | { getSyncDiagnostics?: () => NonNullable<typeof sync> }
+        | undefined;
+      sync = renderer?.getSyncDiagnostics?.() ?? null;
+    } catch {
+      /* not connected yet, or hook absent */
+    }
+
     return {
       wasmReady,
       vfsCount,
@@ -270,6 +317,7 @@ export async function capturePreviewDiagnostics(
       iframePresent: !!iframe,
       bodyLen,
       renderError,
+      sync,
     };
   }, iframeSelector);
 
@@ -284,6 +332,28 @@ export async function capturePreviewDiagnostics(
   else if (!raw.wasmReady) stage = 'WASM_NOT_READY';
   else stage = 'UNKNOWN';
 
+  // Compact sync-mechanism suffix, e.g.
+  //   syncPeers=1 syncRetryTicks=12 stranded="test.qmd=requesting+marker"
+  // `stranded` lists each never-loaded file as <path>=<handleState>, with
+  // `+marker` when the sync client's unavailable marker is set and
+  // `nohandle` when the repo holds no cached handle. Only emitted when the
+  // hook returned data; kept after renderError so existing parsers are
+  // unaffected.
+  let syncSuffix = '';
+  if (raw.sync) {
+    const stranded = raw.sync.stranded
+      .map(
+        (s) =>
+          `${s.path}=${s.handleState ?? 'nohandle'}${s.unavailableMarker ? '+marker' : ''}`,
+      )
+      .join(',');
+    syncSuffix =
+      ` syncPeers=${raw.sync.connectedPeers}` +
+      ` syncRetryTicks=${raw.sync.unavailableRetryTicks}` +
+      ` syncRetryTimer=${raw.sync.retryTimerActive ? 1 : 0}` +
+      (stranded ? ` stranded="${stranded}"` : '');
+  }
+
   const line =
     `[smoke-diag] stage=${stage} wasmReady=${raw.wasmReady} vfs=${raw.vfsCount} ` +
     `projectSelector=${raw.projectSelector ? 1 : 0} connecting=${raw.connecting ? 1 : 0} ` +
@@ -291,8 +361,10 @@ export async function capturePreviewDiagnostics(
     `loadingPreview=${raw.loadingPreview ? 1 : 0} iframe=${raw.iframePresent ? 1 : 0} ` +
     `bodyLen=${raw.bodyLen}` +
     // The real failure reason, when the preview is showing a render error.
-    // Appended last so the analyzer's `stage=` parse is unaffected.
-    (raw.renderError ? ` renderError="${raw.renderError}"` : '');
+    // Appended after the fixed fields so the analyzer's `stage=` parse is
+    // unaffected.
+    (raw.renderError ? ` renderError="${raw.renderError}"` : '') +
+    syncSuffix;
 
   return { stage, ...raw, line };
 }
