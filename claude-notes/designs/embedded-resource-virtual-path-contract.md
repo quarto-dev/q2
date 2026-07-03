@@ -88,47 +88,49 @@ Tracked separately (see Deferred work).
 
 ## Fix
 
-Introduce one documented canonicalization boundary and route the embedded
-lookup through it:
+**Reuse the existing shared helper — do not introduce a new function.**
+`quarto-util` already owns the canonicalization boundary:
 
 ```rust
-/// Canonicalize any std::path::Path — including one corrupted by
-/// PathBuf::join re-inserting a native separator on Windows — into the
-/// forward-slash virtual-resource key space that both the embedded index
-/// (include_dir, normalized at build time) and the WASM `vfs:` importer
-/// already treat as ground truth.
-pub fn to_virtual_key(path: &Path) -> String {
+// crates/quarto-util/src/path.rs:23
+pub fn to_forward_slashes(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 ```
 
-The body is deliberately *only* the `\`→`/` replacement. An earlier draft
-also collapsed empty segments (`split('/').filter(!empty).join("/")`), but
-that **drops the leading slash**, which breaks the very next step in
-`strip_prefix` — `.strip_prefix(RESOURCE_PATH_PREFIX)` where
-`RESOURCE_PATH_PREFIX` begins with `/`. grass's `load_path.join(path)`
-never produces `//` (the load paths have no trailing slash), so there is
-nothing to collapse; the existing `trim_start_matches('/')` in
-`strip_prefix` already handles leading separators after the prefix strip.
-Keep `to_virtual_key` a one-line, idempotent, leading-slash-preserving
-replacement — it stays a named function for the documented boundary and
-reuse in the key collectors, not for body complexity.
+This is byte-identical to what an earlier draft proposed as a new
+`to_virtual_key`, and it is already unit-tested (unix no-op + Windows
+conversion). It is leading-slash-preserving and idempotent — exactly what
+`strip_prefix` needs, since the very next step, `.strip_prefix(RESOURCE_PATH_PREFIX)`,
+depends on the leading `/`. (An earlier draft's extra
+`split('/').filter(!empty).join("/")` would have *dropped* that leading
+slash and broken the prefix strip; grass's `load_path.join(path)` never
+produces `//` anyway, so only the `\`→`/` replacement is needed.)
 
-- **Placement — `EmbeddedResources` only.** Call it at the top of
-  `strip_prefix` (which every `is_file`/`is_dir`/`read`/`read_str` funnels
-  through) and in `collect_files`/`collect_directories` for key symmetry.
-  This is the embedded-namespace boundary — the same "normalize once at the
-  boundary" idiom `include_dir` and `rust-embed` use.
+There are already two private copies of this logic
+(`quarto-core/src/stage/stages/document_profile.rs:132` `to_forward_slash`,
+`quarto-core/src/project/discovery.rs:181` `to_forward_slashes`), which is
+exactly the proliferation to avoid — consolidate on the `quarto-util` one.
+
+- **Add `quarto-util` as a dependency of `quarto-sass`** (it is not one
+  today). `quarto-util::path` is pure `std` and already reasons about
+  `wasm32` behavior (`is_rooted`), so it is safe in `quarto-sass`'s WASM
+  build. Verify the WASM build during implementation.
+- **Placement — `EmbeddedResources` only.** Call `to_forward_slashes` at
+  the top of `strip_prefix` (which every `is_file`/`is_dir`/`read`/`read_str`
+  funnels through) and in `collect_files`/`collect_directories` for key
+  symmetry. This is the embedded-namespace boundary — the same "normalize
+  once at the boundary" idiom `include_dir` and `rust-embed` use.
 - **`RuntimeFs` stays untouched.** Its `read`/`is_file` fall back to real
   `std::fs` for user files; normalizing `\`→`/` there would mangle genuine
   Windows paths (`C:\Users\…`). Normalization is strictly embedded-only.
   (This corrects a research suggestion to also normalize in `RuntimeFs`.)
-- **Function, not a newtype (for now).** grass's `Fs` and `SystemRuntime`
-  are hard-typed to `std::path`; a `VirtualPath` newtype would ripple
-  through both for a currently-single namespace. Promote to a newtype
-  (rust-analyzer `VfsPath` style) only if the virtual surface grows.
+- **Shared helper, not a newtype (for now).** grass's `Fs` and
+  `SystemRuntime` are hard-typed to `std::path`; a `VirtualPath` newtype
+  would ripple through both for a currently-single namespace. Promote to a
+  newtype (rust-analyzer `VfsPath` style) only if the virtual surface grows.
 - **Document the two domains** at the top of `resources.rs` so future
-  embedded providers route through `to_virtual_key` instead of growing
+  embedded providers route through `to_forward_slashes` instead of growing
   their own string-trimming.
 
 ## Test plan (TDD)
@@ -153,7 +155,9 @@ reuse in the key collectors, not for body complexity.
 
 ## Decisions (2026-07-03, with Chris)
 
-- Abstraction: `to_virtual_key` free function now; newtype deferred.
+- Abstraction: reuse the existing `quarto_util::to_forward_slashes` (add
+  `quarto-util` dep to `quarto-sass`); no new function; newtype deferred.
+  Consolidate the two private dupes onto it opportunistically.
 - Placement: `EmbeddedResources` boundary only; `RuntimeFs` untouched.
 - WASM pool divergence: documented + deferred to a strand.
 - Windows CI job: deferred to a strand.
