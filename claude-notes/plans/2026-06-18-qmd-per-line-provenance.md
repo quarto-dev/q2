@@ -19,6 +19,20 @@ TDD-first; pampa-only.
 > examples each, distinct Pandoc elements). Those fixtures become the regression
 > tests here.
 
+> **Related investigation (different layer, same family of bug).** bd-1d6io
+> (`claude-notes/plans/2026-06-01-bd-1d6io-investigation.md`, worktree
+> `.worktrees/bd-1d6io-annotated-qmd-source-tracking`) found a source-tracking
+> off-by-one on the **parse/JSON-writer** side: the tree-sitter code-span and
+> attribute-key scanners absorb one byte of preceding whitespace into the token,
+> so `Inline::Code`/attr-key `source_info` ranges start one byte too early. That
+> is a token-boundary bug in the **scanner** (parse-time), not a linearity
+> assumption in the **qmd writer** (serialize-time) — a different bug, not a
+> duplicate — but it's evidence of the same broader pattern: pampa's
+> source-tracking machinery has more than one place where an implicit
+> boundary/linearity assumption silently breaks. Not folded into this plan's
+> scope (§SCOPE is qmd-writer methods only); noted here so the two don't get
+> fixed in ignorance of each other.
+
 ---
 
 ## 1. Motivation — two failures, one root cause
