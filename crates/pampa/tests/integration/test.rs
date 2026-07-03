@@ -115,7 +115,7 @@ fn has_good_pandoc_version() -> bool {
 /// list is hand-maintained, not derived from this file, so a new gated test
 /// silently isn't covered by `cargo xtask pandoc-check` until you do.
 const PANDOC_ORACLE_MIN_VERSION: (u32, u32) = (3, 6);
-const PANDOC_ORACLE_MAX_VERSION: (u32, u32) = (3, 9);
+const PANDOC_ORACLE_MAX_VERSION: (u32, u32) = (3, 10);
 
 /// Parse the first line of `pandoc --version` output into `(major, minor)`.
 /// Expects format like "pandoc 3.6.1" or "pandoc 3.6". Malformed or empty
