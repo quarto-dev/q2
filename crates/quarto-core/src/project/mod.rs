@@ -230,14 +230,20 @@ fn adjust_paths_recursive(value: &mut ConfigValue, metadata_dir: &Path, document
     match &mut value.value {
         ConfigValueKind::Path(path_str) => {
             let path = PathBuf::from(&*path_str);
-            // Only adjust relative paths (not absolute, not URLs)
-            if path.is_relative()
+            // Only adjust relative paths (not absolute, not URLs). Use
+            // `is_rooted` (has_root), not `Path::is_relative`: on Windows a
+            // POSIX-absolute path like `/usr/share/base.css` is not
+            // `is_absolute` (no drive prefix) and would be wrongly rebased.
+            if !quarto_util::is_rooted(&path)
                 && !path_str.starts_with("http://")
                 && !path_str.starts_with("https://")
             {
                 let abs_path = metadata_dir.join(&path);
                 if let Some(adjusted) = pathdiff::diff_paths(&abs_path, document_dir) {
-                    *path_str = adjusted.to_string_lossy().into_owned();
+                    // The adjusted value is used verbatim in HTML hrefs (e.g. a
+                    // `css: !path` <link>), so it must use forward slashes on
+                    // every platform; pathdiff yields native separators.
+                    *path_str = quarto_util::to_forward_slashes(&adjusted);
                 }
             }
         }
