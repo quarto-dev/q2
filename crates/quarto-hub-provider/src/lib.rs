@@ -12,6 +12,7 @@
 //! index document, and list the project files. Execution, the capability
 //! beacon, and temp-dir materialization land in Phase 4.
 
+mod consent;
 mod dialer;
 mod exec_channel;
 mod execute;
@@ -20,9 +21,13 @@ mod materialize;
 mod token;
 mod token_bridge;
 
+pub use consent::{
+    AlwaysAccept, AlwaysReject, ConsentDecision, ConsentGate, InteractivePrompt, parse_prompt_line,
+    stdin_is_terminal,
+};
 pub use dialer::BearerDialer;
 pub use exec_channel::{BEACON_INTERVAL, BEACON_TIMEOUT, ExecMessage, parse_exec_message};
-pub use execute::{AuthzPolicy, CAPTURE_MIME_TYPE, Provider};
+pub use execute::{CAPTURE_MIME_TYPE, ExecOutcome, Provider};
 pub use join::{JoinConfig, join, join_and_list_files};
 pub use materialize::materialize_project;
 pub use token::{StaticTokenSource, TokenSource};

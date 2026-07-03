@@ -7,7 +7,7 @@
 //! (passthrough) engine, and write a capture binary doc + `CaptureRef` sidecar
 //! — which syncs back to the server, exactly as an editor peer would observe.
 //!
-//! A second test asserts the `Deny` policy writes nothing.
+//! A second test asserts a rejecting consent gate writes nothing.
 
 use std::io::Read as _;
 use std::str::FromStr as _;
@@ -22,7 +22,8 @@ use quarto_core::engine::{
 use quarto_hub::index::{CaptureState, IndexDocument};
 use quarto_hub::resource::read_binary_content;
 use quarto_hub_provider::{
-    AuthzPolicy, ExecMessage, JoinConfig, Provider, StaticTokenSource, join,
+    AlwaysAccept, AlwaysReject, ExecMessage, ExecOutcome, JoinConfig, Provider, StaticTokenSource,
+    join,
 };
 use quarto_trace::EngineCapture;
 use samod::{DocumentId, Repo};
@@ -132,7 +133,7 @@ async fn provider_executes_an_allowed_request_and_writes_a_capture() {
         provider_repo,
         provider_index,
         "provider-actor",
-        AuthzPolicy::AllowAll,
+        Arc::new(AlwaysAccept),
         Some(passthrough_registry()),
     );
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
@@ -184,7 +185,77 @@ async fn provider_executes_an_allowed_request_and_writes_a_capture() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn deny_policy_writes_no_capture() {
+async fn one_shot_executes_once_and_flushes_to_the_hub() {
+    // The one-shot CLI path: execute_once → flush_to_hub (a real
+    // they-have-our-changes confirmation, not a fixed sleep) → the capture doc
+    // and sidecar are present on the server → stop cleanly.
+    let (server_repo, ws_url) = spawn_server().await;
+
+    let file_id = create_text_doc(&server_repo, PASSTHROUGH_QMD).await;
+    let (server_index, index_id) = IndexDocument::create(&server_repo).await.unwrap();
+    server_index.add_file("doc.qmd", &file_id).unwrap();
+    assert!(server_index.get_capture("doc.qmd").is_none());
+
+    let (provider_repo, provider_index) = join(
+        JoinConfig {
+            server_ws_url: ws_url,
+            index_doc_id: index_id.clone(),
+            connect_timeout: Duration::from_secs(10),
+        },
+        Arc::new(StaticTokenSource::new("test-token")),
+    )
+    .await
+    .expect("provider joins");
+
+    let provider = Provider::new(
+        provider_repo,
+        provider_index,
+        "provider-actor",
+        Arc::new(AlwaysAccept),
+        Some(passthrough_registry()),
+    );
+
+    // Execute the single document once (no beacon, no request channel).
+    let outcome = provider
+        .execute_once("doc.qmd")
+        .await
+        .expect("execution succeeds");
+    let ExecOutcome::Executed(capture_doc_id) = outcome else {
+        panic!("expected Executed, got {outcome:?}");
+    };
+
+    // Block until the hub has our changes (the real flush), then confirm both
+    // the sidecar and the capture binary doc are present on the server.
+    provider
+        .flush_to_hub(&capture_doc_id, Duration::from_secs(10))
+        .await;
+
+    // After the flush confirmation the server's index reflects the sidecar.
+    // Allow a brief settle for the server handle to surface the merged change.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let cap = loop {
+        if let Some(cap) = server_index.get_capture("doc.qmd") {
+            break cap;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "sidecar never reached the server"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    assert_eq!(cap.state, Some(CaptureState::Idle));
+    assert_eq!(cap.capture_doc_id, capture_doc_id);
+
+    let captures = fetch_captures(&server_repo, &capture_doc_id).await;
+    assert_eq!(captures.len(), 1);
+    assert_eq!(captures[0].engine_name, "test-passthrough");
+
+    // One-shot then stops the repo cleanly.
+    provider.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rejected_request_writes_no_capture() {
     let (server_repo, ws_url) = spawn_server().await;
 
     let file_id = create_text_doc(&server_repo, PASSTHROUGH_QMD).await;
@@ -206,7 +277,7 @@ async fn deny_policy_writes_no_capture() {
         provider_repo,
         provider_index,
         "provider-actor",
-        AuthzPolicy::Deny,
+        Arc::new(AlwaysReject),
         Some(passthrough_registry()),
     );
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
@@ -221,11 +292,11 @@ async fn deny_policy_writes_no_capture() {
         }
     });
 
-    // Broadcast the request repeatedly for a bounded window; a Deny provider
-    // must never write a capture.
+    // Broadcast the request repeatedly for a bounded window; a provider whose
+    // consent gate rejects must never write a capture.
     let request = ExecMessage::Request {
         path: "doc.qmd".into(),
-        request_id: "req-deny".into(),
+        request_id: "req-reject".into(),
         requester_actor_id: "editor-actor".into(),
     };
     let until = Instant::now() + Duration::from_secs(3);
@@ -235,7 +306,7 @@ async fn deny_policy_writes_no_capture() {
     }
     assert!(
         server_index.get_capture("doc.qmd").is_none(),
-        "Deny policy must not write a capture"
+        "a rejecting consent gate must not write a capture"
     );
 
     let _ = shutdown_tx.send(());

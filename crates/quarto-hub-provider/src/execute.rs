@@ -1,39 +1,46 @@
 //! Execute-on-request loop for the code-execution provider (bd-sfet3264,
 //! Phase 4a).
 //!
-//! Once joined to a hub, a [`Provider`] does two things on the index
-//! `DocHandle`'s ephemeral channel:
+//! Once joined to a hub, in `--watch` mode a [`Provider`] does two things on
+//! the index `DocHandle`'s ephemeral channel:
 //!
 //!  1. **Broadcasts a capability beacon** every [`BEACON_INTERVAL`] so editors
 //!     know an executor is online and which engines it can run.
-//!  2. **Listens for `exec/request`** messages and, when the [`AuthzPolicy`]
-//!     allows the requester, materializes the project, runs the engines
-//!     natively (the same uncached `record_capture` path `q2 preview` uses),
-//!     and writes the result back as a capture binary doc + `CaptureRef`
-//!     sidecar entry — the transport the Phase 1 editor already consumes.
+//!  2. **Listens for `exec/request`** messages and, once the operator accepts
+//!     at the [`ConsentGate`](crate::ConsentGate), materializes the project,
+//!     runs the engines natively (the same uncached `record_capture` path
+//!     `q2 preview` uses), and writes the result back as a capture binary doc +
+//!     `CaptureRef` sidecar entry — the transport the Phase 1 editor consumes.
+//!
+//! The one-shot CLI path instead calls [`Provider::execute_once`] directly for
+//! a single document, then [`Provider::flush_to_hub`] + [`Provider::stop`].
 //!
 //! The engine work runs on a blocking worker (`spawn_blocking` +
 //! `pollster::block_on`), mirroring `quarto-preview`'s `re_execute.rs`, so a
 //! long engine run never stalls the ephemeral-message reactor.
 //!
-//! ## Authorization (Phase 4a: mechanism-first, fail closed)
+//! ## Consent (bd-9lgiulr4)
 //!
-//! [`AuthzPolicy`] is `AllowAll` (opened by `q2 provide-hub --allow-all`) or
-//! `Deny` (the safe default: refuse every request). The real provider-only
-//! gating — honoring a request only when `requesterActorId` equals the
-//! provider's own per-project actor id — needs the hub to accept a Bearer on
-//! `GET /auth/actor` and lands in Phase 5 as a third `ProviderOnly` variant
-//! this enum is the seam for.
+//! Before any engine runs, the provider materializes the project, synthesizes
+//! the **resolved document** (the post-include, pre-engine QMD — exactly what
+//! the engine receives) to a reviewable file, and consults a
+//! [`ConsentGate`](crate::ConsentGate). Only on an affirmative decision does it
+//! invoke the engine. This keeps a hijacked/spoofed CRDT document from silently
+//! driving execution: the operator reviews the *actual bytes that will run*.
+//! The review artifact is derived from the **same materialized snapshot** that
+//! is then executed, so what is reviewed equals what runs.
 
 use std::collections::HashSet;
-use std::path::Component;
+use std::path::{Component, Path, PathBuf};
+use std::str::FromStr as _;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use futures::StreamExt;
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::preview_record::record_capture;
+use quarto_core::engine::preview_record::{compute_input_qmd, record_capture};
 use quarto_core::project::ProjectContext;
 use quarto_hub::index::{CaptureRef, CaptureState, IndexDocument};
 use quarto_hub::resource::create_binary_document;
@@ -43,6 +50,7 @@ use samod::Repo;
 use std::io::Write as _;
 
 use crate::ProviderError;
+use crate::consent::ConsentGate;
 use crate::exec_channel::{BEACON_INTERVAL, ExecMessage, parse_exec_message};
 
 /// MIME type stamped on capture binary docs. Must stay byte-identical to
@@ -53,27 +61,13 @@ use crate::exec_channel::{BEACON_INTERVAL, ExecMessage, parse_exec_message};
 /// axum server); the value is a self-describing label, not validated on read.
 pub const CAPTURE_MIME_TYPE: &str = "application/x-engine-capture+gzip";
 
-/// Who may trigger execution on this provider.
-///
-/// Phase 4a ships only the two poles; Phase 5 adds
-/// `ProviderOnly { self_actor_id }` (gate on `requesterActorId == self`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AuthzPolicy {
-    /// Honor requests from anyone with access to the document
-    /// (`q2 provide-hub --allow-all`).
-    AllowAll,
-    /// Refuse every request (the safe default when `--allow-all` is absent).
-    Deny,
-}
-
-impl AuthzPolicy {
-    /// Whether a request from `requester_actor_id` may run.
-    pub fn allows(&self, _requester_actor_id: &str) -> bool {
-        match self {
-            AuthzPolicy::AllowAll => true,
-            AuthzPolicy::Deny => false,
-        }
-    }
+/// Result of a single execution attempt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExecOutcome {
+    /// The engine ran and a capture was written; carries its document id.
+    Executed(String),
+    /// The operator declined at the consent gate; nothing was written.
+    Rejected,
 }
 
 /// A joined provider ready to serve execution requests. Held behind an `Arc`
@@ -81,12 +75,13 @@ impl AuthzPolicy {
 pub struct Provider {
     repo: Repo,
     index: IndexDocument,
-    /// Beacon `actorId`. Phase 4a uses the samod peer id (stable for the
-    /// process); Phase 5 swaps in the per-project actor id from `/auth/actor`.
+    /// Beacon `actorId` (the samod peer id — stable for the process). Only used
+    /// by the `--watch` beacon; unused in one-shot mode.
     self_actor_id: String,
     /// Engines advertised in the beacon (available, non-markdown).
     engines: Vec<String>,
-    authz: AuthzPolicy,
+    /// Operator consent, consulted before every engine run.
+    consent: Arc<dyn ConsentGate>,
     /// Engine registry override for the capture run. `None` in production (the
     /// default registry); tests pass a passthrough engine. `Clone` is cheap
     /// (engines are `Arc`ed) so each run gets its own copy.
@@ -97,12 +92,12 @@ pub struct Provider {
 }
 
 impl Provider {
-    /// Build a provider around a joined repo + index.
+    /// Build a provider around a joined repo + index and a consent gate.
     pub fn new(
         repo: Repo,
         index: IndexDocument,
         self_actor_id: impl Into<String>,
-        authz: AuthzPolicy,
+        consent: Arc<dyn ConsentGate>,
         registry: Option<EngineRegistry>,
     ) -> Arc<Self> {
         let probe = registry.clone().unwrap_or_default();
@@ -112,7 +107,7 @@ impl Provider {
             index,
             self_actor_id: self_actor_id.into(),
             engines,
-            authz,
+            consent,
             registry,
             in_flight: Mutex::new(HashSet::new()),
         })
@@ -160,21 +155,11 @@ impl Provider {
             let Some(ExecMessage::Request {
                 path,
                 request_id,
-                requester_actor_id,
+                requester_actor_id: _,
             }) = parse_exec_message(&bytes)
             else {
                 continue; // beacons from other providers, or non-exec traffic
             };
-
-            if !self.authz.allows(&requester_actor_id) {
-                tracing::info!(
-                    path = %path,
-                    request_id = %request_id,
-                    requester = %requester_actor_id,
-                    "refusing exec request (provider not opened with --allow-all)"
-                );
-                continue;
-            }
 
             if !self.claim(&path) {
                 tracing::debug!(path = %path, "exec request skipped: already in flight");
@@ -183,14 +168,23 @@ impl Provider {
 
             let provider = Arc::clone(&self);
             let path_for_task = path.clone();
+            let request_id = request_id.clone();
             tokio::task::spawn_blocking(move || {
+                // The consent gate (inside execute_document) prompts the
+                // operator before any engine runs; this blocking worker is the
+                // right place for that blocking read.
                 let result = pollster::block_on(provider.execute_document(&path_for_task));
                 provider.release(&path_for_task);
                 match result {
-                    Ok(doc_id) => tracing::info!(
+                    Ok(ExecOutcome::Executed(doc_id)) => tracing::info!(
                         path = %path_for_task,
                         capture_doc_id = %doc_id,
                         "wrote capture for exec request"
+                    ),
+                    Ok(ExecOutcome::Rejected) => tracing::info!(
+                        path = %path_for_task,
+                        request_id = %request_id,
+                        "exec request rejected by operator"
                     ),
                     Err(e) => {
                         tracing::warn!(path = %path_for_task, error = %e, "exec request failed")
@@ -215,10 +209,11 @@ impl Provider {
             .remove(path);
     }
 
-    /// Materialize the project, run the engines for `rel_path`, and write the
-    /// capture doc + sidecar. Returns the new capture document id. Public for
-    /// the scripted integration test (drives one request without networking).
-    pub async fn execute_document(&self, rel_path: &str) -> Result<String, String> {
+    /// Materialize the project, obtain operator consent, then (on accept) run
+    /// the engines for `rel_path` and write the capture doc + sidecar. Returns
+    /// [`ExecOutcome`]. Public for the scripted integration test (drives one
+    /// request without networking) and the one-shot CLI path.
+    pub async fn execute_document(&self, rel_path: &str) -> Result<ExecOutcome, String> {
         if !self.index.has_file(rel_path) {
             return Err(format!("path '{rel_path}' is not in the project index"));
         }
@@ -226,23 +221,13 @@ impl Provider {
             return Err(format!("refusing to execute unsafe path '{rel_path}'"));
         }
 
-        // Flip an *existing* capture to `running` for durable status. A
-        // first-ever run has no CaptureRef to attach state to (the doc id is
-        // required), so it goes straight to producing the capture — same as
-        // re_execute.rs.
-        if let Some(existing) = self.index.get_capture(rel_path) {
-            let running = CaptureRef {
-                capture_doc_id: existing.capture_doc_id,
-                staleness: existing.staleness,
-                state: Some(CaptureState::Running),
-                last_error: None,
-            };
-            let _ = self.index.set_capture(rel_path, &running);
-        }
-
         let result = self.run_and_store(rel_path).await;
 
-        if let Err(msg) = &result {
+        // Only flip status once we know a run was actually attempted (consent
+        // granted). A rejected request touches nothing.
+        if let Ok(ExecOutcome::Executed(_)) = &result {
+            // Success sidecar already written by run_and_store.
+        } else if let Err(msg) = &result {
             // Surface the failure on an existing capture entry (best effort).
             if let Some(existing) = self.index.get_capture(rel_path) {
                 let errored = CaptureRef {
@@ -258,9 +243,14 @@ impl Provider {
         result
     }
 
-    /// The happy-path body of [`execute_document`](Self::execute_document):
-    /// materialize → discover → record (uncached) → write doc → set sidecar.
-    async fn run_and_store(&self, rel_path: &str) -> Result<String, String> {
+    /// The body of [`execute_document`](Self::execute_document): materialize →
+    /// synthesize the review file → **consent** → (on accept) mark running →
+    /// record (uncached) → write doc → set sidecar.
+    ///
+    /// Consent is obtained from the **same materialized snapshot** whose
+    /// resolved form was written to the review file, so the reviewed bytes are
+    /// the executed bytes (no re-pull between review and run).
+    async fn run_and_store(&self, rel_path: &str) -> Result<ExecOutcome, String> {
         let tmp =
             tempfile::tempdir().map_err(|e| format!("creating a materialization temp dir: {e}"))?;
         crate::materialize::materialize_project(&self.repo, &self.index, tmp.path())
@@ -271,6 +261,40 @@ impl Provider {
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
         let project = ProjectContext::discover(&abs_path, runtime.as_ref())
             .map_err(|e| format!("project discovery failed: {e}"))?;
+
+        // Synthesize the resolved document (post-include, pre-engine QMD — the
+        // bytes the engine receives) to a separate reviewable location.
+        let review_dir =
+            tempfile::tempdir().map_err(|e| format!("creating the review temp dir: {e}"))?;
+        let review_file = write_review_file(
+            &abs_path,
+            &project,
+            runtime.clone(),
+            review_dir.path(),
+            rel_path,
+        )
+        .await?;
+
+        // Consent gate — BEFORE any engine invocation. On reject, write
+        // nothing (Q6).
+        if !self.consent.review(rel_path, &review_file) {
+            return Ok(ExecOutcome::Rejected);
+        }
+
+        // Flip an *existing* capture to `running` for durable status. A
+        // first-ever run has no CaptureRef to attach state to (the doc id is
+        // required), so it goes straight to producing the capture — same as
+        // re_execute.rs. (Done only after consent, so a rejected request never
+        // perturbs the sidecar.)
+        if let Some(existing) = self.index.get_capture(rel_path) {
+            let running = CaptureRef {
+                capture_doc_id: existing.capture_doc_id,
+                staleness: existing.staleness,
+                state: Some(CaptureState::Running),
+                last_error: None,
+            };
+            let _ = self.index.set_capture(rel_path, &running);
+        }
 
         // Decision #4: always a fresh run (uncached record_capture) — code may
         // have side effects and we don't prove it side-effect-free.
@@ -295,8 +319,93 @@ impl Provider {
             .set_capture(rel_path, &updated)
             .map_err(|e| format!("failed to update sidecar: {e}"))?;
 
-        Ok(new_doc_id)
+        Ok(ExecOutcome::Executed(new_doc_id))
     }
+
+    /// Execute one document once, off the reactor. The engine work and the
+    /// consent prompt's blocking stdin read run on a blocking worker (mirroring
+    /// the watch-mode request loop), so neither stalls the async runtime. Used
+    /// by the one-shot CLI path.
+    pub async fn execute_once(self: &Arc<Self>, rel_path: &str) -> Result<ExecOutcome, String> {
+        let me = Arc::clone(self);
+        let path = rel_path.to_string();
+        tokio::task::spawn_blocking(move || pollster::block_on(me.execute_document(&path)))
+            .await
+            .map_err(|e| format!("execution task panicked: {e}"))?
+    }
+
+    /// Block until the hub peer has acknowledged both the index sidecar update
+    /// and the capture binary doc — i.e. collaborators will actually receive
+    /// the output — or a bounded timeout elapses.
+    ///
+    /// Uses the samod fork's [`DocHandle::they_have_our_changes`], which
+    /// resolves once the peer's shared heads match ours (a real delivery
+    /// confirmation, not a fixed sleep). The `timeout` is a safety net for a
+    /// slow/dropped connection; on timeout we log and return so one-shot still
+    /// exits (Q7: real wait preferred, bounded fallback accepted).
+    pub async fn flush_to_hub(&self, capture_doc_id: &str, timeout: Duration) {
+        let index_handle = self.index.handle();
+        let (peers, _) = index_handle.peers();
+        let Some(conn) = peers.keys().next().copied() else {
+            tracing::warn!(
+                "no hub connection at flush time; the capture may not have propagated to collaborators"
+            );
+            return;
+        };
+
+        let repo = self.repo.clone();
+        let capture_doc_id = capture_doc_id.to_string();
+        let confirm = async move {
+            // Peer has our index sidecar update (the CaptureRef pointer).
+            index_handle.they_have_our_changes(conn).await;
+            // Peer has the capture binary doc itself.
+            if let Ok(id) = samod::DocumentId::from_str(&capture_doc_id)
+                && let Ok(Some(cap_handle)) = repo.find(id).await
+            {
+                cap_handle.they_have_our_changes(conn).await;
+            }
+        };
+
+        if tokio::time::timeout(timeout, confirm).await.is_err() {
+            tracing::warn!(
+                "timed out waiting for the hub to acknowledge the capture; it may still be in flight"
+            );
+        }
+    }
+
+    /// Stop the underlying samod repo (drains storage tasks). Call after
+    /// [`flush_to_hub`](Self::flush_to_hub) in one-shot mode.
+    pub async fn stop(&self) {
+        self.repo.stop().await;
+    }
+}
+
+/// Synthesize the resolved document — the post-include, pre-engine QMD that
+/// `EngineExecutionStage` hands the engine — to `<review_dir>/<name>.resolved.qmd`
+/// and return its path. This is the artifact the operator reviews before
+/// consenting.
+async fn write_review_file(
+    abs_path: &Path,
+    project: &ProjectContext,
+    runtime: Arc<dyn SystemRuntime>,
+    review_dir: &Path,
+    rel_path: &str,
+) -> Result<PathBuf, String> {
+    let bytes = compute_input_qmd(abs_path, project, runtime)
+        .await
+        .map_err(|e| format!("computing the resolved document for review: {e}"))?;
+
+    let base = Path::new(rel_path).file_name().map_or_else(
+        || std::ffi::OsString::from("document"),
+        |n| n.to_os_string(),
+    );
+    let mut file_name = base;
+    file_name.push(".resolved.qmd");
+    let review_file = review_dir.join(file_name);
+
+    std::fs::write(&review_file, &bytes)
+        .map_err(|e| format!("writing the review file {}: {e}", review_file.display()))?;
+    Ok(review_file)
 }
 
 /// Names of available execution engines, excluding the always-present markdown
@@ -348,18 +457,6 @@ async fn write_capture_doc(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn allow_all_permits_any_requester() {
-        assert!(AuthzPolicy::AllowAll.allows("anyone"));
-        assert!(AuthzPolicy::AllowAll.allows(""));
-    }
-
-    #[test]
-    fn deny_refuses_every_requester() {
-        assert!(!AuthzPolicy::Deny.allows("anyone"));
-        assert!(!AuthzPolicy::Deny.allows(""));
-    }
 
     #[test]
     fn is_safe_relative_guards_traversal() {
