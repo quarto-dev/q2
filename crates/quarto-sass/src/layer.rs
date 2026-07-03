@@ -102,8 +102,17 @@ enum LayerType {
 /// assert!(layer.rules.contains(".container"));
 /// ```
 pub fn parse_layer(content: &str, hint: Option<&str>) -> Result<SassLayer, SassError> {
+    // Layer parsing is line-ending agnostic. On a Windows checkout the SCSS
+    // sources baked in via include_dir! carry CRLF (git autocrlf), and the
+    // $-anchored boundary regex matches before the `\n` but leaves the `\r`,
+    // so CRLF-terminated markers would be rejected. SCSS -> CSS keeps no
+    // byte-offset map, so normalizing to LF at this single chokepoint is
+    // correct (contrast the document-content preserve policy). Normalizing
+    // here also keeps a clean LF stream flowing into grass.
+    let content = content.replace("\r\n", "\n");
+
     // Verify that at least one boundary marker exists
-    if !LAYER_BOUNDARY_TEST.is_match(content) {
+    if !LAYER_BOUNDARY_TEST.is_match(&content) {
         return Err(SassError::NoBoundaryMarkers {
             hint: hint.map(String::from),
         });
@@ -393,6 +402,28 @@ $second: 2;
         assert!(layer.defaults.contains("$second: 2"));
         assert!(layer.rules.contains(".rule1"));
         assert!(layer.rules.contains(".rule2"));
+    }
+
+    #[test]
+    fn test_parse_crlf_terminated_markers() {
+        // On a Windows checkout, resources/scss/**/*.scss are baked into the
+        // binary with CRLF line endings (git autocrlf) via include_dir!. The
+        // $-anchored boundary regex must still recognize CRLF-terminated
+        // markers, and no residual `\r` may leak into the content handed to
+        // grass. SCSS->CSS keeps no byte-offset map, so normalizing here is
+        // correct (unlike the document-content preserve policy).
+        let lf = "/*-- scss:defaults --*/\n$primary: blue !default;\n/*-- scss:rules --*/\n.container { color: $primary; }\n";
+        let crlf = lf.replace('\n', "\r\n");
+
+        let layer =
+            parse_layer(&crlf, Some("theme.scss")).expect("CRLF-terminated markers must parse");
+
+        assert!(layer.defaults.contains("$primary: blue !default;"));
+        assert!(layer.rules.contains(".container"));
+        assert!(
+            !layer.defaults.contains('\r') && !layer.rules.contains('\r'),
+            "residual CR leaked into layer content fed to grass"
+        );
     }
 
     #[test]

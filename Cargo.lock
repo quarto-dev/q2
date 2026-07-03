@@ -3916,6 +3916,7 @@ dependencies = [
  "quarto-pandoc-types",
  "quarto-source-map",
  "quarto-system-runtime",
+ "quarto-util",
  "regex",
  "serde",
  "serde_json",
