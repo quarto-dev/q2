@@ -11,13 +11,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@headlessui/react": "^2.2.9",
+    "@headlessui/react": "^2.2.10",
     "cors": "^2.8.6",
-    "express": "^5.1.0",
+    "express": "^5.2.1",
     "jsondiffpatch": "^0.7.3",
-    "react": "^19.1.1",
+    "react": "^19.2.7",
     "react-dom": "^19.1.1",
-    "tmp": "^0.2.5"
+    "tmp": "^0.2.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

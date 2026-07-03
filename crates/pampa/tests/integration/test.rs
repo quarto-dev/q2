@@ -115,7 +115,7 @@ fn has_good_pandoc_version() -> bool {
 /// list is hand-maintained, not derived from this file, so a new gated test
 /// silently isn't covered by `cargo xtask pandoc-check` until you do.
 const PANDOC_ORACLE_MIN_VERSION: (u32, u32) = (3, 6);
-const PANDOC_ORACLE_MAX_VERSION: (u32, u32) = (3, 9);
+const PANDOC_ORACLE_MAX_VERSION: (u32, u32) = (3, 10);
 
 /// Parse the first line of `pandoc --version` output into `(major, minor)`.
 /// Expects format like "pandoc 3.6.1" or "pandoc 3.6". Malformed or empty
@@ -206,12 +206,23 @@ const PANDOC_VERSION_PARSE_CASES: &[(&str, (u32, u32))] = &[
     ("", (0, 0)),
 ];
 
+/// Boundary cases are derived from `PANDOC_ORACLE_MIN/MAX_VERSION` so bumping
+/// the ceiling doesn't require hand-editing this table too.
 const PANDOC_ORACLE_RANGE_CASES: &[((u32, u32), bool)] = &[
-    ((3, 5), false),
-    ((3, 6), true),
-    ((3, 7), true),
-    ((3, 9), true),
-    ((3, 10), false),
+    (
+        (PANDOC_ORACLE_MIN_VERSION.0, PANDOC_ORACLE_MIN_VERSION.1 - 1),
+        false,
+    ),
+    (PANDOC_ORACLE_MIN_VERSION, true),
+    (
+        (PANDOC_ORACLE_MIN_VERSION.0, PANDOC_ORACLE_MIN_VERSION.1 + 1),
+        true,
+    ),
+    (PANDOC_ORACLE_MAX_VERSION, true),
+    (
+        (PANDOC_ORACLE_MAX_VERSION.0, PANDOC_ORACLE_MAX_VERSION.1 + 1),
+        false,
+    ),
     ((4, 0), false),
     ((0, 0), false),
 ];
@@ -249,8 +260,15 @@ mod pandoc_oracle_gate_tests {
             message.contains("pandoc 3.10"),
             "message should contain the raw detected version line, got: {message}"
         );
+        let range_str = format!(
+            "Calibrated range: {}.{}\u{2013}{}.{}",
+            PANDOC_ORACLE_MIN_VERSION.0,
+            PANDOC_ORACLE_MIN_VERSION.1,
+            PANDOC_ORACLE_MAX_VERSION.0,
+            PANDOC_ORACLE_MAX_VERSION.1
+        );
         assert!(
-            message.contains("3.6") && message.contains("3.9"),
+            message.contains(&range_str),
             "message should contain the calibrated range, got: {message}"
         );
         assert!(

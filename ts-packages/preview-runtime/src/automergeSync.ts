@@ -21,6 +21,7 @@ import {
   type CreateProjectOptions,
   type CreateProjectResult,
   type FilePayload,
+  type SyncDiagnostics,
 } from '@quarto/quarto-sync-client';
 
 import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm, type ProjectFile } from './wasmRenderer';
@@ -285,6 +286,16 @@ export async function createNewProject(
  */
 export function getActorId(): string | null {
   return client?.getActorId() ?? null;
+}
+
+/**
+ * Diagnostic snapshot of sync health: stranded (index-referenced but
+ * never-loaded) files with their automerge-repo DocHandle states, plus
+ * peer/retry-poll state. Consumed by the e2e smoke-diag classifier via the
+ * test hooks; reads only in-memory state.
+ */
+export function getSyncDiagnostics(): SyncDiagnostics {
+  return ensureClient().getSyncDiagnostics();
 }
 
 /**

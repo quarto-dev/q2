@@ -58,7 +58,7 @@ export {
   fileUnavailableMessage,
   indexUnavailableMessage,
 } from './client.js';
-export type { SyncClient } from './client.js';
+export type { SyncClient, SyncDiagnostics, StrandedFileDiagnostic } from './client.js';
 
 // Injectable diagnostic-log sink (bd-sl4o01y0): stdio hosts (hub-mcp)
 // must route library diagnostics to stderr; browsers keep console.log.
