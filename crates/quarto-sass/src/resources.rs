@@ -166,7 +166,12 @@ impl EmbeddedResources {
 
     /// Strip the resource prefix from a path to get the relative path.
     fn strip_prefix(&self, path: &Path) -> String {
-        let path_str = path.to_string_lossy();
+        // Normalize to forward slashes first. Embedded keys are forward-slash
+        // (include_dir normalizes at build time), but grass resolves @import
+        // via PathBuf::join, which injects a native `\` on Windows into our
+        // virtual load paths. Canonicalize here — the single embedded-lookup
+        // boundary — so the string surgery below matches the keys on every OS.
+        let path_str = quarto_util::path::to_forward_slashes(path);
 
         // Strip absolute resource prefix if present
         let without_abs_prefix = path_str
@@ -229,7 +234,7 @@ impl quarto_system_runtime::EmbeddedResourceProvider for EmbeddedResources {
 /// include_dir, so we don't need to track or add prefixes.
 fn collect_files(dir: &Dir<'static>, files: &mut HashSet<String>) {
     for file in dir.files() {
-        files.insert(file.path().to_string_lossy().to_string());
+        files.insert(quarto_util::path::to_forward_slashes(file.path()));
     }
 
     for subdir in dir.dirs() {
@@ -243,7 +248,7 @@ fn collect_files(dir: &Dir<'static>, files: &mut HashSet<String>) {
 /// include_dir, so we don't need to track or add prefixes.
 fn collect_directories(dir: &Dir<'static>, dirs: &mut HashSet<String>) {
     for subdir in dir.dirs() {
-        dirs.insert(subdir.path().to_string_lossy().to_string());
+        dirs.insert(quarto_util::path::to_forward_slashes(subdir.path()));
         collect_directories(subdir, dirs);
     }
 }
@@ -438,6 +443,26 @@ mod tests {
         assert!(BOOTSTRAP_RESOURCES.is_file(Path::new(
             "/__quarto_resources__/bootstrap/scss/_variables.scss"
         )));
+    }
+
+    #[test]
+    fn test_is_file_tolerates_backslash_separators() {
+        // On Windows, grass resolves @import by PathBuf::join-ing a virtual
+        // load path with the import, which inserts a backslash at the join
+        // boundary (e.g. Bootstrap's _mixins.scss does `@import "vendor/rfs"`).
+        // The embedded lookup keys are forward-slash (include_dir normalizes
+        // at build time), so the lookup must tolerate the backslash shape.
+        // Built inline so it reproduces on Linux CI, where `\` is an ordinary
+        // filename byte rather than a separator.
+        let windows_shape = Path::new("/__quarto_resources__/bootstrap/scss\\vendor/_rfs.scss");
+        assert!(
+            BOOTSTRAP_RESOURCES.is_file(windows_shape),
+            "backslash-separated virtual path must resolve to the embedded file"
+        );
+        assert!(
+            BOOTSTRAP_RESOURCES.read(windows_shape).is_some(),
+            "backslash-separated virtual path must be readable"
+        );
     }
 
     #[test]
