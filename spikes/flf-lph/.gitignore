@@ -2,4 +2,6 @@ capture/
 replay/
 fixture*/doc.tex
 fixture*/doc.epub
+fixture*/doc.docx
+fixture*/doc.pptx
 fixture*/doc_files/
