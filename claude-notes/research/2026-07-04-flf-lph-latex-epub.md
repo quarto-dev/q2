@@ -244,8 +244,18 @@ python3 ../replay.py ../capture/latex/call-2 ../replay/latex --fixture . \
   --partials /Users/gordon/src/quarto-cli/src/resources/formats/pdf/pandoc \
   --env QUARTO_SHARE_PATH=/Users/gordon/src/quarto-cli/src/resources/
 diff ../replay/latex/doc.tex ../capture/latex/q1-baseline-doc.tex  # empty
-# pampa route: see replay/q2json/ (defaults.yml has q2-compat.lua prepended)
+# pampa route (byte-identical to the same baseline):
+cargo build --bin pampa && ../../target/debug/pampa -t json doc.qmd -o /tmp/doc.json
+python3 ../replay.py ../capture/latex/call-2 ../replay/q2json --fixture . \
+  --partials /Users/gordon/src/quarto-cli/src/resources/formats/pdf/pandoc \
+  --input-json /tmp/doc.json --prepend-filter ../q2-compat.lua \
+  --env QUARTO_SHARE_PATH=/Users/gordon/src/quarto-cli/src/resources/
 ```
+
+Note: `capture/` and `replay/` are gitignored (regenerable); the committed
+harness (`pandoc-shim.sh`, `replay.py`, `q2-compat.lua`, fixtures) plus a Q1
+dev checkout at `/Users/gordon/src/quarto-cli` and its bundled pandoc are
+sufficient to regenerate everything above from scratch.
 
 ---
 

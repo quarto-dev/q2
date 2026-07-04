@@ -23,6 +23,12 @@ ap.add_argument("--pandoc", default="/Users/gordon/src/q2/external-sources/quart
 ap.add_argument("--env", action="append", default=[], help="extra KEY=VAL env")
 ap.add_argument("--fixture", default=None, help="dir with resources (png, bib) to copy into workdir")
 ap.add_argument("--partials", default=None, help="dir with template partials to stage next to the template")
+ap.add_argument("--input-json", default=None,
+                help="pampa-route: use this Pandoc JSON (from `pampa -t json`) as input "
+                     "instead of the captured .md; sets `from: json` and injects the "
+                     "quarto_pandoc_reader_opts meta stub")
+ap.add_argument("--prepend-filter", action="append", default=[],
+                help="Lua filter path(s) to prepend to the defaults filter list (e.g. q2-compat.lua)")
 args = ap.parse_args()
 
 cap = os.path.abspath(args.capture)
@@ -36,7 +42,7 @@ def one(pattern):
 
 defaults_src = one("1-defaults-*.yml")
 metadata_src = one("2-metadata-file-*.yml")
-input_src = one("input-*.md")
+input_src = None if args.input_json else one("input-*.md")
 
 # fixture resources
 if args.fixture:
@@ -59,11 +65,25 @@ if tpl:
     tpl_dst = os.path.join(tpl_dir, "template.patched")
     shutil.copy(tpl[0], tpl_dst)
     defaults = re.sub(r"^template: .*$", f"template: {tpl_dst}", defaults, flags=re.M)
+import re as _re
+if args.input_json:
+    defaults = _re.sub(r"^from: .*$", "from: json", defaults, flags=_re.M)
+for f in reversed(args.prepend_filter):
+    defaults = defaults.replace("filters:\n", f"filters:\n  - {os.path.abspath(f)}\n", 1)
 defaults_path = os.path.join(wd, "defaults.yml")
 open(defaults_path, "w").write(defaults)
 
 shutil.copy(metadata_src, os.path.join(wd, "metadata.yml"))
-shutil.copy(input_src, os.path.join(wd, "input.md"))
+if args.input_json:
+    doc = json.load(open(args.input_json))
+    # Q1's normalize/capturereaderstate.lua expects the qmd-reader to have
+    # stashed reader options in meta; an empty MetaMap yields defaults.
+    doc["meta"]["quarto_pandoc_reader_opts"] = {"t": "MetaMap", "c": {}}
+    input_name = "input.json"
+    json.dump(doc, open(os.path.join(wd, input_name), "w"))
+else:
+    input_name = "input.md"
+    shutil.copy(input_src, os.path.join(wd, input_name))
 
 # filter params: patch temp paths to fresh ones in workdir
 params_file = os.path.join(cap, "filter-params.json")
@@ -71,7 +91,7 @@ params = json.load(open(params_file))
 results_file = os.path.join(wd, "filter-results.json")
 params["results-file"] = results_file
 params["notebook-context"] = os.path.join(wd, "notebook-context.json")
-params["quarto-source"] = "input.md"
+params["quarto-source"] = input_name
 params_b64 = base64.b64encode(json.dumps(params).encode()).decode()
 
 dep_file = os.path.join(wd, "filter-deps.jsonl")
@@ -91,7 +111,7 @@ for kv in args.env:
     k, _, v = kv.partition("=")
     env[k] = v
 
-cmd = [args.pandoc, "--defaults", defaults_path, "input.md",
+cmd = [args.pandoc, "--defaults", defaults_path, input_name,
        "--metadata-file", "metadata.yml", "--data-dir", data_dir]
 print("+ " + " ".join(cmd), file=sys.stderr)
 r = subprocess.run(cmd, cwd=wd, env=env)
