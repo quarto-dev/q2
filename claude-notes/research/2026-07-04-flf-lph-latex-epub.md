@@ -3,6 +3,10 @@
 > Round 2 (same day) added: §8 FLF percentages scoped to LaTeX, §9 docx/pptx
 > inventories + spikes, §10 postprocessor AST-portability audit (Carlos's
 > no-postprocessors goal).
+> Round 3 (same day) added: §12 the two-ASTs/one-way-seam architecture
+> clarification (postprocessors port to Lua *under Pandoc*, not to Rust),
+> §13 the design questions gating a "LaTeX 100%" epic (top 5 ranked; left
+> deliberately open).
 
 **Date:** 2026-07-04 · **Worktree:** `.claude/worktrees/flf-lph-research`
 **Plan:** `claude-notes/plans/2026-07-04-flf-lph-format-research.md`
@@ -491,3 +495,164 @@ twice, once per engine)?
 **Q14 — CLI surface & artifacts.** `keep-tex`, output-dir/tex-safe
 filename recipes, a `q2 latexmk` equivalent for bare `.tex` compilation
 (Q1 ships quarto-latexmk; keep or drop)?
+
+---
+
+# Round 3 addenda (2026-07-04): architecture clarification + epic design questions
+
+Premise for a prospective **"LaTeX 100%" epic**: add latex/pdf as a real q2
+format; migrate the TS line-postprocessors (including the effortful ones) to
+AST transforms; port the driver TS (compile loop, option assembly) to Rust
+meticulously; support everything from template partials through citeproc;
+format extensions out of scope. Gordon has seen the questions below and
+deliberately left them open (2026-07-04); they are the agenda for the epic's
+design phase, not settled decisions.
+
+## 12. The two ASTs and the one-way seam (pampa vs pandoc, made precise)
+
+There are two AST worlds; the pipeline crosses between them exactly once:
+
+```
+qmd ──pampa parse──▶ q2 Rust AST ──(q2 native stages?)──▶ serialize to Pandoc JSON
+                                                              │  one-way seam
+                                                              ▼
+                      pandoc process: JSON reader ─▶ PANDOC's AST
+                        [adapter.lua → main.lua → citeproc → (new filters)]
+                                                              ▼
+                                                  pandoc LaTeX WRITER ─▶ .tex
+                                                              ▼
+                                      (residual q2 Rust text pass?) ─▶ lualatex loop
+```
+
+**There is no export back from pandoc JSON into the q2 AST.** Pandoc is
+terminal: after its writer runs, the only things downstream are TeX text and
+the compiler. A round trip would require re-entering pandoc for the writing.
+
+Therefore: **"port the TS line-postprocessors to AST transforms" means
+"move them *earlier*, into the Lua filter chain running under Pandoc, on
+Pandoc's AST"** — the last AST stage that exists before the writer. TS→Lua,
+not TS→Rust. Q1's *output post*-processors become Lua *pre/mid*-processors.
+Concretely, per §10's classes:
+
+- **Class 1 (7 mechanical):** the migration happens *inside the same
+  vendored Q1 Lua filters that today emit the markers* — they emit the final
+  LaTeX instead of a marker. Runs under Pandoc.
+- **Class 2 (4 citeproc-dependent):** new Lua filters appended *after*
+  `citeproc` in the pandoc filter list
+  (`filters: [adapter, main.lua, citeproc, margin-cites.lua]`). Still
+  Pandoc's AST, same process. Moves q2-side only if Q-b below flips to
+  native citeproc.
+- **Class 3 (6 effortful):** mostly Pandoc-side Lua too — they need Q1's
+  custom-node context (callout-contains-float, Note-inside-Table), which
+  lives in the Pandoc-side chain under the spike architecture. Two genuine
+  side-choices:
+  - *Highlighting / code annotations (#16):* Q1 defers because skylighting
+    runs inside pandoc's writer. Option (a): q2-side Rust transform
+    highlights the CodeBlock pre-serialization and hands pandoc
+    `RawBlock("latex", …)` — but then the Lua chain sees a RawBlock where it
+    expects a CodeBlock (ordering/adaptation for decoratedcodeblock,
+    code-annotation). Option (b): a Pandoc-side Lua filter calls
+    `pandoc.write(Pandoc{codeblock}, "latex", {highlight_style})` and
+    splices the highlighted result as raw LaTeX — keeps everything in one
+    world. Leaning (b); choose (a) only to unify HTML+LaTeX highlighting.
+  - *Template suppression (#7/#9):* becomes `$if()$` conditionals in the
+    template — neither AST.
+- **Class 4 (2 longtable processors):** cannot be AST on either side —
+  the information (writer-computed column widths, caption line position) is
+  *created by pandoc's writer*. AST-pure resolution: the Pandoc-side Lua
+  emits those specific longtables entirely as raw LaTeX, computing widths
+  itself (the `pandoc.write` + patch idiom floatreftarget.lua already
+  uses), so the writer never decides. Pragmatic alternative: ~150-LOC Rust
+  text pass in q2 after pandoc returns.
+
+The only reading under which "AST transformers" means *q2 Rust transforms*
+is Route B of Q-a below (q2's native pipeline owns semantics and lowers to
+raw LaTeX before serialization) — the rewrite path, not what the spikes
+validated.
+
+## 13. Design questions gating the epic
+
+### Top 5 (ranked by plan-shaping power)
+
+**Q-a — Crossref/callout ownership: do q2's native transforms get bypassed
+for pandoc-written formats?** The spike route feeds pampa's *raw* parse to
+the Lua chain, so Q1's Lua does crossref numbering, callout structuring,
+float handling for LaTeX — while the Rust transforms keep doing it for HTML.
+Two implementations of Quarto's core semantics, permanently, with drift risk
+(numbering, prefixes, label formats). Alternatives: a lowering adapter from
+q2's resolved AST (big; Q1's renderers expect Q1's custom nodes) vs dual
+implementation + a conformance suite pinning HTML-vs-LaTeX agreement.
+Decides: where the latex pipeline forks off `build_transform_pipeline`, the
+adapter's contents, and book-PDF crossref pre-resolution (done by whichever
+side owns crossref). Recommendation: dual implementation + conformance
+suite for the epic, with a declared long-term direction.
+
+**Q-b — Which citeproc: pandoc's built-in or q2's native Rust citeproc?**
+q2 already renders citations natively for HTML. Pandoc citeproc (the Q1
+arrangement): Class-2 migrations are post-citeproc Lua, fidelity guaranteed
+— but HTML and PDF bibliographies come from two engines. Native citeproc:
+citations resolve before serialization, margin-cite machinery redesigned
+q2-side; biblatex/natbib modes (which bypass citeproc entirely, leaning on
+the template) need their own path regardless. Gates the bibliography/
+margin-citation plan. Recommendation: pandoc citeproc for the epic;
+native-citeproc convergence as a separately-planned swap.
+
+**Q-c — Vendor policy: upstream-first or fork-and-own?** The
+postprocessor→Lua migrations are edits to Q1's filter tree — and we control
+quarto-cli. Upstream-first: land the migrations in quarto-cli itself, Q1
+sheds its TS line-postprocessors too, vendored tree stays diffable, both
+products share fixes — but quarto-cli PRs land on the epic's critical path.
+Fork-and-own: faster, but every migration widens a permanent fork of ~34K
+LOC of Lua. Reorders the whole epic.
+
+**Q-d — Pandoc distribution and version pinning.** Bundle a pinned pandoc
+(Q1-style, ~50MB/platform, GPL redistribution) vs discover system pandoc
+with a version floor. Not just packaging: Class-4 and several Class-3
+migrations depend on *writer behavior* (longtable internals, `\footnote`
+forms, skylighting output), which shifts between pandoc versions. Pinned
+bundle → filters + goldens tested against exactly one writer;
+system-pandoc → a compat matrix. Gates release runbook, CI, and how
+defensively the Lua must be written. Recommendation: bundle and pin.
+
+**Q-e — The conformance oracle: what does "correct" mean and how does CI
+check it?** The TDD backbone of every plan. Golden `.tex`/OOXML snapshots
+diffed against Q1 (snapshot the goldens, or run Q1 in CI?); compile smoke
+tests (TinyTeX in CI — acceptable weight?); pandoc-version ceiling tests à
+la the existing pandoc-oracle. Critically, the **adapter-completeness
+sweep**: the equation mismatch was found by a 2-fixture spike; a real
+corpus (Q1's test suite? quarto-web?) must be run differentially through
+pampa-vs-qmd-reader to enumerate every convention divergence *before*
+plans are scoped — each divergence is an adapter entry, a pampa change, or
+a filter patch.
+
+### The rest (scoping decisions)
+
+- **Format identity & config:** add `FormatIdentifier::Latex` (+ `Pdf` as
+  latex + compile recipe; `render_to_file.rs:508` already anticipates it).
+  Beamer in the epic? ConTeXt explicitly out? Port Q1's latex/pdf YAML
+  schema (latexmk 78 + pdfa 111 + scattered entries) into q2's config
+  validation — in-epic or shared schema effort?
+- **Params channel:** replicate `QUARTO_FILTER_PARAMS` byte-compatibly
+  (recommended — filters run unchanged), but q2 must *compute* the params:
+  crossref/callout titles from Q1's language yml (i18n resource port),
+  paths from tool discovery (TinyTeX). Which params does q2 own vs stub?
+- **Templates:** what does Q1's template patching actually do
+  (template.patched vs template.tex — analyze `patchTemplate`)? User
+  `template-partials` day one? brand.yml → LaTeX in scope?
+- **Engine scope:** markdown-engine-only first, or executed documents
+  (fig-format pdf, image conversion, mediabag, pdf-images.lua) in-epic?
+- **Books/projects:** declare follow-up epic now (single-file merge +
+  crossref pre-resolution — whose crossref loops back to Q-a).
+- **User Lua filters** (plain `filters:`, not extensions): supported in the
+  pandoc leg day one via the entry-point arrays? Bypass q2's
+  `UserFiltersStage` for pandoc formats so filters don't run twice.
+- **Error reporting & UX:** latexmk log parsing → Q-* error catalog
+  entries; tlmgr auto-install policy (touches the user's TeX tree — auto,
+  prompt, or flag-gated); progress UX for multi-run compiles.
+- **CLI surface & artifacts:** `keep-tex`, output-dir/tex-safe filename
+  recipes, a `q2 latexmk` equivalent for bare `.tex` compilation (Q1 ships
+  quarto-latexmk; keep or drop?).
+- **Highlighter side-choice** (from §12 Class 3): pandoc-side
+  `pandoc.write` trick (lean) vs q2-side unified highlighting.
+- **Class-4 mechanism** (from §12): raw-longtable emission from Lua
+  (AST-pure) vs ~150-LOC Rust text pass (pragmatic).

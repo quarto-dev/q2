@@ -89,6 +89,15 @@ Phase 1 findings (summaries; full agent reports go into the Phase 4 doc):
       processors → 7 AST-now, 4 post-citeproc-AST, 6+1 with effort, 2
       genuinely post-writer (longtable internals). Report §10.
 
+### Round 3 (same day): architecture clarification + epic design questions
+- [x] Clarify pampa-vs-pandoc AST confusion: one-way seam, no round trip;
+      "port postprocessors to AST" = TS→Lua under Pandoc (pre/mid-chain),
+      not TS→Rust. Report §12.
+- [x] Design questions gating a "LaTeX 100%" epic, top 5 ranked (crossref
+      ownership, citeproc choice, upstream-first vs fork, pandoc pinning,
+      conformance oracle) + scoping questions. Report §13. Gordon has read
+      them and deliberately left them open for the epic's design phase.
+
 ## Notes
 
 - Q1 source: `external-sources/quarto-cli` (symlinked into this worktree from
