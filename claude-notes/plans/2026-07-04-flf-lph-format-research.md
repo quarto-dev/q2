@@ -74,7 +74,20 @@ Phase 1 findings (summaries; full agent reports go into the Phase 4 doc):
 ### Phase 4: Report
 - [x] Write findings report → claude-notes/research/2026-07-04-flf-lph-latex-epub.md
 - [x] Reconcile this checklist (this edit)
-- [ ] Discuss design questions with Gordon (report §6)
+- [ ] Discuss design questions with Gordon (report §6 + §10)
+
+### Round 2 (Gordon's follow-up, same day)
+- [x] FLF percentages scoped to LaTeX: Lua 32% / TS 44% / other 24% raw;
+      restricted to document-transformation code, Lua = 76% (→ ~95% after
+      §10 migration). Report §8.
+- [x] Repeat analysis for docx and pptx (inventory agents + spikes):
+      docx ~650-700 Lua / ~65 TS / 5 PNGs; pptx ~52 live Lua / ~21 TS / 0
+      resources; both replays byte-identical to Q1 except OOXML timestamps.
+      Report §9.
+- [x] Audit postprocessors vs Carlos's everything-on-the-AST goal:
+      docx/pptx/epub already have zero postprocessors; LaTeX's 20 line
+      processors → 7 AST-now, 4 post-citeproc-AST, 6+1 with effort, 2
+      genuinely post-writer (longtable internals). Report §10.
 
 ## Notes
 

@@ -1,4 +1,8 @@
-# FLF/LPH research: LaTeX and EPUB in q2 via Pandoc + Quarto 1's Lua
+# FLF/LPH research: LaTeX, EPUB, docx, pptx in q2 via Pandoc + Quarto 1's Lua
+
+> Round 2 (same day) added: §8 FLF percentages scoped to LaTeX, §9 docx/pptx
+> inventories + spikes, §10 postprocessor AST-portability audit (Carlos's
+> no-postprocessors goal).
 
 **Date:** 2026-07-04 · **Worktree:** `.claude/worktrees/flf-lph-research`
 **Plan:** `claude-notes/plans/2026-07-04-flf-lph-format-research.md`
@@ -238,3 +242,151 @@ python3 ../replay.py ../capture/latex/call-2 ../replay/latex --fixture . \
 diff ../replay/latex/doc.tex ../capture/latex/q1-baseline-doc.tex  # empty
 # pampa route: see replay/q2json/ (defaults.yml has q2-compat.lua prepended)
 ```
+
+---
+
+# Round 2 addenda (2026-07-04)
+
+## 8. FLF quantified on LaTeX specifically
+
+Buckets: (a) Lua filters; (b) TypeScript a Rust port must own; (c) other
+(templates/partials/schema). All LOC measured on `/Users/gordon/src/quarto-cli`
+(the dev checkout actually driving the spikes). LaTeX-specific Lua was
+measured per-branch this round (not estimated): whole files 1,717 + measured
+latex branches in shared files 1,088 = **2,805** (largest shared branches:
+floatreftarget 376, cites 190, columns 154; callout.lua contributes 0 — its
+latex renderer lives inside quarto-post/latex.lua).
+
+**Raw accounting (everything LaTeX/PDF-specific, incl. beamer templates):**
+
+| Bucket | LOC | Share |
+|---|---|---|
+| (a) Lua filters | 2,805 | **32%** |
+| (b) TS → Rust | 3,948 = format-pdf.ts 1,388 + latexmk/ 2,237 + output-tex.ts 246 + config/pdf.ts 77 | **44%** |
+| (c) Other | ~2,124 = pdf template+partials 788 + beamer resources 1,147 + dedicated schema (latexmk 78, pdfa 111) ≈ 189 (+ scattered latex-tagged entries in shared schema files, not separable) | **24%** |
+| Total | ~8,877 | |
+
+**But bucket (b) is three very different things:**
+
+| TS sub-bucket | LOC | Nature |
+|---|---|---|
+| PDF compile orchestration (latexmk + output-tex + config/pdf) | 2,560 | run lualatex, parse log, tlmgr auto-install, biber/makeindex, rerun loop. Not document transformation; must be Rust regardless of PFR; ~29% of everything |
+| `.tex` line-postprocessors (in format-pdf.ts) | ~885 | document transformation done as post-writer text rewriting — the subject of §10 |
+| Format definition / option assembly / KOMA / PDF-standard | ~560 | config plumbing → Rust structs/yaml, boring |
+
+**The framing that answers "how FLF is LaTeX":** restrict to *document
+transformation* code (what turns AST constructs into LaTeX constructs) —
+Lua 2,805 vs TS postprocessors 885:
+
+> **Lua is 76% of LaTeX document-transformation code today; and if the
+> §10 migration is done, ~95% (residual Rust text-pass ~150–200 LOC).**
+
+The other 24%/56% of raw LOC is compile-loop machinery, option plumbing, and
+templates — code that exists in TS today but is not "format semantics."
+
+## 9. docx and pptx (EPUB replaced as study cases)
+
+### Inventory + FLF split
+
+| | docx | pptx |
+|---|---|---|
+| (a) Lua filters | **~650–700** (quarto-post/docx.lua 203, layout/docx.lua 124, modules/openxml.lua 34, layout/wp.lua 68, callout.lua docx branches ~96, floatreftarget docx/odt renderer ~72, table.lua ~20, docxCalloutImage ~25, landscape ~18, pagebreak/shortcodes/mediabag ~14) | **~52 live** (post/pptx.lua RawBlock fixup 15, floatreftarget pptx renderer 19, output-unroll gates 9, pagebreak no-op 2, _format helper 5) + **30 dead** (layout/pptx.lua `pptxPanel` — defined, never called; drop in port) |
+| (b) TS → Rust | **~65** (format-docx.ts 46 — option assembly + 5 callout-icon paths into filter params; createWordprocessorFormat share ~17) | **~21** (powerpointFormat() defaults 17 + base.ts cell-output unrolling 4) |
+| (c) Other | 5 icon PNGs + ~7 schema lines; **no default reference-doc** | **nothing** — no reference-doc, no template dir, ~5 shared schema entries |
+| TS postprocessors on output | **none** (no zip/OOXML rewriting anywhere) | **none** |
+| FLF on transformation code | **~100% Lua** | **~100% Lua** |
+
+Mechanism: all docx/pptx-specific rendering is Lua emitting
+`RawBlock("openxml", ...)` islands (callout tables, styled captions, section
+breaks, pagebreaks) that Pandoc's writers serialize. The only non-Lua duties:
+docx needs the 5 icon paths resolved into `QUARTO_FILTER_PARAMS`
+(`param("icon-<type>")` in Lua silently drops icons if absent), and pptx
+needs the engine-time cell-output unrolling replicated (q2's executed-cell
+assembly, pre-pandoc).
+
+### Spikes (same harness as §3)
+
+| Spike | Result |
+|---|---|
+| Capture Q1 `--to docx` / `--to pptx` | Same minimal contract as latex, minus template: defaults (to/output-file/filters/from/syntax) + metadata + params env + datadir. Not even a reference-doc. |
+| Replay docx standalone (no Q1 TS) | **identical to Q1's .docx except `docProps/core.xml` timestamps** — every other zip entry byte-identical, incl. word/document.xml (verified per-entry `cmp`) |
+| Replay pptx standalone | **identical except core.xml timestamps**; all 4 slides byte-identical |
+| Content check | docx document.xml shows Quarto styles (ImageCaption, CaptionedFigure, callout tables, Bibliography) — the Lua chain demonstrably did the format work |
+
+LPH verdict for docx/pptx: **total** — cleaner than LaTeX (no compile loop, no
+postprocessors, no template staging). Both formats are pandoc-writer +
+Lua-emitted-OOXML; a q2 orchestrator needs only option assembly and (docx)
+icon params / (pptx) cell unrolling.
+
+## 10. Postprocessor audit vs "everything on the AST" (Carlos's goal)
+
+Scope note: **docx, pptx, epub have zero output postprocessors in Q1** — the
+goal is already satisfied there. LaTeX is the only offender among these
+formats: 20 `LineProcessor`s (~885 LOC TS) run over the generated `.tex` in
+two passes. (The PDF compile loop is not content post-processing and is out
+of scope of the goal.)
+
+Full catalog with producers and line ranges is in the round-2 agent output;
+summary classification:
+
+**Class 1 — AST-portable today, mechanically (7):** sidecaption wrapper (#1),
+biblatex/natbib refs-div placement (#5, #6), `{?quarto-cite:}` → `\fullcite`
+/ `\bibentry` (#8, #10), footnote→sidenote (#14), code-annotation list labels
+(#17). Each replaces a marker the Lua itself emitted with static or
+locally-computable LaTeX — the Lua could emit the final form directly. These
+exist as text rewrites for historical reasons, not technical ones.
+
+**Class 2 — AST-portable after citeproc (4):** guid relocation (#4),
+bibliography indexing/suppression (#11), refs-chapter cleanup (#12),
+margin-citation entry placement (#20). These need citeproc-*rendered*
+entries; but citeproc output IS AST (a `#refs` Div of `CSLReferences`), and
+Pandoc runs filters in declared order — a Lua filter listed *after* citeproc
+sees it. `filters: [main.lua, citeproc, margin-cites.lua]` keeps everything
+on the AST, inside the same pandoc invocation.
+
+**Class 3 — portable with effort, because the AST has context the text pass
+lacks (6):** callout float `[H]` forcing (#2 — at AST time we KNOW a float is
+inside a Callout; the text pass reverse-engineers env nesting), caption
+footnotes → footnotemark/text (#15 — Note nodes are visible inside caption
+inlines), sidenotes inside tables/longtables (#18, #19 — Note-inside-Table is
+an AST query), code-annotation `\circled{N}` in highlighted code (#16 —
+post-writer in Q1 only because *Pandoc's* skylighting runs in the writer; q2
+owns its own highlighting stage, so q2 can highlight at AST time and emit the
+final tokens), template `\printbibliography`/`\bibliography` suppression
+(#7, #9 — properly belongs in the template as an `$if()$` conditional, not in
+any processor).
+
+**Class 4 — genuinely fights Pandoc's writer (2):** margin-longtable column
+width rewriting (#3 — patches the writer-computed
+`p{(\columnwidth - N\tabcolsep)...}` specs to account for
+`\marginparwidth`) and longtable bottom-caption relocation (#13 — reorders
+lines inside the writer-generated longtable preamble). The information needed
+(final column specs, caption line position) is *created by* Pandoc's
+longtable writer; no pre-writer transform can see it. Options: (i) keep a
+minimal Rust text-pass for exactly these (~100–150 LOC); (ii) have the Lua
+emit the entire longtable as raw LaTeX for the margin/bottom-caption cases,
+bypassing the writer (floatreftarget.lua already uses the
+`pandoc.write(...,"latex")` + patch idiom for nested-longtable fixups, so
+this is an established pattern, not a new invention); (iii) upstream writer
+options to Pandoc (slow).
+
+**Verdict on the laudable goal:** For docx/pptx/epub — already true, nothing
+to do. For LaTeX — **18 of 20 processors can move onto the AST** (7
+mechanically, 4 as post-citeproc Lua, 6 with modest effort +1 to the
+template), leaving a hard core of 2 longtable processors where "the AST"
+simply doesn't contain the writer's layout decisions. Recommendation: do the
+Class 1+2 migration when vendoring the filters (it *simplifies* them —
+markers and their consumers collapse into direct emission), take Class 3
+opportunistically, and either keep a ~150-LOC Rust tex-text pass for Class 4
+or adopt the raw-longtable-emission idiom and eliminate text processing
+entirely. Caveat: every Class 1–3 migration is a divergence from upstream
+quarto-cli's filter code — it trades "diff-able against Q1" for architectural
+purity; batch them deliberately, not ad hoc.
+
+### Design questions raised this round
+
+7. Migrating Class 1–3 processors into (vendored) Lua diverges from upstream
+   Q1 filters — how much do we value staying diff-able against quarto-cli?
+8. Class 4: minimal Rust text-pass vs raw-longtable emission from Lua?
+9. pptx: adopt Q1's engine-time cell unrolling into q2's executed-cell
+   assembly (it is engine-side, not filter-side).
