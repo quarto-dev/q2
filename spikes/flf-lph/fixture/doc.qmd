@@ -1,0 +1,61 @@
+---
+title: FLF/LPH Spike Fixture
+author: Spike Runner
+bibliography: refs.bib
+---
+
+# Introduction {#sec-intro}
+
+This document exercises the constructs whose LaTeX/EPUB rendering lives in
+Quarto 1's Lua filters. See @sec-details for more, plus @fig-pixel,
+@tbl-simple, @eq-euler, and @thm-line.
+
+::: {.callout-note title="A note callout"}
+Callouts render to tcolorbox in LaTeX and styled divs in EPUB.
+:::
+
+::: {.callout-warning collapse="true"}
+## Collapsible warning
+This one has a collapse attribute (HTML-only behavior).
+:::
+
+![A tiny image](pixel.png){#fig-pixel}
+
+| a | b |
+|---|---|
+| 1 | 2 |
+| 3 | 4 |
+
+: Simple table {#tbl-simple}
+
+$$ e^{i\pi} + 1 = 0 $$ {#eq-euler}
+
+```{.python filename="hello.py"}
+print("hello, world")
+```
+
+::: {.column-margin}
+This margin note requires TS-side `.tex` postprocessing in Quarto 1.
+:::
+
+A citation: [@knuth84].
+
+::: {#thm-line}
+## A theorem
+
+For all $x$, something interesting holds.
+:::
+
+{{< pagebreak >}}
+
+# Details {#sec-details}
+
+Layout panel:
+
+::: {layout-ncol=2}
+![Left](pixel.png)
+
+![Right](pixel.png)
+:::
+
+Back-reference to @sec-intro.

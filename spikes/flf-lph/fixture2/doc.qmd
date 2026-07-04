@@ -1,0 +1,37 @@
+---
+title: FLF/LPH Postprocessor-Trigger Fixture
+author: Spike Runner
+bibliography: refs.bib
+reference-location: margin
+citation-location: margin
+---
+
+# Margin machinery {#sec-margin}
+
+A margin citation [@knuth84] should be rendered into the margin by the
+TypeScript line processors in Quarto 1.
+
+A footnote in prose.^[This footnote should land in the margin because of
+`reference-location: margin`.]
+
+![A figure with a footnote in its caption^[Caption footnotes get pulled out
+by TS postprocessing.]](pixel.png){#fig-noted}
+
+Code annotations:
+
+```{.python}
+def hello():          # <1>
+    print("hello")    # <2>
+```
+1. The function definition.
+2. The greeting itself.
+
+::: {.column-margin}
+| m | n |
+|---|---|
+| 5 | 6 |
+
+: Margin table {#tbl-margin}
+:::
+
+See @fig-noted and @tbl-margin.
