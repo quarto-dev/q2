@@ -22,8 +22,10 @@ mod defaults;
 mod delegate;
 mod node;
 
+pub use bundle::{BundleFile, content_hash, embedded_files, is_placeholder};
 pub use cache::{
-    DEFAULT_MAX_AGE, ExtractedBundle, LAST_USED_FILE, LOCK_FILE, extract_and_lock, gc,
+    DEFAULT_MAX_AGE, ExtractedBundle, LAST_USED_FILE, LOCK_FILE, default_cache_root,
+    extract_and_lock, gc,
 };
 pub use defaults::{BundledDefault, Source, bundled_defaults, classify, injections, sources};
 pub use node::{Discovery, MIN_NODE_MAJOR, NodeError, NodeInfo, find_node, parse_version};

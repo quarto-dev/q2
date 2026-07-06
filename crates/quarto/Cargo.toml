@@ -20,7 +20,8 @@ tracing-subscriber.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 pollster.workspace = true
-tokio.workspace = true
+# `signal` for the `provide-hub` serve loop's Ctrl-C shutdown.
+tokio = { workspace = true, features = ["signal"] }
 
 quarto-core = { workspace = true, features = ["clap"] }
 quarto-error-catalog.workspace = true
@@ -33,8 +34,10 @@ quarto-system-runtime.workspace = true
 quarto-doctemplate.workspace = true
 quarto-lsp = { workspace = true }
 quarto-hub.workspace = true
+quarto-hub-provider = { path = "../quarto-hub-provider" }
 quarto-mcp-launcher = { path = "../quarto-mcp-launcher" }
 quarto-preview = { path = "../quarto-preview" }
+url = "2.5"
 quarto-publish.workspace = true
 quarto-sass.workspace = true
 quarto-test.workspace = true

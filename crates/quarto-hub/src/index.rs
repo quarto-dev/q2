@@ -153,10 +153,8 @@ impl IndexDocument {
 
                 // Iterate over all keys in the map
                 for key in keys {
-                    if let Some((value, _)) = doc.get(&files_obj, &key).ok().flatten()
-                        && let Some(doc_id) = value.to_str()
-                    {
-                        files.insert(key, doc_id.to_string());
+                    if let Some(doc_id) = read_str_or_text(doc, &files_obj, &key) {
+                        files.insert(key, doc_id);
                     }
                 }
             }
@@ -216,8 +214,7 @@ impl IndexDocument {
     pub fn get_file(&self, path: &str) -> Option<String> {
         self.handle.with_document(|doc| {
             let (_, files_obj) = doc.get(ROOT, FILES_KEY).ok().flatten()?;
-            let (value, _) = doc.get(files_obj, path).ok().flatten()?;
-            value.to_str().map(|s| s.to_string())
+            read_str_or_text(doc, &files_obj, path)
         })
     }
 
@@ -318,6 +315,28 @@ impl IndexDocument {
             .map_err(|e| Error::IndexDocument(format!("failed to remove capture: {:?}", e)))
         })
     }
+}
+
+/// Read a string-valued map entry that may be stored as EITHER a scalar `Str`
+/// OR an automerge `Text` object.
+///
+/// hub-client (`@automerge/automerge` 3.x, via `automerge-repo`) stores plain
+/// string map-values — including the file-document ids in the `files` map — as
+/// `Text` objects, not scalar strings (a `doc.files[path] = id` assignment
+/// becomes a collaborative `Text`). A Rust reader using `Value::to_str()` alone
+/// silently drops the `Text` form, so a project *created in hub-client* reads as
+/// having **zero files** — which broke `q2 provide-hub` materialization
+/// (bd-bm0vaetl). Rust-authored docs (project-mode hub) keep using the scalar
+/// form; this accepts both. Same class of bug as the `metadata-as-str` lint.
+fn read_str_or_text<D: ReadDoc>(doc: &D, obj: &automerge::ObjId, key: &str) -> Option<String> {
+    let (value, id) = doc.get(obj, key).ok().flatten()?;
+    if let Some(s) = value.to_str() {
+        return Some(s.to_string());
+    }
+    if matches!(value, automerge::Value::Object(ObjType::Text)) {
+        return doc.text(&id).ok();
+    }
+    None
 }
 
 /// Read a single CaptureRef out of an automerge entry map.
@@ -433,6 +452,44 @@ mod tests {
             files.get("chapters/intro.qmd"),
             Some(&"doc-id-2".to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn get_all_files_reads_text_valued_ids() {
+        // hub-client (@automerge/automerge 3.x) stores files[path] = docId as a
+        // Text object, not a scalar string. get_all_files/get_file must read
+        // both forms, or a project created in hub-client reads as zero files
+        // and `q2 provide-hub` materializes nothing (bd-bm0vaetl).
+        let repo = create_test_repo().await;
+
+        let mut doc = Automerge::new();
+        doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+            let files = tx.put_object(ROOT, FILES_KEY, ObjType::Map)?;
+            // JS style: the id is a Text object.
+            let t = tx.put_object(&files, "index.qmd", ObjType::Text)?;
+            tx.update_text(&t, "doc-id-from-js")?;
+            // Rust style: the id is a scalar string.
+            tx.put(&files, "about.qmd", "doc-id-from-rust")?;
+            Ok(())
+        })
+        .unwrap();
+        let handle = repo.create(doc).await.unwrap();
+        let doc_id = handle.document_id().to_string();
+        let index = IndexDocument::load(&repo, &doc_id).await.unwrap().unwrap();
+
+        let files = index.get_all_files();
+        assert_eq!(files.len(), 2, "both the Text and scalar ids must be read");
+        assert_eq!(files.get("index.qmd"), Some(&"doc-id-from-js".to_string()));
+        assert_eq!(
+            files.get("about.qmd"),
+            Some(&"doc-id-from-rust".to_string())
+        );
+
+        assert_eq!(
+            index.get_file("index.qmd"),
+            Some("doc-id-from-js".to_string())
+        );
+        assert!(index.has_file("index.qmd"));
     }
 
     #[tokio::test]

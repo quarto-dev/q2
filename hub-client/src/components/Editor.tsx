@@ -13,7 +13,9 @@ import {
   exportProjectAsZip,
   type EditorContentChange,
 } from '@quarto/preview-runtime';
-import { vfsAddFile, isWasmReady } from '@quarto/preview-runtime';
+import { vfsAddFile, isWasmReady, clearCapture } from '@quarto/preview-runtime';
+import { PreviewStatusBar } from './render/PreviewStatusBar';
+import { hasExecutableCells } from '../services/executableCells';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
 import { registerQmdLanguage } from './quartoTheme';
@@ -58,6 +60,18 @@ interface Props {
   onNavigateToFile: (filePath: string, options?: { anchor?: string; replace?: boolean }) => void;
   /** Actor ID -> identity mapping from the IndexDocument */
   identities?: Record<string, import('@quarto/preview-runtime').ActorIdentity>;
+  /** Path -> recorded engine capture sidecar entry (bd-sfet3264). */
+  captures?: Record<string, import('@quarto/preview-runtime').CaptureRef>;
+  /**
+   * Whether at least one q2 executor is currently online for this project
+   * (bd-sfet3264 Phase 2). Gates the Run affordance (Phase 4b).
+   */
+  executorsOnline?: boolean;
+  /**
+   * Broadcast an "execute this document now" request to a connected executor
+   * (bd-sfet3264 Phase 4b). Returns the request id, or null when not connected.
+   */
+  onRequestExecution?: (path: string) => string | null;
   /** Whether the project is connected to the sync server */
   isOnline: boolean;
 }
@@ -136,7 +150,7 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, isOnline }: Props) {
+export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
   const { effectiveTheme } = useTheme();
@@ -1084,6 +1098,14 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               ✕
             </button>
           )}
+          <PreviewStatusBar
+            path={currentFile?.path ?? null}
+            executorsOnline={!!executorsOnline}
+            hasExecutableCells={hasExecutableCells(content)}
+            capture={currentFile ? captures?.[currentFile.path] : undefined}
+            onRun={(p) => { onRequestExecution?.(p); }}
+            onClear={(p) => clearCapture(p)}
+          />
           <PreviewRouter
             content={displayContent}
             currentFile={currentFile}
@@ -1106,6 +1128,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onFormatChange={handleFormatChange}
             onContentRewrite={handleContentRewrite}
             identities={identities}
+            captures={captures}
             attributionOn={attributionOn}
             onAttributionGeneratingChange={setAttributionGenerating}
           />

@@ -116,6 +116,18 @@ pub struct HtmlRenderConfig {
     /// [`crate::engine::EngineRegistry::with_replay`] from a
     /// [`quarto_trace::EngineCapture`] loaded from a trace file.
     pub engine_registry: Option<crate::engine::EngineRegistry>,
+
+    /// Server-recorded engine captures to splice into the HTML render
+    /// (bd-uy4uygha). When non-empty, a [`crate::stage::CaptureSpliceStage`]
+    /// is inserted before [`EngineExecutionStage`] so recorded engine output
+    /// appears in the rendered HTML without re-running the engine — this is how
+    /// hub-client's default `format: html` preview shows the output of a
+    /// document executed by a connected `q2 provide-hub`.
+    ///
+    /// Empty (the default) renders code cells as source, byte-identical to the
+    /// pre-bd-uy4uygha behavior for every existing caller (`q2 render` runs the
+    /// real engine natively instead).
+    pub captures: Vec<quarto_trace::EngineCapture>,
 }
 
 impl HtmlRenderConfig {
@@ -124,12 +136,20 @@ impl HtmlRenderConfig {
         Self {
             resolver: Some(resolver),
             engine_registry: None,
+            captures: Vec::new(),
         }
     }
 
     /// Attach an engine registry override (bd-45yw replay activation).
     pub fn with_engine_registry(mut self, registry: crate::engine::EngineRegistry) -> Self {
         self.engine_registry = Some(registry);
+        self
+    }
+
+    /// Attach server-recorded engine captures to splice into the HTML render
+    /// (bd-uy4uygha). See the [`captures`](Self::captures) field.
+    pub fn with_captures(mut self, captures: Vec<quarto_trace::EngineCapture>) -> Self {
+        self.captures = captures;
         self
     }
 }
@@ -389,27 +409,38 @@ pub fn build_q2_preview_pipeline_stages(
     captures: Vec<quarto_trace::EngineCapture>,
 ) -> Vec<Box<dyn PipelineStage>> {
     // Build the base list *without* threading the engine registry through;
-    // we reconstruct the engine-execution stage ourselves below so it can
-    // also carry the spliced-engine set (bd-sauc9iiq). Passing `None` here
-    // avoids both a registry clone and a discarded-registry bug.
+    // insert_capture_splice_stage reconstructs the engine-execution stage with
+    // it (so it can also carry the spliced-engine set, bd-sauc9iiq). Passing
+    // `None` here avoids both a registry clone and a discarded-registry bug.
     let mut stages = build_html_pipeline_stages_with_options(None, None);
     stages.retain(|s| !Q2_PREVIEW_STAGE_EXCLUDED.contains(&s.name()));
+    insert_capture_splice_stage(&mut stages, engine_registry, captures);
+    stages
+}
 
-    // bd-sauc9iiq: the WASM preview registry has no knitr/jupyter, so
-    // EngineExecutionStage would fall back to markdown and warn
-    // "(no execution)" for every engine these captures replay — even though
-    // CaptureSpliceStage (inserted just below) has already provided their
-    // real output. Collect the captured engine names and hand them to the
-    // engine stage so it suppresses that misleading warning for exactly
-    // those engines (others still warn). Done before `captures` is moved
-    // into the splice stage.
+/// Insert a [`crate::stage::CaptureSpliceStage`] immediately *before*
+/// `EngineExecutionStage`, rebuilding that stage with `engine_registry` plus the
+/// captured engine names.
+///
+/// bd-lucp / bd-5yff4: the splice folds an ordered capture sequence (one per
+/// engine) into the AST, replacing engine code cells with their recorded
+/// output. bd-sauc9iiq: rebuilding the engine stage with
+/// `.with_spliced_engines(...)` suppresses the misleading "(no execution)"
+/// warning for exactly the engines the splice already served (the WASM preview
+/// registry has no knitr/jupyter).
+///
+/// Shared by the q2-preview pipeline and the HTML capture pipeline
+/// ([`build_html_pipeline_stages_with_captures`], bd-uy4uygha) so the two stay
+/// cell-aligned with `build_capture_pipeline_stages`. With empty `captures` the
+/// inserted splice is a pass-through and the engine stage is still (re)built
+/// with the registry, so callers may invoke this unconditionally.
+fn insert_capture_splice_stage(
+    stages: &mut Vec<Box<dyn PipelineStage>>,
+    engine_registry: Option<crate::engine::EngineRegistry>,
+    captures: Vec<quarto_trace::EngineCapture>,
+) {
     let spliced_engine_names: std::collections::HashSet<String> =
         captures.iter().map(|c| c.engine_name.clone()).collect();
-
-    // Reconstruct the engine-execution stage with the caller's registry (if
-    // any — e.g. a ReplayEngine for regression testing) *and* the
-    // spliced-engine set. Mirrors the registry handling in
-    // `build_html_pipeline_stages_with_options`.
     let engine_stage = match engine_registry {
         Some(reg) => EngineExecutionStage::with_registry(reg),
         None => EngineExecutionStage::new(),
@@ -418,20 +449,32 @@ pub fn build_q2_preview_pipeline_stages(
     let engine_idx = stages
         .iter()
         .position(|s| s.name() == "engine-execution")
-        .expect("engine-execution stage must exist in the q2-preview pipeline");
+        .expect("engine-execution stage must exist in the pipeline");
     stages[engine_idx] = Box::new(engine_stage);
-
-    // Insert the splice stage immediately *before* EngineExecutionStage.
-    // bd-lucp: this is the q2-preview-specific consumer of recorded
-    // captures. bd-5yff4: the captures are an ordered sequence (one per
-    // engine); the splice folds them. The HTML pipeline doesn't include
-    // it — `q2 render` either runs the real engine natively or uses
-    // `--replay` (which goes through `EngineRegistry::with_replay_many`,
-    // an entirely different code path).
     let splice_stage: Box<dyn PipelineStage> =
         Box::new(crate::stage::CaptureSpliceStage::new().with_captures(captures));
     stages.insert(engine_idx, splice_stage);
+}
 
+/// Like [`build_html_pipeline_stages_with_options`] but splices server-recorded
+/// engine captures into the HTML render (bd-uy4uygha): hub-client's default
+/// `format: html` preview shows the output of a document executed by a connected
+/// `q2 provide-hub`, without re-running the engine in the browser.
+///
+/// With empty `captures` the result is behaviorally identical to
+/// `build_html_pipeline_stages_with_options` (a pass-through splice + the same
+/// engine stage). Cell alignment with the recorded capture is guaranteed because
+/// captures are recorded from this same stage list truncated at engine-execution
+/// (`build_capture_pipeline_stages`).
+pub fn build_html_pipeline_stages_with_captures(
+    apply_config: Option<ApplyTemplateConfig>,
+    engine_registry: Option<crate::engine::EngineRegistry>,
+    captures: Vec<quarto_trace::EngineCapture>,
+) -> Vec<Box<dyn PipelineStage>> {
+    // Base with None registry — the helper rebuilds the engine stage with the
+    // registry (mirrors the q2-preview builder; avoids a second registry build).
+    let mut stages = build_html_pipeline_stages_with_options(apply_config, None);
+    insert_capture_splice_stage(&mut stages, engine_registry, captures);
     stages
 }
 
@@ -845,7 +888,19 @@ pub async fn render_qmd_to_html(
         .clone()
         .map(|r| ApplyTemplateConfig::new().with_resolver(r));
     let engine_registry = config.engine_registry.clone();
-    let stages = build_html_pipeline_stages_with_options(apply_config, engine_registry);
+    // bd-uy4uygha: when the caller supplies server-recorded captures (hub-client
+    // executing via a connected `q2 provide-hub`), splice them into the HTML.
+    // Empty captures take the unchanged builder — byte-identical for every
+    // existing caller (`q2 render`, which runs the real engine natively).
+    let stages = if config.captures.is_empty() {
+        build_html_pipeline_stages_with_options(apply_config, engine_registry)
+    } else {
+        build_html_pipeline_stages_with_captures(
+            apply_config,
+            engine_registry,
+            config.captures.clone(),
+        )
+    };
 
     let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
     // Extract the rendered output
@@ -1482,6 +1537,71 @@ mod tests {
         assert!(output.html.contains("Hello, world!"));
         assert!(output.html.contains("<!DOCTYPE html>"));
         assert!(output.html.contains("<title>Test</title>"));
+    }
+
+    /// bd-uy4uygha: `render_qmd_to_html` must splice server-recorded captures
+    /// into the HTML (hub-client's default `format: html` preview), not just the
+    /// q2-preview AST path. Mirrors `captureSplice.wasm.test.ts`: one engine cell
+    /// + a hand-built capture whose result markdown is a `.cell` wrapper carrying
+    /// a marker that appears ONLY in the capture, never in the source.
+    #[tokio::test]
+    async fn render_qmd_to_html_splices_captures() {
+        use quarto_trace::EngineCapture;
+
+        // The doc renders as html (no `format:` key). Use a fictitious engine
+        // name no platform registers, so EngineExecutionStage takes the
+        // markdown-fallback branch (no subprocess) and the splice — which runs
+        // before it — is the only thing that can produce output.
+        let qmd = "---\ntitle: T\nengine: markerlang\n---\n\n```{markerlang}\n1 + 1\n```\n";
+        let capture = EngineCapture {
+            engine_name: "markerlang".into(),
+            // Same `{markerlang}` cell as the doc, so its content-hash matches.
+            input_qmd: "```{markerlang}\n1 + 1\n```\n".into(),
+            // Post-engine markdown: a `.cell` wrapper whose stdout is the marker.
+            result: serde_json::json!({
+                "markdown": "::: {.cell}\n```{.markerlang .cell-code}\n1 + 1\n```\n\n::: {.cell-output .cell-output-stdout}\n```\nSPLICEMARKER_ZX9\n```\n:::\n:::\n"
+            }),
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let runtime = make_test_runtime();
+
+        // With the capture, the marker (which is only in the capture) appears.
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let config = HtmlRenderConfig::default().with_captures(vec![capture]);
+        let out = render_qmd_to_html(
+            qmd.as_bytes(),
+            "test.qmd",
+            &mut ctx,
+            &config,
+            runtime.clone(),
+        )
+        .await
+        .unwrap();
+        assert!(
+            out.html.contains("SPLICEMARKER_ZX9"),
+            "spliced engine output must appear in the HTML; got:\n{}",
+            out.html
+        );
+
+        // No capture => source-only render (byte-compatible default path).
+        let mut ctx2 = RenderContext::new(&project, &doc, &format, &binaries);
+        let out2 = render_qmd_to_html(
+            qmd.as_bytes(),
+            "test.qmd",
+            &mut ctx2,
+            &HtmlRenderConfig::default(),
+            runtime,
+        )
+        .await
+        .unwrap();
+        assert!(
+            !out2.html.contains("SPLICEMARKER_ZX9"),
+            "no capture => source-only render"
+        );
     }
 
     #[test]
@@ -2274,6 +2394,7 @@ mod tests {
             let probe_config = HtmlRenderConfig {
                 resolver: None,
                 engine_registry: Some(probe_registry),
+                ..Default::default()
             };
             let runtime = make_test_runtime();
             let _ = pollster::block_on(render_qmd_to_html(
@@ -2317,6 +2438,7 @@ mod tests {
         let config = HtmlRenderConfig {
             resolver: None,
             engine_registry: Some(replay_registry),
+            ..Default::default()
         };
         let runtime = make_test_runtime();
         let output = pollster::block_on(render_qmd_to_html(
