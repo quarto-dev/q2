@@ -330,12 +330,21 @@ new tab; no auto-print.
 - _Deferred (optional polish):_ deeper theme-specific chrome hiding; the
   single-doc printable render already carries no website sidebar/navbar.
 
-### Phase 6 — Verification & docs
-- [ ] Full `cargo xtask verify` (WASM export is a Rust change) + hub-client
-      `npm run build:all` + `test:ci`.
-- [ ] Manual cross-browser E2E (Firefox + Chrome) with screenshots recorded
-      here.
-- [ ] Update `hub-client/changelog.md` (two-commit workflow per CLAUDE.md).
+### Phase 6 — Verification & docs — MOSTLY DONE
+- [x] Legs verified independently: WASM build (green, `render_printable` in pkg,
+      no new warnings); hub-client `npm run build` (tsc -b + vite, ×2) green;
+      hub-client `test:ci` green (678 unit + 76 integration + 123 wasm);
+      preview-renderer suite green; `cargo nextest run -p quarto-core` green
+      (2450 passed).
+- [x] Chrome E2E with screenshots (doc + deck) — see Phase 3.
+- [x] `hub-client/changelog.md` updated (commit `5aa3ee0a`).
+- [ ] **Pre-push (needs user OK to push):** single unified `cargo xtask verify`
+      (the CI `-D warnings` gate over the whole workspace + ts-packages
+      build/smoke). Each leg already passed individually; this is the unified
+      gate.
+- [ ] Firefox E2E pass (Chrome done).
+- [ ] Click the in-app 🖨 button against a live hub (handler is thin,
+      unit-tested glue over the browser-verified render→inline→print pipeline).
 
 ---
 
