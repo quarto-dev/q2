@@ -15,6 +15,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-07-06
+
+- [`550aaeb8`](https://github.com/quarto-dev/q2/commits/550aaeb8): Fixed a rich-text editor bug where committing with Cmd/Ctrl+Enter while text was selected (for example, select-all then bold) could delete the block's content.
+
 ### 2026-07-01
 
 - [`0b13dbcb`](https://github.com/quarto-dev/q2/commits/0b13dbcb): The preview's code-execution controls are now a single status line — executor status, "showing executed output", and the Run/Re-run and Clear-results buttons share one bar instead of stacking as two.
