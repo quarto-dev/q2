@@ -313,12 +313,22 @@ new tab; no auto-print.
 - [ ] **E2E:** click the button in a running hub, confirm the correct producer
       opens. _Pending (needs a running hub-client + project)._
 
-### Phase 5 — Print-CSS audit & polish
-- [ ] Ensure a usable `@media print` baseline reaches the printable doc
-      (Phase 0 showed it's currently thin): hide app/preview chrome + any
-      sidebar/TOC/nav, tune margins + page breaks. Decide where it lives
-      (template partial vs. injected by the inliner).
-- [ ] Verify Bootstrap-theme vs non-theme docs both print cleanly.
+### Phase 5 — Print-CSS baseline — DONE
+- [x] `injectPrintStylesheet`
+      (`ts-packages/preview-renderer/src/utils/printStylesheet.ts`, 3 unit
+      tests) appends a conservative `@media print` block to the **document**
+      case (before `</head>`): `@page` margins, heading break-avoidance
+      (`break-after: avoid-page`), orphans/widows, `break-inside: avoid` for
+      figures/code/tables/`.cell-output`, and a white-background reset. This
+      supplies the pandoc print basics q2's HTML template omits (Phase 0
+      finding). Wired into `buildPrintableHtml`'s non-slides branch; decks skip
+      it (reveal ships its own print CSS). The E2E wasm test now asserts
+      `data-q2-print` present for docs / absent for decks.
+- Decision: injected **printable-only** in the JS glue (not the shared HTML
+  template), matching the Q2 "editor-only concern" framing — no blast radius on
+  `q2 render` or the live preview.
+- _Deferred (optional polish):_ deeper theme-specific chrome hiding; the
+  single-doc printable render already carries no website sidebar/navbar.
 
 ### Phase 6 — Verification & docs
 - [ ] Full `cargo xtask verify` (WASM export is a Rust change) + hub-client

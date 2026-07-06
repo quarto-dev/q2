@@ -33,11 +33,8 @@ import {
   vfsReadFile,
   vfsReadBinaryFile,
 } from '@quarto/preview-runtime';
-import {
-  makeSelfContainedHtml,
-  type SelfContainedReaders,
-} from '@quarto/preview-renderer/utils/makeSelfContainedHtml';
-import { forceRevealPrintMode } from '@quarto/preview-renderer/utils/revealPrintMode';
+import { type SelfContainedReaders } from '@quarto/preview-renderer/utils/makeSelfContainedHtml';
+import { buildPrintableHtml } from './printableDocument';
 
 interface RenderResponse {
   success: boolean;
@@ -116,20 +113,23 @@ describe('render_printable → makeSelfContainedHtml (issue #315)', () => {
     // The user image src is preserved for the inliner to resolve.
     expect(result.html!).toContain('src="figures/plot.png"');
 
-    // Inline exactly as production does — currentFilePath is the
-    // project-relative path (no `/project/` prefix), matching Automerge
-    // `file.path`.
-    const selfContained = makeSelfContainedHtml(
-      result.html!,
+    // Build exactly as production does (buildPrintableHtml) —
+    // currentFilePath is the project-relative path (no `/project/`
+    // prefix), matching Automerge `file.path`.
+    const printable = buildPrintableHtml(
+      result.html,
       'index.qmd',
+      'q2-preview',
       vfsReaders,
     );
 
     // Fully self-contained: no external artifact refs, image embedded.
-    expect(selfContained).not.toMatch(/(href|src)="\/\.quarto\//);
-    expect(selfContained).not.toContain('src="figures/plot.png"');
-    expect(selfContained).toContain('data:image/png;base64,');
-    expect(selfContained.startsWith('<!DOCTYPE html>')).toBe(true);
+    expect(printable).not.toMatch(/(href|src)="\/\.quarto\//);
+    expect(printable).not.toContain('src="figures/plot.png"');
+    expect(printable).toContain('data:image/png;base64,');
+    expect(printable.startsWith('<!DOCTYPE html>')).toBe(true);
+    // Documents get the print-quality stylesheet.
+    expect(printable).toContain('data-q2-print');
   });
 
   it('renders a revealjs doc to a standalone deck put into print layout', async () => {
@@ -150,13 +150,18 @@ describe('render_printable → makeSelfContainedHtml (issue #315)', () => {
     expect(result.html!).toContain('class="reveal"');
     expect(result.html!).toContain('class="slides"');
 
-    const selfContained = forceRevealPrintMode(
-      makeSelfContainedHtml(result.html!, 'deck.qmd', vfsReaders),
+    const printable = buildPrintableHtml(
+      result.html,
+      'deck.qmd',
+      'revealjs',
+      vfsReaders,
     );
 
     // reveal.js and its CSS are inlined (no external artifact refs) and
-    // the deck is forced into print layout.
-    expect(selfContained).not.toMatch(/(href|src)="\/\.quarto\//);
-    expect(selfContained).toContain('view:"print"');
+    // the deck is forced into print layout. Decks skip the document
+    // print stylesheet (reveal ships its own).
+    expect(printable).not.toMatch(/(href|src)="\/\.quarto\//);
+    expect(printable).toContain('view:"print"');
+    expect(printable).not.toContain('data-q2-print');
   });
 });

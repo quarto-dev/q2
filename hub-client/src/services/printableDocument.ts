@@ -29,6 +29,7 @@ import {
   type SelfContainedReaders,
 } from '@quarto/preview-renderer/utils/makeSelfContainedHtml';
 import { forceRevealPrintMode } from '@quarto/preview-renderer/utils/revealPrintMode';
+import { injectPrintStylesheet } from '@quarto/preview-renderer/utils/printStylesheet';
 
 /** Bind the self-contained inliner's readers to the live WASM VFS. */
 function vfsReaders(): SelfContainedReaders {
@@ -70,7 +71,12 @@ export function buildPrintableHtml(
   }
   let out = makeSelfContainedHtml(html, currentFilePath, readers);
   if (isPrintableSlidesFormat(format)) {
+    // Reveal decks carry their own precise per-slide print CSS; just
+    // force the print layout.
     out = forceRevealPrintMode(out);
+  } else {
+    // Documents get the print-quality basics q2's HTML template omits.
+    out = injectPrintStylesheet(out);
   }
   return out;
 }
