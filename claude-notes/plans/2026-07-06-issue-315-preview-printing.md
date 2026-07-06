@@ -276,19 +276,30 @@ new tab; no auto-print.
       wasm-bindgen, `render_printable` present in pkg bindings, no new
       warnings; `tsc` clean for preview-runtime.
 
-### Phase 3 — Wire producer + slides `?print-pdf`, open in tab
-- [ ] Resolve Q-impl-3 (reveal print mode without a working query string).
-- [ ] Glue: `render_printable(path)` → `makeSelfContainedHtml` → Blob URL →
-      `window.open`; for `is_slides`, force reveal print mode.
-- [ ] **E2E:** open in a top-level tab; verify doc **paginates** (multi-page)
-      and deck shows **paged slides**, both in Firefox + Chrome; screenshots
-      here.
+### Phase 3 — Wire producer + slides print mode, open in tab — CODE DONE (E2E pending)
+- [x] **Q-impl-3 resolved:** reveal's print layout is gated on
+      `config.view === "print"` (what `?print-pdf` sets internally). Since a
+      `blob:` URL doesn't expose a query, inject `view:"print"` into the deck's
+      own `Reveal.initialize({…})` config — `forceRevealPrintMode`
+      (`ts-packages/preview-renderer/src/utils/revealPrintMode.ts`, 4 unit
+      tests).
+- [x] Glue: `hub-client/src/services/printableDocument.ts` —
+      `openPrintableDocument(path, format)` = `renderPrintable` → throw on
+      failure → `makeSelfContainedHtml` (readers bound to the WASM VFS) →
+      `forceRevealPrintMode` if slides → Blob URL → `window.open` (pop-up-block
+      detection + delayed revoke). Pure `buildPrintableHtml` +
+      `isPrintableSlidesFormat` unit-tested.
+- [ ] **E2E:** open in a top-level tab; verify a doc **paginates** and a deck
+      shows **paged slides** in Firefox + Chrome. _Pending._
 
-### Phase 4 — UI affordance
-- [ ] **Test first (component):** the preview toolbar shows the control;
-      clicking opens the correct producer for the current format.
-- [ ] Implement the button + wiring at the `PreviewRouter`/`ReactPreview`
-      surface; label per Q-impl-2.
+### Phase 4 — UI affordance — CODE DONE (E2E pending)
+- [x] Floating "🖨" button in the preview-pane (`Editor.tsx`), shown for
+      `q2-preview` / `q2-slides` / `revealjs`; disabled while preparing;
+      dismissible error toast on failure / pop-up block. CSS in `Editor.css`.
+      (Label: an icon button with a descriptive `title`/`aria-label` — resolves
+      Q-impl-2.)
+- [ ] **E2E:** click the button in a running hub, confirm the correct producer
+      opens. _Pending (needs a running hub-client + project)._
 
 ### Phase 5 — Print-CSS audit & polish
 - [ ] Ensure a usable `@media print` baseline reaches the printable doc
