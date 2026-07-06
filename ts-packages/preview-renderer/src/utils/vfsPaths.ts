@@ -74,8 +74,17 @@ export function guessMimeType(path: string): string {
         gif: 'image/gif',
         svg: 'image/svg+xml',
         webp: 'image/webp',
+        avif: 'image/avif',
+        ico: 'image/x-icon',
         css: 'text/css',
         js: 'text/javascript',
+        // Web fonts — needed when inlining `url(...)` references from
+        // theme CSS into a self-contained printable document.
+        woff: 'font/woff',
+        woff2: 'font/woff2',
+        ttf: 'font/ttf',
+        otf: 'font/otf',
+        eot: 'application/vnd.ms-fontobject',
     };
     return mimeTypes[ext || ''] || 'application/octet-stream';
 }
