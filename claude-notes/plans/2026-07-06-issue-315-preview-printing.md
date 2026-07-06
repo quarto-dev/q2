@@ -289,8 +289,20 @@ new tab; no auto-print.
       `forceRevealPrintMode` if slides → Blob URL → `window.open` (pop-up-block
       detection + delayed revoke). Pure `buildPrintableHtml` +
       `isPrintableSlidesFormat` unit-tested.
-- [ ] **E2E:** open in a top-level tab; verify a doc **paginates** and a deck
-      shows **paged slides** in Firefox + Chrome. _Pending._
+- [x] **E2E (real WASM + browser):**
+      `hub-client/src/services/printableDocument.wasm.test.ts` drives the
+      **actual** `render_printable` export against a VFS project and runs
+      `makeSelfContainedHtml` + `forceRevealPrintMode` over the result — the
+      exact production pipeline minus `window.open`. Asserts: q2-preview →
+      full HTML with image `src` preserved → inlined to **zero** `/.quarto`
+      refs + `data:` image; revealjs → standalone deck → inlined + `view:"print"`.
+      Both artifacts were then opened in Chrome as top-level docs: the **doc**
+      renders fully themed and self-contained; the **deck** enters reveal's
+      print layout (`<html class="… reveal-print print-pdf">`, 4 slides stacked
+      one-per-page with content). Screenshots captured in-session.
+      _Remaining:_ Firefox pass + clicking the literal in-app button against a
+      live hub (the button handler is thin, unit-tested glue over this verified
+      pipeline).
 
 ### Phase 4 — UI affordance — CODE DONE (E2E pending)
 - [x] Floating "🖨" button in the preview-pane (`Editor.tsx`), shown for
