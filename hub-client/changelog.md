@@ -15,6 +15,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-07-06
+
+- [`5aa3ee0a`](https://github.com/quarto-dev/q2/commits/5aa3ee0a): Added an "Open printable version" (🖨) button to the preview pane — it opens a standalone, self-contained copy of the current document (or slide deck) in a new tab so you can Print / Save-as-PDF with correct pagination, working around the broken in-frame print behavior.
+
 ### 2026-07-01
 
 - [`21be266a`](https://github.com/quarto-dev/q2/commits/21be266a): Downloaded project ZIPs now use relative paths nested under a single project-name folder (e.g. `Demo-Playground/index.qmd`) instead of absolute paths — `unzip` no longer warns about "stripped absolute path spec" and the archive extracts into one tidy directory.
