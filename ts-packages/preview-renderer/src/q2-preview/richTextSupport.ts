@@ -12,9 +12,17 @@ import type { PreviewContextValue } from './PreviewContext';
 
 /**
  * Block types the rich-text editor can handle. Everything else falls back to the
- * textarea even when `richText` is on. 1a: Para. 1b: + Header. (1c: lists/quotes.)
+ * textarea even when `richText` is on. 1a: Para. 1b: + Header.
+ *
+ * `Plain` (bd-7pxub583): a tight bullet/ordered list stores each item's content
+ * as a `Plain` block (loose lists use `Para`); table cells are also `Plain`.
+ * `Plain` seeds and round-trips exactly like `Para` — `astToProseMirror` maps
+ * both to a paragraph node, and the text-commit channel's `preserve_leaf_variant`
+ * (pampa `apply_node_edit.rs`) coerces the re-parsed `Paragraph` back to `Plain`
+ * so editing a tight-list item does not silently loosen the list. Adding it here
+ * makes tight-list-item and table-cell content rich-editable.
  */
-export const RICHTEXT_SUPPORTED_TYPES = new Set<string>(['Para', 'Header']);
+export const RICHTEXT_SUPPORTED_TYPES = new Set<string>(['Para', 'Header', 'Plain']);
 
 /** True when the rich editor is available for this block (flag on + supported type). */
 export function richTextAvailable(ctx: PreviewContextValue, sourceNodeType: string): boolean {
