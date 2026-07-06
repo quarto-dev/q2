@@ -673,6 +673,24 @@ fn map_format_for_preview(format_str: &str) -> &str {
     }
 }
 
+/// Coerce a *preview* pseudo-format to the HTML-output format its
+/// printable version should render as — the inverse of
+/// [`map_format_for_preview`], used by [`render_printable`].
+///
+/// `q2-preview → html` (a normal HTML page) and `q2-slides → revealjs`
+/// (so the reveal deck **assembler** runs — note this is *not*
+/// `builtin_pseudo_format`'s `html` base, which would drop the deck).
+/// The developer views `q2-debug`/`q2-raw` fall back to `html`.
+/// Non-preview formats (including `revealjs` and `html` themselves)
+/// pass through unchanged so they render via their own HTML pipeline.
+fn coerce_format_for_print(format_str: &str) -> &str {
+    match format_str {
+        "q2-preview" | "q2-debug" | "q2-raw" => "html",
+        "q2-slides" => "revealjs",
+        other => other,
+    }
+}
+
 /// Detect the format string from QMD content's YAML frontmatter.
 /// Returns the format name (e.g., "q2-slides", "q2-debug", "html", "acm-html")
 /// or "html" as default when no format key is present.
@@ -1000,6 +1018,59 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
         false,
         Vec::new(),
         None,
+        None,
+    )
+    .await
+}
+
+/// Render the **printable** form of a document: a standalone HTML page
+/// (or reveal deck) suitable for opening as a bare top-level browser tab
+/// and printing (issue #315, bd-vhdknrvl).
+///
+/// The live preview renders `format: q2-preview` / `format: q2-slides`
+/// through the React/AST pipeline (no standalone document to print).
+/// This export instead **coerces the preview format to its HTML-output
+/// equivalent** (`q2-preview → html`, `q2-slides → revealjs`; see
+/// [`coerce_format_for_print`]) and renders through the HTML pipeline
+/// **with the document's real path**, so relative image `src`s resolve
+/// against the document directory (they are preserved verbatim in the
+/// output for the JS-side `makeSelfContainedHtml` inliner to embed).
+///
+/// The returned document still references its generated artifacts
+/// (theme CSS, reveal.js, fonts) as `/.quarto/project-artifacts/…` VFS
+/// URLs; the caller runs `makeSelfContainedHtml` to inline them before
+/// opening the tab.
+///
+/// # Returns
+/// JSON: `{ "success": true, "html": "...", "is_slides": <bool>, ... }`
+/// or `{ "success": false, "error": "...", "diagnostics": [...] }`.
+#[wasm_bindgen]
+pub async fn render_printable(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
+    let runtime = get_runtime();
+    let path = Path::new(path);
+
+    let content = match runtime.file_read(path) {
+        Ok(bytes) => bytes,
+        Err(e) => return error_response(format!("Failed to read file: {}", e)),
+    };
+
+    let project = match ProjectContext::discover(path, runtime) {
+        Ok(p) => p,
+        Err(e) => return error_response(format!("Failed to discover project context: {}", e)),
+    };
+
+    let detected = detect_format_from_content(std::str::from_utf8(&content).unwrap_or(""));
+    let printable_format = coerce_format_for_print(&detected).to_string();
+
+    render_single_doc_to_response(
+        path,
+        &content,
+        &project,
+        user_grammars,
+        false,
+        Vec::new(),
+        None,
+        Some(&printable_format),
     )
     .await
 }
@@ -1031,6 +1102,7 @@ pub async fn render_qmd_content(
         user_grammars,
         false,
         Vec::new(),
+        None,
         None,
     )
     .await
@@ -1140,6 +1212,7 @@ pub async fn render_page_in_project_with_attribution(
             false,
             Vec::new(),
             attribution_json,
+            None,
         )
         .await;
     }
@@ -1232,6 +1305,7 @@ pub async fn render_page_for_preview(
             user_grammars,
             true,
             captures,
+            None,
             None,
         )
         .await;
@@ -1328,16 +1402,26 @@ async fn render_single_doc_to_response(
     // `q2 render` natively runs engines instead).
     captures: Vec<quarto_trace::EngineCapture>,
     attribution_json: Option<String>,
+    // When `Some`, use this format string verbatim instead of detecting
+    // it from the content (and instead of `prefer_preview_format`
+    // mapping). Used by `render_printable`, which coerces a preview
+    // pseudo-format to its HTML-output equivalent so the HTML branch
+    // runs. `None` preserves the detect-and-maybe-map behavior.
+    format_override: Option<&str>,
 ) -> String {
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
 
     let content_str = std::str::from_utf8(content).unwrap_or("");
-    let detected = detect_format_from_content(content_str);
-    let format_str = if prefer_preview_format {
-        map_format_for_preview(&detected).to_string()
+    let format_str = if let Some(ov) = format_override {
+        ov.to_string()
     } else {
-        detected
+        let detected = detect_format_from_content(content_str);
+        if prefer_preview_format {
+            map_format_for_preview(&detected).to_string()
+        } else {
+            detected
+        }
     };
     let format = match Format::from_format_string(&format_str) {
         Ok(f) => f,

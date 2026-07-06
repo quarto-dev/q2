@@ -254,14 +254,27 @@ new tab; no auto-print.
 - [x] Full preview-renderer suite green (473 unit + 524 integration) + `tsc`
       clean.
 
-### Phase 2 — `render_printable(path)` WASM export (path-aware, HTML-forced)
-- [ ] **Test first (Rust, wasm-quarto-hub-client or a quarto-core proxy):**
-      a `format: q2-preview` fixture with a subdir image renders to a full
-      `<!DOCTYPE html>` doc (not AST) with the image `src` preserved; a
-      `format: revealjs` fixture renders to a standalone deck.
-- [ ] Implement the export (detect → coerce preview→html-output → HTML branch,
-      real path) + the `wasmRenderer.ts` wrapper.
-- [ ] Rebuild WASM (`npm run build:wasm`).
+### Phase 2 — `render_printable(path)` WASM export (path-aware, HTML-forced) — DONE
+- [x] **Test first (quarto-core native integration, runs in nextest):**
+      `crates/quarto-core/tests/integration/printable_render.rs` — a
+      `format: q2-preview` fixture renders (via `render_qmd_to_html` with
+      `Format::html()`, mirroring the coercion) to a full HTML doc with the
+      relative image `src` preserved; a `format: revealjs` fixture renders to a
+      standalone reveal deck (`class="reveal"`/`"slides"`). Both pass. (The
+      WASM crate is `cdylib`-only / not native-testable, so the render-level
+      contract lives here.)
+- [x] Implemented: `coerce_format_for_print` (inverse of
+      `map_format_for_preview`: `q2-preview→html`, `q2-slides→revealjs`,
+      `q2-debug`/`q2-raw`→html, else passthrough) + a `format_override:
+      Option<&str>` param threaded through `render_single_doc_to_response`
+      (4 existing callers pass `None`) + the `render_printable(path)`
+      `#[wasm_bindgen]` export. `wasmRenderer.ts` gets a `renderPrintable`
+      wrapper + `WasmModuleExtended.render_printable` + `.d.ts` decl;
+      auto-exported from `@quarto/preview-runtime`. `is_slides` unchanged — the
+      JS caller already knows the format from `getQ2Format`.
+- [x] WASM rebuilt (`npm run build:wasm`) — compiles for wasm32, passes
+      wasm-bindgen, `render_printable` present in pkg bindings, no new
+      warnings; `tsc` clean for preview-runtime.
 
 ### Phase 3 — Wire producer + slides `?print-pdf`, open in tab
 - [ ] Resolve Q-impl-3 (reveal print mode without a working query string).

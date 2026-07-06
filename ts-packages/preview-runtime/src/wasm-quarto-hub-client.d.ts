@@ -33,6 +33,10 @@ declare module 'wasm-quarto-hub-client' {
     path: string,
     user_grammars?: JsUserGrammars,
   ): Promise<string>;
+  export function render_printable(
+    path: string,
+    user_grammars?: JsUserGrammars,
+  ): Promise<string>;
   export function render_qmd_content(
     content: string,
     template_bundle: string,
