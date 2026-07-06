@@ -1,7 +1,8 @@
 # Embedded-resource virtual-path contract
 
-**Status:** Design (2026-07-03). Fix tracked by strand `bd-nxxgg0pp`
-(discovered from `bd-3fgnmlco`, blocks the `bd-22rtwdur` smoke-all umbrella).
+**Status:** Implemented and merged (PR #374, 2026-07-03). Strands
+`bd-nxxgg0pp`, `bd-3fgnmlco`, `bd-5rl408mv`, `bd-gl0bufxp`, and the
+`bd-22rtwdur` smoke-all umbrella are all closed.
 
 Quarto compiles Bootstrap/theme SCSS from resources embedded at build time
 via `include_dir!`. The `@import`/`@use` statements *inside* that embedded
