@@ -358,7 +358,14 @@ new tab; no auto-print.
       (the CI `-D warnings` gate over the whole workspace + ts-packages
       build/smoke). Each leg already passed individually; this is the unified
       gate.
-- [ ] Firefox E2E pass (Chrome done).
+- [x] **Both formats browser-verified after the BOM fix:**
+      `format: q2-preview` — confirmed by the user working on **Firefox +
+      Chrome**; `format: revealjs` (theme: solarized) — verified in Chrome
+      (CDP): solarized theme applied (cream bg, League Gothic headings,
+      solarized-blue links), fully self-contained (zero external refs), reveal
+      print-pdf layout (one slide per page).
+- [ ] Firefox pass for the **deck** specifically (mechanism is browser-agnostic;
+      only Chrome exercised for revealjs so far).
 - [ ] Click the in-app 🖨 button against a live hub (handler is thin,
       unit-tested glue over the browser-verified render→inline→print pipeline).
 
