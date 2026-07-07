@@ -722,6 +722,13 @@ pub struct RenderToHtmlRenderer {
     /// so `Rc<RefCell<…>>` is correct on both wasm32 and on the
     /// native single-task executor used by tests. (bd-izfv)
     user_grammars: Option<Rc<RefCell<dyn quarto_highlight::UserGrammarProvider>>>,
+
+    /// bd-uy4uygha: server-recorded engine captures for the active page,
+    /// spliced into the HTML so hub-client's default `format: html` preview
+    /// shows the output of a document executed by a connected `q2 provide-hub`.
+    /// Empty (the default) renders code cells as source. Mirrors
+    /// [`RenderToPreviewAstRenderer`]'s `captures` for the AST path.
+    captures: Vec<quarto_trace::EngineCapture>,
 }
 
 impl RenderToHtmlRenderer {
@@ -732,7 +739,16 @@ impl RenderToHtmlRenderer {
             vfs_root: vfs_root.into(),
             vfs_url_root: None,
             user_grammars: None,
+            captures: Vec::new(),
         }
+    }
+
+    /// Attach server-recorded engine captures to splice into the active page's
+    /// HTML (bd-uy4uygha). Mirrors
+    /// [`RenderToPreviewAstRenderer::with_captures`].
+    pub fn with_captures(mut self, captures: Vec<quarto_trace::EngineCapture>) -> Self {
+        self.captures = captures;
+        self
     }
 
     /// Attach a user-grammar provider. The renderer installs it on
@@ -819,7 +835,10 @@ impl Pass2Renderer for RenderToHtmlRenderer {
         // shared across every page this renderer renders.
         ctx.user_grammar_provider = self.user_grammars.clone();
 
-        let config = HtmlRenderConfig::with_resolver(resolver.clone());
+        // bd-uy4uygha: thread the active page's captures into the HTML render
+        // so recorded engine output appears without re-running the engine.
+        let config =
+            HtmlRenderConfig::with_resolver(resolver.clone()).with_captures(self.captures.clone());
         let source_name = doc_info.input.to_string_lossy().to_string();
 
         let mut render_output = render_qmd_to_html(

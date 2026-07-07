@@ -1,0 +1,65 @@
+[package]
+name = "quarto-hub-provider"
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+description = "Connect q2 to a hub session as a code-execution provider (bd-sfet3264)"
+
+[lib]
+name = "quarto_hub_provider"
+path = "src/lib.rs"
+
+[dependencies]
+# Automerge sync via the same samod fork the hub uses. Must match quarto-hub's
+# version/branch exactly, else samod (and its automerge) resolve to a second copy
+# and DocHandle types no longer unify across the crate boundary.
+samod = { version = "0.12.1", git = "https://github.com/quarto-dev/samod.git", branch = "access-policy", features = ["tokio", "tungstenite"] }
+# Reused index-document model (file list, capture sidecar) for the join+list path.
+quarto-hub = { path = "../quarto-hub" }
+# Read file documents out of the VFS during materialization (must match the
+# version quarto-hub uses so DocHandle::with_document hands us the same type).
+automerge = { version = "0.10.0", features = ["utf16-indexing"] }
+# Node discovery + the embedded hub-mcp bundle (we spawn its auth-stream entry).
+quarto-mcp-launcher = { path = "../quarto-mcp-launcher" }
+
+# Phase 4: run engines natively and write the capture back into automerge.
+quarto-core = { workspace = true }
+quarto-system-runtime = { workspace = true }
+quarto-trace = { workspace = true }
+# Gzip the capture JSON before storing it as a binary automerge doc (same wire
+# format q2-preview uses; see CAPTURE_MIME_TYPE in execute.rs).
+flate2 = { workspace = true }
+# CBOR for the ephemeral exec channel. The browser's DocHandle.broadcast
+# CBOR-encodes payloads (cbor-x, useRecords:false → standard CBOR maps), so we
+# mirror it with ciborium for cross-language interop.
+ciborium = "0.2"
+# Per-run project materialization into a fresh temp dir from the VFS.
+tempfile = "3"
+# Drive the async capture write-back on a blocking worker (mirrors
+# quarto-preview/re_execute.rs: engine execution must not block the reactor).
+pollster = { workspace = true }
+
+# Our own websocket dial with an Authorization: Bearer header. We construct the
+# transport ourselves (producing raw bytes for samod's Transport), so the
+# tungstenite version is independent of samod's beyond the byte boundary — but
+# we match 0.27 to avoid a duplicate in the tree.
+tokio-tungstenite = { version = "0.27.0", features = ["native-tls"] }
+tungstenite = { version = "0.27.0" }
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "time"] }
+futures = "0.3"
+url = "2.5"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "net", "test-util"] }
+tokio-tungstenite = { version = "0.27.0", features = ["native-tls"] }
+
+[lints]
+workspace = true

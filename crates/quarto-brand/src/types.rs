@@ -535,10 +535,10 @@ impl BrandLogoResource {
     /// paths and `http(s)://` URLs are left unchanged.
     pub fn with_path_relative_to(&self, base: &Path) -> Self {
         let raw = self.path();
-        let resolved = if is_external_url(raw) || Path::new(raw).is_absolute() {
+        let resolved = if is_external_url(raw) || quarto_util::is_rooted(Path::new(raw)) {
             raw.to_string()
         } else {
-            base.join(raw).to_string_lossy().into_owned()
+            quarto_util::to_forward_slashes(&base.join(raw))
         };
         match self {
             BrandLogoResource::Path(_) => BrandLogoResource::Path(resolved),

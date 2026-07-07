@@ -673,6 +673,24 @@ fn map_format_for_preview(format_str: &str) -> &str {
     }
 }
 
+/// Coerce a *preview* pseudo-format to the HTML-output format its
+/// printable version should render as — the inverse of
+/// [`map_format_for_preview`], used by [`render_printable`].
+///
+/// `q2-preview → html` (a normal HTML page) and `q2-slides → revealjs`
+/// (so the reveal deck **assembler** runs — note this is *not*
+/// `builtin_pseudo_format`'s `html` base, which would drop the deck).
+/// The developer views `q2-debug`/`q2-raw` fall back to `html`.
+/// Non-preview formats (including `revealjs` and `html` themselves)
+/// pass through unchanged so they render via their own HTML pipeline.
+fn coerce_format_for_print(format_str: &str) -> &str {
+    match format_str {
+        "q2-preview" | "q2-debug" | "q2-raw" => "html",
+        "q2-slides" => "revealjs",
+        other => other,
+    }
+}
+
 /// Detect the format string from QMD content's YAML frontmatter.
 /// Returns the format name (e.g., "q2-slides", "q2-debug", "html", "acm-html")
 /// or "html" as default when no format key is present.
@@ -1000,6 +1018,59 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
         false,
         Vec::new(),
         None,
+        None,
+    )
+    .await
+}
+
+/// Render the **printable** form of a document: a standalone HTML page
+/// (or reveal deck) suitable for opening as a bare top-level browser tab
+/// and printing (issue #315, bd-vhdknrvl).
+///
+/// The live preview renders `format: q2-preview` / `format: q2-slides`
+/// through the React/AST pipeline (no standalone document to print).
+/// This export instead **coerces the preview format to its HTML-output
+/// equivalent** (`q2-preview → html`, `q2-slides → revealjs`; see
+/// [`coerce_format_for_print`]) and renders through the HTML pipeline
+/// **with the document's real path**, so relative image `src`s resolve
+/// against the document directory (they are preserved verbatim in the
+/// output for the JS-side `makeSelfContainedHtml` inliner to embed).
+///
+/// The returned document still references its generated artifacts
+/// (theme CSS, reveal.js, fonts) as `/.quarto/project-artifacts/…` VFS
+/// URLs; the caller runs `makeSelfContainedHtml` to inline them before
+/// opening the tab.
+///
+/// # Returns
+/// JSON: `{ "success": true, "html": "...", "is_slides": <bool>, ... }`
+/// or `{ "success": false, "error": "...", "diagnostics": [...] }`.
+#[wasm_bindgen]
+pub async fn render_printable(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
+    let runtime = get_runtime();
+    let path = Path::new(path);
+
+    let content = match runtime.file_read(path) {
+        Ok(bytes) => bytes,
+        Err(e) => return error_response(format!("Failed to read file: {}", e)),
+    };
+
+    let project = match ProjectContext::discover(path, runtime) {
+        Ok(p) => p,
+        Err(e) => return error_response(format!("Failed to discover project context: {}", e)),
+    };
+
+    let detected = detect_format_from_content(std::str::from_utf8(&content).unwrap_or(""));
+    let printable_format = coerce_format_for_print(&detected).to_string();
+
+    render_single_doc_to_response(
+        path,
+        &content,
+        &project,
+        user_grammars,
+        false,
+        Vec::new(),
+        None,
+        Some(&printable_format),
     )
     .await
 }
@@ -1032,6 +1103,7 @@ pub async fn render_qmd_content(
         false,
         Vec::new(),
         None,
+        None,
     )
     .await
 }
@@ -1040,12 +1112,12 @@ pub async fn render_qmd_content(
 ///
 /// Phase 9 entry point used by the hub-client live preview.
 /// Equivalent to
-/// [`render_page_in_project_with_attribution(path, user_grammars, None)`](render_page_in_project_with_attribution).
+/// [`render_page_in_project_with_attribution(path, user_grammars, None, None)`](render_page_in_project_with_attribution).
 /// Kept as a separate entry point for callers that have no
-/// attribution payload to ship and want the simpler signature.
+/// attribution payload or capture to ship and want the simpler signature.
 #[wasm_bindgen]
 pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
-    render_page_in_project_with_attribution(path, user_grammars, None).await
+    render_page_in_project_with_attribution(path, user_grammars, None, None).await
 }
 
 /// Render a single page **in the context of its surrounding project**,
@@ -1083,8 +1155,9 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
 ///
 /// `render_page_in_project(path, user_grammars)` is byte-identical
 /// to `render_page_in_project_with_attribution(path, user_grammars,
-/// None)` for every fixture. A regression on the `None` branch
-/// would break *all* q2-preview renders, not just attributed ones.
+/// None, None)` for every fixture. A regression on the all-`None`
+/// branch would break *all* q2-preview renders, not just attributed
+/// or capture-spliced ones.
 ///
 /// In both branches the response shape is the same `RenderResponse`
 /// JSON `render_qmd` returns today — the JS layer doesn't need a
@@ -1097,6 +1170,11 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
 /// * `attribution_json` - Optional serialized transport JSON. Same
 ///   shape as the payload accepted by
 ///   [`parse_qmd_to_ast_with_attribution`].
+/// * `capture_gz_json` - Optional gzipped-JSON `EngineCapture[]`
+///   (bd-sfet3264), same wire format as [`render_page_for_preview`].
+///   When present, the q2-preview pipeline's `CaptureSpliceStage`
+///   folds the recorded engine output into the AST. `None` renders
+///   code cells as source.
 ///
 /// [`PreBuiltAttributionProvider`]:
 ///     quarto_core::attribution::PreBuiltAttributionProvider
@@ -1105,6 +1183,13 @@ pub async fn render_page_in_project_with_attribution(
     path: &str,
     user_grammars: Option<JsUserGrammars>,
     attribution_json: Option<String>,
+    // bd-sfet3264 (Phase 1A): optional recorded engine capture sequence,
+    // gzipped JSON of `EngineCapture[]` — the same wire format the capture
+    // binary doc holds and that `render_page_for_preview` consumes. hub-client
+    // threads it from the IndexDocument's capture sidecar so executed engine
+    // output is spliced in *without* losing attribution. `None` is
+    // byte-identical to the pre-feature behaviour for every existing caller.
+    capture_gz_json: Option<Vec<u8>>,
 ) -> String {
     let runtime = get_runtime();
     let path_buf = std::path::PathBuf::from(path);
@@ -1115,6 +1200,17 @@ pub async fn render_page_in_project_with_attribution(
         Ok(bytes) => bytes,
         Err(e) => {
             return error_response(format!("Failed to read file: {}", e));
+        }
+    };
+
+    // Deserialize the gzipped JSON capture sequence (empty when absent).
+    // Both render branches thread it into the q2-preview pipeline's
+    // `CaptureSpliceStage` alongside attribution; the non-preview branch
+    // ignores it. Same parsing as `render_page_for_preview`.
+    let captures = match parse_capture_from(capture_gz_json) {
+        Ok(caps) => caps,
+        Err(e) => {
+            return error_response(format!("Failed to parse capture: {}", e));
         }
     };
 
@@ -1138,8 +1234,9 @@ pub async fn render_page_in_project_with_attribution(
             &project,
             user_grammars,
             false,
-            Vec::new(),
+            captures,
             attribution_json,
+            None,
         )
         .await;
     }
@@ -1162,7 +1259,7 @@ pub async fn render_page_in_project_with_attribution(
         project,
         user_grammars,
         false,
-        Vec::new(),
+        captures,
         attribution_json,
     )
     .await
@@ -1232,6 +1329,7 @@ pub async fn render_page_for_preview(
             user_grammars,
             true,
             captures,
+            None,
             None,
         )
         .await;
@@ -1328,16 +1426,26 @@ async fn render_single_doc_to_response(
     // `q2 render` natively runs engines instead).
     captures: Vec<quarto_trace::EngineCapture>,
     attribution_json: Option<String>,
+    // When `Some`, use this format string verbatim instead of detecting
+    // it from the content (and instead of `prefer_preview_format`
+    // mapping). Used by `render_printable`, which coerces a preview
+    // pseudo-format to its HTML-output equivalent so the HTML branch
+    // runs. `None` preserves the detect-and-maybe-map behavior.
+    format_override: Option<&str>,
 ) -> String {
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
 
     let content_str = std::str::from_utf8(content).unwrap_or("");
-    let detected = detect_format_from_content(content_str);
-    let format_str = if prefer_preview_format {
-        map_format_for_preview(&detected).to_string()
+    let format_str = if let Some(ov) = format_override {
+        ov.to_string()
     } else {
-        detected
+        let detected = detect_format_from_content(content_str);
+        if prefer_preview_format {
+            map_format_for_preview(&detected).to_string()
+        } else {
+            detected
+        }
     };
     let format = match Format::from_format_string(&format_str) {
         Ok(f) => f,
@@ -1402,7 +1510,10 @@ async fn render_single_doc_to_response(
             }
         }
         _ => {
-            let config = HtmlRenderConfig::with_resolver(resolver.clone());
+            // bd-uy4uygha: splice server-recorded captures into the HTML render
+            // (hub-client's default `format: html` preview), the same way the
+            // `preview` branch above does for the AST path.
+            let config = HtmlRenderConfig::with_resolver(resolver.clone()).with_captures(captures);
             match render_qmd_to_html(content, &source_name, &mut ctx, &config, runtime_arc).await {
                 Ok(out) => (
                     Some(out.html),
@@ -1584,6 +1695,9 @@ async fn render_project_active_page_to_response(
             if let Some(ref provider) = user_grammars_rc {
                 renderer = renderer.with_user_grammars(provider.clone());
             }
+            // bd-uy4uygha: splice the active page's captures into its HTML the
+            // same way the `preview` branch does for the AST path.
+            renderer = renderer.with_captures(captures);
             let mut pipeline = ProjectPipeline::with_renderer(
                 &mut project,
                 project_type,

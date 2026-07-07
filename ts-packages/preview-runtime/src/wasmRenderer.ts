@@ -42,6 +42,15 @@ interface WasmModuleExtended {
     path: string,
     user_grammars?: unknown,
   ) => Promise<string>;
+  // Printable render (issue #315): coerces the preview pseudo-format
+  // (`q2-preview → html`, `q2-slides → revealjs`) and renders through
+  // the HTML pipeline with the real path, yielding a standalone
+  // `RenderResponse.html`. The caller inlines its `/.quarto/…` assets
+  // (via `makeSelfContainedHtml`) before opening it in a top-level tab.
+  render_printable: (
+    path: string,
+    user_grammars?: unknown,
+  ) => Promise<string>;
   render_qmd_content: (
     content: string,
     templateBundle: string,
@@ -75,6 +84,10 @@ interface WasmModuleExtended {
     path: string,
     user_grammars?: unknown,
     attribution_json?: string,
+    // bd-sfet3264 (Phase 1A): optional gzipped-JSON `EngineCapture[]`. When
+    // present, the q2-preview pipeline's CaptureSpliceStage folds the recorded
+    // engine output into the AST — alongside attribution, not instead of it.
+    capture_gz_json?: Uint8Array,
   ) => Promise<string>;
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
@@ -440,6 +453,25 @@ export async function renderQmd(
 }
 
 /**
+ * Render the **printable** form of a document from the VFS (issue
+ * #315): a standalone HTML page (or reveal deck) whose format has been
+ * coerced away from the preview pseudo-formats (`q2-preview → html`,
+ * `q2-slides → revealjs`) and rendered through the HTML pipeline with
+ * the real path, so relative image `src`s are preserved for inlining.
+ *
+ * The returned `html` still links its generated artifacts as
+ * `/.quarto/…` VFS URLs; run `makeSelfContainedHtml` (from
+ * `@quarto/preview-renderer`) over it before opening a top-level tab.
+ */
+export async function renderPrintable(
+  path: string,
+  userGrammars?: unknown,
+): Promise<RenderResponse> {
+  const wasm = getWasm();
+  return JSON.parse(await wasm.render_printable(path, userGrammars));
+}
+
+/**
  * Render a single page **in the context of its surrounding project**.
  *
  * Phase 9 entry point: discovers the surrounding `_quarto.yml` from
@@ -455,8 +487,14 @@ export async function renderQmd(
 export async function renderPageInProject(
   path: string,
   userGrammars?: unknown,
+  // bd-uy4uygha: optional gzipped-JSON `EngineCapture[]` from the project's
+  // capture sidecar. Forwarded to the capture-ready
+  // `renderPageInProjectWithAttribution`; the WASM HTML branch splices it so
+  // hub-client's default `format: html` preview shows executed output. Omit to
+  // render code cells as source.
+  captureGzJson?: Uint8Array,
 ): Promise<RenderResponse> {
-  return renderPageInProjectWithAttribution(path, userGrammars, null);
+  return renderPageInProjectWithAttribution(path, userGrammars, null, captureGzJson);
 }
 
 /**
@@ -488,6 +526,11 @@ export async function renderPageInProjectWithAttribution(
   path: string,
   userGrammars: unknown,
   attributionJson: string | null,
+  // bd-sfet3264 (Phase 1A): optional gzipped-JSON `EngineCapture[]` from the
+  // project's capture sidecar. When provided, the q2-preview pipeline splices
+  // the recorded engine output into the AST alongside attribution. Omit (or
+  // `undefined`) to render code cells as source.
+  captureGzJson?: Uint8Array,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
   return JSON.parse(
@@ -495,6 +538,7 @@ export async function renderPageInProjectWithAttribution(
       path,
       userGrammars,
       attributionJson ?? undefined,
+      captureGzJson,
     ),
   );
 }
@@ -969,6 +1013,15 @@ export interface RenderToHtmlOptions {
    * Phase 4.5 of `claude-notes/plans/2026-04-21-syntax-highlighting-phase-4.md`.
    */
   userGrammars?: UserGrammarDiscoveryContext;
+
+  /**
+   * Optional gzipped-JSON `EngineCapture[]` from the project's capture sidecar
+   * (bd-uy4uygha). When present, the WASM HTML render splices the recorded
+   * engine output into the page, so hub-client's default `format: html` preview
+   * shows the output of a document executed by a connected `q2 provide-hub`.
+   * Absent → code cells render as source.
+   */
+  captureGzJson?: Uint8Array;
 }
 
 /**
@@ -1161,7 +1214,7 @@ async function renderToHtmlInner(
   try {
     await initWasm();
 
-    const { documentPath, userGrammars } = options;
+    const { documentPath, userGrammars, captureGzJson } = options;
 
     // Resolve and register any user-defined tree-sitter grammars
     // before the render. Cache + bridge live at module scope so
@@ -1179,6 +1232,7 @@ async function renderToHtmlInner(
     const result: RenderResponse = await renderPageInProject(
       documentPath,
       grammarsHandle,
+      captureGzJson,
     );
 
     if (result.success) {

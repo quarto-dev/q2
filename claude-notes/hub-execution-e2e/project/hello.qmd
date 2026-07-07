@@ -1,0 +1,24 @@
+---
+title: Local execution demo
+engine: jupyter
+---
+
+This document has an executable Python cell. When a `q2 provide-hub` executor
+is connected, the preview shows a **Run** button; clicking it runs the code on
+the executor's machine and splices the output back into every collaborator's
+preview.
+
+The `engine: jupyter` line in the front matter above is what makes the cell
+executable — without an `engine:` key the cell renders as source only. (For R,
+use `engine: knitr` and an `{r}` cell instead.)
+
+```{python}
+2 + 3
+```
+
+You can add more cells and re-run:
+
+```{python}
+import sys
+f"python {sys.version_info.major}.{sys.version_info.minor} on the executor"
+```

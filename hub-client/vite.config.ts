@@ -114,8 +114,12 @@ export default defineConfig({
       workbox: {
         // Precache all static assets including JS/CSS bundles and WASM
         globPatterns: ['**/*.{html,js,css,svg,woff,woff2,wasm}'],
-        // Increase limit to 35MB to include WASM files (largest is ~32MB)
-        maximumFileSizeToCacheInBytes: 35 * 1024 * 1024,
+        // Increase limit to include WASM files (largest is ~37MB and growing).
+        // Keep generous headroom: when a globbed asset exceeds this limit
+        // workbox emits a warning that vite-plugin-pwa throws as a fatal
+        // build error, so a too-tight ceiling breaks CI the moment the WASM
+        // creeps past it (see the 35MB ceiling that broke main after #379).
+        maximumFileSizeToCacheInBytes: 64 * 1024 * 1024,
         // Don't warn about large files - we know they're big
         dontCacheBustURLsMatching: /\.[0-9a-f]{8}\./,
         runtimeCaching: [

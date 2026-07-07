@@ -1,0 +1,4 @@
+# Hub project-mode data (index doc + synced file docs) is generated at runtime.
+.quarto/
+*.html
+*_files/

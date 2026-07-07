@@ -1,0 +1,17 @@
+---
+title: R execution demo
+engine: knitr
+---
+
+An R cell executed via the connected `q2` provider (engine: knitr).
+
+```{r}
+1 + 1
+```
+
+A second cell to confirm output splicing:
+
+```{r}
+cat("hello from", R.version.string, "\n")
+sum(1:10)
+```

@@ -14,9 +14,7 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Subscript from '@tiptap/extension-subscript';
-import Superscript from '@tiptap/extension-superscript';
+import { Extension } from '@tiptap/core';
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { PreviewContextValue, ResolvedSource } from './../PreviewContext';
@@ -24,11 +22,11 @@ import { buildNestingCommitDestination, buildAncestorPath } from './../nestingNa
 import { BreadcrumbCrumbs } from './../BreadcrumbCrumbs';
 import { astToDoc } from './astToProseMirror';
 import { docToMarkdown } from './serializer';
-import { Chip } from './chipExtension';
+import { buildRichTextExtensions } from './editorConfig';
 import { RichTextToolbar } from './RichTextToolbar';
 import type { AstNode, PoolEntry } from './ast';
 import { ensureRichTextStyles } from './styles';
-import { placeCaretFromClick } from './caretFromClick';
+import { placeCaretFromClick, placeSelectionFromDrag } from './caretFromClick';
 
 function commitDestination(ctx: PreviewContextValue, resolved: ResolvedSource): string | null {
   if (ctx.editTargetRef !== undefined) {
@@ -70,27 +68,55 @@ export function RichTextEditor({
   // Latch so a commit fires at most once (blur can follow a key-commit).
   const committedRef = useRef(false);
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        // 1a: paragraphs + inline marks. 1b: + headings. (1c: lists/quotes/code.)
-        heading: { levels: [1, 2, 3, 4, 5, 6] },
-        blockquote: false,
-        bulletList: false,
-        orderedList: false,
-        listItem: false,
-        codeBlock: false,
-        horizontalRule: false,
-        // No phantom trailing paragraph: a single-heading (or any non-paragraph)
-        // block would otherwise get an empty trailing <p> — extra vertical space
-        // in the editor AND a stray blank block on commit.
-        trailingNode: false,
-        link: { openOnClick: false },
+  // Keyboard handlers for the commit keymap (bd-hafs0qho). Populated each render
+  // (below, after `commit`/`cancel` are defined) so the keymap always calls the
+  // current closures without going stale.
+  const keymapHandlersRef = useRef<{
+    escape: () => void;
+    modEnter: () => void;
+    enter: () => void;
+  } | null>(null);
+
+  // Commit/cancel/plain-Enter live in tiptap's keymap — NOT a DOM keydown
+  // listener (bd-hafs0qho). A DOM listener runs AFTER ProseMirror's keymap
+  // plugins, so tiptap's HardBreak `Mod-Enter` (now disabled in editorConfig,
+  // belt-and-suspenders) or any other binding would win the race and mutate the
+  // doc before we could `preventDefault`. A high-priority keymap extension runs
+  // first and returns `true`, so `Mod-Enter` deterministically commits with no
+  // hard break inserted, `Escape` cancels, and plain `Enter` is swallowed
+  // (no structural split; `Shift-Enter` still inserts a hard break).
+  const commitKeymap = useMemo(
+    () =>
+      Extension.create({
+        name: 'q2CommitKeymap',
+        priority: 1000,
+        addKeyboardShortcuts() {
+          return {
+            Escape: () => {
+              keymapHandlersRef.current?.escape();
+              return true;
+            },
+            'Mod-Enter': () => {
+              keymapHandlersRef.current?.modEnter();
+              return true;
+            },
+            Enter: () => {
+              keymapHandlersRef.current?.enter();
+              return true;
+            },
+          };
+        },
       }),
-      Subscript,
-      Superscript,
-      Chip,
-    ],
+    [],
+  );
+
+  const extensions = useMemo(
+    () => [...buildRichTextExtensions(), commitKeymap],
+    [commitKeymap],
+  );
+
+  const editor = useEditor({
+    extensions,
     content: seedJSON,
     // Initial caret placement is owned entirely by the mount effect below (click
     // position for a mouse-open, else end-of-block) — see bd-q9lyghv2. tiptap's
@@ -155,58 +181,71 @@ export function RichTextEditor({
     ctx.setEditTarget?.(null);
   };
 
+  // Keep the commit keymap's handlers pointed at the current closures. Assigned
+  // during render (idempotent, no external effect) so a keypress after any
+  // render calls fresh `commit`/`cancel` — no stale-closure window.
+  keymapHandlersRef.current = {
+    escape: cancel,
+    modEnter: () => {
+      if (!editor) return;
+      ctx.requestFocusRestore?.(resolved.sourceEntry.r[0]);
+      commit(editor);
+    },
+    // Swallow plain Enter — no structural split in this single-block editor.
+    // (Shift-Enter is a hard break, handled by the HardBreak extension.)
+    enter: () => {},
+  };
+
   // The whole edit box (editor + toolbar + link input) is one focus scope: we
   // commit only when focus leaves it entirely, so focusing the toolbar's link
   // input keeps the session open.
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  // bd-q9lyghv2 caret-at-click: own the editor's opening caret. Consume the
-  // viewport coords of the mouse click that opened this editor (stashed by
-  // useBlockEditHover) and place the caret there via posAtCoords — so the FIRST
-  // click lands the cursor where the user clicked. With no coords (keyboard/touch
-  // open, or a posAtCoords miss) we focus at end-of-block — the historical
-  // default that `autofocus:'end'` used to provide before we disabled it.
+  // bd-q9lyghv2 caret-at-click / bd-abo9m23f drag-selection: own the editor's
+  // opening selection. Consume the opening-selection payload of the mouse
+  // gesture that opened this editor (stashed by useBlockEditHover) and replay
+  // it via posAtCoords — so the FIRST gesture lands: a click places the caret
+  // at the clicked glyph, a drag recreates the dragged selection (making the
+  // selection-driven toolbar immediately usable). Fallback chain:
+  //   range payload → placeSelectionFromDrag (both endpoints); on miss ↓
+  //   head coords   → placeCaretFromClick (caret at click/release point); on miss ↓
+  //   no payload    → focus('end') — the historical default that
+  //                   `autofocus:'end'` used to provide before we disabled it.
   //
-  // Read-and-CLEAR the coords exactly once: a self-heal re-anchor can remount this
-  // editor, but by then the document has reflowed and the captured coordinates are
-  // stale (the block moved on screen), so the remount falls back to end-of-block
-  // rather than re-replaying a now-wrong click. Nulling the ref here guarantees that.
+  // Read-and-CLEAR the payload exactly once: a self-heal re-anchor can remount
+  // this editor, but by then the document has reflowed and the captured
+  // coordinates are stale (the block moved on screen), so the remount falls back
+  // to end-of-block rather than re-replaying a now-wrong gesture. Nulling the
+  // ref here guarantees that.
   //
   // The placement runs in a requestAnimationFrame so the swapped-in editor box is
   // laid out before posAtCoords reads geometry, and (with autofocus disabled)
   // nothing competes to reset the selection afterward.
   useEffect(() => {
     if (!editor) return;
-    const coords = ctx.pendingClickCoordsRef?.current ?? null;
-    if (ctx.pendingClickCoordsRef) ctx.pendingClickCoordsRef.current = null;
+    const pending = ctx.pendingOpenSelectionRef?.current ?? null;
+    if (ctx.pendingOpenSelectionRef) ctx.pendingOpenSelectionRef.current = null;
     const raf = requestAnimationFrame(() => {
       if (editor.isDestroyed) return;
-      if (coords && placeCaretFromClick(editor, coords)) return;
+      if (
+        pending?.kind === 'range' &&
+        placeSelectionFromDrag(editor, pending.anchor, pending.head)
+      ) {
+        return;
+      }
+      if (pending && placeCaretFromClick(editor, pending.head)) return;
       editor.commands.focus('end');
     });
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]);
 
-  // Keyboard: Esc cancels; Mod-Enter commits; plain Enter is swallowed (no split).
-  // Commit: a focusout from the edit box (focus moved outside it) commits.
+  // Esc/Mod-Enter/plain-Enter are handled by the commit keymap (bd-hafs0qho);
+  // see `commitKeymap` above. This effect only wires the focusout commit: a
+  // focus move OUT of the edit box (not into the toolbar/link input) commits.
   useEffect(() => {
     if (!editor) return;
-    const dom = editor.view.dom as HTMLElement;
     const root = rootRef.current;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        cancel();
-      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        ctx.requestFocusRestore?.(resolved.sourceEntry.r[0]);
-        commit(editor);
-      } else if (e.key === 'Enter' && !e.shiftKey) {
-        // 1a/1b: no structural split. Swallow plain Enter (Shift+Enter = hard break).
-        e.preventDefault();
-      }
-    };
     const onFocusOut = (e: FocusEvent) => {
       // A surface swap fires this as the editor unmounts — not a commit.
       if (ctx.editorModeSwitchRef?.current) return;
@@ -216,10 +255,8 @@ export function RichTextEditor({
       ctx.requestFocusRestore?.(resolved.sourceEntry.r[0]);
       commit(editor);
     };
-    dom.addEventListener('keydown', onKeyDown);
     root?.addEventListener('focusout', onFocusOut);
     return () => {
-      dom.removeEventListener('keydown', onKeyDown);
       root?.removeEventListener('focusout', onFocusOut);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

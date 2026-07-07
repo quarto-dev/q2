@@ -26,6 +26,7 @@ import {
   applyEditorOperations,
   createNewProject,
   type ActorIdentity,
+  type CaptureRef,
   type EditorContentChange,
 } from '@quarto/preview-runtime';
 import type { ProjectFile } from '@quarto/preview-runtime';
@@ -36,6 +37,7 @@ import { useRouting } from './hooks/useRouting';
 import { useProjectSet } from './hooks/useProjectSet';
 import { useAuth } from './hooks/useAuth';
 import { useAuthProbe } from './hooks/useAuthProbe';
+import { useExecutionChannel } from './hooks/useExecutionChannel';
 import { resolveActorId as resolveActorIdRequest } from './services/authService';
 import type { Route, ShareRoute, LinkProjectSetRoute } from './utils/routing';
 import { resolveSyncServerUrl } from './utils/routing';
@@ -101,7 +103,20 @@ function App() {
   const [screenName, setScreenName] = useState<string | undefined>();
   const [cursorColor, setCursorColor] = useState<string | undefined>();
   const [identities, setIdentities] = useState<Record<string, ActorIdentity>>({});
+  // bd-sfet3264 (Phase 1C): IndexDocument V2 capture sidecar (path → CaptureRef).
+  // Populated by the sync client's onCapturesChange; threaded down to the
+  // preview so recorded engine output can be spliced into the rendered AST.
+  const [captures, setCaptures] = useState<Record<string, CaptureRef>>({});
   const [isOnline, setIsOnline] = useState<boolean>(false);
+
+  // bd-sfet3264 (Phase 2D + Phase 4b): track which q2 executors are online for
+  // the connected project (via the index-handle capability beacon) and expose
+  // a way to ask one to run a document. Beacons come from a connected
+  // `q2 provide-hub` (Phase 4).
+  const { executors: liveExecutors, requestExecution } = useExecutionChannel(
+    isOnline,
+    project?.indexDocId ?? null,
+  );
 
   // While a project's sync is disconnected, check whether the disconnect is
   // actually an auth rejection (browsers hide the WS upgrade status). Only
@@ -441,6 +456,9 @@ function App() {
       onIdentitiesChange: (newIdentities) => {
         setIdentities(newIdentities);
       },
+      onCapturesChange: (newCaptures) => {
+        setCaptures(newCaptures);
+      },
       onFileContent: (path, content, _patches) => {
         // Note: patches are ignored - we use diff-based sync in Editor.tsx
         setFileContents((prev) => {
@@ -682,6 +700,9 @@ function App() {
                 navigateToFile(project.id, filePath, options);
               }}
               identities={identities}
+              captures={captures}
+              executorsOnline={liveExecutors.length > 0}
+              onRequestExecution={requestExecution}
               isOnline={isOnline}
             />
           </ErrorBoundary>

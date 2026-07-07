@@ -251,6 +251,18 @@ export function deleteFile(path: string): void {
 }
 
 /**
+ * Clear the recorded engine capture for a document (D6 / bd-sfet3264).
+ *
+ * Removes the `CaptureRef` sidecar entry so the preview falls back to
+ * source-only rendering. Pure CRDT map-key delete — needs no executor
+ * and no server round-trip; the removal syncs to every peer and fires
+ * `onCapturesChange`. No-op when the path has no capture.
+ */
+export function clearCapture(path: string): void {
+  ensureClient().clearCapture(path);
+}
+
+/**
  * Rename a file in the project.
  */
 export function renameFile(oldPath: string, newPath: string): void {
@@ -304,6 +316,16 @@ export function getSyncDiagnostics(): SyncDiagnostics {
  */
 export function getFileHandle(path: string) {
   return ensureClient().getFileHandle(path);
+}
+
+/**
+ * Get the index DocHandle for project-scoped ephemeral messaging
+ * (bd-sfet3264). The execution beacon/request channel broadcasts here so a
+ * single channel reaches every peer regardless of the active file. Returns
+ * null before connect.
+ */
+export function getIndexHandle() {
+  return client?.getIndexHandle() ?? null;
 }
 
 /**

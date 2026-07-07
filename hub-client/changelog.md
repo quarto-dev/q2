@@ -13,10 +13,35 @@ Changelog entry format:
 Group commits by date under level-three headers. Entries within each date should
 be in reverse chronological order (latest first).
 
+⚠️  This file is rendered through the qmd pipeline in the About tab, and the
+test `changelogRender.wasm.test.ts` gates it in CI. Prose is qmd, not plain
+text: a lone `~`, `_`, `^`, or `$` is a markup delimiter and an unclosed one
+fails the parse (e.g. `[Q-2-17] Unclosed Subscript`), turning the whole TS
+Test Suite red. Escape them (`\~`) or reword (e.g. "about 37 MB", not "~37MB").
+After editing, run `cd hub-client && npm run test:wasm` before committing — no
+WASM rebuild is needed for a changelog-only edit.
+
 -->
+
+### 2026-07-07
+
+- [`4af08ef3`](https://github.com/quarto-dev/q2/commits/4af08ef3): Dragging a text selection in the preview now opens the rich-text editor with that selection already active (so Bold/Italic/Link apply immediately); a selection dragged across multiple blocks no longer opens an editor, keeping the selection available for copying.
+- [`6cfc098f`](https://github.com/quarto-dev/q2/commits/6cfc098f): Raised the service-worker precache size limit so the (now about 37 MB) WASM module is cached again for offline use, and to stop continued WASM growth from breaking the production build.
+
+### 2026-07-06
+
+- [`5aa3ee0a`](https://github.com/quarto-dev/q2/commits/5aa3ee0a): Added an "Open printable version" (🖨 Print) button to the Files panel — it opens a standalone, self-contained copy of the current document (or slide deck) in a new tab so you can Print / Save-as-PDF with correct pagination, working around the broken in-frame print behavior.
+- [`550aaeb8`](https://github.com/quarto-dev/q2/commits/550aaeb8): Fixed a rich-text editor bug where committing with Cmd/Ctrl+Enter while text was selected (for example, select-all then bold) could delete the block's content.
 
 ### 2026-07-01
 
+- [`0b13dbcb`](https://github.com/quarto-dev/q2/commits/0b13dbcb): The preview's code-execution controls are now a single status line — executor status, "showing executed output", and the Run/Re-run and Clear-results buttons share one bar instead of stacking as two.
+- [`465f41d2`](https://github.com/quarto-dev/q2/commits/465f41d2): The preview now shows executed code output for **regular documents** (the default `format: html`, including website pages), not only documents with `format: q2-preview` — so after running a document via a connected `q2` executor you see the results in the normal preview without changing the format.
+- [`76a01167`](https://github.com/quarto-dev/q2/commits/76a01167): When a `q2` client is online to execute the project's code, documents with executable cells now show a **Run** button in the preview — click it to run the code on the connected machine and see the executed output; the button reflects progress ("Executing…"), errors, and when the code has changed since the last run.
+
+### 2026-06-30
+
+- [`42fa84de`](https://github.com/quarto-dev/q2/commits/42fa84de): The live preview now shows recorded code-execution output (when a project has it) instead of raw `{r}`/`{python}` source, and a "Clear results" control lets you remove that output for the document (and all collaborators) when you want a clean source view.
 - [`21be266a`](https://github.com/quarto-dev/q2/commits/21be266a): Downloaded project ZIPs now use relative paths nested under a single project-name folder (e.g. `Demo-Playground/index.qmd`) instead of absolute paths — `unzip` no longer warns about "stripped absolute path spec" and the archive extracts into one tidy directory.
 
 ### 2026-06-25
