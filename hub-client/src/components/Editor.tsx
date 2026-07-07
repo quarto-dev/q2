@@ -1000,6 +1000,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                       onRenameFile={handleRenameFile}
                       onOpenInNewTab={handleOpenInNewTab}
                       onCopyLink={handleCopyLink}
+                      currentFormat={currentFormat}
                       searchFiles={searchFiles}
                       fileContents={fileContents}
                     />

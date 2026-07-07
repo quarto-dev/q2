@@ -15,27 +15,67 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--sidebar-border);
 }
 
 .sidebar-header .new-file-btn,
-.sidebar-header .upload-asset-btn {
+.sidebar-header .upload-asset-btn,
+.sidebar-header .print-file-btn {
   padding: 4px 10px;
   background: var(--editor-accent-bg);
   border: 1px solid var(--editor-accent-border);
   border-radius: 4px;
   color: var(--editor-text-muted);
   font-size: 12px;
+  /* Fixed line-height so an emoji glyph's taller line box (e.g. ⬆)
+     doesn't make one button taller than the others. */
+  line-height: 1.5;
   cursor: pointer;
   transition: all 0.2s;
+  /* Keep every button a single line so all three are the same height;
+     when the header is too narrow for all of them, they wrap as whole
+     buttons to a second row rather than one squeezing to two lines. */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .sidebar-header .new-file-btn:hover,
-.sidebar-header .upload-asset-btn:hover {
+.sidebar-header .upload-asset-btn:hover,
+.sidebar-header .print-file-btn:hover:not(:disabled) {
   background: var(--editor-accent-border);
   color: var(--editor-text);
+}
+
+.sidebar-header .print-file-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.sidebar-printable-error {
+  position: relative;
+  margin: 6px 12px;
+  padding: 8px 26px 8px 10px;
+  background: #b3261e;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.35;
+  border-radius: 4px;
+}
+
+.sidebar-printable-error-dismiss {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
 }
 
 .file-list {

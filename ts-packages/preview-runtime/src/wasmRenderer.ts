@@ -42,6 +42,15 @@ interface WasmModuleExtended {
     path: string,
     user_grammars?: unknown,
   ) => Promise<string>;
+  // Printable render (issue #315): coerces the preview pseudo-format
+  // (`q2-preview → html`, `q2-slides → revealjs`) and renders through
+  // the HTML pipeline with the real path, yielding a standalone
+  // `RenderResponse.html`. The caller inlines its `/.quarto/…` assets
+  // (via `makeSelfContainedHtml`) before opening it in a top-level tab.
+  render_printable: (
+    path: string,
+    user_grammars?: unknown,
+  ) => Promise<string>;
   render_qmd_content: (
     content: string,
     templateBundle: string,
@@ -441,6 +450,25 @@ export async function renderQmd(
 ): Promise<RenderResponse> {
   const wasm = getWasm();
   return JSON.parse(await wasm.render_qmd(path, userGrammars));
+}
+
+/**
+ * Render the **printable** form of a document from the VFS (issue
+ * #315): a standalone HTML page (or reveal deck) whose format has been
+ * coerced away from the preview pseudo-formats (`q2-preview → html`,
+ * `q2-slides → revealjs`) and rendered through the HTML pipeline with
+ * the real path, so relative image `src`s are preserved for inlining.
+ *
+ * The returned `html` still links its generated artifacts as
+ * `/.quarto/…` VFS URLs; run `makeSelfContainedHtml` (from
+ * `@quarto/preview-renderer`) over it before opening a top-level tab.
+ */
+export async function renderPrintable(
+  path: string,
+  userGrammars?: unknown,
+): Promise<RenderResponse> {
+  const wasm = getWasm();
+  return JSON.parse(await wasm.render_printable(path, userGrammars));
 }
 
 /**
