@@ -13,6 +13,14 @@ Changelog entry format:
 Group commits by date under level-three headers. Entries within each date should
 be in reverse chronological order (latest first).
 
+⚠️  This file is rendered through the qmd pipeline in the About tab, and the
+test `changelogRender.wasm.test.ts` gates it in CI. Prose is qmd, not plain
+text: a lone `~`, `_`, `^`, or `$` is a markup delimiter and an unclosed one
+fails the parse (e.g. `[Q-2-17] Unclosed Subscript`), turning the whole TS
+Test Suite red. Escape them (`\~`) or reword (e.g. "about 37 MB", not "~37MB").
+After editing, run `cd hub-client && npm run test:wasm` before committing — no
+WASM rebuild is needed for a changelog-only edit.
+
 -->
 
 ### 2026-07-07
