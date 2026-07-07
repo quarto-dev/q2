@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
 import ProjectSelector from './components/ProjectSelector';
+import ProjectsHome from './components/ProjectsHome';
 import ProjectSetSetup from './components/ProjectSetSetup';
 
 // Lazy-loaded dev harness — only fetched when navigating to #/dev/... routes.
@@ -172,6 +173,17 @@ function App() {
 
   // Track if we've done the initial URL-based navigation
   const initialLoadRef = useRef(false);
+
+  // UI exploration (explore/projects-shelves-ui): choose between the new
+  // shelves-based projects home and the classic modal selector. Persisted so
+  // UX testing can flip back and forth across reloads.
+  const [uiVariant, setUiVariant] = useState<'shelves' | 'classic'>(() =>
+    localStorage.getItem('qh-ui-variant') === 'classic' ? 'classic' : 'shelves',
+  );
+  const switchUiVariant = useCallback((variant: 'shelves' | 'classic') => {
+    localStorage.setItem('qh-ui-variant', variant);
+    setUiVariant(variant);
+  }, []);
 
   // URL-based routing
   const {
@@ -667,25 +679,56 @@ function App() {
   return (
     <>
       {!project ? (
-        <ProjectSelector
-          onSelectProject={handleSelectProject}
-          onProjectCreated={handleProjectCreated}
-          isConnecting={isConnecting}
-          error={connectionError}
-          onSignOut={AUTH_ENABLED ? logout : undefined}
-          authEmail={auth?.email}
-          authPicture={auth?.picture}
-          onScreenNameChange={setScreenName}
-          onColorChange={setCursorColor}
-          authName={auth?.name}
-          projectSetDocId={projectSetActions.getProjectSetDocId()}
-          projectSetSyncServer={projectSetActions.getSyncServer()}
-          projectSetStatus={projectSetState.status}
-          projectSetEntries={projectSetState.status === 'connected' ? projectSetState.projects : undefined}
-          onRemoveProjectFromSet={projectSetActions.removeProject}
-          onTouchProject={projectSetActions.touchProject}
-          onAddProjectToSet={projectSetActions.addProject}
-        />
+        uiVariant === 'shelves' ? (
+          <ProjectsHome
+            onSelectProject={handleSelectProject}
+            onProjectCreated={handleProjectCreated}
+            isConnecting={isConnecting}
+            error={connectionError}
+            onSignOut={AUTH_ENABLED ? logout : undefined}
+            authEmail={auth?.email}
+            onScreenNameChange={setScreenName}
+            onColorChange={setCursorColor}
+            projectSetDocId={projectSetActions.getProjectSetDocId()}
+            projectSetSyncServer={projectSetActions.getSyncServer()}
+            projectSetStatus={projectSetState.status}
+            projectSetEntries={projectSetState.status === 'connected' ? projectSetState.projects : undefined}
+            onRemoveProjectFromSet={projectSetActions.removeProject}
+            onTouchProject={projectSetActions.touchProject}
+            onAddProjectToSet={projectSetActions.addProject}
+            onRenameProject={projectSetActions.updateProjectDescription}
+            onSwitchToClassicUi={() => switchUiVariant('classic')}
+          />
+        ) : (
+          <>
+            <ProjectSelector
+              onSelectProject={handleSelectProject}
+              onProjectCreated={handleProjectCreated}
+              isConnecting={isConnecting}
+              error={connectionError}
+              onSignOut={AUTH_ENABLED ? logout : undefined}
+              authEmail={auth?.email}
+              authPicture={auth?.picture}
+              onScreenNameChange={setScreenName}
+              onColorChange={setCursorColor}
+              authName={auth?.name}
+              projectSetDocId={projectSetActions.getProjectSetDocId()}
+              projectSetSyncServer={projectSetActions.getSyncServer()}
+              projectSetStatus={projectSetState.status}
+              projectSetEntries={projectSetState.status === 'connected' ? projectSetState.projects : undefined}
+              onRemoveProjectFromSet={projectSetActions.removeProject}
+              onTouchProject={projectSetActions.touchProject}
+              onAddProjectToSet={projectSetActions.addProject}
+            />
+            <button
+              className="ui-variant-toggle"
+              onClick={() => switchUiVariant('shelves')}
+              title="Shelves-based projects home (UI exploration)"
+            >
+              Try the new projects home
+            </button>
+          </>
+        )
       ) : (
         <ViewModeProvider>
           <ErrorBoundary>

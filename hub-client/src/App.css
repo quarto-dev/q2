@@ -1,1 +1,20 @@
 /* Minimal app styles - component-specific styles in their own CSS files */
+
+/* Floating switch back to the shelves UI exploration (explore/projects-shelves-ui) */
+.ui-variant-toggle {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 2000;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--posit-teal);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.ui-variant-toggle:hover { filter: brightness(1.08); }
