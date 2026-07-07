@@ -15,6 +15,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-07-07
+
+- [`6cfc098f`](https://github.com/quarto-dev/q2/commits/6cfc098f): Raised the service-worker precache size limit so the (now ~37MB) WASM module is cached again for offline use, and to stop continued WASM growth from breaking the production build.
+
 ### 2026-07-06
 
 - [`5aa3ee0a`](https://github.com/quarto-dev/q2/commits/5aa3ee0a): Added an "Open printable version" (🖨 Print) button to the Files panel — it opens a standalone, self-contained copy of the current document (or slide deck) in a new tab so you can Print / Save-as-PDF with correct pagination, working around the broken in-frame print behavior.
