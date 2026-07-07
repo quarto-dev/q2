@@ -3555,6 +3555,7 @@ dependencies = [
 name = "quarto-brand"
 version = "0.7.0"
 dependencies = [
+ "quarto-util",
  "serde",
  "serde_json",
  "serde_yaml",
