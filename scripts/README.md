@@ -2,6 +2,90 @@
 
 This directory contains automation scripts for the Kyoto project.
 
+## Local Production Mode
+
+Two modes available:
+
+**`local-prod.sh`** (Node.js proxy) - Quick setup, no dependencies
+**`local-prod-nginx.sh`** (nginx in Docker) - Test actual nginx config
+
+### What it does
+
+Mirrors the production deployment architecture:
+- Starts the `hub` binary (Rust server) on port 3001
+- Serves the built hub-client on port 8080
+- Proxies `/auth` and `/ws` requests to the hub server
+- Uses production-like cache headers
+
+### Usage
+
+```bash
+# Prerequisites
+cargo build --bin hub
+cd hub-client && npm run build:local-prod && cd ..
+
+# Run (from hub-client directory)
+cd hub-client
+npm run local-prod
+
+# Or run directly
+./scripts/local-prod.sh
+```
+
+**Important:** Use `npm run build:local-prod` (NOT `build:all`) to build with the correct sync server URL (`ws://127.0.0.1:8080/ws`) baked in.
+
+Open `http://127.0.0.1:8080` in your browser. Press **Ctrl-C** to shut down gracefully.
+
+### Architecture
+
+```
+Browser → http://127.0.0.1:8080 (Node.js proxy)
+  ├─ /auth → proxy to hub:3001
+  ├─ /ws → WebSocket upgrade to hub:3001
+  ├─ /assets/* → serve from dist/ (immutable cache)
+  └─ /* → serve from dist/ (no-cache, SPA fallback)
+  
+hub:3001 (Rust binary) → .local-prod-data/
+```
+
+### Node.js Proxy Mode (Recommended)
+
+**Prerequisites:** None (just Node.js, already required)
+
+```bash
+cd hub-client
+npm run local-prod
+```
+
+Fast setup, tests WebSocket proxying and routing. Good for 90% of development.
+
+### Nginx Mode
+
+**Prerequisites:** Docker Desktop
+
+```bash
+cd hub-client
+npm run local-prod:nginx
+```
+
+Tests the actual nginx configuration from production. Use when:
+- Testing nginx config changes before deploying
+- Validating gzip compression, security headers
+- Debugging nginx-specific issues
+
+**Architecture differences:**
+- **Node.js mode:** Browser → Node.js proxy (port 8080) → hub (port 3001)
+- **Nginx mode:** Browser → nginx (Docker, port 8080) → hub (host, port 3001)
+- **Production:** Browser → nginx (native) → hub (native, port 3000)
+
+**Differences from production:** HTTP (no TLS), no OIDC auth, single-machine.
+
+**Logs:**
+- Node.js mode: `.local-prod-data/{hub,static}.log`
+- Nginx mode: `.local-prod-data/hub.log` + `docker compose -f docker-compose.local-prod.yml logs nginx`
+
+**See also:** [`claude-notes/plans/2026-07-03-local-prod-mode.md`](../claude-notes/plans/2026-07-03-local-prod-mode.md) for implementation details.
+
 ## Error Code Auditing
 
 ### audit-error-codes.py ⭐ RECOMMENDED

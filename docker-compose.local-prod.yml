@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: quarto-hub-nginx-local
+    ports:
+      - "8080:8080"
+    volumes:
+      # Nginx config
+      - ./config/local-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # Static files from built hub-client
+      - ./hub-client/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - hub-health-check
+    restart: unless-stopped
+    networks:
+      - quarto-local
+
+  # Health check service to ensure hub is running before nginx starts
+  hub-health-check:
+    image: curlimages/curl:latest
+    container_name: quarto-hub-health-check
+    command: >
+      sh -c "
+      echo 'Waiting for hub to be ready...';
+      for i in 1 2 3 4 5 6 7 8 9 10; do
+        if curl -f http://host.docker.internal:3001/health 2>/dev/null; then
+          echo 'Hub is ready!';
+          exit 0;
+        fi;
+        echo 'Attempt $$i: Hub not ready, waiting...';
+        sleep 2;
+      done;
+      echo 'Hub failed to become ready after 10 attempts';
+      exit 1;
+      "
+    networks:
+      - quarto-local
+    restart: "no"
+
+networks:
+  quarto-local:
+    driver: bridge
+
+# Note: The hub binary runs on the host machine (not in Docker) to avoid
+# WASM/Rust build complexity in containers. Only nginx runs in Docker to
+# test the reverse proxy layer.
+#
+# Start hub separately:
+#   cargo run --bin hub -- --data-dir ./.local-prod-data -P 3001 -H 0.0.0.0 --allow-insecure-auth
+#
+# Then start nginx:
+#   docker compose -f docker-compose.local-prod.yml up

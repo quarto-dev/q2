@@ -54,3 +54,6 @@ CLAUDE.local.md
 
 # playwright-mcp
 .playwright-mcp
+
+# local-prod mode data directory
+.local-prod-data/

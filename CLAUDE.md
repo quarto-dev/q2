@@ -343,9 +343,45 @@ cd hub-client
 npm run dev        # Start dev server with HMR
 npm run dev:fresh  # Clear cache and start fresh
 npm run build      # Production build
+
+# Local production mode (mirrors production setup)
+npm run local-prod # Run hub + static server with proxy (requires built client)
 ```
 
 **Important:** Never run `npm install` from hub-client directly - dependencies are hoisted to the root `node_modules/`.
+
+**Local production mode:**
+
+`npm run local-prod` runs a setup that mirrors the production deployment:
+- Starts the `hub` binary (port 3001) with `--allow-insecure-auth` for local dev
+- Serves the built hub-client (port 8080) with a Node.js proxy that forwards `/auth` and `/ws` to the hub
+- Uses the same cache headers as production (`/assets/` immutable, `/` no-cache)
+
+This helps catch reverse proxy configuration issues, WebSocket routing problems, and cache header behavior early. Before running:
+1. Build the hub binary: `cargo build --bin hub` (or `--release`)
+2. Build the client with local sync server: `cd hub-client && npm run build:local-prod`
+
+Open `http://127.0.0.1:8080` in your browser. Data is stored in `.local-prod-data/` (gitignored). Ctrl-C shuts down both processes gracefully.
+
+**Important:** Use `npm run build:local-prod` instead of `npm run build:all` for local-prod mode. This sets `VITE_DEFAULT_SYNC_SERVER=ws://127.0.0.1:8080/ws` so the client connects to your local hub instead of the public `wss://sync.automerge.org`.
+
+**Local production with nginx:**
+
+For testing the actual nginx configuration and headers:
+```bash
+# Prerequisites: Docker Desktop installed
+cd hub-client
+npm run local-prod:nginx
+```
+
+This runs nginx in Docker (mirroring production config) with the hub binary on the host. Useful for validating nginx configs, gzip compression, security headers before deploying.
+
+**Differences from production:**
+- HTTP instead of HTTPS (no TLS)
+- No OIDC authentication (uses `--allow-insecure-auth`)
+- `local-prod`: Node.js proxy instead of nginx (faster, recommended for daily dev)
+- `local-prod:nginx`: nginx in Docker, hub on host (production has both native)
+- Single-machine setup (production uses separate EC2 + EBS + S3)
 
 ## Architecture Notes
 

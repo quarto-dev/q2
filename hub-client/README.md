@@ -41,9 +41,14 @@ npm run dev
 | `npm run build` | Build TypeScript and Vite for production |
 | `npm run build:wasm` | Rebuild only the WASM module |
 | `npm run build:all` | Rebuild WASM + production build |
+| `npm run build:local-prod` | Build for local-prod mode (sets sync server URL) |
 | `npm run typecheck` | Type-check with strict Vite-compatible settings |
 | `npm run lint` | Run ESLint |
 | `npm run preview` | Preview production build |
+| `npm run local-prod` | Run local production mode (Node.js proxy) |
+| `npm run local-prod:nginx` | Run local production mode (nginx in Docker) |
+| `npm run local-prod:fresh` | Clean rebuild + run local-prod |
+| `npm run local-prod:fresh:nginx` | Clean rebuild + run local-prod with nginx |
 
 ### Preflight Checks
 
@@ -95,6 +100,23 @@ npm run build:all
 ```
 
 This produces a complete production build in `dist/`.
+
+## Local Production Mode
+
+Test hub-client in a production-like setup locally:
+
+```bash
+# Build + run
+npm run local-prod:fresh
+
+# Open http://127.0.0.1:8080
+```
+
+Two modes available:
+- `local-prod` - Node.js proxy (fast, recommended)
+- `local-prod:nginx` - nginx in Docker (tests actual nginx config)
+
+See [`../scripts/README.md`](../scripts/README.md) for details and troubleshooting.
 
 ### dev:fresh vs build:all
 
