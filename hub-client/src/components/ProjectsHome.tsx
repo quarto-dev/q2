@@ -784,7 +784,7 @@ export default function ProjectsHome({
           )}
         </div>
         {shelfItems.length === 0 ? (
-          <div className="ph-shelf-empty">Empty shelf — use a project's ⋯ menu to move it here.</div>
+          <div className="ph-shelf-empty">Empty shelf — drag a project here, or use its ⋯ menu.</div>
         ) : (
           <div className="ph-shelf-row">
             {page > 0 && (
