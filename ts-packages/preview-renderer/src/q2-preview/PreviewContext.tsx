@@ -4,6 +4,7 @@ import type { BlockNode } from '../framework/types';
 import type { ReachabilityClass, SourceIndexEntry, ResolvedSource } from './sourceIndex';
 import type { MutableRefObject } from 'react';
 import type { CaretHint } from './caretGeometry';
+import type { PendingOpenSelection } from './dragSelectionCapture';
 
 /**
  * q2-preview-specific context. Carries values that don't belong on the
@@ -100,21 +101,26 @@ export interface PreviewContextValue {
      */
     editDraftRef?: MutableRefObject<string | null>;
     /**
-     * Viewport coordinates of the mouse click that activated the current edit
-     * target, or null for keyboard / touch activation (bd-q9lyghv2). Written by
-     * `useBlockEditHover`'s mouse `onPointerUp` (the single activation site that
-     * opens a block — both fresh-open and click-switch flow through it) and read
-     * exactly ONCE by `RichTextEditor` at mount, which uses `posAtCoords` to land
-     * the caret where the user clicked instead of at end-of-block.
+     * The opening-selection payload of the mouse gesture that activated the
+     * current edit target, or null for keyboard / touch activation
+     * (bd-q9lyghv2, extended for drags by bd-abo9m23f):
+     *  - `{ kind: 'caret', head }` — plain click; place the caret at the
+     *    click's viewport coords.
+     *  - `{ kind: 'range', anchor, head }` — drag selection contained in the
+     *    activated block; recreate it (direction-aware) in the editor.
+     * Written by `useBlockEditHover`'s `activate()` (the single activation
+     * site that opens a block — both fresh-open and click-switch flow through
+     * it) and read exactly ONCE by `RichTextEditor` at mount, which replays
+     * the coords through `posAtCoords` instead of focusing end-of-block.
      *
-     * The reader CLEARS it after consuming so a self-heal re-anchor remount can't
-     * reuse a stale click (after a reflow the coordinates point at the wrong
-     * glyph) — that remount correctly falls back to end-of-block.
+     * The reader CLEARS it after consuming so a self-heal re-anchor remount
+     * can't reuse stale coordinates (after a reflow they point at the wrong
+     * glyphs) — that remount correctly falls back to end-of-block.
      *
      * A `MutableRefObject` is referentially stable, so exposing it here does NOT
      * cause extra re-renders.
      */
-    pendingClickCoordsRef?: MutableRefObject<{ x: number; y: number } | null>;
+    pendingOpenSelectionRef?: MutableRefObject<PendingOpenSelection | null>;
     /** SourceInfo-value index from the untransformed AST (Plan 2a). Built once per render. */
     sourceIndex?: Map<string, SourceIndexEntry> | null;
     /** Resolve a transformed block to its source counterpart + reachability class (Plan 2a). */

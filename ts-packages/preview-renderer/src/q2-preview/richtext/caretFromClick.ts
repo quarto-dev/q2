@@ -15,6 +15,7 @@
 // editor.
 
 import type { Editor } from '@tiptap/core';
+import { TextSelection } from '@tiptap/pm/state';
 
 /**
  * Move the caret to the document position under the given viewport coordinates.
@@ -31,5 +32,45 @@ export function placeCaretFromClick(
     const hit = editor.view.posAtCoords({ left: coords.x, top: coords.y });
     if (!hit) return false;
     editor.chain().focus().setTextSelection(hit.pos).run();
+    return true;
+}
+
+/**
+ * Recreate a drag selection from the viewport coordinates of its two
+ * endpoints (bd-abo9m23f). `anchor` is where the drag started, `head` where
+ * it released — passed through in that order so a backward drag stays
+ * backward and Shift-Arrow keeps extending from the release end.
+ *
+ * Uses `TextSelection.between`, which nudges each endpoint to the nearest
+ * valid text position while preserving the anchor/head roles — the raw
+ * `posAtCoords` hits may sit on structural boundaries.
+ *
+ * @returns `true` if both endpoints resolved to a non-empty selection and it
+ *   was applied; `false` otherwise (either endpoint missed, or the endpoints
+ *   collapse to a single position) — the caller falls back to
+ *   `placeCaretFromClick` with `head`, i.e. the plain caret-at-release-point
+ *   behavior.
+ */
+export function placeSelectionFromDrag(
+    editor: Editor,
+    anchor: { x: number; y: number },
+    head: { x: number; y: number },
+): boolean {
+    const view = editor.view;
+    const anchorHit = view.posAtCoords({ left: anchor.x, top: anchor.y });
+    const headHit = view.posAtCoords({ left: head.x, top: head.y });
+    if (!anchorHit || !headHit) return false;
+
+    const { state } = view;
+    const selection = TextSelection.between(
+        state.doc.resolve(anchorHit.pos),
+        state.doc.resolve(headHit.pos),
+    );
+    // Degenerate (both endpoints at one position, or no text positions found):
+    // report a miss so the caller's caret fallback owns the collapsed case.
+    if (selection.empty) return false;
+
+    view.dispatch(state.tr.setSelection(selection));
+    editor.commands.focus();
     return true;
 }

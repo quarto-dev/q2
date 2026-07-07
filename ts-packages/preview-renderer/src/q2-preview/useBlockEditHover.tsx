@@ -1,6 +1,8 @@
 import React, { useCallback, useContext, useRef } from 'react';
 import { PreviewContext } from './PreviewContext';
 import { resolveOuterBlock, enumerateOuterBlocks, enumerateNestingSurfaces, captureEditTarget, measureBlockBox, seedForRange } from './outerBlocks';
+import { classifyOpenSelection } from './dragSelectionCapture';
+import type { PendingOpenSelection } from './dragSelectionCapture';
 
 const HOLD_MS = 500;
 const MOVE_THRESHOLD_PX = 8;
@@ -81,6 +83,22 @@ export function useBlockEditHover(): {
         // Dedup: if this block is already the active edit target (same byte range), do nothing.
         if (ctx?.editTarget?.anchorR0 === anchorR0) return;
 
+        // bd-abo9m23f: classify the live DOM selection for mouse opens — BEFORE
+        // any side effect below, so a suppressed activation is a true no-op.
+        //  - caret payload: plain click (caret-at-click, bd-q9lyghv2);
+        //  - range payload: drag selection contained in this block — the editor
+        //    opens with the equivalent selection;
+        //  - suppress: drag selection reaching outside this block — activating
+        //    would swap the DOM and destroy a selection the user may only want
+        //    to copy, so we don't open at all.
+        // Keyboard/touch opens carry no clickCoords and skip classification.
+        let pendingOpen: PendingOpenSelection | null = null;
+        if (opts?.clickCoords) {
+            const classified = classifyOpenSelection(outerBlock, opts.clickCoords);
+            if (classified === 'suppress') return;
+            pendingOpen = classified;
+        }
+
         // G18 clear-on-open invariant: a fresh activation supersedes any pending landing.
         // The reland paths never reach activate, so a landing present here is orphaned.
         // Clearing it ensures pendingLandingRef is always null while an editor is open,
@@ -115,13 +133,13 @@ export function useBlockEditHover(): {
         // §7: write editExpandedRef at EVERY open so remounts read the correct value
         // and hops see false (reset) rather than stale true from a prior expand.
         if (ctx.editExpandedRef) ctx.editExpandedRef.current = expandOnOpen;
-        // bd-q9lyghv2 caret-at-click: stash (mouse) or clear (keyboard/touch) the
-        // opening click's viewport coords at the single open chokepoint — after the
+        // bd-q9lyghv2 / bd-abo9m23f: stash (mouse) or clear (keyboard/touch) the
+        // opening-selection payload at the single open chokepoint — after the
         // early-return guards above, so the ref always matches the editor that is
-        // about to mount and can never hold a stale click from an earlier session.
-        // RichTextEditor reads+clears it once at mount; a null ref means
+        // about to mount and can never hold a stale gesture from an earlier
+        // session. RichTextEditor reads+clears it once at mount; a null ref means
         // end-of-block (the keyboard/touch default).
-        if (ctx.pendingClickCoordsRef) ctx.pendingClickCoordsRef.current = opts?.clickCoords ?? null;
+        if (ctx.pendingOpenSelectionRef) ctx.pendingOpenSelectionRef.current = pendingOpen;
         ctx.setEditTarget({
             anchorR0,
             anchorR1,

@@ -33,6 +33,7 @@ import { buildNestingCommitDestination, buildNestingSurfaces, parentSurface, chi
 import type { NestingSurface } from './nestingNav';
 import type { CaretHint } from './caretGeometry';
 import { prefixWidth } from './caretGeometry';
+import type { PendingOpenSelection } from './dragSelectionCapture';
 
 /**
  * §2 Phase 0: a landing-resolution spec — what the reland (or the synchronous
@@ -270,11 +271,13 @@ export function PreviewRoot(props: PreviewRootProps) {
     // activation; reset to null on close. Referentially stable → no extra
     // re-renders from draft changes.
     const editDraftRef = useRef<string | null>(null);
-    // bd-q9lyghv2 caret-at-click: viewport coords of the mouse click that opened
-    // the current editor (null for keyboard/touch). Written by useBlockEditHover's
-    // onPointerUp; read+cleared once by RichTextEditor at mount to place the caret
-    // at the click via posAtCoords. Referentially stable → no extra re-renders.
-    const pendingClickCoordsRef = useRef<{ x: number; y: number } | null>(null);
+    // bd-q9lyghv2 caret-at-click / bd-abo9m23f drag-selection: opening-selection
+    // payload of the mouse gesture that opened the current editor — caret coords
+    // for a click, anchor+head coords for a contained drag selection (null for
+    // keyboard/touch). Written by useBlockEditHover's activate(); read+cleared
+    // once by RichTextEditor at mount, replayed via posAtCoords. Referentially
+    // stable → no extra re-renders.
+    const pendingOpenSelectionRef = useRef<PendingOpenSelection | null>(null);
     // §7 expand-on-edit: mirrors the expanded state of the current editor.
     // Written at EVERY open (activate / openEditTarget) so:
     //   - Remounts read the correct value (PRESERVED).
@@ -1524,7 +1527,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 editTarget,
                 setEditTarget,
                 editDraftRef,
-                pendingClickCoordsRef,
+                pendingOpenSelectionRef,
                 editExpandedRef,
                 activeEditRegionRef,
                 editTargetRef,
