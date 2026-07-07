@@ -26,6 +26,10 @@ on:
         description: 'Also run smoke-all E2E tests (slow, ~80 extra tests, opt-in only)'
         type: boolean
         default: false
+      smoke-all-workers:
+        description: 'Playwright worker count for smoke-all (override; nightly default is 3)'
+        type: string
+        default: '3'
   schedule:
     - cron: '0 7 * * *'  # 2am EST / 3am EDT, runs on main
   push:
@@ -171,6 +175,11 @@ jobs:
       # changes to the WASM pipeline or theme resolution.
       - name: Run smoke-all E2E tests (nightly + opt-in)
         if: inputs.run-smoke-all == true || github.event_name == 'schedule'
+        env:
+          # Worker count override. Scheduled nightlies leave inputs unset, so
+          # this is empty → the config uses its default (3). A workflow_dispatch
+          # can raise it (e.g. 4) to re-stress the samod-0.12 sync fix.
+          SMOKE_ALL_WORKERS: ${{ inputs.smoke-all-workers }}
         run: |
           cd hub-client
           npx playwright test --config playwright.smoke-all.config.ts
