@@ -120,7 +120,7 @@
 .ph-btn.outline:disabled { opacity: 0.5; cursor: default; }
 
 .ph-btn.ghost-accent {
-  border-color: var(--posit-teal);
+  border: 1px dashed var(--posit-teal);
   color: var(--posit-teal);
   font-size: 12.5px;
   padding: 7px 14px;
@@ -418,6 +418,26 @@
 .ph-card .ph-menu { top: 34px; left: auto; right: 8px; }
 
 .ph-new-shelf-row { margin: 2px 0 24px; }
+
+/* ---- drag and drop ---- */
+
+.ph-card[draggable="true"],
+.ph-row[draggable="true"] {
+  cursor: grab;
+}
+
+.ph-card.dragging,
+.ph-row.dragging {
+  opacity: 0.4;
+}
+
+.ph-shelf.drop-target,
+.ph-rest.drop-target {
+  outline: 2px dashed var(--posit-teal);
+  outline-offset: 8px;
+  border-radius: 6px;
+  background: rgba(65, 149, 153, 0.05);
+}
 
 /* ---- everything else ---- */
 

@@ -210,6 +210,10 @@ export default function ProjectsHome({
   const { colorScheme, cycleColorScheme } = useTheme();
   const { shelves, createShelf, renameShelf, deleteShelf, moveProject, reconcilePending } = useShelves();
   const [shelfPages, setShelfPages] = useState<Record<string, number>>({});
+  // Drag-and-drop between shelves and the unshelved list. dropTarget is a
+  // shelf id or 'unshelved'.
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
 
@@ -310,6 +314,45 @@ export default function ProjectsHome({
   }, [closeAllMenus]);
 
   // ---- actions ----
+
+  // Custom MIME type marks drags originating from a project card/row.
+  // Drop zones key off dataTransfer.types (readable during dragover, unlike
+  // the payload) rather than React state, which lags the native events.
+  const DRAG_TYPE = 'application/x-qh-project';
+
+  const handleDragStart = useCallback((item: ProjectItem) => (e: React.DragEvent) => {
+    e.dataTransfer.setData(DRAG_TYPE, item.indexDocId);
+    e.dataTransfer.setData('text/plain', item.indexDocId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingId(item.indexDocId);
+    closeAllMenus();
+  }, [closeAllMenus]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggingId(null);
+    setDropTarget(null);
+  }, []);
+
+  /** Drop-zone props for a shelf section (or 'unshelved' for the bottom list). */
+  const dropZoneProps = useCallback((target: string) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dropTarget !== target) setDropTarget(target);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      // Ignore leave events fired when moving over the zone's own children
+      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+      setDropTarget((t) => (t === target ? null : t));
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      const docId = e.dataTransfer.getData(DRAG_TYPE) || draggingId;
+      if (docId) moveProject(docId, target === 'unshelved' ? null : target);
+      handleDragEnd();
+    },
+  }), [draggingId, dropTarget, moveProject, handleDragEnd]);
 
   const handleOpen = useCallback(async (item: ProjectItem) => {
     // Ensure a local IDB entry exists (URL routing uses local ids)
@@ -655,7 +698,13 @@ export default function ProjectsHome({
   );
 
   const renderCard = (item: ProjectItem) => (
-    <div key={item.indexDocId} className="ph-card qh-menu-anchor">
+    <div
+      key={item.indexDocId}
+      className={`ph-card qh-menu-anchor ${draggingId === item.indexDocId ? 'dragging' : ''}`}
+      draggable
+      onDragStart={handleDragStart(item)}
+      onDragEnd={handleDragEnd}
+    >
       <button className="ph-card-body" onClick={() => handleOpen(item)} title={item.description}>
         <span className={`ph-card-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
           {item.description}
@@ -688,7 +737,11 @@ export default function ProjectsHome({
     const pageItems = shelfItems.slice(page * SHELF_PAGE_SIZE, (page + 1) * SHELF_PAGE_SIZE);
     const menuKey = `shelf:${shelf.id}`;
     return (
-      <section key={shelf.id} className="ph-shelf">
+      <section
+        key={shelf.id}
+        className={`ph-shelf ${dropTarget === shelf.id ? 'drop-target' : ''}`}
+        {...dropZoneProps(shelf.id)}
+      >
         <div className="ph-shelf-header qh-menu-anchor">
           <span className="ph-shelf-name">{shelf.name}</span>
           <span className="ph-shelf-count">{shelfItems.length}</span>
@@ -920,7 +973,10 @@ export default function ProjectsHome({
               <button className="ph-btn ghost-accent" onClick={handleNewShelf}>＋ New shelf</button>
             </div>
 
-            <section className="ph-rest">
+            <section
+              className={`ph-rest ${dropTarget === 'unshelved' ? 'drop-target' : ''}`}
+              {...dropZoneProps('unshelved')}
+            >
               <div className="ph-rest-header qh-menu-anchor">
                 <span className="ph-rest-title">Everything else</span>
                 <span className="ph-rest-count">{everythingElse.length} · {sortLabel}</span>
@@ -949,7 +1005,13 @@ export default function ProjectsHome({
               ) : (
                 <div className="ph-rest-list">
                   {everythingElse.map((item) => (
-                    <div key={item.indexDocId} className="ph-row qh-menu-anchor">
+                    <div
+                      key={item.indexDocId}
+                      className={`ph-row qh-menu-anchor ${draggingId === item.indexDocId ? 'dragging' : ''}`}
+                      draggable
+                      onDragStart={handleDragStart(item)}
+                      onDragEnd={handleDragEnd}
+                    >
                       <button
                         className={`ph-row-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}
                         onClick={() => handleOpen(item)}
