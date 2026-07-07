@@ -119,25 +119,32 @@ just the file you touched, before every push to `main`.*
 
 ### Phase 4 — Guardrail against recurrence (process, not just content)
 
-Options to reduce the chance a lone-delimiter or size-ceiling regression
-reaches `main` again. To be discussed with the user before implementing —
-this phase is a menu, not a commitment:
+Chosen (with the user, 2026-07-07): an **active reminder** an agent cannot
+miss, backed by a **passive note** at the point of edit. Deliberately *not*
+auto-running the test or gating pushes — the changelog is edited rarely and
+the fix is a single fast command; a reminder is enough.
 
-- [ ] **(cheap, recommended)** Add a `lint`-style check or a note in
-      `hub-client/changelog.md`'s HTML comment header reminding authors
-      that changelog prose is rendered through qmd, so `~`, `_`, `^`, `$`
-      etc. must be escaped or avoided. The `changelogRender.wasm.test.ts`
-      test already enforces this — the gap is *authors not running it*, not
-      missing coverage.
-- [ ] **(process)** Treat "changelog touched" as implying "run
-      `npm run test:wasm`" — because the changelog is a rendered artifact,
-      editing it is a code change, not a docs change.
-- [ ] **(optional, heavier)** Consider whether `cargo xtask verify` should
-      be the default pre-push gate for any `hub-client/**` change, and
-      whether a git pre-push hook or CI-required-status-check on `main`
-      should enforce it. Flag: hooks that run `cargo xtask verify` are slow
-      (full WASM build); may not be worth the friction. **Decision deferred
-      to the user.**
+- [x] **Active: PostToolUse hook.** `.claude/hooks/changelog-reminder.sh`
+      fires on any `Edit`/`Write` whose `file_path` ends in
+      `hub-client/changelog.md` and injects `additionalContext` (visible to
+      the agent) with the exact command `cd hub-client && npm run test:wasm`
+      and the qmd-delimiter warning. Registered in `.claude/settings.json`
+      next to `format-rust.sh`. Non-blocking, ~0 latency; does **not** run
+      the test (that would add latency and needs a built WASM). Verified: it
+      fired live on the edit that added the header note below, and stays
+      silent for `.rs` files and `docs/changelog.md`.
+- [x] **Passive: changelog header note.** The `<!-- -->` header of
+      `hub-client/changelog.md` now warns that the file is rendered through
+      qmd, that `~ _ ^ $` are delimiters, and to run `npm run test:wasm`
+      after editing. (Delimiters inside the HTML comment are not parsed —
+      confirmed: 129/129 WASM tests still pass with the note in place.)
+- [x] **Process note:** editing the changelog is a *code* change (rendered
+      artifact), not a docs change — captured in both the hook message and
+      the header note.
+- [ ] **(not done, optional/heavier)** A `cargo xtask verify` pre-push gate
+      for all `hub-client/**`, or a required CI status check on `main`.
+      Considered heavier than warranted for this failure mode; **left for
+      the user** to pick up if the lightweight guardrail proves insufficient.
 
 ## Non-goals / notes
 
