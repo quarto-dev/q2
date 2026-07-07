@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-07-07
 
+- [`0f338475`](https://github.com/quarto-dev/q2/commits/0f338475): UI exploration (branch only): project cards, shelf headers, and the Peek popover show collaborator facepiles (colored initial disks). Collaborators are mock data for now — real attribution needs automerge-history plumbing.
 - [`1a37f9eb`](https://github.com/quarto-dev/q2/commits/1a37f9eb): UI exploration (branch only): projects can be dragged between shelves and the unshelved list, with the drop target highlighted while dragging.
 - [`389af46b`](https://github.com/quarto-dev/q2/commits/389af46b): UI exploration (branch only): a shelves-based full-page projects home replaces the project-selector modal — search with Cmd+K, personal shelves to group projects, streamlined New/Connect/Import dialogs, and an avatar menu holding identity, cursor color, device linking, and JSON backup. An avatar-menu item switches back to the classic UI.
 - [`4af08ef3`](https://github.com/quarto-dev/q2/commits/4af08ef3): Dragging a text selection in the preview now opens the rich-text editor with that selection already active (so Bold/Italic/Link apply immediately); a selection dragged across multiple blocks no longer opens an editor, keeping the selection available for copying.
