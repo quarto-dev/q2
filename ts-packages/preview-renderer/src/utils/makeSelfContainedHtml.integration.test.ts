@@ -126,6 +126,35 @@ describe('makeSelfContainedHtml', () => {
     expect(style?.textContent).not.toContain('url(fonts/f.woff2)');
   });
 
+  it('strips a leading BOM from inlined CSS so the first rule is not dropped', () => {
+    // A UTF-8 BOM (U+FEFF) prefixing CSS bytes is stripped by the browser
+    // when loaded via <link>, but injected verbatim into a <style> it
+    // invalidates the first selector — dropping e.g. Bootstrap's
+    // `:root,[data-bs-theme=light]{…}` variable block so the theme
+    // silently fails to apply (issue #315 field bug).
+    const css = '﻿:root{--x:1}\nbody{color:red}';
+    const html = `<html><head>
+      <link rel="stylesheet" href="/.quarto/project-artifacts/styles.css">
+      </head><body></body></html>`;
+    const out = makeSelfContainedHtml(html, DOC_PATH, {
+      ...readers({ '/.quarto/project-artifacts/styles.css': css }),
+    });
+    const style = parse(out).querySelector('style');
+    expect(style?.textContent?.charCodeAt(0)).not.toBe(0xfeff);
+    expect(style?.textContent?.startsWith(':root')).toBe(true);
+  });
+
+  it('strips a leading BOM from inlined scripts', () => {
+    const html = `<html><body>
+      <script src="/.quarto/project-artifacts/app.js"></script></body></html>`;
+    const out = makeSelfContainedHtml(html, DOC_PATH, {
+      ...readers({ '/.quarto/project-artifacts/app.js': '﻿window.OK=1;' }),
+    });
+    const script = parse(out).querySelector('script');
+    expect(script?.textContent?.charCodeAt(0)).not.toBe(0xfeff);
+    expect(script?.textContent).toBe('window.OK=1;');
+  });
+
   it('leaves external and data: references untouched', () => {
     const html = `<html><head>
       <link rel="stylesheet" href="https://cdn.example/x.css">

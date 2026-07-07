@@ -132,6 +132,49 @@ describe('render_printable → makeSelfContainedHtml (issue #315)', () => {
     expect(printable).toContain('data-q2-print');
   });
 
+  it('inlines a real Bootstrap-theme stylesheet without a leading BOM (theme applies)', async () => {
+    // Regression for the field bug: the compiled theme CSS artifact
+    // carries a UTF-8 BOM. Loaded via <link> the browser strips it, but
+    // inlined verbatim into a <style> the BOM invalidates the first
+    // selector (`:root,[data-bs-theme=light]{…}`), dropping Bootstrap's
+    // CSS variables so the theme silently fails to apply.
+    vfsAddFile(
+      '_quarto.yml',
+      'project:\n  type: default\nformat:\n  html:\n    theme: cosmo\n',
+    );
+    vfsAddFile(
+      'index.qmd',
+      '---\ntitle: Themed\nformat: q2-preview\n---\n\n# Heading\n\nbody\n',
+    );
+
+    const result = JSON.parse(
+      await renderPrintableRaw('/project/index.qmd'),
+    ) as RenderResponse;
+    expect(result.success, `render failed: ${result.error}`).toBe(true);
+
+    const printable = buildPrintableHtml(
+      result.html,
+      'index.qmd',
+      'q2-preview',
+      vfsReaders,
+    );
+
+    const doc = new DOMParser().parseFromString(printable, 'text/html');
+    const styles = [...doc.querySelectorAll('style')];
+    // The Bootstrap theme was inlined as a <style>…
+    const themeStyle = styles.find((s) =>
+      (s.textContent ?? '').includes('--bs-body-font-family:'),
+    );
+    expect(themeStyle, 'theme CSS not inlined').toBeTruthy();
+    // …and no inlined <style> begins with a BOM (which would corrupt its
+    // first rule and drop Bootstrap's `:root` variable block).
+    for (const s of styles) {
+      expect(s.textContent?.charCodeAt(0)).not.toBe(0xfeff);
+    }
+    // The light-theme variable definition survives in the inlined text.
+    expect(themeStyle!.textContent).toContain('--bs-body-font-family:');
+  });
+
   it('renders a revealjs doc to a standalone deck put into print layout', async () => {
     vfsAddFile('_quarto.yml', 'project:\n  type: default\n');
     vfsAddFile(

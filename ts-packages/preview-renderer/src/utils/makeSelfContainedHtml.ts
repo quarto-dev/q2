@@ -41,6 +41,19 @@ export interface SelfContainedReaders {
 }
 
 /**
+ * Strip a leading UTF-8 BOM (U+FEFF). Compiled theme CSS artifacts can
+ * carry one; a `<link>` load strips it from the byte stream, but injected
+ * verbatim into a `<style>`/`<script>` the BOM prefixes the first token —
+ * for CSS it corrupts the first selector, and since one invalid selector
+ * in a comma list drops the whole rule, Bootstrap's `:root,[data-bs-theme=
+ * light]{…}` variable block is lost and the theme silently fails to apply
+ * (issue #315).
+ */
+function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+/**
  * True for references we must not touch: absolute URLs (http/https or
  * protocol-relative), `data:` URIs (already inlined), pure fragments,
  * and non-resource schemes.
@@ -122,7 +135,7 @@ export function makeSelfContainedHtml(
     const css = readers.readText(key);
     if (css == null) return;
     const style = doc.createElement('style');
-    style.textContent = inlineCssUrls(css, key, readers);
+    style.textContent = inlineCssUrls(stripBom(css), key, readers);
     const media = link.getAttribute('media');
     if (media) style.setAttribute('media', media);
     link.replaceWith(style);
@@ -140,7 +153,7 @@ export function makeSelfContainedHtml(
     const inline = doc.createElement('script');
     const type = script.getAttribute('type');
     if (type) inline.setAttribute('type', type);
-    inline.textContent = js;
+    inline.textContent = stripBom(js);
     script.replaceWith(inline);
   });
 
