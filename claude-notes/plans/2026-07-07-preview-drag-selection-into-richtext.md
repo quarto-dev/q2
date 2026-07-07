@@ -231,7 +231,12 @@ Mount-effect fallback chain (inside the existing rAF):
 - [x] `RichTextEditor.tsx` mount effect: fallback chain range → caret → end.
 - [x] preview-renderer suites green (2026-07-07: 508 unit + 533 integration
   passed, 0 failed).
-- [ ] `npm run test:ci` (hub-client) green.
+- [x] `npm run test:ci` (hub-client): unit + integration legs green; the
+  `test:wasm` leg fails on the PRE-EXISTING `changelog.md renders
+  successfully` test — the 2026-07-07 changelog entry's literal `~37MB`
+  parses as an unclosed subscript (Q-2-17). Broken on main (commit
+  `6cd4dd5a`), unrelated to this strand; an open PR already fixes it
+  (bd-5px05kui filed and closed as duplicate).
 
 ### Phase 2 — end-to-end verification
 
@@ -253,8 +258,17 @@ Mount-effect fallback chain (inside the existing rAF):
   carried selection produced exactly
   `<strong>quick brown fox jumps over the lazy</strong>` — the
   selection-driven-toolbar fluidity this strand is for.
-- [ ] Full `cargo xtask verify` (covers Rust legs + ts-packages builds +
-  hub-client `build:all` + `test:ci`).
+- [x] Full `cargo xtask verify` (2026-07-07): Rust build + tests, ts-packages
+  builds, hub-client `build:all` all green; hub-client tests green except the
+  pre-existing changelog.md Q-2-17 failure noted above (fix in flight in an
+  open PR, independent of this change).
+
+## Outcome
+
+Shipped as `4af08ef3` (feature) + `d116a917` (hub-client changelog entry) on
+branch `braid/bd-abo9m23f-drag-selection-richtext`, 2026-07-07, rebased onto
+main's `658026d0` (which fixed the pre-existing changelog Q-2-17 failure noted
+above). Strand bd-abo9m23f closed.
 
 ## Notes
 
