@@ -15,6 +15,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--sidebar-border);
@@ -29,8 +30,16 @@
   border-radius: 4px;
   color: var(--editor-text-muted);
   font-size: 12px;
+  /* Fixed line-height so an emoji glyph's taller line box (e.g. ⬆)
+     doesn't make one button taller than the others. */
+  line-height: 1.5;
   cursor: pointer;
   transition: all 0.2s;
+  /* Keep every button a single line so all three are the same height;
+     when the header is too narrow for all of them, they wrap as whole
+     buttons to a second row rather than one squeezing to two lines. */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .sidebar-header .new-file-btn:hover,
@@ -38,13 +47,6 @@
 .sidebar-header .print-file-btn:hover:not(:disabled) {
   background: var(--editor-accent-border);
   color: var(--editor-text);
-}
-
-/* "Open printable version" button — sits first so it stays adjacent to
-   the file it acts on; only shown for printable preview formats. */
-.sidebar-header .print-file-btn {
-  margin-right: auto; /* push New/Upload to the right edge */
-  white-space: nowrap;
 }
 
 .sidebar-header .print-file-btn:disabled {
