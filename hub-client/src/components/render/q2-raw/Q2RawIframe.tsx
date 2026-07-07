@@ -4,6 +4,10 @@ interface Q2RawIframeProps {
   astJson: string;
 }
 
+// In production, q2-raw.html is served from a separate domain for sandboxing.
+// In dev/local-prod, it uses a different port.
+const Q2_RAW_URL = import.meta.env.VITE_Q2_RAW_URL || 'q2-raw.html';
+
 /**
  * Simplest possible iframe wrapper: displays JSON.stringified AST
  * in a pre element. No interactivity, no custom components, no navigation.
@@ -72,7 +76,7 @@ export function Q2RawIframe({ astJson }: Q2RawIframeProps) {
   return (
     <iframe
       ref={iframeRef}
-      src="q2-raw.html"
+      src={Q2_RAW_URL}
       title="q2-raw Renderer"
       sandbox="allow-scripts allow-same-origin"
       style={{

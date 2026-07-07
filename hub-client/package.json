@@ -11,7 +11,7 @@
     "build:wasm": "node scripts/build-wasm.js",
     "build:sandboxed": "cd quarto-hub-sandboxed-preview && npm install --silent && npm run build",
     "build:all": "npm run build:wasm && npm run build:sandboxed && npm run build",
-    "build:local-prod": "npm run build:wasm && npm run build:sandboxed && VITE_DEFAULT_SYNC_SERVER=ws://127.0.0.1:8080/ws vite build",
+    "build:local-prod": "npm run build:wasm && npm run build:sandboxed && VITE_DEFAULT_SYNC_SERVER=ws://127.0.0.1:8080/ws VITE_Q2_RAW_URL=http://127.0.0.1:8081/q2-raw.html vite build",
     "postinstall": "cd quarto-hub-sandboxed-preview && npm install --silent",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "lint": "eslint .",

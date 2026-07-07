@@ -2097,6 +2097,7 @@ dependencies = [
 name = "quarto-brand"
 version = "0.7.0"
 dependencies = [
+ "quarto-util",
  "serde",
  "serde_yaml",
  "thiserror 2.0.18",
