@@ -17,7 +17,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-07-07
 
-- [`6cfc098f`](https://github.com/quarto-dev/q2/commits/6cfc098f): Raised the service-worker precache size limit so the (now ~37MB) WASM module is cached again for offline use, and to stop continued WASM growth from breaking the production build.
+- [`6cfc098f`](https://github.com/quarto-dev/q2/commits/6cfc098f): Raised the service-worker precache size limit so the (now about 37 MB) WASM module is cached again for offline use, and to stop continued WASM growth from breaking the production build.
 
 ### 2026-07-06
 
