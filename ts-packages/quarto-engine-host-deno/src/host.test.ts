@@ -22,6 +22,7 @@ import type {
   LanguageClaim,
 } from "@quarto/types";
 import type { PlatformHost } from "@quarto/api/platform";
+import { interop, fallback } from "@quarto/api";
 import type { HtmlDependency, TsExecuteResult, TsPandocIncludes } from "./types.js";
 
 // ===========================================================================
@@ -596,6 +597,73 @@ describe("T3 — handler dispatch and id correlation", () => {
     expect(result?.msg).toEqual({
       type: "claimsLanguageResult",
       result: { kind: "primary", priority: 0 },
+    });
+  });
+
+  // ── author-constructor binding (Plan 4b-D2) ──────────────────────────────
+  //
+  // The rows above exercise mapLanguageClaim's object case with hand-written
+  // `{kind: "interop"|"fallback"}` literals. These two tests instead call the
+  // ACTUAL author-facing constructors from `@quarto/api` (`interop()`/
+  // `fallback()`) — the same ones the A1 synthetic fixtures use
+  // (`interop-r.ts`'s `claimsLanguage("pysynth") => interop()`,
+  // `fallback-univ.ts`'s `claimsLanguage(_) => fallback(5)`), binding
+  // mapLanguageClaim's revert seam (host.ts:~164-178) to the real author SDK
+  // surface end-to-end: author LanguageClaim constructor → wire TsLanguageClaim
+  // variant (per claude-notes/designs/engine-resolution.md §3.2). Do not
+  // conflate this with the (unrelated) TsLanguageClaim type — these
+  // constructors return @quarto/types' `LanguageClaim`, which mapLanguageClaim
+  // normalizes into the wire `TsLanguageClaim` asserted below.
+
+  it("author interop() constructor normalizes to wire {kind:'interop', priority:0} (D2)", async () => {
+    const engine = makeFakeEngine("myEngine");
+    const customDiscovery: ExecutionEngineDiscovery = {
+      ...engine.discovery,
+      claimsLanguage: (_language: string): LanguageClaim => interop(),
+    };
+    const loader = async (_path: string) => customDiscovery;
+
+    // Named revert → RED: mapLanguageClaim's kind map (host.ts:~164-178)
+    // mapped to the wrong wire variant (e.g. hard-coded 'primary') → wrong
+    // `kind` on the wire despite the author calling interop().
+    const { responses } = await runWithFrames(
+      [
+        { id: 1, msg: { type: "loadEngine", enginePath: "/engines/my.ts" } },
+        { id: 40, msg: { type: "claimsLanguage", engine: "myEngine", language: "pysynth" } },
+      ],
+      { loadEngineModule: loader },
+    );
+
+    const result = responses.find((r) => r.msg.type === "claimsLanguageResult");
+    expect(result?.msg).toEqual({
+      type: "claimsLanguageResult",
+      result: { kind: "interop", priority: 0 },
+    });
+  });
+
+  it("author fallback() constructor normalizes to wire {kind:'fallback', priority:0} (D2)", async () => {
+    const engine = makeFakeEngine("myEngine");
+    const customDiscovery: ExecutionEngineDiscovery = {
+      ...engine.discovery,
+      claimsLanguage: (_language: string): LanguageClaim => fallback(),
+    };
+    const loader = async (_path: string) => customDiscovery;
+
+    // Named revert → RED: mapLanguageClaim's kind map (host.ts:~164-178)
+    // mapped to the wrong wire variant → wrong `kind` on the wire despite the
+    // author calling fallback().
+    const { responses } = await runWithFrames(
+      [
+        { id: 1, msg: { type: "loadEngine", enginePath: "/engines/my.ts" } },
+        { id: 41, msg: { type: "claimsLanguage", engine: "myEngine", language: "anylang" } },
+      ],
+      { loadEngineModule: loader },
+    );
+
+    const result = responses.find((r) => r.msg.type === "claimsLanguageResult");
+    expect(result?.msg).toEqual({
+      type: "claimsLanguageResult",
+      result: { kind: "fallback", priority: 0 },
     });
   });
 

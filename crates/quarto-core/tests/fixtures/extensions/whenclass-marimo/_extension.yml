@@ -1,0 +1,14 @@
+title: WhenClass Marimo Engine
+author: Test
+version: 0.1.0
+contributes:
+  engines:
+    - path: dist/whenclass-marimo.js
+      name: whenclass-marimo
+      claims:
+        pysynth:
+          kind: primary
+          priority: 1
+          whenClass: marimo
+      file-extensions: []
+      claims-files: []

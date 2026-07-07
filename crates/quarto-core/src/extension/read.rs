@@ -78,28 +78,21 @@ pub fn read_extension_with_org(
         &mut diagnostics,
     );
 
-    // Extract required fields
+    // `title` and `author` are OPTIONAL, matching Quarto 1: `schema/extension.yml`
+    // has no top-level `required:` marker and `readExtension` reads both leniently.
+    // `title` falls back to the extension's id name (Q1's `title || id.name`);
+    // `author` stays `None` when absent (Q1 stores it as `string | undefined`, and
+    // a real shipped Q1 extension — julia-engine — has no `author`). Requiring
+    // either here silently dropped otherwise-valid Q1-era extensions (bd-8b0af414).
     let title = config
         .get("title")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            crate::error::QuartoError::Other(format!(
-                "{}: missing required 'title' field",
-                extension_file.display()
-            ))
-        })?
-        .to_string();
+        .map_or_else(|| ext_name.clone(), |s| s.to_string());
 
     let author = config
         .get("author")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            crate::error::QuartoError::Other(format!(
-                "{}: missing required 'author' field",
-                extension_file.display()
-            ))
-        })?
-        .to_string();
+        .map(|s| s.to_string());
 
     let version = config
         .get("version")
@@ -655,7 +648,7 @@ contributes:
         assert_eq!(ext.id.name, "test-ext");
         assert_eq!(ext.id.organization, None);
         assert_eq!(ext.title, "Test Extension");
-        assert_eq!(ext.author, "Test Author");
+        assert_eq!(ext.author.as_deref(), Some("Test Author"));
         assert!(ext.version.is_none());
         assert_eq!(ext.contributes.shortcodes.len(), 1);
         assert_eq!(ext.contributes.shortcodes[0], ext_dir.join("hello.lua"));
@@ -765,8 +758,17 @@ contributes:
         );
     }
 
+    /// Q1 does not require `title` (`schema/extension.yml` has no top-level
+    /// `required:` marker; `readExtension` reads it leniently and falls back to
+    /// `extension.title || extension.id.name`). A manifest omitting `title` must
+    /// therefore load, with the title defaulting to the extension's id name.
+    ///
+    /// Named revert (H-title, read.rs ~L82): restoring the `.ok_or_else(...)?`
+    /// requiredness makes this `.unwrap()` panic (missing-title error). The
+    /// `== "test-ext"` discriminator also reddens under a lazy
+    /// `unwrap_or_default()` (empty string ≠ id name), pinning the id-name default.
     #[test]
-    fn test_read_extension_missing_title() {
+    fn test_read_extension_missing_title_defaults_to_id_name() {
         let tmp = TempDir::new().unwrap();
         let ext_dir = tmp.path().join("_extensions/test-ext");
         let file = write_extension(
@@ -780,12 +782,77 @@ contributes:
         );
 
         let runtime = make_runtime();
-        let err = read_extension(&file, &runtime).unwrap_err();
-        assert!(
-            err.to_string().contains("title"),
-            "Error should mention 'title': {}",
-            err
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        // Title defaults to the extension id name (Q1's `title || id.name`).
+        assert_eq!(ext.id.name, "test-ext");
+        assert_eq!(ext.title, "test-ext");
+        // `author` was present, so it round-trips.
+        assert_eq!(ext.author.as_deref(), Some("Author"));
+        // Contribution is actually carried (not just a parsed header).
+        assert_eq!(ext.contributes.shortcodes.len(), 1);
+    }
+
+    /// Q1 does not require `author` (no schema `required:`; a real shipped Q1
+    /// extension — julia-engine — has none). A manifest omitting `author` must
+    /// load, with `author` left `None`.
+    ///
+    /// Named revert (H-author, read.rs ~L93): restoring `.ok_or_else(...)?`
+    /// requiredness makes this `.unwrap()` panic (missing-author error). `title`
+    /// is present here, so H-title's revert does not affect this test (clean
+    /// isolation of the author relaxation).
+    #[test]
+    fn test_read_extension_author_optional() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/test-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Author-less Extension
+contributes:
+  shortcodes:
+    - hello.lua
+"#,
         );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        assert_eq!(ext.title, "Author-less Extension");
+        assert!(ext.author.is_none(), "author should be None when omitted");
+        // Contribution is actually carried.
+        assert_eq!(ext.contributes.shortcodes.len(), 1);
+    }
+
+    /// Reproduces the exact confirmed failure shape: a Q1 engine extension
+    /// (modeled on julia-engine) — `title` + `version` + `quarto-required` +
+    /// `contributes.engines`, and **no `author`**. Before the relaxation this
+    /// was rejected outright and the engine never registered; now it must load.
+    ///
+    /// Named revert (H-author): restoring author requiredness reddens this.
+    #[test]
+    fn test_read_extension_q1_engine_shape() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/julia-engine");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Julia Engine
+version: 0.5.0
+quarto-required: ">=1.4.0"
+contributes:
+  engines:
+    - path: julia-engine.js
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        assert_eq!(ext.title, "Julia Engine");
+        assert!(ext.author.is_none(), "author should be None when omitted");
+        assert_eq!(ext.version.as_deref(), Some("0.5.0"));
+        assert_eq!(ext.contributes.engines.len(), 1);
     }
 
     #[test]

@@ -113,8 +113,25 @@ pub struct TsEngine {
     host: Arc<TsEngineHost>,
 
     // ── Two-step init state ──────────────────────────────────────────────────
-    /// Discovery result (immutable once set — OnceLock).
+    /// Discovery result (immutable once set — OnceLock). Static discovery
+    /// metadata (name / validExtensions / claims) never changes for a fixed
+    /// `engine_path`, so this stays cached forever — including across a
+    /// crash-triggered subprocess respawn. What CAN go stale across a
+    /// respawn is the live subprocess's OWN registration of the module
+    /// (`loadedByPath`/`engineByName` in host.ts, wiped when the process
+    /// dies) — see `loaded_generation` below, which tracks THAT.
     discovery: OnceLock<LoadEngineResult>,
+
+    /// Host generation (`TsEngineHost::spawn_count`) as of the last
+    /// successful `LoadEngine` wire call. `ensure_loaded` compares this
+    /// against the host's CURRENT generation to detect a crash-triggered
+    /// respawn: a fresh subprocess has an empty `loadedByPath`/`engineByName`
+    /// (host.ts), so `LaunchEngine` would fail with "engine not loaded"
+    /// unless `LoadEngine` is resent first — even though `discovery` above
+    /// (the cached RESULT) is still perfectly valid and is NOT re-validated,
+    /// only re-sent. Timeout/Cancel do not bump the host generation (the
+    /// process stays alive), so this stays a no-op for that existing path.
+    loaded_generation: Mutex<Option<u64>>,
 
     /// Instance result — `Mutex<Option>` to allow poisoning.
     instance: Mutex<Option<LaunchEngineResult>>,
@@ -181,6 +198,7 @@ impl TsEngine {
             engine_path,
             host,
             discovery: OnceLock::new(),
+            loaded_generation: Mutex::new(None),
             instance: Mutex::new(None),
             project: Mutex::new(None),
             claims_language_cache: Mutex::new(HashMap::new()),
@@ -224,7 +242,22 @@ impl TsEngine {
     fn ensure_loaded(&self, c: &Cancellation) -> Result<&LoadEngineResult, ExecutionError> {
         self.host.ensure_started()?;
 
-        if self.discovery.get().is_none() {
+        // `current_generation` reflects any respawn `ensure_started()` just
+        // performed above (a crash-triggered reset clears the host's
+        // transport, so the NEXT `ensure_started()` call — this one — does a
+        // real respawn and bumps the generation before we read it here).
+        //
+        // Under a shared host with parallel renders, two engines can observe
+        // the same fresh generation and both resend `LoadEngine` before either
+        // records it below — a benign double-send: the TS harness's `loadEngine`
+        // handler is idempotent per path (`loadedByPath`, host.ts), so the
+        // second load returns the cached discovery without re-importing. Same
+        // accepted double-send race as `discovery.set()` below.
+        let current_generation = self.host.spawn_count();
+        let stale_for_this_process =
+            *self.loaded_generation.lock().unwrap() != Some(current_generation);
+
+        if self.discovery.get().is_none() || stale_for_this_process {
             let result = self.host.load_engine(&self.engine_path, c)?;
 
             if self.name_declared {
@@ -339,8 +372,13 @@ impl TsEngine {
                 }
             }
 
-            // Best-effort set; second racer fails silently.
+            // Best-effort set; second racer fails silently (`discovery` is
+            // immutable-once-set — a reload after a crash respawn recomputes
+            // the SAME static result and this `set` is a harmless no-op).
             let _ = self.discovery.set(result);
+            // Record the generation THIS successful LoadEngine round trip
+            // was sent under, so a later respawn is detected again.
+            *self.loaded_generation.lock().unwrap() = Some(current_generation);
         }
 
         Ok(self.discovery.get().unwrap())
@@ -802,15 +840,48 @@ impl ExecutionEngine for TsEngine {
             options,
         };
 
+        // Capture the transport generation the request is about to be sent on
+        // (see the ProcessCrashed arm below). Read AFTER `ensure_launched`, so
+        // it reflects the transport `request()` will actually use.
+        let generation_at_send = self.host.spawn_count();
+
+        // SCOPE NOTE: this poison guard covers crashes/timeouts/cancels
+        // observed during the EXECUTE verb only. `ensure_launched()` above
+        // (→ `ensure_loaded` → `host.load_engine` / `host.launch_engine`) uses
+        // a bare `?` and is NOT wrapped by this guard, so a crash observed
+        // during LoadEngine/LaunchEngine is not auto-recovered here. This
+        // deliberately mirrors the PRE-EXISTING Cancel/Timeout guard scope
+        // (also execute()-only) — expanding recovery to the load/launch verbs
+        // is out of scope for the approved crash-relaunch fix.
         let response = self
             .host
             .request(msg, ctx.execute_timeout, &ctx.cancellation)
             .inspect_err(|e| {
-                if matches!(
-                    e,
-                    ExecutionError::Cancelled | ExecutionError::Timeout { .. }
-                ) {
-                    self.poison_instance();
+                match e {
+                    ExecutionError::Cancelled | ExecutionError::Timeout { .. } => {
+                        // Process is still ALIVE — reuse the transport,
+                        // only reset the logical launched instance (existing
+                        // behavior, unchanged).
+                        self.poison_instance();
+                    }
+                    ExecutionError::ProcessCrashed { .. } => {
+                        // Process is DEAD — the transport (stdin pipe) is
+                        // broken, not just the logical instance. Reset BOTH:
+                        // the logical instance (so the next execute resends
+                        // LaunchEngine) and the transport (so the next
+                        // `ensure_started()` spawns a genuinely fresh
+                        // subprocess instead of writing to a dead pipe).
+                        //
+                        // `generation_at_send` scopes the transport reset to
+                        // the generation that actually crashed: under a shared
+                        // host with parallel renders, a sibling may already
+                        // have respawned by the time this stale observer runs,
+                        // and `reset_after_crash` must NOT tear down that newer
+                        // healthy transport (see its doc comment).
+                        self.poison_instance();
+                        self.host.reset_after_crash(generation_at_send);
+                    }
+                    _ => {}
                 }
             })?;
 
@@ -1446,6 +1517,161 @@ mod tests {
             assert!(
                 total_launches > prev_launch_count,
                 "after Timeout poison, a new LaunchEngine must be issued; \
+                 before={prev_launch_count}, after={total_launches}"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── Plan 4b F2: Poison policy — cooperative Cancel poisons ─────────────────
+    //
+    // Extends `test_cancel_distinguishable_and_prompt`
+    // (crates/quarto-core/src/engine/ts_process.rs:~1723), which proves
+    // Err(Cancelled) + promptness + `Cancel{target}` sent at the
+    // `ts_process::request` layer. That test cannot observe `poison_instance()`
+    // firing — poisoning happens one layer up, in `TsEngine::execute()`'s
+    // `.inspect_err` on `Cancelled | Timeout` (~:805–815). This test drives the
+    // SAME token-flip technique through `TsEngine::execute()` instead of
+    // `TsEngineHost::request()` directly, so all four F2 assertions are bound
+    // in one test: (1) `Err(Cancelled)`, (2) prompt return, (3) `Cancel{target}`
+    // sent, (4) `poison_instance()` fired (instance is `None`, and a subsequent
+    // `execute()` issues a fresh `LaunchEngine` — mirrors the sibling
+    // `test_poison_policy_timeout_poisons` above for the Timeout branch of the
+    // same `Cancelled | Timeout` poison guard).
+    //
+    // Named revert hunk: the cancel-flip poll in `ts_process.rs::request`
+    // (~:693–701) — the same seam `test_cancel_distinguishable_and_prompt`
+    // targets. Reverting it removes the `Cancelled` outcome, so `execute()`
+    // never sees `Err(Cancelled)` and never poisons; this test (and others
+    // sharing the seam, e.g. `test_cancel_distinguishable_and_prompt` and
+    // `test_none_window_still_cancellable`) go RED on a full-crate run.
+    #[test]
+    fn test_poison_policy_cancel_poisons() {
+        watchdog(Duration::from_secs(15), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("julia-cancel");
+            let engine = TsEngine::new(
+                "julia-cancel",
+                false,
+                PathBuf::from("/engines/julia-cancel.ts"),
+                Arc::clone(&host),
+                None,
+                None,
+                None,
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            mock.enable_auto_echo();
+            // id=1: LaunchEngine (id=0 is the auto-echo LoadEngine).
+            mock.script_response(1, launched_response());
+            // id=2: Execute is withheld — cancelled via token flip, not timeout.
+
+            let cancel = Cancellation::new();
+            let cancel_clone = cancel.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(150));
+                cancel_clone.cancel();
+            });
+
+            let exec_ctx = ExecutionContext::new(
+                PathBuf::from("/tmp"),
+                PathBuf::from("/proj"),
+                PathBuf::from("/proj/doc.qmd"),
+                "html",
+            )
+            // Long window: timeout can't masquerade as cancel.
+            .with_execute_timeout(Some(Duration::from_secs(30)))
+            .with_cancellation(cancel);
+
+            let start = std::time::Instant::now();
+            let result = engine.execute("# test", &exec_ctx);
+            let elapsed = start.elapsed();
+
+            // Assertion 1: distinguishable Cancelled error (not Timeout, not Ok).
+            assert!(
+                matches!(result, Err(ExecutionError::Cancelled)),
+                "expected Cancelled from execute, got: {result:?}"
+            );
+
+            // Assertion 2: returns promptly — well under the 30s timeout window.
+            assert!(
+                elapsed < Duration::from_secs(5),
+                "cancel took too long ({elapsed:?}); should be \u{226a} 30s"
+            );
+
+            // Assertion 3: Cancel{target} was sent on the wire.
+            let sent = mock.sent_messages();
+            assert!(
+                sent.iter().any(|m| matches!(m, ToEngine::Cancel { .. })),
+                "Cancel not in sent messages: {sent:?}"
+            );
+
+            // Assertion 4: poison_instance() fired — instance must be None.
+            assert!(
+                engine.instance.lock().unwrap().is_none(),
+                "instance must be None (poisoned) after Cancelled"
+            );
+
+            // Corroborate poison behaviorally too: a subsequent execute must
+            // issue a fresh LaunchEngine (mirrors test_poison_policy_timeout_poisons).
+            let prev_launch_count = mock
+                .sent_messages()
+                .iter()
+                .filter(|m| matches!(m, ToEngine::LaunchEngine { .. }))
+                .count();
+
+            let mock2 = Arc::clone(&mock);
+            let deliver_relaunch = std::thread::spawn(move || {
+                for _ in 0..200 {
+                    std::thread::sleep(Duration::from_millis(10));
+                    let sent = mock2.sent_messages();
+                    let curr = sent
+                        .iter()
+                        .filter(|m| matches!(m, ToEngine::LaunchEngine { .. }))
+                        .count();
+                    if curr > prev_launch_count {
+                        let idx = sent.len() - 1;
+                        mock2.deliver_late(idx as u64, launched_response());
+                        mock2.deliver_late(
+                            idx as u64 + 1,
+                            FromEngine::ExecuteResult {
+                                result: TsExecuteResult {
+                                    markdown: "# done".to_string(),
+                                    ..Default::default()
+                                },
+                            },
+                        );
+                        return curr;
+                    }
+                }
+                prev_launch_count
+            });
+
+            let exec_ctx2 = ExecutionContext::new(
+                PathBuf::from("/tmp"),
+                PathBuf::from("/proj"),
+                PathBuf::from("/proj/doc.qmd"),
+                "html",
+            )
+            .with_execute_timeout(Some(Duration::from_secs(5)));
+            let _result2 = engine.execute("# test2", &exec_ctx2);
+            let _ = deliver_relaunch.join();
+
+            let sent = mock.sent_messages();
+            let total_launches = sent
+                .iter()
+                .filter(|m| matches!(m, ToEngine::LaunchEngine { .. }))
+                .count();
+            assert!(
+                total_launches > prev_launch_count,
+                "after Cancel poison, a new LaunchEngine must be issued; \
                  before={prev_launch_count}, after={total_launches}"
             );
 

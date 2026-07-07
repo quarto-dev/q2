@@ -348,14 +348,17 @@ contributes:
 "#,
         );
 
-        // Invalid extension (missing title)
+        // Invalid extension (no `contributes` — still a hard read error, since
+        // an extension that contributes nothing is rejected in both q2 and Q1).
+        // NOTE: previously this fixture omitted `title`, but `title` is no longer
+        // required (it defaults to the id name), so a missing-title extension now
+        // loads. Using absent-`contributes` keeps this test exercising the
+        // "invalid extension is skipped" path (bd-8b0af414).
         write_extension(
             &tmp.path().join("_extensions/bad-ext"),
             r#"
+title: Bad
 author: Author
-contributes:
-  shortcodes:
-    - hello.lua
 "#,
         );
 
@@ -375,7 +378,7 @@ contributes:
         let ext = Extension {
             id: super::super::types::ExtensionId::new("lightbox"),
             title: "Lightbox".to_string(),
-            author: "Author".to_string(),
+            author: Some("Author".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from("/ext"),
@@ -392,7 +395,7 @@ contributes:
         let ext = Extension {
             id: super::super::types::ExtensionId::with_organization("acm", "quarto-journals"),
             title: "ACM".to_string(),
-            author: "Author".to_string(),
+            author: Some("Author".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from("/ext"),
@@ -411,7 +414,7 @@ contributes:
         let builtin = Extension {
             id: super::super::types::ExtensionId::with_organization("lipsum", "quarto"),
             title: "Lipsum Built-in".to_string(),
-            author: "Built-in Author".to_string(),
+            author: Some("Built-in Author".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from("/builtin/quarto/lipsum"),
@@ -420,7 +423,7 @@ contributes:
         let user = Extension {
             id: super::super::types::ExtensionId::new("lipsum"),
             title: "Lipsum User".to_string(),
-            author: "User Author".to_string(),
+            author: Some("User Author".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from("/user/lipsum"),
@@ -438,7 +441,7 @@ contributes:
         let builtin = Extension {
             id: super::super::types::ExtensionId::with_organization("lipsum", "quarto"),
             title: "Lipsum Built-in".to_string(),
-            author: "Built-in Author".to_string(),
+            author: Some("Built-in Author".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from("/builtin/quarto/lipsum"),
@@ -447,7 +450,7 @@ contributes:
         let user = Extension {
             id: super::super::types::ExtensionId::with_organization("lipsum", "quarto"),
             title: "Lipsum User Override".to_string(),
-            author: "User Author".to_string(),
+            author: Some("User Author".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from("/user/quarto/lipsum"),

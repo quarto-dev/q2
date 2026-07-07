@@ -1,0 +1,13 @@
+title: Alpha Engine
+author: Test
+version: 0.1.0
+contributes:
+  engines:
+    - path: dist/alpha.js
+      name: alpha
+      claims:
+        synth:
+          kind: primary
+          priority: 1
+      file-extensions: []
+      claims-files: []

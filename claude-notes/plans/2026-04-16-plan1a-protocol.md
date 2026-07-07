@@ -448,6 +448,32 @@ control messages.
   test belongs to plan1a-host's reader-thread tests, seam rows 3/9 — landed there,
   not in `ts_protocol.rs`.)*
 
+### Phase 1.6: Move the protocol off stdout (loopback TCP)
+
+> **Status:** ◔ **Planned** — promoted from a long-referenced "deferred note" to
+> a plan of record: **[Plan 1a.6](2026-07-08-plan1a6-off-stdout-loopback-tcp.md)**.
+> This heading exists so the `Phase 1 → 1.5 → 1.6` sequence is anchored in the
+> plan that owns it, instead of living only as cross-references.
+
+**No protocol-type change — so `plan1a-protocol` itself has nothing to do here.**
+Multiplexing (Phase 1.5) is orthogonal and already carries the channel-agnostic
+`id` envelope; 1.6 swaps only the *transport* underneath it. The stdout footgun
+(a stray `console.log` or a leaked child-process banner corrupts frame parsing,
+tolerated only up to `MAX_CONSECUTIVE_MALFORMED_LINES` with a documented
+frame-loss residual) is deleted by moving the frames to **loopback TCP**
+(ephemeral `127.0.0.1:0` + one-time token), after which stdin/stdout/stderr are
+diagnostic-only.
+
+The actual work lives where the transport lives:
+- **plan1a-host** — `TcpTransport` at the existing `EngineTransport` seam +
+  listener/token handshake (`plan1a-host.md:1193` "Deferred: Phase 1.6").
+- **Plan 1b** — the Deno-side `connectControl(args)` dial-back (`framing.ts:11`).
+
+Engine authors are unaffected (harness-only; the Julia engine already talks
+TCP+key to its own control server). fd-3 and UDS/named-pipe were considered and
+rejected on portability. Full design, cross-platform analysis, rejected
+alternatives, and TDD test plan: **Plan 1a.6**.
+
 ## Success Criteria
 
 - [x] All protocol message types have serialization round-trip tests

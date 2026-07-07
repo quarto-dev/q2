@@ -13,7 +13,7 @@ complete).
 **Branch:** `plan6-pass1-engine-resolution` off `feature/ts-engine-extensions`.
 **Depends on (all landed on the epic branch, code-verified 2026-07-02):**
 `resolve_engines` + `EngineResolution` (`crates/quarto-core/src/engine/resolution.rs:340`),
-static-claims `_extension.yml` parsing (`extension/read.rs:412-542`), Pass-2
+static-claims `_extension.yml` parsing (`extension/read.rs:382-545`), Pass-2
 stage wiring (`stage/stages/engine_execution.rs:230-236`), `DocumentProfile` +
 two-pass orchestrator (`project/orchestrator.rs:1038`, `document_profile.rs:278`).
 
@@ -96,7 +96,7 @@ Ratified with Gordon 2026-07-02 through 2026-07-05:
    - **No §3.3 validation for user tables.** The user is deliberately
      overruling the engine; the table is authoritative. The author-side
      `_extension.yml` hard-error validation in `TsEngine::ensure_loaded`
-     (`ts_engine.rs:223`, validation loop ~247-291) is untouched — while a
+     (`ts_engine.rs:242`, validation loop ~284-329) is untouched — while a
      user table shadows an engine, its own claims are simply never consulted,
      so there is no comparison moment. (A load-time "your table diverges from
      the engine's actual claims" advisory is future polish, not in scope.)
@@ -150,11 +150,13 @@ Ratified with Gordon 2026-07-02 through 2026-07-05:
      registry is a **hard error at registry/`ProjectContext` construction**
      — once, early, before Pass-1, with Q1's message ("…specified in the
      list of engines in the project settings but it is not a valid engine.
-     Available engines are …"). This is the same site and message as 4b-C's
-     validation-parity item (the Task-9 marker in `build_engine_registry`,
-     `project/mod.rs:749`), which extends the identical check to *string*
-     entries when the ordering splice lands — one validation home for the
-     key. All *per-doc-layer* unknown names (doc-frontmatter `engines:`
+     Available engines are …"). **This is 4b-C's validation, already landed**
+     (`5acf0e6dc`, `build_engine_registry`): its `engine_entry_name` parser
+     maps *every* entry form (string / reserved `{path:}` / `{<name>:{claims}}`
+     single-key map) to an `Option<name>`, and the prepended names re-enter
+     the existing step-6 validation loop — the **single validation site this
+     plan reuses**, no second check to add. All *per-doc-layer* unknown names
+     (doc-frontmatter `engines:`
      tables, `engine:`-entry tables) **warn-and-skip** via `ResolutionNote`
      — the resolver stays pure and infallible; `notes` remain
      advisory-only. Because the resolver reads merged metadata, a
@@ -228,7 +230,50 @@ Ratified with Gordon 2026-07-02 through 2026-07-05:
    non-QMD file's Pass-1 conversion runs `markdown_for_file` in the engine's
    `.js`, which is unhashed — out of scope, disclosed.)
 
-## Rebase note (latest: 2026-07-06, base `ba2802d3c` → `c8b1eebb8`)
+## Rebase note (latest: 2026-07-08b, base `70fcf6264` → `0e5a13358`)
+
+**2026-07-08b rebase onto the feature tip `0e5a13358`.** Feature advanced
+(4b Phase F finalization, a marimo multi-engine seam, preview fix). No design
+effect. Two cited files drifted and were re-checked in place: `resolution.rs`
+(marimo test added to `mod tests` at ~735 — production code, `candidate_engines`,
+`MockEngine` at `613-627`, and all T1–T4 citations unchanged; only the
+test-area field-compare `752-765` shifted `+21` → `774-786`) and `ts_engine.rs`
+(three small `TsEngine` insertions, uniform `+7` on the `claims_language`
+branches, the `file_extensions` pre-filter, and the `ensure_loaded` validation
+loop — `ensure_loaded` start `:242` and the `claims:` field `:158` unchanged).
+All other citations still hold. Below: the earlier 2026-07-08 rebase record.
+
+**2026-07-08 rebase onto the feature tip `70fcf6264`.** Plan 4b (through
+Phase F) and 1c.2 (P2/P4) landed. The material effects:
+
+- **4b-C (`5acf0e6dc`) landed the `engines:` ordering splice + validation** —
+  the exact seam this plan's § Post-4b reconciliation was waiting for. The
+  reconciliation is now **done** (see that section, now marked reconciled):
+  decision 3, the Phase-3 project-load-validation item, the build-map (b)
+  note, and the redundant `unknown_engine_in_project_engines_errors` test
+  were all updated to reuse 4b-C's `engine_entry_name` parser + its single
+  validation site rather than re-add them.
+- **Code citations were refreshed 2026-07-08 against the current tree**
+  (this worktree's `crates/` at `70fcf6264`): 4b-C (splice), 1c.2 P4 (typed
+  `FileClaim`, `contribution_order` → `pub(crate)` + getter,
+  `35d5d23fc`/`75b78e5f9`), and 1c.2 P2 (extension discovery) had restructured
+  `resolution.rs`, `extension/read.rs`, `engine/ts_engine.rs`, and
+  `extension/types.rs` since this plan was written; every `file.rs:NNN`
+  line anchor below was re-verified against the symbol it names and
+  corrected where it had drifted (most of `resolution.rs`, `detection.rs`,
+  and the orchestrator/context/pipeline citations turned out unchanged;
+  `read.rs`, `ts_engine.rs`, and `extension/types.rs` had shifted). A
+  handful of citations name code that Phase 3/4 have not written yet
+  (e.g. `claim_for`, `try_claims_language`) — those point at the current
+  insertion context, not at existing code, and could not be verified the
+  same way. **Spot-check at execution time anyway** — this refresh is a
+  point-in-time snapshot, and further rebases will drift it again. One
+  concrete API note: `contribution_order` is now `pub(crate)` with a
+  `contribution_order()` getter (`registry.rs`).
+- **The `claims-extensions` rename was withdrawn upstream** (`3fd29ee2e`): the
+  file-claim surface stays `claims-files` (typed `FileClaim`). This plan does
+  not reference it (plan 6 is about language `claims:`), so no effect —
+  recorded so a reader doesn't reintroduce the dropped name.
 
 **2026-07-06 rebase onto the feature tip `c8b1eebb8` (Plan 4d).** Two things:
 
@@ -252,10 +297,10 @@ that still matter:
 - **4c0 Vec-per-language claims (plan4c, COMPLETE):** static claims are
   `Option<HashMap<String, Vec<StaticLanguageClaim>>>` (on both
   `EngineContribution::External.claims`, `types.rs:115`, and
-  `TsEngine.claims`, `ts_engine.rs:141`). `parse_claims_map` returns the
-  Vec-valued map (`read.rs:449-461`); `parse_static_language_claims`
-  (`read.rs:469`) accepts a per-language **sequence of claim objects**;
-  `combine_claims(&[StaticLanguageClaim], first_class)` (`types.rs:230`,
+  `TsEngine.claims`, `ts_engine.rs:158`). `parse_claims_map` returns the
+  Vec-valued map (`read.rs:452-464`); `parse_static_language_claims`
+  (`read.rs:472`) accepts a per-language **sequence of claim objects**;
+  `combine_claims(&[StaticLanguageClaim], first_class)` (`types.rs:253`,
   public) reduces a language's Vec to its strongest applicable claim via the
   private `ClaimKind::combine_rank()` (Primary=2, Interop=1, Fallback=0).
   Claim tables reuse this model and parser wholesale. plan4c explicitly
@@ -266,32 +311,28 @@ that still matter:
   body. **All resolver-body edits in Phases 2-4 target
   `resolve_engines_inner`.**
 
-## Post-4b reconciliation (do at the rebase onto the post-4b integration tip)
+## Post-4b reconciliation — DONE (2026-07-08, 4b-C landed at `5acf0e6dc`)
 
-Plan 4b executes first (ratified 2026-07-06). Several spots below still read as
-if **this** plan creates the shared `engines:` validation seam — but 4b lands
-it first, so this plan **inherits** it. Do NOT pre-edit these now: they would
-describe 4b code that has not merged yet (the whole reason for the ordering).
-Reconcile them when rebasing this branch onto the post-4b tip, alongside the
-usual citation refresh:
+Plan 4b executed first, and its Phase C landed the shared `engines:`
+seam — `engine_entry_name` (the single entry→name parser) + the
+`build_engine_registry` validation — built to serve this plan (the commit
+message says "Plan 6's claim-table reader reuses this"). The spots that
+had read as if *this* plan creates that seam are now reconciled in place:
 
-- **Decision 3**, the "4b-C *later* extends the same check to string entries
-  when the ordering splice lands" clause → invert: 4b already validates *every*
-  entry form (string + single-key-map key) at `build_engine_registry`
-  construction; this plan reuses 4b's entry→name parser and adds only the
-  claim-table extraction.
-- **Phase 3 "Project-load validation" item** → it is **not** new validation
-  under 4b-first; 4b provides it. This plan's remaining work at that site is
-  the **tabled-name-set stash** + the claim-table map, both built on 4b's
-  parser. Reframe from "validate … → hard error" to "reuse 4b's validated
-  entry parser."
-- **Phase 3 build-map (b) note** — the "4b-C later extends" citation, same flip.
-- **Phase 6 reconciliation item for 4b** → the coordination note was already
-  added to 4b (`71cf07394`, 2026-07-06); downgrade the item from "add" to
-  "verify 4b's note still matches the final entry grammar."
-- **`unknown_engine_in_project_engines_errors` test** → keep only if it adds
-  map-entry-specific coverage 4b's validation test lacks; otherwise it
-  duplicates 4b.
+- **Decision 3** — flipped: the validation is 4b-C's, already landed; this
+  plan reuses `engine_entry_name` + the single validation site.
+- **Phase 3 "Project-load validation" item** — reframed: not new validation;
+  this plan only stashes the tabled-name-set (built via `engine_entry_name`).
+- **Phase 3 build-map (b)** — flipped to consume `engine_entry_name`.
+- **`unknown_engine_in_project_engines_errors` test** — dropped (4b-C's
+  `engine_registry_build.rs` tests cover all entry forms).
+
+**One item remains, deliberately light (Phase 6):** verify at execution that
+4b-C's landed `engine_entry_name` grammar still matches this plan's use
+(string / reserved `{path:}` / `{<name>:{claims}}`) — it does as of
+`5acf0e6dc`, but 4b's later phases could touch it. The Phase 6 "add
+coordination note to 4b" item is already satisfied (note added `71cf07394`;
+4b-C shipped matching it) — downgrade it to that verify.
 
 ## Code facts the design rests on (verified 2026-07-02/05)
 
@@ -299,9 +340,9 @@ usual citation refresh:
   T1 consults *every* candidate engine for *every* doc language
   (`resolution.rs:459-475`). The load-avoidance is distributed inside
   `TsEngine`: static `claims:` answers without loading
-  (`ts_engine.rs:632-667`); only `claims: None` falls to `ensure_loaded`
-  (`:668-697`). `file_extensions` pre-filters *file* claims only
-  (`:700-716`). There is no static surface that eliminates a claims-less
+  (`ts_engine.rs:706-732`); only `claims: None` falls to `ensure_loaded`
+  (`:733-762`). `file_extensions` pre-filters *file* claims only
+  (`:766-771`). There is no static surface that eliminates a claims-less
   engine from *language* contention — hence decision 7.
 - **`detect_engines` returns duplicates intact** (`detection.rs:206-227`);
   only `detect_engine_sequence` dedups. So `resolve_engines_inner`'s
@@ -312,13 +353,13 @@ usual citation refresh:
   other top-level `_quarto.yml` keys flow through the merge. The resolver
   reads both `engine:` and `engines:` from `meta` — no new inputs, no layer
   plumbing.
-- **`parse_claims_map` accepts only per-language forms** (`read.rs:449-461`):
+- **`parse_claims_map` accepts only per-language forms** (`read.rs:452-464`):
   values may be `true`/int/`fallback:`-map/kinded map, or a per-language
   sequence of claim objects. The **top-level list-of-language-names shorthand
   (`claims: [r, python]`) is genuinely new work** (Phase 1) — a different
   shape at a different nesting level from 4c0's per-language list form.
   Unparseable entries are silently skipped (`filter_map`), and a language
-  whose Vec parses empty is dropped (`:456`) — Phase 1 must preserve
+  whose Vec parses empty is dropped (`:459`) — Phase 1 must preserve
   "table present but empty" as `Some(empty)` for the override context
   (decision 2's mask semantics).
 - **Pass-1 today**: the profile pipeline is exactly `EngineClaimsFileStage →
@@ -375,16 +416,84 @@ metadata (decision 2/3). A doc resolves **load-free at Pass-1** iff any of:
 - **P2** — the language scan is empty (markdown passthrough,
   `resolution.rs:380-386`; `generated-languages` not consulted, decision 8).
 - **P3** — explicit `engine: markdown` opt-out (`resolution.rs:425-430`).
-- **P4** — **every registered engine answers `claims_language` without
-  loading**: built-in (pure Rust), statically claimed (`claims: Some` from
-  `_extension.yml`), or **covered by a metadata claim table**. One registered
-  engine that is claims-less *and* untabled makes every doc with a non-empty
-  language set fall through — that is correct (decision 7), and it is what
-  the warning and counters show.
+- **P4** — **every claim consultation the resolution needs returns a
+  *static* answer.** For each `(candidate engine, language)` the resolver
+  either hits a metadata claim table, or the engine answers without
+  loading — built-in (pure Rust) or a `TsEngine` with static `claims:`
+  (`_extension.yml`). This is **not a separate precondition check**: Pass-1
+  *attempts* the resolution over the **no-load claim path**
+  (`try_claims_language`, Phase 4), and a single "would need to load"
+  answer aborts it → fall through. One registered engine that is claims-less
+  *and* untabled returns "would-load" for its candidate languages, so every
+  doc with a non-empty language set that reaches it falls through — correct
+  (decision 7), and what the warning and counters show.
 
 Otherwise the doc **falls through to Pass-2** — exactly today's path. The
-lift is therefore mostly **project-grain** (P4 depends on the registry and
-project config), with per-doc variation via P1–P3 and doc-layer tables.
+lift is therefore mostly **project-grain** (whether P4 holds depends on the
+registry and project config), with per-doc variation via P1–P3 and
+doc-layer tables. "Load-free" is *computed*, not flagged: it is exactly
+"the no-load claim path never answered would-load for this doc."
+
+---
+
+## Test Seam Spec (revert-bound)
+
+A test that cannot name the production hunk whose revert reddens it is
+vacuous. This section binds the "Tests first" lists below; once a test is
+green its harness and assertions are **frozen** — never edited to go green.
+
+**Tier — all phases: Rust `cargo nextest`, no jsdom/browser.** The unit
+under test is a *real* function (`parse_claims_map`, `resolve_engines_inner`
+/ `resolve_engines_pass1`, `DocumentProfileStage`, `pass1_key`, the warning
+builder, `build_engine_config_map`) — **never mocked**. The **only** mocks:
+`MockEngine` (`resolution.rs:613`, a real `dyn ExecutionEngine` with a
+`claim_fn` closure + the new `would_load` knob), the claims-less TS fixture
+(Phase 5), and `MockRuntime`. Integration tests drive
+`crates/quarto-core/tests/integration/`. There is no layout/geometry tier
+here, so the jsdom-zeros trap does not apply; the trap that *does* is
+**asserting against `resolution.notes` when the user-visible surface is
+`ctx.diagnostics`** — see the note-drain test.
+
+**Revert binding (blanket).** Each test's RED hunk is the same-phase
+implementation item it exercises: revert that item and the test reddens
+because the expected value/shape it asserts is the behavior the item adds
+(e.g. `parse_claims_list_shorthand_primary_default` ← the Phase-1
+seq-of-strings widening; `table_beats_static_priority` ←
+`claim_for`'s table branch; `masking_suppresses_interop` ← the same
+interception; the cache-key relational test ← the `extension_contributions`
+gathering; the Phase-5 integration stamp ← the `DocumentProfileStage`
+`resolve_engines_pass1` stamp). The **non-obvious / safety-critical**
+bindings are named inline at their tests: `generated_language_alone_is_noop`
+(← the "append *after* the empty-scan early return" placement),
+`tiers_unchanged_without_tables` (← `claim_for`'s untabled else-branch),
+`pass1_falls_through_dynamic_engine_present` and
+`pass1_registry_grain_is_deliberate` (← the no-load abort + no-short-circuit
+in the shared core), `builtins_answer_statically` (← each built-in's `try_`
+override), `pass1_result_equals_pass2_result` (← the shared-core
+parameterization), `resolution_note_drains_to_diagnostics` and
+`warning_silent_when_all_lift` (below).
+
+**Vacuity check.** The one migrated-value risk is the version test: renaming
+`document_profile_version_is_6` → `…_is_7` alongside the `assert_eq!(…, 7)`
+keeps the discriminator (a wrong bump reddens it); leaving the name would be
+cosmetic only. No expected-value migration in this plan collapses a
+discriminator (the assertions distinguish `Some`/`None` stamps, present/empty
+tables, and lifted/fell-through — all still differ across the states they
+gate).
+
+**Missing-test pass (added above):**
+- `resolution_note_drains_to_diagnostics` (Phase 3) — the resolver unit
+  tests stop at `resolution.notes`; the drain into `ctx.diagnostics` was
+  unguarded.
+- `warning_silent_when_all_lift` (Phase 5) — the only test that distinguishes
+  the emit gate (`fell_through > 0`) from `engines_needing_load` non-empty.
+
+**Accepted-untested (logged, not silently omitted):**
+- `DOCUMENT_PROFILE_VERSION` cache self-invalidation — no pinned-hash test;
+  the relational `cache_key.rs` tests + the version folded at
+  `cache_key.rs:147` cover it (Phase 5 says to eyeball that fold).
+- The `markdown_for_file` `.js` conversion gap in the cache key — pre-existing,
+  out of scope (Explicitly-out-of-scope list).
 
 ---
 
@@ -427,7 +536,12 @@ code phases would then diverge from.
         4c0's *per-language* claim-object sequence.
   - [ ] §3.3: relax the project-wide "every engine fully static" gate to the
         per-doc predicate (P1–P4); record that the tier-dominance shortcut
-        was considered and rejected as unsound (decision 7).
+        was considered and rejected as unsound (decision 7). Document the
+        **no-load claim method** `try_claims_language(lang, first_class) ->
+        Option<LanguageClaim>` (`None` = would-load, uniform per engine) as
+        the mechanism the load-free determination now rests on — the contract
+        previously only described "static claims answer without loading" in
+        prose; the method is the surface.
   - [ ] §4.1: `languages = scan(ast) ∪ generated-languages` (generated
         consulted only when the scan is non-empty); generated entries carry
         `first_class = None`.
@@ -437,8 +551,9 @@ code phases would then diverge from.
         result is stamped complete-or-absent (decision 1), never partial.
   - [ ] §9: the profile artifact is the reduced `ProfileEngineResolution`
         (names only); `EngineResolution` stays the Pass-2 `StageContext`
-        artifact; document the new `notes: Vec<ResolutionNote>` warning
-        channel (purity preserved — warnings are returned data). While
+        artifact and gains the new `notes: Vec<ResolutionNote>` warning
+        channel (on `EngineResolution`, **not** `ProfileEngineResolution` —
+        purity preserved, warnings are returned data). While
         here, fix §9's stale sketch: `ownership` is a `LinkedHashMap`
         (`resolution.rs:286`), not the `HashMap` §9 shows — the profile's
         `Vec<(String, String)>` conversion relies on insertion order.
@@ -478,7 +593,7 @@ frontmatter); the widening lands once in the shared parser.
         *top-level* string list is not confused with 4c0's *per-language*
         claim-object sequence: `claims: {sql: [{kind: primary}, {kind:
         interop}]}` still parses via `parse_static_language_claims`
-        (`read.rs:469`) exactly as before.
+        (`read.rs:472`) exactly as before.
   - [ ] `parse_claims_empty_table_yields_empty_map` — `claims: {}` and
         `claims: []` parse to an **empty map** (no error, no skip). The
         parser's return type stays a bare `HashMap` — present-vs-absent is
@@ -486,7 +601,7 @@ frontmatter); the widening lands once in the shared parser.
         which Phase 3's table builder uses to implement decision 2's mask
         semantics. `_extension.yml` behavior for empty claims is unchanged.
   - [ ] Existing map-form tests stay green (regression).
-- [ ] Widen `parse_claims_map` (`read.rs:449-461`) to accept a **top-level
+- [ ] Widen `parse_claims_map` (`read.rs:452-464`) to accept a **top-level
       YAML sequence of strings** in addition to the per-language map —
       detect the seq-of-strings case **before** the existing
       `ConfigValueKind::Map` guard; each string `lang` →
@@ -496,9 +611,11 @@ frontmatter); the widening lands once in the shared parser.
       unchanged. No `Option` in the return type: table-present-but-empty vs
       table-absent is distinguished by the caller's key-presence check (see
       the empty-table test above).
-- [ ] Raise `parse_claims_map` (and the claim-object helpers Phase 3 needs)
-      from module-private to **`pub(crate)`** — Phase 3 calls them from
+- [ ] Raise `parse_claims_map` and `parse_static_language_claims` /
+      `parse_static_language_claim` (`read.rs:452/472/490`) from
+      module-private to **`pub(crate)`** — Phase 3 calls them from
       `engine/resolution.rs` (cross-module within `quarto-core`).
+      (`combine_claims`, `types.rs:253`, is already public.)
 - [ ] Run the tests; `cargo nextest run -p quarto-core`; commit.
 
 ### Phase 2 — `generated-languages` (static handoff-target declaration)
@@ -565,22 +682,25 @@ frontmatter); the widening lands once in the shared parser.
   - [ ] `empty_table_masks_engine` — `engines: [{jupyter: {claims: []}}]` +
         implicit doc `{python}` with no other claimant → **`ownership`
         empty, `sequence` empty** (the markdown-passthrough shape, reached
-        because jupyter's universal fallback is disabled; the doc still
-        lifts at Pass-1 once Phase 4 lands — every engine is load-free —
-        stamping that empty resolution).
+        because jupyter's universal fallback is disabled). **This Phase-3
+        test asserts only the resolution *shape*** (empty ownership/sequence)
+        via `resolve_engines`; the Pass-1 *lift* of that empty resolution is
+        a Phase-4 concern (`resolve_engines_pass1` doesn't exist yet) — do
+        not assert the lift here.
   - [ ] `table_when_class_gating` — a table entry with `whenClass` applies
         only when the language's `first_class` matches (reuse
-        `combine_claims`, `types.rs:230` — it already applies `when_class`
+        `combine_claims`, `types.rs:253` — it already applies `when_class`
         gating and per-Vec reduction).
   - [ ] `table_fallback_is_a_real_floor` — a table giving engine E
         `fallback: {}` loses language L to another engine's static
         `Primary(L)` — kinds keep their tier meanings (decision 2).
-  - [ ] `unknown_engine_in_project_engines_errors` — **not a resolver test**:
-        lives with the `build_engine_registry` tests (`project/mod.rs`).
-        A project config whose `engines:` map entry names an unregistered
-        engine → `ProjectContext` construction fails with the Q1-parity
-        message (decision 3's project grain). String entries are NOT
-        validated here (4b-C's item).
+  - [ ] ~~`unknown_engine_in_project_engines_errors`~~ — **dropped: 4b-C
+        already tests this.** The `build_engine_registry` validation and its
+        RI tests (`engine_registry_build.rs`, 4b-C `5acf0e6dc`) cover an
+        unregistered `engines:` name → hard error for **all** entry forms,
+        including `{<name>:{claims}}` map entries (parsed by `engine_entry_name`).
+        No plan-6 test to add here; the doc-grain warn-and-skip path is
+        covered by `unknown_engine_in_entry_warns` above.
   - [ ] `unknown_engine_in_entry_warns` — `engine: [{ghost: {claims: [r]}}]`
         with no registered `ghost` → `ResolutionNote::UnknownOverrideEngine`,
         entry's table ignored, tiers proceed. Same expectation for an
@@ -599,6 +719,19 @@ frontmatter); the widening lands once in the shared parser.
         kernel: python3}}` → config `{kernel: python3}`).
   - [ ] `tiers_unchanged_without_tables` — no tables anywhere → byte-identical
         behavior to today (regression pin for the interception seam).
+        **Revert binding:** revert `claim_for`'s else-branch (untabled →
+        `engine.claims_language`) to anything else and existing tier tests
+        plus this one go RED.
+  - [ ] **`resolution_note_drains_to_diagnostics`** (missing-test pass —
+        *stage-level*, not a resolver unit test): render a doc whose
+        `engine:` entry names an unregistered engine through
+        `EngineExecutionStage`; assert `ctx.diagnostics` contains the
+        warning-severity `DiagnosticMessage` (not merely that
+        `resolution.notes` holds the `ResolutionNote`). The resolver unit
+        tests above stop at `resolution.notes`; the **drain** (the new line
+        in `engine_execution.rs` after the existing stash) is otherwise
+        unguarded. **Revert binding:** delete the drain line → the note stays
+        in `resolution.notes`, never reaches `ctx.diagnostics` → RED.
 - [ ] Implement in `resolve_engines_inner` (`resolution.rs:360`):
   - [ ] Add `notes: Vec<ResolutionNote>` to `EngineResolution`
         (`resolution.rs:278-287`) with
@@ -610,26 +743,28 @@ frontmatter); the widening lands once in the shared parser.
         }
         ```
         Purity preserved: warnings are returned data. Initialize `notes` at
-        the three early returns (`resolution.rs:371,376,420`) and the final
-        build (`:577`) — four sites, all inside `resolve_engines_inner`.
-  - [ ] **Project-load validation (decision 3, project grain):** after the
-        registry is assembled at `ProjectContext` construction, validate the
-        project config's `engines:` **map-entry names** against it — unknown
-        name → hard error, Q1 message (site: the Task-9 marker in
-        `build_engine_registry`, `project/mod.rs:749`; 4b-C later extends
-        the same check to string entries). While there, **stash the
-        validated tabled-name-set** (e.g. a `HashSet<String>` on
-        `ProjectContext` next to the registry) — Phase 5's warning consumes
-        it, and the parse is shared with the resolver's table reader
-        (same `pub(crate)` parser, no drift).
+        the three early returns (`resolution.rs:371,382,426`) and the final
+        build (`:583`) — four sites, all inside `resolve_engines_inner`.
+  - [ ] **Project-load validation — already provided by 4b-C
+        (`5acf0e6dc`); do NOT add a second check.** 4b-C's
+        `build_engine_registry` splice validates every project `engines:`
+        entry name (via `engine_entry_name` + the step-6 loop). This plan's
+        remaining work at that site is only to **stash the tabled-name-set**
+        (a `HashSet<String>` on `ProjectContext` next to the registry) —
+        Phase 5's warning consumes it — built by running `engine_entry_name`
+        (reuse it; it is the single entry-name parser) over the project
+        `engines:` list and keeping the map-form entries that carry a
+        `claims` key. No new hard error; unknown names already errored at
+        4b-C's validation.
   - [ ] **Build the per-engine table map** from merged metadata:
-        (a) `meta.get("engines")` array — for each single-key map entry
-        keyed by a registered engine name, parse its `claims` via the shared
-        `parse_claims_map` (Phase 1); `path`-keyed entries skipped (Plan 4b
-        territory); non-`claims` config keys ignored (reserved); unknown
-        engine name → **note + skip** (project-layer unknowns were already
-        rejected at load, so a name reaching this path is doc-layer —
-        decision 3's doc grain).
+        (a) `meta.get("engines")` array — for each entry, take its name via
+        4b-C's **`engine_entry_name`** (string / `{path:}`→skip /
+        `{<name>:{claims}}`→name; the shared parser) and, when the entry is
+        a single-key map keyed by a registered engine, parse its `claims` via
+        the shared `parse_claims_map` (Phase 1); non-`claims` config keys
+        ignored (reserved); unknown engine name → **note + skip** (project-layer
+        unknowns already errored at 4b-C's validation, so a name reaching this
+        path is doc-layer — decision 3's doc grain).
         (b) each `raw_explicit` entry (`resolution.rs:393-419` — covers both
         the `engine:` list and the top-level shorthand) whose config has a
         `claims` key — parsed the same way; unregistered name → note + skip.
@@ -637,16 +772,19 @@ frontmatter); the widening lands once in the shared parser.
         per-language merge across the two surfaces.
   - [ ] **Interception seam:** a private
         `claim_for(engine_name, lang, first_class)` helper used by **all
-        four tiers** (T1 `:453-469`, T2 `:474-494`, T3 `:496-519`,
-        T4 `:521-543`): if the table map has the engine, answer via
-        `combine_claims` on the table's Vec for `lang` (absent language →
-        `None`; universal `fallback:` entry per the existing two-site
-        combine idiom); otherwise call `engine.claims_language`. No other
-        tier logic changes; no ownership guard is added (nothing owns
-        anything before T1 runs).
+        four tiers** (T1 `resolution.rs:459-475`, T2 `:480-500`,
+        T3 `:502-525`, T4 `:527-549`): if the table map has the engine,
+        answer via `combine_claims` on the table's Vec for `lang` (absent
+        language → `LanguageClaim::None`; universal `fallback:` entry per
+        the existing two-site combine idiom); otherwise call
+        `engine.claims_language`. **This is the Pass-2 (loading) path** —
+        `claims_language` loads if it must, which Pass-2 permits. Phase 4
+        adds the no-load Pass-1 variant that swaps `claims_language` for
+        `try_claims_language` (below). No other tier logic changes; no
+        ownership guard is added (nothing owns anything before T1 runs).
   - [ ] **Strip the `claims` key** from the config attached to resolved
         owners in the sequence build (explicit-config lookup built at
-        `resolution.rs:559-567`, consulted at `:564-574`): `claims` is
+        `resolution.rs:560-568`, consulted at `:570-581`): `claims` is
         resolution metadata, not engine execution config — without the strip
         it leaks into `ExecutionContext` via `with_engine_config`. Sibling
         keys pass through untouched. (`engines:` entries never feed execute
@@ -665,7 +803,7 @@ frontmatter); the widening lands once in the shared parser.
       **names only**: strings pass through; a single-key map contributes
       its key; `path`-maps are skipped (no name known Rust-side until 4b).
       Unit test in `project/mod.rs` alongside the existing
-      `build_engine_config_map` tests (`:2133+`).
+      `build_engine_config_map` tests (`:2303+`).
 - [ ] `EngineExecutionStage::run`: drain `resolution.notes` into
       `ctx.diagnostics` after the existing stash (`engine_execution.rs:236`).
       Each variant becomes a **warning**-severity `DiagnosticMessage` (no
@@ -684,13 +822,15 @@ frontmatter); the widening lands once in the shared parser.
       when actually rendered).
 - [ ] Run tests; workspace suite; commit.
 
-### Phase 4 — Load-free predicate + engine staticness surface
+### Phase 4 — Load-free predicate + the no-load claim surface
 
 - [ ] Tests first:
   - [ ] Trait surface (`engine/mod.rs` / `ts_engine.rs` tests):
-        `builtin_engines_are_load_free` (markdown/knitr/jupyter → `true`),
-        `ts_engine_load_free_iff_static_claims` (`claims: Some` → `true`,
-        `None` → `false`).
+        `builtins_answer_statically` (markdown/knitr/jupyter →
+        `try_claims_language` returns `Some`, equal to `claims_language`),
+        `ts_engine_static_iff_claims` (`claims: Some` → `Some(...)` without
+        loading; `claims: None` → `None`, and asserts `ensure_loaded` was
+        **not** called).
   - [ ] Predicate (`resolution.rs` tests), one per prong:
         `pass1_lifts_claimed_file` (P1), `pass1_lifts_no_languages` (P2 —
         including with `generated-languages` present, decision 8),
@@ -699,45 +839,75 @@ frontmatter); the widening lands once in the shared parser.
         `pass1_lifts_tabled_dynamic_engine` (P4 — **the backward-compat
         case**: claims-less mock engine + an `engines:` claim table for it →
         lift; this is the feature's headline),
-        `pass1_falls_through_dynamic_engine_present` (claims-less untabled
+        `pass1_falls_through_dynamic_engine_present` (a would-load mock
         engine + any computational language → `None`),
         `pass1_registry_grain_is_deliberate` (pins P4's conservatism: an
-        explicit `engine: [knitr]` doc **still falls through** while a
-        claims-less untabled engine is merely *registered*, even though
-        resolving it would consult only knitr — do NOT "optimize" P4 to
-        candidate engines; decision 7's unboundedness applies to the whole
-        registry. Add a comment at the predicate saying so).
-        **MockEngine needs a knob first:** add a `load_free: bool` field
-        (default `true`) to `MockEngine` (`resolution.rs:613-627`) and
-        override the trait method with it, so the claims-less-engine tests
-        are expressible.
+        explicit `engine: [knitr]` doc with a `{r}` cell **still falls
+        through** while a would-load mock engine is merely *registered* —
+        because `candidate_engines` includes **every** registered engine
+        (`resolution.rs:71-116`, via `contribution_order`), so the tier loop
+        consults the would-load engine for `r` too, and its `try_` `None`
+        aborts. It falls through *even though knitr statically covers `r`*,
+        because the would-load engine might contest `r` at `Primary(999)` if
+        loaded (decision 7). **Revert binding:** the discriminator is that T1
+        consults *all* candidates without short-circuiting on knitr's
+        `Primary` — "optimize" T1 to stop at the first Primary and this test
+        goes RED (doc would lift, hiding the load). Add a comment at the
+        predicate saying so).
+        **MockEngine needs a knob first:** give `MockEngine`
+        (`resolution.rs:613-627`) a `would_load: bool` field (default
+        `false`) and implement `try_claims_language` as `None` when
+        `would_load`, else `Some((self.claim_fn)(…))` — so the
+        would-load-engine tests are expressible without a separate boolean.
   - [ ] `pass1_result_equals_pass2_result` — for every lifted case, the
         Pass-1 resolution equals a direct `resolve_engines` call
         (purity/consistency guard). **Compare field-wise** (sequence names +
         `ownership` entries): `EngineResolution` and `DetectedEngine` do not
         derive `PartialEq` (`resolution.rs:278`, `detection.rs:37`), and the
         existing tests already compare fields individually
-        (`resolution.rs:752-765`) — follow that convention.
-- [ ] Add to the **`ExecutionEngine`** trait (`engine/traits.rs:61` — that is
-      the trait's name; there is no `Engine` trait):
+        (`resolution.rs:774-786`) — follow that convention.
+- [ ] Add a **no-load claim** method to the **`ExecutionEngine`** trait
+      (`engine/traits.rs:61` — that is the trait's name; there is no `Engine`
+      trait). This *replaces* the earlier `claims_language_is_load_free`
+      boolean: load-freedom is now a byproduct of attempting the claim, so
+      it can neither drift from `claims_language` nor be got wrong by a
+      forgetful override.
       ```rust
-      /// True when `claims_language` answers without loading anything
-      /// (built-ins: pure Rust; TsEngine: static `claims:` declared).
-      /// Metadata claim tables make an engine load-free regardless of
-      /// this answer — that is accounted for at the resolution layer,
-      /// which is the only sanctioned caller for lift decisions.
-      fn claims_language_is_load_free(&self) -> bool { true }
+      /// A static language claim if one exists, or `None` meaning
+      /// "I would have to load to answer." The `None`-ness is a per-engine
+      /// property, uniform across all languages (an engine with a static
+      /// claim source answers every language — `Some(LanguageClaim::None)`
+      /// for one it doesn't claim; a claims-less engine answers `None` for
+      /// all). Default `None` is fail-safe: an un-overridden engine is
+      /// treated as would-load and conservatively falls through.
+      fn try_claims_language(
+          &self, _language: &str, _first_class: Option<&str>,
+      ) -> Option<LanguageClaim> {
+          None
+      }
       ```
-      Override in `TsEngine`: `self.claims.is_some()` (`ts_engine.rs:141`;
-      matches the load-free branch at `ts_engine.rs:632-667`).
-- [ ] Registry/resolution helpers: `EngineRegistry::all_claims_load_free()`
-      (all registered engines answer `true`) plus a resolution-side
-      `registry_is_load_free(registry, tabled: &HashSet<String>)` that
-      treats a tabled engine as load-free (P4's actual test); and
-      `EngineRegistry::engines_needing_load(&self, tabled: &HashSet<String>)
-      -> Vec<(name, Option<PathBuf>)>` — the complement, for the Phase-5
-      warning (an engine tabled in project config is *not* listed). A
-      name-set suffices for both — neither consumer needs table contents.
+      Overrides: built-ins (markdown/knitr/jupyter) →
+      `Some(self.claims_language(language, first_class))` (pure Rust, always
+      static). **All three built-ins MUST override** — the default `None`
+      would treat them as would-load and, since they are candidates for every
+      doc, sink the whole lift (fail-safe, not unsound, but the feature would
+      do nothing); the `builtins_answer_statically` test is the guard.
+      `TsEngine` → answer from static `claims:` when `self.claims.is_some()`
+      (the existing no-load branch at `ts_engine.rs:706-732`), else `None`
+      (`ts_engine.rs:158`; do **not** call `ensure_loaded`). Extract **only
+      the pure claim computation** into the shared helper: `try_claims_language`
+      is a probe and must be **side-effect-free** — no `static_answers`
+      recording, no cache write that presumes a load happened; leave any such
+      recording to the loading `claims_language` path so a Pass-1 probe never
+      mutates execute-time validation state.
+- [ ] Registry/warning helper: `EngineRegistry::engines_needing_load(&self,
+      tabled: &HashSet<String>) -> Vec<(name, Option<PathBuf>)>` — engines
+      **not** in `tabled` whose `try_claims_language` yields `None` (the
+      uniform-per-engine property above makes a single probe well-defined),
+      for the Phase-5 warning. No `all_claims_load_free` / `registry_is_load_free`
+      booleans are added: the predicate computes load-freedom by *running*
+      the no-load path (next item), not by a separate registry query. A
+      name-set suffices for the `tabled` argument.
 - [ ] Add to `resolution.rs`:
       ```rust
       /// Pass-1 entry point: Some(resolution) iff resolving this doc
@@ -749,12 +919,26 @@ frontmatter); the widening lands once in the shared parser.
           registry: &EngineRegistry, claimed: Option<&str>,
       ) -> Option<EngineResolution>;
       ```
-      Internals: factor the language scan + table-map construction out of
-      `resolve_engines_inner` into private helpers so the predicate shares
-      them rather than duplicating logic; route the lifted path through the
-      public wrapper (or emit its own tracing event) so the wrapper split's
-      observability isn't bypassed. Re-export alongside `resolve_engines` in
-      `engine/mod.rs` (`:143`).
+      Internals: factor **both** the language scan + table-map construction
+      **and the four-tier loop itself** (the T1–T4 bodies Phase 3 routed
+      through `claim_for`) out of `resolve_engines_inner` into a shared core
+      **parameterized by a claim closure** `Fn(engine, lang, first_class) ->
+      Option<LanguageClaim>`. The two entry points differ *only* in the
+      closure they pass: `resolve_engines` (Pass-2) passes `claim_for`
+      wrapping the **loading** `claims_language` in `Some` (never `None` —
+      loads if it must); `resolve_engines_pass1` (Pass-1) passes `claim_for`
+      over **`try_claims_language`**, and a single `None` (would-load) makes
+      the core **abort and return `None`** (fall through). This *is* the
+      "attempt the resolution" predicate — no separate probe. The tier bodies
+      are otherwise unchanged; only the claim they read comes from the
+      closure, so `claim_for`'s table interception is shared by both paths.
+      When every consultation is `Some`, the Pass-1 result is **identical**
+      to `resolve_engines` (all answers were static, so the loading path would
+      not have loaded either) — that equivalence is the
+      `pass1_result_equals_pass2_result` guard. Route the lifted path through
+      the public wrapper (or emit its own tracing event) so the wrapper
+      split's observability isn't bypassed. Re-export alongside
+      `resolve_engines` in `engine/mod.rs` (`:143`).
 - [ ] Run tests; workspace suite; commit.
 
 ### Phase 5 — Profile stamp, version bump, cache key, counters, warning
@@ -770,7 +954,9 @@ pinned version assert (`:1460`) live in the crate root
   - [ ] Crate-root `document_profile.rs`: serde round-trip of
         `ProfileEngineResolution` (both `Some` and `None` on the profile);
         version-mismatch rejection unchanged; update the pinned
-        `assert_eq!(DOCUMENT_PROFILE_VERSION, 6)` at `:1460` to 7.
+        `assert_eq!(DOCUMENT_PROFILE_VERSION, 6)` at `:1460` to 7 **and
+        rename its test fn** `document_profile_version_is_6` → `…_is_7` (else
+        a `_is_6`-named test asserts `== 7`).
   - [ ] Cache key: extend the relational tests (`cache_key.rs:232,351`
         convention) — same inputs + different engine-extension
         `_extension.yml` bytes → different key; adding/removing an
@@ -825,7 +1011,9 @@ pinned version assert (`:1460`) live in the crate root
       (`Option<EngineResolution>`, the Pass-2 execute-stage stash) and
       `profile.engine_resolution` (`Option<ProfileEngineResolution>`, this
       stamp) are different types on different carriers — don't conflate.
-- [ ] **Cache key (decision 9):** gather `(extension-name,
+- [ ] **Cache key (decision 9)** — **do the Warning's "Provenance plumbing"
+      sub-item first**: this item consumes the `(name, _extension.yml path)`
+      pairs that sub-item adds to the registry. Gather `(extension-name,
       _extension.yml raw bytes)` pairs for every engine-contributing
       extension, sorted by name, and pass them as
       `Pass1KeyInputs.extension_contributions` (currently hardcoded empty at
@@ -865,7 +1053,13 @@ pinned version assert (`:1460`) live in the crate root
         render (the spanned fix is the out-of-scope reader-diagnostics
         strand).
   - [ ] Emission: in `run_inner` immediately after `pass_one` returns
-        (`orchestrator.rs:831`), before Pass-2 dispatch (`:867`). The
+        (`orchestrator.rs:831`), before Pass-2 dispatch (`:867`). **Gate:
+        emit only when the fell-through tally is `> 0`** (the same count the
+        counter uses) — NOT when `engines_needing_load` is non-empty. The two
+        are computed separately and can disagree: a claims-less engine may be
+        registered while every doc still lifts via P1–P3 (e.g. all
+        markdown-only), and that project must stay silent ("A no-fall-through
+        project emits nothing", below). When the gate passes, the
         engine list comes from `engines_needing_load(&tabled)` with the
         **project-grain tabled-name-set stashed on `ProjectContext` by
         Phase 3's validation item** (an engine tabled in `_quarto.yml` is
@@ -900,9 +1094,21 @@ pinned version assert (`:1460`) live in the crate root
         Multiple claims-less engines → one warning listing each engine +
         path. A no-fall-through project emits nothing.
   - [ ] Tests: unit test for the message builder (single + multiple engines;
-        counts); the Phase-5 integration fixture asserts the warning fires
-        and names the claims-less engine + its `_extension.yml` path in the
-        no-table variant, and is silent in the `engines:`-table variant.
+        counts) — **revert binding:** builder emits the wrong impact clause
+        or omits a path → RED. The Phase-5 integration fixture asserts the
+        warning fires and names the claims-less engine + its `_extension.yml`
+        path in the no-table variant, and is silent in the `engines:`-table
+        variant — **revert binding:** delete the `engines_needing_load`
+        wiring (or the emission) → the no-table variant emits nothing → RED.
+  - [ ] **`warning_silent_when_all_lift`** (missing-test pass — guards the
+        emit *gate*): a project with the claims-less fixture **registered**
+        but every doc lifting via P1–P3 (all markdown-only, no computational
+        cells) → **no warning**. This is the one test that distinguishes the
+        gate `fell_through > 0` from `engines_needing_load` non-empty (the
+        latter is non-empty here — the engine is registered — yet nothing
+        fell through). **Revert binding:** change the gate to
+        `!engines_needing_load(&tabled).is_empty()` → the warning fires with
+        zero fall-throughs → RED. Without this test the gate is unguarded.
 - [ ] `cargo xtask verify` (full — WASM leg required: `quarto-core` types
       feed `wasm-quarto-hub-client`; WASM Pass-1 runs the same stage list via
       `pass_one_dispatch_async`, `orchestrator.rs:1340`, and its registry has
@@ -937,10 +1143,11 @@ pinned version assert (`:1460`) live in the crate root
         predicate; cross-reference this plan for the metadata inputs.
   - [ ] `2026-04-16-plan1a-engine.md` — tighten the "zero-cost Pass-1 lift"
         assertions (lines ~436-448) to "per-doc, load-free-only".
-  - [ ] `2026-07-01-plan4b-shadow-engine-features.md` — Task 9 coordination
-        note: this plan defines the `engines:` entry grammar (strings,
-        reserved `path`-maps, name-keyed config maps with `claims`); the
-        ordering splice implemented there must accept all three entry forms.
+  - [ ] `2026-07-01-plan4b-shadow-engine-features.md` — coordination note
+        already added (`71cf07394`) and 4b-C shipped `engine_entry_name`
+        matching it (`5acf0e6dc`). **Verify** the landed grammar still
+        accepts all three entry forms (string / reserved `{path:}` /
+        `{<name>:{claims}}`); no edit needed unless a later 4b phase changed it.
   - [ ] `2026-04-23-website-project-epic.md` — note the profile-version bump
         + new field + the cache-key extension (it owns the
         orchestrator/profile/cache).

@@ -539,15 +539,19 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
      an asymmetry q2 deliberately closes).
 - [x] **Support extension-contributed engine ordering (`contributes.engines`
   → `registry.contribution_order`), matching Q1's tiebreak.** *(As built, q2
-  does NOT read a project-level `_quarto.yml engines:` key — that splice
-  (`project/mod.rs` "Task 9") is deferred to Plan 4b. Only extension
-  contributions and their bare-string `Reorder` hints populate the order.)*
+  did NOT read a project-level `_quarto.yml engines:` key — that splice
+  (`project/mod.rs` "Task 9") was deferred to Plan 4b. **DONE as of Plan 4b
+  Phase C** (`claude-notes/plans/2026-07-01-plan4b-shadow-engine-features.md`):
+  the project `engines:` key is now spliced in, prepended ahead of
+  extension-contributed names, with all three Q1-compatible entry forms
+  (string / `{path:}` reserved-skip / `{name:{claims}}` name-extraction)
+  handled by `engine_entry_name` in `project/mod.rs`.)*
   Following the Q1 tiebreak half of `resolveEngineExtensions` + `resolveEngines`
   (project-context.ts:739–795 and engine.ts:213–300):
   1. Extension-contributed engines (`_extension.yml` `contributes.engines`)
      populate the ordering list. *(Q1 additionally prepends any
-     `_quarto.yml`-declared `engines:` entries here; q2 does not yet read that
-     project key — deferred to Plan 4b.)*
+     `_quarto.yml`-declared `engines:` entries here; **DONE as of Plan 4b
+     Phase C** — see above.)*
   2. The combined list is walked: object entries (External engines)
      are registered AND their names pushed into the user-specified
      order; bare-string entries (Reorder hints) are pushed into the
@@ -638,7 +642,8 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
 - [x] Write test: extension `contributes.engines` names populate
   `registry.contribution_order` after `discover()`
   (`p1_2_contribution_order_contains_declared_engines`). *(Project-level
-  `_quarto.yml engines:`-key ordering is NOT covered — deferred to Plan 4b.)*
+  `_quarto.yml engines:`-key ordering is now covered too — **DONE as of Plan
+  4b Phase C**, tests C1–C4 in `engine_registry_build.rs`.)*
 - [x] Write test: a bare-string `Reorder` hint naming an unregistered engine →
   hard error at discovery, listing available engines
   (`p1_3_unknown_reorder_hint_errors_listing_available`, matches Q1)
@@ -1722,7 +1727,7 @@ test-deletion obligation); `read.rs:159` `parse_contributes`).
 | ID | Real unit (not mocked) | Seam: call → assertion surface | Named revert hunk → which assertion reddens |
 |----|------------------------|--------------------------------|---------------------------------------------|
 | P1-1 | discovery loop → `EngineRegistry` | fixture ext dir → discover → `registry.engine_names()` contains the engine | Drop the `registry.register(engine)` in discovery step 5 ⇒ `engine_names()` lacks it RED |
-| P1-2 | ordering step (Phase-1 "Final order") | extension `contributes.engines` `name` → `registry.contribution_order` contains it after `discover()` (`p1_2`) | Drop the `order.push(key)` in discovery step 5 ⇒ `contribution_order` lacks the name RED. *(As-built covers extension-contribution ordering only; the `_quarto.yml engines:` project-key splice is deferred to Plan 4b.)* |
+| P1-2 | ordering step (Phase-1 "Final order") | extension `contributes.engines` `name` → `registry.contribution_order` contains it after `discover()` (`p1_2`) | Drop the `order.push(key)` in discovery step 5 ⇒ `contribution_order` lacks the name RED. *(As-built covers extension-contribution ordering only; the `_quarto.yml engines:` project-key splice was deferred to Plan 4b — **DONE as of Plan 4b Phase C**, tests C1–C4.)* |
 | P1-3 | order-validation (step 8) | extension `Reorder` hint naming an unregistered engine → hard error **listing available engines** (`p1_3`) | Remove the "every name in `contribution_order` is registered" check ⇒ no error RED (assert on the message + the live list, not just `is_err`) |
 | P1-4 | collision check (step 5) | two exts both `name: julia` → hard error **naming both contributors** | Replace the collision hard-error with silent overwrite ⇒ `is_err` + both-names-in-message RED |
 | P1-5 | `name`-declared registration | ext `name: julia` → `engine: julia` resolves **with `host.is_alive()==false`** (no spawn) | Remove immediate register-under-`name`; force alias-map lazy path ⇒ a spawn occurs ⇒ `is_alive()==false` RED. *(Exercised-guard: assert the engine DID resolve — else "no spawn" passes vacuously when nothing resolves.)* |
@@ -1857,8 +1862,9 @@ test-deletion obligation); `read.rs:159` `parse_contributes`).
   `contribution_order` name) that is unregistered → hard error listing available
   engines (matches Q1 engine.ts:275–283). Two contributors registering the same
   name → hard error (q2 strengthens Q1's silent-replace asymmetry).
-  *(NOT covered: reading a project-level `_quarto.yml engines:` key and splicing it
-  into the ordering — `project/mod.rs` "Task 9", deferred to Plan 4b.)*
+  *(Reading a project-level `_quarto.yml engines:` key and splicing it into the
+  ordering — `project/mod.rs` "Task 9" — was deferred to Plan 4b. **DONE as of
+  Plan 4b Phase C.**)*
 - [x] `EngineRegistry` (with alias map) lives on `ProjectContext` as
   `Arc<EngineRegistry>` and is populated with extension engines at
   `ProjectContext::new` time (or its caller); per-file `StageContext`

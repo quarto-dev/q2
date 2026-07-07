@@ -120,6 +120,10 @@ export function makeSystem(
   //     (empty), which passes through the gating correctly.
   //
   // ProcessResult.stdout/stderr are optional (undefined unless mode was "piped").
+  // accepted-untested (Plan 4b-D): mergeOutput/stderrFilter/respectStreams/
+  // timeout are marshalled through to ExecOptions below but have no in-scope
+  // consumer to exercise them end-to-end. Known v1 limitation, improvable
+  // later — no test required.
   async function execProcess(
     options: ExecProcessOptions,
     stdin?: string,
@@ -259,6 +263,9 @@ export function makeSystem(
   // — q2 requires ambient pandoc resolved in Rust; if Rust couldn't find it, TS
   // won't do better. `async` ensures callers using `.catch()` see the error
   // even on the None path.
+  // accepted-untested (Plan 4b-D): pandoc()'s happy path has no in-scope
+  // consumer (Plan 2 "no consumer"). The `behave` QUARTO_PANDOC stretch is
+  // Phase F/optional, not this task — no test required here.
   async function pandoc(args: string[], stdin?: string): Promise<ProcessResult> {
     if (global.pandocPath == null) {
       throw new Error(

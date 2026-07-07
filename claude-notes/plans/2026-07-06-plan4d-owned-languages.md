@@ -4,7 +4,7 @@
 **Depends on:** the shipping resolver + TS-engine wire (Plans 1a–c, 2, 3, 4). No new
 machinery — this is a small, additive wire field.
 **Blocks:** nothing. Purely additive; safe to land any time after the wire exists.
-**Estimated sessions:** 1
+**Estimated sessions:** 1–2 (the Phase 4d-D case-4 self-enforcement test adds a new synthetic `owns-cant-run` fixture + committed `dist/` build)
 
 > **For implementers:** this plan is TDD, task-by-task. Steps use `- [ ]` checkboxes.
 > Use `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
@@ -397,7 +397,8 @@ so the next reader sees both. This is the end-to-end check (per repo policy, uni
 are necessary but not sufficient).
 
 **Files:**
-- Modify: `crates/quarto-core/tests/integration/echo_engine_e2e.rs` (add one Deno-gated assertion)
+- Modify: `crates/quarto-core/tests/integration/echo_engine_e2e.rs` (add one Deno-gated positive assertion + the Step-2b negative test)
+- Create: `crates/quarto-core/tests/fixtures/extensions/owns-cant-run/` (synthetic engine for the Step-2b case-4 self-enforcement test)
 - Modify: `crates/quarto-core/src/engine/ts_protocol.rs` (add a cross-ref line to the `handled_languages` doc comment `:370`)
 
 - [ ] **Step 1: Add a Deno-gated e2e assertion** — extend an existing multi-language `echo_engine_e2e.rs` render (or add one) so echo-engine is asked to echo back `options.ownedLanguages`, and assert it equals the language(s) q2 assigned to it (not the leave-alone set). Mirror the existing `deno_available()` skip guard (`echo_engine_e2e.rs:38-43`, early-return, not `#[ignore]`). If echo-engine's fixture source does not already surface options back, add a minimal echo of `ownedLanguages` to its `src/echo-engine.ts` and rebuild its committed `dist/echo-engine.js` with `q2 build-ts-extension`.
@@ -406,6 +407,28 @@ are necessary but not sufficient).
 
 Run: `cargo nextest run -p quarto-core --test integration echo_engine`
 Expected: PASS (or SKIP if deno absent — record which in the transcript).
+
+- [ ] **Step 2b: Case-4 self-enforcement negative test (owned-but-unrunnable, driven by `owned_languages`).**
+  This is the in-scope replacement for Plan 4b's removed `claims-cant-run` fixture / case-4 row. q2 does
+  **not** police engine execution and has **no** static capability model, so owned-but-unrunnable is the
+  engine's own §10 contract obligation — and `owned_languages` is precisely what lets a TS engine
+  self-enforce it *cleanly*, distinguishing "mine" from "owned by nobody" (which `handled_languages`
+  alone cannot). What this test proves is engine-behavior + wire-field carriage, **not** any q2-side
+  partition check.
+  - Add a minimal synthetic fixture `owns-cant-run` (echo-engine-shaped, Deno-gated, committed
+    `dist/…js` built with `q2 build-ts-extension`): it statically `Primary`-claims language `synth` (so
+    q2 assigns it ownership) but handles **no** computational language. Its `execute` reads
+    `options.ownedLanguages`; if any entry falls outside its (empty) capability set it throws a clear
+    `owns "<L>" but cannot run it` error.
+  - **Bind the test to the wire field.** The failure must key on `ownedLanguages.includes(...)`, so the
+    test reddens if `owned_languages` is not carried — i.e. it is a genuine assertion about Phase 4d-B/C,
+    not about cell contents. (Do not have the engine scan cells to reach the error; drive it from the
+    positive set.)
+  - Render a doc with a `{synth}` cell through the binary; assert the render fails with the engine's
+    self-enforcement error naming `synth`. Deno-gated skip exactly like Step 1.
+  - **Do NOT** assert any q2-*side* case-4 behavior: q2 forwards `owned_languages` and the engine decides.
+    Building a q2-side declaration-driven capability check would be a new capability model, explicitly out
+    of scope for this epic.
 
 - [ ] **Step 3: Correct the overstated `handled_languages` doc comment + cross-reference** — the block at `ts_protocol.rs:370-390` currently claims q2 "assigns every language present in the document an owner, or hard-fails … so 'L absent from this set' and 'L owned by me' coincide." That is **false** (present-but-unclaimed languages are silently unowned — Background fact 1). Replace that soundness sentence with the accurate statement and point at the new field:
 
@@ -422,8 +445,9 @@ Expected: PASS (or SKIP if deno absent — record which in the transcript).
 ```bash
 git add crates/quarto-core/tests/integration/echo_engine_e2e.rs \
         crates/quarto-core/src/engine/ts_protocol.rs \
-        crates/quarto-core/tests/fixtures/extensions/echo-engine/
-git commit -m "test(engine): e2e-verify ownedLanguages reaches an engine; cross-ref docs (Plan 4d-D)"
+        crates/quarto-core/tests/fixtures/extensions/echo-engine/ \
+        crates/quarto-core/tests/fixtures/extensions/owns-cant-run/
+git commit -m "test(engine): e2e-verify ownedLanguages reaches an engine + case-4 self-enforcement; cross-ref docs (Plan 4d-D)"
 ```
 
 ---
@@ -469,6 +493,9 @@ git commit -m "docs(design): reconcile engine-resolution + api-surface with owne
 - [ ] Backward-compatible: `#[serde(default)]` on the Rust field; no schema tightening;
   existing engine bundles ignore the new key (verified: echo/marimo fixtures unchanged pass).
 - [ ] `handled_languages` is unchanged; native (knitr/jupyter) paths are untouched.
+- [ ] Case-4 self-enforcement (Phase 4d-D Step 2b): a synthetic engine that owns a language it
+  cannot run detects it via `ownedLanguages` and errors loudly, with the test bound to the wire
+  field (reddens if `owned_languages` is not carried). No q2-side capability check is added.
 - [ ] The two wire fields cross-reference each other in the doc comments, and the
   overstated `handled_languages` "coincide" claim is corrected.
 - [ ] `engine-resolution.md` (§5/§9/§13) and `engine-api-surface.md` describe

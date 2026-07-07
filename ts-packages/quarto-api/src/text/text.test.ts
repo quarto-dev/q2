@@ -13,7 +13,9 @@ import {
   lineColToIndex,
   executeInlineCodeHandler,
   asYamlText,
+  postProcessRestorePreservedHtml,
 } from "./index.js";
+import type { PostProcessOptions } from "@quarto/types";
 
 // ─── lines ────────────────────────────────────────────────────────────────────
 
@@ -191,5 +193,21 @@ describe("text.asYamlText", () => {
     // yaml.stringify({}) returns '{}\n' — verify the real output
     // Revert body to return "" or "{}" → RED
     expect(asYamlText({})).toBe("{}\n");
+  });
+});
+
+// ─── postProcessRestorePreservedHtml (accepted-untested STUB) ─────────────────
+
+// accepted-untested (Plan 4b-D): not built yet (Plan 2 B2 stub). Loose guard
+// only: it fails LOUD (throws) rather than silently no-op'ing. NOT an
+// assertion that throwing is the desired end state — a future real
+// implementation must be free to stop throwing without reddening this test.
+describe("text.postProcessRestorePreservedHtml (accepted-untested stub)", () => {
+  it("throws rather than silently no-op'ing", () => {
+    expect(() =>
+      postProcessRestorePreservedHtml(
+        {} as unknown as PostProcessOptions,
+      ),
+    ).toThrow(/not yet implemented/i);
   });
 });

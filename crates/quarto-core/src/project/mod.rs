@@ -558,6 +558,43 @@ fn build_engine_config_map(
     Some(map)
 }
 
+/// Extract the ordering name (if any) from one project `_quarto.yml`
+/// `engines:` list entry (Plan 6 design contract `engine-and-engines-keys.md`).
+///
+/// The plural, project-level `engines:` key is Q1-compatible: entries come
+/// in THREE forms, only two of which contribute an ordering entry:
+///
+/// - **string** (`knitr`) — a bare ordering entry → `Some(name)`.
+/// - **`{path: …}` map** — Q1's external-engine loader. RESERVED / SKIPPED by
+///   q2 (engines arrive via `_extensions/` discovery instead) — contributes
+///   NO ordering entry and must never error → `None`.
+/// - **`{<name>: {claims: …}}` single-key map** — Plan 6's claim-table entry.
+///   Its KEY is the engine name, so it ALSO contributes an ordering entry;
+///   the payload is Plan 6's and is ignored here → `Some(name)`.
+///
+/// Shared by the project `engines:` ordering splice (this function's only
+/// caller today, [`build_engine_registry`]'s Task-9 site) and Plan 6's
+/// claim-table reader — keep this the single source of entry-name parsing so
+/// Plan 6 does not need a second one.
+#[cfg(not(target_arch = "wasm32"))]
+fn engine_entry_name(entry: &ConfigValue) -> Option<String> {
+    // String form: `- knitr`.
+    if let Some(name) = entry.as_plain_text() {
+        return Some(name);
+    }
+    // Map forms: distinguish `{path: …}` (reserved/skipped) from
+    // `{<name>: {claims: …}}` (single-key map; key IS the name).
+    if let Some(entries) = entry.as_map_entries() {
+        if entries.iter().any(|e| e.key == "path") {
+            return None;
+        }
+        if let [only] = entries {
+            return Some(only.key.clone());
+        }
+    }
+    None
+}
+
 /// Build the project's engine registry: built-ins + every extension-contributed
 /// engine, plus the shared `TsEngineHost` (constructed lazily — only when at
 /// least one `External` engine contribution is present).
@@ -752,7 +789,34 @@ fn build_engine_registry(
         .into_iter()
         .filter(|n| seen.insert(n.clone()))
         .collect();
-    // Task 9: splice _quarto.yml engines: list here for full resolution ordering.
+
+    // ── Task 9 / Plan 4b-C: splice project `_quarto.yml` `engines:` list ─────
+    // Q1 ordering semantics: user-declared project entries win the tiebreak —
+    // prepend their (deduped, in listed order) names ahead of the
+    // extension-contributed order already in `registry.contribution_order`,
+    // so they take effect BEFORE extension auto-promotion. All three grammar
+    // forms are parsed via `engine_entry_name` (Plan 6 reuses it). The
+    // prepended names re-enter the SAME step-6 validation below as any other
+    // contribution_order entry — the single validation site Plan 6 relies on,
+    // no second check needed here.
+    if let Some(project_engines) = config
+        .and_then(|c| c.metadata.as_ref())
+        .and_then(|m| m.get("engines"))
+        .and_then(|e| e.as_array())
+    {
+        let project_names: Vec<String> = project_engines
+            .iter()
+            .filter_map(engine_entry_name)
+            .collect();
+
+        let mut combined: Vec<String> = project_names;
+        combined.extend(registry.contribution_order.iter().cloned());
+        let mut seen = HashSet::new();
+        registry.contribution_order = combined
+            .into_iter()
+            .filter(|n| seen.insert(n.clone()))
+            .collect();
+    }
 
     // ── Step 6: Validate every name in contribution_order is registered (P1-3) ─
     for name in &registry.contribution_order {
@@ -1540,7 +1604,7 @@ mod tests {
             Extension {
                 id: ExtensionId::new("test-ext"),
                 title: "Test".to_string(),
-                author: "Test".to_string(),
+                author: Some("Test".to_string()),
                 version: None,
                 quarto_required: None,
                 path: PathBuf::from("/test"),

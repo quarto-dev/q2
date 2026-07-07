@@ -1,0 +1,13 @@
+title: Behave Engine
+author: Test
+version: 0.1.0
+contributes:
+  engines:
+    - path: dist/behave.js
+      name: behave
+      claims:
+        behave:
+          kind: primary
+          priority: 1
+      file-extensions: []
+      claims-files: []

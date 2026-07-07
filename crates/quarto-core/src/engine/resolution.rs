@@ -735,6 +735,27 @@ mod tests {
         MockEngine::new("jupyter", |_lang, _| LanguageClaim::Fallback(0))
     }
 
+    /// marimo-like: mirrors the static `claims` in the extension's
+    /// `_extension.yml` (see `crates/quarto-core/tests/fixtures/extensions/
+    /// marimo/_extensions/marimo/_extension.yml`):
+    ///   python  { whenClass: marimo } → Primary(2)
+    ///   python.marimo                 → Primary(1)
+    ///   sql     { whenClass: marimo } → Primary(2)
+    ///   sql                           → Interop(0)
+    ///   sql.marimo                    → Primary(1)
+    /// Crucially, marimo claims NOTHING for a bare `{python}`/`{r}` cell —
+    /// that is what lets a co-engine own those languages.
+    fn mock_marimo() -> MockEngine {
+        MockEngine::new("marimo", |lang, first_class| match (lang, first_class) {
+            ("python", Some("marimo")) => LanguageClaim::Primary(2),
+            ("python.marimo", _) => LanguageClaim::Primary(1),
+            ("sql", Some("marimo")) => LanguageClaim::Primary(2),
+            ("sql", _) => LanguageClaim::Interop(0),
+            ("sql.marimo", _) => LanguageClaim::Primary(1),
+            _ => LanguageClaim::None,
+        })
+    }
+
     // ── §4.4 worked cases ─────────────────────────────────────────────────────
 
     /// implicit {r}+{python} → [knitr], python→knitr (T3 Interop, present).
@@ -1182,6 +1203,144 @@ mod tests {
         );
     }
 
+    /// marimo file-claim — CORE INVARIANT: a mixed `{python .marimo}` + `{r}`
+    /// document, when NOT file-claimed (`claimed = None`), resolves to a
+    /// multi-engine sequence — marimo owns python (its Primary(2) whenClass
+    /// claim), knitr owns r — and marimo's leave-alone set therefore INCLUDES
+    /// "r". This is the whole point of dropping marimo's `claimsFile`: once the
+    /// file is not exclusively claimed, the ordinary tier resolver already
+    /// composes both engines correctly. No q2-core change is required.
+    ///
+    /// Named revert (binds to marimo's language claim, the thing that makes
+    /// multi-engine work): remove marimo's `("python", Some("marimo")) =>
+    /// Primary(2)` arm from `mock_marimo` → python is unclaimed by marimo,
+    /// falls to knitr (T3 Interop), `ownership["python"] == "marimo"` goes RED.
+    /// (Proven RED during development.)
+    ///
+    /// Discriminator check (skill step 2): the assertion on
+    /// `handled_languages_for("marimo") ∋ "r"` differs across the states this
+    /// test distinguishes — with knitr owning r it is present; if r were
+    /// unowned or owned BY marimo it would be absent. It is not collapsed.
+    #[test]
+    fn test_marimo_plus_r_unclaimed_resolves_multi_engine() {
+        let registry = mock_registry(vec![mock_marimo(), mock_knitr(), mock_jupyter()]);
+        let ast = ast_with_blocks(vec![
+            engine_cell_with_class("python", "marimo"),
+            engine_cell("r"),
+        ]);
+        let meta = empty_meta();
+
+        // `claimed = None` models the post-fix world: marimo no longer
+        // file-claims the `.qmd`, so the tier resolver runs.
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        let names: Vec<_> = res.sequence.iter().map(|e| e.name.as_str()).collect();
+        assert!(
+            names.contains(&"marimo") && names.contains(&"knitr"),
+            "expected a multi-engine sequence containing both marimo and knitr, got {names:?}"
+        );
+        assert_eq!(
+            res.ownership.get("python").map(|s| s.as_str()),
+            Some("marimo"),
+            "marimo's Primary(2) whenClass=marimo claim must own python"
+        );
+        assert_eq!(
+            res.ownership.get("r").map(|s| s.as_str()),
+            Some("knitr"),
+            "knitr must own the bare {{r}} cell — marimo makes no claim on r"
+        );
+
+        let handled = res.handled_languages_for("marimo");
+        assert!(
+            handled.contains(&"r".to_string()),
+            "marimo's leave-alone set must include r (owned by knitr) so marimo \
+             passes the {{r}} cell through for knitr to execute; got {handled:?}"
+        );
+    }
+
+    /// marimo file-claim — CHARACTERIZATION of the bug being fixed: when the
+    /// file IS claimed by marimo (`claimed = Some("marimo")`, the pre-fix
+    /// behavior driven by `claimsFile`), the CLAIMED SHORT-CIRCUIT collapses
+    /// resolution to `[marimo]` with EMPTY ownership — so `handled_languages_
+    /// for("marimo")` does NOT include "r", the {r} cell is left to no engine,
+    /// and it renders raw. This test documents WHY marimo's `claimsFile` is
+    /// wrong for a mixed doc; paired with the test above it proves the entire
+    /// difference is the file-claim, not any q2-core resolver defect.
+    #[test]
+    fn test_marimo_file_claim_collapses_to_single_engine_bug() {
+        let registry = mock_registry(vec![mock_marimo(), mock_knitr(), mock_jupyter()]);
+        let ast = ast_with_blocks(vec![
+            engine_cell_with_class("python", "marimo"),
+            engine_cell("r"),
+        ]);
+        let meta = empty_meta();
+
+        let res = resolve_engines(&meta, &ast, &registry, Some("marimo"));
+
+        let names: Vec<_> = res.sequence.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["marimo"],
+            "file-claim short-circuit collapses to a single engine"
+        );
+        assert!(
+            res.ownership.is_empty(),
+            "file-claim short-circuit leaves ownership empty — no co-engine"
+        );
+        assert!(
+            !res.handled_languages_for("marimo")
+                .contains(&"r".to_string()),
+            "the bug: r is NOT in marimo's leave-alone set, so no engine runs {{r}}"
+        );
+    }
+
+    /// marimo file-claim — REGRESSION guard 1: a marimo-ONLY doc still selects
+    /// marimo without `claimsFile`. This is one of the two paths `claimsFile`
+    /// used to cover; claimsLanguage covers it via Primary(2).
+    #[test]
+    fn test_marimo_only_unclaimed_still_selects_marimo() {
+        let registry = mock_registry(vec![mock_marimo(), mock_knitr(), mock_jupyter()]);
+        let ast = ast_with_blocks(vec![engine_cell_with_class("python", "marimo")]);
+        let meta = empty_meta();
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        assert_eq!(
+            res.sequence
+                .iter()
+                .map(|e| e.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["marimo"],
+            "marimo-only doc must resolve to exactly [marimo] via claimsLanguage"
+        );
+        assert_eq!(
+            res.ownership.get("python").map(|s| s.as_str()),
+            Some("marimo")
+        );
+    }
+
+    /// marimo file-claim — REGRESSION guard 2: `engine: marimo` frontmatter
+    /// still selects marimo (the other path `claimsFile` covered). With an
+    /// explicit engine key, marimo is seeded present and owns its
+    /// `{python .marimo}` cell via T1.
+    #[test]
+    fn test_marimo_explicit_engine_key_still_selects_marimo() {
+        let registry = mock_registry(vec![mock_marimo(), mock_knitr(), mock_jupyter()]);
+        let ast = ast_with_blocks(vec![engine_cell_with_class("python", "marimo")]);
+        let meta = map_config(vec![("engine", string_config("marimo"))]);
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        assert!(
+            res.sequence.iter().any(|e| e.name == "marimo"),
+            "engine: marimo must keep marimo in the sequence"
+        );
+        assert_eq!(
+            res.ownership.get("python").map(|s| s.as_str()),
+            Some("marimo")
+        );
+    }
+
     /// De-duplication: first occurrence of a language wins its first_class.
     #[test]
     fn test_language_deduplication_first_occurrence_wins() {
@@ -1414,6 +1573,328 @@ mod tests {
         assert_eq!(
             count, 1,
             "exactly one engine_resolution event must fire per resolve_engines call"
+        );
+    }
+
+    // ── Plan 4b Phase B — resolution tier matrix, pure unit rows (B1–B9) ──────
+    //
+    // These extend the synthetic-registry harness above (MockEngine + claim_fn)
+    // to bind the T1–T4 tier comparators, kind-dominance, contribution_order
+    // tiebreak, and whenClass conditioning at the tier level. Each test names
+    // its revert seam — the exact production hunk whose removal reddens it —
+    // in a comment. Verification log:
+    // `.superpowers/sdd/plan4b-task-Bunit-report.md`.
+
+    /// interop-r: Primary(1) for "rsynth", Interop(0) for "pysynth". Shared by
+    /// B3–B6 (all exercise T3's presence gate around the same two languages).
+    fn mock_interop_r() -> MockEngine {
+        MockEngine::new("interop-r", |lang, _| match lang {
+            "rsynth" => LanguageClaim::Primary(1),
+            "pysynth" => LanguageClaim::Interop(0),
+            _ => LanguageClaim::None,
+        })
+    }
+
+    /// fallback-univ: Fallback(0) for ANY language (universal fallback, like
+    /// jupyter but under a distinct name for the B2/B5/B6 tier rows).
+    fn mock_fallback_univ() -> MockEngine {
+        MockEngine::new("fallback-univ", |_lang, _| LanguageClaim::Fallback(0))
+    }
+
+    /// B1 — T1 baseline: a lone Primary claim wins its language outright.
+    ///
+    /// revert seam: T1 comparator (~:466) — neutralizing
+    /// `p > best.unwrap().1` (e.g. forcing the condition false) leaves
+    /// "synth" unclaimed by T1, and no other tier can claim it (alpha's only
+    /// claim is Primary), so `ownership.get("synth")` goes from
+    /// `Some("alpha")` to `None`.
+    #[test]
+    fn test_b1_t1_baseline_primary_wins() {
+        let alpha = MockEngine::new("alpha", |lang, _| {
+            if lang == "synth" {
+                LanguageClaim::Primary(1)
+            } else {
+                LanguageClaim::None
+            }
+        });
+        let registry = mock_registry(vec![alpha]);
+        let ast = ast_with_blocks(vec![engine_cell("synth")]);
+        let meta = empty_meta();
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        assert_eq!(
+            res.ownership.get("synth").map(|s| s.as_str()),
+            Some("alpha"),
+            "T1 Primary: alpha's sole Primary claim on synth must win"
+        );
+    }
+
+    /// B2 — T2 explicit Fallback: an explicitly-listed universal Fallback
+    /// engine picks up a language no Primary claims, even though another
+    /// explicit engine (interop-r) is also listed but has no claim on it.
+    ///
+    /// Doc composition: the doc's only cell language is "orphan" — NOT
+    /// "rsynth" (which would make interop-r a Primary owner and, via
+    /// presence, a T3 Interop candidate too). interop-r is present only by
+    /// explicit declaration and contributes no claim on "orphan" at all.
+    ///
+    /// revert seam: T2 loop (~:491) — commenting out the T2 loop leaves
+    /// "orphan" unclaimed (T4 is gated off — `engine:` key present), so
+    /// `ownership.get("orphan")` goes from `Some("fallback-univ")` to `None`.
+    #[test]
+    fn test_b2_t2_explicit_fallback_wins_unclaimed_language() {
+        let registry = mock_registry(vec![mock_interop_r(), mock_fallback_univ()]);
+        let ast = ast_with_blocks(vec![engine_cell("orphan")]);
+        let meta = map_config(vec![(
+            "engine",
+            array_config(vec![
+                string_config("interop-r"),
+                string_config("fallback-univ"),
+            ]),
+        )]);
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        assert_eq!(
+            res.ownership.get("orphan").map(|s| s.as_str()),
+            Some("fallback-univ"),
+            "T2 explicit Fallback: fallback-univ owns orphan (interop-r has no claim on it)"
+        );
+    }
+
+    /// B3 — T3 presence-gate (+): with interop-r explicitly listed and
+    /// Primary-owning "rsynth", its Interop claim on "pysynth" ALSO fires —
+    /// presence-gating admits it because it's already present (both via
+    /// explicit declaration and via its own T1 win). Both languages land on
+    /// the SAME engine — that's the discriminator.
+    ///
+    /// revert seam: T3 Interop loop (~:504–516) — disabling the loop leaves
+    /// "pysynth" unowned (rsynth is unaffected, still owned via T1), so
+    /// `ownership.get("pysynth")` goes from `Some("interop-r")` to `None`.
+    #[test]
+    fn test_b3_t3_presence_gate_admits_present_engine() {
+        let registry = mock_registry(vec![mock_interop_r()]);
+        let ast = ast_with_blocks(vec![engine_cell("rsynth"), engine_cell("pysynth")]);
+        let meta = map_config(vec![(
+            "engine",
+            array_config(vec![string_config("interop-r")]),
+        )]);
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        assert_eq!(
+            res.ownership.get("rsynth").map(|s| s.as_str()),
+            Some("interop-r"),
+            "T1: interop-r's Primary claim owns rsynth"
+        );
+        assert_eq!(
+            res.ownership.get("pysynth").map(|s| s.as_str()),
+            Some("interop-r"),
+            "T3 Interop: interop-r is present (rsynth win + explicit) so its \
+             Interop claim on pysynth also fires"
+        );
+    }
+
+    /// B4 — T3 presence-gate (−): with NO `engine:` key and NO other language
+    /// making interop-r present, its Interop claim on "pysynth" is DENIED —
+    /// interop-r never appears in the sequence at all.
+    ///
+    /// revert seam: presence-gate condition (~:504–516) — removing
+    /// `if !present.contains(*name) { continue; }` lets T3 consider
+    /// interop-r despite it never having become present, dragging it in as
+    /// pysynth's owner, so `names.contains(&"interop-r")` flips from `false`
+    /// to `true`.
+    #[test]
+    fn test_b4_t3_presence_gate_denies_absent_engine() {
+        let registry = mock_registry(vec![mock_interop_r()]);
+        let ast = ast_with_blocks(vec![engine_cell("pysynth")]);
+        let meta = empty_meta();
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        let names: Vec<_> = res.sequence.iter().map(|e| e.name.as_str()).collect();
+        assert!(
+            !names.contains(&"interop-r"),
+            "interop-r must be ABSENT from the sequence: it never became \
+             present (no rsynth, no explicit engine: key), so its Interop \
+             claim on pysynth must be denied by the presence gate; got: {:?}",
+            names
+        );
+    }
+
+    /// B5 — T4 implicit Fallback: with NO `engine:` key, "pysynth" is denied
+    /// to interop-r (not present — same gate as B4) but IS claimed by
+    /// fallback-univ via T4, which considers ALL registry engines regardless
+    /// of presence.
+    ///
+    /// revert seam: T4 loop (~:539) — disabling the loop leaves "pysynth"
+    /// unclaimed (interop-r still denied by the presence gate), so
+    /// `ownership.get("pysynth")` goes from `Some("fallback-univ")` to `None`.
+    #[test]
+    fn test_b5_t4_implicit_fallback_wins_unclaimed_language() {
+        let registry = mock_registry(vec![mock_interop_r(), mock_fallback_univ()]);
+        let ast = ast_with_blocks(vec![engine_cell("pysynth")]);
+        let meta = empty_meta();
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        assert_eq!(
+            res.ownership.get("pysynth").map(|s| s.as_str()),
+            Some("fallback-univ"),
+            "T4 implicit Fallback: fallback-univ claims pysynth; interop-r's \
+             Interop claim is denied (never present)"
+        );
+    }
+
+    /// B6 — T4 gated off: the SAME doc as B5, but with an explicit `engine:`
+    /// key present. fallback-univ — never explicitly listed and never
+    /// claimed via any earlier tier — must be ABSENT from the sequence.
+    ///
+    /// revert seam: implicit gate `has_engine_key` (~:392) — forcing this to
+    /// `false` makes the resolver fall through to the top-level engine-key
+    /// shorthand scan instead of `detect_engines`, which finds no match in
+    /// this doc's metadata, so `raw_explicit` comes back empty; `is_implicit`
+    /// then flips `true` and T4 fires for the whole registry, adding
+    /// fallback-univ — so `names.contains(&"fallback-univ")` flips from
+    /// `false` to `true`.
+    #[test]
+    fn test_b6_t4_gated_off_under_explicit_sequence() {
+        let registry = mock_registry(vec![mock_interop_r(), mock_fallback_univ()]);
+        let ast = ast_with_blocks(vec![engine_cell("pysynth")]);
+        let meta = map_config(vec![(
+            "engine",
+            array_config(vec![string_config("interop-r")]),
+        )]);
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        let names: Vec<_> = res.sequence.iter().map(|e| e.name.as_str()).collect();
+        assert!(
+            !names.contains(&"fallback-univ"),
+            "fallback-univ must be ABSENT: T4 is gated off under an explicit \
+             `engine:` sequence; got: {:?}",
+            names
+        );
+    }
+
+    /// B7 — kind dominates priority: alpha's Primary(-100) beats
+    /// fallback-univ's Fallback(100) for the SAME language, despite the
+    /// numerically much lower priority — Primary always outranks Fallback.
+    ///
+    /// revert seam: T1 runs before T2/T4 (tier order) — disabling the T1
+    /// loop lets the language reach T4 (implicit, no `engine:` key) where
+    /// fallback-univ's Fallback(100) is the only claim, so
+    /// `ownership.get("kdp")` goes from `Some("alpha")` to
+    /// `Some("fallback-univ")`.
+    #[test]
+    fn test_b7_kind_dominates_priority() {
+        let alpha = MockEngine::new("alpha", |lang, _| {
+            if lang == "kdp" {
+                LanguageClaim::Primary(-100)
+            } else {
+                LanguageClaim::None
+            }
+        });
+        let fallback_univ = MockEngine::new("fallback-univ", |lang, _| {
+            if lang == "kdp" {
+                LanguageClaim::Fallback(100)
+            } else {
+                LanguageClaim::None
+            }
+        });
+        let registry = mock_registry(vec![alpha, fallback_univ]);
+        let ast = ast_with_blocks(vec![engine_cell("kdp")]);
+        let meta = empty_meta();
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        assert_eq!(
+            res.ownership.get("kdp").map(|s| s.as_str()),
+            Some("alpha"),
+            "kind dominates priority: Primary(-100) beats Fallback(100)"
+        );
+    }
+
+    /// B8 — contribution_order tiebreak: alpha and beta both claim
+    /// Primary(1) (an exact priority tie) with NO `engine:` key. The winner
+    /// is decided by candidate order, which `candidate_engines` derives from
+    /// `registry.contribution_order()`; the alpha/beta NAME is the
+    /// discriminator (not some priority difference).
+    ///
+    /// revert seam: `>` → `>=` in the T1 comparator (~:466) — with `>=`, a
+    /// same-priority LATER candidate overwrites `best`, so the last-in-order
+    /// engine wins instead of the first, flipping `ownership.get("tie")`
+    /// from `Some("alpha")` to `Some("beta")`.
+    #[test]
+    fn test_b8_contribution_order_tiebreak() {
+        let alpha = MockEngine::new("alpha", |lang, _| {
+            if lang == "tie" {
+                LanguageClaim::Primary(1)
+            } else {
+                LanguageClaim::None
+            }
+        });
+        let beta = MockEngine::new("beta", |lang, _| {
+            if lang == "tie" {
+                LanguageClaim::Primary(1)
+            } else {
+                LanguageClaim::None
+            }
+        });
+        let mut registry = EngineRegistry::empty();
+        registry.register(Arc::new(alpha));
+        registry.register(Arc::new(beta));
+        registry.contribution_order = vec!["alpha".to_string(), "beta".to_string()];
+
+        let ast = ast_with_blocks(vec![engine_cell("tie")]);
+        let meta = empty_meta();
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        let expected_first = registry
+            .contribution_order()
+            .first()
+            .expect("contribution_order must be non-empty")
+            .clone();
+        assert_eq!(
+            expected_first, "alpha",
+            "sanity: contribution_order()[0] must be alpha"
+        );
+        assert_eq!(
+            res.ownership.get("tie").map(|s| s.as_str()),
+            Some(expected_first.as_str()),
+            "equal-priority Primary tie: first-in-contribution_order (alpha) wins"
+        );
+    }
+
+    /// B9 — whenClass conditional (pure, no registry): a Primary claim
+    /// gated by `when_class: Some("marimo")` only converts when the cell's
+    /// first_class matches; a bare cell (no first_class) gets `None`.
+    ///
+    /// revert seam: the `when_class` guard in
+    /// `static_claim_to_language_claim` (`extension/types.rs:~181–182`) —
+    /// removing it makes the bare-cell call also return `Primary(1)`, so the
+    /// `LanguageClaim::None` assertion goes RED.
+    #[test]
+    fn test_b9_when_class_conditional_claim() {
+        use crate::extension::types::{ClaimKind, StaticLanguageClaim, combine_claims};
+
+        let claims = vec![StaticLanguageClaim {
+            kind: ClaimKind::Primary,
+            priority: None,
+            when_class: Some("marimo".to_string()),
+        }];
+
+        assert_eq!(
+            combine_claims(&claims, Some("marimo")),
+            LanguageClaim::Primary(1),
+            "{{pysynth .marimo}}: first_class matches when_class → claims"
+        );
+        assert_eq!(
+            combine_claims(&claims, None),
+            LanguageClaim::None,
+            "bare {{pysynth}}: no first_class → when_class mismatch → None"
         );
     }
 }

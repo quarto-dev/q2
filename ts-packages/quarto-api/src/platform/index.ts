@@ -132,6 +132,11 @@ export interface PlatformHost {
    * Read environment variables.
    * General-purpose env access — can be used by engine authors who need to
    * read the process environment (e.g. for conditional behavior or debugging).
+   *
+   * accepted-untested (Plan 4b-D): implemented in the real host
+   * (`@quarto/engine-host-deno` `deno-host.ts`), but has no production
+   * caller inside `@quarto/api` today — only test fakes exercise it. Record
+   * only; the keep-or-remove decision belongs to Plan 2 Phase A.
    */
   env: {
     get(key: string): string | undefined;
@@ -152,6 +157,11 @@ export interface PlatformHost {
   /**
    * Resolve a path to its canonical absolute form (follows symlinks).
    * Equivalent to `Deno.realPathSync` / `fs.realpathSync`.
+   *
+   * accepted-untested (Plan 4b-D): implemented in the real host
+   * (`@quarto/engine-host-deno` `deno-host.ts`), but has no production
+   * caller inside `@quarto/api` today — only test fakes exercise it. Record
+   * only; the keep-or-remove decision belongs to Plan 2 Phase A.
    */
   realPath(path: string): string;
 

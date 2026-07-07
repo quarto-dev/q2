@@ -1,0 +1,12 @@
+title: Mismatch Engine
+author: Test
+version: 0.1.0
+contributes:
+  engines:
+    - path: dist/mismatch.js
+      name: mismatch
+      claims:
+        synth:
+          kind: primary
+      file-extensions: []
+      claims-files: []

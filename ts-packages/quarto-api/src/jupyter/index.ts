@@ -46,6 +46,14 @@ const kJupyterNotebookExtensions = [".ipynb"];
  * assignable to any function type, sync or async — only the static checker
  * needs the assist.
  */
+// accepted-untested (Plan 4b-E, record 5): no q2 TS runtime consumer needs
+// any of the 15 throwers below — Julia (the current in-tree jupyter
+// consumer) only calls the 7 real methods + `notebookExtensions`. The loose
+// guard binding this is `index.test.ts`'s `it.each(STUB_KEYS)("%s throws
+// (NotImplemented stub)", ...)`: it asserts each stub FAILS LOUD (throws,
+// namespace stays total, no silent no-op can slip in), NOT that throwing is
+// the desired permanent state — a future real implementation is free to stop
+// throwing without that reading as a regression.
 function notImplemented<T extends (...args: never[]) => unknown>(
   method: string,
 ): T {

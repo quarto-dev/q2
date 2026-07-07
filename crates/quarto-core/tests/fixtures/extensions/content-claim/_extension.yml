@@ -1,0 +1,9 @@
+title: Content Claim Engine
+author: Test
+version: 0.1.0
+contributes:
+  engines:
+    - path: dist/content-claim.js
+      name: content-claim
+      file-extensions:
+        - .syn

@@ -56,7 +56,7 @@ impl fmt::Display for ExtensionId {
 pub struct Extension {
     pub id: ExtensionId,
     pub title: String,
-    pub author: String,
+    pub author: Option<String>,
     pub version: Option<String>,
     pub quarto_required: Option<String>,
     /// Absolute path to the extension directory.

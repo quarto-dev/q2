@@ -226,7 +226,18 @@ function isWarningOutput(output: JupyterOutput): boolean {
 // ─── portable helpers (no Deno.* / node:*) ──────────────────────────────────
 
 /** Strip ANSI escape / control sequences. Portable replacement for Deno's
- * `colors.stripAnsiCode` (the canonical `ansi-regex` pattern). */
+ * `colors.stripAnsiCode` (the canonical `ansi-regex` pattern).
+ *
+ * accepted-untested (Plan 4b-E, record 2): "no colorization" — this strips
+ * ANSI color codes rather than translating them to `<span>` colorization
+ * (Q1's `options.toHtml` ansi_up branch is intentionally not ported; see the
+ * module doc comment "DOCUMENTED SIMPLIFICATIONS" above). The POSITIVE
+ * property both call sites below (`mdOutputStream`, `mdOutputError`) are
+ * bound to — no raw ESC escape byte survives into the emitted markdown/HTML
+ * — is tested in to-markdown.test.ts (E1 for the stream path, Row 14 for the
+ * error path). Do NOT add a test asserting color/styling is absent; that
+ * would freeze the "no colorization" gap as permanent rather than recording
+ * it as a known v1 limitation. */
 // eslint-disable-next-line no-control-regex
 const ANSI_PATTERN =
   // eslint-disable-next-line no-control-regex
@@ -1045,6 +1056,14 @@ export async function jupyterToMarkdown(
     dependencies,
     htmlPreserve,
     // Exact Q1 parity: jupyterToMarkdown never populates `pandoc`.
+    //
+    // accepted-untested (Plan 4b-E, record 3): "no cross-cell pandoc
+    // metadata accumulation" is a prose note, not a testable gap — there is
+    // no `pandoc?` field anywhere under quarto-api/src/ today (confirmed by
+    // grep at Task E pre-flight), so there is nothing for a fixture to
+    // exercise. If a future reader adds a `pandoc?` field to
+    // JupyterToMarkdownResult (or wires cross-cell accumulation into it),
+    // re-derive a real test then — do not add a placeholder assertion now.
     pandoc: undefined,
   };
 }

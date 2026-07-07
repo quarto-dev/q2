@@ -194,6 +194,11 @@ child's stdin/stdout); the deferred Phase 1.6 `TcpTransport` and the future
 
 ## Deferred: Phase 1.6 — move the protocol off stdout (loopback TCP)
 
+> **Plan of record (2026-07-08):**
+> `claude-notes/plans/2026-07-08-plan1a6-off-stdout-loopback-tcp.md` (Plan 1a.6).
+> This section remains the canonical design rationale; the plan carries the
+> checklist, tests, and engine-impact analysis.
+
 Multiplexing (above) does **not** require leaving stdout; it's orthogonal. The
 *reason* to leave stdout is to delete the `console.log` footgun (an engine
 writing to stdout corrupts the protocol). That cleanup is **Phase 1.6,

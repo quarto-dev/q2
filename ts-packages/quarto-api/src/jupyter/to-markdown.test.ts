@@ -291,6 +291,83 @@ describe("Row 14 — error output has its ANSI escape codes stripped", () => {
   });
 });
 
+// ─── E1 — ANSI strip: no raw ESC leaks into HTML output (Plan 4b Phase E) ───
+//
+// Row 14 (above) already binds the ANSI-strip revert seam at the ERROR path
+// (`mdOutputError`, to-markdown.ts:~405). E1 adds the companion binding at
+// the STREAM path (`mdOutputStream`, to-markdown.ts:~395) — the two
+// `stripAnsiCode` call sites the Task E brief names as E1's revert seam.
+//
+// Discipline: assert only the POSITIVE correctness property -- no raw ESC
+// escape byte survives into the emitted markdown/HTML. Do NOT assert
+// anything about color/styling being absent; that "ANSI is strip-only, not
+// colorized" divergence is recorded as its own accepted-untested note next
+// to `ANSI_PATTERN` in to-markdown.ts (record 2) -- it is not this test's
+// job to pin that gap in place.
+//
+// Named revert: comment out `.map(stripAnsiCode)` at to-markdown.ts:395
+// (mdOutputStream) => the escape byte leaks through => RED.
+
+describe("E1 - ANSI strip on stdout stream output: no raw ESC byte leaks", () => {
+  const ESC = String.fromCharCode(27);
+  const esc = ESC + "[31m";
+  const reset = ESC + "[0m";
+
+  function ansiStreamNotebook(): JupyterNotebook {
+    return pythonKernelNotebook([
+      {
+        cell_type: "code",
+        metadata: {},
+        source: ["print('hi')\n"],
+        outputs: [
+          {
+            output_type: "stream",
+            name: "stdout",
+            text: [`${esc}colored${reset} plain\n`],
+          },
+        ],
+      },
+    ]);
+  }
+
+  it("emits the stream text with the ANSI escape byte absent when targeting HTML", async () => {
+    const { host } = makeRecordingHost();
+    const result = await jupyterToMarkdown(
+      host,
+      ansiStreamNotebook(),
+      makeOptions({ toHtml: true }),
+    );
+
+    const md = result.cellOutputs[0].markdown;
+    // positive property: no raw escape byte
+    expect(md).not.toContain(ESC);
+    // the surrounding text content survives the strip (not the whole line
+    // discarded)
+    expect(md).toContain("colored");
+    expect(md).toContain("plain");
+  });
+
+  // "latex/md/ipynb unaffected" (brief): stripping is unconditional, not
+  // gated behind options.toHtml -- bind that across the other three format
+  // flags too.
+  it.each([
+    ["toLatex", { toLatex: true }],
+    ["toMarkdown", { toMarkdown: true }],
+    ["toIpynb", { toIpynb: true }],
+  ] as const)(
+    "also strips the ANSI byte when targeting %s",
+    async (_label, over) => {
+      const { host } = makeRecordingHost();
+      const result = await jupyterToMarkdown(
+        host,
+        ansiStreamNotebook(),
+        makeOptions(over),
+      );
+      expect(result.cellOutputs[0].markdown).not.toContain(ESC);
+    },
+  );
+});
+
 // ─── Row 15 — Julia-consumer cellOutput shape ───────────────────────────────
 
 describe("Row 15 — cellOutputs carry {id, markdown} objects", () => {

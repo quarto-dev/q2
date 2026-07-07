@@ -106,6 +106,11 @@ pub enum ExecutionError {
     /// thread hits EOF. No Q1 equivalent (in-process engines can't crash
     /// independently); mirrors `jupyter::error::ProcessExited`, plus the captured
     /// stderr tail. See plan1a-host error category 6.
+    ///
+    /// Poisons the instance AND resets the transport (Plan 4b Phase F,
+    /// `TsEngine::execute`'s poison guard + `TsEngineHost::reset_after_crash`)
+    /// — unlike `Cancelled`/`Timeout`, which poison the instance only (the
+    /// process is still alive in that case, so the transport stays valid).
     #[error(
         "engine host subprocess crashed while serving '{engine}' (exit code: {code:?})\n{stderr}"
     )]
@@ -129,7 +134,8 @@ pub enum ExecutionError {
     /// The engine owns the language (via resolution) but has no handler for it.
     /// E.g. jupyter resolved as owner of `{sql}` but has no SQL kernel.
     /// This is a clean refusal — it does **not** poison the instance (only
-    /// `Cancelled | Timeout` do). See plan1a-engine §10 case 4.
+    /// `Cancelled | Timeout | ProcessCrashed` do). See plan1a-engine §10 case 4
+    /// (Cancelled/Timeout) and Plan 4b Phase F (ProcessCrashed).
     #[error("engine `{engine}` has no handler for language `{language}`")]
     NoHandlerForLanguage {
         /// The engine that was asked to run the language.

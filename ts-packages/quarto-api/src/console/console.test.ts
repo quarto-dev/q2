@@ -54,6 +54,22 @@ describe("console.info", () => {
     expect(host.log.warning).not.toHaveBeenCalled();
     expect(host.log.error).not.toHaveBeenCalled();
   });
+
+  // accepted-untested (Plan 4b-D): styling options (bold/format) are v1
+  // no-ops — see console/index.ts. Loose guard only: doesn't throw, message
+  // still flows. Uses a LOOSE substring check (the file's own `includes`
+  // idiom, cf. the withSpinner tests below) so a future styling backend that
+  // wraps/formats the string before it reaches host.log.info would NOT redden
+  // this test — an improvement must not read as a regression. NOT an
+  // assertion that styling is discarded/absent.
+  it("does not throw when styling options are passed, and the message still reaches the host log", () => {
+    expect(() =>
+      cons.info("styled message", { bold: true, format: (m) => `**${m}**` }),
+    ).not.toThrow();
+    expect(host.log.info).toHaveBeenCalled();
+    const calls = host.log.info.mock.calls.map((c) => c[0] as string);
+    expect(calls.some((msg) => msg.includes("styled message"))).toBe(true);
+  });
 });
 
 // ─── console.warning ──────────────────────────────────────────────────────────

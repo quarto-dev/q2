@@ -1,0 +1,13 @@
+title: Beta Engine
+author: Test
+version: 0.1.0
+contributes:
+  engines:
+    - path: dist/beta.js
+      name: beta
+      claims:
+        synth:
+          kind: primary
+          priority: 1
+      file-extensions: []
+      claims-files: []

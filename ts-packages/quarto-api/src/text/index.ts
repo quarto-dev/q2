@@ -155,6 +155,11 @@ function notYetImplementedError(method: string): Error {
  * STUB — throws `notYetImplementedError` until the file-IO body lands (Plan 2 B2).
  * Typed to the real SDK signature (`PostProcessOptions`) so the `text` namespace
  * conforms to `QuartoAPI["text"]` and the harness can drop its local stub.
+ *
+ * accepted-untested (Plan 4b-D): not built yet. Fails loud (throws) rather
+ * than silently no-op'ing — see the loose guard in text.test.ts. Do not treat
+ * "throws" as the desired end state; a future real implementation must be
+ * free to stop throwing without that reading as a regression.
  */
 export function postProcessRestorePreservedHtml(
   _options: PostProcessOptions,

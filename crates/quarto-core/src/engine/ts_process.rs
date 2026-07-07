@@ -27,7 +27,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{
-    Arc, Mutex, OnceLock,
+    Arc, Mutex,
     atomic::{AtomicBool, AtomicU64, Ordering},
     mpsc::{self, SyncSender},
 };
@@ -383,7 +383,15 @@ struct PendingSlot {
 /// from running — the spike-confirmed deadlock described in plan1a-host).
 pub struct TsEngineHost {
     /// Shared write half — set by `ensure_started`.
-    write: OnceLock<Arc<dyn EngineTransport>>,
+    ///
+    /// Resettable (`Mutex<Option<..>>`, NOT `OnceLock`): a `ProcessCrashed`
+    /// observation (dead subprocess) calls [`Self::reset_after_crash`],
+    /// which clears this so the NEXT `ensure_started()` performs a genuine
+    /// fresh spawn instead of reusing a transport whose stdin pipe is
+    /// broken. Timeout/Cancel do NOT clear this — the process stays alive,
+    /// so the existing transport remains valid and is reused (see
+    /// `TsEngine::execute`'s poison guard, `ts_engine.rs`).
+    write: Mutex<Option<Arc<dyn EngineTransport>>>,
     /// Shared child handle for kill/wait. `Option` for single-shot reap.
     child: Arc<Mutex<Option<Child>>>,
     /// Set before any kill so the reader can tell expected exit from crash.
@@ -401,7 +409,16 @@ pub struct TsEngineHost {
     /// Process-stable global config sent once via `Init` at spawn.
     global: HostGlobalConfig,
     /// Number of real subprocess spawns (incremented in `ensure_started_inner`).
-    #[cfg(test)]
+    ///
+    /// Doubles as a **generation counter**: `TsEngine::ensure_loaded`
+    /// (`ts_engine.rs`) compares its own cached "generation as of last
+    /// successful `LoadEngine`" against this value to detect that a crash
+    /// respawned the subprocess out from under it — a fresh Deno process
+    /// has an empty `loadedByPath`/`engineByName` (host.ts), so the module
+    /// must be re-`LoadEngine`'d before the next `LaunchEngine`, even though
+    /// the cached `LoadEngineResult` (static discovery metadata) itself
+    /// never changes and stays cached forever. No longer `#[cfg(test)]`-only
+    /// — production code reads it now, not just test assertions.
     spawn_count: AtomicU64,
     /// Number of `LoadEngine` verbs sent through `request()`.
     #[cfg(test)]
@@ -427,7 +444,7 @@ impl TsEngineHost {
     /// spawn yet.
     pub fn new(global: HostGlobalConfig) -> Self {
         Self {
-            write: OnceLock::new(),
+            write: Mutex::new(None),
             child: Arc::new(Mutex::new(None)),
             shutting_down: Arc::new(AtomicBool::new(false)),
             pending: Arc::new(Mutex::new(HashMap::new())),
@@ -436,7 +453,6 @@ impl TsEngineHost {
             stderr_reader: Mutex::new(None),
             recent_stderr: Arc::new(Mutex::new(VecDeque::with_capacity(RECENT_STDERR_CAP))),
             global,
-            #[cfg(test)]
             spawn_count: AtomicU64::new(0),
             #[cfg(test)]
             load_engine_count: AtomicU64::new(0),
@@ -448,7 +464,7 @@ impl TsEngineHost {
     /// Test-only: build a host around a caller-supplied pair of halves,
     /// **bypassing subprocess spawn but still starting the real reader thread**.
     ///
-    /// The `write` half goes into the same `OnceLock` the live path uses; the
+    /// The `write` half goes into the same holder the live path uses; the
     /// `read` half is moved into the spawned reader thread.  `MockTransport::pair()`
     /// produces both halves.  There is no real `Child`, so `self.child` stays
     /// `None` and crash tests are driven by the mock signalling EOF.
@@ -471,7 +487,7 @@ impl TsEngineHost {
         });
 
         // Commit: set write LAST (double-checked contract).
-        host.write.set(write).ok();
+        *host.write.lock().unwrap() = Some(write);
         *host.reader.lock().unwrap() = Some(reader_handle);
 
         host
@@ -504,9 +520,9 @@ impl TsEngineHost {
     /// Lazily spawn the subprocess, start the reader + stderr threads.
     ///
     /// **Idempotent and race-safe** via double-checked commit: fast-path is
-    /// `self.write.get().is_some()`; the coarse init lock is the `reader`
-    /// mutex; `write.set()` commits LAST so a failed spawn leaves `write`
-    /// unset and the next call retries.
+    /// `self.write.lock().unwrap().is_some()`; the coarse init lock is the
+    /// `reader` mutex; committing `write` happens LAST so a failed spawn
+    /// leaves `write` unset and the next call retries.
     pub fn ensure_started(&self) -> Result<(), ExecutionError> {
         self.ensure_started_inner(|| {
             if !is_available() {
@@ -517,6 +533,12 @@ impl TsEngineHost {
             }
             let bundle_path = extracted_bundle_path()?;
             let mut cmd = Command::new("deno");
+            // `--allow-all` is the ACCEPTED v1 security posture (decided 2026-07-01), not an
+            // oversight. Extension bundles are third-party code running at full Deno privilege;
+            // the v1 trust model is "the user installed the extension deliberately." The eventual
+            // real boundary is Phase 1.6 (loopback-TCP transport + one-time token auth), not a
+            // Deno permission set — so any future narrowing to `--allow-read/write/net/run` here
+            // is a deliberate, separately-reviewed change, not a drive-by tightening.
             cmd.arg("run").arg("--allow-all").arg(bundle_path);
             let (write, read, stderr) = spawn_into(cmd, Arc::clone(&self.child))?;
             Ok((
@@ -533,9 +555,14 @@ impl TsEngineHost {
     ///
     /// `init` runs **at most once across concurrent callers**: the coarse init
     /// lock (the `reader` mutex) + the re-check under it + committing
-    /// `write.set()` LAST guarantee it. A failed `init` leaves `write` unset so
-    /// the next call retries (never a cached half-init). The reader thread
-    /// captures field-clones, NEVER `Arc<Self>` (spike-confirmed deadlock).
+    /// `write`'s holder LAST guarantee it. A failed `init` leaves `write`
+    /// unset so the next call retries (never a cached half-init). The reader
+    /// thread captures field-clones, NEVER `Arc<Self>` (spike-confirmed
+    /// deadlock).
+    ///
+    /// Shares its coarse init lock (the `reader` mutex) with
+    /// [`Self::reset_after_crash`] — a crash-triggered reset and a
+    /// (re-)spawn can never interleave into a half-reset/half-init state.
     fn ensure_started_inner<F>(&self, init: F) -> Result<(), ExecutionError>
     where
         F: FnOnce() -> Result<
@@ -548,20 +575,21 @@ impl TsEngineHost {
         >,
     {
         // Fast path — already started.
-        if self.write.get().is_some() {
+        if self.write.lock().unwrap().is_some() {
             return Ok(());
         }
 
         // Slow path — take the coarse init lock, re-check (double-checked).
         let mut reader_guard = self.reader.lock().unwrap();
-        if self.write.get().is_some() {
+        if self.write.lock().unwrap().is_some() {
             return Ok(());
         }
 
         let (write, read, stderr_opt) = init()?;
 
-        // Record the spawn for test assertions (one real spawn = one increment).
-        #[cfg(test)]
+        // Record the spawn (one real spawn = one increment). Also serves as
+        // the generation counter `TsEngine::ensure_loaded` keys its
+        // post-crash reload decision on — see the field doc comment.
         self.spawn_count.fetch_add(1, Ordering::Relaxed);
 
         // Net-new production observability (J8): one INFO event per real spawn.
@@ -606,7 +634,7 @@ impl TsEngineHost {
         *reader_guard = Some(reader_handle);
 
         // Commit: set write LAST.
-        let _ = self.write.set(write);
+        *self.write.lock().unwrap() = Some(write);
 
         // Fire-and-forget Init frame — sent exactly once at spawn, before any
         // LoadEngine request.  No pending slot; id u64::MAX matches Shutdown's
@@ -617,11 +645,103 @@ impl TsEngineHost {
                 global: self.global.clone(),
             },
         };
-        if let Some(w) = self.write.get() {
+        let w = self.write.lock().unwrap().clone();
+        if let Some(w) = w {
             let _ = w.send(&init_frame);
         }
 
         Ok(())
+    }
+
+    /// Reset the transport after a `ProcessCrashed` observation so the NEXT
+    /// `ensure_started()` call performs a genuine fresh subprocess spawn,
+    /// instead of reusing a transport whose stdin pipe is broken (the dead
+    /// process's stdin).
+    ///
+    /// Called from `TsEngine::execute()`'s poison guard
+    /// (`ts_engine.rs::execute`) when it observes
+    /// `ExecutionError::ProcessCrashed` — never from the Timeout/Cancel arm,
+    /// which leaves the (still-alive) transport untouched and only poisons
+    /// the logical launched instance.
+    ///
+    /// # Generation guard (CRITICAL — concurrent shared-host safety)
+    ///
+    /// One `Arc<TsEngineHost>` is shared across PARALLEL document renders
+    /// (`project::pass2_renderer` `docs.par_iter()` +
+    /// `registry.clone()`). When the subprocess dies, `handle_crash`
+    /// broadcasts `ProcessCrashed` to EVERY in-flight `PendingSlot`, so
+    /// every page/chunk with an outstanding request independently reaches
+    /// this method. A STALE observer can arrive *after* a sibling has
+    /// already fully respawned (new healthy transport, `spawn_count`
+    /// advanced). Unconditional teardown would then `take()` the NEW healthy
+    /// transport, `.join()` a STILL-ALIVE reader thread (an unbounded hang
+    /// while holding the coarse `reader` lock → freezing the whole host),
+    /// and kill a healthy subprocess.
+    ///
+    /// `observed_generation` is the host's `spawn_count()` captured at the
+    /// moment the crashed request was SENT (in `execute()`, before the
+    /// `.request()` call) — i.e. the generation of the transport that
+    /// actually crashed. The teardown is a NO-OP unless the host is STILL at
+    /// that generation. The check runs under the `reader` lock, which
+    /// `ensure_started_inner` also holds while it bumps `spawn_count` and
+    /// commits a new transport — so "generation unchanged" atomically
+    /// implies "no newer transport has been committed," and the transport we
+    /// are about to tear down is genuinely the one that crashed, never a
+    /// newer respawn. **Invariant: `reset_after_crash` never tears down a
+    /// transport from a generation newer than the crash it responds to.**
+    ///
+    /// Two overlapping idempotency guards, both required:
+    /// - the generation check handles the ACROSS-respawn stale observer
+    ///   (its `observed_generation` is behind the current one → no-op);
+    /// - the `had_transport` (`write` already `None`) check handles
+    ///   SAME-generation concurrent observers (the first `take()`s the
+    ///   transport; the rest see `None` and return).
+    ///
+    /// Takes the SAME coarse init lock (`reader`) `ensure_started_inner`
+    /// uses, so a concurrent respawn can't observe a half-reset state. By
+    /// the time a caller observes `ProcessCrashed`, the reader thread that
+    /// delivered it has ALREADY returned (`handle_crash` runs synchronously
+    /// on the reader thread immediately before `reader_loop` breaks), so the
+    /// `.join()` below is instant, not a blocking wait.
+    pub(crate) fn reset_after_crash(&self, observed_generation: u64) {
+        let mut reader_guard = self.reader.lock().unwrap();
+
+        // Generation guard (revert seam: this check). A stale observer whose
+        // crash belongs to an OLDER generation must not touch the (newer,
+        // healthy) transport a sibling already respawned. Checked under the
+        // `reader` lock so it is atomic w.r.t. `ensure_started_inner`'s
+        // spawn-count bump + transport commit.
+        if self.spawn_count.load(Ordering::Relaxed) != observed_generation {
+            return;
+        }
+
+        let had_transport = self.write.lock().unwrap().take().is_some();
+        if !had_transport {
+            return;
+        }
+
+        // Join the dead reader thread (already exited on EOF; instant).
+        if let Some(h) = reader_guard.take() {
+            let _ = h.join();
+        }
+        drop(reader_guard);
+
+        if let Some(h) = self.stderr_reader.lock().unwrap().take() {
+            let _ = h.join();
+        }
+
+        // Defensive: reap the child if `handle_crash` somehow left it set —
+        // in the real crash path it is always already `None` (`handle_crash`
+        // takes + reaps it before broadcasting), so this is normally a no-op.
+        if let Some(mut child) = self.child.lock().unwrap().take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+
+        // Clear the crash flag so the NEXT reader thread's unexpected EOF is
+        // treated as a genuine crash again, not folded into an (unrelated,
+        // already-handled) prior "shutting down" state.
+        self.shutting_down.store(false, Ordering::Relaxed);
     }
 
     /// **The demux entry point.**
@@ -642,7 +762,9 @@ impl TsEngineHost {
     ) -> Result<FromEngine, ExecutionError> {
         let write = self
             .write
-            .get()
+            .lock()
+            .unwrap()
+            .clone()
             .ok_or_else(|| ExecutionError::other("engine host not started"))?;
 
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
@@ -788,6 +910,14 @@ impl TsEngineHost {
     /// slots, reap child, join threads.
     ///
     /// Idempotent via `Option::take()` guards on all shared handles.
+    ///
+    /// Note: since the `write` holder became resettable (Plan 4b F4), this
+    /// now `take()`s the transport out of the `Mutex<Option<..>>` (rather
+    /// than reading a `OnceLock`) and briefly holds that mutex across the
+    /// `shutdown()` close. Benign: only `registry::shutdown_all` calls this,
+    /// at final teardown, single-threaded — there is no concurrent
+    /// `request()`/`ensure_started()` racing for the write mutex at that
+    /// point.
     pub fn shutdown(&self) -> Result<(), ExecutionError> {
         // Mark shutting down before anything else.
         self.shutting_down.store(true, Ordering::Relaxed);
@@ -808,7 +938,7 @@ impl TsEngineHost {
         }
 
         // Close stdin (sends Shutdown frame then drops the BufWriter).
-        if let Some(write) = self.write.get() {
+        if let Some(write) = self.write.lock().unwrap().take() {
             let _ = write.shutdown();
         }
 
@@ -834,6 +964,14 @@ impl TsEngineHost {
         self.shutting_down.load(Ordering::Relaxed)
     }
 
+    /// True while a transport is published (post-spawn, pre-reset/shutdown).
+    /// Test-only witness that `reset_after_crash`'s generation guard did NOT
+    /// tear down a healthy transport.
+    #[cfg(test)]
+    pub fn has_transport(&self) -> bool {
+        self.write.lock().unwrap().is_some()
+    }
+
     /// True while the host holds a live child process handle.  Returns false
     /// before the subprocess is spawned and after `shutdown()`/`Drop` reaps
     /// the child.  A mock-transport host has no real `Child`, so this is
@@ -843,7 +981,9 @@ impl TsEngineHost {
     }
 
     /// Number of real subprocess spawns recorded by `ensure_started_inner`.
-    #[cfg(test)]
+    ///
+    /// Also the generation counter `TsEngine::ensure_loaded` reads — see the
+    /// field doc comment. No longer `#[cfg(test)]`-only.
     pub fn spawn_count(&self) -> u64 {
         self.spawn_count.load(Ordering::Relaxed)
     }
@@ -883,7 +1023,8 @@ impl Drop for TsEngineHost {
 
         // Signal shutdown to the write half so the reader's recv() unblocks
         // (for mock transport: sets eof + notifies condvar; for stdio: drops stdin).
-        if let Some(write) = self.write.get() {
+        // `get_mut` (we own `self` here, no lock contention).
+        if let Some(write) = self.write.get_mut().unwrap().take() {
             let _ = write.shutdown();
         }
 
@@ -2269,6 +2410,92 @@ mod tests {
                 1,
                 "init must run exactly once across concurrent callers"
             );
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Plan 4b F4 review — reset_after_crash generation guard (CRITICAL)
+    // -----------------------------------------------------------------------
+    //
+    // One `Arc<TsEngineHost>` is shared across parallel document renders, so
+    // a crash broadcasts `ProcessCrashed` to every in-flight request and each
+    // reaches `reset_after_crash` independently. A STALE observer (its crash
+    // belongs to an OLD generation) can arrive AFTER a sibling already
+    // respawned a fresh, HEALTHY transport. Without the generation guard, the
+    // stale observer would tear down that healthy transport and `.join()` its
+    // STILL-ALIVE reader thread — an unbounded hang while holding the coarse
+    // `reader` lock, freezing the whole host.
+    //
+    // This test is deterministic (no sleeps/timing races on the pass path):
+    // it advances the generation explicitly via `ensure_started_inner`, then
+    // invokes `reset_after_crash` with a STALE generation and asserts it is a
+    // NO-OP — the healthy transport is NOT taken.
+    //
+    // revert seam: the generation check in `reset_after_crash`
+    // (`if self.spawn_count.load(..) != observed_generation { return; }`).
+    // Reverting it makes the stale reset take the healthy gen-2 transport and
+    // then block forever joining gen-2's live reader thread → the watchdog
+    // fires ("DEADLOCK DETECTED") → RED. (Full-crate revert-verified.)
+    #[test]
+    fn test_reset_after_crash_generation_guard_ignores_stale_observer() {
+        watchdog(Duration::from_secs(10), || {
+            let host = TsEngineHost::new(make_host_global_config());
+
+            // --- Generation 1: publish a mock transport (reader thread runs).
+            let (w1, r1, mock1) = MockTransport::pair_with_handle();
+            host.ensure_started_inner(|| Ok((w1, r1, None)))
+                .expect("gen-1 spawn");
+            assert_eq!(host.spawn_count(), 1);
+            assert!(host.has_transport());
+
+            // Simulate the gen-1 subprocess crashing: the reader hits EOF and
+            // exits (handle_crash runs on the reader thread), exactly as after
+            // a real crash — so the legitimate reset's `.join()` is instant.
+            mock1.signal_eof();
+
+            // Legitimate reset for the crash observed at generation 1.
+            host.reset_after_crash(1);
+            assert!(
+                !host.has_transport(),
+                "the gen-1 crash reset must clear the (dead) transport"
+            );
+            assert_eq!(host.spawn_count(), 1, "reset itself never spawns");
+
+            // --- Generation 2: a sibling respawns a fresh, HEALTHY transport
+            // (its reader thread is alive and parked on recv()).
+            let (w2, r2, mock2) = MockTransport::pair_with_handle();
+            host.ensure_started_inner(|| Ok((w2, r2, None)))
+                .expect("gen-2 respawn");
+            assert_eq!(host.spawn_count(), 2);
+            assert!(
+                host.has_transport(),
+                "the gen-2 transport is published and healthy"
+            );
+
+            // --- THE CRITICAL CASE: a STALE observer of the OLD gen-1 crash
+            // now calls reset with observed_generation = 1. It MUST be a
+            // no-op: the healthy gen-2 transport must NOT be torn down, its
+            // live reader must NOT be joined (a join here would hang, caught
+            // by the watchdog), no child killed.
+            host.reset_after_crash(1);
+            assert!(
+                host.has_transport(),
+                "STALE reset (observed gen 1) must NOT tear down the healthy \
+                 gen-2 transport"
+            );
+            assert_eq!(host.spawn_count(), 2);
+
+            // Same-generation observer safety: a reset AT the current
+            // generation still tears the crashed transport down. Simulate the
+            // gen-2 crash first so its reader exits and the join is instant.
+            mock2.signal_eof();
+            host.reset_after_crash(2);
+            assert!(
+                !host.has_transport(),
+                "a current-generation reset tears down the crashed transport"
+            );
+
+            // host `Drop` joins any remaining threads cleanly.
         });
     }
 

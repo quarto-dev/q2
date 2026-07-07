@@ -944,6 +944,42 @@ freeze-epic-time test spec.
 
 ## FINDING #5 (2026-07-03) — marimo renders via `q2 render` but does NOT splice into `q2 preview`
 
+> **RESOLVED (2026-07-07, Plan 4c.2, strand bd-5jxcio5d).** Marimo now splices
+> into the `q2 preview` pane. The fix (commit `4cfc3b1ae`) **generalizes the
+> capture-splice matcher** in `crates/quarto-core/src/engine/capture_splice.rs`
+> (Option (a), ratified): `is_cell_wrapper` was widened to
+> `is_engine_output_block(b) = is_cell_wrapper(b) || matches!(b, Block::RawBlock(_))`,
+> so at a cell's lockstep position the matcher accepts either a `::: {.cell}`
+> wrapper Div (echo/julia/jupyter) **or** a bare `{=html}` `RawBlock` island
+> (marimo) as that cell's output. Prose blocks (Paragraph/Header) still fall
+> through — a prose capture remains a documented no-op — so the fail-soft
+> prose-lockstep guard is preserved and marimo's validated `q2 render` output is
+> unchanged (Option (b) — making marimo emit `.cell` wrappers — was rejected to
+> avoid re-validating the render tier). The A0 characterization confirmed the real
+> marimo `B1` is `[Header, RawBlock(html island)]` lockstep with
+> `A1 = [Header, {python .marimo} cell]`, with the `__MARIMO_EXPORT_CONTEXT__` /
+> `<marimo-code>` header markers absent from the body (they ride
+> `include-in-header`).
+>
+> **Bound by (both tiers):** native SC22 `marimo_shaped_capture_splices`
+> (`capture_splice_seam.rs`, unconditional) — the marimo-shaped island splices,
+> `.cell` companions stay green; and e2e SC21 (the former NEG canary, **flipped
+> NEG→positive** in `engine-capture-splice-marimo.spec.ts`, commits `29476fe8` /
+> `7b9a3e629`), which runs the real `uv`/marimo engine through `q2 preview` and
+> asserts `<marimo-cell-output>` + the evaluated `42` reach the pane body without
+> reload (live PASS). SC23 (widget markup — `<marimo-island>` + `<marimo-slider>`)
+> and SC24 (bare-sql interop — the executed `<marimo-table>` island) confirm the
+> same splice delivers widgets and sql islands to the pane (both live PASS,
+> opt-in `QUARTO_SC21_LIVE=1`).
+>
+> **Widget hydration — open, separate from this fix.** SC23 asserts widget
+> *markup delivery* only. Whether marimo's client-side islands runtime (loaded
+> from `cdn.jsdelivr.net`) actually *hydrates* interactive widgets inside the
+> preview pane's sandboxed iframe (CSP / external-host constraints may block it)
+> is a distinct question, NOT part of bd-5jxcio5d. Disposition pending a decision
+> (accept markup-only + file a follow-up strand, vs. fold in a hydration probe);
+> no claim is made here that interactive widgets work in preview.
+
 Discovered while adding the Phase 4cH browser-level canary. The `q2 preview`
 delivery chain records the marimo capture server-side but the executed marimo
 output never reaches the SPA pane — the pane keeps showing the inert source

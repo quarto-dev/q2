@@ -31,6 +31,12 @@ export interface LogMessageOptions {
   format?: (msg: string) => string;
 }
 
+// accepted-untested (Plan 4b-D): `bold`/`format`/other LogMessageOptions
+// styling is accepted but silently ignored below (`_options` params) — no
+// ANSI/terminal styling backend exists yet. Known v1 limitation, improvable
+// later; do not assert the styling is discarded (a real styling backend
+// later must not read as a regression).
+
 /**
  * The console namespace returned by `makeConsole`.
  *
@@ -72,6 +78,11 @@ export function makeConsole(
     );
   }
 
+  // accepted-untested (Plan 4b-D): withSpinner's animation is a v1 no-op
+  // (neutral start/completion logs only — no setInterval/ANSI spinner). The
+  // positive behavior (fn invoked, result returned, logs emitted) IS asserted
+  // in console.test.ts (D1); this note only records that a real animated
+  // spinner is a known future improvement, not something to freeze as absent.
   async function withSpinner<T>(
     options: {
       message: string | (() => string);

@@ -2053,7 +2053,7 @@ mod tests {
             Extension {
                 id: ExtensionId::new(name),
                 title: name.to_string(),
-                author: String::new(),
+                author: None,
                 version: None,
                 quarto_required: None,
                 path: PathBuf::from("/extensions").join(name),

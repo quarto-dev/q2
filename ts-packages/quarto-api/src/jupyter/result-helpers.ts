@@ -9,6 +9,14 @@
  *   external-sources/quarto-cli/src/core/jupyter/jupyter.ts
  *   (`executeResultEngineDependencies` :2177-2185)
  *   external-sources/quarto-cli/src/core/jupyter/widgets.ts (includes path)
+ *
+ * Plan 4b-E, record 4 note: the Task E brief's default expectation for
+ * "`resultIncludes` widget path" was an accepted-untested prose note (the
+ * unit-level delegation was already bound in `result-helpers.test.ts`, but
+ * nothing drove a REAL widget-MIME notebook cell through `toMarkdown` and
+ * back into `resultIncludes`). That end-to-end binding turned out to be
+ * cheap, so it was taken as the optional E2 stretch instead — see the "E2 —
+ * widget-MIME cell" describe block in `index.test.ts`.
  */
 
 import type { JupyterWidgetDependencies, PandocIncludes } from "@quarto/types";

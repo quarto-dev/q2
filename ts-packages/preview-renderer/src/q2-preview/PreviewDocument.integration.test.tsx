@@ -13,6 +13,7 @@ import { render } from '@testing-library/react';
 import { Ast } from '../framework';
 import type { PandocAST } from '../framework';
 import { previewRegistry } from './registry';
+import { rematerializeScript } from './chromeSlots';
 
 function astJson(meta: Record<string, unknown>, blocks: any[] = []): string {
     const ast: PandocAST = {
@@ -622,6 +623,76 @@ describe('PreviewDocument chrome injection (Phase F.2)', () => {
         unmount();
         expect(
             document.head.querySelector('link[data-test="fv"]'),
+        ).toBeNull();
+    });
+
+    // bd-5oyk1xce: engine include-in-header can be executable (marimo's
+    // islands module + its inline __MARIMO_EXPORT_CONTEXT__ marker). A
+    // <script> parsed via innerHTML is inert; HeaderIncludesEffect must
+    // re-materialize it so the browser runs it. jsdom (no runScripts) can't
+    // observe execution — that is proven by the real-browser e2e
+    // (engine-capture-splice-marimo). These bind the re-materialization
+    // logic + the head delivery/cleanup wiring.
+    it('rematerializeScript returns a fresh executable <script> copying attrs + inline body', () => {
+        // Build an INERT script the way innerHTML does (the exact node
+        // HeaderIncludesEffect starts from).
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML =
+            '<script type="module" src="https://cdn.jsdelivr.net/npm/@marimo-team/islands/main.js" data-x="1"></script>';
+        const inert = wrapper.firstElementChild as HTMLScriptElement;
+
+        const fresh = rematerializeScript(inert);
+
+        // A DISTINCT node (the whole point — the inert one won't execute).
+        expect(fresh).not.toBe(inert);
+        expect(fresh.tagName).toBe('SCRIPT');
+        expect(fresh.getAttribute('type')).toBe('module');
+        expect(fresh.getAttribute('src')).toBe(
+            'https://cdn.jsdelivr.net/npm/@marimo-team/islands/main.js',
+        );
+        expect(fresh.getAttribute('data-x')).toBe('1');
+
+        // Inline body is copied verbatim (e.g. __MARIMO_EXPORT_CONTEXT__).
+        const inlineWrapper = document.createElement('div');
+        inlineWrapper.innerHTML =
+            '<script>window.__MARIMO_EXPORT_CONTEXT__ = { session: "s" };</script>';
+        const inlineFresh = rematerializeScript(
+            inlineWrapper.firstElementChild as HTMLScriptElement,
+        );
+        expect(inlineFresh.textContent).toBe(
+            'window.__MARIMO_EXPORT_CONTEXT__ = { session: "s" };',
+        );
+    });
+
+    it('header-includes <script> lands in document.head (re-materialized) with cleanup', () => {
+        const scriptHtml =
+            '<script type="module" src="https://cdn.jsdelivr.net/npm/@marimo-team/islands@0.23.13/dist/main.js" data-test="islands"></script>';
+        const { unmount } = mount({
+            rendered: metaMap([
+                {
+                    key: 'includes',
+                    value: metaMap([
+                        {
+                            key: 'header',
+                            value: { t: 'MetaList', c: [ms(scriptHtml)] },
+                        },
+                    ]),
+                },
+            ]),
+        });
+
+        const script = document.head.querySelector(
+            'script[data-test="islands"][data-q2-header-include]',
+        ) as HTMLScriptElement | null;
+        expect(script).not.toBeNull();
+        expect(script!.getAttribute('type')).toBe('module');
+        expect(script!.getAttribute('src')).toBe(
+            'https://cdn.jsdelivr.net/npm/@marimo-team/islands@0.23.13/dist/main.js',
+        );
+
+        unmount();
+        expect(
+            document.head.querySelector('script[data-test="islands"]'),
         ).toBeNull();
     });
 

@@ -293,13 +293,29 @@ with a real temp-file-path payload). None of these required any change to `marim
 - **`ts_protocol.rs` doc pin on `TsExecuteOptions::handled_languages` — `b4f4f52bf`.** No logic change; a doc
   comment was added stating the leave-alone semantics (§2 above) and citing the FINDING #4 incident by name,
   so the next TS-engine author reads the contract before getting it backwards, instead of after.
+- **Preview capture-splice generalized for unwrapped engine output — `4cfc3b1ae` (bd-5jxcio5d, FINDING #5
+  RESOLVED).** `q2 preview` splices recorded engine output onto the live AST by matching each source cell to
+  its output block in the captured markdown. That matcher (`capture_splice.rs`) only recognized a `::: {.cell}`
+  wrapper Div — the shape echo/julia/jupyter emit via `mdFromCodeCell`. Marimo emits each executed cell as a
+  bare `{=html}` `RawBlock` island (`<marimo-island>`), zero `.cell` Divs — so marimo output rendered fine
+  under `q2 render` but never reached the `q2 preview` pane (the pane kept showing inert source). Fix:
+  `is_cell_wrapper` was widened to `is_engine_output_block = is_cell_wrapper(b) || matches!(b,
+  Block::RawBlock(_))`, so a cell pairs with its lockstep-positioned output whether that is a `.cell` Div or a
+  RawBlock island; prose blocks still fall through (no mis-pairing). Marimo's render output is unchanged (the
+  fix is entirely q2-side; the alternative — making marimo emit `.cell` wrappers — was rejected to avoid
+  re-validating the render tier). Bound by native SC22 + live e2e SC21/SC23/SC24. A *different* engine that
+  emits unwrapped raw-HTML islands (rather than `.cell` wrappers) now splices into preview automatically —
+  nothing to do on the extension side. (Widget *hydration* inside the preview sandbox — the islands runtime
+  loading from `cdn.jsdelivr.net` under CSP — is a separate, still-open question; markup delivery is proven,
+  interactivity is not claimed.)
 
-**For the migration guide:** these three are "fixed in q2, no engine action needed" — an author porting a
+**For the migration guide:** these are "fixed in q2, no engine action needed" — an author porting a
 *different* engine that hits a space-separated `{lang .cls}` fence round-trip, or that sends
-`include-in-header` as a file path (the Q1-standard convention), or that reads `handledLanguages`, benefits
-from all three automatically; nothing to do on the extension side.
+`include-in-header` as a file path (the Q1-standard convention), or that reads `handledLanguages`, or that
+emits unwrapped raw-HTML output (rather than `.cell` wrappers) through `q2 preview`, benefits from all of
+these automatically; nothing to do on the extension side.
 
-**For the upstream PR / `quarto-marimo` maintainers:** these three are useful *context*, not something the PR
+**For the upstream PR / `quarto-marimo` maintainers:** these are useful *context*, not something the PR
 needs to carry — they were q2-side gaps, already fixed in q2 proper, unrelated to whether `quarto-marimo`
 merges `q2-bare-sql-interop`. Cite them if asked "why did this take q2-core changes at all," but they are not
 part of the engine diff being proposed upstream.

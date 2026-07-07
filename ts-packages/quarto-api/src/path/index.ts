@@ -174,6 +174,8 @@ export function makePathHost(
   // ── dataDir ────────────────────────────────────────────────────────────────
   // Resolves from global.dataDir, creates the dir (mirrors Q1 quartoDir).
   // `roaming` is a no-op: global ships one resolved dataDir (#6 Q1-source compat).
+  // accepted-untested (Plan 4b-D): documented Q1-source-compat no-op — no
+  // test required.
   function dataDir(subdir?: string, _roaming?: boolean): string {
     const p = pathJoin(global.dataDir, subdir);
     host.fs.ensureDir(p);

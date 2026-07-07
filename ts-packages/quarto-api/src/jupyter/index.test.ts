@@ -32,6 +32,10 @@ import type { QuartoAPI } from "@quarto/types";
 import type { PlatformHost } from "../platform/index.js";
 
 import { makeJupyter } from "./index.js";
+import {
+  kApplicationJupyterWidgetState,
+  kApplicationJupyterWidgetView,
+} from "./constants.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -285,5 +289,146 @@ describe("smoke — toMarkdown end-to-end via makeJupyter", () => {
           typeof result.notebookOutputs.suffix === "string",
       ).toBe(true);
     }
+  });
+});
+
+// ─── E2 — widget-MIME cell round-trips to the exact include string ──────────
+// (Plan 4b Phase E, OPTIONAL stretch — taken because it was cheap: it only
+// chains two already-tested units, `toMarkdown`'s widget-dependency
+// extraction (Row 12 in to-markdown.test.ts) and `resultIncludes`'s
+// delegation to `widgetDependencyIncludes` (already unit-tested with
+// synthetic `JupyterWidgetDependencies` in result-helpers.test.ts /
+// widgets.test.ts) — but nothing previously drove them back-to-back from a
+// REAL widget-MIME notebook cell through the full `makeJupyter` namespace
+// the way a Julia consumer would. This is that binding; it supersedes the
+// "accepted-untested" note that record 4 in the Task E brief would otherwise
+// require for `resultIncludes`'s widget path.
+//
+// Named revert (either half breaks this): (a) in to-markdown.ts, gate
+// `widgetDependencies(nb)` behind `false` (or otherwise stop populating
+// `result.dependencies`) => `result.dependencies` is undefined => RED at the
+// `dependencies` assertions; (b) in widgets.ts, stop pushing the
+// jupyter-widgets-runtime `<script src=".../embed-amd.js">` onto `head` when
+// `haveJupyterWidgets` is true => the exact-include-string assertion below
+// goes RED.
+
+describe("E2 — widget-MIME cell: toMarkdown -> resultIncludes emits the exact include", () => {
+  // A dedicated recording host with a REAL per-call unique makeTempFile
+  // (mirrors widgets.test.ts's fake) — the shared makeRecordingHost() above
+  // returns the same constant "/tmp/fake-file" path for every call, which
+  // would make the header and after-body fragments collide onto one path
+  // and make `writes.find` ambiguous between them.
+  function makeWidgetRecordingHost(): RecordingHost {
+    const writes: Array<{ path: string; content: string | Uint8Array }> = [];
+    let counter = 0;
+    const host: Pick<PlatformHost, "fs"> = {
+      fs: {
+        readTextFileSync: () => {
+          throw new Error("readTextFileSync: not implemented in this fake");
+        },
+        writeFileSync: (path, content) => {
+          writes.push({ path, content });
+        },
+        exists: () => false,
+        ensureDir: () => {},
+        makeTempDir: () => "/tmp/fake",
+        makeTempFile: (opts) => {
+          counter += 1;
+          return `${opts?.dir ?? "/tmp"}/${opts?.prefix ?? ""}${counter}${opts?.suffix ?? ""}`;
+        },
+        remove: () => {},
+        walk: () => [],
+      },
+    };
+    return { host, writes };
+  }
+
+  function widgetNotebookWithState(): JupyterNotebook {
+    const nb = pythonKernelNotebook([
+      {
+        cell_type: "code",
+        metadata: {},
+        source: ["w\n"],
+        outputs: [
+          {
+            output_type: "display_data",
+            data: {
+              [kApplicationJupyterWidgetView]: {
+                version_major: 2,
+                version_minor: 0,
+                model_id: "abc123",
+              },
+            },
+            metadata: {},
+          },
+        ],
+      },
+    ]);
+    // real widget-state metadata blob, so widgetDependencyIncludes also
+    // writes the include-after-body fragment (not just include-in-header)
+    nb.metadata.widgets = {
+      [kApplicationJupyterWidgetState]: {
+        state: { "1": { model_name: "IntSliderModel" } },
+        version_major: 2,
+        version_minor: 0,
+      },
+    };
+    return nb;
+  }
+
+  it("emits an include-in-header fragment carrying the jupyter-widgets runtime script", async () => {
+    const { host, writes } = makeWidgetRecordingHost();
+    const ns = makeJupyter(host);
+
+    const result = await ns.toMarkdown(
+      widgetNotebookWithState(),
+      makeToMarkdownOptions({ toHtml: true }),
+    );
+
+    // toMarkdown's own binding (already covered by Row 12, re-asserted here
+    // as the precondition for the chained call below)
+    expect(result.dependencies).toBeDefined();
+    expect(result.dependencies?.jupyterWidgets).toBe(true);
+
+    const includes = ns.resultIncludes("/tmp/quarto-jupyter", result.dependencies);
+
+    expect(includes["include-in-header"]).toBeDefined();
+    const headerPath = includes["include-in-header"]![0];
+    const headerWrite = writes.find((w) => w.path === headerPath);
+    expect(headerWrite).toBeDefined();
+    // exact include string (the jupyter-widgets html-manager embed runtime)
+    expect(String(headerWrite!.content)).toContain(
+      "@jupyter-widgets/html-manager",
+    );
+    expect(String(headerWrite!.content)).toContain("embed-amd.js");
+  });
+
+  it("emits an include-after-body fragment carrying the widget-state MIME payload", async () => {
+    const { host, writes } = makeWidgetRecordingHost();
+    const ns = makeJupyter(host);
+
+    const result = await ns.toMarkdown(
+      widgetNotebookWithState(),
+      makeToMarkdownOptions({ toHtml: true }),
+    );
+    const includes = ns.resultIncludes("/tmp/quarto-jupyter", result.dependencies);
+
+    expect(includes["include-after-body"]).toBeDefined();
+    const afterBodyPath = includes["include-after-body"]![0];
+    const afterBodyWrite = writes.find((w) => w.path === afterBodyPath);
+    expect(afterBodyWrite).toBeDefined();
+    expect(String(afterBodyWrite!.content)).toContain(
+      kApplicationJupyterWidgetState,
+    );
+  });
+
+  it("resultIncludes(tempDir, undefined) stays a no-op even when the namespace has real widget deps available", () => {
+    const { host, writes } = makeRecordingHost();
+    const ns = makeJupyter(host);
+
+    const includes = ns.resultIncludes("/tmp/quarto-jupyter", undefined);
+
+    expect(includes).toEqual({});
+    expect(writes.length).toBe(0);
   });
 });

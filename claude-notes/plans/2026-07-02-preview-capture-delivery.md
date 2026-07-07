@@ -1,6 +1,7 @@
-# Preview engine-capture delivery: julia close/busy failure + browser splice e2e
+# Plan 4a: Preview engine-capture delivery — julia close/busy failure + browser splice e2e
 
-**Status:** plan — created 2026-07-02 from a live user repro. Seams prevalidated same day.
+**Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md) — **Plan 4a**, the preview-delivery sibling of Plan 4's julia validation (fills Plan 4's 4J browser-tier gap).
+**Status:** COMPLETE (15/15) — strand bd-h4rhohhy **in_review**, final review clean. Created 2026-07-02 from a live user repro; seams prevalidated same day.
 **Strand:** bd-h4rhohhy (P1) carries the delivery-bug evidence; the close/busy defect is item
 **Bug A** below (tracked in this plan; noted on the strand).
 **Scope:** OUT of Plan 4c's scope (marimo continues separately). This is a focused

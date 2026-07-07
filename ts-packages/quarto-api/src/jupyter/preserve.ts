@@ -18,6 +18,14 @@
  *
  * Ported (REWRITE, not extract) from:
  *   external-sources/quarto-cli/src/core/jupyter/preserve.ts (lines 12-60)
+ *
+ * accepted-untested (Plan 4b-E, record 1): the preserve/postProcess path is
+ * a constant-`false` v1 no-op; live restore is deferred to Plan 2 B2 / RTQ
+ * F2, as noted above. `preserve.test.ts` already binds the CURRENT inert
+ * behavior with a named revert (make `isPreservedHtml` return `true`) — that
+ * coverage predates this task and is left as-is. Do NOT add a further hard
+ * "always false" assertion here; the existing tests are the ceiling, not a
+ * pattern to extend.
  */
 
 import type { JupyterNotebook, JupyterOutputDisplayData } from "@quarto/types";

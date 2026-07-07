@@ -30,10 +30,15 @@
 //!
 //! We compute a map keyed by `(structural_hash(cell), occurrence_index)`:
 //! - Walk `A1` and `B1` block-pointers in parallel.
-//! - Engine cells in `A1` are matched to the next *cell wrapper* Div
-//!   (`class="cell"`) in `B1`. Each cell maps to exactly one B1 block
-//!   (the wrapper Div, which contains the source + output children).
-//! - Prose blocks in `A1` advance both pointers in lockstep.
+//! - Engine cells in `A1` are matched to the next *engine-output block*
+//!   in `B1` — a `::: {.cell}` wrapper Div (`class="cell"`, what
+//!   echo/julia/jupyter emit) OR a `RawBlock` island (the unwrapped
+//!   `{=html}` block marimo emits). Each cell maps to exactly one B1
+//!   block (the wrapper Div's source + output children, or the raw
+//!   island in its entirety).
+//! - Prose blocks in `A1` advance both pointers in lockstep — a prose
+//!   block (Paragraph/Header/…) is never engine output, so it can't be
+//!   mis-paired as a cell's captured result.
 //!
 //! Then we walk `A2`:
 //! - For each engine cell with key `(hash, n)`, replace it with the
@@ -93,6 +98,31 @@ fn is_cell_wrapper(block: &Block) -> bool {
     attr.1.iter().any(|c| c == "cell")
 }
 
+/// A B1 block that is an engine's per-cell OUTPUT (to be spliced onto the
+/// matching A1 engine cell). Two shapes qualify:
+///  - a `::: {.cell}` Div — the wrapper echo/julia/jupyter emit
+///    (`mdFromCodeCell`); and
+///  - a `RawBlock` — the unwrapped raw island marimo emits (a bare
+///    `{=html}` `<marimo-island>` block, zero `.cell` Divs; see the A0
+///    characterization in capture_splice_seam.rs / bd-5jxcio5d).
+/// A prose block (Paragraph/Header/…) is NOT engine output — it lockstep-
+/// matches source prose and is never paired as a cell's output.
+///
+/// Residual edge (bd-5m1ni9if, preview-only + fail-soft): a **source-level**
+/// `RawBlock` (a user-authored `{=html}`/`{=latex}` block) also passes this
+/// predicate. It is only ever *reached* at a cell position when an engine cell
+/// emits NO output block at its lockstep `B1` position (e.g. `include: false`,
+/// an empty/error cell) AND is immediately followed by such a source RawBlock —
+/// in which case the walk mis-consumes the passthrough block as the cell's
+/// output. That window is unreachable on marimo's normal path (every executed
+/// marimo cell emits an island) and for wrapper engines (they hit the `.cell`
+/// arm first); the outcome is a self-correcting preview mis-splice, never a
+/// wrong render. bd-5m1ni9if tracks the tightening (only consume a `RawBlock`
+/// here when it is not structurally-equal to the next `A1` block).
+fn is_engine_output_block(block: &Block) -> bool {
+    is_cell_wrapper(block) || matches!(block, Block::RawBlock(_))
+}
+
 /// A key for matching engine cells across `A1` (capture) and `A2`
 /// (live edit). Built from the structural hash of the entire
 /// `CodeBlock` (which includes its attributes + body text) plus the
@@ -107,10 +137,11 @@ struct CellKey {
 }
 
 /// Per-engine-cell mapping derived from a capture pair `(A1, B1)`.
-/// Each entry pairs a cell's `CellKey` with the single B1 block (a
-/// `Div.cell` wrapper) the engine emitted for it. We store one block
-/// per key — the engine always emits exactly one wrapper Div per
-/// executed cell. Cells with no output (e.g. `output: false`) have
+/// Each entry pairs a cell's `CellKey` with the single B1 block the
+/// engine emitted for it — a `Div.cell` wrapper (echo/julia/jupyter)
+/// or a `RawBlock` island (marimo). We store one block per key — the
+/// engine always emits exactly one output block per executed cell.
+/// Cells with no output (e.g. `output: false`) have
 /// no map entry; the splice falls through to raw source for those.
 #[derive(Debug, Default, Clone)]
 pub struct CellOutputMap {
@@ -135,9 +166,10 @@ impl CellOutputMap {
 /// Build the engine-output map from a `(A1, B1)` capture pair.
 ///
 /// Walks `A1.blocks` and `B1.blocks` with two pointers:
-/// - Engine cell at `A1[i]` → consume the next cell wrapper at
-///   `B1[j]` (matched by `is_cell_wrapper`). Record `(key, B1[j])`,
-///   advance both pointers.
+/// - Engine cell at `A1[i]` → consume the next engine-output block at
+///   `B1[j]` (matched by `is_engine_output_block` — a `.cell` wrapper
+///   Div or a `RawBlock` island). Record `(key, B1[j])`, advance both
+///   pointers.
 /// - A pair of `Div`s at `A1[i]` / `B1[j]` → recurse into their
 ///   contents with the same walk (sharing the occurrence counter),
 ///   then advance both pointers. This is what lets a cell *nested*
@@ -192,7 +224,7 @@ fn derive_cell_outputs_walk(
             // advancing `j`, so this never iterates more than once — but the
             // loop shape mirrors the intended walk and is kept deliberately.
             #[allow(clippy::never_loop)]
-            while j < b_blocks.len() && !is_cell_wrapper(&b_blocks[j]) {
+            while j < b_blocks.len() && !is_engine_output_block(&b_blocks[j]) {
                 // A B1 block that isn't a cell wrapper sitting where
                 // we expected one means the walk has diverged
                 // (capture corruption or unexpected engine emission).
@@ -202,7 +234,7 @@ fn derive_cell_outputs_walk(
                 // a chance to match.
                 break;
             }
-            if j < b_blocks.len() && is_cell_wrapper(&b_blocks[j]) {
+            if j < b_blocks.len() && is_engine_output_block(&b_blocks[j]) {
                 let hash = compute_block_hash_fresh(a_block);
                 let occurrence = occurrences.entry(hash).or_insert(0);
                 let key = CellKey {
