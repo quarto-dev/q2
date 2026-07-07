@@ -15,6 +15,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-07-07
+
+- [`845495fc`](https://github.com/quarto-dev/q2/commits/845495fc): Fixed the "Open printable version" output rendering unstyled (no theme) — the inlined theme stylesheet's leading byte-order mark was silently dropping Bootstrap's CSS variables.
+
 ### 2026-07-06
 
 - [`5aa3ee0a`](https://github.com/quarto-dev/q2/commits/5aa3ee0a): Added an "Open printable version" (🖨) button to the preview pane — it opens a standalone, self-contained copy of the current document (or slide deck) in a new tab so you can Print / Save-as-PDF with correct pagination, working around the broken in-frame print behavior.

@@ -313,6 +313,22 @@ new tab; no auto-print.
 - [ ] **E2E:** click the button in a running hub, confirm the correct producer
       opens. _Pending (needs a running hub-client + project)._
 
+### Phase 5b — Field bug: theme CSS not applying (BOM) — DONE
+- [x] **Reproduced** the "missing CSS in Firefox+Chrome" report by running the
+      exact production pipeline in a real browser (Chrome via CDP) against a
+      *themed* doc (`theme: cosmo`) — the earlier E2E fixture was themeless so
+      it never inlined a BOM-prefixed theme stylesheet.
+- [x] **Root cause:** the compiled Bootstrap theme CSS artifact carries a
+      leading UTF-8 BOM (U+FEFF). A `<link>` load strips it, but inlining the
+      bytes into a `<style>` prefixes the first selector
+      (`﻿:root,[data-bs-theme=light]`) — one invalid selector in a comma
+      list drops the whole rule, so Bootstrap's `--bs-*` variables were never
+      defined and the doc fell back to unstyled serif.
+- [x] **Fix:** `stripBom` on inlined CSS + JS text in `makeSelfContainedHtml`.
+      Verified in-browser: `--bs-body-font-family` resolves, cosmo renders.
+      Unit tests (CSS+JS BOM) + a themed real-WASM regression that fails
+      without the fix. Commit `845495fc`. No Rust/WASM change.
+
 ### Phase 5 — Print-CSS baseline — DONE
 - [x] `injectPrintStylesheet`
       (`ts-packages/preview-renderer/src/utils/printStylesheet.ts`, 3 unit
