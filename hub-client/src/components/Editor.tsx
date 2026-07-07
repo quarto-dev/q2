@@ -45,7 +45,6 @@ import MarkdownSummary from './MarkdownSummary';
 import ReplayDrawer from './ReplayDrawer';
 import './Editor.css';
 import PreviewRouter from './render/PreviewRouter';
-import { openPrintableDocument } from '../services/printableDocument';
 
 interface Props {
   project: ProjectEntry;
@@ -274,30 +273,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const handleFormatChange = useCallback((format: string | null) => {
     setCurrentFormat(format);
   }, []);
-
-  // "Open printable version" (issue #315). The React preview formats
-  // can't be printed in place (sandboxed iframe → clipped single page,
-  // or no "Print Frame" affordance at all). Instead we render a
-  // standalone, self-contained document and open it in a new tab.
-  const [isPreparingPrintable, setIsPreparingPrintable] = useState(false);
-  const [printableError, setPrintableError] = useState<string | null>(null);
-  const canOpenPrintable =
-    currentFormat === 'q2-preview' ||
-    currentFormat === 'q2-slides' ||
-    currentFormat === 'revealjs';
-  const handleOpenPrintable = useCallback(() => {
-    const path = currentFile?.path;
-    if (!path) return;
-    setPrintableError(null);
-    setIsPreparingPrintable(true);
-    openPrintableDocument(path, currentFormat)
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error('[printable] failed to open printable version:', err);
-        setPrintableError(message);
-      })
-      .finally(() => setIsPreparingPrintable(false));
-  }, [currentFile?.path, currentFormat]);
 
   // Generate thumbnails for slides (only when format is q2-slides)
   const thumbnails = useSlideThumbnails({
@@ -1011,6 +986,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                       onRenameFile={handleRenameFile}
                       onOpenInNewTab={handleOpenInNewTab}
                       onCopyLink={handleCopyLink}
+                      currentFormat={currentFormat}
                       searchFiles={searchFiles}
                       fileContents={fileContents}
                     />
@@ -1108,29 +1084,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             >
               ✕
             </button>
-          )}
-          {canOpenPrintable && (
-            <button
-              className="preview-print-btn"
-              onClick={handleOpenPrintable}
-              disabled={isPreparingPrintable}
-              title="Open a printable version in a new tab (use your browser's Print to save as PDF)"
-              aria-label="Open printable version in a new tab"
-            >
-              {isPreparingPrintable ? '…' : '🖨'}
-            </button>
-          )}
-          {printableError && (
-            <div className="preview-print-error" role="alert">
-              {printableError}
-              <button
-                className="preview-print-error-dismiss"
-                onClick={() => setPrintableError(null)}
-                aria-label="Dismiss"
-              >
-                ✕
-              </button>
-            </div>
           )}
           <PreviewRouter
             content={displayContent}

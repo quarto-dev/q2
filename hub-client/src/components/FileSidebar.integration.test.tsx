@@ -10,6 +10,13 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import FileSidebar from './FileSidebar';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 
+// The printable service touches the WASM VFS + window.open; stub it so
+// the button-wiring tests stay in the component layer.
+const openPrintableDocument = vi.fn(() => Promise.resolve());
+vi.mock('../services/printableDocument', () => ({
+  openPrintableDocument: (...args: unknown[]) => openPrintableDocument(...args),
+}));
+
 function file(path: string): FileEntry {
   return { path, docId: 'doc-' + path };
 }
@@ -84,6 +91,54 @@ describe('FileSidebar asset-upload integration', () => {
       );
       fireEvent.click(screen.getByRole('button', { name: /upload/i }));
       expect(onUploadFiles).toHaveBeenCalledWith([], '_quarto/grammars/toml');
+    });
+  });
+
+  describe('Open printable version button (issue #315)', () => {
+    const printableName = /printable version/i;
+
+    it('is hidden when there is no printable format', () => {
+      render(<FileSidebar {...baseProps} currentFile={file('index.qmd')} />);
+      expect(screen.queryByRole('button', { name: printableName })).toBeNull();
+    });
+
+    it('is hidden for non-printable formats', () => {
+      render(
+        <FileSidebar
+          {...baseProps}
+          currentFile={file('index.qmd')}
+          currentFormat="q2-debug"
+        />,
+      );
+      expect(screen.queryByRole('button', { name: printableName })).toBeNull();
+    });
+
+    it.each(['q2-preview', 'q2-slides', 'revealjs'])(
+      'is shown for the printable format %s',
+      (fmt) => {
+        render(
+          <FileSidebar
+            {...baseProps}
+            currentFile={file('index.qmd')}
+            currentFormat={fmt}
+          />,
+        );
+        expect(
+          screen.getByRole('button', { name: printableName }),
+        ).toBeTruthy();
+      },
+    );
+
+    it('opens the printable document for the current file on click', () => {
+      render(
+        <FileSidebar
+          {...baseProps}
+          currentFile={file('notes/a.qmd')}
+          currentFormat="revealjs"
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: printableName }));
+      expect(openPrintableDocument).toHaveBeenCalledWith('notes/a.qmd', 'revealjs');
     });
   });
 });
