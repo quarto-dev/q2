@@ -33,6 +33,7 @@ import {
   buildShareableUrl,
 } from '../utils/routing';
 import ShareDialog from './ShareDialog';
+import { mockCollaborators, unionCollaborators, type MockUser } from '../utils/mockCollaborators';
 import { useShelves, setPendingShelfAssignment, type Shelf } from '../hooks/useShelves';
 import './ProjectsHome.css';
 
@@ -595,6 +596,32 @@ export default function ProjectsHome({
 
   const sortLabel = sortOrder === 'newest' ? 'newest first' : sortOrder === 'oldest' ? 'oldest first' : 'A to Z';
 
+  // Facepiles are mock data for the exploration (see utils/mockCollaborators).
+  // The real user is always the first face, in their cursor color.
+  const selfUser: MockUser | undefined = userSettings
+    ? { name: `${userSettings.userName} (you)`, initials: initialsFor(userSettings.userName), color: userSettings.userColor }
+    : undefined;
+  const collaboratorsFor = useCallback(
+    (indexDocId: string) => mockCollaborators(indexDocId, selfUser),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [userSettings?.userName, userSettings?.userColor],
+  );
+
+  const renderFacepile = (users: MockUser[], size: 'sm' | 'md' | 'lg', max = 3) => {
+    const shown = users.slice(0, max);
+    const extra = users.length - shown.length;
+    return (
+      <span className={`ph-facepile ${size}`}>
+        {shown.map((u) => (
+          <span key={u.initials} className="ph-face" style={{ backgroundColor: u.color }} title={`${u.name} (mock)`}>
+            {u.initials}
+          </span>
+        ))}
+        {extra > 0 && <span className="ph-face more" title={`${extra} more (mock)`}>+{extra}</span>}
+      </span>
+    );
+  };
+
   // ---- rendering ----
 
   if (loading || projectSetConnecting) {
@@ -681,6 +708,12 @@ export default function ProjectsHome({
       <div className="ph-peek-header">
         ADDED {formatOpened(item.addedAt).toUpperCase()} · OPENED {formatOpened(item.lastAccessed).toUpperCase()}
       </div>
+      <div className="ph-peek-people">
+        {renderFacepile(collaboratorsFor(item.indexDocId), 'lg')}
+        <span className="ph-peek-people-label">
+          {collaboratorsFor(item.indexDocId).map((u) => u.name.replace(/ .*$/, '')).join(', ')} have joined
+        </span>
+      </div>
       <div className="ph-peek-row"><span className="mono">{serverHost(item.syncServer)}</span></div>
       <div className="ph-peek-row"><span className="mono">{shortId(item.indexDocId)}</span></div>
       <div className="ph-peek-note">
@@ -709,7 +742,10 @@ export default function ProjectsHome({
         <span className={`ph-card-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
           {item.description}
         </span>
-        <span className="ph-card-meta">opened {formatOpened(item.lastAccessed)}</span>
+        <span className="ph-card-footer">
+          <span className="ph-card-meta">opened {formatOpened(item.lastAccessed)}</span>
+          {renderFacepile(collaboratorsFor(item.indexDocId), 'sm')}
+        </span>
       </button>
       <button
         className="ph-card-menu-btn"
@@ -750,6 +786,11 @@ export default function ProjectsHome({
         <div className="ph-shelf-header qh-menu-anchor">
           <span className="ph-shelf-name">{shelf.name}</span>
           <span className="ph-shelf-count">{shelfItems.length}</span>
+          {shelfItems.length > 0 &&
+            renderFacepile(
+              unionCollaborators(shelfItems.map((it) => collaboratorsFor(it.indexDocId))),
+              'md',
+            )}
           <span className="ph-flex-spacer" />
           <button
             className="ph-icon-btn"

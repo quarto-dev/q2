@@ -419,6 +419,57 @@
 
 .ph-new-shelf-row { margin: 2px 0 24px; }
 
+/* ---- facepiles (mock collaborators for the exploration) ---- */
+
+.ph-facepile {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ph-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid var(--bg-modal);
+  color: #ffffff;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ph-face + .ph-face { margin-left: -7px; }
+
+.ph-face.more {
+  background: var(--input-bg-alpha-hover);
+  color: var(--text-secondary);
+}
+
+.ph-facepile.sm .ph-face { width: 18px; height: 18px; font-size: 7.5px; }
+.ph-facepile.md .ph-face { width: 20px; height: 20px; font-size: 8px; }
+.ph-facepile.lg .ph-face { width: 24px; height: 24px; font-size: 9px; }
+
+.ph-shelf-header .ph-facepile { margin-left: 6px; align-self: center; }
+
+.ph-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.ph-peek-people {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 8px;
+}
+
+.ph-peek-people-label {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
 /* ---- drag and drop ---- */
 
 .ph-card[draggable="true"],
