@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Parse and resolve `_brand.yml` brand configuration for Quarto"
 
 [dependencies]
+quarto-util = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }
