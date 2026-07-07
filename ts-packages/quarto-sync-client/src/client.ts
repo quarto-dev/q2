@@ -1302,6 +1302,33 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
+   * Clear the recorded engine capture for `path` (D6 / bd-sfet3264).
+   *
+   * Removes the `CaptureRef` sidecar entry from the index document so
+   * the editor falls back to source-only rendering (the splice has
+   * nothing to apply). This is a pure CRDT map-key delete — it touches
+   * only the index doc, never the capture binary doc (samod has no
+   * document-delete API; the orphaned bytes are a separate server-GC
+   * concern). It needs no executor and no server round-trip; the
+   * removal syncs to every connected peer and fires `onCapturesChange`
+   * for all of them.
+   *
+   * No-op when `path` has no capture entry. Throws only if not
+   * connected (no index handle to mutate).
+   */
+  function clearCapture(path: string): void {
+    if (!state.indexHandle) {
+      throw new Error('Not connected');
+    }
+    const indexHandle = state.indexHandle;
+    indexHandle.change(doc => {
+      if (doc.captures && doc.captures[path] !== undefined) {
+        delete doc.captures[path];
+      }
+    });
+  }
+
+  /**
    * Rename a file.
    */
   function renameFile(oldPath: string, newPath: string): void {
@@ -1371,6 +1398,18 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
    */
   function getFileHandle(path: string): DocHandle<FileDocument> | null {
     return state.fileHandles.get(path) ?? null;
+  }
+
+  /**
+   * Get the index DocHandle for project-scoped ephemeral messaging
+   * (bd-sfet3264). Unlike `getFileHandle` (per-file), the index handle is
+   * the natural carrier for the execution beacon/request protocol: every
+   * peer subscribes to the index doc, so a single ephemeral channel reaches
+   * all of them regardless of which file is active. Returns null before
+   * connect.
+   */
+  function getIndexHandle(): DocHandle<IndexDocument> | null {
+    return state.indexHandle;
   }
 
   /**
@@ -1667,8 +1706,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     createBinaryFile,
     deleteFile,
     renameFile,
+    clearCapture,
     isConnected,
     getFileHandle,
+    getIndexHandle,
     getFilePaths,
     getUnavailableFiles,
     getSyncDiagnostics,

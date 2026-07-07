@@ -275,6 +275,73 @@
   position: relative;
 }
 
+/* bd-yai4w8ly: the single merged preview execution status line. Combines the
+   former .executor-online-bar / .run-control / .capture-results-bar. One blue
+   strip (a theme overhaul will revisit the palette); the green dot still
+   signals executor liveness. */
+.preview-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  font-size: 12px;
+  background: #eef6ff;
+  border-bottom: 1px solid #cfe2f5;
+  color: #234;
+}
+
+.preview-status-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.preview-status-error {
+  color: #a12d2d;
+}
+
+/* Right-aligned action group; Run is last so it stays pinned to the far
+   right across state transitions. */
+.preview-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.preview-status-bar button {
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid #b9c7d6;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.preview-status-bar button:hover:not(:disabled) {
+  background: #f0f4f8;
+}
+
+.preview-status-run-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.preview-status-clear-confirm-btn {
+  border-color: #d08a8a !important;
+  color: #a12d2d;
+}
+
+/* Green liveness dot, shown only while an executor is online. */
+.executor-online-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2ea043;
+  flex: 0 0 auto;
+}
+
 .preview-pane.fullscreen {
   flex: 1;
   width: 100%;

@@ -16,6 +16,7 @@ pub mod lsp;
 pub mod mcp;
 pub mod pandoc;
 pub mod preview;
+pub mod provide_hub;
 pub mod publish;
 pub mod remove;
 pub mod render;

@@ -78,13 +78,14 @@ const automergeBase64Plugin = {
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
-await esbuild.build({
-  entryPoints: [join(pkgRoot, 'src/index.ts')],
+// Shared esbuild options for every entry we bundle (the MCP server and the
+// `q2 provide-hub` auth bridge). Both embed into the same dist-bundle/ that
+// the q2 binary include_dir!s, so they must use identical bundling rules.
+const sharedOptions = {
   bundle: true,
   platform: 'node',
   format: 'esm',
   target: NODE_TARGET,
-  outfile: join(outDir, 'index.mjs'),
   conditions: ['source'],
   external: ['@napi-rs/keyring'],
   // Minify to shrink both the standalone tarball and the copy embedded
@@ -107,6 +108,21 @@ await esbuild.build({
   },
   plugins: [automergeBase64Plugin],
   logLevel: 'info',
+};
+
+// The MCP server (`q2 mcp`).
+await esbuild.build({
+  ...sharedOptions,
+  entryPoints: [join(pkgRoot, 'src/index.ts')],
+  outfile: join(outDir, 'index.mjs'),
+});
+
+// The `q2 provide-hub` auth bridge (bd-sfet3264): authenticates and streams
+// Bearer tokens to stdout. Shares the auth/* modules with the server.
+await esbuild.build({
+  ...sharedOptions,
+  entryPoints: [join(pkgRoot, 'src/auth-stream.ts')],
+  outfile: join(outDir, 'auth-stream.mjs'),
 });
 
 // --- ship the keyring addon as a mini node_modules ---------------------

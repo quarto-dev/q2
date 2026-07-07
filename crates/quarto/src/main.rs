@@ -465,6 +465,55 @@ enum Commands {
         args: Vec<String>,
     },
 
+    /// Connect to a hub session as a code-execution provider.
+    ///
+    /// Authenticates with the hub (opening a browser the first time) and
+    /// joins the project's collaborative session to run the project's code on
+    /// THIS machine.
+    ///
+    /// By default this is a ONE-SHOT run: it connects, executes the single
+    /// document named by --file once (after you review and accept it at an
+    /// interactive prompt), pushes the results to every collaborator, and
+    /// exits. Pass --watch to instead stay online and serve execution requests
+    /// as collaborators click "Run" (each still gated by the prompt).
+    ///
+    /// Every execution requires your affirmative consent at a terminal prompt
+    /// that shows the resolved document to be evaluated. Use
+    /// --dangerously-accept-requests only if you fully trust the session and
+    /// want unattended execution.
+    ProvideHub {
+        /// A quarto-hub share URL or a bare project index-document id.
+        project: String,
+
+        /// The project-relative document to execute once. REQUIRED in the
+        /// default one-shot mode; ignored under --watch (the path comes from
+        /// the collaborator's request there).
+        #[arg(long = "file")]
+        file: Option<String>,
+
+        /// Hub websocket URL (defaults to $QUARTO_HUB_SERVER, else the
+        /// canonical hub).
+        #[arg(long, env = "QUARTO_HUB_SERVER")]
+        server: Option<String>,
+
+        /// Stay online and serve execution requests from collaborators (the
+        /// editor's "Run" button) until Ctrl-C, instead of the default
+        /// one-shot run. Each request is still gated by the consent prompt.
+        #[arg(long = "watch")]
+        watch: bool,
+
+        /// Skip the interactive consent prompt and auto-accept every execution.
+        /// DANGEROUS: a hijacked or spoofed session could run arbitrary code on
+        /// this machine unattended. Only use in a fully-trusted session.
+        #[arg(long = "dangerously-accept-requests")]
+        dangerously_accept_requests: bool,
+
+        /// Dev/testing: use this bearer token instead of the interactive OAuth
+        /// bridge. Only for a local, no-auth hub (`q2 hub`), which ignores it.
+        #[arg(long, env = "QUARTO_HUB_TOKEN")]
+        token: Option<String>,
+    },
+
     /// Start collaborative hub server for real-time editing.
     /// By default, watches the current directory (or --project path).
     /// Use --no-project to run as a standalone sync server.
@@ -735,6 +784,22 @@ fn main() -> Result<()> {
             compact,
         }),
         Commands::Mcp { args } => commands::mcp::run(&args),
+
+        Commands::ProvideHub {
+            project,
+            file,
+            server,
+            watch,
+            dangerously_accept_requests,
+            token,
+        } => commands::provide_hub::execute(commands::provide_hub::ProvideHubArgs {
+            project,
+            file,
+            server,
+            watch,
+            dangerously_accept_requests,
+            token,
+        }),
 
         Commands::Hub {
             project,

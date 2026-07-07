@@ -92,6 +92,7 @@ fn capture_engine_input(content: &[u8], source_name: &str, engine_name: &str) ->
     let config = HtmlRenderConfig {
         resolver: None,
         engine_registry: Some(registry),
+        ..Default::default()
     };
     let runtime = runtime_arc();
     let _ = pollster::block_on(render_qmd_to_html(

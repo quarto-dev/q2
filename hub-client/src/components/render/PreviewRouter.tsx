@@ -3,7 +3,7 @@ import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { isQmdFile } from '@quarto/preview-renderer/types/project';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
-import type { ActorIdentity } from '@quarto/preview-runtime';
+import type { ActorIdentity, CaptureRef } from '@quarto/preview-runtime';
 import { parseQmdToAst, isWasmReady, initWasm } from '@quarto/preview-runtime';
 import Preview from './Preview';
 import ReactPreview from './ReactPreview';
@@ -39,6 +39,12 @@ interface PreviewRouterProps {
    * of the `actor.slice(0, 8)` fallback hash.
    */
   identities?: Record<string, ActorIdentity>;
+  /**
+   * Path → recorded engine capture sidecar entry (bd-sfet3264).
+   * Threaded into ReactPreview so the active document's capture can be
+   * fetched and spliced into the rendered AST.
+   */
+  captures?: Record<string, CaptureRef>;
   /**
    * Attribution overlay on/off. Session-only — owned by `Editor.tsx`
    * as `useState`, threaded down here and into `ReactPreview` to
@@ -139,7 +145,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
   // Render the appropriate preview component with shared WASM error banner.
   // `identities` and `attributionOn` are for ReactPreview only — Preview
   // doesn't know about either.
-  const { onRegisterScrollToLine, onRegisterSetScrollRatio, onRegisterReplayScroll, onFormatChange, onContentRewrite, fileContents, identities, attributionOn, onAttributionGeneratingChange, ...commonProps } = props;
+  const { onRegisterScrollToLine, onRegisterSetScrollRatio, onRegisterReplayScroll, onFormatChange, onContentRewrite, fileContents, identities, captures, attributionOn, onAttributionGeneratingChange, ...commonProps } = props;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -149,12 +155,15 @@ export default function PreviewRouter(props: PreviewRouterProps) {
       )}
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {reactFormat ? (
-          <ReactPreview {...commonProps} onContentRewrite={onContentRewrite} fileContents={fileContents} format={reactFormat} identities={identities} attributionOn={attributionOn} onAttributionGeneratingChange={onAttributionGeneratingChange} onRegisterReplayScroll={onRegisterReplayScroll} />
+          <ReactPreview {...commonProps} onContentRewrite={onContentRewrite} fileContents={fileContents} format={reactFormat} identities={identities} captures={captures} attributionOn={attributionOn} onAttributionGeneratingChange={onAttributionGeneratingChange} onRegisterReplayScroll={onRegisterReplayScroll} />
         ) : (
           // Phase 9 Decision 6: pass `fileContents` so any sibling
           // edit (including `_quarto.yml`) triggers a re-render via
           // the Map identity changing on every Automerge update.
-          <Preview {...commonProps} fileContents={fileContents} onRegisterScrollToLine={onRegisterScrollToLine} onRegisterSetScrollRatio={onRegisterSetScrollRatio} />
+          // bd-uy4uygha: `captures` threads the capture sidecar so the default
+          // `format: html` preview can splice executed output (previously only
+          // ReactPreview / q2-preview consumed captures).
+          <Preview {...commonProps} fileContents={fileContents} captures={captures} onRegisterScrollToLine={onRegisterScrollToLine} onRegisterSetScrollRatio={onRegisterSetScrollRatio} />
         )}
       </div>
     </div>

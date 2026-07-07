@@ -39,6 +39,7 @@ pub mod project_pipeline;
 pub mod project_resources;
 pub mod render_page_in_project;
 pub mod render_preserves_source_files;
+pub mod render_to_html_captures;
 pub mod render_to_html_user_grammars;
 pub mod replay_engine;
 pub mod revealjs_features;
