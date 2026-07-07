@@ -727,10 +727,15 @@ export default function ProjectsHome({
   );
 
   const renderShelf = (shelf: Shelf) => {
+    // Shelf order is by recency (lastAccessed, newest first), not by stored
+    // position — paging walks toward older projects, per the design. True
+    // "recent edits" ordering needs automerge-history attribution (Future
+    // phase); last-opened is the closest signal in today's metadata.
     const shelfItems = shelf.projectIds
       .map((id) => byId.get(id))
       .filter((it): it is ProjectItem => !!it)
-      .filter(matches);
+      .filter(matches)
+      .sort((a, b) => (a.lastAccessed < b.lastAccessed ? 1 : -1));
     if (query && shelfItems.length === 0) return null;
     const pageCount = Math.max(1, Math.ceil(shelfItems.length / SHELF_PAGE_SIZE));
     const page = Math.min(shelfPages[shelf.id] ?? 0, pageCount - 1);
