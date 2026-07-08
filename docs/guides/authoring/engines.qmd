@@ -1,0 +1,243 @@
+---
+title: Choosing and configuring engines
+---
+
+## Overview
+
+When Quarto renders a document that contains executable code, it hands that
+code to an **engine** — knitr, Jupyter, or an engine supplied by an
+extension. Most documents never mention an engine at all: Quarto looks at the
+languages of the executable cells and picks engines for you. Two metadata
+keys let you take control when you need it, and they divide the work cleanly
+between them:
+
+- **`engine:`** names *which engines are at play* in a document — the
+  execution sequence.
+- **`engines:`** configures *how engines behave*, whichever ones end up at
+  play, without naming any.
+
+The keys are one letter apart and easy to confuse, so it helps to keep one
+question in mind. When you are picking participants, reach for `engine:`.
+When you are adjusting the behavior of a participant that resolution might
+pick on its own, reach for `engines:`.
+
+## `engine:` — naming the engines at play
+
+A document's `engine:` key declares its **execution sequence**: the engines
+that will run, in the order they will run. The key accepts three shapes.
+
+```{.yaml filename="document.qmd"}
+engine: knitr                  # a one-engine sequence
+
+engine: [knitr, jupyter]       # two engines, run in this order
+
+engine:
+  - jupyter:                   # an entry with configuration:
+      kernel: python3          # the map's value is passed to the engine
+```
+
+Because `engine:` *names participants*, writing it is a committal act — Quarto
+treats your list as the complete statement of who plays. Three consequences
+follow:
+
+1. **The implicit-fallback safety net turns off.** Normally, a computational
+   language that no engine claims falls to Jupyter (or to any engine that
+   declares a stronger fallback claim). An explicit `engine:` list disables
+   that net: if your list does not cover a language, no unlisted engine is
+   quietly added to cover it. To opt out of execution entirely, write
+   `engine: markdown`.
+2. **Listed engines are present by declaration.** Some engines extend their
+   reach only when they are already in play — knitr's reticulate taking
+   `{python}` cells, for example. Listing an engine makes it present, even in
+   a document where it wins no language on its own.
+3. **Order is execution order.** Engines run one after another, each
+   consuming the previous engine's output, so an engine that generates code
+   must be listed before the engine that executes what it generates.
+
+`engine:` is read from **merged metadata**, so a project-level `engine:` in
+`_quarto.yml` also participates and concatenates with a document's own list.
+When both layers name the same engine, the project's entry wins; see
+[Precedence and overrides](#precedence-and-overrides) below for how a
+document overrides that.
+
+## `engines:` — configuring engines without naming any
+
+The project-level `engines:` key configures the **pool of engines** that
+resolution draws from — the built-ins plus any discovered extensions.
+Writing it never puts an engine into play. Its guarantees mirror the
+consequences of `engine:`, which is exactly what makes it safe to set
+project-wide:
+
+- it never makes any document's sequence explicit — the implicit-fallback net
+  stays on;
+- it never makes an engine "present," so it triggers no reach-extending side
+  effects;
+- it never causes an engine to run that would not have run anyway.
+
+The key is an array whose entries come in three forms:
+
+```{.yaml filename="_quarto.yml"}
+engines:
+  - knitr                      # a bare name: influences ordering only
+  - legacy-python:             # a name-keyed map: per-engine configuration;
+      claims: [python]         # `claims` is the configuration this key accepts
+```
+
+The one selection-adjacent influence `engines:` keeps is **ordering**. The
+order engines are visited in breaks ties between equal-strength claims, and it
+sets the order in which the chosen engines run. So `engines:` never *casts*
+anyone — claims decide who runs — it only shapes the order of whoever the
+claims chose.
+
+## Claim tables
+
+A **claim table** is the configuration an `engines:` entry (or an `engine:`
+entry) can carry: it declares which languages an engine handles. This is the
+mechanism behind the headline feature below, so it is worth understanding on
+its own first.
+
+Its simplest form is a list of languages, each of which the engine then
+claims as its own:
+
+```{.yaml filename="_quarto.yml"}
+engines:
+  - my-engine:
+      claims: [r, python]      # my-engine handles both r and python
+```
+
+For finer control, write the table as a map from language to a claim object.
+The `kind` field says *how* the engine wants the language:
+
+```{.yaml filename="_quarto.yml"}
+engines:
+  - my-engine:
+      claims:
+        r: {kind: primary}     # r is mine to execute
+        python: interop        # concise sugar for {kind: interop}
+        julia: true            # shorthand for {kind: primary}
+        sql: 2                 # shorthand for a primary claim at priority 2
+```
+
+A bare kind name (`primary`, `interop`, or `fallback`) is concise sugar for
+`{kind: <name>}` when you don't need `priority` or `whenClass`. The three
+kinds are:
+
+- **`primary`** — the engine executes this language. This is the default, and
+  what every entry in the list-shorthand form becomes.
+- **`interop`** — the engine takes this language *only when it is already in
+  play* for another reason. This is how knitr picks up `{python}` via
+  reticulate without dragging knitr into a Python-only document.
+- **`fallback`** — the engine is a catch-all for anything unclaimed. Jupyter
+  is the built-in universal fallback; any engine can declare its own with a
+  bare `fallback:` entry, which claims everything at the fallback floor:
+
+  ```{.yaml filename="_quarto.yml"}
+  engines:
+    - my-engine:
+        claims:
+          fallback: {priority: 0}
+  ```
+
+### A table replaces, it does not merge
+
+A claim table is a **whole-table replacement**: it stands in for the engine's
+*entire* claim surface, not a patch on top of it. A language absent from the
+table is simply not claimed. This gives two useful moves.
+
+**Masking.** Because a table replaces everything, omitting a language removes
+a claim the engine would otherwise make. To stop knitr from grabbing your
+Python cells via reticulate across a whole project, give it a table that
+claims only R:
+
+```{.yaml filename="_quarto.yml"}
+engines:
+  - knitr:
+      claims: [r]              # knitr keeps r; its interop on python is gone
+```
+
+**The empty-table mask.** An empty table claims nothing at all. Applied to
+Jupyter, it switches off the universal fallback project-wide:
+
+```{.yaml filename="_quarto.yml"}
+engines:
+  - jupyter:
+      claims: []               # jupyter now claims nothing
+```
+
+### Conditional claims with `whenClass`
+
+A claim can be gated on a cell's first class, so an engine takes a language
+only in a specific spelling. A marimo engine, for instance, wants
+`{python .marimo}` cells but should leave plain `{python}` cells alone:
+
+```{.yaml filename="_quarto.yml"}
+engines:
+  - marimo:
+      claims:
+        python: {kind: primary, whenClass: marimo}
+```
+
+With this table, `{python .marimo}` resolves to marimo and a plain `{python}`
+cell does not — it falls through to whichever engine claims Python normally.
+
+## Making a legacy extension resolvable {#backward-compatibility}
+
+This is the payoff the two keys were designed for.
+
+An engine extension can declare its claims statically in its own
+`_extension.yml`, which lets Quarto resolve documents without ever loading the
+extension's code. Older extensions predate this and declare no static claims —
+so Quarto cannot know what they handle without loading them, and tools that
+resolve engines ahead of time (such as the language server) cannot see them.
+
+You do not need to edit the extension to fix this. Supply its claim table in
+your project's `engines:` key, and Quarto answers the extension's language
+claims from your table alone:
+
+```{.yaml filename="_quarto.yml"}
+engines:
+  - legacy-python:
+      claims: [python]         # declare what the extension handles
+```
+
+With that one block, every document in the project resolves ahead of time,
+the extension is never loaded merely to answer a claim, and the extension
+itself is untouched.
+
+## Declaring generated languages
+
+Quarto decides the engine sequence from the languages it finds in a
+document's source. An engine that *generates* code in another language poses
+a problem: the target language has no cell in the source yet, so no engine is
+lined up to own it.
+
+The `generated-languages` key closes that gap. List the languages a document
+will emit, and each one gets an owner in the sequence before any cell of that
+language exists:
+
+```{.yaml filename="document.qmd"}
+generated-languages: [python, sql]
+```
+
+The key is a flat list, declared once at the top level. It only widens the
+scan when the document already has executable cells of its own; a document
+with no code cells stays plain Markdown regardless of what it lists here.
+
+## Precedence and overrides
+
+Two different rules govern conflicts, depending on what is in conflict.
+
+**Claim tables are document-authoritative.** When a document's own
+`engine:`-entry table and the project's `engines:` table both cover the same
+engine, the *document's* table wins — a document knows its own languages
+better than the project does.
+
+**Engine configuration and sequence are project-first.** For the engine
+sequence and for non-claims configuration such as a kernel name, the project
+layer wins on conflict, following Quarto's normal metadata merge. A document
+that needs to override the project's choice says so explicitly with the
+`!prefer` merge tag:
+
+```{.yaml filename="document.qmd"}
+engine: !prefer [jupyter]      # this document's sequence wins over the project's
+```

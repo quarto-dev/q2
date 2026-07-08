@@ -141,7 +141,7 @@ pub use fixture::FixtureEngine;
 pub use markdown::MarkdownEngine;
 pub use registry::EngineRegistry;
 pub use replay::ReplayEngine;
-pub use resolution::{EngineResolution, resolve_engines};
+pub use resolution::{EngineResolution, ResolutionNote, resolve_engines, resolve_engines_pass1};
 pub use traits::ExecutionEngine;
 
 // Re-export native-only engines

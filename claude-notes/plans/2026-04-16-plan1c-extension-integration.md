@@ -267,9 +267,18 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
   **Full-static, zero-load resolution** (the engine is spawned only to
   *execute*, once it has won ownership) is reached when an engine declares
   `name` **and** `claims`/`claims-files` covering its claiming logic. That is
-  the §3.3 payoff and the precondition for the future Pass-1 resolution lift
-  (engine-resolution.md §7) — when *every* engine in a project is fully
-  static, resolution loads nothing.
+  the §3.3 payoff and one input to the Pass-1 resolution lift
+  (engine-resolution.md §7). **Landed shape (Plan 6, implemented):** the
+  project-wide "every engine fully static" gate described here was replaced
+  by a **per-doc** load-free predicate (P1–P4) — a doc lifts to Pass-1 when
+  its own resolution never needs to load an engine, not when the whole
+  project's registry is static. Two additional static-metadata inputs widen
+  which docs qualify beyond this section's `claims`/`claims-files`: **claim
+  tables** (metadata-supplied replacements for an engine's `_extension.yml`
+  claims, letting even a claims-less legacy engine become load-free) and
+  **`generated-languages`**. See
+  [Plan 6](2026-06-29-plan6-pass1-engine-resolution.md) for the predicate and
+  both inputs.
 
   **Q1 schema compatibility:** Q1's `external-engine` schema definition
   is `closed: true` (single property `path`). A `_extension.yml` that

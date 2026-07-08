@@ -235,6 +235,28 @@ impl PipelineStage for EngineExecutionStage {
         );
         ctx.engine_resolution = Some(resolution.clone());
 
+        // Phase 3: drain resolver warnings into ctx.diagnostics. Warning
+        // severity, no `Q-*` codes (matches surrounding engine diagnostics).
+        // `DocumentProfileStage` never drains — avoids double-reporting a
+        // Pass-1-only doc's notes; they surface here when actually rendered.
+        ctx.add_diagnostics(resolution.notes.iter().map(|note| {
+            let msg = match note {
+                crate::engine::ResolutionNote::UnknownOverrideEngine { engine } => format!(
+                    "engine `{engine}` in this document's claim configuration is not a \
+                     registered engine; its claims are ignored"
+                ),
+                crate::engine::ResolutionNote::ConflictingDuplicateEngineConfig { engine } => {
+                    format!(
+                        "engine `{engine}` is given different configuration in more than one \
+                         `engine:` entry; the first entry's configuration wins (with default \
+                         merging, the project's) — use `engine: !prefer [...]` in the document \
+                         to override"
+                    )
+                }
+            };
+            DiagnosticMessage::warning(msg)
+        }));
+
         trace_event!(
             ctx,
             EventLevel::Debug,
@@ -905,6 +927,47 @@ mod tests {
         // document → resolve_engines returns an empty sequence → no engine
         // runs, no diagnostic emitted. The document still passes through.
         assert!(!result.ast.blocks.is_empty());
+    }
+
+    /// Plan 6 Phase 3: a `ResolutionNote` (here, an `engine:`-entry naming an
+    /// unregistered engine — "ghost" — while carrying a claim table) must be
+    /// drained into `ctx.diagnostics` as a warning-severity `DiagnosticMessage`
+    /// — NOT merely land in `resolution.notes` (the resolver unit tests in
+    /// `engine::resolution` stop there; this test covers the STAGE-level drain).
+    ///
+    /// Revert binding: delete the `ctx.add_diagnostics(resolution.notes...)`
+    /// line added after the `ctx.engine_resolution` stash — the note stays in
+    /// `resolution.notes`, never reaches `ctx.diagnostics` → this test reds.
+    #[tokio::test]
+    async fn resolution_note_drains_to_diagnostics() {
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context();
+
+        // "ghost" is not a registered engine; its `engine:`-entry claim table
+        // is skipped with a `ResolutionNote::UnknownOverrideEngine`. A
+        // non-empty language scan is required — an empty scan short-circuits
+        // resolution (P2) before the table-building code ever runs — but the
+        // cell's language must be one NO real built-in engine (markdown /
+        // knitr / jupyter, all live in `ctx.registry` here) would claim,
+        // otherwise a real engine attempts real execution and fails on
+        // missing runtimes in this test environment. `engine:` being
+        // explicit also keeps T4 (jupyter's universal fallback) gated off.
+        let content = b"---\ntitle: Test\nengine:\n  - ghost:\n      claims: [faketest]\n---\n\n```{faketest}\nx\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let _output = stage.run(input, &mut ctx).await.unwrap();
+
+        assert!(
+            ctx.diagnostics.iter().any(|d| {
+                d.kind == quarto_error_reporting::DiagnosticKind::Warning
+                    && d.title.contains("ghost")
+                    && d.title.contains("not a registered engine")
+            }),
+            "expected a warning-severity diagnostic naming the unknown \
+             override engine 'ghost'; got: {:?}",
+            ctx.diagnostics
+        );
     }
 
     #[tokio::test]

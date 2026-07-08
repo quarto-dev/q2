@@ -112,6 +112,16 @@ impl ExecutionEngine for ReplayEngine {
         }
     }
 
+    /// Pure name comparison against the recorded capture, always static
+    /// (Phase 4) — a `ReplayEngine` never loads anything.
+    fn try_claims_language(
+        &self,
+        language: &str,
+        first_class: Option<&str>,
+    ) -> Option<LanguageClaim> {
+        Some(self.claims_language(language, first_class))
+    }
+
     fn execute(
         &self,
         input: &str,

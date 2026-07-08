@@ -16,6 +16,7 @@
 //!
 //! This engine is always available, including in WASM builds.
 
+use super::LanguageClaim;
 use super::context::{ExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use super::traits::ExecutionEngine;
@@ -63,6 +64,17 @@ impl ExecutionEngine for MarkdownEngine {
     fn is_available(&self) -> bool {
         // Always available
         true
+    }
+
+    /// Pure Rust, always static — `claims_language`'s trait-default `None`
+    /// answer IS a static claim (markdown makes no claim on any language),
+    /// not a would-load signal. See `test_markdown_try_claims_language_answers_statically`.
+    fn try_claims_language(
+        &self,
+        language: &str,
+        first_class: Option<&str>,
+    ) -> Option<LanguageClaim> {
+        Some(self.claims_language(language, first_class))
     }
 }
 
@@ -196,6 +208,26 @@ x <- 1:10
     fn test_markdown_claims_language_python_is_none() {
         let engine = MarkdownEngine::new();
         assert_eq!(engine.claims_language("python", None), LanguageClaim::None);
+    }
+
+    // === Phase 4: builtins_answer_statically ===
+
+    /// MarkdownEngine's `try_claims_language` must answer statically
+    /// (`Some`), equal to `claims_language`, for representative languages —
+    /// even though the answer is `LanguageClaim::None` for every language,
+    /// that `None` is a STATIC claim, not a would-load signal. Revert
+    /// binding: without the override, the trait default `None` (would-load)
+    /// would treat markdown as a candidate that sinks every Pass-1 lift.
+    #[test]
+    fn test_markdown_try_claims_language_answers_statically() {
+        let engine = MarkdownEngine::new();
+        for lang in ["r", "python", "sql"] {
+            assert_eq!(
+                engine.try_claims_language(lang, None),
+                Some(engine.claims_language(lang, None)),
+                "try_claims_language must equal claims_language for {lang}"
+            );
+        }
     }
 
     // === Test Seam Row 2: default markdown_for_file returns NotSupported ===

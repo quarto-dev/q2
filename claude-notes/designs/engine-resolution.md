@@ -217,6 +217,21 @@ cross-engine tiering. The universal `fallback:` key is combined the identical
 way (`ts_engine.rs`'s two fallback call sites both route through the Vec
 combiner), so a fallback engine can itself carry more than one claim.
 
+**Top-level list shorthand (disambiguated from 4c0's per-language sequence).**
+A `claims:` value may also be a **top-level list of language names** —
+`claims: [python, r]` — rather than a map keyed by language. This is sugar
+for "each named language gets a bare `Primary(default)` claim," equivalent to
+`claims: { python: primary, r: primary }`. Do not confuse this with 4c0's
+**per-language** claim-object sequence above (`claims: { sql: [{whenClass:
+marimo, kind: primary}, {kind: interop}] }`): the top-level list is a
+shorthand over the *set of languages claimed*, one default `Primary` per
+entry; the per-language Vec is a sequence of *claim objects for one
+language*, letting a single language carry more than one conditioned claim.
+The two shapes are told apart by nesting, not by a discriminator key: a
+`claims:` value that is a list *at the top level* (entries are bare language
+names) is this shorthand; a `claims:` value that is a map whose *entry* value
+is a list (entries are claim objects) is the 4c0 form.
+
 A statically-declared claim used for resolution is validated against the
 dynamic method **only if/when the engine loads to execute** (mismatch → hard
 error, like the `name` check). Static claims are **authoritative for
@@ -224,9 +239,100 @@ resolution**; authors who declare them own their accuracy. `Fallback` cannot
 be a finite language list, so a universal-fallback engine declares
 `fallback:` rather than a per-language entry. Full-static resolution requires a
 declared `name` (zero-load needs the name to place the engine in the
-sequence). When *every* engine a project uses is fully static, resolution
-loads nothing and can move to Pass-1 (§7) — that lift is the payoff of static
-claims.
+sequence). Whether resolution loads nothing is decided **per document, not
+project-wide** — see "The needs-no-load predicate" below; that lift is the
+payoff of static claims (§7).
+
+**Claim tables from metadata (`engine:`/`engines:` sugar).** Metadata may
+also supply an engine's complete claim table — same schema as
+`_extension.yml`'s `claims:` — via a per-entry `claims:` key on either the
+`engine:` or `engines:` metadata key (`engine-and-engines-keys.md` §2/§3 owns
+the user-facing grammar; this is the resolution-side contract for what such a
+table does). A table is a **whole-table replacement**, winner takes all: it
+does not merge with the engine's `_extension.yml` claims or its dynamic
+`claims_language` — it *replaces* them entirely for that engine. **Source
+precedence** (highest wins, no merging across sources): a document's own
+`engine:`-entry table > project `engines:` table > `_extension.yml` static
+claims > the dynamic `claims_language` method. **A table makes its engine
+load-free** — resolution answers every claim consultation for that engine
+from the table, never loading it, which is what lets a legacy claims-less
+extension become Pass-1-resolvable without an edit to the extension itself.
+**An empty table (`claims: []`) is a full mask** — the engine claims nothing;
+the idiom `engines: [{jupyter: {claims: []}}]` disables jupyter's universal
+fallback project-wide. **Built-in engines are maskable but never validated**:
+a table may replace a built-in's (knitr's, jupyter's) claims outright, and
+because a masked engine never loads to compare, the author-validation
+paragraph above has no comparison moment to run while a table shadows it —
+reconciling the two later, as a divergence advisory, is future polish, not
+required now. **Forcing ownership via a table is priority-based and
+best-effort**: a table can outrank other candidates by declaring a
+high-priority claim, but it competes in the same kind/priority tiering as
+everyone else (§4) — against an unoverridden dynamic engine nothing can be
+guaranteed at Pass-1 (the doc falls through and Pass-2 loads the contender).
+
+**The two-key model, restated for resolution.** `engine:` *names the engines
+at play*: an explicit sequence, presence for every listed engine, execution
+order, and — per §4.3 — it turns T4 (implicit fallback) off. A per-entry
+`claims:` inside `engine:` is sugar for a document-level table on an
+already-named engine; the reserved `claims` key is stripped from the rest of
+the entry's config before it reaches the engine at execute time. `engines:`
+*configures without naming*: a Q1-syntax-compatible project-level array whose
+single-key-map entries' `claims:` values supply tables for engines already in
+the registry, without ever touching T4 gating, engine presence, or sequence.
+**q2-divergence:** both keys are read from *merged* metadata (project +
+document layers), not only from the one layer Q1 read each from (frontmatter
+for `engine:`, project config for `engines:`) — `engine-and-engines-keys.md`
+§4 has the full Q1 comparison.
+
+**The needs-no-load predicate (P1–P4).** Let `languages` be the doc's
+computational languages per §4.1 (including `generated-languages` when the
+scan is non-empty). A doc resolves load-free at Pass-1 iff any of:
+
+- **P1** — the file is claimed (`claimed = Some(engine)`): §8's short-circuit
+  consults no claims at all.
+- **P2** — the language scan is empty (markdown passthrough).
+- **P3** — an explicit `engine: markdown` opt-out.
+- **P4** — **every claim consultation the resolution needs returns a static
+  answer.** For each `(candidate engine, language)` pair, either a metadata
+  claim table answers it, or the engine answers without loading (a built-in,
+  or a `TsEngine` with static `claims:`). P4 is not a separate precondition
+  check: resolution attempts every consultation over the no-load claim path,
+  and a single "would need to load" answer aborts the lift, falling through
+  to Pass-2 exactly as today.
+
+Otherwise the doc falls through. "Load-free" is *computed*, not flagged — it
+is exactly "the no-load claim path never answered would-load for this doc."
+
+**Tier-dominance shortcut, considered and rejected as unsound.** An earlier
+design considered a shortcut: "a static `Primary` beats anything a
+non-static engine could declare," letting resolution skip consulting an
+unloaded engine once a static `Primary` claim is found elsewhere. This is
+**unsound** — an unloaded engine could declare `Primary(999)` (priority
+orders *within* a kind, §3.1), so without a load or a claim table a
+claims-less engine's claims cannot be bounded, and the shortcut could pick
+the wrong owner. The predicate above does not shortcut: a claims-less,
+untabled engine registered in the project makes every doc with an uncovered
+computational language fall through — correct, and exactly what the
+lifted/fell-through counters and the index-pass warning (§12) surface.
+
+**The no-load claim method.** The mechanism the predicate rests on is a
+method on the `ExecutionEngine` trait, parallel to `claims_language` but
+answerable without loading:
+
+```rust
+fn try_claims_language(&self, language: &str, first_class: Option<&str>)
+    -> Option<LanguageClaim>;
+```
+
+`None` means "would have to load to answer" — the uniform per-engine signal
+P4 treats as an abort. `Some(claim)` — including `Some(LanguageClaim::None)`
+for "definitely doesn't claim this" — is a static answer. Built-ins override
+it directly (their `claims_language` *is* static); a `TsEngine` with a static
+`claims:` table (above) answers from that table without spawning the JS
+runtime; a claims-less, untabled `TsEngine` returns `None` uniformly. Before
+this method existed, the contract described "static claims answer without
+loading" only in prose; this is the surface that makes it a checkable fact
+rather than a convention.
 
 ## 4. Resolution algorithm
 
@@ -258,6 +364,18 @@ Not a list — **structural**, from the parsed AST: the language of every
 the class name), **minus** `HANDLED_LANGUAGES` (`ojs`/`mermaid`/`dot` — cell
 handlers, not engines) and minus raw `{=fmt}` blocks. No allowlist, no kernel
 registry. An empty set → no engine → markdown passthrough.
+
+**`generated-languages` widens the scan — but only when it is already
+non-empty.** `languages = scan(ast) ∪ generated-languages`: a flat top-level
+list of language names in `meta.generated-languages`, declared once,
+consumer-only (no per-engine attribution), ordering unaffected (order is
+controlled by the explicit `engine:` list, never by this key). Generated
+entries are consulted with `first_class = None` — a generated language has no
+cell of its own to carry a first class. **The union is consulted only when
+`scan(ast)` is non-empty**: a cell-less doc with `generated-languages` set is
+a no-op and stays markdown passthrough, matching the doc having nothing to
+generate into. See §6.1 for why this is the *static* escape from the
+handoff-loss limitation, not a relaxation of it.
 
 ### 4.2 Per-language ownership; `first_class` drives *selection*
 
@@ -417,6 +535,18 @@ would break the determinism guard and the eventual freeze cache-key). Tracked
 as a live-preview limitation (bd-r8n4r); the valuable common handoffs are all
 in the "still works" set.
 
+**The static escape: `generated-languages` (§4.1).** Scenario 1 above
+(injected-cell handoff to an engine absent from the sequence) has a
+**declared, static** escape: `meta.generated-languages` widens the
+pre-execution language scan to include a language the doc promises to
+generate but does not yet contain a literal cell for, so the target engine's
+ownership — and its place in the sequence — is decided from metadata before
+execution starts, not by re-scanning the AST after it runs. This does **not**
+relax the T9 ratification above: the sequence is still derived **once**, from
+information known before execution (the scan *plus* the declared list), never
+by re-resolving mid-execution as cells appear. An author who does not declare
+the generated language remains subject to scenario 1 exactly as ratified.
+
 ### 6.2 Replay drives from recorded captures, not re-resolution
 
 On `main`, replay re-runs `detect_engine_sequence(meta)` and looks up
@@ -446,18 +576,38 @@ time; the browser folds captures.
 
 ## 7. Pass placement
 
-**Resolution runs in Pass 2 (Option A).** Resolving by language in Pass 1 would
-`LoadEngine` expensive TS engines just to index docs that never run them. The
-file-claim half (§8) *is* in Pass 1 (it must, to convert non-QMD input before
+**Resolution is attempted per-document at Pass-1; the stamp is
+complete-or-absent, never partial.** `resolve_engines` is a pure function of
+`(meta, ast, registry, claimed)` (§9), so `DocumentProfileStage` can call its
+Pass-1 counterpart (`resolve_engines_pass1`, §9) directly at the checkpoint:
+when the doc satisfies the needs-no-load predicate (§3.3, P1–P4) the call
+runs entirely over the no-load claim path and the profile is stamped with a
+**complete** `ProfileEngineResolution` (§9); the moment any consultation
+would need to load an engine, the attempt aborts and the profile field is
+`engine_resolution: None`. There is no partial/pending representation, and
+this lift never loads an engine to resolve (only file-claim conversion,
+below, may load one, for an unrelated reason). A `None` stamp is not an
+error: Pass-2 re-resolves the same doc from scratch via `resolve_engines`,
+exactly as it did before this lift existed, so a fall-through doc's render is
+unaffected — only Pass-1-only, profile-consuming features (the LSP today;
+freeze/pooling later, §12) see the gap.
+
+The lift is per-doc *and* project-grain at once: a doc's P1–P3 status is its
+own, but P4 depends on the registry (which engines are static or tabled), so
+in practice a project either has every doc resolve load-free or has a shared
+minority permanently fall through until its extensions or `engines:` tables
+catch up — the condition the index-pass warning (§12) surfaces.
+
+The file-claim half (§8) *is* in Pass 1 (it must, to convert non-QMD input before
 parse), but it only spawns an engine when a doc genuinely needs conversion, and
 it must be inserted into **both** the full pipeline and the Pass-1 builder
 (`pass1_profile_single_file_live`) — otherwise non-QMD docs get a garbage
-`DocumentProfile`.
-
-Because `resolve_engines` is pure, recording its result on the `DocumentProfile`
-and lifting resolution to Pass-1 is a **zero-cost future move** (§10), enabled
-once a project's engines are all fully-static (§3.3) so resolution loads
-nothing.
+`DocumentProfile`. File-claim conversion and engine-set resolution are
+independent Pass-1 activities: a claimed file's `claimed` argument feeds
+`resolve_engines_pass1` exactly as it feeds `resolve_engines` today (§8's
+single-engine short-circuit is P1 of the predicate above), but the file
+claim's own engine load (to run `markdown_for_file`) is not itself a
+resolution load and does not count against the needs-no-load predicate.
 
 ## 8. File-claim semantics (Q1-faithful: claimed file → single engine)
 
@@ -510,8 +660,9 @@ what Q1 actually does. Multi-engine remains a **`.qmd`-authoring** feature
 ```rust
 // crates/quarto-core/src/engine/resolution.rs
 pub struct EngineResolution {
-    pub sequence:  Vec<DetectedEngine>,        // ordered, distinct owners
-    pub ownership: HashMap<String, String>,    // language -> owning engine name
+    pub sequence:  Vec<DetectedEngine>,             // ordered, distinct owners
+    pub ownership: LinkedHashMap<String, String>,   // language -> owning engine name, insertion order
+    pub notes:     Vec<ResolutionNote>,             // warnings — advisory, resolver stays infallible
 }
 impl EngineResolution {
     pub fn handled_languages_for(&self, engine: &str) -> Vec<String>;  // §5 (leave-alone)
@@ -520,16 +671,69 @@ impl EngineResolution {
 pub fn resolve_engines(
     meta: &ConfigValue, ast: &Pandoc, registry: &EngineRegistry, claimed: Option<&str>,
 ) -> EngineResolution;   // tiers, presence-gating, fallback ordering all live here
+
+/// Advisory warnings the resolver records instead of failing — the resolver
+/// stays pure and infallible (§3's per-doc-layer "warn-and-skip" unknown-name
+/// policy), so anything a caller wants to surface travels as returned data,
+/// not an error.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResolutionNote {
+    UnknownOverrideEngine { engine: String },
+    ConflictingDuplicateEngineConfig { engine: String },
+}
 ```
 
-`EngineExecutionStage::run` calls it once and stashes `EngineResolution` on
-`StageContext` (mirroring `project_index` in `run_pipeline`). The loop reads
-`ownership` for each engine's `handled_languages`; the trace records
-`sequence`. Benefits: the tier/presence/fallback logic is **unit-testable in
-isolation** with mock claim tables (no subprocess); the trace can emit a
-"resolved engines" entry; the Pass-1 lift is just "move the call, stamp the
-profile." It is a function + `StageContext` artifact, **not** a pipeline stage
-(it transforms no `PipelineData`).
+`ownership` is a `LinkedHashMap` (`resolution.rs:286`, insertion-ordered), not
+a `HashMap` — `handled_languages_for`'s deterministic output and
+`ProfileEngineResolution`'s `Vec<(String, String)>` conversion (§9.1 below)
+both rely on iterating it in insertion order. `notes` lives on
+`EngineResolution`, **not** on the reduced profile type — warnings are Pass-2
+`StageContext` data (drained into `ctx.diagnostics`), and the profile stays a
+pure names-only snapshot.
+
+`EngineExecutionStage::run` calls `resolve_engines` once and stashes
+`EngineResolution` on `StageContext` (mirroring `project_index` in
+`run_pipeline`). The loop reads `ownership` for each engine's
+`handled_languages`; the trace records `sequence`; `notes` drains into
+`ctx.diagnostics` as warnings. Benefits: the tier/presence/fallback logic is
+**unit-testable in isolation** with mock claim tables (no subprocess); the
+trace can emit a "resolved engines" entry. It is a function + `StageContext`
+artifact, **not** a pipeline stage (it transforms no `PipelineData`).
+
+### 9.1 The Pass-1 lift: `resolve_engines_pass1` and `ProfileEngineResolution`
+
+```rust
+// crates/quarto-core/src/engine/resolution.rs
+pub fn resolve_engines_pass1(
+    meta: &ConfigValue, ast: &Pandoc,
+    registry: &EngineRegistry, claimed: Option<&str>,
+) -> Option<EngineResolution>; // Some = load-free stamp, None = fall through
+
+// crates/quarto-core/src/document_profile.rs
+pub struct ProfileEngineResolution {
+    pub sequence:  Vec<String>,            // ordered distinct owners
+    pub ownership: Vec<(String, String)>,  // language -> engine, insertion order
+}
+```
+
+`resolve_engines_pass1` shares `resolve_engines`'s tiers/presence/fallback
+core (§4), parameterized to run only over the no-load claim path
+(`try_claims_language`, §3.3) — same inputs, same algorithm, different claim
+source. It returns `Some(EngineResolution)` when the needs-no-load predicate
+(§3.3, P1–P4) holds for the doc — a **complete** resolution, identical in
+content to what `resolve_engines` would have produced — and `None` the
+moment any consultation would need to load an engine; there is no partial
+result (§7). `DocumentProfileStage` calls it at the profile checkpoint and,
+on `Some`, projects the full `EngineResolution` down to the reduced
+`ProfileEngineResolution` — names only, no `ConfigValue` blobs — for the
+`engine_resolution: Option<ProfileEngineResolution>` profile field
+(`document-profile-contract.md`): `sequence` becomes engine names,
+`ownership` becomes `Vec<(String, String)>` in the `LinkedHashMap`'s
+insertion order. A `None` stamp means the field is `None`, not an error —
+Pass-2 re-resolves via `resolve_engines` regardless. `EngineResolution::notes`
+does not travel to the profile: a Pass-1 stamp is complete precisely because
+the no-load path answered every consultation, so it produces no warnings to
+carry; `notes` remains a Pass-2 `StageContext`/diagnostics concern.
 
 ## 10. Failure model (Q1 parity, with one deliberate q2 divergence)
 
@@ -614,6 +818,13 @@ case-4. **Deliberate divergence from Q1's eager
      single-engine case. The TS-engine "must error, never silently pass
      through" obligation likewise applies **only** to a TS engine that is a
      non-sole participant in a multi-engine sequence.
+     **A nonsensical claim table follows this same gating.** A metadata claim
+     table (§3.3) that names an owner unable to actually execute a language it
+     claimed — e.g. `engines: [{jupyter: {claims: {sql: primary}}}]` — is not
+     a new failure path: it fails loudly at execute in a multi-engine
+     sequence, exactly like any other case-4 owner, and passes through
+     silently as display code in a single-engine sequence. Tables are a claim
+     *source* (§3.3), not a bypass of this gate.
 - **Multi-engine:** any unavailable **owner** in a sequence → fail the whole
   render loudly, naming the engine/language. Q1 never degrades; neither do we.
 
@@ -639,14 +850,34 @@ case-4. **Deliberate divergence from Q1's eager
   it would change ownership granularity to per-cell and enforcement
   (`handled_languages`) to a per-cell skip set + stable cell identity through
   the threading round-trip. Reversible; least urgent of these three.
-- **Pass-1 resolution.** Once every engine in a project is fully static (§3.3),
-  resolution loads nothing and can run in Pass 1, recording `EngineResolution`
-  on the `DocumentProfile` (profile-version bump) — making the index
-  engine-aware (kernel pooling, freeze planning) and the freeze cache key
-  correct (§6.2).
-- **Project-level claim overrides.** Static claims as config opens
-  `_quarto.yml` overriding an engine's claims (e.g. "knitr does not interop
-  python here"). Deferred.
+
+**In scope, delivered by this plan (moved out of "future"):**
+
+- **Pass-1 resolution.** §7/§9 above: once a doc's resolution satisfies the
+  needs-no-load predicate (§3.3, P1–P4), `resolve_engines_pass1` runs it in
+  Pass 1 and stamps a `ProfileEngineResolution` on the `DocumentProfile`
+  (profile-version bump — `document-profile-contract.md`), making the index
+  engine-aware (kernel pooling, freeze planning, LSP) for every doc that
+  qualifies. **The index-pass warning**: when Pass-1 cannot resolve every
+  doc, the orchestrator prints one warning at index-pass completion naming
+  each engine that must load to answer language claims (with its
+  `_extension.yml` path) and both fixes (author-side `claims:` in
+  `_extension.yml`; user-side `engines:` table in `_quarto.yml`) — the
+  human-facing surface for the fall-through condition described above.
+  **Freeze-key caveat:** a doc whose `engine_resolution` field is `None`
+  cannot be frozen until resolution completes at Pass-2 — the profile alone
+  does not carry enough to key a freeze cache entry for a fall-through doc.
+  This forces **Option A** (load contested engines at Pass-1 to complete the
+  set) *for freeze specifically*, whenever freeze is built; the V1
+  load-free-only stamp here is sufficient for the LSP, which already
+  tolerates `None`, but not sufficient on its own for a freeze cache that
+  must cover every doc.
+- **Project-level claim overrides.** §3.3 above ("Claim tables from
+  metadata") and `engine-and-engines-keys.md` §3: static claims as project
+  config, via the `engines:` key's `claims:` entries. "Knitr does not interop
+  python here" is exactly `engines: [{knitr: {claims: {r: primary}}}]` — a
+  whole-table replacement that omits python, masking it out of knitr's table
+  project-wide.
 
 ## 13. Verification items (during implementation)
 

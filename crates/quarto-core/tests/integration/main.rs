@@ -43,6 +43,7 @@ pub mod navbar_footer_pipeline;
 pub mod navigation_e2e;
 pub mod navigation_merge;
 pub mod page_navigation_pipeline;
+pub mod pass1_engine_resolution_pipeline;
 pub mod preview_render_css_parity;
 pub mod printable_render;
 pub mod project_pipeline;

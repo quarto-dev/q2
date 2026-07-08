@@ -2,7 +2,7 @@
 
 **Status:** Active (Phase 0 of the website epic, `bd-0tr6` / `bd-f3jc`;
 extended in Phase 8 sub-phase 8.0, `bd-fegm` + `bd-r82e`).
-**Version tag:** `DOCUMENT_PROFILE_VERSION = 2`
+**Version tag:** `DOCUMENT_PROFILE_VERSION = 7`
 **Type:** `quarto_core::document_profile::DocumentProfile`
 **Stage:** `quarto_core::stage::stages::DocumentProfileStage` (name
 `"document-profile"`) + `UnwrapProfileStage` (`"unwrap-profile"`),
@@ -66,14 +66,22 @@ produced.
 | `categories_raw` | `Option<ConfigValue>` carrying the originating tagged value of the top-level `categories:` key (`bd-n8a4`). Mirrors `categories` but preserves `!prefer` / `!concat` merge tags so listings consumers can feed it (alongside `listing_item.categories_raw`) into `quarto_config::MergedConfig` for tag-aware merging. Most consumers should keep reading the flattened `categories`; only listings reach for the raw form. Default `None`. |
 | `listing_content_globs` | `Vec<String>` of unresolved glob strings from the host page's `listing.*.contents:` declarations (`bd-xbnf`, listings L6). Flattened across all listings on the page. The dependency-graph builder expands these against `ProjectIndex` at graph-build time (host-relative first, project-relative fallback — matches L3's render-time rule) to add forward edges from each listing host to its content files; hosts with non-empty entries are also added to the graph's `force_render` set so Mode B (`quarto render posts/foo.qmd`) pulls in listing hosts when any of their content files is targeted. Resolution is **not** cached on the profile (the per-doc cache cannot represent dependency on the full project source set safely). Default empty. |
 | `listing_item` | `ListingItemInfo` advertising per-document data for listings consumers (`bd-n8a4`). **Scoped feature surface — listings only**; non-listing consumers must use the corresponding top-level fields (`title`, `description`, `image`, …). Author-supplied values populate during `DocumentProfile::extract`; `ListingItemInfoStage` (`bd-izqh`, L1, landed) auto-fills holes pre-checkpoint for `description` (full first paragraph), `image` (first inline image's URL), `word_count` (Q1-parity tokenization, footnote text excluded), `reading_time_minutes` (`ceil(word_count / 200)`), and `date_modified` (filesystem mtime via `SystemRuntime::path_metadata` formatted as `YYYY-MM-DD` UTC). Author values always win — the stage strictly fills holes. The nested `extra: BTreeMap<String, ConfigValue>` is the **only** open-shape field in the profile and is forbidden to non-listing consumers — see §"Scoped feature surfaces". Default empty (`ListingItemInfo::is_empty()`). |
+| `engine_resolution` | `Option<ProfileEngineResolution>` (`engine-resolution.md` §9.1). `Some` only when the document's engine resolution is provably load-free at Pass-1 — the needs-no-load predicate in `engine-resolution.md` §3.3 (P1–P4) — and is then **complete**: `sequence` is the resolved engine names in run order, `ownership` is the language→engine map in insertion order. `None` means resolution fell through to Pass-2's existing (non-profiled) resolution — **not an error**; most documents may show `None` until every engine a project uses is static or tabled (`engine-resolution.md` §3.3, §12). Names only, no `ConfigValue` blobs. Default `None`. |
 
 ## Non-guarantees (explicit)
 
 What a profile **does not** contain:
 
-- **Engine output.** No values produced by executing code cells
-  (Jupyter, Knitr, Observable). Those require the engine stage,
-  which runs after the checkpoint.
+- **Engine execution output.** No values produced by executing code
+  cells (Jupyter, Knitr, Observable). Those require the engine
+  stage, which runs after the checkpoint. **Engine *resolution* is
+  the exception to this line, not a contradiction of it:** deciding
+  which engine(s) will run and which owns which language is a pure,
+  pre-load computation (`engine-resolution.md` §9) and *is*
+  profile-eligible — see the `engine_resolution` field above. The
+  boundary is between *deciding* an owner (resolution, may be on the
+  profile) and *running* that owner to get a value (execution, never
+  on the profile).
 - **Sugar-synthesized structure.** No callout custom nodes, no
   theorem/float-target/equation-label canonicalization, no
   crossref numbering (`TocEntry::number`), no appendix structure,
@@ -415,22 +423,35 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   changed from `Vec<String>` to `Vec<RawResourcePattern>` so each
   pattern carries its YAML `SourceInfo` for Ariadne-span
   diagnostics.
-- **2026-07-15 — v7 (`bd-ez0hiowa`, title-block parity epic P2).**
-  `DOCUMENT_PROFILE_VERSION` bumped 6 → 7. One new field:
-  - `authors_structured: Vec<ProfileAuthor>` — the structured
-    author model (name literal + given/family components, ORCID,
-    email, url, degrees, attribute flags, denormalized
-    affiliations as `ProfileAffiliation { name, department,
-    url }`). Produced by the shared normalization in
-    `crates/quarto-core/src/metadata/authors.rs`
-    (`parse_authors_model`) — the same pass
-    `AuthorsNormalizeTransform` uses to derive the
-    `by-author`/`by-affiliation` metadata the HTML title block
-    renders. The flat `authors: Vec<String>` field keeps its type
-    and now derives its literals from the same model, so the two
-    fields always agree. Fields the profile does not carry yet
+- **2026-07 — v8 (merge of two concurrent v7 bumps).** Two branches
+  each bumped `DOCUMENT_PROFILE_VERSION` 6 → 7 for a different new
+  field; the ts-engine-extensions rebase merged them, so both fields
+  coexist under **v8** (there is no single-field v7 on the merged
+  line). v6/v7 cache entries on disk are rejected with
+  `DocumentProfileError::VersionMismatch` and silently regenerated,
+  identical to every prior bump. Both new fields:
+  - `authors_structured: Vec<ProfileAuthor>` (`bd-ez0hiowa`,
+    title-block parity epic P2) — the structured author model (name
+    literal + given/family components, ORCID, email, url, degrees,
+    attribute flags, denormalized affiliations as
+    `ProfileAffiliation { name, department, url }`). Produced by the
+    shared normalization in `crates/quarto-core/src/metadata/authors.rs`
+    (`parse_authors_model`) — the same pass `AuthorsNormalizeTransform`
+    uses to derive the `by-author`/`by-affiliation` metadata the HTML
+    title block renders. The flat `authors: Vec<String>` field keeps
+    its type and now derives its literals from the same model, so the
+    two fields always agree. Fields the profile does not carry yet
     (roles, notes, funding) join later with another bump.
-  v6 cache entries on disk are rejected with
-  `DocumentProfileError::VersionMismatch` and silently
-  regenerated, identical to every prior bump.
-  Plan: `claude-notes/plans/2026-07-15-html-title-block-parity.md`.
+    Plan: `claude-notes/plans/2026-07-15-html-title-block-parity.md`.
+  - `engine_resolution: Option<ProfileEngineResolution>` (plan6,
+    Pass-1 engine resolution) — the per-document engine resolution,
+    additive at the on-disk layer (`skip_serializing_if` keeps default
+    profiles compact), stamped only when Pass-1 can resolve it without
+    loading an engine (`engine-resolution.md`'s needs-no-load
+    predicate, §3.3/§7/§9.1). `None` means the doc falls through to
+    Pass-2's existing resolution — not an error. Names only, no
+    `ConfigValue` blobs: `sequence` is the resolved engine names in run
+    order, `ownership` is the language→engine map in insertion order.
+    Feeds the LSP today; future freeze and kernel-pooling consumers
+    later (`engine-resolution.md` §12).
+    Plan: `claude-notes/plans/2026-06-29-plan6-pass1-engine-resolution.md`.

@@ -147,6 +147,27 @@ pub trait ExecutionEngine: Send + Sync {
         LanguageClaim::None
     }
 
+    /// A static language claim if one exists, or `None` meaning "I would
+    /// have to load to answer."
+    ///
+    /// The `None`-ness is a per-engine property, uniform across all
+    /// languages: an engine with a static claim source answers every
+    /// language (`Some(LanguageClaim::None)` for one it doesn't claim); a
+    /// claims-less engine answers `None` for all. This is the no-load claim
+    /// surface Pass-1 engine resolution (`resolve_engines_pass1`) attempts
+    /// the whole resolution over — a single `None` answer aborts the
+    /// attempt and falls through to the loading Pass-2 path.
+    ///
+    /// Default `None` is fail-safe: an un-overridden engine is treated as
+    /// would-load and conservatively falls through.
+    fn try_claims_language(
+        &self,
+        _language: &str,
+        _first_class: Option<&str>,
+    ) -> Option<LanguageClaim> {
+        None
+    }
+
     /// Whether this engine claims a particular non-QMD input file.
     ///
     /// Called during Pass-1 project scanning for files whose extension appears
@@ -192,6 +213,17 @@ pub trait ExecutionEngine: Send + Sync {
     ///
     /// Default: `None` (no constraint declared or not yet loaded).
     fn quarto_required(&self) -> Option<&str> {
+        None
+    }
+
+    /// Absolute path to the `_extension.yml` that contributed this engine,
+    /// if any (Plan 6 Phase 5 provenance). `None` for built-in engines
+    /// (markdown/knitr/jupyter) and for any engine without a known
+    /// extension origin — used by [`super::EngineRegistry::engines_needing_load`]
+    /// to point the Pass-1 fall-through warning at the file to edit.
+    ///
+    /// Default: `None`.
+    fn extension_yml_path(&self) -> Option<PathBuf> {
         None
     }
 

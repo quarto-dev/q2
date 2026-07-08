@@ -247,6 +247,15 @@ impl ExecutionEngine for KnitrEngine {
         }
     }
 
+    /// Pure Rust, always static. See `test_knitr_try_claims_language_answers_statically`.
+    fn try_claims_language(
+        &self,
+        language: &str,
+        first_class: Option<&str>,
+    ) -> Option<LanguageClaim> {
+        Some(self.claims_language(language, first_class))
+    }
+
     fn is_available(&self) -> bool {
         self.rscript_path.is_some()
     }
@@ -460,6 +469,25 @@ mod tests {
     fn test_knitr_claims_language_julia_is_none() {
         let engine = KnitrEngine::new();
         assert_eq!(engine.claims_language("julia", None), LanguageClaim::None);
+    }
+
+    // === Phase 4: builtins_answer_statically ===
+
+    /// KnitrEngine's `try_claims_language` must answer statically (`Some`),
+    /// equal to `claims_language`, for every representative language —
+    /// pure Rust, always static. Revert binding: without the override, the
+    /// trait default `None` (would-load) would sink every Pass-1 lift for a
+    /// doc that has knitr as a candidate (i.e. every doc).
+    #[test]
+    fn test_knitr_try_claims_language_answers_statically() {
+        let engine = KnitrEngine::new();
+        for lang in ["r", "python", "sql", "bash", "sh", "julia"] {
+            assert_eq!(
+                engine.try_claims_language(lang, None),
+                Some(engine.claims_language(lang, None)),
+                "try_claims_language must equal claims_language for {lang}"
+            );
+        }
     }
 
     // === Resource Tests ===

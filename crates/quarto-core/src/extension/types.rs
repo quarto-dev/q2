@@ -98,6 +98,13 @@ pub enum EngineContribution {
     /// resolved during read_extension.
     External {
         path: PathBuf,
+        /// Absolute path to the contributing extension's `_extension.yml`
+        /// (Plan 6 Phase 5 provenance). Distinct from `path` above (the
+        /// engine's `.js` bundle) — this points at the YAML file a user
+        /// would edit to add `claims:`. A plain `PathBuf`, not `SourceInfo`:
+        /// project diagnostics print with `to_text(None)`, so a span
+        /// couldn't render (`commands/render.rs`).
+        extension_yml_path: PathBuf,
         /// Static declaration of the engine's runtime name (e.g. "julia").
         /// `None` = not declared (q2 must LoadEngine to learn the name).
         /// `Some(name)` = registered under `name` with no subprocess load.
@@ -279,6 +286,7 @@ pub fn engine_contribution_missing_fields_warning(
         claims,
         file_extensions,
         claims_files,
+        ..
     } = contribution
     else {
         return None;
@@ -554,6 +562,7 @@ mod tests {
     fn make_full_external() -> EngineContribution {
         EngineContribution::External {
             path: std::path::PathBuf::from("/path/to/engine.js"),
+            extension_yml_path: std::path::PathBuf::from("/path/to/_extension.yml"),
             name: Some("myengine".to_string()),
             claims: Some(HashMap::new()),
             file_extensions: Some(vec![]),
@@ -564,6 +573,7 @@ mod tests {
     fn make_external_without(missing_field: &str) -> EngineContribution {
         EngineContribution::External {
             path: std::path::PathBuf::from("/path/to/engine.js"),
+            extension_yml_path: std::path::PathBuf::from("/path/to/_extension.yml"),
             name: if missing_field == "name" {
                 None
             } else {
@@ -671,6 +681,7 @@ mod tests {
     ) -> EngineContribution {
         EngineContribution::External {
             path: std::path::PathBuf::from("/path/to/engine.js"),
+            extension_yml_path: std::path::PathBuf::from("/path/to/_extension.yml"),
             name: Some("myengine".to_string()),
             claims: Some(HashMap::new()),
             file_extensions: file_extensions

@@ -883,6 +883,8 @@ fn print_render_diagnostics(
     quarto_core::project::orchestrator::print_pass1_stats_if_enabled();
     // bd-3gj56: pass-2 docs / threads_used / wall_ms gauge.
     quarto_core::project::orchestrator::print_pass2_stats_if_enabled();
+    // Plan 6 Phase 5: pass-1 engine-resolution lifted/fell_through gauge.
+    quarto_core::project::orchestrator::print_pass1_engine_resolution_stats_if_enabled();
 }
 
 /// Text path: the existing ariadne-formatted output. Kept verbatim

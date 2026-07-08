@@ -46,6 +46,7 @@ website:
             - guides/authoring/scholarly-writing.qmd
             - guides/authoring/document-language.qmd
             - guides/authoring/computations.qmd
+            - guides/authoring/engines.qmd
             - guides/authoring/navigation.qmd
             - guides/authoring/extensions.qmd
             - guides/authoring/templates.qmd

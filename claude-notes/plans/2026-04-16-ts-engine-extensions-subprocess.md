@@ -77,12 +77,18 @@ resolution tiers, per-language ownership, `handled_languages` enforcement, and
 the failure model — is the design contract
 [`claude-notes/designs/engine-resolution.md`](../designs/engine-resolution.md);
 the "Engine Discovery and Language Claiming" section below summarizes the parts
-the protocol and trait surfaces depend on. Engine **resolution runs in Pass 2**
-(engine `claims_*` must not load expensive TS engines merely to index a doc in
-Pass 1); only the pre-parse **file-claim** half runs in Pass 1. A future
-**per-doc lift** of resolution into Pass 1 (for docs whose engines all resolve
-load-free) is researched in
-[Plan 6](2026-06-29-plan6-pass1-engine-resolution.md) — additive, post-1c.
+the protocol and trait surfaces depend on. Engine resolution's *baseline*
+placement is Pass 2 (engine `claims_*` may load expensive TS engines, which
+Pass 1 must not do merely to index a doc) — this is still exactly right for a
+doc whose resolution can't be computed load-free. **[Plan 6](2026-06-29-plan6-pass1-engine-resolution.md)
+(implemented, additive, post-1c) lifts resolution into Pass 1 per-doc**: a
+load-free predicate (P1–P4) decides, per document, whether its engine
+sequence + language ownership can be computed without loading any engine; if
+so, Pass 1 stamps the result on `DocumentProfile` and Pass 2 never
+re-resolves it. A doc that can't clear the predicate falls through and
+resolves in Pass 2 exactly as before. Pass 1's pre-parse **file-claim** half
+(deciding which engine, if any, claims a whole file before it's even parsed)
+is unaffected and always ran in Pass 1.
 
 ### Shared subprocess lifecycle (one Deno process per project render)
 
@@ -556,13 +562,13 @@ abstraction in Plan 2 is what enables it without rework to `@quarto/api`.
 | [**Plan 4d: `owned_languages` positive ownership wire field**](2026-07-06-plan4d-owned-languages.md) | 1 | TS-engine wire (1a–c, 2, 3, 4) | ○ **Not started** (0/39). **Additive, anytime post-wire; blocks nothing.** Carries the **positive** projection of the ownership map (`ownedLanguages`) beside the existing `handledLanguages` **leave-alone** set, completing the wire: an engine can select the cells q2 resolved it to own (honoring user `engine:`/`engines:` overrides) instead of inferring the complement — ambiguous, since "not handled" = owned-by-me **or** owned-by-nobody. Informational, not enforcement; backward-compatible (`#[serde(default)]`); q2 core does not consume it; native knitr/jupyter untouched. Also updates `engine-resolution.md` §5/§9 + `engine-api-surface.md`. |
 | [**Plan 1a.6: Move protocol off stdout → loopback TCP**](2026-07-08-plan1a6-off-stdout-loopback-tcp.md) | 1-2 | plan1a-host + Plan 1b (both complete); **no** protocol-type change | ○ **Implementation-ready** (0 impl; design ratified + Phase-0 spike PASS + fail-on-revert-bound Test Seam Spec + blank-slate implementer review, all 2026-07-08; dial-back proved end-to-end against real `deno`). Promotes the long-referenced "Phase 1.6" deferred note into a plan of record. Swaps `StdioTransport`→`TcpTransport` at the existing `EngineTransport` seam (bind `127.0.0.1:0` → spawn `--control/--token` → accept-poll + child-liveness → token pre-line → commit); frees stdin/stdout/stderr for diagnostics and **deletes the `console.log`/leaked-child-stdout corruption class** (and its `MAX_CONSECUTIVE_MALFORMED_LINES` mitigation). Rollout = **staged hard-swap** (land alongside stdio, validate incl. Windows, then delete stdio). **Zero engine-author change** (harness-only; Julia engine unaffected, already uses TCP+key internally). fd-3 and UDS/named-pipe considered and rejected on portability. Additive; blocks nothing. |
 | [**Plan 5: engine-host pooling (preview re-compute warmth)**](2026-06-26-plan5-engine-host-pooling.md) | research stub | full stack (1a–c, 2, 4) + preview-wiring (plan1c R5) + DQ-7 | ◔ **Research stub** (no impl checklist yet). **Last** (post-4; orthogonal to Plan 3). |
-| [**Plan 6: Pass-1 engine resolution (per-doc lift)**](2026-06-29-plan6-pass1-engine-resolution.md) | research stub | plan1a-engine + plan1c (resolution machinery) | ○ **Not started** (0/93; design ratified). **Additive**, post-1c; sequenced after Plan 4b; orthogonal to Plans 3/4/5. |
+| [**Plan 6: Pass-1 engine resolution (per-doc lift)**](2026-06-29-plan6-pass1-engine-resolution.md) | implementation plan | plan1a-engine + plan1c (resolution machinery) | ◐ **Implementation DONE** (Phases 0–5 landed and e2e-verified 2026-07-08; Phase 6 — secondary-doc reconciliation + user-facing docs — in progress). **Additive**, post-1c; sequenced after Plan 4b; orthogonal to Plans 3/4/5. |
 | [**Plan 7a: Static content-pattern file claims (research)**](2026-07-07-plan7a-static-content-pattern-claims.md) | TBD | plan1c (claims machinery); coordinates with Plan 1c.2 (P4 schema / P2 discovery) | ◔ **Research** (2/23; design being finalized). **Precedes Plan 7** (Plan 7 consumes 7a's claim mechanism). Extends `_extension.yml` static file-claims to content patterns; amends `engine-resolution.md §3.3` + `engine-api-surface.md`. |
 | [**Plan 7: native percent/spin conversion + precise SourceInfo**](2026-06-27-plan7-native-percent-spin-sourceinfo.md) | 2-3 | plan1c (`claims_file`/`markdown_for_file`) + Plan 0 (SourceInfo) + Plan 3 (jupyter percent helpers) + Plan 7a (claim mechanism); **not** Plan 5/6 | ○ **Not started** (0/13). Post-1c (default after 4); pullable earlier; orthogonal to Plans 5/6. |
 | [**Plan 8: HANDLED_LANGUAGES → claiming engines (absorb #241 mermaid + graphviz TS extension)**](2026-07-02-plan8-mermaid-absorption-graphviz-ts-extension.md) | 2-3 | Part A: #241 + plan1a-engine; Part B: full TS-engine stack (1a–c, 1b, 2A) + `build-ts-extension` | ○ **Not started** (0/15). Part A independent/now; Part B post-1c; enables Plan 6 Q4. |
 | [**Plan 9: `q2 call engine` — Q1-parity engine CLI surface (bd-m1jeqhhz)**](2026-07-03-plan9-call-engine.md) | 2-3 | full TS-engine stack (1a–c, 1b, 2A) + `build-ts-extension`; uses Plan 4's julia fixture | ○ **Not started** (0/46). Post-1c; **resolves the Plan-4E daemon-management gap** (`quarto call engine julia status/kill/log/close/stop`). One-shot `call-engine` host mode (vendored cliffy) + additive `call_engine_command` trait hook (default `NotSupported` ⇒ non-breaking for every other engine). **Overturns RTQ's `populateCommand` = "impossible/redundant" classification** — see the note below and §"populateCommand" in `claude-notes/designs/engine-api-surface.md`. |
 | [**Plan 10: engine `checkInstallation` → real `q2 check`**](2026-07-04-plan10-check-installation.md) | 2-3 | plan1a stack (1a–c, 1b) + fixture engines (4c marimo, julia); native part reuses knitr/jupyter probes | ○ **Not started** (0/53). **Design approved 2026-07-03** (strand bd-4qflzhwh; research + ratified decision points: [`../research/2026-07-03-plan10-check-installation-research.md`](../research/2026-07-03-plan10-check-installation-research.md)); plan authored. Adds `CheckInstallation`/`CheckProgress` wire verbs (streamed progress), `has_check_installation` on `LoadEngineResult`, optional `check_installation` trait method (naming/default-impl pattern follows Plan 9's `call_engine_command` precedent), full Q1-fidelity native knitr/jupyter checks incl. test renders. **Adjacent to Plan 9 only at the trait + CLI surface** — Plan 9 adds no wire verb (one-shot deno mode), so no protocol collision. |
-| **Total** | — | | **✓ Complete:** Plans 0, 2A, 1a-protocol/host/engine, RTQ, 1a-host-bugs, 1b, 1b.1, 1c, 1c.2, 2, 3, 4, 4a, 4c, 4c.2. **◐ In progress:** Plan 4b (3/52). **○ Not started / ◔ stub:** Plans 1a.6, 4d, 5, 6, 7, 7a, 8, 9, 10. |
+| **Total** | — | | **✓ Complete:** Plans 0, 2A, 1a-protocol/host/engine, RTQ, 1a-host-bugs, 1b, 1b.1, 1c, 1c.2, 2, 3, 4, 4a, 4c, 4c.2. **◐ In progress:** Plan 4b (3/52), Plan 6 (implementation landed, Phase 6 reconciliation/docs in progress). **○ Not started / ◔ stub:** Plans 1a.6, 4d, 5, 7, 7a, 8, 9, 10. |
 
 > **Status key:** ✓ complete · ◐ in progress · ○ not started (design may be ratified) · ◔ research stub. Checklist tallies (x/total) audited 2026-07-08 against each plan's own checkboxes.
 
@@ -736,8 +742,9 @@ stubbed plus the `@quarto/types` refinements (formerly Phase 2E).
 Plan 4 integrates everything and depends on all plans being complete.
 
 **Plans 5, 6, and 7 are post-Plan-4 additive layers** — none is on the critical
-path; all are explored after the core stack is validated (5 and 6 are research
-stubs; 7 has a finalized design backing):
+path; all are explored after the core stack is validated (5 is a research
+stub; 6 is now a landed implementation plan; 7 has a finalized design
+backing):
 - **Plan 5** (engine-host pooling) keeps the Deno host **warm across preview
   re-computes** so a TS-engine re-execute doesn't respawn the subprocess +
   re-`import()` the module. Single-project, session-scoped behind
@@ -745,15 +752,24 @@ stubs; 7 has a finalized design backing):
   survives a respawn via its transport file, so pooling only saves the
   Deno-spawn + import, ~hundreds of ms). Depends on the full stack plus the
   preview↔TS-engine wiring (plan1c R5 in RTQ) and DQ-7.
-- **Plan 6** (Pass-1 engine resolution) lifts `resolve_engines` from Pass 2 into
-  Pass 1 **per-doc**, for docs whose engines all resolve load-free (static
-  `_extension.yml` claims, hint exclusion, or tier dominance), with clean
-  fall-through to Pass 2 otherwise — preserving back-compat for legacy Q1
-  engines that need a load. Relaxes the design's all-or-nothing "every engine
-  static" gate (engine-resolution.md §7/§3.3/§12) to a per-doc partial lift;
-  stamps `EngineResolution` on `DocumentProfile` (version bump) for engine-aware
-  indexing, kernel pooling, and freeze. Additive on top of plan1a-engine +
-  plan1c; orthogonal to Plans 3/4/5.
+- **Plan 6** (Pass-1 engine resolution, **implemented**) lifts `resolve_engines`
+  from Pass 2 into Pass 1 **per-doc**, for docs whose resolution is *provably*
+  load-free (the P1–P4 predicate: claimed file, empty language scan, explicit
+  `engine: markdown`, or every claim consultation the resolution needs
+  answered statically — via `_extension.yml` claims, a metadata-supplied
+  **claim table**, or a built-in), with clean fall-through to Pass 2 otherwise
+  — preserving back-compat for legacy Q1 engines that need a load. **A
+  tier-dominance shortcut ("static Primary beats an unloaded engine's
+  possible claim") was considered and rejected as unsound** (an unloaded
+  engine could declare a higher-priority Primary) — one claims-less, untabled
+  engine in the registry can fall a doc through even when every *other*
+  engine is fully static. Relaxes the design's all-or-nothing "every engine
+  static" gate (engine-resolution.md §7/§3.3/§12) to this per-doc predicate;
+  stamps a reduced `ProfileEngineResolution` (engine sequence + language
+  ownership, names only) on `DocumentProfile` (`DOCUMENT_PROFILE_VERSION`
+  6 → 7) for engine-aware indexing, kernel pooling, and freeze — the
+  `EngineResolution` Pass-2 already produces is untouched. Additive on top of
+  plan1a-engine + plan1c; orthogonal to Plans 3/4/5.
 - **Plan 7** (native percent/spin + precise SourceInfo) implements the one thing
   the epic has only **deferred in pieces**: **percent scripts** (`.py`/`.jl`/`.r`
   `# %%`) and **R spin** (`.R`) converted to qmd **natively in Rust**, wired into

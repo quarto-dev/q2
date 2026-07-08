@@ -111,7 +111,7 @@ pub fn read_extension_with_org(
         ))
     })?;
 
-    let contributes = parse_contributes(contributes_cv, ext_dir)?;
+    let contributes = parse_contributes(contributes_cv, ext_dir, extension_file)?;
 
     Ok(Extension {
         id: if let Some(org) = ext_org {
@@ -152,7 +152,16 @@ fn derive_extension_id(ext_dir: &Path) -> (String, Option<String>) {
 }
 
 /// Parse the `contributes` section of an `_extension.yml`.
-fn parse_contributes(contributes: &ConfigValue, ext_dir: &Path) -> Result<Contributes> {
+///
+/// `extension_file` is the absolute path to the `_extension.yml` itself
+/// (distinct from `ext_dir`, its parent directory) — threaded down to
+/// `parse_external_engine` so each `EngineContribution::External` carries
+/// its provenance (Plan 6 Phase 5).
+fn parse_contributes(
+    contributes: &ConfigValue,
+    ext_dir: &Path,
+    extension_file: &Path,
+) -> Result<Contributes> {
     let mut result = Contributes::default();
 
     // Parse formats with "common" key merging
@@ -176,7 +185,7 @@ fn parse_contributes(contributes: &ConfigValue, ext_dir: &Path) -> Result<Contri
 
     // Parse engines
     if let Some(engines_cv) = contributes.get("engines") {
-        result.engines = parse_engines(engines_cv, ext_dir)?;
+        result.engines = parse_engines(engines_cv, ext_dir, extension_file)?;
     }
 
     // Validate that contributes has at least one sub-field (engines count too)
@@ -347,7 +356,11 @@ fn parse_filters(filters_cv: &ConfigValue, ext_dir: &Path) -> Vec<ExtensionFilte
 /// Each element is either:
 /// - A bare string → `EngineContribution::Reorder { name }`.
 /// - A map with a `path` key → `EngineContribution::External { .. }`.
-fn parse_engines(engines_cv: &ConfigValue, ext_dir: &Path) -> Result<Vec<EngineContribution>> {
+fn parse_engines(
+    engines_cv: &ConfigValue,
+    ext_dir: &Path,
+    extension_file: &Path,
+) -> Result<Vec<EngineContribution>> {
     let ConfigValueKind::Array(items) = &engines_cv.value else {
         return Ok(vec![]);
     };
@@ -362,7 +375,7 @@ fn parse_engines(engines_cv: &ConfigValue, ext_dir: &Path) -> Result<Vec<EngineC
                 }
             }
             ConfigValueKind::Map(_) => {
-                let contribution = parse_external_engine(item, ext_dir)?;
+                let contribution = parse_external_engine(item, ext_dir, extension_file)?;
                 result.push(contribution);
             }
             _ => {}
@@ -372,7 +385,11 @@ fn parse_engines(engines_cv: &ConfigValue, ext_dir: &Path) -> Result<Vec<EngineC
 }
 
 /// Parse one object element of `contributes.engines` into an `External` contribution.
-fn parse_external_engine(item: &ConfigValue, ext_dir: &Path) -> Result<EngineContribution> {
+fn parse_external_engine(
+    item: &ConfigValue,
+    ext_dir: &Path,
+    extension_file: &Path,
+) -> Result<EngineContribution> {
     // `path` is required
     let path_str = item.get("path").and_then(|v| v.as_str()).ok_or_else(|| {
         crate::error::QuartoError::Other(
@@ -422,6 +439,7 @@ fn parse_external_engine(item: &ConfigValue, ext_dir: &Path) -> Result<EngineCon
 
     Ok(EngineContribution::External {
         path: resolved_path,
+        extension_yml_path: extension_file.to_path_buf(),
         name,
         claims,
         file_extensions,
@@ -432,17 +450,45 @@ fn parse_external_engine(item: &ConfigValue, ext_dir: &Path) -> Result<EngineCon
 /// Parse a `claims` map value into a `HashMap<String, Vec<StaticLanguageClaim>>`
 /// (4c0 Vec-per-language form).
 ///
-/// Returns an empty map for `claims: {}`. A language key's value may be:
-/// - a YAML **sequence** of claim objects → each element parsed via
-///   `parse_static_language_claim`, collected into the Vec (elements that parse
-///   to `None`, e.g. `false`/null, are dropped);
-/// - a scalar/bool/int/single-object value (pre-4c0 shape) → parsed via the
-///   same single-claim path and wrapped as a 1-element Vec (back-compat).
+/// Returns an empty map for `claims: {}` and `claims: []`. The top-level value
+/// may be:
+/// - a YAML **sequence of strings** (shorthand) → each string `lang` gets a
+///   1-element Vec of a default-priority Primary claim (mirrors §3.2's `true`
+///   normalization, applied at the top level instead of per-language);
+///   non-string elements are skipped;
+/// - a per-language **map**, where a language key's value may be:
+///   - a YAML sequence of claim objects → each element parsed via
+///     `parse_static_language_claim`, collected into the Vec (elements that
+///     parse to `None`, e.g. `false`/null, are dropped);
+///   - a scalar/bool/int/single-object value (pre-4c0 shape) → parsed via the
+///     same single-claim path and wrapped as a 1-element Vec (back-compat).
 ///
 /// A key whose value produces zero claims (an empty sequence, or a
 /// scalar/object that parses to `None`) is omitted from the map entirely —
 /// matching the pre-4c0 "false/null → skip" behavior.
-fn parse_claims_map(cv: &ConfigValue) -> HashMap<String, Vec<StaticLanguageClaim>> {
+pub(crate) fn parse_claims_map(cv: &ConfigValue) -> HashMap<String, Vec<StaticLanguageClaim>> {
+    if let ConfigValueKind::Array(items) = &cv.value {
+        let mut map = HashMap::new();
+        for item in items {
+            // `as_plain_text()`, not `as_str()`: a bare YAML string in
+            // document-frontmatter interpretation context is
+            // `ConfigValueKind::PandocInlines`, not `Scalar(String)` (the
+            // `metadata-as-str` lint's exact concern) — Plan 6 Phase 3 calls
+            // this parser on merged document metadata, not just
+            // `_extension.yml`, which never produces `PandocInlines` here.
+            if let Some(lang) = item.as_plain_text() {
+                map.insert(
+                    lang,
+                    vec![StaticLanguageClaim {
+                        kind: ClaimKind::Primary,
+                        priority: None,
+                        when_class: None,
+                    }],
+                );
+            }
+        }
+        return map;
+    }
     let ConfigValueKind::Map(entries) = &cv.value else {
         return HashMap::new();
     };
@@ -462,7 +508,10 @@ fn parse_claims_map(cv: &ConfigValue) -> HashMap<String, Vec<StaticLanguageClaim
 /// collects the `Some` results (order-preserving; dropped `None` elements do
 /// not shift the rest). Any other shape (scalar/object) delegates to the
 /// single-claim parser and wraps a `Some` result as a 1-element Vec.
-fn parse_static_language_claims(key: &str, cv: &ConfigValue) -> Vec<StaticLanguageClaim> {
+pub(crate) fn parse_static_language_claims(
+    key: &str,
+    cv: &ConfigValue,
+) -> Vec<StaticLanguageClaim> {
     if let ConfigValueKind::Array(items) = &cv.value {
         return items
             .iter()
@@ -478,9 +527,14 @@ fn parse_static_language_claims(key: &str, cv: &ConfigValue) -> Vec<StaticLangua
 /// - `true`  → Primary, priority: None
 /// - integer → Primary, priority: Some(n)
 /// - `false` / null → skip (no entry)
+/// - bare string `primary`/`interop`/`fallback` → that kind, priority: None
+///   (concise sugar for `{ kind: <string> }`); any other string → skip
 /// - object (key == "fallback") → `{ priority?: int }` with kind Fallback
 /// - object (other key) → `{ kind: primary|interop|fallback, priority?: int, whenClass?: str }`
-fn parse_static_language_claim(key: &str, cv: &ConfigValue) -> Option<StaticLanguageClaim> {
+pub(crate) fn parse_static_language_claim(
+    key: &str,
+    cv: &ConfigValue,
+) -> Option<StaticLanguageClaim> {
     match &cv.value {
         // false or null → skip
         ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(false) | yaml_rust2::Yaml::Null) => None,
@@ -496,6 +550,20 @@ fn parse_static_language_claim(key: &str, cv: &ConfigValue) -> Option<StaticLang
             priority: Some(*n as i32),
             when_class: None,
         }),
+        // bare kind string → that kind, default priority (sugar for `{ kind: <string> }`)
+        ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) => {
+            let kind = match s.as_str() {
+                "primary" => ClaimKind::Primary,
+                "interop" => ClaimKind::Interop,
+                "fallback" => ClaimKind::Fallback,
+                _ => return None,
+            };
+            Some(StaticLanguageClaim {
+                kind,
+                priority: None,
+                when_class: None,
+            })
+        }
         // object
         ConfigValueKind::Map(_) => {
             if key == "fallback" {
@@ -1443,6 +1511,7 @@ contributes:
         match &ext.contributes.engines[0] {
             EngineContribution::External {
                 path,
+                extension_yml_path,
                 name,
                 claims,
                 file_extensions,
@@ -1452,6 +1521,10 @@ contributes:
                 assert!(
                     path.to_string_lossy().ends_with(".js"),
                     "path should end with .js"
+                );
+                assert_eq!(
+                    extension_yml_path, &file,
+                    "extension_yml_path must be the _extension.yml this engine was parsed from"
                 );
                 assert_eq!(name.as_deref(), Some("echo"));
                 let claims = claims.as_ref().unwrap();
@@ -1744,6 +1817,261 @@ contributes:
             }
             other => panic!("expected External, got {:?}", other),
         }
+    }
+
+    /// Top-level `claims: [r, sql]` shorthand: each language string maps to a
+    /// 1-element Vec of a default-priority Primary claim (mirrors §3.2's
+    /// `true` normalization, applied at the top level instead of per-language).
+    #[test]
+    fn parse_claims_list_shorthand_primary_default() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims: [r, sql]
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims, .. } => {
+                let claims = claims.as_ref().unwrap();
+                assert_eq!(claims.len(), 2, "both languages must be present");
+
+                let r_claims = claims.get("r").unwrap();
+                assert_eq!(r_claims.len(), 1);
+                assert_eq!(r_claims[0].kind, ClaimKind::Primary);
+                assert_eq!(r_claims[0].priority, None);
+                assert!(r_claims[0].when_class.is_none());
+
+                let sql_claims = claims.get("sql").unwrap();
+                assert_eq!(sql_claims.len(), 1);
+                assert_eq!(sql_claims[0].kind, ClaimKind::Primary);
+                assert_eq!(sql_claims[0].priority, None);
+                assert!(sql_claims[0].when_class.is_none());
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
+    /// A non-string element in the top-level list shorthand is skipped
+    /// (same lenient behavior the map parser uses for unparseable entries);
+    /// the remaining string element still parses.
+    #[test]
+    fn parse_claims_list_shorthand_skips_non_string() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims: [r, 3]
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims, .. } => {
+                let claims = claims.as_ref().unwrap();
+                assert_eq!(claims.len(), 1, "the non-string entry must be skipped");
+                assert!(claims.get("r").is_some());
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
+    /// The top-level string-list shorthand must NOT be confused with 4c0's
+    /// *per-language* claim-object sequence: `claims: {sql: [...]}` still
+    /// dispatches through `parse_static_language_claims` exactly as before.
+    #[test]
+    fn parse_claims_list_shorthand_distinct_from_4c0_form() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims:
+        sql:
+          - kind: primary
+          - kind: interop
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims, .. } => {
+                let claims = claims.as_ref().unwrap();
+                let sql = claims.get("sql").unwrap();
+                assert_eq!(
+                    sql.len(),
+                    2,
+                    "per-language claim-object sequence must still be a 2-element Vec"
+                );
+                assert_eq!(sql[0].kind, ClaimKind::Primary);
+                assert_eq!(sql[1].kind, ClaimKind::Interop);
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
+    /// Both an empty map (`{}`) and an empty list (`[]`) for `claims` parse
+    /// to an empty map — no error, no panic. Present-but-empty stays
+    /// distinguishable from absent at the caller (`Some(empty)`), which
+    /// `test_engine_claims_present_but_empty_is_some` already covers for the
+    /// `{}` shape; this test adds the `[]` shape.
+    #[test]
+    fn parse_claims_empty_table_yields_empty_map() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims: []
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims, .. } => {
+                assert!(
+                    claims.is_some(),
+                    "present-but-empty claims should be Some(empty), not None"
+                );
+                assert!(claims.as_ref().unwrap().is_empty());
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
+    /// Per-language MAP-VALUE claim sugar: a bare kind string (`{r: primary}`)
+    /// is concise sugar for `{r: {kind: primary}}` — same three kinds as the
+    /// object form's `kind` field, default priority/when_class. Do not
+    /// confuse this with the *top-level* list shorthand (`claims: [r]`,
+    /// tested above) — that's sugar one level up; this is sugar for a single
+    /// per-language map entry's value. An unrecognized bare string (`banana`)
+    /// stays lenient and is dropped, same as any other unparseable claim
+    /// value.
+    #[test]
+    fn parse_claims_map_bare_kind_string() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims:
+        r: primary
+        s: interop
+        f: fallback
+        x: banana
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims, .. } => {
+                let claims = claims.as_ref().unwrap();
+
+                let r_claims = claims.get("r").unwrap();
+                assert_eq!(r_claims.len(), 1);
+                assert_eq!(r_claims[0].kind, ClaimKind::Primary);
+                assert_eq!(r_claims[0].priority, None);
+                assert!(r_claims[0].when_class.is_none());
+
+                let s_claims = claims.get("s").unwrap();
+                assert_eq!(s_claims.len(), 1);
+                assert_eq!(s_claims[0].kind, ClaimKind::Interop);
+                assert_eq!(s_claims[0].priority, None);
+                assert!(s_claims[0].when_class.is_none());
+
+                let f_claims = claims.get("f").unwrap();
+                assert_eq!(f_claims.len(), 1);
+                assert_eq!(f_claims[0].kind, ClaimKind::Fallback);
+                assert_eq!(f_claims[0].priority, None);
+                assert!(f_claims[0].when_class.is_none());
+
+                assert!(
+                    claims.get("x").is_none(),
+                    "unrecognized bare kind string must be dropped, not panic"
+                );
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
+    /// Regression (found while wiring Plan 6 Phase 3's claim-table reader,
+    /// which calls `parse_claims_map` on merged DOCUMENT metadata, not just
+    /// `_extension.yml`): the top-level list-shorthand branch used
+    /// `item.as_str()`, which returns `None` for `ConfigValueKind::PandocInlines`
+    /// — the shape a bare YAML string takes in document-frontmatter
+    /// interpretation context (the `metadata-as-str` lint's exact concern).
+    /// `_extension.yml`'s own interpretation context never produces
+    /// `PandocInlines`, so this silently never fired for the ORIGINAL caller
+    /// — only for Phase 3's new document-metadata call site. Constructs the
+    /// `PandocInlines` shape directly (bypassing the YAML pipeline) to
+    /// isolate the parser from the interpretation-context question.
+    ///
+    /// Revert binding: `item.as_str()` → `item.as_plain_text()` in the
+    /// array branch — reverting it makes both languages vanish (RED).
+    #[test]
+    fn parse_claims_list_shorthand_accepts_pandoc_inlines() {
+        use quarto_pandoc_types::{Inline, Str};
+        use quarto_source_map::SourceInfo;
+
+        fn inline_str(s: &str) -> ConfigValue {
+            ConfigValue::new_inlines(
+                vec![Inline::Str(Str {
+                    text: s.to_string(),
+                    source_info: SourceInfo::for_test(),
+                })],
+                SourceInfo::for_test(),
+            )
+        }
+
+        let claims_value = ConfigValue::new_array(
+            vec![inline_str("r"), inline_str("sql")],
+            SourceInfo::for_test(),
+        );
+
+        let claims = parse_claims_map(&claims_value);
+
+        assert_eq!(
+            claims.len(),
+            2,
+            "both PandocInlines-shaped language names must parse; got: {:?}",
+            claims
+        );
+        assert_eq!(claims["r"][0].kind, ClaimKind::Primary);
+        assert_eq!(claims["sql"][0].kind, ClaimKind::Primary);
     }
 
     /// An extension that contributes ONLY engines (no formats/filters/etc.) is valid.

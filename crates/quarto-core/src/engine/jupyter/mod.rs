@@ -172,6 +172,15 @@ impl ExecutionEngine for JupyterEngine {
         LanguageClaim::Fallback(0)
     }
 
+    /// Pure Rust, always static. See `test_jupyter_try_claims_language_answers_statically`.
+    fn try_claims_language(
+        &self,
+        language: &str,
+        first_class: Option<&str>,
+    ) -> Option<LanguageClaim> {
+        Some(self.claims_language(language, first_class))
+    }
+
     fn is_available(&self) -> bool {
         self.jupyter_path.is_some()
     }
@@ -290,6 +299,25 @@ mod tests {
             engine.claims_language("r", None),
             LanguageClaim::Fallback(0)
         );
+    }
+
+    // === Phase 4: builtins_answer_statically ===
+
+    /// JupyterEngine's `try_claims_language` must answer statically
+    /// (`Some`), equal to `claims_language`, for representative languages.
+    /// Revert binding: without the override, the trait default `None`
+    /// (would-load) would sink every Pass-1 lift — jupyter is a universal
+    /// fallback candidate for every doc.
+    #[test]
+    fn test_jupyter_try_claims_language_answers_statically() {
+        let engine = JupyterEngine::new();
+        for lang in ["r", "python", "julia"] {
+            assert_eq!(
+                engine.try_claims_language(lang, None),
+                Some(engine.claims_language(lang, None)),
+                "try_claims_language must equal claims_language for {lang}"
+            );
+        }
     }
 
     // bd-c5u2g: per-process memoization of `find_jupyter`. Pre-fix

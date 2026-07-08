@@ -143,6 +143,16 @@ impl ExecutionEngine for FixtureEngine {
         }
     }
 
+    /// Pure name comparison, always static (Phase 4) — a `FixtureEngine`
+    /// never loads anything.
+    fn try_claims_language(
+        &self,
+        language: &str,
+        first_class: Option<&str>,
+    ) -> Option<LanguageClaim> {
+        Some(self.claims_language(language, first_class))
+    }
+
     fn execute(
         &self,
         input: &str,

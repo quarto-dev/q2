@@ -544,8 +544,18 @@ fn build_engine_config_map(
     let metadata = config.metadata.as_ref()?;
     let mut map = std::collections::HashMap::new();
 
-    if let Some(engines) = metadata.get("engines") {
-        map.insert("engines".to_string(), config_value_to_ts_metadata(engines));
+    // Q1 types `engines` as `string[]`. Map-form entries (Plan 6's claim
+    // tables) are legal Rust-side now, but the wire only needs the ORDERING
+    // name — lower to names only via the shared `engine_entry_name`: strings
+    // pass through, a single-key map contributes its key, `path:`-maps are
+    // skipped (no name known Rust-side until Plan 4b's external-engine work).
+    if let Some(engines) = metadata.get("engines").and_then(|v| v.as_array()) {
+        let names: Vec<TsMetadataValue> = engines
+            .iter()
+            .filter_map(engine_entry_name)
+            .map(TsMetadataValue::String)
+            .collect();
+        map.insert("engines".to_string(), TsMetadataValue::Array(names));
     }
 
     if let Some(output_dir) = &config.output_dir {
@@ -572,12 +582,14 @@ fn build_engine_config_map(
 ///   Its KEY is the engine name, so it ALSO contributes an ordering entry;
 ///   the payload is Plan 6's and is ignored here → `Some(name)`.
 ///
-/// Shared by the project `engines:` ordering splice (this function's only
-/// caller today, [`build_engine_registry`]'s Task-9 site) and Plan 6's
-/// claim-table reader — keep this the single source of entry-name parsing so
-/// Plan 6 does not need a second one.
-#[cfg(not(target_arch = "wasm32"))]
-fn engine_entry_name(entry: &ConfigValue) -> Option<String> {
+/// Shared by the project `engines:` ordering splice
+/// ([`build_engine_registry`]'s Task-9 site, native-only) and Plan 6's
+/// claim-table reader (`engine::resolution`, WASM-compatible) — keep this the
+/// single source of entry-name parsing so Plan 6 does not need a second one.
+/// `pub(crate)` and NOT wasm-gated: the body has no native dependencies (pure
+/// `ConfigValue` traversal), and `engine::resolution` — which is documented
+/// WASM-compatible — calls it unconditionally.
+pub(crate) fn engine_entry_name(entry: &ConfigValue) -> Option<String> {
     // String form: `- knitr`.
     if let Some(name) = entry.as_plain_text() {
         return Some(name);
@@ -593,6 +605,31 @@ fn engine_entry_name(entry: &ConfigValue) -> Option<String> {
         }
     }
     None
+}
+
+/// Compute the set of project `engines:` entry names that carry a `claims`
+/// table (Plan 6 Phase 3/5) — the single-key-map entries whose payload has a
+/// `claims` key, via the shared [`engine_entry_name`] parser. Empty when the
+/// project has no `engines:` key, or none of its entries table anything.
+/// Stashed on [`ProjectContext::tabled_engines`] for Phase 5's warning, which
+/// needs to tell "untabled, claims-less engine" apart from "deliberately
+/// tabled" when deciding whether a Pass-1 fall-through is actionable.
+fn tabled_engine_names(config: Option<&ProjectConfig>) -> std::collections::HashSet<String> {
+    let Some(engines) = config
+        .and_then(|c| c.metadata.as_ref())
+        .and_then(|m| m.get("engines"))
+        .and_then(|e| e.as_array())
+    else {
+        return std::collections::HashSet::new();
+    };
+    engines
+        .iter()
+        .filter_map(|entry| {
+            let name = engine_entry_name(entry)?;
+            entry.get(&name)?.get("claims")?;
+            Some(name)
+        })
+        .collect()
 }
 
 /// Build the project's engine registry: built-ins + every extension-contributed
@@ -704,6 +741,7 @@ fn build_engine_registry(
 
                     EngineContribution::External {
                         path,
+                        extension_yml_path,
                         name,
                         claims,
                         file_extensions,
@@ -754,6 +792,10 @@ fn build_engine_registry(
                         // write point — the registry erases the concrete type at
                         // `register`, and launch caches make later writes inert.
                         engine.set_project(engine_project_context.clone());
+                        // Plan 6 Phase 5: record the contributing extension's
+                        // `_extension.yml` path for the fall-through warning
+                        // and the Pass-1 cache key.
+                        engine.set_extension_yml_path(extension_yml_path.clone());
                         registry.register(Arc::new(engine));
                         key_to_contributor.insert(key.clone(), ext_label.clone());
 
@@ -974,6 +1016,13 @@ pub struct ProjectContext {
     /// Discovered binary dependencies (pandoc/dart-sass/esbuild). Task 7b reads `pandoc` for the
     /// engine host's global config.
     pub binary_dependencies: BinaryDependencies,
+
+    /// Names of project-level `engines:` entries that carry a `claims` table
+    /// (Plan 6 Phase 3). Consumed by Phase 5's index-pass warning to tell
+    /// "this engine is untabled and claims-less" apart from "this engine was
+    /// deliberately given a table" when deciding whether a fall-through is
+    /// actionable. Empty when the project has no `engines:` key (default).
+    pub tabled_engines: std::collections::HashSet<String>,
 }
 
 impl ProjectContext {
@@ -1088,6 +1137,7 @@ impl ProjectContext {
         };
 
         let binary_dependencies = BinaryDependencies::discover(runtime);
+        let tabled_engines = tabled_engine_names(config.as_ref());
 
         let registry = build_registry(
             &extensions,
@@ -1108,6 +1158,7 @@ impl ProjectContext {
             registry,
             extensions,
             binary_dependencies,
+            tabled_engines,
         })
     }
 
@@ -1149,6 +1200,9 @@ impl ProjectContext {
             registry,
             extensions,
             binary_dependencies,
+            // No project config for a single-file pseudo-project → no
+            // `engines:` key to read.
+            tabled_engines: std::collections::HashSet::new(),
         })
     }
 
@@ -1636,6 +1690,7 @@ mod tests {
             // An External contribution requires TsEngineHost → needs_host = true.
             let ext = make_ext(vec![EngineContribution::External {
                 path: PathBuf::from("/test/engine.js"),
+                extension_yml_path: PathBuf::from("/test/_extension.yml"),
                 name: Some("test-engine".to_string()),
                 claims: Some(HashMap::new()),
                 file_extensions: Some(vec![]),
@@ -1653,6 +1708,7 @@ mod tests {
                 },
                 EngineContribution::External {
                     path: PathBuf::from("/test/engine.js"),
+                    extension_yml_path: PathBuf::from("/test/_extension.yml"),
                     name: None,
                     claims: None,
                     file_extensions: None,
@@ -2239,6 +2295,7 @@ mod tests {
 
         use super::super::{
             build_engine_config_map, config_value_to_ts_metadata, document_metadata_to_ts_map,
+            tabled_engine_names,
         };
         use crate::engine::ts_protocol::TsMetadataValue;
         use crate::project::{ProjectConfig, ProjectKind};
@@ -2318,19 +2375,17 @@ mod tests {
 
             let map = build_engine_config_map(&config).expect("config map must be Some");
 
-            // engines key present, lowered from metadata.get("engines").
-            let mut path_map = std::collections::HashMap::new();
-            path_map.insert(
-                "path".to_string(),
-                TsMetadataValue::String("x.js".to_string()),
-            );
+            // engines key present, lowered to NAMES ONLY (Plan 6 Phase 3 item
+            // E): `knitr` (string) passes through; `{path: "x.js"}` names no
+            // engine Rust-side and is skipped — the wire types `engines` as
+            // `string[]`, so a `{path: ...}` entry lowering to a `Map` (the
+            // pre-Phase-3 behavior) was never a valid wire value.
             assert_eq!(
                 map.get("engines"),
-                Some(&TsMetadataValue::Array(vec![
-                    TsMetadataValue::String("knitr".to_string()),
-                    TsMetadataValue::Map(path_map),
-                ])),
-                "engines key must be lowered from metadata"
+                Some(&TsMetadataValue::Array(vec![TsMetadataValue::String(
+                    "knitr".to_string()
+                ),])),
+                "engines key must be lowered to names only, dropping the {{path:}} entry"
             );
 
             // output-dir carries the RAW relative typed field value, flat at the
@@ -2371,6 +2426,142 @@ mod tests {
                 build_engine_config_map(&config),
                 None,
                 "a config with no metadata (single-file default) ⇒ config: None"
+            );
+        }
+
+        // ── builder: single-key claim-table map entry lowers to its name ────────
+        //
+        // Plan 6 Phase 3 item E: `engines:` map-form entries (claim tables)
+        // are legal Rust-side now; the wire only needs the ordering NAME.
+        //
+        // Named revert: reverting the `engine_entry_name` filter_map back to
+        // `config_value_to_ts_metadata` verbatim-lowering makes this go RED
+        // (the claim-table entry would lower to a `Map`, and the `{path:}`
+        // entry would NOT be dropped).
+        #[test]
+        fn build_engine_config_map_lowers_claim_table_entry_to_name() {
+            let engines = ConfigValue::new_array(
+                vec![
+                    ConfigValue::new_string("knitr", si()),
+                    ConfigValue::new_map(
+                        vec![ConfigMapEntry {
+                            key: "legacy".to_string(),
+                            key_source: si(),
+                            value: ConfigValue::new_map(
+                                vec![ConfigMapEntry {
+                                    key: "claims".to_string(),
+                                    key_source: si(),
+                                    value: ConfigValue::new_array(
+                                        vec![ConfigValue::new_string("python", si())],
+                                        si(),
+                                    ),
+                                }],
+                                si(),
+                            ),
+                        }],
+                        si(),
+                    ),
+                    ConfigValue::new_map(
+                        vec![ConfigMapEntry {
+                            key: "path".to_string(),
+                            key_source: si(),
+                            value: ConfigValue::new_string("x.js", si()),
+                        }],
+                        si(),
+                    ),
+                ],
+                si(),
+            );
+            let config = ProjectConfig {
+                metadata: Some(ConfigValue::new_map(
+                    vec![ConfigMapEntry {
+                        key: "engines".to_string(),
+                        key_source: si(),
+                        value: engines,
+                    }],
+                    si(),
+                )),
+                ..ProjectConfig::default()
+            };
+
+            let map = build_engine_config_map(&config).expect("config map must be Some");
+
+            assert_eq!(
+                map.get("engines"),
+                Some(&TsMetadataValue::Array(vec![
+                    TsMetadataValue::String("knitr".to_string()),
+                    TsMetadataValue::String("legacy".to_string()),
+                ])),
+                "the claim-table entry's KEY (legacy) lowers to a name; the \
+                 {{path:}} entry is dropped (no name known Rust-side)"
+            );
+        }
+
+        // ── tabled_engine_names: stash for Phase 5's warning ─────────────────────
+        //
+        // Named revert: dropping the `entry.get(&name)?.get("claims")?` guard
+        // (treating every named entry as tabled) makes `knitr` (a bare
+        // ordering entry, no table) appear in the set → RED.
+        #[test]
+        fn tabled_engine_names_collects_claims_bearing_entries() {
+            let engines = ConfigValue::new_array(
+                vec![
+                    ConfigValue::new_string("knitr", si()), // ordering only, no table
+                    ConfigValue::new_map(
+                        vec![ConfigMapEntry {
+                            key: "legacy".to_string(),
+                            key_source: si(),
+                            value: ConfigValue::new_map(
+                                vec![ConfigMapEntry {
+                                    key: "claims".to_string(),
+                                    key_source: si(),
+                                    value: ConfigValue::new_array(
+                                        vec![ConfigValue::new_string("python", si())],
+                                        si(),
+                                    ),
+                                }],
+                                si(),
+                            ),
+                        }],
+                        si(),
+                    ),
+                ],
+                si(),
+            );
+            let config = ProjectConfig {
+                metadata: Some(ConfigValue::new_map(
+                    vec![ConfigMapEntry {
+                        key: "engines".to_string(),
+                        key_source: si(),
+                        value: engines,
+                    }],
+                    si(),
+                )),
+                ..ProjectConfig::default()
+            };
+
+            let tabled = tabled_engine_names(Some(&config));
+
+            assert!(
+                tabled.contains("legacy"),
+                "legacy carries a `claims` table → must be in the set"
+            );
+            assert!(
+                !tabled.contains("knitr"),
+                "knitr is a bare ordering entry (no table) → must NOT be in the set"
+            );
+        }
+
+        #[test]
+        fn tabled_engine_names_empty_when_no_project_engines_key() {
+            assert!(
+                tabled_engine_names(None).is_empty(),
+                "no project config ⇒ empty set"
+            );
+            let config = ProjectConfig::default();
+            assert!(
+                tabled_engine_names(Some(&config)).is_empty(),
+                "no `engines:` key ⇒ empty set"
             );
         }
 

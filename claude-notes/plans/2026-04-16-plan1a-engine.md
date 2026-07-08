@@ -444,8 +444,15 @@ they don't own. Full model: `claude-notes/designs/engine-resolution.md`
   `claimed = Some(engine)`, `resolve_engines` **short-circuits the tiers** and
   returns that one engine. plan1c deletes the `explicit_with_seed` logic this
   landed code carries; see engine-resolution.md §8.) The result is a pure
-  function of `(meta, ast, registry, claimed)` — no I/O — so the future
-  Pass-1 lift (stamp it on `DocumentProfile`) is a zero-cost move.
+  function of `(meta, ast, registry, claimed)` — no I/O — which is what makes
+  a Pass-1 lift possible at all. **Landed shape (Plan 6):** the lift is
+  **per-doc and load-free-only**, not a blanket zero-cost move for every
+  doc — a doc's resolution is stamped on `DocumentProfile` only when it
+  provably needs no engine load to compute (the P1–P4 predicate); a doc
+  falls through to Pass-2 as soon as one registered engine is both
+  claims-less and untabled and could contend for one of the doc's languages,
+  even if every *other* engine in the registry is fully static. See
+  [Plan 6](2026-06-29-plan6-pass1-engine-resolution.md).
 
   **`DetectedEngine.config` provenance (the resolver does more than name
   engines).** `sequence` is `Vec<DetectedEngine>` and `DetectedEngine` is

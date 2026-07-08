@@ -148,6 +148,14 @@ pub struct TsEngine {
     /// §Invalidation.
     project: Mutex<Option<EngineProjectContext>>,
 
+    /// Absolute path to the contributing extension's `_extension.yml`
+    /// (Plan 6 Phase 5 provenance). Set post-construction via
+    /// [`Self::set_extension_yml_path`], mirroring [`Self::set_project`] —
+    /// the production call site (`build_engine_registry`) knows the path
+    /// at `EngineContribution::External` destructuring time, one step
+    /// after `TsEngine::new`.
+    extension_yml_path: Mutex<Option<PathBuf>>,
+
     // ── Caches ───────────────────────────────────────────────────────────────
     claims_language_cache: Mutex<HashMap<(String, Option<String>), LanguageClaim>>,
     claims_file_cache: Mutex<HashMap<PathBuf, bool>>,
@@ -201,6 +209,7 @@ impl TsEngine {
             loaded_generation: Mutex::new(None),
             instance: Mutex::new(None),
             project: Mutex::new(None),
+            extension_yml_path: Mutex::new(None),
             claims_language_cache: Mutex::new(HashMap::new()),
             claims_file_cache: Mutex::new(HashMap::new()),
             claims,
@@ -394,6 +403,14 @@ impl TsEngine {
     /// field — see Plan 5 §Invalidation.
     pub fn set_project(&self, project: EngineProjectContext) {
         *self.project.lock().unwrap() = Some(project);
+    }
+
+    /// Record the contributing extension's `_extension.yml` path
+    /// (Plan 6 Phase 5 provenance). Mirrors [`Self::set_project`]:
+    /// first-write-wins is fine because the production call site writes
+    /// exactly once, right after construction.
+    pub fn set_extension_yml_path(&self, path: PathBuf) {
+        *self.extension_yml_path.lock().unwrap() = Some(path);
     }
 
     fn ensure_launched(&self, c: &Cancellation) -> Result<LaunchEngineResult, ExecutionError> {
@@ -663,6 +680,26 @@ pub(crate) fn try_insert_alias(
     }
 }
 
+/// Pure claim computation from a static `claims:` map (the two-step idiom:
+/// the specific language key first, then the universal `fallback:` key when
+/// the language itself is unclaimed). Shared by the cached, side-effecting
+/// `claims_language` (which additionally records positive answers for
+/// execute-time validation) and the side-effect-free `try_claims_language`
+/// probe — neither loads anything; this function never touches `self`.
+fn static_claim_from_map(
+    map: &HashMap<String, Vec<StaticLanguageClaim>>,
+    language: &str,
+    first_class: Option<&str>,
+) -> LanguageClaim {
+    let mut claim = lookup_static_claim(map, language, first_class);
+    if claim == LanguageClaim::None
+        && let Some(fb) = map.get("fallback")
+    {
+        claim = combine_claims(fb, first_class);
+    }
+    claim
+}
+
 // ============================================================================
 // ExecutionEngine impl
 // ============================================================================
@@ -705,16 +742,7 @@ impl ExecutionEngine for TsEngine {
 
         if let Some(map) = &self.claims {
             // AUTHORITATIVE static answer — no load.
-            let mut claim = lookup_static_claim(map, language, first_class);
-            if claim == LanguageClaim::None {
-                // Universal fallback: a `fallback` map key claims any otherwise-unclaimed language.
-                // The key's value is a Vec (4c0) — combine it the same way as any other
-                // language key, so a fallback engine can itself carry e.g. a
-                // whenClass-conditioned entry alongside an unconditional one.
-                if let Some(fb) = map.get("fallback") {
-                    claim = combine_claims(fb, first_class);
-                }
-            }
+            let claim = static_claim_from_map(map, language, first_class);
             // Record for execute-time validation — positive answers only.
             // Validation is one-directional (catches over-claiming); recording None answers
             // would turn tolerated under-declaration into a spurious hard render error.
@@ -760,6 +788,27 @@ impl ExecutionEngine for TsEngine {
                 Err(_) => LanguageClaim::None,
             }
         }
+    }
+
+    /// Answer from the static `claims:` map when present (no load); `None`
+    /// (would-load) for a claims-less/legacy-dynamic engine. Deliberately
+    /// does **not** call `ensure_loaded` and does **not** touch the cache or
+    /// `static_answers` — this is a side-effect-free probe (Phase 4); any
+    /// such recording belongs to the loading `claims_language` path so a
+    /// Pass-1 probe never mutates execute-time validation state. See
+    /// `ts_engine_static_iff_claims`.
+    fn try_claims_language(
+        &self,
+        language: &str,
+        first_class: Option<&str>,
+    ) -> Option<LanguageClaim> {
+        self.claims
+            .as_ref()
+            .map(|map| static_claim_from_map(map, language, first_class))
+    }
+
+    fn extension_yml_path(&self) -> Option<PathBuf> {
+        self.extension_yml_path.lock().unwrap().clone()
     }
 
     fn claims_file(&self, file: &str, ext: &str) -> bool {
@@ -1843,6 +1892,63 @@ mod tests {
             );
 
             mock.signal_eof();
+        });
+    }
+
+    // ── Phase 4: no-load claim probe (`try_claims_language`) ──────────────────
+    //
+    // Named revert: if `try_claims_language` fell back to `ensure_loaded`
+    // for either branch, `sent_messages()` would be non-empty (the mock
+    // transport only ever sees a message when the host is actually asked
+    // to do something) → assertion RED. This is the strongest available
+    // mechanical proof of "not loaded" without a real subprocess: the
+    // engine here has no bundle/host behind the mock transport at all, so
+    // any attempt to load would have to go through `sent_messages()`.
+
+    #[test]
+    fn ts_engine_static_iff_claims() {
+        watchdog(Duration::from_secs(10), || {
+            // `claims: Some` → answers directly from the static map, no wire
+            // traffic at all.
+            let (engine, mock) = make_engine_with_mock(
+                "julia",
+                Some(single_claim("r", ClaimKind::Primary, Some(1))),
+                None,
+                None,
+            );
+            assert_eq!(
+                engine.try_claims_language("r", None),
+                Some(LanguageClaim::Primary(1)),
+                "static claims map ⇒ Some(...) without loading"
+            );
+            assert_eq!(
+                engine.try_claims_language("python", None),
+                Some(LanguageClaim::None),
+                "static claims map ⇒ still a static Some(None) for an unclaimed language"
+            );
+            assert_eq!(
+                mock.sent_messages().len(),
+                0,
+                "try_claims_language must be a side-effect-free probe: NO wire \
+                 messages at all — proves ensure_loaded was never called"
+            );
+            mock.signal_eof();
+
+            // `claims: None` (dynamic/legacy engine) → would-load ⇒ `None`,
+            // and the probe itself must not trigger a load merely to answer.
+            let (dyn_engine, mock2) = make_engine_with_mock("dynamic", None, None, None);
+            assert_eq!(
+                dyn_engine.try_claims_language("r", None),
+                None,
+                "no static claims map ⇒ would-load ⇒ None"
+            );
+            assert_eq!(
+                mock2.sent_messages().len(),
+                0,
+                "try_claims_language must never call ensure_loaded, even to \
+                 answer 'would-load'"
+            );
+            mock2.signal_eof();
         });
     }
 
