@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react'
 import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
 import ProjectSelector from './components/ProjectSelector';
 import ProjectsHome from './components/ProjectsHome';
+import JoinShelfLanding from './components/JoinShelfLanding';
 import ProjectSetSetup from './components/ProjectSetSetup';
 
 // Lazy-loaded dev harness — only fetched when navigating to #/dev/... routes.
@@ -41,7 +42,7 @@ import { useAuthProbe } from './hooks/useAuthProbe';
 import { useExecutionChannel } from './hooks/useExecutionChannel';
 import { resolveActorId as resolveActorIdRequest } from './services/authService';
 import type { Route, ShareRoute, LinkProjectSetRoute } from './utils/routing';
-import { resolveSyncServerUrl } from './utils/routing';
+import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER } from './utils/routing';
 import './App.css';
 
 /**
@@ -192,6 +193,16 @@ function App() {
     navigateToProject,
     navigateToFile,
   } = useRouting();
+
+  // Invite-first onboarding: a fresh browser opening a shelf invite gets a
+  // project set created silently instead of the setup screen. The landing
+  // shows "Connecting…" until the set is ready.
+  useEffect(() => {
+    if (route.type === 'join-shelf' && projectSetState.status === 'needs-setup') {
+      projectSetActions.createProjectSet(DEFAULT_SYNC_SERVER);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.type, projectSetState.status]);
 
   // Live refs for the dev-only console debug API. The API itself
   // is installed once (per the gate below) and reads current state
@@ -639,6 +650,22 @@ function App() {
   // Only available in development builds; the DevRoute type is never parsed in production.
   if (route.type === 'dev') {
     return <DevHarnessLazy page={route.page} />;
+  }
+
+  // Shelf invite landing (explore/projects-shelves-ui). Rendered before the
+  // setup screens: a brand-new browser clicking an invite never sees
+  // project-set setup — the set is auto-created below while the landing asks
+  // for identity. The needs-migration case (legacy local projects) still
+  // falls through to the setup screen rather than migrating silently.
+  if (route.type === 'join-shelf' && projectSetState.status !== 'needs-migration') {
+    return (
+      <JoinShelfLanding
+        route={route}
+        projectSetStatus={projectSetState.status}
+        onAddProjectToSet={projectSetActions.addProject}
+        onDone={() => navigateToProjectSelector({ replace: true })}
+      />
+    );
   }
 
   // Show project set setup/migration screen if needed

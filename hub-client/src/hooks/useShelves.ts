@@ -11,10 +11,25 @@
 
 import { useState, useCallback, useEffect } from 'react';
 
+/** A member of a shared shelf. Mock data until shelves become synced docs. */
+export interface ShelfMember {
+  name: string;
+  initials: string;
+  color: string;
+  joinedAt: string;
+  isOwner?: boolean;
+  isYou?: boolean;
+}
+
 export interface Shelf {
   id: string;
   name: string;
   projectIds: string[];
+  /** Present once the shelf has been explicitly shared. */
+  shared?: {
+    sharedAt: string;
+    members: ShelfMember[];
+  };
 }
 
 const SHELVES_KEY = 'qh-shelves-v1';
@@ -97,6 +112,27 @@ export function useShelves() {
     [shelves],
   );
 
+  /** Convert a personal shelf to shared, seeding the member list. */
+  const shareShelf = useCallback((id: string, members: ShelfMember[]) => {
+    setShelves((prev) =>
+      prev.map((s) =>
+        s.id === id && !s.shared
+          ? { ...s, shared: { sharedAt: new Date().toISOString(), members } }
+          : s,
+      ),
+    );
+  }, []);
+
+  const removeMember = useCallback((shelfId: string, initials: string) => {
+    setShelves((prev) =>
+      prev.map((s) =>
+        s.id === shelfId && s.shared
+          ? { ...s, shared: { ...s.shared, members: s.shared.members.filter((m) => m.initials !== initials) } }
+          : s,
+      ),
+    );
+  }, []);
+
   /**
    * Reconcile a pending "add to shelf on create" against the current
    * project list. Called whenever the entries change; a no-op when there is
@@ -130,5 +166,39 @@ export function useShelves() {
     [moveProject],
   );
 
-  return { shelves, createShelf, renameShelf, deleteShelf, moveProject, shelfFor, reconcilePending };
+  return {
+    shelves,
+    createShelf,
+    renameShelf,
+    deleteShelf,
+    moveProject,
+    shelfFor,
+    reconcilePending,
+    shareShelf,
+    removeMember,
+  };
+}
+
+/**
+ * Create a shared shelf from an invite, writing localStorage directly.
+ * Used by the join-shelf landing screen, which renders before ProjectsHome
+ * mounts (so there is no live hook instance to go through). Returns false
+ * if the shelf already exists in this browser.
+ */
+export function createSharedShelfFromInvite(args: {
+  shelfId: string;
+  name: string;
+  projectIds: string[];
+  members: ShelfMember[];
+}): boolean {
+  const shelves = loadShelves();
+  if (shelves.some((s) => s.id === args.shelfId)) return false;
+  shelves.push({
+    id: args.shelfId,
+    name: args.name,
+    projectIds: args.projectIds,
+    shared: { sharedAt: new Date().toISOString(), members: args.members },
+  });
+  localStorage.setItem(SHELVES_KEY, JSON.stringify(shelves));
+  return true;
 }

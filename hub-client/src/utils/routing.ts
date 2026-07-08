@@ -125,6 +125,28 @@ export interface LinkProjectSetRoute {
 }
 
 /**
+ * Route from a shelf invite link (explore/projects-shelves-ui exploration).
+ *
+ * The invite carries the shelf identity plus the shelf's project entries
+ * inline, so joining delivers real, syncable projects; only shelf
+ * membership itself is mock data until shared shelves become synced docs.
+ *
+ * SECURITY: Like ShareRoute, the entries contain bearer document IDs and
+ * the route should only exist transiently.
+ *
+ * URL format: #/join-shelf/<shelfId>?name=<shelf>&from=<inviter>&entries=<json>
+ */
+export interface JoinShelfRoute {
+  type: 'join-shelf';
+  shelfId: string;
+  shelfName: string;
+  /** Display name of the person who sent the invite. */
+  inviter: string;
+  /** Projects on the shelf: real doc ids + servers, joinable immediately. */
+  entries: Array<{ indexDocId: string; syncServer: string; description: string }>;
+}
+
+/**
  * Route for dev-only harness pages (component previews, visual testing).
  * Only parsed in development builds; in production, #/dev/... falls through to project-selector.
  */
@@ -137,7 +159,7 @@ export interface DevRoute {
 /**
  * Union of all possible routes.
  */
-export type Route = ProjectSelectorRoute | ProjectRoute | FileRoute | ShareRoute | LinkProjectSetRoute | DevRoute;
+export type Route = ProjectSelectorRoute | ProjectRoute | FileRoute | ShareRoute | LinkProjectSetRoute | JoinShelfRoute | DevRoute;
 
 // ============================================================================
 // URL Parsing
@@ -218,6 +240,28 @@ export function parseHashRoute(hash: string): Route {
       type: 'link-project-set',
       projectSetDocId,
       syncServer: server,
+    };
+  }
+
+  // Parse join-shelf route: /join-shelf/<shelfId>?name=<shelf>&from=<inviter>&entries=<json>
+  if (segments[0] === 'join-shelf' && segments[1]) {
+    let entries: JoinShelfRoute['entries'] = [];
+    try {
+      const raw = JSON.parse(queryParams.get('entries') ?? '[]');
+      if (Array.isArray(raw)) {
+        entries = raw
+          .filter((e) => typeof e?.d === 'string' && typeof e?.s === 'string')
+          .map((e) => ({ indexDocId: e.d, syncServer: e.s, description: String(e.n ?? '') }));
+      }
+    } catch {
+      // Malformed entries — join proceeds with an empty shelf
+    }
+    return {
+      type: 'join-shelf',
+      shelfId: decodeURIComponent(segments[1]),
+      shelfName: queryParams.get('name') ?? 'Shared shelf',
+      inviter: queryParams.get('from') ?? 'A collaborator',
+      entries,
     };
   }
 
@@ -305,6 +349,16 @@ export function buildHashRoute(route: Route): string {
       const params = new URLSearchParams();
       params.set('server', route.syncServer);
       return `#/link-project-set/${encodeURIComponent(route.projectSetDocId)}?${params.toString()}`;
+    }
+
+    case 'join-shelf': {
+      const params = new URLSearchParams();
+      params.set('name', route.shelfName);
+      params.set('from', route.inviter);
+      params.set('entries', JSON.stringify(
+        route.entries.map((e) => ({ d: e.indexDocId, s: e.syncServer, n: e.description })),
+      ));
+      return `#/join-shelf/${encodeURIComponent(route.shelfId)}?${params.toString()}`;
     }
 
     case 'dev':
@@ -464,6 +518,9 @@ export function routesEqual(a: Route, b: Route): boolean {
         a.syncServer === bLink.syncServer
       );
     }
+
+    case 'join-shelf':
+      return a.shelfId === (b as JoinShelfRoute).shelfId;
 
     case 'dev':
       return a.page === (b as DevRoute).page;

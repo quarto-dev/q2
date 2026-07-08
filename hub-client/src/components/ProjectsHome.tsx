@@ -31,10 +31,11 @@ import {
   DEFAULT_SYNC_SERVER,
   buildProjectSetLinkUrl,
   buildShareableUrl,
+  buildFullUrl,
 } from '../utils/routing';
 import ShareDialog from './ShareDialog';
 import { mockCollaborators, unionCollaborators, type MockUser } from '../utils/mockCollaborators';
-import { useShelves, setPendingShelfAssignment, type Shelf } from '../hooks/useShelves';
+import { useShelves, setPendingShelfAssignment, type Shelf, type ShelfMember } from '../hooks/useShelves';
 import './ProjectsHome.css';
 
 interface Props {
@@ -209,7 +210,9 @@ export default function ProjectsHome({
   const [editNameValue, setEditNameValue] = useState('');
 
   const { colorScheme, cycleColorScheme } = useTheme();
-  const { shelves, createShelf, renameShelf, deleteShelf, moveProject, reconcilePending } = useShelves();
+  const { shelves, createShelf, renameShelf, deleteShelf, moveProject, reconcilePending, shareShelf, removeMember } = useShelves();
+  // Which shelf's members-and-invite popover is open
+  const [membersFor, setMembersFor] = useState<string | null>(null);
   const [shelfPages, setShelfPages] = useState<Record<string, number>>({});
   // Drag-and-drop between shelves and the unshelved list. dropTarget is a
   // shelf id or 'unshelved'.
@@ -291,6 +294,7 @@ export default function ProjectsHome({
     setAvatarMenuOpen(false);
     setPeekFor(null);
     setSortMenuOpen(false);
+    setMembersFor(null);
   }, []);
 
   useEffect(() => {
@@ -576,8 +580,15 @@ export default function ProjectsHome({
   );
 
   const shelvedIds = useMemo(() => {
+    // Shelf project ids may be stored with or without the 'automerge:'
+    // prefix (invite links carry the short form); index both.
     const s = new Set<string>();
-    for (const shelf of shelves) for (const id of shelf.projectIds) s.add(id);
+    for (const shelf of shelves) {
+      for (const id of shelf.projectIds) {
+        s.add(id);
+        s.add(id.startsWith('automerge:') ? id.replace(/^automerge:/, '') : `automerge:${id}`);
+      }
+    }
     return s;
   }, [shelves]);
 
@@ -612,8 +623,8 @@ export default function ProjectsHome({
     const extra = users.length - shown.length;
     return (
       <span className={`ph-facepile ${size}`}>
-        {shown.map((u) => (
-          <span key={u.initials} className="ph-face" style={{ backgroundColor: u.color }} title={`${u.name} (mock)`}>
+        {shown.map((u, i) => (
+          <span key={`${u.initials}-${i}`} className="ph-face" style={{ backgroundColor: u.color }} title={`${u.name} (mock)`}>
             {u.initials}
           </span>
         ))}
@@ -730,6 +741,102 @@ export default function ProjectsHome({
     </div>
   );
 
+  // ---- shelf sharing (membership is mock; see utils/mockCollaborators) ----
+
+  const shelfItemsOf = (shelf: Shelf): ProjectItem[] =>
+    shelf.projectIds
+      .map((id) => byId.get(id) ?? byId.get(`automerge:${id}`))
+      .filter((it): it is ProjectItem => !!it);
+
+  const buildInviteUrl = (shelf: Shelf): string =>
+    buildFullUrl({
+      type: 'join-shelf',
+      shelfId: shelf.id,
+      shelfName: shelf.name,
+      inviter: userSettings?.userName ?? 'A collaborator',
+      entries: shelfItemsOf(shelf).map((it) => ({
+        indexDocId: it.indexDocId.replace(/^automerge:/, ''),
+        syncServer: it.syncServer,
+        description: it.description,
+      })),
+    });
+
+  const handleShareShelf = (shelf: Shelf) => {
+    if (!shelf.shared) {
+      const now = new Date().toISOString();
+      const seeded: ShelfMember[] = selfUser
+        ? [{ ...selfUser, name: selfUser.name.replace(/ \(you\)$/, ''), joinedAt: now, isOwner: true, isYou: true }]
+        : [];
+      // Seed with the mock collaborators already shown on this shelf's
+      // project cards — the "people with access" story stays consistent.
+      const others = unionCollaborators(shelfItemsOf(shelf).map((it) => collaboratorsFor(it.indexDocId)))
+        .filter((u) => !seeded.some((m) => m.initials === u.initials))
+        .map((u) => ({ ...u, joinedAt: now }));
+      shareShelf(shelf.id, [...seeded, ...others]);
+    }
+    setOpenMenu(null);
+    setMembersFor(shelf.id);
+  };
+
+  const renderMembersPopover = (shelf: Shelf) => {
+    const members = shelf.shared?.members ?? [];
+    const you = members.find((m) => m.isYou);
+    const inviteUrl = buildInviteUrl(shelf);
+    return (
+      <div className="ph-menu ph-members" role="dialog" aria-label={`Members of ${shelf.name}`}>
+        <div className="ph-menu-label">SHARED WITH {members.length} {members.length === 1 ? 'PERSON' : 'PEOPLE'}</div>
+        <div className="ph-members-list">
+          {members.map((m, i) => (
+            <div key={`${m.initials}-${i}`} className="ph-member-row">
+              <span className="ph-face lg" style={{ backgroundColor: m.color }}>{m.initials}</span>
+              <span className="ph-member-name">
+                {m.name}
+                {m.isYou && <span className="ph-member-you"> (you)</span>}
+              </span>
+              {m.isOwner ? (
+                <span className="ph-member-badge">Owner</span>
+              ) : !m.isYou ? (
+                <button
+                  className="ph-link danger ph-member-remove"
+                  onClick={() => removeMember(shelf.id, m.initials)}
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        {you && !you.isOwner && (
+          <button
+            className="ph-menu-item danger"
+            onClick={() => {
+              if (confirm(`Leave "${shelf.name}"?\n\nRemoves it from your list only — other members keep it. Projects you've opened stay in your list.`)) {
+                deleteShelf(shelf.id);
+                closeAllMenus();
+              }
+            }}
+          >
+            Leave shelf
+          </button>
+        )}
+        <div className="ph-menu-divider" />
+        <div className="ph-menu-label">INVITE BY LINK</div>
+        <div className="ph-members-invite">
+          <span className="ph-invite-url mono" title={inviteUrl}>{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
+          <button
+            className="ph-btn primary small-invite"
+            onClick={() => copyToClipboard(inviteUrl, `shelf:${shelf.id}:invite`)}
+          >
+            {copied === `shelf:${shelf.id}:invite` ? 'Copied!' : 'Copy link'}
+          </button>
+        </div>
+        <div className="ph-invite-note">
+          Anyone with this link can join this shelf and add or remove projects.
+        </div>
+      </div>
+    );
+  };
+
   const renderCard = (item: ProjectItem) => (
     <div
       key={item.indexDocId}
@@ -767,9 +874,7 @@ export default function ProjectsHome({
     // position — paging walks toward older projects, per the design. True
     // "recent edits" ordering needs automerge-history attribution (Future
     // phase); last-opened is the closest signal in today's metadata.
-    const shelfItems = shelf.projectIds
-      .map((id) => byId.get(id))
-      .filter((it): it is ProjectItem => !!it)
+    const shelfItems = shelfItemsOf(shelf)
       .filter(matches)
       .sort((a, b) => (a.lastAccessed < b.lastAccessed ? 1 : -1));
     if (query && shelfItems.length === 0) return null;
@@ -786,24 +891,50 @@ export default function ProjectsHome({
         <div className="ph-shelf-header qh-menu-anchor">
           <span className="ph-shelf-name">{shelf.name}</span>
           <span className="ph-shelf-count">{shelfItems.length}</span>
-          {shelfItems.length > 0 &&
-            renderFacepile(
-              unionCollaborators(shelfItems.map((it) => collaboratorsFor(it.indexDocId))),
-              'md',
-            )}
+          {shelf.shared && (
+            <button
+              className="ph-shelf-people"
+              title={`Shared with ${shelf.shared.members.length} people — members & invite`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenMenu(null);
+                setMembersFor(membersFor === shelf.id ? null : shelf.id);
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="9" cy="8" r="3.4" stroke="currentColor" strokeWidth="2" />
+                <path d="M3 19c0-3 2.7-4.8 6-4.8s6 1.8 6 4.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <circle cx="17" cy="9" r="2.6" stroke="currentColor" strokeWidth="2" />
+                <path d="M16.5 14.4c2.6.3 4.5 1.9 4.5 4.1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              {renderFacepile(shelf.shared.members, 'md')}
+            </button>
+          )}
           <span className="ph-flex-spacer" />
           <button
             className="ph-icon-btn"
             title="Shelf actions"
             onClick={(e) => {
               e.stopPropagation();
+              setMembersFor(null);
               setOpenMenu(openMenu === menuKey ? null : menuKey);
             }}
           >
             ⋯
           </button>
+          {membersFor === shelf.id && shelf.shared && renderMembersPopover(shelf)}
           {openMenu === menuKey && (
             <div className="ph-menu ph-menu-right" role="menu">
+              {shelf.shared ? (
+                <button className="ph-menu-item" onClick={() => handleShareShelf(shelf)}>
+                  Members &amp; invite…
+                </button>
+              ) : (
+                <button className="ph-menu-item" onClick={() => handleShareShelf(shelf)}>
+                  Share shelf…
+                  <span className="ph-menu-subtext">Invite others to this collection</span>
+                </button>
+              )}
               <button
                 className="ph-menu-item"
                 onClick={() => {
@@ -813,19 +944,50 @@ export default function ProjectsHome({
                 }}
               >
                 Rename shelf…
+                {shelf.shared && <span className="ph-menu-subtext">Renames it for everyone</span>}
               </button>
-              <button
-                className="ph-menu-item danger"
-                onClick={() => {
-                  if (confirm(`Delete shelf "${shelf.name}"?\n\nProjects return to Everything else — nothing is deleted.`)) {
-                    deleteShelf(shelf.id);
-                  }
-                  closeAllMenus();
-                }}
-              >
-                Delete shelf
-                <span className="ph-menu-subtext">Projects return to Everything else</span>
-              </button>
+              {shelf.shared ? (
+                <>
+                  <div className="ph-menu-divider" />
+                  <button
+                    className="ph-menu-item danger"
+                    onClick={() => {
+                      if (confirm(`Leave "${shelf.name}"?\n\nRemoves it from your list only — other members keep it. Projects you've opened stay in your list.`)) {
+                        deleteShelf(shelf.id);
+                      }
+                      closeAllMenus();
+                    }}
+                  >
+                    Leave shelf
+                    <span className="ph-menu-subtext">Removes it from your list only</span>
+                  </button>
+                  <button
+                    className="ph-menu-item danger"
+                    onClick={() => {
+                      if (confirm(`Delete "${shelf.name}" for everyone?\n\nProjects are never deleted — they return to each person's list.`)) {
+                        deleteShelf(shelf.id);
+                      }
+                      closeAllMenus();
+                    }}
+                  >
+                    Delete shelf for everyone…
+                    <span className="ph-menu-subtext">Projects are never deleted</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="ph-menu-item danger"
+                  onClick={() => {
+                    if (confirm(`Delete shelf "${shelf.name}"?\n\nProjects return to Everything else — nothing is deleted.`)) {
+                      deleteShelf(shelf.id);
+                    }
+                    closeAllMenus();
+                  }}
+                >
+                  Delete shelf
+                  <span className="ph-menu-subtext">Projects return to Everything else</span>
+                </button>
+              )}
             </div>
           )}
         </div>
