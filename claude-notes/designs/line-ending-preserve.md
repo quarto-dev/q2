@@ -189,8 +189,46 @@ cannot be done responsibly.
   this spec only requires writer-EOL to keep the *current* engine path
   CRLF-exact.
 
+## Non-source assets — outside the preserve policy
+
+The preserve policy governs **document source** (see byte-offset-invariant.md
+§Scope). Two asset classes fall outside it and must not be conflated with the
+strands above:
+
+- **SCSS → CSS (parsed).** `quarto-sass` normalizes CRLF→LF once at
+  `parse_layer()` (`layer.rs:112`); grass then re-emits LF regardless of input.
+  User-CRLF theme / `_brand.yml` SCSS is safe — it cannot leak CRLF into the
+  compiled CSS. This is a sanctioned normalize-and-forget (no offset map
+  exists), not a policy violation. Root cause + fix: `bd-3fgnmlco` (closed).
+- **Vendored served assets (`reveal.css`, `reveal.js`, embedded JS/CSS).**
+  Embedded via `include_str!` / `include_bytes!` and served byte-for-byte;
+  they carry no offsets and CRLF vs LF is browser-identical. On a Windows
+  checkout `core.autocrlf` rewrites the committed-LF copies to CRLF, so a
+  byte-exact test against an always-LF reference (e.g. the npm dist)
+  false-positives on EOL alone.
+
+  **Sanctioned pattern: normalize EOL inside the test comparison**, not a
+  `.gitattributes` LF pin. `vendored_reveal_assets_match_npm_package`
+  (`crates/quarto-core/src/revealjs/assemble.rs`) does exactly this — it is a
+  *content-drift* check (catch a reveal.js version bump); line endings are
+  noise in it (`bd-ol45i8oe`). A `.gitattributes` pin is checkout-dependent (an
+  existing CRLF working copy stays stale until `git add --renormalize` +
+  re-checkout) and needs per-dir upkeep. Note this is a **different** case from
+  the fixture/snapshot pins (`bd-mv2ggmr5`, doctemplate, citeproc): those pin
+  *inputs to a determinism test*, where LF-on-disk is the thing under test —
+  not served product bytes.
+
 ## Open items
 
+- **Vendored-asset EOL coverage** — a 2026-07-08 audit found ~9 of ~10
+  embedded vendored resource dirs unpinned and untested for EOL; only the
+  reveal drift test exercises the class, and no `cargo xtask lint` enforces
+  EOL coverage on `include_str!` / `include_bytes!` targets under `resources/`.
+  This is cosmetic on the current architecture (served bytes, no offsets;
+  shipped WASM + native binaries are CI-built on Linux → LF), so it is tracked
+  as a decide-if-worth-it item on `bd-aamrec3j`, not a correctness gap. Pursue
+  a code fix (normalize-on-embed, checkout-independent) or a coverage lint only
+  if cross-build-host byte determinism becomes a stated goal.
 - **Column semantics** (`bd-hn2ddyhf`) is unresolved — it gates the
   line/col implementations and decides what their tests assert. The
   2026-06-26 probes sharpen it: `astContext.line_breaks` omits bare CRs

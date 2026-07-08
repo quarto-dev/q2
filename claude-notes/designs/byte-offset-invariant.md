@@ -26,6 +26,40 @@ see. The moment an internal step rewrites bytes *and forgets it did*,
 every offset downstream of that step is silently wrong against the file
 the user is looking at.
 
+## Scope — which bytes this governs
+
+The invariant is about **bytes that carry a reported position** — document
+source (`.qmd` text) whose offsets flow into `SourceInfo`, diagnostics,
+crossref anchors, engine error mapping, and the hub's editor positions. It
+says nothing about bytes q2 never reports an offset into. Classify a byte
+stream by how it is consumed:
+
+| Class | Example | Carries offsets? | Line-ending rule |
+|---|---|---|---|
+| **Source** | `.qmd` text; anything reaching `SourceInfo` / automerge / the editor | yes | **preserve** (this doc) — strategies 1/3 only |
+| **Parsed asset** | SCSS compiled to CSS (`quarto-sass`) | no (the compiler keeps no byte map) | **normalize freely** — the compiler re-emits its own LF anyway |
+| **Served-verbatim asset** | vendored `reveal.css` / `reveal.js` served byte-for-byte | no | **line endings are irrelevant** — don't assert byte-identity on EOL |
+
+Two consequences that are easy to get wrong:
+
+1. **"Strategy 2 is forbidden" is scoped to Source.** `parse_layer()`'s
+   `content.replace("\r\n", "\n")` (`crates/quarto-sass/src/layer.rs:112`) is a
+   normalize-and-forget — and it is **correct**, because SCSS carries no offset
+   map (nothing downstream reports a position into the SCSS bytes). It is a
+   Parsed-asset boundary, out of scope for the invariant, not a violation of
+   it. (grass's own lexer also collapses `\r\n`/`\r`/form-feed → `\n` before
+   parsing, so user-CRLF SCSS can never leak CRLF into the compiled CSS
+   regardless of what `parse_layer` does — verified against
+   `grass_compiler` 0.13.4 `lexer.rs:128-146`.)
+2. **Served build artifacts are out of scope entirely.** An `Artifact`
+   (`crates/quarto-core/src/artifact.rs`) is raw `content: Vec<u8>` with **no
+   `SourceInfo`/offset field**, and the render artifacts flushed to the hub's
+   `/.quarto/project-artifacts` VFS are local per-client output — regenerated
+   each render, **never synced through automerge**. So a served CSS/JS asset's
+   line endings cannot shift any collaborative offset or source position; CRLF
+   vs LF there is cosmetic (browser-identical). See the served-asset note in
+   [line-ending-preserve.md](line-ending-preserve.md).
+
 ## Why q2 has this requirement (and q1 / Pandoc do not)
 
 q2's source maps power two things q1 never had:
