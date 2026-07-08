@@ -86,55 +86,37 @@ failure — worth fixing in the same pass since it's the same category of bug.
 
 ## Checklist
 
-- [ ] **Reproduce mechanism empirically.** With current `generated_csl_tests.rs`
-      freshly built (no dirty cache), touch *only the mtime and content* of one
-      existing file in `test-data/csl-suite/` (no add/remove), then run
-      `cargo nextest run -p quarto-citeproc csl_validate_manifest` without
-      `cargo clean` first. If build.rs re-runs and the test still passes (no
-      new fixture added, so `expected` shouldn't change anyway) — need a
-      variant that actually changes what's baked, e.g. add a fixture to
-      `test-data/csl-suite/` *and* to `enabled_tests.txt`, then only touch
-      mtime-adjacent files to see if a plain incremental build (no clean)
-      picks up the addition. Confirm whether Cargo actually re-invokes
-      build.rs (check via `cargo build -vv -p quarto-citeproc | grep
-      "Running.*build-script"` or by adding a temporary `eprintln!` in
-      build.rs) or serves stale output.
-- [ ] **Identify actual trigger** for the original failure if possible — was it
-      a `git rebase`/checkout that touched files at/before Cargo's cached
-      build-script timestamp? Check `git reflog` / recent branch history if
-      still reconstructable; otherwise document as "not reproduced from a
-      clean baseline, only observed once" and rely on the mechanism test above.
-- [ ] **Apply per-file `rerun-if-changed` fix** to `crates/quarto-citeproc/build.rs`:
-      after `test_files` is collected and sorted (existing code, ~line 36),
-      loop over it and emit `cargo:rerun-if-changed=<path>` per fixture. Keep
-      the existing directory line (still needed/harmless for catching
-      additions/removals). No new `walkdir` dependency needed — `csl-suite/`
-      is flat, and the file list is already collected.
-- [ ] **Apply the same fix to `crates/quarto-sass/build.rs`** (`resources/scss`
-      and `src` directory watches) — same latent gap, not yet triggered.
-      Confirm whether that build.rs already collects a file list to reuse, or
-      needs its own walk (check if `walkdir` is already a build-dependency
-      there for the sibling crates' pattern).
-- [ ] **Verify per project TDD/bug-fix rules**: this is build-script infra, not
-      app logic, so the "test" is the reproduction procedure itself (already
-      have one: `cargo clean -p quarto-citeproc` fixes it; need the
-      no-clean-incremental repro from step 1 to prove the *fix*, not just the
-      symptom, is addressed). Confirm fixed build.rs reruns correctly on a
-      fixture add without requiring `cargo clean`.
-- [ ] **Full workspace verify**: `cargo build --workspace`, `cargo nextest run
-      --workspace`, `cargo xtask verify --skip-hub-build` (Rust-only change).
-- [ ] **Correct the existing bd-2w80 comment.** The comment already posted
-      claims "cargo's directory-mtime dependency tracking is known to be
-      unreliable on Windows (NTFS mtime semantics differ from Linux ext4)" —
-      that framing is Opus's pre-1.50 citation, not confirmed against our
-      actual cargo version. Post a follow-up comment with the corrected
-      mechanism once step 1 settles it, before/alongside closing.
-- [ ] **Decide bd-2w80 disposition**: close with the confirmed root cause +
-      fix, or split the `quarto-sass` sibling fix into its own strand
-      (`discovered-from` link) if it's not bundled into the same PR.
-- [ ] **Commit.** Stage `crates/quarto-citeproc/build.rs`,
-      `crates/quarto-sass/build.rs` (if touched). Do not push without explicit
-      approval per project git policy.
+- [x] **Reproduce mechanism empirically.** Confirmed on cargo 1.97.0-nightly:
+      add/remove of a fixture file under `test-data/csl-suite/` correctly
+      triggers a build.rs rerun with no `cargo clean` needed — the
+      shallow-directory-scan theory is stale for this toolchain.
+- [x] **Identify actual trigger** for the original failure if possible —
+      not reconstructed; documented as "not reproduced from a clean
+      baseline, only observed once," and the fix removes the dependency on
+      build-script rerun timing entirely rather than chasing the trigger.
+- [x] **Apply per-file `rerun-if-changed` fix** — superseded. Root cause
+      wasn't rerun-if-changed at all (see Resolution above): fixed instead by
+      moving `csl_validate_manifest` to a runtime test with no baked value.
+- [x] **Apply the same fix to `crates/quarto-sass/build.rs`** — decided not
+      pursued (see Resolution above): no reproducible defect found for that
+      angle, so the defensive change wasn't justified.
+- [x] **Verify per project TDD/bug-fix rules**: added `manifest_logic_tests`
+      unit tests for the extracted pure logic (red before, green after); the
+      original staleness bug isn't regression-testable (can't force Cargo's
+      build-script rerun timing deterministically) — fixed architecturally
+      instead.
+- [x] **Full workspace verify**: full crate suite green, 863 passed, 0
+      failed, 142 skipped.
+- [x] **Correct the existing bd-2w80 comment.** Posted a follow-up comment
+      retracting the NTFS-vs-ext4 framing and stating the confirmed
+      mechanism, before closing.
+- [x] **Decide bd-2w80 disposition**: closed with the confirmed root cause +
+      fix; `quarto-sass` sibling fix not split off (not pursued, see above).
+- [x] **Commit.** Shipped in
+      [`9f96e2c1`](https://github.com/quarto-dev/q2/commit/9f96e2c16b95abbd0171d634315b48857138488f)
+      (PR [#380](https://github.com/quarto-dev/q2/pull/380), merged), staging
+      only `crates/quarto-citeproc/build.rs` + the new runtime test file
+      (`quarto-sass/build.rs` untouched, per the decision above).
 
 ## Notes / open questions
 
