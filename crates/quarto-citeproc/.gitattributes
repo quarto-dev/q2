@@ -1,0 +1,7 @@
+# The CSL conformance manifest lockfile is byte-compared against a
+# generated LF-only string in tests/integration/csl_conformance.rs
+# (build_lockfile()). Without this pin, core.autocrlf=true checks the
+# file out as CRLF on Windows, producing a false "Lockfile mismatch"
+# unrelated to any real enabled_tests.txt/fixture divergence.
+tests/csl_conformance.lock text eol=lf
+tests/enabled_tests.txt text eol=lf
