@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-09
+
+- [`b379c89d`](https://github.com/quarto-dev/q2/commits/b379c89d): UI exploration (branch only): "shelf" is now called "collection" everywhere — menus, dialogs, and invite links. Existing arrangements carry over automatically.
+
 ### 2026-07-08
 
 - [`71b6c585`](https://github.com/quarto-dev/q2/commits/71b6c585): UI exploration (branch only): shelves can be explicitly shared — a people glyph and member facepile appear on shared shelves, opening a members popover with an invite link. Invite links carry the shelf's projects, so joining from another browser delivers them for real; a brand-new browser skips setup and is asked only for a name and cursor color. Membership itself is still local mock data.
