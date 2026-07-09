@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-09
+
+- [`d31e6118`](https://github.com/quarto-dev/q2/commits/d31e6118): Quoted text in the rich-text editor now appears as ordinary editable quote characters (straight `"…"` or `'…'`) instead of a non-editable pill, so you can edit inside quotes; formatting inside a quote (bold, italic) still renders live.
+
 ### 2026-07-07
 
 - [`4af08ef3`](https://github.com/quarto-dev/q2/commits/4af08ef3): Dragging a text selection in the preview now opens the rich-text editor with that selection already active (so Bold/Italic/Link apply immediately); a selection dragged across multiple blocks no longer opens an editor, keeping the selection available for copying.
