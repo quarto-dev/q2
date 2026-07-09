@@ -1,12 +1,12 @@
 /**
- * JoinShelfLanding — invite-first onboarding for a shared shelf
- * (explore/projects-shelves-ui exploration).
+ * JoinCollectionLanding — invite-first onboarding for a shared collection
+ * (explore/projects-collections-ui exploration).
  *
- * Rendered for #/join-shelf/ links. A fresh browser never sees the
+ * Rendered for #/join-collection/ links. A fresh browser never sees the
  * project-set setup screen: App auto-creates a set silently while this
  * screen asks the one question that matters — who you are. Joining adds
  * the invite's project entries (real doc ids, so they sync for real) and
- * creates the shelf locally with mock membership.
+ * creates the collection locally with mock membership.
  */
 
 import { useState, useEffect } from 'react';
@@ -14,8 +14,8 @@ import type { ProjectSetEntry } from '@quarto/quarto-automerge-schema';
 import type { ProjectSetStatus } from '../hooks/useProjectSet';
 import type { UserSettings } from '../services/storage/types';
 import * as userSettingsService from '../services/userSettings';
-import type { JoinShelfRoute } from '../utils/routing';
-import { createSharedShelfFromInvite, type ShelfMember } from '../hooks/useShelves';
+import type { JoinCollectionRoute } from '../utils/routing';
+import { createSharedCollectionFromInvite, type CollectionMember } from '../hooks/useCollections';
 import './ProjectsHome.css';
 
 const COLOR_PALETTE = [
@@ -32,14 +32,14 @@ function initialsFor(name: string): string {
 }
 
 interface Props {
-  route: JoinShelfRoute;
+  route: JoinCollectionRoute;
   projectSetStatus: ProjectSetStatus;
   onAddProjectToSet: (entry: Omit<ProjectSetEntry, 'addedAt' | 'lastAccessed'>) => void;
   /** Navigate home once the join completes. */
   onDone: () => void;
 }
 
-export default function JoinShelfLanding({ route, projectSetStatus, onAddProjectToSet, onDone }: Props) {
+export default function JoinCollectionLanding({ route, projectSetStatus, onAddProjectToSet, onDone }: Props) {
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
   const [name, setName] = useState('');
   const [color, setColor] = useState(COLOR_PALETTE[0]);
@@ -71,7 +71,7 @@ export default function JoinShelfLanding({ route, projectSetStatus, onAddProject
           : `automerge:${entry.indexDocId}`;
         onAddProjectToSet({ indexDocId, syncServer: entry.syncServer, description: entry.description });
       }
-      const members: ShelfMember[] = [
+      const members: CollectionMember[] = [
         {
           name: route.inviter,
           initials: initialsFor(route.inviter),
@@ -87,9 +87,9 @@ export default function JoinShelfLanding({ route, projectSetStatus, onAddProject
           isYou: true,
         },
       ];
-      createSharedShelfFromInvite({
-        shelfId: route.shelfId,
-        name: route.shelfName,
+      createSharedCollectionFromInvite({
+        collectionId: route.collectionId,
+        name: route.collectionName,
         // Store ids in the same un-prefixed form the invite carries; the
         // home view matches them against project-set entries either way.
         projectIds: route.entries.map((e) => e.indexDocId.replace(/^automerge:/, '')),
@@ -105,9 +105,9 @@ export default function JoinShelfLanding({ route, projectSetStatus, onAddProject
     <div className="projects-home">
       <div className="ph-join">
         <div className="ph-join-card">
-          <div className="ph-join-kicker">SHELF INVITATION</div>
+          <div className="ph-join-kicker">COLLECTION INVITATION</div>
           <h1>
-            {route.inviter} invited you to <span className="ph-join-shelf-name">{route.shelfName}</span>
+            {route.inviter} invited you to <span className="ph-join-collection-name">{route.collectionName}</span>
           </h1>
           <p className="ph-join-sub">
             {route.entries.length === 0
@@ -152,12 +152,12 @@ export default function JoinShelfLanding({ route, projectSetStatus, onAddProject
 
           <div className="ph-join-actions">
             <button className="ph-btn primary" onClick={handleJoin} disabled={!ready || joining || !name.trim()}>
-              {joining ? 'Joining…' : ready ? `Join ${route.shelfName}` : 'Connecting…'}
+              {joining ? 'Joining…' : ready ? `Join ${route.collectionName}` : 'Connecting…'}
             </button>
           </div>
           <p className="ph-join-note">
             Joining adds these projects to your list. This invite flow is part of a UI
-            exploration — shelf membership isn't synced to other members yet.
+            exploration — collection membership isn't synced to other members yet.
           </p>
         </div>
       </div>

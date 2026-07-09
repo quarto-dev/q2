@@ -1,11 +1,11 @@
 /**
- * ProjectsHome — full-page projects view (explore/projects-shelves-ui).
+ * ProjectsHome — full-page projects view (explore/projects-collections-ui).
  *
  * Implements the "Short term" design from QH-ProjectManagement-July26.fig:
- * shelves + streamlined entry, buildable on today's metadata. Replaces the
+ * collections + streamlined entry, buildable on today's metadata. Replaces the
  * ProjectSelector modal on this exploration branch:
  *   - header bar: logo, search (⌘K), Connect/Import ▾, ＋ New ▾, avatar menu
- *   - personal shelves with project cards (paged at 6+)
+ *   - personal collections with project cards (paged at 6+)
  *   - "Everything else" list with per-project ⋯ menu, Rename and Peek for
  *     unnamed projects
  *   - identity / cursor color / device linking / JSON backup relocated into
@@ -35,7 +35,7 @@ import {
 } from '../utils/routing';
 import ShareDialog from './ShareDialog';
 import { mockCollaborators, unionCollaborators, type MockUser } from '../utils/mockCollaborators';
-import { useShelves, setPendingShelfAssignment, type Shelf, type ShelfMember } from '../hooks/useShelves';
+import { useCollections, setPendingCollectionAssignment, type Collection, type CollectionMember } from '../hooks/useCollections';
 import './ProjectsHome.css';
 
 interface Props {
@@ -73,7 +73,7 @@ const COLOR_PALETTE = [
   '#FF5722', '#795548',
 ];
 
-const SHELF_PAGE_SIZE = 8; // two rows of four cards
+const COLLECTION_PAGE_SIZE = 8; // two rows of four cards
 
 const UNNAMED_RE = /^Project \d{4}-\d{2}-\d{2}T/;
 
@@ -169,7 +169,7 @@ export default function ProjectsHome({
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Menus / popovers. openMenu identifies the ⋯ menu by project id or
-  // `shelf:<id>`; submenus and the peek popover are tracked separately.
+  // `collection:<id>`; submenus and the peek popover are tracked separately.
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [moveSubmenuOpen, setMoveSubmenuOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
@@ -188,7 +188,7 @@ export default function ProjectsHome({
 
   // ＋ New dialog state
   const [newTitle, setNewTitle] = useState('');
-  const [newShelfId, setNewShelfId] = useState<string>('');
+  const [newCollectionId, setNewCollectionId] = useState<string>('');
   const [newServer, setNewServer] = useState(DEFAULT_SYNC_SERVER);
   const [showServerField, setShowServerField] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -210,12 +210,12 @@ export default function ProjectsHome({
   const [editNameValue, setEditNameValue] = useState('');
 
   const { colorScheme, cycleColorScheme } = useTheme();
-  const { shelves, createShelf, renameShelf, deleteShelf, moveProject, reconcilePending, shareShelf, removeMember } = useShelves();
-  // Which shelf's members-and-invite popover is open
+  const { collections, createCollection, renameCollection, deleteCollection, moveProject, reconcilePending, shareCollection, removeMember } = useCollections();
+  // Which collection's members-and-invite popover is open
   const [membersFor, setMembersFor] = useState<string | null>(null);
-  const [shelfPages, setShelfPages] = useState<Record<string, number>>({});
-  // Drag-and-drop between shelves and the unshelved list. dropTarget is a
-  // shelf id or 'unshelved'.
+  const [collectionPages, setCollectionPages] = useState<Record<string, number>>({});
+  // Drag-and-drop between collections and the unshelved list. dropTarget is a
+  // collection id or 'unshelved'.
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
@@ -280,7 +280,7 @@ export default function ProjectsHome({
     return m;
   }, [items]);
 
-  // Apply any pending "add to shelf on create" once the new entry appears.
+  // Apply any pending "add to collection on create" once the new entry appears.
   useEffect(() => {
     reconcilePending(items);
   }, [items, reconcilePending]);
@@ -338,7 +338,7 @@ export default function ProjectsHome({
     setDropTarget(null);
   }, []);
 
-  /** Drop-zone props for a shelf section (or 'unshelved' for the bottom list). */
+  /** Drop-zone props for a collection section (or 'unshelved' for the bottom list). */
   const dropZoneProps = useCallback((target: string) => ({
     onDragOver: (e: React.DragEvent) => {
       if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
@@ -402,16 +402,16 @@ export default function ProjectsHome({
     setRenameValue('');
   }, [renameFor, renameValue, onRenameProject]);
 
-  const handleNewShelf = useCallback((): string | null => {
-    const name = prompt('Shelf name');
+  const handleNewCollection = useCallback((): string | null => {
+    const name = prompt('Collection name');
     if (!name?.trim()) return null;
-    return createShelf(name.trim());
-  }, [createShelf]);
+    return createCollection(name.trim());
+  }, [createCollection]);
 
   const openNewDialog = useCallback((choice: ProjectChoice) => {
     setNewDialogChoice(choice);
     setNewTitle('');
-    setNewShelfId('');
+    setNewCollectionId('');
     setShowServerField(false);
     setFormError(null);
     setNewMenuOpen(false);
@@ -428,8 +428,8 @@ export default function ProjectsHome({
         setFormError(result.error || 'Failed to create project');
         return;
       }
-      if (newShelfId) {
-        setPendingShelfAssignment(newTitle.trim(), newShelfId);
+      if (newCollectionId) {
+        setPendingCollectionAssignment(newTitle.trim(), newCollectionId);
       }
       onProjectCreated?.(result.files, newTitle.trim(), newDialogChoice.id, newServer.trim());
       setNewDialogChoice(null);
@@ -438,7 +438,7 @@ export default function ProjectsHome({
     } finally {
       setIsCreating(false);
     }
-  }, [newDialogChoice, newTitle, newServer, newShelfId, onProjectCreated]);
+  }, [newDialogChoice, newTitle, newServer, newCollectionId, onProjectCreated]);
 
   const handleConnect = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -580,17 +580,17 @@ export default function ProjectsHome({
   );
 
   const shelvedIds = useMemo(() => {
-    // Shelf project ids may be stored with or without the 'automerge:'
+    // Collection project ids may be stored with or without the 'automerge:'
     // prefix (invite links carry the short form); index both.
     const s = new Set<string>();
-    for (const shelf of shelves) {
-      for (const id of shelf.projectIds) {
+    for (const collection of collections) {
+      for (const id of collection.projectIds) {
         s.add(id);
         s.add(id.startsWith('automerge:') ? id.replace(/^automerge:/, '') : `automerge:${id}`);
       }
     }
     return s;
-  }, [shelves]);
+  }, [collections]);
 
   const everythingElse = useMemo(() => {
     const rest = items.filter((it) => !shelvedIds.has(it.indexDocId)).filter(matches);
@@ -655,17 +655,17 @@ export default function ProjectsHome({
           className="ph-menu-item-inner"
           onClick={(e) => { e.stopPropagation(); setMoveSubmenuOpen((v) => !v); }}
         >
-          Move to shelf <span className="ph-submenu-arrow">▸</span>
+          Move to collection <span className="ph-submenu-arrow">▸</span>
         </button>
         {moveSubmenuOpen && (
           <div className="ph-menu ph-submenu">
-            {shelves.map((shelf) => (
+            {collections.map((collection) => (
               <button
-                key={shelf.id}
+                key={collection.id}
                 className="ph-menu-item"
-                onClick={() => { moveProject(item.indexDocId, shelf.id); closeAllMenus(); }}
+                onClick={() => { moveProject(item.indexDocId, collection.id); closeAllMenus(); }}
               >
-                {shelf.name}
+                {collection.name}
               </button>
             ))}
             {shelvedIds.has(item.indexDocId) && (
@@ -673,18 +673,18 @@ export default function ProjectsHome({
                 className="ph-menu-item"
                 onClick={() => { moveProject(item.indexDocId, null); closeAllMenus(); }}
               >
-                No shelf
+                No collection
               </button>
             )}
             <button
               className="ph-menu-item accent"
               onClick={() => {
-                const id = handleNewShelf();
+                const id = handleNewCollection();
                 if (id) moveProject(item.indexDocId, id);
                 closeAllMenus();
               }}
             >
-              ＋ New shelf…
+              ＋ New collection…
             </button>
           </div>
         )}
@@ -741,49 +741,49 @@ export default function ProjectsHome({
     </div>
   );
 
-  // ---- shelf sharing (membership is mock; see utils/mockCollaborators) ----
+  // ---- collection sharing (membership is mock; see utils/mockCollaborators) ----
 
-  const shelfItemsOf = (shelf: Shelf): ProjectItem[] =>
-    shelf.projectIds
+  const collectionItemsOf = (collection: Collection): ProjectItem[] =>
+    collection.projectIds
       .map((id) => byId.get(id) ?? byId.get(`automerge:${id}`))
       .filter((it): it is ProjectItem => !!it);
 
-  const buildInviteUrl = (shelf: Shelf): string =>
+  const buildInviteUrl = (collection: Collection): string =>
     buildFullUrl({
-      type: 'join-shelf',
-      shelfId: shelf.id,
-      shelfName: shelf.name,
+      type: 'join-collection',
+      collectionId: collection.id,
+      collectionName: collection.name,
       inviter: userSettings?.userName ?? 'A collaborator',
-      entries: shelfItemsOf(shelf).map((it) => ({
+      entries: collectionItemsOf(collection).map((it) => ({
         indexDocId: it.indexDocId.replace(/^automerge:/, ''),
         syncServer: it.syncServer,
         description: it.description,
       })),
     });
 
-  const handleShareShelf = (shelf: Shelf) => {
-    if (!shelf.shared) {
+  const handleShareCollection = (collection: Collection) => {
+    if (!collection.shared) {
       const now = new Date().toISOString();
-      const seeded: ShelfMember[] = selfUser
+      const seeded: CollectionMember[] = selfUser
         ? [{ ...selfUser, name: selfUser.name.replace(/ \(you\)$/, ''), joinedAt: now, isOwner: true, isYou: true }]
         : [];
-      // Seed with the mock collaborators already shown on this shelf's
+      // Seed with the mock collaborators already shown on this collection's
       // project cards — the "people with access" story stays consistent.
-      const others = unionCollaborators(shelfItemsOf(shelf).map((it) => collaboratorsFor(it.indexDocId)))
+      const others = unionCollaborators(collectionItemsOf(collection).map((it) => collaboratorsFor(it.indexDocId)))
         .filter((u) => !seeded.some((m) => m.initials === u.initials))
         .map((u) => ({ ...u, joinedAt: now }));
-      shareShelf(shelf.id, [...seeded, ...others]);
+      shareCollection(collection.id, [...seeded, ...others]);
     }
     setOpenMenu(null);
-    setMembersFor(shelf.id);
+    setMembersFor(collection.id);
   };
 
-  const renderMembersPopover = (shelf: Shelf) => {
-    const members = shelf.shared?.members ?? [];
+  const renderMembersPopover = (collection: Collection) => {
+    const members = collection.shared?.members ?? [];
     const you = members.find((m) => m.isYou);
-    const inviteUrl = buildInviteUrl(shelf);
+    const inviteUrl = buildInviteUrl(collection);
     return (
-      <div className="ph-menu ph-members" role="dialog" aria-label={`Members of ${shelf.name}`}>
+      <div className="ph-menu ph-members" role="dialog" aria-label={`Members of ${collection.name}`}>
         <div className="ph-menu-label">SHARED WITH {members.length} {members.length === 1 ? 'PERSON' : 'PEOPLE'}</div>
         <div className="ph-members-list">
           {members.map((m, i) => (
@@ -798,7 +798,7 @@ export default function ProjectsHome({
               ) : !m.isYou ? (
                 <button
                   className="ph-link danger ph-member-remove"
-                  onClick={() => removeMember(shelf.id, m.initials)}
+                  onClick={() => removeMember(collection.id, m.initials)}
                 >
                   Remove
                 </button>
@@ -810,13 +810,13 @@ export default function ProjectsHome({
           <button
             className="ph-menu-item danger"
             onClick={() => {
-              if (confirm(`Leave "${shelf.name}"?\n\nRemoves it from your list only — other members keep it. Projects you've opened stay in your list.`)) {
-                deleteShelf(shelf.id);
+              if (confirm(`Leave "${collection.name}"?\n\nRemoves it from your list only — other members keep it. Projects you've opened stay in your list.`)) {
+                deleteCollection(collection.id);
                 closeAllMenus();
               }
             }}
           >
-            Leave shelf
+            Leave collection
           </button>
         )}
         <div className="ph-menu-divider" />
@@ -825,13 +825,13 @@ export default function ProjectsHome({
           <span className="ph-invite-url mono" title={inviteUrl}>{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
           <button
             className="ph-btn primary small-invite"
-            onClick={() => copyToClipboard(inviteUrl, `shelf:${shelf.id}:invite`)}
+            onClick={() => copyToClipboard(inviteUrl, `collection:${collection.id}:invite`)}
           >
-            {copied === `shelf:${shelf.id}:invite` ? 'Copied!' : 'Copy link'}
+            {copied === `collection:${collection.id}:invite` ? 'Copied!' : 'Copy link'}
           </button>
         </div>
         <div className="ph-invite-note">
-          Anyone with this link can join this shelf and add or remove projects.
+          Anyone with this link can join this collection and add or remove projects.
         </div>
       </div>
     );
@@ -869,36 +869,36 @@ export default function ProjectsHome({
     </div>
   );
 
-  const renderShelf = (shelf: Shelf) => {
-    // Shelf order is by recency (lastAccessed, newest first), not by stored
+  const renderCollection = (collection: Collection) => {
+    // Collection order is by recency (lastAccessed, newest first), not by stored
     // position — paging walks toward older projects, per the design. True
     // "recent edits" ordering needs automerge-history attribution (Future
     // phase); last-opened is the closest signal in today's metadata.
-    const shelfItems = shelfItemsOf(shelf)
+    const collectionItems = collectionItemsOf(collection)
       .filter(matches)
       .sort((a, b) => (a.lastAccessed < b.lastAccessed ? 1 : -1));
-    if (query && shelfItems.length === 0) return null;
-    const pageCount = Math.max(1, Math.ceil(shelfItems.length / SHELF_PAGE_SIZE));
-    const page = Math.min(shelfPages[shelf.id] ?? 0, pageCount - 1);
-    const pageItems = shelfItems.slice(page * SHELF_PAGE_SIZE, (page + 1) * SHELF_PAGE_SIZE);
-    const menuKey = `shelf:${shelf.id}`;
+    if (query && collectionItems.length === 0) return null;
+    const pageCount = Math.max(1, Math.ceil(collectionItems.length / COLLECTION_PAGE_SIZE));
+    const page = Math.min(collectionPages[collection.id] ?? 0, pageCount - 1);
+    const pageItems = collectionItems.slice(page * COLLECTION_PAGE_SIZE, (page + 1) * COLLECTION_PAGE_SIZE);
+    const menuKey = `collection:${collection.id}`;
     return (
       <section
-        key={shelf.id}
-        className={`ph-shelf ${dropTarget === shelf.id ? 'drop-target' : ''}`}
-        {...dropZoneProps(shelf.id)}
+        key={collection.id}
+        className={`ph-collection ${dropTarget === collection.id ? 'drop-target' : ''}`}
+        {...dropZoneProps(collection.id)}
       >
-        <div className="ph-shelf-header qh-menu-anchor">
-          <span className="ph-shelf-name">{shelf.name}</span>
-          <span className="ph-shelf-count">{shelfItems.length}</span>
-          {shelf.shared && (
+        <div className="ph-collection-header qh-menu-anchor">
+          <span className="ph-collection-name">{collection.name}</span>
+          <span className="ph-collection-count">{collectionItems.length}</span>
+          {collection.shared && (
             <button
-              className="ph-shelf-people"
-              title={`Shared with ${shelf.shared.members.length} people — members & invite`}
+              className="ph-collection-people"
+              title={`Shared with ${collection.shared.members.length} people — members & invite`}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpenMenu(null);
-                setMembersFor(membersFor === shelf.id ? null : shelf.id);
+                setMembersFor(membersFor === collection.id ? null : collection.id);
               }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -907,13 +907,13 @@ export default function ProjectsHome({
                 <circle cx="17" cy="9" r="2.6" stroke="currentColor" strokeWidth="2" />
                 <path d="M16.5 14.4c2.6.3 4.5 1.9 4.5 4.1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
-              {renderFacepile(shelf.shared.members, 'md')}
+              {renderFacepile(collection.shared.members, 'md')}
             </button>
           )}
           <span className="ph-flex-spacer" />
           <button
             className="ph-icon-btn"
-            title="Shelf actions"
+            title="Collection actions"
             onClick={(e) => {
               e.stopPropagation();
               setMembersFor(null);
@@ -922,55 +922,55 @@ export default function ProjectsHome({
           >
             ⋯
           </button>
-          {membersFor === shelf.id && shelf.shared && renderMembersPopover(shelf)}
+          {membersFor === collection.id && collection.shared && renderMembersPopover(collection)}
           {openMenu === menuKey && (
             <div className="ph-menu ph-menu-right" role="menu">
-              {shelf.shared ? (
-                <button className="ph-menu-item" onClick={() => handleShareShelf(shelf)}>
+              {collection.shared ? (
+                <button className="ph-menu-item" onClick={() => handleShareCollection(collection)}>
                   Members &amp; invite…
                 </button>
               ) : (
-                <button className="ph-menu-item" onClick={() => handleShareShelf(shelf)}>
-                  Share shelf…
+                <button className="ph-menu-item" onClick={() => handleShareCollection(collection)}>
+                  Share collection…
                   <span className="ph-menu-subtext">Invite others to this collection</span>
                 </button>
               )}
               <button
                 className="ph-menu-item"
                 onClick={() => {
-                  const name = prompt('Rename shelf', shelf.name);
-                  if (name?.trim()) renameShelf(shelf.id, name.trim());
+                  const name = prompt('Rename collection', collection.name);
+                  if (name?.trim()) renameCollection(collection.id, name.trim());
                   closeAllMenus();
                 }}
               >
-                Rename shelf…
-                {shelf.shared && <span className="ph-menu-subtext">Renames it for everyone</span>}
+                Rename collection…
+                {collection.shared && <span className="ph-menu-subtext">Renames it for everyone</span>}
               </button>
-              {shelf.shared ? (
+              {collection.shared ? (
                 <>
                   <div className="ph-menu-divider" />
                   <button
                     className="ph-menu-item danger"
                     onClick={() => {
-                      if (confirm(`Leave "${shelf.name}"?\n\nRemoves it from your list only — other members keep it. Projects you've opened stay in your list.`)) {
-                        deleteShelf(shelf.id);
+                      if (confirm(`Leave "${collection.name}"?\n\nRemoves it from your list only — other members keep it. Projects you've opened stay in your list.`)) {
+                        deleteCollection(collection.id);
                       }
                       closeAllMenus();
                     }}
                   >
-                    Leave shelf
+                    Leave collection
                     <span className="ph-menu-subtext">Removes it from your list only</span>
                   </button>
                   <button
                     className="ph-menu-item danger"
                     onClick={() => {
-                      if (confirm(`Delete "${shelf.name}" for everyone?\n\nProjects are never deleted — they return to each person's list.`)) {
-                        deleteShelf(shelf.id);
+                      if (confirm(`Delete "${collection.name}" for everyone?\n\nProjects are never deleted — they return to each person's list.`)) {
+                        deleteCollection(collection.id);
                       }
                       closeAllMenus();
                     }}
                   >
-                    Delete shelf for everyone…
+                    Delete collection for everyone…
                     <span className="ph-menu-subtext">Projects are never deleted</span>
                   </button>
                 </>
@@ -978,28 +978,28 @@ export default function ProjectsHome({
                 <button
                   className="ph-menu-item danger"
                   onClick={() => {
-                    if (confirm(`Delete shelf "${shelf.name}"?\n\nProjects return to Everything else — nothing is deleted.`)) {
-                      deleteShelf(shelf.id);
+                    if (confirm(`Delete collection "${collection.name}"?\n\nProjects return to Everything else — nothing is deleted.`)) {
+                      deleteCollection(collection.id);
                     }
                     closeAllMenus();
                   }}
                 >
-                  Delete shelf
+                  Delete collection
                   <span className="ph-menu-subtext">Projects return to Everything else</span>
                 </button>
               )}
             </div>
           )}
         </div>
-        {shelfItems.length === 0 ? (
-          <div className="ph-shelf-empty">Empty shelf — drag a project here, or use its ⋯ menu.</div>
+        {collectionItems.length === 0 ? (
+          <div className="ph-collection-empty">Empty collection — drag a project here, or use its ⋯ menu.</div>
         ) : (
-          <div className="ph-shelf-row">
+          <div className="ph-collection-row">
             {page > 0 && (
               <button
                 className="ph-pager"
                 title="Newer projects"
-                onClick={() => setShelfPages((p) => ({ ...p, [shelf.id]: page - 1 }))}
+                onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page - 1 }))}
               >
                 ‹
               </button>
@@ -1009,7 +1009,7 @@ export default function ProjectsHome({
               <button
                 className="ph-pager"
                 title="Older projects"
-                onClick={() => setShelfPages((p) => ({ ...p, [shelf.id]: page + 1 }))}
+                onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page + 1 }))}
               >
                 ›
                 <span className="ph-pager-pos mono">{page + 1}/{pageCount}</span>
@@ -1175,10 +1175,10 @@ export default function ProjectsHome({
           </div>
         ) : (
           <>
-            {shelves.map(renderShelf)}
+            {collections.map(renderCollection)}
 
-            <div className="ph-new-shelf-row">
-              <button className="ph-btn ghost-accent" onClick={handleNewShelf}>＋ New shelf</button>
+            <div className="ph-new-collection-row">
+              <button className="ph-btn ghost-accent" onClick={handleNewCollection}>＋ New collection</button>
             </div>
 
             <section
@@ -1208,7 +1208,7 @@ export default function ProjectsHome({
               </div>
               {everythingElse.length === 0 ? (
                 <div className="ph-rest-empty">
-                  {query ? 'No projects match your search.' : 'Everything is on a shelf.'}
+                  {query ? 'No projects match your search.' : 'Everything is on a collection.'}
                 </div>
               ) : (
                 <div className="ph-rest-list">
@@ -1305,15 +1305,15 @@ export default function ProjectsHome({
                 placeholder="Q3 all-hands deck"
                 autoFocus
               />
-              <label className="ph-field-label" htmlFor="ph-new-shelf">Add to shelf (optional)</label>
+              <label className="ph-field-label" htmlFor="ph-new-collection">Add to collection (optional)</label>
               <select
-                id="ph-new-shelf"
+                id="ph-new-collection"
                 className="ph-input"
-                value={newShelfId}
-                onChange={(e) => setNewShelfId(e.target.value)}
+                value={newCollectionId}
+                onChange={(e) => setNewCollectionId(e.target.value)}
               >
-                <option value="">No shelf</option>
-                {shelves.map((s) => (
+                <option value="">No collection</option>
+                {collections.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
@@ -1452,7 +1452,7 @@ export default function ProjectsHome({
         <span className="mono" title={`Built: ${__BUILD_TIME__}\nCommit date: ${__GIT_COMMIT_DATE__}`}>
           {__GIT_COMMIT_HASH__}
         </span>
-        <span className="ph-footer-note">shelves UI exploration</span>
+        <span className="ph-footer-note">collections UI exploration</span>
       </footer>
     </div>
   );

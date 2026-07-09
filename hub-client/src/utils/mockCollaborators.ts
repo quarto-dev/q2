@@ -1,9 +1,9 @@
 /**
  * Mock collaborators for the projects-home UI exploration
- * (explore/projects-shelves-ui).
+ * (explore/projects-collections-ui).
  *
  * The Figma design shows per-project facepiles (colored disks with initials)
- * on cards, shelf headers, and the Peek popover. Real contributor data needs
+ * on cards, collection headers, and the Peek popover. Real contributor data needs
  * automerge-history attribution (a later design phase), so the exploration
  * spoofs a stable fake crew per project: seeded from the indexDocId, so the
  * same project always shows the same faces across reloads.
@@ -46,7 +46,7 @@ export function mockCollaborators(indexDocId: string, self?: MockUser): MockUser
   return self ? [self, ...others.values()] : [...others.values()];
 }
 
-/** Union of collaborators across several projects, capped for shelf headers. */
+/** Union of collaborators across several projects, capped for collection headers. */
 export function unionCollaborators(lists: MockUser[][]): MockUser[] {
   const m = new Map<string, MockUser>();
   for (const list of lists) {

@@ -1,6 +1,6 @@
 /* Minimal app styles - component-specific styles in their own CSS files */
 
-/* Floating switch back to the shelves UI exploration (explore/projects-shelves-ui) */
+/* Floating switch back to the collections UI exploration (explore/projects-collections-ui) */
 .ui-variant-toggle {
   position: fixed;
   bottom: 16px;

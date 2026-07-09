@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react'
 import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
 import ProjectSelector from './components/ProjectSelector';
 import ProjectsHome from './components/ProjectsHome';
-import JoinShelfLanding from './components/JoinShelfLanding';
+import JoinCollectionLanding from './components/JoinCollectionLanding';
 import ProjectSetSetup from './components/ProjectSetSetup';
 
 // Lazy-loaded dev harness — only fetched when navigating to #/dev/... routes.
@@ -175,13 +175,13 @@ function App() {
   // Track if we've done the initial URL-based navigation
   const initialLoadRef = useRef(false);
 
-  // UI exploration (explore/projects-shelves-ui): choose between the new
-  // shelves-based projects home and the classic modal selector. Persisted so
+  // UI exploration (explore/projects-collections-ui): choose between the new
+  // collections-based projects home and the classic modal selector. Persisted so
   // UX testing can flip back and forth across reloads.
-  const [uiVariant, setUiVariant] = useState<'shelves' | 'classic'>(() =>
-    localStorage.getItem('qh-ui-variant') === 'classic' ? 'classic' : 'shelves',
+  const [uiVariant, setUiVariant] = useState<'collections' | 'classic'>(() =>
+    localStorage.getItem('qh-ui-variant') === 'classic' ? 'classic' : 'collections',
   );
-  const switchUiVariant = useCallback((variant: 'shelves' | 'classic') => {
+  const switchUiVariant = useCallback((variant: 'collections' | 'classic') => {
     localStorage.setItem('qh-ui-variant', variant);
     setUiVariant(variant);
   }, []);
@@ -194,11 +194,11 @@ function App() {
     navigateToFile,
   } = useRouting();
 
-  // Invite-first onboarding: a fresh browser opening a shelf invite gets a
+  // Invite-first onboarding: a fresh browser opening a collection invite gets a
   // project set created silently instead of the setup screen. The landing
   // shows "Connecting…" until the set is ready.
   useEffect(() => {
-    if (route.type === 'join-shelf' && projectSetState.status === 'needs-setup') {
+    if (route.type === 'join-collection' && projectSetState.status === 'needs-setup') {
       projectSetActions.createProjectSet(DEFAULT_SYNC_SERVER);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -652,14 +652,14 @@ function App() {
     return <DevHarnessLazy page={route.page} />;
   }
 
-  // Shelf invite landing (explore/projects-shelves-ui). Rendered before the
+  // Collection invite landing (explore/projects-collections-ui). Rendered before the
   // setup screens: a brand-new browser clicking an invite never sees
   // project-set setup — the set is auto-created below while the landing asks
   // for identity. The needs-migration case (legacy local projects) still
   // falls through to the setup screen rather than migrating silently.
-  if (route.type === 'join-shelf' && projectSetState.status !== 'needs-migration') {
+  if (route.type === 'join-collection' && projectSetState.status !== 'needs-migration') {
     return (
-      <JoinShelfLanding
+      <JoinCollectionLanding
         route={route}
         projectSetStatus={projectSetState.status}
         onAddProjectToSet={projectSetActions.addProject}
@@ -706,7 +706,7 @@ function App() {
   return (
     <>
       {!project ? (
-        uiVariant === 'shelves' ? (
+        uiVariant === 'collections' ? (
           <ProjectsHome
             onSelectProject={handleSelectProject}
             onProjectCreated={handleProjectCreated}
@@ -749,8 +749,8 @@ function App() {
             />
             <button
               className="ui-variant-toggle"
-              onClick={() => switchUiVariant('shelves')}
-              title="Shelves-based projects home (UI exploration)"
+              onClick={() => switchUiVariant('collections')}
+              title="Collections-based projects home (UI exploration)"
             >
               Try the new projects home
             </button>

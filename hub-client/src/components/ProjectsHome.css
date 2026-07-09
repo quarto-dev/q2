@@ -1,4 +1,4 @@
-/* ProjectsHome — shelves-based projects view (explore/projects-shelves-ui).
+/* ProjectsHome — collections-based projects view (explore/projects-collections-ui).
    Visual language from QH-ProjectManagement-July26.fig "Short term" section:
    full-page surface, hairline borders, teal primary actions, navy text.
    Colors route through theme.css tokens so dark mode keeps working. */
@@ -286,7 +286,7 @@
   min-width: 180px;
 }
 
-/* ---- shelves ---- */
+/* ---- collections ---- */
 
 .ph-main {
   padding: 24px 30px 40px;
@@ -297,26 +297,26 @@
   flex: 1;
 }
 
-.ph-shelf { margin-bottom: 26px; }
+.ph-collection { margin-bottom: 26px; }
 
-.ph-shelf-header {
+.ph-collection-header {
   display: flex;
   align-items: baseline;
   gap: 8px;
   margin-bottom: 10px;
 }
 
-.ph-shelf-name { font-size: 13px; font-weight: 700; }
-.ph-shelf-count { font-size: 11.5px; color: var(--text-secondary); }
+.ph-collection-name { font-size: 13px; font-weight: 700; }
+.ph-collection-count { font-size: 11.5px; color: var(--text-secondary); }
 
-.ph-shelf-empty,
+.ph-collection-empty,
 .ph-rest-empty {
   font-size: 12.5px;
   color: var(--text-secondary);
   padding: 14px 2px;
 }
 
-.ph-shelf-row {
+.ph-collection-row {
   display: flex;
   align-items: stretch;
   gap: 8px;
@@ -417,7 +417,7 @@
 
 .ph-card .ph-menu { top: 34px; left: auto; right: 8px; }
 
-.ph-new-shelf-row { margin: 2px 0 24px; }
+.ph-new-collection-row { margin: 2px 0 24px; }
 
 /* ---- facepiles (mock collaborators for the exploration) ---- */
 
@@ -448,7 +448,7 @@
 .ph-facepile.md .ph-face { width: 20px; height: 20px; font-size: 8px; }
 .ph-facepile.lg .ph-face { width: 24px; height: 24px; font-size: 9px; }
 
-.ph-shelf-header .ph-facepile { margin-left: 6px; align-self: center; }
+.ph-collection-header .ph-facepile { margin-left: 6px; align-self: center; }
 
 .ph-card-footer {
   display: flex;
@@ -470,9 +470,9 @@
   color: var(--text-primary);
 }
 
-/* ---- shelf sharing: people button, members popover, join landing ---- */
+/* ---- collection sharing: people button, members popover, join landing ---- */
 
-.ph-shelf-people {
+.ph-collection-people {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -486,7 +486,7 @@
   align-self: center;
 }
 
-.ph-shelf-people:hover {
+.ph-collection-people:hover {
   background: var(--input-bg-alpha);
   color: var(--text-primary);
 }
@@ -611,7 +611,7 @@
   line-height: 1.3;
 }
 
-.ph-join-shelf-name { color: var(--posit-teal); }
+.ph-join-collection-name { color: var(--posit-teal); }
 
 .ph-join-sub {
   font-size: 13.5px;
@@ -665,7 +665,7 @@
   opacity: 0.4;
 }
 
-.ph-shelf.drop-target,
+.ph-collection.drop-target,
 .ph-rest.drop-target {
   outline: 2px dashed var(--posit-teal);
   outline-offset: 8px;
