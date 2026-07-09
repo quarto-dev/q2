@@ -24,6 +24,9 @@ import {
   getProjectChoices,
   createProject as wasmCreateProject,
   importProjectFromZip,
+  exportProjectAsZip,
+  connect,
+  disconnect,
   type ProjectChoice,
   type ProjectFile,
 } from '@quarto/preview-runtime';
@@ -32,6 +35,7 @@ import {
   buildProjectSetLinkUrl,
   buildShareableUrl,
   buildFullUrl,
+  resolveSyncServerUrl,
 } from '../utils/routing';
 import ShareDialog from './ShareDialog';
 import { mockCollaborators, unionCollaborators, type MockUser } from '../utils/mockCollaborators';
@@ -412,6 +416,39 @@ export default function ProjectsHome({
     onSelectProject(localProject);
   }, [onSelectProject, onTouchProject]);
 
+  // Which project is currently being exported as a ZIP (background connect)
+  const [exportingId, setExportingId] = useState<string | null>(null);
+
+  /**
+   * Download a project's files as a ZIP without opening it: connect in the
+   * background, pull every file's content (exportProjectAsZip reads only
+   * what's loaded), zip, then tear the connection down. Safe from the home
+   * page because nothing else holds the singleton sync client here.
+   */
+  const handleDownloadZip = useCallback(async (item: ProjectItem) => {
+    if (exportingId) return;
+    setExportingId(item.indexDocId);
+    setFormError(null);
+    try {
+      await connect(resolveSyncServerUrl(item.syncServer), item.indexDocId);
+      const bytes = exportProjectAsZip(item.description);
+      const blob = new Blob([bytes as BlobPart], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${item.description.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'project'}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('ZIP export failed:', err);
+      setFormError(err instanceof Error ? `Export failed: ${err.message}` : 'Export failed.');
+    } finally {
+      try { await disconnect(); } catch { /* connection already down */ }
+      setExportingId(null);
+      closeAllMenus();
+    }
+  }, [exportingId, closeAllMenus]);
+
   const handleRemove = useCallback((item: ProjectItem) => {
     if (confirm(`Remove "${item.description}" from this device?\n\nThis doesn't delete the project for others.`)) {
       moveProject(item.indexDocId, null);
@@ -746,6 +783,13 @@ export default function ProjectsHome({
       >
         {copied === item.indexDocId + ':id' ? 'ID copied!' : 'Copy project ID'}
         <span className="ph-menu-hint mono">{shortId(item.indexDocId)}</span>
+      </button>
+      <button
+        className="ph-menu-item"
+        disabled={!!exportingId}
+        onClick={(e) => { e.stopPropagation(); handleDownloadZip(item); }}
+      >
+        {exportingId === item.indexDocId ? 'Preparing ZIP…' : 'Download as ZIP'}
       </button>
       <button className="ph-menu-item" onClick={() => startRename(item)}>Rename…</button>
       <div className="ph-menu-divider" />
@@ -1197,8 +1241,8 @@ export default function ProjectsHome({
                     Link another browser…
                   </button>
                 )}
-                <button className="ph-menu-item" onClick={handleExportJson}>Back up list (JSON)…</button>
-                <button className="ph-menu-item" onClick={handleImportJson}>Restore list (JSON)…</button>
+                <button className="ph-menu-item" onClick={handleExportJson}>Export project list (JSON)…</button>
+                <button className="ph-menu-item" onClick={handleImportJson}>Import project list (JSON)…</button>
                 <button className="ph-menu-item with-hint" onClick={cycleColorScheme}>
                   Theme
                   <span className="ph-menu-hint">
