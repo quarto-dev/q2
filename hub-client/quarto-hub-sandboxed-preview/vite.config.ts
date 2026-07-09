@@ -49,12 +49,12 @@ const mainConfig: UserConfig = {
       name: 'copy-to-parent',
       closeBundle() {
         const srcPath = resolve(__dirname, 'dist/index.html');
-        const destPath = resolve(__dirname, '../public/q2-raw.html');
+        const destPath = resolve(__dirname, '../public/q2-sandboxed-preview.html');
         try {
           copyFileSync(srcPath, destPath);
-          console.log('✓ Copied to ../public/q2-raw.html');
+          console.log('✓ Copied to ../public/q2-sandboxed-preview.html');
         } catch (err) {
-          console.error('Failed to copy to q2-raw.html:', err);
+          console.error('Failed to copy to q2-sandboxed-preview.html:', err);
         }
       },
     },

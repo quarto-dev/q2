@@ -15,16 +15,16 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const Q2_RAW_PORT = parseInt(process.env.Q2_RAW_PORT || '8081');
-const Q2_RAW_FILE = path.join(__dirname, '../hub-client/public/q2-raw.html');
+const Q2_SANDBOXED_PREVIEW_PORT = parseInt(process.env.Q2_SANDBOXED_PREVIEW_PORT || '8081');
+const Q2_SANDBOXED_PREVIEW_FILE = path.join(__dirname, '../hub-client/public/q2-sandboxed-preview.html');
 const SERVICE_WORKER_FILE = path.join(__dirname, '../hub-client/public/serviceWorker.js');
 
 const server = http.createServer((req, res) => {
-  // Serve q2-raw.html and serviceWorker.js, nothing else
+  // Serve q2-sandboxed-preview.html and serviceWorker.js, nothing else
   let filePath, contentType;
 
-  if (req.url === '/' || req.url === '/q2-raw.html') {
-    filePath = Q2_RAW_FILE;
+  if (req.url === '/' || req.url === '/q2-sandboxed-preview.html') {
+    filePath = Q2_SANDBOXED_PREVIEW_FILE;
     contentType = 'text/html';
   } else if (req.url === '/serviceWorker.js') {
     filePath = SERVICE_WORKER_FILE;
@@ -57,7 +57,7 @@ const server = http.createServer((req, res) => {
   }
 });
 
-server.listen(Q2_RAW_PORT, '127.0.0.1', () => {
-  console.log(`q2-raw server running on http://127.0.0.1:${Q2_RAW_PORT}`);
-  console.log(`Serving ONLY q2-raw.html for sandboxed rendering`);
+server.listen(Q2_SANDBOXED_PREVIEW_PORT, '127.0.0.1', () => {
+  console.log(`q2-sandboxed-preview server running on http://127.0.0.1:${Q2_SANDBOXED_PREVIEW_PORT}`);
+  console.log(`Serving ONLY q2-sandboxed-preview.html for sandboxed rendering`);
 });

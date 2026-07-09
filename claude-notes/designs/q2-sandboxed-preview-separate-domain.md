@@ -1,8 +1,8 @@
-# q2-raw.html Separate Domain Design
+# q2-sandboxed-preview.html Separate Domain Design
 
 ## Problem
 
-The `q2-raw.html` iframe renders raw AST JSON in a sandboxed context. For security isolation, it should be served from a separate domain (cross-origin) rather than the same origin as the main hub-client application.
+The `q2-sandboxed-preview.html` iframe renders raw AST JSON in a sandboxed context. For security isolation, it should be served from a separate domain (cross-origin) rather than the same origin as the main hub-client application.
 
 ## Solution
 
@@ -12,9 +12,9 @@ The `q2-raw.html` iframe renders raw AST JSON in a sandboxed context. For securi
 Main app:     https://your-hub-domain.com/
               ├─ Serves the main React app
               ├─ WebSocket connection to sync server
-              └─ Contains Q2RawIframe component
+              └─ Contains Q2SandboxedPreviewIframe component
 
-q2-raw:       https://raw.your-hub-domain.com/q2-raw.html
+q2-sandboxed-preview:       https://raw.your-hub-domain.com/q2-sandboxed-preview.html
               └─ Single static HTML file
                  ├─ No external dependencies
                  ├─ Inline JavaScript only
@@ -23,7 +23,7 @@ q2-raw:       https://raw.your-hub-domain.com/q2-raw.html
 
 ### Security Benefits
 
-1. **Origin isolation**: q2-raw.html runs in a completely separate origin
+1. **Origin isolation**: q2-sandboxed-preview.html runs in a completely separate origin
 2. **No cookie access**: raw domain can't access hub cookies
 3. **No localStorage access**: raw domain has separate storage
 4. **Minimal attack surface**: Single static file, no build artifacts
@@ -35,7 +35,7 @@ For local development, we simulate the separate domain using ports:
 
 ```
 Main app:     http://127.0.0.1:8080/    (local-prod.sh)
-q2-raw:       http://127.0.0.1:8081/    (q2-raw-server.mjs)
+q2-sandboxed-preview:       http://127.0.0.1:8081/    (q2-sandboxed-preview-server.mjs)
 ```
 
 This mimics the cross-origin setup and allows testing the postMessage communication.
@@ -44,25 +44,25 @@ This mimics the cross-origin setup and allows testing the postMessage communicat
 
 ### Files
 
-- **`hub-client/q2-raw.html`**: The sandboxed HTML file
-- **`scripts/q2-raw-server.mjs`**: Dedicated static server for local-prod
-- **`hub-client/src/components/render/q2-raw/Q2RawIframe.tsx`**: React component that loads the iframe
+- **`hub-client/q2-sandboxed-preview.html`**: The sandboxed HTML file
+- **`scripts/q2-sandboxed-preview-server.mjs`**: Dedicated static server for local-prod
+- **`hub-client/src/components/render/q2-sandboxed-preview/Q2SandboxedPreviewIframe.tsx`**: React component that loads the iframe
 
 ### Environment Variables
 
-- **`VITE_Q2_RAW_URL`**: URL to load q2-raw.html from
-  - Dev: `q2-raw.html` (served by Vite from same origin)
-  - Local-prod: `http://127.0.0.1:8081/q2-raw.html`
-  - Production: `https://raw.your-hub-domain.com/q2-raw.html` (configure as needed)
+- **`VITE_Q2_SANDBOXED_PREVIEW_URL`**: URL to load q2-sandboxed-preview.html from
+  - Dev: `q2-sandboxed-preview.html` (served by Vite from same origin)
+  - Local-prod: `http://127.0.0.1:8081/q2-sandboxed-preview.html`
+  - Production: `https://raw.your-hub-domain.com/q2-sandboxed-preview.html` (configure as needed)
 
 ### Build Configuration
 
 ```bash
 # Local-prod build
-VITE_Q2_RAW_URL=http://127.0.0.1:8081/q2-raw.html npm run build
+VITE_Q2_SANDBOXED_PREVIEW_URL=http://127.0.0.1:8081/q2-sandboxed-preview.html npm run build
 
 # Production build (use your actual raw domain)
-VITE_Q2_RAW_URL=https://raw.your-hub-domain.com/q2-raw.html npm run build
+VITE_Q2_SANDBOXED_PREVIEW_URL=https://raw.your-hub-domain.com/q2-sandboxed-preview.html npm run build
 ```
 
 ### Nginx Configuration
@@ -89,8 +89,8 @@ server {
     listen 443 ssl http2;
     server_name raw.your-hub-domain.com;
     
-    # Only serve q2-raw.html
-    location = /q2-raw.html {
+    # Only serve q2-sandboxed-preview.html
+    location = /q2-sandboxed-preview.html {
         root /var/www/hub-client/dist;
         
         # Strict security headers
@@ -128,7 +128,7 @@ iframe.contentWindow.postMessage({
 // Ready signal
 window.parent.postMessage({ type: 'IFRAME_READY' }, '*')
 
-// VFS read request (currently unused by q2-raw, kept for compatibility)
+// VFS read request (currently unused by q2-sandboxed-preview, kept for compatibility)
 window.parent.postMessage({
   type: 'url',
   path: string
@@ -149,13 +149,13 @@ cd ..
 ./scripts/local-prod.sh
 
 # Open http://127.0.0.1:8080
-# Navigate to a document with q2-raw format
+# Navigate to a document with q2-sandboxed-preview format
 ```
 
 ### Verification
 
 1. Open browser DevTools → Network tab
-2. Find the q2-raw.html request
+2. Find the q2-sandboxed-preview.html request
 3. Verify it loads from `http://127.0.0.1:8081`
 4. Check Console for postMessage events
 5. Verify AST renders correctly
@@ -166,8 +166,8 @@ cd ..
 - [ ] Set up DNS: subdomain → server IP
 - [ ] TLS certificate for raw subdomain
 - [ ] Nginx config for raw subdomain
-- [ ] Build with production URL: `VITE_Q2_RAW_URL=https://raw.your-hub-domain.com/q2-raw.html`
-- [ ] Deploy q2-raw.html to raw subdomain
+- [ ] Build with production URL: `VITE_Q2_SANDBOXED_PREVIEW_URL=https://raw.your-hub-domain.com/q2-sandboxed-preview.html`
+- [ ] Deploy q2-sandboxed-preview.html to raw subdomain
 - [ ] Test cross-origin postMessage
 - [ ] Verify CSP headers
 - [ ] Check iframe sandbox attributes
@@ -176,7 +176,7 @@ cd ..
 
 1. **Subdomain isolation for other renderers**: Apply same pattern to q2-debug, q2-preview
 2. **CDN deployment**: Serve from CDN for global edge caching
-3. **Version pinning**: URL with hash for cache-busting (`q2-raw-abc123.html`)
+3. **Version pinning**: URL with hash for cache-busting (`q2-sandboxed-preview-abc123.html`)
 4. **Multiple raw formats**: Extend pattern to other simple renderers
 
 ## References

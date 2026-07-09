@@ -70,7 +70,7 @@ emulates. Video is just the first place we noticed. The fix belongs at the
 format boundary, not in `video.lua`.
 
 `builtin_pseudo_format()` already encodes the base mapping
-(`q2-preview`/`q2-debug`/`q2-raw` → `html`, `q2-slides` → `html` w/ preview
+(`q2-preview`/`q2-debug`/`q2-sandboxed-preview` → `html`, `q2-slides` → `html` w/ preview
 kind), but for **Lua FORMAT purposes** `q2-slides` should resolve to
 `revealjs` (so `is_format("revealjs")` is true), matching what
 `is_revealjs_target("q2-slides")` already does for pipeline decisions.
@@ -104,7 +104,7 @@ Add to `crates/quarto-core/src/format.rs` (next to `builtin_pseudo_format`):
 /// identically in preview and render.
 pub fn lua_format_for(target_format: &str) -> &str {
     match target_format {
-        "q2-preview" | "q2-debug" | "q2-raw" => "html",
+        "q2-preview" | "q2-debug" | "q2-sandboxed-preview" => "html",
         "q2-slides" => "revealjs",
         other => other,
     }

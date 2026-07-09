@@ -3,7 +3,7 @@ import type { ReactNode, Ref } from 'react';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { Q2DebugIframe } from './q2-debug/Q2DebugIframe';
 import { Q2PreviewIframe, type Q2PreviewIframeHandle } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
-import { Q2RawIframe } from './q2-raw/Q2RawIframe';
+import { Q2SandboxedPreviewIframe } from './q2-sandboxed-preview/Q2SandboxedPreviewIframe';
 import { SlideAst } from './ReactAstSlideRenderer';
 import { transpileTSX } from '../../services/tsxTranspiler';
 import { resolveComponentPath } from '@quarto/preview-renderer/utils/componentPath';
@@ -250,7 +250,7 @@ function ReactRenderer({
   // theme-CSS effect that q2-debug doesn't need, so the two surfaces
   // diverge at the wrapper level. They still share the shared
   // `framework/` plumbing (registry, dispatchers, Ast).
-  if (format === 'q2-raw') {
+  if (format === 'q2-sandboxed-preview') {
     return (
       <ErrorBoundary>
         <div style={{
@@ -262,7 +262,7 @@ function ReactRenderer({
           right: 0,
           bottom: 0,
         }}>
-          <Q2RawIframe astJson={astJson} />
+          <Q2SandboxedPreviewIframe astJson={astJson} />
         </div>
       </ErrorBoundary>
     );

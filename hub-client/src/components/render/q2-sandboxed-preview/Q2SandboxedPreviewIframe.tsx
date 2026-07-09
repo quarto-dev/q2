@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 
-interface Q2RawIframeProps {
+interface Q2SandboxedPreviewIframeProps {
   astJson: string;
 }
 
-// In production, q2-raw.html is served from a separate domain for sandboxing.
+// In production, q2-sandboxed-preview.html is served from a separate domain for sandboxing.
 // In dev/local-prod, it uses a different port.
-const Q2_RAW_URL = import.meta.env.VITE_Q2_RAW_URL || 'q2-raw.html';
+const Q2_SANDBOXED_PREVIEW_URL = import.meta.env.VITE_Q2_SANDBOXED_PREVIEW_URL || 'q2-sandboxed-preview.html';
 
 /**
  * Simplest possible iframe wrapper: displays JSON.stringified AST
  * in a pre element. No interactivity, no custom components, no navigation.
  */
-export function Q2RawIframe({ astJson }: Q2RawIframeProps) {
+export function Q2SandboxedPreviewIframe({ astJson }: Q2SandboxedPreviewIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
 
@@ -76,8 +76,8 @@ export function Q2RawIframe({ astJson }: Q2RawIframeProps) {
   return (
     <iframe
       ref={iframeRef}
-      src={Q2_RAW_URL}
-      title="q2-raw Renderer"
+      src={Q2_SANDBOXED_PREVIEW_URL}
+      title="q2-sandboxed-preview Renderer"
       sandbox="allow-scripts allow-same-origin"
       style={{
         width: '99%',

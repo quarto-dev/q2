@@ -40,7 +40,7 @@ export function App() {
   }, []);
 
   if (!astJson) {
-    return <div style={{ padding: '20px' }}>Loading q2-raw renderer...</div>;
+    return <div style={{ padding: '20px' }}>Loading q2-sandboxed-preview renderer...</div>;
   }
 
   try {

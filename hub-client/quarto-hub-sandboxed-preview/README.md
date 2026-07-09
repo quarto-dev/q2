@@ -4,13 +4,13 @@ A standalone Vite project that builds a self-contained, sandboxed iframe rendere
 
 ## Purpose
 
-This project bundles React, KaTeX, and other dependencies into a single HTML file (`q2-raw.html`) that can run in a sandboxed iframe **without** `allow-same-origin`. This provides better security isolation.
+This project bundles React, KaTeX, and other dependencies into a single HTML file (`q2-sandboxed-preview.html`) that can run in a sandboxed iframe **without** `allow-same-origin`. This provides better security isolation.
 
 ## Architecture
 
 - **Separate build process**: Has its own `package.json`, `vite.config.ts`, and dependencies
 - **Single-file output**: Uses `vite-plugin-singlefile` to inline all JS/CSS into one HTML file
-- **Output location**: Builds to `../q2-raw.html` (hub-client root)
+- **Output location**: Builds to `../q2-sandboxed-preview.html` (hub-client root)
 - **Sandboxed**: The output HTML runs with only `sandbox="allow-scripts"` (no `allow-same-origin`)
 
 ## Development
@@ -28,7 +28,7 @@ npm run build
 
 ## Build Output
 
-The build produces `../q2-raw.html` which is consumed by `Q2RawIframe.tsx` in the parent hub-client project.
+The build produces `../q2-sandboxed-preview.html` which is consumed by `Q2SandboxedPreviewIframe.tsx` in the parent hub-client project.
 
 ## Adding Dependencies
 
