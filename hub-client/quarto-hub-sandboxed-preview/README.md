@@ -19,7 +19,7 @@ This project bundles React, KaTeX, and other dependencies into a single HTML fil
 # Install dependencies (first time only)
 npm install
 
-# Development mode with HMR
+# Development mode with HMR (not recommended)
 npm run dev
 
 # Build production bundle
