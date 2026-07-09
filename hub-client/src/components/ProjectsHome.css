@@ -491,6 +491,11 @@
   color: var(--text-primary);
 }
 
+/* Private collections show just your chip, dimmed until hover — sharing
+   stays visually distinct (glyph + full-strength facepile). */
+.ph-collection-people.private { opacity: 0.55; }
+.ph-collection-people.private:hover { opacity: 1; }
+
 .ph-members {
   left: 0;
   right: auto;

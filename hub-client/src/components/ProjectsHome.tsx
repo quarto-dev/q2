@@ -779,12 +779,22 @@ export default function ProjectsHome({
   };
 
   const renderMembersPopover = (collection: Collection) => {
-    const members = collection.shared?.members ?? [];
+    // A private collection shows the same popover with just you in it, plus
+    // the way to share — copying the link is what turns sharing on.
+    const members: CollectionMember[] = collection.shared?.members
+      ?? (selfUser
+        ? [{ ...selfUser, name: selfUser.name.replace(/ \(you\)$/, ''), joinedAt: '', isOwner: true, isYou: true }]
+        : []);
     const you = members.find((m) => m.isYou);
     const inviteUrl = buildInviteUrl(collection);
+    const copyKey = `collection:${collection.id}:invite`;
     return (
       <div className="ph-menu ph-members" role="dialog" aria-label={`Members of ${collection.name}`}>
-        <div className="ph-menu-label">SHARED WITH {members.length} {members.length === 1 ? 'PERSON' : 'PEOPLE'}</div>
+        <div className="ph-menu-label">
+          {collection.shared
+            ? `SHARED WITH ${members.length} ${members.length === 1 ? 'PERSON' : 'PEOPLE'}`
+            : 'PRIVATE — ONLY YOU'}
+        </div>
         <div className="ph-members-list">
           {members.map((m, i) => (
             <div key={`${m.initials}-${i}`} className="ph-member-row">
@@ -820,18 +830,25 @@ export default function ProjectsHome({
           </button>
         )}
         <div className="ph-menu-divider" />
-        <div className="ph-menu-label">INVITE BY LINK</div>
+        <div className="ph-menu-label">{collection.shared ? 'INVITE BY LINK' : 'SHARE BY LINK'}</div>
         <div className="ph-members-invite">
           <span className="ph-invite-url mono" title={inviteUrl}>{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
           <button
             className="ph-btn primary small-invite"
-            onClick={() => copyToClipboard(inviteUrl, `collection:${collection.id}:invite`)}
+            onClick={() => {
+              // Copying the link is the moment a private collection becomes
+              // shared — the link leaving your hands is the share.
+              if (!collection.shared) handleShareCollection(collection);
+              copyToClipboard(inviteUrl, copyKey);
+            }}
           >
-            {copied === `collection:${collection.id}:invite` ? 'Copied!' : 'Copy link'}
+            {copied === copyKey ? 'Copied!' : 'Copy link'}
           </button>
         </div>
         <div className="ph-invite-note">
-          Anyone with this link can join this collection and add or remove projects.
+          {collection.shared
+            ? 'Anyone with this link can join this collection and add or remove projects.'
+            : 'Copying turns on sharing — anyone with the link can join and add or remove projects.'}
         </div>
       </div>
     );
@@ -891,25 +908,30 @@ export default function ProjectsHome({
         <div className="ph-collection-header qh-menu-anchor">
           <span className="ph-collection-name">{collection.name}</span>
           <span className="ph-collection-count">{collectionItems.length}</span>
-          {collection.shared && (
-            <button
-              className="ph-collection-people"
-              title={`Shared with ${collection.shared.members.length} people — members & invite`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenMenu(null);
-                setMembersFor(membersFor === collection.id ? null : collection.id);
-              }}
-            >
+          <button
+            className={`ph-collection-people ${collection.shared ? '' : 'private'}`}
+            title={collection.shared
+              ? `Shared with ${collection.shared.members.length} people — members & invite`
+              : 'Private — only you. Click to share this collection.'}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpenMenu(null);
+              setMembersFor(membersFor === collection.id ? null : collection.id);
+            }}
+          >
+            {collection.shared && (
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <circle cx="9" cy="8" r="3.4" stroke="currentColor" strokeWidth="2" />
                 <path d="M3 19c0-3 2.7-4.8 6-4.8s6 1.8 6 4.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 <circle cx="17" cy="9" r="2.6" stroke="currentColor" strokeWidth="2" />
                 <path d="M16.5 14.4c2.6.3 4.5 1.9 4.5 4.1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
-              {renderFacepile(collection.shared.members, 'md')}
-            </button>
-          )}
+            )}
+            {renderFacepile(
+              collection.shared?.members ?? (selfUser ? [selfUser] : []),
+              'md',
+            )}
+          </button>
           <span className="ph-flex-spacer" />
           <button
             className="ph-icon-btn"
@@ -922,7 +944,7 @@ export default function ProjectsHome({
           >
             ⋯
           </button>
-          {membersFor === collection.id && collection.shared && renderMembersPopover(collection)}
+          {membersFor === collection.id && renderMembersPopover(collection)}
           {openMenu === menuKey && (
             <div className="ph-menu ph-menu-right" role="menu">
               {collection.shared ? (
