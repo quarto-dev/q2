@@ -555,8 +555,10 @@ mod tests {
     /// pipelines drift on reveal version/CSS. This test compares the embedded
     /// constants to the npm dist and fails if the vendored copy is stale —
     /// re-sync `resources/revealjs/` from `node_modules/reveal.js/dist/` (see
-    /// `resources/revealjs/README.md`). Skips when node_modules is absent
-    /// (fresh checkout before `npm install`).
+    /// `resources/revealjs/README.md`). Line endings are normalized before the
+    /// compare, so a Windows checkout (`core.autocrlf` rewriting the committed-LF
+    /// files to CRLF) does not false-positive on EOL — only real content drift
+    /// fails. Skips when node_modules is absent (fresh checkout before `npm install`).
     #[test]
     fn vendored_reveal_assets_match_npm_package() {
         let npm_dist = concat!(
@@ -569,12 +571,20 @@ mod tests {
             );
             return;
         }
+        // Compare content only, with line endings normalized. These assets are
+        // served verbatim, but CRLF vs LF is irrelevant to every browser, and a
+        // Windows checkout (core.autocrlf) rewrites the committed-LF vendored
+        // files to CRLF on disk — a byte-exact compare against the always-LF npm
+        // copy would then false-positive on line endings alone. This test's job
+        // is to catch *content* drift (a reveal.js version bump), not EOL noise.
+        let norm = |s: &str| s.replace("\r\n", "\n");
         let check = |embedded: &str, rel: &str| {
             let path = format!("{npm_dist}/{rel}");
             let npm =
                 std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("reading {path}: {e}"));
             assert_eq!(
-                embedded, npm,
+                norm(embedded),
+                norm(&npm),
                 "vendored resources/revealjs/{rel} has drifted from \
                  node_modules/reveal.js/dist/{rel} — re-sync the vendored copy \
                  (q2 render and q2 preview must use identical reveal assets)"
