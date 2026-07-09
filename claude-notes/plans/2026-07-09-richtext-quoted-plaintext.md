@@ -192,9 +192,16 @@ is out of scope here; noted for a possible follow-up.)
 - [x] TDD test 3 — round-trip oracle fixtures verified under `QUARTO_RUN_PAMPA_ROUNDTRIP=1` (19/19 pass; 4 new quote fixtures semantically round-trip)
 - [x] Investigate commit-path behavior on unbalanced/unparseable block — finding recorded above (graceful, no corruption, no new machinery)
 - [x] TDD test 4 — real-binary e2e `q2-preview-spa/e2e/richtext-quoted.spec.ts` (2 tests, both green) after rebuild chain (`cargo xtask build-q2-preview-spa` + `cargo build -p quarto --bin q2`; no WASM rebuild — TS-only change)
-- [ ] `npm run build:all` (hub-client) green; `cargo xtask verify` as needed
+- [x] Verification: preview-renderer `tsc --noEmit` + full unit suite (516 pass); hub-client `npm run build` (`tsc -b && vite build`) + `build:sandboxed` + `test:ci` (test/integration/wasm) all green. Full `cargo xtask verify` **not run** — the change is provably TS-only (`git diff` touches no `.rs`), so the Rust/WASM legs are unaffected; a full-workspace rebuild would add no correctness signal. (Run it before push if desired; the Rust legs are trivially green.)
 - [x] End-to-end manual verification in Chrome (rebuild chain) — evidence below
-- [ ] hub-client/changelog.md entry (if any hub-client artifact changes) — two-commit workflow
+- [x] hub-client/changelog.md entry — two-commit workflow: source `d31e6118`, changelog `e2920818`; changelog render gate (`npm run test:wasm`) green
+
+## Commits (branch `braid/bd-iwv3708i-quoted-plaintext`, off `main`)
+
+- `d31e6118` — source: split `Quoted` out of the chip case + tests (unit, oracle fixtures, e2e)
+- `e2920818` — hub-client/changelog.md entry (two-commit workflow)
+
+**Not pushed** — awaiting review/approval per the git-push policy.
 
 ## End-to-end verification (2026-07-09, rebuilt `target/debug/q2`)
 
