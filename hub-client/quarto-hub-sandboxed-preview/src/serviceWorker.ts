@@ -3,7 +3,7 @@ declare var self: ServiceWorkerGlobalScope;
 
 console.log('sandboxed preview service worker started')
 
-const clear = async (cache: Cache) => Promise.all((await cache.keys()).map(k => cache.delete(k)))
+const clearCache = async (cache: Cache) => Promise.all((await cache.keys()).map(k => cache.delete(k)))
 
 // Cache sandboxed preview for offline
 const precacheFilepaths = ['./', './serviceWorker.js']
@@ -12,7 +12,7 @@ self.addEventListener("install", async (e) => {
     e.waitUntil(
         (async () => {
             const cache = await caches.open(cacheName);
-            await clear(cache)
+            await clearCache(cache)
             await cache.addAll(precacheFilepaths);
         })(),
     );
@@ -57,7 +57,8 @@ const getMimeType = (filename: string) => {
 };
 
 // forward fetch request over postmessage
-const com = (event: FetchEvent, url: string) => new Promise<Response>(async resolve => {
+const requestIframeToRequestFromVFS = (event: FetchEvent) => new Promise<Response>(async resolve => {
+    const url = event.request.url
     const client = await self.clients.get(event.clientId)
 
     // wait for a single response
@@ -78,15 +79,15 @@ const com = (event: FetchEvent, url: string) => new Promise<Response>(async reso
     client!.postMessage({ type: 'request', url })
 })
 
+const shouldRequestFromVFS = (url: string) => url.endsWith('gif') || url.endsWith('png') || url.endsWith('jpg')
+
 self.addEventListener('fetch', function (event) {
     console.log("REQUEST:", event.clientId, event.request.url);
     if (event.request.method !== 'GET') return;
 
-    const url = event.request.url;
-
-    if (url.endsWith('gif') || url.endsWith('dog') || url.endsWith('png')) {
-        event.respondWith(com(event, url))
-    } else {
+    if (shouldRequestFromVFS(event.request.url)) {
+        event.respondWith(requestIframeToRequestFromVFS(event))
+    } else { // cache asset or fetch cached asset
         event.respondWith(
             (async () => {
                 const r = await caches.match(event.request);
