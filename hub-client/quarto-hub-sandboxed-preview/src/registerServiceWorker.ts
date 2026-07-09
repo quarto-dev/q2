@@ -1,10 +1,12 @@
 // sends a request (from the preview in the iframe) to the authoring app
 // with type `'url'` and expects a single response with type `'url_reponse'`.
+// The response comes from Q2SandboxedPreviewIframe.tsx
 const requestVFS = (path: string) => {
     const ret = new Promise((resolve, reject) => {
         const handleMessage = (event: MessageEvent) => {
-            if (event.data.type === 'url_response') {
+            if (event.data.type === 'url_response' && event.data.path === path) {
                 window.removeEventListener('message', handleMessage);
+                console.log('received VFS request for ', path, event.data)
 
                 if (event.data.success === true) resolve(event.data.content)
                 else reject(event.data.error)
@@ -38,9 +40,12 @@ export const init = async () => {
             if (event.data?.type === 'request') {
                 const modifiedUrl = event.data.url.split('/').at(-1)
 
-                console.log('got request in preview', modifiedUrl)
                 const content = await requestVFS(modifiedUrl)
-                navigator.serviceWorker.controller!.postMessage({ type: 'response', content, url: event.data.url })
+                navigator.serviceWorker.controller!.postMessage({
+                    type: 'response',
+                    url: event.data.url,
+                    content,
+                })
             }
         });
     }

@@ -16,7 +16,7 @@ export function App() {
 
   useEffect(() => {
     init().then(() => {
-      console.log('INITED!')
+      window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
     })
   }, [])
 
@@ -27,14 +27,9 @@ export function App() {
       if (event.data.type === 'UPDATE_AST') {
         const payload = event.data.payload as UpdateAstPayload;
         setAstJson(payload.astJson);
-        // const dog = await requestVFS('dog_room.png')
-        // console.log('yo yo', { dog })
-        // setDogImage(dog);
       }
     };
     window.addEventListener('message', handleMessage);
-
-    window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
 
     return () => window.removeEventListener('message', handleMessage);
   }, []);

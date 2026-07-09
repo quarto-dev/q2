@@ -17,6 +17,8 @@ export function Q2SandboxedPreviewIframe({ astJson }: Q2SandboxedPreviewIframePr
   const [iframeReady, setIframeReady] = useState(false);
 
   // Handle messages from the iframe
+  // the requests are sent from `requestVFS` in `registerServiceWorker.ts` in the
+  // `quarto-hub-sandboxed-preview` project.
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
       console.log('message received!!', event.data)
@@ -27,6 +29,9 @@ export function Q2SandboxedPreviewIframe({ astJson }: Q2SandboxedPreviewIframePr
         const wasm = await import('wasm-quarto-hub-client');
 
         // Determine if this is a binary file based on extension
+        // TODO: unify this list of extensions with `shouldRequestFromVFS` in serviceWorker.ts
+        // in the `quarto-hub-sandboxed-preview` project. We should have a standard way to 
+        // decide whether or not the preview should be allowed resolve an asset from the VFS.
         const isBinary = /\.(png|jpg|jpeg|gif|pdf|ico|webp|ttf|woff|woff2|zip|wasm)$/i.test(event.data.path);
 
         const resultJson = isBinary

@@ -65,6 +65,7 @@ const requestIframeToRequestFromVFS = (event: FetchEvent) => new Promise<Respons
     const listener = (event: ExtendableMessageEvent) => {
         const data = event.data
         if (data.type === 'response' && data.url === url) {
+            console.log("RESOLVING TO", data)
             resolve(new Response(
                 base64StrToBinary(data.content),
                 {
@@ -79,6 +80,9 @@ const requestIframeToRequestFromVFS = (event: FetchEvent) => new Promise<Respons
     client!.postMessage({ type: 'request', url })
 })
 
+// TODO: unify this list of extensions with `isBinary` in Q2SandboxedPreviewIframe.tsx. 
+// We should have a standard way to decide whether or not the preview should be allowed 
+// resolve an asset from the VFS.
 const shouldRequestFromVFS = (url: string) => url.endsWith('gif') || url.endsWith('png') || url.endsWith('jpg')
 
 self.addEventListener('fetch', function (event) {

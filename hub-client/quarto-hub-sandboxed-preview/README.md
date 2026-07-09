@@ -15,16 +15,13 @@ This project bundles React, KaTeX, and other dependencies into a single HTML fil
 
 ## Development
 
-```bash
-# Install dependencies (first time only)
-npm install
+It is recommended to not work directly in this directory, but instead use `npm run local-prod:fresh:nginx` to test hub client with the `q2-sandboxed-preview` format.
 
-# Development mode with HMR (not recommended)
-npm run dev
-
-# Build production bundle
-npm run build
-```
+This approach is the closest thing we have so far to simulating prod locally. The main issue
+with it is that it does not provide HMR, so its harder to develop with. It would be nice to 
+figure out how to get simulataneous HMR for both the sandboxed preview and the main
+app in a way that we don't have to think too much about service worker registration, 
+but we don't have that for now.
 
 ## Build Output
 
