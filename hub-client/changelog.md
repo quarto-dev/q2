@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-07-09
 
+- [`dbd1bc44`](https://github.com/quarto-dev/q2/commits/dbd1bc44): UI exploration (branch only): every collection header now shows avatar chips — dimmed and just you while private, glyph plus member facepile when shared. Clicking the chips opens the members popover; for a private collection, copying the invite link is what turns sharing on.
 - [`b379c89d`](https://github.com/quarto-dev/q2/commits/b379c89d): UI exploration (branch only): "shelf" is now called "collection" everywhere — menus, dialogs, and invite links. Existing arrangements carry over automatically.
 
 ### 2026-07-08
