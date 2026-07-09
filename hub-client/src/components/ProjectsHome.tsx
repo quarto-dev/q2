@@ -77,6 +77,9 @@ const COLLECTION_PAGE_SIZE = 8; // two rows of four cards
 
 const UNNAMED_RE = /^Project \d{4}-\d{2}-\d{2}T/;
 
+/** Set to '1' once the user opts out of the shared-collection move warning. */
+const MOVE_WARNING_KEY = 'qh-collection-move-warning-dismissed';
+
 function isUnnamed(description: string): boolean {
   return UNNAMED_RE.test(description);
 }
@@ -213,6 +216,15 @@ export default function ProjectsHome({
   const { collections, createCollection, renameCollection, deleteCollection, moveProject, reconcilePending, shareCollection, removeMember } = useCollections();
   // Which collection's members-and-invite popover is open
   const [membersFor, setMembersFor] = useState<string | null>(null);
+  // Pending move out of a shared collection, awaiting the user's OK
+  const [pendingMove, setPendingMove] = useState<{
+    indexDocId: string;
+    name: string;
+    fromName: string;
+    othersCount: number;
+    target: string | null;
+  } | null>(null);
+  const [moveWarnChecked, setMoveWarnChecked] = useState(false);
   const [collectionPages, setCollectionPages] = useState<Record<string, number>>({});
   // Drag-and-drop between collections and the unshelved list. dropTarget is a
   // collection id or 'unshelved'.
@@ -325,6 +337,36 @@ export default function ProjectsHome({
   // the payload) rather than React state, which lags the native events.
   const DRAG_TYPE = 'application/x-qh-project';
 
+  // Moving a project out of a shared collection changes what its other
+  // members see. Warn once (suppressible) before such moves; private
+  // collections and moves within the same collection pass straight through.
+  const collectionOf = useCallback((indexDocId: string): Collection | undefined => {
+    const short = indexDocId.replace(/^automerge:/, '');
+    return collections.find((c) =>
+      c.projectIds.some((id) => id === indexDocId || id === short || `automerge:${id}` === indexDocId),
+    );
+  }, [collections]);
+
+  const requestMove = useCallback((indexDocId: string, target: string | null) => {
+    const from = collectionOf(indexDocId);
+    const othersCount = from?.shared?.members.filter((m) => !m.isYou).length ?? 0;
+    const suppressed = localStorage.getItem(MOVE_WARNING_KEY) === '1';
+    if (from && from.id !== target && othersCount > 0 && !suppressed) {
+      const item = byId.get(indexDocId) ?? byId.get(indexDocId.replace(/^automerge:/, '')) ?? byId.get(`automerge:${indexDocId}`);
+      setMoveWarnChecked(false);
+      setPendingMove({
+        indexDocId,
+        name: item?.description ?? 'this project',
+        fromName: from.name,
+        othersCount,
+        target,
+      });
+      closeAllMenus();
+      return;
+    }
+    moveProject(indexDocId, target);
+  }, [collectionOf, byId, moveProject, closeAllMenus]);
+
   const handleDragStart = useCallback((item: ProjectItem) => (e: React.DragEvent) => {
     e.dataTransfer.setData(DRAG_TYPE, item.indexDocId);
     e.dataTransfer.setData('text/plain', item.indexDocId);
@@ -354,10 +396,10 @@ export default function ProjectsHome({
     onDrop: (e: React.DragEvent) => {
       e.preventDefault();
       const docId = e.dataTransfer.getData(DRAG_TYPE) || draggingId;
-      if (docId) moveProject(docId, target === 'unshelved' ? null : target);
+      if (docId) requestMove(docId, target === 'unshelved' ? null : target);
       handleDragEnd();
     },
-  }), [draggingId, dropTarget, moveProject, handleDragEnd]);
+  }), [draggingId, dropTarget, requestMove, handleDragEnd]);
 
   const handleOpen = useCallback(async (item: ProjectItem) => {
     // Ensure a local IDB entry exists (URL routing uses local ids)
@@ -663,7 +705,7 @@ export default function ProjectsHome({
               <button
                 key={collection.id}
                 className="ph-menu-item"
-                onClick={() => { moveProject(item.indexDocId, collection.id); closeAllMenus(); }}
+                onClick={() => { requestMove(item.indexDocId, collection.id); closeAllMenus(); }}
               >
                 {collection.name}
               </button>
@@ -671,7 +713,7 @@ export default function ProjectsHome({
             {shelvedIds.has(item.indexDocId) && (
               <button
                 className="ph-menu-item"
-                onClick={() => { moveProject(item.indexDocId, null); closeAllMenus(); }}
+                onClick={() => { requestMove(item.indexDocId, null); closeAllMenus(); }}
               >
                 No collection
               </button>
@@ -680,7 +722,7 @@ export default function ProjectsHome({
               className="ph-menu-item accent"
               onClick={() => {
                 const id = handleNewCollection();
-                if (id) moveProject(item.indexDocId, id);
+                if (id) requestMove(item.indexDocId, id);
                 closeAllMenus();
               }}
             >
@@ -1285,6 +1327,47 @@ export default function ProjectsHome({
           </>
         )}
       </main>
+
+      {/* Shared-collection move warning */}
+      {pendingMove && (
+        <div className="ph-dialog-backdrop" onMouseDown={() => setPendingMove(null)}>
+          <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
+            <h2>Move "{pendingMove.name}" out of {pendingMove.fromName}?</h2>
+            <p className="ph-dialog-hint">
+              Please note you're changing {pendingMove.othersCount === 1
+                ? "another person's"
+                : `${pendingMove.othersCount} other people's`} view of this collection — it will
+              no longer appear in {pendingMove.fromName} for them. The project itself isn't
+              deleted or changed.
+            </p>
+            <label className="ph-checkbox-row">
+              <input
+                type="checkbox"
+                checked={moveWarnChecked}
+                onChange={(e) => setMoveWarnChecked(e.target.checked)}
+              />
+              Don't show this again
+            </label>
+            <div className="ph-dialog-actions">
+              <button type="button" className="ph-btn outline" onClick={() => setPendingMove(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ph-btn primary"
+                onClick={() => {
+                  if (moveWarnChecked) localStorage.setItem(MOVE_WARNING_KEY, '1');
+                  moveProject(pendingMove.indexDocId, pendingMove.target);
+                  setPendingMove(null);
+                }}
+                autoFocus
+              >
+                Move it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Rename dialog */}
       {renameFor && (
