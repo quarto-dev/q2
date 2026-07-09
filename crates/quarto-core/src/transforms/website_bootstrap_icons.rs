@@ -111,7 +111,13 @@ mod tests {
         assert_eq!(css.scope, ArtifactScope::Project);
         assert_eq!(css.path.as_deref(), Some(Path::new(CSS_REL_PATH)));
         assert_eq!(css.content_type, "text/css");
-        assert!(css.content.starts_with(b"/*!\n * Bootstrap Icons"));
+        // Line endings are normalized before the check: this served asset carries
+        // no SourceInfo/byte-offset and is never compared byte-for-byte with
+        // anything, so a Windows checkout (`core.autocrlf` rewriting the
+        // committed-LF vendored file to CRLF) must not false-positive on EOL.
+        let head_len = css.content.len().min(64);
+        let head = String::from_utf8_lossy(&css.content[..head_len]).replace("\r\n", "\n");
+        assert!(head.starts_with("/*!\n * Bootstrap Icons"));
 
         let woff = store
             .get("font:bootstrap-icons:bootstrap-icons.woff")
