@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-08
+
+- [`71b6c585`](https://github.com/quarto-dev/q2/commits/71b6c585): UI exploration (branch only): shelves can be explicitly shared — a people glyph and member facepile appear on shared shelves, opening a members popover with an invite link. Invite links carry the shelf's projects, so joining from another browser delivers them for real; a brand-new browser skips setup and is asked only for a name and cursor color. Membership itself is still local mock data.
+
 ### 2026-07-07
 
 - [`0f338475`](https://github.com/quarto-dev/q2/commits/0f338475): UI exploration (branch only): project cards, shelf headers, and the Peek popover show collaborator facepiles (colored initial disks). Collaborators are mock data for now — real attribution needs automerge-history plumbing.
