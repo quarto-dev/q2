@@ -26,6 +26,12 @@ const FIXTURES: { name: string; qmd: string }[] = [
   { name: 'bullet-list', qmd: '- first item\n- second item\n- third item\n' },
   { name: 'ordered-list', qmd: '3. three\n4. four\n5. five\n' },
   { name: 'blockquote', qmd: '> a quoted line\n> still quoted\n' },
+  // bd-iwv3708i — Quoted inlines now seed as editable plaintext straight quotes
+  // (not chips); they must still round-trip back to a `Quoted` node via pampa.
+  { name: 'quoted-double', qmd: 'He said "smart quotes" and it works.\n' },
+  { name: 'quoted-single', qmd: 'A phrase with \'single quotes\' too.\n' },
+  { name: 'quoted-nested', qmd: 'Nested: "outer \'inner\' done" here.\n' },
+  { name: 'quoted-with-marks', qmd: 'A quote with **bold** inside: "very *important* text".\n' },
   { name: 'code-block-quarto', qmd: '```{python}\nprint("hi")\n```\n' },
   { name: 'shortcode', qmd: 'Watch {{< video https://youtu.be/abc >}} now.\n' },
   { name: 'inline-math', qmd: 'Identity $e^{i\\pi}+1=0$ is neat.\n' },
