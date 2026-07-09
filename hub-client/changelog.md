@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-07-09
 
+- [`52c92f94`](https://github.com/quarto-dev/q2/commits/52c92f94): UI exploration (branch only): projects can be downloaded as a ZIP straight from the projects home (project menu → "Download as ZIP") without opening them; the avatar-menu backup entries are now named "Export/Import project list (JSON)".
 - [`1c447eea`](https://github.com/quarto-dev/q2/commits/1c447eea): UI exploration (branch only): moving a project out of a collection that's shared with other people now asks for confirmation ("you're changing other people's view of this collection"), with a "Don't show this again" opt-out. Private collections are unaffected.
 - [`dbd1bc44`](https://github.com/quarto-dev/q2/commits/dbd1bc44): UI exploration (branch only): every collection header now shows avatar chips — dimmed and just you while private, glyph plus member facepile when shared. Clicking the chips opens the members popover; for a private collection, copying the invite link is what turns sharing on.
 - [`b379c89d`](https://github.com/quarto-dev/q2/commits/b379c89d): UI exploration (branch only): "shelf" is now called "collection" everywhere — menus, dialogs, and invite links. Existing arrangements carry over automatically.
