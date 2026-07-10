@@ -59,6 +59,36 @@ format, serialize the Pandoc JSON AST at that fork and pipe it to
 `pandoc -f json -t <format> --template … --lua-filter <imported Q1 filters>`. We call this
 fork point the **`PostCrossref` seam**, and the overall architecture **Cut A**.
 
+Concretely, the eight Q1 filter entry points split across the fork — Q2 owns everything
+above it, Pandoc everything below (this grid table renders under Quarto/Pandoc; GitHub
+won't merge the cells):
+
++----------------+--------------+--------------------------------------------+
+| Q1 entry point | Cut A seam   | Executes in                                |
++================+==============+============================================+
+| pre-ast        | Pre          | Q2                                         |
++----------------+--------------+                                            +
+| post-ast       | Pre          | Parse qmd, run engines; build the          |
++----------------+--------------+                                            +
+| pre-quarto     | Pre          | format-agnostic semantic model:            |
++----------------+--------------+                                            +
+| post-quarto    | PostCrossref | callouts, floats, theorems, crossref #s.   |
++----------------+--------------+--------------------------------------------+
+| ⇢ fork at PostCrossref: serialize Pandoc JSON AST → pandoc -f json -t <fmt> |
++----------------+--------------+--------------------------------------------+
+| pre-render     | → Pandoc     | Pandoc                                     |
++----------------+--------------+                                            +
+| post-render    | → Pandoc     | Imported Q1 layout/post/finalize Lua       |
++----------------+--------------+                                            +
+| pre-finalize   | → Pandoc     | + Pandoc writer: format-specific           |
++----------------+--------------+                                            +
+| post-finalize  | → Pandoc     | rendering (LaTeX/OOXML/…) → bytes.         |
++----------------+--------------+--------------------------------------------+
+
+For HTML/revealjs the `Post` seam still runs in Q2 (Navigation → Finalization → tail
+stages); for Pandoc formats there is no Q2 `Post` seam — the Navigation phase is skipped
+and Pandoc owns everything past the fork.
+
 ## Why this shape is right
 
 - **Maximal reuse, minimal reinvention.** Pandoc's writers + Q1's proven Lua filters are
