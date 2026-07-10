@@ -119,6 +119,13 @@
 .ph-btn.outline:hover { background: var(--input-bg-alpha); }
 .ph-btn.outline:disabled { opacity: 0.5; cursor: default; }
 
+.ph-btn.danger {
+  background: #b3261e;
+  color: #ffffff;
+}
+
+.ph-btn.danger:hover { filter: brightness(1.1); }
+
 .ph-btn.ghost-accent {
   border: 1px dashed var(--posit-teal);
   color: var(--posit-teal);

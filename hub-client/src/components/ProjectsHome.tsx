@@ -229,6 +229,19 @@ export default function ProjectsHome({
     target: string | null;
   } | null>(null);
   const [moveWarnChecked, setMoveWarnChecked] = useState(false);
+  // In-app replacements for native prompt()/confirm(): embedded browsers can
+  // throw on prompt() and auto-accept confirm(), so collection naming and
+  // destructive confirmations get real dialogs.
+  const [newCollectionDialog, setNewCollectionDialog] = useState<null | { forProject?: string }>(null);
+  const [newCollectionName, setNewCollectionName] = useState('');
+  const [renameCollectionTarget, setRenameCollectionTarget] = useState<Collection | null>(null);
+  const [renameCollectionValue, setRenameCollectionValue] = useState('');
+  const [confirmState, setConfirmState] = useState<null | {
+    title: string;
+    body: string;
+    confirmLabel: string;
+    action: () => void;
+  }>(null);
   const [collectionPages, setCollectionPages] = useState<Record<string, number>>({});
   // Drag-and-drop between collections and the unshelved list. dropTarget is a
   // collection id or 'unshelved'.
@@ -450,11 +463,16 @@ export default function ProjectsHome({
   }, [exportingId, closeAllMenus]);
 
   const handleRemove = useCallback((item: ProjectItem) => {
-    if (confirm(`Remove "${item.description}" from this device?\n\nThis doesn't delete the project for others.`)) {
-      moveProject(item.indexDocId, null);
-      onRemoveProjectFromSet?.(item.indexDocId);
-    }
     closeAllMenus();
+    setConfirmState({
+      title: `Remove "${item.description}" from this device?`,
+      body: "This doesn't delete the project for others — anyone who has it keeps it.",
+      confirmLabel: 'Remove',
+      action: () => {
+        moveProject(item.indexDocId, null);
+        onRemoveProjectFromSet?.(item.indexDocId);
+      },
+    });
   }, [moveProject, onRemoveProjectFromSet, closeAllMenus]);
 
   const copyToClipboard = useCallback(async (text: string, label: string) => {
@@ -481,11 +499,23 @@ export default function ProjectsHome({
     setRenameValue('');
   }, [renameFor, renameValue, onRenameProject]);
 
-  const handleNewCollection = useCallback((): string | null => {
-    const name = prompt('Collection name');
-    if (!name?.trim()) return null;
-    return createCollection(name.trim());
-  }, [createCollection]);
+  /** Open the new-collection dialog; when a project id is given, the
+   * project moves onto the collection once it's created. */
+  const openNewCollection = useCallback((forProject?: string) => {
+    setNewCollectionName('');
+    setNewCollectionDialog({ forProject });
+    closeAllMenus();
+  }, [closeAllMenus]);
+
+  const commitNewCollection = useCallback(() => {
+    if (!newCollectionDialog || !newCollectionName.trim()) return;
+    const id = createCollection(newCollectionName.trim());
+    if (newCollectionDialog.forProject) {
+      requestMove(newCollectionDialog.forProject, id);
+    }
+    setNewCollectionDialog(null);
+    setNewCollectionName('');
+  }, [newCollectionDialog, newCollectionName, createCollection, requestMove]);
 
   const openNewDialog = useCallback((choice: ProjectChoice) => {
     setNewDialogChoice(choice);
@@ -757,11 +787,7 @@ export default function ProjectsHome({
             )}
             <button
               className="ph-menu-item accent"
-              onClick={() => {
-                const id = handleNewCollection();
-                if (id) requestMove(item.indexDocId, id);
-                closeAllMenus();
-              }}
+              onClick={() => openNewCollection(item.indexDocId)}
             >
               ＋ New collection…
             </button>
@@ -906,10 +932,13 @@ export default function ProjectsHome({
           <button
             className="ph-menu-item danger"
             onClick={() => {
-              if (confirm(`Leave "${collection.name}"?\n\nRemoves it from your list only — other members keep it. Projects you've opened stay in your list.`)) {
-                deleteCollection(collection.id);
-                closeAllMenus();
-              }
+              closeAllMenus();
+              setConfirmState({
+                title: `Leave "${collection.name}"?`,
+                body: "Removes it from your list only — other members keep it. Projects you've opened stay in your list.",
+                confirmLabel: 'Leave collection',
+                action: () => deleteCollection(collection.id),
+              });
             }}
           >
             Leave collection
@@ -1046,8 +1075,8 @@ export default function ProjectsHome({
               <button
                 className="ph-menu-item"
                 onClick={() => {
-                  const name = prompt('Rename collection', collection.name);
-                  if (name?.trim()) renameCollection(collection.id, name.trim());
+                  setRenameCollectionTarget(collection);
+                  setRenameCollectionValue(collection.name);
                   closeAllMenus();
                 }}
               >
@@ -1060,10 +1089,13 @@ export default function ProjectsHome({
                   <button
                     className="ph-menu-item danger"
                     onClick={() => {
-                      if (confirm(`Leave "${collection.name}"?\n\nRemoves it from your list only — other members keep it. Projects you've opened stay in your list.`)) {
-                        deleteCollection(collection.id);
-                      }
                       closeAllMenus();
+                      setConfirmState({
+                        title: `Leave "${collection.name}"?`,
+                        body: "Removes it from your list only — other members keep it. Projects you've opened stay in your list.",
+                        confirmLabel: 'Leave collection',
+                        action: () => deleteCollection(collection.id),
+                      });
                     }}
                   >
                     Leave collection
@@ -1072,10 +1104,13 @@ export default function ProjectsHome({
                   <button
                     className="ph-menu-item danger"
                     onClick={() => {
-                      if (confirm(`Delete "${collection.name}" for everyone?\n\nProjects are never deleted — they return to each person's list.`)) {
-                        deleteCollection(collection.id);
-                      }
                       closeAllMenus();
+                      setConfirmState({
+                        title: `Delete "${collection.name}" for everyone?`,
+                        body: "Projects are never deleted — they return to each person's list.",
+                        confirmLabel: 'Delete for everyone',
+                        action: () => deleteCollection(collection.id),
+                      });
                     }}
                   >
                     Delete collection for everyone…
@@ -1086,10 +1121,13 @@ export default function ProjectsHome({
                 <button
                   className="ph-menu-item danger"
                   onClick={() => {
-                    if (confirm(`Delete collection "${collection.name}"?\n\nProjects return to Everything else — nothing is deleted.`)) {
-                      deleteCollection(collection.id);
-                    }
                     closeAllMenus();
+                    setConfirmState({
+                      title: `Delete collection "${collection.name}"?`,
+                      body: 'Projects return to Everything else — nothing is deleted.',
+                      confirmLabel: 'Delete collection',
+                      action: () => deleteCollection(collection.id),
+                    });
                   }}
                 >
                   Delete collection
@@ -1286,7 +1324,7 @@ export default function ProjectsHome({
             {collections.map(renderCollection)}
 
             <div className="ph-new-collection-row">
-              <button className="ph-btn ghost-accent" onClick={handleNewCollection}>＋ New collection</button>
+              <button className="ph-btn ghost-accent" onClick={() => openNewCollection()}>＋ New collection</button>
             </div>
 
             <section
@@ -1371,6 +1409,89 @@ export default function ProjectsHome({
           </>
         )}
       </main>
+
+      {/* New collection */}
+      {newCollectionDialog && (
+        <div className="ph-dialog-backdrop" onMouseDown={() => setNewCollectionDialog(null)}>
+          <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
+            <h2>New collection</h2>
+            {newCollectionDialog.forProject && (
+              <p className="ph-dialog-hint">The project will be moved onto it.</p>
+            )}
+            <form onSubmit={(e) => { e.preventDefault(); commitNewCollection(); }}>
+              <label className="ph-field-label" htmlFor="ph-new-collection-name">Name</label>
+              <input
+                id="ph-new-collection-name"
+                className="ph-input focus-accent"
+                value={newCollectionName}
+                onChange={(e) => setNewCollectionName(e.target.value)}
+                placeholder="e.g. Board prep"
+                autoFocus
+              />
+              <div className="ph-dialog-actions">
+                <button type="button" className="ph-btn outline" onClick={() => setNewCollectionDialog(null)}>Cancel</button>
+                <button type="submit" className="ph-btn primary" disabled={!newCollectionName.trim()}>Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Rename collection */}
+      {renameCollectionTarget && (
+        <div className="ph-dialog-backdrop" onMouseDown={() => setRenameCollectionTarget(null)}>
+          <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
+            <h2>Rename collection</h2>
+            {renameCollectionTarget.shared && (
+              <p className="ph-dialog-hint">Renames it for everyone it's shared with.</p>
+            )}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (renameCollectionValue.trim()) {
+                  renameCollection(renameCollectionTarget.id, renameCollectionValue.trim());
+                }
+                setRenameCollectionTarget(null);
+              }}
+            >
+              <label className="ph-field-label" htmlFor="ph-rename-collection">Name</label>
+              <input
+                id="ph-rename-collection"
+                className="ph-input focus-accent"
+                value={renameCollectionValue}
+                onChange={(e) => setRenameCollectionValue(e.target.value)}
+                autoFocus
+              />
+              <div className="ph-dialog-actions">
+                <button type="button" className="ph-btn outline" onClick={() => setRenameCollectionTarget(null)}>Cancel</button>
+                <button type="submit" className="ph-btn primary" disabled={!renameCollectionValue.trim()}>Rename</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Generic destructive confirmation */}
+      {confirmState && (
+        <div className="ph-dialog-backdrop" onMouseDown={() => setConfirmState(null)}>
+          <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
+            <h2>{confirmState.title}</h2>
+            <p className="ph-dialog-hint">{confirmState.body}</p>
+            <div className="ph-dialog-actions">
+              <button type="button" className="ph-btn outline" onClick={() => setConfirmState(null)} autoFocus>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ph-btn danger"
+                onClick={() => { confirmState.action(); setConfirmState(null); }}
+              >
+                {confirmState.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Shared-collection move warning */}
       {pendingMove && (
