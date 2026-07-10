@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-10
+
+- [`60abc1db`](https://github.com/quarto-dev/q2/commits/60abc1db): UI exploration (branch only): fixed "New collection" doing nothing in some browsers — creating and renaming collections now use proper dialogs, and remove/leave/delete confirmations are in-app dialogs instead of native popups.
+
 ### 2026-07-09
 
 - [`52c92f94`](https://github.com/quarto-dev/q2/commits/52c92f94): UI exploration (branch only): projects can be downloaded as a ZIP straight from the projects home (project menu → "Download as ZIP") without opening them; the avatar-menu backup entries are now named "Export/Import project list (JSON)".
