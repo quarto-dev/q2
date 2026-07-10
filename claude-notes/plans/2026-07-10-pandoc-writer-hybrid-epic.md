@@ -22,10 +22,29 @@ callout into a LaTeX `tcolorbox`, a multi-figure panel into a Word table, a cros
 into a Typst `#ref` — all of that is Lua, sitting in front of a Pandoc writer that already
 knows how to serialize a Pandoc AST to LaTeX/OOXML/Typst/etc.
 
-The naive way to bring these formats to Q2 would be to **reimplement every Pandoc writer
-in Rust** inside `pampa`. That is an enormous undertaking — Pandoc's writers represent
-many person-years of accumulated format lore — and it is almost entirely undifferentiated
-work: we would be re-deriving output Pandoc already produces correctly.
+### The alternative: writers in `pampa`
+
+One genuinely viable path is to bring these
+formats fully in-house — port Pandoc's writers (and Q1's format Lua) to Rust in `pampa`.
+This isn't naive or infeasible: the translation is largely mechanical, and the payoff would
+be a single self-contained binary with no external Pandoc dependency. We're choosing not to,
+for two reasons specific to these formats.
+
+First, there's no performance payoff. Q2 has its own HTML writer because HTML sits on the
+interactive hot path — live preview, WASM, the edit→render loop — where milliseconds
+compound. None of the other formats are on that path. A LaTeX render is dominated by the TeX
+engine (seconds of pdflatex), and docx/pptx/typst writer time has never been a known
+concern. The single argument that justified a native writer for HTML simply doesn't transfer
+to formats that are already batch-mode and I/O- or compiler-bound.
+
+Second, reuse buys maintenance leverage for as long as we maintain Quarto 1. Pandoc's
+writers and Q1's format filters are actively maintained and continuously absorb
+format-specific fixes and edge cases. Reusing them means Q2 inherits that work instead of
+forking it; a native rewrite would double every future format fix and slowly diverge. The
+trade has a time horizon — if Q1 is eventually retired we'd own the vendored filters
+outright, and the calculus could tilt back toward native — but for the foreseeable
+maintenance window, standing on Pandoc + Q1 is strictly less work at equal or better
+fidelity.
 
 ## The idea
 
