@@ -412,6 +412,12 @@ lightly). Both reuse the same corpus format where possible.
 
 ### Phase 2 — high-impact fixes (order by silent-error severity)
 
+- [x] 2.0 (pulled forward per Carlos, 2026-07-13) bd-55mb0rjz:
+      element/list `__eq` + Haskell-show `tostring`
+      (`crates/pampa/src/lua/show.rs`; formats probed against pandoc
+      3.9.0.2; structural equality ignores source info via the JSON
+      writer's source-free serialization). Track-1 xfail 122 → 64,
+      zero new failures; e2e verified against the real pandoc binary.
 - [ ] 2.1 Class D0: content-mutation persistence (the worked
       example). Requires the cache+readback vs proxy design decision
       first; coordinate with / likely subsumes bd-195t.
