@@ -420,7 +420,8 @@ lightly). Both reuse the same corpus format where possible.
 - [ ] 2.3 Class B: `parse_attr` full Pandoc shape support
       (positional triple, HTML-like map with class splitting,
       list-of-pairs attributes) + loud diagnostics for rejects.
-- [ ] 2.4 C1: OrderedList listAttributes honored.
+- [x] 2.4 C1: OrderedList listAttributes honored (bd-0xghpvij closed
+      2026-07-13; first ratchet burn-down — differential xfail 6→5).
 - [ ] 2.5 Class D1–D3 audit remainder.
 
 ### Phase 3 — breadth

@@ -69,10 +69,10 @@ fn conformance_lua_env(script_name: &str) -> Lua {
 /// always strings).
 fn lua_tostring(lua: &Lua, value: &Value) -> String {
     let tostring: mlua::Function = lua.globals().get("tostring").expect("tostring missing");
-    tostring
-        .call::<mlua::String>(value.clone())
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "<unprintable error>".to_string())
+    tostring.call::<mlua::String>(value.clone()).map_or_else(
+        |_| "<unprintable error>".to_string(),
+        |s| s.to_string_lossy(),
+    )
 }
 
 /// Flatten a tasty result tree.
