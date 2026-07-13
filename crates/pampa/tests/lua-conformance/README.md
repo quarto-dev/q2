@@ -15,8 +15,10 @@ bd-grkrb9nj).
 | `tasty.lua` | The pure-Lua test runner those files `require`, vendored **unmodified** from [hslua/hslua](https://github.com/hslua/hslua) `tasty-lua/tasty.lua` |
 | `prelude.lua` | Q2-side environment adapter (see below) — ours |
 | `xfail.txt` | Expected-failure list (the parity scoreboard) — ours |
+| `differential/` | Track-2 suite: differential cases vs a real pinned `pandoc` binary (see below) |
 
-Runner: `crates/pampa/tests/integration/lua_conformance.rs`.
+Runners: `crates/pampa/tests/integration/lua_conformance.rs` (Track 1)
+and `crates/pampa/tests/integration/lua_differential.rs` (Track 2).
 
 ## Vendored versions
 
@@ -70,11 +72,42 @@ where q2 intentionally differs from Pandoc — see the plan's
 divergence-registry track) must carry a `# DIVERGENCE:` comment
 explaining and pointing at the registry entry.
 
+## Track 2: the differential suite (`differential/`)
+
+Each case is a directory `differential/cases/<name>/` holding:
+
+- `input.md` — a tiny document (kept trivial on purpose, so reader
+  differences between pandoc and pampa never contaminate the
+  comparison),
+- `filter.lua` — the Lua filter under test,
+- `oracle.json` — the **committed** output of
+  `pandoc -f markdown input.md -L filter.lua -t json` from the pandoc
+  version pinned in `differential/ORACLE_VERSION`.
+
+The runner executes the same pair through the real pampa binary
+(`pampa input.md -F filter.lua -t json`), strips q2's source-tracking
+extensions (`astContext`, per-node `s`/`a` members, the 4th
+`pandoc-api-version` component), and requires the ASTs to be
+identical. `differential/xfail.txt` carries the same ratchet
+semantics as Track 1.
+
+CI never runs pandoc — it compares against the committed snapshots.
+Regenerate locally with `differential/regen-oracles.sh` whenever cases
+change; the script refuses to run against a non-pinned pandoc version.
+Bumping the oracle version is a deliberate PR: edit `ORACLE_VERSION`,
+rerun the script, review every snapshot diff.
+
+`LUA_CONFORMANCE_DUMP=1` works for both runners (with nextest
+`--no-capture`): it prints failing ids in xfail-ready format instead
+of asserting.
+
 ## Adding coverage
 
-- New upstream files: copy from `external-sources/pandoc-lua-marshal/test/`,
-  add the filename to `UPSTREAM_FILES` in the runner, run, and append
-  the new failures to `xfail.txt`.
-- Q2-specific regression cases: prefer the Track-2 differential
-  corpus (oracle: real `pandoc`), not this directory — this directory
-  stays byte-identical to upstream so re-vendoring is a plain copy.
+- New upstream files (Track 1): copy from
+  `external-sources/pandoc-lua-marshal/test/`, add a `#[test]` naming
+  the file in the runner, run, and append the new failures to
+  `xfail.txt`.
+- Q2-specific regression cases (e.g. minimal reproductions of filter
+  bugs users hit): add a Track-2 case directory + regenerate oracles.
+  Keep the Track-1 `upstream/` directory byte-identical to upstream so
+  re-vendoring stays a plain copy.

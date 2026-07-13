@@ -147,11 +147,11 @@ fn run_upstream_file(file_name: &str) -> Vec<CaseResult> {
     results
 }
 
-/// Parse xfail.txt: one test id per line; `#` starts a comment
-/// (standalone or trailing); blank lines ignored.
-fn load_xfail() -> BTreeSet<String> {
-    let path = conformance_dir().join("xfail.txt");
-    let content = std::fs::read_to_string(&path)
+/// Parse an xfail file: one test id per line; `#` starts a comment
+/// (standalone or trailing); blank lines ignored. Shared with the
+/// differential suite (`lua_differential.rs`).
+pub(crate) fn load_xfail_file(path: &Path) -> BTreeSet<String> {
+    let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
     content
         .lines()
@@ -171,7 +171,7 @@ fn load_xfail() -> BTreeSet<String> {
 /// regenerate the baseline; run with `--no-capture`).
 fn check_against_xfail(file_name: &str) {
     let results = run_upstream_file(file_name);
-    let xfail = load_xfail();
+    let xfail = load_xfail_file(&conformance_dir().join("xfail.txt"));
 
     if std::env::var("LUA_CONFORMANCE_DUMP").is_ok() {
         for r in &results {

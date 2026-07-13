@@ -376,11 +376,19 @@ lightly). Both reuse the same corpus format where possible.
       122 xfail** (attr 4/18, inline 4/54, block 3/61). The xfail
       file is the empirical catalog baseline. Scope per Decision 3:
       inline/block/attr now, more files later.
-- [ ] 0.4 Build the Track-2 skeleton: case format, oracle-snapshot
-      generation script (pinned pandoc 3.9.0.2), normalizer,
-      comparator; seed with the Class-D worked-example variants
-      (insert idiom × constructor forms) plus ~10 cases covering
-      Class A and Class B items above.
+- [x] 0.4 Track-2 skeleton built (2026-07-13):
+      `tests/lua-conformance/differential/cases/<name>/{input.md,
+      filter.lua, oracle.json}`, `regen-oracles.sh` (refuses non-pinned
+      pandoc; pin in `ORACLE_VERSION` = 3.9.0.2), normalizer strips
+      q2 source extensions (`astContext`, node `s`/`a`,
+      api-version[3]), runner drives the **real pampa binary**
+      (`CARGO_BIN_EXE_pampa … -F … -t json`), xfail ratchet verified
+      by fault injection. Seeded with 8 cases — baseline 2 pass
+      (reassignment control, all-5-fuzzy-Div-forms guard), 6 xfail
+      each empirically confirming a catalog class: A1 (bare-string
+      return ignored), A2 (bare `'y'` dropped from returned table),
+      B1/B2 (both Pandoc attr shapes → empty attr), C1 (ListAttributes
+      discarded), D0 (in-place `:insert` discarded).
 
 ### Phase 1 — catalog consolidation
 
