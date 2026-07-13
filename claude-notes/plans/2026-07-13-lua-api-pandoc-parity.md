@@ -659,18 +659,16 @@ test exists and breaks, STOP and show it before deleting/updating.
       byte-identical to pandoc 3.9.0.2 through the real binary; HTML
       shows all four nested mutations (caption, colspec alignment,
       head cell, body cell).
-- [ ] S4. pandoc.Pandoc + pandoc.Meta* constructors (needs the
-      Meta↔ConfigValue mapping story — catalog F2). **Design
-      discussion with Carlos required before implementation**;
-      consider designing together with bd-a9g50za2 (doc-level
-      filters are never invoked).
-- [ ] S5. SimpleTable: deliberate divergence per Decision 6 — do NOT
-      implement the pre-pandoc-2.10 simple-table API.
-      `pandoc.SimpleTable` raises an actionable Q-coded error
-      pointing at `pandoc.Table`; divergence-registry entry; the two
-      test-simpletable.lua xfails become permanent `# DIVERGENCE`
-      entries (mechanism shared with bd-9p2686pc — coordinate the
-      Q-code allocation there).
+- [x] S4/S5 split into their own strands (Carlos, 2026-07-13):
+      bd-sgfiiktn's remaining scope moved out; S0–S3 complete.
+  - S4 → **bd-2llqjsms**: pandoc.Pandoc + pandoc.Meta* (needs the
+    Meta↔ConfigValue design — catalog F2; design together with
+    bd-a9g50za2, whose doc-level Pandoc/Meta filter invocation the
+    test-pandoc.lua cases also exercise). 17 xfails.
+  - S5 → **bd-d4wd6r3i**: SimpleTable deliberate divergence per
+    Decision 6 (actionable Q-coded error + registry entry; Q-code
+    and `# DIVERGENCE` mechanism coordinated with bd-9p2686pc).
+    2 xfails.
 
 ### Phase 3 — breadth
 
