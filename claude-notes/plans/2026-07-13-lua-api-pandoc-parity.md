@@ -352,6 +352,32 @@ version drift when we bump the pinned oracle, and covers the filter-
 return boundary that pandoc-lua-marshal's suite exercises only
 lightly). Both reuse the same corpus format where possible.
 
+## Current state (2026-07-13, after bd-hitjclzp)
+
+**Scoreboard**: Track 1 (vendored pandoc-lua-marshal suite) **73/133
+passing** — baseline was 11. Track 2 (differential vs pandoc 3.9.0.2)
+**4/8 passing** — baseline was 2. Strands closed so far: bd-0xghpvij
+(OrderedList ListAttributes), bd-55mb0rjz (__eq + Haskell-show
+tostring), bd-hitjclzp (property cache+readback — the worked example
+is byte-identical to pandoc e2e).
+
+Remaining failure clusters (60 Track-1 + 4 differential):
+
+| Cluster | Count | Strand | Nature |
+|---|---|---|---|
+| Attr argument shapes | ~21 | bd-tzwcof0n | `pandoc.Attr({…})` rejects table-as-first-arg (8); attributes as list-of-pairs / AttributeList-userdata rejected (6); `AttributeList` constructor missing (3); `attr.classes` not a pandoc List (3, incl. `classes:insert` silently lost — bd-195t residue); + both differential attr cases (constructor attrs silently empty — worst remaining silent-error offenders) |
+| List module parity | ~12 | bd-1fjtodu8 | `List{…}` not callable (10); `Inlines:clone`/`Blocks:clone` shallow, should be deep (2). Also blocks several walk tests that use `List` incidentally |
+| walk semantics | 7 | (unfiled — was masked by __eq) | list-level `Inlines`/`Blocks` filter functions not invoked by `walk`; subtree restriction; blocks inside Notes; Inline → Inlines → Block → Blocks ordering |
+| Table field marshaling | 6 | bd-sgfiiktn | `head`/`foot`/`colspecs`/`caption` property round-trips (helper userdata lack `__eq`/expected shapes); single-body form |
+| Filter-return coercion | 2 (diff.) | bd-23yvjfmm | bare-string return ignored; non-userdata table entries dropped — the remaining big silent class (visible only in Track 2) |
+| `__toinline`/`__toblock` | 4 | bd-olz91r4v | coercion metamethod hooks not consulted |
+| Misc constructor/setter gaps | 6 | bd-sgfiiktn / bd-0g2yp61w | Cite args (incl. swapped arg order vs Pandoc), `quotetype`/`mathtype` setters, OrderedList `delimiter`/`listAttributes` aliases + forgiving constructor, `image.caption` alias, one `span.attr` case |
+| Error-message contracts | 2 | bd-9p2686pc | permanent divergences per Decision (2026-07-13 follow-up): happy path matches Pandoc; error paths use Q2's richer diagnostics; Pandoc-silent-drops become loud actionable errors |
+
+Priority order agreed with Carlos: **bd-tzwcof0n (Attr) →
+bd-23yvjfmm (returns) → bd-1fjtodu8 (List)**; refile walk once the
+List noise is gone.
+
 ## Phases
 
 ### Phase 0 — infrastructure spike (first steps)
