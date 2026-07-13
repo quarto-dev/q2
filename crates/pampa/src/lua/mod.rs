@@ -31,7 +31,7 @@ mod utils;
 #[allow(unused_imports)]
 pub use filter::FilterOutput;
 #[allow(unused_imports)]
-pub use filter::{LuaFilterError, apply_lua_filter, apply_lua_filters};
+pub use filter::{LuaFilterError, apply_lua_filter, apply_lua_filters, create_filter_environment};
 #[allow(unused_imports)]
 pub use quarto_doc::{
     HtmlDependency, IncludeLocation, TextInclude, extract_html_dependencies, extract_text_includes,

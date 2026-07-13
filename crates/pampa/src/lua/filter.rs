@@ -108,35 +108,24 @@ pub struct FilterOutput {
     pub resources: Vec<std::path::PathBuf>,
 }
 
-/// Apply a single Lua filter to a document.
+/// Create the Lua environment exactly as user filters see it.
 ///
-/// Returns the filtered document, context, diagnostics, and any HTML
-/// dependencies or text includes registered via the `quarto.doc` API.
+/// This is the single place the filter execution environment is
+/// assembled: the `pandoc` and `quarto` namespaces, the
+/// `FORMAT`/`PANDOC_*` globals, and (on WASM) the synthetic
+/// `io`/`os`/`dofile`. `apply_lua_filter` delegates here; the Lua
+/// conformance suite (`tests/integration/lua_conformance.rs`) uses it
+/// directly so that conformance is measured against the production
+/// environment rather than a synthetic registration.
 ///
-/// The `attribution` handle backs the `quarto.attribution.*` Lua host
-/// binding. Passing `None` registers no-op stubs (the binding is
-/// alive but `lookup` / `lookup_range` return nil and `identities`
-/// returns an empty table). Most callers pass `None`; only
-/// `quarto-core::UserFiltersStage` passes `Some(handle)`.
-pub async fn apply_lua_filter(
-    pandoc: &Pandoc,
-    context: &ASTContext,
-    filter_path: &Path,
-    target_format: &str,
+/// `script_path` seeds `PANDOC_SCRIPT_FILE` and the script directory
+/// used by `quarto.utils.resolve_path`.
+pub fn create_filter_environment(
     runtime: Arc<dyn SystemRuntime>,
+    target_format: &str,
+    script_path: &Path,
     attribution: Option<Arc<dyn crate::attribution::AttributionLookup>>,
-) -> FilterResult<FilterOutput> {
-    // Read filter file via runtime (supports VFS on WASM)
-    let filter_bytes = runtime.file_read(filter_path).map_err(|e| {
-        LuaFilterError::FileReadError(filter_path.to_owned(), std::io::Error::other(e.to_string()))
-    })?;
-    let filter_source = String::from_utf8(filter_bytes).map_err(|e| {
-        LuaFilterError::FileReadError(
-            filter_path.to_owned(),
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()),
-        )
-    })?;
-
+) -> FilterResult<Lua> {
     // Create Lua state
     // On WASM, we can't load all libraries (no package/io/os/debug support),
     // so use a restricted set. On native, load everything for full compatibility.
@@ -174,7 +163,7 @@ pub async fn apply_lua_filter(
     super::quarto_doc::register_quarto_doc(&lua)?;
 
     // Push script dir for quarto.utils.resolve_path
-    let script_dir = filter_path
+    let script_dir = script_path
         .parent()
         .unwrap_or(Path::new(""))
         .to_string_lossy()
@@ -203,7 +192,7 @@ pub async fn apply_lua_filter(
     // PANDOC_SCRIPT_FILE - path to the current filter script
     lua.globals().set(
         "PANDOC_SCRIPT_FILE",
-        filter_path.to_string_lossy().to_string(),
+        script_path.to_string_lossy().to_string(),
     )?;
 
     // PANDOC_READER_OPTIONS - reader options used for the input
@@ -215,6 +204,40 @@ pub async fn apply_lua_filter(
     // We provide default options since we don't track actual writer options yet
     let writer_options = create_writer_options_table(&lua, None)?;
     lua.globals().set("PANDOC_WRITER_OPTIONS", writer_options)?;
+
+    Ok(lua)
+}
+
+/// Apply a single Lua filter to a document.
+///
+/// Returns the filtered document, context, diagnostics, and any HTML
+/// dependencies or text includes registered via the `quarto.doc` API.
+///
+/// The `attribution` handle backs the `quarto.attribution.*` Lua host
+/// binding. Passing `None` registers no-op stubs (the binding is
+/// alive but `lookup` / `lookup_range` return nil and `identities`
+/// returns an empty table). Most callers pass `None`; only
+/// `quarto-core::UserFiltersStage` passes `Some(handle)`.
+pub async fn apply_lua_filter(
+    pandoc: &Pandoc,
+    context: &ASTContext,
+    filter_path: &Path,
+    target_format: &str,
+    runtime: Arc<dyn SystemRuntime>,
+    attribution: Option<Arc<dyn crate::attribution::AttributionLookup>>,
+) -> FilterResult<FilterOutput> {
+    // Read filter file via runtime (supports VFS on WASM)
+    let filter_bytes = runtime.file_read(filter_path).map_err(|e| {
+        LuaFilterError::FileReadError(filter_path.to_owned(), std::io::Error::other(e.to_string()))
+    })?;
+    let filter_source = String::from_utf8(filter_bytes).map_err(|e| {
+        LuaFilterError::FileReadError(
+            filter_path.to_owned(),
+            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()),
+        )
+    })?;
+
+    let lua = create_filter_environment(runtime, target_format, filter_path, attribution)?;
 
     // Load and execute filter script
     lua.load(&filter_source)
