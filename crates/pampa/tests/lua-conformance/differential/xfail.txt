@@ -1,6 +1,5 @@
 # Lua differential expected failures (Track 2) — see ../README.md ratchet semantics.
 # Format: <case-name>  [# reason / class / strand]
-# Baseline 2026-07-13: 8 cases, 3 pass, 5 xfail (orderedlist-listattributes fixed 2026-07-13, bd-0xghpvij) (strand bd-grkrb9nj).
-
-filter-return-mixed-table    # Class A2: non-userdata entries in returned tables silently dropped
-filter-return-string         # Class A1: bare-string filter return silently ignored
+# 2026-07-13: 15 cases, 15 pass, 0 xfail (filter-return cluster fixed, bd-23yvjfmm;
+# earlier: orderedlist-listattributes bd-0xghpvij, content-insert bd-hitjclzp,
+# attr shapes bd-tzwcof0n) (strand bd-grkrb9nj).

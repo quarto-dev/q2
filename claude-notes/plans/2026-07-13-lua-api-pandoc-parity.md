@@ -354,9 +354,10 @@ lightly). Both reuse the same corpus format where possible.
 
 ## Current state (2026-07-13, after bd-hitjclzp)
 
-**Scoreboard** (updated after bd-tzwcof0n): Track 1 **90/133 passing**
-— baseline was 11. Track 2 (differential vs pandoc 3.9.0.2) **6/8
-passing** — baseline was 2. The cluster table below predates
+**Scoreboard** (updated after bd-23yvjfmm): Track 1 **90/133 passing**
+— baseline was 11. Track 2 (differential vs pandoc 3.9.0.2) **15/15
+passing** — baseline was 2/8; the corpus grew to 15 cases and the
+xfail list is now empty. The cluster table below predates
 bd-tzwcof0n (which cleared the Attr cluster, ~21 entries). Strands closed so far: bd-0xghpvij
 (OrderedList ListAttributes), bd-55mb0rjz (__eq + Haskell-show
 tostring), bd-hitjclzp (property cache+readback — the worked example
@@ -460,8 +461,30 @@ List noise is gone.
       through the real binary. Track-1 xfail 64 → 60; differential
       5 → 4 (content-insert-inplace passes). bd-195t residue noted:
       `classes:insert` still detached (bd-tzwcof0n).
-- [ ] 2.2 Class A: filter-return values through fuzzy peekers
-      (kills the other big silent-no-op class).
+- [x] 2.2 Class A: filter-return values through fuzzy peekers — DONE
+      2026-07-13 (bd-23yvjfmm closed). All six filter.rs return
+      handlers (element + list + the four `*_with_control`) now route
+      non-nil returns through `peek_inlines_fuzzy`/`peek_blocks_fuzzy`;
+      the two ad-hoc typewise list-splice sites (`apply_inlines_filter`,
+      `walk_blocks_straight`) delegate to shared `handle_inlines_return`
+      / `handle_blocks_return`. Contract oracle-probed against pandoc
+      3.9.0.2 (probes P1–P13): bare string → word-split (Plain-wrapped
+      for block positions); table → element-wise coercion (string entry
+      → single Str, NO word-split; number/nested-table entry → error);
+      single Inline userdata from a Block filter → Plain-wrapped;
+      number/boolean returns → error (pandoc errors too; ours names the
+      filter function + got-type; Q-coding later under bd-9p2686pc).
+      Invariants kept: nil → keep original, empty table → delete,
+      second return `false` → stop traversal. A3 audit: shortcode.rs
+      `classify_table_result` fixed the same way (inlines-first, then
+      blocks classification via the peekers); dead
+      `extract_lua_{inlines,blocks}_from_table` helpers deleted;
+      doc-level filter gap (Pandoc/Doc collected but never invoked, no
+      Meta) filed as bd-a9g50za2. Differential 8 → **15/15 passing, 0
+      xfail** (7 new oracle cases); Track-1 unchanged (cluster was
+      Track-2-only, as predicted). E2e: `pampa doc.md -F f.lua -t html`
+      byte-identical to pandoc for A1/A2 cases; `return 5` exits 1 with
+      the actionable message.
 - [x] 2.3 Class B — DONE 2026-07-13 (bd-tzwcof0n closed): `parse_attr`
       accepts every Pandoc shape (positional triple, HTML-like map
       with class splitting, list-of-pairs / map / AttributeList

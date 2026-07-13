@@ -9,7 +9,7 @@
  * - Filter return semantics: nil=unchanged, element=replace, list=splice, {}=delete
  */
 
-use mlua::{Function, Lua, MultiValue, Result, Table, Value};
+use mlua::{Error, Function, Lua, MultiValue, Result, Table, Value};
 use quarto_error_reporting::DiagnosticMessage;
 use std::path::Path;
 use std::sync::Arc;
@@ -22,7 +22,10 @@ use super::mediabag::create_shared_mediabag;
 use super::quarto_api::register_quarto_api;
 use super::readwrite::{create_reader_options_table, create_writer_options_table};
 use super::runtime::SystemRuntime;
-use super::types::{LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_table};
+use super::types::{
+    LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_table, peek_blocks_fuzzy,
+    peek_inlines_fuzzy,
+};
 
 // ============================================================================
 // TRAVERSAL CONTROL FOR TOPDOWN MODE
@@ -422,92 +425,105 @@ pub(crate) fn extract_lua_block(lua: &Lua, ud: &mlua::AnyUserData) -> Result<Blo
     ud.borrow::<LuaBlock>()?.extract_flushed(lua)
 }
 
-/// Extract a Vec<Inline> from a Lua table of UserData values.
-pub(crate) fn extract_lua_inlines_from_table(
+/// Lua-facing type name for a value (mlua distinguishes integer/number;
+/// Lua and pandoc both say "number").
+fn lua_facing_type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Integer(_) => "number",
+        other => other.type_name(),
+    }
+}
+
+/// Wrap a fuzzy-peeker failure on a filter's return value in an error
+/// naming the filter function and the Lua type it returned.
+///
+/// Pandoc errors on non-coercible filter returns (e.g. `return 5` →
+/// "Inline, list of Inlines, or string expected, got number"); we match,
+/// with the filter function named for actionability. Q-coding of these
+/// diagnostics is tracked separately (bd-9p2686pc).
+fn filter_return_error(fn_name: &str, got: &'static str, inner: Error) -> Error {
+    let detail = match &inner {
+        Error::RuntimeError(msg) => msg.clone(),
+        other => other.to_string(),
+    };
+    Error::runtime(format!(
+        "invalid value returned from filter function '{fn_name}': {detail}, got {got}"
+    ))
+}
+
+/// Handle return value from an inline filter.
+///
+/// Matches pandoc's semantics: nil keeps the original, everything else
+/// is coerced through `peek_inlines_fuzzy` (bare string → word-split;
+/// table → element-wise coercion, empty table deletes; single userdata
+/// → singleton; non-coercible values are loud errors).
+fn handle_inline_return(
     lua: &Lua,
-    table: &mlua::Table,
+    ret: Value,
+    original: &Inline,
+    fn_name: &str,
 ) -> Result<Vec<Inline>> {
-    let len = table.raw_len();
-    let mut inlines = Vec::new();
-    for i in 1..=len {
-        let value: Value = table.get(i)?;
-        if let Value::UserData(ud) = value {
-            inlines.push(extract_lua_inline(lua, &ud)?);
-        }
-    }
-    Ok(inlines)
-}
-
-/// Extract a Vec<Block> from a Lua table of UserData values.
-pub(crate) fn extract_lua_blocks_from_table(lua: &Lua, table: &mlua::Table) -> Result<Vec<Block>> {
-    let len = table.raw_len();
-    let mut blocks = Vec::new();
-    for i in 1..=len {
-        let value: Value = table.get(i)?;
-        if let Value::UserData(ud) = value {
-            blocks.push(extract_lua_block(lua, &ud)?);
-        }
-    }
-    Ok(blocks)
-}
-
-/// Handle return value from an inline filter
-fn handle_inline_return(lua: &Lua, ret: Value, original: &Inline) -> Result<Vec<Inline>> {
     match ret {
         Value::Nil => Ok(vec![original.clone()]),
-        Value::UserData(ud) => {
-            // Single element return - replace
-            let lua_inline = ud.borrow::<LuaInline>()?;
-            Ok(vec![lua_inline.extract_flushed(lua)?])
+        other => {
+            let got = lua_facing_type_name(&other);
+            peek_inlines_fuzzy(lua, other).map_err(|e| filter_return_error(fn_name, got, e))
         }
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                // Empty table - delete
-                return Ok(vec![]);
-            }
-            // Table of elements - splice
-            let mut inlines = Vec::new();
-            for i in 1..=len {
-                let value: Value = table.get(i)?;
-                if let Value::UserData(ud) = value {
-                    let lua_inline = ud.borrow::<LuaInline>()?;
-                    inlines.push(lua_inline.extract_flushed(lua)?);
-                }
-            }
-            Ok(inlines)
-        }
-        _ => Ok(vec![original.clone()]),
     }
 }
 
-/// Handle return value from a block filter
-fn handle_block_return(lua: &Lua, ret: Value, original: &Block) -> Result<Vec<Block>> {
+/// Handle return value from a block filter.
+///
+/// Matches pandoc's semantics: nil keeps the original, everything else
+/// is coerced through `peek_blocks_fuzzy` (bare string / Inline →
+/// `Plain`-wrapped; table → element-wise coercion, empty table deletes;
+/// non-coercible values are loud errors).
+fn handle_block_return(
+    lua: &Lua,
+    ret: Value,
+    original: &Block,
+    fn_name: &str,
+) -> Result<Vec<Block>> {
     match ret {
         Value::Nil => Ok(vec![original.clone()]),
-        Value::UserData(ud) => {
-            // Single element return - replace
-            let lua_block = ud.borrow::<LuaBlock>()?;
-            Ok(vec![lua_block.extract_flushed(lua)?])
+        other => {
+            let got = lua_facing_type_name(&other);
+            peek_blocks_fuzzy(lua, other).map_err(|e| filter_return_error(fn_name, got, e))
         }
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                // Empty table - delete
-                return Ok(vec![]);
-            }
-            // Table of elements - splice
-            let mut blocks = Vec::new();
-            for i in 1..=len {
-                let value: Value = table.get(i)?;
-                if let Value::UserData(ud) = value {
-                    let lua_block = ud.borrow::<LuaBlock>()?;
-                    blocks.push(lua_block.extract_flushed(lua)?);
-                }
-            }
-            Ok(blocks)
+    }
+}
+
+/// Handle return value from an Inlines list filter (nil keeps the
+/// original list; anything else is coerced like an inline-filter return).
+fn handle_inlines_return(
+    lua: &Lua,
+    ret: Value,
+    original: &[Inline],
+    fn_name: &str,
+) -> Result<Vec<Inline>> {
+    match ret {
+        Value::Nil => Ok(original.to_vec()),
+        other => {
+            let got = lua_facing_type_name(&other);
+            peek_inlines_fuzzy(lua, other).map_err(|e| filter_return_error(fn_name, got, e))
         }
-        _ => Ok(vec![original.clone()]),
+    }
+}
+
+/// Handle return value from a Blocks list filter (nil keeps the
+/// original list; anything else is coerced like a block-filter return).
+fn handle_blocks_return(
+    lua: &Lua,
+    ret: Value,
+    original: &[Block],
+    fn_name: &str,
+) -> Result<Vec<Block>> {
+    match ret {
+        Value::Nil => Ok(original.to_vec()),
+        other => {
+            let got = lua_facing_type_name(&other);
+            peek_blocks_fuzzy(lua, other).map_err(|e| filter_return_error(fn_name, got, e))
+        }
     }
 }
 
@@ -529,35 +545,11 @@ fn handle_inline_return_with_control(
     lua: &Lua,
     ret: MultiValue,
     original: &Inline,
+    fn_name: &str,
 ) -> Result<(Vec<Inline>, TraversalControl)> {
     let mut iter = ret.into_iter();
-
-    // First return value: the element(s)
     let first = iter.next().unwrap_or(Value::Nil);
-    let elements = match first {
-        Value::Nil => vec![original.clone()],
-        Value::UserData(ud) => {
-            let lua_inline = ud.borrow::<LuaInline>()?;
-            vec![lua_inline.extract_flushed(lua)?]
-        }
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                vec![]
-            } else {
-                let mut inlines = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_inline = ud.borrow::<LuaInline>()?;
-                        inlines.push(lua_inline.extract_flushed(lua)?);
-                    }
-                }
-                inlines
-            }
-        }
-        _ => vec![original.clone()],
-    };
+    let elements = handle_inline_return(lua, first, original, fn_name)?;
 
     // Second return value: traversal control (nil/missing = Continue, false = Stop)
     let control = match iter.next() {
@@ -574,35 +566,11 @@ fn handle_block_return_with_control(
     lua: &Lua,
     ret: MultiValue,
     original: &Block,
+    fn_name: &str,
 ) -> Result<(Vec<Block>, TraversalControl)> {
     let mut iter = ret.into_iter();
-
-    // First return value: the element(s)
     let first = iter.next().unwrap_or(Value::Nil);
-    let elements = match first {
-        Value::Nil => vec![original.clone()],
-        Value::UserData(ud) => {
-            let lua_block = ud.borrow::<LuaBlock>()?;
-            vec![lua_block.extract_flushed(lua)?]
-        }
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                vec![]
-            } else {
-                let mut blocks = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_block = ud.borrow::<LuaBlock>()?;
-                        blocks.push(lua_block.extract_flushed(lua)?);
-                    }
-                }
-                blocks
-            }
-        }
-        _ => vec![original.clone()],
-    };
+    let elements = handle_block_return(lua, first, original, fn_name)?;
 
     // Second return value: traversal control (nil/missing = Continue, false = Stop)
     let control = match iter.next() {
@@ -618,31 +586,11 @@ fn handle_blocks_return_with_control(
     lua: &Lua,
     ret: MultiValue,
     original: &[Block],
+    fn_name: &str,
 ) -> Result<(Vec<Block>, TraversalControl)> {
     let mut iter = ret.into_iter();
-
-    // First return value: the block list
     let first = iter.next().unwrap_or(Value::Nil);
-    let blocks = match first {
-        Value::Nil => original.to_vec(),
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                vec![]
-            } else {
-                let mut result = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_block = ud.borrow::<LuaBlock>()?;
-                        result.push(lua_block.extract_flushed(lua)?);
-                    }
-                }
-                result
-            }
-        }
-        _ => original.to_vec(),
-    };
+    let blocks = handle_blocks_return(lua, first, original, fn_name)?;
 
     // Second return value: traversal control
     let control = match iter.next() {
@@ -658,31 +606,11 @@ fn handle_inlines_return_with_control(
     lua: &Lua,
     ret: MultiValue,
     original: &[Inline],
+    fn_name: &str,
 ) -> Result<(Vec<Inline>, TraversalControl)> {
     let mut iter = ret.into_iter();
-
-    // First return value: the inline list
     let first = iter.next().unwrap_or(Value::Nil);
-    let inlines = match first {
-        Value::Nil => original.to_vec(),
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                vec![]
-            } else {
-                let mut result = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_inline = ud.borrow::<LuaInline>()?;
-                        result.push(lua_inline.extract_flushed(lua)?);
-                    }
-                }
-                result
-            }
-        }
-        _ => original.to_vec(),
-    };
+    let inlines = handle_inlines_return(lua, first, original, fn_name)?;
 
     // Second return value: traversal control
     let control = match iter.next() {
@@ -895,11 +823,11 @@ async fn walk_inlines_for_element_filters(
         let filtered = if let Ok(filter_fn) = filter_table.get::<Function>(tag) {
             let inline_ud = lua.create_userdata(LuaInline::new(walked.clone()))?;
             let ret: Value = filter_fn.call_async(inline_ud).await?;
-            handle_inline_return(lua, ret, &walked)?
+            handle_inline_return(lua, ret, &walked, tag)?
         } else if let Ok(filter_fn) = filter_table.get::<Function>("Inline") {
             let inline_ud = lua.create_userdata(LuaInline::new(walked.clone()))?;
             let ret: Value = filter_fn.call_async(inline_ud).await?;
-            handle_inline_return(lua, ret, &walked)?
+            handle_inline_return(lua, ret, &walked, "Inline")?
         } else {
             vec![walked]
         };
@@ -1160,25 +1088,7 @@ async fn apply_inlines_filter(
     if let Ok(inlines_fn) = filter_table.get::<Function>("Inlines") {
         let inlines_table = inlines_to_lua_table(lua, inlines)?;
         let ret: Value = inlines_fn.call_async(inlines_table).await?;
-        match ret {
-            Value::Nil => Ok(inlines.to_vec()),
-            Value::Table(table) => {
-                let len = table.raw_len();
-                if len == 0 {
-                    return Ok(vec![]);
-                }
-                let mut result = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_inline = ud.borrow::<LuaInline>()?;
-                        result.push(lua_inline.extract_flushed(lua)?);
-                    }
-                }
-                Ok(result)
-            }
-            _ => Ok(inlines.to_vec()),
-        }
+        handle_inlines_return(lua, ret, inlines, "Inlines")
     } else {
         Ok(inlines.to_vec())
     }
@@ -1201,11 +1111,11 @@ async fn walk_block_splicing(
         let filtered = if let Ok(filter_fn) = filter_table.get::<Function>(tag) {
             let block_ud = lua.create_userdata(LuaBlock::new(walked.clone()))?;
             let ret: Value = filter_fn.call_async(block_ud).await?;
-            handle_block_return(lua, ret, &walked)?
+            handle_block_return(lua, ret, &walked, tag)?
         } else if let Ok(filter_fn) = filter_table.get::<Function>("Block") {
             let block_ud = lua.create_userdata(LuaBlock::new(walked.clone()))?;
             let ret: Value = filter_fn.call_async(block_ud).await?;
-            handle_block_return(lua, ret, &walked)?
+            handle_block_return(lua, ret, &walked, "Block")?
         } else {
             vec![walked]
         };
@@ -1300,25 +1210,7 @@ async fn walk_blocks_straight(
     if let Ok(blocks_fn) = filter_table.get::<Function>("Blocks") {
         let blocks_table = blocks_to_lua_table(lua, &walked)?;
         let ret: Value = blocks_fn.call_async(blocks_table).await?;
-        match ret {
-            Value::Nil => Ok(walked),
-            Value::Table(table) => {
-                let len = table.raw_len();
-                if len == 0 {
-                    return Ok(vec![]);
-                }
-                let mut result = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_block = ud.borrow::<LuaBlock>()?;
-                        result.push(lua_block.extract_flushed(lua)?);
-                    }
-                }
-                Ok(result)
-            }
-            _ => Ok(walked),
-        }
+        handle_blocks_return(lua, ret, &walked, "Blocks")
     } else {
         Ok(walked)
     }
@@ -1425,7 +1317,7 @@ pub async fn walk_blocks_topdown(
     let (blocks, ctrl) = if let Ok(blocks_fn) = filter_table.get::<Function>("Blocks") {
         let blocks_table = blocks_to_lua_table(lua, blocks)?;
         let ret: MultiValue = blocks_fn.call_async(blocks_table).await?;
-        handle_blocks_return_with_control(lua, ret, blocks)?
+        handle_blocks_return_with_control(lua, ret, blocks, "Blocks")?
     } else {
         (blocks.to_vec(), TraversalControl::Continue)
     };
@@ -1465,11 +1357,11 @@ async fn apply_block_filter_topdown(
     if let Ok(filter_fn) = filter_table.get::<Function>(tag) {
         let block_ud = lua.create_userdata(LuaBlock::new(block.clone()))?;
         let ret: MultiValue = filter_fn.call_async(block_ud).await?;
-        handle_block_return_with_control(lua, ret, block)
+        handle_block_return_with_control(lua, ret, block, tag)
     } else if let Ok(filter_fn) = filter_table.get::<Function>("Block") {
         let block_ud = lua.create_userdata(LuaBlock::new(block.clone()))?;
         let ret: MultiValue = filter_fn.call_async(block_ud).await?;
-        handle_block_return_with_control(lua, ret, block)
+        handle_block_return_with_control(lua, ret, block, "Block")
     } else {
         Ok((vec![block.clone()], TraversalControl::Continue))
     }
@@ -1582,7 +1474,7 @@ pub async fn walk_inlines_topdown(
     let (inlines, ctrl) = if let Ok(inlines_fn) = filter_table.get::<Function>("Inlines") {
         let inlines_table = inlines_to_lua_table(lua, inlines)?;
         let ret: MultiValue = inlines_fn.call_async(inlines_table).await?;
-        handle_inlines_return_with_control(lua, ret, inlines)?
+        handle_inlines_return_with_control(lua, ret, inlines, "Inlines")?
     } else {
         (inlines.to_vec(), TraversalControl::Continue)
     };
@@ -1622,11 +1514,11 @@ async fn apply_inline_filter_topdown(
     if let Ok(filter_fn) = filter_table.get::<Function>(tag) {
         let inline_ud = lua.create_userdata(LuaInline::new(inline.clone()))?;
         let ret: MultiValue = filter_fn.call_async(inline_ud).await?;
-        handle_inline_return_with_control(lua, ret, inline)
+        handle_inline_return_with_control(lua, ret, inline, tag)
     } else if let Ok(filter_fn) = filter_table.get::<Function>("Inline") {
         let inline_ud = lua.create_userdata(LuaInline::new(inline.clone()))?;
         let ret: MultiValue = filter_fn.call_async(inline_ud).await?;
-        handle_inline_return_with_control(lua, ret, inline)
+        handle_inline_return_with_control(lua, ret, inline, "Inline")
     } else {
         Ok((vec![inline.clone()], TraversalControl::Continue))
     }
@@ -2350,7 +2242,7 @@ mod unit_tests {
             text: "original".to_string(),
             source_info: SourceInfo::for_test(),
         });
-        let result = handle_inline_return(&lua, Value::Nil, &original).unwrap();
+        let result = handle_inline_return(&lua, Value::Nil, &original, "Str").unwrap();
         assert_eq!(result.len(), 1);
         match &result[0] {
             Inline::Str(s) => assert_eq!(s.text, "original"),
@@ -2370,12 +2262,13 @@ mod unit_tests {
             text: "original".to_string(),
             source_info: SourceInfo::for_test(),
         });
-        let result = handle_inline_return(&lua, Value::Table(empty_table), &original).unwrap();
+        let result =
+            handle_inline_return(&lua, Value::Table(empty_table), &original, "Str").unwrap();
         assert_eq!(result.len(), 0); // Empty table means delete
     }
 
     #[test]
-    fn test_handle_inline_return_other_value() {
+    fn test_handle_inline_return_number_errors() {
         let lua = Lua::new();
         use crate::pandoc::Inline;
         use crate::pandoc::inline::Str;
@@ -2385,13 +2278,76 @@ mod unit_tests {
             text: "original".to_string(),
             source_info: SourceInfo::for_test(),
         });
-        // Non-nil, non-table, non-userdata returns original unchanged
-        let result = handle_inline_return(&lua, Value::Integer(42), &original).unwrap();
-        assert_eq!(result.len(), 1);
-        match &result[0] {
-            Inline::Str(s) => assert_eq!(s.text, "original"),
-            _ => panic!("Expected Str"),
-        }
+        // Pandoc errors on non-coercible returns; so do we, loudly.
+        let err = handle_inline_return(&lua, Value::Integer(42), &original, "Str").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("number"), "should name the got-type: {msg}");
+        assert!(
+            msg.contains("'Str'"),
+            "should name the filter function: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_handle_inline_return_boolean_errors() {
+        let lua = Lua::new();
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::for_test(),
+        });
+        let err = handle_inline_return(&lua, Value::Boolean(true), &original, "Str").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("boolean"), "should name the got-type: {msg}");
+        assert!(
+            msg.contains("'Str'"),
+            "should name the filter function: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_handle_inline_return_string_wordsplit() {
+        let lua = Lua::new();
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::for_test(),
+        });
+        // Bare string return is word-split like peekInlinesFuzzy.
+        let ret = Value::String(lua.create_string("two words").unwrap());
+        let result = handle_inline_return(&lua, ret, &original, "Str").unwrap();
+        assert_eq!(result.len(), 3);
+        assert!(matches!(&result[0], Inline::Str(s) if s.text == "two"));
+        assert!(matches!(&result[1], Inline::Space(_)));
+        assert!(matches!(&result[2], Inline::Str(s) if s.text == "words"));
+    }
+
+    #[test]
+    fn test_handle_inline_return_table_string_entries() {
+        let lua = Lua::new();
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::for_test(),
+        });
+        // Strings inside a returned table become single Strs (element-wise
+        // peekInlineFuzzy: NO word-split inside lists).
+        let table = lua.create_table().unwrap();
+        table.push("a b").unwrap();
+        table.push("c").unwrap();
+        let result = handle_inline_return(&lua, Value::Table(table), &original, "Str").unwrap();
+        assert_eq!(result.len(), 2);
+        assert!(matches!(&result[0], Inline::Str(s) if s.text == "a b"));
+        assert!(matches!(&result[1], Inline::Str(s) if s.text == "c"));
     }
 
     // =========================================================================
@@ -2409,7 +2365,7 @@ mod unit_tests {
             content: vec![],
             source_info: SourceInfo::for_test(),
         });
-        let result = handle_block_return(&lua, Value::Nil, &original).unwrap();
+        let result = handle_block_return(&lua, Value::Nil, &original, "Para").unwrap();
         assert_eq!(result.len(), 1);
         assert!(matches!(&result[0], Block::Plain(_)));
     }
@@ -2426,12 +2382,13 @@ mod unit_tests {
             content: vec![],
             source_info: SourceInfo::for_test(),
         });
-        let result = handle_block_return(&lua, Value::Table(empty_table), &original).unwrap();
+        let result =
+            handle_block_return(&lua, Value::Table(empty_table), &original, "Para").unwrap();
         assert_eq!(result.len(), 0); // Empty table means delete
     }
 
     #[test]
-    fn test_handle_block_return_other_value() {
+    fn test_handle_block_return_number_errors() {
         let lua = Lua::new();
         use crate::pandoc::Block;
         use crate::pandoc::block::Plain;
@@ -2441,10 +2398,66 @@ mod unit_tests {
             content: vec![],
             source_info: SourceInfo::for_test(),
         });
-        // Non-nil, non-table, non-userdata returns original unchanged
-        let result = handle_block_return(&lua, Value::Integer(42), &original).unwrap();
+        // Pandoc errors on non-coercible returns; so do we, loudly.
+        let err = handle_block_return(&lua, Value::Integer(42), &original, "Para").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("number"), "should name the got-type: {msg}");
+        assert!(
+            msg.contains("'Para'"),
+            "should name the filter function: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_handle_block_return_string_plain() {
+        let lua = Lua::new();
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::{Block, Inline};
+        use quarto_source_map::SourceInfo;
+
+        let original = Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::for_test(),
+        });
+        // Bare string return from a Block filter → Plain(word-split).
+        let ret = Value::String(lua.create_string("plain text").unwrap());
+        let result = handle_block_return(&lua, ret, &original, "Para").unwrap();
         assert_eq!(result.len(), 1);
-        assert!(matches!(&result[0], Block::Plain(_)));
+        match &result[0] {
+            Block::Plain(p) => {
+                assert_eq!(p.content.len(), 3);
+                assert!(matches!(&p.content[0], Inline::Str(s) if s.text == "plain"));
+                assert!(matches!(&p.content[1], Inline::Space(_)));
+                assert!(matches!(&p.content[2], Inline::Str(s) if s.text == "text"));
+            }
+            other => panic!("Expected Plain, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_block_return_table_string_entry() {
+        let lua = Lua::new();
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::{Block, Inline};
+        use quarto_source_map::SourceInfo;
+
+        let original = Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::for_test(),
+        });
+        // A string entry in a Block-filter table → Plain(word-split),
+        // element-wise peekBlockFuzzy.
+        let table = lua.create_table().unwrap();
+        table.push("two words").unwrap();
+        let result = handle_block_return(&lua, Value::Table(table), &original, "Para").unwrap();
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Block::Plain(p) => {
+                assert_eq!(p.content.len(), 3);
+                assert!(matches!(&p.content[0], Inline::Str(s) if s.text == "two"));
+            }
+            other => panic!("Expected Plain, got {other:?}"),
+        }
     }
 
     // =========================================================================
@@ -2463,7 +2476,7 @@ mod unit_tests {
             source_info: SourceInfo::for_test(),
         });
         let (elements, control) =
-            handle_inline_return_with_control(&lua, MultiValue::new(), &original).unwrap();
+            handle_inline_return_with_control(&lua, MultiValue::new(), &original, "Str").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Continue);
     }
@@ -2483,7 +2496,7 @@ mod unit_tests {
         values.push_front(Value::Nil);
         values.push_back(Value::Boolean(false));
         let (elements, control) =
-            handle_inline_return_with_control(&lua, values, &original).unwrap();
+            handle_inline_return_with_control(&lua, values, &original, "Str").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Stop);
     }
@@ -2503,7 +2516,7 @@ mod unit_tests {
         values.push_front(Value::Nil);
         values.push_back(Value::Boolean(true));
         let (elements, control) =
-            handle_inline_return_with_control(&lua, values, &original).unwrap();
+            handle_inline_return_with_control(&lua, values, &original, "Str").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Continue);
     }
@@ -2520,7 +2533,7 @@ mod unit_tests {
             source_info: SourceInfo::for_test(),
         });
         let (elements, control) =
-            handle_block_return_with_control(&lua, MultiValue::new(), &original).unwrap();
+            handle_block_return_with_control(&lua, MultiValue::new(), &original, "Para").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Continue);
     }
@@ -2540,7 +2553,7 @@ mod unit_tests {
         values.push_front(Value::Nil);
         values.push_back(Value::Boolean(false));
         let (elements, control) =
-            handle_block_return_with_control(&lua, values, &original).unwrap();
+            handle_block_return_with_control(&lua, values, &original, "Para").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Stop);
     }
@@ -2557,7 +2570,8 @@ mod unit_tests {
             source_info: SourceInfo::for_test(),
         })];
         let (elements, control) =
-            handle_blocks_return_with_control(&lua, MultiValue::new(), &original).unwrap();
+            handle_blocks_return_with_control(&lua, MultiValue::new(), &original, "Blocks")
+                .unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Continue);
     }
@@ -2577,7 +2591,7 @@ mod unit_tests {
         values.push_front(Value::Nil);
         values.push_back(Value::Boolean(false));
         let (elements, control) =
-            handle_blocks_return_with_control(&lua, values, &original).unwrap();
+            handle_blocks_return_with_control(&lua, values, &original, "Blocks").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Stop);
     }
@@ -2594,7 +2608,8 @@ mod unit_tests {
             source_info: SourceInfo::for_test(),
         })];
         let (elements, control) =
-            handle_inlines_return_with_control(&lua, MultiValue::new(), &original).unwrap();
+            handle_inlines_return_with_control(&lua, MultiValue::new(), &original, "Inlines")
+                .unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Continue);
     }
@@ -2614,13 +2629,13 @@ mod unit_tests {
         values.push_front(Value::Nil);
         values.push_back(Value::Boolean(false));
         let (elements, control) =
-            handle_inlines_return_with_control(&lua, values, &original).unwrap();
+            handle_inlines_return_with_control(&lua, values, &original, "Inlines").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Stop);
     }
 
     #[test]
-    fn test_handle_inlines_return_with_control_other_value() {
+    fn test_handle_inlines_return_with_control_number_errors() {
         let lua = Lua::new();
         use crate::pandoc::Inline;
         use crate::pandoc::inline::Str;
@@ -2631,15 +2646,15 @@ mod unit_tests {
             source_info: SourceInfo::for_test(),
         })];
         let mut values = MultiValue::new();
-        values.push_front(Value::Integer(42)); // Not a table or nil
-        let (elements, control) =
-            handle_inlines_return_with_control(&lua, values, &original).unwrap();
-        assert_eq!(elements.len(), 1); // Falls back to original
-        assert_eq!(control, TraversalControl::Continue);
+        values.push_front(Value::Integer(42)); // Not coercible to Inlines
+        let err =
+            handle_inlines_return_with_control(&lua, values, &original, "Inlines").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("number"), "should name the got-type: {msg}");
     }
 
     #[test]
-    fn test_handle_blocks_return_with_control_other_value() {
+    fn test_handle_blocks_return_with_control_number_errors() {
         let lua = Lua::new();
         use crate::pandoc::Block;
         use crate::pandoc::block::Plain;
@@ -2650,10 +2665,82 @@ mod unit_tests {
             source_info: SourceInfo::for_test(),
         })];
         let mut values = MultiValue::new();
-        values.push_front(Value::Integer(42)); // Not a table or nil
+        values.push_front(Value::Integer(42)); // Not coercible to Blocks
+        let err = handle_blocks_return_with_control(&lua, values, &original, "Blocks").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("number"), "should name the got-type: {msg}");
+        assert!(
+            msg.contains("'Blocks'"),
+            "should name the filter function: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_handle_inline_return_with_control_string_wordsplit() {
+        let lua = Lua::new();
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::for_test(),
+        });
+        let mut values = MultiValue::new();
+        values.push_front(Value::String(lua.create_string("x y").unwrap()));
+        values.push_back(Value::Boolean(false));
         let (elements, control) =
-            handle_blocks_return_with_control(&lua, values, &original).unwrap();
-        assert_eq!(elements.len(), 1); // Falls back to original
+            handle_inline_return_with_control(&lua, values, &original, "Str").unwrap();
+        assert_eq!(elements.len(), 3); // word-split: Str, Space, Str
+        assert!(matches!(&elements[0], Inline::Str(s) if s.text == "x"));
+        assert_eq!(control, TraversalControl::Stop);
+    }
+
+    #[test]
+    fn test_handle_inlines_return_with_control_string_wordsplit() {
+        let lua = Lua::new();
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
+        use quarto_source_map::SourceInfo;
+
+        let original = vec![Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::for_test(),
+        })];
+        let mut values = MultiValue::new();
+        values.push_front(Value::String(lua.create_string("x y").unwrap()));
+        let (elements, control) =
+            handle_inlines_return_with_control(&lua, values, &original, "Inlines").unwrap();
+        assert_eq!(elements.len(), 3);
+        assert!(matches!(&elements[0], Inline::Str(s) if s.text == "x"));
+        assert!(matches!(&elements[1], Inline::Space(_)));
+        assert!(matches!(&elements[2], Inline::Str(s) if s.text == "y"));
+        assert_eq!(control, TraversalControl::Continue);
+    }
+
+    #[test]
+    fn test_handle_blocks_return_with_control_string_plain() {
+        let lua = Lua::new();
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::{Block, Inline};
+        use quarto_source_map::SourceInfo;
+
+        let original = vec![Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::for_test(),
+        })];
+        let mut values = MultiValue::new();
+        values.push_front(Value::String(lua.create_string("block text").unwrap()));
+        let (elements, control) =
+            handle_blocks_return_with_control(&lua, values, &original, "Blocks").unwrap();
+        assert_eq!(elements.len(), 1);
+        match &elements[0] {
+            Block::Plain(p) => {
+                assert_eq!(p.content.len(), 3);
+                assert!(matches!(&p.content[0], Inline::Str(s) if s.text == "block"));
+            }
+            other => panic!("Expected Plain, got {other:?}"),
+        }
         assert_eq!(control, TraversalControl::Continue);
     }
 

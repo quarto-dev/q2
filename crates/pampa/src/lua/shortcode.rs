@@ -22,7 +22,7 @@ use super::filter::{extract_lua_block, extract_lua_inline};
 use super::mediabag::create_shared_mediabag;
 use super::quarto_api::register_quarto_api;
 use super::runtime::SystemRuntime;
-use super::types::{LuaBlock, LuaInline};
+use super::types::{LuaBlock, LuaInline, peek_blocks_fuzzy, peek_inlines_fuzzy};
 
 /// Context in which a shortcode is being resolved.
 /// Named `ShortcodeCallContext` to avoid conflict with the existing
@@ -468,36 +468,27 @@ fn convert_return_value(lua: &Lua, ret: Value) -> LuaShortcodeResult {
 }
 
 /// Classify a table return as Inlines or Blocks.
+///
+/// Entries are coerced with the same fuzzy peekers used for
+/// constructor arguments and filter returns: a table of inline-like
+/// values (including bare strings) is Inlines; otherwise, if every
+/// entry is block-coercible (inline-like entries get `Plain`-wrapped),
+/// it is Blocks. Non-coercible entries are a loud error, not a silent
+/// drop.
 fn classify_table_result(lua: &Lua, table: &mlua::Table) -> LuaShortcodeResult {
-    let len = table.raw_len();
-    if len == 0 {
+    if table.raw_len() == 0 {
         return LuaShortcodeResult::Inlines(vec![]);
     }
 
-    let mut inlines = Vec::new();
-    let mut blocks = Vec::new();
-    let mut has_blocks = false;
-
-    for i in 1..=len {
-        let value: std::result::Result<Value, _> = table.get(i);
-        if let Ok(Value::UserData(ud)) = value {
-            if let Ok(inline) = extract_lua_inline(lua, &ud) {
-                inlines.push(inline);
-            } else if let Ok(block) = extract_lua_block(lua, &ud) {
-                has_blocks = true;
-                blocks.push(block);
-            }
-        }
-    }
-
-    if has_blocks {
-        LuaShortcodeResult::Blocks(blocks)
-    } else if !inlines.is_empty() {
-        LuaShortcodeResult::Inlines(inlines)
-    } else {
-        LuaShortcodeResult::Error(
-            "Shortcode returned table with no recognizable elements".to_string(),
-        )
+    let value = Value::Table(table.clone());
+    match peek_inlines_fuzzy(lua, value.clone()) {
+        Ok(inlines) => LuaShortcodeResult::Inlines(inlines),
+        Err(_) => match peek_blocks_fuzzy(lua, value) {
+            Ok(blocks) => LuaShortcodeResult::Blocks(blocks),
+            Err(e) => LuaShortcodeResult::Error(format!(
+                "Shortcode returned a table that is neither Inlines nor Blocks: {e}"
+            )),
+        },
     }
 }
 
@@ -649,6 +640,81 @@ return {
                     }
                     other => panic!("Expected RawBlock, got {:?}", other),
                 }
+            }
+            other => panic!("Expected Blocks, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_call_returns_table_with_string_entry() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "mix.lua",
+            r#"
+return {
+    mix = function(args, kwargs, meta, raw_args, context)
+        return { pandoc.Str("a"), "b" }
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).await.unwrap();
+
+        let result = engine
+            .call("mix", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Inlines(inlines) => {
+                // The bare string entry is coerced (element-wise, no
+                // word-split), not silently dropped.
+                assert_eq!(inlines.len(), 2);
+                assert!(matches!(&inlines[0], Inline::Str(s) if s.text == "a"));
+                assert!(matches!(&inlines[1], Inline::Str(s) if s.text == "b"));
+            }
+            other => panic!("Expected Inlines, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_call_returns_mixed_inline_block_table() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "mixb.lua",
+            r#"
+return {
+    mixb = function(args, kwargs, meta, raw_args, context)
+        return { pandoc.Emph{pandoc.Str("x")}, pandoc.HorizontalRule() }
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).await.unwrap();
+
+        let result = engine
+            .call("mixb", &make_empty_args(), ShortcodeCallContext::Block)
+            .await
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Blocks(blocks) => {
+                // Inline entries are Plain-wrapped (peek_block_fuzzy), not
+                // silently discarded when the table also contains blocks.
+                assert_eq!(blocks.len(), 2);
+                match &blocks[0] {
+                    Block::Plain(p) => {
+                        assert!(matches!(&p.content[0], Inline::Emph(_)));
+                    }
+                    other => panic!("Expected Plain, got {:?}", other),
+                }
+                assert!(matches!(&blocks[1], Block::HorizontalRule(_)));
             }
             other => panic!("Expected Blocks, got {:?}", other),
         }

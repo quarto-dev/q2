@@ -48,6 +48,21 @@ Progress log:
   contracts 2 (bd-9p2686pc), classes-proxy vs List table ~3
   (bd-tzwcof0n).
 
+- **2026-07-13, bd-23yvjfmm closed** (cluster 3): all filter-return
+  paths (element, list, and the four topdown `*_with_control`
+  handlers, plus the two ad-hoc typewise list-splice sites) route
+  through `peek_inlines_fuzzy`/`peek_blocks_fuzzy`. Bare-string
+  returns coerce like pandoc (word-split; Plain-wrapped in block
+  position); non-userdata table entries coerce element-wise;
+  number/boolean returns are loud errors naming the filter function
+  and got-type (pandoc errors too — probes P1–P13 against 3.9.0.2).
+  A3 audit: shortcode `classify_table_result` fixed the same way
+  (was dropping non-userdata entries AND discarding inlines when a
+  table mixed inlines+blocks); doc-level filter gap (`Pandoc`/`Doc`
+  collected but never invoked; no `Meta` support) filed as
+  bd-a9g50za2. Differential **8 → 15 cases, 15 pass, 0 xfail**;
+  Track-1 unchanged at 90/133 (this cluster was Track-2-only).
+
 - **2026-07-13, bd-hitjclzp closed** (cluster 4 + part of 5):
   hslua-style property cache+readback. `div.content:insert(x)` and
   friends persist; reads alias; flush happens at every marshal-out.
