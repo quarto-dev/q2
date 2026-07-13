@@ -14,6 +14,7 @@ import {
   addProjectToSet,
   removeProjectFromSet,
   touchProjectInSet,
+  updateProjectSummaryInSet,
 } from './index.js';
 import type { ProjectSetDocument } from './index.js';
 
@@ -188,6 +189,49 @@ describe('ProjectSetDocument schema helpers', () => {
     it('should return false for non-existent project', () => {
       const doc = emptyDoc();
       const result = touchProjectInSet(doc, 'automerge:nonexistent');
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('updateProjectSummaryInSet', () => {
+    const summary = {
+      fileCount: 3,
+      topFiles: ['index.qmd', 'notes.qmd', '_quarto.yml'],
+      contributors: [{ name: 'Charlotte Wu', color: '#E8368F' }],
+      asOf: '2026-06-15T12:00:00.000Z',
+    };
+
+    it('should write the summary onto an existing entry', () => {
+      const doc = emptyDoc();
+      addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'Project',
+      }, '2026-01-01T00:00:00.000Z');
+
+      const result = updateProjectSummaryInSet(doc, 'automerge:proj1', summary);
+      expect(result).toBe(true);
+      expect(doc.projects['proj1'].summary).toEqual(summary);
+      // Other fields untouched
+      expect(doc.projects['proj1'].lastAccessed).toBe('2026-01-01T00:00:00.000Z');
+    });
+
+    it('should replace an existing summary', () => {
+      const doc = emptyDoc();
+      addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'Project',
+      });
+      updateProjectSummaryInSet(doc, 'automerge:proj1', summary);
+      const newer = { ...summary, fileCount: 5, asOf: '2026-06-16T12:00:00.000Z' };
+      updateProjectSummaryInSet(doc, 'automerge:proj1', newer);
+      expect(doc.projects['proj1'].summary).toEqual(newer);
+    });
+
+    it('should return false for non-existent project', () => {
+      const doc = emptyDoc();
+      const result = updateProjectSummaryInSet(doc, 'automerge:nonexistent', summary);
       expect(result).toBe(false);
     });
   });

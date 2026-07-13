@@ -125,6 +125,27 @@ export function setIdentity(doc: IndexDocument, actorId: string, screenName: str
  * prefix, which serves as a natural deduplication key — two browsers adding
  * the same project converge automatically via Automerge CRDT merge.
  */
+/**
+ * Cached at-a-glance summary of a project, denormalized onto the owner's
+ * project-set entry.
+ *
+ * This is a per-user cache, not a source of truth: it reflects the project
+ * as of the last time THIS user's client opened it (`asOf`), and is written
+ * by the client while it has the project's documents in hand. It exists so
+ * list surfaces (cards, peek popovers) can show file counts and contributors
+ * without opening a sync connection per project.
+ */
+export interface ProjectSetEntrySummary {
+  /** Number of files in the project's index at `asOf`. */
+  fileCount: number;
+  /** First few file paths (capped by the writer; typically 5). */
+  topFiles: string[];
+  /** Identities seen on the project at `asOf` (capped by the writer). */
+  contributors: ActorIdentity[];
+  /** ISO timestamp when this summary was captured. */
+  asOf: string;
+}
+
 export interface ProjectSetEntry {
   /** Automerge document ID for the project's IndexDocument (with 'automerge:' prefix). */
   indexDocId: string;
@@ -136,6 +157,8 @@ export interface ProjectSetEntry {
   addedAt: string;
   /** ISO timestamp of last access from any browser. Updated on project open. */
   lastAccessed: string;
+  /** Cached peek data; absent until the project is first opened by this user. */
+  summary?: ProjectSetEntrySummary;
 }
 
 /**
@@ -239,6 +262,24 @@ export function touchProjectInSet(
   const entry = doc.projects[key];
   if (!entry) return false;
   entry.lastAccessed = now ?? new Date().toISOString();
+  return true;
+}
+
+/**
+ * Replace the cached peek summary for a project.
+ * Must be called inside an Automerge `change()` callback.
+ *
+ * @returns true if the entry existed and the summary was written
+ */
+export function updateProjectSummaryInSet(
+  doc: ProjectSetDocument,
+  indexDocId: string,
+  summary: ProjectSetEntrySummary,
+): boolean {
+  const key = projectSetKey(indexDocId);
+  const entry = doc.projects[key];
+  if (!entry) return false;
+  entry.summary = summary;
   return true;
 }
 

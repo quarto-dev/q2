@@ -774,6 +774,24 @@
   line-height: 1.4;
 }
 
+.ph-peek-files {
+  padding: 4px 0 6px;
+}
+
+.ph-peek-file {
+  font-size: 12px;
+  color: var(--text-primary);
+  padding: 2.5px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ph-peek-file.more {
+  color: var(--text-secondary);
+  font-family: inherit;
+}
+
 .ph-peek-divider {
   height: 1px;
   background: var(--border-color);

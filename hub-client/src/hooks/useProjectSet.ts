@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { ProjectSetEntry } from '@quarto/quarto-automerge-schema';
+import type { ProjectSetEntry, ProjectSetEntrySummary } from '@quarto/quarto-automerge-schema';
 import {
   getProjectSetPointer,
   setProjectSetPointer,
@@ -54,6 +54,8 @@ export interface ProjectSetActions {
   removeProject: (indexDocId: string) => void;
   /** Update a project's description. */
   updateProjectDescription: (indexDocId: string, description: string) => void;
+  /** Replace a project's cached peek summary. */
+  updateProjectSummary: (indexDocId: string, summary: ProjectSetEntrySummary) => void;
   /** Touch a project (update lastAccessed). */
   touchProject: (indexDocId: string) => void;
   /** Get the connected project set document ID. */
@@ -264,6 +266,12 @@ export function useProjectSet(): [ProjectSetState, ProjectSetActions] {
     setProjects(projectSetService.listProjects());
   }, []);
 
+  const updateProjectSummary = useCallback((indexDocId: string, summary: ProjectSetEntrySummary) => {
+    if (projectSetService.updateProjectSummary(indexDocId, summary)) {
+      setProjects(projectSetService.listProjects());
+    }
+  }, []);
+
   const touchProject = useCallback((indexDocId: string) => {
     projectSetService.touchProject(indexDocId);
     // Don't update projects list for touch — it's a minor metadata update
@@ -286,6 +294,7 @@ export function useProjectSet(): [ProjectSetState, ProjectSetActions] {
     addProject,
     removeProject,
     updateProjectDescription,
+    updateProjectSummary,
     touchProject,
     getProjectSetDocId,
     getSyncServer,

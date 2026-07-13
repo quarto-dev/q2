@@ -15,7 +15,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTheme } from './ThemeContext';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
-import type { ProjectSetEntry } from '@quarto/quarto-automerge-schema';
+import type { ProjectSetEntry, ProjectSetEntrySummary } from '@quarto/quarto-automerge-schema';
 import type { ProjectSetStatus } from '../hooks/useProjectSet';
 import type { UserSettings } from '../services/storage/types';
 import * as projectStorage from '../services/projectStorage';
@@ -62,6 +62,8 @@ interface Props {
   onTouchProject?: (indexDocId: string) => void;
   onAddProjectToSet?: (entry: Omit<ProjectSetEntry, 'addedAt' | 'lastAccessed'>) => void;
   onRenameProject?: (indexDocId: string, description: string) => void;
+  /** Replace a project's cached peek summary (used by Peek's refresh). */
+  onUpdateProjectSummary?: (indexDocId: string, summary: ProjectSetEntrySummary) => void;
   onSwitchToClassicUi?: () => void;
 }
 
@@ -72,6 +74,7 @@ interface ProjectItem {
   description: string;
   addedAt: string;
   lastAccessed: string;
+  summary?: ProjectSetEntrySummary;
 }
 
 const COLOR_PALETTE = [
@@ -176,6 +179,7 @@ export default function ProjectsHome({
   onTouchProject,
   onAddProjectToSet,
   onRenameProject,
+  onUpdateProjectSummary,
   onSwitchToClassicUi,
 }: Props) {
   const projectSetConnecting = projectSetStatus === 'loading' || projectSetStatus === 'connecting';
@@ -195,6 +199,7 @@ export default function ProjectsHome({
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [peekFor, setPeekFor] = useState<string | null>(null);
+  const [peekRefreshing, setPeekRefreshing] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
   // Dialogs
@@ -305,6 +310,7 @@ export default function ProjectsHome({
         description: e.description,
         addedAt: e.addedAt,
         lastAccessed: e.lastAccessed,
+        summary: e.summary,
       }));
     }
     return legacyProjects.map((p) => ({
@@ -791,13 +797,13 @@ export default function ProjectsHome({
     [userSettings?.userName, userSettings?.userColor],
   );
 
-  const renderFacepile = (users: MockUser[], size: 'sm' | 'md' | 'lg', max = 3) => {
+  const renderFacepile = (users: MockUser[], size: 'sm' | 'md' | 'lg', max = 3, mock = true) => {
     const shown = users.slice(0, max);
     const extra = users.length - shown.length;
     return (
       <span className={`ph-facepile ${size}`}>
         {shown.map((u, i) => (
-          <span key={`${u.initials}-${i}`} className="ph-face" style={{ backgroundColor: u.color }} title={`${u.name} (mock)`}>
+          <span key={`${u.initials}-${i}`} className="ph-face" style={{ backgroundColor: u.color }} title={mock ? `${u.name} (mock)` : u.name}>
             {u.initials}
           </span>
         ))}
@@ -860,6 +866,18 @@ export default function ProjectsHome({
       </div>
       <button
         className="ph-menu-item"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpenMenu(null);
+          setMoveSubmenuOpen(false);
+          setPeekFor(item.indexDocId);
+        }}
+      >
+        Peek
+        <span className="ph-menu-subtext">See what's inside without opening it</span>
+      </button>
+      <button
+        className="ph-menu-item"
         disabled={!!duplicatingId}
         onClick={(e) => { e.stopPropagation(); handleDuplicate(item); }}
       >
@@ -898,32 +916,83 @@ export default function ProjectsHome({
     </div>
   );
 
-  const renderPeek = (item: ProjectItem) => (
-    <div className="qh-peek ph-peek" onMouseDown={(e) => e.stopPropagation()}>
-      <div className="ph-peek-header">
-        ADDED {formatOpened(item.addedAt).toUpperCase()} · OPENED {formatOpened(item.lastAccessed).toUpperCase()}
+  /** Refresh a peek summary via a short background connection. Contributors
+   * are carried over: they only update on a real open, when presence data
+   * is flowing. */
+  const refreshPeek = async (item: ProjectItem) => {
+    if (peekRefreshing || exportingId || duplicatingId) return;
+    setPeekRefreshing(true);
+    try {
+      const files = await connect(resolveSyncServerUrl(item.syncServer), item.indexDocId);
+      onUpdateProjectSummary?.(item.indexDocId, {
+        fileCount: files.length,
+        topFiles: files.slice(0, 5).map((f) => f.path),
+        contributors: item.summary?.contributors ?? [],
+        asOf: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('Peek refresh failed:', err);
+    } finally {
+      try { await disconnect(); } catch { /* connection already down */ }
+      setPeekRefreshing(false);
+    }
+  };
+
+  const renderPeek = (item: ProjectItem) => {
+    const s = item.summary;
+    return (
+      <div className="qh-peek ph-peek" onMouseDown={(e) => e.stopPropagation()}>
+        {s ? (
+          <>
+            <div className="ph-peek-header">
+              {s.fileCount} {s.fileCount === 1 ? 'FILE' : 'FILES'} · AS OF {formatOpened(s.asOf).toUpperCase()}
+            </div>
+            {s.contributors.length > 0 && (
+              <div className="ph-peek-people">
+                {renderFacepile(
+                  s.contributors.map((c) => ({ name: c.name, color: c.color, initials: initialsFor(c.name) })),
+                  'lg', 3, false,
+                )}
+                <span className="ph-peek-people-label">
+                  {s.contributors.length === 1
+                    ? `${s.contributors[0].name} has joined`
+                    : `${s.contributors.map((c) => c.name.split(' ')[0]).join(', ')} have joined`}
+                </span>
+              </div>
+            )}
+            <div className="ph-peek-files">
+              {s.topFiles.map((f) => (
+                <div key={f} className="ph-peek-file mono">{f}</div>
+              ))}
+              {s.fileCount > s.topFiles.length && (
+                <div className="ph-peek-file more">and {s.fileCount - s.topFiles.length} more…</div>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="ph-peek-header">NOT OPENED ON THIS DEVICE YET</div>
+            <div className="ph-peek-note">
+              Details are cached when you open a project — or load them now without opening it.
+            </div>
+          </>
+        )}
+        <div className="ph-peek-row">
+          <span className="mono">{serverHost(item.syncServer)} · {shortId(item.indexDocId)}</span>
+        </div>
+        <div className="ph-peek-divider" />
+        <div className="ph-peek-actions">
+          <button className="ph-btn primary" onClick={() => startRename(item)}>Rename…</button>
+          <button className="ph-btn outline" onClick={() => { closeAllMenus(); handleOpen(item); }}>Open</button>
+          <button className="ph-link" onClick={() => refreshPeek(item)}>
+            {peekRefreshing ? 'Refreshing…' : s ? 'Refresh' : 'Load details'}
+          </button>
+          <button className="ph-link danger" onClick={() => handleRemove(item)}>Remove…</button>
+        </div>
+        <div className="ph-peek-footnote">Peeking doesn't count as opening the project.</div>
       </div>
-      <div className="ph-peek-people">
-        {renderFacepile(collaboratorsFor(item.indexDocId), 'lg')}
-        <span className="ph-peek-people-label">
-          {collaboratorsFor(item.indexDocId).map((u) => u.name.replace(/ .*$/, '')).join(', ')} have joined
-        </span>
-      </div>
-      <div className="ph-peek-row"><span className="mono">{serverHost(item.syncServer)}</span></div>
-      <div className="ph-peek-row"><span className="mono">{shortId(item.indexDocId)}</span></div>
-      <div className="ph-peek-note">
-        File-list preview isn't wired up in this exploration yet — it needs a
-        lightweight index-doc connection.
-      </div>
-      <div className="ph-peek-divider" />
-      <div className="ph-peek-actions">
-        <button className="ph-btn primary" onClick={() => startRename(item)}>Rename…</button>
-        <button className="ph-btn outline" onClick={() => { closeAllMenus(); handleOpen(item); }}>Open</button>
-        <button className="ph-link danger" onClick={() => handleRemove(item)}>Remove…</button>
-      </div>
-      <div className="ph-peek-footnote">Peeking doesn't count as opening the project.</div>
-    </div>
-  );
+    );
+  };
 
   // ---- collection sharing (membership is mock; see utils/mockCollaborators) ----
 
@@ -1054,8 +1123,16 @@ export default function ProjectsHome({
           {item.description}
         </span>
         <span className="ph-card-footer">
-          <span className="ph-card-meta">opened {formatOpened(item.lastAccessed)}</span>
-          {renderFacepile(collaboratorsFor(item.indexDocId), 'sm')}
+          <span className="ph-card-meta">
+            {item.summary ? `${item.summary.fileCount} ${item.summary.fileCount === 1 ? 'file' : 'files'} · ` : ''}
+            opened {formatOpened(item.lastAccessed)}
+          </span>
+          {item.summary?.contributors.length
+            ? renderFacepile(
+                item.summary.contributors.map((c) => ({ name: c.name, color: c.color, initials: initialsFor(c.name) })),
+                'sm', 3, false,
+              )
+            : renderFacepile(collaboratorsFor(item.indexDocId), 'sm')}
         </span>
       </button>
       <button
@@ -1070,6 +1147,7 @@ export default function ProjectsHome({
         ⋯
       </button>
       {openMenu === item.indexDocId && renderProjectMenu(item)}
+      {peekFor === item.indexDocId && renderPeek(item)}
     </div>
   );
 
@@ -1459,7 +1537,10 @@ export default function ProjectsHome({
                           </button>
                         </>
                       )}
-                      <span className="ph-row-meta">opened {formatOpened(item.lastAccessed)}</span>
+                      <span className="ph-row-meta">
+                        {item.summary ? `${item.summary.fileCount} ${item.summary.fileCount === 1 ? 'file' : 'files'} · ` : ''}
+                        opened {formatOpened(item.lastAccessed)}
+                      </span>
                       <button
                         className="ph-icon-btn ph-row-menu-btn"
                         title="Project actions"

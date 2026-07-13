@@ -19,12 +19,14 @@ import { resolveSyncServerUrl } from '../utils/routing';
 import type {
   ProjectSetDocument,
   ProjectSetEntry,
+  ProjectSetEntrySummary,
 } from '@quarto/quarto-automerge-schema';
 import {
   CURRENT_PROJECT_SET_SCHEMA_VERSION,
   addProjectToSet,
   removeProjectFromSet,
   touchProjectInSet,
+  updateProjectSummaryInSet,
   projectSetKey,
 } from '@quarto/quarto-automerge-schema';
 
@@ -328,6 +330,23 @@ export function touchProject(indexDocId: string): void {
   });
   // Don't notify for touch — it's a minor metadata update and the caller
   // already knows which project was selected.
+}
+
+/**
+ * Replace the cached peek summary for a project.
+ * No-op (returns false) when not connected or the entry is missing.
+ */
+export function updateProjectSummary(
+  indexDocId: string,
+  summary: ProjectSetEntrySummary,
+): boolean {
+  if (!handle) return false;
+  let updated = false;
+  handle.change(doc => {
+    updated = updateProjectSummaryInSet(doc, indexDocId, summary);
+  });
+  if (updated) notifyProjectsChange();
+  return updated;
 }
 
 /**

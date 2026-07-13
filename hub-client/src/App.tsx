@@ -204,6 +204,28 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.type, projectSetState.status]);
 
+  // Denormalize a peek summary onto this user's project-set entry while a
+  // project is open. Kept current as files and identities change (both are
+  // low-frequency: file add/remove/rename, presence join). This is a per-user
+  // cache of "the project as I last saw it" — list surfaces (cards, peek)
+  // read it so they never need a sync connection per project.
+  useEffect(() => {
+    if (!project || projectSetState.status !== 'connected' || files.length === 0) return;
+    // You are always a contributor; presence identities fill in everyone else
+    // (they can lag connection, so self is added explicitly).
+    const seen = screenName ? [{ name: screenName, color: cursorColor ?? '#447099' }] : [];
+    for (const i of Object.values(identities)) {
+      if (!seen.some((s) => s.name === i.name)) seen.push({ name: i.name, color: i.color });
+    }
+    projectSetActions.updateProjectSummary(project.indexDocId, {
+      fileCount: files.length,
+      topFiles: files.slice(0, 5).map((f) => f.path),
+      contributors: seen.slice(0, 6),
+      asOf: new Date().toISOString(),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, files, identities, screenName, cursorColor, projectSetState.status]);
+
   // Live refs for the dev-only console debug API. The API itself
   // is installed once (per the gate below) and reads current state
   // through these refs, so it doesn't churn on every project /
@@ -724,6 +746,7 @@ function App() {
             onTouchProject={projectSetActions.touchProject}
             onAddProjectToSet={projectSetActions.addProject}
             onRenameProject={projectSetActions.updateProjectDescription}
+            onUpdateProjectSummary={projectSetActions.updateProjectSummary}
             onSwitchToClassicUi={() => switchUiVariant('classic')}
           />
         ) : (
