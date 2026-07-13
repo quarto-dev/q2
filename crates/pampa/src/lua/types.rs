@@ -62,7 +62,7 @@ struct PropertyCacheInner {
 }
 
 impl PropertyCache {
-    fn get(&self, key: &str) -> Option<Value> {
+    pub(crate) fn get(&self, key: &str) -> Option<Value> {
         self.0
             .borrow()
             .entries
@@ -71,7 +71,7 @@ impl PropertyCache {
             .map(|(_, v)| v.clone())
     }
 
-    fn store(&self, key: &str, value: &Value) {
+    pub(crate) fn store(&self, key: &str, value: &Value) {
         let mut inner = self.0.borrow_mut();
         if let Some(slot) = inner.entries.iter_mut().find(|(k, _)| k == key) {
             slot.1 = value.clone();
@@ -80,13 +80,13 @@ impl PropertyCache {
         }
     }
 
-    fn remove(&self, key: &str) {
+    pub(crate) fn remove(&self, key: &str) {
         self.0.borrow_mut().entries.retain(|(k, _)| k != key);
     }
 
     /// Start a flush: returns the entries to write back, or `None`
     /// when there is nothing to do (empty, or already flushing).
-    fn begin_flush(&self) -> Option<Vec<(String, Value)>> {
+    pub(crate) fn begin_flush(&self) -> Option<Vec<(String, Value)>> {
         let mut inner = self.0.borrow_mut();
         if inner.flushing || inner.entries.is_empty() {
             return None;
@@ -95,7 +95,7 @@ impl PropertyCache {
         Some(inner.entries.clone())
     }
 
-    fn end_flush(&self) {
+    pub(crate) fn end_flush(&self) {
         self.0.borrow_mut().flushing = false;
     }
 }
@@ -106,7 +106,10 @@ impl PropertyCache {
 /// (`attr` is also cached, but as userdata with a dedicated flush
 /// path — see `flush_cached_attr_entry`.)
 fn is_cacheable_property(key: &str) -> bool {
-    matches!(key, "content" | "citations" | "caption" | "classes")
+    matches!(
+        key,
+        "content" | "citations" | "caption" | "classes" | "bodies" | "colspecs"
+    )
 }
 
 /// Should this (key, value) pair be cached on an element? Container
@@ -117,7 +120,7 @@ fn is_cacheable_property(key: &str) -> bool {
 /// is cached too, matching hslua — the aliases then read through it).
 fn should_cache_element_property(key: &str, value: &Value) -> bool {
     (is_cacheable_property(key) && matches!(value, Value::Table(_)))
-        || (matches!(key, "attr" | "listAttributes")
+        || (matches!(key, "attr" | "listAttributes" | "head" | "foot" | "caption")
             && matches!(value, Value::UserData(_) | Value::Table(_)))
 }
 
@@ -342,6 +345,7 @@ impl LuaInline {
             Inline::Image(_) => &[
                 "tag",
                 "content",
+                "caption",
                 "src",
                 "title",
                 "attr",
@@ -484,6 +488,9 @@ impl LuaInline {
 
             // Image
             (Inline::Image(i), "content") => inlines_to_lua_table(lua, &i.content),
+            // Pandoc name for the image description: `caption` is an
+            // alias of content (Inline.hs possibleProperty "caption").
+            (Inline::Image(i), "caption") => inlines_to_lua_table(lua, &i.content),
             (Inline::Image(i), "src") => i.target.0.clone().into_lua(lua),
             (Inline::Image(i), "title") => i.target.1.clone().into_lua(lua),
             (Inline::Image(_), "attr") => attr_to_lua_userdata_for_inline(lua, Rc::clone(&self.0)),
@@ -622,6 +629,10 @@ impl LuaInline {
 
             // Image
             (Inline::Image(i), "content") => {
+                i.content = peek_inlines_fuzzy(lua, val)?;
+                Ok(())
+            }
+            (Inline::Image(i), "caption") => {
                 i.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
@@ -1172,6 +1183,10 @@ impl LuaBlock {
                 "tag",
                 "attr",
                 "caption",
+                "colspecs",
+                "head",
+                "bodies",
+                "foot",
                 "identifier",
                 "classes",
                 "attributes",
@@ -1371,12 +1386,37 @@ impl LuaBlock {
                 values_to_list_table(lua, items)
             }
 
-            // Figure caption
-            (Block::Figure(f), "caption") => caption_to_lua_table(lua, &f.caption),
+            // Figure caption: Caption userdata (cached by the Index
+            // metamethod so `fig.caption.long = …` persists via flush).
+            (Block::Figure(f), "caption") => {
+                let ud =
+                    lua.create_userdata(super::constructors::LuaCaption::new(f.caption.clone()))?;
+                Ok(Value::UserData(ud))
+            }
 
             // Table basic fields
             (Block::Table(_), "attr") => attr_to_lua_userdata_for_block(lua, Rc::clone(&self.0)),
-            (Block::Table(t), "caption") => caption_to_lua_table(lua, &t.caption),
+            (Block::Table(t), "caption") => {
+                let ud =
+                    lua.create_userdata(super::constructors::LuaCaption::new(t.caption.clone()))?;
+                Ok(Value::UserData(ud))
+            }
+            (Block::Table(t), "head") => {
+                let ud =
+                    lua.create_userdata(super::constructors::LuaTableHead::new(t.head.clone()))?;
+                Ok(Value::UserData(ud))
+            }
+            (Block::Table(t), "foot") => {
+                let ud =
+                    lua.create_userdata(super::constructors::LuaTableFoot::new(t.foot.clone()))?;
+                Ok(Value::UserData(ud))
+            }
+            (Block::Table(t), "bodies") => {
+                super::constructors::table_bodies_to_lua_list(lua, &t.bodies)
+            }
+            (Block::Table(t), "colspecs") => {
+                super::constructors::colspecs_to_lua_table(lua, &t.colspec)
+            }
             (Block::Table(t), "identifier") => t.attr.0.clone().into_lua(lua),
             (Block::Table(_), "classes") => classes_proxy_for_block(lua, Rc::clone(&self.0)),
             (Block::Table(_), "attributes") => attributes_proxy_for_block(lua, Rc::clone(&self.0)),
@@ -1465,6 +1505,22 @@ impl LuaBlock {
             }
             (Block::Table(t), "caption") => {
                 t.caption = super::constructors::parse_caption(lua, Some(val))?;
+                Ok(())
+            }
+            (Block::Table(t), "head") => {
+                t.head = super::constructors::parse_table_head(lua, val)?;
+                Ok(())
+            }
+            (Block::Table(t), "foot") => {
+                t.foot = super::constructors::parse_table_foot(lua, val)?;
+                Ok(())
+            }
+            (Block::Table(t), "bodies") => {
+                t.bodies = super::constructors::parse_table_bodies(lua, val)?;
+                Ok(())
+            }
+            (Block::Table(t), "colspecs") => {
+                t.colspec = super::constructors::parse_colspecs(lua, val)?;
                 Ok(())
             }
 
@@ -1619,7 +1675,9 @@ impl UserData for LuaBlock {
                 // stale cache entry.
                 if should_cache_element_property(&key, &val) {
                     this.1.store(&key, &val);
-                } else if is_cacheable_property(&key) || key == "attr" || key == "listAttributes" {
+                } else if is_cacheable_property(&key)
+                    || matches!(key.as_str(), "attr" | "listAttributes" | "head" | "foot")
+                {
                     this.1.remove(&key);
                 }
                 Ok(())
@@ -1724,23 +1782,6 @@ fn string_list_to_lua_table(lua: &Lua, items: &[String]) -> Result<Value> {
 /// Wrap a Vec of already-converted Lua values in a table with the List metatable
 fn values_to_list_table(lua: &Lua, values: Vec<Value>) -> Result<Value> {
     super::list::create_list_table(lua, values)
-}
-
-/// Convert Caption to Lua table
-fn caption_to_lua_table(lua: &Lua, caption: &crate::pandoc::Caption) -> Result<Value> {
-    let table = lua.create_table()?;
-
-    // Short caption (optional)
-    if let Some(short) = &caption.short {
-        table.set("short", inlines_to_lua_table(lua, short)?)?;
-    }
-
-    // Long caption (blocks, optional)
-    if let Some(long) = &caption.long {
-        table.set("long", blocks_to_lua_table(lua, long)?)?;
-    }
-
-    Ok(Value::Table(table))
 }
 
 /// Convert Vec<Citation> to a pandoc-List table of Citation userdata
@@ -2510,7 +2551,7 @@ impl LuaAttr {
     }
 
     /// Get a field value by name or index
-    fn get_field(&self, lua: &Lua, key: Value) -> Result<Value> {
+    pub(crate) fn get_field(&self, lua: &Lua, key: Value) -> Result<Value> {
         match key {
             // Positional access (Lua uses 1-based indexing)
             Value::Integer(1) => self.identifier().into_lua(lua),
@@ -2552,7 +2593,7 @@ impl LuaAttr {
 
     /// Set a field value by name or index. Takes `&self`: mutation goes
     /// through the appropriate `RefCell` on the enum variant.
-    fn set_field(&self, key: Value, val: Value, lua: &Lua) -> Result<()> {
+    pub(crate) fn set_field(&self, key: Value, val: Value, lua: &Lua) -> Result<()> {
         match key {
             Value::Integer(1) => {
                 let s = String::from_lua(val, lua)?;
@@ -4012,6 +4053,7 @@ mod tests {
             &[
                 "tag",
                 "content",
+                "caption",
                 "src",
                 "title",
                 "attr",
@@ -4434,6 +4476,10 @@ mod tests {
                 "tag",
                 "attr",
                 "caption",
+                "colspecs",
+                "head",
+                "bodies",
+                "foot",
                 "identifier",
                 "classes",
                 "attributes",

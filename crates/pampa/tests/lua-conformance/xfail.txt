@@ -14,20 +14,18 @@
 # 131 pass, 72 xfail.
 # After bd-sgfiiktn S2 (ListAttributes userdata + OrderedList aliases +
 # strict triple peeker): 144 pass, 59 xfail.
+# After bd-sgfiiktn S3a (Cell/Row/TableHead/TableFoot/TableBody as
+# cache-backed userdata + fuzzy row/cell peekers + Cell/Row walk):
+# 165 pass, 38 xfail.
+# After bd-sgfiiktn S3b (Caption userdata + Caption(long, short) arg
+# order + Table head/foot/bodies/colspecs round-trips + Image caption
+# alias): 173 pass, 30 xfail.
 
 test-block.lua::Block marshalling::__toblock metamethod::metamethod __toblock is called when available # [string "test-block.lua"]:701:  expected values to be equal, got 'Div ("",[],[]) [CodeBlock ("opn",[],[]) "open access"]…
 test-block.lua::Block marshalling::__toblock metamethod::object with metamethod can be used as singleton list # [string "test-block.lua"]:734:  expected values to be equal, got 'Div ("",[],[]) [CodeBlock ("opn",[],[]) "open access"]…
-test-block.lua::Block::Figure::access caption via property `caption` # [string "test-block.lua"]:184:  expected values to be equal, got 'table' and 'userdata'
 test-block.lua::Block::Header::access Attr via property `attr` # runtime error: expected Attr userdata or table stack traceback: 	[C]: in metamethod 'newindex' 	[string "test-block.lua"…
-test-block.lua::Block::Table::access caption via property `caption` # runtime error: expected Inline userdata, string, or Inline-like value stack traceback: 	[C]: in function 'Caption' 	[str…
-test-block.lua::Block::Table::access column specifiers via property `colspecs` # [string "test-block.lua"]:354:  expected same values, got nil and table: 0xa9113c840
-test-block.lua::Block::Table::access table foot via property `foot` # [string "test-block.lua"]:384:  expected same values, got nil and LuaTableFoot: 0xa91134f88
-test-block.lua::Block::Table::access table head via property `head` # [string "test-block.lua"]:368:  expected same values, got nil and LuaTableHead: 0xa91134df8
-test-block.lua::Block::Table::bodies field accepts single TableBody # runtime error: expected table of TableBody stack traceback: 	[C]: in function 'Table' 	[string "test-block.lua"]:415: in…
-test-block.lua::Block::Table::caption field accepts list of blocks # [string "test-block.lua"]:400:  expected same values, got nil and table: 0xa9113d200
 test-block.lua::Blocks::Constructor::gives sensible error message # [string "test-block.lua"]:455:  expected error to match pattern 'Block, list of Blocks, or compatible element expected' …
 test-inline.lua::Inline::Code::has property `attr` # [string "test-inline.lua"]:38:  expected values to be equal, got 'Code ("t",[],[("fubar","quux")]) "true"' and 'Code (""…
-test-inline.lua::Inline::Image::has property `caption` of type Inlines # [string "test-inline.lua"]:65:  expected same values, got nil and table: 0x71ac91940
 test-inline.lua::Inline::Math::has property `mathtype` # runtime error: cannot set field 'mathtype' stack traceback: 	[C]: in metamethod 'newindex' 	[string "test-inline.lua"]:1…
 test-inline.lua::Inline::Quoted::has property `quotetype` # runtime error: cannot set field 'quotetype' stack traceback: 	[C]: in metamethod 'newindex' 	[string "test-inline.lua"]:…
 test-inline.lua::Inline::Span::has property `attr` # error converting Lua table to String (expected string or number) stack traceback: 	[C]: in metamethod 'newindex' 	[strin…
@@ -36,17 +34,6 @@ test-inline.lua::marshalling::__toinline metamethod::metamethod __toinline is ca
 test-inline.lua::marshalling::__toinline metamethod::objects can be used as singleton lists # [string "test-inline.lua"]:523:  expected values to be equal, got '[Code ("opn",[],[]) "open access"]' and '[]'
 
 # --- Baseline for the 7 files vendored 2026-07-13 (bd-sgfiiktn) ---
-test-cell.lua::Cell::aliases::attributes # [string "test-cell.lua"]:67: attempt to index a nil value (field 'attributes')
-test-cell.lua::Cell::aliases::classes # [string "test-cell.lua"]:62: attempt to index a LuaCell value (local 'cell')
-test-cell.lua::Cell::aliases::identifier # [string "test-cell.lua"]:57: attempt to index a LuaCell value (local 'cell')
-test-cell.lua::Cell::properties::can modify contents # [string "test-cell.lua"]:30: attempt to index a LuaCell value (local 'cell')
-test-cell.lua::Cell::properties::modify alignment # [string "test-cell.lua"]:35: attempt to index a LuaCell value (local 'cell')
-test-cell.lua::Cell::properties::modify attr # [string "test-cell.lua"]:50: attempt to index a LuaCell value (local 'cell')
-test-cell.lua::Cell::properties::modify col_span # [string "test-cell.lua"]:45: attempt to index a LuaCell value (local 'cell')
-test-cell.lua::Cell::properties::modify row_span # [string "test-cell.lua"]:40: attempt to index a LuaCell value (local 'cell')
-test-cell.lua::Cell::walk::modifies Inline subelements # [string "test-cell.lua"]:76: attempt to call a nil value (method 'walk')
-test-cell.lua::Cell::walk::uses `Inlines` for lists of inlines # [string "test-cell.lua"]:87: attempt to call a nil value (method 'walk')
-test-cell.lua::Cell::walk::uses order Inline -> Inlines -> Block -> Blocks # [string "test-cell.lua"]:98: attempt to call a nil value (method 'walk')
 test-metavalue.lua::MetaValue elements::MetaList elements behave like lists # [string "test-metavalue.lua"]:10: attempt to call a nil value (global 'MetaList')
 test-metavalue.lua::MetaValue elements::Numbers are treated as strings # [string "test-metavalue.lua"]:15: attempt to call a nil value (global 'MetaList')
 test-pandoc.lua::clone::changing the clone does not affect original # [string "test-pandoc.lua"]:54: attempt to call a nil value (global 'Pandoc')
@@ -66,13 +53,3 @@ test-pandoc.lua::walk::truncating topdown traversal works # [string "test-pandoc
 test-pandoc.lua::walk::uses `Meta` function # [string "test-pandoc.lua"]:110: attempt to call a nil value (global 'Pandoc')
 test-simpletable.lua::SimpleTable::can access properties # [string "test-simpletable.lua"]:19: attempt to call a nil value (global 'SimpleTable')
 test-simpletable.lua::SimpleTable::can modify properties # [string "test-simpletable.lua"]:33: attempt to call a nil value (global 'SimpleTable')
-test-table.lua::Row::Constructor::Can be called without arguments # [string "test-table.lua"]:80:  expected values to be equal, got 'LuaRow: 0xb01023918' and 'LuaRow: 0xb01023968'
-test-table.lua::Row::unmarshalling::A list can be used instead # [string "test-table.lua"]:85:  expected values to be equal, got 'LuaTableHead: 0xb01023a58' and 'LuaTableHead: 0xb01023a…
-test-table.lua::TableBody::aliases::attributes # [string "test-table.lua"]:72: attempt to index a nil value (field 'attributes')
-test-table.lua::TableBody::aliases::classes # [string "test-table.lua"]:67: attempt to index a LuaTableBody value (local 'tbl_body')
-test-table.lua::TableBody::aliases::identifier # [string "test-table.lua"]:62: attempt to index a LuaTableBody value (local 'tbl_body')
-test-table.lua::TableBody::Constructor::Table constructor # runtime error: attr identifier must be a string stack traceback: 	[C]: in function 'TableBody' 	[string "test-table.lua"…
-test-table.lua::TableBody::properties::modify attr # [string "test-table.lua"]:55: attempt to index a LuaTableBody value (local 'tbl_body')
-test-table.lua::TableBody::properties::modify body # [string "test-table.lua"]:40: attempt to index a LuaTableBody value (local 'tbl_body')
-test-table.lua::TableBody::properties::modify head # [string "test-table.lua"]:45: attempt to index a LuaTableBody value (local 'tbl_body')
-test-table.lua::TableBody::properties::modify row_head_columns # [string "test-table.lua"]:50: attempt to index a LuaTableBody value (local 'tbl_body')

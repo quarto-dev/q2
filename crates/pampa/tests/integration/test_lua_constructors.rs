@@ -220,8 +220,8 @@ async fn test_caption_constructor() {
 function Para(elem)
     -- Create a caption with short and long forms
     local caption = pandoc.Caption(
-        {pandoc.Str("Short")},  -- short
-        {pandoc.Para{pandoc.Str("Long"), pandoc.Space(), pandoc.Str("caption")}}  -- long
+        {pandoc.Para{pandoc.Str("Long"), pandoc.Space(), pandoc.Str("caption")}},  -- long
+        {pandoc.Str("Short")}  -- short
     )
 
     -- Check short caption
@@ -253,8 +253,7 @@ async fn test_figure_constructor() {
 function Para(elem)
     -- Create a figure with caption
     local caption = pandoc.Caption(
-        nil,  -- no short caption
-        {pandoc.Para{pandoc.Str("Figure caption")}}
+        {pandoc.Para{pandoc.Str("Figure caption")}}  -- long; no short caption
     )
 
     local figure = pandoc.Figure(
@@ -445,7 +444,7 @@ function Para(elem)
     local body = pandoc.TableBody({body_row})
     local foot = pandoc.TableFoot{}
 
-    local caption = pandoc.Caption(nil, {pandoc.Para{pandoc.Str("Table caption")}})
+    local caption = pandoc.Caption({pandoc.Para{pandoc.Str("Table caption")}})
 
     -- Column specs: list of {alignment, width} tuples
     local colspecs = {{pandoc.AlignDefault, pandoc.ColWidthDefault}}

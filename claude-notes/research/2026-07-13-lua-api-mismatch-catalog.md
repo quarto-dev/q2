@@ -122,6 +122,21 @@ Progress log:
   differential **21/21** (orderedlist-la-userdata-mutation). E2e
   byte-identical to pandoc 3.9.0.2.
 
+- **2026-07-13, bd-sgfiiktn S3** (clusters 7/9 table-part halves +
+  the Table-field-marshaling residue): Cell/Row/TableHead/TableFoot/
+  TableBody/Caption are cache-backed typed userdata (properties,
+  attr aliases through a cached LuaAttr, __eq/__tostring/:clone,
+  Cell:walk + Row:walk); peekRowFuzzy/peekCellFuzzy fuzzy forms;
+  Table head/foot/bodies/colspecs round-trips with nested-mutation
+  persistence; bodies accepts a single TableBody; caption accepts
+  bare block lists; Image caption alias. Arg-order parity fixes:
+  TableBody(body, head, rhc, attr), Caption(long, short). Track-1
+  xfail **59 → 30** (29 flips, zero new failures); differential
+  **22/22** (table-parts-nested-mutation). E2e byte-identical to
+  pandoc 3.9.0.2. Version skew recorded: the 3.9.0.2 binary lacks
+  pandoc.TableBody and Cell:clone; contract is pandoc-lua-marshal
+  @ c2dc4e11.
+
 Notes:
 
 - Cluster 1 (`__eq`) masks finer-grained results: once equality works,

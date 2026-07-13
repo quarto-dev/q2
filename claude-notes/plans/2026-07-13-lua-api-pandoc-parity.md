@@ -625,9 +625,40 @@ test exists and breaks, STOP and show it before deleting/updating.
       alias writes: (7, UpperRoman, TwoParens)). E2e: JSON
       byte-identical to pandoc 3.9.0.2, HTML `<ol start="7"
       type="I">` matches.
-- [ ] S3. Cell/TableBody/Row/TableHead/TableFoot property access,
-      aliases, walk; Table bodies/caption peekers (single body,
-      caption fuzzy forms); head/foot/colspecs round-trips.
+- [x] S3. Cell/Row/TableHead/TableFoot/TableBody + Caption — DONE
+      2026-07-13. All six table-part wrappers rebuilt as cache-backed
+      userdata (Rc<RefCell<T>> + PropertyCache, shared
+      `table_part_userdata!` skeleton in constructors.rs): typed
+      properties with eager validated setters, attr +
+      identifier/classes/attributes aliases routed through a cached
+      LuaAttr handle (nested `cell.attributes.k = v` persists),
+      structural `__eq` via synthetic-Table source-free JSON compare,
+      Haskell-show `__tostring`, deep `:clone`, and `Cell:walk`/
+      `Row:walk` via new walk.rs entry points (typewise_cell/row,
+      topdown_cell/row on the existing LuaWalker children map).
+      Fuzzy peekers match pandoc: `peekRowFuzzy` ({attr,cells} pair
+      or bare cell list), `peekCellFuzzy` (named contents/content or
+      bare blocks), strict loud errors elsewhere (non-table row/cell
+      lists, garbage alignments — previously silent defaults).
+      **Two more Pandoc arg-order fixes**: `pandoc.TableBody(body,
+      head, row_head_columns, attr)` (q2 had attr second) and
+      `pandoc.Caption(long, short)` (q2 had short first). Caption is
+      now typed userdata; Table gained head/foot/bodies/colspecs
+      round-trips (cached, nested mutation persists incl. the raw
+      colspecs pairs table); Table bodies accepts a single TableBody;
+      caption accepts bare block lists; Image gained the `caption`
+      alias for content. Version-skew note: pandoc 3.9.0.2 exports
+      neither pandoc.TableBody nor Cell:clone — the contract is
+      pandoc-lua-marshal @ c2dc4e11 (the vendored suite); the
+      differential case only uses binary-supported behaviors.
+      Track-1 xfail 59 → **30** (21 S3a flips + 8 S3b flips, zero new
+      failures; test-cell and test-table now 15/15 and 12/12);
+      differential 21 → **22/22** (new case
+      table-parts-nested-mutation; normalizer strips the `…S`
+      source-info companions on tagged nodes). E2e: normalized JSON
+      byte-identical to pandoc 3.9.0.2 through the real binary; HTML
+      shows all four nested mutations (caption, colspec alignment,
+      head cell, body cell).
 - [ ] S4. pandoc.Pandoc + pandoc.Meta* constructors (needs the
       Meta↔ConfigValue mapping story — catalog F2). **Design
       discussion with Carlos required before implementation**;

@@ -37,9 +37,10 @@ fn differential_dir() -> PathBuf {
 /// - top-level `astContext`,
 /// - the 4th (q2) component of `pandoc-api-version`,
 /// - `s` (source id) and `a` (attr source structure) members of AST
-///   nodes (objects carrying a string `t` tag — meta maps with
-///   user-chosen `s`/`a` keys are not touched because their containers
-///   have no `t` tag),
+///   nodes, plus the `…S` source-info companions (`captionS`, `headS`,
+///   `footS`, `bodiesS`, `targetS`, …) — all on objects carrying a
+///   string `t` tag (meta maps with user-chosen keys are not touched
+///   because their containers have no `t` tag),
 /// - `citationIdS` (citation id source) on citation objects (which
 ///   carry no `t` tag, so they need their own rule; keyed off the
 ///   `citationId` member).
@@ -49,6 +50,7 @@ fn normalize_nodes(v: &mut Json) {
             if map.get("t").is_some_and(|t| t.is_string()) {
                 map.remove("s");
                 map.remove("a");
+                map.retain(|k, _| !(k.len() > 1 && k.ends_with('S')));
             }
             if map.contains_key("citationId") {
                 map.remove("citationIdS");

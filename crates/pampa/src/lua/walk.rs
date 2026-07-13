@@ -97,6 +97,19 @@ async fn walk_rows<W: LuaWalker>(w: &W, rows: Vec<Row>) -> Result<Vec<Row>> {
     Ok(result)
 }
 
+/// Walk the children of a single table Cell (its content blocks) —
+/// pandoc's `walkBlocksAndInlines` on a Cell; the cell itself is not
+/// offered to any filter function.
+async fn walk_cell_children<W: LuaWalker>(
+    w: &W,
+    cell: crate::pandoc::Cell,
+) -> Result<crate::pandoc::Cell> {
+    Ok(crate::pandoc::Cell {
+        content: w.walk_blocks(cell.content).await?,
+        ..cell
+    })
+}
+
 async fn walk_blocks_vec<W: LuaWalker>(w: &W, items: Vec<Vec<Block>>) -> Result<Vec<Vec<Block>>> {
     let mut result = Vec::with_capacity(items.len());
     for item in items {
@@ -486,6 +499,39 @@ pub(crate) async fn typewise_block_element(
     Ok(current)
 }
 
+/// Typewise walk of a table Cell's contents (`Cell:walk`).
+pub(crate) async fn typewise_cell(
+    lua: &Lua,
+    filter: &Table,
+    cell: &crate::pandoc::Cell,
+) -> Result<crate::pandoc::Cell> {
+    let mut current = cell.clone();
+    for mode in ALL_PASSES {
+        if !pass_is_active(filter, mode) {
+            continue;
+        }
+        let pass = TypewisePass { lua, filter, mode };
+        current = walk_cell_children(&pass, current).await?;
+    }
+    Ok(current)
+}
+
+/// Typewise walk of a table Row's cells (`Row:walk`).
+pub(crate) async fn typewise_row(lua: &Lua, filter: &Table, row: &Row) -> Result<Row> {
+    let mut current = row.clone();
+    for mode in ALL_PASSES {
+        if !pass_is_active(filter, mode) {
+            continue;
+        }
+        let pass = TypewisePass { lua, filter, mode };
+        current = walk_rows(&pass, vec![current])
+            .await?
+            .pop()
+            .expect("walk_rows preserves row count");
+    }
+    Ok(current)
+}
+
 /// Typewise walk rooted at an inline ELEMENT: children only.
 pub(crate) async fn typewise_inline_element(
     lua: &Lua,
@@ -619,6 +665,25 @@ pub(crate) async fn topdown_block_element(
 ) -> Result<Block> {
     let walk = TopdownWalk { lua, filter };
     walk_block_children(&walk, block.clone()).await
+}
+
+/// Topdown walk of a table Cell's contents (`Cell:walk`).
+pub(crate) async fn topdown_cell(
+    lua: &Lua,
+    filter: &Table,
+    cell: &crate::pandoc::Cell,
+) -> Result<crate::pandoc::Cell> {
+    let walk = TopdownWalk { lua, filter };
+    walk_cell_children(&walk, cell.clone()).await
+}
+
+/// Topdown walk of a table Row's cells (`Row:walk`).
+pub(crate) async fn topdown_row(lua: &Lua, filter: &Table, row: &Row) -> Result<Row> {
+    let walk = TopdownWalk { lua, filter };
+    walk_rows(&walk, vec![row.clone()])
+        .await?
+        .pop()
+        .ok_or_else(|| mlua::Error::runtime("walk_rows dropped a row"))
 }
 
 pub(crate) async fn topdown_inline_element(

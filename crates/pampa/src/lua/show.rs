@@ -186,12 +186,12 @@ pub fn show_caption(c: &Caption) -> String {
     format!("Caption {short} {long}")
 }
 
-fn show_row(r: &Row) -> String {
+pub fn show_row(r: &Row) -> String {
     let cells: Vec<String> = r.cells.iter().map(show_cell).collect();
     format!("Row {} [{}]", show_attr(&r.attr), cells.join(","))
 }
 
-fn show_cell(c: &Cell) -> String {
+pub fn show_cell(c: &Cell) -> String {
     format!(
         "Cell {} {} (RowSpan {}) (ColSpan {}) {}",
         show_attr(&c.attr),
@@ -207,15 +207,15 @@ fn show_rows(rows: &[Row]) -> String {
     format!("[{}]", shown.join(","))
 }
 
-fn show_table_head(h: &TableHead) -> String {
+pub fn show_table_head(h: &TableHead) -> String {
     format!("TableHead {} {}", show_attr(&h.attr), show_rows(&h.rows))
 }
 
-fn show_table_foot(f: &TableFoot) -> String {
+pub fn show_table_foot(f: &TableFoot) -> String {
     format!("TableFoot {} {}", show_attr(&f.attr), show_rows(&f.rows))
 }
 
-fn show_table_body(b: &TableBody) -> String {
+pub fn show_table_body(b: &TableBody) -> String {
     format!(
         "TableBody {} (RowHeadColumns {}) {} {}",
         show_attr(&b.attr),
