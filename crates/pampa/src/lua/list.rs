@@ -43,6 +43,9 @@ pub fn get_or_create_inlines_metatable(lua: &Lua) -> Result<Table> {
     // Add walk() method for Inlines
     mt.set("walk", create_inlines_walk_method(lua)?)?;
 
+    // Haskell-show tostring, matching Pandoc: `[Str "a",Space]`
+    mt.set("__tostring", create_inlines_tostring_method(lua)?)?;
+
     lua.set_named_registry_value(INLINES_METATABLE_KEY, mt.clone())?;
     Ok(mt)
 }
@@ -59,6 +62,9 @@ pub fn get_or_create_blocks_metatable(lua: &Lua) -> Result<Table> {
 
     // Add walk() method for Blocks
     mt.set("walk", create_blocks_walk_method(lua)?)?;
+
+    // Haskell-show tostring, matching Pandoc: `[Para [Str "p"]]`
+    mt.set("__tostring", create_blocks_tostring_method(lua)?)?;
 
     lua.set_named_registry_value(BLOCKS_METATABLE_KEY, mt.clone())?;
     Ok(mt)
@@ -514,6 +520,23 @@ use super::types::{
     LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_table, peek_blocks_fuzzy,
     peek_inlines_fuzzy, walk_blocks_with_filter, walk_inlines_with_filter,
 };
+
+/// Create the Pandoc-style `__tostring` for Inlines lists
+/// (Haskell-show of the list: `[Str "hello",Space]`, empty → `[]`).
+fn create_inlines_tostring_method(lua: &Lua) -> Result<Function> {
+    lua.create_function(|lua, table: Table| {
+        let inlines = peek_inlines_fuzzy(lua, Value::Table(table))?;
+        Ok(super::show::show_inlines(&inlines))
+    })
+}
+
+/// Create the Pandoc-style `__tostring` for Blocks lists.
+fn create_blocks_tostring_method(lua: &Lua) -> Result<Function> {
+    lua.create_function(|lua, table: Table| {
+        let blocks = peek_blocks_fuzzy(lua, Value::Table(table))?;
+        Ok(super::show::show_blocks(&blocks))
+    })
+}
 
 /// Create walk() method for Inlines lists
 fn create_inlines_walk_method(lua: &Lua) -> Result<Function> {

@@ -335,15 +335,16 @@ end
 
 #[tokio::test]
 async fn test_list_tostring() {
-    // Test __tostring
+    // Test __tostring — Pandoc's Haskell-show format (bd-55mb0rjz):
+    // tostring(inlines) renders like `[Str "test"]`, not the legacy
+    // `Inlines {...}` shape.
     let filter_code = r#"
 function Para(elem)
     local content = elem.content
     local str = tostring(content)
 
-    -- Should start with "Inlines"
-    if not str:match("^Inlines") then
-        error("tostring failed: expected to start with 'Inlines', got " .. str)
+    if str ~= '[Str "test"]' then
+        error("tostring failed: expected '[Str \"test\"]', got " .. str)
     end
 
     return elem

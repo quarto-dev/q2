@@ -23,6 +23,7 @@ mod quarto_doc;
 mod readwrite;
 pub mod runtime;
 pub mod shortcode;
+mod show;
 mod system;
 mod text;
 mod types;

@@ -656,9 +656,23 @@ impl UserData for LuaInline {
         // Note: clone and walk are handled by get_field() rather than add_method()
         // to allow them to capture self in closures for direct function call syntax
 
-        // __tostring for debugging
+        // __tostring: Haskell-show format, matching Pandoc's Lua API
         methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
-            Ok(format!("{}(...)", this.tag_name()))
+            Ok(super::show::show_inline(&this.0.borrow()))
+        });
+
+        // __eq: structural equality ignoring source info, matching
+        // Pandoc (where elements carry no source information at all).
+        methods.add_meta_method(MetaMethod::Eq, |_, this, other: Value| {
+            Ok(match other {
+                Value::UserData(ud) => match ud.borrow::<LuaInline>() {
+                    Ok(other_inline) => {
+                        inline_structurally_eq(&this.0.borrow(), &other_inline.0.borrow())
+                    }
+                    Err(_) => false,
+                },
+                _ => false,
+            })
         });
 
         // __pairs for iteration (for k, v in pairs(elem))
@@ -1226,9 +1240,23 @@ impl UserData for LuaBlock {
         // Note: clone and walk are handled by get_field() rather than add_method()
         // to allow them to capture self in closures for direct function call syntax
 
-        // __tostring for debugging
+        // __tostring: Haskell-show format, matching Pandoc's Lua API
         methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
-            Ok(format!("{}(...)", this.tag_name()))
+            Ok(super::show::show_block(&this.0.borrow()))
+        });
+
+        // __eq: structural equality ignoring source info, matching
+        // Pandoc (where elements carry no source information at all).
+        methods.add_meta_method(MetaMethod::Eq, |_, this, other: Value| {
+            Ok(match other {
+                Value::UserData(ud) => match ud.borrow::<LuaBlock>() {
+                    Ok(other_block) => {
+                        block_structurally_eq(&this.0.borrow(), &other_block.0.borrow())
+                    }
+                    Err(_) => false,
+                },
+                _ => false,
+            })
         });
 
         // __pairs for iteration (for k, v in pairs(elem))
@@ -1597,6 +1625,49 @@ pub fn lua_table_to_meta(lua: &Lua, val: Value) -> Result<crate::pandoc::Meta> {
         }
         _ => Err(Error::runtime("expected table for Meta")),
     }
+}
+
+// ============================================================================
+// Structural equality (Lua `__eq`, strand bd-55mb0rjz)
+//
+// Pandoc's Lua `==` compares the underlying Haskell values, which carry
+// no source information. q2's AST types derive PartialEq *including*
+// `source_info`, so two identically-constructed elements from different
+// filter lines would compare unequal under derived `==`. We therefore
+// compare the source-free Pandoc JSON of both sides, reusing the JSON
+// writer's maintained match logic (`*_to_source_free_json`) instead of
+// hand-maintaining a parallel ~60-variant equality. Derived `==` serves
+// as a fast path (it implies structural equality).
+// ============================================================================
+
+pub(crate) fn inline_structurally_eq(a: &Inline, b: &Inline) -> bool {
+    if a == b {
+        return true;
+    }
+    let ctx = crate::pandoc::ast_context::ASTContext::default();
+    crate::writers::json::inlines_to_source_free_json(&vec![a.clone()], &ctx)
+        == crate::writers::json::inlines_to_source_free_json(&vec![b.clone()], &ctx)
+}
+
+pub(crate) fn block_structurally_eq(a: &Block, b: &Block) -> bool {
+    if a == b {
+        return true;
+    }
+    let ctx = crate::pandoc::ast_context::ASTContext::default();
+    crate::writers::json::blocks_to_source_free_json(std::slice::from_ref(a), &ctx)
+        == crate::writers::json::blocks_to_source_free_json(std::slice::from_ref(b), &ctx)
+}
+
+/// Attr equality, order-sensitive in the attribute list (Pandoc's Attr
+/// attributes are a list of pairs, so order participates in `==`).
+pub(crate) fn attr_structurally_eq(a: &crate::pandoc::Attr, b: &crate::pandoc::Attr) -> bool {
+    a.0 == b.0
+        && a.1 == b.1
+        && a.2.len() == b.2.len()
+        && a.2
+            .iter()
+            .zip(b.2.iter())
+            .all(|((k1, v1), (k2, v2))| k1 == k2 && v1 == v2)
 }
 
 /// Split a string into Inlines, matching Pandoc's `B.text` from pandoc-types Builder.hs.
@@ -2117,14 +2188,24 @@ impl UserData for LuaAttr {
             lua.create_userdata(LuaAttr::new(this.clone_attr()))
         });
 
-        // __tostring for debugging
+        // __tostring: Haskell-show tuple format, matching Pandoc's
+        // Lua API: `("id",["c"],[("k","v")])`
         methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
-            Ok(format!(
-                "Attr({:?}, {:?}, {:?})",
-                this.identifier(),
-                this.classes(),
-                this.attributes()
-            ))
+            Ok(super::show::show_attr(&this.clone_attr()))
+        });
+
+        // __eq: component-wise equality, order-sensitive in the
+        // attribute list (Pandoc's Attr is a list of pairs).
+        methods.add_meta_method(MetaMethod::Eq, |_, this, other: Value| {
+            Ok(match other {
+                Value::UserData(ud) => match ud.borrow::<LuaAttr>() {
+                    Ok(other_attr) => {
+                        attr_structurally_eq(&this.clone_attr(), &other_attr.clone_attr())
+                    }
+                    Err(_) => false,
+                },
+                _ => false,
+            })
         });
 
         // __len returns 3 (for the three components)

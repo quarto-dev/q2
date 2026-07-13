@@ -31,12 +31,30 @@ Pandoc silently drops, consider erroring with a Q-coded diagnostic
 | 11 | **`__toinline`/`__toblock` metamethods.** Not consulted by q2 coercion. | 4+ Track-1 xfails | G | Match Pandoc | bd-olz91r4v |
 | 12 | **Error-message contracts.** Upstream tests pattern-match pandoc's error strings (e.g. `'Inline, list of Inlines, or string'`). q2 wants richer Q-coded diagnostics instead. | 2 Track-1 xfails | H | **Deliberate divergence candidate**: keep q2 messages, ensure they contain the expected *substance*; register + permanently xfail with `# DIVERGENCE` | bd-9p2686pc |
 
+Progress log:
+
+- **2026-07-13, bd-0xghpvij closed** (cluster 8): OrderedList honors
+  ListAttributes. Differential xfail 6 → 5.
+- **2026-07-13, bd-55mb0rjz closed** (clusters 1 + 10): element/list
+  `__eq` (structural, source-info-ignoring, via the JSON writer's
+  source-free serialization) and Haskell-show `tostring`
+  (`crates/pampa/src/lua/show.rs`, formats probed against pandoc
+  3.9.0.2). Track-1 xfail **122 → 64**, zero new failures. The
+  post-fix residue clusters: Attr shapes ~17 (bd-tzwcof0n), List not
+  callable 7 (bd-1fjtodu8), setters 6 (bd-0g2yp61w), missing
+  constructors/peekers ~7 (bd-sgfiiktn), walk semantics ~6 (was
+  masked by eq; revisit strand split when attacking it),
+  content-mutation persistence ~5 (bd-hitjclzp), error-message
+  contracts 2 (bd-9p2686pc), classes-proxy vs List table ~3
+  (bd-tzwcof0n).
+
 Notes:
 
 - Cluster 1 (`__eq`) masks finer-grained results: once equality works,
   some tests will flip to pass and others will reveal second-order
   mismatches. Expect a large xfail churn (in both directions) on that
-  fix — that is the ratchet working as intended.
+  fix — that is the ratchet working as intended. (Confirmed: the fix
+  flipped 58 tests with zero new failure ids.)
 - The `walk`-related tests currently fail via clusters 1 and 6; do not
   file a separate walk strand until those land and the residue is
   visible.
