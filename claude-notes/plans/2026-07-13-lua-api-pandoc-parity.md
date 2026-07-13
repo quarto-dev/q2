@@ -418,9 +418,21 @@ lightly). Both reuse the same corpus format where possible.
       3.9.0.2; structural equality ignores source info via the JSON
       writer's source-free serialization). Track-1 xfail 122 → 64,
       zero new failures; e2e verified against the real pandoc binary.
-- [ ] 2.1 Class D0: content-mutation persistence (the worked
-      example). Requires the cache+readback vs proxy design decision
-      first; coordinate with / likely subsumes bd-195t.
+- [x] 2.1 Class D0: content-mutation persistence — DONE 2026-07-13
+      (bd-hitjclzp closed). hslua-style `PropertyCache` on
+      LuaInline/LuaBlock (types.rs): cacheable properties (`content`,
+      `citations`, `caption`) alias the same Lua table across reads;
+      every marshal-out path (fuzzy peekers, FromLua, all six
+      filter-return handlers, shortcode extraction, clone/walk/
+      __pairs/__eq/__tostring) flushes the cache back through
+      set_field first. Added the missing set_field arms flush needs:
+      BulletList/OrderedList/DefinitionList/LineBlock `content`,
+      Figure/Table `caption` (part of D1). 9 new integration tests
+      (test_lua_content_mutation.rs) incl. nil-return-discards and
+      aliasing; worked example verified byte-identical to pandoc
+      through the real binary. Track-1 xfail 64 → 60; differential
+      5 → 4 (content-insert-inplace passes). bd-195t residue noted:
+      `classes:insert` still detached (bd-tzwcof0n).
 - [ ] 2.2 Class A: filter-return values through fuzzy peekers
       (kills the other big silent-no-op class).
 - [ ] 2.3 Class B: `parse_attr` full Pandoc shape support

@@ -52,6 +52,7 @@ pub mod test_link_destination_linebreak;
 pub mod test_location_health;
 pub mod test_lua_attr_mutation;
 pub mod test_lua_constructors;
+pub mod test_lua_content_mutation;
 pub mod test_lua_list;
 pub mod test_lua_utils;
 pub mod test_math_attr;

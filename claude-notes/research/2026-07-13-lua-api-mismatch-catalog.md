@@ -48,6 +48,14 @@ Progress log:
   contracts 2 (bd-9p2686pc), classes-proxy vs List table ~3
   (bd-tzwcof0n).
 
+- **2026-07-13, bd-hitjclzp closed** (cluster 4 + part of 5):
+  hslua-style property cache+readback. `div.content:insert(x)` and
+  friends persist; reads alias; flush happens at every marshal-out.
+  Also added the list-shaped-block `content` setters and Figure/Table
+  `caption` setters (cluster 5 partial). Track-1 xfail **64 → 60**,
+  differential 5 → 4. Remaining known mutation gap:
+  `attr.classes:insert` (classes proxy, → bd-tzwcof0n).
+
 Notes:
 
 - Cluster 1 (`__eq`) masks finer-grained results: once equality works,

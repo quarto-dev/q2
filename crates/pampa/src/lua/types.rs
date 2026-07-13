@@ -30,13 +30,117 @@ use crate::pandoc::{Block, Inline};
 /// `FromLua` and the `clone()` Lua method each produce a fresh,
 /// independent cell (deep-clone of the inner value) to preserve today's
 /// per-invocation isolation semantics across filter boundaries.
+/// hslua-style property cache (bd-hitjclzp).
+///
+/// Pandoc's Lua bridge caches every pushed property value in the
+/// userdata's uservalue: repeated reads of `div.content` alias the
+/// *same* Lua table, and marshaling the element back to the host
+/// re-reads ("flushes") the cached values through the property
+/// setters. That is what makes the idiomatic in-place mutation
+/// pattern — `div.content:insert(x); return div` — actually persist.
+///
+/// q2 replicates this with a per-element cache mapping property name →
+/// the exact Lua value handed out. Only properties on the
+/// [`is_cacheable_property`] allowlist participate (they need reliable
+/// setters for the flush); everything else keeps snapshot semantics.
+/// Clones of the userdata share the cache (they also share the value
+/// cell), so aliasing stays consistent.
+///
+/// The cached [`Value`] handles keep their Lua values alive from Rust;
+/// they are released when the userdata is collected (drop chain), so
+/// no uncollectable cycle survives the element itself.
+#[derive(Debug, Clone, Default)]
+pub struct PropertyCache(Rc<RefCell<PropertyCacheInner>>);
+
+#[derive(Debug, Default)]
+struct PropertyCacheInner {
+    /// Reentrancy guard: a flush that (pathologically) reaches itself
+    /// again — e.g. an element inserted into its own content — treats
+    /// the inner occurrence as a snapshot instead of recursing forever.
+    flushing: bool,
+    entries: Vec<(String, Value)>,
+}
+
+impl PropertyCache {
+    fn get(&self, key: &str) -> Option<Value> {
+        self.0
+            .borrow()
+            .entries
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+    }
+
+    fn store(&self, key: &str, value: &Value) {
+        let mut inner = self.0.borrow_mut();
+        if let Some(slot) = inner.entries.iter_mut().find(|(k, _)| k == key) {
+            slot.1 = value.clone();
+        } else {
+            inner.entries.push((key.to_string(), value.clone()));
+        }
+    }
+
+    fn remove(&self, key: &str) {
+        self.0.borrow_mut().entries.retain(|(k, _)| k != key);
+    }
+
+    /// Start a flush: returns the entries to write back, or `None`
+    /// when there is nothing to do (empty, or already flushing).
+    fn begin_flush(&self) -> Option<Vec<(String, Value)>> {
+        let mut inner = self.0.borrow_mut();
+        if inner.flushing || inner.entries.is_empty() {
+            return None;
+        }
+        inner.flushing = true;
+        Some(inner.entries.clone())
+    }
+
+    fn end_flush(&self) {
+        self.0.borrow_mut().flushing = false;
+    }
+}
+
+/// Properties that participate in hslua-style caching. Each needs a
+/// reliable `set_field` implementation on every element that exposes
+/// it, because the flush writes the cached value back through it.
+fn is_cacheable_property(key: &str) -> bool {
+    matches!(key, "content" | "citations" | "caption")
+}
+
 #[derive(Debug, Clone)]
-pub struct LuaInline(pub Rc<RefCell<Inline>>);
+pub struct LuaInline(pub Rc<RefCell<Inline>>, pub PropertyCache);
 
 impl LuaInline {
     /// Construct a `LuaInline` around a freshly-owned `Inline` in a new cell.
     pub fn new(inline: Inline) -> Self {
-        LuaInline(Rc::new(RefCell::new(inline)))
+        LuaInline(Rc::new(RefCell::new(inline)), PropertyCache::default())
+    }
+
+    /// Write cached property values back into the inner cell (hslua
+    /// "readback" semantics — see [`PropertyCache`]). Idempotent; call
+    /// before any read of the inner value that must observe in-place
+    /// mutations made through previously handed-out property tables.
+    pub fn flush_property_cache(&self, lua: &Lua) -> Result<()> {
+        let entries = match self.1.begin_flush() {
+            Some(entries) => entries,
+            None => return Ok(()),
+        };
+        let mut result = Ok(());
+        for (key, value) in entries {
+            if let Err(e) = self.set_field(&key, value, lua) {
+                result = Err(e);
+                break;
+            }
+        }
+        self.1.end_flush();
+        result
+    }
+
+    /// Flush, then deep-clone the inner `Inline` — the blessed way to
+    /// marshal a `LuaInline` back into a Rust AST value.
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<Inline> {
+        self.flush_property_cache(lua)?;
+        Ok(self.0.borrow().clone())
     }
 
     /// Borrow the inner `Inline` immutably.
@@ -192,6 +296,7 @@ impl LuaInline {
                 // Snapshot the inner inline at .clone-access time (matching
                 // pre-refactor behavior). Each invocation of the returned
                 // function produces an independent LuaInline (new cell).
+                self.flush_property_cache(lua)?;
                 let snapshot = self.0.borrow().clone();
                 return lua
                     .create_function(move |lua, ()| {
@@ -205,6 +310,7 @@ impl LuaInline {
                         |lua, (ud, filter_table): (UserDataRef<LuaInline>, Table)| async move {
                             // Snapshot to an owned Inline before awaiting so
                             // we don't hold a RefCell borrow across the await.
+                            ud.flush_property_cache(&lua)?;
                             let snapshot = ud.0.borrow().clone();
                             let filtered =
                                 walk_inline_with_filter(&lua, &snapshot, &filter_table).await?;
@@ -640,9 +746,18 @@ impl UserData for LuaInline {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        // Dynamic field access via __index
+        // Dynamic field access via __index. Cacheable container
+        // properties return the SAME Lua table on repeated reads
+        // (hslua aliasing semantics — see PropertyCache).
         methods.add_meta_method(MetaMethod::Index, |lua, this, key: String| {
-            this.get_field(lua, &key)
+            if let Some(cached) = this.1.get(&key) {
+                return Ok(cached);
+            }
+            let value = this.get_field(lua, &key)?;
+            if is_cacheable_property(&key) && matches!(value, Value::Table(_)) {
+                this.1.store(&key, &value);
+            }
+            Ok(value)
         });
 
         // Dynamic field assignment via __newindex. Now uses add_meta_method
@@ -650,23 +765,39 @@ impl UserData for LuaInline {
         // `LuaInline.0`; set_field takes `&self`.
         methods.add_meta_method(
             MetaMethod::NewIndex,
-            |lua, this, (key, val): (String, Value)| this.set_field(&key, val, lua),
+            |lua, this, (key, val): (String, Value)| {
+                this.set_field(&key, val.clone(), lua)?;
+                // Keep the assigned value aliased (hslua caches the
+                // set value too); non-table assignments just drop any
+                // stale cache entry.
+                if is_cacheable_property(&key) {
+                    if matches!(val, Value::Table(_)) {
+                        this.1.store(&key, &val);
+                    } else {
+                        this.1.remove(&key);
+                    }
+                }
+                Ok(())
+            },
         );
 
         // Note: clone and walk are handled by get_field() rather than add_method()
         // to allow them to capture self in closures for direct function call syntax
 
         // __tostring: Haskell-show format, matching Pandoc's Lua API
-        methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
+        methods.add_meta_method(MetaMethod::ToString, |lua, this, ()| {
+            this.flush_property_cache(lua)?;
             Ok(super::show::show_inline(&this.0.borrow()))
         });
 
         // __eq: structural equality ignoring source info, matching
         // Pandoc (where elements carry no source information at all).
-        methods.add_meta_method(MetaMethod::Eq, |_, this, other: Value| {
+        methods.add_meta_method(MetaMethod::Eq, |lua, this, other: Value| {
             Ok(match other {
                 Value::UserData(ud) => match ud.borrow::<LuaInline>() {
                     Ok(other_inline) => {
+                        this.flush_property_cache(lua)?;
+                        other_inline.flush_property_cache(lua)?;
                         inline_structurally_eq(&this.0.borrow(), &other_inline.0.borrow())
                     }
                     Err(_) => false,
@@ -682,6 +813,7 @@ impl UserData for LuaInline {
             // to the original during iteration are not observed — this also
             // avoids RefCell borrow conflicts if the filter mutates while
             // iterating.
+            this.flush_property_cache(lua)?;
             let snapshot = this.0.borrow().clone();
 
             // Create the iterator function following Lua's next() semantics:
@@ -795,12 +927,39 @@ impl UserData for LuaSourceInfo {
 /// ownership of the same cell and propagate writes back. See
 /// `claude-notes/plans/2026-04-21-lua-attr-mutation-proxy.md`.
 #[derive(Debug, Clone)]
-pub struct LuaBlock(pub Rc<RefCell<Block>>);
+pub struct LuaBlock(pub Rc<RefCell<Block>>, pub PropertyCache);
 
 impl LuaBlock {
     /// Construct a `LuaBlock` around a freshly-owned `Block` in a new cell.
     pub fn new(block: Block) -> Self {
-        LuaBlock(Rc::new(RefCell::new(block)))
+        LuaBlock(Rc::new(RefCell::new(block)), PropertyCache::default())
+    }
+
+    /// Write cached property values back into the inner cell (hslua
+    /// "readback" semantics — see [`PropertyCache`]). Idempotent; call
+    /// before any read of the inner value that must observe in-place
+    /// mutations made through previously handed-out property tables.
+    pub fn flush_property_cache(&self, lua: &Lua) -> Result<()> {
+        let entries = match self.1.begin_flush() {
+            Some(entries) => entries,
+            None => return Ok(()),
+        };
+        let mut result = Ok(());
+        for (key, value) in entries {
+            if let Err(e) = self.set_field(&key, value, lua) {
+                result = Err(e);
+                break;
+            }
+        }
+        self.1.end_flush();
+        result
+    }
+
+    /// Flush, then deep-clone the inner `Block` — the blessed way to
+    /// marshal a `LuaBlock` back into a Rust AST value.
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<Block> {
+        self.flush_property_cache(lua)?;
+        Ok(self.0.borrow().clone())
     }
 
     /// Borrow the inner `Block` immutably.
@@ -929,6 +1088,7 @@ impl LuaBlock {
                 return lua.create_userdata(LuaSourceInfo::new(si))?.into_lua(lua);
             }
             "clone" => {
+                self.flush_property_cache(lua)?;
                 let snapshot = self.0.borrow().clone();
                 return lua
                     .create_function(move |lua, ()| {
@@ -940,6 +1100,7 @@ impl LuaBlock {
                 return lua
                     .create_async_function(
                         |lua, (ud, filter_table): (UserDataRef<LuaBlock>, Table)| async move {
+                            ud.flush_property_cache(&lua)?;
                             let snapshot = ud.0.borrow().clone();
                             let filtered =
                                 walk_block_with_filter(&lua, &snapshot, &filter_table).await?;
@@ -1146,6 +1307,35 @@ impl LuaBlock {
                 f.content = peek_blocks_fuzzy(lua, val)?;
                 Ok(())
             }
+            (Block::Figure(f), "caption") => {
+                f.caption = super::constructors::parse_caption(lua, Some(val))?;
+                Ok(())
+            }
+            (Block::Table(t), "caption") => {
+                t.caption = super::constructors::parse_caption(lua, Some(val))?;
+                Ok(())
+            }
+
+            // List-shaped blocks: `content` assignment re-parses the
+            // items the same way the constructors do (Pandoc's
+            // setBlockContent re-projection semantics; also required
+            // by the PropertyCache flush).
+            (Block::BulletList(b), "content") => {
+                b.content = super::constructors::parse_list_items(lua, val)?;
+                Ok(())
+            }
+            (Block::OrderedList(o), "content") => {
+                o.content = super::constructors::parse_list_items(lua, val)?;
+                Ok(())
+            }
+            (Block::DefinitionList(d), "content") => {
+                d.content = super::constructors::parse_definition_list_items(lua, val)?;
+                Ok(())
+            }
+            (Block::LineBlock(l), "content") => {
+                l.content = super::constructors::parse_line_block_content(lua, val)?;
+                Ok(())
+            }
             (Block::Figure(f), "identifier") => {
                 f.attr.0 = String::from_lua(val, lua)?;
                 Ok(())
@@ -1224,9 +1414,18 @@ impl UserData for LuaBlock {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        // Dynamic field access via __index
+        // Dynamic field access via __index. Cacheable container
+        // properties return the SAME Lua table on repeated reads
+        // (hslua aliasing semantics — see PropertyCache).
         methods.add_meta_method(MetaMethod::Index, |lua, this, key: String| {
-            this.get_field(lua, &key)
+            if let Some(cached) = this.1.get(&key) {
+                return Ok(cached);
+            }
+            let value = this.get_field(lua, &key)?;
+            if is_cacheable_property(&key) && matches!(value, Value::Table(_)) {
+                this.1.store(&key, &value);
+            }
+            Ok(value)
         });
 
         // Dynamic field assignment via __newindex. Uses add_meta_method
@@ -1234,23 +1433,39 @@ impl UserData for LuaBlock {
         // `LuaBlock.0`; set_field takes `&self`.
         methods.add_meta_method(
             MetaMethod::NewIndex,
-            |lua, this, (key, val): (String, Value)| this.set_field(&key, val, lua),
+            |lua, this, (key, val): (String, Value)| {
+                this.set_field(&key, val.clone(), lua)?;
+                // Keep the assigned value aliased (hslua caches the
+                // set value too); non-table assignments just drop any
+                // stale cache entry.
+                if is_cacheable_property(&key) {
+                    if matches!(val, Value::Table(_)) {
+                        this.1.store(&key, &val);
+                    } else {
+                        this.1.remove(&key);
+                    }
+                }
+                Ok(())
+            },
         );
 
         // Note: clone and walk are handled by get_field() rather than add_method()
         // to allow them to capture self in closures for direct function call syntax
 
         // __tostring: Haskell-show format, matching Pandoc's Lua API
-        methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
+        methods.add_meta_method(MetaMethod::ToString, |lua, this, ()| {
+            this.flush_property_cache(lua)?;
             Ok(super::show::show_block(&this.0.borrow()))
         });
 
         // __eq: structural equality ignoring source info, matching
         // Pandoc (where elements carry no source information at all).
-        methods.add_meta_method(MetaMethod::Eq, |_, this, other: Value| {
+        methods.add_meta_method(MetaMethod::Eq, |lua, this, other: Value| {
             Ok(match other {
                 Value::UserData(ud) => match ud.borrow::<LuaBlock>() {
                     Ok(other_block) => {
+                        this.flush_property_cache(lua)?;
+                        other_block.flush_property_cache(lua)?;
                         block_structurally_eq(&this.0.borrow(), &other_block.0.borrow())
                     }
                     Err(_) => false,
@@ -1261,6 +1476,7 @@ impl UserData for LuaBlock {
 
         // __pairs for iteration (for k, v in pairs(elem))
         methods.add_meta_method(MetaMethod::Pairs, |lua, this, ()| {
+            this.flush_property_cache(lua)?;
             let snapshot = this.0.borrow().clone();
 
             // Create the iterator function following Lua's next() semantics:
@@ -1751,7 +1967,7 @@ pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
         }
         Value::UserData(ud) => {
             if let Ok(lua_inline) = ud.borrow::<LuaInline>() {
-                Ok(lua_inline.clone_inline())
+                lua_inline.extract_flushed(lua)
             } else {
                 Err(Error::runtime(
                     "expected Inline userdata, string, or Inline-like value",
@@ -1787,7 +2003,7 @@ pub fn peek_inlines_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Inline>> {
         }
         Value::UserData(ud) => {
             if let Ok(lua_inline) = ud.borrow::<LuaInline>() {
-                Ok(vec![lua_inline.clone_inline()])
+                Ok(vec![lua_inline.extract_flushed(lua)?])
             } else {
                 Err(Error::runtime(
                     "expected Inline, list of Inlines, or string",
@@ -1811,7 +2027,7 @@ pub fn peek_block_fuzzy(lua: &Lua, val: Value) -> Result<Block> {
     match &val {
         Value::UserData(ud) => {
             if let Ok(lua_block) = ud.borrow::<LuaBlock>() {
-                return Ok(lua_block.clone_block());
+                return lua_block.extract_flushed(lua);
             }
             // Not a block — fall through to inlines coercion
             let inlines = peek_inlines_fuzzy(lua, val)?;
@@ -1853,7 +2069,7 @@ pub fn peek_blocks_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Block>> {
         }
         Value::UserData(ud) => {
             if let Ok(lua_block) = ud.borrow::<LuaBlock>() {
-                return Ok(vec![lua_block.clone_block()]);
+                return Ok(vec![lua_block.extract_flushed(lua)?]);
             }
             // Not a block — try inlines coercion
             let inlines = peek_inlines_fuzzy(lua, val)?;
@@ -2660,14 +2876,14 @@ pub fn classes_proxy_for_inline(lua: &Lua, inline: Rc<RefCell<Inline>>) -> Resul
 use mlua::FromLua;
 
 impl FromLua for LuaInline {
-    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         match value {
             Value::UserData(ud) => {
                 let lua_inline = ud.borrow::<LuaInline>()?;
                 // Deep-clone the inner Inline into a fresh cell. This preserves
                 // pre-refactor semantics: FromLua produces an independent
                 // LuaInline, not a shared alias of the source cell.
-                Ok(LuaInline::new(lua_inline.0.borrow().clone()))
+                Ok(LuaInline::new(lua_inline.extract_flushed(lua)?))
             }
             _ => Err(Error::runtime("expected Inline userdata")),
         }
@@ -2675,12 +2891,12 @@ impl FromLua for LuaInline {
 }
 
 impl FromLua for LuaBlock {
-    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         match value {
             Value::UserData(ud) => {
                 let lua_block = ud.borrow::<LuaBlock>()?;
                 // Deep-clone the inner Block into a fresh cell.
-                Ok(LuaBlock::new(lua_block.0.borrow().clone()))
+                Ok(LuaBlock::new(lua_block.extract_flushed(lua)?))
             }
             _ => Err(Error::runtime("expected Block userdata")),
         }

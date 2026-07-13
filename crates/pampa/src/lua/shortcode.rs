@@ -445,16 +445,16 @@ fn register_shortcode_api(lua: &Lua) -> Result<()> {
 }
 
 /// Convert a Lua return value to a LuaShortcodeResult.
-fn convert_return_value(_lua: &Lua, ret: Value) -> LuaShortcodeResult {
+fn convert_return_value(lua: &Lua, ret: Value) -> LuaShortcodeResult {
     match ret {
         Value::Nil => LuaShortcodeResult::Error("Shortcode returned nil".to_string()),
         Value::String(s) => {
             LuaShortcodeResult::Text(s.to_str().map(|s| s.to_string()).unwrap_or_default())
         }
         Value::UserData(ud) => {
-            if let Ok(inline) = extract_lua_inline(&ud) {
+            if let Ok(inline) = extract_lua_inline(lua, &ud) {
                 LuaShortcodeResult::Inlines(vec![inline])
-            } else if let Ok(block) = extract_lua_block(&ud) {
+            } else if let Ok(block) = extract_lua_block(lua, &ud) {
                 LuaShortcodeResult::Blocks(vec![block])
             } else {
                 LuaShortcodeResult::Error(
@@ -462,13 +462,13 @@ fn convert_return_value(_lua: &Lua, ret: Value) -> LuaShortcodeResult {
                 )
             }
         }
-        Value::Table(table) => classify_table_result(&table),
+        Value::Table(table) => classify_table_result(lua, &table),
         _ => LuaShortcodeResult::Error("Shortcode returned unsupported type".to_string()),
     }
 }
 
 /// Classify a table return as Inlines or Blocks.
-fn classify_table_result(table: &mlua::Table) -> LuaShortcodeResult {
+fn classify_table_result(lua: &Lua, table: &mlua::Table) -> LuaShortcodeResult {
     let len = table.raw_len();
     if len == 0 {
         return LuaShortcodeResult::Inlines(vec![]);
@@ -481,9 +481,9 @@ fn classify_table_result(table: &mlua::Table) -> LuaShortcodeResult {
     for i in 1..=len {
         let value: std::result::Result<Value, _> = table.get(i);
         if let Ok(Value::UserData(ud)) = value {
-            if let Ok(inline) = extract_lua_inline(&ud) {
+            if let Ok(inline) = extract_lua_inline(lua, &ud) {
                 inlines.push(inline);
-            } else if let Ok(block) = extract_lua_block(&ud) {
+            } else if let Ok(block) = extract_lua_block(lua, &ud) {
                 has_blocks = true;
                 blocks.push(block);
             }

@@ -795,7 +795,7 @@ fn parse_attr(_lua: &Lua, attr: Option<Value>) -> Result<crate::pandoc::Attr> {
 }
 
 /// Parse list items (each item is a list of blocks)
-fn parse_list_items(lua: &Lua, items: Value) -> Result<Vec<Vec<Block>>> {
+pub(crate) fn parse_list_items(lua: &Lua, items: Value) -> Result<Vec<Vec<Block>>> {
     match items {
         Value::Table(table) => {
             let mut result = Vec::new();
@@ -869,7 +869,7 @@ fn parse_single_citation(lua: &Lua, val: Value) -> Result<Citation> {
 }
 
 /// Parse definition list items: list of {term, definitions}
-fn parse_definition_list_items(
+pub(crate) fn parse_definition_list_items(
     lua: &Lua,
     val: Value,
 ) -> Result<Vec<(Vec<Inline>, Vec<Vec<Block>>)>> {
@@ -897,7 +897,7 @@ fn parse_definition_list_items(
 }
 
 /// Parse line block content: list of lines (each line is a list of inlines)
-fn parse_line_block_content(lua: &Lua, val: Value) -> Result<Vec<Vec<Inline>>> {
+pub(crate) fn parse_line_block_content(lua: &Lua, val: Value) -> Result<Vec<Vec<Inline>>> {
     match val {
         Value::Table(table) => {
             let mut result = Vec::new();
@@ -913,7 +913,7 @@ fn parse_line_block_content(lua: &Lua, val: Value) -> Result<Vec<Vec<Inline>>> {
 }
 
 /// Parse Caption from Lua value
-fn parse_caption(lua: &Lua, val: Option<Value>) -> Result<Caption> {
+pub(crate) fn parse_caption(lua: &Lua, val: Option<Value>) -> Result<Caption> {
     match val {
         None | Some(Value::Nil) => Ok(Caption {
             short: None,
