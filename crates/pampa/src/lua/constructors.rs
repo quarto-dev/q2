@@ -634,15 +634,19 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     // pandoc.OrderedList(items, listattributes?)
     pandoc.set(
         "OrderedList",
-        lua.create_function(|lua, (items, _list_attr): (Value, Option<Value>)| {
+        lua.create_function(|lua, (items, list_attr): (Value, Option<Value>)| {
             let content = parse_list_items(lua, items)?;
-            lua.create_userdata(LuaBlock::new(Block::OrderedList(OrderedList {
-                content,
-                attr: (
-                    1, // start
+            let attr = match list_attr {
+                Some(v) => parse_list_attributes(v)?,
+                None => (
+                    1,
                     crate::pandoc::ListNumberStyle::Default,
                     crate::pandoc::ListNumberDelim::Default,
                 ),
+            };
+            lua.create_userdata(LuaBlock::new(Block::OrderedList(OrderedList {
+                content,
+                attr,
                 source_info: filter_source_info(lua),
             })))
         })?,

@@ -523,8 +523,14 @@ function Para(elem)
         error("Expected OrderedList tag, got " .. tostring(list.tag))
     end
 
-    -- The list should have the attributes we specified
-    -- Note: accessing listAttributes may vary based on implementation
+    -- The list must carry the attributes we specified (bd-0xghpvij:
+    -- the constructor used to silently discard its second argument)
+    if list.start ~= 10 then
+        error("Expected start 10, got " .. tostring(list.start))
+    end
+    if list.style ~= "UpperAlpha" then
+        error("Expected style UpperAlpha, got " .. tostring(list.style))
+    end
 
     return elem
 end

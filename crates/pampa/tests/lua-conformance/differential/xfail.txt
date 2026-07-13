@@ -1,10 +1,9 @@
 # Lua differential expected failures (Track 2) — see ../README.md ratchet semantics.
 # Format: <case-name>  [# reason / class / strand]
-# Baseline 2026-07-13: 8 cases, 2 pass, 6 xfail (strand bd-grkrb9nj).
+# Baseline 2026-07-13: 8 cases, 3 pass, 5 xfail (orderedlist-listattributes fixed 2026-07-13, bd-0xghpvij) (strand bd-grkrb9nj).
 
 attr-html-like-map           # Class B2: parse_attr ignores {id=, class=, k=v} map -> empty attr
 attr-positional-triple       # Class B1: parse_attr ignores positional {id, classes, kv} triple -> empty attr
 content-insert-inplace       # Class D0: div.content returns detached copy; :insert silently discarded
 filter-return-mixed-table    # Class A2: non-userdata entries in returned tables silently dropped
 filter-return-string         # Class A1: bare-string filter return silently ignored
-orderedlist-listattributes   # Class C1: OrderedList discards its ListAttributes argument
