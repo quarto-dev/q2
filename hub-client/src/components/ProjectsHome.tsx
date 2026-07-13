@@ -90,6 +90,16 @@ const UNNAMED_RE = /^Project \d{4}-\d{2}-\d{2}T/;
 /** Set to '1' once the user opts out of the shared-collection move warning. */
 const MOVE_WARNING_KEY = 'qh-collection-move-warning-dismissed';
 
+/** Fork glyph for the duplicate affordance (three nodes, branch lines). */
+const forkIcon = (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="6" cy="5" r="2.2" stroke="currentColor" strokeWidth="2" />
+    <circle cx="18" cy="5" r="2.2" stroke="currentColor" strokeWidth="2" />
+    <circle cx="12" cy="19" r="2.2" stroke="currentColor" strokeWidth="2" />
+    <path d="M6 7.5v1.5c0 1.7 1.3 3 3 3h6c1.7 0 3-1.3 3-3V7.5M12 12v4.5" stroke="currentColor" strokeWidth="2" />
+  </svg>
+);
+
 /** Base64-encode without blowing the arg-spread limit on large files. */
 function toBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -483,19 +493,34 @@ export default function ProjectsHome({
 
   // Which project is being duplicated (background connect + re-create)
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  // Duplicate dialog state: the fork source plus editable name/destination
+  const [duplicateFor, setDuplicateFor] = useState<ProjectItem | null>(null);
+  const [duplicateName, setDuplicateName] = useState('');
+  const [duplicateCollectionId, setDuplicateCollectionId] = useState('');
+
+  /** Open the duplicate (fork) dialog: name prefilled with "(copy)",
+   * destination defaulting to the source's collection. */
+  const openDuplicateDialog = useCallback((item: ProjectItem) => {
+    setDuplicateFor(item);
+    setDuplicateName(`${item.description} (copy)`);
+    setDuplicateCollectionId(collectionOf(item.indexDocId)?.id ?? '');
+    setFormError(null);
+    closeAllMenus();
+  }, [collectionOf, closeAllMenus]);
 
   /**
-   * Duplicate a project: background-connect to the source, read every file
-   * (text and binary), and feed them through the same creation path new
-   * projects use. The copy keeps the source's collection placement via the
-   * pending-assignment mechanism (the new doc id isn't known until the
-   * parent finishes creating it).
+   * Duplicate (fork) a project: background-connect to the source, read every
+   * file (text and binary), and feed them through the same creation path new
+   * projects use — fresh documents, no history carried over. The chosen
+   * collection is applied via the pending-assignment mechanism (the new doc
+   * id isn't known until the parent finishes creating it).
    */
-  const handleDuplicate = useCallback(async (item: ProjectItem) => {
-    if (duplicatingId || exportingId) return;
+  const handleDuplicate = useCallback(async () => {
+    if (!duplicateFor || duplicatingId || exportingId || !duplicateName.trim()) return;
+    const item = duplicateFor;
+    const title = duplicateName.trim();
     setDuplicatingId(item.indexDocId);
     setFormError(null);
-    const copyTitle = `${item.description} (copy)`;
     try {
       const files = await connect(resolveSyncServerUrl(item.syncServer), item.indexDocId);
       const projectFiles: ProjectFile[] = [];
@@ -517,20 +542,19 @@ export default function ProjectsHome({
         return;
       }
       await disconnect();
-      const sourceCollection = collectionOf(item.indexDocId);
-      if (sourceCollection) {
-        setPendingCollectionAssignment(copyTitle, sourceCollection.id);
+      if (duplicateCollectionId) {
+        setPendingCollectionAssignment(title, duplicateCollectionId);
       }
-      onProjectCreated?.(projectFiles, copyTitle, 'duplicate', item.syncServer);
+      setDuplicateFor(null);
+      onProjectCreated?.(projectFiles, title, 'duplicate', item.syncServer);
     } catch (err) {
       console.error('Duplicate failed:', err);
       setFormError(err instanceof Error ? `Duplicate failed: ${err.message}` : 'Duplicate failed.');
       try { await disconnect(); } catch { /* connection already down */ }
     } finally {
       setDuplicatingId(null);
-      closeAllMenus();
     }
-  }, [duplicatingId, exportingId, collectionOf, onProjectCreated, closeAllMenus]);
+  }, [duplicateFor, duplicateName, duplicateCollectionId, duplicatingId, exportingId, onProjectCreated]);
 
   const handleRemove = useCallback((item: ProjectItem) => {
     closeAllMenus();
@@ -879,10 +903,10 @@ export default function ProjectsHome({
       <button
         className="ph-menu-item"
         disabled={!!duplicatingId}
-        onClick={(e) => { e.stopPropagation(); handleDuplicate(item); }}
+        onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
       >
-        {duplicatingId === item.indexDocId ? 'Duplicating…' : 'Duplicate'}
-        <span className="ph-menu-subtext">New copy named "{item.description} (copy)"</span>
+        Duplicate
+        <span className="ph-menu-subtext">Fork a fresh copy — no history carried over</span>
       </button>
       <button
         className="ph-menu-item"
@@ -1135,17 +1159,27 @@ export default function ProjectsHome({
             : renderFacepile(collaboratorsFor(item.indexDocId), 'sm')}
         </span>
       </button>
-      <button
-        className="ph-card-menu-btn"
-        title="Project actions"
-        onClick={(e) => {
-          e.stopPropagation();
-          setMoveSubmenuOpen(false);
-          setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
-        }}
-      >
-        ⋯
-      </button>
+      <span className="ph-card-actions">
+        <button
+          className="ph-fork-btn"
+          title={`Duplicate "${item.description}" (fork a fresh copy)`}
+          disabled={!!duplicatingId}
+          onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
+        >
+          {forkIcon}
+        </button>
+        <button
+          className="ph-card-menu-btn"
+          title="Project actions"
+          onClick={(e) => {
+            e.stopPropagation();
+            setMoveSubmenuOpen(false);
+            setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
+          }}
+        >
+          ⋯
+        </button>
+      </span>
       {openMenu === item.indexDocId && renderProjectMenu(item)}
       {peekFor === item.indexDocId && renderPeek(item)}
     </div>
@@ -1542,6 +1576,14 @@ export default function ProjectsHome({
                         opened {formatOpened(item.lastAccessed)}
                       </span>
                       <button
+                        className="ph-icon-btn ph-fork-btn"
+                        title={`Duplicate "${item.description}" (fork a fresh copy)`}
+                        disabled={!!duplicatingId}
+                        onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
+                      >
+                        {forkIcon}
+                      </button>
+                      <button
                         className="ph-icon-btn ph-row-menu-btn"
                         title="Project actions"
                         onClick={(e) => {
@@ -1562,6 +1604,51 @@ export default function ProjectsHome({
           </>
         )}
       </main>
+
+      {/* Duplicate (fork) */}
+      {duplicateFor && (
+        <div className="ph-dialog-backdrop" onMouseDown={() => { if (!duplicatingId) setDuplicateFor(null); }}>
+          <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
+            <h2>Duplicate "{duplicateFor.description}"</h2>
+            <p className="ph-dialog-hint">
+              A fresh copy of all {duplicateFor.summary ? `${duplicateFor.summary.fileCount} ` : ''}files — no
+              edit history carries over.
+            </p>
+            {formError && <div className="ph-error inline">{formError}</div>}
+            <form onSubmit={(e) => { e.preventDefault(); handleDuplicate(); }}>
+              <label className="ph-field-label" htmlFor="ph-dup-name">Name</label>
+              <input
+                id="ph-dup-name"
+                className="ph-input focus-accent"
+                value={duplicateName}
+                onChange={(e) => setDuplicateName(e.target.value)}
+                autoFocus
+                onFocus={(e) => e.target.select()}
+              />
+              <label className="ph-field-label" htmlFor="ph-dup-collection">Add to collection</label>
+              <select
+                id="ph-dup-collection"
+                className="ph-input"
+                value={duplicateCollectionId}
+                onChange={(e) => setDuplicateCollectionId(e.target.value)}
+              >
+                <option value="">No collection</option>
+                {collections.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <div className="ph-dialog-actions">
+                <button type="button" className="ph-btn outline" disabled={!!duplicatingId} onClick={() => setDuplicateFor(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="ph-btn primary" disabled={!!duplicatingId || !duplicateName.trim()}>
+                  {duplicatingId ? 'Duplicating…' : 'Duplicate'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* New collection */}
       {newCollectionDialog && (

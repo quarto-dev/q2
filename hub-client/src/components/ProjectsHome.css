@@ -127,7 +127,7 @@
 .ph-btn.danger:hover { filter: brightness(1.1); }
 
 .ph-btn.ghost-accent {
-  border: 1px dashed var(--posit-teal);
+  border: 1px solid var(--posit-teal);
   color: var(--posit-teal);
   font-size: 12.5px;
   padding: 7px 14px;
@@ -405,10 +405,19 @@
   color: var(--text-secondary);
 }
 
-.ph-card-menu-btn {
+.ph-card-actions {
   position: absolute;
   top: 8px;
   right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  opacity: 0;
+}
+
+.ph-card:hover .ph-card-actions { opacity: 1; }
+
+.ph-card-menu-btn {
   background: none;
   border: none;
   font-size: 13px;
@@ -416,11 +425,21 @@
   cursor: pointer;
   border-radius: 5px;
   padding: 1px 6px;
-  opacity: 0;
 }
 
-.ph-card:hover .ph-card-menu-btn { opacity: 1; }
 .ph-card-menu-btn:hover { background: var(--input-bg-alpha); color: var(--text-primary); }
+
+.ph-card-actions .ph-fork-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 5px;
+  padding: 3px 5px 1px;
+}
+
+.ph-fork-btn:hover { background: var(--input-bg-alpha); color: var(--posit-teal); }
+.ph-fork-btn:disabled { opacity: 0.4; cursor: default; }
 
 .ph-card .ph-menu { top: 34px; left: auto; right: 8px; }
 
