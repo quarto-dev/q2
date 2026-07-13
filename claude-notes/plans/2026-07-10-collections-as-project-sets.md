@@ -43,16 +43,16 @@ untouched. "Minimum blast surface."
       entry), removeProject, updateSummary, touch, rename collection
 - [x] Create-collection (new empty set doc), subscribe-collection (existing
       doc id), unsubscribe (drop from array; doc untouched — "leave")
-- [ ] `useProjectSet` → `useCollectionSets`: exposes
+- [x] `useProjectSet` → `useCollectionSets`: exposes
       `Array<{ docId, name, entries, syncServer }>` + actions
 
 ### Phase 3 — localStorage collections migration
-- [ ] On first load with the new code: for each entry in `qh-collections-v1`,
+- [x] On first load with the new code: for each entry in `qh-collections-v1`,
       create a new collection doc named after it, copy the matching entries
       from the personal set into it, append to the pointer array
-- [ ] The original set becomes the personal root collection (name it
+- [x] The original set becomes the personal root collection (name it
       "My projects" when the name field is empty; user-editable)
-- [ ] Mark `qh-collections-v1` migrated (rename key, don't delete) — one-way,
+- [x] Mark `qh-collections-v1` migrated (rename key, don't delete) — one-way,
       idempotent, safe to interrupt (commit point = pointer-array write)
 
 ### Phase 4 — UI rewiring
