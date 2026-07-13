@@ -8,12 +8,12 @@
  * The relanded editor opens collapsed.
  *
  * This is a real-browser test because:
- * - The breadcrumb chip renders only under real browser layout (useLayoutEffect reads
- *   getBoundingClientRect(); jsdom returns zero rects → chip renders at wrong position
- *   or not at all).
  * - The crumb button click requires a real non-zero-size DOM element to be reachable.
- * - jsdom tests of crumb-click behavior went VACUOUS (the chip didn't render, the
- *   click did nothing, the test passed for the wrong reason).
+ * - jsdom tests of crumb-click behavior can go VACUOUS if the crumb isn't reachable.
+ *
+ * (Post edit-chrome consolidation the breadcrumb lives INSIDE the pop-up
+ * `.q2-rt-toolbar`, not the retired standalone floating chip — the crumb buttons
+ * and the crumb-jump behavior are unchanged.)
  *
  * Fail-on-revert (primary): in PreviewRoot.tsx ~line 784, change:
  *   `const carryExpanded = pl.spec.kind === 'nest';`
@@ -105,8 +105,9 @@ test.describe('T13(c) — Crumb jump does NOT carry expansion into destination e
         await iframe.locator('p[data-block-pool-id]').first().click();
         await iframe.locator('textarea').first().waitFor({ timeout: 10_000 });
 
-        // 4. Verify the breadcrumb chip is visible (we are in a nested surface).
-        const chip = iframe.locator('[data-testid="q2-breadcrumb-chip"]');
+        // 4. Verify the pop-up toolbar (hosting the breadcrumb) is visible (we are in
+        //    a nested surface with unlockNestingCursor on).
+        const chip = iframe.locator('.q2-rt-toolbar');
         await chip.waitFor({ timeout: 5_000 });
 
         // 5. Trigger EXPANSION: press 'x' (the §7 expand-on-edit trigger).
@@ -132,8 +133,8 @@ test.describe('T13(c) — Crumb jump does NOT carry expansion into destination e
         );
         console.log(`crumb-no-carry: crumb titles: ${JSON.stringify(crumbTitles)}`);
 
-        // 7. Click the OUTERMOST ancestor crumb (the Div crumb — title="Div" per
-        // buildAncestorPath in BreadcrumbChip.tsx).
+        // 7. Click the OUTERMOST ancestor crumb (the Div crumb — title per
+        // buildAncestorPath, rendered by BreadcrumbCrumbs inside the toolbar).
         // We try getByRole({ name: 'Div' }) first (per design doc); fall back to
         // .q2-crumb.first() if no crumb with that name is found.
         const divCrumbByRole = chip.getByRole('button', { name: 'Div' });

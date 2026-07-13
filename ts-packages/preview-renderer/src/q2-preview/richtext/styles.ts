@@ -10,51 +10,6 @@
 let injected = false;
 
 const CSS = `
-/* Left-margin edit affordance: the "Editing…" label + the rich/plain toggle,
-   parked in the margin (absolute, right-aligned against the edit box's left edge)
-   so it never overlaps the text. The label is inert; the toggle buttons are
-   interactive but use mousedown-preventDefault to avoid blurring the editor. */
-.q2-edit-affordance {
-  position: absolute;
-  right: calc(100% + 0.7rem);
-  top: 0;
-  text-align: right;
-  user-select: none;
-}
-.q2-edit-affordance-label {
-  font-size: 0.72rem;
-  line-height: 1.7;
-  font-style: italic;
-  white-space: nowrap;
-  color: rgba(59, 130, 246, 0.7);
-  pointer-events: none;
-}
-.q2-edit-mode-toggle {
-  margin-top: 0.3rem;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.1rem;
-}
-.q2-edit-mode-toggle button {
-  appearance: none;
-  border: none;
-  background: none;
-  padding: 0 0.15rem;
-  font-size: 0.66rem;
-  line-height: 1.4;
-  white-space: nowrap;
-  cursor: pointer;
-  color: rgba(100, 116, 139, 0.7);
-  border-right: 2px solid transparent;
-}
-.q2-edit-mode-toggle button:hover { color: rgba(59, 130, 246, 0.9); }
-.q2-edit-mode-toggle button.q2-edit-mode-active {
-  color: rgba(59, 130, 246, 1);
-  font-weight: 600;
-  border-right-color: rgba(59, 130, 246, 0.8);
-}
-
 .q2-richtext-editor { position: relative; }
 
 /* Formatting toolbar — a small box floating just above the top-left of the edit
@@ -100,6 +55,17 @@ const CSS = `
 }
 .q2-rt-tb-btn:hover { background: rgba(59, 130, 246, 0.12); }
 .q2-rt-tb-active { background: rgba(59, 130, 246, 0.18); color: rgb(37, 99, 235); }
+/* Mode toggle — the Markdown-mark SVG. inline-flex centers it; the SVG's
+   currentColor recolors with the button's active state (highlight-only). */
+.q2-rt-tb-mode {
+  display: inline-flex;
+  align-items: center;
+}
+.q2-rt-tb-mode svg {
+  display: block;
+  height: 0.95em;
+  width: auto;
+}
 .q2-rt-tb-bold { font-weight: 700; }
 .q2-rt-tb-italic { font-style: italic; }
 .q2-rt-tb-strike { text-decoration: line-through; }

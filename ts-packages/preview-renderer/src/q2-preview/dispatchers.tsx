@@ -14,8 +14,8 @@ import { isOnFirstVisualLine, isOnLastVisualLine, getLogicalColumn, placeCaretAt
 import { buildNestingCommitDestination, classifyNestingKey, detectPlatform } from './nestingNav';
 import { editBaseline } from './outerBlocks';
 import { RichTextEditor } from './richtext/RichTextEditor';
-import { EditAffordance } from './richtext/EditAffordance';
-import { richTextAvailable } from './richTextSupport';
+import { EditToolbar } from './richtext/EditToolbar';
+import { richTextAvailable, richEditorActiveForType } from './richTextSupport';
 
 // P3.3 §3b: detect platform once at module load so classifyNestingKey can
 // distinguish mac (Cmd+Ctrl) from other (Alt+Shift) nesting chords.
@@ -67,11 +67,12 @@ function renderMeasuredEdit(
     activeEditRegionRef: React.MutableRefObject<HTMLDivElement | null> | undefined,
     ctx: PreviewContextValue,
     richSupported: boolean,
+    richActive: boolean,
 ): React.ReactNode {
     const wrapperStyle: React.CSSProperties = {
         ...(editTarget.boxStyle as React.CSSProperties),
         boxSizing: 'content-box',
-        // Positioning context for the left-margin edit affordance.
+        // Offset parent for the plain-surface toolbar's placement effect.
         position: 'relative',
     };
     // Lists carry a large left padding (the bullet/number gutter). Replicating
@@ -85,9 +86,12 @@ function renderMeasuredEdit(
     return (
         <AttributionWrap node={node} as="div">
             <div ref={activeEditRegionRef} id="q2-active-edit-region" style={wrapperStyle}>
-                {/* Left-margin affordance (Editing… + rich/plain toggle), shown only
-                    when the rich editor feature is enabled. */}
-                {ctx.richText && <EditAffordance ctx={ctx} richSupported={richSupported} />}
+                {/* Plain-surface toolbar: shown when rich/nesting is on, EXCEPT when
+                    the rich editor is active (it mounts its own — `!richActive` keeps
+                    exactly one). Code/CustomBlocks get it with just a type crumb. */}
+                {(ctx.richText || ctx.unlockNestingCursor) && !richActive && (
+                    <EditToolbar richSupported={richSupported} />
+                )}
                 {textarea}
             </div>
         </AttributionWrap>
@@ -519,7 +523,9 @@ function renderBlockEditSurface(
     resolved: ResolvedSource,
     sourceNodeType: string,
 ): React.ReactNode {
-    if (richTextAvailable(ctx, sourceNodeType) && (ctx.editorMode ?? 'rich') !== 'plain') {
+    // Read the SAME predicate the toolbar gate uses, so the surface choice and
+    // `!richActive` can't drift — exactly-one-toolbar is structural, not coincidental.
+    if (richEditorActiveForType(ctx, sourceNodeType)) {
         return <RichTextEditor ctx={ctx} resolved={resolved} />;
     }
     return renderBlockTextarea(ctx, resolved);
@@ -569,10 +575,12 @@ export const Block = (args: NodeArgs<BlockNode>) => {
         // Pass activeEditRegionRef so the wrapper div is tracked — used by
         // useBlockEditHover's onPointerUp to suppress parent-climb activation.
         const sourceNodeType = (resolved!.sourceNode as { t: string }).t;
+        // Compute once (sourceNodeType in scope) and thread into renderMeasuredEdit.
+        const richActive = richEditorActiveForType(ctx, sourceNodeType);
         const surface = renderBlockEditSurface(ctx, resolved!, sourceNodeType);
         return renderMeasuredEdit(
             args.node, surface, ctx.editTarget!, ctx.activeEditRegionRef,
-            ctx, richTextAvailable(ctx, sourceNodeType),
+            ctx, richTextAvailable(ctx, sourceNodeType), richActive,
         );
     }
 
@@ -632,8 +640,8 @@ export const CustomBlock = (args: NodeArgs<CustomBlockNode>) => {
 
     if (isBlockEditTarget(ctx, resolved) && ctx) {
         const textarea = renderBlockTextarea(ctx, resolved!);
-        // CustomBlocks are not rich-editable in v1 → always textarea, no toggle.
-        return renderMeasuredEdit(args.node, textarea, ctx.editTarget!, ctx.activeEditRegionRef, ctx, false);
+        // CustomBlocks aren't rich-editable → textarea, no toggle (richSupported/richActive false).
+        return renderMeasuredEdit(args.node, textarea, ctx.editTarget!, ctx.activeEditRegionRef, ctx, false, false);
     }
 
     const Component =
