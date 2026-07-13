@@ -138,11 +138,18 @@ export interface LinkProjectSetRoute {
  */
 export interface JoinCollectionRoute {
   type: 'join-collection';
+  /** Automerge doc id of the collection's ProjectSetDocument (no prefix). */
   collectionId: string;
   collectionName: string;
   /** Display name of the person who sent the invite. */
   inviter: string;
-  /** Projects on the collection: real doc ids + servers, joinable immediately. */
+  /** Sync server hosting the collection document. */
+  syncServer: string;
+  /**
+   * Legacy payload from pre-architecture invites (projects inlined in the
+   * URL). Still parsed for backward compatibility; the join flow now
+   * subscribes to the collection document instead.
+   */
   entries: Array<{ indexDocId: string; syncServer: string; description: string }>;
 }
 
@@ -261,6 +268,7 @@ export function parseHashRoute(hash: string): Route {
       collectionId: decodeURIComponent(segments[1]),
       collectionName: queryParams.get('name') ?? 'Shared collection',
       inviter: queryParams.get('from') ?? 'A collaborator',
+      syncServer: queryParams.get('server') ?? '',
       entries,
     };
   }
@@ -355,9 +363,12 @@ export function buildHashRoute(route: Route): string {
       const params = new URLSearchParams();
       params.set('name', route.collectionName);
       params.set('from', route.inviter);
-      params.set('entries', JSON.stringify(
-        route.entries.map((e) => ({ d: e.indexDocId, s: e.syncServer, n: e.description })),
-      ));
+      if (route.syncServer) params.set('server', route.syncServer);
+      if (route.entries.length > 0) {
+        params.set('entries', JSON.stringify(
+          route.entries.map((e) => ({ d: e.indexDocId, s: e.syncServer, n: e.description })),
+        ));
+      }
       return `#/join-collection/${encodeURIComponent(route.collectionId)}?${params.toString()}`;
     }
 

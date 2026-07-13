@@ -36,7 +36,7 @@ import * as projectStorage from './services/projectStorage';
 import { installDebugApi } from './services/debugApi';
 import { getUserIdentity, updateUserName } from './services/userSettings';
 import { useRouting } from './hooks/useRouting';
-import { useProjectSet } from './hooks/useProjectSet';
+import { useCollectionSets } from './hooks/useCollectionSets';
 import { useAuth } from './hooks/useAuth';
 import { useAuthProbe } from './hooks/useAuthProbe';
 import { useExecutionChannel } from './hooks/useExecutionChannel';
@@ -132,7 +132,7 @@ function App() {
   });
 
   // Project set management (synced project list)
-  const [projectSetState, projectSetActions] = useProjectSet();
+  const [projectSetState, projectSetActions] = useCollectionSets();
 
   // Keep a ref so callbacks that intentionally omit projectSetState from their
   // dependency arrays (to avoid re-creation churn) can still read the latest status.
@@ -683,8 +683,8 @@ function App() {
     return (
       <JoinCollectionLanding
         route={route}
-        projectSetStatus={projectSetState.status}
-        onAddProjectToSet={projectSetActions.addProject}
+        status={projectSetState.status}
+        onSubscribe={projectSetActions.subscribeCollection}
         onDone={() => navigateToProjectSelector({ replace: true })}
       />
     );
@@ -747,6 +747,13 @@ function App() {
             onAddProjectToSet={projectSetActions.addProject}
             onRenameProject={projectSetActions.updateProjectDescription}
             onUpdateProjectSummary={projectSetActions.updateProjectSummary}
+            collections={projectSetState.collections}
+            onCreateCollection={projectSetActions.createCollection}
+            onUnsubscribeCollection={projectSetActions.unsubscribeCollection}
+            onRenameCollection={projectSetActions.renameCollection}
+            onAddProjectToCollection={projectSetActions.addProjectToCollection}
+            onRemoveProjectFromCollection={projectSetActions.removeProjectFromCollection}
+            onMoveProjectBetweenCollections={projectSetActions.moveProjectBetweenCollections}
             onSwitchToClassicUi={() => switchUiVariant('classic')}
           />
         ) : (

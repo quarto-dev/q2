@@ -56,23 +56,23 @@ untouched. "Minimum blast surface."
       idempotent, safe to interrupt (commit point = pointer-array write)
 
 ### Phase 4 — UI rewiring
-- [ ] ProjectsHome reads collections from the hook instead of localStorage;
+- [x] ProjectsHome reads collections from the hook instead of localStorage;
       "Everything else" = personal-root entries not present in any other
       collection (display-level; the root stays a superset so nothing is
       ever lost)
-- [ ] Move keeps current semantics (remove+add across docs); new "Add to
+- [x] Move keeps current semantics (remove+add across docs); new "Add to
       collection" menu item adds without removing (multi-membership is now
       natural — entries in several sets)
-- [ ] Share/members popover backed by the real doc: invite link carries the
+- [x] Share/members popover backed by the real doc: invite link carries the
       collection doc id + server only (entries no longer inlined in the URL)
-- [ ] JoinCollectionLanding: real subscribe (append docId to pointer array),
+- [x] JoinCollectionLanding: real subscribe (append docId to pointer array),
       auto-create personal root for fresh browsers as today
-- [ ] Facepiles/peek contributors read from project index-doc `identities`
+- [x] Facepiles/peek contributors read from project index-doc `identities`
       (one-shot read piggybacked on the existing summary write; peek refresh
       also picks them up)
 
 ### Phase 5 — verification
-- [ ] `npm run build:all` + full `npm run test:ci`
+- [x] `npm run build:all` + full `npm run test:ci`
 - [ ] Manual: fresh browser, upgraded browser (with and without localStorage
       collections), two-browser share/join round trip, debug.html inspection
       of resulting docs

@@ -79,6 +79,13 @@ interface ServerConnection {
   wsAdapter: BrowserWebSocketClientAdapter;
   /** Number of collection connections using this server. */
   refCount: number;
+  /**
+   * Resolves once on the first peer connection and stays resolved. The
+   * repo's 'peer' event fires only on the initial connect, so we latch it
+   * here — otherwise the second collection sharing this server would wait
+   * forever for an event that never fires again.
+   */
+  ready: Promise<void>;
 }
 
 // ============================================================================
@@ -163,30 +170,21 @@ function notifyChange(): void {
   }
 }
 
-function waitForPeer(r: Repo, timeoutMs: number = 5000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      cleanup();
-      reject(new Error('Timeout waiting for peer connection'));
-    }, timeoutMs);
-
-    const onPeer = () => {
-      cleanup();
-      resolve();
-    };
-
-    const cleanup = () => {
-      clearTimeout(timeoutId);
-      r.networkSubsystem.off('peer', onPeer);
-    };
-
-    r.networkSubsystem.on('peer', onPeer);
-  });
+/**
+ * Race a server's latched readiness against a timeout.
+ * @returns true if a peer connected within the timeout, false otherwise.
+ */
+function awaitServerReady(server: ServerConnection, timeoutMs: number): Promise<boolean> {
+  return Promise.race([
+    server.ready.then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+  ]);
 }
 
 /**
- * Get or create the shared Repo for a sync server.
- * When created, kicks off a peer wait purely for the connection indicator.
+ * Get or create the shared Repo for a sync server. Creation latches the
+ * first 'peer' event into `server.ready`, so every collection on the
+ * server can await readiness regardless of connection order.
  */
 function acquireServer(syncServerUrl: string): ServerConnection {
   const resolved = resolveSyncServerUrl(syncServerUrl);
@@ -197,7 +195,10 @@ function acquireServer(syncServerUrl: string): ServerConnection {
       network: [wsAdapter],
       storage: new IndexedDBStorageAdapter(),
     });
-    server = { repo, wsAdapter, refCount: 0 };
+    const ready = new Promise<void>((resolve) => {
+      repo.networkSubsystem.on('peer', () => resolve());
+    });
+    server = { repo, wsAdapter, refCount: 0, ready };
     servers.set(resolved, server);
   }
   server.refCount++;
@@ -237,13 +238,7 @@ export async function connectCollection(
 
     if (!handle.doc()) {
       // No local cache — wait for the network before declaring the doc.
-      let isOnline = false;
-      try {
-        await waitForPeer(server.repo, 5000);
-        isOnline = true;
-      } catch {
-        isOnline = false;
-      }
+      const isOnline = await awaitServerReady(server, 5000);
       onConnectionChange?.(isOnline);
       await handle.whenReady();
       if (!handle.doc()) {
@@ -254,9 +249,7 @@ export async function connectCollection(
         );
       }
     } else {
-      waitForPeer(server.repo, 5000)
-        .then(() => onConnectionChange?.(true))
-        .catch(() => onConnectionChange?.(false));
+      awaitServerReady(server, 5000).then((online) => onConnectionChange?.(online));
     }
 
     const onChange = () => notifyChange();
@@ -307,10 +300,8 @@ export async function createCollection(
   name?: string,
 ): Promise<string> {
   const server = acquireServer(syncServerUrl);
-  try {
-    // Creation requires the server so the document actually syncs.
-    await waitForPeer(server.repo, 10000);
-  } catch {
+  // Creation requires the server so the document actually syncs.
+  if (!(await awaitServerReady(server, 10000))) {
     releaseServer(syncServerUrl);
     throw new Error(
       'Could not reach sync server. Please check your connection and try again.',

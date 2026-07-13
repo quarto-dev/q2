@@ -16,7 +16,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTheme } from './ThemeContext';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import type { ProjectSetEntry, ProjectSetEntrySummary } from '@quarto/quarto-automerge-schema';
-import type { ProjectSetStatus } from '../hooks/useProjectSet';
+import type { CollectionsStatus as ProjectSetStatus } from '../hooks/useCollectionSets';
 import type { UserSettings } from '../services/storage/types';
 import * as projectStorage from '../services/projectStorage';
 import * as userSettingsService from '../services/userSettings';
@@ -41,8 +41,8 @@ import {
   resolveSyncServerUrl,
 } from '../utils/routing';
 import ShareDialog from './ShareDialog';
-import { mockCollaborators, unionCollaborators, type MockUser } from '../utils/mockCollaborators';
-import { useCollections, setPendingCollectionAssignment, type Collection, type CollectionMember } from '../hooks/useCollections';
+import { mockCollaborators, type MockUser } from '../utils/mockCollaborators';
+import type { CollectionSnapshot } from '../services/projectSetService';
 import './ProjectsHome.css';
 
 interface Props {
@@ -64,7 +64,26 @@ interface Props {
   onRenameProject?: (indexDocId: string, description: string) => void;
   /** Replace a project's cached peek summary (used by Peek's refresh). */
   onUpdateProjectSummary?: (indexDocId: string, summary: ProjectSetEntrySummary) => void;
+  /** All connected collections, root first (from useCollectionSets). */
+  collections?: CollectionSnapshot[];
+  onCreateCollection?: (name: string) => Promise<string>;
+  onUnsubscribeCollection?: (collectionDocId: string) => Promise<void>;
+  onRenameCollection?: (collectionDocId: string, name: string) => void;
+  onAddProjectToCollection?: (collectionDocId: string, entry: Omit<ProjectSetEntry, 'addedAt' | 'lastAccessed'>) => void;
+  onRemoveProjectFromCollection?: (collectionDocId: string, indexDocId: string) => void;
+  onMoveProjectBetweenCollections?: (fromDocId: string, toDocId: string, indexDocId: string) => void;
   onSwitchToClassicUi?: () => void;
+}
+
+/** In-component view of a non-root collection (adapted from a snapshot). */
+interface CollectionView {
+  /** The collection's ProjectSetDocument id. */
+  id: string;
+  name: string;
+  syncServer: string;
+  entries: ProjectSetEntry[];
+  /** Entry keys (indexDocId without prefix), for membership checks. */
+  projectIds: string[];
 }
 
 /** Unified view of a project regardless of source (synced set vs legacy IDB). */
@@ -89,6 +108,20 @@ const UNNAMED_RE = /^Project \d{4}-\d{2}-\d{2}T/;
 
 /** Set to '1' once the user opts out of the shared-collection move warning. */
 const MOVE_WARNING_KEY = 'qh-collection-move-warning-dismissed';
+
+/**
+ * Pending "add to collection on create": new-project flows don't know the
+ * project's doc id until the parent app finishes creating it, so the
+ * assignment is recorded by title and reconciled when the entry appears.
+ */
+const PENDING_ASSIGNMENT_KEY = 'qh-collection-pending-v1';
+
+function setPendingCollectionAssignment(title: string, collectionId: string): void {
+  localStorage.setItem(
+    PENDING_ASSIGNMENT_KEY,
+    JSON.stringify({ title, collectionId, ts: Date.now() }),
+  );
+}
 
 /** Fork glyph for the duplicate affordance (three nodes, branch lines). */
 const forkIcon = (
@@ -190,6 +223,13 @@ export default function ProjectsHome({
   onAddProjectToSet,
   onRenameProject,
   onUpdateProjectSummary,
+  collections: collectionsProp,
+  onCreateCollection,
+  onUnsubscribeCollection,
+  onRenameCollection,
+  onAddProjectToCollection,
+  onRemoveProjectFromCollection,
+  onMoveProjectBetweenCollections,
   onSwitchToClassicUi,
 }: Props) {
   const projectSetConnecting = projectSetStatus === 'loading' || projectSetStatus === 'connecting';
@@ -205,7 +245,7 @@ export default function ProjectsHome({
   // Menus / popovers. openMenu identifies the ⋯ menu by project id or
   // `collection:<id>`; submenus and the peek popover are tracked separately.
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [moveSubmenuOpen, setMoveSubmenuOpen] = useState(false);
+  const [moveSubmenuOpen, setMoveSubmenuOpen] = useState<false | 'move' | 'add'>(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [peekFor, setPeekFor] = useState<string | null>(null);
@@ -245,7 +285,26 @@ export default function ProjectsHome({
   const [editNameValue, setEditNameValue] = useState('');
 
   const { colorScheme, cycleColorScheme } = useTheme();
-  const { collections, createCollection, renameCollection, deleteCollection, moveProject, reconcilePending, shareCollection, removeMember } = useCollections();
+
+  // ---- collections adapter ----
+  // Collections are real ProjectSetDocuments delivered via props (root
+  // first). The root is the personal superset; the sections on this page
+  // render the non-root collections, and "Everything else" is computed as
+  // root entries not present in any of them.
+  const collectionViews: CollectionView[] = useMemo(
+    () =>
+      (collectionsProp ?? [])
+        .filter((c) => !c.isRoot)
+        .map((c) => ({
+          id: c.docId,
+          name: c.name ?? 'Untitled collection',
+          syncServer: c.syncServer,
+          entries: c.entries,
+          projectIds: c.entries.map((e) => e.indexDocId.replace(/^automerge:/, '')),
+        })),
+    [collectionsProp],
+  );
+  const collections = collectionViews;
   // Which collection's members-and-invite popover is open
   const [membersFor, setMembersFor] = useState<string | null>(null);
   // Pending move out of a shared collection, awaiting the user's OK
@@ -262,7 +321,7 @@ export default function ProjectsHome({
   // destructive confirmations get real dialogs.
   const [newCollectionDialog, setNewCollectionDialog] = useState<null | { forProject?: string }>(null);
   const [newCollectionName, setNewCollectionName] = useState('');
-  const [renameCollectionTarget, setRenameCollectionTarget] = useState<Collection | null>(null);
+  const [renameCollectionTarget, setRenameCollectionTarget] = useState<CollectionView | null>(null);
   const [renameCollectionValue, setRenameCollectionValue] = useState('');
   const [confirmState, setConfirmState] = useState<null | {
     title: string;
@@ -340,8 +399,29 @@ export default function ProjectsHome({
 
   // Apply any pending "add to collection on create" once the new entry appears.
   useEffect(() => {
-    reconcilePending(items);
-  }, [items, reconcilePending]);
+    const raw = localStorage.getItem(PENDING_ASSIGNMENT_KEY);
+    if (!raw) return;
+    try {
+      const pending: { title: string; collectionId: string; ts: number } = JSON.parse(raw);
+      if (Date.now() - pending.ts > 24 * 3600 * 1000) {
+        localStorage.removeItem(PENDING_ASSIGNMENT_KEY);
+        return;
+      }
+      const match = items.find(
+        (e) => e.description === pending.title && new Date(e.addedAt).getTime() >= pending.ts - 60_000,
+      );
+      if (match) {
+        onAddProjectToCollection?.(pending.collectionId, {
+          indexDocId: match.indexDocId,
+          syncServer: match.syncServer,
+          description: match.description,
+        });
+        localStorage.removeItem(PENDING_ASSIGNMENT_KEY);
+      }
+    } catch {
+      localStorage.removeItem(PENDING_ASSIGNMENT_KEY);
+    }
+  }, [items, onAddProjectToCollection]);
 
   // ---- global listeners ----
 
@@ -383,19 +463,65 @@ export default function ProjectsHome({
   // the payload) rather than React state, which lags the native events.
   const DRAG_TYPE = 'application/x-qh-project';
 
-  // Moving a project out of a shared collection changes what its other
-  // members see. Warn once (suppressible) before such moves; private
-  // collections and moves within the same collection pass straight through.
-  const collectionOf = useCallback((indexDocId: string): Collection | undefined => {
+  const collectionOf = useCallback((indexDocId: string): CollectionView | undefined => {
     const short = indexDocId.replace(/^automerge:/, '');
     return collections.find((c) =>
       c.projectIds.some((id) => id === indexDocId || id === short || `automerge:${id}` === indexDocId),
     );
   }, [collections]);
 
+  const entryFor = useCallback((indexDocId: string): Omit<ProjectSetEntry, 'addedAt' | 'lastAccessed'> | null => {
+    const item = byId.get(indexDocId)
+      ?? byId.get(indexDocId.replace(/^automerge:/, ''))
+      ?? byId.get(`automerge:${indexDocId}`);
+    if (item) return { indexDocId: item.indexDocId, syncServer: item.syncServer, description: item.description };
+    for (const c of collections) {
+      const e = c.entries.find((en) => en.indexDocId.replace(/^automerge:/, '') === indexDocId.replace(/^automerge:/, ''));
+      if (e) return { indexDocId: e.indexDocId, syncServer: e.syncServer, description: e.description };
+    }
+    return null;
+  }, [byId, collections]);
+
+  /**
+   * Apply a move: target collection gets the entry; a non-root source
+   * collection loses it; target null means "no collection" (the entry
+   * remains in the personal root superset either way).
+   */
+  const moveProject = useCallback((indexDocId: string, target: string | null) => {
+    const from = collectionOf(indexDocId);
+    if (target) {
+      if (from && from.id !== target && onMoveProjectBetweenCollections) {
+        onMoveProjectBetweenCollections(from.id, target, indexDocId);
+      } else if (!from || from.id !== target) {
+        const entry = entryFor(indexDocId);
+        if (entry) onAddProjectToCollection?.(target, entry);
+      }
+    } else if (from) {
+      onRemoveProjectFromCollection?.(from.id, indexDocId);
+    }
+  }, [collectionOf, entryFor, onMoveProjectBetweenCollections, onAddProjectToCollection, onRemoveProjectFromCollection]);
+
+  /** Add without removing — a project can sit in several collections. */
+  const addToCollection = useCallback((indexDocId: string, target: string) => {
+    const entry = entryFor(indexDocId);
+    if (entry) onAddProjectToCollection?.(target, entry);
+  }, [entryFor, onAddProjectToCollection]);
+
+  /** People other than you seen on a collection's projects (contributor
+   * union from cached summaries). We can't know access for sure — bearer
+   * links — so this is the acceptable-risk heuristic for the move warning. */
+  const otherPeopleOn = useCallback((collection: CollectionView): number => {
+    const names = new Set<string>();
+    for (const e of collection.entries) {
+      for (const c of e.summary?.contributors ?? []) names.add(c.name);
+    }
+    if (userSettings?.userName) names.delete(userSettings.userName);
+    return names.size;
+  }, [userSettings]);
+
   const requestMove = useCallback((indexDocId: string, target: string | null) => {
     const from = collectionOf(indexDocId);
-    const othersCount = from?.shared?.members.filter((m) => !m.isYou).length ?? 0;
+    const othersCount = from ? otherPeopleOn(from) : 0;
     const suppressed = localStorage.getItem(MOVE_WARNING_KEY) === '1';
     if (from && from.id !== target && othersCount > 0 && !suppressed) {
       const item = byId.get(indexDocId) ?? byId.get(indexDocId.replace(/^automerge:/, '')) ?? byId.get(`automerge:${indexDocId}`);
@@ -411,7 +537,7 @@ export default function ProjectsHome({
       return;
     }
     moveProject(indexDocId, target);
-  }, [collectionOf, byId, moveProject, closeAllMenus]);
+  }, [collectionOf, otherPeopleOn, byId, moveProject, closeAllMenus]);
 
   const handleDragStart = useCallback((item: ProjectItem) => (e: React.DragEvent) => {
     e.dataTransfer.setData(DRAG_TYPE, item.indexDocId);
@@ -601,15 +727,19 @@ export default function ProjectsHome({
     closeAllMenus();
   }, [closeAllMenus]);
 
-  const commitNewCollection = useCallback(() => {
-    if (!newCollectionDialog || !newCollectionName.trim()) return;
-    const id = createCollection(newCollectionName.trim());
-    if (newCollectionDialog.forProject) {
-      requestMove(newCollectionDialog.forProject, id);
+  const commitNewCollection = useCallback(async () => {
+    if (!newCollectionDialog || !newCollectionName.trim() || !onCreateCollection) return;
+    try {
+      const id = await onCreateCollection(newCollectionName.trim());
+      if (newCollectionDialog.forProject) {
+        requestMove(newCollectionDialog.forProject, id);
+      }
+      setNewCollectionDialog(null);
+      setNewCollectionName('');
+    } catch (err) {
+      setFormError(err instanceof Error ? `Could not create collection: ${err.message}` : 'Could not create collection.');
     }
-    setNewCollectionDialog(null);
-    setNewCollectionName('');
-  }, [newCollectionDialog, newCollectionName, createCollection, requestMove]);
+  }, [newCollectionDialog, newCollectionName, onCreateCollection, requestMove]);
 
   const openNewDialog = useCallback((choice: ProjectChoice) => {
     setNewDialogChoice(choice);
@@ -856,22 +986,24 @@ export default function ProjectsHome({
       <div className="ph-menu-item ph-submenu-parent">
         <button
           className="ph-menu-item-inner"
-          onClick={(e) => { e.stopPropagation(); setMoveSubmenuOpen((v) => !v); }}
+          onClick={(e) => { e.stopPropagation(); setMoveSubmenuOpen((v) => v === 'move' ? false : 'move'); }}
         >
           Move to collection <span className="ph-submenu-arrow">▸</span>
         </button>
-        {moveSubmenuOpen && (
+        {moveSubmenuOpen === 'move' && (
           <div className="ph-menu ph-submenu">
-            {collections.map((collection) => (
-              <button
-                key={collection.id}
-                className="ph-menu-item"
-                onClick={() => { requestMove(item.indexDocId, collection.id); closeAllMenus(); }}
-              >
-                {collection.name}
-              </button>
-            ))}
-            {shelvedIds.has(item.indexDocId) && (
+            {collections
+              .filter((c) => !c.projectIds.includes(item.indexDocId.replace(/^automerge:/, '')))
+              .map((collection) => (
+                <button
+                  key={collection.id}
+                  className="ph-menu-item"
+                  onClick={() => { requestMove(item.indexDocId, collection.id); closeAllMenus(); }}
+                >
+                  {collection.name}
+                </button>
+              ))}
+            {collectionOf(item.indexDocId) && (
               <button
                 className="ph-menu-item"
                 onClick={() => { requestMove(item.indexDocId, null); closeAllMenus(); }}
@@ -885,6 +1017,34 @@ export default function ProjectsHome({
             >
               ＋ New collection…
             </button>
+          </div>
+        )}
+      </div>
+      <div className="ph-menu-item ph-submenu-parent">
+        <button
+          className="ph-menu-item-inner"
+          onClick={(e) => { e.stopPropagation(); setMoveSubmenuOpen((v) => v === 'add' ? false : 'add'); }}
+        >
+          Add to collection <span className="ph-submenu-arrow">▸</span>
+        </button>
+        {moveSubmenuOpen === 'add' && (
+          <div className="ph-menu ph-submenu">
+            {collections
+              .filter((c) => !c.projectIds.includes(item.indexDocId.replace(/^automerge:/, '')))
+              .map((collection) => (
+                <button
+                  key={collection.id}
+                  className="ph-menu-item"
+                  onClick={() => { addToCollection(item.indexDocId, collection.id); closeAllMenus(); }}
+                >
+                  {collection.name}
+                </button>
+              ))}
+            {collections.every((c) => c.projectIds.includes(item.indexDocId.replace(/^automerge:/, ''))) && (
+              <div className="ph-menu-item ph-menu-subtext" style={{ cursor: 'default' }}>
+                Already in every collection
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1018,117 +1178,83 @@ export default function ProjectsHome({
     );
   };
 
-  // ---- collection sharing (membership is mock; see utils/mockCollaborators) ----
+  // ---- collection sharing (real synced documents) ----
 
-  const collectionItemsOf = (collection: Collection): ProjectItem[] =>
-    collection.projectIds
-      .map((id) => byId.get(id) ?? byId.get(`automerge:${id}`))
-      .filter((it): it is ProjectItem => !!it);
+  /** Items on a collection come from its own document's entries — a shared
+   * collection can hold projects this user has never opened. */
+  const collectionItemsOf = (collection: CollectionView): ProjectItem[] =>
+    collection.entries.map((e) => ({
+      indexDocId: e.indexDocId,
+      syncServer: e.syncServer,
+      description: e.description,
+      addedAt: e.addedAt,
+      lastAccessed: e.lastAccessed,
+      summary: e.summary,
+    }));
 
-  const buildInviteUrl = (collection: Collection): string =>
+  /** Invite = the collection document's id + server. Nothing else travels. */
+  const buildInviteUrl = (collection: CollectionView): string =>
     buildFullUrl({
       type: 'join-collection',
       collectionId: collection.id,
       collectionName: collection.name,
       inviter: userSettings?.userName ?? 'A collaborator',
-      entries: collectionItemsOf(collection).map((it) => ({
-        indexDocId: it.indexDocId.replace(/^automerge:/, ''),
-        syncServer: it.syncServer,
-        description: it.description,
-      })),
+      syncServer: collection.syncServer,
+      entries: [],
     });
 
-  const handleShareCollection = (collection: Collection) => {
-    if (!collection.shared) {
-      const now = new Date().toISOString();
-      const seeded: CollectionMember[] = selfUser
-        ? [{ ...selfUser, name: selfUser.name.replace(/ \(you\)$/, ''), joinedAt: now, isOwner: true, isYou: true }]
-        : [];
-      // Seed with the mock collaborators already shown on this collection's
-      // project cards — the "people with access" story stays consistent.
-      const others = unionCollaborators(collectionItemsOf(collection).map((it) => collaboratorsFor(it.indexDocId)))
-        .filter((u) => !seeded.some((m) => m.initials === u.initials))
-        .map((u) => ({ ...u, joinedAt: now }));
-      shareCollection(collection.id, [...seeded, ...others]);
+  /** People seen on a collection: you plus the contributor union from the
+   * projects' cached summaries. Derived, not a stored member list. */
+  const peopleOn = (collection: CollectionView): MockUser[] => {
+    const people: MockUser[] = selfUser
+      ? [{ ...selfUser, name: selfUser.name.replace(/ \(you\)$/, '') }]
+      : [];
+    for (const e of collection.entries) {
+      for (const c of e.summary?.contributors ?? []) {
+        if (!people.some((p) => p.name === c.name)) {
+          people.push({ name: c.name, color: c.color, initials: initialsFor(c.name) });
+        }
+      }
     }
-    setOpenMenu(null);
-    setMembersFor(collection.id);
+    return people;
   };
 
-  const renderMembersPopover = (collection: Collection) => {
-    // A private collection shows the same popover with just you in it, plus
-    // the way to share — copying the link is what turns sharing on.
-    const members: CollectionMember[] = collection.shared?.members
-      ?? (selfUser
-        ? [{ ...selfUser, name: selfUser.name.replace(/ \(you\)$/, ''), joinedAt: '', isOwner: true, isYou: true }]
-        : []);
-    const you = members.find((m) => m.isYou);
+  const renderMembersPopover = (collection: CollectionView) => {
+    const people = peopleOn(collection);
     const inviteUrl = buildInviteUrl(collection);
     const copyKey = `collection:${collection.id}:invite`;
     return (
-      <div className="ph-menu ph-members" role="dialog" aria-label={`Members of ${collection.name}`}>
+      <div className="ph-menu ph-members" role="dialog" aria-label={`People on ${collection.name}`}>
         <div className="ph-menu-label">
-          {collection.shared
-            ? `SHARED WITH ${members.length} ${members.length === 1 ? 'PERSON' : 'PEOPLE'}`
-            : 'PRIVATE — ONLY YOU'}
+          {people.length <= 1
+            ? 'ONLY YOU SO FAR'
+            : `${people.length} PEOPLE SEEN ON THESE PROJECTS`}
         </div>
         <div className="ph-members-list">
-          {members.map((m, i) => (
+          {people.map((m, i) => (
             <div key={`${m.initials}-${i}`} className="ph-member-row">
               <span className="ph-face lg" style={{ backgroundColor: m.color }}>{m.initials}</span>
               <span className="ph-member-name">
                 {m.name}
-                {m.isYou && <span className="ph-member-you"> (you)</span>}
+                {i === 0 && selfUser && <span className="ph-member-you"> (you)</span>}
               </span>
-              {m.isOwner ? (
-                <span className="ph-member-badge">Owner</span>
-              ) : !m.isYou ? (
-                <button
-                  className="ph-link danger ph-member-remove"
-                  onClick={() => removeMember(collection.id, m.initials)}
-                >
-                  Remove
-                </button>
-              ) : null}
             </div>
           ))}
         </div>
-        {you && !you.isOwner && (
-          <button
-            className="ph-menu-item danger"
-            onClick={() => {
-              closeAllMenus();
-              setConfirmState({
-                title: `Leave "${collection.name}"?`,
-                body: "Removes it from your list only — other members keep it. Projects you've opened stay in your list.",
-                confirmLabel: 'Leave collection',
-                action: () => deleteCollection(collection.id),
-              });
-            }}
-          >
-            Leave collection
-          </button>
-        )}
         <div className="ph-menu-divider" />
-        <div className="ph-menu-label">{collection.shared ? 'INVITE BY LINK' : 'SHARE BY LINK'}</div>
+        <div className="ph-menu-label">INVITE BY LINK</div>
         <div className="ph-members-invite">
           <span className="ph-invite-url mono" title={inviteUrl}>{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
           <button
             className="ph-btn primary small-invite"
-            onClick={() => {
-              // Copying the link is the moment a private collection becomes
-              // shared — the link leaving your hands is the share.
-              if (!collection.shared) handleShareCollection(collection);
-              copyToClipboard(inviteUrl, copyKey);
-            }}
+            onClick={() => copyToClipboard(inviteUrl, copyKey)}
           >
             {copied === copyKey ? 'Copied!' : 'Copy link'}
           </button>
         </div>
         <div className="ph-invite-note">
-          {collection.shared
-            ? 'Anyone with this link can join this collection and add or remove projects.'
-            : 'Copying turns on sharing — anyone with the link can join and add or remove projects.'}
+          Anyone with this link can join this collection and add or remove projects.
+          Its contents sync to them for real.
         </div>
       </div>
     );
@@ -1185,7 +1311,7 @@ export default function ProjectsHome({
     </div>
   );
 
-  const renderCollection = (collection: Collection) => {
+  const renderCollection = (collection: CollectionView) => {
     // Collection order is by recency (lastAccessed, newest first), not by stored
     // position — paging walks toward older projects, per the design. True
     // "recent edits" ordering needs automerge-history attribution (Future
@@ -1207,30 +1333,33 @@ export default function ProjectsHome({
         <div className="ph-collection-header qh-menu-anchor">
           <span className="ph-collection-name">{collection.name}</span>
           <span className="ph-collection-count">{collectionItems.length}</span>
-          <button
-            className={`ph-collection-people ${collection.shared ? '' : 'private'}`}
-            title={collection.shared
-              ? `Shared with ${collection.shared.members.length} people — members & invite`
-              : 'Private — only you. Click to share this collection.'}
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpenMenu(null);
-              setMembersFor(membersFor === collection.id ? null : collection.id);
-            }}
-          >
-            {collection.shared && (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle cx="9" cy="8" r="3.4" stroke="currentColor" strokeWidth="2" />
-                <path d="M3 19c0-3 2.7-4.8 6-4.8s6 1.8 6 4.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <circle cx="17" cy="9" r="2.6" stroke="currentColor" strokeWidth="2" />
-                <path d="M16.5 14.4c2.6.3 4.5 1.9 4.5 4.1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-            )}
-            {renderFacepile(
-              collection.shared?.members ?? (selfUser ? [selfUser] : []),
-              'md',
-            )}
-          </button>
+          {(() => {
+            const people = peopleOn(collection);
+            const hasOthers = people.length > 1;
+            return (
+              <button
+                className={`ph-collection-people ${hasOthers ? '' : 'private'}`}
+                title={hasOthers
+                  ? `${people.length} people seen on these projects — people & invite`
+                  : 'Only you so far. Click to invite others.'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenMenu(null);
+                  setMembersFor(membersFor === collection.id ? null : collection.id);
+                }}
+              >
+                {hasOthers && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="9" cy="8" r="3.4" stroke="currentColor" strokeWidth="2" />
+                    <path d="M3 19c0-3 2.7-4.8 6-4.8s6 1.8 6 4.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <circle cx="17" cy="9" r="2.6" stroke="currentColor" strokeWidth="2" />
+                    <path d="M16.5 14.4c2.6.3 4.5 1.9 4.5 4.1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                )}
+                {renderFacepile(people, 'md', 3, false)}
+              </button>
+            );
+          })()}
           <span className="ph-flex-spacer" />
           <button
             className="ph-icon-btn"
@@ -1246,16 +1375,12 @@ export default function ProjectsHome({
           {membersFor === collection.id && renderMembersPopover(collection)}
           {openMenu === menuKey && (
             <div className="ph-menu ph-menu-right" role="menu">
-              {collection.shared ? (
-                <button className="ph-menu-item" onClick={() => handleShareCollection(collection)}>
-                  Members &amp; invite…
-                </button>
-              ) : (
-                <button className="ph-menu-item" onClick={() => handleShareCollection(collection)}>
-                  Share collection…
-                  <span className="ph-menu-subtext">Invite others to this collection</span>
-                </button>
-              )}
+              <button
+                className="ph-menu-item"
+                onClick={() => { setOpenMenu(null); setMembersFor(collection.id); }}
+              >
+                People &amp; invite…
+              </button>
               <button
                 className="ph-menu-item"
                 onClick={() => {
@@ -1265,59 +1390,24 @@ export default function ProjectsHome({
                 }}
               >
                 Rename collection…
-                {collection.shared && <span className="ph-menu-subtext">Renames it for everyone</span>}
+                <span className="ph-menu-subtext">Renames it for everyone subscribed</span>
               </button>
-              {collection.shared ? (
-                <>
-                  <div className="ph-menu-divider" />
-                  <button
-                    className="ph-menu-item danger"
-                    onClick={() => {
-                      closeAllMenus();
-                      setConfirmState({
-                        title: `Leave "${collection.name}"?`,
-                        body: "Removes it from your list only — other members keep it. Projects you've opened stay in your list.",
-                        confirmLabel: 'Leave collection',
-                        action: () => deleteCollection(collection.id),
-                      });
-                    }}
-                  >
-                    Leave collection
-                    <span className="ph-menu-subtext">Removes it from your list only</span>
-                  </button>
-                  <button
-                    className="ph-menu-item danger"
-                    onClick={() => {
-                      closeAllMenus();
-                      setConfirmState({
-                        title: `Delete "${collection.name}" for everyone?`,
-                        body: "Projects are never deleted — they return to each person's list.",
-                        confirmLabel: 'Delete for everyone',
-                        action: () => deleteCollection(collection.id),
-                      });
-                    }}
-                  >
-                    Delete collection for everyone…
-                    <span className="ph-menu-subtext">Projects are never deleted</span>
-                  </button>
-                </>
-              ) : (
-                <button
-                  className="ph-menu-item danger"
-                  onClick={() => {
-                    closeAllMenus();
-                    setConfirmState({
-                      title: `Delete collection "${collection.name}"?`,
-                      body: 'Projects return to Everything else — nothing is deleted.',
-                      confirmLabel: 'Delete collection',
-                      action: () => deleteCollection(collection.id),
-                    });
-                  }}
-                >
-                  Delete collection
-                  <span className="ph-menu-subtext">Projects return to Everything else</span>
-                </button>
-              )}
+              <div className="ph-menu-divider" />
+              <button
+                className="ph-menu-item danger"
+                onClick={() => {
+                  closeAllMenus();
+                  setConfirmState({
+                    title: `Leave "${collection.name}"?`,
+                    body: "Removes it from your view only — anyone else subscribed keeps it, and projects you've opened stay in your list.",
+                    confirmLabel: 'Leave collection',
+                    action: () => { onUnsubscribeCollection?.(collection.id); },
+                  });
+                }}
+              >
+                Leave collection
+                <span className="ph-menu-subtext">Removes it from your view only</span>
+              </button>
             </div>
           )}
         </div>
@@ -1682,14 +1772,12 @@ export default function ProjectsHome({
         <div className="ph-dialog-backdrop" onMouseDown={() => setRenameCollectionTarget(null)}>
           <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
             <h2>Rename collection</h2>
-            {renameCollectionTarget.shared && (
-              <p className="ph-dialog-hint">Renames it for everyone it's shared with.</p>
-            )}
+            <p className="ph-dialog-hint">Renames it for everyone subscribed to it.</p>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 if (renameCollectionValue.trim()) {
-                  renameCollection(renameCollectionTarget.id, renameCollectionValue.trim());
+                  onRenameCollection?.(renameCollectionTarget.id, renameCollectionValue.trim());
                 }
                 setRenameCollectionTarget(null);
               }}

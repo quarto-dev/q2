@@ -1,21 +1,20 @@
 /**
- * JoinCollectionLanding — invite-first onboarding for a shared collection
- * (explore/projects-collections-ui exploration).
+ * JoinCollectionLanding — invite-first onboarding for a shared collection.
  *
  * Rendered for #/join-collection/ links. A fresh browser never sees the
- * project-set setup screen: App auto-creates a set silently while this
- * screen asks the one question that matters — who you are. Joining adds
- * the invite's project entries (real doc ids, so they sync for real) and
- * creates the collection locally with mock membership.
+ * setup screen: App auto-creates a personal root collection silently while
+ * this screen asks the one question that matters — who you are. Joining
+ * subscribes this browser to the collection document (appending its doc id
+ * to the collections pointer array); the collection's projects arrive by
+ * sync, shared for real.
  */
 
 import { useState, useEffect } from 'react';
-import type { ProjectSetEntry } from '@quarto/quarto-automerge-schema';
-import type { ProjectSetStatus } from '../hooks/useProjectSet';
+import type { CollectionsStatus } from '../hooks/useCollectionSets';
 import type { UserSettings } from '../services/storage/types';
 import * as userSettingsService from '../services/userSettings';
 import type { JoinCollectionRoute } from '../utils/routing';
-import { createSharedCollectionFromInvite, type CollectionMember } from '../hooks/useCollections';
+import { DEFAULT_SYNC_SERVER } from '../utils/routing';
 import './ProjectsHome.css';
 
 const COLOR_PALETTE = [
@@ -33,17 +32,19 @@ function initialsFor(name: string): string {
 
 interface Props {
   route: JoinCollectionRoute;
-  projectSetStatus: ProjectSetStatus;
-  onAddProjectToSet: (entry: Omit<ProjectSetEntry, 'addedAt' | 'lastAccessed'>) => void;
+  status: CollectionsStatus;
+  /** Subscribe this browser to the collection document. */
+  onSubscribe: (collectionDocId: string, syncServer: string) => Promise<void>;
   /** Navigate home once the join completes. */
   onDone: () => void;
 }
 
-export default function JoinCollectionLanding({ route, projectSetStatus, onAddProjectToSet, onDone }: Props) {
+export default function JoinCollectionLanding({ route, status, onSubscribe, onDone }: Props) {
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
   const [name, setName] = useState('');
   const [color, setColor] = useState(COLOR_PALETTE[0]);
   const [joining, setJoining] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     userSettingsService.getUserIdentity().then((s) => {
@@ -53,11 +54,12 @@ export default function JoinCollectionLanding({ route, projectSetStatus, onAddPr
     }).catch((err) => console.error('Failed to load identity:', err));
   }, []);
 
-  const ready = projectSetStatus === 'connected';
+  const ready = status === 'connected';
 
   const handleJoin = async () => {
-    if (!name.trim() || !ready) return;
+    if (!name.trim() || !ready || joining) return;
     setJoining(true);
+    setError(null);
     try {
       if (userSettings && name.trim() !== userSettings.userName) {
         await userSettingsService.updateUserName(name.trim());
@@ -65,37 +67,11 @@ export default function JoinCollectionLanding({ route, projectSetStatus, onAddPr
       if (userSettings && color !== userSettings.userColor) {
         await userSettingsService.updateUserColor(color);
       }
-      for (const entry of route.entries) {
-        const indexDocId = entry.indexDocId.startsWith('automerge:')
-          ? entry.indexDocId
-          : `automerge:${entry.indexDocId}`;
-        onAddProjectToSet({ indexDocId, syncServer: entry.syncServer, description: entry.description });
-      }
-      const members: CollectionMember[] = [
-        {
-          name: route.inviter,
-          initials: initialsFor(route.inviter),
-          color: '#7C3AED',
-          joinedAt: new Date().toISOString(),
-          isOwner: true,
-        },
-        {
-          name: name.trim(),
-          initials: initialsFor(name.trim()),
-          color,
-          joinedAt: new Date().toISOString(),
-          isYou: true,
-        },
-      ];
-      createSharedCollectionFromInvite({
-        collectionId: route.collectionId,
-        name: route.collectionName,
-        // Store ids in the same un-prefixed form the invite carries; the
-        // home view matches them against project-set entries either way.
-        projectIds: route.entries.map((e) => e.indexDocId.replace(/^automerge:/, '')),
-        members,
-      });
+      await onSubscribe(route.collectionId, route.syncServer || DEFAULT_SYNC_SERVER);
       onDone();
+    } catch (err) {
+      console.error('Join failed:', err);
+      setError(err instanceof Error ? err.message : 'Could not join the collection.');
     } finally {
       setJoining(false);
     }
@@ -110,18 +86,9 @@ export default function JoinCollectionLanding({ route, projectSetStatus, onAddPr
             {route.inviter} invited you to <span className="ph-join-collection-name">{route.collectionName}</span>
           </h1>
           <p className="ph-join-sub">
-            {route.entries.length === 0
-              ? 'A shared collection of Quarto projects.'
-              : `A shared collection of ${route.entries.length} Quarto project${route.entries.length === 1 ? '' : 's'}:`}
+            A shared collection of Quarto projects — its contents sync to you when you join.
           </p>
-          {route.entries.length > 0 && (
-            <ul className="ph-join-projects">
-              {route.entries.slice(0, 5).map((e) => (
-                <li key={e.indexDocId}>{e.description || 'Untitled project'}</li>
-              ))}
-              {route.entries.length > 5 && <li className="muted">and {route.entries.length - 5} more…</li>}
-            </ul>
-          )}
+          {error && <div className="ph-error inline">{error}</div>}
 
           <div className="ph-join-identity">
             <div className="ph-field-label">How you'll appear to the team</div>
@@ -156,8 +123,8 @@ export default function JoinCollectionLanding({ route, projectSetStatus, onAddPr
             </button>
           </div>
           <p className="ph-join-note">
-            Joining adds these projects to your list. This invite flow is part of a UI
-            exploration — collection membership isn't synced to other members yet.
+            Joining subscribes you to this collection — anyone with the link can join and
+            add or remove projects.
           </p>
         </div>
       </div>
