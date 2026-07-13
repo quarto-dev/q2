@@ -579,15 +579,47 @@ test exists and breaks, STOP and show it before deleting/updating.
       Citation/ListAttributes as plain tables (18), Cell/TableBody
       not property-indexable + no walk (21), pandoc.Pandoc/Meta*
       missing (17), SimpleTable missing (2).
-- [ ] S1. Citation as userdata (typed properties, __eq, clone,
-      tostring) + Cite peekers (single citation, fuzzy forms).
+- [x] S1. Citation as userdata + Cite peekers — DONE 2026-07-13.
+      New `LuaCitation` (types.rs): Rc<RefCell<Citation>> cell +
+      PropertyCache on the Inlines-valued `prefix`/`suffix` (aliased
+      reads, `:insert` persists), eager typed setters (id/mode/
+      prefix/suffix/note_num/hash), structural `__eq` via the
+      source-free JSON compare (wrapped in a synthetic Cite),
+      `__tostring` via show_citation, deep `:clone`.
+      `pandoc.Citation` validates id/mode eagerly (loud error on a
+      garbage mode — pandoc defers the same error to marshal-out;
+      timing-only divergence, noted for the bd-9p2686pc registry).
+      **`pandoc.Cite` argument order flipped to Pandoc's
+      `(content, citations)`** (mkCite is `flip Cite`; comment
+      c-inqf5qlb); citations peeker is strict `peekList peekCitation`
+      ("table expected, got Citation" / "Citation expected, got X").
+      `cite.citations` reads as an aliased pandoc-List of Citation
+      userdata (cache+readback; in-place `c.mode = …` and
+      `citations:insert` persist). CitationMode constants added to
+      the conformance prelude (upstream registerConstants parity).
+      Differential normalizer now strips q2's `citationIdS` source
+      extension. 4 q2 test sites updated to the flipped Cite order.
+      Track-1 xfail 81 → **72** (all 7 test-citation + 2 Cite
+      test-inline xfails flipped, zero new failures); differential
+      19 → **20/20** (new case cite-construct-userdata). E2e:
+      normalized JSON byte-identical to pandoc 3.9.0.2; HTML matches.
 - [ ] S2. ListAttributes as userdata + OrderedList
       listAttributes/delimiter aliases + forgiving constructor.
 - [ ] S3. Cell/TableBody/Row/TableHead/TableFoot property access,
       aliases, walk; Table bodies/caption peekers (single body,
       caption fuzzy forms); head/foot/colspecs round-trips.
-- [ ] S4. pandoc.Pandoc + pandoc.Meta* constructors + SimpleTable
-      (needs the Meta↔ConfigValue mapping story — catalog F2).
+- [ ] S4. pandoc.Pandoc + pandoc.Meta* constructors (needs the
+      Meta↔ConfigValue mapping story — catalog F2). **Design
+      discussion with Carlos required before implementation**;
+      consider designing together with bd-a9g50za2 (doc-level
+      filters are never invoked).
+- [ ] S5. SimpleTable: deliberate divergence per Decision 6 — do NOT
+      implement the pre-pandoc-2.10 simple-table API.
+      `pandoc.SimpleTable` raises an actionable Q-coded error
+      pointing at `pandoc.Table`; divergence-registry entry; the two
+      test-simpletable.lua xfails become permanent `# DIVERGENCE`
+      entries (mechanism shared with bd-9p2686pc — coordinate the
+      Q-code allocation there).
 
 ### Phase 3 — breadth
 
@@ -629,6 +661,12 @@ test exists and breaks, STOP and show it before deleting/updating.
 5. **Oracle pinning**: pin pandoc **3.9.0.2** exactly, stamp version
    in snapshot headers; bumps are deliberate PRs. Pandoc's Lua
    behavior is stable over time, so churn should be minimal.
+6. **SimpleTable is a deliberate divergence** (Carlos, 2026-07-13):
+   q2 does not implement the legacy pre-pandoc-2.10 simple-table
+   representation. `pandoc.SimpleTable` raises an actionable Q-coded
+   error directing users to `pandoc.Table`; registry entry; the two
+   test-simpletable.lua cases become permanent `# DIVERGENCE` xfail
+   entries (mechanism shared with bd-9p2686pc).
 
 ## Source-of-truth references
 

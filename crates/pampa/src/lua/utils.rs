@@ -284,6 +284,9 @@ fn create_type(lua: &Lua) -> Result<Function> {
                 if let Ok(block) = ud.borrow::<LuaBlock>() {
                     return Ok(get_block_type_name(&block.borrow_block()));
                 }
+                if ud.borrow::<crate::lua::types::LuaCitation>().is_ok() {
+                    return Ok("Citation".to_string());
+                }
                 // For other userdata, try metatable __name
                 if let Ok(mt) = ud.metatable()
                     && let Ok(name) = mt.get::<String>("__name")

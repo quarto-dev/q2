@@ -259,11 +259,8 @@ async fn test_citations_in_place_mutation_persists() {
     let filtered = run_filter(
         r#"
 function Para(p)
-    local cite = pandoc.Cite({pandoc.Citation("k1", "NormalCitation")}, {pandoc.Str("@k1")})
-    -- citations is a plain table today (no List metatable — the
-    -- Citation-userdata gap is tracked in bd-sgfiiktn), so use the
-    -- raw table.insert form; the cache flush is what's under test.
-    table.insert(cite.citations, pandoc.Citation("k2", "NormalCitation"))
+    local cite = pandoc.Cite({pandoc.Str("@k1")}, {pandoc.Citation("k1", "NormalCitation")})
+    cite.citations:insert(pandoc.Citation("k2", "NormalCitation"))
     return pandoc.Para({cite})
 end
 "#,

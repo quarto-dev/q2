@@ -16,11 +16,10 @@ use super::mediabag::SharedMediaBag;
 use super::runtime::SystemRuntime;
 
 use crate::pandoc::{
-    Block, BlockQuote, BulletList, Caption, Citation, CitationMode, Cite, CodeBlock,
-    DefinitionList, Div, Emph, Figure, Header, HorizontalRule, Image, Inline, LineBlock, LineBreak,
-    Link, Math, MathType, Note, OrderedList, Paragraph, Plain, QuoteType, Quoted, RawBlock,
-    RawInline, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript, Superscript,
-    Underline,
+    Block, BlockQuote, BulletList, Caption, Citation, Cite, CodeBlock, DefinitionList, Div, Emph,
+    Figure, Header, HorizontalRule, Image, Inline, LineBlock, LineBreak, Link, Math, MathType,
+    Note, OrderedList, Paragraph, Plain, QuoteType, Quoted, RawBlock, RawInline, SmallCaps,
+    SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript, Superscript, Underline,
     attr::AttrSourceInfo,
     list::{ListAttributes, ListNumberDelim, ListNumberStyle},
     table::{
@@ -524,12 +523,15 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         })?,
     )?;
 
-    // pandoc.Cite(citations, content)
+    // pandoc.Cite(content, citations) — Pandoc's argument order
+    // (mkCite is `flip Cite`): placeholder content first, then the
+    // list of Citation userdata. q2 historically took (citations,
+    // content); flipped for parity (bd-sgfiiktn, comment c-inqf5qlb).
     pandoc.set(
         "Cite",
-        lua.create_function(|lua, (citations, content): (Value, Value)| {
-            let citations = parse_citations(lua, citations)?;
+        lua.create_function(|lua, (content, citations): (Value, Value)| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
+            let citations = super::types::lua_table_to_citations(lua, citations)?;
             lua.create_userdata(LuaInline::new(Inline::Cite(Cite {
                 citations,
                 content: inlines,
@@ -933,60 +935,6 @@ pub(crate) fn parse_list_items(lua: &Lua, items: Value) -> Result<Vec<Vec<Block>
             let blocks = peek_blocks_fuzzy(lua, items)?;
             Ok(vec![blocks])
         }
-    }
-}
-
-/// Parse citations from Lua table
-fn parse_citations(lua: &Lua, val: Value) -> Result<Vec<Citation>> {
-    match val {
-        Value::Table(table) => {
-            let mut result = Vec::new();
-            for item in table.sequence_values::<Value>() {
-                let item = item?;
-                let citation = parse_single_citation(lua, item)?;
-                result.push(citation);
-            }
-            Ok(result)
-        }
-        _ => Err(Error::runtime("expected table of citations")),
-    }
-}
-
-/// Parse a single Citation from a Lua table
-fn parse_single_citation(lua: &Lua, val: Value) -> Result<Citation> {
-    match val {
-        Value::Table(table) => {
-            let id: String = table.get("id")?;
-            let mode_str: String = table
-                .get("mode")
-                .unwrap_or_else(|_| "NormalCitation".to_string());
-            let mode = match mode_str.as_str() {
-                "AuthorInText" => CitationMode::AuthorInText,
-                "SuppressAuthor" => CitationMode::SuppressAuthor,
-                _ => CitationMode::NormalCitation,
-            };
-            let prefix: Value = table
-                .get("prefix")
-                .unwrap_or(Value::Table(lua.create_table()?));
-            let prefix = peek_inlines_fuzzy(lua, prefix).unwrap_or_default();
-            let suffix: Value = table
-                .get("suffix")
-                .unwrap_or(Value::Table(lua.create_table()?));
-            let suffix = peek_inlines_fuzzy(lua, suffix).unwrap_or_default();
-            let note_num: i64 = table.get("note_num").unwrap_or(0);
-            let hash: i64 = table.get("hash").unwrap_or(0);
-
-            Ok(Citation {
-                id,
-                mode,
-                prefix,
-                suffix,
-                note_num: note_num as usize,
-                hash: hash as usize,
-                id_source: None,
-            })
-        }
-        _ => Err(Error::runtime("expected citation table")),
     }
 }
 
@@ -1452,6 +1400,10 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     )?;
 
     // pandoc.Citation(id, mode, prefix?, suffix?, note_num?, hash?)
+    // Returns typed Citation userdata (bd-sgfiiktn S1). id and mode are
+    // required and validated eagerly, matching Pandoc's mkCitation;
+    // prefix/suffix run through the fuzzy Inlines peeker (a bare string
+    // word-splits); note_num/hash default to 0.
     pandoc.set(
         "Citation",
         lua.create_function(
@@ -1464,18 +1416,14 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 Option<i64>,
                 Option<i64>,
             )| {
-                let mode = match mode.as_str() {
-                    "AuthorInText" => CitationMode::AuthorInText,
-                    "SuppressAuthor" => CitationMode::SuppressAuthor,
-                    _ => CitationMode::NormalCitation,
-                };
+                let mode = super::types::parse_citation_mode(&mode)?;
                 let prefix = match prefix {
-                    Some(v) => peek_inlines_fuzzy(lua, v).unwrap_or_default(),
-                    None => vec![],
+                    Some(Value::Nil) | None => vec![],
+                    Some(v) => peek_inlines_fuzzy(lua, v)?,
                 };
                 let suffix = match suffix {
-                    Some(v) => peek_inlines_fuzzy(lua, v).unwrap_or_default(),
-                    None => vec![],
+                    Some(Value::Nil) | None => vec![],
+                    Some(v) => peek_inlines_fuzzy(lua, v)?,
                 };
                 let citation = Citation {
                     id,
@@ -1486,28 +1434,7 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     hash: hash.unwrap_or(0) as usize,
                     id_source: None,
                 };
-                // Return as a table so it can be used with Cite constructor
-                let table = lua.create_table()?;
-                table.set("id", citation.id.clone())?;
-                table.set(
-                    "mode",
-                    match citation.mode {
-                        CitationMode::AuthorInText => "AuthorInText",
-                        CitationMode::SuppressAuthor => "SuppressAuthor",
-                        CitationMode::NormalCitation => "NormalCitation",
-                    },
-                )?;
-                table.set(
-                    "prefix",
-                    super::types::inlines_to_lua_table(lua, &citation.prefix)?,
-                )?;
-                table.set(
-                    "suffix",
-                    super::types::inlines_to_lua_table(lua, &citation.suffix)?,
-                )?;
-                table.set("note_num", citation.note_num as i64)?;
-                table.set("hash", citation.hash as i64)?;
-                Ok(table)
+                lua.create_userdata(super::types::LuaCitation::new(citation))
             },
         )?,
     )?;
@@ -2804,7 +2731,7 @@ mod tests {
             .load(
                 r#"
                 local citation = pandoc.Citation("smith2020", "NormalCitation")
-                local c = pandoc.Cite({citation}, {pandoc.Str("@smith2020")})
+                local c = pandoc.Cite({pandoc.Str("@smith2020")}, {citation})
                 return c.t
             "#,
             )
@@ -3163,7 +3090,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ========== parse_citations tests ==========
+    // ========== citation marshaling tests ==========
 
     #[test]
     fn test_parse_citations_valid() {
@@ -3173,7 +3100,7 @@ mod tests {
                 r#"
                 local citation = pandoc.Citation("smith2020", "AuthorInText")
                 local citations = {citation}
-                local cite = pandoc.Cite(citations, {pandoc.Str("@smith2020")})
+                local cite = pandoc.Cite({pandoc.Str("@smith2020")}, citations)
                 return cite.t
             "#,
             )
@@ -3185,11 +3112,9 @@ mod tests {
     #[test]
     fn test_parse_citations_invalid() {
         let lua = Lua::new();
-        let result = parse_citations(&lua, Value::Integer(42));
+        let result = super::super::types::lua_table_to_citations(&lua, Value::Integer(42));
         assert!(result.is_err());
     }
-
-    // ========== parse_single_citation tests ==========
 
     #[test]
     fn test_parse_single_citation_author_in_text() {
@@ -3239,7 +3164,7 @@ mod tests {
     #[test]
     fn test_parse_single_citation_invalid() {
         let lua = Lua::new();
-        let result = parse_single_citation(&lua, Value::Integer(42));
+        let result = super::super::types::lua_value_to_citation(&lua, Value::Integer(42));
         assert!(result.is_err());
     }
 

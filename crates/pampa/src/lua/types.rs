@@ -1645,27 +1645,18 @@ fn caption_to_lua_table(lua: &Lua, caption: &crate::pandoc::Caption) -> Result<V
     Ok(Value::Table(table))
 }
 
-/// Convert Vec<Citation> to Lua table of citation tables
+/// Convert Vec<Citation> to a pandoc-List table of Citation userdata
+/// (matching Pandoc, where `cite.citations` is a List whose entries
+/// are typed Citation values).
 fn citations_to_lua_table(lua: &Lua, citations: &[crate::pandoc::Citation]) -> Result<Value> {
-    let table = lua.create_table()?;
-    for (i, citation) in citations.iter().enumerate() {
-        let cit_table = lua.create_table()?;
-        cit_table.set("id", citation.id.clone())?;
-        cit_table.set("prefix", inlines_to_lua_table(lua, &citation.prefix)?)?;
-        cit_table.set("suffix", inlines_to_lua_table(lua, &citation.suffix)?)?;
-        cit_table.set(
-            "mode",
-            match citation.mode {
-                crate::pandoc::CitationMode::AuthorInText => "AuthorInText",
-                crate::pandoc::CitationMode::SuppressAuthor => "SuppressAuthor",
-                crate::pandoc::CitationMode::NormalCitation => "NormalCitation",
-            },
-        )?;
-        cit_table.set("note_num", citation.note_num as i64)?;
-        cit_table.set("hash", citation.hash as i64)?;
-        table.set(i + 1, cit_table)?;
-    }
-    Ok(Value::Table(table))
+    let values = citations
+        .iter()
+        .map(|citation| {
+            lua.create_userdata(LuaCitation::new(citation.clone()))
+                .map(Value::UserData)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    super::list::create_list_table(lua, values)
 }
 
 /// Convert Lua value to Attr - accepts either LuaAttr userdata or table
@@ -1713,40 +1704,29 @@ fn lua_value_to_attr(val: Value, _lua: &Lua) -> Result<crate::pandoc::Attr> {
     }
 }
 
-/// Convert Lua table to Vec<Citation>
-fn lua_table_to_citations(_lua: &Lua, val: Value) -> Result<Vec<crate::pandoc::Citation>> {
+/// Convert a Lua value to Vec<Citation>: a sequence table whose
+/// entries are Citation userdata, matching Pandoc's strict
+/// `peekList peekCitation` ("table expected, got <type>" /
+/// "Citation expected, got <type>").
+pub(crate) fn lua_table_to_citations(
+    lua: &Lua,
+    val: Value,
+) -> Result<Vec<crate::pandoc::Citation>> {
     match val {
         Value::Table(table) => {
             let mut result = Vec::new();
-            for item in table.sequence_values::<Table>() {
-                let cit_table = item?;
-                let id: String = cit_table.get("id")?;
-                let prefix_val: Value = cit_table.get("prefix")?;
-                let prefix = peek_inlines_fuzzy(_lua, prefix_val)?;
-                let suffix_val: Value = cit_table.get("suffix")?;
-                let suffix = peek_inlines_fuzzy(_lua, suffix_val)?;
-                let mode_str: String = cit_table.get("mode")?;
-                let mode = match mode_str.as_str() {
-                    "AuthorInText" => crate::pandoc::CitationMode::AuthorInText,
-                    "SuppressAuthor" => crate::pandoc::CitationMode::SuppressAuthor,
-                    _ => crate::pandoc::CitationMode::NormalCitation,
-                };
-                let note_num: i64 = cit_table.get("note_num").unwrap_or(0);
-                let hash: i64 = cit_table.get("hash").unwrap_or(0);
-
-                result.push(crate::pandoc::Citation {
-                    id,
-                    prefix,
-                    suffix,
-                    mode,
-                    note_num: note_num as usize,
-                    hash: hash as usize,
-                    id_source: None, // Filter-created citations don't have source info
-                });
+            for item in table.sequence_values::<Value>() {
+                result.push(lua_value_to_citation(lua, item?)?);
             }
             Ok(result)
         }
-        _ => Err(Error::runtime("expected table of citations")),
+        Value::UserData(ud) if ud.borrow::<LuaCitation>().is_ok() => Err(Error::runtime(
+            "table expected, got Citation (a single Citation must be wrapped in a list)",
+        )),
+        other => Err(Error::runtime(format!(
+            "table of Citations expected, got {}",
+            other.type_name()
+        ))),
     }
 }
 
@@ -3119,6 +3099,250 @@ pub fn attributes_proxy_for_inline(lua: &Lua, inline: Rc<RefCell<Inline>>) -> Re
 pub fn classes_proxy_for_inline(lua: &Lua, inline: Rc<RefCell<Inline>>) -> Result<Value> {
     let attr = LuaAttr::for_inline(inline);
     attr.with_attr(|a| super::list::create_string_list_table(lua, &a.1))
+}
+
+/// Parse a citation-mode string, erroring loudly on anything that is
+/// not one of Pandoc's three constructor names (Pandoc's `peekRead`
+/// does the same: `Could not read: <value>`).
+pub(crate) fn parse_citation_mode(s: &str) -> Result<crate::pandoc::CitationMode> {
+    use crate::pandoc::CitationMode;
+    match s {
+        "AuthorInText" => Ok(CitationMode::AuthorInText),
+        "SuppressAuthor" => Ok(CitationMode::SuppressAuthor),
+        "NormalCitation" => Ok(CitationMode::NormalCitation),
+        other => Err(Error::runtime(format!(
+            "invalid citation mode '{other}' (expected NormalCitation, AuthorInText, or SuppressAuthor)"
+        ))),
+    }
+}
+
+fn citation_mode_name(mode: &crate::pandoc::CitationMode) -> &'static str {
+    use crate::pandoc::CitationMode;
+    match mode {
+        CitationMode::AuthorInText => "AuthorInText",
+        CitationMode::SuppressAuthor => "SuppressAuthor",
+        CitationMode::NormalCitation => "NormalCitation",
+    }
+}
+
+/// Wrapper for a Pandoc `Citation` as typed Lua userdata, matching
+/// pandoc-lua-marshal's `typeCitation` (bd-sgfiiktn S1; previously
+/// `pandoc.Citation` returned a plain Lua table).
+///
+/// The inner `Citation` lives behind `Rc<RefCell<…>>` so the userdata
+/// handed out inside a `cite.citations` List stays live: in-place
+/// mutation (`c.id = 'x'`) lands in the cell, and the Cite element's
+/// cached `citations` table re-reads the same cells at flush time.
+/// The Inlines-valued `prefix`/`suffix` properties get the same
+/// hslua-style cache+readback treatment elements use (aliased reads,
+/// `:insert` persists — see [`PropertyCache`]).
+///
+/// Divergence note (registry-bound, bd-9p2686pc): property assignment
+/// validates eagerly here, while Pandoc caches the raw value and only
+/// errors at marshal-out. Programs that observe the difference error
+/// in both implementations; only the timing and message differ.
+#[derive(Debug, Clone)]
+pub struct LuaCitation {
+    pub cell: Rc<RefCell<crate::pandoc::Citation>>,
+    pub(crate) cache: PropertyCache,
+}
+
+impl LuaCitation {
+    pub fn new(citation: crate::pandoc::Citation) -> Self {
+        LuaCitation {
+            cell: Rc::new(RefCell::new(citation)),
+            cache: PropertyCache::default(),
+        }
+    }
+
+    fn is_cacheable_key(key: &str) -> bool {
+        matches!(key, "prefix" | "suffix")
+    }
+
+    /// Write cached `prefix`/`suffix` tables back into the cell
+    /// (hslua readback semantics). Idempotent.
+    pub fn flush_property_cache(&self, lua: &Lua) -> Result<()> {
+        let entries = match self.cache.begin_flush() {
+            Some(entries) => entries,
+            None => return Ok(()),
+        };
+        let mut result = Ok(());
+        for (key, value) in entries {
+            if let Err(e) = self.set_field(&key, value, lua) {
+                result = Err(e);
+                break;
+            }
+        }
+        self.cache.end_flush();
+        result
+    }
+
+    /// Flush, then deep-clone the inner `Citation` — the blessed way
+    /// to marshal a `LuaCitation` back into a Rust value.
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<crate::pandoc::Citation> {
+        self.flush_property_cache(lua)?;
+        Ok(self.cell.borrow().clone())
+    }
+
+    fn get_field(&self, lua: &Lua, key: &str) -> Result<Value> {
+        if key == "clone" {
+            self.flush_property_cache(lua)?;
+            let snapshot = self.cell.borrow().clone();
+            return lua
+                .create_function(move |lua, ()| {
+                    lua.create_userdata(LuaCitation::new(snapshot.clone()))
+                })?
+                .into_lua(lua);
+        }
+        let inner = self.cell.borrow();
+        match key {
+            "id" => inner.id.clone().into_lua(lua),
+            "mode" => citation_mode_name(&inner.mode).into_lua(lua),
+            "prefix" => inlines_to_lua_table(lua, &inner.prefix),
+            "suffix" => inlines_to_lua_table(lua, &inner.suffix),
+            "note_num" => (inner.note_num as i64).into_lua(lua),
+            "hash" => (inner.hash as i64).into_lua(lua),
+            _ => Ok(Value::Nil),
+        }
+    }
+
+    fn set_field(&self, key: &str, val: Value, lua: &Lua) -> Result<()> {
+        match key {
+            "id" => {
+                let id = String::from_lua(val, lua)?;
+                self.cell.borrow_mut().id = id;
+                Ok(())
+            }
+            "mode" => {
+                let s = String::from_lua(val, lua)?;
+                let mode = parse_citation_mode(&s)?;
+                self.cell.borrow_mut().mode = mode;
+                Ok(())
+            }
+            "prefix" => {
+                let inlines = peek_inlines_fuzzy(lua, val)?;
+                self.cell.borrow_mut().prefix = inlines;
+                Ok(())
+            }
+            "suffix" => {
+                let inlines = peek_inlines_fuzzy(lua, val)?;
+                self.cell.borrow_mut().suffix = inlines;
+                Ok(())
+            }
+            "note_num" => {
+                let n = i64::from_lua(val, lua)?;
+                self.cell.borrow_mut().note_num = n as usize;
+                Ok(())
+            }
+            "hash" => {
+                let n = i64::from_lua(val, lua)?;
+                self.cell.borrow_mut().hash = n as usize;
+                Ok(())
+            }
+            _ => Err(Error::runtime(format!(
+                "cannot set field '{key}' on Citation"
+            ))),
+        }
+    }
+
+    /// Structural equality ignoring source info, via the JSON writer's
+    /// source-free serialization (same approach as elements — wrap the
+    /// citations in a synthetic Cite so the maintained match logic does
+    /// the comparison).
+    fn structurally_eq(&self, other: &LuaCitation) -> bool {
+        let wrap = |c: &LuaCitation| {
+            Inline::Cite(crate::pandoc::Cite {
+                citations: vec![c.cell.borrow().clone()],
+                content: vec![],
+                source_info: SourceInfo::generated(By::unknown()),
+            })
+        };
+        inline_structurally_eq(&wrap(self), &wrap(other))
+    }
+}
+
+impl UserData for LuaCitation {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method(MetaMethod::Index, |lua, this, key: String| {
+            if let Some(cached) = this.cache.get(&key) {
+                return Ok(cached);
+            }
+            let value = this.get_field(lua, &key)?;
+            if LuaCitation::is_cacheable_key(&key) && matches!(value, Value::Table(_)) {
+                this.cache.store(&key, &value);
+            }
+            Ok(value)
+        });
+
+        methods.add_meta_method(
+            MetaMethod::NewIndex,
+            |lua, this, (key, val): (String, Value)| {
+                this.set_field(&key, val.clone(), lua)?;
+                if LuaCitation::is_cacheable_key(&key) {
+                    if matches!(val, Value::Table(_)) {
+                        this.cache.store(&key, &val);
+                    } else {
+                        this.cache.remove(&key);
+                    }
+                }
+                Ok(())
+            },
+        );
+
+        methods.add_meta_method(MetaMethod::ToString, |lua, this, ()| {
+            this.flush_property_cache(lua)?;
+            Ok(super::show::show_citation(&this.cell.borrow()))
+        });
+
+        methods.add_meta_method(MetaMethod::Eq, |lua, this, other: Value| {
+            Ok(match other {
+                Value::UserData(ud) => match ud.borrow::<LuaCitation>() {
+                    Ok(other_citation) => {
+                        this.flush_property_cache(lua)?;
+                        other_citation.flush_property_cache(lua)?;
+                        this.structurally_eq(&other_citation)
+                    }
+                    Err(_) => false,
+                },
+                _ => false,
+            })
+        });
+    }
+}
+
+/// Marshal one Lua value into a `Citation`: only `LuaCitation`
+/// userdata is accepted, matching Pandoc's strict `peekCitation`
+/// ("Citation expected, got <type>").
+pub(crate) fn lua_value_to_citation(lua: &Lua, val: Value) -> Result<crate::pandoc::Citation> {
+    match val {
+        Value::UserData(ud) => match ud.borrow::<LuaCitation>() {
+            Ok(citation) => citation.extract_flushed(lua),
+            Err(_) => Err(Error::runtime(format!(
+                "Citation expected, got {}",
+                userdata_type_name(&ud)
+            ))),
+        },
+        other => Err(Error::runtime(format!(
+            "Citation expected, got {}",
+            other.type_name()
+        ))),
+    }
+}
+
+/// Best-effort human-readable name for a userdata value in error
+/// messages (element tag for our AST wrappers, Rust wrapper name
+/// otherwise).
+fn userdata_type_name(ud: &mlua::AnyUserData) -> String {
+    if let Ok(inline) = ud.borrow::<LuaInline>() {
+        return inline.tag_name().to_string();
+    }
+    if let Ok(block) = ud.borrow::<LuaBlock>() {
+        return block.tag_name().to_string();
+    }
+    if ud.borrow::<LuaAttr>().is_ok() {
+        return "Attr".to_string();
+    }
+    "userdata".to_string()
 }
 
 // FromLua implementation for converting Lua values back to Rust types

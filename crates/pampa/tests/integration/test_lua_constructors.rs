@@ -55,7 +55,7 @@ async fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
 
 #[tokio::test]
 async fn test_cite_constructor() {
-    // Test pandoc.Cite(citations, content) constructor
+    // Test pandoc.Cite(content, citations) constructor (Pandoc arg order)
     let filter_code = r#"
 function Para(elem)
     -- Create a citation
@@ -66,8 +66,8 @@ function Para(elem)
 
     -- Create a Cite inline with the citation
     local cite = pandoc.Cite(
-        {citation},            -- citations list
-        {pandoc.Str("Knuth")}  -- content
+        {pandoc.Str("Knuth")}, -- content
+        {citation}             -- citations list
     )
 
     -- Verify the cite was created correctly

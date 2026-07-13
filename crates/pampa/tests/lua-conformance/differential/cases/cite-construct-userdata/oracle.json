@@ -1,0 +1,68 @@
+{
+  "blocks": [
+    {
+      "c": [
+        {
+          "c": [
+            [
+              {
+                "citationHash": 0,
+                "citationId": "knuth1984",
+                "citationMode": {
+                  "t": "AuthorInText"
+                },
+                "citationNoteNum": 3,
+                "citationPrefix": [
+                  {
+                    "c": "see",
+                    "t": "Str"
+                  },
+                  {
+                    "t": "Space"
+                  },
+                  {
+                    "c": "also",
+                    "t": "Str"
+                  }
+                ],
+                "citationSuffix": []
+              },
+              {
+                "citationHash": 0,
+                "citationId": "lamport1994",
+                "citationMode": {
+                  "t": "SuppressAuthor"
+                },
+                "citationNoteNum": 0,
+                "citationPrefix": [],
+                "citationSuffix": []
+              }
+            ],
+            [
+              {
+                "c": "placeholder",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "text",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Cite"
+        }
+      ],
+      "t": "Para"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    1
+  ]
+}

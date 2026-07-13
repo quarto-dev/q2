@@ -27,6 +27,8 @@ local constants = {
   'DisplayMath', 'InlineMath',
   -- QuoteType
   'SingleQuote', 'DoubleQuote',
+  -- CitationMode
+  'AuthorInText', 'SuppressAuthor', 'NormalCitation',
 }
 for _, name in ipairs(constants) do
   _G[name] = name

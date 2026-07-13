@@ -95,6 +95,20 @@ Progress log:
   differential 5 → 4. Remaining known mutation gap:
   `attr.classes:insert` (classes proxy, → bd-tzwcof0n).
 
+- **2026-07-13, bd-sgfiiktn S1** (part of clusters 7 + 9): Citation is
+  typed userdata (`LuaCitation`: property cache on prefix/suffix,
+  structural `__eq`, Haskell-show `__tostring`, deep `:clone`, eager
+  validated setters); `pandoc.Cite` argument order flipped to Pandoc's
+  `(content, citations)` (comment c-inqf5qlb) with the strict
+  list-of-Citation-userdata peeker ("table expected, got Citation" /
+  "Citation expected, got X"); `cite.citations` is an aliased
+  pandoc-List of Citation userdata with cache+readback persistence.
+  CitationMode constants added to the conformance prelude.
+  Track-1 xfail **81 → 72** (7 test-citation + 2 Cite flips, zero new
+  failures); differential **19 → 20 cases, all pass**
+  (cite-construct-userdata; normalizer now strips `citationIdS`).
+  E2e byte-identical to pandoc 3.9.0.2 through the real binary.
+
 Notes:
 
 - Cluster 1 (`__eq`) masks finer-grained results: once equality works,

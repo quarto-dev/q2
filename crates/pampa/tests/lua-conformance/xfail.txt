@@ -10,6 +10,8 @@
 # 2026-07-13 (bd-sgfiiktn phase 0): vendored the remaining 7 upstream files
 # (citation, listattributes, metavalue, pandoc, simpletable, table, cell) —
 # corpus 133 -> 203 cases; new baseline 122 pass, 81 xfail overall.
+# After bd-sgfiiktn S1 (Citation userdata + Cite(content, citations) peekers):
+# 131 pass, 72 xfail.
 
 test-block.lua::Block marshalling::__toblock metamethod::metamethod __toblock is called when available # [string "test-block.lua"]:701:  expected values to be equal, got 'Div ("",[],[]) [CodeBlock ("opn",[],[]) "open access"]…
 test-block.lua::Block marshalling::__toblock metamethod::object with metamethod can be used as singleton list # [string "test-block.lua"]:734:  expected values to be equal, got 'Div ("",[],[]) [CodeBlock ("opn",[],[]) "open access"]…
@@ -24,8 +26,6 @@ test-block.lua::Block::Table::access table head via property `head` # [string "t
 test-block.lua::Block::Table::bodies field accepts single TableBody # runtime error: expected table of TableBody stack traceback: 	[C]: in function 'Table' 	[string "test-block.lua"]:415: in…
 test-block.lua::Block::Table::caption field accepts list of blocks # [string "test-block.lua"]:400:  expected same values, got nil and table: 0xa9113d200
 test-block.lua::Blocks::Constructor::gives sensible error message # [string "test-block.lua"]:455:  expected error to match pattern 'Block, list of Blocks, or compatible element expected' …
-test-inline.lua::Inline::Cite::has list of citations in property `cite` # runtime error: expected table of citations stack traceback: 	[C]: in function 'Cite' 	[string "test-inline.lua"]:21: in …
-test-inline.lua::Inline::Cite::has property `content` # runtime error: expected citation table stack traceback: 	[C]: in function 'Cite' 	[string "test-inline.lua"]:11: in func…
 test-inline.lua::Inline::Code::has property `attr` # [string "test-inline.lua"]:38:  expected values to be equal, got 'Code ("t",[],[("fubar","quux")]) "true"' and 'Code (""…
 test-inline.lua::Inline::Image::has property `caption` of type Inlines # [string "test-inline.lua"]:65:  expected same values, got nil and table: 0x71ac91940
 test-inline.lua::Inline::Math::has property `mathtype` # runtime error: cannot set field 'mathtype' stack traceback: 	[C]: in metamethod 'newindex' 	[string "test-inline.lua"]:1…
@@ -47,13 +47,6 @@ test-cell.lua::Cell::properties::modify row_span # [string "test-cell.lua"]:40: 
 test-cell.lua::Cell::walk::modifies Inline subelements # [string "test-cell.lua"]:76: attempt to call a nil value (method 'walk')
 test-cell.lua::Cell::walk::uses `Inlines` for lists of inlines # [string "test-cell.lua"]:87: attempt to call a nil value (method 'walk')
 test-cell.lua::Cell::walk::uses order Inline -> Inlines -> Block -> Blocks # [string "test-cell.lua"]:98: attempt to call a nil value (method 'walk')
-test-citation.lua::Citation::can be cloned # bad argument #2: error converting Lua nil to String (expected string or number) stack traceback: 	[C]: in function 'Cita…
-test-citation.lua::Citation::field `hash`::can be set # [string "test-citation.lua"]:104:  expected values to be equal, got 'table: 0x7f8c6cec0' and 'table: 0x7f8c6d000'
-test-citation.lua::Citation::field `id`::can be set # [string "test-citation.lua"]:30:  expected values to be equal, got 'table: 0x7f8c3f080' and 'table: 0x7f8c3f140'
-test-citation.lua::Citation::field `mode`::can be set # [string "test-citation.lua"]:43:  expected values to be equal, got 'table: 0x7f8c3f440' and 'table: 0x7f8c3f500'
-test-citation.lua::Citation::field `note_num`::can be set # [string "test-citation.lua"]:88:  expected values to be equal, got 'table: 0x7f8c6c9c0' and 'table: 0x7f8c6cb00'
-test-citation.lua::Citation::field `prefix`::can be set # [string "test-citation.lua"]:56:  expected values to be equal, got 'table: 0x7f8c3fdc0' and 'table: 0x7f8c3ff00'
-test-citation.lua::Citation::field `suffix`::can be set # [string "test-citation.lua"]:72:  expected values to be equal, got 'table: 0x7f8c6c4c0' and 'table: 0x7f8c6c640'
 test-listattributes.lua::ListAttributes::can be cloned # [string "test-listattributes.lua"]:48: attempt to call a nil value (method 'clone')
 test-listattributes.lua::ListAttributes::can be compared on equality # [string "test-listattributes.lua"]:22:  expected values to be equal, got 'table: 0x958c3ef00' and 'table: 0x958c3f100'
 test-listattributes.lua::ListAttributes::can be modified through `delimiter` # [string "test-listattributes.lua"]:44:  expected values to be equal, got 'table: 0x958c3f300' and 'table: 0x958c3f580'

@@ -39,13 +39,19 @@ fn differential_dir() -> PathBuf {
 /// - `s` (source id) and `a` (attr source structure) members of AST
 ///   nodes (objects carrying a string `t` tag — meta maps with
 ///   user-chosen `s`/`a` keys are not touched because their containers
-///   have no `t` tag).
+///   have no `t` tag),
+/// - `citationIdS` (citation id source) on citation objects (which
+///   carry no `t` tag, so they need their own rule; keyed off the
+///   `citationId` member).
 fn normalize_nodes(v: &mut Json) {
     match v {
         Json::Object(map) => {
             if map.get("t").is_some_and(|t| t.is_string()) {
                 map.remove("s");
                 map.remove("a");
+            }
+            if map.contains_key("citationId") {
+                map.remove("citationIdS");
             }
             for (_k, val) in map.iter_mut() {
                 normalize_nodes(val);
