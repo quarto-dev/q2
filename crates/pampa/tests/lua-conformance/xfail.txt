@@ -12,13 +12,13 @@
 # corpus 133 -> 203 cases; new baseline 122 pass, 81 xfail overall.
 # After bd-sgfiiktn S1 (Citation userdata + Cite(content, citations) peekers):
 # 131 pass, 72 xfail.
+# After bd-sgfiiktn S2 (ListAttributes userdata + OrderedList aliases +
+# strict triple peeker): 144 pass, 59 xfail.
 
 test-block.lua::Block marshalling::__toblock metamethod::metamethod __toblock is called when available # [string "test-block.lua"]:701:  expected values to be equal, got 'Div ("",[],[]) [CodeBlock ("opn",[],[]) "open access"]…
 test-block.lua::Block marshalling::__toblock metamethod::object with metamethod can be used as singleton list # [string "test-block.lua"]:734:  expected values to be equal, got 'Div ("",[],[]) [CodeBlock ("opn",[],[]) "open access"]…
 test-block.lua::Block::Figure::access caption via property `caption` # [string "test-block.lua"]:184:  expected values to be equal, got 'table' and 'userdata'
 test-block.lua::Block::Header::access Attr via property `attr` # runtime error: expected Attr userdata or table stack traceback: 	[C]: in metamethod 'newindex' 	[string "test-block.lua"…
-test-block.lua::Block::OrderedList::forgiving constructor # [string "test-block.lua"]:269:  expected same values, got nil and table: 0xa910e32c0
-test-block.lua::Block::OrderedList::has list attribute aliases # [string "test-block.lua"]:275:  expected values to be equal, got 'nil' and 'OneParen'
 test-block.lua::Block::Table::access caption via property `caption` # runtime error: expected Inline userdata, string, or Inline-like value stack traceback: 	[C]: in function 'Caption' 	[str…
 test-block.lua::Block::Table::access column specifiers via property `colspecs` # [string "test-block.lua"]:354:  expected same values, got nil and table: 0xa9113c840
 test-block.lua::Block::Table::access table foot via property `foot` # [string "test-block.lua"]:384:  expected same values, got nil and LuaTableFoot: 0xa91134f88
@@ -47,17 +47,6 @@ test-cell.lua::Cell::properties::modify row_span # [string "test-cell.lua"]:40: 
 test-cell.lua::Cell::walk::modifies Inline subelements # [string "test-cell.lua"]:76: attempt to call a nil value (method 'walk')
 test-cell.lua::Cell::walk::uses `Inlines` for lists of inlines # [string "test-cell.lua"]:87: attempt to call a nil value (method 'walk')
 test-cell.lua::Cell::walk::uses order Inline -> Inlines -> Block -> Blocks # [string "test-cell.lua"]:98: attempt to call a nil value (method 'walk')
-test-listattributes.lua::ListAttributes::can be cloned # [string "test-listattributes.lua"]:48: attempt to call a nil value (method 'clone')
-test-listattributes.lua::ListAttributes::can be compared on equality # [string "test-listattributes.lua"]:22:  expected values to be equal, got 'table: 0x958c3ef00' and 'table: 0x958c3f100'
-test-listattributes.lua::ListAttributes::can be modified through `delimiter` # [string "test-listattributes.lua"]:44:  expected values to be equal, got 'table: 0x958c3f300' and 'table: 0x958c3f580'
-test-listattributes.lua::ListAttributes::can be modified through `start` # [string "test-listattributes.lua"]:34:  expected values to be equal, got 'table: 0x958c3f000' and 'table: 0x958c3f280'
-test-listattributes.lua::ListAttributes::can be modified through `style` # [string "test-listattributes.lua"]:39:  expected values to be equal, got 'table: 0x958c3f180' and 'table: 0x958c3f400'
-test-listattributes.lua::ListAttributes::Constructor::omitting a delimiter sets it to DefaultDelim # [string "test-listattributes.lua"]:61:  expected values to be equal, got 'nil' and 'DefaultDelim'
-test-listattributes.lua::ListAttributes::Constructor::omitting a start numer sets it to 1 # [string "test-listattributes.lua"]:55:  expected values to be equal, got 'nil' and '1'
-test-listattributes.lua::ListAttributes::Constructor::omitting a style sets it to DefaultStyle # [string "test-listattributes.lua"]:58:  expected values to be equal, got 'nil' and 'DefaultStyle'
-test-listattributes.lua::ListAttributes::has field `delimiter` # [string "test-listattributes.lua"]:19:  expected values to be equal, got 'nil' and 'Period'
-test-listattributes.lua::ListAttributes::has field `start` # [string "test-listattributes.lua"]:11:  expected values to be equal, got 'nil' and '7'
-test-listattributes.lua::ListAttributes::has field `style` # [string "test-listattributes.lua"]:15:  expected values to be equal, got 'nil' and 'Example'
 test-metavalue.lua::MetaValue elements::MetaList elements behave like lists # [string "test-metavalue.lua"]:10: attempt to call a nil value (global 'MetaList')
 test-metavalue.lua::MetaValue elements::Numbers are treated as strings # [string "test-metavalue.lua"]:15: attempt to call a nil value (global 'MetaList')
 test-pandoc.lua::clone::changing the clone does not affect original # [string "test-pandoc.lua"]:54: attempt to call a nil value (global 'Pandoc')

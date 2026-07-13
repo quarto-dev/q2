@@ -9,7 +9,11 @@
  */
 
 use hashlink::LinkedHashMap;
-use mlua::{Error, FromLua, IntoLua, Lua, Result, Table as LuaTable, Value};
+use mlua::{
+    Error, FromLua, IntoLua, Lua, MetaMethod, Result, Table as LuaTable, UserDataMethods, Value,
+};
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use super::mediabag::SharedMediaBag;
@@ -208,11 +212,159 @@ impl UserData for LuaCell {
     }
 }
 
-/// Wrapper for ListAttributes
-#[derive(Debug, Clone)]
-pub struct LuaListAttributes(pub ListAttributes);
+/// Parse a ListNumberStyle name, erroring loudly on anything that is
+/// not one of Pandoc's constructor names (Pandoc's `peekRead` errors
+/// with `Could not read: <value>`).
+pub(crate) fn parse_list_number_style(s: &str) -> Result<ListNumberStyle> {
+    match s {
+        "DefaultStyle" => Ok(ListNumberStyle::Default),
+        "Example" => Ok(ListNumberStyle::Example),
+        "Decimal" => Ok(ListNumberStyle::Decimal),
+        "LowerRoman" => Ok(ListNumberStyle::LowerRoman),
+        "UpperRoman" => Ok(ListNumberStyle::UpperRoman),
+        "LowerAlpha" => Ok(ListNumberStyle::LowerAlpha),
+        "UpperAlpha" => Ok(ListNumberStyle::UpperAlpha),
+        other => Err(Error::runtime(format!(
+            "invalid list number style '{other}' (expected DefaultStyle, Example, Decimal, \
+             LowerRoman, UpperRoman, LowerAlpha, or UpperAlpha)"
+        ))),
+    }
+}
 
-impl UserData for LuaListAttributes {}
+pub(crate) fn list_number_style_name(style: &ListNumberStyle) -> &'static str {
+    match style {
+        ListNumberStyle::Default => "DefaultStyle",
+        ListNumberStyle::Example => "Example",
+        ListNumberStyle::Decimal => "Decimal",
+        ListNumberStyle::LowerRoman => "LowerRoman",
+        ListNumberStyle::UpperRoman => "UpperRoman",
+        ListNumberStyle::LowerAlpha => "LowerAlpha",
+        ListNumberStyle::UpperAlpha => "UpperAlpha",
+    }
+}
+
+/// Parse a ListNumberDelim name; loud error on garbage (see
+/// [`parse_list_number_style`]).
+pub(crate) fn parse_list_number_delim(s: &str) -> Result<ListNumberDelim> {
+    match s {
+        "DefaultDelim" => Ok(ListNumberDelim::Default),
+        "Period" => Ok(ListNumberDelim::Period),
+        "OneParen" => Ok(ListNumberDelim::OneParen),
+        "TwoParens" => Ok(ListNumberDelim::TwoParens),
+        other => Err(Error::runtime(format!(
+            "invalid list number delimiter '{other}' (expected DefaultDelim, Period, \
+             OneParen, or TwoParens)"
+        ))),
+    }
+}
+
+pub(crate) fn list_number_delim_name(delim: &ListNumberDelim) -> &'static str {
+    match delim {
+        ListNumberDelim::Default => "DefaultDelim",
+        ListNumberDelim::Period => "Period",
+        ListNumberDelim::OneParen => "OneParen",
+        ListNumberDelim::TwoParens => "TwoParens",
+    }
+}
+
+/// Wrapper for a Pandoc `ListAttributes` triple as typed Lua userdata,
+/// matching pandoc-lua-marshal's `typeListAttributes` (bd-sgfiiktn S2;
+/// previously `pandoc.ListAttributes` returned a plain positional
+/// table).
+///
+/// The triple lives behind `Rc<RefCell<…>>` so the userdata cached on
+/// an OrderedList's `listAttributes` property stays live: nested
+/// mutation (`ol.listAttributes.start = 42`) lands in the cell and is
+/// written back at the element's cache flush. All three properties
+/// are scalars, so no `PropertyCache` is needed on the userdata
+/// itself; setters validate eagerly (Pandoc defers the same errors to
+/// marshal-out — timing-only divergence, as with Citation).
+#[derive(Debug, Clone)]
+pub struct LuaListAttributes {
+    pub cell: Rc<RefCell<ListAttributes>>,
+}
+
+impl LuaListAttributes {
+    pub fn new(attrs: ListAttributes) -> Self {
+        LuaListAttributes {
+            cell: Rc::new(RefCell::new(attrs)),
+        }
+    }
+
+    /// Deep-clone the triple out of the cell.
+    pub fn clone_attrs(&self) -> ListAttributes {
+        self.cell.borrow().clone()
+    }
+
+    pub(crate) fn get_field(&self, lua: &Lua, key: &str) -> Result<Value> {
+        if key == "clone" {
+            let snapshot = self.cell.borrow().clone();
+            return lua
+                .create_function(move |lua, ()| {
+                    lua.create_userdata(LuaListAttributes::new(snapshot.clone()))
+                })?
+                .into_lua(lua);
+        }
+        let inner = self.cell.borrow();
+        match key {
+            "start" => (inner.0 as i64).into_lua(lua),
+            "style" => list_number_style_name(&inner.1).into_lua(lua),
+            "delimiter" => list_number_delim_name(&inner.2).into_lua(lua),
+            _ => Ok(Value::Nil),
+        }
+    }
+
+    pub(crate) fn set_field(&self, key: &str, val: Value, lua: &Lua) -> Result<()> {
+        match key {
+            "start" => {
+                let n = i64::from_lua(val, lua)?;
+                self.cell.borrow_mut().0 = n as usize;
+                Ok(())
+            }
+            "style" => {
+                let s = String::from_lua(val, lua)?;
+                let style = parse_list_number_style(&s)?;
+                self.cell.borrow_mut().1 = style;
+                Ok(())
+            }
+            "delimiter" => {
+                let s = String::from_lua(val, lua)?;
+                let delim = parse_list_number_delim(&s)?;
+                self.cell.borrow_mut().2 = delim;
+                Ok(())
+            }
+            _ => Err(Error::runtime(format!(
+                "cannot set field '{key}' on ListAttributes"
+            ))),
+        }
+    }
+}
+
+impl UserData for LuaListAttributes {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method(MetaMethod::Index, |lua, this, key: String| {
+            this.get_field(lua, &key)
+        });
+
+        methods.add_meta_method(
+            MetaMethod::NewIndex,
+            |lua, this, (key, val): (String, Value)| this.set_field(&key, val, lua),
+        );
+
+        // Structural equality (the triple's derived PartialEq; no
+        // source info to ignore). False against non-ListAttributes,
+        // including the equivalent raw triple table — matching pandoc.
+        methods.add_meta_method(MetaMethod::Eq, |_, this, other: Value| {
+            Ok(match other {
+                Value::UserData(ud) => match ud.borrow::<LuaListAttributes>() {
+                    Ok(other_la) => *this.cell.borrow() == *other_la.cell.borrow(),
+                    Err(_) => false,
+                },
+                _ => false,
+            })
+        });
+    }
+}
 
 /// Register the pandoc namespace with element constructors
 pub fn register_pandoc_namespace(
@@ -1308,41 +1460,41 @@ fn parse_single_cell(lua: &Lua, val: Value) -> Result<Cell> {
     }
 }
 
-/// Parse ListAttributes from Lua value
-fn parse_list_attributes(val: Value) -> Result<ListAttributes> {
+/// Parse ListAttributes from a Lua value: ListAttributes userdata or
+/// a full positional triple `{start, style, delimiter}`, matching
+/// Pandoc's `peekListAttributes` (userdata-or-peekTriple choice; a
+/// partial triple like `{3}` is an error there too — "all choices
+/// failed" — and silently-defaulting garbage would mask typos).
+/// `Nil` means "argument omitted" and yields the Pandoc defaults
+/// `(1, DefaultStyle, DefaultDelim)`.
+pub(crate) fn parse_list_attributes(val: Value) -> Result<ListAttributes> {
     match val {
+        Value::Nil => Ok((1, ListNumberStyle::Default, ListNumberDelim::Default)),
         Value::Table(table) => {
-            let start: i64 = table.get(1).unwrap_or(1);
-            let style_str: String = table.get(2).unwrap_or_else(|_| "DefaultStyle".to_string());
-            let delim_str: String = table.get(3).unwrap_or_else(|_| "DefaultDelim".to_string());
-
-            let style = match style_str.as_str() {
-                "Decimal" => ListNumberStyle::Decimal,
-                "LowerAlpha" => ListNumberStyle::LowerAlpha,
-                "UpperAlpha" => ListNumberStyle::UpperAlpha,
-                "LowerRoman" => ListNumberStyle::LowerRoman,
-                "UpperRoman" => ListNumberStyle::UpperRoman,
-                "Example" => ListNumberStyle::Example,
-                _ => ListNumberStyle::Default,
-            };
-
-            let delim = match delim_str.as_str() {
-                "Period" => ListNumberDelim::Period,
-                "OneParen" => ListNumberDelim::OneParen,
-                "TwoParens" => ListNumberDelim::TwoParens,
-                _ => ListNumberDelim::Default,
-            };
-
+            let start: i64 = table.get(1).map_err(|_| {
+                Error::runtime("ListAttributes triple: expected integer start at index 1")
+            })?;
+            let style_str: String = table.get(2).map_err(|_| {
+                Error::runtime("ListAttributes triple: expected style string at index 2")
+            })?;
+            let delim_str: String = table.get(3).map_err(|_| {
+                Error::runtime("ListAttributes triple: expected delimiter string at index 3")
+            })?;
+            let style = parse_list_number_style(&style_str)?;
+            let delim = parse_list_number_delim(&delim_str)?;
             Ok((start as usize, style, delim))
         }
         Value::UserData(ud) => {
             if let Ok(attr) = ud.borrow::<LuaListAttributes>() {
-                Ok(attr.0.clone())
+                Ok(attr.clone_attrs())
             } else {
-                Err(Error::runtime("expected ListAttributes userdata"))
+                Err(Error::runtime("expected ListAttributes userdata or triple"))
             }
         }
-        _ => Ok((1, ListNumberStyle::Default, ListNumberDelim::Default)),
+        other => Err(Error::runtime(format!(
+            "expected ListAttributes userdata or {{start, style, delimiter}} triple, got {}",
+            other.type_name()
+        ))),
     }
 }
 
@@ -1460,52 +1612,25 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         })?,
     )?;
 
-    // pandoc.ListAttributes(start?, style?, delim?)
+    // pandoc.ListAttributes(start?, style?, delim?) — typed userdata
+    // (bd-sgfiiktn S2). All arguments optional with Pandoc defaults
+    // (1, DefaultStyle, DefaultDelim); style/delimiter validated
+    // eagerly, matching mkListAttributes' peekRead (loud error on
+    // garbage — the old code silently defaulted, masking typos).
     pandoc.set(
         "ListAttributes",
         lua.create_function(
             |lua, (start, style, delim): (Option<i64>, Option<String>, Option<String>)| {
                 let start = start.unwrap_or(1) as usize;
                 let style = match style.as_deref() {
-                    Some("Decimal") => ListNumberStyle::Decimal,
-                    Some("LowerAlpha") => ListNumberStyle::LowerAlpha,
-                    Some("UpperAlpha") => ListNumberStyle::UpperAlpha,
-                    Some("LowerRoman") => ListNumberStyle::LowerRoman,
-                    Some("UpperRoman") => ListNumberStyle::UpperRoman,
-                    Some("Example") => ListNumberStyle::Example,
-                    _ => ListNumberStyle::Default,
+                    None => ListNumberStyle::Default,
+                    Some(s) => parse_list_number_style(s)?,
                 };
                 let delim = match delim.as_deref() {
-                    Some("Period") => ListNumberDelim::Period,
-                    Some("OneParen") => ListNumberDelim::OneParen,
-                    Some("TwoParens") => ListNumberDelim::TwoParens,
-                    _ => ListNumberDelim::Default,
+                    None => ListNumberDelim::Default,
+                    Some(s) => parse_list_number_delim(s)?,
                 };
-                // Return as a table with positional access like Pandoc
-                let table = lua.create_table()?;
-                table.set(1, start as i64)?;
-                table.set(
-                    2,
-                    match style {
-                        ListNumberStyle::Decimal => "Decimal",
-                        ListNumberStyle::LowerAlpha => "LowerAlpha",
-                        ListNumberStyle::UpperAlpha => "UpperAlpha",
-                        ListNumberStyle::LowerRoman => "LowerRoman",
-                        ListNumberStyle::UpperRoman => "UpperRoman",
-                        ListNumberStyle::Example => "Example",
-                        ListNumberStyle::Default => "DefaultStyle",
-                    },
-                )?;
-                table.set(
-                    3,
-                    match delim {
-                        ListNumberDelim::Period => "Period",
-                        ListNumberDelim::OneParen => "OneParen",
-                        ListNumberDelim::TwoParens => "TwoParens",
-                        ListNumberDelim::Default => "DefaultDelim",
-                    },
-                )?;
-                Ok(table)
+                lua.create_userdata(LuaListAttributes::new((start, style, delim)))
             },
         )?,
     )?;
@@ -3593,42 +3718,53 @@ mod tests {
         assert!(matches!(result.1, ListNumberStyle::LowerAlpha));
         assert!(matches!(result.2, ListNumberDelim::OneParen));
 
-        // Test UpperAlpha
-        let table = lua.create_table().unwrap();
-        table.raw_set(2, "UpperAlpha").unwrap();
-        let result = parse_list_attributes(Value::Table(table)).unwrap();
-        assert!(matches!(result.1, ListNumberStyle::UpperAlpha));
+        // Every remaining style/delimiter name parses inside a FULL
+        // triple (a partial triple is an error, matching Pandoc's
+        // peekTriple — pinned below).
+        for (style_name, expected) in [
+            ("UpperAlpha", ListNumberStyle::UpperAlpha),
+            ("LowerRoman", ListNumberStyle::LowerRoman),
+            ("UpperRoman", ListNumberStyle::UpperRoman),
+            ("Example", ListNumberStyle::Example),
+        ] {
+            let table = lua.create_table().unwrap();
+            table.raw_set(1, 1).unwrap();
+            table.raw_set(2, style_name).unwrap();
+            table.raw_set(3, "TwoParens").unwrap();
+            let result = parse_list_attributes(Value::Table(table)).unwrap();
+            assert_eq!(result.1, expected);
+            assert!(matches!(result.2, ListNumberDelim::TwoParens));
+        }
+    }
 
-        // Test LowerRoman
+    #[test]
+    fn test_parse_list_attributes_partial_triple_errors() {
+        // Pandoc rejects a partial triple ("all choices failed"); so
+        // do we, with a message naming the missing slot.
+        let lua = Lua::new();
         let table = lua.create_table().unwrap();
-        table.raw_set(2, "LowerRoman").unwrap();
-        let result = parse_list_attributes(Value::Table(table)).unwrap();
-        assert!(matches!(result.1, ListNumberStyle::LowerRoman));
+        table.raw_set(1, 3).unwrap();
+        let result = parse_list_attributes(Value::Table(table));
+        assert!(result.is_err());
+    }
 
-        // Test UpperRoman
+    #[test]
+    fn test_parse_list_attributes_garbage_style_errors() {
+        // The old code silently defaulted garbage styles; now loud.
+        let lua = Lua::new();
         let table = lua.create_table().unwrap();
-        table.raw_set(2, "UpperRoman").unwrap();
-        let result = parse_list_attributes(Value::Table(table)).unwrap();
-        assert!(matches!(result.1, ListNumberStyle::UpperRoman));
-
-        // Test Example
-        let table = lua.create_table().unwrap();
-        table.raw_set(2, "Example").unwrap();
-        let result = parse_list_attributes(Value::Table(table)).unwrap();
-        assert!(matches!(result.1, ListNumberStyle::Example));
-
-        // Test TwoParens
-        let table = lua.create_table().unwrap();
-        table.raw_set(3, "TwoParens").unwrap();
-        let result = parse_list_attributes(Value::Table(table)).unwrap();
-        assert!(matches!(result.2, ListNumberDelim::TwoParens));
+        table.raw_set(1, 1).unwrap();
+        table.raw_set(2, "Garbage").unwrap();
+        table.raw_set(3, "Period").unwrap();
+        let err = parse_list_attributes(Value::Table(table)).unwrap_err();
+        assert!(err.to_string().contains("invalid list number style"));
     }
 
     #[test]
     fn test_parse_list_attributes_userdata() {
         let lua = create_lua_env();
         let attrs = (2usize, ListNumberStyle::Decimal, ListNumberDelim::Period);
-        let ud = lua.create_userdata(LuaListAttributes(attrs)).unwrap();
+        let ud = lua.create_userdata(LuaListAttributes::new(attrs)).unwrap();
         let result = parse_list_attributes(Value::UserData(ud)).unwrap();
         assert_eq!(result.0, 2);
     }
@@ -3775,7 +3911,7 @@ mod tests {
             .load(
                 r#"
                 local l = pandoc.ListAttributes(5, "Decimal", "Period")
-                return l[1]
+                return l.start
             "#,
             )
             .eval()
@@ -3798,7 +3934,7 @@ mod tests {
         ] {
             let result: String = lua
                 .load(format!(
-                    r#"local l = pandoc.ListAttributes(1, "{}", "Period"); return l[2]"#,
+                    r#"local l = pandoc.ListAttributes(1, "{}", "Period"); return l.style"#,
                     style
                 ))
                 .eval()
@@ -3818,7 +3954,7 @@ mod tests {
         ] {
             let result: String = lua
                 .load(format!(
-                    r#"local l = pandoc.ListAttributes(1, "Decimal", "{}"); return l[3]"#,
+                    r#"local l = pandoc.ListAttributes(1, "Decimal", "{}"); return l.delimiter"#,
                     delim
                 ))
                 .eval()
@@ -3838,7 +3974,7 @@ mod tests {
             .load(
                 r#"
                 local l = pandoc.ListAttributes()
-                return l[2]
+                return l.style
             "#,
             )
             .eval()

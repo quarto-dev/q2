@@ -109,6 +109,19 @@ Progress log:
   (cite-construct-userdata; normalizer now strips `citationIdS`).
   E2e byte-identical to pandoc 3.9.0.2 through the real binary.
 
+- **2026-07-13, bd-sgfiiktn S2** (rest of cluster 7's
+  ListAttributes half + the OrderedList alias entries of cluster 9):
+  ListAttributes is typed userdata (start/style/delimiter, eager
+  validated setters, structural __eq, :clone); constructor and
+  triple peeker validate loudly (garbage styles no longer silently
+  default; partial triples error like pandoc's peekTriple);
+  OrderedList gained listAttributes (cached, aliased, nested
+  mutation persists) + delimiter, with start/style/delimiter as
+  hslua-style aliases reading/writing through the cached value.
+  Track-1 xfail **72 → 59** (13 flips, zero new failures);
+  differential **21/21** (orderedlist-la-userdata-mutation). E2e
+  byte-identical to pandoc 3.9.0.2.
+
 Notes:
 
 - Cluster 1 (`__eq`) masks finer-grained results: once equality works,

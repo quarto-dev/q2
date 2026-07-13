@@ -112,10 +112,54 @@ fn is_cacheable_property(key: &str) -> bool {
 /// Should this (key, value) pair be cached on an element? Container
 /// tables for the allowlisted properties, plus the `attr` LuaAttr
 /// userdata (so `el.attr` reads alias and nested attr mutations
-/// survive to the flush).
+/// survive to the flush) and the OrderedList `listAttributes`
+/// userdata (same aliasing rationale; a raw-triple table assignment
+/// is cached too, matching hslua — the aliases then read through it).
 fn should_cache_element_property(key: &str, value: &Value) -> bool {
     (is_cacheable_property(key) && matches!(value, Value::Table(_)))
-        || (key == "attr" && matches!(value, Value::UserData(_) | Value::Table(_)))
+        || (matches!(key, "attr" | "listAttributes")
+            && matches!(value, Value::UserData(_) | Value::Table(_)))
+}
+
+/// Resolve an OrderedList list-attribute alias (`start`/`style`/
+/// `delimiter`) through the element's cached `listAttributes` value,
+/// mirroring hslua's alias mechanism: the alias path reads the
+/// property, so it observes the cached value — the live userdata, or
+/// a user-assigned raw triple table (string-indexed, usually nil,
+/// until a flush re-peeks the positional triple). Returns `Ok(None)`
+/// when there is no cache entry (caller reads the element directly).
+fn ordered_list_alias_get(cache: &PropertyCache, lua: &Lua, key: &str) -> Result<Option<Value>> {
+    match cache.get("listAttributes") {
+        None => Ok(None),
+        Some(Value::UserData(ud)) => match ud.borrow::<super::constructors::LuaListAttributes>() {
+            Ok(la) => la.get_field(lua, key).map(Some),
+            Err(_) => Ok(None),
+        },
+        Some(Value::Table(t)) => t.get::<Value>(key).map(Some),
+        Some(_) => Ok(None),
+    }
+}
+
+/// Write an OrderedList list-attribute alias through the cached
+/// `listAttributes` value when present (see [`ordered_list_alias_get`]).
+/// Returns `Ok(false)` when there is no cache entry (caller writes to
+/// the element directly).
+fn ordered_list_alias_set(cache: &PropertyCache, lua: &Lua, key: &str, val: Value) -> Result<bool> {
+    match cache.get("listAttributes") {
+        None => Ok(false),
+        Some(Value::UserData(ud)) => match ud.borrow::<super::constructors::LuaListAttributes>() {
+            Ok(la) => {
+                la.set_field(key, val, lua)?;
+                Ok(true)
+            }
+            Err(_) => Ok(false),
+        },
+        Some(Value::Table(t)) => {
+            t.set(key, val)?;
+            Ok(true)
+        }
+        Some(_) => Ok(false),
+    }
 }
 
 /// Flush one cached `attr` entry during an element flush. Returns
@@ -1100,7 +1144,16 @@ impl LuaBlock {
             ],
             Block::RawBlock(_) => &["tag", "format", "text", "clone", "walk"],
             Block::BlockQuote(_) => &["tag", "content", "clone", "walk"],
-            Block::OrderedList(_) => &["tag", "content", "start", "style", "clone", "walk"],
+            Block::OrderedList(_) => &[
+                "tag",
+                "content",
+                "listAttributes",
+                "start",
+                "style",
+                "delimiter",
+                "clone",
+                "walk",
+            ],
             Block::BulletList(_) => &["tag", "content", "clone", "walk"],
             Block::DefinitionList(_) => &["tag", "content", "clone", "walk"],
             Block::Header(_) => &[
@@ -1251,18 +1304,36 @@ impl LuaBlock {
                     .collect::<Result<_>>()?;
                 values_to_list_table(lua, items)
             }
-            (Block::OrderedList(o), "start") => (o.attr.0 as i64).into_lua(lua),
+            (Block::OrderedList(o), "listAttributes") => {
+                // Fresh userdata around a copy of the triple; the
+                // Index metamethod caches it, so reads alias and
+                // nested mutation persists via the flush.
+                let ud = lua
+                    .create_userdata(super::constructors::LuaListAttributes::new(o.attr.clone()))?;
+                Ok(Value::UserData(ud))
+            }
+            // start/style/delimiter are hslua-style ALIASES into the
+            // listAttributes property: when a cached listAttributes
+            // value exists, they read through it (including the
+            // pandoc quirk that a user-assigned raw triple table is
+            // string-indexed, yielding nil until the flush re-peeks).
+            (Block::OrderedList(o), "start") => {
+                match ordered_list_alias_get(&self.1, lua, "start")? {
+                    Some(v) => Ok(v),
+                    None => (o.attr.0 as i64).into_lua(lua),
+                }
+            }
             (Block::OrderedList(o), "style") => {
-                let style = match o.attr.1 {
-                    crate::pandoc::ListNumberStyle::Default => "DefaultStyle",
-                    crate::pandoc::ListNumberStyle::Decimal => "Decimal",
-                    crate::pandoc::ListNumberStyle::LowerAlpha => "LowerAlpha",
-                    crate::pandoc::ListNumberStyle::UpperAlpha => "UpperAlpha",
-                    crate::pandoc::ListNumberStyle::LowerRoman => "LowerRoman",
-                    crate::pandoc::ListNumberStyle::UpperRoman => "UpperRoman",
-                    crate::pandoc::ListNumberStyle::Example => "Example",
-                };
-                style.into_lua(lua)
+                match ordered_list_alias_get(&self.1, lua, "style")? {
+                    Some(v) => Ok(v),
+                    None => super::constructors::list_number_style_name(&o.attr.1).into_lua(lua),
+                }
+            }
+            (Block::OrderedList(o), "delimiter") => {
+                match ordered_list_alias_get(&self.1, lua, "delimiter")? {
+                    Some(v) => Ok(v),
+                    None => super::constructors::list_number_delim_name(&o.attr.2).into_lua(lua),
+                }
             }
 
             // Figure
@@ -1409,6 +1480,33 @@ impl LuaBlock {
                 o.content = super::constructors::parse_list_items(lua, val)?;
                 Ok(())
             }
+            (Block::OrderedList(o), "listAttributes") => {
+                o.attr = super::constructors::parse_list_attributes(val)?;
+                Ok(())
+            }
+            // Aliases write through the cached listAttributes value
+            // when present (hslua alias semantics), else directly
+            // into the element's triple.
+            (Block::OrderedList(o), "start") => {
+                if !ordered_list_alias_set(&self.1, lua, "start", val.clone())? {
+                    o.attr.0 = i64::from_lua(val, lua)? as usize;
+                }
+                Ok(())
+            }
+            (Block::OrderedList(o), "style") => {
+                if !ordered_list_alias_set(&self.1, lua, "style", val.clone())? {
+                    let s = String::from_lua(val, lua)?;
+                    o.attr.1 = super::constructors::parse_list_number_style(&s)?;
+                }
+                Ok(())
+            }
+            (Block::OrderedList(o), "delimiter") => {
+                if !ordered_list_alias_set(&self.1, lua, "delimiter", val.clone())? {
+                    let s = String::from_lua(val, lua)?;
+                    o.attr.2 = super::constructors::parse_list_number_delim(&s)?;
+                }
+                Ok(())
+            }
             (Block::DefinitionList(d), "content") => {
                 d.content = super::constructors::parse_definition_list_items(lua, val)?;
                 Ok(())
@@ -1521,7 +1619,7 @@ impl UserData for LuaBlock {
                 // stale cache entry.
                 if should_cache_element_property(&key, &val) {
                     this.1.store(&key, &val);
-                } else if is_cacheable_property(&key) || key == "attr" {
+                } else if is_cacheable_property(&key) || key == "attr" || key == "listAttributes" {
                     this.1.remove(&key);
                 }
                 Ok(())
@@ -4293,7 +4391,16 @@ mod tests {
         });
         assert_eq!(
             LuaBlock::new(block).field_names(),
-            &["tag", "content", "start", "style", "clone", "walk"]
+            &[
+                "tag",
+                "content",
+                "listAttributes",
+                "start",
+                "style",
+                "delimiter",
+                "clone",
+                "walk"
+            ]
         );
     }
 

@@ -603,8 +603,28 @@ test exists and breaks, STOP and show it before deleting/updating.
       test-inline xfails flipped, zero new failures); differential
       19 → **20/20** (new case cite-construct-userdata). E2e:
       normalized JSON byte-identical to pandoc 3.9.0.2; HTML matches.
-- [ ] S2. ListAttributes as userdata + OrderedList
-      listAttributes/delimiter aliases + forgiving constructor.
+- [x] S2. ListAttributes as userdata + OrderedList aliases — DONE
+      2026-07-13. `LuaListAttributes` rebuilt as typed userdata
+      (Rc<RefCell<triple>> cell, start/style/delimiter properties
+      with eager validated setters, structural `__eq`, `:clone`; no
+      `__tostring` — pandoc has none either). `pandoc.ListAttributes`
+      returns userdata with Pandoc defaults; garbage style/delim is a
+      loud error (old code silently defaulted). `parse_list_attributes`
+      matches `peekListAttributes`: userdata or FULL positional
+      triple; a partial triple (`{3}`) errors like pandoc's
+      peekTriple; garbage anywhere errors. OrderedList gained
+      `listAttributes` (cached userdata — aliased reads, nested
+      mutation persists via flush) and `delimiter`; `start`/`style`/
+      `delimiter` are true hslua-style aliases that read/write
+      THROUGH the cached listAttributes value (including the pandoc
+      quirk that a raw-triple assignment makes aliases read nil until
+      flush re-peeks — oracle-probed). Track-1 xfail 72 → **59**
+      (11 test-listattributes + 2 test-block flips, zero new
+      failures); differential 20 → **21/21** (new case
+      orderedlist-la-userdata-mutation pins in-place style mutation +
+      alias writes: (7, UpperRoman, TwoParens)). E2e: JSON
+      byte-identical to pandoc 3.9.0.2, HTML `<ol start="7"
+      type="I">` matches.
 - [ ] S3. Cell/TableBody/Row/TableHead/TableFoot property access,
       aliases, walk; Table bodies/caption peekers (single body,
       caption fuzzy forms); head/foot/colspecs round-trips.

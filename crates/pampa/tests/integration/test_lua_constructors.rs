@@ -484,18 +484,19 @@ async fn test_list_attributes_constructor() {
     let filter_code = r#"
 function Para(elem)
     -- Create list attributes with custom start, style, and delimiter
+    -- (typed userdata with named properties, matching Pandoc)
     local attr = pandoc.ListAttributes(5, "Decimal", "Period")
 
-    if attr[1] ~= 5 then
-        error("Expected start 5, got " .. attr[1])
+    if attr.start ~= 5 then
+        error("Expected start 5, got " .. attr.start)
     end
 
-    if attr[2] ~= "Decimal" then
-        error("Expected style 'Decimal', got " .. tostring(attr[2]))
+    if attr.style ~= "Decimal" then
+        error("Expected style 'Decimal', got " .. tostring(attr.style))
     end
 
-    if attr[3] ~= "Period" then
-        error("Expected delim 'Period', got " .. tostring(attr[3]))
+    if attr.delimiter ~= "Period" then
+        error("Expected delim 'Period', got " .. tostring(attr.delimiter))
     end
 
     return elem
