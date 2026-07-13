@@ -137,6 +137,23 @@ Progress log:
   pandoc.TableBody and Cell:clone; contract is pandoc-lua-marshal
   @ c2dc4e11.
 
+- **2026-07-13, bd-0g2yp61w closed** (cluster 5 remainder): element
+  `attr` assignment re-runs `parse_attr` (bare string / triple /
+  HTML-like map / flushed userdata all accepted on set, matching
+  "assignment re-runs the fuzzy peeker"); `quotetype`/`mathtype`
+  setters added with eager loud validation. Track-1 xfail **30 → 25**
+  (5 flips, zero new failures); differential **23/23**
+  (setter-repeek-attr-enums). E2e HTML identical to pandoc 3.9.0.2.
+
+- **2026-07-13, bd-olz91r4v closed** (cluster 11): `__toinline`/
+  `__toblock` metamethod hooks in all four fuzzy peekers, with
+  hslua's recoverable-failure semantics (non-function metafield,
+  call error, or wrong return type fall through to normal coercion).
+  Track-1 xfail **25 → 21** (4 flips); differential **24/24**
+  (toinline-toblock-hooks). E2e byte-identical to pandoc 3.9.0.2.
+  Remaining 21 xfails: 17 Pandoc/Meta* (bd-2llqjsms), 2 SimpleTable
+  (bd-d4wd6r3i), 2 error-message contracts (bd-9p2686pc).
+
 Notes:
 
 - Cluster 1 (`__eq`) masks finer-grained results: once equality works,

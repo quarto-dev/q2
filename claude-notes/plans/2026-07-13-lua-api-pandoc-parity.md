@@ -501,7 +501,20 @@ List noise is gone.
       4 → 2 (both attr cases match the oracle).
 - [x] 2.4 C1: OrderedList listAttributes honored (bd-0xghpvij closed
       2026-07-13; first ratchet burn-down — differential xfail 6→5).
-- [ ] 2.5 Class D1–D3 audit remainder.
+- [x] 2.5 Class D1 remainder — DONE 2026-07-13 (bd-0g2yp61w closed).
+      Element `attr` assignment now re-runs `parse_attr` (Pandoc's
+      assignment-re-runs-the-peeker rule): bare string → identifier,
+      positional triple, HTML-like map, Attr/AttributeList userdata
+      (flushed) — `lua_value_to_attr` delegates to `parse_attr`
+      instead of its weaker ad-hoc parser. Added the missing
+      `quoted.quotetype` and `math.mathtype` setters with eager loud
+      validation. Track-1 xfail 30 → **25** (5 flips: Header/Span/
+      Code attr, quotetype, mathtype; zero new failures);
+      differential 22 → **23/23** (new case setter-repeek-attr-enums).
+      E2e: HTML identical to pandoc for all five behaviors through
+      the real binary. D2 was completed by bd-tzwcof0n/bd-hitjclzp;
+      D3 (inapplicable-property semantics) folded into bd-9p2686pc's
+      error-contract work.
 - [x] 2.6 Class E2 (pulled forward per priority order): pandoc.List
       module parity — DONE 2026-07-13 (bd-1fjtodu8 closed). The List
       module table now carries its own metatable with `__call`
@@ -669,6 +682,23 @@ test exists and breaks, STOP and show it before deleting/updating.
     Decision 6 (actionable Q-coded error + registry entry; Q-code
     and `# DIVERGENCE` mechanism coordinated with bd-9p2686pc).
     2 xfails.
+
+### Phase 2d — small parity strands (2026-07-13, second session)
+
+- [x] Class G (bd-olz91r4v closed): `__toinline`/`__toblock`
+      metamethod hooks consulted by all four fuzzy peekers
+      (`call_element_metamethod` + `peek_{inline,block}_via_metamethod`
+      in types.rs), with hslua's recoverable-failure semantics: hook
+      absent / non-function metafield / call error / wrong return
+      type all fall through to normal coercion (pinned by the
+      "ignored" upstream tests). Ordering mirrors the Haskell:
+      inline tables try the hook first; block singletons try the
+      hook before list interpretation; strict element peeks come
+      before hooks on userdata. Since bd-23yvjfmm routed all filter
+      returns through these peekers, the hooks work in returns and
+      constructor args alike. Track-1 xfail 25 → **21** (all 4
+      metamethod tests); differential 23 → **24/24** (new case
+      toinline-toblock-hooks). E2e byte-identical to pandoc 3.9.0.2.
 
 ### Phase 3 — breadth
 

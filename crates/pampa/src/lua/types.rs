@@ -666,10 +666,36 @@ impl LuaInline {
                 m.text = String::from_lua(val, lua)?;
                 Ok(())
             }
+            (Inline::Math(m), "mathtype") => {
+                let s = String::from_lua(val, lua)?;
+                m.math_type = match s.as_str() {
+                    "InlineMath" => crate::pandoc::MathType::InlineMath,
+                    "DisplayMath" => crate::pandoc::MathType::DisplayMath,
+                    other => {
+                        return Err(Error::runtime(format!(
+                            "invalid math type '{other}' (expected InlineMath or DisplayMath)"
+                        )));
+                    }
+                };
+                Ok(())
+            }
 
             // Quoted
             (Inline::Quoted(q), "content") => {
                 q.content = peek_inlines_fuzzy(lua, val)?;
+                Ok(())
+            }
+            (Inline::Quoted(q), "quotetype") => {
+                let s = String::from_lua(val, lua)?;
+                q.quote_type = match s.as_str() {
+                    "SingleQuote" => crate::pandoc::QuoteType::SingleQuote,
+                    "DoubleQuote" => crate::pandoc::QuoteType::DoubleQuote,
+                    other => {
+                        return Err(Error::runtime(format!(
+                            "invalid quote type '{other}' (expected SingleQuote or DoubleQuote)"
+                        )));
+                    }
+                };
                 Ok(())
             }
 
@@ -1798,49 +1824,16 @@ fn citations_to_lua_table(lua: &Lua, citations: &[crate::pandoc::Citation]) -> R
     super::list::create_list_table(lua, values)
 }
 
-/// Convert Lua value to Attr - accepts either LuaAttr userdata or table
-fn lua_value_to_attr(val: Value, _lua: &Lua) -> Result<crate::pandoc::Attr> {
-    match val {
-        Value::UserData(ud) => {
-            let lua_attr = ud.borrow::<LuaAttr>()?;
-            // Clone the underlying Attr regardless of the variant
-            // (Owned / BlockRef / InlineRef); the result is independent.
-            Ok(lua_attr.clone_attr())
-        }
-        Value::Table(table) => {
-            // Try to interpret as {identifier, classes, attributes} table
-            let identifier: Option<String> =
-                table.get(1).ok().or_else(|| table.get("identifier").ok());
-            let classes: Option<Value> = table.get(2).ok().or_else(|| table.get("classes").ok());
-            let attributes: Option<Value> =
-                table.get(3).ok().or_else(|| table.get("attributes").ok());
-
-            let id = identifier.unwrap_or_default();
-            let cls = match classes {
-                Some(Value::Table(t)) => {
-                    let mut result = Vec::new();
-                    for item in t.sequence_values::<String>() {
-                        result.push(item?);
-                    }
-                    result
-                }
-                _ => Vec::new(),
-            };
-            let attrs = match attributes {
-                Some(Value::Table(t)) => {
-                    let mut result = hashlink::LinkedHashMap::new();
-                    for pair in t.pairs::<String, String>() {
-                        let (k, v) = pair?;
-                        result.insert(k, v);
-                    }
-                    result
-                }
-                _ => hashlink::LinkedHashMap::new(),
-            };
-            Ok((id, cls, attrs))
-        }
-        _ => Err(Error::runtime("expected Attr userdata or table")),
-    }
+/// Convert a Lua value to an Attr for property assignment. Delegates
+/// to `parse_attr` so assignment re-runs the same peeker the
+/// constructors use (Pandoc's rule): bare string → identifier-only,
+/// positional triple, HTML-like map (`class` split, `id` key), the q2
+/// named form, Attr/AttributeList userdata (flushed). Previously this
+/// was a weaker ad-hoc parser, so `header.attr = 'id'` and
+/// `code.attr = {id=…, k=…}` were rejected or silently mis-read
+/// (bd-0g2yp61w).
+fn lua_value_to_attr(val: Value, lua: &Lua) -> Result<crate::pandoc::Attr> {
+    super::constructors::parse_attr(lua, Some(val))
 }
 
 /// Convert a Lua value to Vec<Citation>: a sequence table whose
@@ -2147,12 +2140,59 @@ pub fn split_string_to_inlines(s: &str) -> Vec<Inline> {
     result
 }
 
+/// Call a `__toinline`/`__toblock`-style metamethod hook on a table
+/// or userdata value, returning the hook's raw result. Any other
+/// outcome — no metatable, absent or non-function metafield, or a
+/// call error — yields `None`, and callers fall through to their
+/// normal coercion. This mirrors hslua's `peekInlineMetamethod` /
+/// `peekBlockMetamethod`, whose failures are recoverable `failPeek`s
+/// inside `<|>` chains (bd-olz91r4v; pinned by the "metafield is
+/// ignored if it's not a function" and "non-Inline return values are
+/// ignored" upstream tests).
+fn call_element_metamethod(val: &Value, name: &str) -> Option<Value> {
+    let metafield: Value = match val {
+        Value::Table(t) => t.metatable()?.get(name).ok()?,
+        Value::UserData(ud) => ud.metatable().ok()?.get(name).ok()?,
+        _ => return None,
+    };
+    match metafield {
+        Value::Function(f) => f.call::<Value>(val.clone()).ok(),
+        _ => None,
+    }
+}
+
+/// `__toinline` hook: Some(inline) only when the hook exists, runs,
+/// and returns Inline userdata.
+fn peek_inline_via_metamethod(lua: &Lua, val: &Value) -> Option<Inline> {
+    match call_element_metamethod(val, "__toinline")? {
+        Value::UserData(ud) => {
+            let lua_inline = ud.borrow::<LuaInline>().ok()?;
+            lua_inline.extract_flushed(lua).ok()
+        }
+        _ => None,
+    }
+}
+
+/// `__toblock` hook: Some(block) only when the hook exists, runs, and
+/// returns Block userdata.
+fn peek_block_via_metamethod(lua: &Lua, val: &Value) -> Option<Block> {
+    match call_element_metamethod(val, "__toblock")? {
+        Value::UserData(ud) => {
+            let lua_block = ud.borrow::<LuaBlock>().ok()?;
+            lua_block.extract_flushed(lua).ok()
+        }
+        _ => None,
+    }
+}
+
 /// Peek a single Inline from a Lua value, with fuzzy coercion.
 ///
 /// Matches Pandoc's `peekInlineFuzzy`:
 /// 1. String → `Str(text)` (NO word splitting)
-/// 2. UserData containing LuaInline → extract
-/// 3. Otherwise → error
+/// 2. UserData containing LuaInline → extract; other userdata → try
+///    the `__toinline` metamethod
+/// 3. Table → try the `__toinline` metamethod
+/// 4. Otherwise → error
 pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
     use crate::pandoc::Str;
     match val {
@@ -2163,15 +2203,23 @@ pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
                 source_info: filter_source_info(lua),
             }))
         }
-        Value::UserData(ud) => {
+        Value::UserData(ref ud) => {
             if let Ok(lua_inline) = ud.borrow::<LuaInline>() {
                 lua_inline.extract_flushed(lua)
+            } else if let Some(inline) = peek_inline_via_metamethod(lua, &val) {
+                Ok(inline)
             } else {
                 Err(Error::runtime(
                     "expected Inline userdata, string, or Inline-like value",
                 ))
             }
         }
+        Value::Table(_) => match peek_inline_via_metamethod(lua, &val) {
+            Some(inline) => Ok(inline),
+            None => Err(Error::runtime(
+                "expected Inline userdata, string, or Inline-like value",
+            )),
+        },
         _ => Err(Error::runtime(
             "expected Inline userdata, string, or Inline-like value",
         )),
@@ -2182,8 +2230,10 @@ pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
 ///
 /// Matches Pandoc's `peekInlinesFuzzy`:
 /// 1. String → word-split via `split_string_to_inlines()`
-/// 2. Table → iterate sequence values, each via `peek_inline_fuzzy()`
-/// 3. UserData containing LuaInline → wrap in singleton vec
+/// 2. Table → try the `__toinline` metamethod (singleton) first,
+///    else iterate sequence values, each via `peek_inline_fuzzy()`
+/// 3. UserData → singleton via `peek_inline_fuzzy()` (which consults
+///    the metamethod for foreign userdata)
 /// 4. Otherwise → error
 pub fn peek_inlines_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Inline>> {
     match val {
@@ -2191,7 +2241,10 @@ pub fn peek_inlines_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Inline>> {
             let text = s.to_str()?;
             Ok(split_string_to_inlines(&text))
         }
-        Value::Table(table) => {
+        Value::Table(ref table) => {
+            if let Some(inline) = peek_inline_via_metamethod(lua, &val) {
+                return Ok(vec![inline]);
+            }
             let mut inlines = Vec::new();
             for pair in table.sequence_values::<Value>() {
                 let value = pair?;
@@ -2199,15 +2252,12 @@ pub fn peek_inlines_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Inline>> {
             }
             Ok(inlines)
         }
-        Value::UserData(ud) => {
-            if let Ok(lua_inline) = ud.borrow::<LuaInline>() {
-                Ok(vec![lua_inline.extract_flushed(lua)?])
-            } else {
-                Err(Error::runtime(
-                    "expected Inline, list of Inlines, or string",
-                ))
-            }
-        }
+        Value::UserData(_) => match peek_inline_fuzzy(lua, val) {
+            Ok(inline) => Ok(vec![inline]),
+            Err(_) => Err(Error::runtime(
+                "expected Inline, list of Inlines, or string",
+            )),
+        },
         _ => Err(Error::runtime(
             "expected Inline, list of Inlines, or string",
         )),
@@ -2218,14 +2268,18 @@ pub fn peek_inlines_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Inline>> {
 ///
 /// Matches Pandoc's `peekBlockFuzzy`:
 /// 1. UserData containing LuaBlock → extract
-/// 2. Any value accepted by `peek_inlines_fuzzy()` → wrap in `Plain`
-/// 3. Otherwise → error
+/// 2. `__toblock` metamethod (tables and foreign userdata)
+/// 3. Any value accepted by `peek_inlines_fuzzy()` → wrap in `Plain`
+/// 4. Otherwise → error
 pub fn peek_block_fuzzy(lua: &Lua, val: Value) -> Result<Block> {
     use crate::pandoc::Plain;
     match &val {
         Value::UserData(ud) => {
             if let Ok(lua_block) = ud.borrow::<LuaBlock>() {
                 return lua_block.extract_flushed(lua);
+            }
+            if let Some(block) = peek_block_via_metamethod(lua, &val) {
+                return Ok(block);
             }
             // Not a block — fall through to inlines coercion
             let inlines = peek_inlines_fuzzy(lua, val)?;
@@ -2235,6 +2289,9 @@ pub fn peek_block_fuzzy(lua: &Lua, val: Value) -> Result<Block> {
             }))
         }
         _ => {
+            if let Some(block) = peek_block_via_metamethod(lua, &val) {
+                return Ok(block);
+            }
             // Try inlines coercion for strings, tables of inlines, etc.
             match peek_inlines_fuzzy(lua, val) {
                 Ok(inlines) => Ok(Block::Plain(Plain {
@@ -2250,14 +2307,18 @@ pub fn peek_block_fuzzy(lua: &Lua, val: Value) -> Result<Block> {
 /// Peek a list of Blocks from a Lua value, with fuzzy coercion.
 ///
 /// Matches Pandoc's `peekBlocksFuzzy`:
-/// 1. Table → iterate sequence values, each via `peek_block_fuzzy()`
-/// 2. UserData containing LuaBlock → wrap in singleton vec
-/// 3. Any value accepted by `peek_inlines_fuzzy()` → wrap in `Plain` block singleton
-/// 4. Otherwise → error
+/// 1. `__toblock` metamethod → singleton (before list interpretation)
+/// 2. Table → iterate sequence values, each via `peek_block_fuzzy()`
+/// 3. UserData containing LuaBlock → wrap in singleton vec
+/// 4. Any value accepted by `peek_inlines_fuzzy()` → wrap in `Plain` block singleton
+/// 5. Otherwise → error
 pub fn peek_blocks_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Block>> {
     use crate::pandoc::Plain;
     match &val {
         Value::Table(table) => {
+            if let Some(block) = peek_block_via_metamethod(lua, &val) {
+                return Ok(vec![block]);
+            }
             let mut blocks = Vec::new();
             for pair in table.sequence_values::<Value>() {
                 let value = pair?;
@@ -2268,6 +2329,9 @@ pub fn peek_blocks_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Block>> {
         Value::UserData(ud) => {
             if let Ok(lua_block) = ud.borrow::<LuaBlock>() {
                 return Ok(vec![lua_block.extract_flushed(lua)?]);
+            }
+            if let Some(block) = peek_block_via_metamethod(lua, &val) {
+                return Ok(vec![block]);
             }
             // Not a block — try inlines coercion
             let inlines = peek_inlines_fuzzy(lua, val)?;
