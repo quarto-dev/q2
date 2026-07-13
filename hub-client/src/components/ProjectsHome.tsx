@@ -27,6 +27,9 @@ import {
   exportProjectAsZip,
   connect,
   disconnect,
+  getFileContent,
+  getBinaryFileContent,
+  isFileBinary,
   type ProjectChoice,
   type ProjectFile,
 } from '@quarto/preview-runtime';
@@ -83,6 +86,16 @@ const UNNAMED_RE = /^Project \d{4}-\d{2}-\d{2}T/;
 
 /** Set to '1' once the user opts out of the shared-collection move warning. */
 const MOVE_WARNING_KEY = 'qh-collection-move-warning-dismissed';
+
+/** Base64-encode without blowing the arg-spread limit on large files. */
+function toBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
 
 function isUnnamed(description: string): boolean {
   return UNNAMED_RE.test(description);
@@ -462,6 +475,57 @@ export default function ProjectsHome({
     }
   }, [exportingId, closeAllMenus]);
 
+  // Which project is being duplicated (background connect + re-create)
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+
+  /**
+   * Duplicate a project: background-connect to the source, read every file
+   * (text and binary), and feed them through the same creation path new
+   * projects use. The copy keeps the source's collection placement via the
+   * pending-assignment mechanism (the new doc id isn't known until the
+   * parent finishes creating it).
+   */
+  const handleDuplicate = useCallback(async (item: ProjectItem) => {
+    if (duplicatingId || exportingId) return;
+    setDuplicatingId(item.indexDocId);
+    setFormError(null);
+    const copyTitle = `${item.description} (copy)`;
+    try {
+      const files = await connect(resolveSyncServerUrl(item.syncServer), item.indexDocId);
+      const projectFiles: ProjectFile[] = [];
+      for (const f of files) {
+        if (isFileBinary(f.path)) {
+          const bin = getBinaryFileContent(f.path);
+          if (bin) {
+            projectFiles.push({ path: f.path, content_type: 'binary', content: toBase64(bin.content), mime_type: bin.mimeType });
+          }
+        } else {
+          const text = getFileContent(f.path);
+          if (text !== null) {
+            projectFiles.push({ path: f.path, content_type: 'text', content: text });
+          }
+        }
+      }
+      if (projectFiles.length === 0) {
+        setFormError('Nothing to duplicate — the project has no readable files.');
+        return;
+      }
+      await disconnect();
+      const sourceCollection = collectionOf(item.indexDocId);
+      if (sourceCollection) {
+        setPendingCollectionAssignment(copyTitle, sourceCollection.id);
+      }
+      onProjectCreated?.(projectFiles, copyTitle, 'duplicate', item.syncServer);
+    } catch (err) {
+      console.error('Duplicate failed:', err);
+      setFormError(err instanceof Error ? `Duplicate failed: ${err.message}` : 'Duplicate failed.');
+      try { await disconnect(); } catch { /* connection already down */ }
+    } finally {
+      setDuplicatingId(null);
+      closeAllMenus();
+    }
+  }, [duplicatingId, exportingId, collectionOf, onProjectCreated, closeAllMenus]);
+
   const handleRemove = useCallback((item: ProjectItem) => {
     closeAllMenus();
     setConfirmState({
@@ -794,6 +858,14 @@ export default function ProjectsHome({
           </div>
         )}
       </div>
+      <button
+        className="ph-menu-item"
+        disabled={!!duplicatingId}
+        onClick={(e) => { e.stopPropagation(); handleDuplicate(item); }}
+      >
+        {duplicatingId === item.indexDocId ? 'Duplicating…' : 'Duplicate'}
+        <span className="ph-menu-subtext">New copy named "{item.description} (copy)"</span>
+      </button>
       <button
         className="ph-menu-item"
         onClick={() => copyToClipboard(
