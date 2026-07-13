@@ -392,15 +392,23 @@ lightly). Both reuse the same corpus format where possible.
 
 ### Phase 1 — catalog consolidation
 
-- [ ] 1.1 Turn Phase-0 failures into a structured catalog
-      (`claude-notes/research/2026-07-lua-api-mismatch-catalog.md`),
-      classified A–H, each with: repro snippet, Pandoc behavior, Q2
-      behavior, severity (silent vs loud), proposed disposition
-      (match Pandoc / stay strict + diagnostic).
-- [ ] 1.2 File child strands per class (or per coherent fix unit)
-      under bd-grkrb9nj; link bd-195t into Class D.
-- [ ] 1.3 Review disposition decisions with Carlos (esp. the
-      strict-vs-match calls and the B3 q2-ism).
+- [x] 1.1 Structured catalog written:
+      `claude-notes/research/2026-07-13-lua-api-mismatch-catalog.md`
+      — 12 root-cause clusters covering all 128 baseline xfails, each
+      with evidence, class, disposition, and strand.
+- [x] 1.2 Ten child strands filed under bd-grkrb9nj (see
+      `braid dep tree bd-grkrb9nj`): bd-55mb0rjz (E: __eq/tostring),
+      bd-23yvjfmm (A: filter returns), bd-tzwcof0n (B: attr shapes),
+      bd-hitjclzp (D0: content mutation; related bd-195t),
+      bd-0g2yp61w (D1: setters), bd-1fjtodu8 (E2: List module),
+      bd-sgfiiktn (C: missing constructors + misc peekers),
+      bd-0xghpvij (C1: OrderedList), bd-olz91r4v (G: metamethods),
+      bd-9p2686pc (H: error contract + divergence registry).
+- [ ] 1.3 Review disposition decisions with Carlos. Only one
+      genuinely open call: catalog cluster 12 (upstream tests
+      pattern-match pandoc's error *strings*; proposed: keep q2's
+      richer messages, register as permanent divergence). Everything
+      else is "match Pandoc" per Decision 1.
 
 ### Phase 2 — high-impact fixes (order by silent-error severity)
 
