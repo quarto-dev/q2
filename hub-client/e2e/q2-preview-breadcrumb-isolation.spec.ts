@@ -3,10 +3,12 @@
  *
  * Verifies two production behaviors that require a real browser:
  *
- * 1. **Chip pointer-isolation** (Test A): clicking the ◀ out button does NOT
- *    blur-commit the dirty textarea. The chip's onPointerDown preventDefault
- *    keeps the textarea focused so no blur fires; the nesting move re-seeds
- *    the draft to the div buffer instead.
+ * 1. **Breadcrumb pointer-isolation** (Test A): clicking the ◀ out button does NOT
+ *    blur-commit the dirty textarea. The crumb/arrow buttons' onPointerDown
+ *    preventDefault keeps the textarea focused so no blur fires; the nesting move
+ *    re-seeds the draft to the div buffer instead. (Post-consolidation the
+ *    breadcrumb lives in the pop-up toolbar, INSIDE the edit region, rather than
+ *    the retired standalone floating chip.)
  *
  * 2. **Nesting key-chords** (Tests B + C): the dispatchers.tsx onKeyDown branch
  *    for classifyNestingKey fires on the platform's chord, moves the nesting cursor, and does
@@ -51,7 +53,7 @@ const FIXTURE_QMD = [
 ].join('\n');
 
 // ---------------------------------------------------------------------------
-// Shared helpers (mirrors q2-preview-breadcrumb-geometry.spec.ts)
+// Shared helpers
 // ---------------------------------------------------------------------------
 
 /** Set up the project, navigate, and wait for preview + edit affordances. */
@@ -131,7 +133,9 @@ test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-cho
         await iframe.locator('div.outer p[data-block-pool-id]').first().click();
         const ta = iframe.locator('textarea').first();
         await ta.waitFor({ timeout: 10_000 });
-        await iframe.locator('[data-testid="q2-breadcrumb-chip"]').waitFor({ timeout: 5000 });
+        // The breadcrumb now lives in the pop-up toolbar (the standalone chip was
+        // retired); wait on the ◀ out-arrow, which we click below.
+        await iframe.locator('.q2-breadcrumb-out').waitFor({ timeout: 5000 });
 
         const contentBefore = await getFileContent(page, filename);
         expect(contentBefore).toContain('Inner paragraph.');

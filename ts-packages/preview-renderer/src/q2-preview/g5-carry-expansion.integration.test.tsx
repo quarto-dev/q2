@@ -268,7 +268,7 @@ describe('G5 T13 ★ — nest-only carry expansion', () => {
         textarea = container.querySelector<HTMLTextAreaElement>('textarea')!;
 
         // Crumb jump: click the blockquote crumb button.
-        // The BreadcrumbChip renders crumb buttons with .q2-crumb class and
+        // The folded pop-up toolbar renders crumb buttons with .q2-crumb class and
         // title={label} (labelForSourceNode) — for BlockQuote, title='BlockQuote'.
         const crumbBtn = container.querySelector<HTMLElement>('.q2-crumb[title="BlockQuote"]');
         if (crumbBtn === null) {

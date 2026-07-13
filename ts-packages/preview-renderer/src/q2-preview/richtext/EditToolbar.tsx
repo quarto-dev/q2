@@ -1,5 +1,8 @@
-// Phase 1b (bd-sjb4pzx8) — a small formatting toolbar anchored to the top-left
-// of the rich-text edit box.
+// bd-sjb4pzx8 / bd-igpm0xur — the single pop-up edit-chrome host for every editable
+// block (generalized from the rich-only RichTextToolbar). Optional `editor`: present
+// on the rich surface (marks + link editor render), absent on the plain surface (code
+// chunks, CustomBlocks, plain-mode blocks) where only the mode toggle + type indicator
+// show.
 //
 // Mark buttons (bold/italic/strike/sub/sup) are second triggers for the same
 // commands Cmd-B/I fire — `toggleMark` over the current selection (ProseMirror
@@ -13,9 +16,12 @@
 // input DOES take focus; the editor's commit is scoped to "focus left the whole
 // edit box" (see RichTextEditor), so focusing the input keeps the session open.
 
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import type { Editor } from '@tiptap/core';
 import { shouldPlaceChromeBelow } from '../editChromeGeometry';
+import { ensureRichTextStyles } from './styles';
+import { ModeToggle } from './ModeToggle';
+import { EditTypeIndicator } from './EditTypeIndicator';
 
 /** Gap (px) between the toolbar and the edit box, matching the CSS margin. */
 const TOOLBAR_GAP = 4;
@@ -34,18 +40,25 @@ const MARKS: MarkSpec[] = [
   { name: 'superscript', label: 'x²', title: 'Superscript' },
 ];
 
-export function RichTextToolbar({
+export function EditToolbar({
   editor,
-  trailing,
+  richSupported,
 }: {
-  editor: Editor;
-  /** Optional content rendered at the END of the toolbar row, after a separator
-   *  (bd-9x3zbuj8 Task 2: the inline nesting breadcrumb). */
-  trailing?: ReactNode;
+  /** The live tiptap editor when the rich surface is mounted; null/undefined on
+   *  the plain surface (no marks then). */
+  editor?: Editor | null;
+  /** True when the block is rich-supported (Para/Header/Plain with richText on) —
+   *  the gate for showing the rich/plain mode toggle. */
+  richSupported: boolean;
 }) {
+  // Plain surface mounts this without RichTextEditor (the other caller), so inject here.
+  ensureRichTextStyles();
+
   // Re-render on selection/content changes so isActive() highlights stay current.
+  // No-op when there is no editor (plain surface).
   const [, force] = useState(0);
   useEffect(() => {
+    if (!editor) return;
     const bump = () => force((n) => n + 1);
     editor.on('selectionUpdate', bump);
     editor.on('transaction', bump);
@@ -63,7 +76,9 @@ export function RichTextToolbar({
   const [placeBelow, setPlaceBelow] = useState(false);
   useLayoutEffect(() => {
     const tb = toolbarRef.current;
-    const box = tb?.closest('.q2-richtext-editor');
+    // Offset parent differs per surface: `.q2-richtext-editor` (rich) vs
+    // `#q2-active-edit-region` (plain wrapper). Measure whichever we're mounted in.
+    const box = tb?.closest('.q2-richtext-editor, #q2-active-edit-region');
     if (!tb || !box) return;
     const height = tb.offsetHeight;
     // Degenerate layout (jsdom zero-rects): keep the default 'above' placement.
@@ -90,17 +105,20 @@ export function RichTextToolbar({
 
   const toggleMark = (name: string) => (e: MouseEvent) => {
     e.preventDefault();
+    if (!editor) return;
     editor.chain().focus().toggleMark(name).run();
   };
 
   const openLinkEditor = (e: MouseEvent) => {
     e.preventDefault();
+    if (!editor) return;
     const existing = editor.isActive('link') ? (editor.getAttributes('link').href as string) : '';
     setLinkUrl(existing ?? '');
     setLinkOpen(true);
   };
 
   const applyLink = () => {
+    if (!editor) return;
     const url = linkUrl.trim();
     if (!url) {
       // Empty URL on an existing link removes it; otherwise just cancel.
@@ -117,13 +135,14 @@ export function RichTextToolbar({
   };
 
   const removeLink = () => {
+    if (!editor) return;
     editor.chain().focus().extendMarkRange('link').unsetLink().run();
     setLinkOpen(false);
   };
 
   const cancelLink = () => {
     setLinkOpen(false);
-    editor.chain().focus().run();
+    editor?.chain().focus().run();
   };
 
   return (
@@ -132,7 +151,10 @@ export function RichTextToolbar({
       className={`q2-rt-toolbar${placeBelow ? ' q2-rt-toolbar-below' : ''}`}
       contentEditable={false}
     >
-      {!linkOpen ? (
+      {richSupported && <ModeToggle />}
+      {/* Divider: sets the mode toggle apart from the marks (only when both show). */}
+      {richSupported && editor && <span className="q2-rt-tb-sep" />}
+      {editor && (!linkOpen ? (
         <>
           {MARKS.map((m) => (
             <button
@@ -181,13 +203,11 @@ export function RichTextToolbar({
             <button type="button" className="q2-rt-tb-btn" title="Remove link" onMouseDown={(e) => { e.preventDefault(); removeLink(); }}>✕</button>
           )}
         </div>
-      )}
-      {trailing != null && (
-        <>
-          <span className="q2-rt-tb-sep" />
-          {trailing}
-        </>
-      )}
+      ))}
+      {/* Type/nesting indicator (always). Leading separator only when a toggle
+          and/or marks precede it, so a bare code-chunk toolbar has no leading rule. */}
+      {(richSupported || editor) && <span className="q2-rt-tb-sep" />}
+      <EditTypeIndicator />
     </div>
   );
 }
