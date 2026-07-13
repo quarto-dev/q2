@@ -37,11 +37,11 @@ untouched. "Minimum blast surface."
 - [x] Migration tests: fresh install, existing pointer, re-run idempotence
 
 ### Phase 2 — service layer
-- [ ] `projectSetService` → manages a MAP of doc handles keyed by docId
+- [x] `projectSetService` → manages a MAP of doc handles keyed by docId
       (connect-all on startup; add/remove collection connections at runtime)
-- [ ] Operations gain a collection-doc parameter: addProject(collectionId,
+- [x] Operations gain a collection-doc parameter: addProject(collectionId,
       entry), removeProject, updateSummary, touch, rename collection
-- [ ] Create-collection (new empty set doc), subscribe-collection (existing
+- [x] Create-collection (new empty set doc), subscribe-collection (existing
       doc id), unsubscribe (drop from array; doc untouched — "leave")
 - [ ] `useProjectSet` → `useCollectionSets`: exposes
       `Array<{ docId, name, entries, syncServer }>` + actions
