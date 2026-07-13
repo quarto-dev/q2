@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-13
+
+- [`3fc6e610`](https://github.com/quarto-dev/q2/commits/3fc6e610): Editing a block in the preview now uses one pop-up toolbar — the rich/plain switch is a Markdown-mark icon on it, the toolbar appears for every editable block (code chunks included), and the type/nesting breadcrumb folds into it, replacing the cut-off left-margin "Editing…" label and the separate floating breadcrumb.
+
 ### 2026-07-09
 
 - [`d31e6118`](https://github.com/quarto-dev/q2/commits/d31e6118): Quoted text in the rich-text editor now appears as ordinary editable quote characters (straight `"…"` or `'…'`) instead of a non-editable pill, so you can edit inside quotes; formatting inside a quote (bold, italic) still renders live.
