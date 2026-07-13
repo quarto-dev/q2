@@ -9,7 +9,7 @@
  */
 
 use hashlink::LinkedHashMap;
-use mlua::{Error, IntoLua, Lua, Result, Table as LuaTable, Value};
+use mlua::{Error, FromLua, IntoLua, Lua, Result, Table as LuaTable, Value};
 use std::sync::Arc;
 
 use super::mediabag::SharedMediaBag;
@@ -33,7 +33,8 @@ use super::list::{
     get_or_create_blocks_metatable, get_or_create_inlines_metatable, get_or_create_list_metatable,
 };
 use super::types::{
-    LuaAttr, LuaBlock, LuaInline, filter_source_info, peek_blocks_fuzzy, peek_inlines_fuzzy,
+    LuaAttr, LuaBlock, LuaInline, filter_source_info, lua_table_to_strings, peek_blocks_fuzzy,
+    peek_inlines_fuzzy,
 };
 use mlua::UserData;
 
@@ -759,38 +760,159 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     Ok(())
 }
 
-/// Parse optional attr argument into Attr tuple
-fn parse_attr(_lua: &Lua, attr: Option<Value>) -> Result<crate::pandoc::Attr> {
+/// Parse an optional attr argument into an Attr tuple, accepting every
+/// shape Pandoc's `peekAttr` accepts (pandoc-lua-marshal Attr.hs:202)
+/// plus the q2 named-key extension (kept per plan Decision 2):
+///
+/// - `nil`/absent → null attr
+/// - string → identifier only
+/// - Attr userdata (any variant) → cloned out (cache flushed first)
+/// - table with positional entries → `{id, {classes}, {attributes}}`
+/// - table without positional entries → HTML-like map: `id` →
+///   identifier, `class` → space-split classes, table-valued
+///   `classes`/`attributes` and `identifier` → q2 named-key form,
+///   any other string/number value → attribute
+pub(crate) fn parse_attr(lua: &Lua, attr: Option<Value>) -> Result<crate::pandoc::Attr> {
     match attr {
-        None => Ok((String::new(), vec![], LinkedHashMap::new())),
+        None | Some(Value::Nil) => Ok((String::new(), vec![], LinkedHashMap::new())),
         Some(Value::UserData(ud)) => {
-            // Support LuaAttr userdata (all variants — Owned / BlockRef /
-            // InlineRef clone out to an independent Attr value)
-            let lua_attr = ud.borrow::<LuaAttr>()?;
-            Ok(lua_attr.clone_attr())
+            if let Ok(lua_attr) = ud.borrow::<LuaAttr>() {
+                // All variants — Owned / BlockRef / InlineRef — clone
+                // out to an independent Attr value.
+                return lua_attr.extract_flushed(lua);
+            }
+            if let Ok(proxy) = ud.borrow::<super::types::LuaAttributesProxy>() {
+                // An AttributeList value: attributes-only Attr,
+                // matching pandoc's mkAttr userdata branch.
+                return Ok((String::new(), vec![], proxy.snapshot_map()));
+            }
+            Err(Error::runtime(
+                "invalid attr: expected Attr or AttributeList userdata, table, or string",
+            ))
         }
-        Some(Value::Table(table)) => {
-            // Support table format: {identifier, classes, attributes}
-            let identifier: String = table.get("identifier").unwrap_or_default();
-            let classes: Vec<String> = table
-                .get::<Option<LuaTable>>("classes")?
-                .map(|t| {
-                    t.sequence_values::<String>()
-                        .filter_map(|r| r.ok())
-                        .collect()
-                })
-                .unwrap_or_default();
-            let attributes: LinkedHashMap<String, String> = table
-                .get::<Option<LuaTable>>("attributes")?
-                .map(|t| t.pairs::<String, String>().filter_map(|r| r.ok()).collect())
-                .unwrap_or_default();
-            Ok((identifier, classes, attributes))
-        }
+        Some(Value::Table(table)) => parse_attr_table(lua, &table),
         Some(Value::String(s)) => {
-            // Support simple string format for identifier
+            // Simple string format: identifier only
             Ok((s.to_str()?.to_string(), vec![], LinkedHashMap::new()))
         }
-        Some(_) => Err(Error::runtime("invalid attr format")),
+        Some(other) => Err(Error::runtime(format!(
+            "invalid attr: expected Attr userdata, table, or string, got {}",
+            other.type_name()
+        ))),
+    }
+}
+
+/// Table form of an Attr (see `parse_attr`). Mirrors pandoc's
+/// `peekAttrTable`: positional entries win; otherwise the table is
+/// read as an HTML-like map (extended with q2's named keys).
+fn parse_attr_table(lua: &Lua, table: &LuaTable) -> Result<crate::pandoc::Attr> {
+    if table.raw_len() > 0 {
+        // Positional triple {id, classes?, attributes?}
+        let identifier: String = match table.raw_get::<Value>(1)? {
+            Value::Nil => String::new(),
+            v => String::from_lua(v, lua)
+                .map_err(|_| Error::runtime("attr identifier must be a string"))?,
+        };
+        let classes = match table.raw_get::<Value>(2)? {
+            Value::Nil => vec![],
+            v => parse_class_list(lua, v)?,
+        };
+        let attributes = match table.raw_get::<Value>(3)? {
+            Value::Nil => LinkedHashMap::new(),
+            v => parse_attribute_list(lua, v)?,
+        };
+        return Ok((identifier, classes, attributes));
+    }
+
+    // HTML-like map (+ q2 named-key extension)
+    let mut identifier = String::new();
+    let mut classes: Vec<String> = vec![];
+    let mut attributes: LinkedHashMap<String, String> = LinkedHashMap::new();
+    for pair in table.pairs::<String, Value>() {
+        let (key, value) = pair?;
+        match (key.as_str(), &value) {
+            ("id" | "identifier", _) => {
+                identifier = String::from_lua(value, lua)
+                    .map_err(|_| Error::runtime("attr identifier must be a string"))?;
+            }
+            // HTML-like: class is a space-separated string
+            ("class", Value::String(s)) => {
+                classes.extend(s.to_str()?.split_whitespace().map(String::from));
+            }
+            // q2 named-key extension: classes as a list
+            ("classes", Value::Table(_)) => {
+                classes.extend(parse_class_list(lua, value)?);
+            }
+            // q2 named-key extension: attributes as a nested map/list
+            ("attributes", Value::Table(_)) => {
+                for (k, v) in parse_attribute_list(lua, value)? {
+                    attributes.insert(k, v);
+                }
+            }
+            _ => {
+                let v = String::from_lua(value, lua).map_err(|_| {
+                    Error::runtime(format!(
+                        "attr: value for key '{key}' must be a string or number"
+                    ))
+                })?;
+                attributes.insert(key, v);
+            }
+        }
+    }
+    Ok((identifier, classes, attributes))
+}
+
+/// A class list: table of strings (numbers coerce, like pandoc's
+/// peekText), or a classes proxy userdata.
+pub(crate) fn parse_class_list(lua: &Lua, val: Value) -> Result<Vec<String>> {
+    lua_table_to_strings(lua, val)
+}
+
+/// An attribute list, in any of the shapes pandoc's
+/// `peekAttributeList` accepts (Attr.hs:83): a string-keyed map, a
+/// list of `{key, value}` pairs, or an AttributeList userdata.
+pub(crate) fn parse_attribute_list(lua: &Lua, val: Value) -> Result<LinkedHashMap<String, String>> {
+    match val {
+        Value::UserData(ud) => {
+            if let Ok(proxy) = ud.borrow::<super::types::LuaAttributesProxy>() {
+                return Ok(proxy.snapshot_map());
+            }
+            Err(Error::runtime(
+                "attributes must be a table or AttributeList",
+            ))
+        }
+        Value::Table(table) => {
+            if table.raw_len() > 0 {
+                // List of {key, value} pairs
+                let mut map = LinkedHashMap::new();
+                for entry in table.sequence_values::<LuaTable>() {
+                    let pair = entry.map_err(|_| {
+                        Error::runtime("attributes list entries must be {key, value} pairs")
+                    })?;
+                    let k: String = pair.get(1)?;
+                    let v = String::from_lua(pair.get::<Value>(2)?, lua).map_err(|_| {
+                        Error::runtime("attribute values must be strings or numbers")
+                    })?;
+                    map.insert(k, v);
+                }
+                Ok(map)
+            } else {
+                // String-keyed map
+                let mut map = LinkedHashMap::new();
+                for pair in table.pairs::<String, Value>() {
+                    let (k, value) = pair?;
+                    let v = String::from_lua(value, lua).map_err(|_| {
+                        Error::runtime("attribute values must be strings or numbers")
+                    })?;
+                    map.insert(k, v);
+                }
+                Ok(map)
+            }
+        }
+        other => Err(Error::runtime(format!(
+            "attributes must be a table or AttributeList, got {}",
+            other.type_name()
+        ))),
     }
 }
 
@@ -1278,31 +1400,55 @@ fn parse_list_attributes(val: Value) -> Result<ListAttributes> {
 
 /// Register the pandoc.Attr() constructor and other utility constructors
 fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
-    // pandoc.Attr(identifier, classes, attributes)
-    // All parameters are optional with default empty values
+    // pandoc.Attr([identifier[, classes[, attributes]]])
+    // Dispatches on the FIRST argument's type, like pandoc's mkAttr
+    // (pandoc-lua-marshal Attr.hs:230): a string starts the positional
+    // form; a table is a full attr table (positional triple or
+    // HTML-like map); Attr/AttributeList userdata convert; nil → null.
     pandoc.set(
         "Attr",
         lua.create_function(
-            |lua, (identifier, classes, attributes): (Option<String>, Option<Value>, Option<Value>)| {
-                let id = identifier.unwrap_or_default();
-                // Both `classes` and `attributes` accept a plain Lua
-                // table OR a corresponding proxy userdata (so
-                // `pandoc.Attr(id, cb.attr.classes, cb.attr.attributes)`
-                // works without the user having to materialize a table
-                // first).
-                let cls = match classes {
-                    None | Some(Value::Nil) => Vec::new(),
-                    Some(v) => super::types::lua_table_to_strings(lua, v)
-                        .map_err(|_| Error::runtime("classes must be a table of strings"))?,
+            |lua, (first, classes, attributes): (Option<Value>, Option<Value>, Option<Value>)| {
+                let attr = match first {
+                    None | Some(Value::Nil) => (String::new(), Vec::new(), LinkedHashMap::new()),
+                    Some(Value::String(s)) => {
+                        let id = s.to_str()?.to_string();
+                        // `classes` and `attributes` accept plain Lua
+                        // tables OR the corresponding proxy userdata
+                        // (so pandoc.Attr(id, cb.attr.classes,
+                        // cb.attr.attributes) works directly).
+                        let cls = match classes {
+                            None | Some(Value::Nil) => Vec::new(),
+                            Some(v) => parse_class_list(lua, v).map_err(|_| {
+                                Error::runtime("classes must be a table of strings")
+                            })?,
+                        };
+                        let attrs = match attributes {
+                            None | Some(Value::Nil) => LinkedHashMap::new(),
+                            Some(v) => parse_attribute_list(lua, v)?,
+                        };
+                        (id, cls, attrs)
+                    }
+                    // Table or userdata first arg: the whole attr in
+                    // one value (remaining args ignored, like pandoc).
+                    Some(v) => parse_attr(lua, Some(v))?,
                 };
-                let attrs = match attributes {
-                    None | Some(Value::Nil) => LinkedHashMap::new(),
-                    Some(v) => super::types::lua_table_to_string_map(lua, v)
-                        .map_err(|_| Error::runtime("attributes must be a table"))?,
-                };
-                lua.create_userdata(LuaAttr::new((id, cls, attrs)))
+                lua.create_userdata(LuaAttr::new(attr))
             },
         )?,
+    )?;
+
+    // pandoc.AttributeList(value) — an attribute list from a
+    // string-keyed map, a list of {key, value} pairs, or another
+    // AttributeList. Returned as the same userdata type element
+    // `.attributes` reads produce.
+    pandoc.set(
+        "AttributeList",
+        lua.create_function(|lua, value: Value| {
+            let map = parse_attribute_list(lua, value)?;
+            let owner = LuaAttr::new((String::new(), Vec::new(), map));
+            lua.create_userdata(super::types::LuaAttributesProxy::new(owner))
+        })?,
     )?;
 
     // pandoc.Citation(id, mode, prefix?, suffix?, note_num?, hash?)

@@ -103,8 +103,47 @@ impl PropertyCache {
 /// Properties that participate in hslua-style caching. Each needs a
 /// reliable `set_field` implementation on every element that exposes
 /// it, because the flush writes the cached value back through it.
+/// (`attr` is also cached, but as userdata with a dedicated flush
+/// path — see `flush_cached_attr_entry`.)
 fn is_cacheable_property(key: &str) -> bool {
-    matches!(key, "content" | "citations" | "caption")
+    matches!(key, "content" | "citations" | "caption" | "classes")
+}
+
+/// Should this (key, value) pair be cached on an element? Container
+/// tables for the allowlisted properties, plus the `attr` LuaAttr
+/// userdata (so `el.attr` reads alias and nested attr mutations
+/// survive to the flush).
+fn should_cache_element_property(key: &str, value: &Value) -> bool {
+    (is_cacheable_property(key) && matches!(value, Value::Table(_)))
+        || (key == "attr" && matches!(value, Value::UserData(_) | Value::Table(_)))
+}
+
+/// Flush one cached `attr` entry during an element flush. Returns
+/// `Ok(true)` when the entry was fully handled here (the caller must
+/// not run `set_field` for it).
+///
+/// A cached `LuaAttr` gets its own property cache flushed first (the
+/// classes List table). If it is a live ref into `element_cell`'s own
+/// Attr, writes have already landed — running the element's `attr`
+/// setter would self-borrow. An *Owned* attr (or a ref to a different
+/// element) is copied in via `apply`, matching Pandoc's
+/// re-peek-at-flush semantics.
+fn flush_cached_attr_entry(
+    lua: &Lua,
+    value: &Value,
+    is_self_ref: impl FnOnce(&LuaAttr) -> bool,
+    apply: impl FnOnce(crate::pandoc::Attr),
+) -> Result<bool> {
+    if let Value::UserData(ud) = value
+        && let Ok(lua_attr) = ud.borrow::<LuaAttr>()
+    {
+        lua_attr.flush_property_cache(lua)?;
+        if !is_self_ref(&lua_attr) {
+            apply(lua_attr.clone_attr());
+        }
+        return Ok(true);
+    }
+    Ok(false)
 }
 
 #[derive(Debug, Clone)]
@@ -127,7 +166,29 @@ impl LuaInline {
         };
         let mut result = Ok(());
         for (key, value) in entries {
-            if let Err(e) = self.set_field(&key, value, lua) {
+            let step = if key == "attr" {
+                flush_cached_attr_entry(
+                    lua,
+                    &value,
+                    |a| a.is_ref_to_inline(&self.0),
+                    |tuple| {
+                        let mut inner = self.0.borrow_mut();
+                        if let Some(slot) = inline_attr_mut(&mut inner) {
+                            *slot = tuple;
+                        }
+                    },
+                )
+                .and_then(|handled| {
+                    if handled {
+                        Ok(())
+                    } else {
+                        self.set_field(&key, value, lua)
+                    }
+                })
+            } else {
+                self.set_field(&key, value, lua)
+            };
+            if let Err(e) = step {
                 result = Err(e);
                 break;
             }
@@ -754,7 +815,7 @@ impl UserData for LuaInline {
                 return Ok(cached);
             }
             let value = this.get_field(lua, &key)?;
-            if is_cacheable_property(&key) && matches!(value, Value::Table(_)) {
+            if should_cache_element_property(&key, &value) {
                 this.1.store(&key, &value);
             }
             Ok(value)
@@ -768,14 +829,12 @@ impl UserData for LuaInline {
             |lua, this, (key, val): (String, Value)| {
                 this.set_field(&key, val.clone(), lua)?;
                 // Keep the assigned value aliased (hslua caches the
-                // set value too); non-table assignments just drop any
+                // set value too); other assignments just drop any
                 // stale cache entry.
-                if is_cacheable_property(&key) {
-                    if matches!(val, Value::Table(_)) {
-                        this.1.store(&key, &val);
-                    } else {
-                        this.1.remove(&key);
-                    }
+                if should_cache_element_property(&key, &val) {
+                    this.1.store(&key, &val);
+                } else if is_cacheable_property(&key) || key == "attr" {
+                    this.1.remove(&key);
                 }
                 Ok(())
             },
@@ -946,7 +1005,29 @@ impl LuaBlock {
         };
         let mut result = Ok(());
         for (key, value) in entries {
-            if let Err(e) = self.set_field(&key, value, lua) {
+            let step = if key == "attr" {
+                flush_cached_attr_entry(
+                    lua,
+                    &value,
+                    |a| a.is_ref_to_block(&self.0),
+                    |tuple| {
+                        let mut inner = self.0.borrow_mut();
+                        if let Some(slot) = block_attr_mut(&mut inner) {
+                            *slot = tuple;
+                        }
+                    },
+                )
+                .and_then(|handled| {
+                    if handled {
+                        Ok(())
+                    } else {
+                        self.set_field(&key, value, lua)
+                    }
+                })
+            } else {
+                self.set_field(&key, value, lua)
+            };
+            if let Err(e) = step {
                 result = Err(e);
                 break;
             }
@@ -1422,7 +1503,7 @@ impl UserData for LuaBlock {
                 return Ok(cached);
             }
             let value = this.get_field(lua, &key)?;
-            if is_cacheable_property(&key) && matches!(value, Value::Table(_)) {
+            if should_cache_element_property(&key, &value) {
                 this.1.store(&key, &value);
             }
             Ok(value)
@@ -1436,14 +1517,12 @@ impl UserData for LuaBlock {
             |lua, this, (key, val): (String, Value)| {
                 this.set_field(&key, val.clone(), lua)?;
                 // Keep the assigned value aliased (hslua caches the
-                // set value too); non-table assignments just drop any
+                // set value too); other assignments just drop any
                 // stale cache entry.
-                if is_cacheable_property(&key) {
-                    if matches!(val, Value::Table(_)) {
-                        this.1.store(&key, &val);
-                    } else {
-                        this.1.remove(&key);
-                    }
+                if should_cache_element_property(&key, &val) {
+                    this.1.store(&key, &val);
+                } else if is_cacheable_property(&key) || key == "attr" {
+                    this.1.remove(&key);
                 }
                 Ok(())
             },
@@ -2209,8 +2288,19 @@ pub(crate) fn inline_attr_mut(inline: &mut Inline) -> Option<&mut crate::pandoc:
 ///
 /// FromLua always produces an independent `Owned` variant, matching
 /// pre-refactor semantics (ownership does not cross FromLua boundaries).
+///
+/// The `cache` field carries the same hslua-style property cache the
+/// elements have (see [`PropertyCache`]): `attr.classes` hands out a
+/// pandoc-List table that aliases across reads, and the cache is
+/// flushed back through `set_field` before the attr value is read out.
 #[derive(Debug, Clone)]
-pub enum LuaAttr {
+pub struct LuaAttr {
+    target: AttrTarget,
+    pub(crate) cache: PropertyCache,
+}
+
+#[derive(Debug, Clone)]
+enum AttrTarget {
     Owned(Rc<RefCell<crate::pandoc::Attr>>),
     BlockRef(Rc<RefCell<Block>>),
     InlineRef(Rc<RefCell<Inline>>),
@@ -2219,17 +2309,68 @@ pub enum LuaAttr {
 impl LuaAttr {
     /// Create a new standalone (Owned) LuaAttr from an Attr tuple.
     pub fn new(attr: crate::pandoc::Attr) -> Self {
-        LuaAttr::Owned(Rc::new(RefCell::new(attr)))
+        LuaAttr {
+            target: AttrTarget::Owned(Rc::new(RefCell::new(attr))),
+            cache: PropertyCache::default(),
+        }
     }
 
     /// Create a proxy LuaAttr referencing the given block's Attr.
     pub fn for_block(block: Rc<RefCell<Block>>) -> Self {
-        LuaAttr::BlockRef(block)
+        LuaAttr {
+            target: AttrTarget::BlockRef(block),
+            cache: PropertyCache::default(),
+        }
     }
 
     /// Create a proxy LuaAttr referencing the given inline's Attr.
     pub fn for_inline(inline: Rc<RefCell<Inline>>) -> Self {
-        LuaAttr::InlineRef(inline)
+        LuaAttr {
+            target: AttrTarget::InlineRef(inline),
+            cache: PropertyCache::default(),
+        }
+    }
+
+    /// Whether this LuaAttr is a live proxy into a parent element (its
+    /// direct writes already land in the parent's cell).
+    pub(crate) fn is_element_ref(&self) -> bool {
+        !matches!(self.target, AttrTarget::Owned(_))
+    }
+
+    /// Is this a live ref into exactly this block cell?
+    pub(crate) fn is_ref_to_block(&self, cell: &Rc<RefCell<Block>>) -> bool {
+        matches!(&self.target, AttrTarget::BlockRef(rc) if Rc::ptr_eq(rc, cell))
+    }
+
+    /// Is this a live ref into exactly this inline cell?
+    pub(crate) fn is_ref_to_inline(&self, cell: &Rc<RefCell<Inline>>) -> bool {
+        matches!(&self.target, AttrTarget::InlineRef(rc) if Rc::ptr_eq(rc, cell))
+    }
+
+    /// Write cached property values (currently: the `classes` List
+    /// table) back into the underlying Attr. Idempotent.
+    pub fn flush_property_cache(&self, lua: &Lua) -> Result<()> {
+        let entries = match self.cache.begin_flush() {
+            Some(entries) => entries,
+            None => return Ok(()),
+        };
+        let mut result = Ok(());
+        for (key, value) in entries {
+            let key_value = Value::String(lua.create_string(&key)?);
+            if let Err(e) = self.set_field(key_value, value, lua) {
+                result = Err(e);
+                break;
+            }
+        }
+        self.cache.end_flush();
+        result
+    }
+
+    /// Flush, then deep-clone the underlying Attr — the blessed way to
+    /// marshal a `LuaAttr` back into a Rust Attr tuple.
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<crate::pandoc::Attr> {
+        self.flush_property_cache(lua)?;
+        Ok(self.clone_attr())
     }
 
     /// Run `f` against the underlying Attr for reading. Panics on a
@@ -2238,14 +2379,14 @@ impl LuaAttr {
     /// in a way that invalidated the proxy, which shouldn't happen under
     /// normal filter usage.
     fn with_attr<R>(&self, f: impl FnOnce(&crate::pandoc::Attr) -> R) -> R {
-        match self {
-            LuaAttr::Owned(rc) => f(&rc.borrow()),
-            LuaAttr::BlockRef(rc) => {
+        match &self.target {
+            AttrTarget::Owned(rc) => f(&rc.borrow()),
+            AttrTarget::BlockRef(rc) => {
                 let block = rc.borrow();
                 f(block_attr_ref(&block)
                     .expect("LuaAttr::BlockRef proxy points at a block variant without an Attr"))
             }
-            LuaAttr::InlineRef(rc) => {
+            AttrTarget::InlineRef(rc) => {
                 let inline = rc.borrow();
                 f(inline_attr_ref(&inline)
                     .expect("LuaAttr::InlineRef proxy points at an inline variant without an Attr"))
@@ -2255,14 +2396,14 @@ impl LuaAttr {
 
     /// Run `f` against the underlying Attr for mutation.
     fn with_attr_mut<R>(&self, f: impl FnOnce(&mut crate::pandoc::Attr) -> R) -> R {
-        match self {
-            LuaAttr::Owned(rc) => f(&mut rc.borrow_mut()),
-            LuaAttr::BlockRef(rc) => {
+        match &self.target {
+            AttrTarget::Owned(rc) => f(&mut rc.borrow_mut()),
+            AttrTarget::BlockRef(rc) => {
                 let mut block = rc.borrow_mut();
                 f(block_attr_mut(&mut block)
                     .expect("LuaAttr::BlockRef proxy points at a block variant without an Attr"))
             }
-            LuaAttr::InlineRef(rc) => {
+            AttrTarget::InlineRef(rc) => {
                 let mut inline = rc.borrow_mut();
                 f(inline_attr_mut(&mut inline)
                     .expect("LuaAttr::InlineRef proxy points at an inline variant without an Attr"))
@@ -2295,10 +2436,7 @@ impl LuaAttr {
         match key {
             // Positional access (Lua uses 1-based indexing)
             Value::Integer(1) => self.identifier().into_lua(lua),
-            Value::Integer(2) => {
-                let ud = lua.create_userdata(LuaClassesProxy::new(self.clone()))?;
-                Ok(Value::UserData(ud))
-            }
+            Value::Integer(2) => self.classes_list_value(lua),
             Value::Integer(3) => {
                 let ud = lua.create_userdata(LuaAttributesProxy::new(self.clone()))?;
                 Ok(Value::UserData(ud))
@@ -2309,10 +2447,7 @@ impl LuaAttr {
                 let key_str: &str = borrowed.as_ref();
                 match key_str {
                     "identifier" => self.identifier().into_lua(lua),
-                    "classes" => {
-                        let ud = lua.create_userdata(LuaClassesProxy::new(self.clone()))?;
-                        Ok(Value::UserData(ud))
-                    }
+                    "classes" => self.classes_list_value(lua),
                     "attributes" => {
                         let ud = lua.create_userdata(LuaAttributesProxy::new(self.clone()))?;
                         Ok(Value::UserData(ud))
@@ -2323,6 +2458,18 @@ impl LuaAttr {
             }
             _ => Ok(Value::Nil),
         }
+    }
+
+    /// Read `classes` as a pandoc-List table, aliased across reads via
+    /// the property cache (matching Pandoc, where `attr.classes` is a
+    /// pandoc List and in-place mutation persists).
+    fn classes_list_value(&self, lua: &Lua) -> Result<Value> {
+        if let Some(cached) = self.cache.get("classes") {
+            return Ok(cached);
+        }
+        let value = self.with_attr(|attr| super::list::create_string_list_table(lua, &attr.1))?;
+        self.cache.store("classes", &value);
+        Ok(value)
     }
 
     /// Set a field value by name or index. Takes `&self`: mutation goes
@@ -2394,28 +2541,44 @@ impl UserData for LuaAttr {
         // variant, so set_field takes `&self`.
         methods.add_meta_method(
             MetaMethod::NewIndex,
-            |lua, this, (key, val): (Value, Value)| this.set_field(key, val, lua),
+            |lua, this, (key, val): (Value, Value)| {
+                let is_classes_key = matches!(&key, Value::Integer(2))
+                    || matches!(&key, Value::String(s) if s.to_str().is_ok_and(|k| &*k == "classes"));
+                this.set_field(key, val, lua)?;
+                // User assignment invalidates the cached classes List
+                // (rebuilt with the List metatable on next read). The
+                // internal flush path calls set_field directly and
+                // deliberately keeps the cache (aliasing survives).
+                if is_classes_key {
+                    this.cache.remove("classes");
+                }
+                Ok(())
+            },
         );
 
         // Clone method — always produces an Owned copy, independent of
         // the source variant (BlockRef/InlineRef clones detach the Attr
         // from its parent, matching Pandoc's "elem.attr:clone()" shape).
         methods.add_method("clone", |lua, this, ()| {
+            this.flush_property_cache(lua)?;
             lua.create_userdata(LuaAttr::new(this.clone_attr()))
         });
 
         // __tostring: Haskell-show tuple format, matching Pandoc's
         // Lua API: `("id",["c"],[("k","v")])`
-        methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
+        methods.add_meta_method(MetaMethod::ToString, |lua, this, ()| {
+            this.flush_property_cache(lua)?;
             Ok(super::show::show_attr(&this.clone_attr()))
         });
 
         // __eq: component-wise equality, order-sensitive in the
         // attribute list (Pandoc's Attr is a list of pairs).
-        methods.add_meta_method(MetaMethod::Eq, |_, this, other: Value| {
+        methods.add_meta_method(MetaMethod::Eq, |lua, this, other: Value| {
             Ok(match other {
                 Value::UserData(ud) => match ud.borrow::<LuaAttr>() {
                     Ok(other_attr) => {
+                        this.flush_property_cache(lua)?;
+                        other_attr.flush_property_cache(lua)?;
                         attr_structurally_eq(&this.clone_attr(), &other_attr.clone_attr())
                     }
                     Err(_) => false,
@@ -2430,10 +2593,11 @@ impl UserData for LuaAttr {
 }
 
 impl FromLua for LuaAttr {
-    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         match value {
             Value::UserData(ud) => {
                 let lua_attr = ud.borrow::<LuaAttr>()?;
+                lua_attr.flush_property_cache(lua)?;
                 // Always produce an Owned clone on FromLua: detach from
                 // any parent, preserving today's "independent copy"
                 // semantics.
@@ -2492,6 +2656,42 @@ impl LuaAttributesProxy {
         self.0.with_attr(|a| a.2.len())
     }
 
+    /// The i-th (1-based) key/value pair, in insertion order.
+    fn pair_at(&self, i: usize) -> Option<(String, String)> {
+        self.0.with_attr(|a| {
+            a.2.iter()
+                .nth(i.checked_sub(1)?)
+                .map(|(k, v)| (k.clone(), v.clone()))
+        })
+    }
+
+    /// Replace (Some) or remove (None) the i-th (1-based) pair,
+    /// preserving the order of the other entries. Out-of-range
+    /// indices are ignored, matching Lua table semantics loosely.
+    fn set_pair_at(&self, i: usize, pair: Option<(String, String)>) {
+        self.0.with_attr_mut(|a| {
+            let mut pairs: Vec<(String, String)> =
+                a.2.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let Some(idx) = i.checked_sub(1) else { return };
+            if idx >= pairs.len() {
+                return;
+            }
+            match pair {
+                Some(p) => pairs[idx] = p,
+                None => {
+                    pairs.remove(idx);
+                }
+            }
+            a.2 = pairs.into_iter().collect();
+        });
+    }
+
+    /// Snapshot the attribute map (used when an AttributeList value is
+    /// consumed by a constructor / attr parser).
+    pub(crate) fn snapshot_map(&self) -> hashlink::LinkedHashMap<String, String> {
+        self.0.with_attr(|a| a.2.clone())
+    }
+
     fn snapshot_pairs(&self) -> Vec<(String, String)> {
         self.0
             .with_attr(|a| a.2.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
@@ -2500,7 +2700,7 @@ impl LuaAttributesProxy {
 
 impl UserData for LuaAttributesProxy {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        // attrs["key"] — string read
+        // attrs["key"] — string read; attrs[i] — i-th {key, value} pair
         methods.add_meta_method(MetaMethod::Index, |lua, this, key: Value| match key {
             Value::String(s) => {
                 let k = s.to_str()?.to_string();
@@ -2509,6 +2709,15 @@ impl UserData for LuaAttributesProxy {
                     None => Ok(Value::Nil),
                 }
             }
+            Value::Integer(i) => match usize::try_from(i).ok().and_then(|i| this.pair_at(i)) {
+                Some((k, v)) => {
+                    let pair = lua.create_table()?;
+                    pair.set(1, k)?;
+                    pair.set(2, v)?;
+                    Ok(Value::Table(pair))
+                }
+                None => Ok(Value::Nil),
+            },
             _ => Ok(Value::Nil),
         });
 
@@ -2518,9 +2727,28 @@ impl UserData for LuaAttributesProxy {
             |lua, this, (key, val): (Value, Value)| {
                 let k = match key {
                     Value::String(s) => s.to_str()?.to_string(),
+                    // attrs[i] = {key, value} replaces; attrs[i] = nil removes
+                    Value::Integer(i) => {
+                        let idx = usize::try_from(i)
+                            .map_err(|_| Error::runtime("AttributeList index must be positive"))?;
+                        match val {
+                            Value::Nil => this.set_pair_at(idx, None),
+                            Value::Table(pair) => {
+                                let k: String = pair.get(1)?;
+                                let v: String = pair.get(2)?;
+                                this.set_pair_at(idx, Some((k, v)));
+                            }
+                            _ => {
+                                return Err(Error::runtime(
+                                    "AttributeList entries must be {key, value} pairs or nil",
+                                ));
+                            }
+                        }
+                        return Ok(());
+                    }
                     _ => {
                         return Err(Error::runtime(
-                            "Attr.attributes proxy: only string keys are supported",
+                            "Attr.attributes proxy: only string or integer keys are supported",
                         ));
                     }
                 };
@@ -2584,6 +2812,22 @@ impl UserData for LuaAttributesProxy {
                 "Attributes({:?})",
                 this.0.with_attr(|a| a.2.clone())
             ))
+        });
+
+        // __eq: pairwise, order-sensitive (Pandoc's AttributeList is a
+        // list of pairs).
+        methods.add_meta_method(MetaMethod::Eq, |_, this, other: Value| {
+            Ok(match other {
+                Value::UserData(ud) => match ud.borrow::<LuaAttributesProxy>() {
+                    Ok(other_proxy) => {
+                        let a = this.snapshot_pairs();
+                        let b = other_proxy.snapshot_pairs();
+                        a == b
+                    }
+                    Err(_) => false,
+                },
+                _ => false,
+            })
         });
     }
 }
@@ -2855,9 +3099,13 @@ pub fn attributes_proxy_for_block(lua: &Lua, block: Rc<RefCell<Block>>) -> Resul
 
 /// Block-level `.classes` shortcut: a LuaClassesProxy bound to the
 /// block's Attr.
+/// Block-level `.classes` read: a pandoc-List table of the classes.
+/// (Named for its proxy-userdata history; since bd-tzwcof0n it returns
+/// a List table — write-back persistence comes from the element's
+/// PropertyCache, which caches it under the "classes" key.)
 pub fn classes_proxy_for_block(lua: &Lua, block: Rc<RefCell<Block>>) -> Result<Value> {
-    let ud = lua.create_userdata(LuaClassesProxy::new(LuaAttr::for_block(block)))?;
-    Ok(Value::UserData(ud))
+    let attr = LuaAttr::for_block(block);
+    attr.with_attr(|a| super::list::create_string_list_table(lua, &a.1))
 }
 
 /// Inline-level `.attributes` shortcut.
@@ -2867,9 +3115,10 @@ pub fn attributes_proxy_for_inline(lua: &Lua, inline: Rc<RefCell<Inline>>) -> Re
 }
 
 /// Inline-level `.classes` shortcut.
+/// Inline-level `.classes` read — see `classes_proxy_for_block`.
 pub fn classes_proxy_for_inline(lua: &Lua, inline: Rc<RefCell<Inline>>) -> Result<Value> {
-    let ud = lua.create_userdata(LuaClassesProxy::new(LuaAttr::for_inline(inline)))?;
-    Ok(Value::UserData(ud))
+    let attr = LuaAttr::for_inline(inline);
+    attr.with_attr(|a| super::list::create_string_list_table(lua, &a.1))
 }
 
 // FromLua implementation for converting Lua values back to Rust types

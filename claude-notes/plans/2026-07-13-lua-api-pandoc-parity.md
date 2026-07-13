@@ -354,9 +354,10 @@ lightly). Both reuse the same corpus format where possible.
 
 ## Current state (2026-07-13, after bd-hitjclzp)
 
-**Scoreboard**: Track 1 (vendored pandoc-lua-marshal suite) **73/133
-passing** — baseline was 11. Track 2 (differential vs pandoc 3.9.0.2)
-**4/8 passing** — baseline was 2. Strands closed so far: bd-0xghpvij
+**Scoreboard** (updated after bd-tzwcof0n): Track 1 **90/133 passing**
+— baseline was 11. Track 2 (differential vs pandoc 3.9.0.2) **6/8
+passing** — baseline was 2. The cluster table below predates
+bd-tzwcof0n (which cleared the Attr cluster, ~21 entries). Strands closed so far: bd-0xghpvij
 (OrderedList ListAttributes), bd-55mb0rjz (__eq + Haskell-show
 tostring), bd-hitjclzp (property cache+readback — the worked example
 is byte-identical to pandoc e2e).
@@ -461,9 +462,20 @@ List noise is gone.
       `classes:insert` still detached (bd-tzwcof0n).
 - [ ] 2.2 Class A: filter-return values through fuzzy peekers
       (kills the other big silent-no-op class).
-- [ ] 2.3 Class B: `parse_attr` full Pandoc shape support
-      (positional triple, HTML-like map with class splitting,
-      list-of-pairs attributes) + loud diagnostics for rejects.
+- [x] 2.3 Class B — DONE 2026-07-13 (bd-tzwcof0n closed): `parse_attr`
+      accepts every Pandoc shape (positional triple, HTML-like map
+      with class splitting, list-of-pairs / map / AttributeList
+      attributes) plus the kept q2 named-key form, with loud errors
+      for rejects; `pandoc.Attr` dispatches on its first argument like
+      mkAttr; new `pandoc.AttributeList` constructor; AttributeList
+      proxy gained integer pair indexing (read/replace/delete) and
+      `__eq`; `attr.classes`/element `.classes` now return pandoc-List
+      tables with cache+readback persistence (also completes bd-195t:
+      `cb.attr.classes:insert` persists, verified byte-identical to
+      pandoc e2e). LuaAttr refactored enum→struct with its own
+      PropertyCache; elements cache the `attr` userdata (aliased
+      reads, recursive flush). Track-1 xfail 60 → 43; differential
+      4 → 2 (both attr cases match the oracle).
 - [x] 2.4 C1: OrderedList listAttributes honored (bd-0xghpvij closed
       2026-07-13; first ratchet burn-down — differential xfail 6→5).
 - [ ] 2.5 Class D1–D3 audit remainder.
