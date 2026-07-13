@@ -3152,52 +3152,54 @@ impl FromLua for LuaBlock {
     }
 }
 
-/// Apply a filter to a single inline element using correct traversal
-/// This wraps the element in a list and applies the list-walking function
+/// Apply a filter to a single inline element. Per pandoc's subtree
+/// rule, only the element's CHILDREN are offered to the filter — the
+/// element itself is never visited and no synthetic singleton list is
+/// created.
 pub async fn walk_inline_with_filter(lua: &Lua, inline: &Inline, filter: &Table) -> Result<Inline> {
-    let filtered = walk_inlines_with_filter(lua, &[inline.clone()], filter).await?;
-    Ok(filtered
-        .into_iter()
-        .next()
-        .unwrap_or_else(|| inline.clone()))
+    use super::filter::{WalkingOrder, get_walking_order};
+    match get_walking_order(filter)? {
+        WalkingOrder::Typewise => super::walk::typewise_inline_element(lua, filter, inline).await,
+        WalkingOrder::Topdown => super::walk::topdown_inline_element(lua, filter, inline).await,
+    }
 }
 
-/// Apply a filter to a single block element using correct traversal
-/// This wraps the element in a list and applies the list-walking function
+/// Apply a filter to a single block element (children only — see
+/// `walk_inline_with_filter`).
 pub async fn walk_block_with_filter(lua: &Lua, block: &Block, filter: &Table) -> Result<Block> {
-    let filtered = walk_blocks_with_filter(lua, &[block.clone()], filter).await?;
-    Ok(filtered.into_iter().next().unwrap_or_else(|| block.clone()))
+    use super::filter::{WalkingOrder, get_walking_order};
+    match get_walking_order(filter)? {
+        WalkingOrder::Typewise => super::walk::typewise_block_element(lua, filter, block).await,
+        WalkingOrder::Topdown => super::walk::topdown_block_element(lua, filter, block).await,
+    }
 }
 
-/// Apply a filter table to a list of inlines using correct two-pass or topdown traversal
+/// Apply a filter table to a list of inlines. The list itself IS
+/// offered to the `Inlines` function, and all four typewise passes run
+/// (block functions reach blocks nested inside Notes).
 pub async fn walk_inlines_with_filter(
     lua: &Lua,
     inlines: &[Inline],
     filter: &Table,
 ) -> Result<Vec<Inline>> {
-    use super::filter::{
-        WalkingOrder, apply_typewise_inlines, get_walking_order, walk_inlines_topdown,
-    };
-
+    use super::filter::{WalkingOrder, get_walking_order};
     match get_walking_order(filter)? {
-        WalkingOrder::Typewise => apply_typewise_inlines(lua, filter, inlines).await,
-        WalkingOrder::Topdown => walk_inlines_topdown(lua, filter, inlines).await,
+        WalkingOrder::Typewise => super::walk::typewise_inlines(lua, filter, inlines).await,
+        WalkingOrder::Topdown => super::walk::topdown_inlines(lua, filter, inlines).await,
     }
 }
 
-/// Apply a filter table to a list of blocks using correct four-pass or topdown traversal
+/// Apply a filter table to a list of blocks (the list is offered to
+/// the `Blocks` function).
 pub async fn walk_blocks_with_filter(
     lua: &Lua,
     blocks: &[Block],
     filter: &Table,
 ) -> Result<Vec<Block>> {
-    use super::filter::{
-        WalkingOrder, apply_typewise_filter, get_walking_order, walk_blocks_topdown,
-    };
-
+    use super::filter::{WalkingOrder, get_walking_order};
     match get_walking_order(filter)? {
-        WalkingOrder::Typewise => apply_typewise_filter(lua, filter, blocks).await,
-        WalkingOrder::Topdown => walk_blocks_topdown(lua, filter, blocks).await,
+        WalkingOrder::Typewise => super::walk::typewise_blocks(lua, filter, blocks).await,
+        WalkingOrder::Topdown => super::walk::topdown_blocks(lua, filter, blocks).await,
     }
 }
 

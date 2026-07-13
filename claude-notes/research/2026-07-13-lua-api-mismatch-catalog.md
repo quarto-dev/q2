@@ -48,6 +48,18 @@ Progress log:
   contracts 2 (bd-9p2686pc), classes-proxy vs List table ~3
   (bd-tzwcof0n).
 
+- **2026-07-13, bd-2j048yfm closed** (walk cluster): traversal engine
+  rewritten as `crates/pampa/src/lua/walk.rs`, mirroring
+  pandoc-lua-marshal Walk/SpliceList/Topdown: single children map
+  (now covering Table cells/captions, DefinitionList, Citation
+  prefix/suffix — all skipped by the old hand-rolled passes), subtree
+  rule for `elem:walk` (fixes the `i:walk(filter), false` C-stack
+  overflow), four-pass typewise order, topdown list-level stops +
+  truncation. Track-1 **98 → 110 pass / 23 xfail** (all 12 walk
+  xfails flipped); differential **17 → 19 cases, all pass**. One
+  pre-existing q2 test updated per normative decision (pandoc compat
+  over q2's old synthetic wrapper-list `Blocks` visit).
+
 - **2026-07-13, bd-1fjtodu8 closed** (cluster 6 + the clone half of
   the old cluster-1 residue): pandoc.List module is callable
   (`List(t)`/`List{…}` in-place, `List()` empty, non-table → loud

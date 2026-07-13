@@ -55,6 +55,7 @@ pub mod test_lua_constructors;
 pub mod test_lua_content_mutation;
 pub mod test_lua_list;
 pub mod test_lua_utils;
+pub mod test_lua_walk;
 pub mod test_math_attr;
 pub mod test_meta;
 pub mod test_metadata_source_tracking;

@@ -28,6 +28,7 @@ mod system;
 mod text;
 mod types;
 mod utils;
+mod walk;
 
 #[allow(unused_imports)]
 pub use filter::FilterOutput;

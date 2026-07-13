@@ -354,9 +354,9 @@ lightly). Both reuse the same corpus format where possible.
 
 ## Current state (2026-07-13, after bd-hitjclzp)
 
-**Scoreboard** (updated after bd-1fjtodu8): Track 1 **98/133 passing**
-— baseline was 11. Track 2 (differential vs pandoc 3.9.0.2) **17/17
-passing** — baseline was 2/8; the corpus has grown to 17 cases and the
+**Scoreboard** (updated after bd-2j048yfm): Track 1 **110/133 passing**
+— baseline was 11. Track 2 (differential vs pandoc 3.9.0.2) **19/19
+passing** — baseline was 2/8; the corpus has grown to 19 cases and the
 xfail list is empty. The cluster table below predates
 bd-tzwcof0n (which cleared the Attr cluster, ~21 entries). Strands closed so far: bd-0xghpvij
 (OrderedList ListAttributes), bd-55mb0rjz (__eq + Haskell-show
@@ -369,7 +369,7 @@ Remaining failure clusters (60 Track-1 + 4 differential):
 |---|---|---|---|
 | Attr argument shapes | ~21 | bd-tzwcof0n | `pandoc.Attr({…})` rejects table-as-first-arg (8); attributes as list-of-pairs / AttributeList-userdata rejected (6); `AttributeList` constructor missing (3); `attr.classes` not a pandoc List (3, incl. `classes:insert` silently lost — bd-195t residue); + both differential attr cases (constructor attrs silently empty — worst remaining silent-error offenders) |
 | List module parity | ~12 | bd-1fjtodu8 | `List{…}` not callable (10); `Inlines:clone`/`Blocks:clone` shallow, should be deep (2). Also blocks several walk tests that use `List` incidentally |
-| walk semantics | 12 | bd-2j048yfm (filed 2026-07-13 once List noise cleared) | list-level `Inlines`/`Blocks` filter functions not invoked by `walk`; subtree restriction; blocks inside Notes; Inline → Inlines → Block → Blocks ordering; topdown truncation C-stack overflow |
+| walk semantics | ~~12~~ 0 — CLOSED 2026-07-13 | bd-2j048yfm | list-level `Inlines`/`Blocks` filter functions not invoked by `walk`; subtree restriction; blocks inside Notes; Inline → Inlines → Block → Blocks ordering; topdown truncation C-stack overflow |
 | Table field marshaling | 6 | bd-sgfiiktn | `head`/`foot`/`colspecs`/`caption` property round-trips (helper userdata lack `__eq`/expected shapes); single-body form |
 | Filter-return coercion | 2 (diff.) | bd-23yvjfmm | bare-string return ignored; non-userdata table entries dropped — the remaining big silent class (visible only in Track 2) |
 | `__toinline`/`__toblock` | 4 | bd-olz91r4v | coercion metamethod hooks not consulted |
@@ -517,6 +517,56 @@ List noise is gone.
       test); differential 15 → **17/17** (new cases
       list-module-callable, list-clone-deep). E2e byte-identical to
       pandoc through the real binary.
+
+### Phase 2b — walk semantics (bd-2j048yfm, in progress 2026-07-13)
+
+Reference: `external-sources/pandoc-lua-marshal/src/Text/Pandoc/Lua/`
+`{Walk,SpliceList,Topdown}.hs` + `Marshal/Shared.hs`
+(`walkBlocksAndInlines`). Contract (from the Haskell + upstream tests):
+`elem:walk` visits the element's **children only** (subtree rule — no
+self-application, no synthetic singleton list); typewise = four full
+walks in order Inline-splicing → Inlines-straight → Block-splicing →
+Blocks-straight, each bottom-up with children visited before the
+element's own function; inline-rooted walks still run the block passes
+(blocks nested in Note/etc.); topdown = single pre-order traversal
+(list fn before element fn before children), element-level `false`
+skips that element's children but siblings continue, list-level
+`false` halts the whole list's processing.
+
+**Normative decision (Carlos, 2026-07-13)**: pandoc compatibility wins
+over any q2 test that pinned self-inclusive `elem:walk`. If such a
+test exists and breaks, STOP and show it before deleting/updating.
+
+- [x] W1. Failing-test inventory: 6 Rust integration tests in
+      `tests/integration/test_lua_walk.rs` (subtree rule inline+block,
+      no synthetic singleton list, Note descent, typewise order,
+      `i:walk(filter), false` no-overflow), all failing pre-fix.
+- [x] W2–W5. DONE as one coherent rewrite (2026-07-13): new module
+      `crates/pampa/src/lua/walk.rs` mirrors pandoc-lua-marshal — the
+      AST children map is written ONCE (`walk_{inline,block}_children`,
+      generic over a `LuaWalker` trait), with `TypewisePass` (four
+      sequential bottom-up passes, splicing children-before-element)
+      and `TopdownWalk` (single pre-order traversal; list fn → element
+      fn → children of the *replaced* elements; element-level `false`
+      skips children, list-level `false` halts the list) built on it.
+      Entry points: element roots start at the children map (subtree
+      rule — kills the C-stack overflow); list roots offer the top
+      list to `Inlines`/`Blocks`. The old ~900 lines of four drifting
+      hand-rolled recursions in filter.rs (which skipped Table /
+      DefinitionList / Figure-caption inline content and Citation
+      prefix/suffix entirely) were deleted; `apply_typewise_filter` /
+      `apply_topdown_filter` / types.rs walk entry points now delegate.
+      Also fixed by the unified children map: block filters now reach
+      Table cell/caption content in every pass. One pre-existing test
+      updated per Carlos's normative call (see below):
+      `test_elem_walk_typewise_traversal_order` pinned the synthetic
+      `[Div]` wrapper-list `Blocks` visit; expectation changed to the
+      pandoc contract (single `Blocks` for `Div.content`).
+- [x] W6. Scoreboard: Track-1 xfail 35 → **23** (all 12 walk xfails
+      flipped, zero new failures); differential 17 → **19/19** (new
+      cases walk-elem-subtree, walk-topdown-truncate). Full pampa
+      suite 4100/4100; e2e byte-identical to pandoc incl. the
+      truncation subtlety. `cargo xtask verify` run before commit.
 
 ### Phase 3 — breadth
 
