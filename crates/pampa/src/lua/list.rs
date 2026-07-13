@@ -26,6 +26,35 @@ pub fn get_or_create_list_metatable(lua: &Lua) -> Result<Table> {
     }
 
     let mt = create_list_metatable(lua, "List")?;
+
+    // Make the module table itself callable — `List(t)` / `List{…}` /
+    // `List()` — like hslua-list: the metatable is attached to the
+    // argument IN PLACE (the same table is returned), and non-table
+    // arguments are an error. Instances are NOT callable (their
+    // metatable is `mt`, which has no `__call` field).
+    let module_mt = lua.create_table()?;
+    module_mt.set(
+        "__call",
+        lua.create_function(|lua, (module, arg): (Table, Option<Value>)| {
+            let t = match arg {
+                None | Some(Value::Nil) => lua.create_table()?,
+                Some(Value::Table(t)) => t,
+                Some(other) => {
+                    let got = match &other {
+                        Value::Integer(_) => "number",
+                        v => v.type_name(),
+                    };
+                    return Err(mlua::Error::runtime(format!(
+                        "bad argument #1 to 'List' (table expected, got {got})"
+                    )));
+                }
+            };
+            t.set_metatable(Some(module))?;
+            Ok(t)
+        })?,
+    )?;
+    mt.set_metatable(Some(module_mt))?;
+
     lua.set_named_registry_value(LIST_METATABLE_KEY, mt.clone())?;
     Ok(mt)
 }
@@ -42,6 +71,9 @@ pub fn get_or_create_inlines_metatable(lua: &Lua) -> Result<Table> {
 
     // Add walk() method for Inlines
     mt.set("walk", create_inlines_walk_method(lua)?)?;
+
+    // Deep clone (unlike generic List:clone, which is shallow)
+    mt.set("clone", create_inlines_clone_method(lua)?)?;
 
     // Haskell-show tostring, matching Pandoc: `[Str "a",Space]`
     mt.set("__tostring", create_inlines_tostring_method(lua)?)?;
@@ -63,6 +95,9 @@ pub fn get_or_create_blocks_metatable(lua: &Lua) -> Result<Table> {
     // Add walk() method for Blocks
     mt.set("walk", create_blocks_walk_method(lua)?)?;
 
+    // Deep clone (unlike generic List:clone, which is shallow)
+    mt.set("clone", create_blocks_clone_method(lua)?)?;
+
     // Haskell-show tostring, matching Pandoc: `[Para [Str "p"]]`
     mt.set("__tostring", create_blocks_tostring_method(lua)?)?;
 
@@ -80,11 +115,14 @@ fn create_list_metatable(lua: &Lua, name: &str) -> Result<Table> {
     // Set __index to self so methods are accessible
     mt.set("__index", mt.clone())?;
 
-    // Metamethods
+    // Metamethods. NOTE: no `__call` here — a `__call` field on this
+    // table would make list INSTANCES callable (their metatable is this
+    // table), which pandoc's lists are not. The callable-module behavior
+    // (`pandoc.List{…}`) lives on the module's own metatable, attached in
+    // `get_or_create_list_metatable`.
     mt.set("__concat", create_concat_method(lua)?)?;
     mt.set("__eq", create_eq_method(lua)?)?;
     mt.set("__tostring", create_tostring_method(lua)?)?;
-    mt.set("__call", create_new_method(lua)?)?;
 
     // List methods
     mt.set("at", create_at_method(lua)?)?;
@@ -520,6 +558,56 @@ use super::types::{
     LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_table, peek_blocks_fuzzy,
     peek_inlines_fuzzy, walk_blocks_with_filter, walk_inlines_with_filter,
 };
+
+/// Deep clone for Inlines lists: each Inline userdata entry is
+/// extracted (flushing cached property mutations) and re-wrapped in a
+/// fresh userdata, so mutating the clone never affects the original.
+/// Matches pandoc, where `Inlines:clone`/`Blocks:clone` are deep while
+/// generic `List:clone` is shallow.
+fn create_inlines_clone_method(lua: &Lua) -> Result<Function> {
+    lua.create_function(|lua, table: Table| {
+        let len = table.raw_len();
+        let result = lua.create_table_with_capacity(len, 0)?;
+        if let Some(mt) = table.metatable() {
+            result.set_metatable(Some(mt))?;
+        }
+        for i in 1..=len {
+            let val: Value = table.raw_get(i)?;
+            let cloned = match &val {
+                Value::UserData(ud) if ud.borrow::<LuaInline>().is_ok() => {
+                    let inline = ud.borrow::<LuaInline>()?.extract_flushed(lua)?;
+                    Value::UserData(lua.create_userdata(LuaInline::new(inline))?)
+                }
+                _ => val,
+            };
+            result.raw_set(i, cloned)?;
+        }
+        Ok(result)
+    })
+}
+
+/// Deep clone for Blocks lists (see `create_inlines_clone_method`).
+fn create_blocks_clone_method(lua: &Lua) -> Result<Function> {
+    lua.create_function(|lua, table: Table| {
+        let len = table.raw_len();
+        let result = lua.create_table_with_capacity(len, 0)?;
+        if let Some(mt) = table.metatable() {
+            result.set_metatable(Some(mt))?;
+        }
+        for i in 1..=len {
+            let val: Value = table.raw_get(i)?;
+            let cloned = match &val {
+                Value::UserData(ud) if ud.borrow::<LuaBlock>().is_ok() => {
+                    let block = ud.borrow::<LuaBlock>()?.extract_flushed(lua)?;
+                    Value::UserData(lua.create_userdata(LuaBlock::new(block))?)
+                }
+                _ => val,
+            };
+            result.raw_set(i, cloned)?;
+        }
+        Ok(result)
+    })
+}
 
 /// Create the Pandoc-style `__tostring` for Inlines lists
 /// (Haskell-show of the list: `[Str "hello",Space]`, empty → `[]`).

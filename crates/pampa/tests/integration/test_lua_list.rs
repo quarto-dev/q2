@@ -610,3 +610,121 @@ end
 
     run_filter(filter_code, doc).await;
 }
+
+// ============================================================================
+// pandoc.List module parity (bd-1fjtodu8): callable constructor, in-place
+// metatable attachment, non-callable instances, deep Inlines/Blocks clone.
+// Semantics oracle-probed against pandoc 3.9.0.2.
+// ============================================================================
+
+fn simple_doc() -> Pandoc {
+    create_test_doc(vec![Inline::Str(Str {
+        text: "x".to_string(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
+    })])
+}
+
+#[tokio::test]
+async fn test_list_module_callable() {
+    let filter_code = r#"
+function Para(elem)
+    local List = pandoc.List
+
+    -- List(t) attaches the metatable in place and returns the same table
+    local t = {1, 2}
+    local l = List(t)
+    assert(rawequal(t, l), "List(t) must return the same table")
+    assert(getmetatable(l) == List, "metatable must be pandoc.List")
+
+    -- brace-call literal
+    local m = List{3, 4}
+    assert(#m == 2 and m[1] == 3, "List{...} literal must work")
+
+    -- empty forms
+    assert(#List() == 0, "List() must give an empty list")
+    assert(#List{} == 0, "List{} must give an empty list")
+
+    -- methods work on constructed lists
+    m:insert(5)
+    assert(#m == 3 and m:includes(5), "instance methods must work")
+    local mapped = m:map(function(x) return x * 2 end)
+    assert(mapped[3] == 10, "map must work")
+    return elem
+end
+"#;
+    run_filter(filter_code, simple_doc()).await;
+}
+
+#[tokio::test]
+async fn test_list_module_call_rejects_non_table() {
+    let filter_code = r#"
+function Para(elem)
+    local ok, err = pcall(function() return pandoc.List('ab') end)
+    assert(not ok, "List('ab') must error, not silently coerce")
+    assert(tostring(err):find('table expected', 1, true),
+           "error must say 'table expected', got: " .. tostring(err))
+    return elem
+end
+"#;
+    run_filter(filter_code, simple_doc()).await;
+}
+
+#[tokio::test]
+async fn test_list_instances_not_callable() {
+    let filter_code = r#"
+function Para(elem)
+    local l = pandoc.List{1, 2}
+    local ok = pcall(function() return l{3} end)
+    assert(not ok, "List instances must not be callable (pandoc parity)")
+    return elem
+end
+"#;
+    run_filter(filter_code, simple_doc()).await;
+}
+
+#[tokio::test]
+async fn test_inlines_clone_deep() {
+    let filter_code = r#"
+function Para(elem)
+    local ils = pandoc.Inlines('Hello, World!')
+    local cl = ils:clone()
+    assert(not rawequal(ils[1], cl[1]), "clone entries must be fresh userdata")
+    cl[1].text = 'Bonjour,'
+    assert(ils[1].text == 'Hello,',
+           "Inlines:clone must be deep; original changed to " .. ils[1].text)
+    assert(cl[1].text == 'Bonjour,', "clone must carry the mutation")
+    return elem
+end
+"#;
+    run_filter(filter_code, simple_doc()).await;
+}
+
+#[tokio::test]
+async fn test_blocks_clone_deep() {
+    let filter_code = r#"
+function Para(elem)
+    local bls = pandoc.Blocks({pandoc.Para('one'), pandoc.CodeBlock('two')})
+    local cl = bls:clone()
+    cl[1].content[1].text = 'CHANGED'
+    assert(bls[1].content[1].text == 'one',
+           "Blocks:clone must be deep; original changed to " .. bls[1].content[1].text)
+    assert(cl[1].content[1].text == 'CHANGED', "clone must carry the mutation")
+    return elem
+end
+"#;
+    run_filter(filter_code, simple_doc()).await;
+}
+
+#[tokio::test]
+async fn test_generic_list_clone_stays_shallow() {
+    let filter_code = r#"
+function Para(elem)
+    local inner = {x = 1}
+    local orig = pandoc.List{inner}
+    local cl = orig:clone()
+    assert(rawequal(cl[1], inner), "generic List:clone must stay SHALLOW (pandoc parity)")
+    return elem
+end
+"#;
+    run_filter(filter_code, simple_doc()).await;
+}

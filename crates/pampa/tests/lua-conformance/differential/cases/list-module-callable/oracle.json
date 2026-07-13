@@ -1,0 +1,28 @@
+{
+  "blocks": [
+    {
+      "c": [
+        {
+          "c": "alpha",
+          "t": "Str"
+        },
+        {
+          "c": "beta",
+          "t": "Str"
+        },
+        {
+          "c": "yes",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    1
+  ]
+}

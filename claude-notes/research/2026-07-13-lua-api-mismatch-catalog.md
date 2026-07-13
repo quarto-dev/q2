@@ -48,6 +48,18 @@ Progress log:
   contracts 2 (bd-9p2686pc), classes-proxy vs List table ~3
   (bd-tzwcof0n).
 
+- **2026-07-13, bd-1fjtodu8 closed** (cluster 6 + the clone half of
+  the old cluster-1 residue): pandoc.List module is callable
+  (`List(t)`/`List{…}` in-place, `List()` empty, non-table → loud
+  "table expected" error) via a metatable on the module table itself;
+  the stray `__call` on the instance metatable was removed (instances
+  are not callable in pandoc); `Inlines:clone`/`Blocks:clone` deep
+  (generic `List:clone` stays shallow). Track-1 **90 → 98 pass / 35
+  xfail** (5 BulletList-content + 2 deep-clone + 1 AttributeList
+  flipped); differential **15 → 17 cases, all pass**. The walk-order
+  tests that use `List` incidentally now fail on walk semantics
+  proper — the walk cluster is unmasked and ready to refile.
+
 - **2026-07-13, bd-23yvjfmm closed** (cluster 3): all filter-return
   paths (element, list, and the four topdown `*_with_control`
   handlers, plus the two ad-hoc typewise list-splice sites) route

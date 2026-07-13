@@ -354,10 +354,10 @@ lightly). Both reuse the same corpus format where possible.
 
 ## Current state (2026-07-13, after bd-hitjclzp)
 
-**Scoreboard** (updated after bd-23yvjfmm): Track 1 **90/133 passing**
-— baseline was 11. Track 2 (differential vs pandoc 3.9.0.2) **15/15
-passing** — baseline was 2/8; the corpus grew to 15 cases and the
-xfail list is now empty. The cluster table below predates
+**Scoreboard** (updated after bd-1fjtodu8): Track 1 **98/133 passing**
+— baseline was 11. Track 2 (differential vs pandoc 3.9.0.2) **17/17
+passing** — baseline was 2/8; the corpus has grown to 17 cases and the
+xfail list is empty. The cluster table below predates
 bd-tzwcof0n (which cleared the Attr cluster, ~21 entries). Strands closed so far: bd-0xghpvij
 (OrderedList ListAttributes), bd-55mb0rjz (__eq + Haskell-show
 tostring), bd-hitjclzp (property cache+readback — the worked example
@@ -369,7 +369,7 @@ Remaining failure clusters (60 Track-1 + 4 differential):
 |---|---|---|---|
 | Attr argument shapes | ~21 | bd-tzwcof0n | `pandoc.Attr({…})` rejects table-as-first-arg (8); attributes as list-of-pairs / AttributeList-userdata rejected (6); `AttributeList` constructor missing (3); `attr.classes` not a pandoc List (3, incl. `classes:insert` silently lost — bd-195t residue); + both differential attr cases (constructor attrs silently empty — worst remaining silent-error offenders) |
 | List module parity | ~12 | bd-1fjtodu8 | `List{…}` not callable (10); `Inlines:clone`/`Blocks:clone` shallow, should be deep (2). Also blocks several walk tests that use `List` incidentally |
-| walk semantics | 7 | (unfiled — was masked by __eq) | list-level `Inlines`/`Blocks` filter functions not invoked by `walk`; subtree restriction; blocks inside Notes; Inline → Inlines → Block → Blocks ordering |
+| walk semantics | 12 | bd-2j048yfm (filed 2026-07-13 once List noise cleared) | list-level `Inlines`/`Blocks` filter functions not invoked by `walk`; subtree restriction; blocks inside Notes; Inline → Inlines → Block → Blocks ordering; topdown truncation C-stack overflow |
 | Table field marshaling | 6 | bd-sgfiiktn | `head`/`foot`/`colspecs`/`caption` property round-trips (helper userdata lack `__eq`/expected shapes); single-body form |
 | Filter-return coercion | 2 (diff.) | bd-23yvjfmm | bare-string return ignored; non-userdata table entries dropped — the remaining big silent class (visible only in Track 2) |
 | `__toinline`/`__toblock` | 4 | bd-olz91r4v | coercion metamethod hooks not consulted |
@@ -502,6 +502,21 @@ List noise is gone.
 - [x] 2.4 C1: OrderedList listAttributes honored (bd-0xghpvij closed
       2026-07-13; first ratchet burn-down — differential xfail 6→5).
 - [ ] 2.5 Class D1–D3 audit remainder.
+- [x] 2.6 Class E2 (pulled forward per priority order): pandoc.List
+      module parity — DONE 2026-07-13 (bd-1fjtodu8 closed). The List
+      module table now carries its own metatable with `__call`
+      (hslua-list semantics, oracle-probed: `List(t)`/`List{…}` attach
+      the metatable IN PLACE and return the same table; `List()` makes
+      an empty list; non-table arg → "table expected, got X" error).
+      Removed the stray `__call` field from the instance metatable —
+      list instances are NOT callable in pandoc. `Inlines:clone` /
+      `Blocks:clone` are now deep (fresh userdata per entry, flushing
+      property caches; generic `List:clone` stays shallow, also
+      oracle-confirmed). Track-1 xfail 43 → **35** (8 flipped: 5
+      BulletList-content tests, both deep-clone tests, 1 AttributeList
+      test); differential 15 → **17/17** (new cases
+      list-module-callable, list-clone-deep). E2e byte-identical to
+      pandoc through the real binary.
 
 ### Phase 3 — breadth
 
