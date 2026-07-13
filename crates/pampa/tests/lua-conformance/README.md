@@ -11,7 +11,7 @@ bd-grkrb9nj).
 
 | Path | What |
 |---|---|
-| `upstream/test-*.lua` | Pandoc's own marshaling tests, vendored **unmodified** from [pandoc/pandoc-lua-marshal](https://github.com/pandoc/pandoc-lua-marshal) |
+| `upstream/test-*.lua` | Pandoc's own marshaling tests (all 10 files as of 2026-07-13), vendored **unmodified** from [pandoc/pandoc-lua-marshal](https://github.com/pandoc/pandoc-lua-marshal) |
 | `tasty.lua` | The pure-Lua test runner those files `require`, vendored **unmodified** from [hslua/hslua](https://github.com/hslua/hslua) `tasty-lua/tasty.lua` |
 | `prelude.lua` | Q2-side environment adapter (see below) — ours |
 | `xfail.txt` | Expected-failure list (the parity scoreboard) — ours |

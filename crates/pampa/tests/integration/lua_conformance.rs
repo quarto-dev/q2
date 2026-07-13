@@ -170,6 +170,12 @@ pub(crate) fn load_xfail_file(path: &Path) -> BTreeSet<String> {
 /// failing id in xfail-ready format instead of asserting (used to
 /// regenerate the baseline; run with `--no-capture`).
 fn check_against_xfail(file_name: &str) {
+    // Vendored files vary widely in size; 10 is right for the big
+    // three, smaller files pass their own floor.
+    check_against_xfail_min(file_name, 10)
+}
+
+fn check_against_xfail_min(file_name: &str, min_cases: usize) {
     let results = run_upstream_file(file_name);
     let xfail = load_xfail_file(&conformance_dir().join("xfail.txt"));
 
@@ -248,7 +254,7 @@ fn check_against_xfail(file_name: &str) {
     // hide behind a matching xfail entry count.
     let total = results.len();
     assert!(
-        total > 10,
+        total > min_cases,
         "suspiciously few conformance cases ({total}) ran for {file_name} — harness broken?"
     );
 }
@@ -266,4 +272,39 @@ fn lua_conformance_inline() {
 #[test]
 fn lua_conformance_block() {
     check_against_xfail("test-block.lua");
+}
+
+#[test]
+fn lua_conformance_citation() {
+    check_against_xfail("test-citation.lua");
+}
+
+#[test]
+fn lua_conformance_listattributes() {
+    check_against_xfail("test-listattributes.lua");
+}
+
+#[test]
+fn lua_conformance_metavalue() {
+    check_against_xfail_min("test-metavalue.lua", 1);
+}
+
+#[test]
+fn lua_conformance_pandoc() {
+    check_against_xfail("test-pandoc.lua");
+}
+
+#[test]
+fn lua_conformance_simpletable() {
+    check_against_xfail_min("test-simpletable.lua", 1);
+}
+
+#[test]
+fn lua_conformance_table() {
+    check_against_xfail("test-table.lua");
+}
+
+#[test]
+fn lua_conformance_cell() {
+    check_against_xfail("test-cell.lua");
 }

@@ -568,6 +568,27 @@ test exists and breaks, STOP and show it before deleting/updating.
       suite 4100/4100; e2e byte-identical to pandoc incl. the
       truncation subtlety. `cargo xtask verify` run before commit.
 
+### Phase 2c — missing constructors + userdata-ness (bd-sgfiiktn, in progress 2026-07-13)
+
+- [x] S0. Grow Track-1 coverage (Decision 3's "later" is now): vendored
+      the remaining 7 upstream files (test-{citation,listattributes,
+      metavalue,pandoc,simpletable,table,cell}.lua @ the same
+      c2dc4e11 commit); runner gained per-file case-count floors.
+      Corpus 133 → **203 cases; baseline 122 pass / 81 xfail** —
+      the 58 new xfails are the empirical spec for this strand:
+      Citation/ListAttributes as plain tables (18), Cell/TableBody
+      not property-indexable + no walk (21), pandoc.Pandoc/Meta*
+      missing (17), SimpleTable missing (2).
+- [ ] S1. Citation as userdata (typed properties, __eq, clone,
+      tostring) + Cite peekers (single citation, fuzzy forms).
+- [ ] S2. ListAttributes as userdata + OrderedList
+      listAttributes/delimiter aliases + forgiving constructor.
+- [ ] S3. Cell/TableBody/Row/TableHead/TableFoot property access,
+      aliases, walk; Table bodies/caption peekers (single body,
+      caption fuzzy forms); head/foot/colspecs round-trips.
+- [ ] S4. pandoc.Pandoc + pandoc.Meta* constructors + SimpleTable
+      (needs the Meta↔ConfigValue mapping story — catalog F2).
+
 ### Phase 3 — breadth
 
 - [ ] 3.1 C2/C3: missing constructors; Citation/ListAttributes as
