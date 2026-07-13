@@ -12,6 +12,10 @@ import {
   getProjectSetPointer,
   setProjectSetPointer,
   clearProjectSetPointer,
+  getCollectionPointers,
+  setCollectionPointers,
+  addCollectionPointer,
+  removeCollectionPointer,
 } from './projectSetStorage';
 import { closeDatabase } from './projectStorage';
 
@@ -67,5 +71,56 @@ describe('projectSetStorage', () => {
     await clearProjectSetPointer();
     const pointer = await getProjectSetPointer();
     expect(pointer).toBeNull();
+  });
+
+  describe('collection pointers', () => {
+    it('should return [] for a fresh browser', async () => {
+      expect(await getCollectionPointers()).toEqual([]);
+    });
+
+    it('should self-heal from a legacy singleton pointer', async () => {
+      await setProjectSetPointer('automerge:legacy1', 'wss://sync.example.com');
+      const collections = await getCollectionPointers();
+      expect(collections).toEqual([
+        { projectSetDocId: 'automerge:legacy1', syncServer: 'wss://sync.example.com' },
+      ]);
+      // Legacy pointer is preserved as a safety net
+      expect((await getProjectSetPointer())!.projectSetDocId).toBe('automerge:legacy1');
+      // Conversion is stable across reads (idempotent)
+      expect(await getCollectionPointers()).toEqual(collections);
+    });
+
+    it('should not re-convert once the collections record exists', async () => {
+      await setProjectSetPointer('automerge:legacy1', 'wss://sync.example.com');
+      await getCollectionPointers();
+      // A later legacy-pointer change must not clobber the collections array
+      await setProjectSetPointer('automerge:legacy2', 'wss://sync.example.com');
+      const collections = await getCollectionPointers();
+      expect(collections.map((c) => c.projectSetDocId)).toEqual(['automerge:legacy1']);
+    });
+
+    it('should add with dedupe and remove by doc id', async () => {
+      await addCollectionPointer({ projectSetDocId: 'automerge:a', syncServer: 'wss://s1' });
+      await addCollectionPointer({ projectSetDocId: 'automerge:b', syncServer: 'wss://s2' });
+      await addCollectionPointer({ projectSetDocId: 'automerge:a', syncServer: 'wss://s1' });
+      expect((await getCollectionPointers()).map((c) => c.projectSetDocId)).toEqual([
+        'automerge:a',
+        'automerge:b',
+      ]);
+
+      await removeCollectionPointer('automerge:a');
+      expect((await getCollectionPointers()).map((c) => c.projectSetDocId)).toEqual([
+        'automerge:b',
+      ]);
+    });
+
+    it('should replace the full array with setCollectionPointers', async () => {
+      await setCollectionPointers([
+        { projectSetDocId: 'automerge:x', syncServer: 'wss://s' },
+      ]);
+      expect((await getCollectionPointers()).length).toBe(1);
+      await setCollectionPointers([]);
+      expect(await getCollectionPointers()).toEqual([]);
+    });
   });
 });

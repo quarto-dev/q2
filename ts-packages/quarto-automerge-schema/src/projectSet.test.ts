@@ -15,6 +15,7 @@ import {
   removeProjectFromSet,
   touchProjectInSet,
   updateProjectSummaryInSet,
+  setProjectSetName,
 } from './index.js';
 import type { ProjectSetDocument } from './index.js';
 
@@ -190,6 +191,17 @@ describe('ProjectSetDocument schema helpers', () => {
       const doc = emptyDoc();
       const result = touchProjectInSet(doc, 'automerge:nonexistent');
       expect(result).toBe(false);
+    });
+  });
+
+  describe('setProjectSetName', () => {
+    it('should set and change the collection name', () => {
+      const doc = emptyDoc();
+      expect(setProjectSetName(doc, 'Lab papers')).toBe(true);
+      expect(doc.name).toBe('Lab papers');
+      expect(setProjectSetName(doc, 'Lab papers')).toBe(false);
+      expect(setProjectSetName(doc, 'Lab notebooks')).toBe(true);
+      expect(doc.name).toBe('Lab notebooks');
     });
   });
 

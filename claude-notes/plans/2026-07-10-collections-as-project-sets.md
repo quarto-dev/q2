@@ -27,14 +27,14 @@ untouched. "Minimum blast surface."
 ## Checklist
 
 ### Phase 1 — schema + tests
-- [ ] `ProjectSetDocument` gains optional `name?: string` (collection display
+- [x] `ProjectSetDocument` gains optional `name?: string` (collection display
       name) with helper `setProjectSetName` + tests
-- [ ] New IDB shape: `CollectionsPointer { key: 'collections', collections:
+- [x] New IDB shape: `CollectionsPointer { key: 'collections', collections:
       Array<{ projectSetDocId, syncServer }> }` in storage types
-- [ ] IDB migration 4→5 (structural no-op, transform converts the singleton
+- [x] IDB migration 4→5 (structural no-op, transform converts the singleton
       `projectSet` pointer into a one-element `collections` array; old pointer
       kept as safety net, never deleted by the migration)
-- [ ] Migration tests: fresh install, existing pointer, re-run idempotence
+- [x] Migration tests: fresh install, existing pointer, re-run idempotence
 
 ### Phase 2 — service layer
 - [ ] `projectSetService` → manages a MAP of doc handles keyed by docId

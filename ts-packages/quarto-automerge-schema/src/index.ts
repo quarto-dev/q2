@@ -174,6 +174,12 @@ export interface ProjectSetDocument {
   projects: Record<string, ProjectSetEntry>;
   /** Schema version for forward compatibility. */
   version: number;
+  /**
+   * Display name when this set is used as a collection (a user-visible,
+   * shareable grouping of projects). Absent on sets created before
+   * collections existed; the UI supplies a default until the user names it.
+   */
+  name?: string;
 }
 
 /**
@@ -262,6 +268,21 @@ export function touchProjectInSet(
   const entry = doc.projects[key];
   if (!entry) return false;
   entry.lastAccessed = now ?? new Date().toISOString();
+  return true;
+}
+
+/**
+ * Set the collection display name on a ProjectSetDocument.
+ * Must be called inside an Automerge `change()` callback.
+ *
+ * @returns true if the name changed
+ */
+export function setProjectSetName(
+  doc: ProjectSetDocument,
+  name: string,
+): boolean {
+  if (doc.name === name) return false;
+  doc.name = name;
   return true;
 }
 
