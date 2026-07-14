@@ -1186,14 +1186,11 @@ export default function ProjectsHome({
         </div>
         <div className="ph-peek-divider" />
         <div className="ph-peek-actions">
-          <button className="ph-btn primary" onClick={() => startRename(item)}>Rename…</button>
-          <button className="ph-btn outline" onClick={() => { closeAllMenus(); handleOpen(item); }}>Open</button>
           <button className="ph-link" onClick={() => refreshPeek(item)}>
             {peekRefreshing ? 'Refreshing…' : s ? 'Refresh' : 'Load details'}
           </button>
-          <button className="ph-link danger" onClick={() => handleRemove(item)}>Remove…</button>
         </div>
-        <div className="ph-peek-footnote">Peeking doesn't count as opening the project.</div>
+        <div className="ph-peek-footnote">Peeking is read-only — use the ⋯ menu to act on the project.</div>
       </div>
     );
   };
