@@ -41,7 +41,7 @@ import {
   resolveSyncServerUrl,
 } from '../utils/routing';
 import ShareDialog from './ShareDialog';
-import { mockCollaborators, type MockUser } from '../utils/mockCollaborators';
+import type { Face } from '../utils/facepile';
 import type { CollectionSnapshot } from '../services/projectSetService';
 import './ProjectsHome.css';
 
@@ -940,28 +940,39 @@ export default function ProjectsHome({
 
   const sortLabel = sortOrder === 'newest' ? 'newest first' : sortOrder === 'oldest' ? 'oldest first' : 'A to Z';
 
-  // Facepiles are mock data for the exploration (see utils/mockCollaborators).
-  // The real user is always the first face, in their cursor color.
-  const selfUser: MockUser | undefined = userSettings
+  // The current user, as a face (real identity from user settings).
+  const selfUser: Face | undefined = userSettings
     ? { name: `${userSettings.userName} (you)`, initials: initialsFor(userSettings.userName), color: userSettings.userColor }
     : undefined;
-  const collaboratorsFor = useCallback(
-    (indexDocId: string) => mockCollaborators(indexDocId, selfUser),
+
+  // Real contributors for a project: the identities cached on its summary
+  // (populated from the index doc when anyone opens it). A project nobody
+  // else has touched shows just you — never fabricated authors.
+  const contributorsFor = useCallback(
+    (item: ProjectItem): Face[] => {
+      const real = (item.summary?.contributors ?? []).map((c) => ({
+        name: c.name,
+        color: c.color,
+        initials: initialsFor(c.name),
+      }));
+      if (real.length > 0) return real;
+      return selfUser ? [{ ...selfUser, name: selfUser.name.replace(/ \(you\)$/, '') }] : [];
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [userSettings?.userName, userSettings?.userColor],
   );
 
-  const renderFacepile = (users: MockUser[], size: 'sm' | 'md' | 'lg', max = 3, mock = true) => {
+  const renderFacepile = (users: Face[], size: 'sm' | 'md' | 'lg', max = 3) => {
     const shown = users.slice(0, max);
     const extra = users.length - shown.length;
     return (
       <span className={`ph-facepile ${size}`}>
         {shown.map((u, i) => (
-          <span key={`${u.initials}-${i}`} className="ph-face" style={{ backgroundColor: u.color }} title={mock ? `${u.name} (mock)` : u.name}>
+          <span key={`${u.initials}-${i}`} className="ph-face" style={{ backgroundColor: u.color }} title={u.name}>
             {u.initials}
           </span>
         ))}
-        {extra > 0 && <span className="ph-face more" title={`${extra} more (mock)`}>+{extra}</span>}
+        {extra > 0 && <span className="ph-face more" title={`${extra} more`}>+{extra}</span>}
       </span>
     );
   };
@@ -1135,7 +1146,7 @@ export default function ProjectsHome({
               <div className="ph-peek-people">
                 {renderFacepile(
                   s.contributors.map((c) => ({ name: c.name, color: c.color, initials: initialsFor(c.name) })),
-                  'lg', 3, false,
+                  'lg', 3,
                 )}
                 <span className="ph-peek-people-label">
                   {s.contributors.length === 1
@@ -1205,8 +1216,8 @@ export default function ProjectsHome({
 
   /** People seen on a collection: you plus the contributor union from the
    * projects' cached summaries. Derived, not a stored member list. */
-  const peopleOn = (collection: CollectionView): MockUser[] => {
-    const people: MockUser[] = selfUser
+  const peopleOn = (collection: CollectionView): Face[] => {
+    const people: Face[] = selfUser
       ? [{ ...selfUser, name: selfUser.name.replace(/ \(you\)$/, '') }]
       : [];
     for (const e of collection.entries) {
@@ -1277,12 +1288,7 @@ export default function ProjectsHome({
             {item.summary ? `${item.summary.fileCount} ${item.summary.fileCount === 1 ? 'file' : 'files'} · ` : ''}
             opened {formatOpened(item.lastAccessed)}
           </span>
-          {item.summary?.contributors.length
-            ? renderFacepile(
-                item.summary.contributors.map((c) => ({ name: c.name, color: c.color, initials: initialsFor(c.name) })),
-                'sm', 3, false,
-              )
-            : renderFacepile(collaboratorsFor(item.indexDocId), 'sm')}
+          {renderFacepile(contributorsFor(item), 'sm')}
         </span>
       </button>
       <span className="ph-card-actions">
@@ -1356,7 +1362,7 @@ export default function ProjectsHome({
                     <path d="M16.5 14.4c2.6.3 4.5 1.9 4.5 4.1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                   </svg>
                 )}
-                {renderFacepile(people, 'md', 3, false)}
+                {renderFacepile(people, 'md', 3)}
               </button>
             );
           })()}
