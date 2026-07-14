@@ -36,8 +36,9 @@ use super::list::{
     get_or_create_blocks_metatable, get_or_create_inlines_metatable, get_or_create_list_metatable,
 };
 use super::types::{
-    LuaAttr, LuaBlock, LuaInline, filter_source_info, lua_table_to_strings, peek_blocks_fuzzy,
-    peek_inlines_fuzzy,
+    LuaAttr, LuaBlock, LuaInline, filter_source_info, invalid_value_error, lua_table_to_strings,
+    peek_blocks_fuzzy, peek_inlines_fuzzy, type_mismatch_error, type_mismatch_error_named,
+    unknown_field_error, userdata_type_name,
 };
 use mlua::UserData;
 
@@ -196,9 +197,7 @@ impl LuaCaption {
                 self.cell.borrow_mut().long = long;
                 Ok(())
             }
-            _ => Err(Error::runtime(format!(
-                "cannot set field '{key}' on Caption"
-            ))),
+            _ => Err(unknown_field_error(key, "Caption")),
         }
     }
 }
@@ -389,9 +388,7 @@ impl LuaTableHead {
                 self.cell.borrow_mut().rows = rows;
                 Ok(())
             }
-            _ => Err(Error::runtime(format!(
-                "cannot set field '{key}' on TableHead"
-            ))),
+            _ => Err(unknown_field_error(key, "TableHead")),
         }
     }
 }
@@ -472,9 +469,7 @@ impl LuaTableFoot {
                 self.cell.borrow_mut().rows = rows;
                 Ok(())
             }
-            _ => Err(Error::runtime(format!(
-                "cannot set field '{key}' on TableFoot"
-            ))),
+            _ => Err(unknown_field_error(key, "TableFoot")),
         }
     }
 }
@@ -567,9 +562,7 @@ impl LuaTableBody {
                 self.cell.borrow_mut().rowhead_columns = n as usize;
                 Ok(())
             }
-            _ => Err(Error::runtime(format!(
-                "cannot set field '{key}' on TableBody"
-            ))),
+            _ => Err(unknown_field_error(key, "TableBody")),
         }
     }
 }
@@ -675,7 +668,7 @@ impl LuaRow {
                 self.cell.borrow_mut().cells = cells;
                 Ok(())
             }
-            _ => Err(Error::runtime(format!("cannot set field '{key}' on Row"))),
+            _ => Err(unknown_field_error(key, "Row")),
         }
     }
 }
@@ -805,7 +798,7 @@ impl LuaCell {
                 self.cell.borrow_mut().col_span = n as usize;
                 Ok(())
             }
-            _ => Err(Error::runtime(format!("cannot set field '{key}' on Cell"))),
+            _ => Err(unknown_field_error(key, "Cell")),
         }
     }
 }
@@ -851,10 +844,11 @@ pub(crate) fn parse_list_number_style(s: &str) -> Result<ListNumberStyle> {
         "UpperRoman" => Ok(ListNumberStyle::UpperRoman),
         "LowerAlpha" => Ok(ListNumberStyle::LowerAlpha),
         "UpperAlpha" => Ok(ListNumberStyle::UpperAlpha),
-        other => Err(Error::runtime(format!(
-            "invalid list number style '{other}' (expected DefaultStyle, Example, Decimal, \
-             LowerRoman, UpperRoman, LowerAlpha, or UpperAlpha)"
-        ))),
+        other => Err(invalid_value_error(
+            "list number style",
+            other,
+            "DefaultStyle, Example, Decimal, LowerRoman, UpperRoman, LowerAlpha, or UpperAlpha",
+        )),
     }
 }
 
@@ -878,10 +872,11 @@ pub(crate) fn parse_list_number_delim(s: &str) -> Result<ListNumberDelim> {
         "Period" => Ok(ListNumberDelim::Period),
         "OneParen" => Ok(ListNumberDelim::OneParen),
         "TwoParens" => Ok(ListNumberDelim::TwoParens),
-        other => Err(Error::runtime(format!(
-            "invalid list number delimiter '{other}' (expected DefaultDelim, Period, \
-             OneParen, or TwoParens)"
-        ))),
+        other => Err(invalid_value_error(
+            "list number delimiter",
+            other,
+            "DefaultDelim, Period, OneParen, or TwoParens",
+        )),
     }
 }
 
@@ -960,9 +955,7 @@ impl LuaListAttributes {
                 self.cell.borrow_mut().2 = delim;
                 Ok(())
             }
-            _ => Err(Error::runtime(format!(
-                "cannot set field '{key}' on ListAttributes"
-            ))),
+            _ => Err(unknown_field_error(key, "ListAttributes")),
         }
     }
 }
@@ -1177,10 +1170,11 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 "SingleQuote" => QuoteType::SingleQuote,
                 "DoubleQuote" => QuoteType::DoubleQuote,
                 _ => {
-                    return Err(Error::runtime(format!(
-                        "invalid quote type: {}",
-                        quote_type
-                    )));
+                    return Err(invalid_value_error(
+                        "quote type",
+                        &quote_type,
+                        "SingleQuote or DoubleQuote",
+                    ));
                 }
             };
             let inlines = peek_inlines_fuzzy(lua, content)?;
@@ -1213,7 +1207,13 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
             let mt = match math_type.as_str() {
                 "InlineMath" => MathType::InlineMath,
                 "DisplayMath" => MathType::DisplayMath,
-                _ => return Err(Error::runtime(format!("invalid math type: {}", math_type))),
+                _ => {
+                    return Err(invalid_value_error(
+                        "math type",
+                        &math_type,
+                        "InlineMath or DisplayMath",
+                    ));
+                }
             };
             lua.create_userdata(LuaInline::new(Inline::Math(Math {
                 math_type: mt,
@@ -1589,8 +1589,9 @@ pub(crate) fn parse_attr(lua: &Lua, attr: Option<Value>) -> Result<crate::pandoc
                 // matching pandoc's mkAttr userdata branch.
                 return Ok((String::new(), vec![], proxy.snapshot_map()));
             }
-            Err(Error::runtime(
-                "invalid attr: expected Attr or AttributeList userdata, table, or string",
+            Err(type_mismatch_error_named(
+                "Attr or AttributeList userdata, table, or string",
+                &userdata_type_name(&ud),
             ))
         }
         Some(Value::Table(table)) => parse_attr_table(lua, &table),
@@ -1598,10 +1599,10 @@ pub(crate) fn parse_attr(lua: &Lua, attr: Option<Value>) -> Result<crate::pandoc
             // Simple string format: identifier only
             Ok((s.to_str()?.to_string(), vec![], LinkedHashMap::new()))
         }
-        Some(other) => Err(Error::runtime(format!(
-            "invalid attr: expected Attr userdata, table, or string, got {}",
-            other.type_name()
-        ))),
+        Some(other) => Err(type_mismatch_error(
+            "Attr userdata, table, or string",
+            &other,
+        )),
     }
 }
 
@@ -1614,7 +1615,7 @@ fn parse_attr_table(lua: &Lua, table: &LuaTable) -> Result<crate::pandoc::Attr> 
         let identifier: String = match table.raw_get::<Value>(1)? {
             Value::Nil => String::new(),
             v => String::from_lua(v, lua)
-                .map_err(|_| Error::runtime("attr identifier must be a string"))?,
+                .map_err(|_| Error::runtime("Q-11-3: attr identifier must be a string"))?,
         };
         let classes = match table.raw_get::<Value>(2)? {
             Value::Nil => vec![],
@@ -1636,7 +1637,7 @@ fn parse_attr_table(lua: &Lua, table: &LuaTable) -> Result<crate::pandoc::Attr> 
         match (key.as_str(), &value) {
             ("id" | "identifier", _) => {
                 identifier = String::from_lua(value, lua)
-                    .map_err(|_| Error::runtime("attr identifier must be a string"))?;
+                    .map_err(|_| Error::runtime("Q-11-3: attr identifier must be a string"))?;
             }
             // HTML-like: class is a space-separated string
             ("class", Value::String(s)) => {
@@ -1655,7 +1656,7 @@ fn parse_attr_table(lua: &Lua, table: &LuaTable) -> Result<crate::pandoc::Attr> 
             _ => {
                 let v = String::from_lua(value, lua).map_err(|_| {
                     Error::runtime(format!(
-                        "attr: value for key '{key}' must be a string or number"
+                        "Q-11-3: attr: value for key '{key}' must be a string or number"
                     ))
                 })?;
                 attributes.insert(key, v);
@@ -1680,8 +1681,9 @@ pub(crate) fn parse_attribute_list(lua: &Lua, val: Value) -> Result<LinkedHashMa
             if let Ok(proxy) = ud.borrow::<super::types::LuaAttributesProxy>() {
                 return Ok(proxy.snapshot_map());
             }
-            Err(Error::runtime(
-                "attributes must be a table or AttributeList",
+            Err(type_mismatch_error_named(
+                "table or AttributeList",
+                &userdata_type_name(&ud),
             ))
         }
         Value::Table(table) => {
@@ -1690,11 +1692,11 @@ pub(crate) fn parse_attribute_list(lua: &Lua, val: Value) -> Result<LinkedHashMa
                 let mut map = LinkedHashMap::new();
                 for entry in table.sequence_values::<LuaTable>() {
                     let pair = entry.map_err(|_| {
-                        Error::runtime("attributes list entries must be {key, value} pairs")
+                        Error::runtime("Q-11-3: attributes list entries must be {key, value} pairs")
                     })?;
                     let k: String = pair.get(1)?;
                     let v = String::from_lua(pair.get::<Value>(2)?, lua).map_err(|_| {
-                        Error::runtime("attribute values must be strings or numbers")
+                        Error::runtime("Q-11-3: attribute values must be strings or numbers")
                     })?;
                     map.insert(k, v);
                 }
@@ -1705,17 +1707,14 @@ pub(crate) fn parse_attribute_list(lua: &Lua, val: Value) -> Result<LinkedHashMa
                 for pair in table.pairs::<String, Value>() {
                     let (k, value) = pair?;
                     let v = String::from_lua(value, lua).map_err(|_| {
-                        Error::runtime("attribute values must be strings or numbers")
+                        Error::runtime("Q-11-3: attribute values must be strings or numbers")
                     })?;
                     map.insert(k, v);
                 }
                 Ok(map)
             }
         }
-        other => Err(Error::runtime(format!(
-            "attributes must be a table or AttributeList, got {}",
-            other.type_name()
-        ))),
+        other => Err(type_mismatch_error("table or AttributeList", &other)),
     }
 }
 
@@ -1758,12 +1757,17 @@ pub(crate) fn parse_definition_list_items(
                         let defs = parse_list_items(lua, defs_val)?;
                         result.push((term, defs));
                     }
-                    _ => return Err(Error::runtime("expected definition list item as table")),
+                    other => {
+                        return Err(type_mismatch_error("definition list item table", &other));
+                    }
                 }
             }
             Ok(result)
         }
-        _ => Err(Error::runtime("expected table for definition list")),
+        other => Err(type_mismatch_error(
+            "table of definition list items",
+            &other,
+        )),
     }
 }
 
@@ -1779,7 +1783,7 @@ pub(crate) fn parse_line_block_content(lua: &Lua, val: Value) -> Result<Vec<Vec<
             }
             Ok(result)
         }
-        _ => Err(Error::runtime("expected table of lines")),
+        other => Err(type_mismatch_error("table of lines", &other)),
     }
 }
 
@@ -1824,7 +1828,10 @@ pub(crate) fn parse_caption(lua: &Lua, val: Option<Value>) -> Result<Caption> {
             if let Ok(lua_caption) = ud.borrow::<LuaCaption>() {
                 lua_caption.extract_flushed(lua)
             } else {
-                Err(Error::runtime("expected Caption userdata"))
+                Err(type_mismatch_error_named(
+                    "Caption userdata",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
         // Fallback: try as blocks-like value (matching Pandoc's peekCaptionFuzzy)
@@ -1854,12 +1861,12 @@ pub(crate) fn parse_colspecs(_lua: &Lua, val: Value) -> Result<Vec<ColSpec>> {
                         let width = parse_col_width(width_val)?;
                         result.push((alignment, width));
                     }
-                    _ => return Err(Error::runtime("expected colspec as table")),
+                    other => return Err(type_mismatch_error("colspec table", &other)),
                 }
             }
             Ok(result)
         }
-        _ => Err(Error::runtime("expected table of colspecs")),
+        other => Err(type_mismatch_error("table of colspecs", &other)),
     }
 }
 
@@ -1876,10 +1883,11 @@ fn parse_alignment(val: Value) -> Result<Alignment> {
                 "AlignLeft" => Ok(Alignment::Left),
                 "AlignCenter" => Ok(Alignment::Center),
                 "AlignRight" => Ok(Alignment::Right),
-                other => Err(Error::runtime(format!(
-                    "invalid alignment '{other}' (expected AlignDefault, AlignLeft, \
-                     AlignCenter, or AlignRight)"
-                ))),
+                other => Err(invalid_value_error(
+                    "alignment",
+                    other,
+                    "AlignDefault, AlignLeft, AlignCenter, or AlignRight",
+                )),
             }
         }
         Value::UserData(ud) => {
@@ -1887,13 +1895,13 @@ fn parse_alignment(val: Value) -> Result<Alignment> {
             if let Ok(align) = ud.borrow::<LuaAlignment>() {
                 Ok(align.0.clone())
             } else {
-                Err(Error::runtime("expected Alignment name or sentinel"))
+                Err(type_mismatch_error_named(
+                    "Alignment name or sentinel",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        other => Err(Error::runtime(format!(
-            "expected Alignment name or sentinel, got {}",
-            other.type_name()
-        ))),
+        other => Err(type_mismatch_error("Alignment name or sentinel", &other)),
     }
 }
 
@@ -1947,10 +1955,13 @@ pub(crate) fn parse_table_head(lua: &Lua, val: Value) -> Result<TableHead> {
             if let Ok(head) = ud.borrow::<LuaTableHead>() {
                 head.extract_flushed(lua)
             } else {
-                Err(Error::runtime("expected TableHead userdata"))
+                Err(type_mismatch_error_named(
+                    "table or TableHead",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table or TableHead")),
+        other => Err(type_mismatch_error("table or TableHead", &other)),
     }
 }
 
@@ -1978,10 +1989,13 @@ pub(crate) fn parse_table_foot(lua: &Lua, val: Value) -> Result<TableFoot> {
             if let Ok(foot) = ud.borrow::<LuaTableFoot>() {
                 foot.extract_flushed(lua)
             } else {
-                Err(Error::runtime("expected TableFoot userdata"))
+                Err(type_mismatch_error_named(
+                    "table or TableFoot",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table or TableFoot")),
+        other => Err(type_mismatch_error("table or TableFoot", &other)),
     }
 }
 
@@ -2004,10 +2018,7 @@ pub(crate) fn parse_table_bodies(lua: &Lua, val: Value) -> Result<Vec<TableBody>
             let body = ud.borrow::<LuaTableBody>().unwrap().extract_flushed(lua)?;
             Ok(vec![body])
         }
-        other => Err(Error::runtime(format!(
-            "table of TableBody expected, got {}",
-            other.type_name()
-        ))),
+        other => Err(type_mismatch_error("table of TableBody", &other)),
     }
 }
 
@@ -2072,10 +2083,13 @@ fn parse_single_table_body(lua: &Lua, val: Value) -> Result<TableBody> {
             if let Ok(body) = ud.borrow::<LuaTableBody>() {
                 body.extract_flushed(lua)
             } else {
-                Err(Error::runtime("expected TableBody userdata"))
+                Err(type_mismatch_error_named(
+                    "table or TableBody",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table or TableBody")),
+        other => Err(type_mismatch_error("table or TableBody", &other)),
     }
 }
 
@@ -2091,10 +2105,7 @@ fn parse_rows_strict(lua: &Lua, val: Value) -> Result<Vec<Row>> {
             }
             Ok(result)
         }
-        other => Err(Error::runtime(format!(
-            "table of Rows expected, got {}",
-            other.type_name()
-        ))),
+        other => Err(type_mismatch_error("table of Rows", &other)),
     }
 }
 
@@ -2147,10 +2158,13 @@ fn parse_single_row(lua: &Lua, val: Value) -> Result<Row> {
             if let Ok(row) = ud.borrow::<LuaRow>() {
                 row.extract_flushed(lua)
             } else {
-                Err(Error::runtime("expected Row userdata"))
+                Err(type_mismatch_error_named(
+                    "table or Row",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table or Row")),
+        other => Err(type_mismatch_error("table or Row", &other)),
     }
 }
 
@@ -2166,10 +2180,7 @@ fn parse_cells_strict(lua: &Lua, val: Value) -> Result<Vec<Cell>> {
             }
             Ok(result)
         }
-        other => Err(Error::runtime(format!(
-            "table of Cells expected, got {}",
-            other.type_name()
-        ))),
+        other => Err(type_mismatch_error("table of Cells", &other)),
     }
 }
 
@@ -2210,10 +2221,13 @@ fn parse_single_cell(lua: &Lua, val: Value) -> Result<Cell> {
             if let Ok(cell) = ud.borrow::<LuaCell>() {
                 cell.extract_flushed(lua)
             } else {
-                Err(Error::runtime("expected Cell userdata"))
+                Err(type_mismatch_error_named(
+                    "table or Cell",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table or Cell")),
+        other => Err(type_mismatch_error("table or Cell", &other)),
     }
 }
 
@@ -2229,13 +2243,15 @@ pub(crate) fn parse_list_attributes(val: Value) -> Result<ListAttributes> {
         Value::Nil => Ok((1, ListNumberStyle::Default, ListNumberDelim::Default)),
         Value::Table(table) => {
             let start: i64 = table.get(1).map_err(|_| {
-                Error::runtime("ListAttributes triple: expected integer start at index 1")
+                Error::runtime("Q-11-3: ListAttributes triple: expected integer start at index 1")
             })?;
             let style_str: String = table.get(2).map_err(|_| {
-                Error::runtime("ListAttributes triple: expected style string at index 2")
+                Error::runtime("Q-11-3: ListAttributes triple: expected style string at index 2")
             })?;
             let delim_str: String = table.get(3).map_err(|_| {
-                Error::runtime("ListAttributes triple: expected delimiter string at index 3")
+                Error::runtime(
+                    "Q-11-3: ListAttributes triple: expected delimiter string at index 3",
+                )
             })?;
             let style = parse_list_number_style(&style_str)?;
             let delim = parse_list_number_delim(&delim_str)?;
@@ -2245,13 +2261,16 @@ pub(crate) fn parse_list_attributes(val: Value) -> Result<ListAttributes> {
             if let Ok(attr) = ud.borrow::<LuaListAttributes>() {
                 Ok(attr.clone_attrs())
             } else {
-                Err(Error::runtime("expected ListAttributes userdata or triple"))
+                Err(type_mismatch_error_named(
+                    "ListAttributes userdata or {start, style, delimiter} triple",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        other => Err(Error::runtime(format!(
-            "expected ListAttributes userdata or {{start, style, delimiter}} triple, got {}",
-            other.type_name()
-        ))),
+        other => Err(type_mismatch_error(
+            "ListAttributes userdata or {start, style, delimiter} triple",
+            &other,
+        )),
     }
 }
 
@@ -2277,7 +2296,7 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                         let cls = match classes {
                             None | Some(Value::Nil) => Vec::new(),
                             Some(v) => parse_class_list(lua, v).map_err(|_| {
-                                Error::runtime("classes must be a table of strings")
+                                Error::runtime("Q-11-3: classes must be a table of strings")
                             })?,
                         };
                         let attrs = match attributes {
@@ -5020,6 +5039,163 @@ mod tests {
         let lua = create_lua_env();
         let result: mlua::Result<Value> = lua.load(r#"return pandoc.Blocks(123)"#).eval();
         assert!(result.is_err());
+    }
+
+    /// Run a Lua chunk that must fail, asserting the error carries the
+    /// given Q-code and message fragment (bd-ixnp4uqj sweep).
+    fn assert_lua_error(lua: &Lua, chunk: &str, code: &str, fragment: &str) {
+        let err = lua
+            .load(chunk)
+            .exec()
+            .expect_err(&format!("expected error from: {chunk}"))
+            .to_string();
+        assert!(err.contains(code), "{chunk}: missing {code} in: {err}");
+        assert!(
+            err.contains(fragment),
+            "{chunk}: missing {fragment:?} in: {err}"
+        );
+    }
+
+    #[test]
+    fn test_marshaling_argument_errors_are_q11_3() {
+        // bd-ixnp4uqj: value-conversion failures carry Q-11-3 wherever
+        // they occur — constructor argument or setter value alike (the
+        // fuzzy peekers already behave this way since bd-9p2686pc).
+        let lua = create_lua_env();
+        for (chunk, fragment) in [
+            // enum-value validation: constructor + setter give the same code
+            (
+                r#"pandoc.Math("Bogus", "x")"#,
+                "invalid math type 'Bogus' (expected InlineMath or DisplayMath)",
+            ),
+            (
+                r#"local m = pandoc.Math("InlineMath", "x"); m.mathtype = "Bogus""#,
+                "invalid math type 'Bogus'",
+            ),
+            (
+                r#"pandoc.Quoted("Bogus", {pandoc.Str("a")})"#,
+                "invalid quote type 'Bogus' (expected SingleQuote or DoubleQuote)",
+            ),
+            (
+                r#"local q = pandoc.Quoted("SingleQuote", {pandoc.Str("a")}); q.quotetype = "Bogus""#,
+                "invalid quote type 'Bogus'",
+            ),
+            (
+                r#"pandoc.Citation("id", "Bogus")"#,
+                "invalid citation mode 'Bogus'",
+            ),
+            (
+                r#"pandoc.OrderedList({{pandoc.Plain({})}}, {1, "Bogus", "DefaultDelim"})"#,
+                "invalid list number style 'Bogus'",
+            ),
+            (
+                r#"pandoc.OrderedList({{pandoc.Plain({})}}, {1, "Decimal", "Bogus"})"#,
+                "invalid list number delimiter 'Bogus'",
+            ),
+            (r#"pandoc.Cell({}, "Bogus")"#, "invalid alignment 'Bogus'"),
+            // peekers / parsers: hslua "<expected> expected, got <type>"
+            (
+                r#"pandoc.Cite({pandoc.Str("a")}, 5)"#,
+                "table of Citations expected, got number",
+            ),
+            (
+                r#"pandoc.Cite({pandoc.Str("a")}, pandoc.Citation("id", "NormalCitation"))"#,
+                "must be wrapped in a list",
+            ),
+            (
+                r#"pandoc.Span({pandoc.Str("a")}, 5)"#,
+                "Attr userdata, table, or string expected, got number",
+            ),
+            (
+                r#"pandoc.DefinitionList(5)"#,
+                "table of definition list items expected, got number",
+            ),
+            (
+                r#"pandoc.LineBlock(5)"#,
+                "table of lines expected, got number",
+            ),
+            (
+                r#"pandoc.OrderedList({{pandoc.Plain({})}}, {"x", "Decimal", "DefaultDelim"})"#,
+                "expected integer start at index 1",
+            ),
+            (
+                r#"pandoc.List(5)"#,
+                "bad argument #1 to 'List' (table expected, got number)",
+            ),
+        ] {
+            assert_lua_error(&lua, chunk, "Q-11-3", fragment);
+        }
+    }
+
+    #[test]
+    fn test_property_assignment_errors_are_q11_5() {
+        // bd-ixnp4uqj: setter-specific structural refusals carry Q-11-5
+        // (unknown field, read-only field, wrong variant, proxy keys).
+        let lua = create_lua_env();
+        for (chunk, fragment) in [
+            (
+                r#"local s = pandoc.Str("a"); s.attributes = {x = "y"}"#,
+                "cannot set 'attributes' on this inline variant",
+            ),
+            (
+                r#"local p = pandoc.Para({}); p.classes = {"c"}"#,
+                "cannot set 'classes' on this block variant",
+            ),
+            (
+                r#"local c = pandoc.Cell({}); c.bogus = 1"#,
+                "cannot set unknown field 'bogus' on Cell",
+            ),
+            (
+                r#"local r = pandoc.Row({}); r.bogus = 1"#,
+                "cannot set unknown field 'bogus' on Row",
+            ),
+            (
+                r#"local h = pandoc.TableHead({}); h.bogus = 1"#,
+                "cannot set unknown field 'bogus' on TableHead",
+            ),
+            (
+                r#"local b = pandoc.TableBody({}); b.bogus = 1"#,
+                "cannot set unknown field 'bogus' on TableBody",
+            ),
+            (
+                r#"local cap = pandoc.Caption({}); cap.bogus = 1"#,
+                "cannot set unknown field 'bogus' on Caption",
+            ),
+            (
+                r#"local la = pandoc.ListAttributes(); la.bogus = 1"#,
+                "cannot set unknown field 'bogus' on ListAttributes",
+            ),
+            (
+                r#"local ct = pandoc.Citation("a", "NormalCitation"); ct.bogus = 1"#,
+                "cannot set unknown field 'bogus' on Citation",
+            ),
+            (
+                r#"local a = pandoc.Attr(); a.bogus = "x""#,
+                "cannot set unknown field 'bogus' on Attr",
+            ),
+            (
+                r#"local a = pandoc.Attr(); a.tag = "x""#,
+                "cannot set read-only field 'tag'",
+            ),
+            (
+                r#"local a = pandoc.Attr(); a[true] = "x""#,
+                "invalid key type for Attr",
+            ),
+            // NOTE: no LuaClassesProxy cases — `attr.classes` is a plain
+            // pandoc-List table since bd-tzwcof0n; the proxy is accepted
+            // as input but never handed out, so its __newindex errors are
+            // unreachable from Lua (tagged Q-11-5 anyway).
+            (
+                r#"local a = pandoc.Attr(); a.attributes[true] = "x""#,
+                "only string or integer keys are supported",
+            ),
+            (
+                r#"local a = pandoc.Attr(); a.attributes[1] = 5"#,
+                "{key, value} pairs or nil",
+            ),
+        ] {
+            assert_lua_error(&lua, chunk, "Q-11-5", fragment);
+        }
     }
 
     // ========== Fuzzy coercion constructor tests ==========

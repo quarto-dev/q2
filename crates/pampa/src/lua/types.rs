@@ -672,9 +672,11 @@ impl LuaInline {
                     "InlineMath" => crate::pandoc::MathType::InlineMath,
                     "DisplayMath" => crate::pandoc::MathType::DisplayMath,
                     other => {
-                        return Err(Error::runtime(format!(
-                            "invalid math type '{other}' (expected InlineMath or DisplayMath)"
-                        )));
+                        return Err(invalid_value_error(
+                            "math type",
+                            other,
+                            "InlineMath or DisplayMath",
+                        ));
                     }
                 };
                 Ok(())
@@ -691,9 +693,11 @@ impl LuaInline {
                     "SingleQuote" => crate::pandoc::QuoteType::SingleQuote,
                     "DoubleQuote" => crate::pandoc::QuoteType::DoubleQuote,
                     other => {
-                        return Err(Error::runtime(format!(
-                            "invalid quote type '{other}' (expected SingleQuote or DoubleQuote)"
-                        )));
+                        return Err(invalid_value_error(
+                            "quote type",
+                            other,
+                            "SingleQuote or DoubleQuote",
+                        ));
                     }
                 };
                 Ok(())
@@ -858,7 +862,7 @@ impl LuaInline {
                     Ok(())
                 }
                 None => Err(Error::runtime(
-                    "cannot set 'attributes' on this inline variant",
+                    "Q-11-5: cannot set 'attributes' on this inline variant",
                 )),
             },
             (inline, "classes") => match inline_attr_mut(inline) {
@@ -867,12 +871,12 @@ impl LuaInline {
                     Ok(())
                 }
                 None => Err(Error::runtime(
-                    "cannot set 'classes' on this inline variant",
+                    "Q-11-5: cannot set 'classes' on this inline variant",
                 )),
             },
 
             // Read-only fields
-            (_, "tag" | "t") => Err(Error::runtime("Q-11-5: cannot set read-only field 'tag'")),
+            (_, "tag" | "t") => Err(read_only_field_error("tag")),
 
             // Unknown field
             _ => Err(Error::runtime(format!(
@@ -1650,7 +1654,7 @@ impl LuaBlock {
                     Ok(())
                 }
                 None => Err(Error::runtime(
-                    "cannot set 'attributes' on this block variant",
+                    "Q-11-5: cannot set 'attributes' on this block variant",
                 )),
             },
             (block, "classes") => match block_attr_mut(block) {
@@ -1658,11 +1662,13 @@ impl LuaBlock {
                     attr.1 = lua_table_to_strings(lua, val)?;
                     Ok(())
                 }
-                None => Err(Error::runtime("cannot set 'classes' on this block variant")),
+                None => Err(Error::runtime(
+                    "Q-11-5: cannot set 'classes' on this block variant",
+                )),
             },
 
             // Read-only fields
-            (_, "tag" | "t") => Err(Error::runtime("Q-11-5: cannot set read-only field 'tag'")),
+            (_, "tag" | "t") => Err(read_only_field_error("tag")),
 
             // Unknown field
             _ => Err(Error::runtime(format!(
@@ -1859,12 +1865,9 @@ pub(crate) fn lua_table_to_citations(
             Ok(result)
         }
         Value::UserData(ud) if ud.borrow::<LuaCitation>().is_ok() => Err(Error::runtime(
-            "table expected, got Citation (a single Citation must be wrapped in a list)",
+            "Q-11-3: table expected, got Citation (a single Citation must be wrapped in a list)",
         )),
-        other => Err(Error::runtime(format!(
-            "table of Citations expected, got {}",
-            other.type_name()
-        ))),
+        other => Err(type_mismatch_error("table of Citations", &other)),
     }
 }
 
@@ -2012,7 +2015,7 @@ pub fn lua_to_meta_value(lua: &Lua, val: Value) -> Result<crate::pandoc::MetaVal
             }
         }
         Value::Nil => Ok(MetaValue::MetaBool(false)),
-        _ => Err(Error::runtime("cannot convert value to MetaValue")),
+        other => Err(type_mismatch_error("MetaValue", &other)),
     }
 }
 
@@ -2036,7 +2039,7 @@ pub fn lua_table_to_meta(lua: &Lua, val: Value) -> Result<crate::pandoc::Meta> {
             }
             Ok(meta)
         }
-        _ => Err(Error::runtime("expected table for Meta")),
+        other => Err(type_mismatch_error("table (Meta)", &other)),
     }
 }
 
@@ -2215,6 +2218,35 @@ pub(crate) fn type_mismatch_error(expected: &str, got: &Value) -> Error {
     Error::runtime(format!(
         "Q-11-3: {expected} expected, got {}",
         lua_facing_type_name(got)
+    ))
+}
+
+/// Q-11-3 with an explicit got-type name, for branches where the
+/// caller has a more precise name than `lua_facing_type_name` gives
+/// (typically a wrong-userdata branch naming the actual userdata type).
+pub(crate) fn type_mismatch_error_named(expected: &str, got: &str) -> Error {
+    Error::runtime(format!("Q-11-3: {expected} expected, got {got}"))
+}
+
+/// Q-11-3 for values of the right type but an invalid value — enum
+/// names like MathType/QuoteType/CitationMode/Alignment. Lists the
+/// accepted values so the fix is in the message.
+pub(crate) fn invalid_value_error(what: &str, got: &str, expected: &str) -> Error {
+    Error::runtime(format!(
+        "Q-11-3: invalid {what} '{got}' (expected {expected})"
+    ))
+}
+
+/// Q-11-5 (invalid property assignment): write to a read-only field.
+pub(crate) fn read_only_field_error(field: &str) -> Error {
+    Error::runtime(format!("Q-11-5: cannot set read-only field '{field}'"))
+}
+
+/// Q-11-5 (invalid property assignment): write to a field the receiver
+/// type does not have.
+pub(crate) fn unknown_field_error(field: &str, on: &str) -> Error {
+    Error::runtime(format!(
+        "Q-11-5: cannot set unknown field '{field}' on {on}"
     ))
 }
 
@@ -2728,11 +2760,11 @@ impl LuaAttr {
                         self.with_attr_mut(|attr| attr.2 = attrs);
                         Ok(())
                     }
-                    "t" | "tag" => Err(Error::runtime("cannot set read-only field 'tag'")),
-                    _ => Err(Error::runtime(format!("cannot set field '{}'", key_str))),
+                    "t" | "tag" => Err(read_only_field_error("tag")),
+                    _ => Err(unknown_field_error(key_str, "Attr")),
                 }
             }
-            _ => Err(Error::runtime("invalid key type for Attr")),
+            _ => Err(Error::runtime("Q-11-5: invalid key type for Attr")),
         }
     }
 }
@@ -2821,7 +2853,7 @@ impl FromLua for LuaAttr {
                 // semantics.
                 Ok(LuaAttr::new(lua_attr.clone_attr()))
             }
-            _ => Err(Error::runtime("expected Attr userdata")),
+            other => Err(type_mismatch_error("Attr", &other)),
         }
     }
 }
@@ -2947,8 +2979,9 @@ impl UserData for LuaAttributesProxy {
                     Value::String(s) => s.to_str()?.to_string(),
                     // attrs[i] = {key, value} replaces; attrs[i] = nil removes
                     Value::Integer(i) => {
-                        let idx = usize::try_from(i)
-                            .map_err(|_| Error::runtime("AttributeList index must be positive"))?;
+                        let idx = usize::try_from(i).map_err(|_| {
+                            Error::runtime("Q-11-5: AttributeList index must be positive")
+                        })?;
                         match val {
                             Value::Nil => this.set_pair_at(idx, None),
                             Value::Table(pair) => {
@@ -2958,7 +2991,7 @@ impl UserData for LuaAttributesProxy {
                             }
                             _ => {
                                 return Err(Error::runtime(
-                                    "AttributeList entries must be {key, value} pairs or nil",
+                                    "Q-11-5: AttributeList entries must be {key, value} pairs or nil",
                                 ));
                             }
                         }
@@ -2966,7 +2999,8 @@ impl UserData for LuaAttributesProxy {
                     }
                     _ => {
                         return Err(Error::runtime(
-                            "Attr.attributes proxy: only string or integer keys are supported",
+                            "Q-11-5: Attr.attributes proxy: only string or integer keys \
+                             are supported",
                         ));
                     }
                 };
@@ -3073,7 +3107,7 @@ impl LuaClassesProxy {
     fn set(&self, i: usize, value: Option<String>) -> Result<()> {
         if i == 0 {
             return Err(Error::runtime(
-                "Attr.classes proxy: index must be >= 1 (Lua 1-based)",
+                "Q-11-5: Attr.classes proxy: index must be >= 1 (Lua 1-based)",
             ));
         }
         self.0.with_attr_mut(|a| {
@@ -3089,7 +3123,7 @@ impl LuaClassesProxy {
                         Ok(())
                     } else {
                         Err(Error::runtime(format!(
-                            "Attr.classes proxy: index {} out of range (len = {}); \
+                            "Q-11-5: Attr.classes proxy: index {} out of range (len = {}); \
                              use index in 1..={} to overwrite or {} to append",
                             i,
                             len,
@@ -3182,7 +3216,7 @@ impl UserData for LuaClassesProxy {
                     Value::Integer(i) if i >= 1 => i as usize,
                     _ => {
                         return Err(Error::runtime(
-                            "Attr.classes proxy: only positive integer keys are supported",
+                            "Q-11-5: Attr.classes proxy: only positive integer keys are supported",
                         ));
                     }
                 };
@@ -3249,10 +3283,13 @@ pub(crate) fn lua_table_to_strings(_lua: &Lua, val: Value) -> Result<Vec<String>
             if let Ok(proxy) = ud.borrow::<LuaClassesProxy>() {
                 Ok(proxy.0.classes())
             } else {
-                Err(Error::runtime("expected table of strings"))
+                Err(type_mismatch_error_named(
+                    "table of strings",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table of strings")),
+        other => Err(type_mismatch_error("table of strings", &other)),
     }
 }
 
@@ -3275,10 +3312,13 @@ pub(crate) fn lua_table_to_string_map(
             if let Ok(proxy) = ud.borrow::<LuaAttributesProxy>() {
                 Ok(proxy.0.attributes())
             } else {
-                Err(Error::runtime("expected table of key-value pairs"))
+                Err(type_mismatch_error_named(
+                    "table of key-value pairs",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table of key-value pairs")),
+        other => Err(type_mismatch_error("table of key-value pairs", &other)),
     }
 }
 
@@ -3348,9 +3388,11 @@ pub(crate) fn parse_citation_mode(s: &str) -> Result<crate::pandoc::CitationMode
         "AuthorInText" => Ok(CitationMode::AuthorInText),
         "SuppressAuthor" => Ok(CitationMode::SuppressAuthor),
         "NormalCitation" => Ok(CitationMode::NormalCitation),
-        other => Err(Error::runtime(format!(
-            "invalid citation mode '{other}' (expected NormalCitation, AuthorInText, or SuppressAuthor)"
-        ))),
+        other => Err(invalid_value_error(
+            "citation mode",
+            other,
+            "NormalCitation, AuthorInText, or SuppressAuthor",
+        )),
     }
 }
 
@@ -3477,9 +3519,7 @@ impl LuaCitation {
                 self.cell.borrow_mut().hash = n as usize;
                 Ok(())
             }
-            _ => Err(Error::runtime(format!(
-                "cannot set field '{key}' on Citation"
-            ))),
+            _ => Err(unknown_field_error(key, "Citation")),
         }
     }
 
@@ -3555,22 +3595,19 @@ pub(crate) fn lua_value_to_citation(lua: &Lua, val: Value) -> Result<crate::pand
     match val {
         Value::UserData(ud) => match ud.borrow::<LuaCitation>() {
             Ok(citation) => citation.extract_flushed(lua),
-            Err(_) => Err(Error::runtime(format!(
-                "Citation expected, got {}",
-                userdata_type_name(&ud)
-            ))),
+            Err(_) => Err(type_mismatch_error_named(
+                "Citation",
+                &userdata_type_name(&ud),
+            )),
         },
-        other => Err(Error::runtime(format!(
-            "Citation expected, got {}",
-            other.type_name()
-        ))),
+        other => Err(type_mismatch_error("Citation", &other)),
     }
 }
 
 /// Best-effort human-readable name for a userdata value in error
 /// messages (element tag for our AST wrappers, Rust wrapper name
 /// otherwise).
-fn userdata_type_name(ud: &mlua::AnyUserData) -> String {
+pub(crate) fn userdata_type_name(ud: &mlua::AnyUserData) -> String {
     if let Ok(inline) = ud.borrow::<LuaInline>() {
         return inline.tag_name().to_string();
     }
@@ -3596,7 +3633,7 @@ impl FromLua for LuaInline {
                 // LuaInline, not a shared alias of the source cell.
                 Ok(LuaInline::new(lua_inline.extract_flushed(lua)?))
             }
-            _ => Err(Error::runtime("expected Inline userdata")),
+            other => Err(type_mismatch_error("Inline", &other)),
         }
     }
 }
@@ -3609,7 +3646,7 @@ impl FromLua for LuaBlock {
                 // Deep-clone the inner Block into a fresh cell.
                 Ok(LuaBlock::new(lua_block.extract_flushed(lua)?))
             }
-            _ => Err(Error::runtime("expected Block userdata")),
+            other => Err(type_mismatch_error("Block", &other)),
         }
     }
 }

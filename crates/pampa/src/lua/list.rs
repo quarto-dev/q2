@@ -45,7 +45,7 @@ pub fn get_or_create_list_metatable(lua: &Lua) -> Result<Table> {
                         v => v.type_name(),
                     };
                     return Err(mlua::Error::runtime(format!(
-                        "bad argument #1 to 'List' (table expected, got {got})"
+                        "Q-11-3: bad argument #1 to 'List' (table expected, got {got})"
                     )));
                 }
             };
@@ -466,7 +466,9 @@ fn create_iter_method(lua: &Lua) -> Result<Function> {
     lua.create_function(|lua, (table, step): (Table, Option<i64>)| {
         let step = step.unwrap_or(1);
         if step == 0 {
-            return Err(mlua::Error::runtime("List.iter: step size must not be 0"));
+            return Err(mlua::Error::runtime(
+                "Q-11-3: List.iter: step size must not be 0",
+            ));
         }
 
         let len = table.raw_len() as i64;
@@ -538,7 +540,7 @@ fn create_new_method(lua: &Lua) -> Result<Function> {
             }
             Some(_) => {
                 return Err(mlua::Error::runtime(
-                    "List:new expects a table, iterator, or nothing",
+                    "Q-11-3: List:new expects a table, iterator, or nothing",
                 ));
             }
         };

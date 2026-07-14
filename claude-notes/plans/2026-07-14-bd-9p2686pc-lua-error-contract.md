@@ -90,9 +90,47 @@ that bd-d4wd6r3i seeded.
 - [x] Filter file:line: mlua traceback at the filter boundary carries
       it (verified in e2e output).
 
-### Phase 3 — remaining rollout (follow-up strand)
+### Phase 3 — remaining rollout (bd-ixnp4uqj, 2026-07-14)
 
-- [ ] Sweep the remaining ~85 `Error::runtime` sites (table-part
-      setters "cannot set field on X", eager property validators,
-      Citation/ListAttributes/Meta peekers) onto Q-11-3/5.
-      Tracked on a discovered-from strand; see epic Phase 3.3.
+**Scope**: the marshaling layer only — `types.rs`, `constructors.rs`,
+`list.rs` (`filter.rs` has no bare sites left). The other
+`Error::runtime` files (`readwrite.rs`, `system.rs`, `io_wasm.rs`,
+`quarto_doc.rs`, `mediabag.rs`, `utils.rs`, …) are stdlib/system
+shims with different error families (file I/O, OS), not the
+marshaling contract; `walk.rs:686` is an internal invariant. Out of
+scope here.
+
+**Classification rule** (consistent with what Phase 2 shipped):
+
+- **Q-11-3** — shared value-*conversion* failures, wherever invoked
+  (constructor arg, filter arg, or setter value): peekers
+  (`table of Citations expected, got X`), FromLua impls, attr/caption/
+  colspec/row/cell/list-attr parsers, and enum-value validation
+  (mathtype, quotetype, citation mode, list number style/delim,
+  alignment). Rationale: the fuzzy peekers already emit Q-11-3 from
+  setter arms (Phase 2), so `pandoc.Math("Bogus", …)` and
+  `m.mathtype = "Bogus"` must carry the same code.
+- **Q-11-5** — setter-*specific structural* refusals: unknown field
+  ("cannot set field 'x' on Cell"), read-only field, wrong-variant
+  assignment ("cannot set 'classes' on this block variant"), proxy
+  `__newindex` key/shape errors (AttributeList, classes proxy, Attr
+  key type).
+
+- [x] TDD: table-driven pinning tests (Q-11-3 families + Q-11-5
+      families) written first and observed red
+      (`test_marshaling_argument_errors_are_q11_3`,
+      `test_property_assignment_errors_are_q11_5` in constructors.rs).
+      Note: no LuaClassesProxy cases — `attr.classes` is a plain
+      pandoc-List since bd-tzwcof0n; the proxy is input-only, so its
+      `__newindex` errors are unreachable from Lua (tagged anyway).
+- [x] Helpers in types.rs: `type_mismatch_error_named`,
+      `invalid_value_error` (Q-11-3), `read_only_field_error`,
+      `unknown_field_error` (Q-11-5); shipped element/`__newindex`
+      sites deduped onto them (element unknown-field message kept
+      byte-identical; table parts gained "on <Type>").
+- [x] Sweep types.rs (~30 sites), constructors.rs (~50), list.rs (3).
+      Conformance ratchet unchanged (Track-1 184/19) — none of the 19
+      remaining xfails are message-dependent.
+- [x] Full verify + e2e through `q2 render` (Q-11-3 invalid math
+      type and Q-11-5 unknown field on Cell both observed in real
+      render errors, with filter file:line tracebacks).
