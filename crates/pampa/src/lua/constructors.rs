@@ -1538,7 +1538,29 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         )?,
     )?;
 
+    // pandoc.SimpleTable: deliberate divergence (Decision 6, bd-d4wd6r3i).
+    // q2 does not implement the legacy pre-pandoc-2.10 simple-table
+    // representation; the constructor exists only to raise an actionable
+    // error. Registry: crates/pampa/tests/lua-conformance/divergences.md
+    pandoc.set(
+        "SimpleTable",
+        lua.create_function(|_lua, _args: mlua::MultiValue| -> Result<Value> {
+            Err(simpletable_divergence_error("pandoc.SimpleTable"))
+        })?,
+    )?;
+
     Ok(())
+}
+
+/// The Q-11-2 error shared by all three legacy simple-table entry points
+/// (`pandoc.SimpleTable`, `pandoc.utils.to_simple_table`,
+/// `pandoc.utils.from_simple_table`).
+pub(crate) fn simpletable_divergence_error(entry_point: &str) -> mlua::Error {
+    mlua::Error::RuntimeError(format!(
+        "Q-11-2: {entry_point} is not supported: Quarto does not implement \
+         the legacy pre-pandoc-2.10 SimpleTable API. Construct a pandoc.Table \
+         instead (see https://quarto.org/docs/errors/lua/Q-11-2)."
+    ))
 }
 
 /// Parse an optional attr argument into an Attr tuple, accepting every

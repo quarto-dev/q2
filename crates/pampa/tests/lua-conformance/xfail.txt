@@ -46,5 +46,8 @@ test-pandoc.lua::operations::concatenation # [string "test-pandoc.lua"]:40: atte
 test-pandoc.lua::walk::default traversal is typewise, bottom-up # [string "test-pandoc.lua"]:125: attempt to call a nil value (global 'Pandoc')
 test-pandoc.lua::walk::truncating topdown traversal works # [string "test-pandoc.lua"]:167: attempt to call a nil value (global 'Pandoc')
 test-pandoc.lua::walk::uses `Meta` function # [string "test-pandoc.lua"]:110: attempt to call a nil value (global 'Pandoc')
-test-simpletable.lua::SimpleTable::can access properties # [string "test-simpletable.lua"]:19: attempt to call a nil value (global 'SimpleTable')
-test-simpletable.lua::SimpleTable::can modify properties # [string "test-simpletable.lua"]:33: attempt to call a nil value (global 'SimpleTable')
+# DIVERGENCE (permanent, Decision 6 / bd-d4wd6r3i): q2 does not implement
+# the legacy pre-pandoc-2.10 SimpleTable API; pandoc.SimpleTable raises the
+# actionable Q-11-2 error. See tests/lua-conformance/divergences.md.
+test-simpletable.lua::SimpleTable::can access properties # DIVERGENCE: runtime error: Q-11-2: pandoc.SimpleTable is not supported
+test-simpletable.lua::SimpleTable::can modify properties # DIVERGENCE: runtime error: Q-11-2: pandoc.SimpleTable is not supported

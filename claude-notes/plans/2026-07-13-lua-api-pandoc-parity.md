@@ -699,6 +699,24 @@ test exists and breaks, STOP and show it before deleting/updating.
       constructor args alike. Track-1 xfail 25 → **21** (all 4
       metamethod tests); differential 23 → **24/24** (new case
       toinline-toblock-hooks). E2e byte-identical to pandoc 3.9.0.2.
+- [x] S5 (bd-d4wd6r3i closed 2026-07-14): SimpleTable deliberate
+      divergence shipped per Decision 6. `pandoc.SimpleTable` +
+      `pandoc.utils.to_simple_table`/`from_simple_table` (added as
+      stubs — they didn't exist) all raise the shared **Q-11-2**
+      error (`simpletable_divergence_error` in constructors.rs;
+      catalog entry in quarto-error-catalog) pointing at
+      `pandoc.Table`. Seeded the divergence registry at
+      `crates/pampa/tests/lua-conformance/divergences.md` — first
+      entry SimpleTable; bd-9p2686pc should extend this file (and
+      formalize the `# DIVERGENCE` xfail marker, today a comment
+      convention) rather than invent a parallel mechanism. The 2
+      test-simpletable.lua xfails are now permanent `# DIVERGENCE`
+      entries (Track-1 stays 21 xfail — 2 of them permanent; 182
+      pass). New integration tests: test_simpletable_constructor_ /
+      test_utils_{to,from}_simple_table_raises_divergence_error.
+      E2e: `q2 render` with a SimpleTable-calling filter fails with
+      the Q-11-2 message + filter stack traceback (both entry-point
+      shapes exercised through the real binary).
 
 ### Phase 3 — breadth
 

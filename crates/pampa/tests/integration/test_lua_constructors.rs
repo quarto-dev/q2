@@ -49,6 +49,31 @@ async fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
     (pandoc, context)
 }
 
+/// Helper to run a filter that is expected to fail; returns the error text.
+async fn run_filter_expect_error(filter_code: &str, doc: Pandoc) -> String {
+    let mut filter_file = NamedTempFile::new().expect("Failed to create temp file");
+    filter_file
+        .write_all(filter_code.as_bytes())
+        .expect("Failed to write filter");
+
+    let context = ASTContext::anonymous();
+    let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
+        std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
+    let result = apply_lua_filters(
+        doc,
+        context,
+        &[filter_file.path().to_path_buf()],
+        "html",
+        runtime,
+        None,
+    )
+    .await;
+    match result {
+        Ok(_) => panic!("expected the filter to fail, but it succeeded"),
+        Err(e) => e.to_string(),
+    }
+}
+
 // ============================================================================
 // Cite and Citation constructor tests
 // ============================================================================
@@ -542,4 +567,71 @@ end
     })]);
 
     run_filter(filter_code, doc).await;
+}
+
+// ============================================================================
+// SimpleTable: deliberate divergence (bd-d4wd6r3i, epic-plan Decision 6).
+// q2 does not implement the legacy pre-pandoc-2.10 simple-table API; all
+// three entry points raise an actionable Q-11-2 error pointing at
+// pandoc.Table. Registry: crates/pampa/tests/lua-conformance/divergences.md
+// ============================================================================
+
+fn simpletable_doc() -> Pandoc {
+    create_test_doc(vec![Inline::Str(Str {
+        text: "test".to_string(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
+    })])
+}
+
+fn assert_simpletable_divergence_error(err: &str, entry_point: &str) {
+    assert!(
+        err.contains("Q-11-2"),
+        "{entry_point}: expected Q-11-2 in error, got: {err}"
+    );
+    assert!(
+        err.contains("pandoc.Table"),
+        "{entry_point}: expected pointer to pandoc.Table in error, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn test_simpletable_constructor_raises_divergence_error() {
+    let filter_code = r#"
+function Para(elem)
+    pandoc.SimpleTable({}, {}, {}, {}, {})
+    return elem
+end
+"#;
+    let err = run_filter_expect_error(filter_code, simpletable_doc()).await;
+    assert_simpletable_divergence_error(&err, "pandoc.SimpleTable");
+}
+
+#[tokio::test]
+async fn test_utils_to_simple_table_raises_divergence_error() {
+    let filter_code = r#"
+function Para(elem)
+    pandoc.utils.to_simple_table(pandoc.Table(
+        {long = {}},
+        {{pandoc.AlignDefault, nil}},
+        pandoc.TableHead(),
+        {},
+        pandoc.TableFoot()
+    ))
+    return elem
+end
+"#;
+    let err = run_filter_expect_error(filter_code, simpletable_doc()).await;
+    assert_simpletable_divergence_error(&err, "pandoc.utils.to_simple_table");
+}
+
+#[tokio::test]
+async fn test_utils_from_simple_table_raises_divergence_error() {
+    let filter_code = r#"
+function Para(elem)
+    pandoc.utils.from_simple_table({})
+    return elem
+end
+"#;
+    let err = run_filter_expect_error(filter_code, simpletable_doc()).await;
+    assert_simpletable_divergence_error(&err, "pandoc.utils.from_simple_table");
 }

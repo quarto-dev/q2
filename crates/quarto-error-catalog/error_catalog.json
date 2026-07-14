@@ -861,6 +861,13 @@
     "docs_url": "https://quarto.org/docs/errors/lua/Q-11-1",
     "since_version": "99.9.9"
   },
+  "Q-11-2": {
+    "subsystem": "lua",
+    "title": "SimpleTable Is Not Supported",
+    "message_template": "Quarto does not implement the legacy pre-pandoc-2.10 SimpleTable API (pandoc.SimpleTable, pandoc.utils.to_simple_table, pandoc.utils.from_simple_table). Use pandoc.Table instead.",
+    "docs_url": "https://quarto.org/docs/errors/lua/Q-11-2",
+    "since_version": "99.9.9"
+  },
   "Q-12-1": {
     "subsystem": "listing",
     "title": "Custom Listing Template Not Yet Supported",

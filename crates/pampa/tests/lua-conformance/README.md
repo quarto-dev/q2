@@ -15,6 +15,7 @@ bd-grkrb9nj).
 | `tasty.lua` | The pure-Lua test runner those files `require`, vendored **unmodified** from [hslua/hslua](https://github.com/hslua/hslua) `tasty-lua/tasty.lua` |
 | `prelude.lua` | Q2-side environment adapter (see below) — ours |
 | `xfail.txt` | Expected-failure list (the parity scoreboard) — ours |
+| `divergences.md` | Registry of deliberate, permanent divergences (their xfail entries carry a `# DIVERGENCE` marker) — ours |
 | `differential/` | Track-2 suite: differential cases vs a real pinned `pandoc` binary (see below) |
 
 Runners: `crates/pampa/tests/integration/lua_conformance.rs` (Track 1)
