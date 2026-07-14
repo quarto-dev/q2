@@ -26,6 +26,7 @@ WASM rebuild is needed for a changelog-only edit.
 ### 2026-07-10
 
 - [`a2391089`](https://github.com/quarto-dev/q2/commits/a2391089): UI exploration (branch only): projects can be duplicated from the projects home (project menu → Duplicate) — the copy gets all files, the name "(copy)", and the same collection as the original.
+- [`02095b9a`](https://github.com/quarto-dev/q2/commits/02095b9a): UI exploration (branch only): the Peek preview no longer repeats Rename/Open/Remove (those are in the ⋯ menu) — it's a read-only preview with just a Refresh action.
 - [`f0ce3a31`](https://github.com/quarto-dev/q2/commits/f0ce3a31): UI exploration (branch only): Peek is now a magnifying-glass icon next to the fork icon on each project — hover it to get a floating preview of the project (files, who's joined), instead of a menu item.
 - [`214d62e4`](https://github.com/quarto-dev/q2/commits/214d62e4): UI exploration (branch only): author chips on shared collections now accumulate instead of overwriting — when a second person opens a shared project, both show as authors rather than the latest editor replacing the previous one.
 - [`7a7dafdf`](https://github.com/quarto-dev/q2/commits/7a7dafdf): UI exploration (branch only): project cards no longer show placeholder "authors" — a new file starts with just you, and cards show the real people who've opened the project.
