@@ -741,10 +741,13 @@ test exists and breaks, STOP and show it before deleting/updating.
 - [ ] 3.1 C2/C3: missing constructors; Citation/ListAttributes as
       proper userdata.
 - [ ] 3.2 Classes E, F, G per catalog priorities.
-- [ ] 3.3 H2 error contract rollout across the marshaling layer —
+- [x] 3.3 H2 error contract rollout across the marshaling layer —
       contract + core adoption done (bd-9p2686pc: Q-11-3/4/5);
-      remaining ~85 bare Error::runtime sites tracked on
-      **bd-ixnp4uqj**.
+      remaining bare Error::runtime sites in types.rs /
+      constructors.rs / list.rs swept onto Q-11-3/5 by
+      **bd-ixnp4uqj** (closed, commit f79fbf22). Stdlib/system shims
+      (readwrite/system/io_wasm/…) deliberately out of scope — not
+      the marshaling contract.
 
 ### Phase 4 — steady state
 
