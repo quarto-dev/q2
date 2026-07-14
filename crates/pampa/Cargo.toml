@@ -42,6 +42,7 @@ lua-filter = ["filters", "dep:mlua"]
 template-fs = []
 
 [dependencies]
+async-trait.workspace = true
 tree-sitter = { workspace = true }
 tree-sitter-qmd = { workspace = true }
 comrak = { version = "0.52.0", default-features = false }

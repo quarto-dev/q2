@@ -1,0 +1,52 @@
+# Lua conformance expected failures — the parity burn-down scoreboard.
+# See tests/lua-conformance/README.md (ratchet: unexpected fail OR unexpected pass breaks CI).
+# Format: <file>::<group>::…::<test name>  [# observed failure message]
+# Baseline 2026-07-13: 133 cases, 11 pass, 122 xfail (strand bd-grkrb9nj).
+# After bd-55mb0rjz (__eq + tostring): 69 pass, 64 xfail.
+# After bd-hitjclzp (property cache+readback): 73 pass, 60 xfail.
+# After bd-tzwcof0n (Attr shapes, AttributeList, classes as List): 90 pass, 43 xfail.
+# After bd-1fjtodu8 (List module callable, deep Inlines/Blocks clone): 98 pass, 35 xfail.
+# After bd-2j048yfm (walk engine rewrite: subtree rule, Note descent, topdown): 110 pass, 23 xfail.
+# 2026-07-13 (bd-sgfiiktn phase 0): vendored the remaining 7 upstream files
+# (citation, listattributes, metavalue, pandoc, simpletable, table, cell) —
+# corpus 133 -> 203 cases; new baseline 122 pass, 81 xfail overall.
+# After bd-sgfiiktn S1 (Citation userdata + Cite(content, citations) peekers):
+# 131 pass, 72 xfail.
+# After bd-sgfiiktn S2 (ListAttributes userdata + OrderedList aliases +
+# strict triple peeker): 144 pass, 59 xfail.
+# After bd-sgfiiktn S3a (Cell/Row/TableHead/TableFoot/TableBody as
+# cache-backed userdata + fuzzy row/cell peekers + Cell/Row walk):
+# 165 pass, 38 xfail.
+# After bd-sgfiiktn S3b (Caption userdata + Caption(long, short) arg
+# order + Table head/foot/bodies/colspecs round-trips + Image caption
+# alias): 173 pass, 30 xfail.
+# After bd-0g2yp61w (attr assignment re-runs parse_attr; quotetype/
+# mathtype setters): 178 pass, 25 xfail.
+# After bd-olz91r4v (__toinline/__toblock metamethod hooks in the
+# fuzzy peekers): 182 pass, 21 xfail.
+# After bd-9p2686pc (marshaling error contract: Q-11-3/4/5,
+# Inlines/Blocks error on nil like pandoc): 184 pass, 19 xfail.
+
+# --- Baseline for the 7 files vendored 2026-07-13 (bd-sgfiiktn) ---
+test-metavalue.lua::MetaValue elements::MetaList elements behave like lists # [string "test-metavalue.lua"]:10: attempt to call a nil value (global 'MetaList')
+test-metavalue.lua::MetaValue elements::Numbers are treated as strings # [string "test-metavalue.lua"]:15: attempt to call a nil value (global 'MetaList')
+test-pandoc.lua::clone::changing the clone does not affect original # [string "test-pandoc.lua"]:54: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::clone::cloned value is equal to original # [string "test-pandoc.lua"]:50: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::Meta::block element is treated as MetaBlocks singleton # [string "test-pandoc.lua"]:22: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::Meta::block list is treated as MetaBlocks # [string "test-pandoc.lua"]:18: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::Meta::booleans are treated as MetaBool # [string "test-pandoc.lua"]:30: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::Meta::inline element is treated as MetaInlines singleton # [string "test-pandoc.lua"]:14: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::Meta::inline list is treated as MetaInlines # [string "test-pandoc.lua"]:10: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::Meta::list of strings becomes MetaList of MetaStrings # [string "test-pandoc.lua"]:34: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::Meta::string is treated as MetaString # [string "test-pandoc.lua"]:26: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::normalize::normalizes table # [string "test-pandoc.lua"]:90: attempt to call a nil value (method 'insert')
+test-pandoc.lua::normalize::removes repeated whitespace # [string "test-pandoc.lua"]:65: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::operations::concatenation # [string "test-pandoc.lua"]:40: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::walk::default traversal is typewise, bottom-up # [string "test-pandoc.lua"]:125: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::walk::truncating topdown traversal works # [string "test-pandoc.lua"]:167: attempt to call a nil value (global 'Pandoc')
+test-pandoc.lua::walk::uses `Meta` function # [string "test-pandoc.lua"]:110: attempt to call a nil value (global 'Pandoc')
+# DIVERGENCE (permanent, Decision 6 / bd-d4wd6r3i): q2 does not implement
+# the legacy pre-pandoc-2.10 SimpleTable API; pandoc.SimpleTable raises the
+# actionable Q-11-2 error. See tests/lua-conformance/divergences.md.
+test-simpletable.lua::SimpleTable::can access properties # DIVERGENCE: runtime error: Q-11-2: pandoc.SimpleTable is not supported
+test-simpletable.lua::SimpleTable::can modify properties # DIVERGENCE: runtime error: Q-11-2: pandoc.SimpleTable is not supported

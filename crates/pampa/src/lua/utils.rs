@@ -47,6 +47,27 @@ pub fn register_pandoc_utils(lua: &Lua, pandoc: &Table) -> Result<()> {
     // pandoc.utils.to_roman_numeral(n)
     utils.set("to_roman_numeral", create_to_roman_numeral(lua)?)?;
 
+    // pandoc.utils.to_simple_table / from_simple_table: deliberate
+    // divergence (Decision 6, bd-d4wd6r3i) — the legacy simple-table API
+    // is not implemented; these stubs raise the shared Q-11-2 error.
+    // Registry: crates/pampa/tests/lua-conformance/divergences.md
+    utils.set(
+        "to_simple_table",
+        lua.create_function(|_lua, _args: mlua::MultiValue| -> Result<Value> {
+            Err(super::constructors::simpletable_divergence_error(
+                "pandoc.utils.to_simple_table",
+            ))
+        })?,
+    )?;
+    utils.set(
+        "from_simple_table",
+        lua.create_function(|_lua, _args: mlua::MultiValue| -> Result<Value> {
+            Err(super::constructors::simpletable_divergence_error(
+                "pandoc.utils.from_simple_table",
+            ))
+        })?,
+    )?;
+
     pandoc.set("utils", utils)?;
 
     Ok(())
@@ -283,6 +304,15 @@ fn create_type(lua: &Lua) -> Result<Function> {
                 }
                 if let Ok(block) = ud.borrow::<LuaBlock>() {
                     return Ok(get_block_type_name(&block.borrow_block()));
+                }
+                if ud.borrow::<crate::lua::types::LuaCitation>().is_ok() {
+                    return Ok("Citation".to_string());
+                }
+                if ud
+                    .borrow::<crate::lua::constructors::LuaListAttributes>()
+                    .is_ok()
+                {
+                    return Ok("ListAttributes".to_string());
                 }
                 // For other userdata, try metatable __name
                 if let Ok(mt) = ud.metatable()
