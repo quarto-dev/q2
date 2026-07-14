@@ -26,6 +26,7 @@ WASM rebuild is needed for a changelog-only edit.
 ### 2026-07-10
 
 - [`a2391089`](https://github.com/quarto-dev/q2/commits/a2391089): UI exploration (branch only): projects can be duplicated from the projects home (project menu → Duplicate) — the copy gets all files, the name "(copy)", and the same collection as the original.
+- [`7a7dafdf`](https://github.com/quarto-dev/q2/commits/7a7dafdf): UI exploration (branch only): project cards no longer show placeholder "authors" — a new file starts with just you, and cards show the real people who've opened the project.
 - [`645d5b53`](https://github.com/quarto-dev/q2/commits/645d5b53): UI exploration (branch only): opening a collection invite in a browser that already had a project no longer shows a confusing "migrate your project list" screen — it shows the invitation and quietly folds any existing project into your list.
 - [`85108dde`](https://github.com/quarto-dev/q2/commits/85108dde): UI exploration (branch only): fixed a just-joined collection not appearing when your own project list was still empty.
 - [`19c69ff3`](https://github.com/quarto-dev/q2/commits/19c69ff3): UI exploration (branch only): collections are now real synced documents rather than a per-browser list — they sync across your browsers, sharing one genuinely gives collaborators access, and a project can live in more than one collection ("Add to collection"). Existing collections migrate automatically on first load.
