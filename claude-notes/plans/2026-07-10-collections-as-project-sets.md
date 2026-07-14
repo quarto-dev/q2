@@ -73,7 +73,7 @@ untouched. "Minimum blast surface."
 
 ### Phase 5 — verification
 - [x] `npm run build:all` + full `npm run test:ci`
-- [ ] Manual: fresh browser, upgraded browser (with and without localStorage
+- [x] Manual: fresh browser, upgraded browser (with and without localStorage
       collections), two-browser share/join round trip, debug.html inspection
       of resulting docs
 
@@ -104,3 +104,22 @@ collection doc afterward. Charlie's history view is prior art.
 link-project-set route races it (observed 2026-07-09: link failed to displace
 a fresh pointer). The multi-connection refactor should make "append a
 collection" not contend with init at all, fixing that class of bug.
+
+## Local-prod verification (2026-07-14)
+
+Ran the full stack via `npm run local-prod` (hub binary + local sync
+server on 127.0.0.1:8080, fresh `.local-prod-data`). Verified end to end:
+fresh-browser project-set create; new project; new collection ("Team
+docs") + drag a project in; invite link is doc-id-only (`server=`, no
+`entries=`); a second browser joined via the invite and saw the synced
+project; created "meeting agenda" targeted at Team docs on browser 2;
+it appeared **live** on browser 1 (no reload). Hub log clean (only the
+expected `auth_disabled` warnings under `--allow-insecure-auth`).
+
+Found + fixed one bug: the empty-state guard hid a subscribed collection
+when the personal root was still empty (85108dde).
+
+Deferred/known: the People popover shows "only you" until members open
+projects (contributors derive from cached summaries; a real members map
+is the documented follow-on).
+
