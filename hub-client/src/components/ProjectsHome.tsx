@@ -1582,7 +1582,7 @@ export default function ProjectsHome({
       {isConnecting && <div className="ph-connecting">Connecting to sync server…</div>}
 
       <main className="ph-main">
-        {items.length === 0 ? (
+        {items.length === 0 && collections.every((c) => c.entries.length === 0) ? (
           <div className="ph-empty-state">
             <h2>No projects yet</h2>
             <p>Create your first Quarto project, or connect to one a collaborator shared.</p>
