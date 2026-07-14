@@ -422,30 +422,34 @@ pub(crate) fn extract_lua_block(lua: &Lua, ud: &mlua::AnyUserData) -> Result<Blo
     ud.borrow::<LuaBlock>()?.extract_flushed(lua)
 }
 
-/// Lua-facing type name for a value (mlua distinguishes integer/number;
-/// Lua and pandoc both say "number").
-fn lua_facing_type_name(v: &Value) -> &'static str {
-    match v {
-        Value::Integer(_) => "number",
-        other => other.type_name(),
-    }
-}
+use super::types::lua_facing_type_name;
 
 /// Wrap a fuzzy-peeker failure on a filter's return value in an error
 /// naming the filter function and the Lua type it returned.
 ///
 /// Pandoc errors on non-coercible filter returns (e.g. `return 5` →
 /// "Inline, list of Inlines, or string expected, got number"); we match,
-/// with the filter function named for actionability. Q-coding of these
-/// diagnostics is tracked separately (bd-9p2686pc).
+/// with the filter function named for actionability and the Q-11-4
+/// code of the marshaling error contract (bd-9p2686pc). The inner
+/// peeker error already carries its own Q-11-3 "expected, got" detail;
+/// strip that code so the user sees one code, one message.
 fn filter_return_error(fn_name: &str, got: &'static str, inner: Error) -> Error {
     let detail = match &inner {
         Error::RuntimeError(msg) => msg.clone(),
         other => other.to_string(),
     };
-    Error::runtime(format!(
-        "invalid value returned from filter function '{fn_name}': {detail}, got {got}"
-    ))
+    let detail = detail.strip_prefix("Q-11-3: ").unwrap_or(&detail);
+    // A contract-shaped inner error already ends in "…expected, got X";
+    // only append the got-type when the detail doesn't state it.
+    if detail.contains("expected, got") {
+        Error::runtime(format!(
+            "Q-11-4: invalid value returned from filter function '{fn_name}': {detail}"
+        ))
+    } else {
+        Error::runtime(format!(
+            "Q-11-4: invalid value returned from filter function '{fn_name}': {detail}, got {got}"
+        ))
+    }
 }
 
 /// Handle return value from an inline filter.

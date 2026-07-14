@@ -872,10 +872,13 @@ impl LuaInline {
             },
 
             // Read-only fields
-            (_, "tag" | "t") => Err(Error::runtime("cannot set read-only field 'tag'")),
+            (_, "tag" | "t") => Err(Error::runtime("Q-11-5: cannot set read-only field 'tag'")),
 
             // Unknown field
-            _ => Err(Error::runtime(format!("cannot set field '{}'", key))),
+            _ => Err(Error::runtime(format!(
+                "Q-11-5: cannot set unknown field '{}'",
+                key
+            ))),
         }
     }
 }
@@ -1659,10 +1662,13 @@ impl LuaBlock {
             },
 
             // Read-only fields
-            (_, "tag" | "t") => Err(Error::runtime("cannot set read-only field 'tag'")),
+            (_, "tag" | "t") => Err(Error::runtime("Q-11-5: cannot set read-only field 'tag'")),
 
             // Unknown field
-            _ => Err(Error::runtime(format!("cannot set field '{}'", key))),
+            _ => Err(Error::runtime(format!(
+                "Q-11-5: cannot set unknown field '{}'",
+                key
+            ))),
         }
     }
 }
@@ -2192,6 +2198,26 @@ fn peek_block_via_metamethod(lua: &Lua, val: &Value) -> Option<Block> {
 /// 2. UserData containing LuaInline → extract; other userdata → try
 ///    the `__toinline` metamethod
 /// 3. Table → try the `__toinline` metamethod
+/// Lua-facing type name for a value (mlua distinguishes integer/number;
+/// Lua and pandoc both say "number").
+pub(crate) fn lua_facing_type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Integer(_) => "number",
+        other => other.type_name(),
+    }
+}
+
+/// Q-11-3 (invalid argument): the marshaling error contract for values
+/// of the wrong type (bd-9p2686pc). The message body follows hslua's
+/// `"<expected> expected, got <type>"` shape so upstream
+/// `error_matches` patterns written against pandoc apply unchanged.
+pub(crate) fn type_mismatch_error(expected: &str, got: &Value) -> Error {
+    Error::runtime(format!(
+        "Q-11-3: {expected} expected, got {}",
+        lua_facing_type_name(got)
+    ))
+}
+
 /// 4. Otherwise → error
 pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
     use crate::pandoc::Str;
@@ -2209,19 +2235,22 @@ pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
             } else if let Some(inline) = peek_inline_via_metamethod(lua, &val) {
                 Ok(inline)
             } else {
-                Err(Error::runtime(
-                    "expected Inline userdata, string, or Inline-like value",
+                Err(type_mismatch_error(
+                    "Inline userdata, string, or Inline-like value",
+                    &val,
                 ))
             }
         }
         Value::Table(_) => match peek_inline_via_metamethod(lua, &val) {
             Some(inline) => Ok(inline),
-            None => Err(Error::runtime(
-                "expected Inline userdata, string, or Inline-like value",
+            None => Err(type_mismatch_error(
+                "Inline userdata, string, or Inline-like value",
+                &val,
             )),
         },
-        _ => Err(Error::runtime(
-            "expected Inline userdata, string, or Inline-like value",
+        _ => Err(type_mismatch_error(
+            "Inline userdata, string, or Inline-like value",
+            &val,
         )),
     }
 }
@@ -2252,14 +2281,16 @@ pub fn peek_inlines_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Inline>> {
             }
             Ok(inlines)
         }
-        Value::UserData(_) => match peek_inline_fuzzy(lua, val) {
+        Value::UserData(_) => match peek_inline_fuzzy(lua, val.clone()) {
             Ok(inline) => Ok(vec![inline]),
-            Err(_) => Err(Error::runtime(
-                "expected Inline, list of Inlines, or string",
+            Err(_) => Err(type_mismatch_error(
+                "Inline, list of Inlines, or string",
+                &val,
             )),
         },
-        _ => Err(Error::runtime(
-            "expected Inline, list of Inlines, or string",
+        _ => Err(type_mismatch_error(
+            "Inline, list of Inlines, or string",
+            &val,
         )),
     }
 }
@@ -2293,12 +2324,15 @@ pub fn peek_block_fuzzy(lua: &Lua, val: Value) -> Result<Block> {
                 return Ok(block);
             }
             // Try inlines coercion for strings, tables of inlines, etc.
-            match peek_inlines_fuzzy(lua, val) {
+            match peek_inlines_fuzzy(lua, val.clone()) {
                 Ok(inlines) => Ok(Block::Plain(Plain {
                     content: inlines,
                     source_info: SourceInfo::generated(By::unknown()),
                 })),
-                Err(_) => Err(Error::runtime("expected Block, list of Inlines, or string")),
+                Err(_) => Err(type_mismatch_error(
+                    "Block, list of Inlines, or string",
+                    &val,
+                )),
             }
         }
     }
@@ -2342,13 +2376,14 @@ pub fn peek_blocks_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Block>> {
         }
         _ => {
             // Try inlines coercion for strings
-            match peek_inlines_fuzzy(lua, val) {
+            match peek_inlines_fuzzy(lua, val.clone()) {
                 Ok(inlines) => Ok(vec![Block::Plain(Plain {
                     content: inlines,
                     source_info: SourceInfo::generated(By::unknown()),
                 })]),
-                Err(_) => Err(Error::runtime(
-                    "expected Block, list of Blocks, or compatible element",
+                Err(_) => Err(type_mismatch_error(
+                    "Block, list of Blocks, or compatible element",
+                    &val,
                 )),
             }
         }

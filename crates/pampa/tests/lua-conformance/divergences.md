@@ -7,9 +7,15 @@ the conformance `xfail.txt` files. Anything not listed here that fails
 conformance is a bug or unfinished parity work.
 
 This registry is consumed by both conformance ratchets (Track 1
-`xfail.txt` and `differential/xfail.txt`); the error contract and the
-ratchet's formal `# DIVERGENCE` handling are being designed on strand
-bd-9p2686pc — that work should extend this file, not replace it.
+`xfail.txt` and `differential/xfail.txt`): an xfail entry whose
+trailing comment starts with `DIVERGENCE` must have a record here
+(enforced by `divergence_xfails_are_registered` in
+lua_conformance.rs), and if such an entry ever *passes*, the ratchet
+reports it as a stale registry entry rather than ordinary progress.
+The marshaling error contract these entries reference is Q-11-2..5
+(bd-9p2686pc): granular, actionable codes — Q-11-3 invalid argument
+(`"<expected> expected, got <type>"`), Q-11-4 invalid filter return,
+Q-11-5 invalid property assignment.
 
 Format per entry: what diverges, why, the Q-code the user sees, and
 which conformance cases are permanently xfailed.

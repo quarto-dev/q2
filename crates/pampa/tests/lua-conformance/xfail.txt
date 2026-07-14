@@ -24,9 +24,8 @@
 # mathtype setters): 178 pass, 25 xfail.
 # After bd-olz91r4v (__toinline/__toblock metamethod hooks in the
 # fuzzy peekers): 182 pass, 21 xfail.
-
-test-block.lua::Blocks::Constructor::gives sensible error message # [string "test-block.lua"]:455:  expected error to match pattern 'Block, list of Blocks, or compatible element expected' …
-test-inline.lua::Inlines::Constructor::gives sensible error message # [string "test-inline.lua"]:336:  expected error to match pattern 'Inline, list of Inlines, or string' but got: nil
+# After bd-9p2686pc (marshaling error contract: Q-11-3/4/5,
+# Inlines/Blocks error on nil like pandoc): 184 pass, 19 xfail.
 
 # --- Baseline for the 7 files vendored 2026-07-13 (bd-sgfiiktn) ---
 test-metavalue.lua::MetaValue elements::MetaList elements behave like lists # [string "test-metavalue.lua"]:10: attempt to call a nil value (global 'MetaList')

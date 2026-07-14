@@ -2555,44 +2555,37 @@ fn register_list_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set("List", list_mt)?;
 
     // pandoc.Inlines(content) - creates an Inlines list
-    // Delegates to peek_inlines_fuzzy for coercion, matching Pandoc behavior
+    // Delegates to peek_inlines_fuzzy for coercion, matching Pandoc
+    // behavior — including erroring on nil/no-arg (bd-9p2686pc: nil is
+    // ambiguous between "keep" and "remove" in filter contexts, so it
+    // is never silently read as an empty list).
     pandoc.set(
         "Inlines",
         lua.create_function(|lua, content: Option<Value>| {
             let mt = get_or_create_inlines_metatable(lua)?;
-            let table = match content {
-                None | Some(Value::Nil) => lua.create_table()?,
-                Some(val) => {
-                    let inlines = peek_inlines_fuzzy(lua, val)?;
-                    let result = lua.create_table()?;
-                    for (i, inline) in inlines.into_iter().enumerate() {
-                        result.raw_set(i + 1, lua.create_userdata(LuaInline::new(inline))?)?;
-                    }
-                    result
-                }
-            };
+            let inlines = peek_inlines_fuzzy(lua, content.unwrap_or(Value::Nil))?;
+            let table = lua.create_table()?;
+            for (i, inline) in inlines.into_iter().enumerate() {
+                table.raw_set(i + 1, lua.create_userdata(LuaInline::new(inline))?)?;
+            }
             table.set_metatable(Some(mt))?;
             Ok(table)
         })?,
     )?;
 
     // pandoc.Blocks(content) - creates a Blocks list
-    // Delegates to peek_blocks_fuzzy for coercion, matching Pandoc behavior
+    // Delegates to peek_blocks_fuzzy for coercion, matching Pandoc
+    // behavior — including erroring on nil/no-arg (see pandoc.Inlines
+    // above; bd-9p2686pc).
     pandoc.set(
         "Blocks",
         lua.create_function(|lua, content: Option<Value>| {
             let mt = get_or_create_blocks_metatable(lua)?;
-            let table = match content {
-                None | Some(Value::Nil) => lua.create_table()?,
-                Some(val) => {
-                    let blocks = peek_blocks_fuzzy(lua, val)?;
-                    let result = lua.create_table()?;
-                    for (i, block) in blocks.into_iter().enumerate() {
-                        result.raw_set(i + 1, lua.create_userdata(LuaBlock::new(block))?)?;
-                    }
-                    result
-                }
-            };
+            let blocks = peek_blocks_fuzzy(lua, content.unwrap_or(Value::Nil))?;
+            let table = lua.create_table()?;
+            for (i, block) in blocks.into_iter().enumerate() {
+                table.raw_set(i + 1, lua.create_userdata(LuaBlock::new(block))?)?;
+            }
             table.set_metatable(Some(mt))?;
             Ok(table)
         })?,
@@ -4888,18 +4881,23 @@ mod tests {
     // ========== List constructors tests ==========
 
     #[test]
-    fn test_inlines_constructor_nil() {
+    fn test_inlines_constructor_nil_errors() {
+        // Decision (bd-9p2686pc, 2026-07-14): match pandoc — nil/no-arg
+        // errors. The permissive empty-list reading was ambiguous (nil
+        // = "keep element" vs {} = "remove element" in filter returns).
         let lua = create_lua_env();
-        let result: i64 = lua
-            .load(
-                r#"
-                local i = pandoc.Inlines()
-                return #i
-            "#,
-            )
-            .eval()
-            .unwrap();
-        assert_eq!(result, 0);
+        for call in ["pandoc.Inlines()", "pandoc.Inlines(nil)"] {
+            let err = lua
+                .load(format!("return {call}"))
+                .eval::<Value>()
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("Q-11-3"), "{call}: {err}");
+            assert!(
+                err.contains("Inline, list of Inlines, or string expected, got nil"),
+                "{call}: {err}"
+            );
+        }
     }
 
     #[test]
@@ -4970,18 +4968,21 @@ mod tests {
     }
 
     #[test]
-    fn test_blocks_constructor_nil() {
+    fn test_blocks_constructor_nil_errors() {
+        // See test_inlines_constructor_nil_errors (bd-9p2686pc).
         let lua = create_lua_env();
-        let result: i64 = lua
-            .load(
-                r#"
-                local b = pandoc.Blocks()
-                return #b
-            "#,
-            )
-            .eval()
-            .unwrap();
-        assert_eq!(result, 0);
+        for call in ["pandoc.Blocks()", "pandoc.Blocks(nil)"] {
+            let err = lua
+                .load(format!("return {call}"))
+                .eval::<Value>()
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("Q-11-3"), "{call}: {err}");
+            assert!(
+                err.contains("Block, list of Blocks, or compatible element expected, got nil"),
+                "{call}: {err}"
+            );
+        }
     }
 
     #[test]

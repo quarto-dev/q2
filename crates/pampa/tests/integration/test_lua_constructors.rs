@@ -635,3 +635,52 @@ end
     let err = run_filter_expect_error(filter_code, simpletable_doc()).await;
     assert_simpletable_divergence_error(&err, "pandoc.utils.from_simple_table");
 }
+
+// ============================================================================
+// Marshaling error contract (bd-9p2686pc): granular Q-codes.
+// Q-11-3 invalid argument, Q-11-4 invalid filter return,
+// Q-11-5 invalid property assignment.
+// ============================================================================
+
+#[tokio::test]
+async fn test_filter_return_error_is_q_coded() {
+    let filter_code = r#"
+function Str(elem)
+    return 5
+end
+"#;
+    let err = run_filter_expect_error(filter_code, simpletable_doc()).await;
+    assert!(err.contains("Q-11-4"), "expected Q-11-4 in: {err}");
+    assert!(err.contains("'Str'"), "expected filter fn name in: {err}");
+    assert!(err.contains("got number"), "expected got-type in: {err}");
+    assert!(
+        !err.contains("got number, got number"),
+        "got-type stated twice in: {err}"
+    );
+}
+
+#[tokio::test]
+async fn test_readonly_field_assignment_is_q_coded() {
+    let filter_code = r#"
+function Para(elem)
+    elem.tag = "Div"
+    return elem
+end
+"#;
+    let err = run_filter_expect_error(filter_code, simpletable_doc()).await;
+    assert!(err.contains("Q-11-5"), "expected Q-11-5 in: {err}");
+    assert!(err.contains("read-only"), "expected read-only in: {err}");
+}
+
+#[tokio::test]
+async fn test_unknown_field_assignment_is_q_coded() {
+    let filter_code = r#"
+function Para(elem)
+    elem.bogus_field = 1
+    return elem
+end
+"#;
+    let err = run_filter_expect_error(filter_code, simpletable_doc()).await;
+    assert!(err.contains("Q-11-5"), "expected Q-11-5 in: {err}");
+    assert!(err.contains("bogus_field"), "expected field name in: {err}");
+}

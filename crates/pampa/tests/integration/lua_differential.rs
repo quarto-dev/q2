@@ -238,6 +238,11 @@ fn lua_differential_cases() {
                 o.name,
                 o.message.as_deref().unwrap_or("").replace('\n', "\n  ")
             )),
+            (true, true) if xfail.is_divergence(&o.name) => report.push_str(&format!(
+                "\nDIVERGENCE entry passed — q2 now matches pandoc; remove the xfail line \
+                 AND the divergences.md entry: {}\n",
+                o.name
+            )),
             (true, true) => report.push_str(&format!(
                 "\nunexpected PASS (progress! remove from differential/xfail.txt): {}\n",
                 o.name

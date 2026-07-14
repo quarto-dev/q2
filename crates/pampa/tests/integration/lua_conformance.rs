@@ -15,7 +15,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use mlua::{Lua, Table, Value};
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -147,16 +146,70 @@ fn run_upstream_file(file_name: &str) -> Vec<CaseResult> {
     results
 }
 
-/// Parse an xfail file: one test id per line; `#` starts a comment
-/// (standalone or trailing); blank lines ignored. Shared with the
-/// differential suite (`lua_differential.rs`).
-pub(crate) fn load_xfail_file(path: &Path) -> BTreeSet<String> {
+/// A parsed xfail list: expected-failure ids, plus which of them are
+/// registered permanent divergences (bd-9p2686pc). An entry is a
+/// divergence when its trailing comment starts with `DIVERGENCE` —
+/// e.g. `test-x.lua::case # DIVERGENCE: q2 raises Q-11-2`. Divergence
+/// entries must have a matching record in
+/// `tests/lua-conformance/divergences.md` (enforced by
+/// `divergence_xfails_are_registered`), and an unexpected PASS on one
+/// is reported differently: it means q2 now matches pandoc and the
+/// registry entry itself is stale.
+pub(crate) struct XfailList {
+    /// id -> is_divergence
+    entries: std::collections::BTreeMap<String, bool>,
+}
+
+impl XfailList {
+    pub(crate) fn contains(&self, id: &str) -> bool {
+        self.entries.contains_key(id)
+    }
+
+    pub(crate) fn is_divergence(&self, id: &str) -> bool {
+        self.entries.get(id).copied().unwrap_or(false)
+    }
+
+    pub(crate) fn divergence_ids(&self) -> impl Iterator<Item = &str> {
+        self.entries
+            .iter()
+            .filter(|(_, d)| **d)
+            .map(|(id, _)| id.as_str())
+    }
+}
+
+/// Parse xfail content: one test id per line; `#` starts a comment
+/// (standalone or trailing); blank lines ignored; a trailing comment
+/// starting with `DIVERGENCE` marks the entry as a permanent
+/// divergence. Shared with the differential suite
+/// (`lua_differential.rs`).
+pub(crate) fn parse_xfail(content: &str) -> XfailList {
+    let mut entries = std::collections::BTreeMap::new();
+    for line in content.lines() {
+        let (id, comment) = match line.split_once('#') {
+            Some((id, comment)) => (id.trim(), comment.trim()),
+            None => (line.trim(), ""),
+        };
+        if id.is_empty() {
+            continue;
+        }
+        entries.insert(id.to_string(), comment.starts_with("DIVERGENCE"));
+    }
+    XfailList { entries }
+}
+
+pub(crate) fn load_xfail_file(path: &Path) -> XfailList {
     let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
-    content
-        .lines()
-        .map(|line| line.split('#').next().unwrap_or("").trim())
-        .filter(|line| !line.is_empty())
+    parse_xfail(&content)
+}
+
+/// Check that every `# DIVERGENCE` xfail entry has a record in the
+/// divergence registry (matched by literal id containment). Returns
+/// the unregistered ids.
+pub(crate) fn unregistered_divergences(xfail: &XfailList, registry: &str) -> Vec<String> {
+    xfail
+        .divergence_ids()
+        .filter(|id| !registry.contains(*id))
         .map(String::from)
         .collect()
 }
@@ -234,12 +287,26 @@ fn check_against_xfail_min(file_name: &str, min_cases: usize) {
             ));
         }
     }
-    if !unexpected_passes.is_empty() {
+    let (divergence_passes, progress_passes): (Vec<&&CaseResult>, Vec<&&CaseResult>) =
+        unexpected_passes
+            .iter()
+            .partition(|r| xfail.is_divergence(&r.id));
+    if !progress_passes.is_empty() {
         report.push_str(&format!(
             "\n{} unexpected PASS(es) (progress! remove these lines from xfail.txt):\n",
-            unexpected_passes.len()
+            progress_passes.len()
         ));
-        for r in &unexpected_passes {
+        for r in &progress_passes {
+            report.push_str(&format!("  {}\n", r.id));
+        }
+    }
+    if !divergence_passes.is_empty() {
+        report.push_str(&format!(
+            "\n{} DIVERGENCE entry/entries passed — q2 now matches pandoc here; remove the \
+             xfail line AND the corresponding divergences.md entry:\n",
+            divergence_passes.len()
+        ));
+        for r in &divergence_passes {
             report.push_str(&format!("  {}\n", r.id));
         }
     }
@@ -307,4 +374,64 @@ fn lua_conformance_table() {
 #[test]
 fn lua_conformance_cell() {
     check_against_xfail("test-cell.lua");
+}
+
+// ============================================================================
+// Xfail parsing + divergence registry consistency (bd-9p2686pc)
+// ============================================================================
+
+#[test]
+fn parse_xfail_distinguishes_divergences() {
+    let list = parse_xfail(
+        "# a standalone comment\n\
+         \n\
+         test-a.lua::case one # plain observed-message comment\n\
+         test-b.lua::case two # DIVERGENCE: q2 raises Q-11-2\n\
+         test-c.lua::bare\n",
+    );
+    assert!(list.contains("test-a.lua::case one"));
+    assert!(!list.is_divergence("test-a.lua::case one"));
+    assert!(list.contains("test-b.lua::case two"));
+    assert!(list.is_divergence("test-b.lua::case two"));
+    assert!(list.contains("test-c.lua::bare"));
+    assert!(!list.is_divergence("test-c.lua::bare"));
+    assert!(!list.contains("# a standalone comment"));
+    assert_eq!(
+        list.divergence_ids().collect::<Vec<_>>(),
+        vec!["test-b.lua::case two"]
+    );
+}
+
+#[test]
+fn unregistered_divergences_flags_missing_registry_entries() {
+    let list = parse_xfail(
+        "test-a.lua::registered # DIVERGENCE: in the registry\n\
+         test-b.lua::missing # DIVERGENCE: not in the registry\n\
+         test-c.lua::plain-xfail # not a divergence, never checked\n",
+    );
+    let registry = "…prose… `test-a.lua::registered` …prose…";
+    assert_eq!(
+        unregistered_divergences(&list, registry),
+        vec!["test-b.lua::missing".to_string()]
+    );
+}
+
+/// The live consistency check: every `# DIVERGENCE` entry in either
+/// ratchet's xfail list must appear (as a literal id) in
+/// tests/lua-conformance/divergences.md.
+#[test]
+fn divergence_xfails_are_registered() {
+    let registry = std::fs::read_to_string(conformance_dir().join("divergences.md"))
+        .expect("failed to read divergences.md");
+    for xfail_path in [
+        conformance_dir().join("xfail.txt"),
+        conformance_dir().join("differential/xfail.txt"),
+    ] {
+        let missing = unregistered_divergences(&load_xfail_file(&xfail_path), &registry);
+        assert!(
+            missing.is_empty(),
+            "DIVERGENCE xfail entries in {} lack a divergences.md record: {missing:#?}",
+            xfail_path.display()
+        );
+    }
 }

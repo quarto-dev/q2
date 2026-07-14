@@ -35,53 +35,64 @@ that bd-d4wd6r3i seeded.
   frames `while retrieving function argument <arg>` / `while retrieving
   arguments for function <fn>`.
 
-## Open design questions (Carlos)
+## Design decisions (Carlos, 2026-07-14)
 
-1. **Nil-permissiveness of Inlines/Blocks constructors.** Pandoc errors
-   on `Inlines(nil)`, `Blocks(nil)`, and no-arg `Inlines()`; q2 returns
-   an empty list (and has tests pinning that convenience,
-   constructors.rs:4896). Options:
-   - (a) Keep permissive → behavioral divergence: registry entry +
-     the 2 upstream error-contract xfails become permanent
-     `# DIVERGENCE` entries (catalog row-12 disposition).
-   - (b) Match pandoc: error on nil/no-arg. If the message *contains*
-     pandoc's phrase ("Inline, list of Inlines, or string"), both
-     upstream tests simply pass — no divergence entry at all.
-2. **Q-code granularity.** One `Q-11-3` "Lua marshaling type error"
-   with structured detail, vs a small family (constructor-arg /
-   property-set / filter-return / read-only-field).
+1. **Inlines/Blocks constructors error on nil/no-arg**, matching
+   pandoc. Rationale: the permissive empty-list reading is ambiguous —
+   `nil` could mean "no change to the filtered element" while `{}`
+   means "remove it"; silently picking one hides bugs. Consequence:
+   the 2 upstream error-contract tests should FLIP to passing (our
+   message must contain pandoc's phrase), not become divergences.
+   q2 tests pinning the old `pandoc.Inlines()` → empty-list
+   convenience get updated.
+2. **Granular Q-codes**, one per error family — errors must state what
+   went wrong and what would fix it; a catch-all "Lua marshaling
+   error" says nothing actionable. Allocation:
+   - **Q-11-3** Invalid Lua constructor/function argument
+     (expected-vs-got + which argument of which function).
+   - **Q-11-4** Invalid Lua filter return value (names the filter
+     function + got-type; upgrades `filter_return_error`).
+   - **Q-11-5** Invalid element property assignment (setter type
+     errors; read-only field writes).
 
-## Checklist (proposed phases)
+## Checklist
 
-### Phase 1 — ratchet formalization (no policy dependency)
+### Phase 1 — ratchet formalization — DONE 2026-07-14
 
-- [ ] `load_xfail_file` → return entries + divergence flags
-      (`# DIVERGENCE` on the entry line or a `DIVERGENCE:` prefix in
-      the trailing comment). Shared by Track 1 + Track 2.
-- [ ] Unexpected PASS of a DIVERGENCE-marked entry gets its own error
+- [x] `parse_xfail`/`load_xfail_file` → `XfailList` with divergence
+      flags (trailing comment starting `DIVERGENCE`). Shared by
+      Track 1 + Track 2 (lua_differential imports it).
+- [x] Unexpected PASS of a DIVERGENCE-marked entry gets its own error
       text ("q2 now matches pandoc here — remove the xfail AND the
-      divergences.md entry").
-- [ ] Consistency test: every DIVERGENCE-marked xfail id appears in
-      `divergences.md` (cheap textual containment check), and vice
-      versa entries list their xfail ids.
+      divergences.md entry"), in both ratchets.
+- [x] Consistency test `divergence_xfails_are_registered`: every
+      DIVERGENCE-marked xfail id (both files) appears literally in
+      `divergences.md`; the checker's failure path is unit-tested
+      with synthetic input (`unregistered_divergences`).
 
-### Phase 2 — error contract (blocked on Q1/Q2 decisions)
+### Phase 2 — error contract — DONE 2026-07-14 (core adoption)
 
-- [ ] TDD: pin the contract shape with tests (unit + upstream xfail
-      flips where messages start matching).
-- [ ] `marshal_error` helper (expected, got, entry-point context)
-      emitting the agreed Q-code(s); message body mirrors hslua's
-      `"<expected> expected, got <type>"` so upstream `error_matches`
-      patterns pass wherever behavior already matches.
-- [ ] Adopt in the four fuzzy peekers + `filter_return_error` first
-      (highest-traffic sites), then sweep the remaining
-      `Error::runtime` sites incrementally.
-- [ ] Filter file:line: verify mlua traceback coverage suffices at the
-      filter.rs boundary; if not, attach via DiagnosticMessage at the
-      quarto-core error path.
+- [x] TDD: 7 pinning tests written first and observed red
+      (2 unit constructor-nil tests — replacing the two that pinned
+      the old empty-list convenience, per Decision 1 — plus
+      integration tests for Q-11-4/Q-11-5 and the no-double-got
+      message shape).
+- [x] Q-11-3/4/5 allocated in quarto-error-catalog.
+- [x] `type_mismatch_error(expected, got)` + `lua_facing_type_name`
+      in types.rs; hslua's `"<expected> expected, got <type>"` shape.
+- [x] Adopted in the four fuzzy peekers (terminal branches),
+      `filter_return_error` (Q-11-4, deduplicates the inner Q-11-3
+      detail), and both element `__newindex` fallbacks (Q-11-5:
+      read-only tag, unknown field).
+- [x] `pandoc.Inlines`/`pandoc.Blocks` error on nil/no-arg like
+      pandoc (Decision 1) → the 2 upstream error-contract tests
+      FLIPPED (Track-1: 184 pass / 19 xfail); lua-types stubs updated.
+- [x] Filter file:line: mlua traceback at the filter boundary carries
+      it (verified in e2e output).
 
-### Phase 3 — bookkeeping
+### Phase 3 — remaining rollout (follow-up strand)
 
-- [ ] Resolve the 2 error-message-contract xfails per Q1 (flip or mark
-      `# DIVERGENCE` + registry entry).
-- [ ] Update epic plan Phase 3.3/4.1; close strand.
+- [ ] Sweep the remaining ~85 `Error::runtime` sites (table-part
+      setters "cannot set field on X", eager property validators,
+      Citation/ListAttributes/Meta peekers) onto Q-11-3/5.
+      Tracked on a discovered-from strand; see epic Phase 3.3.

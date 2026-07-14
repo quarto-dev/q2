@@ -83,11 +83,11 @@ local inlines2 = pandoc.Inlines("Hello")
 -- From a single inline
 local inlines3 = pandoc.Inlines(pandoc.Str("Hello"))
 
--- Empty
-local inlines4 = pandoc.Inlines()
+-- Empty (nil/no argument is an error — Q-11-3)
+local inlines4 = pandoc.Inlines({})
 ```
 ]]
----@param content? pandoc.Inline[]|string|pandoc.Inline Content to wrap
+---@param content pandoc.Inline[]|string|pandoc.Inline Content to wrap (nil is an error; use {} for empty)
 ---@return pandoc.Inlines
 function pandoc.Inlines(content) end
 
@@ -108,6 +108,6 @@ local blocks = pandoc.Blocks({
 })
 ```
 ]]
----@param content? pandoc.Block[] Content to wrap
+---@param content pandoc.Block[] Content to wrap (nil is an error; use {} for empty)
 ---@return pandoc.Blocks
 function pandoc.Blocks(content) end

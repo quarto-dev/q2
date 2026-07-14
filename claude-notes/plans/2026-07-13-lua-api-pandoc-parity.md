@@ -717,14 +717,34 @@ test exists and breaks, STOP and show it before deleting/updating.
       E2e: `q2 render` with a SimpleTable-calling filter fails with
       the Q-11-2 message + filter stack traceback (both entry-point
       shapes exercised through the real binary).
+- [x] Class H core (bd-9p2686pc closed 2026-07-14): marshaling error
+      contract + divergence-registry formalization. Decisions
+      (Carlos): Inlines/Blocks ERROR on nil/no-arg like pandoc (the
+      permissive empty-list read was ambiguous: nil = keep vs {} =
+      remove); granular Q-codes over a catch-all. Q-11-3 invalid
+      argument (`"<expected> expected, got <type>"`, hslua shape, via
+      `type_mismatch_error` in types.rs), Q-11-4 invalid filter
+      return (wraps the Q-11-3 detail without duplicating it),
+      Q-11-5 invalid property assignment (read-only tag / unknown
+      field) — adopted in the four fuzzy peekers, filter_return_error,
+      both element __newindex fallbacks, and the Inlines/Blocks
+      constructors. Ratchets: xfail parsing returns divergence flags;
+      a passing `# DIVERGENCE` entry is reported as a stale registry
+      entry; `divergence_xfails_are_registered` ties both xfail files
+      to divergences.md. The 2 upstream error-contract tests FLIPPED
+      (Track-1 184 pass / 19 xfail; differential stays 24/24). E2e:
+      all three Q-codes observed through `q2 render`. Remaining ~85
+      bare Error::runtime sites → Phase 3.3 rollout strand.
 
 ### Phase 3 — breadth
 
 - [ ] 3.1 C2/C3: missing constructors; Citation/ListAttributes as
       proper userdata.
 - [ ] 3.2 Classes E, F, G per catalog priorities.
-- [ ] 3.3 H2 error contract rollout across the marshaling layer
-      (dedicated Q-code range for Lua marshaling errors).
+- [ ] 3.3 H2 error contract rollout across the marshaling layer —
+      contract + core adoption done (bd-9p2686pc: Q-11-3/4/5);
+      remaining ~85 bare Error::runtime sites tracked on
+      **bd-ixnp4uqj**.
 
 ### Phase 4 — steady state
 
