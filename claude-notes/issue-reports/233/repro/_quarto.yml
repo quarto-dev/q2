@@ -1,0 +1,7 @@
+project:
+  type: website
+website:
+  sidebar:
+    contents:
+      - index.qmd
+      - about.qmd

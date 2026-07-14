@@ -1,0 +1,5 @@
+---
+title: About
+---
+
+This page parses fine.

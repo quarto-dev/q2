@@ -1,0 +1,5 @@
+---
+title: Home
+---
+
+- Reflect changes to *other* pages' titles within the next render
