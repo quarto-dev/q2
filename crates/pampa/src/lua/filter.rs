@@ -260,7 +260,8 @@ pub async fn apply_lua_filter(
     };
 
     // Extract diagnostics, HTML dependencies, and text includes from Lua state
-    let diagnostics = super::diagnostics::extract_lua_diagnostics(&lua)?;
+    let mut diagnostics = super::diagnostics::extract_lua_diagnostics(&lua)?;
+    diagnostics.extend(unimplemented_doc_handler_warnings(&lua, filter_path)?);
     let html_dependencies = super::quarto_doc::extract_html_dependencies(&lua)?;
     let text_includes = super::quarto_doc::extract_text_includes(&lua)?;
     let resources = super::quarto_doc::extract_resources(&lua)?;
@@ -408,6 +409,37 @@ fn get_filter_table(lua: &Lua) -> Result<Table> {
     }
 
     Ok(filter_table)
+}
+
+/// Q-11-6: doc-level filter functions (Pandoc/Meta/Doc) are collected
+/// but not yet invoked (bd-2llqjsms / bd-a9g50za2 track the
+/// Meta<->ConfigValue design this needs). Until then, a filter that
+/// defines one gets a loud warning instead of a silent no-op.
+fn unimplemented_doc_handler_warnings(
+    lua: &Lua,
+    filter_path: &Path,
+) -> Result<Vec<DiagnosticMessage>> {
+    let globals = lua.globals();
+    let mut warnings = Vec::new();
+    for name in ["Pandoc", "Meta", "Doc"] {
+        if globals.get::<Function>(name).is_ok() {
+            warnings.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::warning(format!(
+                    "Unimplemented: Lua filter '{}' defines a '{name}' handler, \
+                     which q2 does not invoke yet",
+                    filter_path.display()
+                ))
+                .with_code("Q-11-6")
+                .problem(
+                    "Document-level filter functions (Pandoc, Meta, Doc) are \
+                     not yet supported; the handler is ignored",
+                )
+                .add_hint("Element-level handlers (Str, Para, ...) run normally")
+                .build(),
+            );
+        }
+    }
+    Ok(warnings)
 }
 
 /// Extract an Inline from a Lua UserData value (flushing any cached

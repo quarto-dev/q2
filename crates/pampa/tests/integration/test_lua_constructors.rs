@@ -49,6 +49,32 @@ async fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
     (pandoc, context)
 }
 
+/// Helper to run a filter and return the collected diagnostics.
+async fn run_filter_diagnostics(
+    filter_code: &str,
+    doc: Pandoc,
+) -> Vec<quarto_error_reporting::DiagnosticMessage> {
+    let mut filter_file = NamedTempFile::new().expect("Failed to create temp file");
+    filter_file
+        .write_all(filter_code.as_bytes())
+        .expect("Failed to write filter");
+
+    let context = ASTContext::anonymous();
+    let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
+        std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
+    apply_lua_filters(
+        doc,
+        context,
+        &[filter_file.path().to_path_buf()],
+        "html",
+        runtime,
+        None,
+    )
+    .await
+    .expect("Filter failed")
+    .diagnostics
+}
+
 /// Helper to run a filter that is expected to fail; returns the error text.
 async fn run_filter_expect_error(filter_code: &str, doc: Pandoc) -> String {
     let mut filter_file = NamedTempFile::new().expect("Failed to create temp file");
@@ -656,6 +682,66 @@ end
     assert!(
         !err.contains("got number, got number"),
         "got-type stated twice in: {err}"
+    );
+}
+
+#[tokio::test]
+async fn test_doc_level_handler_emits_unimplemented_warning() {
+    // bd-2llqjsms / bd-a9g50za2 are still open: doc-level filter
+    // functions (Pandoc/Meta/Doc) are collected but never invoked.
+    // Until they are implemented, defining one must produce a loud
+    // Q-11-6 warning instead of a silent no-op.
+    for handler in ["Meta", "Pandoc", "Doc"] {
+        let filter_code = format!(
+            r#"
+function Str(elem)
+    return elem
+end
+function {handler}(x)
+    return x
+end
+"#
+        );
+        let doc = create_test_doc(vec![Inline::Str(Str {
+            text: "hi".to_string(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        })]);
+        let diags = run_filter_diagnostics(&filter_code, doc).await;
+        let warning = diags
+            .iter()
+            .find(|d| d.code.as_deref() == Some("Q-11-6"))
+            .unwrap_or_else(|| panic!("no Q-11-6 diagnostic for '{handler}' in: {diags:?}"));
+        assert!(
+            warning.title.contains(&format!("'{handler}'")),
+            "{handler}: title does not name the handler: {}",
+            warning.title
+        );
+        assert!(
+            matches!(
+                warning.kind,
+                quarto_error_reporting::DiagnosticKind::Warning
+            ),
+            "{handler}: expected a warning, got {:?}",
+            warning.kind
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_element_only_filter_has_no_unimplemented_warning() {
+    let filter_code = r#"
+function Str(elem)
+    return elem
+end
+"#;
+    let doc = create_test_doc(vec![Inline::Str(Str {
+        text: "hi".to_string(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
+    })]);
+    let diags = run_filter_diagnostics(filter_code, doc).await;
+    assert!(
+        diags.iter().all(|d| d.code.as_deref() != Some("Q-11-6")),
+        "unexpected Q-11-6 diagnostic: {diags:?}"
     );
 }
 
