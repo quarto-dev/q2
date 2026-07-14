@@ -194,12 +194,24 @@ function App() {
     navigateToFile,
   } = useRouting();
 
-  // Invite-first onboarding: a fresh browser opening a collection invite gets a
-  // project set created silently instead of the setup screen. The landing
-  // shows "Connecting…" until the set is ready.
+  // Invite-first onboarding: opening a collection invite establishes a
+  // personal root behind the landing screen, so the invitee only ever sees
+  // "join Team docs" — never the setup or migration prompts. A browser with a
+  // stray legacy project (needs-migration) migrates it silently into the new
+  // root (non-destructive: the legacy store is retained); a fresh browser
+  // (needs-setup) just creates an empty root. The landing shows "Connecting…"
+  // until the root is ready, then Join subscribes to the collection.
+  const inviteRootInitiatedRef = useRef(false);
   useEffect(() => {
-    if (route.type === 'join-collection' && projectSetState.status === 'needs-setup') {
+    if (route.type !== 'join-collection' || inviteRootInitiatedRef.current) return;
+    if (projectSetState.status === 'needs-setup') {
+      inviteRootInitiatedRef.current = true;
       projectSetActions.createProjectSet(DEFAULT_SYNC_SERVER);
+    } else if (projectSetState.status === 'needs-migration') {
+      // Fire once: migrateProjects resets to needs-migration on failure, so
+      // an unguarded effect would retry-loop against an unreachable server.
+      inviteRootInitiatedRef.current = true;
+      projectSetActions.migrateProjects(DEFAULT_SYNC_SERVER);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.type, projectSetState.status]);
@@ -674,12 +686,11 @@ function App() {
     return <DevHarnessLazy page={route.page} />;
   }
 
-  // Collection invite landing (explore/projects-collections-ui). Rendered before the
-  // setup screens: a brand-new browser clicking an invite never sees
-  // project-set setup — the set is auto-created below while the landing asks
-  // for identity. The needs-migration case (legacy local projects) still
-  // falls through to the setup screen rather than migrating silently.
-  if (route.type === 'join-collection' && projectSetState.status !== 'needs-migration') {
+  // Collection invite landing (explore/projects-collections-ui). Always shown
+  // for an invite route, ahead of the setup/migration screens: the effect
+  // above establishes the personal root (creating or silently migrating) so
+  // the invitee only ever sees "join <collection>", never onboarding prompts.
+  if (route.type === 'join-collection') {
     return (
       <JoinCollectionLanding
         route={route}
