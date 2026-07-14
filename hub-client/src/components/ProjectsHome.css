@@ -415,7 +415,8 @@
   opacity: 0;
 }
 
-.ph-card:hover .ph-card-actions { opacity: 1; }
+.ph-card:hover .ph-card-actions,
+.ph-card.peek-open .ph-card-actions { opacity: 1; }
 
 .ph-card-menu-btn {
   background: none;
@@ -429,7 +430,8 @@
 
 .ph-card-menu-btn:hover { background: var(--input-bg-alpha); color: var(--text-primary); }
 
-.ph-card-actions .ph-fork-btn {
+.ph-card-actions .ph-fork-btn,
+.ph-card-actions .ph-peek-btn {
   background: none;
   border: none;
   color: var(--text-secondary);
@@ -440,6 +442,14 @@
 
 .ph-fork-btn:hover { background: var(--input-bg-alpha); color: var(--posit-teal); }
 .ph-fork-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* Hover-to-peek: the magnifying-glass icon and its floating popover live in
+   this anchor so the pointer can travel from icon to popover without the
+   hover being lost. The anchor is a non-positioning wrapper (position:
+   static) so the popover anchors to the nearest positioned ancestor — the
+   card or row — and stays on-screen regardless of the icon's spot. */
+.ph-peek-anchor { display: inline-flex; align-items: center; }
+.ph-peek-btn:hover { background: var(--input-bg-alpha); color: var(--posit-teal); }
 
 .ph-card .ph-menu { top: 34px; left: auto; right: 8px; }
 
@@ -761,8 +771,9 @@
 
 .ph-peek {
   position: absolute;
-  top: calc(100% + 4px);
-  left: 140px;
+  top: calc(100% + 6px);
+  left: 0;
+  right: auto;
   width: 320px;
   background: var(--context-menu-bg);
   border: 1px solid var(--context-menu-border);
@@ -770,6 +781,7 @@
   box-shadow: 0 10px 32px var(--context-menu-shadow);
   padding: 17px 19px;
   z-index: 70;
+  cursor: default;
 }
 
 .ph-peek-header {

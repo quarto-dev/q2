@@ -133,6 +133,14 @@ const forkIcon = (
   </svg>
 );
 
+/** Magnifying glass for the hover-to-peek affordance. */
+const peekIcon = (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="2" />
+    <path d="M15.5 15.5L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
 /** Base64-encode without blowing the arg-spread limit on large files. */
 function toBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -249,6 +257,19 @@ export default function ProjectsHome({
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [peekFor, setPeekFor] = useState<string | null>(null);
+  // Peek is a hover card: open on hover of the magnifying-glass icon, and
+  // stay open while the pointer is over the icon or the popover. A short
+  // close delay (cancelled by re-entering) bridges the gap between them and
+  // lets the pointer reach the popover's action buttons.
+  const peekTimerRef = useRef<number | null>(null);
+  const openPeekHover = useCallback((indexDocId: string) => {
+    if (peekTimerRef.current) { window.clearTimeout(peekTimerRef.current); peekTimerRef.current = null; }
+    setPeekFor(indexDocId);
+  }, []);
+  const closePeekHoverSoon = useCallback(() => {
+    if (peekTimerRef.current) window.clearTimeout(peekTimerRef.current);
+    peekTimerRef.current = window.setTimeout(() => setPeekFor(null), 180);
+  }, []);
   const [peekRefreshing, setPeekRefreshing] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -1061,18 +1082,6 @@ export default function ProjectsHome({
       </div>
       <button
         className="ph-menu-item"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpenMenu(null);
-          setMoveSubmenuOpen(false);
-          setPeekFor(item.indexDocId);
-        }}
-      >
-        Peek
-        <span className="ph-menu-subtext">See what's inside without opening it</span>
-      </button>
-      <button
-        className="ph-menu-item"
         disabled={!!duplicatingId}
         onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
       >
@@ -1274,7 +1283,7 @@ export default function ProjectsHome({
   const renderCard = (item: ProjectItem) => (
     <div
       key={item.indexDocId}
-      className={`ph-card qh-menu-anchor ${draggingId === item.indexDocId ? 'dragging' : ''}`}
+      className={`ph-card qh-menu-anchor ${draggingId === item.indexDocId ? 'dragging' : ''} ${peekFor === item.indexDocId ? 'peek-open' : ''}`}
       draggable
       onDragStart={handleDragStart(item)}
       onDragEnd={handleDragEnd}
@@ -1292,6 +1301,20 @@ export default function ProjectsHome({
         </span>
       </button>
       <span className="ph-card-actions">
+        <span
+          className="ph-peek-anchor"
+          onMouseOver={() => openPeekHover(item.indexDocId)}
+          onMouseOut={closePeekHoverSoon}
+        >
+          <button
+            className="ph-peek-btn"
+            title="Peek — see what's inside"
+            onClick={(e) => { e.stopPropagation(); openPeekHover(item.indexDocId); }}
+          >
+            {peekIcon}
+          </button>
+          {peekFor === item.indexDocId && renderPeek(item)}
+        </span>
         <button
           className="ph-fork-btn"
           title={`Duplicate "${item.description}" (fork a fresh copy)`}
@@ -1313,7 +1336,6 @@ export default function ProjectsHome({
         </button>
       </span>
       {openMenu === item.indexDocId && renderProjectMenu(item)}
-      {peekFor === item.indexDocId && renderPeek(item)}
     </div>
   );
 
@@ -1654,22 +1676,25 @@ export default function ProjectsHome({
                         {item.description}
                       </button>
                       {isUnnamed(item.description) && (
-                        <>
-                          <button className="ph-link" onClick={() => startRename(item)}>Rename</button>
-                          <button
-                            className="ph-link muted"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPeekFor(peekFor === item.indexDocId ? null : item.indexDocId);
-                            }}
-                          >
-                            Peek
-                          </button>
-                        </>
+                        <button className="ph-link" onClick={() => startRename(item)}>Rename</button>
                       )}
                       <span className="ph-row-meta">
                         {item.summary ? `${item.summary.fileCount} ${item.summary.fileCount === 1 ? 'file' : 'files'} · ` : ''}
                         opened {formatOpened(item.lastAccessed)}
+                      </span>
+                      <span
+                        className="ph-peek-anchor"
+                        onMouseOver={() => openPeekHover(item.indexDocId)}
+                        onMouseOut={closePeekHoverSoon}
+                      >
+                        <button
+                          className="ph-icon-btn ph-peek-btn"
+                          title="Peek — see what's inside"
+                          onClick={(e) => { e.stopPropagation(); openPeekHover(item.indexDocId); }}
+                        >
+                          {peekIcon}
+                        </button>
+                        {peekFor === item.indexDocId && renderPeek(item)}
                       </span>
                       <button
                         className="ph-icon-btn ph-fork-btn"
@@ -1691,7 +1716,6 @@ export default function ProjectsHome({
                         ⋯
                       </button>
                       {openMenu === item.indexDocId && renderProjectMenu(item)}
-                      {peekFor === item.indexDocId && renderPeek(item)}
                     </div>
                   ))}
                 </div>
