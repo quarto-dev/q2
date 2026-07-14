@@ -287,7 +287,16 @@ export function setProjectSetName(
 }
 
 /**
- * Replace the cached peek summary for a project.
+ * Update the cached peek summary for a project.
+ *
+ * The summary lives on a shared collection entry, so multiple collaborators
+ * write it. The file-shape fields (fileCount, topFiles, asOf) are "last
+ * writer's view" and replaced wholesale, but `contributors` are **unioned**
+ * with whatever is already stored: a naive replace made each editor clobber
+ * the others' identities, so the last person to edit appeared as the sole
+ * author. Union (dedup by name, incoming color/order preferred) makes
+ * authorship accumulate the way collaborators expect.
+ *
  * Must be called inside an Automerge `change()` callback.
  *
  * @returns true if the entry existed and the summary was written
@@ -300,7 +309,19 @@ export function updateProjectSummaryInSet(
   const key = projectSetKey(indexDocId);
   const entry = doc.projects[key];
   if (!entry) return false;
-  entry.summary = summary;
+
+  const merged = new Map<string, ActorIdentity>();
+  for (const c of summary.contributors) merged.set(c.name, { name: c.name, color: c.color });
+  for (const c of entry.summary?.contributors ?? []) {
+    if (!merged.has(c.name)) merged.set(c.name, { name: c.name, color: c.color });
+  }
+
+  entry.summary = {
+    fileCount: summary.fileCount,
+    topFiles: summary.topFiles,
+    asOf: summary.asOf,
+    contributors: [...merged.values()],
+  };
   return true;
 }
 

@@ -228,7 +228,7 @@ describe('ProjectSetDocument schema helpers', () => {
       expect(doc.projects['proj1'].lastAccessed).toBe('2026-01-01T00:00:00.000Z');
     });
 
-    it('should replace an existing summary', () => {
+    it('should replace file-shape fields but union contributors', () => {
       const doc = emptyDoc();
       addProjectToSet(doc, {
         indexDocId: 'automerge:proj1',
@@ -236,9 +236,39 @@ describe('ProjectSetDocument schema helpers', () => {
         description: 'Project',
       });
       updateProjectSummaryInSet(doc, 'automerge:proj1', summary);
-      const newer = { ...summary, fileCount: 5, asOf: '2026-06-16T12:00:00.000Z' };
+      // A different collaborator writes their own view later
+      const newer = {
+        fileCount: 5,
+        topFiles: ['index.qmd'],
+        contributors: [{ name: 'Saima Khan', color: '#00BCD4' }],
+        asOf: '2026-06-16T12:00:00.000Z',
+      };
       updateProjectSummaryInSet(doc, 'automerge:proj1', newer);
-      expect(doc.projects['proj1'].summary).toEqual(newer);
+      const stored = doc.projects['proj1'].summary!;
+      // File-shape fields take the newer writer's view
+      expect(stored.fileCount).toBe(5);
+      expect(stored.topFiles).toEqual(['index.qmd']);
+      expect(stored.asOf).toBe('2026-06-16T12:00:00.000Z');
+      // Contributors accumulate — neither author clobbers the other
+      expect(stored.contributors.map((c) => c.name).sort()).toEqual(['Charlotte Wu', 'Saima Khan']);
+    });
+
+    it('should not duplicate a contributor already present', () => {
+      const doc = emptyDoc();
+      addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'Project',
+      });
+      updateProjectSummaryInSet(doc, 'automerge:proj1', summary);
+      // Same author edits again with an updated color
+      updateProjectSummaryInSet(doc, 'automerge:proj1', {
+        ...summary,
+        contributors: [{ name: 'Charlotte Wu', color: '#FF0000' }],
+      });
+      const stored = doc.projects['proj1'].summary!;
+      expect(stored.contributors).toHaveLength(1);
+      expect(stored.contributors[0]).toEqual({ name: 'Charlotte Wu', color: '#FF0000' });
     });
 
     it('should return false for non-existent project', () => {
