@@ -1,0 +1,30 @@
+---
+title: "Metadata Grid"
+author: "Norah Jones"
+date: "2026-07-01"
+date-modified: "2026-07-10"
+doi: "10.1234/example.5678"
+description: "A one-line description."
+keywords:
+  - music
+  - texas
+categories:
+  - analysis
+  - jazz
+# Title-block parity corpus (bd-gx9cic8z). date-modified / doi /
+# keywords / description / categories are not rendered in the title
+# block yet; P3 (bd-j6huijli) adds them and strengthens these
+# assertions (p.date-modified, p.doi > a, div.keywords,
+# div.quarto-categories > div.quarto-category, …).
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "header#title-block-header.quarto-title-block.default",
+            "div.quarto-title > h1.title",
+          ]
+---
+
+Body.

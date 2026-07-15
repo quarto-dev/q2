@@ -1,0 +1,6 @@
+---
+source: crates/quarto-core/tests/integration/title_block_pipeline.rs
+assertion_line: 263
+expression: extract_main_open_tag(&html)
+---
+<main class="content" id="quarto-document-content">

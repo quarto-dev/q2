@@ -1,0 +1,30 @@
+---
+title: "Structured Authors"
+author:
+  - name: Norah Jones
+    orcid: 0000-0002-1825-0097
+    email: norah@example.com
+    url: https://example.com/norah
+    corresponding: true
+    affiliations:
+      - name: Carnegie Mellon University
+        department: School of Music
+  - name: Bill Malone
+    affiliations:
+      - name: University of Texas
+# Title-block parity corpus (bd-gx9cic8z). Structured authors currently
+# render as flattened booleans (bd-8v34zny5); P2 (bd-ez0hiowa) replaces
+# this with the normalized author model and strengthens these
+# assertions (two-column grid, ORCID badge, email icon, author names).
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "header#title-block-header.quarto-title-block.default",
+            "div.quarto-title > h1.title",
+          ]
+---
+
+Body.

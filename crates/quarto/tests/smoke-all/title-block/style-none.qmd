@@ -1,0 +1,17 @@
+---
+title: "No Title Block"
+author: "Norah Jones"
+title-block-style: none
+# Title-block parity corpus (bd-gx9cic8z). title-block-style is
+# currently ignored (a styled title block is still emitted); P6
+# (bd-vkiwhcny) implements none (no styled title-block processing) and
+# flips these assertions.
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["header#title-block-header"]
+---
+
+Body.

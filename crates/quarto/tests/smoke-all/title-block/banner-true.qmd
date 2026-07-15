@@ -1,0 +1,22 @@
+---
+title: "Banner Document"
+subtitle: "With a banner"
+author: "Norah Jones"
+date: "2026-07-01"
+title-block-banner: true
+# Title-block parity corpus (bd-gx9cic8z). title-block-banner is
+# currently ignored; P5 (bd-364ol5lu) emits div.quarto-title-banner
+# above #quarto-content, adds quarto-banner-title-block to <main>, and
+# strengthens these assertions accordingly.
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "header#title-block-header.quarto-title-block.default",
+            "div.quarto-title > h1.title",
+          ]
+---
+
+Body.

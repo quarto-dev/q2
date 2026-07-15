@@ -1,0 +1,20 @@
+---
+source: crates/quarto-core/tests/integration/title_block_pipeline.rs
+assertion_line: 256
+expression: extract_title_block(&html)
+---
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Metadata Grid</h1>
+</div>
+<div class="quarto-title-meta">
+<div class="quarto-title-meta-author">
+<div class="quarto-title-meta-heading">Author</div>
+<div class="quarto-title-meta-contents">Norah Jones</div>
+</div>
+<div class="quarto-title-meta-date">
+<div class="quarto-title-meta-heading">Published</div>
+<div class="quarto-title-meta-contents">2026-07-01</div>
+</div>
+</div>
+</header>

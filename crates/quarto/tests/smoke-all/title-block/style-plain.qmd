@@ -1,0 +1,16 @@
+---
+title: "Plain Style"
+author: "Norah Jones"
+title-block-style: plain
+# Title-block parity corpus (bd-gx9cic8z). title-block-style is
+# currently ignored; P6 (bd-vkiwhcny) implements plain (structure
+# without the styled SCSS layer) and strengthens these assertions.
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["header#title-block-header"]
+---
+
+Body.

@@ -1,0 +1,29 @@
+---
+title: "A Simple Document"
+subtitle: "With a subtitle"
+author: "Norah Jones"
+date: "2026-07-01"
+abstract: |
+  This is the abstract. It has more than one sentence so we can
+  see how the abstract is laid out.
+# Title-block parity corpus (bd-gx9cic8z). Assertions reflect the
+# CURRENT contract and are strengthened phase by phase; P1
+# (bd-tezzk9vp) moves this fixture to the Q1-parity DOM (p.subtitle.lead,
+# p.author, p.date, block-title, …).
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "header#title-block-header.quarto-title-block.default",
+            "div.quarto-title > h1.title",
+            "div.quarto-title p.subtitle",
+            "div.quarto-title-meta",
+            "div.abstract",
+          ]
+---
+
+## Introduction
+
+Some body text.

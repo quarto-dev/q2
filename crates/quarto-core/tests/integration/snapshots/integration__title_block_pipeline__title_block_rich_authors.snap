@@ -1,0 +1,16 @@
+---
+source: crates/quarto-core/tests/integration/title_block_pipeline.rs
+assertion_line: 250
+expression: extract_title_block(&html)
+---
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Structured Authors</h1>
+</div>
+<div class="quarto-title-meta">
+<div class="quarto-title-meta-author">
+<div class="quarto-title-meta-heading">Author</div>
+<div class="quarto-title-meta-contents">truetrue</div>
+</div>
+</div>
+</header>

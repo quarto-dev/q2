@@ -1,0 +1,23 @@
+---
+title: "Label Overrides"
+author: "Norah Jones"
+date: "2026-07-01"
+abstract: "A short abstract."
+author-title: "Written by"
+published-title: "Posted"
+abstract-title: "Summary"
+# Title-block parity corpus (bd-gx9cic8z). The *-title label overrides
+# are currently ignored; P1 (bd-tezzk9vp) honours them and strengthens
+# these assertions (heading text "Written by" / "Posted" / "Summary").
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "header#title-block-header.quarto-title-block.default",
+            "div.quarto-title-meta",
+          ]
+---
+
+Body.
