@@ -178,9 +178,12 @@ dialog behavior, unrelated to path handling.
 
 ### Phase 4 — bookkeeping
 
-- [ ] Commit (staged; awaiting user approval per pre-commit review policy).
-- [ ] hub-client changelog entry (two-commit workflow, needs commit 1's hash).
-- [ ] `braid close bd-jzqswvh0` with reason.
+- [x] Commit `64ba0e38` (fix + tests + this plan), approved by Carlos.
+- [x] hub-client changelog entry: commit `5f544f12` (two-commit workflow);
+      `npm run test:wasm` green (changelog render gate).
+- [x] Pushed as `bugfix/bd-jzqswvh0-image-drop-relative-path`; PR
+      https://github.com/quarto-dev/q2/pull/395 — awaiting CI.
+- [ ] `braid close bd-jzqswvh0` after PR merge.
 
 ## Resolved questions (Carlos, 2026-07-15)
 
