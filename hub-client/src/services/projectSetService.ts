@@ -84,6 +84,26 @@ function notifyProjectsChange(): void {
   }
 }
 
+/**
+ * Build the module `repo` (and `wsAdapter`) for a project-set connection.
+ * With a `syncServerUrl` the repo carries a WebSocket adapter as before;
+ * without one it is **storage-only** — a local project set that lives in the
+ * cache with no network (bd-uvtx8qux). Shared by connect / createProjectSet /
+ * the local variants.
+ */
+function buildRepo(syncServerUrl?: string): void {
+  if (syncServerUrl) {
+    wsAdapter = new BrowserWebSocketClientAdapter(resolveSyncServerUrl(syncServerUrl));
+    repo = new Repo({
+      network: [wsAdapter],
+      storage: new IndexedDBStorageAdapter(),
+    });
+  } else {
+    wsAdapter = null;
+    repo = new Repo({ storage: new IndexedDBStorageAdapter() });
+  }
+}
+
 function waitForPeer(r: Repo, timeoutMs: number = 5000): Promise<void> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
@@ -125,14 +145,10 @@ export async function connect(
 ): Promise<ProjectSetEntry[]> {
   await disconnect();
 
-  wsAdapter = new BrowserWebSocketClientAdapter(resolveSyncServerUrl(syncServerUrl));
-  repo = new Repo({
-    network: [wsAdapter],
-    storage: new IndexedDBStorageAdapter(),
-  });
+  buildRepo(syncServerUrl);
 
   const docId = projectSetDocId as DocumentId;
-  const foundHandle = await repo.find<ProjectSetDocument>(docId);
+  const foundHandle = await repo!.find<ProjectSetDocument>(docId);
   handle = foundHandle;
 
   // Check if we have a cached document locally
@@ -145,7 +161,7 @@ export async function connect(
     cleanupFn = () => handle?.off('change', onChange);
 
     // Start background sync (but don't wait for it)
-    waitForPeer(repo, 5000)
+    waitForPeer(repo!, 5000)
       .then(() => onConnectionChange?.(true))
       .catch(() => onConnectionChange?.(false));
 
@@ -155,7 +171,7 @@ export async function connect(
   // No local data — need to sync from server first
   let isOnline = false;
   try {
-    await waitForPeer(repo, 5000);
+    await waitForPeer(repo!, 5000);
     isOnline = true;
   } catch {
     isOnline = false;
@@ -193,16 +209,12 @@ export async function createProjectSet(
 ): Promise<string> {
   await disconnect();
 
-  wsAdapter = new BrowserWebSocketClientAdapter(resolveSyncServerUrl(syncServerUrl));
-  repo = new Repo({
-    network: [wsAdapter],
-    storage: new IndexedDBStorageAdapter(),
-  });
+  buildRepo(syncServerUrl);
 
   // For creation, we need the server to be reachable so the document
   // gets synced. Without this, the document would only exist locally.
   try {
-    await waitForPeer(repo, 10000);
+    await waitForPeer(repo!, 10000);
   } catch {
     await disconnect();
     throw new Error(
@@ -218,7 +230,7 @@ export async function createProjectSet(
     version: CURRENT_PROJECT_SET_SCHEMA_VERSION,
   } as Record<string, unknown>;
   const doc = automergeFrom(initial);
-  handle = repo.import<ProjectSetDocument>(automergeSerialize(doc));
+  handle = repo!.import<ProjectSetDocument>(automergeSerialize(doc));
 
   // Subscribe to changes
   const onChange = () => notifyProjectsChange();
@@ -229,12 +241,92 @@ export async function createProjectSet(
 }
 
 /**
+ * Create a new **local-only** project set, minted client-side and stored in
+ * the local cache with no sync server and no network adapter (bd-uvtx8qux).
+ *
+ * The document is flushed to storage before returning so it survives an
+ * immediate reload. `syncServer` is never set — this set is not synced to any
+ * hub until the project is later published (the adoption follow-on).
+ *
+ * @returns The document ID of the newly created local ProjectSetDocument.
+ */
+export async function createLocalProjectSet(): Promise<string> {
+  await disconnect();
+
+  buildRepo(); // storage-only, no network
+
+  const initial = {
+    projects: {},
+    version: CURRENT_PROJECT_SET_SCHEMA_VERSION,
+  } as Record<string, unknown>;
+  const doc = automergeFrom(initial);
+  handle = repo!.import<ProjectSetDocument>(automergeSerialize(doc));
+
+  const onChange = () => notifyProjectsChange();
+  handle.on('change', onChange);
+  cleanupFn = () => handle?.off('change', onChange);
+
+  // Persist before returning: a local set has no server backstop.
+  await repo!.flush();
+
+  return handle.documentId;
+}
+
+/**
+ * Open an existing **local-only** project set from the local cache, with no
+ * network adapter (bd-uvtx8qux). Used on reload for a set created by
+ * {@link createLocalProjectSet}.
+ *
+ * @throws If the set document is not present in the local cache.
+ */
+export async function connectLocal(
+  projectSetDocId: string,
+): Promise<ProjectSetEntry[]> {
+  await disconnect();
+
+  buildRepo(); // storage-only, no network
+
+  const docId = projectSetDocId as DocumentId;
+  const foundHandle = await repo!.find<ProjectSetDocument>(docId);
+  handle = foundHandle;
+  await foundHandle.whenReady();
+
+  const doc = handle.doc();
+  if (!doc) {
+    throw new Error('Local project set not found in local storage.');
+  }
+
+  const onChange = () => notifyProjectsChange();
+  handle.on('change', onChange);
+  cleanupFn = () => handle?.off('change', onChange);
+
+  return getProjectsList(doc);
+}
+
+/**
+ * Flush pending project-set writes to the local cache. Matters for local
+ * project sets, which have no server to re-sync from. No-op when disconnected.
+ */
+export async function flush(): Promise<void> {
+  await repo?.flush();
+}
+
+/**
  * Disconnect from the project set sync.
  */
 export async function disconnect(): Promise<void> {
   if (cleanupFn) {
     cleanupFn();
     cleanupFn = null;
+  }
+  // Persist any pending changes before dropping the repo. A local project
+  // set has no server to re-sync from, so an unflushed change would be lost.
+  if (repo) {
+    try {
+      await repo.flush();
+    } catch {
+      // Best-effort — a flush failure must not block teardown.
+    }
   }
   handle = null;
   if (wsAdapter) {

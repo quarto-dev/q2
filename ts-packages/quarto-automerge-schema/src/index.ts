@@ -128,8 +128,12 @@ export function setIdentity(doc: IndexDocument, actorId: string, screenName: str
 export interface ProjectSetEntry {
   /** Automerge document ID for the project's IndexDocument (with 'automerge:' prefix). */
   indexDocId: string;
-  /** WebSocket URL for the sync server hosting this project. */
-  syncServer: string;
+  /**
+   * WebSocket URL for the sync server hosting this project. Absent for
+   * **local-only** projects, which live entirely in the local cache and
+   * are not synced to any hub (bd-uvtx8qux / bd-e2qnvb4a).
+   */
+  syncServer?: string;
   /** User-provided project name/description. */
   description: string;
   /** ISO timestamp when this project was added to the set. */
@@ -192,19 +196,26 @@ export function addProjectToSet(
       changed = true;
     }
     if (existing.syncServer !== entry.syncServer) {
+      // Assigning `undefined` deletes the key in Automerge — the right
+      // move for a project that transitioned to local-only.
       existing.syncServer = entry.syncServer;
       changed = true;
     }
     return changed;
   }
 
-  doc.projects[key] = {
+  // Build without a `syncServer` key when local-only. Automerge cannot
+  // store an explicit `undefined`, so we must omit the field entirely.
+  const created: ProjectSetEntry = {
     indexDocId: entry.indexDocId,
-    syncServer: entry.syncServer,
     description: entry.description,
     addedAt: timestamp,
     lastAccessed: timestamp,
   };
+  if (entry.syncServer !== undefined) {
+    created.syncServer = entry.syncServer;
+  }
+  doc.projects[key] = created;
   return true;
 }
 

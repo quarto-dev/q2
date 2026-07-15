@@ -262,8 +262,11 @@ export default function ProjectSelector({
     let localProject = await projectStorage.getProjectByIndexDocId(entry.indexDocId);
     if (!localProject) {
       localProject = await projectStorage.addProject(
+        // A local-only project set entry has no syncServer; the empty
+        // string is the local sentinel in the IDB layer (falsy → the
+        // sync client's storage-only path).
         entry.indexDocId,
-        entry.syncServer,
+        entry.syncServer ?? '',
         entry.description,
       );
     }
