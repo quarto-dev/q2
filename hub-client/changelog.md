@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-15
+
+- [`faae3684`](https://github.com/quarto-dev/q2/commits/faae3684): The preview's title block now matches the rendered site's Quarto-1-style markup — multiple authors each get their own line under a pluralized "Authors" heading (structured author lists no longer render as garbage), a date without an author shows its "Published" entry, and the `author-title` / `published-title` / `abstract-title` options are honored.
+
 ### 2026-07-13
 
 - [`3fc6e610`](https://github.com/quarto-dev/q2/commits/3fc6e610): Editing a block in the preview now uses one pop-up toolbar — the rich/plain switch is a Markdown-mark icon on it, the toolbar appears for every editable block (code chunks included), and the type/nesting breadcrumb folds into it, replacing the cut-off left-margin "Editing…" label and the separate floating breadcrumb.
