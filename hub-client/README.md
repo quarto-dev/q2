@@ -2,6 +2,11 @@
 
 Web frontend for Quarto Hub - a collaborative document editor using Quarto's WASM rendering engine.
 
+Quarto Hub is **local-first**: it opens straight into a usable editor with no
+sign-in, and projects live in your browser until you choose to connect to a
+hub for sync and collaboration. See [`LOCAL-FIRST.md`](./LOCAL-FIRST.md) for the
+user-facing model and [`OFFLINE.md`](./OFFLINE.md) for the offline asset cache.
+
 ## Prerequisites
 
 - Node.js 18+
