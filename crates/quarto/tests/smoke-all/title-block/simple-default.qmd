@@ -6,10 +6,10 @@ date: "2026-07-01"
 abstract: |
   This is the abstract. It has more than one sentence so we can
   see how the abstract is laid out.
-# Title-block parity corpus (bd-gx9cic8z). Assertions reflect the
-# CURRENT contract and are strengthened phase by phase; P1
-# (bd-tezzk9vp) moves this fixture to the Q1-parity DOM (p.subtitle.lead,
-# p.author, p.date, block-title, …).
+# Title-block parity corpus (bd-gx9cic8z). P1 (bd-tezzk9vp) target DOM:
+# Q1's default title block — subtitle carries `lead`, meta grid children
+# are bare divs, author/date contents are <p>-wrapped (p.date), abstract
+# heading uses `block-title` and abstract content is paragraph-wrapped.
 _quarto:
   tests:
     html:
@@ -18,9 +18,17 @@ _quarto:
         - [
             "header#title-block-header.quarto-title-block.default",
             "div.quarto-title > h1.title",
-            "div.quarto-title p.subtitle",
-            "div.quarto-title-meta",
-            "div.abstract",
+            "div.quarto-title > p.subtitle.lead",
+            "div.quarto-title-meta > div > div.quarto-title-meta-heading",
+            "div.quarto-title-meta div.quarto-title-meta-contents > p",
+            "div.quarto-title-meta p.date",
+            "div.abstract > div.block-title",
+            "div.abstract > p",
+          ]
+        - [
+            "div.quarto-title-meta > div.quarto-title-meta-author",
+            "div.quarto-title-meta > div.quarto-title-meta-date",
+            "div.abstract-title",
           ]
 ---
 

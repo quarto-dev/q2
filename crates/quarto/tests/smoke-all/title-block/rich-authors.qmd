@@ -12,10 +12,10 @@ author:
   - name: Bill Malone
     affiliations:
       - name: University of Texas
-# Title-block parity corpus (bd-gx9cic8z). Structured authors currently
-# render as flattened booleans (bd-8v34zny5); P2 (bd-ez0hiowa) replaces
-# this with the normalized author model and strengthens these
-# assertions (two-column grid, ORCID badge, email icon, author names).
+# Title-block parity corpus (bd-gx9cic8z). P1 (bd-tezzk9vp): structured
+# authors render by name (fixes the flattened-boolean output of
+# bd-8v34zny5). P2 (bd-ez0hiowa) adds the full model: two-column
+# authors/affiliations grid, ORCID badge, email icon, url link.
 _quarto:
   tests:
     html:
@@ -24,7 +24,11 @@ _quarto:
         - [
             "header#title-block-header.quarto-title-block.default",
             "div.quarto-title > h1.title",
+            "div.quarto-title-meta div.quarto-title-meta-contents > p",
           ]
+      ensureFileRegexMatches:
+        - ["Norah Jones", "Bill Malone"]
+        - ["truetrue"]
 ---
 
 Body.

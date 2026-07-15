@@ -1,68 +1,64 @@
 import type { AstProps } from '../../framework';
-import { extractMetaString, extractMetaStringList } from '../../framework';
+import {
+    extractMetaBool,
+    extractMetaString,
+    getMetaPath,
+} from '../../framework';
 
 /**
- * Built-in `__title_block__` synthetic-registry entry (Plan 2D Phase 7).
+ * Built-in `__title_block__` synthetic-registry entry (Plan 2D Phase 7,
+ * markup updated by the title-block parity epic bd-gx9cic8z P1).
  *
- * Mirrors the Rust HTML template's `<header id="title-block-header">`
- * subtree at `crates/quarto-core/src/template.rs:211-240` byte-for-byte.
+ * Mirrors the Rust built-in `title-block` / `title-metadata` template
+ * partials (`TITLE_BLOCK_PARTIAL` / `TITLE_METADATA_PARTIAL` in
+ * `crates/quarto-core/src/template.rs`) — Q1-parity DOM: subtitle
+ * carries `lead`, the `quarto-title-meta` grid children are bare divs,
+ * author/date contents are `<p>`-wrapped (`p.date`), and the abstract
+ * uses `div.block-title` inside `div.abstract`.
+ *
+ * **Inputs.** Reads the metadata the pipeline's
+ * `AuthorsNormalizeTransform` derives (the preview pipeline runs it):
+ * - `rendered.has-title-block` — gates the whole `<header>`;
+ * - `by-author` — normalized author list (`name.literal` per entry);
+ * - `labels.*` — heading labels (pluralized / `*-title`-overridden).
+ * Hardcoded fallbacks remain for direct-render contexts where the
+ * transform didn't run.
  *
  * **Prop shape.** Receives `AstProps` (`{ ast, onNavigateToDocument,
  * setAst }`), the same shape registered under the `Ast` key — NOT the
  * `NodeArgs<…>` shape used by per-tag entries. The title block
  * operates on document-level state (`ast.meta`), not on a node in
  * the AST. `FormatRegistry` at `framework/types.ts` types
- * `__title_block__?: AstComponent`, so a user TSX override that
- * destructures `{ meta }` or `{ node }` by reflex will fail to
- * compile.
+ * `__title_block__?: AstComponent`.
  *
- * **Built-in behavior.** Reads `ast.meta` and ignores `setAst` /
- * `onNavigateToDocument`. A user override that wants editable title
- * blocks can call `setAst`; one that wants click-to-navigate on the
- * title can call `onNavigateToDocument`.
+ * **Composition.** To wrap the built-in, import it from
+ * `window.__Q2_PREVIEW_RENDERER__.PreviewTitleBlock`; the same global
+ * exposes `extractMetaString` and the other framework helpers.
  *
- * **Composition.** To wrap the built-in (add a DOI / license /
- * download button without re-implementing the whole `<header>`),
- * import it from `window.__Q2_PREVIEW_RENDERER__.PreviewTitleBlock`
- * (exposed by Phase 7.3.1) and render it alongside your own
- * extensions. The same global exposes `extractMetaString` and the
- * other framework helpers so the override can coerce `ast.meta`
- * values without re-implementing the walks.
- *
- * **Pandoc-falsy semantics.** Missing keys, empty strings, and
- * non-string shapes all suppress the relevant optional element
- * (`subtitle`, `author`, `date`, `abstract`). Matches the Rust
- * template's `$if(x)$` gates, where Pandoc treats `""` as falsy.
+ * **Known fidelity gap.** A multi-paragraph abstract renders as one
+ * `<p>` here (blocks flattened to text) while the Rust side emits one
+ * `<p>` per paragraph. Tracked with the P2 rich-author work
+ * (bd-ez0hiowa), which brings block-fidelity meta rendering.
  */
 export const PreviewTitleBlock = ({ ast }: AstProps) => {
     const meta = ast.meta ?? {};
 
-    // Mirror Rust template.rs:211: $if(title)$ gates the entire
-    // <header>. Missing / empty-string / non-string title all
-    // suppress the title block.
+    // Mirror TITLE_BLOCK_PARTIAL's $if(rendered.has-title-block)$
+    // gate. The transform sets it when any of title / subtitle /
+    // authors / date / abstract exists.
+    const hasTitleBlock =
+        extractMetaBool(getMetaPath(meta, ['rendered', 'has-title-block'])) ===
+        true;
+    if (!hasTitleBlock) return null;
+
     const title = extractMetaString(meta.title);
-    if (!title) return null;
-
     const subtitle = extractMetaString(meta.subtitle);
-
-    // Match Rust template.rs:219-225: one <div class="quarto-title-meta-author">,
-    // never multiple. For YAML list form (`author: [Alice, Bob]`) Rust
-    // stringifies the TemplateValue::List as the empty-string-joined
-    // concatenation ("AliceBob") — q2-preview matches by joining
-    // with empty string. Locked by §"Out of scope: Multi-author
-    // rendering UX" in the plan; when Rust fixes multi-author
-    // rendering, both sides flip together.
-    const author: string | undefined = (() => {
-        const single = extractMetaString(meta.author);
-        if (single !== undefined && single.length > 0) return single;
-        const list = extractMetaStringList(meta.author);
-        if (list.length === 0) return undefined;
-        const joined = list.join('');
-        return joined.length > 0 ? joined : undefined;
-    })();
-
     const date = extractMetaString(meta.date);
     const abstract = extractMetaString(meta.abstract);
+    const authors = extractByAuthorNames(meta['by-author']);
+
+    const label = (key: string, fallback: string): string =>
+        extractMetaString(getMetaPath(meta, ['labels', key])) ?? fallback;
 
     return (
         <header
@@ -70,47 +66,73 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
             className="quarto-title-block default"
         >
             <div className="quarto-title">
-                {/* TODO(i18n): "Author" / "Published" / "Abstract" are
-                    hardcoded literals — flip to extractMetaString(
-                    meta.labels?.<key>) when Rust grows a
-                    LanguageResolveStage. See plan §"Out of scope: i18n". */}
-                <h1 className="title">{title}</h1>
-                {subtitle ? <p className="subtitle">{subtitle}</p> : null}
+                {title ? <h1 className="title">{title}</h1> : null}
+                {subtitle ? (
+                    <p className="subtitle lead">{subtitle}</p>
+                ) : null}
             </div>
-            {/*
-              Rust quirk replicated: $if(date)$ is INSIDE $if(author)$
-              at template.rs:225, so a doc with date but no author
-              renders no date. Mirrored to lock Rust parity; flipping
-              both is a follow-up plan.
-            */}
-            {author ? (
-                <div className="quarto-title-meta">
-                    <div className="quarto-title-meta-author">
+            {/* Like Q1 (and TITLE_METADATA_PARTIAL), the grid div is
+                always emitted when the title block renders, even if
+                all its cells are empty. */}
+            <div className="quarto-title-meta">
+                {authors.length > 0 ? (
+                    <div>
                         <div className="quarto-title-meta-heading">
-                            Author
+                            {label(
+                                'authors',
+                                authors.length > 1 ? 'Authors' : 'Author',
+                            )}
                         </div>
                         <div className="quarto-title-meta-contents">
-                            {author}
+                            {authors.map((name, i) => (
+                                <p key={i}>{name}</p>
+                            ))}
                         </div>
                     </div>
-                    {date ? (
-                        <div className="quarto-title-meta-date">
-                            <div className="quarto-title-meta-heading">
-                                Published
-                            </div>
-                            <div className="quarto-title-meta-contents">
-                                {date}
-                            </div>
+                ) : null}
+                {date ? (
+                    <div>
+                        <div className="quarto-title-meta-heading">
+                            {label('published', 'Published')}
                         </div>
-                    ) : null}
-                </div>
-            ) : null}
+                        <div className="quarto-title-meta-contents">
+                            <p className="date">{date}</p>
+                        </div>
+                    </div>
+                ) : null}
+            </div>
             {abstract ? (
-                <div className="abstract">
-                    <div className="abstract-title">Abstract</div>
-                    {abstract}
+                <div>
+                    <div className="abstract">
+                        <div className="block-title">
+                            {label('abstract', 'Abstract')}
+                        </div>
+                        <p>{abstract}</p>
+                    </div>
                 </div>
             ) : null}
         </header>
     );
 };
+
+/**
+ * Extract the display names from a normalized `by-author` MetaList
+ * (entries are MetaMaps shaped `{ name: { literal } }`, written by
+ * `AuthorsNormalizeTransform`). Returns `[]` for missing/wrong shapes.
+ */
+function extractByAuthorNames(byAuthor: unknown): string[] {
+    if (!byAuthor || typeof byAuthor !== 'object') return [];
+    const m = byAuthor as { t?: string; c?: unknown };
+    if (m.t !== 'MetaList' || !Array.isArray(m.c)) return [];
+    const out: string[] = [];
+    for (const entry of m.c) {
+        // Entries are MetaMaps; getMetaPath's first step expects the
+        // plain top-level record, so wrap the entry to reuse its
+        // MetaMap walking for the ['name', 'literal'] descent.
+        const literal = extractMetaString(
+            getMetaPath({ entry }, ['entry', 'name', 'literal']),
+        );
+        if (literal !== undefined && literal.length > 0) out.push(literal);
+    }
+    return out;
+}

@@ -8,9 +8,12 @@ expression: extract_title_block(&html)
 <h1 class="title">Plain Style</h1>
 </div>
 <div class="quarto-title-meta">
-<div class="quarto-title-meta-author">
+<div>
 <div class="quarto-title-meta-heading">Author</div>
-<div class="quarto-title-meta-contents">Norah Jones</div>
+<div class="quarto-title-meta-contents">
+<p>Norah Jones</p>
 </div>
 </div>
+</div>
+
 </header>

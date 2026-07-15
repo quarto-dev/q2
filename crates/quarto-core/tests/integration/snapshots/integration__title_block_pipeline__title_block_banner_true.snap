@@ -6,16 +6,21 @@ expression: extract_title_block(&html)
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
 <h1 class="title">Banner Document</h1>
-<p class="subtitle">With a banner</p>
+<p class="subtitle lead">With a banner</p>
 </div>
 <div class="quarto-title-meta">
-<div class="quarto-title-meta-author">
+<div>
 <div class="quarto-title-meta-heading">Author</div>
-<div class="quarto-title-meta-contents">Norah Jones</div>
+<div class="quarto-title-meta-contents">
+<p>Norah Jones</p>
 </div>
-<div class="quarto-title-meta-date">
+</div>
+<div>
 <div class="quarto-title-meta-heading">Published</div>
-<div class="quarto-title-meta-contents">2026-07-01</div>
+<div class="quarto-title-meta-contents">
+<p class="date">2026-07-01</p>
 </div>
 </div>
+</div>
+
 </header>

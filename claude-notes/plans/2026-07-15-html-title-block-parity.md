@@ -304,19 +304,39 @@ screenshots for banner/visual phases) before any phase is declared done.
   the preview React title block under the JS runners — the Q9 lockstep
   guard; extend those alongside each phase.
 
-### Phase 1 — DOM parity for the existing surface
+### Phase 1 — DOM parity for the existing surface (bd-tezzk9vp) — DONE 2026-07-15
 
-- [ ] `p.subtitle.lead`; author/date wrapped in `<p class="author">`/
-      `<p class="date">`; abstract as `div > div.abstract > div.block-title`
-      with paragraph content; bare-div meta entries (drop
-      `quarto-title-meta-author/-date` classes from the simple grid)
-- [ ] Author/Authors pluralization + `author-title`/`published-title`/
-      `abstract-title`/etc. override options (English defaults per Q3)
-- [ ] Convert the inline title block in `FULL_HTML_TEMPLATE` into built-in
-      doctemplate partials (`title-block.html`, `title-metadata.html`,
-      `_title-meta-author.html`) resolved ahead of user `template-partials`
-      so users can override them Q1-style
-- [ ] Lockstep: update `PreviewTitleBlock.tsx` to the new markup (Q9)
+- [x] `p.subtitle.lead`; author/date wrapped in `<p>`/`<p class="date">`;
+      abstract as `div > div.abstract > div.block-title` with paragraph
+      content; bare-div meta entries (dropped `quarto-title-meta-author/
+      -date` classes — the former is reserved for the P2 affiliations
+      grid); `quarto-title-meta` grid emitted whenever the title block
+      renders (Q1 parity, empty grid allowed)
+- [x] Author/Authors pluralization + `author-title`/`published-title`/
+      `abstract-title`/`modified-title`/`doi-title`/`description-title`
+      overrides, via new `AuthorsNormalizeTransform` (authors.lua-style:
+      writes `by-author`, `labels`, `author-meta`, and
+      `rendered.has-title-block` into meta; typed name parsing in new
+      `quarto-core/src/metadata/authors.rs`). English defaults per Q3.
+- [x] Converted the inline title block in `FULL_HTML_TEMPLATE` into
+      built-in doctemplate partials (`title-block` / `title-metadata`,
+      each also registered under the `.html` alias), user
+      `template-partials` shadow them Q1-style; custom templates also
+      resolve the built-ins as a final fallback
+- [x] Lockstep: `PreviewTitleBlock.tsx` rewritten to the new markup,
+      consuming the same derived meta (`by-author`/`labels`/
+      `rendered.has-title-block`); its vitest integration suite and the
+      five `smoke-all/q2-preview/title-block-*` fixtures updated;
+      verified via Playwright smoke-all sweep (14 title-block tests)
+- Bonus fixes landed here: bd-8v34zny5 (`truetrue`) fixed by the
+  normalized author names (full model still P2); Q1-parity fixes for
+  date-without-author (Published cell now renders) and
+  no-title-with-authors (header renders without `<h1>`); the head
+  `<meta name="author">` now emits one tag per author via Pandoc's
+  `author-meta` convention.
+- Known P1 deviations (intentional): date still unformatted (P4); one
+  `<p>` per multi-paragraph abstract in *preview* only (noted in
+  PreviewTitleBlock docs, follows P2 meta-fidelity work).
 
 ### Phase 2 — Structured author/affiliation model
 

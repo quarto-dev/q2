@@ -159,5 +159,13 @@
 # styles.css on `}` and sorting yields identical output (same 317278 bytes).
 # doc.html hash unchanged: HTML body/head are byte-identical (the fixture has
 # no code block).
-doc.html f2e961001ddc65cb9bd3029a328cd9a1b1bfa97137371024536496637df2b0a0
+# Re-captured 2026-07-15 (bd-tezzk9vp, title-block parity P1): doc.html
+# hash updated because the title block is now emitted by the built-in
+# `title-block`/`title-metadata` template partials with Q1-parity
+# markup. For this title-only fixture the deltas are: the (Q1-parity)
+# always-present-when-title-block-renders empty
+# `<div class="quarto-title-meta"></div>` grid, and partial-call
+# whitespace around the header. doc_files/styles.css hash unchanged:
+# the change is template-only (the title-block SCSS already shipped).
+doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
 doc_files/styles.css 2d130440cbd2bca07b1d26030eed3e7347e76363a894e3d09ef4765611cc212e

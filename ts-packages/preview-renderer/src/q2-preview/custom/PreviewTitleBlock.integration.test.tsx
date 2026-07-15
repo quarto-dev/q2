@@ -1,14 +1,19 @@
 /**
- * Vitest tests for `PreviewTitleBlock` (Plan 2D Phase 7.4).
+ * Vitest tests for `PreviewTitleBlock` (Plan 2D Phase 7.4; markup
+ * updated by the title-block parity epic bd-gx9cic8z P1).
  *
  * Mounts via `<Ast>` with `previewRegistry` so the title block is
  * resolved through the registry's `__title_block__` synthetic key
  * the same way it would be in production.
  *
- * Asserts the rendered DOM matches the Rust HTML template's title
- * block at `crates/quarto-core/src/template.rs:211-240` byte-for-byte,
- * including the deliberately-replicated quirks (date suppressed
- * without author; multi-author empty-string-join).
+ * Asserts the rendered DOM matches the Rust built-in `title-block` /
+ * `title-metadata` template partials (`TITLE_BLOCK_PARTIAL` /
+ * `TITLE_METADATA_PARTIAL` in `crates/quarto-core/src/template.rs`).
+ *
+ * The component consumes the metadata the pipeline's
+ * `AuthorsNormalizeTransform` derives (`rendered.has-title-block`,
+ * `by-author`, `labels`); the `derived(…)` helper below builds meta
+ * the way the pipeline delivers it.
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
@@ -48,6 +53,31 @@ const PARA = (...inlines: any[]) => ({ t: 'Para', c: inlines });
 const ms = (c: string) => ({ t: 'MetaString', c });
 const ml = (...items: any[]) => ({ t: 'MetaList', c: items });
 const mi = (...inlines: any[]) => ({ t: 'MetaInlines', c: inlines });
+const mb = (c: boolean) => ({ t: 'MetaBool', c });
+const mm = (entries: Record<string, unknown>) => ({
+    t: 'MetaMap',
+    c: Object.entries(entries).map(([key, value]) => ({ key, value })),
+});
+
+/** Normalized `by-author` entry list, as `AuthorsNormalizeTransform` writes it. */
+const byAuthor = (...names: string[]) =>
+    ml(...names.map((n) => mm({ name: mm({ literal: ms(n) }) })));
+
+/**
+ * Wrap raw meta with the derived keys the pipeline's
+ * `AuthorsNormalizeTransform` writes before the component runs:
+ * `rendered.has-title-block` and (when authors given) `by-author`.
+ */
+function derived(
+    meta: Record<string, unknown>,
+    authors: string[] = [],
+): Record<string, unknown> {
+    return {
+        ...meta,
+        ...(authors.length > 0 ? { 'by-author': byAuthor(...authors) } : {}),
+        rendered: mm({ 'has-title-block': mb(true) }),
+    };
+}
 
 let priorBodyClass: string;
 let priorTitle: string;
@@ -61,15 +91,15 @@ afterEach(() => {
 });
 
 describe('PreviewTitleBlock — required elements', () => {
-    it('no title → renders null (no <header>)', () => {
+    it('no derived has-title-block flag → renders null (no <header>)', () => {
         const { container } = mount({}, [PARA(STR('body'))]);
         expect(
             container.querySelector('header#title-block-header'),
         ).toBeNull();
     });
 
-    it('title only → <header> + <h1 class="title">, nothing optional', () => {
-        const { container } = mount({ title: ms('Doc') });
+    it('title only → <header> + <h1 class="title"> + empty meta grid', () => {
+        const { container } = mount(derived({ title: ms('Doc') }));
         const header = container.querySelector('header#title-block-header');
         expect(header).not.toBeNull();
         expect(header!.className).toBe('quarto-title-block default');
@@ -77,110 +107,153 @@ describe('PreviewTitleBlock — required elements', () => {
         expect(h1).not.toBeNull();
         expect(h1!.textContent).toBe('Doc');
         expect(header!.querySelector('p.subtitle')).toBeNull();
-        expect(header!.querySelector('div.quarto-title-meta')).toBeNull();
+        // Q1 parity: the quarto-title-meta grid div is always emitted
+        // (empty when there are no cells).
+        const grid = header!.querySelector('div.quarto-title-meta');
+        expect(grid).not.toBeNull();
+        expect(grid!.children.length).toBe(0);
         expect(header!.querySelector('div.abstract')).toBeNull();
     });
 
-    it('title + subtitle → adds <p class="subtitle">', () => {
-        const { container } = mount({
-            title: ms('Doc'),
-            subtitle: ms('Sub'),
-        });
+    it('title + subtitle → adds <p class="subtitle lead">', () => {
+        const { container } = mount(
+            derived({ title: ms('Doc'), subtitle: ms('Sub') }),
+        );
         const subtitle = container.querySelector(
-            'header#title-block-header div.quarto-title > p.subtitle',
+            'header#title-block-header div.quarto-title > p.subtitle.lead',
         );
         expect(subtitle).not.toBeNull();
         expect(subtitle!.textContent).toBe('Sub');
     });
 
-    it('title + author (string) → exactly one .quarto-title-meta-author block', () => {
-        const { container } = mount({
-            title: ms('Doc'),
-            author: ms('Jane Doe'),
-        });
-        const meta = container.querySelector('div.quarto-title-meta');
-        expect(meta).not.toBeNull();
-        const authors = container.querySelectorAll(
-            'div.quarto-title-meta-author',
+    it('one author → bare-div cell, "Author" heading, <p>-wrapped name', () => {
+        const { container } = mount(
+            derived({ title: ms('Doc') }, ['Jane Doe']),
         );
-        expect(authors.length).toBe(1);
+        const grid = container.querySelector('div.quarto-title-meta');
+        expect(grid).not.toBeNull();
+        // Q1 parity: grid children are bare divs — the legacy
+        // quarto-title-meta-author/-date classes are gone (the former
+        // is reserved for the P2 affiliations grid).
         expect(
-            authors[0].querySelector('.quarto-title-meta-heading')!.textContent,
-        ).toBe('Author');
-        expect(
-            authors[0].querySelector('.quarto-title-meta-contents')!.textContent,
-        ).toBe('Jane Doe');
-    });
-
-    it('title + author (MetaList of two) → ONE author block with empty-join content', () => {
-        const { container } = mount({
-            title: ms('Doc'),
-            author: ml(ms('Alice'), ms('Bob')),
-        });
-        const authors = container.querySelectorAll(
-            'div.quarto-title-meta-author',
-        );
-        expect(authors.length).toBe(1);
-        expect(
-            authors[0].querySelector('.quarto-title-meta-contents')!.textContent,
-        ).toBe('AliceBob');
-    });
-
-    it('title + author + date → date sibling of author inside .quarto-title-meta', () => {
-        const { container } = mount({
-            title: ms('Doc'),
-            author: ms('Jane'),
-            date: ms('2026-05-10'),
-        });
-        const meta = container.querySelector('div.quarto-title-meta');
-        expect(meta).not.toBeNull();
-        const author = meta!.querySelector(
-            ':scope > div.quarto-title-meta-author',
-        );
-        const date = meta!.querySelector(
-            ':scope > div.quarto-title-meta-date',
-        );
-        expect(author).not.toBeNull();
-        expect(date).not.toBeNull();
-        expect(
-            date!.querySelector('.quarto-title-meta-heading')!.textContent,
-        ).toBe('Published');
-        expect(
-            date!.querySelector('.quarto-title-meta-contents')!.textContent,
-        ).toBe('2026-05-10');
-    });
-
-    it('title + date but NO author → date does NOT render (Rust quirk locked)', () => {
-        const { container } = mount({
-            title: ms('Doc'),
-            date: ms('2026-05-10'),
-        });
-        expect(container.querySelector('div.quarto-title-meta')).toBeNull();
-        expect(
-            container.querySelector('div.quarto-title-meta-date'),
+            container.querySelector('div.quarto-title-meta-author'),
         ).toBeNull();
+        const cells = grid!.querySelectorAll(':scope > div');
+        expect(cells.length).toBe(1);
+        expect(
+            cells[0].querySelector('.quarto-title-meta-heading')!.textContent,
+        ).toBe('Author');
+        const names = cells[0].querySelectorAll(
+            '.quarto-title-meta-contents > p',
+        );
+        expect(names.length).toBe(1);
+        expect(names[0].textContent).toBe('Jane Doe');
     });
 
-    it('title + abstract → adds <div class="abstract"> with abstract-title heading', () => {
-        const { container } = mount({
-            title: ms('Doc'),
-            abstract: ms('A short summary.'),
-        });
-        const abstract = container.querySelector('div.abstract');
+    it('two authors → "Authors" heading and one <p> per author', () => {
+        const { container } = mount(
+            derived({ title: ms('Doc') }, ['Alice', 'Bob']),
+        );
+        const grid = container.querySelector('div.quarto-title-meta');
+        const cells = grid!.querySelectorAll(':scope > div');
+        expect(cells.length).toBe(1);
+        expect(
+            cells[0].querySelector('.quarto-title-meta-heading')!.textContent,
+        ).toBe('Authors');
+        const names = cells[0].querySelectorAll(
+            '.quarto-title-meta-contents > p',
+        );
+        expect(names.length).toBe(2);
+        expect(names[0].textContent).toBe('Alice');
+        expect(names[1].textContent).toBe('Bob');
+    });
+
+    it('author + date → two bare-div cells, date as <p class="date">', () => {
+        const { container } = mount(
+            derived({ title: ms('Doc'), date: ms('2026-05-10') }, ['Jane']),
+        );
+        const grid = container.querySelector('div.quarto-title-meta');
+        const cells = grid!.querySelectorAll(':scope > div');
+        expect(cells.length).toBe(2);
+        expect(
+            cells[1].querySelector('.quarto-title-meta-heading')!.textContent,
+        ).toBe('Published');
+        const date = cells[1].querySelector(
+            '.quarto-title-meta-contents > p.date',
+        );
+        expect(date).not.toBeNull();
+        expect(date!.textContent).toBe('2026-05-10');
+    });
+
+    it('date but NO author → date cell renders (Q1 parity; old quirk removed)', () => {
+        const { container } = mount(
+            derived({ title: ms('Doc'), date: ms('2026-05-10') }),
+        );
+        const grid = container.querySelector('div.quarto-title-meta');
+        expect(grid).not.toBeNull();
+        const date = grid!.querySelector('p.date');
+        expect(date).not.toBeNull();
+        expect(date!.textContent).toBe('2026-05-10');
+    });
+
+    it('abstract → outer div > div.abstract with block-title heading and <p>', () => {
+        const { container } = mount(
+            derived({ title: ms('Doc'), abstract: ms('A short summary.') }),
+        );
+        const abstract = container.querySelector(
+            'header#title-block-header > div > div.abstract',
+        );
         expect(abstract).not.toBeNull();
         expect(
-            abstract!.querySelector('.abstract-title')!.textContent,
+            abstract!.querySelector(':scope > div.block-title')!.textContent,
         ).toBe('Abstract');
-        expect(abstract!.textContent).toContain('A short summary.');
+        expect(container.querySelector('.abstract-title')).toBeNull();
+        const p = abstract!.querySelector(':scope > p');
+        expect(p).not.toBeNull();
+        expect(p!.textContent).toBe('A short summary.');
+    });
+
+    it('labels from meta override the hardcoded fallbacks', () => {
+        const { container } = mount({
+            title: ms('Doc'),
+            date: ms('2026-05-10'),
+            'by-author': byAuthor('Jane'),
+            abstract: ms('S.'),
+            labels: mm({
+                authors: ms('Written by'),
+                published: ms('Posted'),
+                abstract: ms('Summary'),
+            }),
+            rendered: mm({ 'has-title-block': mb(true) }),
+        });
+        const headings = Array.from(
+            container.querySelectorAll('.quarto-title-meta-heading'),
+        ).map((el) => el.textContent);
+        expect(headings).toEqual(['Written by', 'Posted']);
+        expect(
+            container.querySelector('div.block-title')!.textContent,
+        ).toBe('Summary');
+    });
+
+    it('no title but authors present → header renders without <h1> (Q1 parity)', () => {
+        const { container } = mount(
+            derived({ date: ms('2026-05-10') }, ['Jane']),
+        );
+        const header = container.querySelector('header#title-block-header');
+        expect(header).not.toBeNull();
+        expect(header!.querySelector('h1.title')).toBeNull();
+        expect(header!.querySelectorAll('p').length).toBeGreaterThan(0);
     });
 
     it('title with inline emphasis → renders as plain text (matches Rust)', () => {
-        const { container } = mount({
-            title: mi(STR('Hello'), { t: 'Space' }, {
-                t: 'Emph',
-                c: [STR('World')],
+        const { container } = mount(
+            derived({
+                title: mi(STR('Hello'), { t: 'Space' }, {
+                    t: 'Emph',
+                    c: [STR('World')],
+                }),
             }),
-        });
+        );
         const h1 = container.querySelector('h1.title');
         expect(h1).not.toBeNull();
         expect(h1!.textContent).toBe('Hello World');
@@ -190,52 +263,58 @@ describe('PreviewTitleBlock — required elements', () => {
 });
 
 describe('PreviewTitleBlock — Pandoc-falsy semantics', () => {
-    it('empty-string title → renders null (no <header>)', () => {
-        const { container } = mount({ title: ms('') });
+    it('empty-string title → header renders, <h1> suppressed', () => {
+        const { container } = mount(derived({ title: ms('') }));
         expect(
             container.querySelector('header#title-block-header'),
-        ).toBeNull();
+        ).not.toBeNull();
+        expect(container.querySelector('h1.title')).toBeNull();
     });
 
     it('title set + empty-string subtitle → <p class="subtitle"> is NOT rendered', () => {
-        const { container } = mount({ title: ms('Doc'), subtitle: ms('') });
+        const { container } = mount(
+            derived({ title: ms('Doc'), subtitle: ms('') }),
+        );
         expect(container.querySelector('p.subtitle')).toBeNull();
     });
 
-    it('title set + empty-string author → .quarto-title-meta is NOT rendered', () => {
-        const { container } = mount({ title: ms('Doc'), author: ms('') });
-        expect(container.querySelector('div.quarto-title-meta')).toBeNull();
-    });
-
-    it('title + author + empty-string date → date sub-block is NOT rendered', () => {
-        const { container } = mount({
-            title: ms('Doc'),
-            author: ms('Jane'),
-            date: ms(''),
-        });
-        expect(container.querySelector('div.quarto-title-meta')).not.toBeNull();
+    it('no by-author → grid has no author cell', () => {
+        const { container } = mount(derived({ title: ms('Doc') }));
         expect(
-            container.querySelector('div.quarto-title-meta-date'),
+            container.querySelector('.quarto-title-meta-heading'),
         ).toBeNull();
     });
 
+    it('title + author + empty-string date → no date cell', () => {
+        const { container } = mount(
+            derived({ title: ms('Doc'), date: ms('') }, ['Jane']),
+        );
+        const grid = container.querySelector('div.quarto-title-meta');
+        expect(grid).not.toBeNull();
+        expect(grid!.querySelector('p.date')).toBeNull();
+    });
+
     it('title set + empty-string abstract → .abstract is NOT rendered', () => {
-        const { container } = mount({ title: ms('Doc'), abstract: ms('') });
+        const { container } = mount(
+            derived({ title: ms('Doc'), abstract: ms('') }),
+        );
         expect(container.querySelector('div.abstract')).toBeNull();
     });
 
-    it('title + author = MetaList ["Alice", ""] → one block with content "Alice"', () => {
+    it('by-author entry with empty literal → dropped from the list', () => {
         const { container } = mount({
             title: ms('Doc'),
-            author: ml(ms('Alice'), ms('')),
+            'by-author': ml(
+                mm({ name: mm({ literal: ms('Alice') }) }),
+                mm({ name: mm({ literal: ms('') }) }),
+            ),
+            rendered: mm({ 'has-title-block': mb(true) }),
         });
-        const authors = container.querySelectorAll(
-            'div.quarto-title-meta-author',
+        const names = container.querySelectorAll(
+            '.quarto-title-meta-contents > p',
         );
-        expect(authors.length).toBe(1);
-        expect(
-            authors[0].querySelector('.quarto-title-meta-contents')!.textContent,
-        ).toBe('Alice');
+        expect(names.length).toBe(1);
+        expect(names[0].textContent).toBe('Alice');
     });
 });
 
@@ -249,7 +328,7 @@ describe('PreviewTitleBlock — user override via registry', () => {
             __title_block__: StubTitleBlock as any,
         };
         const { container } = mount(
-            { title: ms('Doc') },
+            derived({ title: ms('Doc') }),
             [PARA(STR('body'))],
             overrideRegistry,
         );
@@ -278,7 +357,7 @@ describe('PreviewTitleBlock — user override via registry', () => {
             __title_block__: ComposedTitleBlock,
         };
         const { container } = mount(
-            { title: ms('Doc') },
+            derived({ title: ms('Doc') }),
             [],
             overrideRegistry,
         );

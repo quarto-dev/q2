@@ -6,9 +6,8 @@ abstract: "A short abstract."
 author-title: "Written by"
 published-title: "Posted"
 abstract-title: "Summary"
-# Title-block parity corpus (bd-gx9cic8z). The *-title label overrides
-# are currently ignored; P1 (bd-tezzk9vp) honours them and strengthens
-# these assertions (heading text "Written by" / "Posted" / "Summary").
+# Title-block parity corpus (bd-gx9cic8z). P1 (bd-tezzk9vp): the
+# *-title metadata options override the default heading labels.
 _quarto:
   tests:
     html:
@@ -17,6 +16,17 @@ _quarto:
         - [
             "header#title-block-header.quarto-title-block.default",
             "div.quarto-title-meta",
+          ]
+      ensureFileRegexMatches:
+        - [
+            'quarto-title-meta-heading">Written by<',
+            'quarto-title-meta-heading">Posted<',
+            'block-title">Summary<',
+          ]
+        - [
+            'quarto-title-meta-heading">Author<',
+            'quarto-title-meta-heading">Published<',
+            '>Abstract<',
           ]
 ---
 

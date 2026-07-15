@@ -8,17 +8,24 @@ expression: extract_title_block(&html)
 <h1 class="title">Label Overrides</h1>
 </div>
 <div class="quarto-title-meta">
-<div class="quarto-title-meta-author">
-<div class="quarto-title-meta-heading">Author</div>
-<div class="quarto-title-meta-contents">Norah Jones</div>
-</div>
-<div class="quarto-title-meta-date">
-<div class="quarto-title-meta-heading">Published</div>
-<div class="quarto-title-meta-contents">2026-07-01</div>
+<div>
+<div class="quarto-title-meta-heading">Written by</div>
+<div class="quarto-title-meta-contents">
+<p>Norah Jones</p>
 </div>
 </div>
+<div>
+<div class="quarto-title-meta-heading">Posted</div>
+<div class="quarto-title-meta-contents">
+<p class="date">2026-07-01</p>
+</div>
+</div>
+</div>
+<div>
 <div class="abstract">
-<div class="abstract-title">Abstract</div>
-A short abstract.
+<div class="block-title">Summary</div>
+<p>A short abstract.</p>
 </div>
+</div>
+
 </header>

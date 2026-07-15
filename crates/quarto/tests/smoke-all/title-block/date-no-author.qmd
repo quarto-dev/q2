@@ -1,0 +1,18 @@
+---
+title: "Date Without Author"
+date: "2026-07-01"
+# Title-block parity corpus (bd-gx9cic8z). P1 (bd-tezzk9vp): Q1 renders
+# the Published entry even when there is no author; Q2's pre-P1
+# template nested the date inside $if(author)$ and dropped it.
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "div.quarto-title-meta p.date",
+            "div.quarto-title-meta div.quarto-title-meta-heading",
+          ]
+---
+
+Body.

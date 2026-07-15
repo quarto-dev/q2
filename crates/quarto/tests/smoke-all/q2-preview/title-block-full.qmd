@@ -14,12 +14,18 @@ _quarto:
         -
           - 'header#title-block-header'
           - 'h1.title'
-          - 'p.subtitle'
+          - 'p.subtitle.lead'
+          - 'div.quarto-title-meta div.quarto-title-meta-heading'
+          - 'div.quarto-title-meta-contents > p'
+          - 'div.quarto-title-meta p.date'
+          - 'div.abstract'
+          - 'div.abstract > div.block-title'
+        -
           - 'div.quarto-title-meta-author'
           - 'div.quarto-title-meta-date'
-          - 'div.abstract'
           - 'div.abstract-title'
-        - []
 ---
 
-A paragraph beneath the full title-block chrome.
+A paragraph beneath the full title-block chrome (Q1-parity markup,
+title-block epic bd-gx9cic8z P1: `subtitle lead`, bare-div grid cells,
+`<p>`-wrapped author/date, `block-title` abstract heading).

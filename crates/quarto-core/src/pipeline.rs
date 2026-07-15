@@ -68,18 +68,19 @@ use crate::stage::{
 use crate::transform::TransformPipeline;
 use crate::transforms::{
     AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
-    CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
-    CodeBlockGenerateTransform, CodeBlockRenderTransform, CrossrefIndexTransform,
-    CrossrefRenderTransform, CrossrefResolveTransform, EquationLabelTransform,
-    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
-    FooterGenerateTransform, FooterRenderTransform, FootnotesTransform, LinkRewriteTransform,
-    ListingGenerateTransform, ListingRenderTransform, MetadataNormalizeTransform,
-    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
-    PageNavRenderTransform, ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
-    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
-    TableBootstrapClassTransform, TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform,
-    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
-    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    AuthorsNormalizeTransform, CalloutResolveTransform, CalloutTransform,
+    CategoriesSidebarTransform, CodeBlockGenerateTransform, CodeBlockRenderTransform,
+    CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform,
+    EquationLabelTransform, ExampleEmbedRenderTransform, ExampleEmbedTransform,
+    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
+    FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
+    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
+    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
+    TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
+    WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
+    WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -1186,6 +1187,12 @@ pub fn build_transform_pipeline(
         lua_format,
     )));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
+    // Author/label normalization (bd-gx9cic8z P1): derives `by-author`,
+    // `labels`, and `rendered.has-title-block` from raw metadata for
+    // the title-block template partial AND the q2-preview React title
+    // block (which reads the same metadata keys). Runs right after
+    // metadata-normalize; format-agnostic like Q1's authors.lua pass.
+    pipeline.push(Box::new(AuthorsNormalizeTransform::new()));
     // bd-1tl09 Phase 0: code-block decoration Generate runs after
     // metadata-normalize so document-level defaults (e.g.
     // `code-copy: true`) are visible when computing per-block

@@ -12,11 +12,12 @@ _quarto:
     q2-preview:
       ensureHtmlElements:
         -
+          - 'div.quarto-title-meta-contents > p'
+        -
           - 'div.quarto-title-meta-author'
-        - []
 ---
 
-A paragraph with two authors in YAML list form. q2-preview emits
-exactly one div with class quarto-title-meta-author whose contents text
-is the empty-string-joined names AliceBob, mirroring the Rust template
-quirk. See the plan section on multi-author rendering UX.
+A paragraph with two authors in YAML list form. Each author renders
+as its own `<p>` inside `quarto-title-meta-contents`, with the
+pluralized "Authors" heading (Q1 parity, bd-gx9cic8z P1 — the old
+empty-string-join quirk is gone on both sides).
