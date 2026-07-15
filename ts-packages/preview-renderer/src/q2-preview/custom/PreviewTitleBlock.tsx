@@ -1,25 +1,32 @@
-import type { AstProps } from '../../framework';
+import type { AstProps, BlockNode, InlineNode } from '../../framework';
 import {
     extractMetaBool,
     extractMetaString,
+    extractMetaStringList,
     getMetaPath,
+    inlinesToPlainText,
 } from '../../framework';
 
 /**
  * Built-in `__title_block__` synthetic-registry entry (Plan 2D Phase 7,
- * markup updated by the title-block parity epic bd-gx9cic8z P1).
+ * markup updated by the title-block parity epic bd-gx9cic8z P1/P2).
  *
- * Mirrors the Rust built-in `title-block` / `title-metadata` template
- * partials (`TITLE_BLOCK_PARTIAL` / `TITLE_METADATA_PARTIAL` in
+ * Mirrors the Rust built-in `title-block` / `title-metadata` /
+ * `_title-meta-author` template partials (`TITLE_BLOCK_PARTIAL` /
+ * `TITLE_METADATA_PARTIAL` / `TITLE_META_AUTHOR_PARTIAL` in
  * `crates/quarto-core/src/template.rs`) — Q1-parity DOM: subtitle
  * carries `lead`, the `quarto-title-meta` grid children are bare divs,
- * author/date contents are `<p>`-wrapped (`p.date`), and the abstract
- * uses `div.block-title` inside `div.abstract`.
+ * author/date contents are `<p>`-wrapped (`p.date`), the abstract
+ * uses `div.block-title` inside `div.abstract`, and structured
+ * authors render Q1's two-column `.quarto-title-meta-author` grid
+ * with url-linked names, degrees, an email icon anchor, and an ORCID
+ * badge anchor (both inline SVGs, design decision Q8).
  *
  * **Inputs.** Reads the metadata the pipeline's
  * `AuthorsNormalizeTransform` derives (the preview pipeline runs it):
  * - `rendered.has-title-block` — gates the whole `<header>`;
- * - `by-author` — normalized author list (`name.literal` per entry);
+ * - `by-author` — normalized author list (`name.literal`, `url`,
+ *   `email`, `orcid`, `degrees`, denormalized `affiliations`);
  * - `labels.*` — heading labels (pluralized / `*-title`-overridden).
  * Hardcoded fallbacks remain for direct-render contexts where the
  * transform didn't run.
@@ -35,10 +42,10 @@ import {
  * `window.__Q2_PREVIEW_RENDERER__.PreviewTitleBlock`; the same global
  * exposes `extractMetaString` and the other framework helpers.
  *
- * **Known fidelity gap.** A multi-paragraph abstract renders as one
- * `<p>` here (blocks flattened to text) while the Rust side emits one
- * `<p>` per paragraph. Tracked with the P2 rich-author work
- * (bd-ez0hiowa), which brings block-fidelity meta rendering.
+ * **Known fidelity gap.** Inline markup inside title-block fields
+ * (emphasis in an abstract paragraph, say) flattens to plain text
+ * here while the Rust side renders it as HTML. Paragraph structure
+ * is preserved (one `<p>` per abstract paragraph, since P2).
  */
 export const PreviewTitleBlock = ({ ast }: AstProps) => {
     const meta = ast.meta ?? {};
@@ -54,8 +61,9 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
     const title = extractMetaString(meta.title);
     const subtitle = extractMetaString(meta.subtitle);
     const date = extractMetaString(meta.date);
-    const abstract = extractMetaString(meta.abstract);
-    const authors = extractByAuthorNames(meta['by-author']);
+    const abstractParagraphs = extractParagraphs(meta.abstract);
+    const authors = extractByAuthors(meta['by-author']);
+    const hasAffiliations = authors.some((a) => a.affiliations.length > 0);
 
     const label = (key: string, fallback: string): string =>
         extractMetaString(getMetaPath(meta, ['labels', key])) ?? fallback;
@@ -71,11 +79,36 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
                     <p className="subtitle lead">{subtitle}</p>
                 ) : null}
             </div>
+            {/* Mirror TITLE_METADATA_PARTIAL: with affiliations the
+                authors move to the two-column grid; without, they
+                stay a cell of the plain grid (Q1's
+                $if(by-affiliation)$ / $elseif(by-author)$ split). */}
+            {hasAffiliations ? (
+                <div className="quarto-title-meta-author">
+                    <div className="quarto-title-meta-heading">
+                        {label(
+                            'authors',
+                            authors.length > 1 ? 'Authors' : 'Author',
+                        )}
+                    </div>
+                    <div className="quarto-title-meta-heading">
+                        {label(
+                            'affiliations',
+                            countAffiliations(authors) > 1
+                                ? 'Affiliations'
+                                : 'Affiliation',
+                        )}
+                    </div>
+                    {authors.map((author, i) => (
+                        <AuthorAffiliationRow key={i} author={author} />
+                    ))}
+                </div>
+            ) : null}
             {/* Like Q1 (and TITLE_METADATA_PARTIAL), the grid div is
                 always emitted when the title block renders, even if
                 all its cells are empty. */}
             <div className="quarto-title-meta">
-                {authors.length > 0 ? (
+                {!hasAffiliations && authors.length > 0 ? (
                     <div>
                         <div className="quarto-title-meta-heading">
                             {label(
@@ -84,8 +117,10 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
                             )}
                         </div>
                         <div className="quarto-title-meta-contents">
-                            {authors.map((name, i) => (
-                                <p key={i}>{name}</p>
+                            {authors.map((author, i) => (
+                                <p key={i}>
+                                    <AuthorInline author={author} />
+                                </p>
                             ))}
                         </div>
                     </div>
@@ -101,13 +136,15 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
                     </div>
                 ) : null}
             </div>
-            {abstract ? (
+            {abstractParagraphs.length > 0 ? (
                 <div>
                     <div className="abstract">
                         <div className="block-title">
                             {label('abstract', 'Abstract')}
                         </div>
-                        <p>{abstract}</p>
+                        {abstractParagraphs.map((text, i) => (
+                            <p key={i}>{text}</p>
+                        ))}
                     </div>
                 </div>
             ) : null}
@@ -115,24 +152,197 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
     );
 };
 
+/** One normalized `by-author` entry's display surface. */
+interface PreviewAuthor {
+    name: string;
+    url?: string;
+    email?: string;
+    orcid?: string;
+    degrees: string[];
+    affiliations: PreviewAffiliation[];
+}
+
+interface PreviewAffiliation {
+    name?: string;
+    url?: string;
+}
+
+/** One row of the two-column grid: author cell + affiliations cell. */
+const AuthorAffiliationRow = ({ author }: { author: PreviewAuthor }) => (
+    <>
+        <div className="quarto-title-meta-contents">
+            <p className="author">
+                <AuthorInline author={author} />
+            </p>
+        </div>
+        <div className="quarto-title-meta-contents">
+            {author.affiliations.map((aff, i) => (
+                <p className="affiliation" key={i}>
+                    {aff.url ? (
+                        <a href={aff.url}>{aff.name}</a>
+                    ) : (
+                        aff.name
+                    )}
+                </p>
+            ))}
+        </div>
+    </>
+);
+
 /**
- * Extract the display names from a normalized `by-author` MetaList
- * (entries are MetaMaps shaped `{ name: { literal } }`, written by
- * `AuthorsNormalizeTransform`). Returns `[]` for missing/wrong shapes.
+ * One author's inline rendering — the `_title-meta-author` partial:
+ * name (linked when `url` is set) with degrees inside the link, then
+ * the email and ORCID icon anchors.
  */
-function extractByAuthorNames(byAuthor: unknown): string[] {
+const AuthorInline = ({ author }: { author: PreviewAuthor }) => {
+    const display =
+        author.degrees.length > 0
+            ? `${author.name}, ${author.degrees.join(', ')}`
+            : author.name;
+    return (
+        <>
+            {author.url ? <a href={author.url}>{display}</a> : display}
+            {author.email ? (
+                <>
+                    {' '}
+                    <a
+                        href={`mailto:${author.email}`}
+                        className="quarto-title-author-email"
+                    >
+                        <EnvelopeIcon />
+                    </a>
+                </>
+            ) : null}
+            {author.orcid ? (
+                <>
+                    {' '}
+                    <a
+                        href={`https://orcid.org/${author.orcid}`}
+                        className="quarto-title-author-orcid"
+                        aria-label={`ORCID profile for ${author.name}`}
+                    >
+                        <OrcidIcon />
+                    </a>
+                </>
+            ) : null}
+        </>
+    );
+};
+
+/**
+ * Bootstrap Icons `envelope`, inlined (the icon font only ships with
+ * website projects). Byte-for-byte the SVG the Rust
+ * `TITLE_META_AUTHOR_PARTIAL` emits.
+ */
+const EnvelopeIcon = () => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        fill="currentColor"
+        className="bi bi-envelope"
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+        focusable="false"
+    >
+        <path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1zm13 2.383-4.708 2.825L15 11.105zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741M1 11.105l4.708-2.897L1 5.383z" />
+    </svg>
+);
+
+/**
+ * The ORCID iD glyph in ORCID brand green, inlined (design decision
+ * Q8 — Q1 used a base64 PNG). Byte-for-byte the SVG the Rust
+ * `TITLE_META_AUTHOR_PARTIAL` emits.
+ */
+const OrcidIcon = () => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        fill="#A6CE39"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+        focusable="false"
+    >
+        <path d="M12 0C5.372 0 0 5.372 0 12s5.372 12 12 12 12-5.372 12-12S18.628 0 12 0zM7.369 4.378c.525 0 .947.431.947.947s-.422.947-.947.947a.95.95 0 0 1-.947-.947c0-.525.422-.947.947-.947zm-.722 3.038h1.444v10.041H6.647V7.416zm3.562 0h3.9c3.712 0 5.344 2.653 5.344 5.025 0 2.578-2.016 5.025-5.325 5.025h-3.919V7.416zm1.444 1.303v7.444h2.297c3.272 0 4.022-2.484 4.022-3.722 0-2.016-1.284-3.722-4.097-3.722h-2.222z" />
+    </svg>
+);
+
+/** Count the affiliation cells across all authors (for the fallback
+ * Affiliation/Affiliations pluralization when `labels` is absent). */
+function countAffiliations(authors: PreviewAuthor[]): number {
+    return authors.reduce((n, a) => n + a.affiliations.length, 0);
+}
+
+/**
+ * Extract the display surface from a normalized `by-author` MetaList
+ * (entries are MetaMaps shaped `{ name: { literal }, url?, email?,
+ * orcid?, degrees?, affiliations? }`, written by
+ * `AuthorsNormalizeTransform`). Entries without a non-empty
+ * `name.literal` are dropped. Returns `[]` for missing/wrong shapes.
+ */
+function extractByAuthors(byAuthor: unknown): PreviewAuthor[] {
     if (!byAuthor || typeof byAuthor !== 'object') return [];
     const m = byAuthor as { t?: string; c?: unknown };
     if (m.t !== 'MetaList' || !Array.isArray(m.c)) return [];
-    const out: string[] = [];
+    const out: PreviewAuthor[] = [];
     for (const entry of m.c) {
         // Entries are MetaMaps; getMetaPath's first step expects the
         // plain top-level record, so wrap the entry to reuse its
-        // MetaMap walking for the ['name', 'literal'] descent.
-        const literal = extractMetaString(
-            getMetaPath({ entry }, ['entry', 'name', 'literal']),
-        );
-        if (literal !== undefined && literal.length > 0) out.push(literal);
+        // MetaMap walking.
+        const wrapped = { entry };
+        const at = (...path: string[]) =>
+            getMetaPath(wrapped, ['entry', ...path]);
+        const name = extractMetaString(at('name', 'literal'));
+        if (name === undefined || name.length === 0) continue;
+        out.push({
+            name,
+            url: extractMetaString(at('url')),
+            email: extractMetaString(at('email')),
+            orcid: extractMetaString(at('orcid')),
+            degrees: extractMetaStringList(at('degrees')),
+            affiliations: extractAffiliations(at('affiliations')),
+        });
     }
     return out;
+}
+
+/** Extract the denormalized affiliation list of one by-author entry. */
+function extractAffiliations(value: unknown): PreviewAffiliation[] {
+    if (!value || typeof value !== 'object') return [];
+    const m = value as { t?: string; c?: unknown };
+    if (m.t !== 'MetaList' || !Array.isArray(m.c)) return [];
+    const out: PreviewAffiliation[] = [];
+    for (const entry of m.c) {
+        const wrapped = { entry };
+        const name = extractMetaString(getMetaPath(wrapped, ['entry', 'name']));
+        const url = extractMetaString(getMetaPath(wrapped, ['entry', 'url']));
+        if (name === undefined && url === undefined) continue;
+        out.push({ name, url });
+    }
+    return out;
+}
+
+/**
+ * Split a title-block field into display paragraphs: MetaBlocks →
+ * one string per Para/Plain block (Q1 parity: the Rust side emits
+ * one `<p>` per abstract paragraph); other Meta shapes → a single
+ * paragraph via the plain-text coercion. Empty/missing → `[]`.
+ */
+function extractParagraphs(value: unknown): string[] {
+    if (!value || typeof value !== 'object') return [];
+    const m = value as { t?: string; c?: unknown };
+    if (m.t === 'MetaBlocks' && Array.isArray(m.c)) {
+        const out: string[] = [];
+        for (const block of m.c as BlockNode[]) {
+            const b = block as { t?: string; c?: unknown };
+            if ((b.t === 'Para' || b.t === 'Plain') && Array.isArray(b.c)) {
+                const text = inlinesToPlainText(b.c as InlineNode[]);
+                if (text.length > 0) out.push(text);
+            }
+        }
+        return out;
+    }
+    const text = extractMetaString(value);
+    return text !== undefined && text.length > 0 ? [text] : [];
 }

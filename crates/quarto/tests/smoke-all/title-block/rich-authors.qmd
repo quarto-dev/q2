@@ -6,16 +6,21 @@ author:
     email: norah@example.com
     url: https://example.com/norah
     corresponding: true
+    degrees:
+      - PhD
     affiliations:
       - name: Carnegie Mellon University
         department: School of Music
   - name: Bill Malone
     affiliations:
       - name: University of Texas
-# Title-block parity corpus (bd-gx9cic8z). P1 (bd-tezzk9vp): structured
-# authors render by name (fixes the flattened-boolean output of
-# bd-8v34zny5). P2 (bd-ez0hiowa) adds the full model: two-column
-# authors/affiliations grid, ORCID badge, email icon, url link.
+        url: https://utexas.edu
+# Title-block parity corpus (bd-gx9cic8z). P2 (bd-ez0hiowa): the full
+# structured author model renders as Q1's two-column authors /
+# affiliations grid (`.quarto-title-meta-author`), with url-linked
+# names, degrees after the name, an email icon anchor, and an ORCID
+# badge anchor (inline SVG per design decision Q8). With affiliations
+# present, the plain `.quarto-title-meta` grid carries no authors cell.
 _quarto:
   tests:
     html:
@@ -24,10 +29,24 @@ _quarto:
         - [
             "header#title-block-header.quarto-title-block.default",
             "div.quarto-title > h1.title",
-            "div.quarto-title-meta div.quarto-title-meta-contents > p",
+            "div.quarto-title-meta-author > div.quarto-title-meta-heading",
+            "div.quarto-title-meta-author > div.quarto-title-meta-contents > p.author",
+            "div.quarto-title-meta-author > div.quarto-title-meta-contents > p.affiliation",
+            "p.author > a[href='https://example.com/norah']",
+            "a.quarto-title-author-email[href='mailto:norah@example.com'] > svg",
+            "a.quarto-title-author-orcid[href='https://orcid.org/0000-0002-1825-0097'] > svg",
+            "p.affiliation > a[href='https://utexas.edu']",
           ]
+        - ["div.quarto-title-meta div.quarto-title-meta-contents > p"]
       ensureFileRegexMatches:
-        - ["Norah Jones", "Bill Malone"]
+        - [
+            "Norah Jones, PhD</a>",
+            "Bill Malone",
+            "Carnegie Mellon University",
+            "University of Texas",
+            'quarto-title-meta-heading">Authors<',
+            'quarto-title-meta-heading">Affiliations<',
+          ]
         - ["truetrue"]
 ---
 

@@ -276,20 +276,46 @@ $endif$"#;
 /// Built-in `title-metadata` partial — the metadata grid below the
 /// title, ported from Quarto 1's `title-metadata.html`.
 ///
-/// Phase-1 scope (bd-tezzk9vp): authors + published date + abstract.
-/// The remaining grid entries (modified, doi) and trailing blocks
-/// (keywords, description) land with bd-j6huijli; the two-column
-/// authors/affiliations variant with bd-ez0hiowa.
+/// Phase-2 scope (bd-ez0hiowa): when affiliations exist, authors
+/// render in the two-column `.quarto-title-meta-author` grid
+/// (Authors/Affiliations headings) and the plain `.quarto-title-meta`
+/// grid carries no authors cell (Q1's `$if(by-affiliation)$` /
+/// `$elseif(by-author)$` split). The remaining grid entries
+/// (modified, doi) and trailing blocks (keywords, description) land
+/// with bd-j6huijli.
+///
+/// Deviation from Q1's template text: Q1 gates the two-column grid on
+/// `$if(by-affiliation/first)$`; doctemplate conditions don't take
+/// pipes, and `AuthorsNormalizeTransform` only writes
+/// `by-affiliation` when non-empty, so the plain variable test is
+/// equivalent.
 ///
 /// Like Q1, the `quarto-title-meta` grid div is emitted whenever the
 /// title block renders, even if all its cells are empty.
-pub const TITLE_METADATA_PARTIAL: &str = r#"<div class="quarto-title-meta">
-$if(by-author)$
+pub const TITLE_METADATA_PARTIAL: &str = r#"$if(by-affiliation)$
+<div class="quarto-title-meta-author">
+<div class="quarto-title-meta-heading">$labels.authors$</div>
+<div class="quarto-title-meta-heading">$labels.affiliations$</div>
+$for(by-author)$
+<div class="quarto-title-meta-contents">
+<p class="author">$_title-meta-author()$</p>
+</div>
+<div class="quarto-title-meta-contents">
+$for(by-author.affiliations)$
+<p class="affiliation">$if(it.url)$<a href="$it.url$">$endif$$it.name$$if(it.url)$</a>$endif$</p>
+$endfor$
+</div>
+$endfor$
+</div>
+$endif$
+<div class="quarto-title-meta">
+$if(by-affiliation)$
+$elseif(by-author)$
 <div>
 <div class="quarto-title-meta-heading">$labels.authors$</div>
 <div class="quarto-title-meta-contents">
 $for(by-author)$
-<p>$it.name.literal$</p>
+<p>$_title-meta-author()$</p>
 $endfor$
 </div>
 </div>
@@ -312,6 +338,25 @@ $abstract$
 </div>
 $endif$"#;
 
+/// Built-in `_title-meta-author` partial — one author's rendering
+/// inside the title-block author lists, ported from Quarto 1's
+/// `_title-meta-author.html`: the name (linked when the author has a
+/// `url`), degrees after the name inside the link, an email icon
+/// anchor (`quarto-title-author-email`), and an ORCID badge anchor
+/// (`quarto-title-author-orcid`).
+///
+/// Deviations from Q1 (per design decision Q8): the ORCID badge is an
+/// inline SVG (the ORCID glyph in brand green) instead of Q1's
+/// base64 PNG `<img>`, and the email icon is an inline SVG of
+/// Bootstrap Icons' `envelope` instead of the `bi bi-envelope` font
+/// glyph (the icon font only ships with website projects). The
+/// anchor class names — the extension/SCSS targets — are identical
+/// to Q1's.
+///
+/// Evaluated inside `$for(by-author)$`, so `it` is one normalized
+/// by-author entry.
+pub const TITLE_META_AUTHOR_PARTIAL: &str = r##"$if(it.url)$<a href="$it.url$">$endif$$it.name.literal$$if(it.degrees)$, $for(it.degrees)$$it$$sep$, $endfor$$endif$$if(it.url)$</a>$endif$$if(it.email)$ <a href="mailto:$it.email$" class="quarto-title-author-email"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-envelope" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1zm13 2.383-4.708 2.825L15 11.105zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741M1 11.105l4.708-2.897L1 5.383z"/></svg></a>$endif$$if(it.orcid)$ <a href="https://orcid.org/$it.orcid$" class="quarto-title-author-orcid" aria-label="ORCID profile for $it.name.literal$"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#A6CE39" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 0C5.372 0 0 5.372 0 12s5.372 12 12 12 12-5.372 12-12S18.628 0 12 0zM7.369 4.378c.525 0 .947.431.947.947s-.422.947-.947.947a.95.95 0 0 1-.947-.947c0-.525.422-.947.947-.947zm-.722 3.038h1.444v10.041H6.647V7.416zm3.562 0h3.9c3.712 0 5.344 2.653 5.344 5.025 0 2.578-2.016 5.025-5.325 5.025h-3.919V7.416zm1.444 1.303v7.444h2.297c3.272 0 4.022-2.484 4.022-3.722 0-2.016-1.284-3.722-4.097-3.722h-2.222z"/></svg></a>$endif$"##;
+
 /// Resolver holding the built-in HTML template partials.
 ///
 /// Each partial is registered under both its bare name
@@ -323,6 +368,7 @@ pub fn builtin_html_partials() -> MemoryResolver {
     for (name, content) in [
         ("title-block", TITLE_BLOCK_PARTIAL),
         ("title-metadata", TITLE_METADATA_PARTIAL),
+        ("_title-meta-author", TITLE_META_AUTHOR_PARTIAL),
     ] {
         resolver.add(name, content);
         resolver.add(format!("{name}.html"), content);

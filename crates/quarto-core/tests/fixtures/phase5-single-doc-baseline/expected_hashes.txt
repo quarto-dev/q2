@@ -167,5 +167,16 @@
 # `<div class="quarto-title-meta"></div>` grid, and partial-call
 # whitespace around the header. doc_files/styles.css hash unchanged:
 # the change is template-only (the title-block SCSS already shipped).
+# Re-captured 2026-07-15 (bd-ez0hiowa, title-block parity P2):
+# doc_files/styles.css hash updated because
+# `resources/scss/html/templates/title-block.scss` now sizes the
+# inline-SVG author decorations: `svg` joined `img` in the
+# `.quarto-title-author-orcid` rule, and `.quarto-title-author-email`
+# gained an `svg { height/width: 1em; vertical-align: -0.125em }`
+# rule (Q2 emits the ORCID badge and email icon as inline SVGs —
+# design decision Q8 — where Q1 used a base64 PNG and an icon-font
+# glyph). doc.html hash unchanged: the fixture has no authors, so
+# neither the new selectors nor the title-block markup changes touch
+# its body/head.
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css 2d130440cbd2bca07b1d26030eed3e7347e76363a894e3d09ef4765611cc212e
+doc_files/styles.css d4ca5cf8b3763de4308eefa220028fbe989b6aec6bc5be54127788a940a0e235

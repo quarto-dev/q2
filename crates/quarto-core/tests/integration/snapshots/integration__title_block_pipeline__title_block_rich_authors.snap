@@ -1,20 +1,28 @@
 ---
 source: crates/quarto-core/tests/integration/title_block_pipeline.rs
-assertion_line: 250
 expression: extract_title_block(&html)
 ---
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
 <h1 class="title">Structured Authors</h1>
 </div>
-<div class="quarto-title-meta">
-<div>
+<div class="quarto-title-meta-author">
 <div class="quarto-title-meta-heading">Authors</div>
+<div class="quarto-title-meta-heading">Affiliations</div>
 <div class="quarto-title-meta-contents">
-<p>Norah Jones</p>
-<p>Bill Malone</p>
+<p class="author"><a href="https://example.com/norah">Norah Jones, PhD</a> <a href="mailto:norah@example.com" class="quarto-title-author-email"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-envelope" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1zm13 2.383-4.708 2.825L15 11.105zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741M1 11.105l4.708-2.897L1 5.383z"/></svg></a> <a href="https://orcid.org/0000-0002-1825-0097" class="quarto-title-author-orcid" aria-label="ORCID profile for Norah Jones"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#A6CE39" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 0C5.372 0 0 5.372 0 12s5.372 12 12 12 12-5.372 12-12S18.628 0 12 0zM7.369 4.378c.525 0 .947.431.947.947s-.422.947-.947.947a.95.95 0 0 1-.947-.947c0-.525.422-.947.947-.947zm-.722 3.038h1.444v10.041H6.647V7.416zm3.562 0h3.9c3.712 0 5.344 2.653 5.344 5.025 0 2.578-2.016 5.025-5.325 5.025h-3.919V7.416zm1.444 1.303v7.444h2.297c3.272 0 4.022-2.484 4.022-3.722 0-2.016-1.284-3.722-4.097-3.722h-2.222z"/></svg></a></p>
+</div>
+<div class="quarto-title-meta-contents">
+<p class="affiliation">Carnegie Mellon University</p>
+</div>
+<div class="quarto-title-meta-contents">
+<p class="author">Bill Malone</p>
+</div>
+<div class="quarto-title-meta-contents">
+<p class="affiliation"><a href="https://utexas.edu">University of Texas</a></p>
 </div>
 </div>
+<div class="quarto-title-meta">
 </div>
 
 </header>

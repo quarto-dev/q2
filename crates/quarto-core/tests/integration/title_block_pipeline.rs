@@ -139,10 +139,10 @@ abstract: |
 Some body text.
 "#;
 
-/// Structured authors with affiliations, ORCID, email, url. Today the
-/// template flattens the config maps into boolean garbage
-/// (bd-8v34zny5); the snapshot documents that until P2 (bd-ez0hiowa)
-/// replaces it with the normalized author model.
+/// Structured authors with affiliations, ORCID, email, url, degrees.
+/// P2 (bd-ez0hiowa) renders these as Q1's two-column
+/// authors/affiliations grid with url/degrees/email/ORCID decorations
+/// (and fixed bd-8v34zny5's flattened-boolean rendering).
 const RICH_AUTHORS: &str = r#"---
 title: "Structured Authors"
 author:
@@ -151,12 +151,15 @@ author:
     email: norah@example.com
     url: https://example.com/norah
     corresponding: true
+    degrees:
+      - PhD
     affiliations:
       - name: Carnegie Mellon University
         department: School of Music
   - name: Bill Malone
     affiliations:
       - name: University of Texas
+        url: https://utexas.edu
 ---
 
 Body.

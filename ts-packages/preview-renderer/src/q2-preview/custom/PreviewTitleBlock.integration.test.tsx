@@ -318,6 +318,152 @@ describe('PreviewTitleBlock — Pandoc-falsy semantics', () => {
     });
 });
 
+describe('PreviewTitleBlock — structured authors (P2, bd-ez0hiowa)', () => {
+    /** One rich normalized by-author entry, as the P2 transform writes it. */
+    const richAuthors = () =>
+        ml(
+            mm({
+                name: mm({ literal: ms('Norah Jones') }),
+                url: ms('https://example.com/norah'),
+                email: ms('norah@example.com'),
+                orcid: ms('0000-0002-1825-0097'),
+                degrees: ml(ms('PhD')),
+                affiliations: ml(
+                    mm({
+                        name: ms('Carnegie Mellon University'),
+                        department: ms('School of Music'),
+                    }),
+                ),
+            }),
+            mm({
+                name: mm({ literal: ms('Bill Malone') }),
+                affiliations: ml(
+                    mm({
+                        name: ms('University of Texas'),
+                        url: ms('https://utexas.edu'),
+                    }),
+                ),
+            }),
+        );
+
+    function mountRich() {
+        return mount({
+            title: ms('Doc'),
+            'by-author': richAuthors(),
+            labels: mm({
+                authors: ms('Authors'),
+                affiliations: ms('Affiliations'),
+            }),
+            rendered: mm({ 'has-title-block': mb(true) }),
+        });
+    }
+
+    it('affiliations present → two-column quarto-title-meta-author grid', () => {
+        const { container } = mountRich();
+        const grid = container.querySelector('div.quarto-title-meta-author');
+        expect(grid).not.toBeNull();
+        const headings = grid!.querySelectorAll(
+            ':scope > div.quarto-title-meta-heading',
+        );
+        expect(Array.from(headings).map((h) => h.textContent)).toEqual([
+            'Authors',
+            'Affiliations',
+        ]);
+        // One author cell + one affiliation cell per author.
+        const cells = grid!.querySelectorAll(
+            ':scope > div.quarto-title-meta-contents',
+        );
+        expect(cells.length).toBe(4);
+        expect(cells[0].querySelector('p.author')).not.toBeNull();
+        expect(cells[1].querySelector('p.affiliation')).not.toBeNull();
+        // The plain meta grid renders but carries no authors cell
+        // (Q1's $if(by-affiliation)$ / $elseif(by-author)$ split).
+        const plainGrid = container.querySelector('div.quarto-title-meta');
+        expect(plainGrid).not.toBeNull();
+        expect(plainGrid!.children.length).toBe(0);
+    });
+
+    it('author name links to url with degrees inside the anchor', () => {
+        const { container } = mountRich();
+        const link = container.querySelector(
+            'p.author > a[href="https://example.com/norah"]',
+        );
+        expect(link).not.toBeNull();
+        expect(link!.textContent).toBe('Norah Jones, PhD');
+    });
+
+    it('email → quarto-title-author-email anchor with inline SVG', () => {
+        const { container } = mountRich();
+        const email = container.querySelector(
+            'p.author > a.quarto-title-author-email[href="mailto:norah@example.com"]',
+        );
+        expect(email).not.toBeNull();
+        expect(email!.querySelector('svg')).not.toBeNull();
+    });
+
+    it('orcid → quarto-title-author-orcid anchor with inline SVG', () => {
+        const { container } = mountRich();
+        const orcid = container.querySelector(
+            'p.author > a.quarto-title-author-orcid[href="https://orcid.org/0000-0002-1825-0097"]',
+        );
+        expect(orcid).not.toBeNull();
+        expect(orcid!.getAttribute('aria-label')).toBe(
+            'ORCID profile for Norah Jones',
+        );
+        expect(orcid!.querySelector('svg')).not.toBeNull();
+    });
+
+    it('affiliation with url renders as a link', () => {
+        const { container } = mountRich();
+        const affLink = container.querySelector(
+            'p.affiliation > a[href="https://utexas.edu"]',
+        );
+        expect(affLink).not.toBeNull();
+        expect(affLink!.textContent).toBe('University of Texas');
+    });
+
+    it('no affiliations → single-column path, decorations still render', () => {
+        const { container } = mount({
+            title: ms('Doc'),
+            'by-author': ml(
+                mm({
+                    name: mm({ literal: ms('Jane Doe') }),
+                    orcid: ms('0000-0001-0000-0000'),
+                }),
+            ),
+            rendered: mm({ 'has-title-block': mb(true) }),
+        });
+        expect(
+            container.querySelector('div.quarto-title-meta-author'),
+        ).toBeNull();
+        const cell = container.querySelector(
+            'div.quarto-title-meta .quarto-title-meta-contents > p',
+        );
+        expect(cell).not.toBeNull();
+        expect(
+            cell!.querySelector('a.quarto-title-author-orcid'),
+        ).not.toBeNull();
+    });
+
+    it('multi-paragraph abstract → one <p> per paragraph (P2 fidelity fix)', () => {
+        const { container } = mount(
+            derived({
+                title: ms('Doc'),
+                abstract: {
+                    t: 'MetaBlocks',
+                    c: [PARA(STR('First.')), PARA(STR('Second.'))],
+                },
+            }),
+        );
+        const abstract = container.querySelector('div.abstract');
+        expect(abstract).not.toBeNull();
+        const paras = abstract!.querySelectorAll(':scope > p');
+        expect(paras.length).toBe(2);
+        expect(paras[0].textContent).toBe('First.');
+        expect(paras[1].textContent).toBe('Second.');
+    });
+});
+
 describe('PreviewTitleBlock — user override via registry', () => {
     it('full replacement → stub renders, built-in <header> is absent', () => {
         const StubTitleBlock = vi.fn(() => (

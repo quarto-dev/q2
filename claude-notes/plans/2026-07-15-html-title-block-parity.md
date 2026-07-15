@@ -338,21 +338,54 @@ screenshots for banner/visual phases) before any phase is declared done.
   `<p>` per multi-paragraph abstract in *preview* only (noted in
   PreviewTitleBlock docs, follows P2 meta-fidelity work).
 
-### Phase 2 — Structured author/affiliation model
+### Phase 2 — Structured author/affiliation model (bd-ez0hiowa) — DONE 2026-07-15
 
-- [ ] Port authors.lua normalization to Rust as typed structs
-      (`quarto-core` `metadata/authors.rs` or similar): author schema
-      (structured name, degrees, orcid, email, url, roles, flags),
-      affiliation schema, `ref:`/`id` resolution, top-level `affiliations:`
-      block, `funding` normalization (schema only — no HTML output, Q7)
-- [ ] Emit `authors`/`affiliations`/`by-author`/`by-affiliation`/`labels`
-      into meta; fix bd-8v34zny5 (`truetrue`)
-- [ ] Two-column authors/affiliations grid (`.quarto-title-meta-author` with
-      Authors/Affiliations headings) in `title-metadata.html`
-- [ ] `_title-meta-author.html`: url link, degrees, email icon, ORCID badge
-      as inline SVG with `quarto-title-author-orcid` class (Q8)
-- [ ] `DocumentProfile` structured authors field + `profile_version` bump
-- [ ] Lockstep: `PreviewTitleBlock.tsx` renders structured authors (Q9)
+- [x] Ported authors.lua normalization to typed structs in
+      `quarto-core/src/metadata/authors.rs`: full author schema
+      (structured name with particles, degrees, orcid, email, phone,
+      fax, url, acknowledgements, note with global numbering,
+      attribute flags incl. `attributes:` list/map form, CRediT roles
+      with alias + vocab decoration, metadata bucket), affiliation
+      schema (all Q1 fields, `state`→`region` and
+      `affiliation-url`→`url` aliases, metadata bucket), inline +
+      `ref:` + top-level `affiliations:` block with dedup/remap,
+      `funding` normalization (schema only, Q7). Documented
+      deviations (in the module doc): BibTeX-heuristic name split
+      instead of Q1's bibtex round-trip; literals include particles;
+      proper base-26 letters; undefined `ref:` → warning + drop
+      instead of Q1's abort; roles-map takes all entries.
+- [x] `AuthorsNormalizeTransform` emits `authors` (refs),
+      `affiliations`, `by-author` (denormalized), `by-affiliation`,
+      `funding`, extended `labels` (+ `affiliations`
+      single/plural + `affiliation-title` override), `author-meta`,
+      `rendered.has-title-block`; surfaces normalization issues as
+      render diagnostics.
+- [x] Two-column authors/affiliations grid in the built-in
+      `title-metadata` partial (Q1's `$if(by-affiliation)$` /
+      `$elseif(by-author)$` split; `/first` pipe not needed since the
+      key is only written when non-empty).
+- [x] New `_title-meta-author` built-in partial: url link with
+      degrees inside the anchor, email icon, ORCID badge — both
+      inline SVGs (Q8; envelope from bootstrap-icons upstream, ORCID
+      glyph in brand green #A6CE39). SCSS deviation documented in
+      `title-block.scss`: `svg` joined `img` in the orcid rule +
+      email svg sizing. **Doctemplate fix that fell out**: the
+      bare-partial external scanner now accepts underscore-leading
+      names (`$_title-meta-author()$` — Q1 template-partials
+      compatibility), `crates/tree-sitter-doctemplate/grammar/src/scanner.c`.
+- [x] `DocumentProfile` v7: `authors_structured: Vec<ProfileAuthor>`
+      (+ `ProfileAffiliation`), flat `authors` now derives from the
+      same model; contract doc change log updated (incl. retroactive
+      v6 entry).
+- [x] Lockstep: `PreviewTitleBlock.tsx` renders the two-column grid +
+      decorations from the same derived meta; also fixed the P1-noted
+      multi-paragraph-abstract fidelity gap (one `<p>` per paragraph).
+      New q2-preview smoke fixture `title-block-rich-authors.qmd`;
+      vitest suite grown to 26 tests.
+- Snapshot/baseline changes: `title_block_rich_authors` insta
+  snapshot re-captured (the intended new DOM); phase5 byte-identity
+  `styles.css` hash re-captured (SCSS svg rules, entry documented in
+  `expected_hashes.txt`).
 
 ### Phase 3 — Metadata grid completeness
 
