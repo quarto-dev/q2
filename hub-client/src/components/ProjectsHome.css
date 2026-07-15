@@ -413,6 +413,13 @@
   align-items: center;
   gap: 1px;
   opacity: 0;
+  /* Three icons (peek/fork/⋯) overlay the top-right corner on hover. Fade the
+     card background in beneath them so a long title reads cleanly instead of
+     colliding with the glyphs. The card background is unchanged on hover, so
+     the solid part is invisible and only masks the title's tail. */
+  padding-left: 20px;
+  border-radius: 6px;
+  background: linear-gradient(to right, transparent, var(--bg-modal) 20px);
 }
 
 .ph-card:hover .ph-card-actions,

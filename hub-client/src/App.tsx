@@ -34,7 +34,7 @@ import {
 import type { ProjectFile } from '@quarto/preview-runtime';
 import * as projectStorage from './services/projectStorage';
 import { installDebugApi } from './services/debugApi';
-import { getUserIdentity, updateUserName } from './services/userSettings';
+import { getUserIdentity, updateUserName, actorIdFromUserId } from './services/userSettings';
 import { useRouting } from './hooks/useRouting';
 import { useCollectionSets } from './hooks/useCollectionSets';
 import { useAuth } from './hooks/useAuth';
@@ -104,6 +104,8 @@ function App() {
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [screenName, setScreenName] = useState<string | undefined>();
   const [cursorColor, setCursorColor] = useState<string | undefined>();
+  // Local user id → stable Automerge actor when auth is disabled (local-prod).
+  const [localActorId, setLocalActorId] = useState<string | undefined>();
   const [identities, setIdentities] = useState<Record<string, ActorIdentity>>({});
   // bd-sfet3264 (Phase 1C): IndexDocument V2 capture sidecar (path → CaptureRef).
   // Populated by the sync client's onCapturesChange; threaded down to the
@@ -143,8 +145,8 @@ function App() {
   // `resolveActorIdRequest` for the three-valued contract; callers abandon
   // the open only on `null` (auth failure), proceed on `string`/`undefined`.
   const resolveActorId = useCallback(
-    (indexDocId: string) => resolveActorIdRequest(indexDocId, AUTH_ENABLED, triggerRefresh),
-    [triggerRefresh],
+    (indexDocId: string) => resolveActorIdRequest(indexDocId, AUTH_ENABLED, triggerRefresh, localActorId),
+    [triggerRefresh, localActorId],
   );
 
   // Capture auth error from redirect query param (once, before URL is cleaned).
@@ -160,6 +162,7 @@ function App() {
   useEffect(() => {
     if (AUTH_ENABLED && authLoading) return;
     getUserIdentity().then(async (settings) => {
+      setLocalActorId(actorIdFromUserId(settings.userId));
       if (auth?.name && settings.createdAt === settings.updatedAt) {
         const updated = await updateUserName(auth.name);
         setScreenName(updated.userName);

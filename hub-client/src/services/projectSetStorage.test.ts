@@ -114,6 +114,49 @@ describe('projectSetStorage', () => {
       ]);
     });
 
+    it('pins the legacy-singleton (root) to the front when present but out of order', async () => {
+      // Simulate a browser whose collections record was built by another path
+      // first (e.g. the localStorage-collections migration), leaving the real
+      // root — the legacy singleton — at a non-zero index. Root identity is
+      // positional (collections[0]) elsewhere, so it must be normalized to front.
+      await setProjectSetPointer('automerge:root', 'wss://s');
+      await setCollectionPointers([
+        { projectSetDocId: 'automerge:other1', syncServer: 'wss://s' },
+        { projectSetDocId: 'automerge:root', syncServer: 'wss://s' },
+        { projectSetDocId: 'automerge:other2', syncServer: 'wss://s' },
+      ]);
+      expect((await getCollectionPointers()).map((c) => c.projectSetDocId)).toEqual([
+        'automerge:root',
+        'automerge:other1',
+        'automerge:other2',
+      ]);
+    });
+
+    it('matches the root regardless of the automerge: prefix', async () => {
+      // Real browsers store bare doc ids in the collections array but the
+      // singleton may carry the prefix (or vice versa); matching normalizes it.
+      await setProjectSetPointer('automerge:root', 'wss://s');
+      await setCollectionPointers([
+        { projectSetDocId: 'other1', syncServer: 'wss://s' },
+        { projectSetDocId: 'root', syncServer: 'wss://s' },
+      ]);
+      expect((await getCollectionPointers()).map((c) => c.projectSetDocId)).toEqual([
+        'root',
+        'other1',
+      ]);
+    });
+
+    it('leaves order unchanged when there is no legacy singleton', async () => {
+      await setCollectionPointers([
+        { projectSetDocId: 'automerge:a', syncServer: 'wss://s' },
+        { projectSetDocId: 'automerge:b', syncServer: 'wss://s' },
+      ]);
+      expect((await getCollectionPointers()).map((c) => c.projectSetDocId)).toEqual([
+        'automerge:a',
+        'automerge:b',
+      ]);
+    });
+
     it('should replace the full array with setCollectionPointers', async () => {
       await setCollectionPointers([
         { projectSetDocId: 'automerge:x', syncServer: 'wss://s' },

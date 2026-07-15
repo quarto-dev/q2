@@ -67,13 +67,44 @@ export async function getCollectionPointers(): Promise<CollectionPointerEntry[]>
   if (!db.objectStoreNames.contains(STORES.PROJECT_SET)) {
     return [];
   }
+  let collections: CollectionPointerEntry[];
   const record: CollectionsPointer | undefined = await db.get(STORES.PROJECT_SET, 'collections');
   if (record) {
-    return record.collections;
+    collections = record.collections;
+  } else {
+    await migratePointerToCollections(db);
+    const migrated: CollectionsPointer | undefined = await db.get(STORES.PROJECT_SET, 'collections');
+    collections = migrated?.collections ?? [];
   }
-  await migratePointerToCollections(db);
-  const migrated: CollectionsPointer | undefined = await db.get(STORES.PROJECT_SET, 'collections');
-  return migrated?.collections ?? [];
+  const singleton: ProjectSetPointer | undefined = await db.get(STORES.PROJECT_SET, 'projectSet');
+  return pinRootFirst(collections, singleton);
+}
+
+/**
+ * Ensure the root — the doc named by the legacy singleton pointer — is first.
+ *
+ * Root identity is positional elsewhere (`collections[0]` is treated as the
+ * personal superset). But the array can be built out of order when the
+ * collections record is first created by a path *other* than the
+ * singleton→collections migration (notably the `qh-collections-v1`
+ * localStorage-collections migration, which creates collection pointers before
+ * the singleton self-heal can prepend the root). Reorder on read so the root
+ * is always index 0, regardless of how the array was assembled. No-op when
+ * there is no singleton, the array is trivial, or the root is already first.
+ */
+function pinRootFirst(
+  collections: CollectionPointerEntry[],
+  singleton: ProjectSetPointer | undefined,
+): CollectionPointerEntry[] {
+  if (!singleton || collections.length < 2) return collections;
+  const norm = (id: string) => id.replace(/^automerge:/, '');
+  const rootId = norm(singleton.projectSetDocId);
+  const idx = collections.findIndex((c) => norm(c.projectSetDocId) === rootId);
+  if (idx <= 0) return collections;
+  const reordered = [...collections];
+  const [root] = reordered.splice(idx, 1);
+  reordered.unshift(root);
+  return reordered;
 }
 
 /** Replace the full collections array. */

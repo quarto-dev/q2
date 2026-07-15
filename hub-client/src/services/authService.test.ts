@@ -268,6 +268,41 @@ describe('authService', () => {
       expect(onSessionExpired).not.toHaveBeenCalled();
     });
 
+    it('returns the fallback actor id (not the network) when auth is disabled', async () => {
+      // Auth-less deployments (local-prod) have no /auth/actor to call, but a
+      // stable local actor id lets identity stamping still work. The fallback
+      // is returned verbatim; the network is never touched.
+      const onSessionExpired = vi.fn();
+      const result = await resolveActorId(
+        'automerge:abc',
+        false,
+        onSessionExpired,
+        '6d914340d834489b934c58390f9b3301',
+      );
+
+      expect(result).toBe('6d914340d834489b934c58390f9b3301');
+      expect(fetch).not.toHaveBeenCalled();
+      expect(onSessionExpired).not.toHaveBeenCalled();
+    });
+
+    it('ignores the fallback when auth is enabled (server actor wins)', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ actor_id: 'serveractor' }),
+      } as Response);
+      const onSessionExpired = vi.fn();
+
+      const result = await resolveActorId(
+        'automerge:abc',
+        true,
+        onSessionExpired,
+        '6d914340d834489b934c58390f9b3301',
+      );
+
+      expect(result).toBe('serveractor');
+    });
+
     it('returns the actor ID on success without triggering refresh', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: true,

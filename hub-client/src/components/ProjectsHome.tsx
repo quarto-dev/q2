@@ -1653,7 +1653,7 @@ export default function ProjectsHome({
               </div>
               {everythingElse.length === 0 ? (
                 <div className="ph-rest-empty">
-                  {query ? 'No projects match your search.' : 'Everything is on a collection.'}
+                  {query ? 'No projects match your search.' : 'Everything is in a collection.'}
                 </div>
               ) : (
                 <div className="ph-rest-list">
