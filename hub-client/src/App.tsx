@@ -32,7 +32,7 @@ import {
 import type { ProjectFile } from '@quarto/preview-runtime';
 import * as projectStorage from './services/projectStorage';
 import { installDebugApi } from './services/debugApi';
-import { getUserIdentity, updateUserName } from './services/userSettings';
+import { getUserIdentity, updateUserName, getOrCreateLocalActor } from './services/userSettings';
 import { useRouting } from './hooks/useRouting';
 import { useProjectSet } from './hooks/useProjectSet';
 import { useAuth } from './hooks/useAuth';
@@ -108,6 +108,10 @@ function App() {
   // preview so recorded engine output can be spliced into the rendered AST.
   const [captures, setCaptures] = useState<Record<string, CaptureRef>>({});
   const [isOnline, setIsOnline] = useState<boolean>(false);
+  // Connection-gated auth (bd-u4p8xhdc): the app opens with no login gate.
+  // Signing in is triggered only when the user chooses to connect to a hub;
+  // `showLogin` renders the sign-in screen as an opt-in overlay.
+  const [showLogin, setShowLogin] = useState<boolean>(false);
 
   // bd-sfet3264 (Phase 2D + Phase 4b): track which q2 executors are online for
   // the connected project (via the index-handle capability beacon) and expose
@@ -123,8 +127,10 @@ function App() {
   // definitive 401/403 evidence ever clears auth — never network errors.
   // Past the token's exp, useAuth's expiry timer logs out on the first 401
   // (preempting this probe's two-strike); the probe governs earlier drops.
+  // Only probe for a hub-backed project (one with a sync server). A local
+  // project has no server, so its perpetual `!isOnline` is not an auth signal.
   useAuthProbe({
-    enabled: AUTH_ENABLED && !!auth && !!project && !isOnline,
+    enabled: AUTH_ENABLED && !!auth && !!project?.syncServer && !isOnline,
     triggerRefresh,
     onAuthRejected: expireSession,
   });
@@ -143,6 +149,16 @@ function App() {
   const resolveActorId = useCallback(
     (indexDocId: string) => resolveActorIdRequest(indexDocId, AUTH_ENABLED, triggerRefresh),
     [triggerRefresh],
+  );
+
+  // Choose the authoring actor for a project when opening it. A local
+  // project (no sync server) is authored under the stable per-browser local
+  // actor — no server round-trip. A hub project uses the server-derived HMAC
+  // actor via `resolveActorId` (bd-gxz6tqbk / bd-u4p8xhdc).
+  const resolveActorForOpen = useCallback(
+    (indexDocId: string, syncServer: string): Promise<string | null | undefined> =>
+      syncServer ? resolveActorId(indexDocId) : getOrCreateLocalActor(),
+    [resolveActorId],
   );
 
   // Capture auth error from redirect query param (once, before URL is cleaned).
@@ -256,7 +272,7 @@ function App() {
             setIsConnecting(true);
             setConnectionError(null);
             try {
-              const newActorId = await resolveActorId(targetProject.indexDocId);
+              const newActorId = await resolveActorForOpen(targetProject.indexDocId, targetProject.syncServer);
               if (newActorId === null) return;
               const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newActorId, screenName, cursorColor);
               setProject(targetProject);
@@ -384,7 +400,7 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const newActorId = await resolveActorId(targetProject.indexDocId);
+            const newActorId = await resolveActorForOpen(targetProject.indexDocId, targetProject.syncServer);
             if (newActorId === null) return;
             const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newActorId, screenName, cursorColor);
             setProject(targetProject);
@@ -409,11 +425,12 @@ function App() {
     loadFromUrl();
   }, [route, navigateToProjectSelector, navigateToProject, navigateToFile]);
 
-  // Disconnect sync when auth is lost (token expired or user logged out).
-  // Without this, the WebSocket adapter keeps retrying with an expired cookie
-  // and the user sees "Connection lost" instead of the login screen.
+  // Disconnect sync when auth is lost (token expired or user logged out) —
+  // but ONLY for a hub-backed project (one with a sync server). A local
+  // project has no server and no auth dependency, so an auth-loss event must
+  // never tear it down (bd-u4p8xhdc).
   useEffect(() => {
-    if (AUTH_ENABLED && !auth && !authLoading && project) {
+    if (AUTH_ENABLED && !auth && !authLoading && project?.syncServer) {
       disconnect();
       setProject(null);
       setFiles([]);
@@ -488,7 +505,7 @@ function App() {
     setConnectionError(null);
 
     try {
-      const newActorId = await resolveActorId(selectedProject.indexDocId);
+      const newActorId = await resolveActorForOpen(selectedProject.indexDocId, selectedProject.syncServer);
       if (newActorId === null) return;
       const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, newActorId, screenName, cursorColor);
       setProject(selectedProject);
@@ -506,7 +523,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject, navigateToFile, resolveActorId, screenName, cursorColor]);
+  }, [navigateToProject, navigateToFile, resolveActorForOpen, screenName, cursorColor]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();
@@ -540,31 +557,43 @@ function App() {
         mimeType: f.mime_type,
       }));
 
-      // Create the Automerge documents. The resolveActorId callback is
-      // called after the index doc is created (to derive the HMAC actor
-      // ID from the indexDocId) but before any file docs are written.
-      //
-      // Resolve only the runtime connection value (the WS adapter needs an
-      // absolute ws(s):// URL); the portable `syncServer` is what we store
-      // and share below, so it stays origin-independent under a subpath.
-      const result = await createNewProject({
-        syncServer: resolveSyncServerUrl(syncServer),
-        files,
-      }, undefined, screenName, cursorColor, resolveActorId);
+      // Create the Automerge documents. An empty syncServer means a
+      // local-first project (bd-u4p8xhdc): a storage-only Repo authored
+      // under the stable per-browser local actor, with no server round-trip.
+      // A hub project uses today's path — resolve the HMAC actor after the
+      // index doc exists, and connect the WS adapter (resolveSyncServerUrl
+      // gives the absolute ws(s):// URL; the portable `syncServer` is what we
+      // store and share, so it stays origin-independent under a subpath).
+      const isLocal = !syncServer;
+      const result = isLocal
+        ? await createNewProject(
+            { files },
+            await getOrCreateLocalActor(),
+            screenName,
+            cursorColor,
+          )
+        : await createNewProject(
+            { syncServer: resolveSyncServerUrl(syncServer), files },
+            undefined,
+            screenName,
+            cursorColor,
+            resolveActorId,
+          );
 
-      // Store the project in IndexedDB
+      // Store the project in IndexedDB (empty syncServer for a local project).
       const projectEntry = await projectStorage.addProject(
         result.indexDocId,
         syncServer,
         title
       );
 
-      // Also add to the synced project set
+      // Also add to the connected project set. Omit syncServer for a local
+      // project so the set entry stays local too.
       if (projectSetStateRef.current.status === 'connected') {
         try {
           projectSetActions.addProject({
             indexDocId: result.indexDocId,
-            syncServer,
+            syncServer: syncServer || undefined,
             description: title,
           });
         } catch {
@@ -594,21 +623,18 @@ function App() {
     }
   }, [navigateToProject, resolveActorId, screenName, cursorColor]);
 
-  // Auth gate: when auth is enabled, require login before showing the app.
-  // Show a loading spinner while checking auth status to avoid login flash.
-  if (AUTH_ENABLED && authLoading) {
-    return (
-      <div className="project-selector" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Loading...</div>
-      </div>
-    );
-  }
-
-  if (AUTH_ENABLED && !auth) {
+  // Connection-gated auth (bd-u4p8xhdc): there is NO login gate. The app
+  // opens straight into a usable, local-first selector. Sign-in is shown only
+  // when the user opts to connect to a hub (or a redirect returned an error).
+  // `useAuth` probes /auth/me on mount to recognize an existing session; a
+  // 401/network failure is non-blocking, so a backend-less static deploy
+  // still renders.
+  if ((showLogin || authError) && !auth) {
     return (
       <LoginScreen
         error={authError}
         message={sessionExpired ? 'Your session expired — please sign in again.' : undefined}
+        onCancel={() => setShowLogin(false)}
       />
     );
   }
@@ -672,7 +698,9 @@ function App() {
           onProjectCreated={handleProjectCreated}
           isConnecting={isConnecting}
           error={connectionError}
-          onSignOut={AUTH_ENABLED ? logout : undefined}
+          isHubConnected={!!auth}
+          onConnectToHub={() => setShowLogin(true)}
+          onSignOut={auth ? logout : undefined}
           authEmail={auth?.email}
           authPicture={auth?.picture}
           onScreenNameChange={setScreenName}

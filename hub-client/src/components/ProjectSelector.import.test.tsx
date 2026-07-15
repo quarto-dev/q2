@@ -27,7 +27,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
-import { DEFAULT_SYNC_SERVER } from '../utils/routing';
 
 const { importMock } = vi.hoisted(() => ({ importMock: vi.fn() }));
 
@@ -133,12 +132,14 @@ describe('ProjectSelector — Import from ZIP', () => {
     expect(passedBytes).toBeInstanceOf(Uint8Array);
     expect(Array.from(passedBytes)).toEqual(Array.from(ZIP_BYTES));
 
-    // The parsed files + form values flow to the create callback.
+    // The parsed files + form values flow to the create callback. Import now
+    // defaults to local (empty sync server) when no hub project set is
+    // connected — the local-first default (bd-u4p8xhdc).
     const [files, title, projectType, syncServer] = onProjectCreated.mock.calls[0];
     expect(files).toEqual(parsed);
     expect(title).toBe('My Project');
     expect(projectType).toBe('imported');
-    expect(syncServer).toBe(DEFAULT_SYNC_SERVER);
+    expect(syncServer).toBe('');
   });
 
   it('surfaces a parse error and does not create a project', async () => {

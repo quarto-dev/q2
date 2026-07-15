@@ -24,7 +24,11 @@ interface Props {
   error?: string | null;
   /** Called when a new project is created with scaffold files */
   onProjectCreated?: (files: ProjectFile[], title: string, projectType: string, syncServer: string) => void;
-  /** Called when user signs out of Google. Only passed when auth is enabled. */
+  /** Whether the app is connected to a hub (has a signed-in session). */
+  isHubConnected?: boolean;
+  /** Called when the user chooses to connect to a hub (triggers sign-in). */
+  onConnectToHub?: () => void;
+  /** Called when user signs out. Passed only when signed in to a hub. */
   onSignOut?: () => void;
   /** Authenticated user's email (for display). */
   authEmail?: string;
@@ -64,6 +68,8 @@ export default function ProjectSelector({
   isConnecting,
   error: connectionError,
   onProjectCreated,
+  isHubConnected,
+  onConnectToHub,
   onSignOut,
   authEmail,
   authPicture,
@@ -361,10 +367,9 @@ export default function ProjectSelector({
       return;
     }
 
-    if (!syncServer.trim()) {
-      setFormError('Sync Server URL is required');
-      return;
-    }
+    // Create targets the active project set: a hub server when connected to
+    // one, otherwise local-only (empty string) — the local-first default.
+    const createTargetServer = projectSetSyncServer ?? '';
 
     setIsCreating(true);
 
@@ -388,7 +393,7 @@ export default function ProjectSelector({
       // Call the callback with the scaffold files
       // The parent component (or k-tsqm task) will handle Automerge document creation
       if (onProjectCreated) {
-        onProjectCreated(result.files, createProjectTitle.trim(), createProjectType, syncServer.trim());
+        onProjectCreated(result.files, createProjectTitle.trim(), createProjectType, createTargetServer);
       } else {
         // If no callback, show success message with file list
         const fileList = result.files.map(f => f.path).join(', ');
@@ -440,10 +445,9 @@ export default function ProjectSelector({
       return;
     }
 
-    if (!syncServer.trim()) {
-      setFormError('Sync Server URL is required');
-      return;
-    }
+    // Import targets the active project set (hub server when connected,
+    // otherwise local-only — the local-first default).
+    const importTargetServer = projectSetSyncServer ?? '';
 
     setIsImporting(true);
 
@@ -457,7 +461,7 @@ export default function ProjectSelector({
       }
 
       if (onProjectCreated) {
-        onProjectCreated(files, importTitle.trim(), 'imported', syncServer.trim());
+        onProjectCreated(files, importTitle.trim(), 'imported', importTargetServer);
         // Reset the form; the parent handles navigation into the project.
         setShowImportForm(false);
         setImportFile(null);
@@ -554,17 +558,36 @@ export default function ProjectSelector({
             <p className="tagline">Multiplayer editing for your Quarto projects</p>
           </div>
           <div className="header-actions">
-            {onSignOut && (
-              <button
-                className="sign-out-btn"
-                onClick={onSignOut}
-                title={authEmail ? `Signed in as ${authEmail}` : 'Sign out'}
-              >
-                {authPicture && (
-                  <img src={authPicture} alt="" className="auth-avatar" referrerPolicy="no-referrer" />
-                )}
-                <span>Sign out</span>
-              </button>
+            {/*
+              Account-level hub connection control (bd-u4p8xhdc). When not
+              connected, offer "Connect to a hub" (triggers sign-in). When
+              connected, show the signed-in identity + Sign out. This is
+              session-scoped state, kept out of the per-project action row so
+              it does not collide with "Connect to Project" (join-by-doc-id).
+            */}
+            {isHubConnected ? (
+              onSignOut && (
+                <button
+                  className="sign-out-btn"
+                  onClick={onSignOut}
+                  title={authEmail ? `Signed in as ${authEmail}` : 'Sign out'}
+                >
+                  {authPicture && (
+                    <img src={authPicture} alt="" className="auth-avatar" referrerPolicy="no-referrer" />
+                  )}
+                  <span>{authEmail ? `Signed in as ${authEmail}` : 'Signed in'} · Sign out</span>
+                </button>
+              )
+            ) : (
+              onConnectToHub && (
+                <button
+                  className="sign-out-btn"
+                  onClick={onConnectToHub}
+                  title="Connect to a hub to sync and collaborate"
+                >
+                  <span>Connect to a hub</span>
+                </button>
+              )
             )}
             <button
               className="theme-toggle"
@@ -727,16 +750,6 @@ export default function ProjectSelector({
                 autoFocus
               />
             </div>
-            <div className="form-group">
-              <label htmlFor="createSyncServer">Sync Server URL</label>
-              <input
-                id="createSyncServer"
-                type="text"
-                value={syncServer}
-                onChange={(e) => setSyncServer(e.target.value)}
-                placeholder="wss://sync.automerge.org"
-              />
-            </div>
             <div className="form-actions">
               <button type="button" onClick={() => setShowCreateForm(false)}>Cancel</button>
               <button
@@ -772,16 +785,6 @@ export default function ProjectSelector({
                 value={importTitle}
                 onChange={(e) => setImportTitle(e.target.value)}
                 placeholder="My Imported Project"
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="importSyncServer">Sync Server URL</label>
-              <input
-                id="importSyncServer"
-                type="text"
-                value={syncServer}
-                onChange={(e) => setSyncServer(e.target.value)}
-                placeholder="wss://sync.automerge.org"
               />
             </div>
             <div className="form-actions">

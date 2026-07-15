@@ -114,13 +114,16 @@ export function useProjectSet(): [ProjectSetState, ProjectSetActions] {
         const pointer = await getProjectSetPointer();
 
         if (pointer) {
-          // Have a pointer — connect to the project set
+          // Have a pointer — connect to the project set. An empty syncServer
+          // marks a local-only set: open it from the cache with no network.
           setStatus('connecting');
           syncServerRef.current = pointer.syncServer;
-          const entries = await projectSetService.connect(
-            pointer.syncServer,
-            pointer.projectSetDocId,
-          );
+          const entries = pointer.syncServer
+            ? await projectSetService.connect(
+                pointer.syncServer,
+                pointer.projectSetDocId,
+              )
+            : await projectSetService.connectLocal(pointer.projectSetDocId);
           setProjects(entries);
           setStatus('connected');
         } else {
@@ -130,7 +133,16 @@ export function useProjectSet(): [ProjectSetState, ProjectSetActions] {
             setLegacyProjects(legacy);
             setStatus('needs-migration');
           } else {
-            setStatus('needs-setup');
+            // Local-first (bd-u4p8xhdc): no pointer and nothing to migrate →
+            // auto-create a local project set so the app opens straight into
+            // a usable selector with no login and no server. The set is
+            // minted client-side and lives in the local cache; its pointer
+            // records an empty syncServer to mark it local.
+            const docId = await projectSetService.createLocalProjectSet();
+            await setProjectSetPointer(docId, '');
+            syncServerRef.current = '';
+            setProjects([]);
+            setStatus('connected');
           }
         }
       } catch (err) {

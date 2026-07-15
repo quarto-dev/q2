@@ -14,14 +14,23 @@
 import { useAuthProvider } from '../../auth/AuthProvider';
 import { hubPath } from '../../utils/routing';
 
-export function LoginScreen({ error, message }: { error?: boolean; message?: string }) {
+export function LoginScreen({
+  error,
+  message,
+  onCancel,
+}: {
+  error?: boolean;
+  message?: string;
+  /** When provided, renders a "Back" control that dismisses the sign-in screen. */
+  onCancel?: () => void;
+}) {
   const provider = useAuthProvider();
 
   return (
     <div className="project-selector" style={{ alignItems: 'center' }}>
       <div className="modal" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '48px 32px' }}>
         <img src="/quarto-icon.svg" alt="Quarto" style={{ width: '48px', height: '48px', marginBottom: '8px' }} />
-        <h1 style={{ margin: 0 }}>Quarto Hub</h1>
+        <h1 style={{ margin: 0 }}>Connect to a hub</h1>
         {error ? (
           <p style={{ color: 'var(--posit-red)', fontSize: '14px', margin: '0 0 16px' }}>
             Sign-in failed. Your account is not authorized to access this hub.
@@ -38,6 +47,15 @@ export function LoginScreen({ error, message }: { error?: boolean; message?: str
         <provider.SignInButton
           loginUri={window.location.origin + hubPath('/auth/callback')}
         />
+        {onCancel && (
+          <button
+            className="link-button"
+            onClick={onCancel}
+            style={{ marginTop: '16px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px' }}
+          >
+            ← Keep working locally
+          </button>
+        )}
       </div>
     </div>
   );
