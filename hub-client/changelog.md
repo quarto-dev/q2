@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-07-15
 
+- [`633ab60f`](https://github.com/quarto-dev/q2/commits/633ab60f): Structured authors now render fully in the preview title block, matching the rendered site: authors with affiliations appear in a two-column Authors/Affiliations grid, names link to the author's `url` with degrees shown after the name, and email and ORCID entries render as icon links.
 - [`faae3684`](https://github.com/quarto-dev/q2/commits/faae3684): The preview's title block now matches the rendered site's Quarto-1-style markup — multiple authors each get their own line under a pluralized "Authors" heading (structured author lists no longer render as garbage), a date without an author shows its "Published" entry, and the `author-title` / `published-title` / `abstract-title` options are honored.
 
 ### 2026-07-13
