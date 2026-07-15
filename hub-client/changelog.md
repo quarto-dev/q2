@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-15
+
+- [`64ba0e38`](https://github.com/quarto-dev/q2/commits/64ba0e38): Dropping an image into the editor now defaults the upload to the current document's folder and inserts a correctly relativized path (e.g. `![](../photo.png)`), instead of uploading to the project root with a broken document-relative reference; sidebar drags into a subdirectory document are fixed the same way.
+
 ### 2026-07-13
 
 - [`3fc6e610`](https://github.com/quarto-dev/q2/commits/3fc6e610): Editing a block in the preview now uses one pop-up toolbar — the rich/plain switch is a Markdown-mark icon on it, the toolbar appears for every editable block (code chunks included), and the type/nesting breadcrumb folds into it, replacing the cut-off left-margin "Editing…" label and the separate floating breadcrumb.
