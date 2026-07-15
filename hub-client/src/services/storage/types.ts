@@ -71,6 +71,13 @@ export interface UserSettings {
   userColor: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Stable per-browser Automerge actor id (32 hex chars) used to author
+   * local-only documents. Minted once by {@link getOrCreateLocalActor} so
+   * local edits attribute coherently across reloads (bd-gxz6tqbk). Absent
+   * until the first local document is authored.
+   */
+  localActorId?: string;
 }
 
 /**

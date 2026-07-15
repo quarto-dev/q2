@@ -128,3 +128,37 @@ export async function getUserId(): Promise<string> {
   const settings = await getUserIdentity();
   return settings.userId;
 }
+
+/**
+ * Generate a valid Automerge actor id: 16 random bytes → 32 lowercase hex.
+ */
+function generateActorId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Get the stable per-browser local actor id, minting and persisting one on
+ * first use (bd-gxz6tqbk).
+ *
+ * Local-only documents are authored under this actor so edits attribute to a
+ * single coherent author across reloads — replacing the null-actor behaviour
+ * where Automerge assigns a fresh random actor per handle on every load.
+ * Persisted alongside the user identity in the userSettings store.
+ */
+export async function getOrCreateLocalActor(): Promise<string> {
+  const settings = await getUserIdentity();
+  if (settings.localActorId) {
+    return settings.localActorId;
+  }
+
+  const localActorId = generateActorId();
+  const db = await getDb();
+  await db.put(STORES.USER_SETTINGS, {
+    ...settings,
+    localActorId,
+    updatedAt: new Date().toISOString(),
+  });
+  return localActorId;
+}
