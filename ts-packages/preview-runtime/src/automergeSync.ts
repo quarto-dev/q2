@@ -301,6 +301,15 @@ export function getActorId(): string | null {
 }
 
 /**
+ * Flush pending storage writes to the local cache. See
+ * `SyncClient.flush` — matters for local-first projects, which have no
+ * sync server to re-sync from. No-op when disconnected.
+ */
+export async function flush(): Promise<void> {
+  await client?.flush();
+}
+
+/**
  * Diagnostic snapshot of sync health: stranded (index-referenced but
  * never-loaded) files with their automerge-repo DocHandle states, plus
  * peer/retry-poll state. Consumed by the e2e smoke-diag classifier via the

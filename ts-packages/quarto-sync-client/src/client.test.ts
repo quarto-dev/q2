@@ -121,6 +121,7 @@ function installMockRepo<T>(
       find: vi.fn().mockResolvedValue(connectHandle),
       import: vi.fn().mockReturnValue(createHandle),
       create: vi.fn().mockReturnValue(createHandle),
+      flush: vi.fn().mockResolvedValue(undefined),
       networkSubsystem: mockNetworkSubsystem,
     });
     return this as Repo;
@@ -355,6 +356,7 @@ describe('createSyncClient.getBinaryDocById URL normalization (bd-4uvv)', () => 
         }),
         import: vi.fn().mockReturnValue(binaryHandle),
         create: vi.fn().mockReturnValue(binaryHandle),
+        flush: vi.fn().mockResolvedValue(undefined),
         networkSubsystem: mockNetworkSubsystem,
       });
       return this as Repo;
@@ -391,6 +393,7 @@ describe('createSyncClient.getBinaryDocById URL normalization (bd-4uvv)', () => 
         }),
         import: vi.fn().mockReturnValue(indexHandle),
         create: vi.fn().mockReturnValue(indexHandle),
+        flush: vi.fn().mockResolvedValue(undefined),
         networkSubsystem: { on: vi.fn(), off: vi.fn() },
       });
       return this as Repo;
@@ -431,6 +434,7 @@ describe('createSyncClient.getBinaryDocById URL normalization (bd-4uvv)', () => 
         }),
         import: vi.fn().mockReturnValue(indexHandle),
         create: vi.fn().mockReturnValue(indexHandle),
+        flush: vi.fn().mockResolvedValue(undefined),
         networkSubsystem: { on: vi.fn(), off: vi.fn() },
       });
       return this as Repo;

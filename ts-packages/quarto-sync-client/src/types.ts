@@ -353,8 +353,13 @@ export interface CreateBinaryFileResult {
  * Options for creating a new project.
  */
 export interface CreateProjectOptions {
-  /** Sync server URL */
-  syncServer: string;
+  /**
+   * Sync server URL. Omit (or pass an empty string) to create a
+   * **local-only** project: a storage-only Repo with no network adapter,
+   * living entirely in the local cache. A hub connection is required only
+   * when the project is later opened against a server (bd-e2qnvb4a).
+   */
+  syncServer?: string;
   /** List of files to create in the project */
   files: Array<{
     path: string;

@@ -45,6 +45,7 @@ import type {
   DisconnectOptions,
   DisconnectReport,
   FindDocRetryOptions,
+  StorageKind,
   SyncClientAuthOptions,
 } from './types.js';
 import { computeSHA256 } from './hash.js';
@@ -148,6 +149,27 @@ async function buildWsAdapter(
     getBearer: auth.getBearer,
     retryInterval: retryIntervalMs,
   }) as unknown as NetworkAdapter;
+}
+
+/**
+ * Build the automerge `Repo` for a connection, with or without a network
+ * adapter. When `syncServer` is empty/undefined the Repo is **storage-only**
+ * (local-first mode, bd-e2qnvb4a): no WebSocket adapter is constructed, so
+ * nothing is contacted and `wsAdapter` is null. Otherwise the WS adapter is
+ * built as before and attached. Shared by `connect` and `createNewProject`.
+ */
+async function buildRepo(opts: {
+  syncServer?: string;
+  auth?: SyncClientAuthOptions;
+  retryIntervalMs?: number;
+  storage?: StorageKind;
+}): Promise<{ repo: Repo; wsAdapter: NetworkAdapter | null }> {
+  const storage = buildStorageAdapter(opts.storage);
+  if (!opts.syncServer) {
+    return { repo: new Repo({ storage }), wsAdapter: null };
+  }
+  const wsAdapter = await buildWsAdapter(opts.syncServer, opts.auth, opts.retryIntervalMs);
+  return { repo: new Repo({ network: [wsAdapter], storage }), wsAdapter };
 }
 
 // FileDocument can be text or binary - use runtime detection
@@ -817,32 +839,41 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     await disconnect();
 
     try {
-      state.wsAdapter = await buildWsAdapter(syncServerUrl, effectiveAuth, options.retryIntervalMs);
-      state.repo = new Repo({
-        network: [state.wsAdapter],
-        storage: buildStorageAdapter(options.storage),
+      const built = await buildRepo({
+        syncServer: syncServerUrl,
+        auth: effectiveAuth,
+        retryIntervalMs: options.retryIntervalMs,
+        storage: options.storage,
       });
+      state.wsAdapter = built.wsAdapter;
+      state.repo = built.repo;
       state.actorId = actorId ?? null;
       state.findDocRetry = { ...DEFAULT_FIND_DOC_RETRY, ...options.findDocRetry };
       trackPeers(state.repo);
 
-      // Try to connect to peer, but continue in offline mode if it fails
+      // Try to connect to peer, but continue in offline mode if it fails.
+      // Local-first mode (no sync server) has no network adapter at all, so
+      // there is no peer to wait for — go straight to offline-from-storage.
       let isOnline = false;
-      try {
-        syncLog('Waiting for peer connection...');
-        await waitForPeer(state.repo, peerTimeoutMs);
-        syncLog('Peer connected - online mode');
-        isOnline = true;
-      } catch (peerError) {
-        if (options.requireOnline) {
-          // Tear down the adapter's reconnect loop before failing —
-          // the caller asked for online-or-error, not a background
-          // retry it can't observe.
-          await disconnect();
-          throw new PeerUnavailableError(syncServerUrl, peerTimeoutMs, peerError);
+      if (built.wsAdapter) {
+        try {
+          syncLog('Waiting for peer connection...');
+          await waitForPeer(state.repo, peerTimeoutMs);
+          syncLog('Peer connected - online mode');
+          isOnline = true;
+        } catch (peerError) {
+          if (options.requireOnline) {
+            // Tear down the adapter's reconnect loop before failing —
+            // the caller asked for online-or-error, not a background
+            // retry it can't observe.
+            await disconnect();
+            throw new PeerUnavailableError(syncServerUrl, peerTimeoutMs, peerError);
+          }
+          console.warn('Peer connection failed, continuing in offline mode:', peerError);
+          isOnline = false;
         }
-        console.warn('Peer connection failed, continuing in offline mode:', peerError);
-        isOnline = false;
+      } else {
+        syncLog('Local-first mode - no sync server, storage-only repo');
       }
 
       // The index staying unavailable IS fatal — nothing sensible can
@@ -1488,15 +1519,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     await disconnect();
 
     try {
-      state.wsAdapter = await buildWsAdapter(
-        options.syncServer,
-        options.auth,
-        options.retryIntervalMs,
-      );
-      state.repo = new Repo({
-        network: [state.wsAdapter],
-        storage: buildStorageAdapter(options.storage),
+      const built = await buildRepo({
+        syncServer: options.syncServer,
+        auth: options.auth,
+        retryIntervalMs: options.retryIntervalMs,
+        storage: options.storage,
       });
+      state.wsAdapter = built.wsAdapter;
+      state.repo = built.repo;
       state.findDocRetry = { ...DEFAULT_FIND_DOC_RETRY, ...options.findDocRetry };
       trackPeers(state.repo);
 
@@ -1504,23 +1534,29 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // The timeout defaults to 1 ms so the browser falls back to IDB
       // quickly; callers that need guaranteed online creation (e.g. test
       // helpers) should pass options.peerTimeoutMs to wait for the peer.
+      // Local-first creation (no sync server) has no network adapter, so
+      // it is offline by construction — nothing to wait for.
       let isOnline = false;
-      try {
-        syncLog('Waiting for peer connection...');
-        await waitForPeer(state.repo, options.peerTimeoutMs ?? 1);
-        syncLog('Peer connected - online mode');
-        isOnline = true;
-      } catch (peerError) {
-        if (options.requireOnline) {
-          await disconnect();
-          throw new PeerUnavailableError(
-            options.syncServer,
-            options.peerTimeoutMs ?? 1,
-            peerError,
-          );
+      if (built.wsAdapter) {
+        try {
+          syncLog('Waiting for peer connection...');
+          await waitForPeer(state.repo, options.peerTimeoutMs ?? 1);
+          syncLog('Peer connected - online mode');
+          isOnline = true;
+        } catch (peerError) {
+          if (options.requireOnline) {
+            await disconnect();
+            throw new PeerUnavailableError(
+              options.syncServer ?? '',
+              options.peerTimeoutMs ?? 1,
+              peerError,
+            );
+          }
+          console.warn('Peer connection failed, creating project in offline mode:', peerError);
+          isOnline = false;
         }
-        console.warn('Peer connection failed, creating project in offline mode:', peerError);
-        isOnline = false;
+      } else {
+        syncLog('Local-first mode - creating project in storage-only repo');
       }
 
       // Phase 1: Generate a document ID and resolve the actor ID before
@@ -1639,6 +1675,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
       callbacks.onConnectionChange?.(currentlyOnline);
 
+      // Persist the freshly-created index + file docs to the local cache
+      // before returning. Local-first projects have no server backstop, so
+      // this guarantees the new project survives an immediate reload.
+      await flush();
+
       return { indexDocId, files: createdFiles };
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -1690,6 +1731,18 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     return state.actorId;
   }
 
+  /**
+   * Flush all pending storage writes to the local cache.
+   *
+   * Matters most for local-first projects (no sync server): there is no
+   * peer to re-sync from, so the local cache is the only durable copy.
+   * automerge-repo writes on a background debounce, so an immediate reload
+   * after a change could otherwise lose it. No-op when disconnected.
+   */
+  async function flush(): Promise<void> {
+    await state.repo?.flush();
+  }
+
   // Return the public API
   return {
     connect,
@@ -1715,6 +1768,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     getSyncDiagnostics,
     createNewProject,
     getActorId,
+    flush,
   };
 }
 
