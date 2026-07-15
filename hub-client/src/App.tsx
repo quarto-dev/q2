@@ -39,6 +39,7 @@ import { useAuth } from './hooks/useAuth';
 import { useAuthProbe } from './hooks/useAuthProbe';
 import { useExecutionChannel } from './hooks/useExecutionChannel';
 import { resolveActorId as resolveActorIdRequest } from './services/authService';
+import { resolveActorForOpen as resolveActorForOpenImpl } from './services/openActor';
 import type { Route, ShareRoute, LinkProjectSetRoute } from './utils/routing';
 import { resolveSyncServerUrl } from './utils/routing';
 import './App.css';
@@ -151,13 +152,21 @@ function App() {
     [triggerRefresh],
   );
 
-  // Choose the authoring actor for a project when opening it. A local
-  // project (no sync server) is authored under the stable per-browser local
-  // actor — no server round-trip. A hub project uses the server-derived HMAC
-  // actor via `resolveActorId` (bd-gxz6tqbk / bd-u4p8xhdc).
+  // Choose the authoring actor for a project when opening it. A local project
+  // (no sync server) is authored under the stable per-browser local actor —
+  // no server round-trip. A hub project uses the server-derived HMAC actor;
+  // if that needs a session we don't have (401 → null), prompt sign-in rather
+  // than letting the open fail silently (bd-gxz6tqbk / bd-u4p8xhdc).
   const resolveActorForOpen = useCallback(
     (indexDocId: string, syncServer: string): Promise<string | null | undefined> =>
-      syncServer ? resolveActorId(indexDocId) : getOrCreateLocalActor(),
+      resolveActorForOpenImpl(indexDocId, syncServer, {
+        getLocalActor: getOrCreateLocalActor,
+        resolveHubActor: resolveActorId,
+        onNeedsSignIn: () => {
+          setConnectionError('Sign in to open this hub project.');
+          setShowLogin(true);
+        },
+      }),
     [resolveActorId],
   );
 

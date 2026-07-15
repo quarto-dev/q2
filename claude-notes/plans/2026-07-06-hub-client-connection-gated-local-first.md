@@ -110,6 +110,21 @@ follow-on**: `2026-07-06-hub-client-local-project-adoption.md`.
 
 > The adoption follow-on (A5 — connect+adopt, A6 — offline-doc durability/D1, A7adopt — E2E) lives in `2026-07-06-hub-client-local-project-adoption.md`, `conditional-blocks` on `bd-10bdjmjb`.
 
+## Follow-up fixes (post-A4)
+
+- **Logged-off hub-project open was a silent no-op** (interactive testing). With
+  the gate removed, a logged-off user reaches the selector and can click a hub
+  project (one with a `syncServer`), but `resolveActorId` returned `null`
+  (401) and the open path just `return`ed — nothing happened, no feedback.
+  Fix: extracted `resolveActorForOpen` (`src/services/openActor.ts`) — local
+  projects always open under the local actor; a hub project whose actor
+  resolves to `null` now fires an `onNeedsSignIn` callback (App shows the
+  sign-in screen + a "Sign in to open this hub project" message) instead of
+  failing silently. `undefined` (auth-disabled/insecure hub) still opens with
+  no prompt. Tests: `openActor.test.ts` (4 cases). *(Offline-read of a
+  cached hub project while logged off is intentionally NOT done here — that is
+  offline-durability / D1 territory.)*
+
 ## Non-goals
 - **v1 does not publish an existing local project up to a hub** — that is the adoption follow-on plan (`2026-07-06-hub-client-local-project-adoption.md`), deferred behind D1 (`bd-10bdjmjb`).
 - Does **not** change server-side auth enforcement; an auth-required hub still 401s unauthenticated connections.
