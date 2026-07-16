@@ -122,13 +122,39 @@ returns rather than once.
     see the updated risk below. The remaining work is purely **app-layer**
     (actor resolution B1 + reconnect display-bridge B3) — the sync layer
     already opens offline read+write and syncs up.
-- [ ] **B1 — Open cached hub project offline (supersede prompt-sign-in).**
+- [x] **B1 — Open cached hub project offline (supersede prompt-sign-in).**
   `resolveActorForOpen` (and the `openActor` helper): for a hub project with no
   resolvable HMAC actor, fall back to the local actor and open from cache
   instead of firing `onNeedsSignIn`. Keep a genuine "never-cached + offline"
   case surfacing a clear "can't open — not cached, and you're offline" message
   (that one really can't open). Tests: cached hub doc opens offline read+write;
   never-cached hub doc offline reports the precise reason.
+  - **Done:** the `openActor` seam is extended and made online-vs-offline
+    aware for free — `resolveHubActor` *resolving* `null` means logged-off but
+    online (the request completed), while it *throwing* a `TypeError` means
+    offline (fetch failed); a non-network error (e.g. HTTP 500) still
+    propagates. Decision for a hub project with no HMAC actor: **cached →
+    open under the local actor** (no prompt); **uncached + online →
+    `onNeedsSignIn`** (signing in can fetch it); **uncached + offline →
+    `onCannotOpenOffline`** (a precise "not cached on this device, and you're
+    offline" message). Cache membership is a new stateless probe
+    `isDocCached(indexDocId)` in `quarto-sync-client`
+    (`storage-adapter.ts`) — `loadRange([bareId,'snapshot'/'incremental'])`
+    over the same storage the Repo writes, `interpretAsDocumentId` to
+    normalise the `automerge:` URL. Wired in `App.tsx` (`resolveActorForOpen`
+    deps gain `isCached: isDocCached` + `onCannotOpenOffline`); the three open
+    call sites keep the existing `=== null → return` abandon pattern.
+    - **Tests:** `openActor.test.ts` (8 cases — local, signed-in, auth-off,
+      logged-off-uncached→prompt, cached-logged-off→local, cached-offline→
+      local, uncached-offline→cannot-open, 500→propagates);
+      `isDocCached` integration test over the cached-hub fixture; the B0
+      baseline already proves the offline open under the local actor works
+      read+write. Strict hub-client build (`tsc -b && vite build`) green.
+    - **Verification honesty:** logic + probe are covered by unit/integration
+      tests + the strict build; the full browser E2E (sign out → open a cached
+      hub project offline → edit) is B5. Authorship still shows the local
+      actor across the offline window until reconnect — the display-bridge is
+      B3.
 - [ ] **B2 — Offline authorship under the local actor.** Author offline edits
   under the local actor; write `identities[localActor]`. Tests: offline edits
   attribute to this human (not an 8-hex stub) and persist across reload.

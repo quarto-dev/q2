@@ -15,6 +15,8 @@
 
 import {
   StorageAdapter,
+  interpretAsDocumentId,
+  type AnyDocumentId,
   type Chunk,
   type StorageAdapterInterface,
   type StorageKey,
@@ -67,6 +69,33 @@ export class MemoryStorageAdapter extends StorageAdapter implements StorageAdapt
       if (k.startsWith(prefix)) this.data.delete(k);
     }
   }
+}
+
+/**
+ * True iff the document already has chunks in the local cache — i.e. the
+ * project was synced at least once and can be opened offline. Reads the
+ * same storage the Repo writes (default IndexedDB in the browser) via a
+ * transient, read-only adapter; no network. automerge-repo stores a doc's
+ * chunks under `[documentId, "snapshot"|"incremental", …]` keyed by the
+ * *bare* document id, so we normalise the `automerge:` URL first.
+ *
+ * The app's open path uses this to decide whether a logged-off/offline
+ * hub project can open from cache under the local actor (bd-qklxdkwh) or
+ * must prompt sign-in / report that it is offline and uncached.
+ */
+export async function isDocCached(indexDocId: string, kind?: StorageKind): Promise<boolean> {
+  let documentId: string;
+  try {
+    documentId = interpretAsDocumentId(indexDocId as unknown as AnyDocumentId);
+  } catch {
+    // A malformed id can't correspond to anything cached.
+    return false;
+  }
+  const adapter = buildStorageAdapter(kind);
+  const snapshot = await adapter.loadRange([documentId, 'snapshot']);
+  if (snapshot.length > 0) return true;
+  const incremental = await adapter.loadRange([documentId, 'incremental']);
+  return incremental.length > 0;
 }
 
 export function buildStorageAdapter(kind?: StorageKind): StorageAdapterInterface {

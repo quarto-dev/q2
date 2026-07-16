@@ -19,6 +19,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 
+import { isDocCached } from './storage-adapter.js';
 import { startTestHub, type TestHub } from './test-hub.js';
 import {
   createSyncedHubProject,
@@ -98,16 +99,28 @@ describe('offline-cached hub project (sync-client baseline)', () => {
     await reopened.client.disconnect();
   }, 30000);
 
-  // ── Behavioral specs the later phases implement (red→green with impl) ──
+  it('isDocCached distinguishes a synced project from a never-seen doc', async () => {
+    // The probe the openActor seam uses to decide "open from cache" vs
+    // "prompt sign-in / report offline-unopenable" (B1, bd-qklxdkwh).
+    const project = await createSyncedHubProject(hub, {
+      path: 'notes.qmd',
+      content: 'online body\n',
+      actor: HUB_ACTOR,
+      screenName: 'Alice',
+      color: '#3366cc',
+    });
 
-  // B1 (bd-qklxdkwh) — the app-level open path currently prompts sign-in
-  // for a logged-off hub open (openActor → onNeedsSignIn). B1 makes a
-  // *cached* hub project open under the local actor instead; only a
-  // genuinely never-cached + offline project reports a precise
-  // "can't open" reason. (Unit-tested at the openActor seam; see
-  // openActor.test.ts.)
-  it.todo('B1: cached hub project opens offline under the local actor (no sign-in prompt)');
-  it.todo('B1: never-cached hub project offline reports a precise "not cached" reason');
+    expect(await isDocCached(project.indexDocId)).toBe(true);
+    // A well-formed but never-seen doc id is not cached.
+    expect(await isDocCached('automerge:2j9knpCsexT8gPeMFXQCLbTQGKC')).toBe(false);
+    // A malformed id is not cached (and does not throw).
+    expect(await isDocCached('not-an-automerge-url')).toBe(false);
+  }, 30000);
+
+  // ── Behavioral specs the later phases implement (red→green with impl) ──
+  // B1 (bd-qklxdkwh) is DONE: the open decision is unit-tested at the
+  // openActor seam (openActor.test.ts) and the offline open under the
+  // local actor is exercised by the baseline test above.
 
   // B2 (bd-ab44wv07) — offline edits author under the local actor and
   // write identities[localActor] so they display as this human, not an

@@ -87,7 +87,7 @@ export type {
 // storageId in their handshake metadata (the real samod hub always
 // announces one — exit-drain delivery confirmation keys off it,
 // bd-10deu8h4).
-export { MemoryStorageAdapter } from './storage-adapter.js';
+export { MemoryStorageAdapter, isDocCached } from './storage-adapter.js';
 
 // Export utilities
 export { computeSHA256 } from './hash.js';

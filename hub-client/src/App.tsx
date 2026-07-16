@@ -30,6 +30,7 @@ import {
   type EditorContentChange,
 } from '@quarto/preview-runtime';
 import type { ProjectFile } from '@quarto/preview-runtime';
+import { isDocCached } from '@quarto/quarto-sync-client';
 import * as projectStorage from './services/projectStorage';
 import { installDebugApi } from './services/debugApi';
 import { getUserIdentity, updateUserName, getOrCreateLocalActor } from './services/userSettings';
@@ -155,16 +156,25 @@ function App() {
   // Choose the authoring actor for a project when opening it. A local project
   // (no sync server) is authored under the stable per-browser local actor —
   // no server round-trip. A hub project uses the server-derived HMAC actor;
-  // if that needs a session we don't have (401 → null), prompt sign-in rather
-  // than letting the open fail silently (bd-gxz6tqbk / bd-u4p8xhdc).
+  // if that needs a session we don't have, the outcome depends on whether the
+  // project is cached and whether we're online (bd-gxz6tqbk / bd-u4p8xhdc /
+  // bd-qklxdkwh): a cached project opens from cache under the local actor; an
+  // uncached one prompts sign-in when online, or reports offline-unopenable.
   const resolveActorForOpen = useCallback(
     (indexDocId: string, syncServer: string): Promise<string | null | undefined> =>
       resolveActorForOpenImpl(indexDocId, syncServer, {
         getLocalActor: getOrCreateLocalActor,
         resolveHubActor: resolveActorId,
+        isCached: isDocCached,
         onNeedsSignIn: () => {
           setConnectionError('Sign in to open this hub project.');
           setShowLogin(true);
+        },
+        onCannotOpenOffline: () => {
+          setConnectionError(
+            "This hub project isn't cached on this device, and you're offline. " +
+              'Reconnect and sign in to open it.',
+          );
         },
       }),
     [resolveActorId],
