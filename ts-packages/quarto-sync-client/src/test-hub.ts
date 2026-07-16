@@ -30,6 +30,22 @@ export interface TestHub {
   /** Allow queued + future websocket upgrades to proceed. */
   releaseUpgrades(): void;
   /**
+   * Toggle whether new websocket upgrades are held (queued) or
+   * accepted. `setHolding(true)` after a client is already connected,
+   * combined with {@link dropConnections}, models a mid-session network
+   * loss on a *stable URL* — the offline window an offline-cached-hub
+   * test needs (bd-ysusqcb3). `setHolding(false)` accepts queued and
+   * future upgrades, modelling reconnect. `releaseUpgrades()` is the
+   * `setHolding(false)` alias kept for the D1 offline-creation tests.
+   */
+  setHolding(hold: boolean): void;
+  /**
+   * Close all currently-open client sockets, simulating a dropped
+   * connection. The client's WebSocket adapter schedules a reconnect,
+   * which succeeds again once holding is off (see {@link setHolding}).
+   */
+  dropConnections(): void;
+  /**
    * True iff the hub holds the document (bounded wait). Uses the
    * repo's find with an overall deadline; "unavailable" or timeout
    * map to false.
@@ -95,12 +111,20 @@ export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> 
     throw new Error('test hub failed to bind a TCP port');
   }
 
+  const setHolding = (hold: boolean): void => {
+    holding = hold;
+    if (!hold) {
+      for (const proceed of queued.splice(0)) proceed();
+    }
+  };
+
   return {
     url: `ws://127.0.0.1:${address.port}/ws`,
     repo,
-    releaseUpgrades(): void {
-      holding = false;
-      for (const proceed of queued.splice(0)) proceed();
+    releaseUpgrades: () => setHolding(false),
+    setHolding,
+    dropConnections(): void {
+      for (const ws of wss.clients) ws.terminate();
     },
     async hubHasDoc(docId: string, timeoutMs = 5000): Promise<boolean> {
       const deadline = Date.now() + timeoutMs;

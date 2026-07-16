@@ -60,4 +60,13 @@ describe('resolveActorForOpen', () => {
     expect(actor).toBeUndefined();
     expect(onNeedsSignIn).not.toHaveBeenCalled();
   });
+
+  // B1 (bd-qklxdkwh, epic bd-xxjy9yfp) supersedes the prompt-sign-in
+  // behavior for *cached* hub projects: a logged-off open of a cached hub
+  // project falls back to the local actor and opens from cache instead of
+  // firing onNeedsSignIn; only a genuinely never-cached + offline project
+  // surfaces a precise "can't open" reason. These land red→green with B1's
+  // seam extension (cache-awareness in the openActor deps).
+  it.todo('B1: cached hub project + null HMAC actor opens under the local actor (no prompt)');
+  it.todo('B1: never-cached hub project + offline reports a precise "not cached" reason');
 });

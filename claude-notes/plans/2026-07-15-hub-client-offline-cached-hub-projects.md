@@ -94,10 +94,34 @@ returns rather than once.
 
 ## Phases (TDD-first) — coordinate with D1 (`bd-10bdjmjb`)
 
-- [ ] **B0 — Test scaffolding.** Fixtures: a cached hub project (created online
+- [x] **B0 — Test scaffolding.** Fixtures: a cached hub project (created online
   against a fake/real hub, then the peer dropped) reopened offline; an offline
   edit; a reconnect that flushes the edit up; authorship assertions across the
   timeline. Extend the `openActor` seam. Write the failing tests for B1–B3.
+  - **Done:** Reusable green scaffolding, mirroring how A0 landed (fixtures
+    committed green; each phase's red test lands with its own implementation —
+    a red test is never committed alone, per the A1 precedent).
+    - **`test-hub.ts`** gained `setHolding(hold)` + `dropConnections()` so a
+      single hub on a **stable URL** models online→offline→online (drop live
+      sockets + hold new upgrades = offline; `setHolding(false)` = reconnect).
+      `releaseUpgrades()` kept as the `setHolding(false)` alias for the D1
+      tests.
+    - **`cached-hub.ts`** (new) composes test-hub + fake-indexeddb into the
+      timeline: `createSyncedHubProject` (create online, confirm the hub holds
+      both docs), `goOffline`/`goOnline`, `reopenCachedOffline` (fresh client =
+      reload, degrades to offline-from-cache), `waitForHubFileText`
+      (server-side ground truth), `readIdentities`.
+    - **`cached-hub-offline.test.ts`** (new) — green baseline exercising the
+      full timeline at the sync-client layer, plus `it.todo` specs for B1–B3.
+      `openActor.test.ts` gained the two B1 `it.todo` specs at the seam.
+  - **Empirical finding (answers B4's open question for *existing* docs):** the
+    baseline **passes** — an offline edit to an already-synced cached doc
+    reaches the hub on reconnect via normal automerge sync, with **no** D1
+    announce-on-connect fix (`bd-10bdjmjb`, which was about *newly created*
+    docs). B4 is therefore *not* gated on D1 for the edit-existing-doc case;
+    see the updated risk below. The remaining work is purely **app-layer**
+    (actor resolution B1 + reconnect display-bridge B3) — the sync layer
+    already opens offline read+write and syncs up.
 - [ ] **B1 — Open cached hub project offline (supersede prompt-sign-in).**
   `resolveActorForOpen` (and the `openActor` helper): for a hub project with no
   resolvable HMAC actor, fall back to the local actor and open from cache
@@ -119,6 +143,11 @@ returns rather than once.
   this shares D1's announce-on-connect fix (`bd-10bdjmjb`) or is already covered
   by normal automerge sync for existing docs. Tests: edit N cached docs offline,
   reconnect, assert all N updates reach the hub.
+  - **B0 finding:** for a *single* existing cached doc the answer is **already
+    covered** — the B0 baseline flushes an offline edit to the hub on reconnect
+    with no D1 fix. B4 shrinks to widening this to *N* docs (and a
+    newly-created-offline doc under an existing project, which *is* the D1
+    case) and confirming it holds under the real hub-client reconnect wiring.
 - [ ] **B5 — End-to-end verification + docs.** Real browser: open a hub project
   online, go offline (or sign out), edit, reconnect/sign-in, confirm the edits
   reach the hub and authorship reads as one human in the UI/DevTools. Record
@@ -145,10 +174,12 @@ returns rather than once.
 
 ## Risks & open questions
 
-- **D1 gating (`bd-10bdjmjb`, in progress):** confirm whether syncing offline
-  edits to *existing* cached docs needs the D1 announce-on-connect fix or is
-  already covered by normal automerge sync (creation was the D1 case). This
-  determines whether B can land ahead of D1.
+- **D1 gating (`bd-10bdjmjb`, in progress):** ~~confirm whether syncing offline
+  edits to *existing* cached docs needs the D1 announce-on-connect fix~~
+  **Resolved by B0:** editing an *existing* cached doc offline syncs up on
+  reconnect via normal automerge sync — no D1 fix needed, so **B can land ahead
+  of D1**. D1 still gates the *create-offline-under-an-existing-project* case
+  (a genuinely new doc), which B4 must keep distinct.
 - **Spoofable offline actor:** offline edits under a client-chosen local actor
   are display-bridged, not server-vouched — the same trust model plan 1 already
   accepts for local projects. Server acceptance is unaffected (peer/cookie-based).
