@@ -59,34 +59,40 @@ export function readIdentities(
 
 export interface CachedHubProject {
   indexDocId: string;
+  /** The first file (convenience for single-file tests). */
   fileDocId: string;
   path: string;
   content: string;
+  /** Every file created, in order. */
+  files: Array<{ path: string; content: string; fileDocId: string }>;
 }
 
 /**
  * Create a project online against `hub` and wait until the hub actually
- * holds both docs — the project is then cached on both ends. The creator
- * client is disconnected before returning; callers reopen with a fresh
- * client to model a reload.
+ * holds the index and every file doc — the project is then cached on both
+ * ends. The creator client is disconnected before returning; callers reopen
+ * with a fresh client to model a reload. Pass `files` for a multi-file
+ * project, or `path`/`content` for a single file.
  */
 export async function createSyncedHubProject(
   hub: TestHub,
   opts: {
     path?: string;
     content?: string;
+    files?: Array<{ path: string; content: string }>;
     actor?: string;
     screenName?: string;
     color?: string;
   } = {},
 ): Promise<CachedHubProject> {
-  const path = opts.path ?? 'doc.qmd';
-  const content = opts.content ?? 'online body\n';
+  const inputs = opts.files ?? [
+    { path: opts.path ?? 'doc.qmd', content: opts.content ?? 'online body\n' },
+  ];
   const { client } = makeRecordingClient();
   const created = await client.createNewProject(
     {
       syncServer: hub.url,
-      files: [{ path, content, contentType: 'text' }],
+      files: inputs.map((f) => ({ ...f, contentType: 'text' as const })),
       storage: 'indexeddb',
       // Create while the peer is connected so the docs flush to the hub
       // immediately (no background-sync race).
@@ -97,15 +103,27 @@ export async function createSyncedHubProject(
     opts.screenName,
     opts.color,
   );
-  const fileDocId = created.files[0]!.docId;
   await client.flush();
+  const files = inputs.map((f, i) => ({
+    path: f.path,
+    content: f.content,
+    fileDocId: created.files[i]!.docId,
+  }));
   const gotIndex = await hub.hubHasDoc(created.indexDocId, 8000);
-  const gotFile = await hub.hubHasDoc(fileDocId, 8000);
-  if (!gotIndex || !gotFile) {
-    throw new Error('createSyncedHubProject: docs did not reach the hub');
+  if (!gotIndex) throw new Error('createSyncedHubProject: index did not reach the hub');
+  for (const f of files) {
+    if (!(await hub.hubHasDoc(f.fileDocId, 8000))) {
+      throw new Error(`createSyncedHubProject: ${f.path} did not reach the hub`);
+    }
   }
   await client.disconnect();
-  return { indexDocId: created.indexDocId, fileDocId, path, content };
+  return {
+    indexDocId: created.indexDocId,
+    fileDocId: files[0]!.fileDocId,
+    path: files[0]!.path,
+    content: files[0]!.content,
+    files,
+  };
 }
 
 /** Model going offline on a stable URL: drop live sockets + hold new upgrades. */
@@ -117,6 +135,24 @@ export function goOffline(hub: TestHub): void {
 /** Model reconnect: accept queued and future upgrades again. */
 export function goOnline(hub: TestHub): void {
   hub.setHolding(false);
+}
+
+/**
+ * Wait until the client has a connected peer. Disconnecting while the
+ * socket is still mid-handshake throws in `ws` ("closed before the
+ * connection was established"); waiting for the peer first makes teardown
+ * clean. Call after {@link goOnline} before `disconnect()`.
+ */
+export async function waitForOnline(
+  rec: { client: SyncClient },
+  timeoutMs = 10000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (rec.client.getSyncDiagnostics().connectedPeers > 0) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error('waitForOnline: no peer connected within timeout');
 }
 
 /**

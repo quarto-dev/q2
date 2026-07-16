@@ -301,6 +301,16 @@ export function getActorId(): string | null {
 }
 
 /**
+ * Switch the authoring actor for the open project and bridge authorship
+ * display. See `SyncClient.switchActor` — used on reconnect to move a
+ * hub project opened offline (local actor) back to the server-trusted
+ * HMAC actor. No-op when disconnected.
+ */
+export function switchActor(actorId: string, screenName?: string, color?: string): void {
+  client?.switchActor(actorId, screenName, color);
+}
+
+/**
  * Flush pending storage writes to the local cache. See
  * `SyncClient.flush` — matters for local-first projects, which have no
  * sync server to re-sync from. No-op when disconnected.

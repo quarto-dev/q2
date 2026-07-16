@@ -155,15 +155,37 @@ returns rather than once.
       hub project offline → edit) is B5. Authorship still shows the local
       actor across the offline window until reconnect — the display-bridge is
       B3.
-- [ ] **B2 — Offline authorship under the local actor.** Author offline edits
+- [x] **B2 — Offline authorship under the local actor.** Author offline edits
   under the local actor; write `identities[localActor]`. Tests: offline edits
   attribute to this human (not an 8-hex stub) and persist across reload.
-- [ ] **B3 — Reconnect switch + display bridge + sync-up.** On sign-in/online
+  - **Done (verification-only — no production change needed):** the existing
+    `connect` path already writes `identities[actorId]` (via `setIdentity`
+    when actor+screenName are given) and authors edits under `state.actorId`
+    (via `applyActorId` on every `findDoc`). B1 passes the local actor +
+    screenName on an offline open, so offline edits already attribute to the
+    human and persist. Locked in by a `cached-hub-offline.test.ts` case:
+    offline edit → latest file-doc change carries the local actor,
+    `identities[localActor] = {name}`, and both survive a reload (fresh
+    offline client, no screenName re-write).
+- [x] **B3 — Reconnect switch + display bridge + sync-up.** On sign-in/online
   for the project: fetch `stableActor`, `applyActorId`, bridge `identities`
   (steps 4–7), (re)attach/reactivate the network adapter, flush offline edits.
   Reuse the adoption A5 mechanics. Tests: future edits carry `stableActor`;
   offline + online history display as one human; offline edits reach the (fake)
   hub after reconnect.
+  - **Done:** new `SyncClient.switchActor(actorId, screenName?, color?)`
+    (`client.ts`, exposed through the `preview-runtime` facade) re-authors all
+    open handles via `applyActorId` and writes the bridge identity row so the
+    HMAC actor inherits the human's name/color. The App calls it from
+    `onConnectionChange(true)` for a hub project via
+    `reconcileHubActorOnReconnect`: it resolves the HMAC actor (a peer only
+    reconnects with a valid cookie, so it resolves) and switches only if the
+    current actor differs — a no-op for a normally-online project or a
+    transient blip. Tests (`cached-hub-offline.test.ts` B3): after switch
+    `getActorId()===HMAC`; the post-switch file-doc change carries the HMAC
+    actor while the offline change still carries the local actor (history
+    immutable); `identities` has both actors as one human; the offline + online
+    edits reach the in-process hub.
 - [ ] **B4 — Durability of offline edits (D1 coordination).** Ensure offline
   edits to *existing cached* docs reliably sync on reconnect. Determine whether
   this shares D1's announce-on-connect fix (`bd-10bdjmjb`) or is already covered
@@ -174,12 +196,40 @@ returns rather than once.
     with no D1 fix. B4 shrinks to widening this to *N* docs (and a
     newly-created-offline doc under an existing project, which *is* the D1
     case) and confirming it holds under the real hub-client reconnect wiring.
-- [ ] **B5 — End-to-end verification + docs.** Real browser: open a hub project
+  - **Done:** `cached-hub-offline.test.ts` B4 edits N=4 existing cached docs
+    offline, reconnects, and asserts **all N** updated docs reach the in-process
+    hub via normal automerge sync — **no D1 announce-on-connect fix required**
+    for existing docs. The one case that *does* remain D1 territory
+    (`bd-10bdjmjb`) — creating a **new** doc offline under an existing project —
+    is deliberately out of this test's scope and stays gated on D1.
+- [x] **B5 — End-to-end verification + docs.** Real browser: open a hub project
   online, go offline (or sign out), edit, reconnect/sign-in, confirm the edits
   reach the hub and authorship reads as one human in the UI/DevTools. Record
   exact steps + observed output per the repo end-to-end policy. Update
   `hub-client/LOCAL-FIRST.md` (the table currently says sync/collab are
   hub-only; add the offline-cached-hub-project row).
+  - **Docs:** `hub-client/LOCAL-FIRST.md` gains a "Working offline with a hub
+    project" section + a table row ("Open & edit a *previously-opened* hub
+    project offline — ✅ from cache").
+  - **Automated E2E (library level, real hub):** `cached-hub-offline.test.ts`
+    drives the **real sync client** against a real in-process
+    (`startTestHub`) hub through the entire timeline — create online → go
+    offline (drop sockets + hold upgrades on a stable URL) → reopen from cache
+    → offline edit → reconnect → `switchActor` → sync-up — over
+    `fake-indexeddb`. This exercises the actual `connect`/`applyActorId`/
+    `switchActor`/storage code paths end to end, not mocks.
+  - **Automated (decision + build):** `openActor.test.ts` (8 cases) covers the
+    online-vs-offline / cached-vs-uncached open decision; the strict hub-client
+    build (`tsc -b && vite build`) confirms the App wiring compiles.
+  - **Manual (honest gap, per the A7v1 precedent):** the full *browser* session
+    with a **live OIDC provider** — sign in, open a hub project, sign out / go
+    offline in the tab, edit, sign back in, watch the edits sync and authorship
+    collapse to one human in the UI — is **not automated** (the headless
+    harness has no OIDC client id, and under `--allow-insecure-auth`
+    `AUTH_ENABLED` is false so the null/offline actor branches aren't hit).
+    Manual recipe: `npm run local-prod`, create a hub project, use DevTools →
+    Network → Offline, reload (opens from cache, editable), edit, go back
+    online, confirm the edit reaches the hub and authorship shows one author.
 
 ## Interaction with the shipped v1
 

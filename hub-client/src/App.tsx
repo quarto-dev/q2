@@ -25,6 +25,8 @@ import {
   getFileContent,
   applyEditorOperations,
   createNewProject,
+  getActorId,
+  switchActor,
   type ActorIdentity,
   type CaptureRef,
   type EditorContentChange,
@@ -180,6 +182,27 @@ function App() {
     [resolveActorId],
   );
 
+  // On reconnect for a hub project we opened offline under the local actor,
+  // switch to the server-trusted HMAC actor and bridge authorship display so
+  // the offline window and online edits read as one human (bd-g5apu5bm). A
+  // peer only reconnects with a valid cookie, so the HMAC actor resolves; a
+  // normally-online project already carries it, making this a no-op.
+  const reconcileHubActorOnReconnect = useCallback(
+    async (indexDocId: string): Promise<void> => {
+      const current = getActorId();
+      let stable: string | null | undefined;
+      try {
+        stable = await resolveActorId(indexDocId);
+      } catch {
+        return; // still offline / transient — nothing to switch to yet
+      }
+      if (typeof stable === 'string' && stable !== current) {
+        switchActor(stable, screenNameRef.current, cursorColorRef.current);
+      }
+    },
+    [resolveActorId],
+  );
+
   // Capture auth error from redirect query param (once, before URL is cleaned).
   const [authError] = useState(() => {
     const has = new URLSearchParams(window.location.search).has('auth_error');
@@ -228,6 +251,12 @@ function App() {
   routeRef.current = route;
   const navigateToFileRef = useRef(navigateToFile);
   navigateToFileRef.current = navigateToFile;
+  // Current identity, read from the reconnect handler (which is registered
+  // once per project and would otherwise capture stale name/color).
+  const screenNameRef = useRef(screenName);
+  screenNameRef.current = screenName;
+  const cursorColorRef = useRef(cursorColor);
+  cursorColorRef.current = cursorColor;
 
   useEffect(() => {
     const enabled =
@@ -508,16 +537,23 @@ function App() {
         if (!connected && project) {
           // Connection lost - show error
           setConnectionError('Connection lost - working offline');
-        } else if (connected && connectionError === 'Connection lost - working offline') {
-          // Connection restored - clear error
-          setConnectionError(null);
+        } else if (connected) {
+          if (connectionError === 'Connection lost - working offline') {
+            // Connection restored - clear error
+            setConnectionError(null);
+          }
+          // Reconnected: if this hub project was opened offline under the
+          // local actor, switch to the HMAC actor and bridge authorship.
+          if (project?.syncServer) {
+            void reconcileHubActorOnReconnect(project.indexDocId);
+          }
         }
       },
       onError: (error) => {
         setConnectionError(error.message);
       },
     });
-  }, [project]);
+  }, [project, reconcileHubActorOnReconnect]);
 
   const handleSelectProject = useCallback(async (selectedProject: ProjectEntry, filePathOverride?: string) => {
     setIsConnecting(true);

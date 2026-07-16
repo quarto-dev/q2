@@ -73,13 +73,21 @@ export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> 
     }
   });
 
+  // Sockets of upgrade requests that arrived while holding and haven't
+  // completed the handshake yet. Tracked so stop() can destroy them —
+  // otherwise httpServer.close() hangs waiting on these half-open sockets.
+  const pendingSockets = new Set<{ destroy(): void; destroyed: boolean }>();
+
   const wss = new WebSocketServer({ noServer: true });
   httpServer.on('upgrade', (req, socket, head) => {
     if (req.url !== '/ws') {
       socket.destroy();
       return;
     }
+    pendingSockets.add(socket);
+    socket.on('close', () => pendingSockets.delete(socket));
     const proceed = (): void => {
+      pendingSockets.delete(socket);
       // The socket may have died while queued.
       if (!socket.destroyed) {
         wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
@@ -140,6 +148,12 @@ export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> 
       return false;
     },
     async stop(): Promise<void> {
+      // Destroy any held (never-upgraded) sockets and terminate live ones —
+      // httpServer.close() waits on open connections, so a lingering
+      // half-open upgrade (the offline window) would hang teardown.
+      for (const s of pendingSockets) if (!s.destroyed) s.destroy();
+      pendingSockets.clear();
+      for (const ws of wss.clients) ws.terminate();
       // shutdown() flushes storage, and flush() throws "DocHandle is
       // not ready" for docs that were announced but never delivered —
       // exactly the half-state the exit-drain tests (bd-10deu8h4)

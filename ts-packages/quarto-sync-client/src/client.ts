@@ -1732,6 +1732,38 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
+   * Switch the authoring actor for all open handles and bridge authorship
+   * display (bd-g5apu5bm, epic bd-xxjy9yfp).
+   *
+   * Used on reconnect: a hub project opened offline authors under the
+   * per-browser local actor; when the session returns we switch to the
+   * server-trusted HMAC actor so *future* edits carry it, and copy the
+   * human's identity onto the new actor so the offline-window history and
+   * the online edits display as one person. History is never rewritten
+   * (automerge changes are immutable) — only future authorship and the
+   * identities map change. No-op if disconnected or already on `actorId`.
+   */
+  function switchActor(actorId: string, screenName?: string, color?: string): void {
+    if (!state.repo || !actorId || actorId === state.actorId) return;
+    state.actorId = actorId;
+    // Re-author future changes on every open handle.
+    if (state.indexHandle) applyActorId(state.indexHandle, actorId);
+    for (const handle of state.fileHandles.values()) {
+      applyActorId(handle, actorId);
+    }
+    // Bridge authorship display: the new actor inherits the human's name and
+    // color, so the whole timeline reads as one person. Written into the
+    // index doc, so it syncs up like any other change.
+    if (state.indexHandle && screenName) {
+      state.indexHandle.change((d) => {
+        setIdentity(d, actorId, screenName, color || '');
+      });
+      const doc = state.indexHandle.doc();
+      if (doc) notifyIdentitiesIfChanged(doc);
+    }
+  }
+
+  /**
    * Flush all pending storage writes to the local cache.
    *
    * Matters most for local-first projects (no sync server): there is no
@@ -1768,6 +1800,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     getSyncDiagnostics,
     createNewProject,
     getActorId,
+    switchActor,
     flush,
   };
 }

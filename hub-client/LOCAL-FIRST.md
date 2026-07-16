@@ -39,12 +39,30 @@ Signing out (or a session expiring) never disturbs a local project — only
 hub-backed projects need a valid session, and losing one simply returns you to
 the project list.
 
+## Working offline with a hub project
+
+A hub project you've opened before is **cached in this browser**, so you can
+keep working on it even with no connection — for example on a plane, or after
+signing out:
+
+- Opening a cached hub project while offline (or logged out) loads it from the
+  local cache and is **fully editable**. You don't need to sign in first.
+- Your offline edits are attributed to the local author ("You") while you're
+  disconnected.
+- When you reconnect (come back online / sign in), your offline edits **sync up
+  to the hub automatically**, and the whole editing history — offline and
+  online — shows as one author.
+
+A hub project you've **never** opened on this device can't be opened offline
+(there's nothing cached yet); the app tells you to reconnect and sign in.
+
 ## What requires a hub
 
 | Action | Local (no account) | Connected to a hub |
 | --- | --- | --- |
 | Create / edit / preview a project | ✅ | ✅ |
 | Persist across reloads (same browser) | ✅ | ✅ |
+| Open & edit a *previously-opened* hub project offline | — | ✅ (from cache) |
 | Sync across your own devices | — | ✅ |
 | Real-time collaboration with others | — | ✅ |
 | Share a project link | — | ✅ |
