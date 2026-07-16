@@ -23,6 +23,12 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-15
+
+- [`3992e45d`](https://github.com/quarto-dev/q2/commits/3992e45d): UI exploration (branch only): opening a project on a local hub without sign-in now records you as a contributor, so collection avatar chips fill in during local testing instead of staying empty.
+- [`3992e45d`](https://github.com/quarto-dev/q2/commits/3992e45d): UI exploration (branch only): the Automerge debugger now opens against an auth-disabled local hub and lists every collection as its own named synced document, instead of showing only a single project set.
+- [`3992e45d`](https://github.com/quarto-dev/q2/commits/3992e45d): UI exploration (branch only): project cards fade their hover action icons (peek, fork, menu) beneath long titles so they no longer overlap the text, and the empty-state now reads "Everything is in a collection".
+
 ### 2026-07-10
 
 - [`a2391089`](https://github.com/quarto-dev/q2/commits/a2391089): UI exploration (branch only): projects can be duplicated from the projects home (project menu → Duplicate) — the copy gets all files, the name "(copy)", and the same collection as the original.
