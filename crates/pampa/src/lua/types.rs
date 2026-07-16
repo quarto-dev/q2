@@ -30,13 +30,225 @@ use crate::pandoc::{Block, Inline};
 /// `FromLua` and the `clone()` Lua method each produce a fresh,
 /// independent cell (deep-clone of the inner value) to preserve today's
 /// per-invocation isolation semantics across filter boundaries.
+/// hslua-style property cache (bd-hitjclzp).
+///
+/// Pandoc's Lua bridge caches every pushed property value in the
+/// userdata's uservalue: repeated reads of `div.content` alias the
+/// *same* Lua table, and marshaling the element back to the host
+/// re-reads ("flushes") the cached values through the property
+/// setters. That is what makes the idiomatic in-place mutation
+/// pattern — `div.content:insert(x); return div` — actually persist.
+///
+/// q2 replicates this with a per-element cache mapping property name →
+/// the exact Lua value handed out. Only properties on the
+/// [`is_cacheable_property`] allowlist participate (they need reliable
+/// setters for the flush); everything else keeps snapshot semantics.
+/// Clones of the userdata share the cache (they also share the value
+/// cell), so aliasing stays consistent.
+///
+/// The cached [`Value`] handles keep their Lua values alive from Rust;
+/// they are released when the userdata is collected (drop chain), so
+/// no uncollectable cycle survives the element itself.
+#[derive(Debug, Clone, Default)]
+pub struct PropertyCache(Rc<RefCell<PropertyCacheInner>>);
+
+#[derive(Debug, Default)]
+struct PropertyCacheInner {
+    /// Reentrancy guard: a flush that (pathologically) reaches itself
+    /// again — e.g. an element inserted into its own content — treats
+    /// the inner occurrence as a snapshot instead of recursing forever.
+    flushing: bool,
+    entries: Vec<(String, Value)>,
+}
+
+impl PropertyCache {
+    pub(crate) fn get(&self, key: &str) -> Option<Value> {
+        self.0
+            .borrow()
+            .entries
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+    }
+
+    pub(crate) fn store(&self, key: &str, value: &Value) {
+        let mut inner = self.0.borrow_mut();
+        if let Some(slot) = inner.entries.iter_mut().find(|(k, _)| k == key) {
+            slot.1 = value.clone();
+        } else {
+            inner.entries.push((key.to_string(), value.clone()));
+        }
+    }
+
+    pub(crate) fn remove(&self, key: &str) {
+        self.0.borrow_mut().entries.retain(|(k, _)| k != key);
+    }
+
+    /// Start a flush: returns the entries to write back, or `None`
+    /// when there is nothing to do (empty, or already flushing).
+    pub(crate) fn begin_flush(&self) -> Option<Vec<(String, Value)>> {
+        let mut inner = self.0.borrow_mut();
+        if inner.flushing || inner.entries.is_empty() {
+            return None;
+        }
+        inner.flushing = true;
+        Some(inner.entries.clone())
+    }
+
+    pub(crate) fn end_flush(&self) {
+        self.0.borrow_mut().flushing = false;
+    }
+}
+
+/// Properties that participate in hslua-style caching. Each needs a
+/// reliable `set_field` implementation on every element that exposes
+/// it, because the flush writes the cached value back through it.
+/// (`attr` is also cached, but as userdata with a dedicated flush
+/// path — see `flush_cached_attr_entry`.)
+fn is_cacheable_property(key: &str) -> bool {
+    matches!(
+        key,
+        "content" | "citations" | "caption" | "classes" | "bodies" | "colspecs"
+    )
+}
+
+/// Should this (key, value) pair be cached on an element? Container
+/// tables for the allowlisted properties, plus the `attr` LuaAttr
+/// userdata (so `el.attr` reads alias and nested attr mutations
+/// survive to the flush) and the OrderedList `listAttributes`
+/// userdata (same aliasing rationale; a raw-triple table assignment
+/// is cached too, matching hslua — the aliases then read through it).
+fn should_cache_element_property(key: &str, value: &Value) -> bool {
+    (is_cacheable_property(key) && matches!(value, Value::Table(_)))
+        || (matches!(key, "attr" | "listAttributes" | "head" | "foot" | "caption")
+            && matches!(value, Value::UserData(_) | Value::Table(_)))
+}
+
+/// Resolve an OrderedList list-attribute alias (`start`/`style`/
+/// `delimiter`) through the element's cached `listAttributes` value,
+/// mirroring hslua's alias mechanism: the alias path reads the
+/// property, so it observes the cached value — the live userdata, or
+/// a user-assigned raw triple table (string-indexed, usually nil,
+/// until a flush re-peeks the positional triple). Returns `Ok(None)`
+/// when there is no cache entry (caller reads the element directly).
+fn ordered_list_alias_get(cache: &PropertyCache, lua: &Lua, key: &str) -> Result<Option<Value>> {
+    match cache.get("listAttributes") {
+        None => Ok(None),
+        Some(Value::UserData(ud)) => match ud.borrow::<super::constructors::LuaListAttributes>() {
+            Ok(la) => la.get_field(lua, key).map(Some),
+            Err(_) => Ok(None),
+        },
+        Some(Value::Table(t)) => t.get::<Value>(key).map(Some),
+        Some(_) => Ok(None),
+    }
+}
+
+/// Write an OrderedList list-attribute alias through the cached
+/// `listAttributes` value when present (see [`ordered_list_alias_get`]).
+/// Returns `Ok(false)` when there is no cache entry (caller writes to
+/// the element directly).
+fn ordered_list_alias_set(cache: &PropertyCache, lua: &Lua, key: &str, val: Value) -> Result<bool> {
+    match cache.get("listAttributes") {
+        None => Ok(false),
+        Some(Value::UserData(ud)) => match ud.borrow::<super::constructors::LuaListAttributes>() {
+            Ok(la) => {
+                la.set_field(key, val, lua)?;
+                Ok(true)
+            }
+            Err(_) => Ok(false),
+        },
+        Some(Value::Table(t)) => {
+            t.set(key, val)?;
+            Ok(true)
+        }
+        Some(_) => Ok(false),
+    }
+}
+
+/// Flush one cached `attr` entry during an element flush. Returns
+/// `Ok(true)` when the entry was fully handled here (the caller must
+/// not run `set_field` for it).
+///
+/// A cached `LuaAttr` gets its own property cache flushed first (the
+/// classes List table). If it is a live ref into `element_cell`'s own
+/// Attr, writes have already landed — running the element's `attr`
+/// setter would self-borrow. An *Owned* attr (or a ref to a different
+/// element) is copied in via `apply`, matching Pandoc's
+/// re-peek-at-flush semantics.
+fn flush_cached_attr_entry(
+    lua: &Lua,
+    value: &Value,
+    is_self_ref: impl FnOnce(&LuaAttr) -> bool,
+    apply: impl FnOnce(crate::pandoc::Attr),
+) -> Result<bool> {
+    if let Value::UserData(ud) = value
+        && let Ok(lua_attr) = ud.borrow::<LuaAttr>()
+    {
+        lua_attr.flush_property_cache(lua)?;
+        if !is_self_ref(&lua_attr) {
+            apply(lua_attr.clone_attr());
+        }
+        return Ok(true);
+    }
+    Ok(false)
+}
+
 #[derive(Debug, Clone)]
-pub struct LuaInline(pub Rc<RefCell<Inline>>);
+pub struct LuaInline(pub Rc<RefCell<Inline>>, pub PropertyCache);
 
 impl LuaInline {
     /// Construct a `LuaInline` around a freshly-owned `Inline` in a new cell.
     pub fn new(inline: Inline) -> Self {
-        LuaInline(Rc::new(RefCell::new(inline)))
+        LuaInline(Rc::new(RefCell::new(inline)), PropertyCache::default())
+    }
+
+    /// Write cached property values back into the inner cell (hslua
+    /// "readback" semantics — see [`PropertyCache`]). Idempotent; call
+    /// before any read of the inner value that must observe in-place
+    /// mutations made through previously handed-out property tables.
+    pub fn flush_property_cache(&self, lua: &Lua) -> Result<()> {
+        let entries = match self.1.begin_flush() {
+            Some(entries) => entries,
+            None => return Ok(()),
+        };
+        let mut result = Ok(());
+        for (key, value) in entries {
+            let step = if key == "attr" {
+                flush_cached_attr_entry(
+                    lua,
+                    &value,
+                    |a| a.is_ref_to_inline(&self.0),
+                    |tuple| {
+                        let mut inner = self.0.borrow_mut();
+                        if let Some(slot) = inline_attr_mut(&mut inner) {
+                            *slot = tuple;
+                        }
+                    },
+                )
+                .and_then(|handled| {
+                    if handled {
+                        Ok(())
+                    } else {
+                        self.set_field(&key, value, lua)
+                    }
+                })
+            } else {
+                self.set_field(&key, value, lua)
+            };
+            if let Err(e) = step {
+                result = Err(e);
+                break;
+            }
+        }
+        self.1.end_flush();
+        result
+    }
+
+    /// Flush, then deep-clone the inner `Inline` — the blessed way to
+    /// marshal a `LuaInline` back into a Rust AST value.
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<Inline> {
+        self.flush_property_cache(lua)?;
+        Ok(self.0.borrow().clone())
     }
 
     /// Borrow the inner `Inline` immutably.
@@ -133,6 +345,7 @@ impl LuaInline {
             Inline::Image(_) => &[
                 "tag",
                 "content",
+                "caption",
                 "src",
                 "title",
                 "attr",
@@ -192,6 +405,7 @@ impl LuaInline {
                 // Snapshot the inner inline at .clone-access time (matching
                 // pre-refactor behavior). Each invocation of the returned
                 // function produces an independent LuaInline (new cell).
+                self.flush_property_cache(lua)?;
                 let snapshot = self.0.borrow().clone();
                 return lua
                     .create_function(move |lua, ()| {
@@ -205,6 +419,7 @@ impl LuaInline {
                         |lua, (ud, filter_table): (UserDataRef<LuaInline>, Table)| async move {
                             // Snapshot to an owned Inline before awaiting so
                             // we don't hold a RefCell borrow across the await.
+                            ud.flush_property_cache(&lua)?;
                             let snapshot = ud.0.borrow().clone();
                             let filtered =
                                 walk_inline_with_filter(&lua, &snapshot, &filter_table).await?;
@@ -273,6 +488,9 @@ impl LuaInline {
 
             // Image
             (Inline::Image(i), "content") => inlines_to_lua_table(lua, &i.content),
+            // Pandoc name for the image description: `caption` is an
+            // alias of content (Inline.hs possibleProperty "caption").
+            (Inline::Image(i), "caption") => inlines_to_lua_table(lua, &i.content),
             (Inline::Image(i), "src") => i.target.0.clone().into_lua(lua),
             (Inline::Image(i), "title") => i.target.1.clone().into_lua(lua),
             (Inline::Image(_), "attr") => attr_to_lua_userdata_for_inline(lua, Rc::clone(&self.0)),
@@ -414,6 +632,10 @@ impl LuaInline {
                 i.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
+            (Inline::Image(i), "caption") => {
+                i.content = peek_inlines_fuzzy(lua, val)?;
+                Ok(())
+            }
             (Inline::Image(i), "src") => {
                 i.target.0 = String::from_lua(val, lua)?;
                 Ok(())
@@ -444,10 +666,40 @@ impl LuaInline {
                 m.text = String::from_lua(val, lua)?;
                 Ok(())
             }
+            (Inline::Math(m), "mathtype") => {
+                let s = String::from_lua(val, lua)?;
+                m.math_type = match s.as_str() {
+                    "InlineMath" => crate::pandoc::MathType::InlineMath,
+                    "DisplayMath" => crate::pandoc::MathType::DisplayMath,
+                    other => {
+                        return Err(invalid_value_error(
+                            "math type",
+                            other,
+                            "InlineMath or DisplayMath",
+                        ));
+                    }
+                };
+                Ok(())
+            }
 
             // Quoted
             (Inline::Quoted(q), "content") => {
                 q.content = peek_inlines_fuzzy(lua, val)?;
+                Ok(())
+            }
+            (Inline::Quoted(q), "quotetype") => {
+                let s = String::from_lua(val, lua)?;
+                q.quote_type = match s.as_str() {
+                    "SingleQuote" => crate::pandoc::QuoteType::SingleQuote,
+                    "DoubleQuote" => crate::pandoc::QuoteType::DoubleQuote,
+                    other => {
+                        return Err(invalid_value_error(
+                            "quote type",
+                            other,
+                            "SingleQuote or DoubleQuote",
+                        ));
+                    }
+                };
                 Ok(())
             }
 
@@ -610,7 +862,7 @@ impl LuaInline {
                     Ok(())
                 }
                 None => Err(Error::runtime(
-                    "cannot set 'attributes' on this inline variant",
+                    "Q-11-5: cannot set 'attributes' on this inline variant",
                 )),
             },
             (inline, "classes") => match inline_attr_mut(inline) {
@@ -619,15 +871,18 @@ impl LuaInline {
                     Ok(())
                 }
                 None => Err(Error::runtime(
-                    "cannot set 'classes' on this inline variant",
+                    "Q-11-5: cannot set 'classes' on this inline variant",
                 )),
             },
 
             // Read-only fields
-            (_, "tag" | "t") => Err(Error::runtime("cannot set read-only field 'tag'")),
+            (_, "tag" | "t") => Err(read_only_field_error("tag")),
 
             // Unknown field
-            _ => Err(Error::runtime(format!("cannot set field '{}'", key))),
+            _ => Err(Error::runtime(format!(
+                "Q-11-5: cannot set unknown field '{}'",
+                key
+            ))),
         }
     }
 }
@@ -640,9 +895,18 @@ impl UserData for LuaInline {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        // Dynamic field access via __index
+        // Dynamic field access via __index. Cacheable container
+        // properties return the SAME Lua table on repeated reads
+        // (hslua aliasing semantics — see PropertyCache).
         methods.add_meta_method(MetaMethod::Index, |lua, this, key: String| {
-            this.get_field(lua, &key)
+            if let Some(cached) = this.1.get(&key) {
+                return Ok(cached);
+            }
+            let value = this.get_field(lua, &key)?;
+            if should_cache_element_property(&key, &value) {
+                this.1.store(&key, &value);
+            }
+            Ok(value)
         });
 
         // Dynamic field assignment via __newindex. Now uses add_meta_method
@@ -650,15 +914,43 @@ impl UserData for LuaInline {
         // `LuaInline.0`; set_field takes `&self`.
         methods.add_meta_method(
             MetaMethod::NewIndex,
-            |lua, this, (key, val): (String, Value)| this.set_field(&key, val, lua),
+            |lua, this, (key, val): (String, Value)| {
+                this.set_field(&key, val.clone(), lua)?;
+                // Keep the assigned value aliased (hslua caches the
+                // set value too); other assignments just drop any
+                // stale cache entry.
+                if should_cache_element_property(&key, &val) {
+                    this.1.store(&key, &val);
+                } else if is_cacheable_property(&key) || key == "attr" {
+                    this.1.remove(&key);
+                }
+                Ok(())
+            },
         );
 
         // Note: clone and walk are handled by get_field() rather than add_method()
         // to allow them to capture self in closures for direct function call syntax
 
-        // __tostring for debugging
-        methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
-            Ok(format!("{}(...)", this.tag_name()))
+        // __tostring: Haskell-show format, matching Pandoc's Lua API
+        methods.add_meta_method(MetaMethod::ToString, |lua, this, ()| {
+            this.flush_property_cache(lua)?;
+            Ok(super::show::show_inline(&this.0.borrow()))
+        });
+
+        // __eq: structural equality ignoring source info, matching
+        // Pandoc (where elements carry no source information at all).
+        methods.add_meta_method(MetaMethod::Eq, |lua, this, other: Value| {
+            Ok(match other {
+                Value::UserData(ud) => match ud.borrow::<LuaInline>() {
+                    Ok(other_inline) => {
+                        this.flush_property_cache(lua)?;
+                        other_inline.flush_property_cache(lua)?;
+                        inline_structurally_eq(&this.0.borrow(), &other_inline.0.borrow())
+                    }
+                    Err(_) => false,
+                },
+                _ => false,
+            })
         });
 
         // __pairs for iteration (for k, v in pairs(elem))
@@ -668,6 +960,7 @@ impl UserData for LuaInline {
             // to the original during iteration are not observed — this also
             // avoids RefCell borrow conflicts if the filter mutates while
             // iterating.
+            this.flush_property_cache(lua)?;
             let snapshot = this.0.borrow().clone();
 
             // Create the iterator function following Lua's next() semantics:
@@ -781,12 +1074,61 @@ impl UserData for LuaSourceInfo {
 /// ownership of the same cell and propagate writes back. See
 /// `claude-notes/plans/2026-04-21-lua-attr-mutation-proxy.md`.
 #[derive(Debug, Clone)]
-pub struct LuaBlock(pub Rc<RefCell<Block>>);
+pub struct LuaBlock(pub Rc<RefCell<Block>>, pub PropertyCache);
 
 impl LuaBlock {
     /// Construct a `LuaBlock` around a freshly-owned `Block` in a new cell.
     pub fn new(block: Block) -> Self {
-        LuaBlock(Rc::new(RefCell::new(block)))
+        LuaBlock(Rc::new(RefCell::new(block)), PropertyCache::default())
+    }
+
+    /// Write cached property values back into the inner cell (hslua
+    /// "readback" semantics — see [`PropertyCache`]). Idempotent; call
+    /// before any read of the inner value that must observe in-place
+    /// mutations made through previously handed-out property tables.
+    pub fn flush_property_cache(&self, lua: &Lua) -> Result<()> {
+        let entries = match self.1.begin_flush() {
+            Some(entries) => entries,
+            None => return Ok(()),
+        };
+        let mut result = Ok(());
+        for (key, value) in entries {
+            let step = if key == "attr" {
+                flush_cached_attr_entry(
+                    lua,
+                    &value,
+                    |a| a.is_ref_to_block(&self.0),
+                    |tuple| {
+                        let mut inner = self.0.borrow_mut();
+                        if let Some(slot) = block_attr_mut(&mut inner) {
+                            *slot = tuple;
+                        }
+                    },
+                )
+                .and_then(|handled| {
+                    if handled {
+                        Ok(())
+                    } else {
+                        self.set_field(&key, value, lua)
+                    }
+                })
+            } else {
+                self.set_field(&key, value, lua)
+            };
+            if let Err(e) = step {
+                result = Err(e);
+                break;
+            }
+        }
+        self.1.end_flush();
+        result
+    }
+
+    /// Flush, then deep-clone the inner `Block` — the blessed way to
+    /// marshal a `LuaBlock` back into a Rust AST value.
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<Block> {
+        self.flush_property_cache(lua)?;
+        Ok(self.0.borrow().clone())
     }
 
     /// Borrow the inner `Block` immutably.
@@ -846,7 +1188,16 @@ impl LuaBlock {
             ],
             Block::RawBlock(_) => &["tag", "format", "text", "clone", "walk"],
             Block::BlockQuote(_) => &["tag", "content", "clone", "walk"],
-            Block::OrderedList(_) => &["tag", "content", "start", "style", "clone", "walk"],
+            Block::OrderedList(_) => &[
+                "tag",
+                "content",
+                "listAttributes",
+                "start",
+                "style",
+                "delimiter",
+                "clone",
+                "walk",
+            ],
             Block::BulletList(_) => &["tag", "content", "clone", "walk"],
             Block::DefinitionList(_) => &["tag", "content", "clone", "walk"],
             Block::Header(_) => &[
@@ -865,6 +1216,10 @@ impl LuaBlock {
                 "tag",
                 "attr",
                 "caption",
+                "colspecs",
+                "head",
+                "bodies",
+                "foot",
                 "identifier",
                 "classes",
                 "attributes",
@@ -915,6 +1270,7 @@ impl LuaBlock {
                 return lua.create_userdata(LuaSourceInfo::new(si))?.into_lua(lua);
             }
             "clone" => {
+                self.flush_property_cache(lua)?;
                 let snapshot = self.0.borrow().clone();
                 return lua
                     .create_function(move |lua, ()| {
@@ -926,6 +1282,7 @@ impl LuaBlock {
                 return lua
                     .create_async_function(
                         |lua, (ud, filter_table): (UserDataRef<LuaBlock>, Table)| async move {
+                            ud.flush_property_cache(&lua)?;
                             let snapshot = ud.0.borrow().clone();
                             let filtered =
                                 walk_block_with_filter(&lua, &snapshot, &filter_table).await?;
@@ -995,18 +1352,36 @@ impl LuaBlock {
                     .collect::<Result<_>>()?;
                 values_to_list_table(lua, items)
             }
-            (Block::OrderedList(o), "start") => (o.attr.0 as i64).into_lua(lua),
+            (Block::OrderedList(o), "listAttributes") => {
+                // Fresh userdata around a copy of the triple; the
+                // Index metamethod caches it, so reads alias and
+                // nested mutation persists via the flush.
+                let ud = lua
+                    .create_userdata(super::constructors::LuaListAttributes::new(o.attr.clone()))?;
+                Ok(Value::UserData(ud))
+            }
+            // start/style/delimiter are hslua-style ALIASES into the
+            // listAttributes property: when a cached listAttributes
+            // value exists, they read through it (including the
+            // pandoc quirk that a user-assigned raw triple table is
+            // string-indexed, yielding nil until the flush re-peeks).
+            (Block::OrderedList(o), "start") => {
+                match ordered_list_alias_get(&self.1, lua, "start")? {
+                    Some(v) => Ok(v),
+                    None => (o.attr.0 as i64).into_lua(lua),
+                }
+            }
             (Block::OrderedList(o), "style") => {
-                let style = match o.attr.1 {
-                    crate::pandoc::ListNumberStyle::Default => "DefaultStyle",
-                    crate::pandoc::ListNumberStyle::Decimal => "Decimal",
-                    crate::pandoc::ListNumberStyle::LowerAlpha => "LowerAlpha",
-                    crate::pandoc::ListNumberStyle::UpperAlpha => "UpperAlpha",
-                    crate::pandoc::ListNumberStyle::LowerRoman => "LowerRoman",
-                    crate::pandoc::ListNumberStyle::UpperRoman => "UpperRoman",
-                    crate::pandoc::ListNumberStyle::Example => "Example",
-                };
-                style.into_lua(lua)
+                match ordered_list_alias_get(&self.1, lua, "style")? {
+                    Some(v) => Ok(v),
+                    None => super::constructors::list_number_style_name(&o.attr.1).into_lua(lua),
+                }
+            }
+            (Block::OrderedList(o), "delimiter") => {
+                match ordered_list_alias_get(&self.1, lua, "delimiter")? {
+                    Some(v) => Ok(v),
+                    None => super::constructors::list_number_delim_name(&o.attr.2).into_lua(lua),
+                }
             }
 
             // Figure
@@ -1044,12 +1419,37 @@ impl LuaBlock {
                 values_to_list_table(lua, items)
             }
 
-            // Figure caption
-            (Block::Figure(f), "caption") => caption_to_lua_table(lua, &f.caption),
+            // Figure caption: Caption userdata (cached by the Index
+            // metamethod so `fig.caption.long = …` persists via flush).
+            (Block::Figure(f), "caption") => {
+                let ud =
+                    lua.create_userdata(super::constructors::LuaCaption::new(f.caption.clone()))?;
+                Ok(Value::UserData(ud))
+            }
 
             // Table basic fields
             (Block::Table(_), "attr") => attr_to_lua_userdata_for_block(lua, Rc::clone(&self.0)),
-            (Block::Table(t), "caption") => caption_to_lua_table(lua, &t.caption),
+            (Block::Table(t), "caption") => {
+                let ud =
+                    lua.create_userdata(super::constructors::LuaCaption::new(t.caption.clone()))?;
+                Ok(Value::UserData(ud))
+            }
+            (Block::Table(t), "head") => {
+                let ud =
+                    lua.create_userdata(super::constructors::LuaTableHead::new(t.head.clone()))?;
+                Ok(Value::UserData(ud))
+            }
+            (Block::Table(t), "foot") => {
+                let ud =
+                    lua.create_userdata(super::constructors::LuaTableFoot::new(t.foot.clone()))?;
+                Ok(Value::UserData(ud))
+            }
+            (Block::Table(t), "bodies") => {
+                super::constructors::table_bodies_to_lua_list(lua, &t.bodies)
+            }
+            (Block::Table(t), "colspecs") => {
+                super::constructors::colspecs_to_lua_table(lua, &t.colspec)
+            }
             (Block::Table(t), "identifier") => t.attr.0.clone().into_lua(lua),
             (Block::Table(_), "classes") => classes_proxy_for_block(lua, Rc::clone(&self.0)),
             (Block::Table(_), "attributes") => attributes_proxy_for_block(lua, Rc::clone(&self.0)),
@@ -1132,6 +1532,78 @@ impl LuaBlock {
                 f.content = peek_blocks_fuzzy(lua, val)?;
                 Ok(())
             }
+            (Block::Figure(f), "caption") => {
+                f.caption = super::constructors::parse_caption(lua, Some(val))?;
+                Ok(())
+            }
+            (Block::Table(t), "caption") => {
+                t.caption = super::constructors::parse_caption(lua, Some(val))?;
+                Ok(())
+            }
+            (Block::Table(t), "head") => {
+                t.head = super::constructors::parse_table_head(lua, val)?;
+                Ok(())
+            }
+            (Block::Table(t), "foot") => {
+                t.foot = super::constructors::parse_table_foot(lua, val)?;
+                Ok(())
+            }
+            (Block::Table(t), "bodies") => {
+                t.bodies = super::constructors::parse_table_bodies(lua, val)?;
+                Ok(())
+            }
+            (Block::Table(t), "colspecs") => {
+                t.colspec = super::constructors::parse_colspecs(lua, val)?;
+                Ok(())
+            }
+
+            // List-shaped blocks: `content` assignment re-parses the
+            // items the same way the constructors do (Pandoc's
+            // setBlockContent re-projection semantics; also required
+            // by the PropertyCache flush).
+            (Block::BulletList(b), "content") => {
+                b.content = super::constructors::parse_list_items(lua, val)?;
+                Ok(())
+            }
+            (Block::OrderedList(o), "content") => {
+                o.content = super::constructors::parse_list_items(lua, val)?;
+                Ok(())
+            }
+            (Block::OrderedList(o), "listAttributes") => {
+                o.attr = super::constructors::parse_list_attributes(val)?;
+                Ok(())
+            }
+            // Aliases write through the cached listAttributes value
+            // when present (hslua alias semantics), else directly
+            // into the element's triple.
+            (Block::OrderedList(o), "start") => {
+                if !ordered_list_alias_set(&self.1, lua, "start", val.clone())? {
+                    o.attr.0 = i64::from_lua(val, lua)? as usize;
+                }
+                Ok(())
+            }
+            (Block::OrderedList(o), "style") => {
+                if !ordered_list_alias_set(&self.1, lua, "style", val.clone())? {
+                    let s = String::from_lua(val, lua)?;
+                    o.attr.1 = super::constructors::parse_list_number_style(&s)?;
+                }
+                Ok(())
+            }
+            (Block::OrderedList(o), "delimiter") => {
+                if !ordered_list_alias_set(&self.1, lua, "delimiter", val.clone())? {
+                    let s = String::from_lua(val, lua)?;
+                    o.attr.2 = super::constructors::parse_list_number_delim(&s)?;
+                }
+                Ok(())
+            }
+            (Block::DefinitionList(d), "content") => {
+                d.content = super::constructors::parse_definition_list_items(lua, val)?;
+                Ok(())
+            }
+            (Block::LineBlock(l), "content") => {
+                l.content = super::constructors::parse_line_block_content(lua, val)?;
+                Ok(())
+            }
             (Block::Figure(f), "identifier") => {
                 f.attr.0 = String::from_lua(val, lua)?;
                 Ok(())
@@ -1182,7 +1654,7 @@ impl LuaBlock {
                     Ok(())
                 }
                 None => Err(Error::runtime(
-                    "cannot set 'attributes' on this block variant",
+                    "Q-11-5: cannot set 'attributes' on this block variant",
                 )),
             },
             (block, "classes") => match block_attr_mut(block) {
@@ -1190,14 +1662,19 @@ impl LuaBlock {
                     attr.1 = lua_table_to_strings(lua, val)?;
                     Ok(())
                 }
-                None => Err(Error::runtime("cannot set 'classes' on this block variant")),
+                None => Err(Error::runtime(
+                    "Q-11-5: cannot set 'classes' on this block variant",
+                )),
             },
 
             // Read-only fields
-            (_, "tag" | "t") => Err(Error::runtime("cannot set read-only field 'tag'")),
+            (_, "tag" | "t") => Err(read_only_field_error("tag")),
 
             // Unknown field
-            _ => Err(Error::runtime(format!("cannot set field '{}'", key))),
+            _ => Err(Error::runtime(format!(
+                "Q-11-5: cannot set unknown field '{}'",
+                key
+            ))),
         }
     }
 }
@@ -1210,9 +1687,18 @@ impl UserData for LuaBlock {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        // Dynamic field access via __index
+        // Dynamic field access via __index. Cacheable container
+        // properties return the SAME Lua table on repeated reads
+        // (hslua aliasing semantics — see PropertyCache).
         methods.add_meta_method(MetaMethod::Index, |lua, this, key: String| {
-            this.get_field(lua, &key)
+            if let Some(cached) = this.1.get(&key) {
+                return Ok(cached);
+            }
+            let value = this.get_field(lua, &key)?;
+            if should_cache_element_property(&key, &value) {
+                this.1.store(&key, &value);
+            }
+            Ok(value)
         });
 
         // Dynamic field assignment via __newindex. Uses add_meta_method
@@ -1220,19 +1706,50 @@ impl UserData for LuaBlock {
         // `LuaBlock.0`; set_field takes `&self`.
         methods.add_meta_method(
             MetaMethod::NewIndex,
-            |lua, this, (key, val): (String, Value)| this.set_field(&key, val, lua),
+            |lua, this, (key, val): (String, Value)| {
+                this.set_field(&key, val.clone(), lua)?;
+                // Keep the assigned value aliased (hslua caches the
+                // set value too); other assignments just drop any
+                // stale cache entry.
+                if should_cache_element_property(&key, &val) {
+                    this.1.store(&key, &val);
+                } else if is_cacheable_property(&key)
+                    || matches!(key.as_str(), "attr" | "listAttributes" | "head" | "foot")
+                {
+                    this.1.remove(&key);
+                }
+                Ok(())
+            },
         );
 
         // Note: clone and walk are handled by get_field() rather than add_method()
         // to allow them to capture self in closures for direct function call syntax
 
-        // __tostring for debugging
-        methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
-            Ok(format!("{}(...)", this.tag_name()))
+        // __tostring: Haskell-show format, matching Pandoc's Lua API
+        methods.add_meta_method(MetaMethod::ToString, |lua, this, ()| {
+            this.flush_property_cache(lua)?;
+            Ok(super::show::show_block(&this.0.borrow()))
+        });
+
+        // __eq: structural equality ignoring source info, matching
+        // Pandoc (where elements carry no source information at all).
+        methods.add_meta_method(MetaMethod::Eq, |lua, this, other: Value| {
+            Ok(match other {
+                Value::UserData(ud) => match ud.borrow::<LuaBlock>() {
+                    Ok(other_block) => {
+                        this.flush_property_cache(lua)?;
+                        other_block.flush_property_cache(lua)?;
+                        block_structurally_eq(&this.0.borrow(), &other_block.0.borrow())
+                    }
+                    Err(_) => false,
+                },
+                _ => false,
+            })
         });
 
         // __pairs for iteration (for k, v in pairs(elem))
         methods.add_meta_method(MetaMethod::Pairs, |lua, this, ()| {
+            this.flush_property_cache(lua)?;
             let snapshot = this.0.borrow().clone();
 
             // Create the iterator function following Lua's next() semantics:
@@ -1305,125 +1822,52 @@ fn values_to_list_table(lua: &Lua, values: Vec<Value>) -> Result<Value> {
     super::list::create_list_table(lua, values)
 }
 
-/// Convert Caption to Lua table
-fn caption_to_lua_table(lua: &Lua, caption: &crate::pandoc::Caption) -> Result<Value> {
-    let table = lua.create_table()?;
-
-    // Short caption (optional)
-    if let Some(short) = &caption.short {
-        table.set("short", inlines_to_lua_table(lua, short)?)?;
-    }
-
-    // Long caption (blocks, optional)
-    if let Some(long) = &caption.long {
-        table.set("long", blocks_to_lua_table(lua, long)?)?;
-    }
-
-    Ok(Value::Table(table))
-}
-
-/// Convert Vec<Citation> to Lua table of citation tables
+/// Convert Vec<Citation> to a pandoc-List table of Citation userdata
+/// (matching Pandoc, where `cite.citations` is a List whose entries
+/// are typed Citation values).
 fn citations_to_lua_table(lua: &Lua, citations: &[crate::pandoc::Citation]) -> Result<Value> {
-    let table = lua.create_table()?;
-    for (i, citation) in citations.iter().enumerate() {
-        let cit_table = lua.create_table()?;
-        cit_table.set("id", citation.id.clone())?;
-        cit_table.set("prefix", inlines_to_lua_table(lua, &citation.prefix)?)?;
-        cit_table.set("suffix", inlines_to_lua_table(lua, &citation.suffix)?)?;
-        cit_table.set(
-            "mode",
-            match citation.mode {
-                crate::pandoc::CitationMode::AuthorInText => "AuthorInText",
-                crate::pandoc::CitationMode::SuppressAuthor => "SuppressAuthor",
-                crate::pandoc::CitationMode::NormalCitation => "NormalCitation",
-            },
-        )?;
-        cit_table.set("note_num", citation.note_num as i64)?;
-        cit_table.set("hash", citation.hash as i64)?;
-        table.set(i + 1, cit_table)?;
-    }
-    Ok(Value::Table(table))
+    let values = citations
+        .iter()
+        .map(|citation| {
+            lua.create_userdata(LuaCitation::new(citation.clone()))
+                .map(Value::UserData)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    super::list::create_list_table(lua, values)
 }
 
-/// Convert Lua value to Attr - accepts either LuaAttr userdata or table
-fn lua_value_to_attr(val: Value, _lua: &Lua) -> Result<crate::pandoc::Attr> {
-    match val {
-        Value::UserData(ud) => {
-            let lua_attr = ud.borrow::<LuaAttr>()?;
-            // Clone the underlying Attr regardless of the variant
-            // (Owned / BlockRef / InlineRef); the result is independent.
-            Ok(lua_attr.clone_attr())
-        }
-        Value::Table(table) => {
-            // Try to interpret as {identifier, classes, attributes} table
-            let identifier: Option<String> =
-                table.get(1).ok().or_else(|| table.get("identifier").ok());
-            let classes: Option<Value> = table.get(2).ok().or_else(|| table.get("classes").ok());
-            let attributes: Option<Value> =
-                table.get(3).ok().or_else(|| table.get("attributes").ok());
-
-            let id = identifier.unwrap_or_default();
-            let cls = match classes {
-                Some(Value::Table(t)) => {
-                    let mut result = Vec::new();
-                    for item in t.sequence_values::<String>() {
-                        result.push(item?);
-                    }
-                    result
-                }
-                _ => Vec::new(),
-            };
-            let attrs = match attributes {
-                Some(Value::Table(t)) => {
-                    let mut result = hashlink::LinkedHashMap::new();
-                    for pair in t.pairs::<String, String>() {
-                        let (k, v) = pair?;
-                        result.insert(k, v);
-                    }
-                    result
-                }
-                _ => hashlink::LinkedHashMap::new(),
-            };
-            Ok((id, cls, attrs))
-        }
-        _ => Err(Error::runtime("expected Attr userdata or table")),
-    }
+/// Convert a Lua value to an Attr for property assignment. Delegates
+/// to `parse_attr` so assignment re-runs the same peeker the
+/// constructors use (Pandoc's rule): bare string → identifier-only,
+/// positional triple, HTML-like map (`class` split, `id` key), the q2
+/// named form, Attr/AttributeList userdata (flushed). Previously this
+/// was a weaker ad-hoc parser, so `header.attr = 'id'` and
+/// `code.attr = {id=…, k=…}` were rejected or silently mis-read
+/// (bd-0g2yp61w).
+fn lua_value_to_attr(val: Value, lua: &Lua) -> Result<crate::pandoc::Attr> {
+    super::constructors::parse_attr(lua, Some(val))
 }
 
-/// Convert Lua table to Vec<Citation>
-fn lua_table_to_citations(_lua: &Lua, val: Value) -> Result<Vec<crate::pandoc::Citation>> {
+/// Convert a Lua value to Vec<Citation>: a sequence table whose
+/// entries are Citation userdata, matching Pandoc's strict
+/// `peekList peekCitation` ("table expected, got <type>" /
+/// "Citation expected, got <type>").
+pub(crate) fn lua_table_to_citations(
+    lua: &Lua,
+    val: Value,
+) -> Result<Vec<crate::pandoc::Citation>> {
     match val {
         Value::Table(table) => {
             let mut result = Vec::new();
-            for item in table.sequence_values::<Table>() {
-                let cit_table = item?;
-                let id: String = cit_table.get("id")?;
-                let prefix_val: Value = cit_table.get("prefix")?;
-                let prefix = peek_inlines_fuzzy(_lua, prefix_val)?;
-                let suffix_val: Value = cit_table.get("suffix")?;
-                let suffix = peek_inlines_fuzzy(_lua, suffix_val)?;
-                let mode_str: String = cit_table.get("mode")?;
-                let mode = match mode_str.as_str() {
-                    "AuthorInText" => crate::pandoc::CitationMode::AuthorInText,
-                    "SuppressAuthor" => crate::pandoc::CitationMode::SuppressAuthor,
-                    _ => crate::pandoc::CitationMode::NormalCitation,
-                };
-                let note_num: i64 = cit_table.get("note_num").unwrap_or(0);
-                let hash: i64 = cit_table.get("hash").unwrap_or(0);
-
-                result.push(crate::pandoc::Citation {
-                    id,
-                    prefix,
-                    suffix,
-                    mode,
-                    note_num: note_num as usize,
-                    hash: hash as usize,
-                    id_source: None, // Filter-created citations don't have source info
-                });
+            for item in table.sequence_values::<Value>() {
+                result.push(lua_value_to_citation(lua, item?)?);
             }
             Ok(result)
         }
-        _ => Err(Error::runtime("expected table of citations")),
+        Value::UserData(ud) if ud.borrow::<LuaCitation>().is_ok() => Err(Error::runtime(
+            "Q-11-3: table expected, got Citation (a single Citation must be wrapped in a list)",
+        )),
+        other => Err(type_mismatch_error("table of Citations", &other)),
     }
 }
 
@@ -1571,7 +2015,7 @@ pub fn lua_to_meta_value(lua: &Lua, val: Value) -> Result<crate::pandoc::MetaVal
             }
         }
         Value::Nil => Ok(MetaValue::MetaBool(false)),
-        _ => Err(Error::runtime("cannot convert value to MetaValue")),
+        other => Err(type_mismatch_error("MetaValue", &other)),
     }
 }
 
@@ -1595,8 +2039,51 @@ pub fn lua_table_to_meta(lua: &Lua, val: Value) -> Result<crate::pandoc::Meta> {
             }
             Ok(meta)
         }
-        _ => Err(Error::runtime("expected table for Meta")),
+        other => Err(type_mismatch_error("table (Meta)", &other)),
     }
+}
+
+// ============================================================================
+// Structural equality (Lua `__eq`, strand bd-55mb0rjz)
+//
+// Pandoc's Lua `==` compares the underlying Haskell values, which carry
+// no source information. q2's AST types derive PartialEq *including*
+// `source_info`, so two identically-constructed elements from different
+// filter lines would compare unequal under derived `==`. We therefore
+// compare the source-free Pandoc JSON of both sides, reusing the JSON
+// writer's maintained match logic (`*_to_source_free_json`) instead of
+// hand-maintaining a parallel ~60-variant equality. Derived `==` serves
+// as a fast path (it implies structural equality).
+// ============================================================================
+
+pub(crate) fn inline_structurally_eq(a: &Inline, b: &Inline) -> bool {
+    if a == b {
+        return true;
+    }
+    let ctx = crate::pandoc::ast_context::ASTContext::default();
+    crate::writers::json::inlines_to_source_free_json(&vec![a.clone()], &ctx)
+        == crate::writers::json::inlines_to_source_free_json(&vec![b.clone()], &ctx)
+}
+
+pub(crate) fn block_structurally_eq(a: &Block, b: &Block) -> bool {
+    if a == b {
+        return true;
+    }
+    let ctx = crate::pandoc::ast_context::ASTContext::default();
+    crate::writers::json::blocks_to_source_free_json(std::slice::from_ref(a), &ctx)
+        == crate::writers::json::blocks_to_source_free_json(std::slice::from_ref(b), &ctx)
+}
+
+/// Attr equality, order-sensitive in the attribute list (Pandoc's Attr
+/// attributes are a list of pairs, so order participates in `==`).
+pub(crate) fn attr_structurally_eq(a: &crate::pandoc::Attr, b: &crate::pandoc::Attr) -> bool {
+    a.0 == b.0
+        && a.1 == b.1
+        && a.2.len() == b.2.len()
+        && a.2
+            .iter()
+            .zip(b.2.iter())
+            .all(|((k1, v1), (k2, v2))| k1 == k2 && v1 == v2)
 }
 
 /// Split a string into Inlines, matching Pandoc's `B.text` from pandoc-types Builder.hs.
@@ -1662,12 +2149,108 @@ pub fn split_string_to_inlines(s: &str) -> Vec<Inline> {
     result
 }
 
+/// Call a `__toinline`/`__toblock`-style metamethod hook on a table
+/// or userdata value, returning the hook's raw result. Any other
+/// outcome — no metatable, absent or non-function metafield, or a
+/// call error — yields `None`, and callers fall through to their
+/// normal coercion. This mirrors hslua's `peekInlineMetamethod` /
+/// `peekBlockMetamethod`, whose failures are recoverable `failPeek`s
+/// inside `<|>` chains (bd-olz91r4v; pinned by the "metafield is
+/// ignored if it's not a function" and "non-Inline return values are
+/// ignored" upstream tests).
+fn call_element_metamethod(val: &Value, name: &str) -> Option<Value> {
+    let metafield: Value = match val {
+        Value::Table(t) => t.metatable()?.get(name).ok()?,
+        Value::UserData(ud) => ud.metatable().ok()?.get(name).ok()?,
+        _ => return None,
+    };
+    match metafield {
+        Value::Function(f) => f.call::<Value>(val.clone()).ok(),
+        _ => None,
+    }
+}
+
+/// `__toinline` hook: Some(inline) only when the hook exists, runs,
+/// and returns Inline userdata.
+fn peek_inline_via_metamethod(lua: &Lua, val: &Value) -> Option<Inline> {
+    match call_element_metamethod(val, "__toinline")? {
+        Value::UserData(ud) => {
+            let lua_inline = ud.borrow::<LuaInline>().ok()?;
+            lua_inline.extract_flushed(lua).ok()
+        }
+        _ => None,
+    }
+}
+
+/// `__toblock` hook: Some(block) only when the hook exists, runs, and
+/// returns Block userdata.
+fn peek_block_via_metamethod(lua: &Lua, val: &Value) -> Option<Block> {
+    match call_element_metamethod(val, "__toblock")? {
+        Value::UserData(ud) => {
+            let lua_block = ud.borrow::<LuaBlock>().ok()?;
+            lua_block.extract_flushed(lua).ok()
+        }
+        _ => None,
+    }
+}
+
 /// Peek a single Inline from a Lua value, with fuzzy coercion.
 ///
 /// Matches Pandoc's `peekInlineFuzzy`:
 /// 1. String → `Str(text)` (NO word splitting)
-/// 2. UserData containing LuaInline → extract
-/// 3. Otherwise → error
+/// 2. UserData containing LuaInline → extract; other userdata → try
+///    the `__toinline` metamethod
+/// 3. Table → try the `__toinline` metamethod
+/// Lua-facing type name for a value (mlua distinguishes integer/number;
+/// Lua and pandoc both say "number").
+pub(crate) fn lua_facing_type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Integer(_) => "number",
+        other => other.type_name(),
+    }
+}
+
+/// Q-11-3 (invalid argument): the marshaling error contract for values
+/// of the wrong type (bd-9p2686pc). The message body follows hslua's
+/// `"<expected> expected, got <type>"` shape so upstream
+/// `error_matches` patterns written against pandoc apply unchanged.
+pub(crate) fn type_mismatch_error(expected: &str, got: &Value) -> Error {
+    Error::runtime(format!(
+        "Q-11-3: {expected} expected, got {}",
+        lua_facing_type_name(got)
+    ))
+}
+
+/// Q-11-3 with an explicit got-type name, for branches where the
+/// caller has a more precise name than `lua_facing_type_name` gives
+/// (typically a wrong-userdata branch naming the actual userdata type).
+pub(crate) fn type_mismatch_error_named(expected: &str, got: &str) -> Error {
+    Error::runtime(format!("Q-11-3: {expected} expected, got {got}"))
+}
+
+/// Q-11-3 for values of the right type but an invalid value — enum
+/// names like MathType/QuoteType/CitationMode/Alignment. Lists the
+/// accepted values so the fix is in the message.
+pub(crate) fn invalid_value_error(what: &str, got: &str, expected: &str) -> Error {
+    Error::runtime(format!(
+        "Q-11-3: invalid {what} '{got}' (expected {expected})"
+    ))
+}
+
+/// Q-11-5 (invalid property assignment): write to a read-only field.
+pub(crate) fn read_only_field_error(field: &str) -> Error {
+    Error::runtime(format!("Q-11-5: cannot set read-only field '{field}'"))
+}
+
+/// Q-11-5 (invalid property assignment): write to a field the receiver
+/// type does not have.
+pub(crate) fn unknown_field_error(field: &str, on: &str) -> Error {
+    Error::runtime(format!(
+        "Q-11-5: cannot set unknown field '{field}' on {on}"
+    ))
+}
+
+/// 4. Otherwise → error
 pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
     use crate::pandoc::Str;
     match val {
@@ -1678,17 +2261,28 @@ pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
                 source_info: filter_source_info(lua),
             }))
         }
-        Value::UserData(ud) => {
+        Value::UserData(ref ud) => {
             if let Ok(lua_inline) = ud.borrow::<LuaInline>() {
-                Ok(lua_inline.clone_inline())
+                lua_inline.extract_flushed(lua)
+            } else if let Some(inline) = peek_inline_via_metamethod(lua, &val) {
+                Ok(inline)
             } else {
-                Err(Error::runtime(
-                    "expected Inline userdata, string, or Inline-like value",
+                Err(type_mismatch_error(
+                    "Inline userdata, string, or Inline-like value",
+                    &val,
                 ))
             }
         }
-        _ => Err(Error::runtime(
-            "expected Inline userdata, string, or Inline-like value",
+        Value::Table(_) => match peek_inline_via_metamethod(lua, &val) {
+            Some(inline) => Ok(inline),
+            None => Err(type_mismatch_error(
+                "Inline userdata, string, or Inline-like value",
+                &val,
+            )),
+        },
+        _ => Err(type_mismatch_error(
+            "Inline userdata, string, or Inline-like value",
+            &val,
         )),
     }
 }
@@ -1697,8 +2291,10 @@ pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
 ///
 /// Matches Pandoc's `peekInlinesFuzzy`:
 /// 1. String → word-split via `split_string_to_inlines()`
-/// 2. Table → iterate sequence values, each via `peek_inline_fuzzy()`
-/// 3. UserData containing LuaInline → wrap in singleton vec
+/// 2. Table → try the `__toinline` metamethod (singleton) first,
+///    else iterate sequence values, each via `peek_inline_fuzzy()`
+/// 3. UserData → singleton via `peek_inline_fuzzy()` (which consults
+///    the metamethod for foreign userdata)
 /// 4. Otherwise → error
 pub fn peek_inlines_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Inline>> {
     match val {
@@ -1706,7 +2302,10 @@ pub fn peek_inlines_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Inline>> {
             let text = s.to_str()?;
             Ok(split_string_to_inlines(&text))
         }
-        Value::Table(table) => {
+        Value::Table(ref table) => {
+            if let Some(inline) = peek_inline_via_metamethod(lua, &val) {
+                return Ok(vec![inline]);
+            }
             let mut inlines = Vec::new();
             for pair in table.sequence_values::<Value>() {
                 let value = pair?;
@@ -1714,17 +2313,16 @@ pub fn peek_inlines_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Inline>> {
             }
             Ok(inlines)
         }
-        Value::UserData(ud) => {
-            if let Ok(lua_inline) = ud.borrow::<LuaInline>() {
-                Ok(vec![lua_inline.clone_inline()])
-            } else {
-                Err(Error::runtime(
-                    "expected Inline, list of Inlines, or string",
-                ))
-            }
-        }
-        _ => Err(Error::runtime(
-            "expected Inline, list of Inlines, or string",
+        Value::UserData(_) => match peek_inline_fuzzy(lua, val.clone()) {
+            Ok(inline) => Ok(vec![inline]),
+            Err(_) => Err(type_mismatch_error(
+                "Inline, list of Inlines, or string",
+                &val,
+            )),
+        },
+        _ => Err(type_mismatch_error(
+            "Inline, list of Inlines, or string",
+            &val,
         )),
     }
 }
@@ -1733,14 +2331,18 @@ pub fn peek_inlines_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Inline>> {
 ///
 /// Matches Pandoc's `peekBlockFuzzy`:
 /// 1. UserData containing LuaBlock → extract
-/// 2. Any value accepted by `peek_inlines_fuzzy()` → wrap in `Plain`
-/// 3. Otherwise → error
+/// 2. `__toblock` metamethod (tables and foreign userdata)
+/// 3. Any value accepted by `peek_inlines_fuzzy()` → wrap in `Plain`
+/// 4. Otherwise → error
 pub fn peek_block_fuzzy(lua: &Lua, val: Value) -> Result<Block> {
     use crate::pandoc::Plain;
     match &val {
         Value::UserData(ud) => {
             if let Ok(lua_block) = ud.borrow::<LuaBlock>() {
-                return Ok(lua_block.clone_block());
+                return lua_block.extract_flushed(lua);
+            }
+            if let Some(block) = peek_block_via_metamethod(lua, &val) {
+                return Ok(block);
             }
             // Not a block — fall through to inlines coercion
             let inlines = peek_inlines_fuzzy(lua, val)?;
@@ -1750,13 +2352,19 @@ pub fn peek_block_fuzzy(lua: &Lua, val: Value) -> Result<Block> {
             }))
         }
         _ => {
+            if let Some(block) = peek_block_via_metamethod(lua, &val) {
+                return Ok(block);
+            }
             // Try inlines coercion for strings, tables of inlines, etc.
-            match peek_inlines_fuzzy(lua, val) {
+            match peek_inlines_fuzzy(lua, val.clone()) {
                 Ok(inlines) => Ok(Block::Plain(Plain {
                     content: inlines,
                     source_info: SourceInfo::generated(By::unknown()),
                 })),
-                Err(_) => Err(Error::runtime("expected Block, list of Inlines, or string")),
+                Err(_) => Err(type_mismatch_error(
+                    "Block, list of Inlines, or string",
+                    &val,
+                )),
             }
         }
     }
@@ -1765,14 +2373,18 @@ pub fn peek_block_fuzzy(lua: &Lua, val: Value) -> Result<Block> {
 /// Peek a list of Blocks from a Lua value, with fuzzy coercion.
 ///
 /// Matches Pandoc's `peekBlocksFuzzy`:
-/// 1. Table → iterate sequence values, each via `peek_block_fuzzy()`
-/// 2. UserData containing LuaBlock → wrap in singleton vec
-/// 3. Any value accepted by `peek_inlines_fuzzy()` → wrap in `Plain` block singleton
-/// 4. Otherwise → error
+/// 1. `__toblock` metamethod → singleton (before list interpretation)
+/// 2. Table → iterate sequence values, each via `peek_block_fuzzy()`
+/// 3. UserData containing LuaBlock → wrap in singleton vec
+/// 4. Any value accepted by `peek_inlines_fuzzy()` → wrap in `Plain` block singleton
+/// 5. Otherwise → error
 pub fn peek_blocks_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Block>> {
     use crate::pandoc::Plain;
     match &val {
         Value::Table(table) => {
+            if let Some(block) = peek_block_via_metamethod(lua, &val) {
+                return Ok(vec![block]);
+            }
             let mut blocks = Vec::new();
             for pair in table.sequence_values::<Value>() {
                 let value = pair?;
@@ -1782,7 +2394,10 @@ pub fn peek_blocks_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Block>> {
         }
         Value::UserData(ud) => {
             if let Ok(lua_block) = ud.borrow::<LuaBlock>() {
-                return Ok(vec![lua_block.clone_block()]);
+                return Ok(vec![lua_block.extract_flushed(lua)?]);
+            }
+            if let Some(block) = peek_block_via_metamethod(lua, &val) {
+                return Ok(vec![block]);
             }
             // Not a block — try inlines coercion
             let inlines = peek_inlines_fuzzy(lua, val)?;
@@ -1793,13 +2408,14 @@ pub fn peek_blocks_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Block>> {
         }
         _ => {
             // Try inlines coercion for strings
-            match peek_inlines_fuzzy(lua, val) {
+            match peek_inlines_fuzzy(lua, val.clone()) {
                 Ok(inlines) => Ok(vec![Block::Plain(Plain {
                     content: inlines,
                     source_info: SourceInfo::generated(By::unknown()),
                 })]),
-                Err(_) => Err(Error::runtime(
-                    "expected Block, list of Blocks, or compatible element",
+                Err(_) => Err(type_mismatch_error(
+                    "Block, list of Blocks, or compatible element",
+                    &val,
                 )),
             }
         }
@@ -1922,8 +2538,19 @@ pub(crate) fn inline_attr_mut(inline: &mut Inline) -> Option<&mut crate::pandoc:
 ///
 /// FromLua always produces an independent `Owned` variant, matching
 /// pre-refactor semantics (ownership does not cross FromLua boundaries).
+///
+/// The `cache` field carries the same hslua-style property cache the
+/// elements have (see [`PropertyCache`]): `attr.classes` hands out a
+/// pandoc-List table that aliases across reads, and the cache is
+/// flushed back through `set_field` before the attr value is read out.
 #[derive(Debug, Clone)]
-pub enum LuaAttr {
+pub struct LuaAttr {
+    target: AttrTarget,
+    pub(crate) cache: PropertyCache,
+}
+
+#[derive(Debug, Clone)]
+enum AttrTarget {
     Owned(Rc<RefCell<crate::pandoc::Attr>>),
     BlockRef(Rc<RefCell<Block>>),
     InlineRef(Rc<RefCell<Inline>>),
@@ -1932,17 +2559,68 @@ pub enum LuaAttr {
 impl LuaAttr {
     /// Create a new standalone (Owned) LuaAttr from an Attr tuple.
     pub fn new(attr: crate::pandoc::Attr) -> Self {
-        LuaAttr::Owned(Rc::new(RefCell::new(attr)))
+        LuaAttr {
+            target: AttrTarget::Owned(Rc::new(RefCell::new(attr))),
+            cache: PropertyCache::default(),
+        }
     }
 
     /// Create a proxy LuaAttr referencing the given block's Attr.
     pub fn for_block(block: Rc<RefCell<Block>>) -> Self {
-        LuaAttr::BlockRef(block)
+        LuaAttr {
+            target: AttrTarget::BlockRef(block),
+            cache: PropertyCache::default(),
+        }
     }
 
     /// Create a proxy LuaAttr referencing the given inline's Attr.
     pub fn for_inline(inline: Rc<RefCell<Inline>>) -> Self {
-        LuaAttr::InlineRef(inline)
+        LuaAttr {
+            target: AttrTarget::InlineRef(inline),
+            cache: PropertyCache::default(),
+        }
+    }
+
+    /// Whether this LuaAttr is a live proxy into a parent element (its
+    /// direct writes already land in the parent's cell).
+    pub(crate) fn is_element_ref(&self) -> bool {
+        !matches!(self.target, AttrTarget::Owned(_))
+    }
+
+    /// Is this a live ref into exactly this block cell?
+    pub(crate) fn is_ref_to_block(&self, cell: &Rc<RefCell<Block>>) -> bool {
+        matches!(&self.target, AttrTarget::BlockRef(rc) if Rc::ptr_eq(rc, cell))
+    }
+
+    /// Is this a live ref into exactly this inline cell?
+    pub(crate) fn is_ref_to_inline(&self, cell: &Rc<RefCell<Inline>>) -> bool {
+        matches!(&self.target, AttrTarget::InlineRef(rc) if Rc::ptr_eq(rc, cell))
+    }
+
+    /// Write cached property values (currently: the `classes` List
+    /// table) back into the underlying Attr. Idempotent.
+    pub fn flush_property_cache(&self, lua: &Lua) -> Result<()> {
+        let entries = match self.cache.begin_flush() {
+            Some(entries) => entries,
+            None => return Ok(()),
+        };
+        let mut result = Ok(());
+        for (key, value) in entries {
+            let key_value = Value::String(lua.create_string(&key)?);
+            if let Err(e) = self.set_field(key_value, value, lua) {
+                result = Err(e);
+                break;
+            }
+        }
+        self.cache.end_flush();
+        result
+    }
+
+    /// Flush, then deep-clone the underlying Attr — the blessed way to
+    /// marshal a `LuaAttr` back into a Rust Attr tuple.
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<crate::pandoc::Attr> {
+        self.flush_property_cache(lua)?;
+        Ok(self.clone_attr())
     }
 
     /// Run `f` against the underlying Attr for reading. Panics on a
@@ -1951,14 +2629,14 @@ impl LuaAttr {
     /// in a way that invalidated the proxy, which shouldn't happen under
     /// normal filter usage.
     fn with_attr<R>(&self, f: impl FnOnce(&crate::pandoc::Attr) -> R) -> R {
-        match self {
-            LuaAttr::Owned(rc) => f(&rc.borrow()),
-            LuaAttr::BlockRef(rc) => {
+        match &self.target {
+            AttrTarget::Owned(rc) => f(&rc.borrow()),
+            AttrTarget::BlockRef(rc) => {
                 let block = rc.borrow();
                 f(block_attr_ref(&block)
                     .expect("LuaAttr::BlockRef proxy points at a block variant without an Attr"))
             }
-            LuaAttr::InlineRef(rc) => {
+            AttrTarget::InlineRef(rc) => {
                 let inline = rc.borrow();
                 f(inline_attr_ref(&inline)
                     .expect("LuaAttr::InlineRef proxy points at an inline variant without an Attr"))
@@ -1968,14 +2646,14 @@ impl LuaAttr {
 
     /// Run `f` against the underlying Attr for mutation.
     fn with_attr_mut<R>(&self, f: impl FnOnce(&mut crate::pandoc::Attr) -> R) -> R {
-        match self {
-            LuaAttr::Owned(rc) => f(&mut rc.borrow_mut()),
-            LuaAttr::BlockRef(rc) => {
+        match &self.target {
+            AttrTarget::Owned(rc) => f(&mut rc.borrow_mut()),
+            AttrTarget::BlockRef(rc) => {
                 let mut block = rc.borrow_mut();
                 f(block_attr_mut(&mut block)
                     .expect("LuaAttr::BlockRef proxy points at a block variant without an Attr"))
             }
-            LuaAttr::InlineRef(rc) => {
+            AttrTarget::InlineRef(rc) => {
                 let mut inline = rc.borrow_mut();
                 f(inline_attr_mut(&mut inline)
                     .expect("LuaAttr::InlineRef proxy points at an inline variant without an Attr"))
@@ -2004,14 +2682,11 @@ impl LuaAttr {
     }
 
     /// Get a field value by name or index
-    fn get_field(&self, lua: &Lua, key: Value) -> Result<Value> {
+    pub(crate) fn get_field(&self, lua: &Lua, key: Value) -> Result<Value> {
         match key {
             // Positional access (Lua uses 1-based indexing)
             Value::Integer(1) => self.identifier().into_lua(lua),
-            Value::Integer(2) => {
-                let ud = lua.create_userdata(LuaClassesProxy::new(self.clone()))?;
-                Ok(Value::UserData(ud))
-            }
+            Value::Integer(2) => self.classes_list_value(lua),
             Value::Integer(3) => {
                 let ud = lua.create_userdata(LuaAttributesProxy::new(self.clone()))?;
                 Ok(Value::UserData(ud))
@@ -2022,10 +2697,7 @@ impl LuaAttr {
                 let key_str: &str = borrowed.as_ref();
                 match key_str {
                     "identifier" => self.identifier().into_lua(lua),
-                    "classes" => {
-                        let ud = lua.create_userdata(LuaClassesProxy::new(self.clone()))?;
-                        Ok(Value::UserData(ud))
-                    }
+                    "classes" => self.classes_list_value(lua),
                     "attributes" => {
                         let ud = lua.create_userdata(LuaAttributesProxy::new(self.clone()))?;
                         Ok(Value::UserData(ud))
@@ -2038,9 +2710,21 @@ impl LuaAttr {
         }
     }
 
+    /// Read `classes` as a pandoc-List table, aliased across reads via
+    /// the property cache (matching Pandoc, where `attr.classes` is a
+    /// pandoc List and in-place mutation persists).
+    fn classes_list_value(&self, lua: &Lua) -> Result<Value> {
+        if let Some(cached) = self.cache.get("classes") {
+            return Ok(cached);
+        }
+        let value = self.with_attr(|attr| super::list::create_string_list_table(lua, &attr.1))?;
+        self.cache.store("classes", &value);
+        Ok(value)
+    }
+
     /// Set a field value by name or index. Takes `&self`: mutation goes
     /// through the appropriate `RefCell` on the enum variant.
-    fn set_field(&self, key: Value, val: Value, lua: &Lua) -> Result<()> {
+    pub(crate) fn set_field(&self, key: Value, val: Value, lua: &Lua) -> Result<()> {
         match key {
             Value::Integer(1) => {
                 let s = String::from_lua(val, lua)?;
@@ -2076,11 +2760,11 @@ impl LuaAttr {
                         self.with_attr_mut(|attr| attr.2 = attrs);
                         Ok(())
                     }
-                    "t" | "tag" => Err(Error::runtime("cannot set read-only field 'tag'")),
-                    _ => Err(Error::runtime(format!("cannot set field '{}'", key_str))),
+                    "t" | "tag" => Err(read_only_field_error("tag")),
+                    _ => Err(unknown_field_error(key_str, "Attr")),
                 }
             }
-            _ => Err(Error::runtime("invalid key type for Attr")),
+            _ => Err(Error::runtime("Q-11-5: invalid key type for Attr")),
         }
     }
 }
@@ -2107,24 +2791,50 @@ impl UserData for LuaAttr {
         // variant, so set_field takes `&self`.
         methods.add_meta_method(
             MetaMethod::NewIndex,
-            |lua, this, (key, val): (Value, Value)| this.set_field(key, val, lua),
+            |lua, this, (key, val): (Value, Value)| {
+                let is_classes_key = matches!(&key, Value::Integer(2))
+                    || matches!(&key, Value::String(s) if s.to_str().is_ok_and(|k| &*k == "classes"));
+                this.set_field(key, val, lua)?;
+                // User assignment invalidates the cached classes List
+                // (rebuilt with the List metatable on next read). The
+                // internal flush path calls set_field directly and
+                // deliberately keeps the cache (aliasing survives).
+                if is_classes_key {
+                    this.cache.remove("classes");
+                }
+                Ok(())
+            },
         );
 
         // Clone method — always produces an Owned copy, independent of
         // the source variant (BlockRef/InlineRef clones detach the Attr
         // from its parent, matching Pandoc's "elem.attr:clone()" shape).
         methods.add_method("clone", |lua, this, ()| {
+            this.flush_property_cache(lua)?;
             lua.create_userdata(LuaAttr::new(this.clone_attr()))
         });
 
-        // __tostring for debugging
-        methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
-            Ok(format!(
-                "Attr({:?}, {:?}, {:?})",
-                this.identifier(),
-                this.classes(),
-                this.attributes()
-            ))
+        // __tostring: Haskell-show tuple format, matching Pandoc's
+        // Lua API: `("id",["c"],[("k","v")])`
+        methods.add_meta_method(MetaMethod::ToString, |lua, this, ()| {
+            this.flush_property_cache(lua)?;
+            Ok(super::show::show_attr(&this.clone_attr()))
+        });
+
+        // __eq: component-wise equality, order-sensitive in the
+        // attribute list (Pandoc's Attr is a list of pairs).
+        methods.add_meta_method(MetaMethod::Eq, |lua, this, other: Value| {
+            Ok(match other {
+                Value::UserData(ud) => match ud.borrow::<LuaAttr>() {
+                    Ok(other_attr) => {
+                        this.flush_property_cache(lua)?;
+                        other_attr.flush_property_cache(lua)?;
+                        attr_structurally_eq(&this.clone_attr(), &other_attr.clone_attr())
+                    }
+                    Err(_) => false,
+                },
+                _ => false,
+            })
         });
 
         // __len returns 3 (for the three components)
@@ -2133,16 +2843,17 @@ impl UserData for LuaAttr {
 }
 
 impl FromLua for LuaAttr {
-    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         match value {
             Value::UserData(ud) => {
                 let lua_attr = ud.borrow::<LuaAttr>()?;
+                lua_attr.flush_property_cache(lua)?;
                 // Always produce an Owned clone on FromLua: detach from
                 // any parent, preserving today's "independent copy"
                 // semantics.
                 Ok(LuaAttr::new(lua_attr.clone_attr()))
             }
-            _ => Err(Error::runtime("expected Attr userdata")),
+            other => Err(type_mismatch_error("Attr", &other)),
         }
     }
 }
@@ -2195,6 +2906,42 @@ impl LuaAttributesProxy {
         self.0.with_attr(|a| a.2.len())
     }
 
+    /// The i-th (1-based) key/value pair, in insertion order.
+    fn pair_at(&self, i: usize) -> Option<(String, String)> {
+        self.0.with_attr(|a| {
+            a.2.iter()
+                .nth(i.checked_sub(1)?)
+                .map(|(k, v)| (k.clone(), v.clone()))
+        })
+    }
+
+    /// Replace (Some) or remove (None) the i-th (1-based) pair,
+    /// preserving the order of the other entries. Out-of-range
+    /// indices are ignored, matching Lua table semantics loosely.
+    fn set_pair_at(&self, i: usize, pair: Option<(String, String)>) {
+        self.0.with_attr_mut(|a| {
+            let mut pairs: Vec<(String, String)> =
+                a.2.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let Some(idx) = i.checked_sub(1) else { return };
+            if idx >= pairs.len() {
+                return;
+            }
+            match pair {
+                Some(p) => pairs[idx] = p,
+                None => {
+                    pairs.remove(idx);
+                }
+            }
+            a.2 = pairs.into_iter().collect();
+        });
+    }
+
+    /// Snapshot the attribute map (used when an AttributeList value is
+    /// consumed by a constructor / attr parser).
+    pub(crate) fn snapshot_map(&self) -> hashlink::LinkedHashMap<String, String> {
+        self.0.with_attr(|a| a.2.clone())
+    }
+
     fn snapshot_pairs(&self) -> Vec<(String, String)> {
         self.0
             .with_attr(|a| a.2.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
@@ -2203,7 +2950,7 @@ impl LuaAttributesProxy {
 
 impl UserData for LuaAttributesProxy {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        // attrs["key"] — string read
+        // attrs["key"] — string read; attrs[i] — i-th {key, value} pair
         methods.add_meta_method(MetaMethod::Index, |lua, this, key: Value| match key {
             Value::String(s) => {
                 let k = s.to_str()?.to_string();
@@ -2212,6 +2959,15 @@ impl UserData for LuaAttributesProxy {
                     None => Ok(Value::Nil),
                 }
             }
+            Value::Integer(i) => match usize::try_from(i).ok().and_then(|i| this.pair_at(i)) {
+                Some((k, v)) => {
+                    let pair = lua.create_table()?;
+                    pair.set(1, k)?;
+                    pair.set(2, v)?;
+                    Ok(Value::Table(pair))
+                }
+                None => Ok(Value::Nil),
+            },
             _ => Ok(Value::Nil),
         });
 
@@ -2221,9 +2977,30 @@ impl UserData for LuaAttributesProxy {
             |lua, this, (key, val): (Value, Value)| {
                 let k = match key {
                     Value::String(s) => s.to_str()?.to_string(),
+                    // attrs[i] = {key, value} replaces; attrs[i] = nil removes
+                    Value::Integer(i) => {
+                        let idx = usize::try_from(i).map_err(|_| {
+                            Error::runtime("Q-11-5: AttributeList index must be positive")
+                        })?;
+                        match val {
+                            Value::Nil => this.set_pair_at(idx, None),
+                            Value::Table(pair) => {
+                                let k: String = pair.get(1)?;
+                                let v: String = pair.get(2)?;
+                                this.set_pair_at(idx, Some((k, v)));
+                            }
+                            _ => {
+                                return Err(Error::runtime(
+                                    "Q-11-5: AttributeList entries must be {key, value} pairs or nil",
+                                ));
+                            }
+                        }
+                        return Ok(());
+                    }
                     _ => {
                         return Err(Error::runtime(
-                            "Attr.attributes proxy: only string keys are supported",
+                            "Q-11-5: Attr.attributes proxy: only string or integer keys \
+                             are supported",
                         ));
                     }
                 };
@@ -2288,6 +3065,22 @@ impl UserData for LuaAttributesProxy {
                 this.0.with_attr(|a| a.2.clone())
             ))
         });
+
+        // __eq: pairwise, order-sensitive (Pandoc's AttributeList is a
+        // list of pairs).
+        methods.add_meta_method(MetaMethod::Eq, |_, this, other: Value| {
+            Ok(match other {
+                Value::UserData(ud) => match ud.borrow::<LuaAttributesProxy>() {
+                    Ok(other_proxy) => {
+                        let a = this.snapshot_pairs();
+                        let b = other_proxy.snapshot_pairs();
+                        a == b
+                    }
+                    Err(_) => false,
+                },
+                _ => false,
+            })
+        });
     }
 }
 
@@ -2314,7 +3107,7 @@ impl LuaClassesProxy {
     fn set(&self, i: usize, value: Option<String>) -> Result<()> {
         if i == 0 {
             return Err(Error::runtime(
-                "Attr.classes proxy: index must be >= 1 (Lua 1-based)",
+                "Q-11-5: Attr.classes proxy: index must be >= 1 (Lua 1-based)",
             ));
         }
         self.0.with_attr_mut(|a| {
@@ -2330,7 +3123,7 @@ impl LuaClassesProxy {
                         Ok(())
                     } else {
                         Err(Error::runtime(format!(
-                            "Attr.classes proxy: index {} out of range (len = {}); \
+                            "Q-11-5: Attr.classes proxy: index {} out of range (len = {}); \
                              use index in 1..={} to overwrite or {} to append",
                             i,
                             len,
@@ -2423,7 +3216,7 @@ impl UserData for LuaClassesProxy {
                     Value::Integer(i) if i >= 1 => i as usize,
                     _ => {
                         return Err(Error::runtime(
-                            "Attr.classes proxy: only positive integer keys are supported",
+                            "Q-11-5: Attr.classes proxy: only positive integer keys are supported",
                         ));
                     }
                 };
@@ -2490,10 +3283,13 @@ pub(crate) fn lua_table_to_strings(_lua: &Lua, val: Value) -> Result<Vec<String>
             if let Ok(proxy) = ud.borrow::<LuaClassesProxy>() {
                 Ok(proxy.0.classes())
             } else {
-                Err(Error::runtime("expected table of strings"))
+                Err(type_mismatch_error_named(
+                    "table of strings",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table of strings")),
+        other => Err(type_mismatch_error("table of strings", &other)),
     }
 }
 
@@ -2516,10 +3312,13 @@ pub(crate) fn lua_table_to_string_map(
             if let Ok(proxy) = ud.borrow::<LuaAttributesProxy>() {
                 Ok(proxy.0.attributes())
             } else {
-                Err(Error::runtime("expected table of key-value pairs"))
+                Err(type_mismatch_error_named(
+                    "table of key-value pairs",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table of key-value pairs")),
+        other => Err(type_mismatch_error("table of key-value pairs", &other)),
     }
 }
 
@@ -2558,9 +3357,13 @@ pub fn attributes_proxy_for_block(lua: &Lua, block: Rc<RefCell<Block>>) -> Resul
 
 /// Block-level `.classes` shortcut: a LuaClassesProxy bound to the
 /// block's Attr.
+/// Block-level `.classes` read: a pandoc-List table of the classes.
+/// (Named for its proxy-userdata history; since bd-tzwcof0n it returns
+/// a List table — write-back persistence comes from the element's
+/// PropertyCache, which caches it under the "classes" key.)
 pub fn classes_proxy_for_block(lua: &Lua, block: Rc<RefCell<Block>>) -> Result<Value> {
-    let ud = lua.create_userdata(LuaClassesProxy::new(LuaAttr::for_block(block)))?;
-    Ok(Value::UserData(ud))
+    let attr = LuaAttr::for_block(block);
+    attr.with_attr(|a| super::list::create_string_list_table(lua, &a.1))
 }
 
 /// Inline-level `.attributes` shortcut.
@@ -2570,88 +3373,332 @@ pub fn attributes_proxy_for_inline(lua: &Lua, inline: Rc<RefCell<Inline>>) -> Re
 }
 
 /// Inline-level `.classes` shortcut.
+/// Inline-level `.classes` read — see `classes_proxy_for_block`.
 pub fn classes_proxy_for_inline(lua: &Lua, inline: Rc<RefCell<Inline>>) -> Result<Value> {
-    let ud = lua.create_userdata(LuaClassesProxy::new(LuaAttr::for_inline(inline)))?;
-    Ok(Value::UserData(ud))
+    let attr = LuaAttr::for_inline(inline);
+    attr.with_attr(|a| super::list::create_string_list_table(lua, &a.1))
+}
+
+/// Parse a citation-mode string, erroring loudly on anything that is
+/// not one of Pandoc's three constructor names (Pandoc's `peekRead`
+/// does the same: `Could not read: <value>`).
+pub(crate) fn parse_citation_mode(s: &str) -> Result<crate::pandoc::CitationMode> {
+    use crate::pandoc::CitationMode;
+    match s {
+        "AuthorInText" => Ok(CitationMode::AuthorInText),
+        "SuppressAuthor" => Ok(CitationMode::SuppressAuthor),
+        "NormalCitation" => Ok(CitationMode::NormalCitation),
+        other => Err(invalid_value_error(
+            "citation mode",
+            other,
+            "NormalCitation, AuthorInText, or SuppressAuthor",
+        )),
+    }
+}
+
+fn citation_mode_name(mode: &crate::pandoc::CitationMode) -> &'static str {
+    use crate::pandoc::CitationMode;
+    match mode {
+        CitationMode::AuthorInText => "AuthorInText",
+        CitationMode::SuppressAuthor => "SuppressAuthor",
+        CitationMode::NormalCitation => "NormalCitation",
+    }
+}
+
+/// Wrapper for a Pandoc `Citation` as typed Lua userdata, matching
+/// pandoc-lua-marshal's `typeCitation` (bd-sgfiiktn S1; previously
+/// `pandoc.Citation` returned a plain Lua table).
+///
+/// The inner `Citation` lives behind `Rc<RefCell<…>>` so the userdata
+/// handed out inside a `cite.citations` List stays live: in-place
+/// mutation (`c.id = 'x'`) lands in the cell, and the Cite element's
+/// cached `citations` table re-reads the same cells at flush time.
+/// The Inlines-valued `prefix`/`suffix` properties get the same
+/// hslua-style cache+readback treatment elements use (aliased reads,
+/// `:insert` persists — see [`PropertyCache`]).
+///
+/// Divergence note (registry-bound, bd-9p2686pc): property assignment
+/// validates eagerly here, while Pandoc caches the raw value and only
+/// errors at marshal-out. Programs that observe the difference error
+/// in both implementations; only the timing and message differ.
+#[derive(Debug, Clone)]
+pub struct LuaCitation {
+    pub cell: Rc<RefCell<crate::pandoc::Citation>>,
+    pub(crate) cache: PropertyCache,
+}
+
+impl LuaCitation {
+    pub fn new(citation: crate::pandoc::Citation) -> Self {
+        LuaCitation {
+            cell: Rc::new(RefCell::new(citation)),
+            cache: PropertyCache::default(),
+        }
+    }
+
+    fn is_cacheable_key(key: &str) -> bool {
+        matches!(key, "prefix" | "suffix")
+    }
+
+    /// Write cached `prefix`/`suffix` tables back into the cell
+    /// (hslua readback semantics). Idempotent.
+    pub fn flush_property_cache(&self, lua: &Lua) -> Result<()> {
+        let entries = match self.cache.begin_flush() {
+            Some(entries) => entries,
+            None => return Ok(()),
+        };
+        let mut result = Ok(());
+        for (key, value) in entries {
+            if let Err(e) = self.set_field(&key, value, lua) {
+                result = Err(e);
+                break;
+            }
+        }
+        self.cache.end_flush();
+        result
+    }
+
+    /// Flush, then deep-clone the inner `Citation` — the blessed way
+    /// to marshal a `LuaCitation` back into a Rust value.
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<crate::pandoc::Citation> {
+        self.flush_property_cache(lua)?;
+        Ok(self.cell.borrow().clone())
+    }
+
+    fn get_field(&self, lua: &Lua, key: &str) -> Result<Value> {
+        if key == "clone" {
+            self.flush_property_cache(lua)?;
+            let snapshot = self.cell.borrow().clone();
+            return lua
+                .create_function(move |lua, ()| {
+                    lua.create_userdata(LuaCitation::new(snapshot.clone()))
+                })?
+                .into_lua(lua);
+        }
+        let inner = self.cell.borrow();
+        match key {
+            "id" => inner.id.clone().into_lua(lua),
+            "mode" => citation_mode_name(&inner.mode).into_lua(lua),
+            "prefix" => inlines_to_lua_table(lua, &inner.prefix),
+            "suffix" => inlines_to_lua_table(lua, &inner.suffix),
+            "note_num" => (inner.note_num as i64).into_lua(lua),
+            "hash" => (inner.hash as i64).into_lua(lua),
+            _ => Ok(Value::Nil),
+        }
+    }
+
+    fn set_field(&self, key: &str, val: Value, lua: &Lua) -> Result<()> {
+        match key {
+            "id" => {
+                let id = String::from_lua(val, lua)?;
+                self.cell.borrow_mut().id = id;
+                Ok(())
+            }
+            "mode" => {
+                let s = String::from_lua(val, lua)?;
+                let mode = parse_citation_mode(&s)?;
+                self.cell.borrow_mut().mode = mode;
+                Ok(())
+            }
+            "prefix" => {
+                let inlines = peek_inlines_fuzzy(lua, val)?;
+                self.cell.borrow_mut().prefix = inlines;
+                Ok(())
+            }
+            "suffix" => {
+                let inlines = peek_inlines_fuzzy(lua, val)?;
+                self.cell.borrow_mut().suffix = inlines;
+                Ok(())
+            }
+            "note_num" => {
+                let n = i64::from_lua(val, lua)?;
+                self.cell.borrow_mut().note_num = n as usize;
+                Ok(())
+            }
+            "hash" => {
+                let n = i64::from_lua(val, lua)?;
+                self.cell.borrow_mut().hash = n as usize;
+                Ok(())
+            }
+            _ => Err(unknown_field_error(key, "Citation")),
+        }
+    }
+
+    /// Structural equality ignoring source info, via the JSON writer's
+    /// source-free serialization (same approach as elements — wrap the
+    /// citations in a synthetic Cite so the maintained match logic does
+    /// the comparison).
+    fn structurally_eq(&self, other: &LuaCitation) -> bool {
+        let wrap = |c: &LuaCitation| {
+            Inline::Cite(crate::pandoc::Cite {
+                citations: vec![c.cell.borrow().clone()],
+                content: vec![],
+                source_info: SourceInfo::generated(By::unknown()),
+            })
+        };
+        inline_structurally_eq(&wrap(self), &wrap(other))
+    }
+}
+
+impl UserData for LuaCitation {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method(MetaMethod::Index, |lua, this, key: String| {
+            if let Some(cached) = this.cache.get(&key) {
+                return Ok(cached);
+            }
+            let value = this.get_field(lua, &key)?;
+            if LuaCitation::is_cacheable_key(&key) && matches!(value, Value::Table(_)) {
+                this.cache.store(&key, &value);
+            }
+            Ok(value)
+        });
+
+        methods.add_meta_method(
+            MetaMethod::NewIndex,
+            |lua, this, (key, val): (String, Value)| {
+                this.set_field(&key, val.clone(), lua)?;
+                if LuaCitation::is_cacheable_key(&key) {
+                    if matches!(val, Value::Table(_)) {
+                        this.cache.store(&key, &val);
+                    } else {
+                        this.cache.remove(&key);
+                    }
+                }
+                Ok(())
+            },
+        );
+
+        methods.add_meta_method(MetaMethod::ToString, |lua, this, ()| {
+            this.flush_property_cache(lua)?;
+            Ok(super::show::show_citation(&this.cell.borrow()))
+        });
+
+        methods.add_meta_method(MetaMethod::Eq, |lua, this, other: Value| {
+            Ok(match other {
+                Value::UserData(ud) => match ud.borrow::<LuaCitation>() {
+                    Ok(other_citation) => {
+                        this.flush_property_cache(lua)?;
+                        other_citation.flush_property_cache(lua)?;
+                        this.structurally_eq(&other_citation)
+                    }
+                    Err(_) => false,
+                },
+                _ => false,
+            })
+        });
+    }
+}
+
+/// Marshal one Lua value into a `Citation`: only `LuaCitation`
+/// userdata is accepted, matching Pandoc's strict `peekCitation`
+/// ("Citation expected, got <type>").
+pub(crate) fn lua_value_to_citation(lua: &Lua, val: Value) -> Result<crate::pandoc::Citation> {
+    match val {
+        Value::UserData(ud) => match ud.borrow::<LuaCitation>() {
+            Ok(citation) => citation.extract_flushed(lua),
+            Err(_) => Err(type_mismatch_error_named(
+                "Citation",
+                &userdata_type_name(&ud),
+            )),
+        },
+        other => Err(type_mismatch_error("Citation", &other)),
+    }
+}
+
+/// Best-effort human-readable name for a userdata value in error
+/// messages (element tag for our AST wrappers, Rust wrapper name
+/// otherwise).
+pub(crate) fn userdata_type_name(ud: &mlua::AnyUserData) -> String {
+    if let Ok(inline) = ud.borrow::<LuaInline>() {
+        return inline.tag_name().to_string();
+    }
+    if let Ok(block) = ud.borrow::<LuaBlock>() {
+        return block.tag_name().to_string();
+    }
+    if ud.borrow::<LuaAttr>().is_ok() {
+        return "Attr".to_string();
+    }
+    "userdata".to_string()
 }
 
 // FromLua implementation for converting Lua values back to Rust types
 use mlua::FromLua;
 
 impl FromLua for LuaInline {
-    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         match value {
             Value::UserData(ud) => {
                 let lua_inline = ud.borrow::<LuaInline>()?;
                 // Deep-clone the inner Inline into a fresh cell. This preserves
                 // pre-refactor semantics: FromLua produces an independent
                 // LuaInline, not a shared alias of the source cell.
-                Ok(LuaInline::new(lua_inline.0.borrow().clone()))
+                Ok(LuaInline::new(lua_inline.extract_flushed(lua)?))
             }
-            _ => Err(Error::runtime("expected Inline userdata")),
+            other => Err(type_mismatch_error("Inline", &other)),
         }
     }
 }
 
 impl FromLua for LuaBlock {
-    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+    fn from_lua(value: Value, lua: &Lua) -> Result<Self> {
         match value {
             Value::UserData(ud) => {
                 let lua_block = ud.borrow::<LuaBlock>()?;
                 // Deep-clone the inner Block into a fresh cell.
-                Ok(LuaBlock::new(lua_block.0.borrow().clone()))
+                Ok(LuaBlock::new(lua_block.extract_flushed(lua)?))
             }
-            _ => Err(Error::runtime("expected Block userdata")),
+            other => Err(type_mismatch_error("Block", &other)),
         }
     }
 }
 
-/// Apply a filter to a single inline element using correct traversal
-/// This wraps the element in a list and applies the list-walking function
+/// Apply a filter to a single inline element. Per pandoc's subtree
+/// rule, only the element's CHILDREN are offered to the filter — the
+/// element itself is never visited and no synthetic singleton list is
+/// created.
 pub async fn walk_inline_with_filter(lua: &Lua, inline: &Inline, filter: &Table) -> Result<Inline> {
-    let filtered = walk_inlines_with_filter(lua, &[inline.clone()], filter).await?;
-    Ok(filtered
-        .into_iter()
-        .next()
-        .unwrap_or_else(|| inline.clone()))
+    use super::filter::{WalkingOrder, get_walking_order};
+    match get_walking_order(filter)? {
+        WalkingOrder::Typewise => super::walk::typewise_inline_element(lua, filter, inline).await,
+        WalkingOrder::Topdown => super::walk::topdown_inline_element(lua, filter, inline).await,
+    }
 }
 
-/// Apply a filter to a single block element using correct traversal
-/// This wraps the element in a list and applies the list-walking function
+/// Apply a filter to a single block element (children only — see
+/// `walk_inline_with_filter`).
 pub async fn walk_block_with_filter(lua: &Lua, block: &Block, filter: &Table) -> Result<Block> {
-    let filtered = walk_blocks_with_filter(lua, &[block.clone()], filter).await?;
-    Ok(filtered.into_iter().next().unwrap_or_else(|| block.clone()))
+    use super::filter::{WalkingOrder, get_walking_order};
+    match get_walking_order(filter)? {
+        WalkingOrder::Typewise => super::walk::typewise_block_element(lua, filter, block).await,
+        WalkingOrder::Topdown => super::walk::topdown_block_element(lua, filter, block).await,
+    }
 }
 
-/// Apply a filter table to a list of inlines using correct two-pass or topdown traversal
+/// Apply a filter table to a list of inlines. The list itself IS
+/// offered to the `Inlines` function, and all four typewise passes run
+/// (block functions reach blocks nested inside Notes).
 pub async fn walk_inlines_with_filter(
     lua: &Lua,
     inlines: &[Inline],
     filter: &Table,
 ) -> Result<Vec<Inline>> {
-    use super::filter::{
-        WalkingOrder, apply_typewise_inlines, get_walking_order, walk_inlines_topdown,
-    };
-
+    use super::filter::{WalkingOrder, get_walking_order};
     match get_walking_order(filter)? {
-        WalkingOrder::Typewise => apply_typewise_inlines(lua, filter, inlines).await,
-        WalkingOrder::Topdown => walk_inlines_topdown(lua, filter, inlines).await,
+        WalkingOrder::Typewise => super::walk::typewise_inlines(lua, filter, inlines).await,
+        WalkingOrder::Topdown => super::walk::topdown_inlines(lua, filter, inlines).await,
     }
 }
 
-/// Apply a filter table to a list of blocks using correct four-pass or topdown traversal
+/// Apply a filter table to a list of blocks (the list is offered to
+/// the `Blocks` function).
 pub async fn walk_blocks_with_filter(
     lua: &Lua,
     blocks: &[Block],
     filter: &Table,
 ) -> Result<Vec<Block>> {
-    use super::filter::{
-        WalkingOrder, apply_typewise_filter, get_walking_order, walk_blocks_topdown,
-    };
-
+    use super::filter::{WalkingOrder, get_walking_order};
     match get_walking_order(filter)? {
-        WalkingOrder::Typewise => apply_typewise_filter(lua, filter, blocks).await,
-        WalkingOrder::Topdown => walk_blocks_topdown(lua, filter, blocks).await,
+        WalkingOrder::Typewise => super::walk::typewise_blocks(lua, filter, blocks).await,
+        WalkingOrder::Topdown => super::walk::topdown_blocks(lua, filter, blocks).await,
     }
 }
 
@@ -3142,6 +4189,7 @@ mod tests {
             &[
                 "tag",
                 "content",
+                "caption",
                 "src",
                 "title",
                 "attr",
@@ -3521,7 +4569,16 @@ mod tests {
         });
         assert_eq!(
             LuaBlock::new(block).field_names(),
-            &["tag", "content", "start", "style", "clone", "walk"]
+            &[
+                "tag",
+                "content",
+                "listAttributes",
+                "start",
+                "style",
+                "delimiter",
+                "clone",
+                "walk"
+            ]
         );
     }
 
@@ -3555,6 +4612,10 @@ mod tests {
                 "tag",
                 "attr",
                 "caption",
+                "colspecs",
+                "head",
+                "bodies",
+                "foot",
                 "identifier",
                 "classes",
                 "attributes",

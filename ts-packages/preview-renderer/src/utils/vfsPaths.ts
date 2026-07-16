@@ -40,6 +40,39 @@ export function resolveRelativePath(
 }
 
 /**
+ * Compute the relative path from the directory of `fromFile` to `toPath` —
+ * the inverse of {@link resolveRelativePath}. The result is suitable for a
+ * markdown link/image target inside `fromFile`.
+ *
+ * Both arguments are POSIX-style paths in the same convention (project-root
+ * relative, with or without a leading `/`); `.`/`..` segments are
+ * normalized before comparison.
+ *
+ *   relativePathBetween('posts/hello.qmd', 'posts/photo.png')  → 'photo.png'
+ *   relativePathBetween('posts/hello.qmd', 'photo.png')        → '../photo.png'
+ *   relativePathBetween('posts/hello.qmd', 'images/photo.png') → '../images/photo.png'
+ */
+export function relativePathBetween(fromFile: string, toPath: string): string {
+    // normalizePath yields a single-leading-slash canonical form for both,
+    // making segment comparison convention-independent.
+    const fromSegments = normalizePath(fromFile).split('/').filter(Boolean);
+    const toSegments = normalizePath(toPath).split('/').filter(Boolean);
+    fromSegments.pop(); // drop the filename: we relativize against its directory
+
+    let shared = 0;
+    while (
+        shared < fromSegments.length &&
+        shared < toSegments.length - 1 && // keep at least the target filename
+        fromSegments[shared] === toSegments[shared]
+    ) {
+        shared++;
+    }
+
+    const ups = fromSegments.length - shared;
+    return [...Array(ups).fill('..'), ...toSegments.slice(shared)].join('/');
+}
+
+/**
  * Collapse `.` and `..` segments and remove empty segments, ensuring
  * the result has a single leading `/`. Trailing `..` past the root is
  * silently swallowed (matches the prior private-copy behavior).

@@ -89,4 +89,18 @@ describe('resolveDefaultDestination', () => {
       expect(resolveDefaultDestination({})).toBe('');
     });
   });
+
+  describe('editor drop (selection = file open in the editor)', () => {
+    // The editor's external-file drop handler passes the current file as
+    // `selection` so dropped assets default to the document's own folder
+    // (bd-jzqswvh0). There is no dropTarget: the drop landed on the
+    // editor surface, not on a sidebar folder row.
+    it('defaults to the open file\'s directory for a subdirectory file', () => {
+      expect(resolveDefaultDestination({ selection: 'posts/hello.qmd' })).toBe('posts');
+    });
+
+    it('defaults to root when the open file is at the project root', () => {
+      expect(resolveDefaultDestination({ selection: 'hello.qmd' })).toBe('');
+    });
+  });
 });

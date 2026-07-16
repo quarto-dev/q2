@@ -20,6 +20,7 @@ import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
 import { registerQmdLanguage } from './quartoTheme';
 import { processFileForUpload } from '../services/resourceService';
+import { buildDropMarkdown, resolveDefaultDestination } from './fileUpload';
 import { useProjectSearch } from '../services/search';
 import { usePresence } from '../hooks/usePresence';
 import { usePreference } from '../hooks/usePreference';
@@ -808,15 +809,13 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         const position = target?.position ?? editorRef.current.getPosition();
 
         if (position && (type === 'image' || type === 'qmd')) {
-          // Generate appropriate markdown
-          let markdown: string;
-          if (type === 'image') {
-            markdown = `![](${path})`;
-          } else {
-            // For qmd files, use the filename as link text
-            const fileName = path.split('/').pop() || path;
-            markdown = `[${fileName}](${path})`;
-          }
+          // Sidebar paths are project-root relative; the markdown target
+          // must be relative to the current file's directory.
+          const markdown = buildDropMarkdown(
+            type === 'image' ? 'image' : 'link',
+            currentFile?.path ?? null,
+            path
+          );
 
           // Insert markdown at drop position
           editorRef.current.executeEdits('file-drop', [{
@@ -852,7 +851,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     }
 
     setAssetInitialFiles(files);
-    setAssetDestination('');
+    // Default the upload next to the document being edited, so the common
+    // case yields a same-directory reference.
+    setAssetDestination(resolveDefaultDestination({ selection: currentFile?.path ?? null }));
     setShowNewAssetDialog(true);
   }, [currentFile]);
 
@@ -902,7 +903,10 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       // insert a markdown image reference at the drop point.
       if (file.type.startsWith('image/') && pendingDropPositionRef.current && editorRef.current) {
         const position = pendingDropPositionRef.current;
-        const markdown = `![](${result.path})`;
+        // result.path is the final project-root-relative path (it can be
+        // hash-suffix renamed on conflict); relativize it against the
+        // current file so the markdown reference resolves.
+        const markdown = buildDropMarkdown('image', currentFile?.path ?? null, result.path);
 
         editorRef.current.executeEdits('image-drop', [{
           range: {
@@ -921,7 +925,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       console.error('Failed to upload file:', err);
       pendingDropPositionRef.current = null;
     }
-  }, [handleCreateTextFile]);
+  }, [handleCreateTextFile, currentFile]);
 
   // Handle deleting a file
   const handleDeleteFile = useCallback((file: FileEntry) => {

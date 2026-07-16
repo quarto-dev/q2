@@ -1,0 +1,38 @@
+{
+  "blocks": [
+    {
+      "c": [
+        [
+          7,
+          {
+            "t": "UpperRoman"
+          },
+          {
+            "t": "TwoParens"
+          }
+        ],
+        [
+          [
+            {
+              "c": [
+                {
+                  "c": "x",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ]
+        ]
+      ],
+      "t": "OrderedList"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    1
+  ]
+}

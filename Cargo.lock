@@ -3015,6 +3015,7 @@ name = "pampa"
 version = "0.0.0"
 dependencies = [
  "ariadne",
+ "async-trait",
  "base64 0.22.1",
  "clap",
  "comrak",

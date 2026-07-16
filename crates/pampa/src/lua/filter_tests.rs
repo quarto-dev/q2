@@ -1564,18 +1564,20 @@ end
     let order = fs::read_to_string(&order_file).unwrap();
     let lines: Vec<&str> = order.lines().collect();
 
-    // Expected four-pass order:
+    // Expected four-pass order (pandoc subtree rule, bd-2j048yfm):
     // Pass 1: All inline elements (Str:a, Str:b)
     // Pass 2: All inline lists (Inlines, Inlines) - one per Para
     // Pass 3: All block elements (Para, Para)
-    // Pass 4: All block lists - there are TWO:
-    //         - Div.content (the inner [Para, Para] list)
-    //         - The wrapper list [Div] from wrapping the single element
-    // Note: The Div filter itself is NOT called because we're inside elem:walk
+    // Pass 4: All block lists - exactly ONE: Div.content. elem:walk
+    //         visits the element's children only; neither the Div
+    //         itself nor any synthetic [Div] wrapper list is offered
+    //         to the filter (matches pandoc; pinned upstream by
+    //         test-block.lua::walk::uses order Inline -> Inlines ->
+    //         Block -> Blocks).
     assert_eq!(
         lines,
         vec![
-            "Str:a", "Str:b", "Inlines", "Inlines", "Para", "Para", "Blocks", "Blocks"
+            "Str:a", "Str:b", "Inlines", "Inlines", "Para", "Para", "Blocks"
         ],
         "Expected four-pass order: all inlines first, then Inlines lists, then blocks, then Blocks lists"
     );

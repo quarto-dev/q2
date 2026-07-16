@@ -182,11 +182,15 @@ async fn synthetic_io_available_in_filters() {
     vfs.add_file(
         std::path::Path::new("/project/check_io.lua"),
         br#"
-function Pandoc(doc)
+-- Para (not Pandoc): doc-level handlers are not invoked yet, so the
+-- assertions would be dead code, and bd-2llqjsms's interim Q-11-6
+-- warning would trip the empty-diagnostics check below. The test doc
+-- contains a Paragraph, so Para actually runs.
+function Para(el)
     assert(type(io) == "table", "io should be a table")
     assert(type(io.open) == "function", "io.open should be a function")
     assert(type(io.type) == "function", "io.type should be a function")
-    return doc
+    return el
 end
 "#
         .to_vec(),
@@ -241,12 +245,13 @@ async fn synthetic_os_available_in_filters() {
     vfs.add_file(
         std::path::Path::new("/project/check_os.lua"),
         br#"
-function Pandoc(doc)
+-- Para, not Pandoc; see synthetic_io_available_in_filters.
+function Para(el)
     assert(type(os) == "table", "os should be a table")
     assert(type(os.time) == "function", "os.time should be a function")
     assert(type(os.clock) == "function", "os.clock should be a function")
     assert(type(os.difftime) == "function", "os.difftime should be a function")
-    return doc
+    return el
 end
 "#
         .to_vec(),

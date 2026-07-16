@@ -1,0 +1,27 @@
+{
+  "blocks": [
+    {
+      "c": [
+        {
+          "c": "block",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "text",
+          "t": "Str"
+        }
+      ],
+      "t": "Plain"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    1
+  ]
+}
