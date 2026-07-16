@@ -452,7 +452,7 @@ screenshots for banner/visual phases) before any phase is declared done.
 - [ ] Module doc note pointing at Q1's `date-format` token/locale/keyword
       surface as the future design target
 
-### Phase 5 — Banner mode (bd-364ol5lu) — IN PROGRESS 2026-07-16
+### Phase 5 — Banner mode (bd-364ol5lu) — DONE 2026-07-16
 
 Design notes (scoped 2026-07-16):
 
