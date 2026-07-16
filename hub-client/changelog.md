@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-16
+
+- [`d9ff92af`](https://github.com/quarto-dev/q2/commits/d9ff92af): The preview title block now renders the complete metadata grid, matching the rendered site: category chips under the title, the `description`, "Modified" (`date-modified`) and "Doi" (linked to doi.org) entries, and a trailing "Keywords" block; `title-block-categories: false` hides the chips.
+
 ### 2026-07-15
 
 - [`633ab60f`](https://github.com/quarto-dev/q2/commits/633ab60f): Structured authors now render fully in the preview title block, matching the rendered site: authors with affiliations appear in a two-column Authors/Affiliations grid, names link to the author's `url` with degrees shown after the name, and email and ORCID entries render as icon links.
