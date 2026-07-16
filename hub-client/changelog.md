@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-07-16
 
+- [`7907d35b`](https://github.com/quarto-dev/q2/commits/7907d35b): The preview supports title-block banner mode, matching the rendered site: with `title-block-banner` set, the title (plus subtitle, description, and category chips) renders in a full-width colored banner above the content area, with the author/date metadata grid below it.
 - [`d9ff92af`](https://github.com/quarto-dev/q2/commits/d9ff92af): The preview title block now renders the complete metadata grid, matching the rendered site: category chips under the title, the `description`, "Modified" (`date-modified`) and "Doi" (linked to doi.org) entries, and a trailing "Keywords" block; `title-block-categories: false` hides the chips.
 
 ### 2026-07-15
