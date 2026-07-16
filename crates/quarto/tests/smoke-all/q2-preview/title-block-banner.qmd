@@ -1,0 +1,27 @@
+---
+title: Banner Doc
+subtitle: With a banner
+author: Norah Jones
+date: "2026-07-01"
+title-block-banner: true
+format: q2-preview
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        -
+          - 'header#title-block-header.quarto-title-block.page-columns.page-full'
+          - 'div.quarto-title-banner.page-columns.page-full > div.quarto-title.column-body > h1.title'
+          - 'div.quarto-title-banner div.quarto-title > p.subtitle.lead'
+          - 'header#title-block-header div.quarto-title-meta p.date'
+          - 'main.content.quarto-banner-title-block'
+        -
+          - 'main header#title-block-header'
+---
+
+Banner mode in preview (title-block epic bd-gx9cic8z P5): the title
+block hoists above `#quarto-content`, title/subtitle render inside the
+banner div, the meta grid stays below it, and `<main>` carries
+`quarto-banner-title-block` — lockstep with the Rust partials (Q9).

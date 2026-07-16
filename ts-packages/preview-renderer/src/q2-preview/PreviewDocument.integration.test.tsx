@@ -43,6 +43,10 @@ const HEADER = (level: number, text: string) => ({
 });
 const ms = (c: string) => ({ t: 'MetaString', c });
 const mb = (c: boolean) => ({ t: 'MetaBool', c });
+const mm = (entries: Record<string, unknown>) => ({
+    t: 'MetaMap',
+    c: Object.entries(entries).map(([key, value]) => ({ key, value })),
+});
 
 // Snapshot body.className so other tests in the suite aren't observed
 // in a polluted state. Vitest happy-dom resets the DOM per file by
@@ -173,6 +177,56 @@ describe('PreviewDocument body container', () => {
         // that the color mode is already set.
         mount({ 'body-classes': ms('custom-cls quarto-dark') });
         expect(document.body.className).toBe('custom-cls quarto-dark');
+    });
+});
+
+describe('PreviewDocument banner placement (P5, bd-364ol5lu)', () => {
+    it('banner flag → title block renders BEFORE #quarto-content, main gains quarto-banner-title-block', () => {
+        const { container } = mount(
+            {
+                title: ms('Doc'),
+                rendered: mm({
+                    'has-title-block': mb(true),
+                    'title-block-banner': mb(true),
+                }),
+            },
+            [PARA(STR('hello'))],
+        );
+        const header = container.querySelector('header#title-block-header');
+        const content = container.querySelector('div#quarto-content');
+        expect(header).not.toBeNull();
+        expect(content).not.toBeNull();
+        // The header is a preceding sibling of #quarto-content, not
+        // inside it (mirrors FULL_HTML_TEMPLATE's banner conditional).
+        expect(content!.contains(header)).toBe(false);
+        expect(
+            header!.compareDocumentPosition(content!) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        expect(
+            container.querySelector(
+                'main.content.quarto-banner-title-block#quarto-document-content',
+            ),
+        ).not.toBeNull();
+    });
+
+    it('no banner flag → title block stays inside <main>, no banner class', () => {
+        const { container } = mount(
+            {
+                title: ms('Doc'),
+                rendered: mm({ 'has-title-block': mb(true) }),
+            },
+            [PARA(STR('hello'))],
+        );
+        const main = container.querySelector(
+            'main.content#quarto-document-content',
+        );
+        expect(
+            main!.querySelector('header#title-block-header'),
+        ).not.toBeNull();
+        expect(main!.classList.contains('quarto-banner-title-block')).toBe(
+            false,
+        );
     });
 });
 

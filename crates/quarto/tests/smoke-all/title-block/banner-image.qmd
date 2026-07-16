@@ -1,0 +1,28 @@
+---
+title: "Banner Image"
+author: "Norah Jones"
+title-block-banner: banner.png
+# Title-block parity corpus (bd-gx9cic8z, P5 bd-364ol5lu): a
+# title-block-banner value naming an existing file (relative to the
+# document) is an image banner — the generated include-in-header
+# <style> sets background-image + background-size: cover (Q1's
+# documentTitleIncludeInHeader behavior; banner.png is the committed
+# 1x1 test image next to this fixture).
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "body > header#title-block-header div.quarto-title-banner",
+            "main.content.quarto-banner-title-block",
+          ]
+      ensureFileRegexMatches:
+        - [
+            "background-image: url\\(banner\\.png\\);",
+            "background-size: cover;",
+          ]
+        - []
+---
+
+Body.

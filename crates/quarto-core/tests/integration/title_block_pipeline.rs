@@ -51,9 +51,18 @@ fn write(path: &Path, contents: &str) {
 /// (`ProjectPipeline` with `RenderToFileOptions`, the `q2 render`
 /// path) and return the rendered HTML of `doc.html`.
 fn render_doc_to_html(qmd: &str) -> String {
+    render_doc_to_html_with_files(qmd, &[])
+}
+
+/// Like [`render_doc_to_html`], with extra sibling files written next
+/// to `doc.qmd` first (e.g. a banner image the metadata references).
+fn render_doc_to_html_with_files(qmd: &str, files: &[(&str, &[u8])]) -> String {
     let temp = TempDir::new().unwrap();
     let project_dir = canonical(temp.path());
     write(&project_dir.join("doc.qmd"), qmd);
+    for (name, bytes) in files {
+        std::fs::write(project_dir.join(name), bytes).unwrap();
+    }
 
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let mut project =
@@ -116,6 +125,41 @@ fn extract_main_open_tag(html: &str) -> String {
         .expect("rendered HTML must contain <main");
     let end_rel = html[start..].find('>').expect("main tag must close");
     html[start..start + end_rel + 1].to_string()
+}
+
+/// Extract the generated banner `<style>` block from the head (the
+/// include-in-header block `TitleBannerTransform` emits for explicit
+/// banner colors/images — design decision Q5). Panics if absent.
+fn extract_banner_style(html: &str) -> String {
+    let marker = ".quarto-title-block .quarto-title-banner";
+    let mut rest = html;
+    let mut offset = 0;
+    while let Some(start_rel) = rest.find("<style") {
+        let start = offset + start_rel;
+        let end_rel = html[start..]
+            .find("</style>")
+            .expect("style tag must be closed");
+        let block = &html[start..start + end_rel + "</style>".len()];
+        if block.contains(marker) {
+            return block.to_string();
+        }
+        offset = start + end_rel;
+        rest = &html[offset..];
+    }
+    panic!("rendered HTML must contain the generated banner <style> block");
+}
+
+/// True when `#title-block-header` appears before `#quarto-content` —
+/// the banner-mode placement (Q1 relocates it with a DOM
+/// postprocessor; Q2 emits it there via a template conditional).
+fn header_precedes_quarto_content(html: &str) -> bool {
+    let header = html
+        .find("<header id=\"title-block-header\"")
+        .expect("rendered HTML must contain #title-block-header");
+    let content = html
+        .find("id=\"quarto-content\"")
+        .expect("rendered HTML must contain #quarto-content");
+    header < content
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -201,9 +245,10 @@ title-block-categories: false
 Body.
 "#;
 
-/// Banner mode. Today the option is ignored; P5 (bd-364ol5lu) emits
-/// the `.quarto-title-banner` structure above `#quarto-content` and
-/// adds `quarto-banner-title-block` to `<main>`.
+/// Banner mode (P5, bd-364ol5lu): the `.quarto-title-banner` structure
+/// renders above `#quarto-content` and `<main>` gains
+/// `quarto-banner-title-block`. `title-block-banner: true` generates
+/// no style block — colors come from the theme SCSS (Q5).
 const BANNER_TRUE: &str = r#"---
 title: "Banner Document"
 subtitle: "With a banner"
@@ -214,6 +259,43 @@ title-block-banner: true
 
 Body.
 "#;
+
+/// Explicit banner color + text color: generates the
+/// include-in-header `<style>` block (Q5); `body`/`body-bg` values of
+/// `title-block-banner-color` would suppress the color rule (covered
+/// by the transform's unit tests).
+const BANNER_COLOR: &str = r##"---
+title: "Banner Explicit Color"
+author: "Norah Jones"
+title-block-banner: "#FFDDFF"
+title-block-banner-color: "#111111"
+---
+
+Body.
+"##;
+
+/// Image banner: the value names an existing file relative to the
+/// document, so the generated style uses background-image +
+/// background-size: cover, and the image is registered for resource
+/// copying.
+const BANNER_IMAGE: &str = r#"---
+title: "Banner Image"
+author: "Norah Jones"
+title-block-banner: banner.png
+---
+
+Body.
+"#;
+
+/// A 1x1 RGBA PNG (the smallest valid image) for the image-banner
+/// fixture.
+const TEST_PNG: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+    0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0xF0,
+    0x1F, 0x00, 0x05, 0x00, 0x01, 0xFF, 0xAB, 0xCE, 0x36, 0x89, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+    0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+];
 
 /// Label overrides. Today they are ignored; P1 (bd-tezzk9vp) honours
 /// them.
@@ -286,10 +368,44 @@ fn title_block_metadata_grid_no_categories_baseline() {
 #[test]
 fn title_block_banner_true_baseline() {
     let html = render_doc_to_html(BANNER_TRUE);
+    assert!(
+        header_precedes_quarto_content(&html),
+        "banner header must render above #quarto-content"
+    );
     insta::assert_snapshot!("title_block_banner_true", extract_title_block(&html));
     insta::assert_snapshot!(
         "title_block_banner_true_main_tag",
         extract_main_open_tag(&html)
+    );
+}
+
+#[test]
+fn title_block_banner_color_baseline() {
+    let html = render_doc_to_html(BANNER_COLOR);
+    assert!(header_precedes_quarto_content(&html));
+    insta::assert_snapshot!("title_block_banner_color", extract_title_block(&html));
+    insta::assert_snapshot!(
+        "title_block_banner_color_style",
+        extract_banner_style(&html)
+    );
+}
+
+#[test]
+fn title_block_banner_image_baseline() {
+    let html = render_doc_to_html_with_files(BANNER_IMAGE, &[("banner.png", TEST_PNG)]);
+    assert!(header_precedes_quarto_content(&html));
+    insta::assert_snapshot!(
+        "title_block_banner_image_style",
+        extract_banner_style(&html)
+    );
+}
+
+#[test]
+fn title_block_non_banner_header_stays_in_main() {
+    let html = render_doc_to_html(SIMPLE);
+    assert!(
+        !header_precedes_quarto_content(&html),
+        "without a banner the header stays inside <main>"
     );
 }
 

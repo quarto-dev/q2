@@ -78,9 +78,9 @@ use crate::transforms::{
     PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
     SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
-    TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
-    WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
-    WebsiteTitlePrefixTransform,
+    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
+    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
+    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -1183,7 +1183,7 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(ShortcodeResolveTransform::with_lua_support(
         shortcode_paths,
         extensions,
-        runtime,
+        runtime.clone(),
         lua_format,
     )));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
@@ -1193,6 +1193,12 @@ pub fn build_transform_pipeline(
     // block (which reads the same metadata keys). Runs right after
     // metadata-normalize; format-agnostic like Q1's authors.lua pass.
     pipeline.push(Box::new(AuthorsNormalizeTransform::new()));
+    // Title-block banner mode (bd-gx9cic8z P5): derives
+    // `rendered.title-block-banner` (the template's banner gate) and,
+    // for explicit banner colors/images, pushes the generated
+    // include-in-header <style> + image ResourceCopyIntent. HTML-only
+    // (self-gated on `ctx.format.is_html_based()`).
+    pipeline.push(Box::new(TitleBannerTransform::new(runtime)));
     // bd-1tl09 Phase 0: code-block decoration Generate runs after
     // metadata-normalize so document-level defaults (e.g.
     // `code-copy: true`) are visible when computing per-block

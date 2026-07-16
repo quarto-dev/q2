@@ -198,6 +198,9 @@ $endif$
 $for(include-before)$
 $include-before$
 $endfor$
+$if(rendered.title-block-banner)$
+$title-block()$
+$endif$
 
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-$page-layout$">
 $if(rendered.navigation.sidebar)$
@@ -223,9 +226,12 @@ $rendered.navigation.margin_categories$
 $endif$
 $endif$
 
-<main class="content" id="quarto-document-content">
+<main class="content$if(rendered.title-block-banner)$ quarto-banner-title-block$endif$" id="quarto-document-content">
 
+$if(rendered.title-block-banner)$
+$else$
 $title-block()$
+$endif$
 
 $body$
 
@@ -265,9 +271,58 @@ $endif$
 /// flag yet (Q1's book pipeline does, for chapter pages — design
 /// decision Q11), so it is inert until a project pipeline needs it.
 ///
+/// P5 (bd-364ol5lu): the partial branches internally on
+/// `rendered.title-block-banner` (written by `TitleBannerTransform`)
+/// instead of registering a separate `banner/title-block` partial —
+/// in Q1 a user's `template-partials` file named `title-block.html`
+/// shadows the built-in in *both* modes (Pandoc resolves partials by
+/// basename; Q1's banner file is `banner/title-block.html`), and the
+/// single Q2 name preserves exactly that override semantics. The
+/// banner branch is Q1's `banner/title-block.html` verbatim:
+/// title/subtitle/description/categories move *inside*
+/// `div.quarto-title-banner > div.quarto-title.column-body`, the meta
+/// grid stays below the banner, and there is no `hide-description`
+/// gate (Q1 parity). The `page-columns page-full` classes on the
+/// header and banner div are baked into the markup — Q1 gets them
+/// from its generic bootstrap grid DOM postprocessor, which Q2
+/// doesn't have. `quarto-template-params.banner-header-class` is
+/// ported verbatim but currently has no producer (Q1 sets `toc-left`
+/// from `toc-location`, which Q2 doesn't support yet).
+///
 /// A document can replace this partial by listing a file named
 /// `title-block.html` under `template-partials` (Q1 compatibility).
 pub const TITLE_BLOCK_PARTIAL: &str = r#"$if(rendered.has-title-block)$
+$if(rendered.title-block-banner)$
+<header id="title-block-header" class="quarto-title-block default page-columns page-full$if(quarto-template-params.banner-header-class)$ $quarto-template-params.banner-header-class$$endif$">
+<div class="quarto-title-banner page-columns page-full">
+<div class="quarto-title column-body">
+$if(title)$
+<h1 class="title">$title$</h1>
+$endif$
+$if(subtitle)$
+<p class="subtitle lead">$subtitle$</p>
+$endif$
+$if(description)$
+<div>
+<div class="description">
+$description$
+</div>
+</div>
+$endif$
+$if(categories)$
+$if(quarto-template-params.title-block-categories)$
+<div class="quarto-categories">
+$for(categories)$
+<div class="quarto-category">$it$</div>
+$endfor$
+</div>
+$endif$
+$endif$
+</div>
+</div>
+$title-metadata()$
+</header>
+$else$
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
 $if(title)$
@@ -296,6 +351,7 @@ $description$
 $endif$
 $title-metadata()$
 </header>
+$endif$
 $endif$"#;
 
 /// Built-in `title-metadata` partial — the metadata grid below the

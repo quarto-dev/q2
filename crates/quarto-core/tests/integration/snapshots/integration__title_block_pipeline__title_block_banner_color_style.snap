@@ -1,0 +1,18 @@
+---
+source: crates/quarto-core/tests/integration/title_block_pipeline.rs
+expression: extract_banner_style(&html)
+---
+<style>
+.quarto-title-block .quarto-title-banner h1,
+.quarto-title-block .quarto-title-banner h2,
+.quarto-title-block .quarto-title-banner h3,
+.quarto-title-block .quarto-title-banner h4,
+.quarto-title-block .quarto-title-banner h5,
+.quarto-title-block .quarto-title-banner h6 {
+color: #111111;
+}
+.quarto-title-block .quarto-title-banner {
+color: #111111;
+background: #FFDDFF;
+}
+</style>

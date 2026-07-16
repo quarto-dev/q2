@@ -4,19 +4,25 @@ subtitle: "With a banner"
 author: "Norah Jones"
 date: "2026-07-01"
 title-block-banner: true
-# Title-block parity corpus (bd-gx9cic8z). title-block-banner is
-# currently ignored; P5 (bd-364ol5lu) emits div.quarto-title-banner
-# above #quarto-content, adds quarto-banner-title-block to <main>, and
-# strengthens these assertions accordingly.
+# Title-block parity corpus (bd-gx9cic8z). P5 (bd-364ol5lu): the
+# banner header renders above #quarto-content (direct child of body),
+# header + banner div carry page-columns page-full, title/subtitle
+# live inside div.quarto-title.column-body in the banner, the meta
+# grid stays below the banner inside the header, and <main> gains
+# quarto-banner-title-block.
 _quarto:
   tests:
     html:
       noErrors: true
       ensureHtmlElements:
         - [
-            "header#title-block-header.quarto-title-block.default",
-            "div.quarto-title > h1.title",
+            "body > header#title-block-header.quarto-title-block.default.page-columns.page-full",
+            "header#title-block-header > div.quarto-title-banner.page-columns.page-full > div.quarto-title.column-body > h1.title",
+            "div.quarto-title-banner div.quarto-title > p.subtitle.lead",
+            "header#title-block-header div.quarto-title-meta p.date",
+            "main.content.quarto-banner-title-block#quarto-document-content",
           ]
+        - ["main header#title-block-header"]
 ---
 
 Body.

@@ -452,19 +452,109 @@ screenshots for banner/visual phases) before any phase is declared done.
 - [ ] Module doc note pointing at Q1's `date-format` token/locale/keyword
       surface as the future design target
 
-### Phase 5 — Banner mode
+### Phase 5 — Banner mode (bd-364ol5lu) — IN PROGRESS 2026-07-16
 
-- [ ] `banner/title-block.html` partial; header emitted above
-      `#quarto-content` via template conditional; `page-columns page-full`
-      classes; `main.quarto-banner-title-block`; `#quarto-header.quarto-banner`
-- [ ] `title-block-banner: true` (theme-derived via existing SCSS)
-- [ ] Explicit color + `title-block-banner-color` (`body`/`body-bg`/color)
-      via generated include-in-header style (per Q5)
-- [ ] Image banner (path detection, `background-image`, resource collection
-      so the image is copied to the output dir)
-- [ ] `toc-left` header class when `toc-location: left`
-- [ ] Browser screenshot verification against Q1 output
-- [ ] Lockstep: `PreviewTitleBlock.tsx` banner variant (Q9)
+Design notes (scoped 2026-07-16):
+
+- **One partial, internal branch.** The `title-block` partial branches
+  on a derived `rendered.title-block-banner` flag rather than
+  registering a separate `banner/title-block` partial: in Q1, a user's
+  `template-partials` file named `title-block.html` shadows the
+  built-in in *both* modes (Pandoc resolves partials by basename, and
+  Q1's banner file is `banner/title-block.html`); a single Q2 partial
+  name preserves exactly that override semantics. Q1's inert
+  `quarto-template-params.banner-header-class` hook is ported verbatim
+  (no producer yet — see toc-left deferral below).
+- **Placement via skeleton conditionals** (architecture item 3):
+  `FULL_HTML_TEMPLATE` emits `$title-block()$` before
+  `<div id="quarto-content">` when the flag is set, inside `<main>`
+  otherwise; `<main>` conditionally gains `quarto-banner-title-block`.
+- **`page-columns page-full` baked into the partial markup** (header +
+  banner div). In Q1 those classes come from the *generic* bootstrap
+  grid DOM postprocessor (`ensureInGrid` walking up from
+  `column-body`); with no DOM postprocessor we emit them directly —
+  the P0 research doc's captured Q1 banner DOM is the target.
+- **Banner styles**: `title-block-banner: true` → no generated style
+  (theme SCSS `bannerBg()`/`bannerColor()`, already ported). Explicit
+  color/image → a `<style>` block pushed onto
+  `RenderContext.includes` (in-header), folded into
+  `rendered.includes.*` at apply-template — the Q5 mechanism.
+  `title-block-banner-color: body|body-bg` → no inline color (Q1's
+  `titleColor()` returns undefined for both; the SCSS default chain
+  handles them); any other value → `color:` on banner headings +
+  container.
+- **Image banner**: Q1's detection (absolute path, or exists relative
+  to the input's dir) → `background-image: url(...)` +
+  `background-size: cover` in the generated style; the file is copied
+  to the output tree via a `ResourceCopyIntent` pushed on
+  `RenderContext.resource_copies` (the `ResourceCollectorTransform`
+  pattern).
+- **Deferred, documented**: `#quarto-header.quarto-banner` — Q2's
+  navbar has no `#quarto-header` wrapper element, and the class's only
+  consumer in all of Q1 is `.quarto-banner nav.quarto-secondary-nav`
+  (website secondary nav), which Q2 doesn't have; revisit when
+  secondary-nav lands. `toc-left` (`banner-header-class`) — Q2 has no
+  `toc-location` option at all yet (grep: zero hits), so the class
+  would be unreachable; the template hook is in place for when
+  toc-location lands.
+
+Work items:
+
+- [x] TDD red: strengthened `smoke-all/title-block/banner-true.qmd`
+      (body > header.page-columns.page-full, banner div >
+      quarto-title.column-body > h1, main.quarto-banner-title-block,
+      header NOT inside main — 5 checks red before the fix); new
+      fixtures banner-color.qmd + banner-image.qmd (+ committed 1x1
+      banner.png); insta cases banner_color (header + generated style
+      block), banner_image_style, plus `header_precedes_quarto_content`
+      positional asserts and a non-banner stays-in-main guard
+- [x] `TitleBannerTransform` (new, Normalization phase, HTML-format
+      only — deliberately NOT revealjs): derives
+      `rendered.title-block-banner`, classifies bool/color/image,
+      generates the Q5 `<style>` appended to the canonical
+      `rendered.includes.header` list (shared
+      `append_to_rendered_header` with the favicon transform — reaches
+      both the native `$header-includes$` and the q2-preview head
+      injector), pushes the image `ResourceCopyIntent`; 9 unit tests
+      for the classification matrix. **WASM note:** the image-vs-color
+      existence probe goes through the injected `SystemRuntime`
+      (`ShortcodeResolveTransform` pattern) — a bare `Path::is_file()`
+      can't see `/project/` VFS files, which the Playwright sweep
+      caught (banner-image.qmd failed under the WASM runner until the
+      runtime probe landed)
+- [x] `TITLE_BLOCK_PARTIAL` banner branch (Q1-verbatim, incl.
+      description/categories inside the banner and no hide-description
+      gate in banner mode); skeleton emits the partial above
+      `#quarto-content` when the flag is set, `<main>` conditionally
+      gains `quarto-banner-title-block`. Non-banner output is
+      byte-identical (phase5 hash test passed unchanged).
+- [x] Banner SCSS confirmed live: compiled theme CSS carries
+      `.quarto-title-banner{...color:#fdfefe;background:#517699}`
+      (theme-derived via bannerBg()/bannerColor())
+- [x] Browser screenshot verification against Q1 (chrome-devtools MCP,
+      Q1 = system `quarto` dev binary, 2026-07-16): banner-true doc
+      renders visually identically (same slate banner, chips,
+      grid-below layout); only expected deltas are the unformatted
+      date (P4) and a few px of section-heading margin. Explicit-color
+      doc verified: #FFDDFF banner + #111111 title beat the theme.
+- [x] Lockstep (Q9): `PreviewTitleBlock.tsx` banner branch (shared
+      `TitleMetaGrids` fragment mirrors Q1's shared title-metadata
+      partial); `PreviewDocument.tsx` hoists the title block above
+      `#quarto-content` + `<main>` class, mirroring the skeleton
+      conditionals; +6 vitest cases (553 pass); new q2-preview smoke
+      fixture `title-block-banner.qmd`; Playwright title-block sweep
+      green (20 tests)
+- [x] End-to-end (2026-07-16): `cargo run --bin q2 -- render` on an
+      output-dir project with `title-block-banner: banner.png` +
+      `title-block-banner-color: "#FFFFFF"`: `_site/banner.png` copied
+      (ResourceCopyIntent), head `<style>` has
+      `background-image: url(banner.png); background-size: cover;`,
+      header before `#quarto-content`,
+      `<main class="content quarto-banner-title-block">`; output
+      inspected
+
+Deferred (documented in the transform module doc + above):
+`#quarto-header.quarto-banner`, `toc-left` producer.
 
 ### Phase 6 — Styles + degradation
 

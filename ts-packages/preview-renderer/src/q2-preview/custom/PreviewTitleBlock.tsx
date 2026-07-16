@@ -100,6 +100,65 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
     const label = (key: string, fallback: string): string =>
         extractMetaString(getMetaPath(meta, ['labels', key])) ?? fallback;
 
+    // Banner mode (P5, bd-364ol5lu): `TitleBannerTransform` writes the
+    // flag; the markup mirrors TITLE_BLOCK_PARTIAL's banner branch —
+    // title/subtitle/description/categories inside
+    // div.quarto-title-banner > div.quarto-title.column-body, the meta
+    // grids below the banner, page-columns page-full on header +
+    // banner div, and (Q1 banner-partial parity) NO hide-description
+    // gate.
+    const banner =
+        extractMetaBool(
+            getMetaPath(meta, ['rendered', 'title-block-banner']),
+        ) === true;
+
+    const categoryChips =
+        categories.length > 0 ? (
+            <div className="quarto-categories">
+                {categories.map((category, i) => (
+                    <div className="quarto-category" key={i}>
+                        {category}
+                    </div>
+                ))}
+            </div>
+        ) : null;
+
+    const descriptionBlock = description ? (
+        <div>
+            <div className="description">{description}</div>
+        </div>
+    ) : null;
+
+    if (banner) {
+        return (
+            <header
+                id="title-block-header"
+                className="quarto-title-block default page-columns page-full"
+            >
+                <div className="quarto-title-banner page-columns page-full">
+                    <div className="quarto-title column-body">
+                        {title ? <h1 className="title">{title}</h1> : null}
+                        {subtitle ? (
+                            <p className="subtitle lead">{subtitle}</p>
+                        ) : null}
+                        {descriptionBlock}
+                        {categoryChips}
+                    </div>
+                </div>
+                <TitleMetaGrids
+                    authors={authors}
+                    hasAffiliations={hasAffiliations}
+                    date={date}
+                    dateModified={dateModified}
+                    doi={doi}
+                    keywords={keywords}
+                    abstractParagraphs={abstractParagraphs}
+                    label={label}
+                />
+            </header>
+        );
+    }
+
     return (
         <header
             id="title-block-header"
@@ -110,128 +169,157 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
                 {subtitle ? (
                     <p className="subtitle lead">{subtitle}</p>
                 ) : null}
-                {categories.length > 0 ? (
-                    <div className="quarto-categories">
-                        {categories.map((category, i) => (
-                            <div className="quarto-category" key={i}>
-                                {category}
-                            </div>
-                        ))}
-                    </div>
-                ) : null}
+                {categoryChips}
             </div>
             {/* Q11 gate: hide-description suppresses the block (set by
                 Q1's book pipeline for chapter pages; nothing sets it
                 in Q2 yet). */}
-            {description && !hideDescription ? (
-                <div>
-                    <div className="description">{description}</div>
+            {!hideDescription ? descriptionBlock : null}
+            <TitleMetaGrids
+                authors={authors}
+                hasAffiliations={hasAffiliations}
+                date={date}
+                dateModified={dateModified}
+                doi={doi}
+                keywords={keywords}
+                abstractParagraphs={abstractParagraphs}
+                label={label}
+            />
+        </header>
+    );
+};
+
+/** Props for the shared metadata-grid fragment. */
+interface TitleMetaGridsProps {
+    authors: PreviewAuthor[];
+    hasAffiliations: boolean;
+    date?: string;
+    dateModified?: string;
+    doi?: string;
+    keywords: string[];
+    abstractParagraphs: string[];
+    label: (key: string, fallback: string) => string;
+}
+
+/**
+ * The metadata grids below the title — the `title-metadata` partial's
+ * output, shared verbatim by the default and banner layouts (in Q1
+ * both title-block partials call `$title-metadata.html()$`).
+ */
+const TitleMetaGrids = ({
+    authors,
+    hasAffiliations,
+    date,
+    dateModified,
+    doi,
+    keywords,
+    abstractParagraphs,
+    label,
+}: TitleMetaGridsProps) => (
+    <>
+        {/* Mirror TITLE_METADATA_PARTIAL: with affiliations the
+            authors move to the two-column grid; without, they
+            stay a cell of the plain grid (Q1's
+            $if(by-affiliation)$ / $elseif(by-author)$ split). */}
+        {hasAffiliations ? (
+            <div className="quarto-title-meta-author">
+                <div className="quarto-title-meta-heading">
+                    {label(
+                        'authors',
+                        authors.length > 1 ? 'Authors' : 'Author',
+                    )}
                 </div>
-            ) : null}
-            {/* Mirror TITLE_METADATA_PARTIAL: with affiliations the
-                authors move to the two-column grid; without, they
-                stay a cell of the plain grid (Q1's
-                $if(by-affiliation)$ / $elseif(by-author)$ split). */}
-            {hasAffiliations ? (
-                <div className="quarto-title-meta-author">
+                <div className="quarto-title-meta-heading">
+                    {label(
+                        'affiliations',
+                        countAffiliations(authors) > 1
+                            ? 'Affiliations'
+                            : 'Affiliation',
+                    )}
+                </div>
+                {authors.map((author, i) => (
+                    <AuthorAffiliationRow key={i} author={author} />
+                ))}
+            </div>
+        ) : null}
+        {/* Like Q1 (and TITLE_METADATA_PARTIAL), the grid div is
+            always emitted when the title block renders, even if
+            all its cells are empty. */}
+        <div className="quarto-title-meta">
+            {!hasAffiliations && authors.length > 0 ? (
+                <div>
                     <div className="quarto-title-meta-heading">
                         {label(
                             'authors',
                             authors.length > 1 ? 'Authors' : 'Author',
                         )}
                     </div>
-                    <div className="quarto-title-meta-heading">
-                        {label(
-                            'affiliations',
-                            countAffiliations(authors) > 1
-                                ? 'Affiliations'
-                                : 'Affiliation',
-                        )}
-                    </div>
-                    {authors.map((author, i) => (
-                        <AuthorAffiliationRow key={i} author={author} />
-                    ))}
-                </div>
-            ) : null}
-            {/* Like Q1 (and TITLE_METADATA_PARTIAL), the grid div is
-                always emitted when the title block renders, even if
-                all its cells are empty. */}
-            <div className="quarto-title-meta">
-                {!hasAffiliations && authors.length > 0 ? (
-                    <div>
-                        <div className="quarto-title-meta-heading">
-                            {label(
-                                'authors',
-                                authors.length > 1 ? 'Authors' : 'Author',
-                            )}
-                        </div>
-                        <div className="quarto-title-meta-contents">
-                            {authors.map((author, i) => (
-                                <p key={i}>
-                                    <AuthorInline author={author} />
-                                </p>
-                            ))}
-                        </div>
-                    </div>
-                ) : null}
-                {date ? (
-                    <div>
-                        <div className="quarto-title-meta-heading">
-                            {label('published', 'Published')}
-                        </div>
-                        <div className="quarto-title-meta-contents">
-                            <p className="date">{date}</p>
-                        </div>
-                    </div>
-                ) : null}
-                {dateModified ? (
-                    <div>
-                        <div className="quarto-title-meta-heading">
-                            {label('modified', 'Modified')}
-                        </div>
-                        <div className="quarto-title-meta-contents">
-                            <p className="date-modified">{dateModified}</p>
-                        </div>
-                    </div>
-                ) : null}
-                {doi ? (
-                    <div>
-                        <div className="quarto-title-meta-heading">
-                            {label('doi', 'Doi')}
-                        </div>
-                        <div className="quarto-title-meta-contents">
-                            <p className="doi">
-                                <a href={`https://doi.org/${doi}`}>{doi}</a>
+                    <div className="quarto-title-meta-contents">
+                        {authors.map((author, i) => (
+                            <p key={i}>
+                                <AuthorInline author={author} />
                             </p>
-                        </div>
-                    </div>
-                ) : null}
-            </div>
-            {abstractParagraphs.length > 0 ? (
-                <div>
-                    <div className="abstract">
-                        <div className="block-title">
-                            {label('abstract', 'Abstract')}
-                        </div>
-                        {abstractParagraphs.map((text, i) => (
-                            <p key={i}>{text}</p>
                         ))}
                     </div>
                 </div>
             ) : null}
-            {keywords.length > 0 ? (
+            {date ? (
                 <div>
-                    <div className="keywords">
-                        <div className="block-title">
-                            {label('keywords', 'Keywords')}
-                        </div>
-                        <p>{keywords.join(', ')}</p>
+                    <div className="quarto-title-meta-heading">
+                        {label('published', 'Published')}
+                    </div>
+                    <div className="quarto-title-meta-contents">
+                        <p className="date">{date}</p>
                     </div>
                 </div>
             ) : null}
-        </header>
-    );
-};
+            {dateModified ? (
+                <div>
+                    <div className="quarto-title-meta-heading">
+                        {label('modified', 'Modified')}
+                    </div>
+                    <div className="quarto-title-meta-contents">
+                        <p className="date-modified">{dateModified}</p>
+                    </div>
+                </div>
+            ) : null}
+            {doi ? (
+                <div>
+                    <div className="quarto-title-meta-heading">
+                        {label('doi', 'Doi')}
+                    </div>
+                    <div className="quarto-title-meta-contents">
+                        <p className="doi">
+                            <a href={`https://doi.org/${doi}`}>{doi}</a>
+                        </p>
+                    </div>
+                </div>
+            ) : null}
+        </div>
+        {abstractParagraphs.length > 0 ? (
+            <div>
+                <div className="abstract">
+                    <div className="block-title">
+                        {label('abstract', 'Abstract')}
+                    </div>
+                    {abstractParagraphs.map((text, i) => (
+                        <p key={i}>{text}</p>
+                    ))}
+                </div>
+            </div>
+        ) : null}
+        {keywords.length > 0 ? (
+            <div>
+                <div className="keywords">
+                    <div className="block-title">
+                        {label('keywords', 'Keywords')}
+                    </div>
+                    <p>{keywords.join(', ')}</p>
+                </div>
+            </div>
+        ) : null}
+    </>
+);
 
 /** One normalized `by-author` entry's display surface. */
 interface PreviewAuthor {

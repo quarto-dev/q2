@@ -1,0 +1,10 @@
+---
+source: crates/quarto-core/tests/integration/title_block_pipeline.rs
+expression: extract_banner_style(&html)
+---
+<style>
+.quarto-title-block .quarto-title-banner {
+background-image: url(banner.png);
+background-size: cover;
+}
+</style>

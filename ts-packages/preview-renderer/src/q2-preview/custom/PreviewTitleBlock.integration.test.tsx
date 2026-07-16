@@ -616,6 +616,92 @@ describe('PreviewTitleBlock — metadata grid completeness (P3, bd-j6huijli)', (
     });
 });
 
+describe('PreviewTitleBlock — banner mode (P5, bd-364ol5lu)', () => {
+    /** Derived meta with the banner flag `TitleBannerTransform` writes. */
+    function bannerDerived(
+        meta: Record<string, unknown>,
+        authors: string[] = [],
+    ): Record<string, unknown> {
+        return {
+            ...meta,
+            ...(authors.length > 0 ? { 'by-author': byAuthor(...authors) } : {}),
+            rendered: mm({
+                'has-title-block': mb(true),
+                'title-block-banner': mb(true),
+            }),
+        };
+    }
+
+    it('banner → header/banner div carry page-columns page-full, title in column-body', () => {
+        const { container } = mount(
+            bannerDerived({ title: ms('Doc'), subtitle: ms('Sub') }),
+        );
+        const header = container.querySelector('header#title-block-header');
+        expect(header).not.toBeNull();
+        expect(header!.className).toBe(
+            'quarto-title-block default page-columns page-full',
+        );
+        const title = header!.querySelector(
+            ':scope > div.quarto-title-banner.page-columns.page-full > div.quarto-title.column-body > h1.title',
+        );
+        expect(title).not.toBeNull();
+        expect(title!.textContent).toBe('Doc');
+        expect(
+            header!.querySelector(
+                'div.quarto-title-banner div.quarto-title > p.subtitle.lead',
+            ),
+        ).not.toBeNull();
+    });
+
+    it('banner → description and categories render inside the banner div', () => {
+        const { container } = mount(
+            bannerDerived({
+                title: ms('Doc'),
+                description: ms('A description.'),
+                categories: ml(ms('analysis')),
+            }),
+        );
+        const banner = container.querySelector('div.quarto-title-banner');
+        expect(
+            banner!.querySelector('div.quarto-title > div > div.description'),
+        ).not.toBeNull();
+        expect(
+            banner!.querySelector(
+                'div.quarto-title > div.quarto-categories > div.quarto-category',
+            ),
+        ).not.toBeNull();
+    });
+
+    it('banner → meta grid renders below the banner, inside the header', () => {
+        const { container } = mount(
+            bannerDerived({ title: ms('Doc'), date: ms('2026-07-01') }, [
+                'Jane',
+            ]),
+        );
+        const header = container.querySelector('header#title-block-header');
+        const grid = header!.querySelector(':scope > div.quarto-title-meta');
+        expect(grid).not.toBeNull();
+        expect(grid!.querySelector('p.date')).not.toBeNull();
+        // The grid is NOT inside the banner div.
+        expect(
+            container.querySelector(
+                'div.quarto-title-banner div.quarto-title-meta',
+            ),
+        ).toBeNull();
+    });
+
+    it('banner → no hide-description gate (Q1 banner partial parity)', () => {
+        const { container } = mount(
+            bannerDerived({
+                title: ms('Doc'),
+                description: ms('Shown anyway.'),
+                'hide-description': mb(true),
+            }),
+        );
+        expect(container.querySelector('div.description')).not.toBeNull();
+    });
+});
+
 describe('PreviewTitleBlock — user override via registry', () => {
     it('full replacement → stub renders, built-in <header> is absent', () => {
         const StubTitleBlock = vi.fn(() => (
