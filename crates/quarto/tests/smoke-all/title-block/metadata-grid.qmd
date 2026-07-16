@@ -11,11 +11,9 @@ keywords:
 categories:
   - analysis
   - jazz
-# Title-block parity corpus (bd-gx9cic8z). date-modified / doi /
-# keywords / description / categories are not rendered in the title
-# block yet; P3 (bd-j6huijli) adds them and strengthens these
-# assertions (p.date-modified, p.doi > a, div.keywords,
-# div.quarto-categories > div.quarto-category, …).
+# Title-block parity corpus (bd-gx9cic8z). P3 (bd-j6huijli): the full
+# metadata grid — Modified/Doi cells, keywords + description blocks,
+# and category chips (title-block-categories defaults to true).
 _quarto:
   tests:
     html:
@@ -24,6 +22,13 @@ _quarto:
         - [
             "header#title-block-header.quarto-title-block.default",
             "div.quarto-title > h1.title",
+            "div.quarto-title > div.quarto-categories > div.quarto-category",
+            "div.description",
+            "div.quarto-title-meta p.date",
+            "div.quarto-title-meta p.date-modified",
+            "div.quarto-title-meta p.doi > a[href='https://doi.org/10.1234/example.5678']",
+            "div.keywords > div.block-title",
+            "div.keywords > p",
           ]
 ---
 

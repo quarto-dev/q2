@@ -166,8 +166,9 @@ Body.
 "#;
 
 /// The rest of the metadata grid: date-modified, doi, keywords,
-/// description, categories. None of these render today; P3
-/// (bd-j6huijli) adds them.
+/// description, categories. P3 (bd-j6huijli) renders them: Modified
+/// and linked Doi cells in the grid, keywords and description blocks,
+/// and category chips.
 const METADATA_GRID: &str = r#"---
 title: "Metadata Grid"
 author: "Norah Jones"
@@ -181,6 +182,20 @@ keywords:
 categories:
   - analysis
   - jazz
+---
+
+Body.
+"#;
+
+/// `title-block-categories: false` suppresses the category chips
+/// (P3, bd-j6huijli; the option defaults to true).
+const METADATA_GRID_NO_CATEGORIES: &str = r#"---
+title: "Categories Disabled"
+author: "Norah Jones"
+categories:
+  - analysis
+  - jazz
+title-block-categories: false
 ---
 
 Body.
@@ -257,6 +272,15 @@ fn title_block_rich_authors_baseline() {
 fn title_block_metadata_grid_baseline() {
     let html = render_doc_to_html(METADATA_GRID);
     insta::assert_snapshot!("title_block_metadata_grid", extract_title_block(&html));
+}
+
+#[test]
+fn title_block_metadata_grid_no_categories_baseline() {
+    let html = render_doc_to_html(METADATA_GRID_NO_CATEGORIES);
+    insta::assert_snapshot!(
+        "title_block_metadata_grid_no_categories",
+        extract_title_block(&html)
+    );
 }
 
 #[test]

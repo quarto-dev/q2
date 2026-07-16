@@ -1,0 +1,34 @@
+---
+title: Metadata Grid
+author: Norah Jones
+date: "2026-07-01"
+date-modified: "2026-07-10"
+doi: "10.1234/example.5678"
+description: A one-line description.
+keywords:
+  - music
+  - texas
+categories:
+  - analysis
+  - jazz
+format: q2-preview
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        -
+          - 'header#title-block-header'
+          - 'div.quarto-title > div.quarto-categories > div.quarto-category'
+          - 'div.description'
+          - 'div.quarto-title-meta p.date'
+          - 'div.quarto-title-meta p.date-modified'
+          - 'div.quarto-title-meta p.doi > a'
+          - 'div.keywords > div.block-title'
+          - 'div.keywords > p'
+---
+
+The full metadata grid in preview (title-block epic bd-gx9cic8z P3:
+category chips, description block, Modified and linked Doi cells,
+trailing keywords block — lockstep with the Rust partials, Q9).

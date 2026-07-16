@@ -464,6 +464,158 @@ describe('PreviewTitleBlock — structured authors (P2, bd-ez0hiowa)', () => {
     });
 });
 
+describe('PreviewTitleBlock — metadata grid completeness (P3, bd-j6huijli)', () => {
+    it('categories → chips inside div.quarto-title (param written by transform)', () => {
+        const { container } = mount(
+            derived({
+                title: ms('Doc'),
+                categories: ml(ms('analysis'), ms('jazz')),
+                'quarto-template-params': mm({
+                    'title-block-categories': mb(true),
+                }),
+            }),
+        );
+        const chips = container.querySelectorAll(
+            'div.quarto-title > div.quarto-categories > div.quarto-category',
+        );
+        expect(Array.from(chips).map((c) => c.textContent)).toEqual([
+            'analysis',
+            'jazz',
+        ]);
+    });
+
+    it('title-block-categories: false (no template param) → no chips', () => {
+        const { container } = mount(
+            derived({
+                title: ms('Doc'),
+                categories: ml(ms('analysis')),
+                'title-block-categories': mb(false),
+            }),
+        );
+        expect(container.querySelector('div.quarto-categories')).toBeNull();
+        // The header itself still renders.
+        expect(
+            container.querySelector('header#title-block-header'),
+        ).not.toBeNull();
+    });
+
+    it('description → outer div > div.description after the quarto-title div', () => {
+        const { container } = mount(
+            derived({
+                title: ms('Doc'),
+                description: ms('A one-line description.'),
+            }),
+        );
+        const description = container.querySelector(
+            'header#title-block-header > div > div.description',
+        );
+        expect(description).not.toBeNull();
+        expect(description!.textContent).toBe('A one-line description.');
+    });
+
+    it('hide-description → description suppressed (Q11 gate)', () => {
+        const { container } = mount(
+            derived({
+                title: ms('Doc'),
+                description: ms('A one-line description.'),
+                'hide-description': mb(true),
+            }),
+        );
+        expect(container.querySelector('div.description')).toBeNull();
+    });
+
+    it('date-modified → Modified cell with <p class="date-modified">', () => {
+        const { container } = mount(
+            derived({
+                title: ms('Doc'),
+                date: ms('2026-07-01'),
+                'date-modified': ms('2026-07-10'),
+            }),
+        );
+        const grid = container.querySelector('div.quarto-title-meta');
+        const cells = grid!.querySelectorAll(':scope > div');
+        // Published, then Modified (Q1 cell order).
+        expect(cells.length).toBe(2);
+        expect(
+            cells[1].querySelector('.quarto-title-meta-heading')!.textContent,
+        ).toBe('Modified');
+        const modified = cells[1].querySelector(
+            '.quarto-title-meta-contents > p.date-modified',
+        );
+        expect(modified).not.toBeNull();
+        expect(modified!.textContent).toBe('2026-07-10');
+    });
+
+    it('doi → Doi cell with a doi.org link', () => {
+        const { container } = mount(
+            derived({ title: ms('Doc'), doi: ms('10.1234/example.5678') }),
+        );
+        const doi = container.querySelector(
+            'div.quarto-title-meta p.doi > a[href="https://doi.org/10.1234/example.5678"]',
+        );
+        expect(doi).not.toBeNull();
+        expect(doi!.textContent).toBe('10.1234/example.5678');
+        const heading = container.querySelector(
+            'div.quarto-title-meta .quarto-title-meta-heading',
+        );
+        expect(heading!.textContent).toBe('Doi');
+    });
+
+    it('keywords → block-title heading + comma-joined <p>, after the abstract', () => {
+        const { container } = mount(
+            derived({
+                title: ms('Doc'),
+                abstract: ms('S.'),
+                keywords: ml(ms('music'), ms('texas')),
+            }),
+        );
+        const keywords = container.querySelector(
+            'header#title-block-header > div > div.keywords',
+        );
+        expect(keywords).not.toBeNull();
+        expect(
+            keywords!.querySelector(':scope > div.block-title')!.textContent,
+        ).toBe('Keywords');
+        expect(keywords!.querySelector(':scope > p')!.textContent).toBe(
+            'music, texas',
+        );
+        // Q1 order: abstract block precedes the keywords block.
+        const blocks = container.querySelectorAll(
+            'header#title-block-header > div',
+        );
+        const classNames = Array.from(blocks).map(
+            (b) => b.firstElementChild?.className ?? b.className,
+        );
+        expect(classNames.indexOf('abstract')).toBeLessThan(
+            classNames.indexOf('keywords'),
+        );
+    });
+
+    it('labels override Modified/Doi/Keywords headings', () => {
+        const { container } = mount(
+            derived({
+                title: ms('Doc'),
+                'date-modified': ms('2026-07-10'),
+                doi: ms('10.1/x'),
+                keywords: ml(ms('k')),
+                labels: mm({
+                    modified: ms('Updated'),
+                    doi: ms('DOI'),
+                    keywords: ms('Tags'),
+                }),
+            }),
+        );
+        const headings = Array.from(
+            container.querySelectorAll('.quarto-title-meta-heading'),
+        ).map((el) => el.textContent);
+        expect(headings).toEqual(['Updated', 'DOI']);
+        expect(
+            container.querySelector('div.keywords > div.block-title')!
+                .textContent,
+        ).toBe('Tags');
+    });
+});
+
 describe('PreviewTitleBlock — user override via registry', () => {
     it('full replacement → stub renders, built-in <header> is absent', () => {
         const StubTitleBlock = vi.fn(() => (

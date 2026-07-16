@@ -387,13 +387,58 @@ screenshots for banner/visual phases) before any phase is declared done.
   `styles.css` hash re-captured (SCSS svg rules, entry documented in
   `expected_hashes.txt`).
 
-### Phase 3 — Metadata grid completeness
+### Phase 3 — Metadata grid completeness (bd-j6huijli) — DONE 2026-07-16
 
-- [ ] `date-modified` (Modified), `doi` (link to doi.org), `keywords`,
-      `description` (+ Q11 gate)
-- [ ] Category chips (`div.quarto-categories > div.quarto-category`) +
-      `title-block-categories` option
-- [ ] Lockstep: `PreviewTitleBlock.tsx` metadata grid additions (Q9)
+- [x] TDD red: strengthened `smoke-all/title-block/metadata-grid.qmd`
+      assertions (p.date-modified, p.doi > a[href doi.org],
+      div.keywords > div.block-title, div.description,
+      div.quarto-categories > div.quarto-category; 6 checks red before
+      the fix); new `categories-disabled.qmd` fixture
+      (`title-block-categories: false` must NOT emit
+      .quarto-categories); new insta case
+      `title_block_metadata_grid_no_categories` in
+      `title_block_pipeline.rs`
+- [x] `date-modified` (Modified), `doi` (linked to doi.org) grid cells +
+      `keywords` block in `TITLE_METADATA_PARTIAL`
+- [x] `description` block + `hide-description` gate (ported verbatim;
+      nothing sets the flag in Q2 yet, per Q11) and category chips
+      (`div.quarto-categories > div.quarto-category`) in
+      `TITLE_BLOCK_PARTIAL`; `AuthorsNormalizeTransform` writes
+      `quarto-template-params.title-block-categories` (bool true,
+      Q1's exact key so Q1-ported custom partials keep working;
+      omitted when the document sets `title-block-categories: false`)
+- [x] `description` joined `RICH_TITLE_BLOCK_FIELDS` (inline HTML in the
+      title block); head `<meta name="description">` switched to the
+      plain-text `description-meta` derived by
+      `MetadataNormalizeTransform` (the Pandoc/Q1 head contract,
+      explicit value wins); head keywords meta joins list values with
+      `, ` ($for/$sep$)
+- [x] `has_title_block_content` extended with description / doi /
+      date-modified / keywords / categories
+- [x] Lockstep: `PreviewTitleBlock.tsx` metadata grid additions (Q9):
+      categories chips, description (+hide-description),
+      Modified/Doi cells, keywords block; vitest integration suite
+      grown by 7 tests (547 pass); new q2-preview smoke fixture
+      `title-block-metadata-grid.qmd`; Playwright title-block sweep
+      green (17 tests, after `npm run build:wasm` + `VITE_E2E=1
+      npm run build`)
+- [x] End-to-end (2026-07-16): rendered the metadata-grid fixture
+      (description changed to `A *fine* one-line description.` to
+      prove rich rendering) via
+      `cargo run --bin q2 -- render <scratch>/doc.qmd` and inspected
+      `doc.html`: title block contains
+      `<div class="quarto-category">analysis</div>`,
+      `<div class="description">\nA <em>fine</em> one-line
+      description.`, `<p class="date-modified">2026-07-10</p>`,
+      `<p class="doi"><a href="https://doi.org/10.1234/example.5678">`,
+      and `<div class="keywords">…<p>music, texas</p>`; head has
+      `<meta name="description" content="A fine one-line description.">`
+      (plain text) and `<meta name="keywords" content="music, texas">`
+- Snapshot changes: `title_block_metadata_grid.snap` updated (the
+  intended new grid markup), `title_block_metadata_grid_no_categories.snap`
+  added. Phase5 `expected_hashes.txt` NOT re-captured: its fixture doc
+  has no description/keywords/categories metadata, so its bytes are
+  unchanged (byte-identity test passed in the workspace run).
 
 ### Phase 4 — Shared date helper (not a date-format system, per Q4)
 

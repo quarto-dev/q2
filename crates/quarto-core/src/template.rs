@@ -167,10 +167,10 @@ $if(date)$
 <meta name="dcterms.date" content="$date$">
 $endif$
 $if(keywords)$
-<meta name="keywords" content="$keywords$">
+<meta name="keywords" content="$for(keywords)$$it$$sep$, $endfor$">
 $endif$
-$if(description)$
-<meta name="description" content="$description$">
+$if(description-meta)$
+<meta name="description" content="$description-meta$">
 $endif$
 $if(canonical-url)$
 <link rel="canonical" href="$canonical-url$">
@@ -257,6 +257,14 @@ $endif$
 /// `AuthorsNormalizeTransform` when any title-block content exists),
 /// so metadata-less documents produce no empty `<header>`.
 ///
+/// P3 (bd-j6huijli) additions, both Q1-verbatim: the category chips
+/// (gated on `quarto-template-params.title-block-categories`, written
+/// by `AuthorsNormalizeTransform` unless the document sets
+/// `title-block-categories: false`) and the `description` block. The
+/// `hide-description` gate is ported with it; nothing in Q2 sets that
+/// flag yet (Q1's book pipeline does, for chapter pages — design
+/// decision Q11), so it is inert until a project pipeline needs it.
+///
 /// A document can replace this partial by listing a file named
 /// `title-block.html` under `template-partials` (Q1 compatibility).
 pub const TITLE_BLOCK_PARTIAL: &str = r#"$if(rendered.has-title-block)$
@@ -268,7 +276,24 @@ $endif$
 $if(subtitle)$
 <p class="subtitle lead">$subtitle$</p>
 $endif$
+$if(categories)$
+$if(quarto-template-params.title-block-categories)$
+<div class="quarto-categories">
+$for(categories)$
+<div class="quarto-category">$it$</div>
+$endfor$
 </div>
+$endif$
+$endif$
+</div>
+$if(hide-description)$
+$elseif(description)$
+<div>
+<div class="description">
+$description$
+</div>
+</div>
+$endif$
 $title-metadata()$
 </header>
 $endif$"#;
@@ -276,13 +301,14 @@ $endif$"#;
 /// Built-in `title-metadata` partial — the metadata grid below the
 /// title, ported from Quarto 1's `title-metadata.html`.
 ///
-/// Phase-2 scope (bd-ez0hiowa): when affiliations exist, authors
-/// render in the two-column `.quarto-title-meta-author` grid
-/// (Authors/Affiliations headings) and the plain `.quarto-title-meta`
-/// grid carries no authors cell (Q1's `$if(by-affiliation)$` /
-/// `$elseif(by-author)$` split). The remaining grid entries
-/// (modified, doi) and trailing blocks (keywords, description) land
-/// with bd-j6huijli.
+/// When affiliations exist, authors render in the two-column
+/// `.quarto-title-meta-author` grid (Authors/Affiliations headings)
+/// and the plain `.quarto-title-meta` grid carries no authors cell
+/// (Q1's `$if(by-affiliation)$` / `$elseif(by-author)$` split —
+/// bd-ez0hiowa). P3 (bd-j6huijli) completes the grid with the
+/// Modified and Doi cells (the doi linked to doi.org, Q1-verbatim)
+/// and the trailing keywords block. (The description block lives in
+/// [`TITLE_BLOCK_PARTIAL`], matching Q1's template split.)
 ///
 /// Deviation from Q1's template text: Q1 gates the two-column grid on
 /// `$if(by-affiliation/first)$`; doctemplate conditions don't take
@@ -328,12 +354,36 @@ $if(date)$
 </div>
 </div>
 $endif$
+$if(date-modified)$
+<div>
+<div class="quarto-title-meta-heading">$labels.modified$</div>
+<div class="quarto-title-meta-contents">
+<p class="date-modified">$date-modified$</p>
+</div>
+</div>
+$endif$
+$if(doi)$
+<div>
+<div class="quarto-title-meta-heading">$labels.doi$</div>
+<div class="quarto-title-meta-contents">
+<p class="doi"><a href="https://doi.org/$doi$">$doi$</a></p>
+</div>
+</div>
+$endif$
 </div>
 $if(abstract)$
 <div>
 <div class="abstract">
 <div class="block-title">$labels.abstract$</div>
 $abstract$
+</div>
+</div>
+$endif$
+$if(keywords)$
+<div>
+<div class="keywords">
+<div class="block-title">$labels.keywords$</div>
+<p>$for(keywords)$$it$$sep$, $endfor$</p>
 </div>
 </div>
 $endif$"#;
@@ -772,6 +822,12 @@ fn add_metadata_to_context(meta: &ConfigValue, ctx: &mut TemplateContext) {
 /// `pagetitle` is deliberately *not* listed: it feeds the head `<title>`
 /// element, where HTML tags are invalid. It is derived as plain text by
 /// `derive_pagetitle` (pampa's `template::config_merge`) and must stay so.
+/// Likewise `description-meta` (not listed): the head's
+/// `<meta name="description">` consumes it, derived as plain text from
+/// `description` by `MetadataNormalizeTransform` — the same
+/// `description`/`description-meta` split Pandoc's HTML writer and
+/// Q1's `html.template` use, which is what lets `description` itself
+/// render rich in the title block.
 ///
 /// `author`/`date` are out of scope for now (an author can be an object or
 /// list, and also feeds `<meta>` attribute contexts that require plain
@@ -782,7 +838,7 @@ fn add_metadata_to_context(meta: &ConfigValue, ctx: &mut TemplateContext) {
 /// `abstract` is not listed here: it renders in *block* context (its
 /// paragraphs become `<p>` elements, Q1 parity) via
 /// [`titleblock_field_to_block_html`].
-const RICH_TITLE_BLOCK_FIELDS: &[&str] = &["title", "subtitle"];
+const RICH_TITLE_BLOCK_FIELDS: &[&str] = &["title", "subtitle", "description"];
 
 /// Convert a metadata entry to a template value, honoring the rich
 /// title-block allowlist. Allowlisted fields whose value is Pandoc
@@ -1870,12 +1926,20 @@ mod tests {
             TemplateValue::List(vec![TemplateValue::String("Jane Doe".to_string())]),
         );
         ctx.insert("date", TemplateValue::String("2024-01-15".to_string()));
+        // Keywords arrive as a list (YAML `keywords: [rust, quarto]`);
+        // the head meta joins them with ", ". The description meta
+        // consumes the plain-text `description-meta` derived by
+        // MetadataNormalizeTransform, never the (possibly rich)
+        // `description` itself.
         ctx.insert(
             "keywords",
-            TemplateValue::String("rust, quarto".to_string()),
+            TemplateValue::List(vec![
+                TemplateValue::String("rust".to_string()),
+                TemplateValue::String("quarto".to_string()),
+            ]),
         );
         ctx.insert(
-            "description",
+            "description-meta",
             TemplateValue::String("A sample document".to_string()),
         );
         ctx.insert("page-layout", TemplateValue::String("article".to_string()));

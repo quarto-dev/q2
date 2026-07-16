@@ -34,9 +34,13 @@
 //!   the template head's `<meta name="author" …>` loop.
 //! - **`rendered.has-title-block`** — a Q2-internal flag: true when
 //!   any title-block content exists (title, subtitle, authors, date,
-//!   or abstract). The built-in `title-block` template partial keys on
-//!   it so documents with no title-block metadata emit no empty
-//!   `<header>`.
+//!   abstract, or — since P3, bd-j6huijli — date-modified, doi,
+//!   keywords, description, categories). The built-in `title-block`
+//!   template partial keys on it so documents with no title-block
+//!   metadata emit no empty `<header>`.
+//! - **`quarto-template-params.title-block-categories`** — Q1's
+//!   template-param contract for the category chips: written (true)
+//!   unless the document sets `title-block-categories: false`.
 //!
 //! Like Q1's Lua pass, the derived keys are written into document
 //! metadata (not a side channel) so downstream consumers — templates,
@@ -205,6 +209,19 @@ pub fn normalize_authors_meta(meta: &mut ConfigValue) -> Vec<String> {
     if has_title_block_content(meta, &model.authors) {
         meta.insert_path(
             &["rendered", "has-title-block"],
+            ConfigValue::new_bool(true, gen_si()),
+        );
+    }
+
+    // Q1's template-param contract: the title-block partial gates the
+    // category chips on `quarto-template-params.title-block-categories`
+    // (not on the raw option, whose *absence* must mean "show"). Using
+    // Q1's exact key keeps Q1-ported custom `template-partials`
+    // working. Written only when enabled — an absent variable is false
+    // in `$if(…)$`.
+    if meta.get("title-block-categories").and_then(|v| v.as_bool()) != Some(false) {
+        meta.insert_path(
+            &["quarto-template-params", "title-block-categories"],
             ConfigValue::new_bool(true, gen_si()),
         );
     }
@@ -572,16 +589,29 @@ fn compute_labels(
 
 /// True when the document has any content the title block renders.
 ///
-/// Phase 3 (bd-j6huijli) extends this list with `description`, `doi`,
-/// `date-modified`, `keywords`, and `categories` when those fields
-/// join the metadata grid.
+/// The metadata-grid fields (`date-modified`, `doi`, `keywords`,
+/// `description`, `categories`) count as content since P3
+/// (bd-j6huijli). `categories` counts even when
+/// `title-block-categories: false` — like Q1, the header (with its
+/// always-present `quarto-title-meta` grid) still renders; only the
+/// chips are suppressed.
 fn has_title_block_content(meta: &ConfigValue, authors: &[Author]) -> bool {
     if !authors.is_empty() {
         return true;
     }
-    ["title", "subtitle", "date", "abstract"]
-        .iter()
-        .any(|key| meta.get(key).is_some())
+    [
+        "title",
+        "subtitle",
+        "date",
+        "abstract",
+        "date-modified",
+        "doi",
+        "keywords",
+        "description",
+        "categories",
+    ]
+    .iter()
+    .any(|key| meta.get(key).is_some())
 }
 
 #[cfg(test)]
@@ -703,6 +733,54 @@ mod tests {
         let mut meta = map(vec![("format", s("html"))]);
         normalize_authors_meta(&mut meta);
         assert!(meta.get_path(&["rendered", "has-title-block"]).is_none());
+        // No categories → the template param is still written (the
+        // chips gate is independent of whether categories exist).
+        assert_eq!(
+            meta.get_path(&["quarto-template-params", "title-block-categories"])
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn metadata_grid_fields_set_title_block_flag() {
+        // P3 (bd-j6huijli): each grid field alone is title-block content.
+        for key in [
+            "date-modified",
+            "doi",
+            "keywords",
+            "description",
+            "categories",
+        ] {
+            let mut meta = map(vec![(key, s("x"))]);
+            normalize_authors_meta(&mut meta);
+            assert_eq!(
+                meta.get_path(&["rendered", "has-title-block"])
+                    .and_then(|v| v.as_bool()),
+                Some(true),
+                "{key} should count as title-block content"
+            );
+        }
+    }
+
+    #[test]
+    fn title_block_categories_false_clears_template_param() {
+        let mut meta = map(vec![
+            ("title", s("T")),
+            ("categories", arr(vec![s("analysis")])),
+            ("title-block-categories", ConfigValue::new_bool(false, si())),
+        ]);
+        normalize_authors_meta(&mut meta);
+        assert!(
+            meta.get_path(&["quarto-template-params", "title-block-categories"])
+                .is_none()
+        );
+        // The header itself still renders (chips-only suppression).
+        assert_eq!(
+            meta.get_path(&["rendered", "has-title-block"])
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
     }
 
     #[test]

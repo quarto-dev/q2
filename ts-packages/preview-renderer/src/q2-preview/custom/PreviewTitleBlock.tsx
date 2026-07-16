@@ -9,7 +9,7 @@ import {
 
 /**
  * Built-in `__title_block__` synthetic-registry entry (Plan 2D Phase 7,
- * markup updated by the title-block parity epic bd-gx9cic8z P1/P2).
+ * markup updated by the title-block parity epic bd-gx9cic8z P1/P2/P3).
  *
  * Mirrors the Rust built-in `title-block` / `title-metadata` /
  * `_title-meta-author` template partials (`TITLE_BLOCK_PARTIAL` /
@@ -27,7 +27,14 @@ import {
  * - `rendered.has-title-block` — gates the whole `<header>`;
  * - `by-author` — normalized author list (`name.literal`, `url`,
  *   `email`, `orcid`, `degrees`, denormalized `affiliations`);
- * - `labels.*` — heading labels (pluralized / `*-title`-overridden).
+ * - `labels.*` — heading labels (pluralized / `*-title`-overridden);
+ * - `quarto-template-params.title-block-categories` — the category
+ *   chips gate (P3, bd-j6huijli), written unless the document sets
+ *   `title-block-categories: false`.
+ * P3 also renders the raw metadata-grid fields: `date-modified`
+ * (Modified cell), `doi` (Doi cell, linked to doi.org), `keywords`
+ * (trailing block), `description` (block below the title, suppressed
+ * by `hide-description`), and `categories`.
  * Hardcoded fallbacks remain for direct-render contexts where the
  * transform didn't run.
  *
@@ -61,9 +68,34 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
     const title = extractMetaString(meta.title);
     const subtitle = extractMetaString(meta.subtitle);
     const date = extractMetaString(meta.date);
+    const dateModified = extractMetaString(meta['date-modified']);
+    const doi = extractMetaString(meta.doi);
+    const keywords = extractMetaStringList(meta.keywords);
+    const description = extractMetaString(meta.description);
+    const hideDescription =
+        extractMetaBool(meta['hide-description']) === true;
     const abstractParagraphs = extractParagraphs(meta.abstract);
     const authors = extractByAuthors(meta['by-author']);
     const hasAffiliations = authors.some((a) => a.affiliations.length > 0);
+
+    // Mirror TITLE_BLOCK_PARTIAL's
+    // $if(quarto-template-params.title-block-categories)$ gate —
+    // `AuthorsNormalizeTransform` writes the param unless the document
+    // sets `title-block-categories: false`. The fallback reads the raw
+    // option for direct-render contexts where the transform didn't run
+    // (absent means enabled, Q1's default).
+    const categoriesParam = extractMetaBool(
+        getMetaPath(meta, [
+            'quarto-template-params',
+            'title-block-categories',
+        ]),
+    );
+    const categoriesEnabled =
+        categoriesParam ??
+        extractMetaBool(meta['title-block-categories']) !== false;
+    const categories = categoriesEnabled
+        ? extractMetaStringList(meta.categories)
+        : [];
 
     const label = (key: string, fallback: string): string =>
         extractMetaString(getMetaPath(meta, ['labels', key])) ?? fallback;
@@ -78,7 +110,24 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
                 {subtitle ? (
                     <p className="subtitle lead">{subtitle}</p>
                 ) : null}
+                {categories.length > 0 ? (
+                    <div className="quarto-categories">
+                        {categories.map((category, i) => (
+                            <div className="quarto-category" key={i}>
+                                {category}
+                            </div>
+                        ))}
+                    </div>
+                ) : null}
             </div>
+            {/* Q11 gate: hide-description suppresses the block (set by
+                Q1's book pipeline for chapter pages; nothing sets it
+                in Q2 yet). */}
+            {description && !hideDescription ? (
+                <div>
+                    <div className="description">{description}</div>
+                </div>
+            ) : null}
             {/* Mirror TITLE_METADATA_PARTIAL: with affiliations the
                 authors move to the two-column grid; without, they
                 stay a cell of the plain grid (Q1's
@@ -135,6 +184,28 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
                         </div>
                     </div>
                 ) : null}
+                {dateModified ? (
+                    <div>
+                        <div className="quarto-title-meta-heading">
+                            {label('modified', 'Modified')}
+                        </div>
+                        <div className="quarto-title-meta-contents">
+                            <p className="date-modified">{dateModified}</p>
+                        </div>
+                    </div>
+                ) : null}
+                {doi ? (
+                    <div>
+                        <div className="quarto-title-meta-heading">
+                            {label('doi', 'Doi')}
+                        </div>
+                        <div className="quarto-title-meta-contents">
+                            <p className="doi">
+                                <a href={`https://doi.org/${doi}`}>{doi}</a>
+                            </p>
+                        </div>
+                    </div>
+                ) : null}
             </div>
             {abstractParagraphs.length > 0 ? (
                 <div>
@@ -145,6 +216,16 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
                         {abstractParagraphs.map((text, i) => (
                             <p key={i}>{text}</p>
                         ))}
+                    </div>
+                </div>
+            ) : null}
+            {keywords.length > 0 ? (
+                <div>
+                    <div className="keywords">
+                        <div className="block-title">
+                            {label('keywords', 'Keywords')}
+                        </div>
+                        <p>{keywords.join(', ')}</p>
                     </div>
                 </div>
             ) : null}
