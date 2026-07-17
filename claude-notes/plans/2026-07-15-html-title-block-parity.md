@@ -1,8 +1,11 @@
 # HTML Title Block Parity with Quarto 1 (bd-gx9cic8z)
 
-**Status: DESIGN SETTLED (2026-07-15) — awaiting explicit approval to start
-execution.** All open questions resolved with Carlos; see "Design decisions"
-below. Q5 (banner `<style>` vs SCSS) got a written clarification, recorded
+**Status: COMPLETE (2026-07-17).** All phases P0–P7 executed on
+`feature/bd-gx9cic8z-title-block-parity` (PR #396, draft). Follow-up
+strands for every deferred item are filed and linked from P7 below.
+Original design-settlement note (2026-07-15) preserved: all open
+questions resolved with Carlos; see "Design decisions" below. Q5
+(banner `<style>` vs SCSS) got a written clarification, recorded
 inline.
 
 Braid epic: `bd-gx9cic8z`. Related bug filed during study: `bd-8v34zny5`
@@ -679,13 +682,33 @@ Work items:
       and none CSS contain 0 `quarto-title-meta-heading` rules vs 1
       in the default control; outputs inspected
 
-### Phase 7 — Docs + wrap-up
+### Phase 7 — Docs + wrap-up (bd-y71ga2l8) — DONE 2026-07-17
 
-- [ ] docs/ page for title blocks (rendered with q2), documenting supported
-      surface and deviations from Q1
-- [ ] Follow-up strands for deferred items (manuscript style, language-file
-      localization, real date-format design on the Phase-4 seam,
-      citation/scholar meta tags, editable React title block)
+- [x] Two docs/ pages, rendered with q2 and structurally/stylistically
+      modeled on quarto-web (per Carlos's brief; prose written with
+      the reader-expectations methodology):
+      `docs/guides/authoring/title-blocks.qmd` (overview, styles incl.
+      the manuscript-unsupported callout, structured authors +
+      `ref:` affiliations, banners + custom background/foreground,
+      categories, dates, label-override table with Q2's actual
+      defaults, template-partials pointer) and
+      `docs/guides/authoring/dates.qmd` (parse forms + no-guessing
+      warning, keywords + UTC callout, named styles, the supported
+      token table — deferred tokens called out — escaping, and a
+      "Where Formatting Applies" section covering listings and the
+      ISO machine slots). Both registered in the sidebar; rendered
+      with zero warnings from the new pages; visually inspected in
+      the browser (they dogfood the title-block features they
+      document). Note: Q1's definition-list syntax is unsupported in
+      qmd — the style list uses bullets instead.
+- [x] Follow-up strands filed (all discovered-from bd-y71ga2l8):
+      bd-45tfp790 (localization design: labels + date locales +
+      locale-week tokens + local-tz keywords), bd-4j4okt4o
+      (manuscript style, Q6), bd-e2kpwy7n (toc-location; unlocks the
+      inert banner toc-left hook), bd-xva3f8uy
+      (#quarto-header.quarto-banner when secondary-nav lands),
+      bd-6reut449 (citation/scholar meta tags, Q10), bd-a949e2zu
+      (editable React title block, Q9).
 
 ## References
 
