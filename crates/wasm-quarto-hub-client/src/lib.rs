@@ -920,6 +920,7 @@ pub async fn parse_qmd_to_ast_with_attribution(
         include_inline_locations: true,
         attribution_by_node,
         attribution_actors,
+        ..Default::default()
     };
 
     let ast_json = match pampa::writers::json::write_with_config(

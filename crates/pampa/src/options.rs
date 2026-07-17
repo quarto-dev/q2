@@ -237,11 +237,11 @@ pub fn merge_with_defaults(defaults: Value, user_opts: &Value) -> Value {
 // =============================================================================
 
 /// Supported reader format names.
-pub const SUPPORTED_READER_FORMATS: &[&str] = &["qmd", "markdown", "json"];
+pub const SUPPORTED_READER_FORMATS: &[&str] = &["qmd", "markdown", "json", "raw-json"];
 
 /// Supported writer format names.
 pub const SUPPORTED_WRITER_FORMATS: &[&str] = &[
-    "html", "html5", "json", "native", "markdown", "qmd", "plain",
+    "html", "html5", "json", "raw-json", "native", "markdown", "qmd", "plain",
 ];
 
 /// Check if a format is supported for reading.

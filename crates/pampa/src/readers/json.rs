@@ -22,11 +22,12 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::location::{Location, Range};
 use crate::pandoc::{
-    Alignment, Attr, AttrSourceInfo, Block, BlockQuote, BulletList, Caption, Cell, Citation,
-    CitationMode, Cite, Code, CodeBlock, ColSpec, ColWidth, CustomNode, DefinitionList, Div, Emph,
-    Figure, Header, HorizontalRule, Image, Inline, InlineAttr, Inlines, LineBlock, Link,
-    ListAttributes, ListNumberDelim, ListNumberStyle, Math, MathType, MetaBlock, Note, OrderedList,
-    Pandoc, Paragraph, Plain, QuoteType, Quoted, RawBlock, RawInline, Row, Slot, SmallCaps,
+    Alignment, Attr, AttrSourceInfo, Block, BlockQuote, BulletList, Caption, CaptionBlock, Cell,
+    Citation, CitationMode, Cite, Code, CodeBlock, ColSpec, ColWidth, CustomNode, DefinitionList,
+    Delete, Div, EditComment, Emph, Figure, Header, Highlight, HorizontalRule, Image, Inline,
+    InlineAttr, Inlines, Insert, LineBlock, Link, ListAttributes, ListNumberDelim, ListNumberStyle,
+    Math, MathType, MetaBlock, Note, NoteReference, OrderedList, Pandoc, Paragraph, Plain,
+    QuoteType, Quoted, RawBlock, RawInline, Row, Shortcode, ShortcodeArg, Slot, SmallCaps,
     SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript, Superscript, Table, TableBody,
     TableFoot, TableHead, Underline,
 };
@@ -57,6 +58,18 @@ pub enum JsonReadError {
     },
     MalformedSourceInfoPool,
     CircularSourceInfoReference(usize),
+    /// The raw-json reader was fed a document without the
+    /// `pampa-json-format` marker. `has_pandoc_api_version` distinguishes
+    /// "this is Pandoc-style JSON" (point the user at `-f json`) from
+    /// "this is not a pampa document at all".
+    NotRawJson {
+        has_pandoc_api_version: bool,
+    },
+    /// The raw-json reader was fed a marker version it does not support.
+    UnsupportedRawJsonVersion(u64),
+    /// The Pandoc-superset JSON reader was fed a raw-json document
+    /// (the `pampa-json-format` marker is present).
+    UnexpectedRawJsonMarker,
 }
 
 impl std::fmt::Display for JsonReadError {
@@ -89,6 +102,35 @@ impl std::fmt::Display for JsonReadError {
                     f,
                     "Circular or forward reference in source-info pool (`p`): ID {} references a parent that doesn't exist yet",
                     id
+                )
+            }
+            JsonReadError::NotRawJson {
+                has_pandoc_api_version,
+            } => {
+                if *has_pandoc_api_version {
+                    write!(
+                        f,
+                        "Input is Pandoc-style JSON (it has pandoc-api-version and no pampa-json-format marker); use -f json to read it"
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Not a pampa raw JSON document: the pampa-json-format marker is missing"
+                    )
+                }
+            }
+            JsonReadError::UnsupportedRawJsonVersion(version) => {
+                write!(
+                    f,
+                    "Unsupported pampa raw JSON format version {} (this reader supports version {})",
+                    version,
+                    crate::writers::raw_json::RAW_JSON_FORMAT_VERSION
+                )
+            }
+            JsonReadError::UnexpectedRawJsonMarker => {
+                write!(
+                    f,
+                    "Input is pampa raw JSON (it has the pampa-json-format marker); use the raw-json reader (-f raw-json) instead"
                 )
             }
         }
@@ -125,6 +167,15 @@ struct SourceInfoDeserializer {
     /// When `None`, the deserializer is in strict mode and missing `s:`
     /// is an error. This is the contract for q2-internal JSON.
     completing_default_by: Option<By>,
+
+    /// When true, the node readers accept the raw-json extension tags
+    /// (`Attr`, `NoteReference`, CriticMarkup inlines, `Shortcode`,
+    /// `CaptionBlock`, and the `Meta{Path,Glob,Expr,Int,Real,Null}` meta
+    /// kinds). The Pandoc-superset reader leaves this off so the two
+    /// formats stay honest about their vocabularies. Like
+    /// `completing_default_by`, this is reader-level configuration
+    /// threaded through the recursion alongside the pool.
+    raw: bool,
 }
 
 impl SourceInfoDeserializer {
@@ -133,6 +184,7 @@ impl SourceInfoDeserializer {
         SourceInfoDeserializer {
             pool: Vec::new(),
             completing_default_by: None,
+            raw: false,
         }
     }
 
@@ -467,6 +519,7 @@ impl SourceInfoDeserializer {
         Ok(SourceInfoDeserializer {
             pool,
             completing_default_by: None,
+            raw: false,
         })
     }
 
@@ -709,6 +762,36 @@ fn read_attr_source(
         id,
         classes,
         attributes,
+    })
+}
+
+/// Read an optional source-info ref: absent or `null` → `None`, a pool
+/// id → `Some(SourceInfo)`.
+fn read_opt_source_ref(
+    value: Option<&Value>,
+    deserializer: &SourceInfoDeserializer,
+) -> Result<Option<quarto_source_map::SourceInfo>> {
+    match value {
+        None => Ok(None),
+        Some(v) if v.is_null() => Ok(None),
+        Some(v) => Ok(Some(deserializer.from_json_ref(v)?)),
+    }
+}
+
+/// Read a `targetS` sidecar (`[url_ref?, title_ref?]`) back into a
+/// `TargetSourceInfo` — the inverse of the writer's
+/// `stream_write_target_source`. Absent sidecar → empty (backward
+/// compatibility with JSON that predates target-source tracking).
+fn read_target_source(
+    value: Option<&Value>,
+    deserializer: &SourceInfoDeserializer,
+) -> Result<crate::pandoc::attr::TargetSourceInfo> {
+    let Some(arr) = value.and_then(|v| v.as_array()) else {
+        return Ok(crate::pandoc::attr::TargetSourceInfo::empty());
+    };
+    Ok(crate::pandoc::attr::TargetSourceInfo {
+        url: read_opt_source_ref(arr.first(), deserializer)?,
+        title: read_opt_source_ref(arr.get(1), deserializer)?,
     })
 }
 
@@ -976,7 +1059,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 target,
                 source_info,
                 attr_source,
-                target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
+                target_source: read_target_source(obj.get("targetS"), deserializer)?,
             }))
         }
         "RawInline" => {
@@ -1052,7 +1135,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 target,
                 source_info,
                 attr_source,
-                target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
+                target_source: read_target_source(obj.get("targetS"), deserializer)?,
             }))
         }
         "Span" => {
@@ -1163,7 +1246,10 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                         mode,
                         hash,
                         note_num,
-                        id_source: None,
+                        id_source: read_opt_source_ref(
+                            citation_obj.get("citationIdS"),
+                            deserializer,
+                        )?,
                     })
                 })
                 .collect::<Result<Vec<_>>>()?;
@@ -1177,7 +1263,223 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 source_info,
             }))
         }
+        // Raw-json extension vocabulary (bd-en2hvrwn). Only accepted when
+        // the deserializer runs in raw mode; the Pandoc-superset reader
+        // falls through to UnsupportedVariant below, keeping the two
+        // formats honest about what they speak.
+        "NoteReference" if deserializer.raw => {
+            let c = obj
+                .get("c")
+                .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
+            let id = c
+                .as_str()
+                .ok_or_else(|| {
+                    JsonReadError::InvalidType("NoteReference content must be string".to_string())
+                })?
+                .to_string();
+            Ok(Inline::NoteReference(NoteReference { id, source_info }))
+        }
+        "Attr" if deserializer.raw => {
+            let c = obj
+                .get("c")
+                .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
+            let attr = read_attr(c)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
+            Ok(Inline::Attr(InlineAttr {
+                attr,
+                attr_source,
+                source_info,
+            }))
+        }
+        "Insert" | "Delete" | "Highlight" | "EditComment" if deserializer.raw => {
+            // Span-shaped payload: c = [attr, inlines], a = attr sources.
+            let c = obj
+                .get("c")
+                .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
+            let arr = c.as_array().ok_or_else(|| {
+                JsonReadError::InvalidType(format!("{} content must be array", t))
+            })?;
+            if arr.len() != 2 {
+                return Err(JsonReadError::InvalidType(format!(
+                    "{} array must have 2 elements",
+                    t
+                )));
+            }
+            let attr = read_attr(&arr[0])?;
+            let content = read_inlines(&arr[1], deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
+            Ok(match t {
+                "Insert" => Inline::Insert(Insert {
+                    attr,
+                    content,
+                    source_info,
+                    attr_source,
+                }),
+                "Delete" => Inline::Delete(Delete {
+                    attr,
+                    content,
+                    source_info,
+                    attr_source,
+                }),
+                "Highlight" => Inline::Highlight(Highlight {
+                    attr,
+                    content,
+                    source_info,
+                    attr_source,
+                }),
+                "EditComment" => Inline::EditComment(EditComment {
+                    attr,
+                    content,
+                    source_info,
+                    attr_source,
+                }),
+                _ => unreachable!("guarded by the match arm pattern"),
+            })
+        }
+        "Shortcode" if deserializer.raw => {
+            let c = obj
+                .get("c")
+                .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
+            Ok(Inline::Shortcode(read_raw_shortcode_body(
+                c,
+                source_info,
+                deserializer,
+            )?))
+        }
         _ => Err(JsonReadError::UnsupportedVariant(format!("Inline: {}", t))),
+    }
+}
+
+/// Raw mode: read a Shortcode body object
+/// `{isEscaped, keywordArgs, name, positionalArgs}` (the inverse of the
+/// writer's `stream_write_shortcode_body`). `source_info` comes from the
+/// enclosing `{c, s, t}` node.
+fn read_raw_shortcode_body(
+    value: &Value,
+    source_info: quarto_source_map::SourceInfo,
+    deserializer: &SourceInfoDeserializer,
+) -> Result<Shortcode> {
+    let obj = value.as_object().ok_or_else(|| {
+        JsonReadError::InvalidType("Shortcode content must be object".to_string())
+    })?;
+
+    let is_escaped = obj
+        .get("isEscaped")
+        .and_then(|v| v.as_bool())
+        .ok_or_else(|| JsonReadError::MissingField("isEscaped".to_string()))?;
+    let name = obj
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| JsonReadError::MissingField("name".to_string()))?
+        .to_string();
+
+    let positional_args = obj
+        .get("positionalArgs")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| JsonReadError::MissingField("positionalArgs".to_string()))?
+        .iter()
+        .map(|arg| read_raw_shortcode_arg(arg, deserializer))
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut keyword_args = LinkedHashMap::new();
+    for pair in obj
+        .get("keywordArgs")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| JsonReadError::MissingField("keywordArgs".to_string()))?
+    {
+        let pair_arr = pair.as_array().ok_or_else(|| {
+            JsonReadError::InvalidType("keywordArgs entry must be [key, arg]".to_string())
+        })?;
+        if pair_arr.len() != 2 {
+            return Err(JsonReadError::InvalidType(
+                "keywordArgs entry must have 2 elements".to_string(),
+            ));
+        }
+        let key = pair_arr[0]
+            .as_str()
+            .ok_or_else(|| {
+                JsonReadError::InvalidType("keywordArgs key must be string".to_string())
+            })?
+            .to_string();
+        keyword_args.insert(key, read_raw_shortcode_arg(&pair_arr[1], deserializer)?);
+    }
+
+    Ok(Shortcode {
+        is_escaped,
+        name,
+        positional_args,
+        keyword_args,
+        source_info,
+    })
+}
+
+/// Raw mode: read one tagged ShortcodeArg (the inverse of the writer's
+/// `stream_write_shortcode_arg`).
+fn read_raw_shortcode_arg(
+    value: &Value,
+    deserializer: &SourceInfoDeserializer,
+) -> Result<ShortcodeArg> {
+    let obj = value
+        .as_object()
+        .ok_or_else(|| JsonReadError::InvalidType("ShortcodeArg must be object".to_string()))?;
+    let t = obj
+        .get("t")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
+    let c = obj
+        .get("c")
+        .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
+
+    match t {
+        "String" => Ok(ShortcodeArg::String(
+            c.as_str()
+                .ok_or_else(|| {
+                    JsonReadError::InvalidType("String arg content must be string".to_string())
+                })?
+                .to_string(),
+        )),
+        "Number" => Ok(ShortcodeArg::Number(c.as_f64().ok_or_else(|| {
+            JsonReadError::InvalidType("Number arg content must be number".to_string())
+        })?)),
+        "Boolean" => Ok(ShortcodeArg::Boolean(c.as_bool().ok_or_else(|| {
+            JsonReadError::InvalidType("Boolean arg content must be boolean".to_string())
+        })?)),
+        "Shortcode" => {
+            let source_info =
+                deserializer.resolve_source_info(obj.get("s"), "ShortcodeArg.Shortcode")?;
+            Ok(ShortcodeArg::Shortcode(read_raw_shortcode_body(
+                c,
+                source_info,
+                deserializer,
+            )?))
+        }
+        "KeyValue" => {
+            let mut map = std::collections::HashMap::new();
+            for pair in c.as_array().ok_or_else(|| {
+                JsonReadError::InvalidType("KeyValue arg content must be array".to_string())
+            })? {
+                let pair_arr = pair.as_array().ok_or_else(|| {
+                    JsonReadError::InvalidType("KeyValue entry must be [key, arg]".to_string())
+                })?;
+                if pair_arr.len() != 2 {
+                    return Err(JsonReadError::InvalidType(
+                        "KeyValue entry must have 2 elements".to_string(),
+                    ));
+                }
+                let key = pair_arr[0]
+                    .as_str()
+                    .ok_or_else(|| {
+                        JsonReadError::InvalidType("KeyValue key must be string".to_string())
+                    })?
+                    .to_string();
+                map.insert(key, read_raw_shortcode_arg(&pair_arr[1], deserializer)?);
+            }
+            Ok(ShortcodeArg::KeyValue(map))
+        }
+        other => Err(JsonReadError::UnsupportedVariant(format!(
+            "ShortcodeArg: {}",
+            other
+        ))),
     }
 }
 
@@ -1246,9 +1548,16 @@ fn read_ast_context(value: &Value) -> Result<ASTContext> {
         }
     }
 
+    // Raw-json envelopes carry the example-list counter; Pandoc-superset
+    // documents don't have it and get the fresh-context default of 1.
+    let example_list_counter = obj
+        .get("exampleListCounter")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1) as usize;
+
     Ok(ASTContext {
         filenames,
-        example_list_counter: std::cell::Cell::new(1),
+        example_list_counter: std::cell::Cell::new(example_list_counter),
         source_context,
         parent_source_info: None,
     })
@@ -1307,6 +1616,13 @@ fn read_pandoc(value: &Value, completing_default_by: Option<By>) -> Result<(Pand
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for Pandoc".to_string()))?;
 
+    // A pampa-json-format marker means this is a raw-json document; its
+    // vocabulary is a superset of ours, so reject with a pointer to the
+    // right reader instead of failing later on an unknown tag.
+    if obj.contains_key("pampa-json-format") {
+        return Err(JsonReadError::UnexpectedRawJsonMarker);
+    }
+
     // We could validate the API version here if needed
     // let _api_version = obj.get("pandoc-api-version");
 
@@ -1350,6 +1666,72 @@ fn read_pandoc(value: &Value, completing_default_by: Option<By>) -> Result<(Pand
         obj.get("meta")
             .ok_or_else(|| JsonReadError::MissingField("meta".to_string()))?,
         key_sources,
+        &deserializer,
+    )?;
+    let blocks = read_blocks(
+        obj.get("blocks")
+            .ok_or_else(|| JsonReadError::MissingField("blocks".to_string()))?,
+        &deserializer,
+    )?;
+
+    Ok((Pandoc { meta, blocks }, context))
+}
+
+/// Read a raw-json document (see `writers::raw_json` for the format
+/// contract). Called by [`crate::readers::raw_json::read`].
+///
+/// Differences from [`read_pandoc`]:
+/// - the `pampa-json-format` marker is required and its version checked;
+/// - the node readers run with the raw vocabulary enabled;
+/// - `meta` is a single config-value node (order-preserving entries with
+///   inline key sources), not a Pandoc-style sorted object;
+/// - always strict about `s:` references — raw-json is q2-internal.
+pub(crate) fn read_raw_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
+    let obj = value
+        .as_object()
+        .ok_or_else(|| JsonReadError::InvalidType("Expected object for Pandoc".to_string()))?;
+
+    match obj.get("pampa-json-format") {
+        None => {
+            return Err(JsonReadError::NotRawJson {
+                has_pandoc_api_version: obj.contains_key("pandoc-api-version"),
+            });
+        }
+        Some(marker) => {
+            let version = marker
+                .get("version")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| {
+                    JsonReadError::InvalidType(
+                        "pampa-json-format.version must be a number".to_string(),
+                    )
+                })?;
+            if version != crate::writers::raw_json::RAW_JSON_FORMAT_VERSION {
+                return Err(JsonReadError::UnsupportedRawJsonVersion(version));
+            }
+        }
+    }
+
+    let context = if let Some(ast_context_val) = obj.get("astContext") {
+        read_ast_context(ast_context_val)?
+    } else {
+        ASTContext::new()
+    };
+
+    let mut deserializer = if let Some(pool_json) = obj
+        .get("astContext")
+        .and_then(|v| v.as_object())
+        .and_then(|o| o.get("p"))
+    {
+        SourceInfoDeserializer::new(pool_json)?
+    } else {
+        SourceInfoDeserializer::empty()
+    };
+    deserializer.raw = true;
+
+    let meta = read_config_value(
+        obj.get("meta")
+            .ok_or_else(|| JsonReadError::MissingField("meta".to_string()))?,
         &deserializer,
     )?;
     let blocks = read_blocks(
@@ -2231,6 +2613,18 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 },
             ))
         }
+        // Raw-json extension vocabulary (bd-en2hvrwn); see the inline
+        // reader's raw arms for the convention.
+        "CaptionBlock" if deserializer.raw => {
+            let c = obj
+                .get("c")
+                .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
+            let content = read_inlines(c, deserializer)?;
+            Ok(Block::CaptionBlock(CaptionBlock {
+                content,
+                source_info,
+            }))
+        }
         _ => Err(JsonReadError::UnsupportedVariant(format!("Block: {}", t))),
     }
 }
@@ -2306,7 +2700,19 @@ fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Re
     let source_info =
         deserializer.resolve_source_info(obj.get("s"), &format!("ConfigValue.{}", t))?;
 
-    let merge_op = quarto_pandoc_types::MergeOp::default();
+    // `m` carries a non-default merge op (raw-json only; the writer omits
+    // it for the default). Absent key → default, matching the writer.
+    let merge_op = match obj.get("m").and_then(|v| v.as_str()) {
+        Some("prefer") => quarto_pandoc_types::MergeOp::Prefer,
+        Some("concat") => quarto_pandoc_types::MergeOp::Concat,
+        Some(other) => {
+            return Err(JsonReadError::InvalidType(format!(
+                "Unknown merge op: {}",
+                other
+            )));
+        }
+        None => quarto_pandoc_types::MergeOp::default(),
+    };
 
     match t {
         "MetaString" => {
@@ -2430,6 +2836,64 @@ fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Re
             }
             Ok(ConfigValue {
                 value: ConfigValueKind::Map(entries),
+                source_info,
+                merge_op,
+            })
+        }
+        // Raw-json meta vocabulary (bd-en2hvrwn): faithful encodings for
+        // the kinds the Pandoc-style tags collapse.
+        "MetaInt" if deserializer.raw => {
+            let c = obj.get("c").and_then(|v| v.as_i64()).ok_or_else(|| {
+                JsonReadError::InvalidType("MetaInt content must be integer".to_string())
+            })?;
+            Ok(ConfigValue {
+                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(c)),
+                source_info,
+                merge_op,
+            })
+        }
+        "MetaReal" if deserializer.raw => {
+            // yaml_rust2 reals are raw source strings; carried verbatim.
+            let c = obj.get("c").and_then(|v| v.as_str()).ok_or_else(|| {
+                JsonReadError::InvalidType("MetaReal content must be string".to_string())
+            })?;
+            Ok(ConfigValue {
+                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Real(c.to_string())),
+                source_info,
+                merge_op,
+            })
+        }
+        "MetaNull" if deserializer.raw => Ok(ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Null),
+            source_info,
+            merge_op,
+        }),
+        "MetaPath" if deserializer.raw => {
+            let c = obj.get("c").and_then(|v| v.as_str()).ok_or_else(|| {
+                JsonReadError::InvalidType("MetaPath content must be string".to_string())
+            })?;
+            Ok(ConfigValue {
+                value: ConfigValueKind::Path(c.to_string()),
+                source_info,
+                merge_op,
+            })
+        }
+        "MetaGlob" if deserializer.raw => {
+            let c = obj.get("c").and_then(|v| v.as_str()).ok_or_else(|| {
+                JsonReadError::InvalidType("MetaGlob content must be string".to_string())
+            })?;
+            Ok(ConfigValue {
+                value: ConfigValueKind::Glob(c.to_string()),
+                source_info,
+                merge_op,
+            })
+        }
+        "MetaExpr" if deserializer.raw => {
+            let c = obj.get("c").and_then(|v| v.as_str()).ok_or_else(|| {
+                JsonReadError::InvalidType("MetaExpr content must be string".to_string())
+            })?;
+            Ok(ConfigValue {
+                value: ConfigValueKind::Expr(c.to_string()),
                 source_info,
                 merge_op,
             })
