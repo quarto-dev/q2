@@ -556,7 +556,7 @@ Work items:
 Deferred (documented in the transform module doc + above):
 `#quarto-header.quarto-banner`, `toc-left` producer.
 
-### Phase 6 — Styles + degradation (bd-vkiwhcny) — IN PROGRESS 2026-07-17
+### Phase 6 — Styles + degradation (bd-vkiwhcny) — DONE 2026-07-17
 
 Design notes (scoped 2026-07-17):
 
