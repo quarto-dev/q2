@@ -442,6 +442,16 @@ screenshots for banner/visual phases) before any phase is declared done.
 
 ### Phase 4 — Shared date helper (not a date-format system, per Q4)
 
+> **Design study (2026-07-17, at Carlos's request):**
+> `claude-notes/plans/2026-07-17-date-formatting-design.md` — a full
+> study of Q1's date subsystem (source + quarto-web docs) and a
+> proposed "familiar, not byte-for-byte" Q2 design. Headline finding:
+> Q1 formats all dates *before* templating (EJS never formats), so
+> doctemplates being logic-less is no obstacle — the Q2-natural
+> transform-based design is structurally what Q1 already does. The
+> items below predate that study; the ancillary doc's work-item list
+> supersedes them once the design is approved.
+
 - [ ] Create one shared date module (parse ISO-ish inputs via the `time`
       crate; render a default human display format) and consume it from the
       title block
