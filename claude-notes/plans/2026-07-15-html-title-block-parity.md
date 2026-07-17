@@ -440,7 +440,47 @@ screenshots for banner/visual phases) before any phase is declared done.
   has no description/keywords/categories metadata, so its bytes are
   unchanged (byte-identity test passed in the workspace run).
 
-### Phase 4 — Shared date helper (not a date-format system, per Q4)
+### Phase 4 — Date parsing & formatting (bd-13f821l5) — DONE 2026-07-17
+
+Executed per the approved ancillary design
+(`2026-07-17-date-formatting-design.md`); scope grew beyond the
+original Q4 "helper only" sketch with Carlos's approval (all tokens
+without i18n/localization design cost). Delivered:
+
+- [x] `crates/quarto-core/src/dates.rs`: Q1's parse-form list (no
+      guessing tail — diagnostic instead), named styles
+      full/long/medium/short/iso (English, Q3 deferral), day.js token
+      formatter with `[...]` escapes incl. ISO-week tokens; deferred
+      locale-week (`w ww wo gggg`) + named-tz (`z zzz`) tokens warn.
+      Unit matrix mirrors the Q1 docs-page examples.
+- [x] `DateNormalizeTransform`: keywords (`today`/`now` via UTC
+      runtime clock — `SystemRuntime::unix_timestamp`, WASM-safe —
+      and `last-modified` via VFS-aware mtime), ISO
+      `date-meta`/`date-modified-meta` (head dcterms switched to it —
+      deliberate deviation, the machine slot stays ISO), in-place
+      formatted `date`/`date-modified`, Q1's precedence (field
+      `{value,format}` > `date-format` > forced `long` for the styled
+      HTML title block, `iso` otherwise and for all other formats).
+- [x] Listings format date fields at record-build (finally consuming
+      `ListingConfig::date_format`; doc `date-format` fallback;
+      `medium` default) — the same pre-template position as Q1's EJS
+      records; feeds parse via the shared module.
+- [x] TDD: new smoke fixtures `date-format.qmd` +
+      `date-default-long.qmd` (red first: 5 regex checks); insta
+      re-baselines (4 snapshots: `2026-07-01` → `July 1, 2026` etc.,
+      matching the P0 research doc's Q1 extracts); listing test pins
+      updated to `Jan 15, 2026`; 8 transform unit tests + 9 dates
+      module tests. Playwright title-block sweep green (23 tests —
+      the date fixtures run under the WASM runner).
+- [x] E2E (2026-07-17): `date: today` + `date-format: "dddd MMM Do,
+      YYYY"` renders `<p class="date">Friday Jul 17th, 2026</p>` with
+      `<meta name="dcterms.date" content="2026-07-17T00:00:00+00:00">`;
+      output inspected.
+- Preview lockstep (Q9): no TSX changes by design — the preview
+  pipeline runs the transform, so formatted dates flow through the
+  existing meta reads.
+
+#### (superseded original sketch)
 
 > **Design study (2026-07-17, at Carlos's request):**
 > `claude-notes/plans/2026-07-17-date-formatting-design.md` — a full

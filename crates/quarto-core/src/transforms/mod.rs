@@ -42,6 +42,7 @@ mod config;
 mod crossref_index;
 mod crossref_render;
 mod crossref_resolve;
+mod date_normalize;
 mod equation_label;
 mod example_embed;
 mod float_ref_target;
@@ -96,6 +97,7 @@ pub use config::{
 pub use crossref_index::CrossrefIndexTransform;
 pub use crossref_render::CrossrefRenderTransform;
 pub use crossref_resolve::CrossrefResolveTransform;
+pub use date_normalize::DateNormalizeTransform;
 pub use equation_label::EquationLabelTransform;
 pub use example_embed::{ExampleEmbedRenderTransform, ExampleEmbedTransform};
 pub use float_ref_target::FloatRefTargetSugarTransform;

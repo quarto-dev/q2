@@ -200,7 +200,9 @@ fn default_listing_renders_three_posts_in_date_desc_order() {
     assert!(host.contains("Alice"));
     assert!(host.contains("Bob"));
     assert!(host.contains("Carol"));
-    assert!(host.contains("2026-01-15"));
+    // Dates are pre-formatted at record-build with the `medium`
+    // default (bd-13f821l5).
+    assert!(host.contains("Jan 15, 2026"));
 }
 
 /// Listing item links must travel through `LinkRewriteTransform`.
@@ -310,7 +312,9 @@ fn table_type_emits_listing_table_wrapper() {
     // Row data present.
     assert!(host.contains("First"));
     assert!(host.contains("Alice"));
-    assert!(host.contains("2026-01-15"));
+    // Dates are pre-formatted at record-build with the `medium`
+    // default (bd-13f821l5).
+    assert!(host.contains("Jan 15, 2026"));
 }
 
 #[test]

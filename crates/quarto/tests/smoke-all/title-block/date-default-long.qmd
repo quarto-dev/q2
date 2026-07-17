@@ -1,0 +1,21 @@
+---
+title: "Default Long Date"
+author: "Norah Jones"
+date: "2026-07-01"
+# Title-block parity corpus (bd-gx9cic8z, P4 bd-13f821l5): with no
+# date-format, the styled HTML title block forces the `long` style
+# (Q1's documentTitleMetadata rule): July 1, 2026. The head's
+# dcterms.date stays ISO via date-meta.
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - [
+            "<p class=\"date\">July 1, 2026</p>",
+            "<meta name=\"dcterms.date\" content=\"2026-07-01\">",
+          ]
+        - ["<p class=\"date\">2026-07-01</p>"]
+---
+
+Body.

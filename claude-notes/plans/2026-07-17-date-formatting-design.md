@@ -1,7 +1,11 @@
 # Date Parsing & Formatting for Q2 (title-block P4, bd-13f821l5)
 
-**Status: DESIGN DRAFT (2026-07-17) — for iteration with Carlos;
-execution awaits explicit go-ahead.**
+**Status: APPROVED (2026-07-17) — executing.** Carlos approved all
+open-question recommendations; final token scope (Carlos): implement
+every token that does not incur i18n/localization design cost —
+i.e. everything except locale-week `w ww wo gggg` (deferred to the
+localization design, likely tackled next) and named-timezone `z zzz`
+(deferred on tz-database dependency grounds).
 
 Ancillary to the title-block parity epic plan
 (`2026-07-15-html-title-block-parity.md`, design decision Q4 and the
@@ -234,6 +238,7 @@ matter; both only touch meta). For each of `date`, `date-modified`:
 | 3 | Full day.js token set incl. week-of-year, named tz | Documented subset; deferred tokens warn | `time` has no tz db / week-year machinery; no real-world usage in Q1's own templates |
 | 4 | `dcterms.date` gets the human-formatted string | `date-meta` stays ISO | Machine slots stay machine-readable (P3 precedent) |
 | 5 | Silent `Invalid Date` on unparseable input (some paths) | Render diagnostic, raw string preserved | Q2 diagnostics culture |
+| 6 | `today`/`now` resolve in the machine's local timezone | UTC (via `SystemRuntime::unix_timestamp`, WASM-safe) | Deterministic across native/WASM; local-tz support joins the localization/timezone design |
 
 ## Open questions for Carlos
 

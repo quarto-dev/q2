@@ -41,6 +41,7 @@ pub mod artifact_flush;
 pub mod attribution;
 pub mod cell_options;
 pub mod crossref;
+pub mod dates;
 pub mod dependency;
 pub mod document_profile;
 pub mod engine;

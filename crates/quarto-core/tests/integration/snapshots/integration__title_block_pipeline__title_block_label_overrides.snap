@@ -1,6 +1,5 @@
 ---
 source: crates/quarto-core/tests/integration/title_block_pipeline.rs
-assertion_line: 272
 expression: extract_title_block(&html)
 ---
 <header id="title-block-header" class="quarto-title-block default">
@@ -17,7 +16,7 @@ expression: extract_title_block(&html)
 <div>
 <div class="quarto-title-meta-heading">Posted</div>
 <div class="quarto-title-meta-contents">
-<p class="date">2026-07-01</p>
+<p class="date">July 1, 2026</p>
 </div>
 </div>
 </div>

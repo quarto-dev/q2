@@ -163,8 +163,8 @@ const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 $for(author-meta)$
 <meta name="author" content="$author-meta$">
 $endfor$
-$if(date)$
-<meta name="dcterms.date" content="$date$">
+$if(date-meta)$
+<meta name="dcterms.date" content="$date-meta$">
 $endif$
 $if(keywords)$
 <meta name="keywords" content="$for(keywords)$$it$$sep$, $endfor$">
@@ -2014,7 +2014,10 @@ mod tests {
             "author-meta",
             TemplateValue::List(vec![TemplateValue::String("Jane Doe".to_string())]),
         );
-        ctx.insert("date", TemplateValue::String("2024-01-15".to_string()));
+        // The head's dcterms.date consumes the ISO `date-meta` derived
+        // by DateNormalizeTransform (never the possibly-formatted
+        // `date` itself — bd-13f821l5).
+        ctx.insert("date-meta", TemplateValue::String("2024-01-15".to_string()));
         // Keywords arrive as a list (YAML `keywords: [rust, quarto]`);
         // the head meta joins them with ", ". The description meta
         // consumes the plain-text `description-meta` derived by

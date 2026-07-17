@@ -1,0 +1,30 @@
+---
+title: "Date Formatting"
+author: "Norah Jones"
+date: "2026-07-01"
+date-modified: "03/07/2026"
+date-format: "MMM D, YYYY"
+# Title-block parity corpus (bd-gx9cic8z, P4 bd-13f821l5): dates are
+# parsed (multiple input forms) and formatted per date-format before
+# templating; the head's dcterms.date keeps the ISO form via the
+# derived date-meta (deliberate deviation from Q1, which leaks the
+# formatted string into the machine slot).
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "div.quarto-title-meta p.date",
+            "div.quarto-title-meta p.date-modified",
+          ]
+      ensureFileRegexMatches:
+        - [
+            "<p class=\"date\">Jul 1, 2026</p>",
+            "<p class=\"date-modified\">Mar 7, 2026</p>",
+            "<meta name=\"dcterms.date\" content=\"2026-07-01\">",
+          ]
+        - ["<p class=\"date\">2026-07-01</p>"]
+---
+
+Body.
