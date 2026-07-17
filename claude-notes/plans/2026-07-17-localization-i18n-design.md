@@ -341,7 +341,16 @@ Phase 4 notes:
       added to it.
 - [x] Changelog: no hub-client/ source changes in this epic, so the
       hub-client changelog rule is not triggered.
-- [ ] Full `cargo xtask verify` + strand closeout.
+- [x] Full `cargo xtask verify` + strand closeout. Run 2026-07-17: the
+      first run caught `include_dir` being native-only (fixed in 21cb8a04 —
+      terms now embed on wasm32 too). Second run: **every leg green**
+      (lints/clippy, fmt, Rust build, tree-sitter, 10110 Rust tests,
+      ts-packages build, WASM build, hub-client build + tests,
+      trace-viewer, shared packages) **except** the `quarto-hub-mcp`
+      "live:" suite — 20 timeouts against `wss://sync.automerge.org`,
+      which is down (same outage that has braid on the local sync server).
+      Environmental, unrelated to this epic; re-verify that leg when the
+      public sync server is back.
 - (Lua visibility of `quarto.language` moved out of this epic → bd-xzaiqpjq,
   blocked on Meta support: bd-2llqjsms, bd-a9g50za2.)
 
