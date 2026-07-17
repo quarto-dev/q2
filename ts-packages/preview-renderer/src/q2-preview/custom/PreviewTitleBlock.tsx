@@ -100,6 +100,42 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
     const label = (key: string, fallback: string): string =>
         extractMetaString(getMetaPath(meta, ['labels', key])) ?? fallback;
 
+    // `title-block-style: none` (P6, bd-vkiwhcny): Pandoc's fallback
+    // title block, mirroring TITLE_BLOCK_PARTIAL's none branch — a
+    // bare header with no quarto classes, plain subtitle (no `lead`),
+    // one p.author per normalized author name, and the abstract under
+    // `div.abstract-title`. Banner is disabled by the transform side
+    // (`TitleBannerTransform` skips none), so this branch never
+    // combines with the banner flag.
+    const noneStyle =
+        extractMetaBool(
+            getMetaPath(meta, ['rendered', 'title-block-none']),
+        ) === true;
+    if (noneStyle) {
+        return (
+            <header id="title-block-header">
+                {title ? <h1 className="title">{title}</h1> : null}
+                {subtitle ? <p className="subtitle">{subtitle}</p> : null}
+                {authors.map((author, i) => (
+                    <p className="author" key={i}>
+                        {author.name}
+                    </p>
+                ))}
+                {date ? <p className="date">{date}</p> : null}
+                {abstractParagraphs.length > 0 ? (
+                    <div className="abstract">
+                        <div className="abstract-title">
+                            {label('abstract', 'Abstract')}
+                        </div>
+                        {abstractParagraphs.map((text, i) => (
+                            <p key={i}>{text}</p>
+                        ))}
+                    </div>
+                ) : null}
+            </header>
+        );
+    }
+
     // Banner mode (P5, bd-364ol5lu): `TitleBannerTransform` writes the
     // flag; the markup mirrors TITLE_BLOCK_PARTIAL's banner branch —
     // title/subtitle/description/categories inside

@@ -226,6 +226,19 @@ pub fn normalize_authors_meta(meta: &mut ConfigValue) -> Vec<String> {
         );
     }
 
+    // `title-block-style: none` (P6, bd-vkiwhcny): the template's
+    // Pandoc-fallback branch and the preview's none-branch key on this
+    // flag. `plain` changes no markup (it only drops the SCSS layer,
+    // handled by `ThemeConfig`), so only `none` gets a derived key.
+    if crate::transforms::TitleBlockStyle::from_meta(meta)
+        == crate::transforms::TitleBlockStyle::None
+    {
+        meta.insert_path(
+            &["rendered", "title-block-none"],
+            ConfigValue::new_bool(true, gen_si()),
+        );
+    }
+
     model.issues
 }
 
@@ -759,6 +772,28 @@ mod tests {
                     .and_then(|v| v.as_bool()),
                 Some(true),
                 "{key} should count as title-block content"
+            );
+        }
+    }
+
+    #[test]
+    fn style_none_writes_title_block_none_flag() {
+        // P6 (bd-vkiwhcny): the template's Pandoc-fallback branch keys
+        // on `rendered.title-block-none`; plain/default write nothing.
+        let mut meta = map(vec![("title", s("T")), ("title-block-style", s("none"))]);
+        normalize_authors_meta(&mut meta);
+        assert_eq!(
+            meta.get_path(&["rendered", "title-block-none"])
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
+
+        for style in ["plain", "default"] {
+            let mut meta = map(vec![("title", s("T")), ("title-block-style", s(style))]);
+            normalize_authors_meta(&mut meta);
+            assert!(
+                meta.get_path(&["rendered", "title-block-none"]).is_none(),
+                "style {style} must not set the none flag"
             );
         }
     }

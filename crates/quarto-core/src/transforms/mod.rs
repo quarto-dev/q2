@@ -90,7 +90,9 @@ pub use code_block_generate::{
     resolve_default_copy_mode,
 };
 pub use code_block_render::CodeBlockRenderTransform;
-pub use config::{AppendixStyle, ReferenceLocation, is_feature_disabled, resolve_website_bool};
+pub use config::{
+    AppendixStyle, ReferenceLocation, TitleBlockStyle, is_feature_disabled, resolve_website_bool,
+};
 pub use crossref_index::CrossrefIndexTransform;
 pub use crossref_render::CrossrefRenderTransform;
 pub use crossref_resolve::CrossrefResolveTransform;

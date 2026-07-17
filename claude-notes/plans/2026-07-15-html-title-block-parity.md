@@ -556,15 +556,78 @@ Work items:
 Deferred (documented in the transform module doc + above):
 `#quarto-header.quarto-banner`, `toc-left` producer.
 
-### Phase 6 — Styles + degradation
+### Phase 6 — Styles + degradation (bd-vkiwhcny) — IN PROGRESS 2026-07-17
 
-- [ ] `title-block-style: plain` (structure without the SCSS layer) and
-      `none` (verbatim/minimal behavior); interaction with existing
-      minimal-mode `TitleBlockTransform`
-- [ ] Schema entries for the option surface; `manuscript` skipped entirely
-      per Q6 (no dedicated warning machinery)
-- [ ] Lockstep: `PreviewTitleBlock.tsx` honors style option where it
-      changes markup (Q9)
+Design notes (scoped 2026-07-17):
+
+- **Q1 semantics, verified from source**: `title-block-style: plain`
+  keeps the full styled DOM but drops the `title-block.scss` layer
+  from the CSS compile (`documentTitleScssLayer` returns undefined);
+  `none` (or `false`) uses **Pandoc's fallback title block**
+  (`formats/html/pandoc/title-block.html`: bare header without
+  quarto classes, `h1.title`, `p.subtitle` without `lead`, one
+  `p.author` per author, `p.date`, `div.abstract >
+  div.abstract-title`) and also drops the SCSS layer; banner is
+  disabled for `none` (`documentTitlePartial` returns no partials)
+  but active for `plain`.
+- **"Schema entries" resolution**: Q2 has no YAML schema-validation
+  layer for document options — the established convention is a typed
+  enum in `transforms/config.rs` (`AppendixStyle` precedent, which is
+  exactly the Default/Plain/None shape needed, with silent fallback
+  for unknown values — matching Q6's "no dedicated warning machinery"
+  for `manuscript`).
+- **SCSS layer toggle**: `ThemeConfig` (quarto-sass) gains
+  `title_block_layer: bool` read from `title-block-style` in
+  `from_config_value`; `assemble_theme_scss` honors it. The
+  no-theme fast path (shared cached default CSS) additionally
+  requires the flag; a `plain`/`none` doc takes the existing
+  fingerprinted `compile_with_doc_vars` path (flag joins the cache
+  hash), so the shared default bundle stays byte-identical and
+  cacheable — at most one extra CSS variant per project.
+- **Minimal-mode `TitleBlockTransform`**: orthogonal — it only fires
+  for `minimal: true` / `theme: none|pandoc`; `title-block-style`
+  operates in the full template. Documented, no code interaction.
+- **Preview lockstep is markup-only** (per the Q9 item): `none`
+  renders the Pandoc-fallback markup in `PreviewTitleBlock`; `plain`
+  changes no markup (the CSS-layer drop is a render-CSS concern).
+
+Work items:
+
+- [x] TDD red: strengthened `style-none.qmd` (bare header, no
+      `.quarto-title-block` class, `p.author`; 5 checks red) and
+      `style-plain.qmd` (styled DOM + CSS negatives); insta
+      `title_block_style_none` re-baselined to the Pandoc fallback.
+      **Found while testing**: one responsive `.quarto-title-banner`
+      margin rule lives in the *bootstrap* layer (in Q1 too —
+      `_bootstrap-rules.scss:1916`), so it correctly survives
+      plain/none; the CSS negatives target layer-only selectors
+      (`.quarto-title-meta-heading`, `.quarto-title-author-orcid`)
+- [x] `TitleBlockStyle` enum in `transforms/config.rs`
+      (`AppendixStyle` pattern; `false` = none, `manuscript`/unknown →
+      silent Default per Q6); `AuthorsNormalizeTransform` derives
+      `rendered.title-block-none`; `TitleBannerTransform` skips when
+      none (new pipeline test: none + banner → header stays in main,
+      no banner markup)
+- [x] `TITLE_BLOCK_PARTIAL` Pandoc-fallback branch
+      (`$if(rendered.title-block-none)$`; iterates `by-author` names;
+      `$labels.abstract$` where Pandoc uses `$abstract-title$` —
+      documented deviation, override still honored)
+- [x] `ThemeConfig.title_block_layer` (from `title-block-style`,
+      duplicated reader documented) honored in `assemble_theme_scss` +
+      both native and WASM `compile_with_doc_vars`; stage fast path
+      requires the flag, cache key includes it; unit-test matrices in
+      quarto-sass and quarto-core
+- [x] Lockstep: `PreviewTitleBlock.tsx` none-branch (Q9); +2 vitest
+      (555 pass); new q2-preview fixture `title-block-style-none.qmd`;
+      Playwright title-block sweep green (21 tests, incl. the html
+      style fixtures under the WASM runner — proving the WASM
+      dart-sass path honors the flag)
+- [x] End-to-end (2026-07-17): `cargo run --bin q2 -- render` of
+      none/plain/default docs: none emits
+      `<header id="title-block-header"><h1 class="title">…<p
+      class="author">` (Pandoc fallback, no quarto classes); plain
+      and none CSS contain 0 `quarto-title-meta-heading` rules vs 1
+      in the default control; outputs inspected
 
 ### Phase 7 — Docs + wrap-up
 

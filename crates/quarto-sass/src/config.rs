@@ -72,6 +72,16 @@ pub struct ThemeConfig {
     /// their choosing. `themes` is always empty when this is `true`.
     pub suppress_bootstrap: bool,
 
+    /// Whether to include the built-in title-block SCSS layer
+    /// (`templates/title-block.scss`) in the compiled bundle.
+    ///
+    /// `true` by default; `false` when the document sets
+    /// `title-block-style: plain | none | false` — Q1's
+    /// `documentTitleScssLayer` behavior (bd-gx9cic8z P6). The
+    /// document keeps its markup (for `plain`); only the styled look
+    /// is dropped.
+    pub title_block_layer: bool,
+
     /// Unresolved reference to a `_brand.yml` (path or inline block),
     /// or `None` if no brand was configured.
     ///
@@ -104,6 +114,7 @@ impl ThemeConfig {
             themes,
             minified,
             suppress_bootstrap: false,
+            title_block_layer: true,
             brand_ref: None,
         }
     }
@@ -117,6 +128,7 @@ impl ThemeConfig {
             themes: Vec::new(),
             minified: true,
             suppress_bootstrap: false,
+            title_block_layer: true,
             brand_ref: None,
         }
     }
@@ -169,6 +181,7 @@ impl ThemeConfig {
                         themes: Vec::new(),
                         minified: true,
                         suppress_bootstrap: true,
+                        title_block_layer: true,
                         brand_ref: None,
                     }
                 } else {
@@ -177,11 +190,19 @@ impl ThemeConfig {
                         themes,
                         minified: true,
                         suppress_bootstrap: false,
+                        title_block_layer: true,
                         brand_ref: None,
                     }
                 }
             }
         };
+
+        // `title-block-style: plain | none | false` drops the
+        // title-block SCSS layer (Q1's `documentTitleScssLayer`
+        // returns no layer for those values; bd-gx9cic8z P6). Markup
+        // consequences live in quarto-core; this crate only controls
+        // the layer's presence in the bundle.
+        result.title_block_layer = title_block_layer_enabled(config);
 
         // `theme: none` is mutually exclusive with brand — Q1 would
         // produce no Bootstrap output anyway, so we mirror that by
@@ -317,6 +338,7 @@ pub fn resolve_brand_layers(
         themes: Vec::new(),
         minified: true,
         suppress_bootstrap: false,
+        title_block_layer: true,
         brand_ref: Some(brand_ref),
     }
     .resolve(runtime, base_dir)?;
@@ -324,6 +346,26 @@ pub fn resolve_brand_layers(
     match resolved.brand {
         Some(brand) => crate::brand_layer::brand_to_layers(&brand, font_path_prefix),
         None => Ok(Vec::new()),
+    }
+}
+
+/// Whether the title-block SCSS layer should be included, per the
+/// `title-block-style` option: `plain`, `none`, and `false` drop it
+/// (Q1's `documentTitleScssLayer`); anything else — including absent
+/// and unrecognized values — keeps it. Mirrors quarto-core's
+/// `TitleBlockStyle` parsing (this crate sits below quarto-core, so
+/// the two readers are deliberately duplicated; both are covered by
+/// the P6 test matrix).
+fn title_block_layer_enabled(config: &ConfigValue) -> bool {
+    let Some(value) = config.get("title-block-style") else {
+        return true;
+    };
+    if let Some(b) = value.as_bool() {
+        return b;
+    }
+    match config_value_as_text(value).as_deref() {
+        Some(s) => !matches!(s.to_lowercase().as_str(), "plain" | "none" | "false"),
+        None => true,
     }
 }
 
@@ -536,6 +578,60 @@ mod tests {
         assert!(config.themes.is_empty());
         assert!(config.minified);
         assert!(!config.has_themes());
+        assert!(config.title_block_layer);
+    }
+
+    /// Helper: a config map with a single scalar entry.
+    fn config_with_scalar(key: &str, value: Yaml) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Map(vec![ConfigMapEntry {
+                key: key.to_string(),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue {
+                    value: ConfigValueKind::Scalar(value),
+                    source_info: SourceInfo::for_test(),
+                    merge_op: quarto_pandoc_types::MergeOp::Concat,
+                },
+            }]),
+            source_info: SourceInfo::for_test(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        }
+    }
+
+    #[test]
+    fn test_title_block_layer_flag_matrix() {
+        // bd-gx9cic8z P6: plain / none / false drop the layer; the
+        // default, unknown values (incl. Q1's unsupported
+        // `manuscript`), and `true` keep it.
+        let keep = |cfg: &ConfigValue| {
+            ThemeConfig::from_config_value(cfg)
+                .unwrap()
+                .title_block_layer
+        };
+        assert!(keep(&empty_config()));
+        for (val, expect) in [
+            ("plain", false),
+            ("none", false),
+            ("default", true),
+            ("manuscript", true),
+        ] {
+            assert_eq!(
+                keep(&config_with_scalar(
+                    "title-block-style",
+                    Yaml::String(val.to_string())
+                )),
+                expect,
+                "title-block-style: {val}"
+            );
+        }
+        assert!(!keep(&config_with_scalar(
+            "title-block-style",
+            Yaml::Boolean(false)
+        )));
+        assert!(keep(&config_with_scalar(
+            "title-block-style",
+            Yaml::Boolean(true)
+        )));
     }
 
     #[test]

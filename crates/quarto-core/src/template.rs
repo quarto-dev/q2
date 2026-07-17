@@ -289,10 +289,43 @@ $endif$
 /// ported verbatim but currently has no producer (Q1 sets `toc-left`
 /// from `toc-location`, which Q2 doesn't support yet).
 ///
+/// P6 (bd-vkiwhcny): `title-block-style: none` renders Q1's fallback
+/// — Pandoc's own plain title block
+/// (`formats/html/pandoc/title-block.html`): a bare header with no
+/// quarto classes, `h1.title`, `p.subtitle` without `lead`, one
+/// `p.author` per author, `p.date`, and `div.abstract >
+/// div.abstract-title`. Gated on `rendered.title-block-none` (written
+/// by `AuthorsNormalizeTransform`); the fallback iterates the
+/// normalized `by-author` names (Pandoc iterates raw `$author$`;
+/// same output for every supported author shape) and uses
+/// `$labels.abstract$` where Pandoc uses its own `$abstract-title$`
+/// variable (same "Abstract" default, and the `abstract-title`
+/// override keeps working — deviation documented here).
+///
 /// A document can replace this partial by listing a file named
 /// `title-block.html` under `template-partials` (Q1 compatibility).
 pub const TITLE_BLOCK_PARTIAL: &str = r#"$if(rendered.has-title-block)$
-$if(rendered.title-block-banner)$
+$if(rendered.title-block-none)$
+<header id="title-block-header">
+$if(title)$<h1 class="title">$title$</h1>
+$endif$
+$if(subtitle)$
+<p class="subtitle">$subtitle$</p>
+$endif$
+$for(by-author)$
+<p class="author">$it.name.literal$</p>
+$endfor$
+$if(date)$
+<p class="date">$date$</p>
+$endif$
+$if(abstract)$
+<div class="abstract">
+<div class="abstract-title">$labels.abstract$</div>
+$abstract$
+</div>
+$endif$
+</header>
+$elseif(rendered.title-block-banner)$
 <header id="title-block-header" class="quarto-title-block default page-columns page-full$if(quarto-template-params.banner-header-class)$ $quarto-template-params.banner-header-class$$endif$">
 <div class="quarto-title-banner page-columns page-full">
 <div class="quarto-title column-body">

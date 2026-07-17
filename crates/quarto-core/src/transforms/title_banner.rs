@@ -97,6 +97,16 @@ impl AstTransform for TitleBannerTransform {
             return Ok(());
         }
 
+        // `title-block-style: none` disables the banner entirely (Q1:
+        // `documentTitlePartial` returns no partials for none/false,
+        // so no banner markup or generated style). `plain` keeps the
+        // banner (Q1 only drops the SCSS layer for plain).
+        if crate::transforms::TitleBlockStyle::from_meta(&ast.meta)
+            == crate::transforms::TitleBlockStyle::None
+        {
+            return Ok(());
+        }
+
         let input_dir = ctx
             .document
             .input

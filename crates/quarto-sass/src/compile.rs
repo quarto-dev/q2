@@ -85,16 +85,16 @@ pub fn assemble_theme_scss(
     // (like TS Quarto's order for built-in user layers), then any theme
     // layers from the config. User themes can override any `.hl-*` or
     // title-block rule by declaring the same selector in a later layer.
-    let title_block_layer = load_title_block_layer()?;
     let highlight_layer = load_highlight_layer()?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
-    let mut user_layers = vec![
-        title_block_layer,
-        highlight_layer,
-        embed_example_layer,
-        copy_code_layer,
-    ];
+    let mut user_layers = Vec::new();
+    // `title-block-style: plain|none` drops the title-block layer
+    // (bd-gx9cic8z P6); all other built-in layers are unconditional.
+    if config.title_block_layer {
+        user_layers.push(load_title_block_layer()?);
+    }
+    user_layers.extend([highlight_layer, embed_example_layer, copy_code_layer]);
     user_layers.extend(result.layers);
 
     // Assemble SCSS
@@ -204,28 +204,33 @@ pub fn compile_with_doc_vars(
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
 
     // Fast paths: no doc-vars to inject — defer to existing entry points
-    // so we keep the OnceLock cache for the no-theme case.
+    // so we keep the OnceLock cache for the no-theme case. When the
+    // title-block layer is dropped (`title-block-style: plain|none`),
+    // the shared default bundle no longer matches, so fall through to
+    // a direct assembly instead (the themed path honors the flag via
+    // `assemble_theme_scss`).
     if doc_vars.is_empty() {
         if config.has_themes() {
             return compile_theme_css(config, context);
         }
-        return compile_default_css(context.runtime(), config.minified);
+        if config.title_block_layer {
+            return compile_default_css(context.runtime(), config.minified);
+        }
     }
 
-    // Build user layers: title-block + highlight (always-present built-ins,
-    // matching `compile_default_css` and `assemble_theme_scss`), then any
+    // Build user layers: title-block (unless dropped by
+    // `title-block-style: plain|none`) + highlight built-ins,
+    // matching `compile_default_css` and `assemble_theme_scss`, then any
     // theme layers, then doc_vars LAST so it lands at the top of the
     // merged-defaults section and wins the `!default` race.
-    let title_block_layer = load_title_block_layer()?;
     let highlight_layer = load_highlight_layer()?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
-    let mut user_layers = vec![
-        title_block_layer,
-        highlight_layer,
-        embed_example_layer,
-        copy_code_layer,
-    ];
+    let mut user_layers = Vec::new();
+    if config.title_block_layer {
+        user_layers.push(load_title_block_layer()?);
+    }
+    user_layers.extend([highlight_layer, embed_example_layer, copy_code_layer]);
 
     let mut load_paths = default_load_paths();
     if config.has_themes() {
@@ -478,23 +483,26 @@ pub async fn compile_with_doc_vars(
     };
     use crate::themes::process_theme_specs;
 
+    // Same fast-path rule as the native variant: the shared default
+    // bundle only matches when the title-block layer is included
+    // (`title-block-style: plain|none` drops it — bd-gx9cic8z P6).
     if doc_vars.is_empty() {
         if config.has_themes() {
             return compile_theme_css(config, context).await;
         }
-        return compile_default_css(context.runtime(), config.minified).await;
+        if config.title_block_layer {
+            return compile_default_css(context.runtime(), config.minified).await;
+        }
     }
 
-    let title_block_layer = load_title_block_layer()?;
     let highlight_layer = load_highlight_layer()?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
-    let mut user_layers = vec![
-        title_block_layer,
-        highlight_layer,
-        embed_example_layer,
-        copy_code_layer,
-    ];
+    let mut user_layers = Vec::new();
+    if config.title_block_layer {
+        user_layers.push(load_title_block_layer()?);
+    }
+    user_layers.extend([highlight_layer, embed_example_layer, copy_code_layer]);
 
     let mut load_paths = default_load_paths();
     if config.has_themes() {

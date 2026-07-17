@@ -322,11 +322,24 @@ title-block-style: plain
 Body.
 "#;
 
-/// `title-block-style: none`. Today ignored; P6 (bd-vkiwhcny).
+/// `title-block-style: none`: Pandoc's fallback title block, no
+/// quarto classes, no SCSS layer (P6, bd-vkiwhcny).
 const STYLE_NONE: &str = r#"---
 title: "No Title Block"
 author: "Norah Jones"
 title-block-style: none
+---
+
+Body.
+"#;
+
+/// `title-block-style: none` beats `title-block-banner` — Q1 emits no
+/// banner partials for none/false (P6, bd-vkiwhcny).
+const STYLE_NONE_WITH_BANNER: &str = r#"---
+title: "No Title Block, Banner Ignored"
+author: "Norah Jones"
+title-block-style: none
+title-block-banner: true
 ---
 
 Body.
@@ -425,4 +438,21 @@ fn title_block_style_plain_baseline() {
 fn title_block_style_none_baseline() {
     let html = render_doc_to_html(STYLE_NONE);
     insta::assert_snapshot!("title_block_style_none", extract_title_block(&html));
+}
+
+#[test]
+fn title_block_style_none_disables_banner() {
+    let html = render_doc_to_html(STYLE_NONE_WITH_BANNER);
+    assert!(
+        !header_precedes_quarto_content(&html),
+        "style none must beat the banner: header stays inside <main>"
+    );
+    assert!(
+        !html.contains("quarto-title-banner"),
+        "no banner markup with style none"
+    );
+    assert!(
+        !html.contains("quarto-banner-title-block"),
+        "no banner class on <main> with style none"
+    );
 }

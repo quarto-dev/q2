@@ -1,0 +1,25 @@
+---
+title: No Styled Block
+author: Norah Jones
+date: "2026-07-01"
+title-block-style: none
+format: q2-preview
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        -
+          - 'header#title-block-header > h1.title'
+          - 'header#title-block-header > p.author'
+          - 'header#title-block-header > p.date'
+        -
+          - 'header#title-block-header.quarto-title-block'
+          - 'div.quarto-title'
+          - 'div.quarto-title-meta'
+---
+
+`title-block-style: none` in preview: Pandoc's fallback title block —
+bare header, no quarto classes or metadata grids (title-block epic
+bd-gx9cic8z P6, lockstep with the Rust partials, Q9).

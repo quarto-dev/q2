@@ -702,6 +702,66 @@ describe('PreviewTitleBlock — banner mode (P5, bd-364ol5lu)', () => {
     });
 });
 
+describe('PreviewTitleBlock — title-block-style none (P6, bd-vkiwhcny)', () => {
+    /** Derived meta with the none flag `AuthorsNormalizeTransform` writes. */
+    function noneDerived(
+        meta: Record<string, unknown>,
+        authors: string[] = [],
+    ): Record<string, unknown> {
+        return {
+            ...meta,
+            ...(authors.length > 0 ? { 'by-author': byAuthor(...authors) } : {}),
+            rendered: mm({
+                'has-title-block': mb(true),
+                'title-block-none': mb(true),
+            }),
+        };
+    }
+
+    it('none → Pandoc fallback: bare header, no quarto classes or grids', () => {
+        const { container } = mount(
+            noneDerived(
+                {
+                    title: ms('Doc'),
+                    subtitle: ms('Sub'),
+                    date: ms('2026-07-01'),
+                },
+                ['Jane Doe'],
+            ),
+        );
+        const header = container.querySelector('header#title-block-header');
+        expect(header).not.toBeNull();
+        expect(header!.classList.contains('quarto-title-block')).toBe(false);
+        expect(header!.querySelector(':scope > h1.title')!.textContent).toBe(
+            'Doc',
+        );
+        const subtitle = header!.querySelector(':scope > p.subtitle');
+        expect(subtitle).not.toBeNull();
+        expect(subtitle!.classList.contains('lead')).toBe(false);
+        expect(
+            header!.querySelector(':scope > p.author')!.textContent,
+        ).toBe('Jane Doe');
+        expect(header!.querySelector(':scope > p.date')).not.toBeNull();
+        expect(container.querySelector('div.quarto-title')).toBeNull();
+        expect(container.querySelector('div.quarto-title-meta')).toBeNull();
+    });
+
+    it('none → abstract renders with abstract-title heading', () => {
+        const { container } = mount(
+            noneDerived({ title: ms('Doc'), abstract: ms('Short.') }),
+        );
+        const abstract = container.querySelector(
+            'header#title-block-header > div.abstract',
+        );
+        expect(abstract).not.toBeNull();
+        expect(
+            abstract!.querySelector(':scope > div.abstract-title')!
+                .textContent,
+        ).toBe('Abstract');
+        expect(container.querySelector('div.block-title')).toBeNull();
+    });
+});
+
 describe('PreviewTitleBlock — user override via registry', () => {
     it('full replacement → stub renders, built-in <header> is absent', () => {
         const StubTitleBlock = vi.fn(() => (
