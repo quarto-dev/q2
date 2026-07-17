@@ -764,3 +764,24 @@ format:
         "theme: dark should use light text"
     );
 }
+
+/// The scaffold's `<html lang>` follows the document's `lang` option
+/// (bd-llhlzd7p); it was previously hardcoded to `"en"`.
+#[test]
+fn scaffold_html_lang_follows_document_lang() {
+    let html = render_revealjs(
+        "---\ntitle: \"Charla\"\nlang: es\nformat: revealjs\n---\n\n## Una\n\nHola.\n",
+    );
+    assert!(
+        html.contains("<html lang=\"es\">"),
+        "expected <html lang=\"es\"> in scaffold"
+    );
+
+    // Without `lang`, the scaffold keeps the historical "en" default.
+    let default_html =
+        render_revealjs("---\ntitle: \"Talk\"\nformat: revealjs\n---\n\n## One\n\nHi.\n");
+    assert!(
+        default_html.contains("<html lang=\"en\">"),
+        "expected <html lang=\"en\"> default in scaffold"
+    );
+}

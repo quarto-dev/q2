@@ -47,6 +47,7 @@ use quarto_source_map::SourceInfo;
 
 use crate::Result;
 use crate::crossref::{CROSSREF_RESOLVED_REF, EQUATION, FLOAT_REF_TARGET, PROOF, THEOREM};
+use crate::language::LanguageTerms;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 
@@ -77,65 +78,71 @@ impl AstTransform for CrossrefRenderTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
-        render_blocks(&mut ast.blocks);
+        // Localized terms (bd-llhlzd7p): reference text prefers the
+        // `crossref-<type>-prefix` term (Q1 semantics; prefix falls back to
+        // title), and proof labels use `environment-proof-title`. `None`
+        // when the LanguageResolveStage hasn't run (direct unit tests) —
+        // the node's `kind` / English defaults apply then.
+        let terms = LanguageTerms::from_meta(&ast.meta);
+        render_blocks(&mut ast.blocks, terms.as_ref());
         Ok(())
     }
 }
 
-fn render_blocks(blocks: &mut Blocks) {
+fn render_blocks(blocks: &mut Blocks, terms: Option<&LanguageTerms>) {
     for block in blocks.iter_mut() {
-        render_block(block);
+        render_block(block, terms);
     }
 }
 
-fn render_block(block: &mut Block) {
+fn render_block(block: &mut Block, terms: Option<&LanguageTerms>) {
     // Recurse into children.
     match block {
-        Block::BlockQuote(bq) => render_blocks(&mut bq.content),
+        Block::BlockQuote(bq) => render_blocks(&mut bq.content, terms),
         Block::OrderedList(ol) => {
             for item in &mut ol.content {
-                render_blocks(item);
+                render_blocks(item, terms);
             }
         }
         Block::BulletList(bl) => {
             for item in &mut bl.content {
-                render_blocks(item);
+                render_blocks(item, terms);
             }
         }
         Block::DefinitionList(dl) => {
             for (term, defs) in &mut dl.content {
-                render_inlines(term);
+                render_inlines(term, terms);
                 for def in defs {
-                    render_blocks(def);
+                    render_blocks(def, terms);
                 }
             }
         }
         Block::Figure(fig) => {
-            render_blocks(&mut fig.content);
+            render_blocks(&mut fig.content, terms);
             if let Some(long) = fig.caption.long.as_mut() {
-                render_blocks(long);
+                render_blocks(long, terms);
             }
             if let Some(short) = fig.caption.short.as_mut() {
-                render_inlines(short);
+                render_inlines(short, terms);
             }
         }
-        Block::Div(div) => render_blocks(&mut div.content),
-        Block::Paragraph(p) => render_inlines(&mut p.content),
-        Block::Plain(p) => render_inlines(&mut p.content),
+        Block::Div(div) => render_blocks(&mut div.content, terms),
+        Block::Paragraph(p) => render_inlines(&mut p.content, terms),
+        Block::Plain(p) => render_inlines(&mut p.content, terms),
         Block::LineBlock(lb) => {
             for line in &mut lb.content {
-                render_inlines(line);
+                render_inlines(line, terms);
             }
         }
-        Block::Header(h) => render_inlines(&mut h.content),
+        Block::Header(h) => render_inlines(&mut h.content, terms),
         Block::Custom(node) => {
             // Recurse into slots first so nested resolved refs are rendered.
             for (_k, slot) in node.slots.iter_mut() {
                 match slot {
-                    Slot::Block(b) => render_block(b),
-                    Slot::Blocks(bs) => render_blocks(bs),
-                    Slot::Inline(i) => render_inline(i),
-                    Slot::Inlines(is) => render_inlines(is),
+                    Slot::Block(b) => render_block(b, terms),
+                    Slot::Blocks(bs) => render_blocks(bs, terms),
+                    Slot::Inline(i) => render_inline(i, terms),
+                    Slot::Inlines(is) => render_inlines(is, terms),
                 }
             }
         }
@@ -151,7 +158,7 @@ fn render_block(block: &mut Block) {
             let replacement = render_theorem(take_custom_node(node));
             *block = replacement;
         } else if node.type_name == PROOF {
-            let replacement = render_proof(take_custom_node(node));
+            let replacement = render_proof(take_custom_node(node), terms);
             *block = replacement;
         }
     }
@@ -172,36 +179,36 @@ fn take_custom_node(node: &mut CustomNode) -> CustomNode {
     )
 }
 
-fn render_inlines(inlines: &mut Inlines) {
+fn render_inlines(inlines: &mut Inlines, terms: Option<&LanguageTerms>) {
     for inline in inlines.iter_mut() {
-        render_inline(inline);
+        render_inline(inline, terms);
     }
 }
 
-fn render_inline(inline: &mut Inline) {
+fn render_inline(inline: &mut Inline, terms: Option<&LanguageTerms>) {
     match inline {
-        Inline::Emph(e) => render_inlines(&mut e.content),
-        Inline::Underline(u) => render_inlines(&mut u.content),
-        Inline::Strong(s) => render_inlines(&mut s.content),
-        Inline::Strikeout(s) => render_inlines(&mut s.content),
-        Inline::Superscript(s) => render_inlines(&mut s.content),
-        Inline::Subscript(s) => render_inlines(&mut s.content),
-        Inline::SmallCaps(s) => render_inlines(&mut s.content),
-        Inline::Quoted(q) => render_inlines(&mut q.content),
-        Inline::Link(l) => render_inlines(&mut l.content),
-        Inline::Image(i) => render_inlines(&mut i.content),
-        Inline::Note(n) => render_blocks(&mut n.content),
-        Inline::Span(s) => render_inlines(&mut s.content),
-        Inline::Insert(i) => render_inlines(&mut i.content),
-        Inline::Delete(d) => render_inlines(&mut d.content),
-        Inline::Highlight(h) => render_inlines(&mut h.content),
+        Inline::Emph(e) => render_inlines(&mut e.content, terms),
+        Inline::Underline(u) => render_inlines(&mut u.content, terms),
+        Inline::Strong(s) => render_inlines(&mut s.content, terms),
+        Inline::Strikeout(s) => render_inlines(&mut s.content, terms),
+        Inline::Superscript(s) => render_inlines(&mut s.content, terms),
+        Inline::Subscript(s) => render_inlines(&mut s.content, terms),
+        Inline::SmallCaps(s) => render_inlines(&mut s.content, terms),
+        Inline::Quoted(q) => render_inlines(&mut q.content, terms),
+        Inline::Link(l) => render_inlines(&mut l.content, terms),
+        Inline::Image(i) => render_inlines(&mut i.content, terms),
+        Inline::Note(n) => render_blocks(&mut n.content, terms),
+        Inline::Span(s) => render_inlines(&mut s.content, terms),
+        Inline::Insert(i) => render_inlines(&mut i.content, terms),
+        Inline::Delete(d) => render_inlines(&mut d.content, terms),
+        Inline::Highlight(h) => render_inlines(&mut h.content, terms),
         Inline::Custom(node) => {
             for (_k, slot) in node.slots.iter_mut() {
                 match slot {
-                    Slot::Block(b) => render_block(b),
-                    Slot::Blocks(bs) => render_blocks(bs),
-                    Slot::Inline(i) => render_inline(i),
-                    Slot::Inlines(is) => render_inlines(is),
+                    Slot::Block(b) => render_block(b, terms),
+                    Slot::Blocks(bs) => render_blocks(bs, terms),
+                    Slot::Inline(i) => render_inline(i, terms),
+                    Slot::Inlines(is) => render_inlines(is, terms),
                 }
             }
         }
@@ -210,7 +217,7 @@ fn render_inline(inline: &mut Inline) {
 
     if let Inline::Custom(node) = inline {
         if node.type_name == CROSSREF_RESOLVED_REF {
-            *inline = render_resolved_ref(take_custom_node(node));
+            *inline = render_resolved_ref(take_custom_node(node), terms);
         } else if node.type_name == EQUATION {
             *inline = render_equation(take_custom_node(node));
         }
@@ -535,7 +542,7 @@ fn prepend_theorem_label(mut content: Blocks, label: Inlines, source_info: Sourc
 ///
 /// Proofs never carry a number. The id (if any) flows through on the
 /// Div's `id` attribute so anchor links still work.
-fn render_proof(node: CustomNode) -> Block {
+fn render_proof(node: CustomNode, terms: Option<&LanguageTerms>) -> Block {
     let source_info = node.source_info.clone();
     let mut attr = node.attr;
     if !attr.1.iter().any(|c| c == "proof") {
@@ -562,10 +569,17 @@ fn render_proof(node: CustomNode) -> Block {
             }));
             inlines
         }
-        None => vec![Inline::Str(Str {
-            text: "Proof.".to_string(),
-            source_info: source_info.clone(),
-        })],
+        None => {
+            // `environment-proof-title` term ("Proof" → "Demostración", …);
+            // the trailing period matches Q1's proof label shape.
+            let proof_title = terms
+                .and_then(|t| t.get("environment-proof-title"))
+                .unwrap_or("Proof");
+            vec![Inline::Str(Str {
+                text: format!("{proof_title}."),
+                source_info: source_info.clone(),
+            })]
+        }
     };
     // Make the label italic via Emph.
     let label: Inlines = vec![
@@ -658,19 +672,32 @@ fn render_equation(node: CustomNode) -> Inline {
 /// Link text is `"<Kind> <N>"` when the ref is resolved, or the literal
 /// `"?id?"` (wrapped visibly) for unresolved refs so the failure is
 /// obvious in the rendered document.
-fn render_resolved_ref(node: CustomNode) -> Inline {
+fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>) -> Inline {
     let identifier = node
         .plain_data
         .get("identifier")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let kind = node
+    // Reference text uses the `crossref-<type>-prefix` term (which falls
+    // back to `crossref-<type>-title`) when the language table defines one;
+    // otherwise the node's `kind` (registry display name — already
+    // localized for built-ins, or `crossref.custom`'s reference-prefix).
+    let ref_type = node
         .plain_data
-        .get("kind")
+        .get("ref_type")
         .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+        .unwrap_or("");
+    let kind = terms.and_then(|t| t.crossref_prefix(ref_type)).map_or_else(
+        || {
+            node.plain_data
+                .get("kind")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string()
+        },
+        |s| s.to_string(),
+    );
     let resolved = node
         .plain_data
         .get("resolved")
@@ -1064,7 +1091,7 @@ mod tests {
             .slots
             .insert("content".into(), Slot::Blocks(vec![para("inside")]));
         let mut block = Block::Custom(callout);
-        render_block(&mut block);
+        render_block(&mut block, None);
         match block {
             Block::Custom(n) => assert_eq!(n.type_name, "Callout"),
             _ => panic!("callout was mutated"),

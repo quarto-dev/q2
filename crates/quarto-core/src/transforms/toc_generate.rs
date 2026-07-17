@@ -118,13 +118,19 @@ impl AstTransform for TocGenerateTransform {
             .and_then(|v| v.as_int())
             .unwrap_or(3) as i32;
 
-        // Default title is "Table of Contents" if not specified.
+        // Title precedence (decided 2026-07-17, bd-llhlzd7p): user
+        // `toc-title` metadata > localized `toc-title-document` term >
+        // English literal (stage-less unit-test fallback).
         // `as_plain_text` (not `as_str`): a bare `toc-title` front-matter string
         // is stored as `ConfigValueKind::PandocInlines`. (bd-y89ihf0i)
         let title = ast
             .meta
             .get("toc-title")
             .and_then(|v| v.as_plain_text())
+            .or_else(|| {
+                crate::language::LanguageTerms::from_meta(&ast.meta)
+                    .and_then(|t| t.get("toc-title-document").map(|s| s.to_string()))
+            })
             .or_else(|| Some("Table of Contents".to_string()));
 
         let config = TocConfig { depth, title };

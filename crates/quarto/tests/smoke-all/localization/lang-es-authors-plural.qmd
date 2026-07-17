@@ -1,0 +1,17 @@
+---
+title: Autores múltiples
+author:
+  - Ana García
+  - Luis Pérez
+lang: es
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["Autores/as<"]
+        - [">Authors<", "Autor/a<"]
+---
+
+Contenido.

@@ -101,6 +101,13 @@ impl PipelineStage for PreEngineSugaringStage {
             .take()
             .unwrap_or_else(RefTypeRegistry::builtin);
 
+        // Localize built-in display names from the resolved term table
+        // (bd-llhlzd7p) before user config extends the registry, so
+        // `crossref.custom` names win over locale defaults.
+        if let Some(terms) = crate::language::LanguageTerms::from_meta(&doc.ast.meta) {
+            registry.localize_builtin_display_names(&terms);
+        }
+
         // Extend the registry from `crossref.custom` and lift `crossref.ids`
         // into promised-id entries. Errors are non-fatal and become
         // diagnostics on the stage context.

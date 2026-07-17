@@ -1,0 +1,24 @@
+---
+title: Inline language override
+format: html
+language:
+  crossref-tbl-title: "Tabella"
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["Tabella 1: Una tabella"]
+        - ["Table 1:"]
+---
+
+Vedi @tbl-uno.
+
+::: {#tbl-uno}
+
+| a | b |
+|---|---|
+| 1 | 2 |
+
+Una tabella
+:::

@@ -1,0 +1,23 @@
+---
+title: Crossref localization
+lang: es
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["Tabla 1: Una tabla", "Tabla.1</a>"]
+        - [">Table<", "Table 1"]
+---
+
+Ver @tbl-uno.
+
+::: {#tbl-uno}
+
+| a | b |
+|---|---|
+| 1 | 2 |
+
+Una tabla
+:::

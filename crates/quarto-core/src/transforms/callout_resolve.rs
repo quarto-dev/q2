@@ -66,6 +66,7 @@ use quarto_source_map::{By, SourceInfo};
 use serde_json::Value;
 
 use crate::Result;
+use crate::language::LanguageTerms;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 
@@ -103,64 +104,68 @@ impl AstTransform for CalloutResolveTransform {
         // ids on collapsible callouts. Starts at 1 to match TS Quarto's
         // `calloutidx` (`src/resources/filters/modules/callouts.lua`).
         let mut counter = 1u32;
-        resolve_blocks(&mut ast.blocks, &mut counter);
+        // Localized default titles (`callout-<type>-title`, bd-llhlzd7p);
+        // `None` when the LanguageResolveStage hasn't run (direct unit
+        // tests) — the capitalize() fallback applies then.
+        let terms = LanguageTerms::from_meta(&ast.meta);
+        resolve_blocks(&mut ast.blocks, &mut counter, terms.as_ref());
         Ok(())
     }
 }
 
 /// Resolve CustomNodes in a vector of blocks.
-fn resolve_blocks(blocks: &mut Vec<Block>, counter: &mut u32) {
+fn resolve_blocks(blocks: &mut Vec<Block>, counter: &mut u32, terms: Option<&LanguageTerms>) {
     for block in blocks.iter_mut() {
-        resolve_block(block, counter);
+        resolve_block(block, counter, terms);
     }
 }
 
 /// Resolve a single block, potentially converting CustomNode to Div.
-fn resolve_block(block: &mut Block, counter: &mut u32) {
+fn resolve_block(block: &mut Block, counter: &mut u32, terms: Option<&LanguageTerms>) {
     // First, recursively resolve any nested blocks
     match block {
         Block::BlockQuote(bq) => {
-            resolve_blocks(&mut bq.content, counter);
+            resolve_blocks(&mut bq.content, counter, terms);
         }
         Block::OrderedList(ol) => {
             for item in &mut ol.content {
-                resolve_blocks(item, counter);
+                resolve_blocks(item, counter, terms);
             }
         }
         Block::BulletList(bl) => {
             for item in &mut bl.content {
-                resolve_blocks(item, counter);
+                resolve_blocks(item, counter, terms);
             }
         }
         Block::DefinitionList(dl) => {
             for (_term, defs) in &mut dl.content {
                 for def in defs {
-                    resolve_blocks(def, counter);
+                    resolve_blocks(def, counter, terms);
                 }
             }
         }
         Block::Figure(fig) => {
-            resolve_blocks(&mut fig.content, counter);
+            resolve_blocks(&mut fig.content, counter, terms);
         }
         Block::Div(div) => {
-            resolve_blocks(&mut div.content, counter);
+            resolve_blocks(&mut div.content, counter, terms);
         }
         Block::Table(table) => {
             for body in &mut table.bodies {
                 for row in &mut body.body {
                     for cell in &mut row.cells {
-                        resolve_blocks(&mut cell.content, counter);
+                        resolve_blocks(&mut cell.content, counter, terms);
                     }
                 }
             }
             for row in &mut table.head.rows {
                 for cell in &mut row.cells {
-                    resolve_blocks(&mut cell.content, counter);
+                    resolve_blocks(&mut cell.content, counter, terms);
                 }
             }
             for row in &mut table.foot.rows {
                 for cell in &mut row.cells {
-                    resolve_blocks(&mut cell.content, counter);
+                    resolve_blocks(&mut cell.content, counter, terms);
                 }
             }
         }
@@ -168,15 +173,15 @@ fn resolve_block(block: &mut Block, counter: &mut u32) {
             // First resolve any nested blocks in slots
             for (_name, slot) in &mut custom.slots {
                 match slot {
-                    Slot::Block(b) => resolve_block(b, counter),
-                    Slot::Blocks(bs) => resolve_blocks(bs, counter),
+                    Slot::Block(b) => resolve_block(b, counter, terms),
+                    Slot::Blocks(bs) => resolve_blocks(bs, counter, terms),
                     _ => {}
                 }
             }
 
             // Then check if this is a Callout that should be resolved
             if custom.type_name == "Callout" {
-                let resolved_div = resolve_callout(custom, counter);
+                let resolved_div = resolve_callout(custom, counter, terms);
                 *block = Block::Div(resolved_div);
             }
         }
@@ -190,7 +195,11 @@ fn resolve_block(block: &mut Block, counter: &mut u32) {
 ///
 /// `counter` is bumped by 1 whenever a collapsible callout consumes
 /// it for the `callout-N-contents` id.
-fn resolve_callout(custom: &mut CustomNode, counter: &mut u32) -> Div {
+fn resolve_callout(
+    custom: &mut CustomNode,
+    counter: &mut u32,
+    terms: Option<&LanguageTerms>,
+) -> Div {
     // Extract callout properties from plain_data. Appearance is
     // already normalized at CalloutTransform time (minimal → simple +
     // icon=false), so the resolver only sees `default` or `simple`.
@@ -247,7 +256,7 @@ fn resolve_callout(custom: &mut CustomNode, counter: &mut u32) -> Div {
         Some(t) if !t.is_empty() => (Some(t), true),
         _ if appearance == "default" => (
             Some(vec![Inline::Str(Str {
-                text: capitalize(&callout_type),
+                text: callout_display_name(&callout_type, terms),
                 source_info: SourceInfo::generated(By::callout()),
             })]),
             false,
@@ -269,7 +278,7 @@ fn resolve_callout(custom: &mut CustomNode, counter: &mut u32) -> Div {
                 Inline::Span(quarto_pandoc_types::inline::Span {
                     attr: make_attr(&["screen-reader-only"]),
                     content: vec![Inline::Str(Str {
-                        text: capitalize(&callout_type),
+                        text: callout_display_name(&callout_type, terms),
                         source_info: SourceInfo::generated(By::callout()),
                     })],
                     source_info: SourceInfo::generated(By::callout()),
@@ -569,6 +578,16 @@ fn extract_bool(value: &Value, key: &str) -> Option<bool> {
     value.get(key).and_then(|v| v.as_bool())
 }
 
+/// The display name for a callout type: the localized
+/// `callout-<type>-title` term when available (bd-llhlzd7p), else the
+/// capitalized type keyword (which is also how unknown/custom callout
+/// types are titled).
+fn callout_display_name(callout_type: &str, terms: Option<&LanguageTerms>) -> String {
+    terms
+        .and_then(|t| t.get(&format!("callout-{callout_type}-title")))
+        .map_or_else(|| capitalize(callout_type), |s| s.to_string())
+}
+
 /// Capitalize the first letter of a string.
 fn capitalize(s: &str) -> String {
     let mut chars = s.chars();
@@ -739,7 +758,7 @@ mod tests {
         custom.plain_data = json!({"type": "note"});
         // No title slot - should use default
 
-        let resolved = resolve_callout(&mut custom, &mut 1);
+        let resolved = resolve_callout(&mut custom, &mut 1, None);
 
         // Find the title container and check it has "Note"
         let header = &resolved.content[0];
@@ -766,7 +785,7 @@ mod tests {
         let mut custom = CustomNode::new("Callout", empty_attr(), dummy_source_info());
         custom.plain_data = json!({"type": "warning", "icon": false});
 
-        let resolved = resolve_callout(&mut custom, &mut 1);
+        let resolved = resolve_callout(&mut custom, &mut 1, None);
 
         // Q1-parity: header always contains an icon container; the
         // `no-icon` marker lives on the outer div + the inner `<i>`.
@@ -985,7 +1004,7 @@ mod tests {
             Some(vec![str_inline("Watch Out")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         let classes = outer_classes(&resolved);
         assert_has_class(&classes, "callout");
         assert_has_class(&classes, "callout-style-default");
@@ -1000,7 +1019,7 @@ mod tests {
     #[tokio::test]
     async fn test_canonical_default_no_title_injects_default() {
         let mut node = callout_node("tip", Some("default"), None, None, None, vec![para("Body")]);
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         let classes = outer_classes(&resolved);
         assert_has_class(&classes, "callout-style-default");
         assert_has_class(&classes, "callout-titled");
@@ -1014,7 +1033,7 @@ mod tests {
     #[tokio::test]
     async fn test_canonical_simple_no_title_stays_untitled() {
         let mut node = callout_node("note", Some("simple"), None, None, None, vec![para("Body")]);
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         let classes = outer_classes(&resolved);
         assert_has_class(&classes, "callout-style-simple");
         assert_no_class(&classes, "callout-titled");
@@ -1063,7 +1082,7 @@ mod tests {
             Some(vec![str_inline("Please Read")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         let classes = outer_classes(&resolved);
         assert_has_class(&classes, "callout-style-simple");
         assert_has_class(&classes, "callout-titled");
@@ -1084,7 +1103,7 @@ mod tests {
             None,
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         let classes = outer_classes(&resolved);
         assert_has_class(&classes, "callout-style-simple");
         assert_no_class(&classes, "callout-style-minimal");
@@ -1117,7 +1136,7 @@ mod tests {
             Some(vec![str_inline("Heads Up")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         assert_has_class(&outer_classes(&resolved), "no-icon");
         assert!(
             contains_class_anywhere(&resolved, "callout-icon-container"),
@@ -1141,7 +1160,7 @@ mod tests {
             Some(vec![str_inline("Heads Up")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         let raw_icon_html = collect_raw_html(&resolved);
         assert!(
             raw_icon_html.contains("callout-icon no-icon"),
@@ -1162,7 +1181,7 @@ mod tests {
             Some(vec![str_inline("Heads Up")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         let raw_icon_html = collect_raw_html(&resolved);
         assert!(
             raw_icon_html.contains("callout-icon"),
@@ -1209,7 +1228,7 @@ mod tests {
             Some(vec![str_inline("Heads Up")]),
             vec![],
         );
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         assert_has_class(&outer_classes(&resolved), "callout-empty-content");
     }
 
@@ -1223,7 +1242,7 @@ mod tests {
             Some(vec![str_inline("Title")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         let header = match &resolved.content[0] {
             Block::Div(d) => d,
             other => panic!("expected header Div, got {:?}", other),
@@ -1244,7 +1263,7 @@ mod tests {
             Some(vec![str_inline("T")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         // Expected structure: outer > [header, collapse-wrapper];
         // collapse-wrapper > body.
         assert_eq!(
@@ -1304,7 +1323,7 @@ mod tests {
             Some(vec![str_inline("T")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         let header = match &resolved.content[0] {
             Block::Div(d) => d,
             other => panic!("expected header Div, got {:?}", other),
@@ -1337,7 +1356,7 @@ mod tests {
                 Some(vec![str_inline("T")]),
                 vec![para("Body")],
             );
-            let resolved = resolve_callout(&mut node, &mut 1);
+            let resolved = resolve_callout(&mut node, &mut 1, None);
             let classes = outer_classes(&resolved);
             assert_no_class(&classes, "callout-appearance-default");
             assert_no_class(&classes, "callout-appearance-simple");
@@ -1356,7 +1375,7 @@ mod tests {
             vec![para("Body")],
         );
         node.attr.0 = "mywarn".to_string();
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         assert_eq!(
             resolved.attr.0, "mywarn",
             "user-supplied id must survive resolution"
@@ -1374,7 +1393,7 @@ mod tests {
                 Some(vec![str_inline("T")]),
                 vec![para("Body")],
             );
-            let resolved = resolve_callout(&mut node, &mut 1);
+            let resolved = resolve_callout(&mut node, &mut 1, None);
             assert_has_class(&outer_classes(&resolved), &format!("callout-{}", t));
         }
     }
@@ -1395,7 +1414,7 @@ mod tests {
             Some(vec![str_inline("Watch Out")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         let header = match &resolved.content[0] {
             Block::Div(d) => d,
             other => panic!("expected header Div, got {:?}", other),
@@ -1454,7 +1473,7 @@ mod tests {
             None, // no user title → default-inject "Tip"
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         let header = match &resolved.content[0] {
             Block::Div(d) => d,
             _ => panic!("expected header Div"),
@@ -1504,7 +1523,7 @@ mod tests {
             obj.insert("kind".into(), json!("Tip"));
             obj.insert("identifier".into(), json!("tip-foo"));
         }
-        let resolved = resolve_callout(&mut node, &mut 1);
+        let resolved = resolve_callout(&mut node, &mut 1, None);
         let header = match &resolved.content[0] {
             Block::Div(d) => d,
             _ => panic!("expected header Div"),

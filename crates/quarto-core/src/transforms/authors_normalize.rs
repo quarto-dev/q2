@@ -526,29 +526,40 @@ fn funding_source_to_config_value(source: &FundingSource) -> ConfigValue {
 
 /// Compute the title-block heading labels.
 ///
-/// Default English strings match Q1's `_language.yml` keys
+/// Precedence per label (bd-llhlzd7p, Q1 `computeLabels` parity):
+/// per-document `*-title` option > localized language term
 /// (`title-block-author-single`, `title-block-affiliation-plural`,
-/// `title-block-published`, …); the per-document `*-title` options
-/// override them.
+/// `title-block-published`, `section-title-abstract`, …) > English
+/// literal (the fallback when the `LanguageResolveStage` hasn't run,
+/// e.g. in direct unit tests). `doi` and `description` have no term key
+/// in the catalog — Q1 hardcodes them too.
 fn compute_labels(
     meta: &ConfigValue,
     author_count: usize,
     affiliation_count: usize,
 ) -> ConfigValue {
     let override_of = |key: &str| meta.get(key).and_then(|v| v.as_plain_text());
+    let terms = crate::language::LanguageTerms::from_meta(meta);
+    let term = |key: &str, fallback: &str| -> String {
+        terms
+            .as_ref()
+            .and_then(|t| t.get(key))
+            .unwrap_or(fallback)
+            .to_string()
+    };
 
     let authors_label = override_of("author-title").unwrap_or_else(|| {
         if author_count > 1 {
-            "Authors".to_string()
+            term("title-block-author-plural", "Authors")
         } else {
-            "Author".to_string()
+            term("title-block-author-single", "Author")
         }
     });
     let affiliations_label = override_of("affiliation-title").unwrap_or_else(|| {
         if affiliation_count > 1 {
-            "Affiliations".to_string()
+            term("title-block-affiliation-plural", "Affiliations")
         } else {
-            "Affiliation".to_string()
+            term("title-block-affiliation-single", "Affiliation")
         }
     });
     let entries = vec![
@@ -560,14 +571,16 @@ fn compute_labels(
         map_entry(
             "published",
             ConfigValue::new_string(
-                override_of("published-title").unwrap_or_else(|| "Published".to_string()),
+                override_of("published-title")
+                    .unwrap_or_else(|| term("title-block-published", "Published")),
                 gen_si(),
             ),
         ),
         map_entry(
             "modified",
             ConfigValue::new_string(
-                override_of("modified-title").unwrap_or_else(|| "Modified".to_string()),
+                override_of("modified-title")
+                    .unwrap_or_else(|| term("title-block-modified", "Modified")),
                 gen_si(),
             ),
         ),
@@ -581,7 +594,8 @@ fn compute_labels(
         map_entry(
             "abstract",
             ConfigValue::new_string(
-                override_of("abstract-title").unwrap_or_else(|| "Abstract".to_string()),
+                override_of("abstract-title")
+                    .unwrap_or_else(|| term("section-title-abstract", "Abstract")),
                 gen_si(),
             ),
         ),
@@ -594,7 +608,7 @@ fn compute_labels(
         ),
         map_entry(
             "keywords",
-            ConfigValue::new_string("Keywords".to_string(), gen_si()),
+            ConfigValue::new_string(term("title-block-keywords", "Keywords"), gen_si()),
         ),
     ];
     ConfigValue::new_map(entries, gen_si())

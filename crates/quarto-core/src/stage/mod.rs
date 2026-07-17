@@ -112,9 +112,9 @@ pub use stages::CodeHighlightStage;
 pub use stages::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CaptureSpliceStage,
     CompileThemeCssStage, DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage,
-    IncludeResolveStage, LinkResolutionStage, ListingItemInfoStage, MathJsStage,
-    MetadataMergeStage, ParseDocumentStage, PreEngineSugaringStage, RenderHtmlBodyStage,
-    ResourceReportStage, UnwrapProfileStage, UserFiltersStage,
+    IncludeResolveStage, LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage,
+    MathJsStage, MetadataMergeStage, ParseDocumentStage, PreEngineSugaringStage,
+    RenderHtmlBodyStage, ResourceReportStage, UnwrapProfileStage, UserFiltersStage,
 };
 
 // Re-export the trace_event macro
