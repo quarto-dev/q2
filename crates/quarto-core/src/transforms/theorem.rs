@@ -189,6 +189,13 @@ fn transform_block(
 
         let matched = class_match.or(id_match);
         if let Some((ref_type, kind)) = matched {
+            // Display name from the registry when available — its built-in
+            // kinds are localized by the pre-engine-sugaring stage
+            // (bd-llhlzd7p). The static table's English name is the
+            // registry-less fallback (direct unit tests).
+            let kind = registry
+                .and_then(|r| r.get(ref_type))
+                .map_or_else(|| kind.to_string(), |def| def.kind.clone());
             let converted = convert_div(
                 std::mem::replace(
                     div,
@@ -200,7 +207,7 @@ fn transform_block(
                     },
                 ),
                 ref_type,
-                kind,
+                &kind,
             );
             *block = Block::Custom(converted);
         }

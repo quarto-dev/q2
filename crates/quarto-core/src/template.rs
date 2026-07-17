@@ -224,12 +224,12 @@ $endif$
 $if(author)$
 <div class="quarto-title-meta">
 <div class="quarto-title-meta-author">
-<div class="quarto-title-meta-heading">Author</div>
+<div class="quarto-title-meta-heading">$labels.author$</div>
 <div class="quarto-title-meta-contents">$author$</div>
 </div>
 $if(date)$
 <div class="quarto-title-meta-date">
-<div class="quarto-title-meta-heading">Published</div>
+<div class="quarto-title-meta-heading">$labels.published$</div>
 <div class="quarto-title-meta-contents">$date$</div>
 </div>
 $endif$
@@ -237,7 +237,7 @@ $endif$
 $endif$
 $if(abstract)$
 <div class="abstract">
-<div class="abstract-title">Abstract</div>
+<div class="abstract-title">$labels.abstract$</div>
 $abstract$
 </div>
 $endif$
@@ -316,6 +316,9 @@ pub fn render_with_template(
     // Add body content
     ctx.insert("body", TemplateValue::String(body.to_string()));
 
+    // Localized title-block labels, then metadata (user `labels:` wins).
+    add_title_block_labels(meta, &mut ctx);
+
     // Convert and add metadata
     add_metadata_to_context(meta, &mut ctx);
 
@@ -361,6 +364,9 @@ pub fn render_with_compiled_template(
 ) -> Result<(String, Vec<DiagnosticMessage>)> {
     let mut ctx = TemplateContext::new();
     ctx.insert("body", TemplateValue::String(body.to_string()));
+
+    // Localized title-block labels, then metadata (user `labels:` wins).
+    add_title_block_labels(meta, &mut ctx);
 
     // Add metadata, excluding keys that are handled specially or shouldn't
     // leak into the template context as variables. The authored
@@ -584,6 +590,45 @@ pub fn compile_builtin_template_with_partials(
         source_context,
     )
     .map_err(|e| crate::error::QuartoError::other(e.to_string()))
+}
+
+/// Compute localized title-block labels (Q1 `computeLabels` parity,
+/// bd-llhlzd7p): `labels.author` picks the single/plural term by author
+/// count; `labels.published` / `labels.abstract` come from the resolved
+/// term table (`quarto.language` metadata). English defaults apply when the
+/// `LanguageResolveStage` hasn't run (direct template unit tests).
+///
+/// Inserted *before* the metadata walk so a user-supplied `labels:`
+/// metadata key overrides the computed values.
+fn add_title_block_labels(meta: &ConfigValue, ctx: &mut TemplateContext) {
+    let terms = crate::language::LanguageTerms::from_meta(meta);
+    let term = |key: &str, fallback: &str| -> String {
+        terms
+            .as_ref()
+            .and_then(|t| t.get(key))
+            .unwrap_or(fallback)
+            .to_string()
+    };
+    let plural_authors = matches!(
+        meta.get("author").map(|a| &a.value),
+        Some(ConfigValueKind::Array(items)) if items.len() > 1
+    );
+    let author_label = if plural_authors {
+        term("title-block-author-plural", "Authors")
+    } else {
+        term("title-block-author-single", "Author")
+    };
+    let mut labels = std::collections::HashMap::new();
+    labels.insert("author".to_string(), TemplateValue::String(author_label));
+    labels.insert(
+        "published".to_string(),
+        TemplateValue::String(term("title-block-published", "Published")),
+    );
+    labels.insert(
+        "abstract".to_string(),
+        TemplateValue::String(term("section-title-abstract", "Abstract")),
+    );
+    ctx.insert("labels", TemplateValue::Map(labels));
 }
 
 /// Add metadata from the Pandoc AST to the template context, excluding specific keys.

@@ -376,6 +376,15 @@ pub fn render_revealjs_document(
         .get("title")
         .and_then(|v| v.as_plain_text())
         .unwrap_or_default();
+    // Document language for `<html lang>`; previously hardcoded "en"
+    // (bd-llhlzd7p). Falls back to "en" when unset, matching the html
+    // template's default-less behavior for reveal (the scaffold always
+    // emits the attribute).
+    let lang = meta
+        .get("lang")
+        .and_then(|v| v.as_plain_text())
+        .unwrap_or_else(|| "en".to_string());
+    let lang = attr_escape(&lang);
     let config = reveal_config_json(meta);
 
     // Deck-level footer/logo live OUTSIDE `.slides` (see `footer_logo_html`).
@@ -405,7 +414,7 @@ pub fn render_revealjs_document(
 
     format!(
         r#"<!DOCTYPE html>
-<html lang="en">
+<html lang="{lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">

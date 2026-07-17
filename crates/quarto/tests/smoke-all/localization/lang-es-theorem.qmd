@@ -1,0 +1,22 @@
+---
+title: Teoremas
+lang: es
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["Teorema.1", "Demostración."]
+        - ["Theorem.1", ">Proof."]
+---
+
+::: {#thm-pit .theorem}
+## Pitágoras
+
+Un enunciado.
+:::
+
+::: {.proof}
+Se deja como ejercicio.
+:::

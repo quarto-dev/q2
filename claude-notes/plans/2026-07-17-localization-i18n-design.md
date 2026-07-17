@@ -299,13 +299,38 @@ Phase 3 notes:
   `tests/integration/language_pipeline.rs`.
 
 ### Phase 4 — consumers
-- [ ] Callout titles (TDD: es/fr render tests first).
-- [ ] Crossref/theorem registry seeding + theorem-table dedupe.
-- [ ] TOC title.
-- [ ] Title-block template variables (author single/plural flag).
-- [ ] Revealjs `lang` fix.
+- [x] Callout titles (TDD: es/fr render tests first).
+- [x] Crossref/theorem registry seeding + theorem-table dedupe.
+- [x] TOC title.
+- [x] Title-block template variables (author single/plural flag).
+- [x] Revealjs `lang` fix.
 - [ ] Full-workspace verify (`cargo xtask verify` — WASM leg affected:
-      quarto-core changes).
+      quarto-core changes). *(Deferred to session end, before push.)*
+
+Phase 4 notes:
+- 7 smoke-all fixtures in `crates/quarto/tests/smoke-all/localization/`
+  (written first, all failing on exactly the localized strings, then green).
+- Crossref: `RefTypeRegistry::localize_builtin_display_names` runs in
+  `PreEngineSugaringStage` *before* `extend_from_metadata`, so
+  `crossref.custom` display names win over locale defaults. Reference text
+  additionally prefers `crossref-<type>-prefix` (Q1 prefix→title fallback)
+  at render time; captions use the localized `kind`. Proof labels use
+  `environment-proof-title`.
+- Theorem sugar now takes its display name from the registry (localized),
+  keeping `THEOREM_CLASSES`' English column only as the registry-less
+  test fallback — the duplicate display-name table is effectively gone.
+- Title block: `labels.{author,published,abstract}` computed in Rust
+  (author single/plural by author count, Q1 `computeLabels` parity),
+  inserted before the metadata walk so a user `labels:` key wins.
+- End-to-end record (policy §3): `cargo run --bin q2 -- render completo.qmd`
+  (es doc with toc/title-block/table+ref/theorem/proof/callout) — output
+  inspected: `<html lang="es">`, "Tabla de contenidos", "Autor/a",
+  "Fecha de publicación", "Resumen", "Tabla 1: Una tabla", "Teorema 1
+  (Pitágoras)", "Demostración.", "Advertencia". Revealjs scaffold verified
+  via `render_to_file` integration test (`lang="es"` / default `"en"`).
+- Discovered (filed): bd-51k5yz4e — caption-form pipe tables
+  (`: Caption {#tbl-N}`) never get a numbered caption prefix (pre-existing,
+  language-independent; related bd-uwv2eec2).
 
 ### Phase 5 — docs & closeout
 - [ ] `docs/authoring/language.qmd`; schema entries for `lang`/`language`.

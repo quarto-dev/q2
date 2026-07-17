@@ -1,0 +1,18 @@
+---
+title: Bloque de título
+author: Ana García
+date: 2026-01-15
+abstract: |
+  Un resumen breve.
+lang: es
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["<html lang=\"es\"", "Autor/a<", "Fecha de publicación", ">Resumen<"]
+        - [">Author<", ">Published<", ">Abstract<"]
+---
+
+Contenido.
