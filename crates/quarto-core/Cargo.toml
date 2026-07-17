@@ -61,6 +61,14 @@ quarto-highlight.workspace = true
 # follow-up bd-754f review may replace it with a Q2-native scheme.
 base64.workspace = true
 
+# Compile-time embedding of `resources/language/` term files (bd-llhlzd7p).
+# Deliberately NOT in the native-only section below: localization must work
+# in the WASM preview pipeline too (LanguageResolveStage runs there), so the
+# ~150KB of term YAML is embedded on both targets. The other in-tree
+# `include_dir!` uses (knitr resources, builtin extensions) remain
+# native-gated at their use sites.
+include_dir = "0.7"
+
 # Optional clap dep so types exposed to the CLI (e.g. `AttributionMode`)
 # can carry `ValueEnum` derives without forcing clap into the WASM tree
 # or other non-CLI consumers. The `quarto` crate enables this via
@@ -73,7 +81,6 @@ clap = ["dep:clap"]
 # Native-only dependencies (for execution engines and resource extraction)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tempfile = "3"
-include_dir = "0.7"
 which = "8"
 regex = "1.12"
 # `scraper` (CSS-selector HTML reader) for the L7 post-render upgrade
