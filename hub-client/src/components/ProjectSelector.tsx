@@ -103,6 +103,17 @@ export default function ProjectSelector({
   const [projectChoices, setProjectChoices] = useState<ProjectChoice[]>([]);
   const [loadingChoices, setLoadingChoices] = useState(false);
 
+  // Sync Server URL field shared by Create + Import (new-project forms, as
+  // opposed to Connect's join-an-existing-project form above). Editable, but
+  // must default to empty when not connected to a hub: a non-empty default
+  // silently turns local creation into a hub-creation attempt with no
+  // session, which createNewProject's resolveActorId callback doesn't abort
+  // on (client.ts) — the project gets created and wired to a real WS
+  // adapter, then immediately torn down by the auth-loss-teardown effect.
+  // Reset on each form open so it tracks projectSetSyncServer if it changes
+  // mid-session (e.g. the user connects to a hub between opens).
+  const [newProjectSyncServer, setNewProjectSyncServer] = useState(() => projectSetSyncServer ?? '');
+
   // Import-from-ZIP form state
   const [importTitle, setImportTitle] = useState('');
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -368,7 +379,7 @@ export default function ProjectSelector({
     }
 
     // Empty targets local-only creation; otherwise a hub sync server.
-    const createTargetServer = syncServer.trim();
+    const createTargetServer = newProjectSyncServer.trim();
 
     setIsCreating(true);
 
@@ -445,7 +456,7 @@ export default function ProjectSelector({
     }
 
     // Empty targets local-only creation; otherwise a hub sync server.
-    const importTargetServer = syncServer.trim();
+    const importTargetServer = newProjectSyncServer.trim();
 
     setIsImporting(true);
 
@@ -675,7 +686,7 @@ export default function ProjectSelector({
           <div className="action-buttons">
             <button
               className="action-btn create-btn"
-              onClick={() => { setShowCreateForm(true); setShowConnectForm(false); setShowImportForm(false); }}
+              onClick={() => { setNewProjectSyncServer(projectSetSyncServer ?? ''); setShowCreateForm(true); setShowConnectForm(false); setShowImportForm(false); }}
             >
               <span className="action-btn-text">
                 <span className="action-btn-title">
@@ -699,7 +710,7 @@ export default function ProjectSelector({
             </button>
             <button
               className="action-btn import-btn"
-              onClick={() => { setShowImportForm(true); setShowCreateForm(false); setShowConnectForm(false); }}
+              onClick={() => { setNewProjectSyncServer(projectSetSyncServer ?? ''); setShowImportForm(true); setShowCreateForm(false); setShowConnectForm(false); }}
             >
               <span className="action-btn-text">
                 <span className="action-btn-title">
@@ -753,8 +764,8 @@ export default function ProjectSelector({
               <input
                 id="createSyncServer"
                 type="text"
-                value={syncServer}
-                onChange={(e) => setSyncServer(e.target.value)}
+                value={newProjectSyncServer}
+                onChange={(e) => setNewProjectSyncServer(e.target.value)}
                 placeholder="wss://sync.automerge.org"
               />
             </div>
@@ -800,8 +811,8 @@ export default function ProjectSelector({
               <input
                 id="importSyncServer"
                 type="text"
-                value={syncServer}
-                onChange={(e) => setSyncServer(e.target.value)}
+                value={newProjectSyncServer}
+                onChange={(e) => setNewProjectSyncServer(e.target.value)}
                 placeholder="wss://sync.automerge.org"
               />
             </div>

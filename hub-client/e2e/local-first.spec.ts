@@ -3,13 +3,20 @@
  *
  * Verifies the headline of the connection-gated local-first work through a
  * real browser: with no IdP configured, the SPA opens straight into a usable
- * project selector (no login gate), a project can be created fully locally
- * (sync server field cleared), and it persists across a reload. The
- * account-level control offers "Connect to a hub" rather than gating the
- * whole app. The Create form's Sync Server URL field is editable and
- * defaults to DEFAULT_SYNC_SERVER (restored per bd-u4p8xhdc follow-up) — this
- * test clears it explicitly so project creation stays offline instead of
- * contacting the real wss://sync.automerge.org configured via `.env`.
+ * project selector (no login gate), a project can be created fully locally,
+ * and it persists across a reload. The account-level control offers
+ * "Connect to a hub" rather than gating the whole app.
+ *
+ * The Create form's Sync Server URL field is editable (restored per
+ * bd-u4p8xhdc follow-up bd-ivkf752c) but MUST default to empty when not
+ * connected to a hub — this test asserts that default rather than clearing
+ * the field, because a non-empty default is exactly the regression that
+ * shipped once already (bd-ivkf752c follow-up): it silently turns local
+ * creation into a hub-creation attempt with no session, which
+ * createNewProject's resolveActorId callback doesn't abort on, so the
+ * project gets created and wired to a real WS adapter, then immediately
+ * torn down by App.tsx's auth-loss-teardown effect — a "flash" of the
+ * editor before bouncing back to the selector.
  *
  * The hub-connect leg (sign in, open/create a hub project) requires a live
  * OIDC provider and is verified manually — see the plan's A7v1 notes.
@@ -44,11 +51,12 @@ test.describe('Local-first (connection-gated auth)', () => {
     await expect(typeSelect).toBeVisible();
     await typeSelect.selectOption({ index: 0 });
 
-    // The create form's Sync Server URL field is editable; clear it so the
-    // project is created local-only instead of targeting a real server.
+    // The create form's Sync Server URL field is editable, but must default
+    // to empty (local) since we're not connected to a hub — left untouched
+    // here so this test guards the default, not just the override.
     const syncServerInput = page.getByLabel(/sync server url/i);
     await expect(syncServerInput).toBeVisible();
-    await syncServerInput.fill('');
+    await expect(syncServerInput).toHaveValue('');
 
     const title = `Local Project ${Date.now()}`;
     await page.locator('#projectTitle').fill(title);

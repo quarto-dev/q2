@@ -128,13 +128,32 @@ follow-on**: `2026-07-06-hub-client-local-project-adoption.md`.
 - **Sync Server URL field restored to Create/Import** (user request,
   bd-ivkf752c, discovered-from bd-u4p8xhdc). A4 removed the field entirely,
   defaulting silently to `projectSetSyncServer ?? ''`. Reverted: the field is
-  back in both forms, defaulting to `DEFAULT_SYNC_SERVER` (same as the
-  Connect form / pre-A4 behavior) and editable; clearing it still creates a
-  local-only project (`isLocal = !syncServer` in `App.tsx` is unchanged).
-  Tests: `ProjectSelector.create.test.tsx` (new), `ProjectSelector.import.test.tsx`,
-  `ProjectSelector.connect.test.tsx` (updated); `e2e/local-first.spec.ts`
-  updated to clear the field explicitly so the offline-creation test doesn't
-  target the real `wss://sync.automerge.org` from `.env`.
+  back in both forms and editable. Tests: `ProjectSelector.create.test.tsx`
+  (new), `ProjectSelector.import.test.tsx`, `ProjectSelector.connect.test.tsx`
+  (updated); `e2e/local-first.spec.ts` updated.
+
+- **Regression: unconditional `DEFAULT_SYNC_SERVER` default broke local
+  creation** (interactive testing, follow-up to bd-ivkf752c). The field
+  restoration above initially defaulted to `DEFAULT_SYNC_SERVER`
+  unconditionally (matching the Connect form). That silently turned local
+  creation into a hub-creation attempt whenever the user didn't clear the
+  field: `isLocal = !syncServer` in `App.tsx` saw a non-empty value and took
+  the hub path; `createNewProject`'s `resolveActorId` callback got a 401 (no
+  session) but `client.ts:1568-1571` swallows that (`?? undefined`) instead
+  of aborting, so the project was created anyway, wired to a real WS
+  adapter — then immediately torn down by the auth-loss-teardown effect
+  (`App.tsx:480-489`, correctly acting on the now-truthy `syncServer`). User-
+  visible symptom: a flash of the editor on create *or* on reopening that
+  project, then bounced back to the selector. Fix: the field now defaults to
+  `projectSetSyncServer ?? ''` (empty/local when not connected to a hub, the
+  connected hub's server when connected) via new state
+  `newProjectSyncServer`, reset on each Create/Import form open — separate
+  from the Connect form's own `syncServer` state, which legitimately keeps
+  defaulting to `DEFAULT_SYNC_SERVER` (joining an existing project always
+  needs a real server). Tests updated in the same three files plus
+  `e2e/local-first.spec.ts`, which now asserts the empty default directly
+  instead of force-clearing the field — the prior version of that test
+  masked exactly this regression.
 
 ## Non-goals
 - **v1 does not publish an existing local project up to a hub** — that is the adoption follow-on plan (`2026-07-06-hub-client-local-project-adoption.md`), deferred behind D1 (`bd-10bdjmjb`).

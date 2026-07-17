@@ -1,10 +1,16 @@
 /**
  * Tests for the "Create New Project" form's Sync Server URL field.
  *
- * The field defaults to DEFAULT_SYNC_SERVER (matching the Connect form) and
- * is editable — restored after a brief removal during the local-first epic
- * (bd-u4p8xhdc); see claude-notes/plans/2026-07-06-hub-client-connection-gated-local-first.md.
- * Clearing the field still creates a local-only project (empty syncServer).
+ * The field is editable, but its *default* value must track whether the app
+ * is currently connected to a hub: empty (local) when disconnected, the
+ * connected hub's server when connected. Defaulting unconditionally to
+ * DEFAULT_SYNC_SERVER (a prior version of this field) silently turned local
+ * creation into a hub creation attempt with no session — createNewProject's
+ * resolveActorId callback swallows the resulting 401 (client.ts:1568-1571)
+ * instead of aborting, so the project was created anyway, wired to a real
+ * WS adapter, and then immediately torn down by App.tsx's auth-loss-teardown
+ * effect (a "flash" of the editor before bouncing back to the selector).
+ * See claude-notes/plans/2026-07-06-hub-client-connection-gated-local-first.md.
  *
  * @vitest-environment jsdom
  */
@@ -39,12 +45,16 @@ vi.mock('./ThemeContext', () => ({
 
 import ProjectSelector from './ProjectSelector';
 
-function renderSelector(onProjectCreated = vi.fn()) {
+function renderSelector(
+  onProjectCreated = vi.fn(),
+  props: Partial<React.ComponentProps<typeof ProjectSelector>> = {},
+) {
   render(
     <ProjectSelector
       onSelectProject={vi.fn()}
       onProjectCreated={onProjectCreated}
       projectSetEntries={[]}
+      {...props}
     />,
   );
   return { onProjectCreated };
@@ -61,15 +71,38 @@ describe('ProjectSelector — Create New Project sync server field', () => {
     });
   });
 
-  it('shows a Sync Server URL field defaulting to DEFAULT_SYNC_SERVER', async () => {
+  it('defaults to empty (local) when not connected to a hub', async () => {
     renderSelector();
     fireEvent.click(await screen.findByRole('button', { name: /create new project/i }));
 
     const input = (await screen.findByLabelText(/sync server url/i)) as HTMLInputElement;
-    expect(input.value).toBe('wss://sync.automerge.org');
+    expect(input.value).toBe('');
   });
 
-  it('is editable and the edited value flows to onProjectCreated', async () => {
+  it('defaults to the connected hub server when a project set is connected', async () => {
+    renderSelector(vi.fn(), { projectSetSyncServer: 'wss://hub.example.com/ws' });
+    fireEvent.click(await screen.findByRole('button', { name: /create new project/i }));
+
+    const input = (await screen.findByLabelText(/sync server url/i)) as HTMLInputElement;
+    expect(input.value).toBe('wss://hub.example.com/ws');
+  });
+
+  it('leaving the field empty (not connected to a hub) creates a local-only project', async () => {
+    const { onProjectCreated } = renderSelector();
+    fireEvent.click(await screen.findByRole('button', { name: /create new project/i }));
+
+    await screen.findByLabelText(/project type/i);
+    fireEvent.change(screen.getByLabelText('Project Title'), {
+      target: { value: 'Local Project' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^create project$/i }));
+
+    await waitFor(() => expect(onProjectCreated).toHaveBeenCalledTimes(1));
+    const [, , , syncServer] = onProjectCreated.mock.calls[0];
+    expect(syncServer).toBe('');
+  });
+
+  it('is editable — a typed value overrides the default and flows to onProjectCreated', async () => {
     const { onProjectCreated } = renderSelector();
     fireEvent.click(await screen.findByRole('button', { name: /create new project/i }));
 
@@ -85,21 +118,5 @@ describe('ProjectSelector — Create New Project sync server field', () => {
     await waitFor(() => expect(onProjectCreated).toHaveBeenCalledTimes(1));
     const [, , , syncServer] = onProjectCreated.mock.calls[0];
     expect(syncServer).toBe('wss://my-hub.example.com/ws');
-  });
-
-  it('clearing the field still creates a local-only project (empty syncServer)', async () => {
-    const { onProjectCreated } = renderSelector();
-    fireEvent.click(await screen.findByRole('button', { name: /create new project/i }));
-
-    await screen.findByLabelText(/project type/i);
-    fireEvent.change(screen.getByLabelText(/sync server url/i), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('Project Title'), {
-      target: { value: 'Local Project' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^create project$/i }));
-
-    await waitFor(() => expect(onProjectCreated).toHaveBeenCalledTimes(1));
-    const [, , , syncServer] = onProjectCreated.mock.calls[0];
-    expect(syncServer).toBe('');
   });
 });

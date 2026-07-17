@@ -132,16 +132,17 @@ describe('ProjectSelector — Import from ZIP', () => {
     expect(passedBytes).toBeInstanceOf(Uint8Array);
     expect(Array.from(passedBytes)).toEqual(Array.from(ZIP_BYTES));
 
-    // The parsed files + form values flow to the create callback, including
-    // the (editable) Sync Server URL field's current value.
+    // The parsed files + form values flow to the create callback. Not
+    // connected to a hub, so the (editable) Sync Server URL field defaults
+    // to empty — a local-only import.
     const [files, title, projectType, syncServer] = onProjectCreated.mock.calls[0];
     expect(files).toEqual(parsed);
     expect(title).toBe('My Project');
     expect(projectType).toBe('imported');
-    expect(syncServer).toBe('wss://sync.automerge.org');
+    expect(syncServer).toBe('');
   });
 
-  it('lets the sync server field be edited, including cleared for a local-only import', async () => {
+  it('lets the sync server field be edited to target a hub', async () => {
     const parsed = [{ path: 'index.qmd', content_type: 'text', content: '# Hi' }];
     importMock.mockReturnValue(parsed);
 
@@ -149,15 +150,15 @@ describe('ProjectSelector — Import from ZIP', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Import from ZIP/i }));
 
     const syncServerInput = screen.getByLabelText(/sync server url/i) as HTMLInputElement;
-    expect(syncServerInput.value).toBe('wss://sync.automerge.org');
-    fireEvent.change(syncServerInput, { target: { value: '' } });
+    expect(syncServerInput.value).toBe('');
+    fireEvent.change(syncServerInput, { target: { value: 'wss://my-hub.example.com/ws' } });
 
     setInputFiles(screen.getByLabelText('ZIP File'), [zipFile('My Project.zip')]);
     fireEvent.click(screen.getByRole('button', { name: /Import Project/i }));
 
     await waitFor(() => expect(onProjectCreated).toHaveBeenCalledTimes(1));
     const [, , , syncServer] = onProjectCreated.mock.calls[0];
-    expect(syncServer).toBe('');
+    expect(syncServer).toBe('wss://my-hub.example.com/ws');
   });
 
   it('surfaces a parse error and does not create a project', async () => {
