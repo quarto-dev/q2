@@ -68,6 +68,23 @@ export class PeerUnavailableError extends Error {
 }
 
 /**
+ * Actor resolution reported an auth failure (`resolveActorId` → null)
+ * during project creation. Per the three-valued contract (string /
+ * undefined / null), null must ABANDON the operation — creating a
+ * hub-wired project with no session produces a doc the app immediately
+ * tears down. Callers catch this to prompt sign-in.
+ */
+export class ActorAuthRequiredError extends Error {
+  override readonly name = 'ActorAuthRequiredError';
+  constructor(indexDocId: string) {
+    super(
+      `actor resolution returned null (auth required) for ${indexDocId}; ` +
+        'aborting project creation',
+    );
+  }
+}
+
+/**
  * Normalize a document id from the index into the `automerge:<id>`
  * URL form that `repo.find()` requires (bd-4uvv). `String(...)`
  * coerces first because automerge's read proxy can return
@@ -1565,9 +1582,19 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const indexUrl = generateAutomergeUrl();
       const { documentId: indexDocId } = parseAutomergeUrl(indexUrl);
 
-      const resolvedActorId = resolveActorId
-        ? (await resolveActorId(indexDocId)) ?? undefined
-        : actorId;
+      let resolvedActorId: string | undefined;
+      if (resolveActorId) {
+        const resolved = await resolveActorId(indexDocId);
+        // null = auth failure → abort (three-valued contract); undefined =
+        // auth disabled → proceed with no actor.
+        if (resolved === null) {
+          await disconnect();
+          throw new ActorAuthRequiredError(indexDocId);
+        }
+        resolvedActorId = resolved;
+      } else {
+        resolvedActorId = actorId;
+      }
       state.actorId = resolvedActorId ?? null;
 
       // Phase 2: Create the index document via createDoc with the

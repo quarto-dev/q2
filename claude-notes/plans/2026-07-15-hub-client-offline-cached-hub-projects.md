@@ -231,6 +231,43 @@ returns rather than once.
     Network → Offline, reload (opens from cache, editable), edit, go back
     online, confirm the edit reaches the hub and authorship shows one author.
 
+## Follow-up fixes (post-B5)
+
+- **State-based auth teardown killed every logged-off hub open** (interactive
+  testing, 2026-07-17). B1 opens a cached hub project logged-off under the
+  local actor — but App.tsx's auth-loss teardown was *state*-based
+  (`AUTH_ENABLED && !auth && project?.syncServer` → disconnect), so the
+  project unmounted on the very next render: a flash of the editor, then the
+  selector. Symptoms reported: clicking any hub project while signed out
+  flashed and bounced; same after sign-out. None of B1's tests caught it —
+  they cover the `openActor` seam and the sync client, and the E2E harness
+  builds with auth disabled, so the App-level effect interplay was never
+  exercised. Fix: teardown is now *transition*-based via
+  `shouldTeardownOnAuthChange` (`src/services/authTeardown.ts`, extracted +
+  unit-tested): it fires only on a genuine loss (`hadAuth && !hasAuth`,
+  tracked with a ref), still only for hub-backed projects. Sign-out with a
+  doc open still returns to the selector (deliberate transition), but
+  reopening from the selector now works offline per B1.
+
+- **Hub create without a session silently created-then-flashed.** The same
+  interactive round found `createNewProject`'s `resolveActorId` callback
+  swallowed `null` (`?? undefined`, violating the documented three-valued
+  contract), so creating a project targeting a hub while logged off created
+  the docs anyway, wired to a live WS adapter — then the (then state-based)
+  teardown killed it. Fix in `quarto-sync-client`: `null` now aborts creation
+  with a typed `ActorAuthRequiredError` before any document exists
+  (`client.actor-auth.test.ts` pins the three-valued contract); App catches
+  it and prompts sign-in ("Sign in to create a project on this hub."). Also
+  fixed while wiring: a consumed `showLogin` is reset on successful sign-in,
+  so a later sign-out lands on the selector, not a stale LoginScreen.
+
+- **Open UX question (filed, not done):** should sign-out with a cached hub
+  project open keep the project open (reverse-switch to the local actor in
+  place, the mirror of B3) instead of returning to the selector? The B5
+  manual recipe ("sign out … edit … sign back in") leans yes; current
+  behavior (teardown on genuine sign-out, reopen from selector works) is the
+  conservative v1.
+
 ## Interaction with the shipped v1
 
 - **Supersedes** the interim prompt-sign-in behavior for *cached* hub projects

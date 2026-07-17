@@ -32,7 +32,7 @@ import {
   type EditorContentChange,
 } from '@quarto/preview-runtime';
 import type { ProjectFile } from '@quarto/preview-runtime';
-import { isDocCached } from '@quarto/quarto-sync-client';
+import { isDocCached, ActorAuthRequiredError } from '@quarto/quarto-sync-client';
 import * as projectStorage from './services/projectStorage';
 import { installDebugApi } from './services/debugApi';
 import { getUserIdentity, updateUserName, getOrCreateLocalActor } from './services/userSettings';
@@ -43,6 +43,7 @@ import { useAuthProbe } from './hooks/useAuthProbe';
 import { useExecutionChannel } from './hooks/useExecutionChannel';
 import { resolveActorId as resolveActorIdRequest } from './services/authService';
 import { resolveActorForOpen as resolveActorForOpenImpl } from './services/openActor';
+import { shouldTeardownOnAuthChange } from './services/authTeardown';
 import type { Route, ShareRoute, LinkProjectSetRoute } from './utils/routing';
 import { resolveSyncServerUrl } from './utils/routing';
 import './App.css';
@@ -116,6 +117,12 @@ function App() {
   // Signing in is triggered only when the user chooses to connect to a hub;
   // `showLogin` renders the sign-in screen as an opt-in overlay.
   const [showLogin, setShowLogin] = useState<boolean>(false);
+
+  // A successful sign-in consumes the request; without this reset a stale
+  // `showLogin` re-gates the app into the LoginScreen on the next sign-out.
+  useEffect(() => {
+    if (auth) setShowLogin(false);
+  }, [auth]);
 
   // bd-sfet3264 (Phase 2D + Phase 4b): track which q2 executors are online for
   // the connected project (via the index-handle capability beacon) and expose
@@ -473,18 +480,29 @@ function App() {
     loadFromUrl();
   }, [route, navigateToProjectSelector, navigateToProject, navigateToFile]);
 
-  // Disconnect sync when auth is lost (token expired or user logged out) —
-  // but ONLY for a hub-backed project (one with a sync server). A local
-  // project has no server and no auth dependency, so an auth-loss event must
-  // never tear it down (bd-u4p8xhdc).
+  // Disconnect sync when auth is LOST (token expired or user logged out) —
+  // a transition from signed-in to signed-out, not the mere state of being
+  // signed out with a hub project open. A cached hub project deliberately
+  // opens logged-off under the local actor (B1, bd-qklxdkwh) and must stay
+  // open; a local project (no sync server) is never torn down (bd-u4p8xhdc).
+  const hadAuthRef = useRef(!!auth);
   useEffect(() => {
-    if (AUTH_ENABLED && !auth && !authLoading && project?.syncServer) {
+    const hadAuth = hadAuthRef.current;
+    hadAuthRef.current = !!auth;
+    if (
+      shouldTeardownOnAuthChange({
+        authEnabled: AUTH_ENABLED,
+        hadAuth,
+        hasAuth: !!auth,
+        authLoading,
+        projectSyncServer: project?.syncServer,
+      })
+    ) {
       disconnect();
       setProject(null);
       setFiles([]);
       setFileContents(new Map());
       setConnectionError(null);
-
     }
   }, [auth, authLoading, project]);
 
@@ -672,6 +690,14 @@ function App() {
       // Update URL to reflect the new project
       navigateToProject(projectEntry.id, { replace: true });
     } catch (err) {
+      // Creating on a hub needs a session: the sync client aborts (before
+      // any document exists) when the actor resolves to null — prompt
+      // sign-in instead of surfacing a raw error.
+      if (err instanceof ActorAuthRequiredError) {
+        setConnectionError('Sign in to create a project on this hub.');
+        setShowLogin(true);
+        return;
+      }
       setConnectionError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsConnecting(false);
