@@ -4,8 +4,12 @@
  * Verifies the headline of the connection-gated local-first work through a
  * real browser: with no IdP configured, the SPA opens straight into a usable
  * project selector (no login gate), a project can be created fully locally
- * (no sync server), and it persists across a reload. The account-level
- * control offers "Connect to a hub" rather than gating the whole app.
+ * (sync server field cleared), and it persists across a reload. The
+ * account-level control offers "Connect to a hub" rather than gating the
+ * whole app. The Create form's Sync Server URL field is editable and
+ * defaults to DEFAULT_SYNC_SERVER (restored per bd-u4p8xhdc follow-up) — this
+ * test clears it explicitly so project creation stays offline instead of
+ * contacting the real wss://sync.automerge.org configured via `.env`.
  *
  * The hub-connect leg (sign in, open/create a hub project) requires a live
  * OIDC provider and is verified manually — see the plan's A7v1 notes.
@@ -40,8 +44,11 @@ test.describe('Local-first (connection-gated auth)', () => {
     await expect(typeSelect).toBeVisible();
     await typeSelect.selectOption({ index: 0 });
 
-    // The create form must not ask for a sync server — Create is local.
-    await expect(page.getByLabel(/sync server url/i)).toHaveCount(0);
+    // The create form's Sync Server URL field is editable; clear it so the
+    // project is created local-only instead of targeting a real server.
+    const syncServerInput = page.getByLabel(/sync server url/i);
+    await expect(syncServerInput).toBeVisible();
+    await syncServerInput.fill('');
 
     const title = `Local Project ${Date.now()}`;
     await page.locator('#projectTitle').fill(title);

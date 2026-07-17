@@ -125,6 +125,17 @@ follow-on**: `2026-07-06-hub-client-local-project-adoption.md`.
   cached hub project while logged off is intentionally NOT done here — that is
   offline-durability / D1 territory.)*
 
+- **Sync Server URL field restored to Create/Import** (user request,
+  bd-ivkf752c, discovered-from bd-u4p8xhdc). A4 removed the field entirely,
+  defaulting silently to `projectSetSyncServer ?? ''`. Reverted: the field is
+  back in both forms, defaulting to `DEFAULT_SYNC_SERVER` (same as the
+  Connect form / pre-A4 behavior) and editable; clearing it still creates a
+  local-only project (`isLocal = !syncServer` in `App.tsx` is unchanged).
+  Tests: `ProjectSelector.create.test.tsx` (new), `ProjectSelector.import.test.tsx`,
+  `ProjectSelector.connect.test.tsx` (updated); `e2e/local-first.spec.ts`
+  updated to clear the field explicitly so the offline-creation test doesn't
+  target the real `wss://sync.automerge.org` from `.env`.
+
 ## Non-goals
 - **v1 does not publish an existing local project up to a hub** — that is the adoption follow-on plan (`2026-07-06-hub-client-local-project-adoption.md`), deferred behind D1 (`bd-10bdjmjb`).
 - Does **not** change server-side auth enforcement; an auth-required hub still 401s unauthenticated connections.

@@ -4,8 +4,8 @@
  * The account-level control shows "Connect to a hub" when disconnected
  * (triggering sign-in) and the signed-in identity + Sign out when connected.
  * It is deliberately separate from the per-project "Connect to Project"
- * (join-by-doc-id) action. The create form no longer asks for a sync server —
- * Create defaults to local.
+ * (join-by-doc-id) action. The Create/Import forms' Sync Server URL field is
+ * covered in ProjectSelector.create.test.tsx / ProjectSelector.import.test.tsx.
  *
  * @vitest-environment jsdom
  */
@@ -82,11 +82,5 @@ describe('ProjectSelector hub-connection header control', () => {
     expect(onSignOut).toHaveBeenCalledTimes(1);
     // The disconnected affordance is gone.
     expect(screen.queryByRole('button', { name: /^connect to a hub$/i })).toBeNull();
-  });
-
-  it('the create form no longer asks for a sync server (local default)', () => {
-    render(<ProjectSelector {...baseProps} isHubConnected={false} onConnectToHub={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: /create new project/i }));
-    expect(screen.queryByLabelText(/sync server url/i)).toBeNull();
   });
 });

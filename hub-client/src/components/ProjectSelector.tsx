@@ -367,9 +367,8 @@ export default function ProjectSelector({
       return;
     }
 
-    // Create targets the active project set: a hub server when connected to
-    // one, otherwise local-only (empty string) — the local-first default.
-    const createTargetServer = projectSetSyncServer ?? '';
+    // Empty targets local-only creation; otherwise a hub sync server.
+    const createTargetServer = syncServer.trim();
 
     setIsCreating(true);
 
@@ -445,9 +444,8 @@ export default function ProjectSelector({
       return;
     }
 
-    // Import targets the active project set (hub server when connected,
-    // otherwise local-only — the local-first default).
-    const importTargetServer = projectSetSyncServer ?? '';
+    // Empty targets local-only creation; otherwise a hub sync server.
+    const importTargetServer = syncServer.trim();
 
     setIsImporting(true);
 
@@ -750,6 +748,16 @@ export default function ProjectSelector({
                 autoFocus
               />
             </div>
+            <div className="form-group">
+              <label htmlFor="createSyncServer">Sync Server URL</label>
+              <input
+                id="createSyncServer"
+                type="text"
+                value={syncServer}
+                onChange={(e) => setSyncServer(e.target.value)}
+                placeholder="wss://sync.automerge.org"
+              />
+            </div>
             <div className="form-actions">
               <button type="button" onClick={() => setShowCreateForm(false)}>Cancel</button>
               <button
@@ -785,6 +793,16 @@ export default function ProjectSelector({
                 value={importTitle}
                 onChange={(e) => setImportTitle(e.target.value)}
                 placeholder="My Imported Project"
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="importSyncServer">Sync Server URL</label>
+              <input
+                id="importSyncServer"
+                type="text"
+                value={syncServer}
+                onChange={(e) => setSyncServer(e.target.value)}
+                placeholder="wss://sync.automerge.org"
               />
             </div>
             <div className="form-actions">
