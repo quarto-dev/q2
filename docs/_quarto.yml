@@ -42,6 +42,7 @@ website:
             - guides/authoring/brand.qmd
             - guides/authoring/layout.qmd
             - guides/authoring/scholarly-writing.qmd
+            - guides/authoring/document-language.qmd
             - guides/authoring/computations.qmd
             - guides/authoring/navigation.qmd
             - guides/authoring/extensions.qmd

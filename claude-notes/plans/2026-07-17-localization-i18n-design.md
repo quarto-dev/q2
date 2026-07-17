@@ -333,10 +333,23 @@ Phase 4 notes:
   language-independent; related bd-uwv2eec2).
 
 ### Phase 5 — docs & closeout
-- [ ] `docs/authoring/language.qmd`; schema entries for `lang`/`language`.
-- [ ] Changelog / strand closeout.
+- [x] Docs page: `docs/guides/authoring/document-language.qmd` (rendered
+      with q2; added to the site sidebar).
+- [x] Schema entries for `lang`/`language`: **N/A for now** — q2 has no
+      document-metadata schema/completion surface yet (no analogue of Q1's
+      `definitions.yml`); when one lands, `lang` and `language` should be
+      added to it.
+- [x] Changelog: no hub-client/ source changes in this epic, so the
+      hub-client changelog rule is not triggered.
+- [ ] Full `cargo xtask verify` + strand closeout.
 - (Lua visibility of `quarto.language` moved out of this epic → bd-xzaiqpjq,
   blocked on Meta support: bd-2llqjsms, bd-a9g50za2.)
+
+Phase 5 notes:
+- Visible side effect worth knowing: the default TOC title changed from
+  q2's old hardcoded "Table of Contents" to the catalog's
+  "Table of contents" (lowercase c) — this is Quarto 1's exact string, so
+  it's a parity gain, but it shows up in every default-English document.
 
 ## Decisions (resolved with Carlos, 2026-07-17)
 
