@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-17
+
+- [`25b8c870`](https://github.com/quarto-dev/q2/commits/25b8c870): The preview honors `title-block-style`: `none` shows the minimal Pandoc-style title block (plain title, author, and date lines with no styled layout), matching the rendered site; `plain` keeps the standard structure.
+
 ### 2026-07-16
 
 - [`7907d35b`](https://github.com/quarto-dev/q2/commits/7907d35b): The preview supports title-block banner mode, matching the rendered site: with `title-block-banner` set, the title (plus subtitle, description, and category chips) renders in a full-width colored banner above the content area, with the author/date metadata grid below it.
