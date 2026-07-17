@@ -26,6 +26,7 @@ pub mod include_resolve_pipeline;
 pub mod incremental_rebuild;
 pub mod jupyter_integration;
 pub mod language_catalog;
+pub mod language_resolve;
 pub mod link_rewriting_pipeline;
 pub mod listing_pipeline;
 pub mod math_mode_pipeline;

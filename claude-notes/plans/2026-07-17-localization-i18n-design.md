@@ -261,12 +261,24 @@ Phase 0 findings (2026-07-17):
   `parse_term_file` reads Scalar(Null) as the empty string.
 
 ### Phase 1 — test skeletons
-- [ ] Write the unit-test suite above (failing / `#[ignore]`-staged as needed).
+- [x] Write the unit-test suite above (failing / `#[ignore]`-staged as needed).
+      (`tests/integration/language_resolve.rs`, 18 tests, verified failing
+      against the missing API before implementation.)
 
 ### Phase 2 — resolution core
-- [ ] `crates/quarto-core/src/language.rs`: `LanguageTerms`, subtag walk,
+- [x] `crates/quarto-core/src/language.rs`: `LanguageTerms`, subtag walk,
       merge, file/inline/subkey handling, diagnostics.
-- [ ] Unit tests green.
+- [x] Unit tests green. (21 language tests + full quarto-core suite, 2473
+      passed.)
+
+Phase 1-2 notes:
+- `resolve_language(lang, extra_layers)` has no diagnostics param: warnings
+  are emitted when layers are *built* (`structured_layer_from_config`,
+  `parse_language_file`), where key source locations are at hand.
+- Unknown-key warning includes a note that the key remains reachable as
+  `$quarto.language.<key>$` (tested: warning carries the key's location).
+- Custom files are strict (non-string term value = hard error);
+  inline metadata is lenient (warn + skip the entry).
 
 ### Phase 3 — pipeline integration
 - [ ] `LanguageResolveStage` after `MetadataMergeStage`; inject
