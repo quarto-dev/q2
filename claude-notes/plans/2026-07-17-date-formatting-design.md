@@ -152,10 +152,18 @@ Pure functions plus an injectable "now"/mtime boundary:
     `[...]` escapes. Proposed supported subset (covers every example
     in Q1's docs page and everything the built-in templates/listings
     ever emit): `YYYY YY MMMM MMM MM M DD D dddd ddd dd d HH H hh h
-    mm m ss s SSS A a Do Z ZZ Q k kk X x`. Deferred (warn +
-    render literally): week-of-year family (`w ww W WW wo gggg
-    GGGG`) and named-timezone `z zzz` (day.js plugin territory;
-    `time` has no tz database and pulling one in isn't warranted).
+    mm m ss s SSS A a Do Z ZZ Q k kk X x`, **plus the ISO-week
+    tokens `W WW GGGG`** — those are nearly free (`time` has
+    `iso_week()` and ISO week-year built in, no locale data
+    involved). Deferred (warn + render literally), by cost class:
+    - *locale-week tokens* `w ww wo gggg` — "which day starts the
+      week / which week is week 1" is locale-defined (US vs ISO
+      rules differ), so these belong to the deferred localization
+      epic alongside named-style locales;
+    - *named-timezone tokens* `z zzz` ("EST" / "Eastern Standard
+      Time") — need a full IANA tz database, a heavyweight
+      dependency `time` deliberately omits, for a token with no
+      plausible document-date use.
     Unknown runs of alpha characters outside `[...]` produce one
     diagnostic naming the token.
 
@@ -244,8 +252,13 @@ matter; both only touch meta). For each of `date`, `date-modified`:
   `long` for any styled title block (`default`, `plain`, banner;
   not `none`/`false`). Match exactly (recommended), or only for
   `default`?
-- **Q-d (token subset)**: any tokens in the deferred list you want in
-  scope from day one (e.g. `w`/`W` for blog-ish sites)?
+- **Q-d (token subset)**: resolved refinement (2026-07-17): ISO-week
+  tokens (`W WW GGGG`) move into the day-one subset — `time` provides
+  them without locale data. Locale-week (`w ww wo gggg`) and
+  named-timezone (`z zzz`) tokens stay deferred with diagnostics
+  unless a concrete use case surfaces (a user writing e.g.
+  `date-format: "[Week] w, YYYY"` for editorial/journal-style
+  "Week 23, 2026" dating is the only scenario these serve).
 - **Q-e (module home)**: `quarto-core::dates` as proposed, or start
   it in `quarto-util` with the runtime-dependent keyword resolution
   staying in quarto-core?
