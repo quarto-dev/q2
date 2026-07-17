@@ -1,0 +1,33 @@
+---
+title: "No Title Block"
+author: "Norah Jones"
+title-block-style: none
+# Title-block parity corpus (bd-gx9cic8z, P6 bd-vkiwhcny): none uses
+# Pandoc's fallback title block (bare header, no quarto classes, one
+# p.author per author) and drops the title-block SCSS layer. (One
+# responsive .quarto-title-banner margin rule lives in the bootstrap
+# layer — in Q1 too — so the CSS negatives target selectors only the
+# title-block layer produces.)
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "header#title-block-header > h1.title",
+            "header#title-block-header > p.author",
+          ]
+        - [
+            "header#title-block-header.quarto-title-block",
+            "div.quarto-title",
+            "div.quarto-title-meta",
+          ]
+      ensureCssRegexMatches:
+        - []
+        - [
+            "\\.quarto-title-meta-heading",
+            "\\.quarto-title-author-orcid",
+          ]
+---
+
+Body.

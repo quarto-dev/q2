@@ -159,5 +159,24 @@
 # styles.css on `}` and sorting yields identical output (same 317278 bytes).
 # doc.html hash unchanged: HTML body/head are byte-identical (the fixture has
 # no code block).
-doc.html f2e961001ddc65cb9bd3029a328cd9a1b1bfa97137371024536496637df2b0a0
-doc_files/styles.css 2d130440cbd2bca07b1d26030eed3e7347e76363a894e3d09ef4765611cc212e
+# Re-captured 2026-07-15 (bd-tezzk9vp, title-block parity P1): doc.html
+# hash updated because the title block is now emitted by the built-in
+# `title-block`/`title-metadata` template partials with Q1-parity
+# markup. For this title-only fixture the deltas are: the (Q1-parity)
+# always-present-when-title-block-renders empty
+# `<div class="quarto-title-meta"></div>` grid, and partial-call
+# whitespace around the header. doc_files/styles.css hash unchanged:
+# the change is template-only (the title-block SCSS already shipped).
+# Re-captured 2026-07-15 (bd-ez0hiowa, title-block parity P2):
+# doc_files/styles.css hash updated because
+# `resources/scss/html/templates/title-block.scss` now sizes the
+# inline-SVG author decorations: `svg` joined `img` in the
+# `.quarto-title-author-orcid` rule, and `.quarto-title-author-email`
+# gained an `svg { height/width: 1em; vertical-align: -0.125em }`
+# rule (Q2 emits the ORCID badge and email icon as inline SVGs —
+# design decision Q8 — where Q1 used a base64 PNG and an icon-font
+# glyph). doc.html hash unchanged: the fixture has no authors, so
+# neither the new selectors nor the title-block markup changes touch
+# its body/head.
+doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
+doc_files/styles.css d4ca5cf8b3763de4308eefa220028fbe989b6aec6bc5be54127788a940a0e235

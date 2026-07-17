@@ -1,0 +1,139 @@
+---
+title: Dates and Date Formatting
+---
+
+## Date Parsing
+
+When you write a date in a Quarto document, Quarto parses the date string by trying a number of standard forms, in the following order:
+
+-   `MM/DD/YYYY`
+-   `MM-DD-YYYY`
+-   `MM/DD/YY`
+-   `MM-DD-YY`
+-   `YYYY-MM-DD`
+-   `DD MM YYYY`
+-   `MM DD, YYYY`
+-   `YYYY-MM-DDTHH:mm:ss`, with an optional UTC offset
+
+A date that matches none of these forms is left as-is, and the render reports a warning naming the accepted forms.
+
+In addition, you may provide date keywords, which produce a dynamic date:
+
+| Keyword         | Date                                                                   |
+|-----------------|------------------------------------------------------------------------|
+| `today`         | The current date, with the time portion set to 0.                      |
+| `now`           | The current date and time.                                             |
+| `last-modified` | The last modified date and time of the input file containing the date. |
+
+::: callout-note
+Keyword dates currently resolve in UTC. (Quarto 1 resolves them in the machine's local timezone; local-timezone support is planned alongside localization.)
+:::
+
+## Date Formatting
+
+When specifying a date format in Quarto, there are two ways to represent the format that you'd like.
+
+### Using a Date Style
+
+You can specify a simple date style which will be used to format the date. For example:
+
+``` yaml
+---
+date: 03/07/2005
+date-format: long
+---
+```
+
+Valid styles and examples of the formatted output are as follows:
+
+| Style    | Description                                 | Example               |
+|----------|---------------------------------------------|-----------------------|
+| `full`   | A full date that includes the weekday name  | Monday, March 7, 2005 |
+| `long`   | A long date that includes a wide month name | March 7, 2005         |
+| `medium` | A medium date                               | Mar 7, 2005           |
+| `short`  | A short date with a numeric month           | 3/7/05                |
+| `iso`    | A short date in ISO format                  | 2005-03-07            |
+
+The named styles currently render in English; localized output is planned as part of a broader localization effort.
+
+### Using a Date Format
+
+You can also specify a date format string that will be used to format the date. For example:
+
+``` yaml
+---
+date: 03/07/2005
+date-format: "MMM D, YYYY"
+---
+```
+
+The permissible values in this string include:
+
+| **Format String** | **Output**       | **Description**                            |
+|-------------------|------------------|--------------------------------------------|
+| `YY`              | 18               | Two-digit year                             |
+| `YYYY`            | 2018             | Four-digit year                            |
+| `M`               | 1-12             | The month, beginning at 1                  |
+| `MM`              | 01-12            | The month, 2-digits                        |
+| `MMM`             | Jan-Dec          | The abbreviated month name                 |
+| `MMMM`            | January-December | The full month name                        |
+| `D`               | 1-31             | The day of the month                       |
+| `DD`              | 01-31            | The day of the month, 2-digits             |
+| `Do`              | 1st 2nd ... 31st | The day of the month with ordinal          |
+| `d`               | 0-6              | The day of the week, with Sunday as 0      |
+| `dd`              | Su-Sa            | The min name of the day of the week        |
+| `ddd`             | Sun-Sat          | The short name of the day of the week      |
+| `dddd`            | Sunday-Saturday  | The name of the day of the week            |
+| `H`               | 0-23             | The hour                                   |
+| `HH`              | 00-23            | The hour, 2-digits                         |
+| `h`               | 1-12             | The hour, 12-hour clock                    |
+| `hh`              | 01-12            | The hour, 12-hour clock, 2-digits          |
+| `k`               | 1-24             | The hour, beginning at 1                   |
+| `kk`              | 01-24            | The hour, 2-digits, beginning at 1         |
+| `m`               | 0-59             | The minute                                 |
+| `mm`              | 00-59            | The minute, 2-digits                       |
+| `s`               | 0-59             | The second                                 |
+| `ss`              | 00-59            | The second, 2-digits                       |
+| `SSS`             | 000-999          | The millisecond, 3-digits                  |
+| `Z`               | +05:00           | The offset from UTC, ±HH:mm                |
+| `ZZ`              | +0500            | The offset from UTC, ±HHmm                 |
+| `A`               | AM PM            |                                            |
+| `a`               | am pm            |                                            |
+| `Q`               | 1-4              | Quarter                                    |
+| `X`               | 1360013296       | Unix timestamp in seconds                  |
+| `x`               | 1360013296123    | Unix timestamp in milliseconds             |
+| `W`               | 1 2 ... 52 53    | ISO week of year                           |
+| `WW`              | 01 02 ... 52 53  | ISO week of year, 2-digits                 |
+| `GGGG`            | 2017             | ISO week year                              |
+
+To escape characters, wrap them in square brackets (e.g. `[MM]`). Characters that are not format tokens (such as the `T` in `YYYY-MM-DDTHH:mm:ssZ`) pass through to the output unchanged.
+
+Example formats and outputs include:
+
+| Format                                 | Output                                |
+|----------------------------------------|---------------------------------------|
+| `MMM D, YYYY`                          | Mar 7, 2005                           |
+| `DD/MM/YYYY`                           | 07/03/2005                            |
+| `[YYYYescape] YYYY-MM-DDTHH:mm:ssZ[Z]` | YYYYescape 2005-03-07T00:00:00-05:00Z |
+| `YYYY-MM-DDTHH:mm:ssZ`                 | 2005-03-07T00:00:00-05:00             |
+| `dddd MMM D, YYYY`                     | Monday Mar 7, 2005                    |
+
+::: callout-note
+Quarto 1's locale-dependent week-of-year tokens (`w`, `ww`, `wo`, `gggg`) and named-timezone tokens (`z`, `zzz`) are not currently supported; they render literally, and the render reports a warning. The locale-week tokens are planned as part of a broader localization effort.
+:::
+
+## Where Formatting Applies
+
+The `date-format` option formats the `date` and `date-modified` fields wherever they appear: in the document [title block](title-blocks.qmd), and in the date columns of website listings. A listing can also set its own `date-format`, which takes precedence over the document option for that listing's items.
+
+Machine-readable dates are unaffected: the `<meta name="dcterms.date">` tag in the page head and the dates in RSS feeds always use standard machine formats, regardless of `date-format`.
+
+You can also format a single date field differently from the rest of the document by writing it in the expanded form:
+
+``` yaml
+---
+date:
+  value: 2005-03-07
+  format: full
+---
+```

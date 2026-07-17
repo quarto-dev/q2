@@ -9,10 +9,13 @@ _quarto:
     q2-preview:
       ensureHtmlElements:
         -
-          - 'p'
-        -
           - 'header#title-block-header'
           - 'div.quarto-title-meta'
+          - 'div.quarto-title-meta p.date'
+        -
+          - 'h1.title'
 ---
 
-Some content.
+Some content. With no `title` but author/date present, the title
+block still renders its metadata grid (Q1 parity, bd-gx9cic8z P1 —
+the header is gated on any title-block content, not on `title`).

@@ -1,0 +1,5 @@
+---
+source: crates/quarto-core/tests/integration/title_block_pipeline.rs
+expression: extract_main_open_tag(&html)
+---
+<main class="content quarto-banner-title-block" id="quarto-document-content">

@@ -122,6 +122,14 @@ impl<A: PartialResolver, B: PartialResolver> PartialResolver for ChainedResolver
     }
 }
 
+/// References to resolvers resolve like the resolver itself, so chains
+/// can borrow a caller-owned resolver instead of taking it by value.
+impl<T: PartialResolver + ?Sized> PartialResolver for &T {
+    fn get_partial(&self, name: &str, base_path: &Path) -> Option<String> {
+        (**self).get_partial(name, base_path)
+    }
+}
+
 /// Resolve the path to a partial file.
 ///
 /// Follows Pandoc/doctemplates path resolution rules:

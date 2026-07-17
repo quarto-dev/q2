@@ -57,7 +57,15 @@ use thiserror::Error;
 ///   offending scalar. v5 serialized profiles will fail to
 ///   deserialize at the field level; cached frozen profiles need to
 ///   be regenerated.
-pub const DOCUMENT_PROFILE_VERSION: u32 = 6;
+/// - `7`: `bd-ez0hiowa` (title-block parity epic, P2). Adds
+///   `authors_structured: Vec<ProfileAuthor>` — the structured author
+///   model (name components, ORCID, email, url, degrees, attribute
+///   flags, denormalized affiliations) that the Phase-0 note below
+///   deferred. The flat `authors: Vec<String>` field is unchanged in
+///   type and now derives its literals from the same normalization
+///   (`metadata::authors::parse_authors_model`), so the two fields
+///   always agree.
+pub const DOCUMENT_PROFILE_VERSION: u32 = 7;
 
 /// Depth used when extracting the heading outline at the profile
 /// checkpoint.
@@ -268,6 +276,56 @@ impl ListingItemInfo {
     }
 }
 
+/// One structured author in a [`DocumentProfile`] (v7,
+/// bd-ez0hiowa). A serializable snapshot of the display-relevant
+/// surface of [`crate::metadata::authors::Author`]; fields the
+/// profile doesn't carry yet (roles, notes, funding) can join with a
+/// `profile_version` bump.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProfileAuthor {
+    /// Display name ("Norah Jones").
+    pub name: String,
+    /// Given name(s), when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub given: Option<String>,
+    /// Family name, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub family: Option<String>,
+    /// ORCID identifier (bare id).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orcid: Option<String>,
+    /// Email address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    /// Home page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// Academic titles displayed after the name ("PhD").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub degrees: Vec<String>,
+    /// Attribute flags that are true for this author
+    /// (`corresponding`, `equal-contributor`, `deceased`, custom).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<String>,
+    /// Denormalized affiliations, in reference order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub affiliations: Vec<ProfileAffiliation>,
+}
+
+/// One affiliation attached to a [`ProfileAuthor`].
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProfileAffiliation {
+    /// Institution name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Department.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub department: Option<String>,
+    /// Home page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
 /// Static snapshot of a document, extracted at the pipeline
 /// checkpoint after metadata merge and before any AST mutation.
 ///
@@ -302,9 +360,18 @@ pub struct DocumentProfile {
     pub subtitle: Option<String>,
     pub description: Option<String>,
 
-    /// Authors, flat list of plain-text names. See the Phase-0 plan:
-    /// a structured author model is deliberately deferred.
+    /// Authors, flat list of plain-text names (the `literal` of each
+    /// [`ProfileAuthor`] in `authors_structured`; kept for consumers
+    /// that only need display names).
     pub authors: Vec<String>,
+
+    /// Structured author model: name components, ORCID, email, url,
+    /// degrees, attribute flags, and denormalized affiliations.
+    /// Derived by the same normalization the title block renders from
+    /// (`metadata::authors::parse_authors_model`). Additive in v7
+    /// (title-block parity epic P2, bd-ez0hiowa).
+    #[serde(default)]
+    pub authors_structured: Vec<ProfileAuthor>,
 
     pub date: Option<String>,
     pub categories: Vec<String>,
@@ -497,6 +564,7 @@ impl Default for DocumentProfile {
             subtitle: None,
             description: None,
             authors: Vec::new(),
+            authors_structured: Vec::new(),
             date: None,
             categories: Vec::new(),
             keywords: Vec::new(),
@@ -538,6 +606,7 @@ impl DocumentProfile {
     pub fn extract(ast: &Pandoc, source_path: &Path, output_href: &str, format_id: &str) -> Self {
         let meta = &ast.meta;
         let outline = extract_outline(&ast.blocks);
+        let authors_structured = extract_structured_authors(meta);
 
         Self {
             profile_version: DOCUMENT_PROFILE_VERSION,
@@ -547,7 +616,8 @@ impl DocumentProfile {
             title: plain_text_field(meta, "title"),
             subtitle: plain_text_field(meta, "subtitle"),
             description: plain_text_field(meta, "description"),
-            authors: extract_authors(meta),
+            authors: authors_structured.iter().map(|a| a.name.clone()).collect(),
+            authors_structured,
             date: plain_text_field(meta, "date"),
             categories: extract_string_list(meta, "categories"),
             keywords: extract_string_list(meta, "keywords"),
@@ -732,37 +802,36 @@ fn extract_string_list(meta: &ConfigValue, key: &str) -> Vec<String> {
     }
 }
 
-/// Authors extraction. Accepts:
-///
-/// - A single scalar string → `["Jane Doe"]`
-/// - An array of strings → `["Jane Doe", "John Smith"]`
-/// - An array of maps with a `name` key → `[{name: "Jane Doe", …}, …]`
-/// - A single map with a `name` key → `[name]`
-///
-/// Structured author metadata (affiliation, email, ORCID, etc.) is
-/// deliberately dropped in Phase 0. A dedicated author-model pass is
-/// planned as a separate epic.
-fn extract_authors(meta: &ConfigValue) -> Vec<String> {
-    // Quarto historically accepts both `author` and `authors`.
-    for key in ["author", "authors"] {
-        if let Some(value) = meta.get(key) {
-            if let Some(arr) = value.as_array() {
-                let names: Vec<String> = arr.iter().filter_map(author_entry_name).collect();
-                if !names.is_empty() {
-                    return names;
-                }
-            } else if let Some(name) = author_entry_name(value) {
-                return vec![name];
-            }
-        }
-    }
-    Vec::new()
-}
-
-fn author_entry_name(value: &ConfigValue) -> Option<String> {
-    value
-        .as_plain_text()
-        .or_else(|| value.get("name").and_then(|v| v.as_plain_text()))
+/// Structured-author extraction (v7, bd-ez0hiowa): runs the shared
+/// author normalization (`metadata::authors::parse_authors_model` —
+/// the same pass the title block renders from) and snapshots its
+/// display-relevant surface into serializable [`ProfileAuthor`]s.
+fn extract_structured_authors(meta: &ConfigValue) -> Vec<ProfileAuthor> {
+    let model = crate::metadata::authors::parse_authors_model(meta);
+    model
+        .authors
+        .iter()
+        .map(|a| ProfileAuthor {
+            name: a.name.literal.clone(),
+            given: a.name.given.clone(),
+            family: a.name.family.clone(),
+            orcid: a.orcid.clone(),
+            email: a.email.clone(),
+            url: a.url.clone(),
+            degrees: a.degrees.clone(),
+            attributes: a.attributes.clone(),
+            affiliations: a
+                .affiliations
+                .iter()
+                .filter_map(|r| model.affiliations.iter().find(|aff| &aff.id == r))
+                .map(|aff| ProfileAffiliation {
+                    name: aff.name.clone(),
+                    department: aff.department.clone(),
+                    url: aff.url.clone(),
+                })
+                .collect(),
+        })
+        .collect()
 }
 
 /// Extract the heading outline from the document body.
@@ -918,6 +987,59 @@ Body.
         );
         assert_eq!(profile.image.as_deref(), Some("cover.png"));
         assert!(profile.draft);
+    }
+
+    #[test]
+    fn profile_extract_structured_authors() {
+        // v7 (bd-ez0hiowa): the structured author model surfaces in
+        // the profile, and the flat `authors` list carries the same
+        // display literals.
+        let qmd = "\
+---
+title: Structured
+author:
+  - name: Norah Jones
+    orcid: 0000-0002-1825-0097
+    email: norah@example.com
+    url: https://example.com/norah
+    corresponding: true
+    degrees: [PhD]
+    affiliations:
+      - name: Carnegie Mellon University
+        department: School of Music
+  - name: Bill Malone
+---
+
+Body.
+";
+        let ast = parse_qmd(qmd);
+        let profile = DocumentProfile::extract(&ast, Path::new("s.qmd"), "s.html", "html");
+
+        assert_eq!(profile.authors, vec!["Norah Jones", "Bill Malone"]);
+        assert_eq!(profile.authors_structured.len(), 2);
+        let norah = &profile.authors_structured[0];
+        assert_eq!(norah.name, "Norah Jones");
+        assert_eq!(norah.given.as_deref(), Some("Norah"));
+        assert_eq!(norah.family.as_deref(), Some("Jones"));
+        assert_eq!(norah.orcid.as_deref(), Some("0000-0002-1825-0097"));
+        assert_eq!(norah.email.as_deref(), Some("norah@example.com"));
+        assert_eq!(norah.url.as_deref(), Some("https://example.com/norah"));
+        assert_eq!(norah.degrees, vec!["PhD"]);
+        assert_eq!(norah.attributes, vec!["corresponding"]);
+        assert_eq!(norah.affiliations.len(), 1);
+        assert_eq!(
+            norah.affiliations[0].name.as_deref(),
+            Some("Carnegie Mellon University")
+        );
+        assert_eq!(
+            norah.affiliations[0].department.as_deref(),
+            Some("School of Music")
+        );
+
+        // Round-trips through JSON at the current version.
+        let json = profile.to_json().unwrap();
+        let back = DocumentProfile::from_json(&json).unwrap();
+        assert_eq!(back.authors_structured, profile.authors_structured);
     }
 
     #[test]
@@ -1456,8 +1578,8 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_6() {
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 6);
+    fn document_profile_version_is_7() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 7);
     }
 
     /// A v3 profile (the pre-listings shape) must be rejected by

@@ -1,0 +1,153 @@
+---
+title: Title Blocks
+---
+
+## Overview
+
+HTML pages rendered with Quarto include a formatted title block at the start of the article. The title block gathers metadata from the document front matter — the title, subtitle, authors and their affiliations, publication and modification dates, DOI, abstract, description, keywords, and category labels — and lays it out in stylized groups.
+
+For example, this front matter:
+
+``` yaml
+---
+title: Summarizing Output for Reproducible Documents
+description: A summary of best practices
+author:
+  - name: Norah Jones
+    affiliations:
+      - name: Spacely Sprockets
+date: 2018-05-04
+---
+```
+
+produces a title block with the title and description at the top, followed by a metadata grid with the author, affiliation, and publication date.
+
+The title block lays out these elements automatically. If you'd like, you can control its behavior using `title-block-style`. Three options are available:
+
+-   `default` — The default treatment gathers the title elements into stylized groups and styles them with a smaller font face.
+
+-   `plain` — The plain treatment does all of the title element processing (gathering and organizing the elements) but does not apply the default title block styling.
+
+-   `none` — `none` disables title block processing altogether. The title block is emitted in Pandoc's plain form: an unstyled header containing the title, authors, date, and abstract.
+
+::: callout-note
+Quarto 1's fourth style, `manuscript`, is not currently supported. Documents that specify it fall back to `default`.
+:::
+
+## Authors and Affiliations
+
+Authors may be written as simple names or as structured records. A structured author can carry an ORCID, an email address, a homepage URL, academic degrees, and one or more affiliations:
+
+``` yaml
+---
+author:
+  - name: Norah Jones
+    orcid: 0000-0002-1825-0097
+    email: norah@example.com
+    url: https://example.com/norah
+    degrees:
+      - PhD
+    affiliations:
+      - name: Carnegie Mellon University
+        department: School of Music
+---
+```
+
+When any author has an affiliation, the title block renders authors and affiliations side by side in a two-column grid. Author names link to their `url`, and email and ORCID entries render as icon links after the name.
+
+Affiliations may also be declared once at the top level and referenced by id, which keeps the front matter compact when several authors share an institution:
+
+``` yaml
+---
+author:
+  - name: Norah Jones
+    affiliations:
+      - ref: cmu
+  - name: Bill Malone
+    affiliations:
+      - ref: cmu
+affiliations:
+  - id: cmu
+    name: Carnegie Mellon University
+---
+```
+
+## Title Banners
+
+If you'd like a more prominent title block, you can use `title-block-banner` to create a banner style title block. A banner positions the title, subtitle, description, and categories in a full-width band above the article, with the remaining metadata below it. For example:
+
+``` yaml
+---
+title-block-banner: true
+---
+```
+
+In this case, the color of the banner is determined by the document theme.
+
+### Custom Backgrounds
+
+You can control the banner background by providing either a CSS color (e.g. `"#FFDDFF"` or `red`) or the path to an image, which becomes the banner's background. For example, to use a banner image you might write:
+
+``` yaml
+---
+title-block-banner: images/banner.jpeg
+---
+```
+
+The image is copied into the output directory automatically.
+
+### Foreground Color
+
+You can also specify the color of the banner's text, using `title-block-banner-color` and providing a CSS color. The special values `body` and `body-bg` select the theme's body text color and body background color, respectively.
+
+## Categories
+
+When the front matter lists `categories`, the title block renders them as labeled chips under the title (inside the banner, when a banner is active). To suppress the chips while keeping the categories available to listings, set:
+
+``` yaml
+---
+title-block-categories: false
+---
+```
+
+## Date
+
+Quarto includes the document's `date` (and `date-modified`, when present) in the title block. In addition to writing a standard date, you may use a few special keywords that generate the date for you: `today` provides the current date with the time set to 0, `now` provides the current date and time, and `last-modified` provides the modification date and time of the document file itself.
+
+### Formatting
+
+When the title block uses the `default` or `plain` styles, Quarto formats the date in a readable long form (e.g. "May 4, 2018"). You can control the formatting by specifying a `date-format` in the document front matter. For example:
+
+``` yaml
+---
+title: Summarizing Output for Reproducible Documents
+date: 2018-05-04
+date-format: short
+---
+```
+
+For the available named styles and format strings, see the [date format reference](dates.qmd).
+
+## Metadata Labels
+
+The metadata labels in the title block ("Author", "Published", and so on) have default values that you may want to replace with your own. The following options customize them:
+
+| Option              | Default label            |
+|---------------------|--------------------------|
+| `author-title`      | Author / Authors         |
+| `affiliation-title` | Affiliation / Affiliations |
+| `published-title`   | Published                |
+| `modified-title`    | Modified                 |
+| `abstract-title`    | Abstract                 |
+| `description-title` | Description              |
+| `doi-title`         | Doi                      |
+
+The author and affiliation labels pluralize automatically, according to how many authors and affiliations the document declares.
+
+::: callout-note
+Label defaults are currently English-only. Localized labels (Quarto 1's `lang`-based label system) are planned as part of a broader localization effort.
+:::
+
+## Custom Title Blocks
+
+To replace the built-in title block entirely, provide your own version of the `title-block.html` template partial via `template-partials`. Quarto 2 uses the same partial names as Quarto 1 (`title-block.html`, `title-metadata.html`, `_title-meta-author.html`), so partials written for Quarto 1 continue to work. See [Templates](templates.qmd) for details.

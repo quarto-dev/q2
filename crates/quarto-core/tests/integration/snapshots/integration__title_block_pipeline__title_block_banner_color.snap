@@ -1,0 +1,20 @@
+---
+source: crates/quarto-core/tests/integration/title_block_pipeline.rs
+expression: extract_title_block(&html)
+---
+<header id="title-block-header" class="quarto-title-block default page-columns page-full">
+<div class="quarto-title-banner page-columns page-full">
+<div class="quarto-title column-body">
+<h1 class="title">Banner Explicit Color</h1>
+</div>
+</div>
+<div class="quarto-title-meta">
+<div>
+<div class="quarto-title-meta-heading">Author</div>
+<div class="quarto-title-meta-contents">
+<p>Norah Jones</p>
+</div>
+</div>
+</div>
+
+</header>

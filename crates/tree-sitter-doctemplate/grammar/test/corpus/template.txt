@@ -203,3 +203,13 @@ $hello()$
         (interpolation
           (bare_partial
             (partial_name)))))
+================================================================================
+template.txt 10 - underscore-leading bare partials
+================================================================================
+$_title-meta-author()$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (interpolation
+          (bare_partial
+            (partial_name)))))

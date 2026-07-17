@@ -119,7 +119,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // KEYWORD_FOR_2: "${", w($), "for"
 
     int kw_type = 1;
-    if (lookahead_is_alpha(lexer) && valid_symbols[BARE_PARTIAL_IDENTIFIER]) {
+    // A bare partial name starts with a letter or an underscore
+    // (Pandoc partial files may be underscore-prefixed, e.g. Quarto 1's
+    // `_title-meta-author.html`).
+    if ((lookahead_is_alpha(lexer) || lexer->lookahead == '_') &&
+        valid_symbols[BARE_PARTIAL_IDENTIFIER]) {
         return parse_bare_partial_identifier(lexer);
     }
     LEX_CHARACTER('$');
