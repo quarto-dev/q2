@@ -1,0 +1,53 @@
+---
+title: "Structured Authors"
+author:
+  - name: Norah Jones
+    orcid: 0000-0002-1825-0097
+    email: norah@example.com
+    url: https://example.com/norah
+    corresponding: true
+    degrees:
+      - PhD
+    affiliations:
+      - name: Carnegie Mellon University
+        department: School of Music
+  - name: Bill Malone
+    affiliations:
+      - name: University of Texas
+        url: https://utexas.edu
+# Title-block parity corpus (bd-gx9cic8z). P2 (bd-ez0hiowa): the full
+# structured author model renders as Q1's two-column authors /
+# affiliations grid (`.quarto-title-meta-author`), with url-linked
+# names, degrees after the name, an email icon anchor, and an ORCID
+# badge anchor (inline SVG per design decision Q8). With affiliations
+# present, the plain `.quarto-title-meta` grid carries no authors cell.
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "header#title-block-header.quarto-title-block.default",
+            "div.quarto-title > h1.title",
+            "div.quarto-title-meta-author > div.quarto-title-meta-heading",
+            "div.quarto-title-meta-author > div.quarto-title-meta-contents > p.author",
+            "div.quarto-title-meta-author > div.quarto-title-meta-contents > p.affiliation",
+            "p.author > a[href='https://example.com/norah']",
+            "a.quarto-title-author-email[href='mailto:norah@example.com'] > svg",
+            "a.quarto-title-author-orcid[href='https://orcid.org/0000-0002-1825-0097'] > svg",
+            "p.affiliation > a[href='https://utexas.edu']",
+          ]
+        - ["div.quarto-title-meta div.quarto-title-meta-contents > p"]
+      ensureFileRegexMatches:
+        - [
+            "Norah Jones, PhD</a>",
+            "Bill Malone",
+            "Carnegie Mellon University",
+            "University of Texas",
+            'quarto-title-meta-heading">Authors<',
+            'quarto-title-meta-heading">Affiliations<',
+          ]
+        - ["truetrue"]
+---
+
+Body.

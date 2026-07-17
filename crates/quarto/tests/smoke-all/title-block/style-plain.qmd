@@ -1,0 +1,29 @@
+---
+title: "Plain Style"
+author: "Norah Jones"
+title-block-style: plain
+# Title-block parity corpus (bd-gx9cic8z, P6 bd-vkiwhcny): plain keeps
+# the full styled DOM but drops the title-block SCSS layer from the
+# compiled CSS (Q1's documentTitleScssLayer behavior). (One
+# responsive .quarto-title-banner margin rule lives in the bootstrap
+# layer — in Q1 too — so the CSS negatives target selectors only the
+# title-block layer produces.)
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "header#title-block-header.quarto-title-block.default",
+            "div.quarto-title > h1.title",
+            "div.quarto-title-meta",
+          ]
+      ensureCssRegexMatches:
+        - []
+        - [
+            "\\.quarto-title-meta-heading",
+            "\\.quarto-title-author-orcid",
+          ]
+---
+
+Body.

@@ -1,0 +1,51 @@
+---
+source: crates/quarto-core/tests/integration/title_block_pipeline.rs
+expression: extract_title_block(&html)
+---
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Metadata Grid</h1>
+<div class="quarto-categories">
+<div class="quarto-category">analysis</div>
+<div class="quarto-category">jazz</div>
+</div>
+</div>
+<div>
+<div class="description">
+A one-line description.
+</div>
+</div>
+<div class="quarto-title-meta">
+<div>
+<div class="quarto-title-meta-heading">Author</div>
+<div class="quarto-title-meta-contents">
+<p>Norah Jones</p>
+</div>
+</div>
+<div>
+<div class="quarto-title-meta-heading">Published</div>
+<div class="quarto-title-meta-contents">
+<p class="date">July 1, 2026</p>
+</div>
+</div>
+<div>
+<div class="quarto-title-meta-heading">Modified</div>
+<div class="quarto-title-meta-contents">
+<p class="date-modified">July 10, 2026</p>
+</div>
+</div>
+<div>
+<div class="quarto-title-meta-heading">Doi</div>
+<div class="quarto-title-meta-contents">
+<p class="doi"><a href="https://doi.org/10.1234/example.5678">10.1234/example.5678</a></p>
+</div>
+</div>
+</div>
+<div>
+<div class="keywords">
+<div class="block-title">Keywords</div>
+<p>music, texas</p>
+</div>
+</div>
+
+</header>

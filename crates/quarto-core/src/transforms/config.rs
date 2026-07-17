@@ -135,6 +135,67 @@ impl AppendixStyle {
     }
 }
 
+/// Title-block styling behavior (bd-gx9cic8z P6).
+///
+/// Corresponds to the `title-block-style` option in Quarto schema.
+/// Schema source: `document-layout.yml`. Q1's fourth value,
+/// `manuscript`, is deliberately unsupported (epic design decision
+/// Q6) and falls back to `Default` like any unknown value — the
+/// `AppendixStyle` convention (no dedicated warning machinery).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TitleBlockStyle {
+    /// The styled Quarto title block (default).
+    #[default]
+    Default,
+    /// Styled DOM without the title-block SCSS layer.
+    Plain,
+    /// Pandoc's fallback title block; banner disabled; no SCSS layer.
+    None,
+}
+
+impl TitleBlockStyle {
+    /// Parse from string value.
+    // Infallible parser with a default fallback; `FromStr` would force a
+    // `Result`/`Err` this enum doesn't need.
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "plain" => Self::Plain,
+            "none" | "false" => Self::None,
+            _ => Self::Default,
+        }
+    }
+
+    /// Parse from bool value (`title-block-style: false` is Q1's
+    /// second spelling of `none`).
+    pub fn from_bool(b: bool) -> Self {
+        if b { Self::Default } else { Self::None }
+    }
+
+    /// Read the option from document metadata.
+    pub fn from_meta(meta: &quarto_pandoc_types::ConfigValue) -> Self {
+        let Some(value) = meta.get("title-block-style") else {
+            return Self::Default;
+        };
+        if let Some(b) = value.as_bool() {
+            return Self::from_bool(b);
+        }
+        value
+            .as_plain_text()
+            .map(|s| Self::from_str(&s))
+            .unwrap_or_default()
+    }
+
+    /// Convert to string value.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Plain => "plain",
+            Self::None => "none",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,5 +364,42 @@ mod tests {
     #[test]
     fn test_appendix_style_default() {
         assert_eq!(AppendixStyle::default(), AppendixStyle::Default);
+    }
+
+    fn string_value(s: &str) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+            source_info: SourceInfo::for_test(),
+            merge_op: Default::default(),
+        }
+    }
+
+    #[test]
+    fn test_title_block_style_from_meta_matrix() {
+        use TitleBlockStyle as S;
+        // Absent → default.
+        let empty = ConfigValue::new_map(vec![], SourceInfo::for_test());
+        assert_eq!(S::from_meta(&empty), S::Default);
+        for (val, expect) in [
+            ("plain", S::Plain),
+            ("none", S::None),
+            ("default", S::Default),
+            // Q1's manuscript is deliberately unsupported (epic Q6) —
+            // silent fallback like any unknown value.
+            ("manuscript", S::Default),
+            ("garbage", S::Default),
+        ] {
+            let meta = meta_with("title-block-style", string_value(val));
+            assert_eq!(S::from_meta(&meta), expect, "title-block-style: {val}");
+        }
+        // Q1's boolean spelling: `false` = none, `true` = default.
+        assert_eq!(
+            S::from_meta(&meta_with("title-block-style", bool_value(false))),
+            S::None
+        );
+        assert_eq!(
+            S::from_meta(&meta_with("title-block-style", bool_value(true))),
+            S::Default
+        );
     }
 }

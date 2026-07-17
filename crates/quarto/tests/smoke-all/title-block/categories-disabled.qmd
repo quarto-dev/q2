@@ -1,0 +1,20 @@
+---
+title: "Categories Disabled"
+author: "Norah Jones"
+categories:
+  - analysis
+  - jazz
+title-block-categories: false
+# Title-block parity corpus (bd-gx9cic8z, P3 bd-j6huijli):
+# `title-block-categories: false` suppresses the category chips
+# (the option defaults to true — see metadata-grid.qmd).
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["header#title-block-header.quarto-title-block.default"]
+        - ["div.quarto-categories", "div.quarto-category"]
+---
+
+Body.

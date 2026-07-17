@@ -1,0 +1,35 @@
+---
+title: "Metadata Grid"
+author: "Norah Jones"
+date: "2026-07-01"
+date-modified: "2026-07-10"
+doi: "10.1234/example.5678"
+description: "A one-line description."
+keywords:
+  - music
+  - texas
+categories:
+  - analysis
+  - jazz
+# Title-block parity corpus (bd-gx9cic8z). P3 (bd-j6huijli): the full
+# metadata grid — Modified/Doi cells, keywords + description blocks,
+# and category chips (title-block-categories defaults to true).
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "header#title-block-header.quarto-title-block.default",
+            "div.quarto-title > h1.title",
+            "div.quarto-title > div.quarto-categories > div.quarto-category",
+            "div.description",
+            "div.quarto-title-meta p.date",
+            "div.quarto-title-meta p.date-modified",
+            "div.quarto-title-meta p.doi > a[href='https://doi.org/10.1234/example.5678']",
+            "div.keywords > div.block-title",
+            "div.keywords > p",
+          ]
+---
+
+Body.

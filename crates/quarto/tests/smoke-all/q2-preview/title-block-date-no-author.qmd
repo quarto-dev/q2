@@ -10,12 +10,13 @@ _quarto:
       ensureHtmlElements:
         -
           - 'header#title-block-header'
-        -
           - 'div.quarto-title-meta'
+          - 'div.quarto-title-meta p.date'
+        -
           - 'div.quarto-title-meta-date'
 ---
 
-A paragraph; with `date` but no `author`, the Rust template's
-`$if(date)$` block is gated inside the `$if(author)$` branch so the
-date is suppressed. Locked here so the Rust quirk and q2-preview
-mirror each other.
+A paragraph; with `date` but no `author`, the Published cell renders
+on its own (Q1 parity, title-block epic bd-gx9cic8z P1 — the old
+Rust-template quirk of nesting `$if(date)$` inside `$if(author)$` is
+gone on both sides).

@@ -99,7 +99,12 @@ fn apply_favicon(meta: &mut ConfigValue, resolver: Option<&ResourceResolverConte
 /// `rendered.includes.header` list. Mirrors the
 /// `IncludeResolveStage` contract: the array is created if absent,
 /// existing entries are preserved.
-fn append_to_rendered_header(meta: &mut ConfigValue, html: String) {
+///
+/// Shared with `TitleBannerTransform` (bd-364ol5lu), which appends
+/// the generated explicit-banner `<style>` block through the same
+/// channel so it reaches both the native template's
+/// `$header-includes$` and the q2-preview head injector.
+pub(crate) fn append_to_rendered_header(meta: &mut ConfigValue, html: String) {
     if !matches!(&meta.value, ConfigValueKind::Map(_)) {
         return;
     }

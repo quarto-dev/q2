@@ -69,16 +69,17 @@ use crate::stage::{
 use crate::transform::TransformPipeline;
 use crate::transforms::{
     AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
-    CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
-    CodeBlockGenerateTransform, CodeBlockRenderTransform, CrossrefIndexTransform,
-    CrossrefRenderTransform, CrossrefResolveTransform, EquationLabelTransform,
-    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
-    FooterGenerateTransform, FooterRenderTransform, FootnotesTransform, LinkRewriteTransform,
-    ListingGenerateTransform, ListingRenderTransform, MetadataNormalizeTransform,
-    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
-    PageNavRenderTransform, ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
-    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
-    TableBootstrapClassTransform, TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform,
+    AuthorsNormalizeTransform, CalloutResolveTransform, CalloutTransform,
+    CategoriesSidebarTransform, CodeBlockGenerateTransform, CodeBlockRenderTransform,
+    CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform,
+    DateNormalizeTransform, EquationLabelTransform, ExampleEmbedRenderTransform,
+    ExampleEmbedTransform, FloatRefTargetSugarTransform, FooterGenerateTransform,
+    FooterRenderTransform, FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform,
+    ListingRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
+    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
+    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
     TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
     WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
@@ -1195,10 +1196,29 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(ShortcodeResolveTransform::with_lua_support(
         shortcode_paths,
         extensions,
-        runtime,
+        runtime.clone(),
         lua_format,
     )));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
+    // Date normalization (bd-gx9cic8z P4): resolves today/now/
+    // last-modified, writes ISO `date-meta`/`date-modified-meta` for
+    // machine slots, and replaces `date`/`date-modified` with the
+    // formatted string (Q1's pre-Pandoc rewrite + forced `long` for
+    // the styled HTML title block). Runs before AuthorsNormalize so
+    // every downstream consumer sees formatted dates.
+    pipeline.push(Box::new(DateNormalizeTransform::new(runtime.clone())));
+    // Author/label normalization (bd-gx9cic8z P1): derives `by-author`,
+    // `labels`, and `rendered.has-title-block` from raw metadata for
+    // the title-block template partial AND the q2-preview React title
+    // block (which reads the same metadata keys). Runs right after
+    // metadata-normalize; format-agnostic like Q1's authors.lua pass.
+    pipeline.push(Box::new(AuthorsNormalizeTransform::new()));
+    // Title-block banner mode (bd-gx9cic8z P5): derives
+    // `rendered.title-block-banner` (the template's banner gate) and,
+    // for explicit banner colors/images, pushes the generated
+    // include-in-header <style> + image ResourceCopyIntent. HTML-only
+    // (self-gated on `ctx.format.is_html_based()`).
+    pipeline.push(Box::new(TitleBannerTransform::new(runtime)));
     // bd-1tl09 Phase 0: code-block decoration Generate runs after
     // metadata-normalize so document-level defaults (e.g.
     // `code-copy: true`) are visible when computing per-block

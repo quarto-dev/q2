@@ -1,0 +1,39 @@
+---
+title: Structured Authors
+author:
+  - name: Norah Jones
+    orcid: 0000-0002-1825-0097
+    email: norah@example.com
+    url: https://example.com/norah
+    degrees:
+      - PhD
+    affiliations:
+      - name: Carnegie Mellon University
+  - name: Bill Malone
+    affiliations:
+      - name: University of Texas
+        url: https://utexas.edu
+format: q2-preview
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        -
+          - 'div.quarto-title-meta-author > div.quarto-title-meta-heading'
+          - 'div.quarto-title-meta-author > div.quarto-title-meta-contents > p.author'
+          - 'div.quarto-title-meta-author > div.quarto-title-meta-contents > p.affiliation'
+          - 'p.author > a[href="https://example.com/norah"]'
+          - 'a.quarto-title-author-email[href="mailto:norah@example.com"] > svg'
+          - 'a.quarto-title-author-orcid[href="https://orcid.org/0000-0002-1825-0097"] > svg'
+          - 'p.affiliation > a[href="https://utexas.edu"]'
+        -
+          - 'div.quarto-title-meta div.quarto-title-meta-contents > p'
+---
+
+Structured authors with affiliations render the two-column
+authors/affiliations grid in the preview title block, with url-linked
+names, degrees, email icon, and ORCID badge (Q1 parity,
+bd-gx9cic8z P2) — in lockstep with the Rust `title-metadata` /
+`_title-meta-author` template partials.

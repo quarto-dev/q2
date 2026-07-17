@@ -1,0 +1,28 @@
+---
+title: "Two Authors"
+author:
+  - Amelia Earhart
+  - Bill Malone
+date: "2026-07-01"
+# Title-block parity corpus (bd-gx9cic8z). P1 (bd-tezzk9vp): the
+# authors heading pluralizes (Author -> Authors) and each author
+# renders as its own <p> inside quarto-title-meta-contents.
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "div.quarto-title-meta div.quarto-title-meta-contents > p",
+            "div.quarto-title-meta p.date",
+          ]
+      ensureFileRegexMatches:
+        - [
+            'quarto-title-meta-heading">Authors<',
+            "<p>Amelia Earhart</p>",
+            "<p>Bill Malone</p>",
+          ]
+        - ['quarto-title-meta-heading">Author<']
+---
+
+Body.

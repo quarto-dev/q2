@@ -41,6 +41,8 @@ website:
             - guides/authoring/shortcodes.qmd
             - guides/authoring/brand.qmd
             - guides/authoring/layout.qmd
+            - guides/authoring/title-blocks.qmd
+            - guides/authoring/dates.qmd
             - guides/authoring/scholarly-writing.qmd
             - guides/authoring/document-language.qmd
             - guides/authoring/computations.qmd

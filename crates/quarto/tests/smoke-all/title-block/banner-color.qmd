@@ -1,0 +1,28 @@
+---
+title: "Banner Explicit Color"
+author: "Norah Jones"
+title-block-banner: "#FFDDFF"
+title-block-banner-color: "#111111"
+# Title-block parity corpus (bd-gx9cic8z, P5 bd-364ol5lu): an explicit
+# banner color/text-color generates an include-in-header <style> whose
+# rules target .quarto-title-block .quarto-title-banner (design
+# decision Q5 — doc metadata beats the theme by source order +
+# specificity, no !important).
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "body > header#title-block-header div.quarto-title-banner",
+            "main.content.quarto-banner-title-block",
+          ]
+      ensureFileRegexMatches:
+        - [
+            "\\.quarto-title-block \\.quarto-title-banner \\{[^}]*background: #FFDDFF;",
+            "\\.quarto-title-block \\.quarto-title-banner h1[^{]*\\{[^}]*color: #111111;",
+          ]
+        - []
+---
+
+Body.

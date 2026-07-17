@@ -227,6 +227,16 @@ fn cache_key(
     // Include minification flag
     hasher.update(if theme_config.minified { b"1" } else { b"0" });
 
+    // Include the title-block-layer flag (`title-block-style:
+    // plain|none` compiles a bundle without that layer — bd-gx9cic8z
+    // P6); without this, a plain doc and a default doc would collide
+    // on the same cache entry.
+    hasher.update(if theme_config.title_block_layer {
+        b"tb1"
+    } else {
+        b"tb0"
+    });
+
     let hash = hasher.finalize();
     Ok(hex::encode(hash))
 }
@@ -400,10 +410,13 @@ impl PipelineStage for CompileThemeCssStage {
         // `$navbar-bg`, etc. injections — see the plan and `derive_doc_scss_layer`.
         let doc_vars = derive_doc_scss_layer(&doc.ast.meta);
 
-        // Fast path: no themes AND no doc-derived variables. Use the
+        // Fast path: no themes, no doc-derived variables, and the
+        // default layer set (title-block layer included). Use the
         // shared, cached default-CSS bundle. This preserves byte-identity
         // with prior behavior for plain documents (no website / no sidebar).
-        if !theme_config.has_themes() && doc_vars.is_empty() {
+        // `title-block-style: plain|none` docs take the fingerprinted
+        // path below so their layer-less bundle gets its own cache key.
+        if !theme_config.has_themes() && doc_vars.is_empty() && theme_config.title_block_layer {
             // Try the runtime cache first (cross-session persistence).
             if cache_ok
                 && let Ok(Some(cached)) = cache_get_lru(
@@ -1473,6 +1486,7 @@ mod tests {
             themes: vec![spec],
             minified,
             suppress_bootstrap: false,
+            title_block_layer: true,
             brand_ref: None,
         }
     }
@@ -1482,6 +1496,7 @@ mod tests {
             themes: vec![ThemeSpec::Custom(PathBuf::from(path))],
             minified,
             suppress_bootstrap: false,
+            title_block_layer: true,
             brand_ref: None,
         }
     }
