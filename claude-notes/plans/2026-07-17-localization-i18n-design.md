@@ -248,9 +248,17 @@ matières"):
 ## Phases / work items
 
 ### Phase 0 — resources
-- [ ] Copy `_language*.yml` (35 files) + provenance README into
+- [x] Copy `_language*.yml` (35 files) + provenance README into
       `resources/language/`; embed via `include_dir!`.
-- [ ] Catalog integrity test (parses, known keys).
+- [x] Catalog integrity test (parses, known keys).
+
+Phase 0 findings (2026-07-17):
+- Upstream stray keys kept verbatim, allowlisted in the integrity test:
+  `_language-lt.yml` `search`, `_language-sv.yml` `callout-danger-title`.
+- `_language-sr-Latn.yml` has **no** `_language-sr.yml` parent — the subtag
+  walk must tolerate missing intermediate layers (unit-tested in phase 2).
+- quarto-yaml parses `key: ""` as Null (filed bd-gutochbq, upstream crate);
+  `parse_term_file` reads Scalar(Null) as the empty string.
 
 ### Phase 1 — test skeletons
 - [ ] Write the unit-test suite above (failing / `#[ignore]`-staged as needed).

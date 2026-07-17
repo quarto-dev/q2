@@ -49,6 +49,7 @@ pub mod extension;
 pub mod filter_resolve;
 pub mod format;
 pub mod get_config;
+pub mod language;
 pub mod output_sink;
 pub mod pipeline;
 pub mod project;
