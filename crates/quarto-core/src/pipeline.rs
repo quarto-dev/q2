@@ -61,9 +61,10 @@ use crate::stage::stages::ClipboardJsStage;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
     DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage,
-    LinkResolutionStage, ListingItemInfoStage, LoadedSource, MathJsStage, MetadataMergeStage,
-    ParseDocumentStage, Pipeline, PipelineData, PipelineStage, PreEngineSugaringStage,
-    RenderHtmlBodyStage, ResourceReportStage, StageContext, UnwrapProfileStage, UserFiltersStage,
+    LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage, LoadedSource, MathJsStage,
+    MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
+    PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, StageContext,
+    UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
@@ -277,6 +278,11 @@ pub fn build_html_pipeline_stages_with_options(
     let mut stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
         Box::new(MetadataMergeStage::new()),
+        // Resolve localized terms (`lang` + `language:` → `quarto.language`
+        // metadata) right after the merge so every downstream consumer —
+        // profile extraction, transforms, templates — sees the table
+        // (bd-llhlzd7p).
+        Box::new(LanguageResolveStage::new()),
         // Include-shortcode expansion runs before the profile
         // checkpoint so content spliced in via `{{< include … >}}`
         // (headings, code blocks, crossref targets) is visible to
@@ -539,6 +545,9 @@ pub fn build_wasm_html_pipeline() -> Pipeline {
         Box::new(ParseDocumentStage::new()),
         // No EngineExecutionStage - code cells pass through as-is
         Box::new(MetadataMergeStage::new()),
+        // Localized-term resolution — same position/contract as the
+        // native pipeline (bd-llhlzd7p).
+        Box::new(LanguageResolveStage::new()),
         // Include expansion before the profile checkpoint — bd-xfwx.
         Box::new(IncludeExpansionStage::new()),
         // Resolve include-in-header / before-body / after-body
@@ -689,6 +698,10 @@ pub fn build_analysis_pipeline() -> Pipeline {
     let stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
         Box::new(MetadataMergeStage::new()),
+        // Localized-term resolution — keeps analysis-path transforms in
+        // sync with the render pipelines once they consume terms
+        // (bd-llhlzd7p).
+        Box::new(LanguageResolveStage::new()),
         Box::new(IncludeExpansionStage::new()),
         Box::new(PreEngineSugaringStage::new()),
         Box::new(AstTransformsStage::with_pipeline(
@@ -1905,59 +1918,63 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 22);
+        assert_eq!(stages.len(), 23);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "metadata-merge");
+        // Localized-term resolution (bd-llhlzd7p) directly follows the
+        // metadata merge so `quarto.language` is present for every
+        // downstream consumer, including the profile checkpoint.
+        assert_eq!(stages[2].name(), "language-resolve");
         // Include expansion runs before the profile checkpoint (bd-xfwx)
         // so profiles reflect content spliced in via `{{< include ... >}}`.
-        assert_eq!(stages[2].name(), "include-expansion");
+        assert_eq!(stages[3].name(), "include-expansion");
         // include-resolve (bd-8kp3) sits between include-expansion and
         // the profile checkpoint so file-slot include dependencies are
         // recorded into `profile.includes` for cache invalidation.
-        assert_eq!(stages[3].name(), "include-resolve");
+        assert_eq!(stages[4].name(), "include-resolve");
         // Listings auto-fill (bd-izqh, L1) sits between include-resolve
         // and the profile checkpoint so `meta.listing-item.*` enrichment
         // is visible to `DocumentProfile.listing_item`.
-        assert_eq!(stages[4].name(), "listing-item-info");
+        assert_eq!(stages[5].name(), "listing-item-info");
         // Profile checkpoint (Phase 0 website epic, bd-f3jc).
-        assert_eq!(stages[5].name(), "document-profile");
+        assert_eq!(stages[6].name(), "document-profile");
         // Cross-doc body-link resolution (Phase 8 sub-phase 8.0d).
-        assert_eq!(stages[6].name(), "link-resolution");
-        assert_eq!(stages[7].name(), "unwrap-profile");
-        assert_eq!(stages[8].name(), "pre-engine-sugaring");
-        assert_eq!(stages[9].name(), "engine-execution");
-        assert_eq!(stages[10].name(), "compile-theme-css");
+        assert_eq!(stages[7].name(), "link-resolution");
+        assert_eq!(stages[8].name(), "unwrap-profile");
+        assert_eq!(stages[9].name(), "pre-engine-sugaring");
+        assert_eq!(stages[10].name(), "engine-execution");
+        assert_eq!(stages[11].name(), "compile-theme-css");
         // Bootstrap JS (bd-4eyf) sits immediately after CompileThemeCssStage
         // so the same theme predicate gates JS and CSS together.
-        assert_eq!(stages[11].name(), "bootstrap-js");
+        assert_eq!(stages[12].name(), "bootstrap-js");
         // ClipboardJsStage (Phase 2 of bd-1tl09) sits next to
         // bootstrap-js because both ship a Project-scoped JS payload
         // gated on minimal-HTML. clipboard-js additionally gates on
         // `code-copy != false`.
-        assert_eq!(stages[12].name(), "clipboard-js");
+        assert_eq!(stages[13].name(), "clipboard-js");
         // Attribution-generate runs before user filters so the
         // `quarto.attribution.*` Lua host binding sees a populated
         // sidecar (bd-0fd0). No-op when no provider is installed.
-        assert_eq!(stages[13].name(), "attribution-generate");
-        assert_eq!(stages[14].name(), "user-filters-pre");
-        assert_eq!(stages[15].name(), "ast-transforms");
-        assert_eq!(stages[16].name(), "user-filters-post");
+        assert_eq!(stages[14].name(), "attribution-generate");
+        assert_eq!(stages[15].name(), "user-filters-pre");
+        assert_eq!(stages[16].name(), "ast-transforms");
+        assert_eq!(stages[17].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[17].name(), "resource-report");
-        assert_eq!(stages[18].name(), "code-highlight");
+        assert_eq!(stages[18].name(), "resource-report");
+        assert_eq!(stages[19].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, crossref `\tag{N}`) is visible.
-        assert_eq!(stages[19].name(), "math-js");
-        assert_eq!(stages[20].name(), "render-html-body");
-        assert_eq!(stages[21].name(), "apply-template");
+        assert_eq!(stages[20].name(), "math-js");
+        assert_eq!(stages[21].name(), "render-html-body");
+        assert_eq!(stages[22].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 22);
+        assert_eq!(pipeline.len(), 23);
     }
 
     #[test]
@@ -1974,7 +1991,9 @@ mod tests {
         // Includes `attribution-generate` (bd-0fd0) so hub-client
         // preview filters see the same `quarto.attribution.*` host
         // binding as the CLI.
-        assert_eq!(pipeline.len(), 19);
+        // Includes `language-resolve` (bd-llhlzd7p) so preview output
+        // localizes identically to `q2 render`.
+        assert_eq!(pipeline.len(), 20);
         let names = pipeline.stage_names();
         // bd-4eyf: hub-client iframe reinit blows away stateful
         // Bootstrap components, so we deliberately omit `bootstrap-js`
@@ -2005,8 +2024,9 @@ mod tests {
         use crate::stage::PipelineDataKind;
 
         let pipeline = build_analysis_pipeline();
-        // Parse + MetadataMerge + IncludeExpansion + PreEngineSugaring + AstTransforms(analysis subset)
-        assert_eq!(pipeline.len(), 5);
+        // Parse + MetadataMerge + LanguageResolve + IncludeExpansion +
+        // PreEngineSugaring + AstTransforms(analysis subset)
+        assert_eq!(pipeline.len(), 6);
         assert_eq!(pipeline.expected_input(), PipelineDataKind::LoadedSource);
         assert_eq!(pipeline.expected_output(), PipelineDataKind::DocumentAst);
     }

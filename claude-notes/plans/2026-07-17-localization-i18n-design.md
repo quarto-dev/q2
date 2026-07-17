@@ -281,9 +281,22 @@ Phase 1-2 notes:
   inline metadata is lenient (warn + skip the entry).
 
 ### Phase 3 — pipeline integration
-- [ ] `LanguageResolveStage` after `MetadataMergeStage`; inject
+- [x] `LanguageResolveStage` after `MetadataMergeStage`; inject
       `quarto.language` into `meta`; template namespace works.
-- [ ] Project-root auto-detection wired through project context.
+- [x] Project-root auto-detection wired through project context.
+
+Phase 3 notes:
+- Stage inserted in three builders: `build_html_pipeline_stages_with_options`
+  (covers native render + q2-preview), `build_wasm_html_pipeline`, and
+  `build_analysis_pipeline`. Deliberately **not** in `get_config`'s pipeline
+  (that surface shows user config, not derived state) nor the Pass-1 profile
+  pipeline in `orchestrator.rs` (profile doesn't carry terms in v1).
+- `language: <file>.yml` resolves against the document dir, then the project
+  root; missing file = source-located **error** diagnostic, render continues
+  on shipped terms.
+- `LanguageTerms::from_meta(&meta)` is the transform-side accessor;
+  round-trip is tested. 10 pipeline tests in
+  `tests/integration/language_pipeline.rs`.
 
 ### Phase 4 — consumers
 - [ ] Callout titles (TDD: es/fr render tests first).

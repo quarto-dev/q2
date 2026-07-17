@@ -16,8 +16,8 @@ use std::collections::BTreeMap;
 use include_dir::{Dir, include_dir};
 use pampa::utils::diagnostic_collector::DiagnosticCollector;
 use quarto_config::InterpretationContext;
-use quarto_pandoc_types::config_value::{ConfigValue, ConfigValueKind};
-use quarto_source_map::SourceInfo;
+use quarto_pandoc_types::config_value::{ConfigMapEntry, ConfigValue, ConfigValueKind};
+use quarto_source_map::{By, SourceInfo};
 use yaml_rust2::Yaml;
 
 /// Embedded copies of `resources/language/_language*.yml` (see the README in
@@ -164,6 +164,66 @@ impl LanguageTerms {
     pub fn iter(&self) -> impl Iterator<Item = (&str, &TermEntry)> {
         self.terms.iter().map(|(k, v)| (k.as_str(), v))
     }
+
+    /// Reads the resolved table back from merged document metadata.
+    ///
+    /// This is the accessor AST transforms use: the `LanguageResolveStage`
+    /// injects the table under `quarto.language` (and `lang` is ordinary
+    /// metadata), so any consumer holding `doc.ast.meta` can reconstruct
+    /// the table without extra plumbing. Returns `None` when the stage has
+    /// not run (no `quarto.language` in `meta`).
+    pub fn from_meta(meta: &ConfigValue) -> Option<LanguageTerms> {
+        let lang = meta
+            .get("lang")
+            .and_then(|v| v.as_plain_text())
+            .unwrap_or_else(|| "en".to_string());
+        let table = meta.get("quarto")?.get("language")?;
+        let ConfigValueKind::Map(entries) = &table.value else {
+            return None;
+        };
+        let mut terms = BTreeMap::new();
+        for entry in entries {
+            let value = if matches!(entry.value.value, ConfigValueKind::Scalar(Yaml::Null)) {
+                String::new()
+            } else {
+                match entry.value.as_plain_text() {
+                    Some(v) => v,
+                    None => continue,
+                }
+            };
+            terms.insert(
+                entry.key.clone(),
+                TermEntry {
+                    value,
+                    source: entry.value.source_info.clone(),
+                },
+            );
+        }
+        Some(LanguageTerms { lang, terms })
+    }
+
+    /// Builds the `ConfigValue` map the `LanguageResolveStage` injects at
+    /// `quarto.language`: every term as a literal string scalar, each entry
+    /// keeping the source location of the file/metadata that defined it.
+    pub fn to_config_value(&self) -> ConfigValue {
+        let entries = self
+            .terms
+            .iter()
+            .map(|(key, term)| ConfigMapEntry {
+                key: key.clone(),
+                key_source: term.source.clone(),
+                value: ConfigValue::new_string(term.value.clone(), term.source.clone()),
+            })
+            .collect();
+        ConfigValue::new_map(entries, SourceInfo::generated(By::programmatic_config()))
+    }
+}
+
+/// The BCP 47 subtag prefix chain for a tag, most general first:
+/// `"pt-BR"` → `["pt", "pt-BR"]`. (Exposed for the stage's sibling-file
+/// probing; resolution itself uses it internally.)
+pub fn language_subtag_prefixes(lang: &str) -> Vec<String> {
+    subtag_prefixes(lang)
 }
 
 /// The set of known term keys: the keys of the embedded base catalog
@@ -227,9 +287,10 @@ pub fn resolve_language(lang: &str, extra_layers: &[StructuredTermLayer]) -> Lan
 
     // 1. Embedded base catalog.
     if let Some(content) = embedded_language_file(BASE_LANGUAGE_FILE)
-        && let Ok(layer) = parse_term_file(content, BASE_LANGUAGE_FILE) {
-            terms.extend(layer.terms);
-        }
+        && let Ok(layer) = parse_term_file(content, BASE_LANGUAGE_FILE)
+    {
+        terms.extend(layer.terms);
+    }
 
     // 2. Embedded per-language files along the subtag walk.
     for prefix in subtag_prefixes(lang) {
@@ -420,8 +481,7 @@ fn is_stringish(value: &ConfigValue) -> bool {
 fn is_stringish_kind(kind: &ConfigValueKind) -> bool {
     matches!(
         kind,
-        ConfigValueKind::Scalar(Yaml::String(_) | Yaml::Null) |
-ConfigValueKind::PandocInlines(_)
+        ConfigValueKind::Scalar(Yaml::String(_) | Yaml::Null) | ConfigValueKind::PandocInlines(_)
     )
 }
 
