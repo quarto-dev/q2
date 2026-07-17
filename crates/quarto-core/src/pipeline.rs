@@ -1018,6 +1018,7 @@ pub async fn render_qmd_to_preview_ast(
         include_inline_locations: true,
         attribution_by_node,
         attribution_actors,
+        ..Default::default()
     };
     let mut buf = Vec::new();
     pampa::writers::json::write_with_config(&ast.ast, &ast_context, &mut buf, &json_config)

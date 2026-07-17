@@ -148,6 +148,7 @@ fn attribution_on_path_emits_records_and_actors_table() {
         include_inline_locations: false,
         attribution_by_node: Some(Arc::new(by_node)),
         attribution_actors: Some(Arc::new(actors)),
+        ..JsonConfig::default()
     };
 
     let mut buf = Vec::new();
@@ -221,6 +222,7 @@ fn attribution_off_path_is_byte_identical_to_no_attribution_default() {
         include_inline_locations: false,
         attribution_by_node: None,
         attribution_actors: None,
+        ..JsonConfig::default()
     };
     let mut buf_explicit = Vec::new();
     write_with_config(&pandoc, &context, &mut buf_explicit, &config_explicit_none)

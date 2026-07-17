@@ -60,6 +60,24 @@ pub struct JsonConfig {
     /// by `attribution_by_node`, including warning-path placeholders.
     /// Emitted as `astContext.attributionActors` when any entry is used.
     pub attribution_actors: Option<Arc<HashMap<Arc<str>, JsonAttributionIdentity>>>,
+
+    /// If true, emit the pampa-native `raw-json` format (bd-en2hvrwn,
+    /// GH #11) instead of the Pandoc-superset shape:
+    ///
+    /// - the `pampa-json-format` envelope marker is emitted first and
+    ///   `pandoc-api-version` is omitted;
+    /// - pampa AST extensions (standalone `Attr`, `NoteReference`,
+    ///   CriticMarkup inlines, `Shortcode`, `CaptionBlock`) are written
+    ///   with native tags instead of being desugared or rejected;
+    /// - metadata is written faithfully (full `ConfigValue`: Path/Glob/
+    ///   Expr kinds, merge ops, scalar types, entry order) as a single
+    ///   config-value node instead of a sorted Pandoc-style meta object;
+    /// - `astContext` carries `exampleListCounter`.
+    ///
+    /// The contract is that write-then-read is the identity on the AST.
+    /// Only the streaming writer implements raw mode; use the
+    /// `writers::raw_json` / `readers::raw_json` entry points.
+    pub raw: bool,
 }
 
 // ============================================================================
@@ -1755,11 +1773,17 @@ fn write_blocks(blocks: &[Block], ctx: &mut JsonWriterContext) -> Value {
 /// Generate JSON representation of a Pandoc document.
 ///
 /// This function is used internally by the HTML writer to build the source map.
+/// Raw mode (`JsonConfig::raw`) is implemented only on the streaming path;
+/// this function's callers never set it (asserted below).
 pub(crate) fn write_pandoc(
     pandoc: &Pandoc,
     ast_context: &ASTContext,
     config: &JsonConfig,
 ) -> Result<Value, Vec<DiagnosticMessage>> {
+    debug_assert!(
+        !config.raw,
+        "raw mode is only implemented on the streaming writer; use writers::raw_json"
+    );
     // Create the JSON writer context
     let mut ctx = JsonWriterContext::new(ast_context, config);
 
@@ -2277,6 +2301,140 @@ where
     w.str_value(type_name)?;
     w.end_object()?;
     Ok(())
+}
+
+/// Raw mode: emit a Shortcode's body object
+/// `{isEscaped, keywordArgs, name, positionalArgs}` (alphabetical).
+///
+/// `keywordArgs` is an array of `[key, arg]` pairs in `LinkedHashMap`
+/// insertion order (the qmd writer relies on that order for source-order
+/// roundtrips; so do we).
+fn stream_write_shortcode_body<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    shortcode: &quarto_pandoc_types::Shortcode,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_object()?;
+    w.key("isEscaped")?;
+    w.bool_value(shortcode.is_escaped)?;
+    w.key("keywordArgs")?;
+    w.begin_array()?;
+    for (key, arg) in &shortcode.keyword_args {
+        w.begin_array()?;
+        w.str_value(key)?;
+        stream_write_shortcode_arg(w, arg, ctx)?;
+        w.end_array()?;
+    }
+    w.end_array()?;
+    w.key("name")?;
+    w.str_value(&shortcode.name)?;
+    w.key("positionalArgs")?;
+    w.begin_array()?;
+    for arg in &shortcode.positional_args {
+        stream_write_shortcode_arg(w, arg, ctx)?;
+    }
+    w.end_array()?;
+    w.end_object()?;
+    Ok(())
+}
+
+/// Raw mode: emit one ShortcodeArg as a tagged node.
+///
+/// `String`/`Number`/`Boolean` are `{c, t}`; a nested `Shortcode` is a
+/// full `{c, s, t}` node (its own source info interned into the pool);
+/// `KeyValue` is `{c: [[key, arg]...], t}` with entries sorted by key —
+/// the underlying `HashMap` has no stable order, and sorting keeps the
+/// output deterministic (map equality on read-back is order-independent).
+fn stream_write_shortcode_arg<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    arg: &quarto_pandoc_types::ShortcodeArg,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    use quarto_pandoc_types::ShortcodeArg;
+    match arg {
+        ShortcodeArg::String(s) => {
+            w.begin_object()?;
+            w.key("c")?;
+            w.str_value(s)?;
+            w.key("t")?;
+            w.str_value("String")?;
+            w.end_object()?;
+            Ok(())
+        }
+        ShortcodeArg::Number(n) => {
+            w.begin_object()?;
+            w.key("c")?;
+            w.f64_value(*n)?;
+            w.key("t")?;
+            w.str_value("Number")?;
+            w.end_object()?;
+            Ok(())
+        }
+        ShortcodeArg::Boolean(b) => {
+            w.begin_object()?;
+            w.key("c")?;
+            w.bool_value(*b)?;
+            w.key("t")?;
+            w.str_value("Boolean")?;
+            w.end_object()?;
+            Ok(())
+        }
+        ShortcodeArg::Shortcode(sc) => stream_write_simple_node(
+            w,
+            "Shortcode",
+            &sc.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_shortcode_body(w, sc, ctx)
+            },
+        ),
+        ShortcodeArg::KeyValue(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            w.begin_object()?;
+            w.key("c")?;
+            w.begin_array()?;
+            for key in keys {
+                w.begin_array()?;
+                w.str_value(key)?;
+                stream_write_shortcode_arg(w, &map[key], ctx)?;
+                w.end_array()?;
+            }
+            w.end_array()?;
+            w.key("t")?;
+            w.str_value("KeyValue")?;
+            w.end_object()?;
+            Ok(())
+        }
+    }
+}
+
+/// Raw mode: emit a Span-shaped extension node `{a, c: [attr, inlines], s, t}`.
+/// Used for the four CriticMarkup inlines, whose payload is exactly a
+/// Span's (attr + inline content) under their own tag.
+fn stream_write_span_like_raw<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    type_name: &str,
+    attr: &Attr,
+    content: &Vec<Inline>,
+    source_info: &SourceInfo,
+    attr_source: &AttrSourceInfo,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    stream_write_attrs_node(
+        w,
+        type_name,
+        source_info,
+        attr_source,
+        ctx,
+        |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+            w.begin_array()?;
+            stream_write_attr(w, attr)?;
+            stream_write_inlines(w, content, ctx)?;
+            w.end_array()?;
+            Ok(())
+        },
+    )
 }
 
 /// Emit an Inlines array: `[<inline>...]`.
@@ -2866,6 +3024,17 @@ fn stream_write_inline<W: io::Write>(
             },
         ),
         Inline::Shortcode(shortcode) => {
+            if ctx.serializer.config.raw {
+                return stream_write_simple_node(
+                    w,
+                    "Shortcode",
+                    &shortcode.source_info,
+                    ctx,
+                    |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                        stream_write_shortcode_body(w, shortcode, ctx)
+                    },
+                );
+            }
             let span = shortcode_to_span(shortcode.clone());
             let attr = (
                 span.attr.0.clone(),
@@ -2887,6 +3056,17 @@ fn stream_write_inline<W: io::Write>(
             )
         }
         Inline::NoteReference(note_ref) => {
+            if ctx.serializer.config.raw {
+                return stream_write_simple_node(
+                    w,
+                    "NoteReference",
+                    &note_ref.source_info,
+                    ctx,
+                    |w: &mut JsonStreamWriter<W>, _ctx: &mut JsonWriterContext| {
+                        w.str_value(&note_ref.id)
+                    },
+                );
+            }
             ctx.errors.push(
                 DiagnosticMessageBuilder::error("Unprocessed note reference in JSON writer")
                     .with_code("Q-3-31")
@@ -2918,6 +3098,18 @@ fn stream_write_inline<W: io::Write>(
             )
         }
         Inline::Attr(inline_attr) => {
+            if ctx.serializer.config.raw {
+                return stream_write_attrs_node(
+                    w,
+                    "Attr",
+                    &inline_attr.source_info,
+                    &inline_attr.attr_source,
+                    ctx,
+                    |w: &mut JsonStreamWriter<W>, _ctx: &mut JsonWriterContext| {
+                        stream_write_attr(w, &inline_attr.attr)
+                    },
+                );
+            }
             ctx.errors.push(
                 DiagnosticMessageBuilder::error(
                     "Standalone attribute not supported in JSON format",
@@ -2939,6 +3131,17 @@ fn stream_write_inline<W: io::Write>(
             Ok(())
         }
         Inline::Insert(ins) => {
+            if ctx.serializer.config.raw {
+                return stream_write_span_like_raw(
+                    w,
+                    "Insert",
+                    &ins.attr,
+                    &ins.content,
+                    &ins.source_info,
+                    &ins.attr_source,
+                    ctx,
+                );
+            }
             ctx.errors.push(
                 DiagnosticMessageBuilder::error("Unprocessed Insert markup in JSON writer")
                     .with_code("Q-3-33")
@@ -2968,6 +3171,17 @@ fn stream_write_inline<W: io::Write>(
             )
         }
         Inline::Delete(del) => {
+            if ctx.serializer.config.raw {
+                return stream_write_span_like_raw(
+                    w,
+                    "Delete",
+                    &del.attr,
+                    &del.content,
+                    &del.source_info,
+                    &del.attr_source,
+                    ctx,
+                );
+            }
             ctx.errors.push(
                 DiagnosticMessageBuilder::error("Unprocessed Delete markup in JSON writer")
                     .with_code("Q-3-34")
@@ -2997,6 +3211,17 @@ fn stream_write_inline<W: io::Write>(
             )
         }
         Inline::Highlight(hl) => {
+            if ctx.serializer.config.raw {
+                return stream_write_span_like_raw(
+                    w,
+                    "Highlight",
+                    &hl.attr,
+                    &hl.content,
+                    &hl.source_info,
+                    &hl.attr_source,
+                    ctx,
+                );
+            }
             ctx.errors.push(
                 DiagnosticMessageBuilder::error("Unprocessed Highlight markup in JSON writer")
                     .with_code("Q-3-35")
@@ -3026,6 +3251,17 @@ fn stream_write_inline<W: io::Write>(
             )
         }
         Inline::EditComment(ec) => {
+            if ctx.serializer.config.raw {
+                return stream_write_span_like_raw(
+                    w,
+                    "EditComment",
+                    &ec.attr,
+                    &ec.content,
+                    &ec.source_info,
+                    &ec.attr_source,
+                    ctx,
+                );
+            }
             ctx.errors.push(
                 DiagnosticMessageBuilder::error("Unprocessed EditComment markup in JSON writer")
                     .with_code("Q-3-36")
@@ -3406,6 +3642,17 @@ fn stream_write_block<W: io::Write>(
             },
         ),
         Block::CaptionBlock(caption) => {
+            if ctx.serializer.config.raw {
+                return stream_write_simple_node(
+                    w,
+                    "CaptionBlock",
+                    &caption.source_info,
+                    ctx,
+                    |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                        stream_write_inlines(w, &caption.content, ctx)
+                    },
+                );
+            }
             ctx.errors.push(
                 DiagnosticMessageBuilder::error("Orphaned caption block in JSON writer")
                     .with_code("Q-3-21")
@@ -3649,20 +3896,33 @@ fn stream_write_custom_inline<W: io::Write>(
 }
 
 /// Emit a meta node `{c, s, t}` with alphabetical key ordering.
+/// Emit a config-value node: `{c, m?, s, t}` (alphabetical).
+///
+/// `s` comes from the value's own `source_info`. In raw mode, a
+/// non-default merge op is carried in `m` ("prefer"; the default,
+/// "concat", is omitted to keep output lean). The Pandoc-superset mode
+/// never emits `m` — merge ops are not representable there.
 fn stream_write_meta_node<W: io::Write, FC>(
     w: &mut JsonStreamWriter<W>,
     type_name: &str,
-    source_info: &SourceInfo,
+    value: &ConfigValue,
     ctx: &mut JsonWriterContext,
     content: FC,
 ) -> io::Result<()>
 where
     FC: FnOnce(&mut JsonStreamWriter<W>, &mut JsonWriterContext) -> io::Result<()>,
 {
-    let s_id = ctx.serializer.intern(source_info);
+    let s_id = ctx.serializer.intern(&value.source_info);
     w.begin_object()?;
     w.key("c")?;
     content(w, ctx)?;
+    if ctx.serializer.config.raw && value.merge_op != quarto_pandoc_types::MergeOp::default() {
+        w.key("m")?;
+        w.str_value(match value.merge_op {
+            quarto_pandoc_types::MergeOp::Prefer => "prefer",
+            quarto_pandoc_types::MergeOp::Concat => "concat",
+        })?;
+    }
     w.key("s")?;
     w.u64_value(s_id as u64)?;
     w.key("t")?;
@@ -3676,68 +3936,97 @@ fn stream_write_config_value<W: io::Write>(
     value: &ConfigValue,
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
+    let raw = ctx.serializer.config.raw;
     match &value.value {
         ConfigValueKind::Scalar(yaml) => match yaml {
             yaml_rust2::Yaml::String(s) => {
-                stream_write_meta_node(w, "MetaString", &value.source_info, ctx, |w, _ctx| {
-                    w.str_value(s)
-                })
+                stream_write_meta_node(w, "MetaString", value, ctx, |w, _ctx| w.str_value(s))
             }
             yaml_rust2::Yaml::Boolean(b) => {
-                stream_write_meta_node(w, "MetaBool", &value.source_info, ctx, |w, _ctx| {
-                    w.bool_value(*b)
-                })
+                stream_write_meta_node(w, "MetaBool", value, ctx, |w, _ctx| w.bool_value(*b))
+            }
+            yaml_rust2::Yaml::Integer(i) if raw => {
+                stream_write_meta_node(w, "MetaInt", value, ctx, |w, _ctx| w.i64_value(*i))
             }
             yaml_rust2::Yaml::Integer(i) => {
                 let text = i.to_string();
-                stream_write_meta_node(w, "MetaString", &value.source_info, ctx, |w, _ctx| {
-                    w.str_value(&text)
-                })
+                stream_write_meta_node(w, "MetaString", value, ctx, |w, _ctx| w.str_value(&text))
+            }
+            // yaml_rust2 stores reals as their raw source string; carrying
+            // the string keeps the raw roundtrip byte-faithful.
+            yaml_rust2::Yaml::Real(r) if raw => {
+                stream_write_meta_node(w, "MetaReal", value, ctx, |w, _ctx| w.str_value(r))
             }
             yaml_rust2::Yaml::Real(r) => {
-                stream_write_meta_node(w, "MetaString", &value.source_info, ctx, |w, _ctx| {
-                    w.str_value(r)
-                })
+                stream_write_meta_node(w, "MetaString", value, ctx, |w, _ctx| w.str_value(r))
+            }
+            yaml_rust2::Yaml::Null if raw => {
+                stream_write_meta_node(w, "MetaNull", value, ctx, |w, _ctx| w.null_value())
             }
             yaml_rust2::Yaml::Null => {
-                stream_write_meta_node(w, "MetaString", &value.source_info, ctx, |w, _ctx| {
-                    w.str_value("")
-                })
+                stream_write_meta_node(w, "MetaString", value, ctx, |w, _ctx| w.str_value(""))
             }
-            _ => stream_write_meta_node(w, "MetaString", &value.source_info, ctx, |w, _ctx| {
-                w.str_value("")
-            }),
+            other if raw => {
+                // Raw mode must not silently degrade: a Scalar holding a
+                // non-scalar YAML value has no faithful encoding, so fail
+                // the write loudly.
+                ctx.errors.push(
+                    DiagnosticMessageBuilder::error(
+                        "Unserializable YAML scalar in raw JSON writer",
+                    )
+                    .with_code("Q-3-57")
+                    .with_location(value.source_info.clone())
+                    .problem(format!(
+                        "Scalar metadata holds a non-scalar YAML value ({:?}), which raw-json cannot represent faithfully",
+                        std::mem::discriminant(other)
+                    ))
+                    .add_detail("Arrays and maps should use ConfigValueKind::Array / Map, not Scalar")
+                    .add_hint("This may indicate a bug in metadata construction")
+                    .build(),
+                );
+                stream_write_meta_node(w, "MetaNull", value, ctx, |w, _ctx| w.null_value())
+            }
+            _ => stream_write_meta_node(w, "MetaString", value, ctx, |w, _ctx| w.str_value("")),
         },
         ConfigValueKind::PandocInlines(inlines) => {
-            stream_write_meta_node(w, "MetaInlines", &value.source_info, ctx, |w, ctx| {
+            stream_write_meta_node(w, "MetaInlines", value, ctx, |w, ctx| {
                 stream_write_inlines(w, inlines, ctx)
             })
         }
         ConfigValueKind::PandocBlocks(blocks) => {
-            stream_write_meta_node(w, "MetaBlocks", &value.source_info, ctx, |w, ctx| {
+            stream_write_meta_node(w, "MetaBlocks", value, ctx, |w, ctx| {
                 stream_write_blocks(w, blocks, ctx)
             })
         }
+        ConfigValueKind::Path(p) if raw => {
+            stream_write_meta_node(w, "MetaPath", value, ctx, |w, _ctx| w.str_value(p))
+        }
         ConfigValueKind::Path(p) => {
             let inlines = build_path_inlines(p, &value.source_info);
-            stream_write_meta_node(w, "MetaInlines", &value.source_info, ctx, |w, ctx| {
+            stream_write_meta_node(w, "MetaInlines", value, ctx, |w, ctx| {
                 stream_write_inlines(w, &inlines, ctx)
             })
+        }
+        ConfigValueKind::Glob(g) if raw => {
+            stream_write_meta_node(w, "MetaGlob", value, ctx, |w, _ctx| w.str_value(g))
         }
         ConfigValueKind::Glob(g) => {
             let inlines = build_glob_inlines(g, &value.source_info);
-            stream_write_meta_node(w, "MetaInlines", &value.source_info, ctx, |w, ctx| {
+            stream_write_meta_node(w, "MetaInlines", value, ctx, |w, ctx| {
                 stream_write_inlines(w, &inlines, ctx)
             })
         }
+        ConfigValueKind::Expr(e) if raw => {
+            stream_write_meta_node(w, "MetaExpr", value, ctx, |w, _ctx| w.str_value(e))
+        }
         ConfigValueKind::Expr(e) => {
             let inlines = build_expr_inlines(e, &value.source_info);
-            stream_write_meta_node(w, "MetaInlines", &value.source_info, ctx, |w, ctx| {
+            stream_write_meta_node(w, "MetaInlines", value, ctx, |w, ctx| {
                 stream_write_inlines(w, &inlines, ctx)
             })
         }
         ConfigValueKind::Array(items) => {
-            stream_write_meta_node(w, "MetaList", &value.source_info, ctx, |w, ctx| {
+            stream_write_meta_node(w, "MetaList", value, ctx, |w, ctx| {
                 w.begin_array()?;
                 for item in items {
                     stream_write_config_value(w, item, ctx)?;
@@ -3747,7 +4036,7 @@ fn stream_write_config_value<W: io::Write>(
             })
         }
         ConfigValueKind::Map(entries) => {
-            stream_write_meta_node(w, "MetaMap", &value.source_info, ctx, |w, ctx| {
+            stream_write_meta_node(w, "MetaMap", value, ctx, |w, ctx| {
                 w.begin_array()?;
                 for entry in entries {
                     w.begin_object()?;
@@ -3933,16 +4222,36 @@ fn stream_write_pandoc<W: io::Write>(
 
     let res: io::Result<()> = (|| {
         w.begin_object()?;
+        if config.raw {
+            // The marker MUST be the first key: it is the format's
+            // self-identification, visible in the first line of output.
+            // `pandoc-api-version` is deliberately absent in raw mode so
+            // Pandoc-JSON consumers fail fast instead of half-parsing.
+            w.key("pampa-json-format")?;
+            w.begin_object()?;
+            w.key("version")?;
+            w.u64_value(crate::writers::raw_json::RAW_JSON_FORMAT_VERSION)?;
+            w.end_object()?;
+        }
         w.key("blocks")?;
         stream_write_blocks(w, &pandoc.blocks, &mut ctx)?;
         w.key("meta")?;
-        stream_write_config_value_as_meta(w, &pandoc.meta, &mut ctx)?;
-        w.key("pandoc-api-version")?;
-        w.begin_array()?;
-        w.u64_value(1)?;
-        w.u64_value(23)?;
-        w.u64_value(1)?;
-        w.end_array()?;
+        if config.raw {
+            // Full-fidelity meta: a single config-value node (entry order,
+            // key sources, merge ops, and the top-level value's own
+            // source info all inline). The Pandoc-style sorted object
+            // cannot preserve entry order on read (serde_json maps are
+            // BTreeMaps), hence the array-of-entries encoding.
+            stream_write_config_value(w, &pandoc.meta, &mut ctx)?;
+        } else {
+            stream_write_config_value_as_meta(w, &pandoc.meta, &mut ctx)?;
+            w.key("pandoc-api-version")?;
+            w.begin_array()?;
+            w.u64_value(1)?;
+            w.u64_value(23)?;
+            w.u64_value(1)?;
+            w.end_array()?;
+        }
         w.key("astContext")?;
         w.begin_object()?;
         // files (alphabetical: files, metaTopLevelKeySources?, p)
@@ -3973,8 +4282,17 @@ fn stream_write_pandoc<W: io::Write>(
         }
         w.end_array()?;
 
-        // metaTopLevelKeySources (only if non-empty)
-        if let ConfigValueKind::Map(entries) = &pandoc.meta.value
+        // Roundtrip-relevant ASTContext state beyond the files table
+        // (raw mode only): the example-list counter.
+        if config.raw {
+            w.key("exampleListCounter")?;
+            w.u64_value(ast_context.example_list_counter.get() as u64)?;
+        }
+
+        // metaTopLevelKeySources (only if non-empty; not in raw mode,
+        // where key sources ride inline in the meta entry encoding)
+        if !config.raw
+            && let ConfigValueKind::Map(entries) = &pandoc.meta.value
             && !entries.is_empty()
         {
             w.key("metaTopLevelKeySources")?;

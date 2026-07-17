@@ -317,6 +317,18 @@ fn main() {
                 }
             }
         }
+        "raw-json" => {
+            // Full-fidelity q2-internal format: strict source-info
+            // references, no post-read transforms — the AST comes back
+            // exactly as it was written.
+            match readers::raw_json::read(&mut input.as_bytes()) {
+                Ok((pandoc, context)) => (pandoc, context),
+                Err(e) => {
+                    eprintln!("Error reading raw JSON: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
         "commonmark" => {
             // Use comrak-based CommonMark reader
             readers::commonmark::read(&input, input_filename)
@@ -495,6 +507,16 @@ fn main() {
                     ..writers::json::JsonConfig::default()
                 };
                 writers::json::write_with_config(&pandoc, &context, &mut buf, &json_config)
+            }
+            "raw-json" => {
+                let json_config = writers::json::JsonConfig {
+                    include_inline_locations: args
+                        .json_source_location
+                        .as_ref()
+                        .is_some_and(|s| s == "full"),
+                    ..writers::json::JsonConfig::default()
+                };
+                writers::raw_json::write_with_config(&pandoc, &context, &mut buf, &json_config)
             }
             "native" => writers::native::write(&pandoc, &context, &mut buf),
             "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf),

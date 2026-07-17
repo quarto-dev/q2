@@ -8,6 +8,11 @@
 (first formal TS reader); [q2-preview plan 5](../plans/2026-05-04-q2-preview-plan-5-wire-format.md)
 (`Synthetic` / `Derived` variants).
 
+> **Second consumer:** the pampa `raw-json` format (bd-en2hvrwn, GH #11;
+> see [raw-json-format.md](raw-json-format.md)) emits the same
+> `astContext.p` pool through the same writer code. Code allocations
+> here govern both formats.
+
 ## Purpose
 
 The source-info pool is a JSON-encoded structure emitted by the Pandoc
