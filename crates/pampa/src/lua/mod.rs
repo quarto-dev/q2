@@ -8,6 +8,7 @@
  * Elements are exposed as userdata with named field access (Pandoc 2.17+ style).
  */
 
+mod config_value;
 mod constructors;
 mod diagnostics;
 mod dofile_wasm;
@@ -17,6 +18,7 @@ mod json;
 mod list;
 pub mod mediabag;
 mod os_wasm;
+mod pandoc_doc;
 mod path;
 mod quarto_api;
 mod quarto_doc;

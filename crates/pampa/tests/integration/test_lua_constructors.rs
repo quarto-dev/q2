@@ -686,17 +686,18 @@ end
 }
 
 #[tokio::test]
-async fn test_doc_level_handler_emits_unimplemented_warning() {
-    // bd-2llqjsms / bd-a9g50za2 are still open: doc-level filter
-    // functions (Pandoc/Meta/Doc) are collected but never invoked.
-    // Until they are implemented, defining one must produce a loud
-    // Q-11-6 warning instead of a silent no-op.
+async fn test_doc_level_handlers_run_without_diagnostics() {
+    // Flipped from test_doc_level_handler_emits_unimplemented_warning:
+    // all three doc-level handlers (Meta/Pandoc/Doc) are invoked as of
+    // bd-a9g50za2 Phase 4, and the interim Q-11-6 "unimplemented"
+    // warning is retired (removed from quarto-error-catalog). Each
+    // handler must observably run, with no diagnostics emitted.
+    // (Invocation effects themselves are asserted in
+    // crates/pampa/src/lua/filter_tests.rs — the test_meta_handler_* and
+    // test_pandoc_handler_* suites.)
     for handler in ["Meta", "Pandoc", "Doc"] {
         let filter_code = format!(
             r#"
-function Str(elem)
-    return elem
-end
 function {handler}(x)
     return x
 end
@@ -707,42 +708,11 @@ end
             source_info: quarto_source_map::SourceInfo::for_test(),
         })]);
         let diags = run_filter_diagnostics(&filter_code, doc).await;
-        let warning = diags
-            .iter()
-            .find(|d| d.code.as_deref() == Some("Q-11-6"))
-            .unwrap_or_else(|| panic!("no Q-11-6 diagnostic for '{handler}' in: {diags:?}"));
         assert!(
-            warning.title.contains(&format!("'{handler}'")),
-            "{handler}: title does not name the handler: {}",
-            warning.title
-        );
-        assert!(
-            matches!(
-                warning.kind,
-                quarto_error_reporting::DiagnosticKind::Warning
-            ),
-            "{handler}: expected a warning, got {:?}",
-            warning.kind
+            diags.is_empty(),
+            "{handler}: unexpected diagnostics: {diags:?}"
         );
     }
-}
-
-#[tokio::test]
-async fn test_element_only_filter_has_no_unimplemented_warning() {
-    let filter_code = r#"
-function Str(elem)
-    return elem
-end
-"#;
-    let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "hi".to_string(),
-        source_info: quarto_source_map::SourceInfo::for_test(),
-    })]);
-    let diags = run_filter_diagnostics(filter_code, doc).await;
-    assert!(
-        diags.iter().all(|d| d.code.as_deref() != Some("Q-11-6")),
-        "unexpected Q-11-6 diagnostic: {diags:?}"
-    );
 }
 
 #[tokio::test]
@@ -769,4 +739,96 @@ end
     let err = run_filter_expect_error(filter_code, simpletable_doc()).await;
     assert!(err.contains("Q-11-5"), "expected Q-11-5 in: {err}");
     assert!(err.contains("bogus_field"), "expected field name in: {err}");
+}
+
+// ============================================================================
+// pandoc.Pandoc / pandoc.Meta / pandoc.Meta* constructors (bd-2llqjsms
+// Phase 3) — error paths and behaviors the conformance suite doesn't pin.
+// ============================================================================
+
+#[tokio::test]
+async fn test_pandoc_constructor_rejects_non_table_meta() {
+    let err = run_filter_expect_error(
+        "pandoc.Pandoc({}, 5)\n",
+        create_test_doc(vec![Inline::Str(Str {
+            text: "hi".to_string(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        })]),
+    )
+    .await;
+    assert!(err.contains("Q-11-3"), "expected Q-11-3 in: {err}");
+    assert!(
+        err.contains("table (Meta)"),
+        "expected expected-type in: {err}"
+    );
+    assert!(err.contains("got number"), "expected got-type in: {err}");
+}
+
+#[tokio::test]
+async fn test_meta_constructor_rejects_non_table() {
+    let err = run_filter_expect_error(
+        "pandoc.Meta('not a table')\n",
+        create_test_doc(vec![Inline::Str(Str {
+            text: "hi".to_string(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        })]),
+    )
+    .await;
+    assert!(err.contains("Q-11-3"), "expected Q-11-3 in: {err}");
+    assert!(err.contains("got string"), "expected got-type in: {err}");
+}
+
+#[tokio::test]
+async fn test_metabool_rejects_non_boolean() {
+    // Pandoc: "boolean expected, got string". Lua truthiness coercion
+    // must NOT apply.
+    let err = run_filter_expect_error(
+        "pandoc.MetaBool('x')\n",
+        create_test_doc(vec![Inline::Str(Str {
+            text: "hi".to_string(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        })]),
+    )
+    .await;
+    assert!(
+        err.contains("boolean") && err.contains("got string"),
+        "expected boolean-type error in: {err}"
+    );
+}
+
+#[tokio::test]
+async fn test_meta_constructor_behaviors() {
+    // Successful top-level asserts: constructor coercions and cross-path
+    // document equality. Any failed assert -> filter load error -> panic.
+    let (_, _) = run_filter(
+        r#"
+-- MetaString renders numbers (explicit stringification request)
+assert(pandoc.MetaString(5) == '5', 'MetaString(5)')
+assert(pandoc.MetaString('x') == 'x', 'MetaString identity')
+-- MetaBool is the identity on booleans
+assert(pandoc.MetaBool(true) == true, 'MetaBool identity')
+-- MetaList normalizes elementwise: Inline userdata -> Inlines singleton
+local m = pandoc.MetaList{pandoc.Emph('x'), 'str'}
+assert(pandoc.utils.type(m) == 'List', 'MetaList type')
+assert(pandoc.utils.type(m[1]) == 'Inlines', 'MetaList inline elem')
+assert(m[2] == 'str', 'MetaList string elem')
+-- MetaMap normalizes values; result is a plain table
+local mm = pandoc.MetaMap{k = pandoc.Emph('x')}
+assert(pandoc.utils.type(mm.k) == 'Inlines', 'MetaMap value')
+-- Docs from pandoc.read and pandoc.Pandoc are interchangeable values
+local a = pandoc.read('hello', 'qmd')
+local b = pandoc.Pandoc({pandoc.Para('hello')})
+assert(pandoc.utils.type(a) == 'Pandoc', 'read doc type')
+assert(pandoc.utils.type(b) == 'Pandoc', 'constructed doc type')
+assert(a == b, 'read == constructed')
+assert(a ~= pandoc.Pandoc({pandoc.Para('different')}), 'different docs unequal')
+-- clone from a read doc works too (shared metatable)
+assert(a:clone() == a, 'clone equal')
+"#,
+        create_test_doc(vec![Inline::Str(Str {
+            text: "hi".to_string(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        })]),
+    )
+    .await;
 }
