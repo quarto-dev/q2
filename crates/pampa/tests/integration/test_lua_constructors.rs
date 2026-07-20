@@ -686,39 +686,18 @@ end
 }
 
 #[tokio::test]
-async fn test_meta_handler_emits_no_unimplemented_warning() {
-    // `function Meta` is invoked as of bd-a9g50za2 Phase 2; it must NOT
-    // trigger the Q-11-6 "unimplemented" warning reserved for the
-    // still-uninvoked Pandoc/Doc handlers.
-    let filter_code = r#"
-function Meta(meta)
-    return meta
-end
-"#;
-    let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "hi".to_string(),
-        source_info: quarto_source_map::SourceInfo::for_test(),
-    })]);
-    let diags = run_filter_diagnostics(filter_code, doc).await;
-    assert!(
-        diags.iter().all(|d| d.code.as_deref() != Some("Q-11-6")),
-        "unexpected Q-11-6 diagnostic for Meta: {diags:?}"
-    );
-}
-
-#[tokio::test]
-async fn test_doc_level_handler_emits_unimplemented_warning() {
-    // bd-a9g50za2 Phase 4 is still open: the whole-document filter
-    // functions (Pandoc/Doc) are collected but never invoked. Until
-    // they are implemented, defining one must produce a loud Q-11-6
-    // warning instead of a silent no-op. (Meta is invoked — see
-    // test_meta_handler_emits_no_unimplemented_warning.)
-    for handler in ["Pandoc", "Doc"] {
+async fn test_doc_level_handlers_run_without_diagnostics() {
+    // Flipped from test_doc_level_handler_emits_unimplemented_warning:
+    // all three doc-level handlers (Meta/Pandoc/Doc) are invoked as of
+    // bd-a9g50za2 Phase 4, and the interim Q-11-6 "unimplemented"
+    // warning is retired (removed from quarto-error-catalog). Each
+    // handler must observably run, with no diagnostics emitted.
+    // (Invocation effects themselves are asserted in
+    // crates/pampa/src/lua/filter_tests.rs — the test_meta_handler_* and
+    // test_pandoc_handler_* suites.)
+    for handler in ["Meta", "Pandoc", "Doc"] {
         let filter_code = format!(
             r#"
-function Str(elem)
-    return elem
-end
 function {handler}(x)
     return x
 end
@@ -729,42 +708,11 @@ end
             source_info: quarto_source_map::SourceInfo::for_test(),
         })]);
         let diags = run_filter_diagnostics(&filter_code, doc).await;
-        let warning = diags
-            .iter()
-            .find(|d| d.code.as_deref() == Some("Q-11-6"))
-            .unwrap_or_else(|| panic!("no Q-11-6 diagnostic for '{handler}' in: {diags:?}"));
         assert!(
-            warning.title.contains(&format!("'{handler}'")),
-            "{handler}: title does not name the handler: {}",
-            warning.title
-        );
-        assert!(
-            matches!(
-                warning.kind,
-                quarto_error_reporting::DiagnosticKind::Warning
-            ),
-            "{handler}: expected a warning, got {:?}",
-            warning.kind
+            diags.is_empty(),
+            "{handler}: unexpected diagnostics: {diags:?}"
         );
     }
-}
-
-#[tokio::test]
-async fn test_element_only_filter_has_no_unimplemented_warning() {
-    let filter_code = r#"
-function Str(elem)
-    return elem
-end
-"#;
-    let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "hi".to_string(),
-        source_info: quarto_source_map::SourceInfo::for_test(),
-    })]);
-    let diags = run_filter_diagnostics(filter_code, doc).await;
-    assert!(
-        diags.iter().all(|d| d.code.as_deref() != Some("Q-11-6")),
-        "unexpected Q-11-6 diagnostic: {diags:?}"
-    );
 }
 
 #[tokio::test]

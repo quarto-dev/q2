@@ -131,52 +131,17 @@ fn get_or_create_doc_metatable(lua: &Lua) -> Result<Table> {
         })?,
     )?;
 
-    // walk(doc, filter): pandoc's applyFully order. The element legs are
-    // handled by walk_blocks_with_filter (which itself dispatches on the
-    // filter's `traverse`); the Meta leg wraps them in the right order.
-    // The Pandoc-handler leg and meta-value traversal are Phase 4
-    // (plan: 2026-07-20-lua-meta-pandoc-filters.md).
+    // walk(doc, filter): pandoc's walk method IS applyFully — full
+    // doc-level order including meta-value traversal and the
+    // Pandoc-handler leg, shared with the filter pass.
     mt.set(
         "walk",
         lua.create_async_function(|lua, (doc, filter): (Table, Table)| async move {
-            use super::filter::{WalkingOrder, get_walking_order};
             let pandoc = peek_pandoc_doc(&lua, Value::Table(doc))?;
             let new_source = filter_source_info(&lua);
-            let (blocks, meta) = match get_walking_order(&filter)? {
-                WalkingOrder::Typewise => {
-                    let blocks =
-                        super::types::walk_blocks_with_filter(&lua, &pandoc.blocks, &filter)
-                            .await?;
-                    let meta = super::filter::apply_meta_function(
-                        &lua,
-                        &filter,
-                        &pandoc.meta,
-                        &new_source,
-                    )
-                    .await?;
-                    (blocks, meta)
-                }
-                WalkingOrder::Topdown => {
-                    let meta = super::filter::apply_meta_function(
-                        &lua,
-                        &filter,
-                        &pandoc.meta,
-                        &new_source,
-                    )
-                    .await?;
-                    let blocks =
-                        super::types::walk_blocks_with_filter(&lua, &pandoc.blocks, &filter)
-                            .await?;
-                    (blocks, meta)
-                }
-            };
-            push_pandoc_doc(
-                &lua,
-                &Pandoc {
-                    blocks,
-                    meta: meta.unwrap_or(pandoc.meta),
-                },
-            )
+            let walked =
+                super::filter::apply_full_filter(&lua, &filter, &pandoc, &new_source).await?;
+            push_pandoc_doc(&lua, &walked)
         })?,
     )?;
 

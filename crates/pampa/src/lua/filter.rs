@@ -248,45 +248,17 @@ pub async fn apply_lua_filter(
     // Get filter functions from globals or return value
     let filter_table = get_filter_table(&lua)?;
 
-    // Determine traversal mode
-    let walking_order = get_walking_order(&filter_table)?;
-
-    // Apply the filter using the appropriate traversal. Doc-level order
-    // matches pandoc's applyFully (pandoc-lua-marshal Pandoc.hs):
-    //   typewise: element walk -> Meta -> Pandoc
-    //   topdown:  Pandoc -> Meta -> element walk
-    // (`Pandoc`/`Doc` handler invocation is bd-a9g50za2 Phase 4.)
     let meta_new_source = quarto_source_map::SourceInfo::generated(quarto_source_map::By::filter(
         filter_path.to_string_lossy().to_string(),
         0,
     ));
-    let (filtered_blocks, filtered_meta) = match walking_order {
-        WalkingOrder::Typewise => {
-            let blocks = apply_typewise_filter(&lua, &filter_table, &pandoc.blocks).await?;
-            let meta =
-                apply_meta_function(&lua, &filter_table, &pandoc.meta, &meta_new_source).await?;
-            (blocks, meta)
-        }
-        WalkingOrder::Topdown => {
-            let meta =
-                apply_meta_function(&lua, &filter_table, &pandoc.meta, &meta_new_source).await?;
-            let blocks = apply_topdown_filter(&lua, &filter_table, &pandoc.blocks).await?;
-            (blocks, meta)
-        }
-    };
+    let filtered_pandoc = apply_full_filter(&lua, &filter_table, pandoc, &meta_new_source).await?;
 
     // Extract diagnostics, HTML dependencies, and text includes from Lua state
-    let mut diagnostics = super::diagnostics::extract_lua_diagnostics(&lua)?;
-    diagnostics.extend(unimplemented_doc_handler_warnings(&lua, filter_path)?);
+    let diagnostics = super::diagnostics::extract_lua_diagnostics(&lua)?;
     let html_dependencies = super::quarto_doc::extract_html_dependencies(&lua)?;
     let text_includes = super::quarto_doc::extract_text_includes(&lua)?;
     let resources = super::quarto_doc::extract_resources(&lua)?;
-
-    // Return filtered document with all extracted data
-    let filtered_pandoc = Pandoc {
-        meta: filtered_meta.unwrap_or_else(|| pandoc.meta.clone()),
-        blocks: filtered_blocks,
-    };
 
     Ok(FilterOutput {
         pandoc: filtered_pandoc,
@@ -466,35 +438,101 @@ pub(crate) async fn apply_meta_function(
     }
 }
 
-/// Q-11-6: the Pandoc/Doc doc-level filter functions are collected
-/// but not yet invoked (bd-a9g50za2 Phase 4). Until then, a filter that
-/// defines one gets a loud warning instead of a silent no-op. (`Meta`
-/// handlers ARE invoked — see `apply_meta_function`.)
-fn unimplemented_doc_handler_warnings(
+/// Invoke the `Pandoc` (or deprecated alias `Doc`) whole-document
+/// handler, if the filter defines one.
+///
+/// Pandoc semantics (applyPandocFunction / applyStraight): the handler
+/// receives the whole document value; `nil` return keeps the document;
+/// a doc-shaped table return replaces it, with the meta reconciled
+/// against the pre-handler meta so untouched entries keep their
+/// provenance. Returns `None` when no handler is defined or it
+/// returned nil.
+pub(crate) async fn apply_pandoc_function(
     lua: &Lua,
-    filter_path: &Path,
-) -> Result<Vec<DiagnosticMessage>> {
-    let globals = lua.globals();
-    let mut warnings = Vec::new();
-    for name in ["Pandoc", "Doc"] {
-        if globals.get::<Function>(name).is_ok() {
-            warnings.push(
-                quarto_error_reporting::DiagnosticMessageBuilder::warning(format!(
-                    "Unimplemented: Lua filter '{}' defines a '{name}' handler, \
-                     which q2 does not invoke yet",
-                    filter_path.display()
-                ))
-                .with_code("Q-11-6")
-                .problem(
-                    "Whole-document filter functions (Pandoc, Doc) are \
-                     not yet supported; the handler is ignored",
-                )
-                .add_hint("Element-level handlers (Str, Para, ...) and Meta run normally")
-                .build(),
-            );
+    filter_table: &Table,
+    pandoc: &Pandoc,
+    new_source: &quarto_source_map::SourceInfo,
+) -> Result<Option<Pandoc>> {
+    let func = match filter_table.get::<Function>("Pandoc") {
+        Ok(func) => func,
+        Err(_) => match filter_table.get::<Function>("Doc") {
+            Ok(func) => func,
+            Err(_) => return Ok(None),
+        },
+    };
+    let doc_value = super::pandoc_doc::push_pandoc_doc(lua, pandoc)?;
+    let result: Value = func.call_async(doc_value).await?;
+    match result {
+        Value::Nil => Ok(None),
+        Value::Table(t) => {
+            let blocks_val: Value = t.get("blocks").unwrap_or(Value::Nil);
+            let blocks = super::types::peek_blocks_fuzzy(lua, blocks_val)?;
+            let meta_val: Value = t.get("meta").unwrap_or(Value::Nil);
+            let meta = match meta_val {
+                // A doc table without meta: empty map (matches the
+                // pandoc.Pandoc(blocks) constructor's default).
+                Value::Nil => quarto_pandoc_types::ConfigValue {
+                    value: quarto_pandoc_types::ConfigValueKind::Map(Vec::new()),
+                    source_info: new_source.clone(),
+                    merge_op: quarto_pandoc_types::MergeOp::default(),
+                },
+                Value::Table(mt) => {
+                    super::config_value::peek_meta(lua, &mt, Some(&pandoc.meta), new_source)?
+                }
+                other => {
+                    return Err(filter_return_error(
+                        "Pandoc",
+                        lua_facing_type_name(&other),
+                        Error::runtime("table (Meta) expected for doc.meta"),
+                    ));
+                }
+            };
+            Ok(Some(Pandoc { blocks, meta }))
+        }
+        other => Err(filter_return_error(
+            "Pandoc",
+            lua_facing_type_name(&other),
+            Error::runtime("Pandoc document or nil expected"),
+        )),
+    }
+}
+
+/// Apply one filter table to a whole document — pandoc's `applyFully`
+/// (pandoc-lua-marshal Pandoc.hs):
+///   typewise: element walk (meta values first, then blocks) -> Meta -> Pandoc
+///   topdown:  Pandoc -> Meta -> element walk (meta values, then blocks)
+/// Shared by the filter pass (`apply_lua_filter`) and `doc:walk`.
+pub(crate) async fn apply_full_filter(
+    lua: &Lua,
+    filter_table: &Table,
+    pandoc: &Pandoc,
+    new_source: &quarto_source_map::SourceInfo,
+) -> Result<Pandoc> {
+    match get_walking_order(filter_table)? {
+        WalkingOrder::Typewise => {
+            let (meta, blocks) =
+                super::walk::typewise_pandoc(lua, filter_table, &pandoc.meta, &pandoc.blocks)
+                    .await?;
+            let meta = apply_meta_function(lua, filter_table, &meta, new_source)
+                .await?
+                .unwrap_or(meta);
+            let doc = Pandoc { meta, blocks };
+            Ok(apply_pandoc_function(lua, filter_table, &doc, new_source)
+                .await?
+                .unwrap_or(doc))
+        }
+        WalkingOrder::Topdown => {
+            let doc = apply_pandoc_function(lua, filter_table, pandoc, new_source)
+                .await?
+                .unwrap_or_else(|| pandoc.clone());
+            let meta = apply_meta_function(lua, filter_table, &doc.meta, new_source)
+                .await?
+                .unwrap_or(doc.meta);
+            let (meta, blocks) =
+                super::walk::topdown_pandoc(lua, filter_table, &meta, &doc.blocks).await?;
+            Ok(Pandoc { meta, blocks })
         }
     }
-    Ok(warnings)
 }
 
 /// Extract an Inline from a Lua UserData value (flushing any cached

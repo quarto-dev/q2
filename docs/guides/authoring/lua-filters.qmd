@@ -1,0 +1,111 @@
+---
+title: Lua filters
+---
+
+Quarto documents can be transformed with [Pandoc-style Lua
+filters](https://pandoc.org/lua-filters.html). List filters in the
+document (or project) metadata:
+
+``` yaml
+---
+title: My document
+filters:
+  - my-filter.lua
+---
+```
+
+## Element filters
+
+A filter file defines functions named after the AST elements it wants to
+transform. Each function receives the element and may return a
+replacement (or `nil` to keep the element unchanged):
+
+``` lua
+function Str(el)
+  return pandoc.Str(el.text:upper())
+end
+
+function Header(el)
+  el.level = el.level + 1
+  return el
+end
+```
+
+## Whole-document handlers: `Meta` and `Pandoc`
+
+Beyond element functions, a filter can define document-level handlers:
+
+- `function Meta(meta)` receives the document metadata after the element
+  traversal (so it can observe anything element functions computed).
+  Return the (possibly modified) `meta`, or `nil` to leave metadata
+  unchanged.
+- `function Pandoc(doc)` receives the whole document (`doc.blocks`,
+  `doc.meta`) last of all, and may return a replacement document.
+  (`Doc` is accepted as a deprecated alias.)
+
+``` lua
+function Meta(meta)
+  meta.subtitle = 'Rendered ' .. os.date('%Y-%m-%d')
+  return meta
+end
+
+function Pandoc(doc)
+  doc.blocks:insert(pandoc.HorizontalRule())
+  return doc
+end
+```
+
+With the default (typewise) traversal the order is: element functions,
+then `Meta`, then `Pandoc`. Setting `traverse = 'topdown'` reverses it:
+`Pandoc` first, then `Meta`, then a top-down element walk. Element
+functions also traverse metadata values — a `Str` function will visit
+the words of your `title` as well as your document body, exactly as in
+Pandoc.
+
+## How metadata looks from Lua
+
+Metadata values appear as natural Lua values, following modern Pandoc's
+conventions:
+
+| metadata value | Lua value |
+|----|----|
+| string parsed as markdown (the default in front matter) | `Inlines` (or `Blocks`) |
+| literal string (`!str`) | string |
+| boolean | boolean |
+| list | `pandoc.List` |
+| mapping | table |
+
+Quarto deliberately diverges from Pandoc in a few places, in favor of
+its richer configuration model:
+
+- **Numbers stay numbers.** `count: 3` reads as the Lua number `3`
+  (Pandoc renders it as the string `'3'`).
+- **Null reads as `nil`.** A key with an explicit YAML `~` looks absent
+  from Lua; deleting a metadata key is `meta.key = nil`, and writing an
+  explicit null is `quarto.config.null()`.
+- Values Quarto tracks specially — `!path`, `!glob`, `!expr` tagged
+  strings — appear as small typed values with a `.value` string
+  property, and survive a filter round-trip losslessly.
+
+## Constructing configuration values: `quarto.config`
+
+The `quarto.config` table mirrors Quarto's YAML tag system, so a filter
+can create exactly the value a tag would have produced:
+
+| Lua | YAML equivalent |
+|----|----|
+| `quarto.config.str('**text**')` | `key: !str "**text**"` (literal string) |
+| `quarto.config.md('**text**')` | `key: !md "**text**"` (parsed markdown) |
+| `quarto.config.path('style.css')` | `key: !path style.css` |
+| `quarto.config.glob('posts/*.qmd')` | `key: !glob posts/*.qmd` |
+| `quarto.config.expr('Sys.time()')` | `key: !expr Sys.time()` |
+| `quarto.config.null()` | `key: ~` |
+
+For example, to add a stylesheet path from a filter:
+
+``` lua
+function Meta(meta)
+  meta.css = quarto.config.path('extra.css')
+  return meta
+end
+```

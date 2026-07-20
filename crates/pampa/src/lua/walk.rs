@@ -443,6 +443,95 @@ fn pass_is_active(filter: &Table, mode: PassMode) -> bool {
 }
 
 // ============================================================================
+// Metadata traversal (Pandoc's Walkable instance covers Meta: element
+// filter functions visit MetaInlines/MetaBlocks payloads, and Pandoc's
+// field order puts meta before blocks in every pass)
+// ============================================================================
+
+/// Walk the Inlines/Blocks payloads embedded in a metadata ConfigValue
+/// with the given walker. Containers and scalars keep their nodes
+/// (source_info, merge_op, key order, key_source) untouched — only the
+/// inline/block payload vectors are replaced.
+async fn walk_meta_config_value<W: LuaWalker>(
+    w: &W,
+    cv: quarto_pandoc_types::ConfigValue,
+) -> Result<quarto_pandoc_types::ConfigValue> {
+    use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
+    let ConfigValue {
+        value,
+        source_info,
+        merge_op,
+    } = cv;
+    let value = match value {
+        ConfigValueKind::PandocInlines(inlines) => {
+            ConfigValueKind::PandocInlines(w.walk_inlines(inlines).await?)
+        }
+        ConfigValueKind::PandocBlocks(blocks) => {
+            ConfigValueKind::PandocBlocks(w.walk_blocks(blocks).await?)
+        }
+        ConfigValueKind::Array(items) => {
+            let mut walked = Vec::with_capacity(items.len());
+            for item in items {
+                walked.push(Box::pin(walk_meta_config_value(w, item)).await?);
+            }
+            ConfigValueKind::Array(walked)
+        }
+        ConfigValueKind::Map(entries) => {
+            let mut walked = Vec::with_capacity(entries.len());
+            for entry in entries {
+                walked.push(ConfigMapEntry {
+                    key: entry.key,
+                    key_source: entry.key_source,
+                    value: Box::pin(walk_meta_config_value(w, entry.value)).await?,
+                });
+            }
+            ConfigValueKind::Map(walked)
+        }
+        other => other,
+    };
+    Ok(ConfigValue {
+        value,
+        source_info,
+        merge_op,
+    })
+}
+
+/// Typewise element walk over a whole document: per pass, meta payloads
+/// first (Pandoc field order), then the block tree.
+pub(crate) async fn typewise_pandoc(
+    lua: &Lua,
+    filter: &Table,
+    meta: &quarto_pandoc_types::ConfigValue,
+    blocks: &[Block],
+) -> Result<(quarto_pandoc_types::ConfigValue, Vec<Block>)> {
+    let mut meta = meta.clone();
+    let mut blocks = blocks.to_vec();
+    for mode in ALL_PASSES {
+        if !pass_is_active(filter, mode) {
+            continue;
+        }
+        let pass = TypewisePass { lua, filter, mode };
+        meta = walk_meta_config_value(&pass, meta).await?;
+        blocks = pass.walk_blocks(blocks).await?;
+    }
+    Ok((meta, blocks))
+}
+
+/// Topdown element walk over a whole document: meta payloads first,
+/// then the block tree (truncation control stays subtree-local).
+pub(crate) async fn topdown_pandoc(
+    lua: &Lua,
+    filter: &Table,
+    meta: &quarto_pandoc_types::ConfigValue,
+    blocks: &[Block],
+) -> Result<(quarto_pandoc_types::ConfigValue, Vec<Block>)> {
+    let walk = TopdownWalk { lua, filter };
+    let meta = walk_meta_config_value(&walk, meta.clone()).await?;
+    let blocks = walk.walk_blocks(blocks.to_vec()).await?;
+    Ok((meta, blocks))
+}
+
+// ============================================================================
 // Typewise entry points
 // ============================================================================
 

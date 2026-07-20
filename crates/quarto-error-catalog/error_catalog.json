@@ -797,7 +797,6 @@
     "docs_url": "https://quarto.org/docs/errors/cli/Q-7-1",
     "since_version": "99.9.9"
   },
-
   "Q-7-2": {
     "subsystem": "cli",
     "title": "Input Path Not Found",
@@ -805,7 +804,6 @@
     "docs_url": "https://quarto.org/docs/errors/cli/Q-7-2",
     "since_version": "99.9.9"
   },
-
   "Q-7-3": {
     "subsystem": "cli",
     "title": "No Input and No Project",
@@ -813,7 +811,6 @@
     "docs_url": "https://quarto.org/docs/errors/cli/Q-7-3",
     "since_version": "99.9.9"
   },
-
   "Q-7-4": {
     "subsystem": "cli",
     "title": "Multiple Inputs Without a Project",
@@ -821,7 +818,6 @@
     "docs_url": "https://quarto.org/docs/errors/cli/Q-7-4",
     "since_version": "99.9.9"
   },
-
   "Q-7-5": {
     "subsystem": "cli",
     "title": "Inputs Span Multiple Projects",
@@ -829,7 +825,6 @@
     "docs_url": "https://quarto.org/docs/errors/cli/Q-7-5",
     "since_version": "99.9.9"
   },
-
   "Q-7-6": {
     "subsystem": "cli",
     "title": "Input Excluded From Render List",
@@ -837,7 +832,6 @@
     "docs_url": "https://quarto.org/docs/errors/cli/Q-7-6",
     "since_version": "99.9.9"
   },
-
   "Q-7-7": {
     "subsystem": "cli",
     "title": "No Renderable Files Matched",
@@ -845,7 +839,6 @@
     "docs_url": "https://quarto.org/docs/errors/cli/Q-7-7",
     "since_version": "99.9.9"
   },
-
   "Q-7-8": {
     "subsystem": "cli",
     "title": "Project Discovery Failed",
@@ -853,7 +846,6 @@
     "docs_url": "https://quarto.org/docs/errors/cli/Q-7-8",
     "since_version": "99.9.9"
   },
-
   "Q-11-1": {
     "subsystem": "lua",
     "title": "Lua Filter Diagnostic",
@@ -887,13 +879,6 @@
     "title": "Invalid Lua Property Assignment",
     "message_template": "An assignment to an AST element property was rejected: the field is read-only, unknown for this element type, or the value has the wrong type.",
     "docs_url": "https://quarto.org/docs/errors/lua/Q-11-5",
-    "since_version": "99.9.9"
-  },
-  "Q-11-6": {
-    "subsystem": "lua",
-    "title": "Doc-Level Lua Filter Handler Not Yet Supported",
-    "message_template": "A Lua filter defines a document-level handler (Pandoc, Meta, or Doc), which Quarto does not invoke yet. The handler is ignored; element-level handlers (Str, Para, ...) run normally.",
-    "docs_url": "https://quarto.org/docs/errors/lua/Q-11-6",
     "since_version": "99.9.9"
   },
   "Q-12-1": {

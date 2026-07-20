@@ -122,6 +122,84 @@ end
 }
 
 // ============================================================================
+// Doc-level handlers (function Meta / function Pandoc) on WASM
+// ============================================================================
+
+/// Smoke test for bd-2llqjsms/bd-a9g50za2: the Meta and Pandoc handlers
+/// run on wasm32 with the ConfigValue marshaling round-trip.
+#[wasm_bindgen_test]
+async fn doc_level_handlers_wasm() {
+    use pampa::lua::apply_lua_filters;
+    use pampa::lua::runtime::{VirtualFileSystem, WasmRuntime};
+    use pampa::pandoc::{ASTContext, Block, Inline, Pandoc, Paragraph, Str};
+    use quarto_pandoc_types::ConfigValueKind;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    let mut vfs = VirtualFileSystem::new();
+    vfs.add_file(
+        std::path::Path::new("/project/doc_handlers.lua"),
+        br#"
+function Meta(meta)
+    meta.stage = 'meta-ran'
+    return meta
+end
+function Pandoc(doc)
+    doc.meta.stage = tostring(doc.meta.stage) .. '+pandoc'
+    return doc
+end
+"#
+        .to_vec(),
+    );
+
+    let runtime: Arc<dyn pampa::lua::runtime::SystemRuntime> = Arc::new(WasmRuntime::with_vfs(vfs));
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(Paragraph {
+            content: vec![Inline::Str(Str {
+                text: "hello".to_string(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
+            })],
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        })],
+    };
+    let context = ASTContext::new();
+
+    let output = apply_lua_filters(
+        pandoc,
+        context,
+        &[PathBuf::from("/project/doc_handlers.lua")],
+        "html",
+        runtime,
+        None,
+    )
+    .await
+    .expect("filter execution failed");
+
+    assert!(
+        output.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        output.diagnostics
+    );
+    // Typewise order: Meta ran, then Pandoc saw and extended its value.
+    match &output.pandoc.meta.value {
+        ConfigValueKind::Map(entries) => {
+            let stage = entries
+                .iter()
+                .find(|e| e.key == "stage")
+                .expect("stage key missing");
+            match &stage.value.value {
+                ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) => {
+                    assert_eq!(s, "meta-ran+pandoc")
+                }
+                other => panic!("expected string scalar, got {other:?}"),
+            }
+        }
+        other => panic!("expected Map meta, got {other:?}"),
+    }
+}
+
+// ============================================================================
 // Test 3: Shortcode engine initialization on WASM
 // ============================================================================
 
@@ -182,10 +260,9 @@ async fn synthetic_io_available_in_filters() {
     vfs.add_file(
         std::path::Path::new("/project/check_io.lua"),
         br#"
--- Para (not Pandoc): doc-level handlers are not invoked yet, so the
--- assertions would be dead code, and bd-2llqjsms's interim Q-11-6
--- warning would trip the empty-diagnostics check below. The test doc
--- contains a Paragraph, so Para actually runs.
+-- Para runs for the test doc's Paragraph, so the assertions are
+-- exercised. (Doc-level handlers are covered by the dedicated
+-- doc_level_handlers_wasm smoke test.)
 function Para(el)
     assert(type(io) == "table", "io should be a table")
     assert(type(io.open) == "function", "io.open should be a function")

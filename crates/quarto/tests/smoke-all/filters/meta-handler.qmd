@@ -11,7 +11,7 @@ _quarto:
         - ["p.subtitle"]
         - []
       ensureFileRegexMatches:
-        - ["<title>Title From Meta</title>", "Subtitle from Meta handler", "seen-2-strs"]
+        - ["<title>Title From Meta</title>", "Subtitle from Meta handler", "seen-[1-9][0-9]*-strs"]
         - ["Original Title"]
 ---
 

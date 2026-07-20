@@ -4,7 +4,9 @@
 invocation). Parent epic: bd-grkrb9nj. Supersedes bd-uy3z (older duplicate,
 close when this lands).
 
-**Status:** design proposal — iterating with Carlos before implementation.
+**Status:** Phases 0–4 implemented (commits c4723a68 Phases 1–2, 75adf0b7
+Phase 3, Phase 4 in the follow-on commit). Design decisions recorded below;
+`doc:normalize()` deferred to bd-62lppjuy.
 
 ## Overview
 
@@ -322,23 +324,43 @@ Phase 2 notes:
       MetaBool, MetaList/MetaMap normalization, cross-path doc equality).
 
 ### Phase 4 — Pandoc handler + full-doc walk parity + cleanup
-- [ ] **Element walk must traverse meta values** (discovered from upstream
-      test-pandoc.lua walk tests): pandoc's `walkBlocksAndInlines` visits
-      MetaInlines/MetaBlocks payloads inside meta — meta-first (Pandoc's
-      field order), inline pass then block pass in typewise; root-down in
-      topdown. q2's walk currently touches only `pandoc.blocks`, so element
-      filters never see meta content (e.g. Str-uppercase doesn't uppercase
-      the title in q2 but does in pandoc). Implement with reconciliation
-      (only changed PandocInlines/Blocks payloads get new nodes).
-- [ ] Invoke Pandoc/Doc handler (typewise last; topdown first with
-      truncation), shared with `doc:walk` (pandoc's `walk` method IS
-      `applyFully`, so the doc walk needs the full order incl. meta
-      traversal — implement as one shared helper).
-- [ ] Remove Q-11-6 warning path + retire catalog entry + flip its test.
-- [ ] Divergence registry entries (D-num, D-null, D-order) with pinning tests.
-- [ ] WASM smoke test addition (`tests/wasm_lua.rs`); verify WASM leg builds
-      (`cargo xtask verify`).
-- [ ] Docs: user-facing Lua filter page notes Meta/Pandoc support +
-      `quarto.config.*`.
-- [ ] File follow-up strand for `doc:normalize()`; close bd-2llqjsms,
-      bd-a9g50za2, bd-uy3z.
+- [x] **Element walk traverses meta values**: `walk_meta_config_value` in
+      walk.rs walks MetaInlines/MetaBlocks payloads with either walker
+      (generic over LuaWalker); `typewise_pandoc` runs meta-then-blocks
+      *per pass* (matching pandoc's field-order semantics pinned by the
+      conformance walk test), `topdown_pandoc` meta-then-blocks root-down.
+      Container/scalar nodes keep provenance; only payload vectors are
+      replaced. Note: in the real pipeline this walks the **merged**
+      config metadata, so element filters now see format config etc. —
+      same as pandoc/Q1; the smoke fixture asserts a nonzero Str count
+      rather than pinning merged-config size.
+- [x] Pandoc/Doc handler invoked via `apply_pandoc_function` (nil keeps
+      doc; doc-shaped return reconciles meta against the pre-handler
+      meta; Q-11-4 on invalid returns). `apply_full_filter` is the shared
+      applyFully implementation used by both the filter pass and
+      `doc:walk`. All 4 remaining walk/differential xfails flipped:
+      conformance 198 pass / 5 xfail (normalize ×2 + 3 DIVERGENCE);
+      differential 30/30.
+- [x] Q-11-6 removed: warning path deleted, catalog entry retired (no
+      docs page existed), tests flipped
+      (`test_doc_level_handlers_run_without_diagnostics`).
+- [x] Divergence registry entries (D-num, D-null, D-order) with pinning
+      tests (landed in Phase 1-2 commits; D-num conformance xfail
+      annotated in Phase 3).
+- [x] WASM smoke test `doc_level_handlers_wasm` added to
+      `tests/wasm_lua.rs` (Meta→Pandoc order through the ConfigValue
+      round-trip on wasm32).
+- [x] Docs: new user-facing guide `docs/guides/authoring/lua-filters.qmd`
+      (element filters, Meta/Pandoc handlers, native meta representation
+      with the registered divergences, `quarto.config.*` table) — linked
+      from the guides index, render verified with `q2 render`.
+- [x] E2E through the real binary: `q2 render` of a doc whose filter
+      defines Str+Meta+Pandoc handlers produced
+      `summary: 7 strs, after meta` in the output HTML (Pandoc handler
+      ran last, saw Meta's value, appended a block; the Str count of 7 =
+      3 body + 4 merged-meta inlines proves meta traversal end-to-end;
+      output inspected).
+- [x] Follow-up strand for `doc:normalize()` filed: **bd-62lppjuy**
+      (child of epic bd-grkrb9nj, discovered-from bd-2llqjsms).
+- [ ] Close bd-2llqjsms, bd-a9g50za2 after final gates + commit
+      (bd-uy3z already closed as superseded).

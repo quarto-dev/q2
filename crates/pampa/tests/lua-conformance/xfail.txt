@@ -32,13 +32,9 @@
 # walk/clone/__eq/__concat): 196 pass, 7 xfail (2 of them DIVERGENCE).
 
 # --- Remaining (bd-2llqjsms follow-ups) ---
-# normalize(): deferred to a follow-up strand (plan Phase 0 decision 4).
-test-pandoc.lua::normalize::normalizes table # doc:normalize() not implemented (follow-up strand)
-test-pandoc.lua::normalize::removes repeated whitespace # doc:normalize() not implemented (follow-up strand)
-# Full-doc walk parity (element functions traverse meta values; Pandoc
-# handler leg with topdown truncation): plan Phase 4.
-test-pandoc.lua::walk::default traversal is typewise, bottom-up # walk does not yet traverse meta values / invoke Pandoc (Phase 4)
-test-pandoc.lua::walk::truncating topdown traversal works # walk does not yet traverse meta values / invoke Pandoc (Phase 4)
+# normalize(): deferred to follow-up strand bd-62lppjuy (plan Phase 0 decision 4).
+test-pandoc.lua::normalize::normalizes table # doc:normalize() not implemented (bd-62lppjuy)
+test-pandoc.lua::normalize::removes repeated whitespace # doc:normalize() not implemented (bd-62lppjuy)
 # DIVERGENCE (permanent, D-num, 2026-07-20): q2 metadata numbers are
 # first-class, never stringified. See tests/lua-conformance/divergences.md.
 test-metavalue.lua::MetaValue elements::Numbers are treated as strings # DIVERGENCE: meta numbers stay numbers (D-num)
