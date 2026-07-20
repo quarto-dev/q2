@@ -1,0 +1,32 @@
+---
+title: "Mermaid diagrams"
+---
+
+A fenced code block marked `mermaid` renders as a diagram. A flowchart:
+
+```mermaid
+flowchart LR
+  A[Idea] --> B(Draft)
+  B --> C{Review}
+  C --> D[Publish]
+  C --> B
+```
+
+The same syntax draws every diagram type Mermaid supports. A sequence
+diagram:
+
+```mermaid
+sequenceDiagram
+  participant Author
+  participant Editor
+  Author->>Editor: Submit draft
+  Editor-->>Author: Request changes
+  Author->>Editor: Submit revision
+  Editor->>Author: Accept
+```
+
+Ordinary code blocks are unaffected:
+
+```python
+print("hello")
+```

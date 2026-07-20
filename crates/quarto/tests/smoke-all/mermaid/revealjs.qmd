@@ -1,0 +1,34 @@
+---
+title: "Mermaid Revealjs"
+format: revealjs
+# bd-5m4ga0s1: same transform output inside a reveal deck — the
+# diagram <pre> sits inside a slide <section>, and the CDN script
+# reaches the deck through the rendered.includes.after-body slot newly
+# wired into the reveal scaffold (render_revealjs_document).
+_quarto:
+  tests:
+    revealjs:
+      noErrors: true
+      ensureHtmlElements:
+        - ["section pre.mermaid"]
+        - []
+      ensureFileRegexMatches:
+        - [
+            "<pre class=\"mermaid\">",
+            "cdn\\.jsdelivr\\.net/npm/mermaid@11\\.12\\.0/dist/mermaid\\.esm\\.min\\.mjs",
+            "mermaid\\.run\\(\\{ querySelector: 'pre\\.mermaid' \\}\\)",
+          ]
+        - []
+---
+
+## A slide
+
+Some text.
+
+## Diagram slide
+
+```mermaid
+flowchart LR
+  a --> b
+  b --> c
+```

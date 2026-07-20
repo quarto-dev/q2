@@ -52,6 +52,7 @@ mod footnotes;
 mod link_rewrite;
 mod listing_generate;
 mod listing_render;
+mod mermaid;
 mod metadata_normalize;
 mod navbar_generate;
 mod navbar_render;
@@ -107,6 +108,7 @@ pub use footnotes::FootnotesTransform;
 pub use link_rewrite::LinkRewriteTransform;
 pub use listing_generate::ListingGenerateTransform;
 pub use listing_render::ListingRenderTransform;
+pub use mermaid::{MERMAID_VERSION, MermaidRenderTransform};
 pub use metadata_normalize::MetadataNormalizeTransform;
 pub(crate) use metadata_normalize::inlines_to_plain_text;
 pub use navbar_generate::NavbarGenerateTransform;
@@ -129,3 +131,51 @@ pub use website_bootstrap_icons::WebsiteBootstrapIconsTransform;
 pub use website_canonical_url::WebsiteCanonicalUrlTransform;
 pub use website_favicon::WebsiteFaviconTransform;
 pub use website_title_prefix::WebsiteTitlePrefixTransform;
+
+/// Append an HTML literal to the canonical `rendered.includes.<slot>`
+/// list (`slot` is `"header"`, `"before-body"`, or `"after-body"`) —
+/// the location populated by
+/// [`IncludeResolveStage`](crate::stage::IncludeResolveStage) and read
+/// by the HTML template (`$header-includes$` / `$include-after$`) and
+/// the reveal scaffold
+/// ([`render_revealjs_document`](crate::revealjs::render_revealjs_document)).
+///
+/// `sentinel` must be a substring embedded in `payload` (typically an
+/// HTML comment); if any existing entry already contains it, the
+/// append is skipped, making transform re-runs idempotent. Shared by
+/// [`AttributionViewerTransform`] and [`MermaidRenderTransform`].
+pub(crate) fn append_with_sentinel(
+    meta: &mut quarto_pandoc_types::ConfigValue,
+    slot: &str,
+    sentinel: &str,
+    payload: String,
+) {
+    use quarto_pandoc_types::ConfigValue;
+    use quarto_pandoc_types::config_value::ConfigValueKind;
+
+    if !matches!(&meta.value, ConfigValueKind::Map(_)) {
+        return;
+    }
+    let source_info = meta.source_info.clone();
+
+    if !meta.contains_path(&["rendered", "includes", slot]) {
+        meta.insert_path(
+            &["rendered", "includes", slot],
+            ConfigValue::new_array(vec![], source_info.clone()),
+        );
+    }
+
+    let Some(target) = meta.get_path_mut(&["rendered", "includes", slot]) else {
+        return;
+    };
+    let ConfigValueKind::Array(items) = &mut target.value else {
+        return;
+    };
+    if items
+        .iter()
+        .any(|item| item.as_str().is_some_and(|s| s.contains(sentinel)))
+    {
+        return;
+    }
+    items.push(ConfigValue::new_string(payload, source_info));
+}

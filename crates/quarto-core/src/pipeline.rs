@@ -75,13 +75,13 @@ use crate::transforms::{
     DateNormalizeTransform, EquationLabelTransform, ExampleEmbedRenderTransform,
     ExampleEmbedTransform, FloatRefTargetSugarTransform, FooterGenerateTransform,
     FooterRenderTransform, FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform,
-    ListingRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
-    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
-    ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
-    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
-    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
-    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
-    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    ListingRenderTransform, MermaidRenderTransform, MetadataNormalizeTransform,
+    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
+    PageNavRenderTransform, ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
+    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
+    TableBootstrapClassTransform, TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform,
+    TocGenerateTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -1398,6 +1398,14 @@ pub fn build_transform_pipeline(
     // hoisted `<img>` is still visible to resource collection). See
     // `reveal_finalization_transforms` and bd-w0c6d38k.
     pipeline.extend(reveal_finalization_transforms(is_revealjs));
+    // bd-5m4ga0s1: replace ```mermaid code blocks with
+    // `<pre class="mermaid">` RawBlocks + the after-body CDN script.
+    // HTML-family self-gated (html + revealjs). Must precede
+    // `code-block-render` so diagram blocks never grow copy-button /
+    // filename chrome. Excluded from q2-preview via
+    // `Q2_PREVIEW_TRANSFORM_EXCLUDED` — the React built-in mermaid
+    // component consumes the raw CodeBlock there.
+    pipeline.push(Box::new(MermaidRenderTransform::new()));
     // bd-1tl09 Phase 0: code-block decoration Render. Consumes the
     // typed payload produced by `code-block-generate` in the
     // Normalization Phase and emits the outer wrapping markup
@@ -1505,6 +1513,12 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     //     replacing the HTML-injection approach with React
     //     components.
     "crossref-render",
+    // `mermaid-render` replaces the diagram CodeBlock with a RawBlock
+    // + after-body CDN script for `q2 render`. In preview the raw
+    // CodeBlock must survive to the React layer, where the built-in
+    // mermaid component (ts-packages/preview-renderer) renders the
+    // diagram live for both q2-preview and q2-slides (bd-5m4ga0s1).
+    "mermaid-render",
 ];
 
 /// Build the q2-preview transform pipeline (Plan 1).
@@ -3217,6 +3231,51 @@ mod tests {
                 names.contains(&required),
                 "{required} must be present in the q2-preview pipeline so preview's React \
                  renderer sees the same decorated code blocks as `q2 render`; got: {names:?}",
+            );
+        }
+    }
+
+    /// bd-5m4ga0s1: `mermaid-render` must run for both HTML-family
+    /// render formats, and must precede `code-block-render` so a
+    /// diagram block is already a `RawBlock` before code-block chrome
+    /// (copy button, filename header) would attach to it.
+    #[test]
+    fn mermaid_render_present_before_code_block_render() {
+        for format in ["html", "revealjs"] {
+            let runtime = make_test_runtime();
+            let pipeline = build_transform_pipeline(vec![], vec![], runtime, format.to_string());
+            let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+
+            let mermaid_pos = names.iter().position(|&n| n == "mermaid-render");
+            let cbr_pos = names.iter().position(|&n| n == "code-block-render");
+            assert!(
+                mermaid_pos.is_some(),
+                "[{format}] mermaid-render must be in build_transform_pipeline; got: {names:?}",
+            );
+            assert!(
+                mermaid_pos.unwrap() < cbr_pos.expect("code-block-render anchor missing"),
+                "[{format}] mermaid-render must precede code-block-render; got positions \
+                 mermaid={mermaid_pos:?}, code-block-render={cbr_pos:?} in {names:?}",
+            );
+        }
+    }
+
+    /// bd-5m4ga0s1: in `q2 preview` / hub-client the raw `CodeBlock`
+    /// with class `mermaid` must survive to the React layer (the
+    /// built-in mermaid component in ts-packages/preview-renderer owns
+    /// rendering there, for both `q2-preview` and `q2-slides`). The
+    /// transform is therefore on `Q2_PREVIEW_TRANSFORM_EXCLUDED`.
+    #[test]
+    fn q2_preview_pipeline_excludes_mermaid_render() {
+        for format in ["q2-preview", "q2-slides"] {
+            let runtime = make_test_runtime();
+            let pipeline =
+                build_q2_preview_transform_pipeline(vec![], vec![], runtime, format.to_string());
+            let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+            assert!(
+                !names.contains(&"mermaid-render"),
+                "[{format}] mermaid-render must NOT run in the preview pipeline — the React \
+                 mermaid component consumes the raw CodeBlock; got: {names:?}",
             );
         }
     }
