@@ -1,0 +1,34 @@
+---
+title: "Mermaid Basic"
+# bd-5m4ga0s1: a plain ```mermaid fenced block renders as
+# <pre class="mermaid"> with the escaped diagram source, plus a single
+# after-body <script type="module"> loading the exact-pinned CDN build
+# and calling mermaid.run(). The `-->` arrow doubles as the
+# HTML-escaping probe (must appear as --&gt;).
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["pre.mermaid"]
+        - []
+      ensureFileRegexMatches:
+        - [
+            "<pre class=\"mermaid\">",
+            "flowchart LR",
+            "a --&gt; b",
+            "cdn\\.jsdelivr\\.net/npm/mermaid@11\\.12\\.0/dist/mermaid\\.esm\\.min\\.mjs",
+            "mermaid\\.initialize\\(\\{ startOnLoad: false \\}\\)",
+            "mermaid\\.run\\(\\{ querySelector: 'pre\\.mermaid' \\}\\)",
+          ]
+        - ["a --> b"]
+---
+
+Before the diagram.
+
+```mermaid
+flowchart LR
+  a --> b
+```
+
+After the diagram.
