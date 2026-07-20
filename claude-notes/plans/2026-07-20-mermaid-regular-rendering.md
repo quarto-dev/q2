@@ -372,11 +372,25 @@ were the freshly rebuilt `target/debug/q2` (SPA re-embedded).
 
 ### Phase 5 — docs + close-out
 
-- [ ] User-facing docs page under `docs/` (syntax, both formats,
-      CDN note); render with `cargo run --bin q2 -- render docs/`
-      (Q2, not Q1). Relates to existing docs strand bd-5ijtt —
-      re-scope or re-parent it rather than duplicating.
-- [ ] Full `cargo xtask verify`; commit; ask before push
+- [ ] User-facing docs page under `docs/` — deliberately left to the
+      dedicated docs strand **bd-5ijtt** (child of + blocked by
+      bd-5m4ga0s1); do it in a follow-up session rather than
+      duplicating here.
+- [x] Full `cargo xtask verify` run 2026-07-20. **Steps 1–11 green**
+      (clippy/-D warnings, fmt, workspace build, tree-sitter, 10222
+      Rust tests, ts-packages builds, hub-client WASM build,
+      test:ci 129, trace-viewer, preview-* suites). Step 13's SPA
+      build ran green earlier in-session; step 14 is `--e2e`-gated.
+      **Step 12 (hub-MCP live tests) failed environmentally**: 20/26
+      failures, all in `live:` describe blocks that connect to a
+      hard-coded remote hub project; `sync.automerge.org` was
+      unreachable from this machine for the whole session (braid
+      offline warnings + direct curl timeout confirm). The 6
+      offline-capable protocol tests passed. `quarto-hub-mcp` has no
+      dependency on any code changed by this strand. Re-run step 12
+      when connectivity returns before merging.
+- [x] Commits on `braid/bd-5m4ga0s1-mermaid-diagrams-regular-rendering`;
+      push awaits user approval per repo policy.
 
 ## Resolved decisions (ratified by user 2026-07-20)
 
