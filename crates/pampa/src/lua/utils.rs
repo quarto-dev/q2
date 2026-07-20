@@ -314,6 +314,15 @@ fn create_type(lua: &Lua) -> Result<Function> {
                 {
                     return Ok("ListAttributes".to_string());
                 }
+                if let Ok(special) = ud.borrow::<crate::lua::config_value::LuaConfigSpecial>() {
+                    return Ok(special.kind.type_name().to_string());
+                }
+                if ud
+                    .borrow::<crate::lua::config_value::LuaConfigNull>()
+                    .is_ok()
+                {
+                    return Ok("Null".to_string());
+                }
                 // For other userdata, try metatable __name
                 if let Ok(mt) = ud.metatable()
                     && let Ok(name) = mt.get::<String>("__name")

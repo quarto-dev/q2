@@ -8,6 +8,7 @@
  * Elements are exposed as userdata with named field access (Pandoc 2.17+ style).
  */
 
+mod config_value;
 mod constructors;
 mod diagnostics;
 mod dofile_wasm;

@@ -251,12 +251,22 @@ pub async fn apply_lua_filter(
     // Determine traversal mode
     let walking_order = get_walking_order(&filter_table)?;
 
-    // Apply the filter using the appropriate traversal
-    let filtered_blocks = match walking_order {
+    // Apply the filter using the appropriate traversal. Doc-level order
+    // matches pandoc's applyFully (pandoc-lua-marshal Pandoc.hs):
+    //   typewise: element walk -> Meta -> Pandoc
+    //   topdown:  Pandoc -> Meta -> element walk
+    // (`Pandoc`/`Doc` handler invocation is bd-a9g50za2 Phase 4.)
+    let (filtered_blocks, filtered_meta) = match walking_order {
         WalkingOrder::Typewise => {
-            apply_typewise_filter(&lua, &filter_table, &pandoc.blocks).await?
+            let blocks = apply_typewise_filter(&lua, &filter_table, &pandoc.blocks).await?;
+            let meta = apply_meta_function(&lua, &filter_table, &pandoc.meta, filter_path).await?;
+            (blocks, meta)
         }
-        WalkingOrder::Topdown => apply_topdown_filter(&lua, &filter_table, &pandoc.blocks).await?,
+        WalkingOrder::Topdown => {
+            let meta = apply_meta_function(&lua, &filter_table, &pandoc.meta, filter_path).await?;
+            let blocks = apply_topdown_filter(&lua, &filter_table, &pandoc.blocks).await?;
+            (blocks, meta)
+        }
     };
 
     // Extract diagnostics, HTML dependencies, and text includes from Lua state
@@ -268,7 +278,7 @@ pub async fn apply_lua_filter(
 
     // Return filtered document with all extracted data
     let filtered_pandoc = Pandoc {
-        meta: pandoc.meta.clone(),
+        meta: filtered_meta.unwrap_or_else(|| pandoc.meta.clone()),
         blocks: filtered_blocks,
     };
 
@@ -395,6 +405,7 @@ fn get_filter_table(lua: &Lua) -> Result<Table> {
         // Document-level
         "Pandoc",
         "Doc",
+        "Meta",
     ];
 
     for name in &filter_names {
@@ -411,17 +422,58 @@ fn get_filter_table(lua: &Lua) -> Result<Table> {
     Ok(filter_table)
 }
 
-/// Q-11-6: doc-level filter functions (Pandoc/Meta/Doc) are collected
-/// but not yet invoked (bd-2llqjsms / bd-a9g50za2 track the
-/// Meta<->ConfigValue design this needs). Until then, a filter that
-/// defines one gets a loud warning instead of a silent no-op.
+/// Invoke the `Meta` doc-level handler, if the filter defines one.
+///
+/// Pandoc semantics (applyMetaFunction / applyStraight): the handler
+/// receives the materialized meta (native shapes, "Meta"-named table);
+/// `nil` return keeps the document's meta unchanged; a table return is
+/// peeked back as a map, reconciled against the original so untouched
+/// entries keep their provenance. Returns `None` when the handler is
+/// absent or returned nil.
+async fn apply_meta_function(
+    lua: &Lua,
+    filter_table: &Table,
+    meta: &quarto_pandoc_types::ConfigValue,
+    filter_path: &Path,
+) -> Result<Option<quarto_pandoc_types::ConfigValue>> {
+    let func = match filter_table.get::<Function>("Meta") {
+        Ok(func) => func,
+        Err(_) => return Ok(None),
+    };
+    let meta_value = super::config_value::push_meta(lua, meta)?;
+    let result: Value = func.call_async(meta_value).await?;
+    match result {
+        Value::Nil => Ok(None),
+        Value::Table(table) => {
+            let new_source = quarto_source_map::SourceInfo::generated(
+                quarto_source_map::By::filter(filter_path.to_string_lossy().to_string(), 0),
+            );
+            Ok(Some(super::config_value::peek_meta(
+                lua,
+                &table,
+                Some(meta),
+                &new_source,
+            )?))
+        }
+        other => Err(filter_return_error(
+            "Meta",
+            lua_facing_type_name(&other),
+            Error::runtime("table or nil expected"),
+        )),
+    }
+}
+
+/// Q-11-6: the Pandoc/Doc doc-level filter functions are collected
+/// but not yet invoked (bd-a9g50za2 Phase 4). Until then, a filter that
+/// defines one gets a loud warning instead of a silent no-op. (`Meta`
+/// handlers ARE invoked — see `apply_meta_function`.)
 fn unimplemented_doc_handler_warnings(
     lua: &Lua,
     filter_path: &Path,
 ) -> Result<Vec<DiagnosticMessage>> {
     let globals = lua.globals();
     let mut warnings = Vec::new();
-    for name in ["Pandoc", "Meta", "Doc"] {
+    for name in ["Pandoc", "Doc"] {
         if globals.get::<Function>(name).is_ok() {
             warnings.push(
                 quarto_error_reporting::DiagnosticMessageBuilder::warning(format!(
@@ -431,10 +483,10 @@ fn unimplemented_doc_handler_warnings(
                 ))
                 .with_code("Q-11-6")
                 .problem(
-                    "Document-level filter functions (Pandoc, Meta, Doc) are \
+                    "Whole-document filter functions (Pandoc, Doc) are \
                      not yet supported; the handler is ignored",
                 )
-                .add_hint("Element-level handlers (Str, Para, ...) run normally")
+                .add_hint("Element-level handlers (Str, Para, ...) and Meta run normally")
                 .build(),
             );
         }

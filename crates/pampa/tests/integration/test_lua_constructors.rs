@@ -686,12 +686,34 @@ end
 }
 
 #[tokio::test]
+async fn test_meta_handler_emits_no_unimplemented_warning() {
+    // `function Meta` is invoked as of bd-a9g50za2 Phase 2; it must NOT
+    // trigger the Q-11-6 "unimplemented" warning reserved for the
+    // still-uninvoked Pandoc/Doc handlers.
+    let filter_code = r#"
+function Meta(meta)
+    return meta
+end
+"#;
+    let doc = create_test_doc(vec![Inline::Str(Str {
+        text: "hi".to_string(),
+        source_info: quarto_source_map::SourceInfo::for_test(),
+    })]);
+    let diags = run_filter_diagnostics(filter_code, doc).await;
+    assert!(
+        diags.iter().all(|d| d.code.as_deref() != Some("Q-11-6")),
+        "unexpected Q-11-6 diagnostic for Meta: {diags:?}"
+    );
+}
+
+#[tokio::test]
 async fn test_doc_level_handler_emits_unimplemented_warning() {
-    // bd-2llqjsms / bd-a9g50za2 are still open: doc-level filter
-    // functions (Pandoc/Meta/Doc) are collected but never invoked.
-    // Until they are implemented, defining one must produce a loud
-    // Q-11-6 warning instead of a silent no-op.
-    for handler in ["Meta", "Pandoc", "Doc"] {
+    // bd-a9g50za2 Phase 4 is still open: the whole-document filter
+    // functions (Pandoc/Doc) are collected but never invoked. Until
+    // they are implemented, defining one must produce a loud Q-11-6
+    // warning instead of a silent no-op. (Meta is invoked — see
+    // test_meta_handler_emits_no_unimplemented_warning.)
+    for handler in ["Pandoc", "Doc"] {
         let filter_code = format!(
             r#"
 function Str(elem)

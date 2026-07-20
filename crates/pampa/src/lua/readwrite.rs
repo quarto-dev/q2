@@ -17,9 +17,10 @@ use crate::options::{
     merge_with_defaults, normalize_reader_format, normalize_writer_format, parse_format_string,
 };
 use crate::pandoc::Pandoc;
-use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
+use quarto_pandoc_types::{ConfigValue, ConfigValueKind, MergeOp};
 
-use super::types::{blocks_to_lua_table, meta_value_to_lua, peek_blocks_fuzzy};
+use super::config_value::{peek_config_value, push_meta};
+use super::types::{blocks_to_lua_table, filter_source_info, peek_blocks_fuzzy};
 
 /// Register pandoc.read, pandoc.write, and option constructors on the pandoc table.
 pub fn register_pandoc_readwrite(lua: &Lua, pandoc: &Table) -> Result<()> {
@@ -196,123 +197,6 @@ fn parse_format_spec_from_lua(_lua: &Lua, value: Value) -> Result<ParsedFormat> 
     }
 }
 
-/// Phase 5: Convert ConfigValue to a Lua table (loses source info).
-fn config_value_to_lua(lua: &Lua, config: &ConfigValue) -> Result<Value> {
-    match &config.value {
-        ConfigValueKind::Scalar(yaml) => match yaml {
-            yaml_rust2::Yaml::String(s) => Ok(Value::String(lua.create_string(s)?)),
-            yaml_rust2::Yaml::Boolean(b) => Ok(Value::Boolean(*b)),
-            yaml_rust2::Yaml::Integer(i) => Ok(Value::Integer(*i)),
-            yaml_rust2::Yaml::Real(r) => Ok(Value::Number(r.parse().unwrap_or(0.0))),
-            yaml_rust2::Yaml::Null => Ok(Value::Nil),
-            _ => Ok(Value::Nil),
-        },
-        ConfigValueKind::PandocInlines(inlines) => {
-            // Convert to MetaValue and then to Lua using existing converter
-            use crate::pandoc::MetaValue;
-            let meta_value = MetaValue::MetaInlines(inlines.clone());
-            meta_value_to_lua(lua, &meta_value)
-        }
-        ConfigValueKind::PandocBlocks(blocks) => {
-            // Convert to MetaValue and then to Lua using existing converter
-            use crate::pandoc::MetaValue;
-            let meta_value = MetaValue::MetaBlocks(blocks.clone());
-            meta_value_to_lua(lua, &meta_value)
-        }
-        ConfigValueKind::Array(items) => {
-            let table = lua.create_table()?;
-            for (i, item) in items.iter().enumerate() {
-                table.set(i + 1, config_value_to_lua(lua, item)?)?;
-            }
-            Ok(Value::Table(table))
-        }
-        ConfigValueKind::Map(entries) => {
-            let table = lua.create_table()?;
-            for entry in entries {
-                table.set(entry.key.as_str(), config_value_to_lua(lua, &entry.value)?)?;
-            }
-            Ok(Value::Table(table))
-        }
-        ConfigValueKind::Path(p) => Ok(Value::String(lua.create_string(p)?)),
-        ConfigValueKind::Glob(g) => Ok(Value::String(lua.create_string(g)?)),
-        ConfigValueKind::Expr(e) => Ok(Value::String(lua.create_string(e)?)),
-    }
-}
-
-/// Phase 5: Convert a Lua table to ConfigValue.
-fn lua_to_config_value(lua: &Lua, val: Value) -> Result<ConfigValue> {
-    use quarto_pandoc_types::MergeOp;
-    use quarto_source_map::{By, SourceInfo};
-
-    let merge_op = MergeOp::default();
-    // Lua-side ConfigValue conversion — no YAML source bytes exist.
-    // `filter_source_info` may later overwrite if this flows through
-    // a Lua filter return path.
-    let source_info = SourceInfo::generated(By::unknown());
-
-    match val {
-        Value::Nil => Ok(ConfigValue {
-            value: ConfigValueKind::Map(Vec::new()),
-            source_info,
-            merge_op,
-        }),
-        Value::Boolean(b) => Ok(ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(b)),
-            source_info,
-            merge_op,
-        }),
-        Value::String(s) => Ok(ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s.to_str()?.to_string())),
-            source_info,
-            merge_op,
-        }),
-        Value::Integer(i) => Ok(ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(i)),
-            source_info,
-            merge_op,
-        }),
-        Value::Number(n) => Ok(ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Real(n.to_string())),
-            source_info,
-            merge_op,
-        }),
-        Value::Table(t) => {
-            // Check if it's a sequence (array) or a map
-            let len = t.raw_len();
-            if len > 0 {
-                // It's a list
-                let mut items = Vec::new();
-                for i in 1..=len {
-                    let item: Value = t.get(i)?;
-                    items.push(lua_to_config_value(lua, item)?);
-                }
-                Ok(ConfigValue {
-                    value: ConfigValueKind::Array(items),
-                    source_info,
-                    merge_op,
-                })
-            } else {
-                // It's a map
-                let mut entries = Vec::new();
-                for pair in t.pairs::<String, Value>() {
-                    let (k, v) = pair?;
-                    entries.push(ConfigMapEntry {
-                        key: k,
-                        key_source: source_info.clone(),
-                        value: lua_to_config_value(lua, v)?,
-                    });
-                }
-                Ok(ConfigValue {
-                    value: ConfigValueKind::Map(entries),
-                    source_info,
-                    merge_op,
-                })
-            }
-        }
-        _ => Err(Error::runtime("cannot convert value to ConfigValue")),
-    }
-}
-
 /// Convert a Rust Pandoc document to a Lua table.
 ///
 /// Returns a table with `blocks`, `meta`, and `pandoc-api-version` fields.
@@ -323,8 +207,9 @@ fn rust_pandoc_to_lua_table(lua: &Lua, pandoc: &Pandoc) -> Result<Value> {
     let blocks_lua = blocks_to_lua_table(lua, &pandoc.blocks)?;
     doc.set("blocks", blocks_lua)?;
 
-    // Phase 5: Convert meta directly from ConfigValue to Lua
-    let meta_lua = config_value_to_lua(lua, &pandoc.meta)?;
+    // Native meta shape (modern-pandoc parity): Inlines/Blocks userdata,
+    // native scalars, "Meta"-named top-level table.
+    let meta_lua = push_meta(lua, &pandoc.meta)?;
     doc.set("meta", meta_lua)?;
 
     // Set pandoc-api-version (we use 1.23 for compatibility)
@@ -349,9 +234,19 @@ fn lua_pandoc_to_rust(lua: &Lua, val: Value) -> Result<Pandoc> {
             let blocks_val: Value = t.get("blocks").unwrap_or(Value::Nil);
             let blocks = peek_blocks_fuzzy(lua, blocks_val)?;
 
-            // Phase 5: Convert meta directly from Lua to ConfigValue
+            // Native meta shape back to ConfigValue. No original to
+            // reconcile against here (pandoc.write takes arbitrary doc
+            // values); absent meta means an empty map.
             let meta_val: Value = t.get("meta").unwrap_or(Value::Nil);
-            let meta = lua_to_config_value(lua, meta_val)?;
+            let meta = if meta_val.is_nil() {
+                ConfigValue {
+                    value: ConfigValueKind::Map(Vec::new()),
+                    source_info: filter_source_info(lua),
+                    merge_op: MergeOp::default(),
+                }
+            } else {
+                peek_config_value(lua, meta_val, None, &filter_source_info(lua))?
+            };
 
             Ok(Pandoc { blocks, meta })
         }
@@ -1097,248 +992,87 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::approx_constant)] // 3.14 is config round-trip test data, not π
-    fn test_config_value_to_lua_scalar_types() {
-        use quarto_pandoc_types::{ConfigValueKind, MergeOp};
-        use quarto_source_map::SourceInfo;
-
+    fn test_pandoc_read_meta_is_native_shape() {
+        // Modern-pandoc parity: doc.meta values are native Lua values
+        // (Inlines userdata for markdown-parsed strings, numbers stay
+        // numbers), not the legacy {t="MetaInlines", ...} tagged tables.
         let lua = Lua::new();
+        super::super::constructors::register_pandoc_namespace(
+            &lua,
+            std::sync::Arc::new(super::super::runtime::NativeRuntime::new()),
+            super::super::mediabag::create_shared_mediabag(),
+        )
+        .unwrap();
 
-        // String
-        let config = ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("hello".to_string())),
-            source_info: SourceInfo::for_test(),
-            merge_op: MergeOp::default(),
-        };
-        let result = config_value_to_lua(&lua, &config).unwrap();
-        assert_eq!(
-            result.as_string().and_then(|s| s.to_str().ok()).unwrap(),
-            "hello"
-        );
-
-        // Boolean
-        let config = ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(true)),
-            source_info: SourceInfo::for_test(),
-            merge_op: MergeOp::default(),
-        };
-        let result = config_value_to_lua(&lua, &config).unwrap();
-        assert!(result.as_boolean().unwrap());
-
-        // Integer
-        let config = ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(42)),
-            source_info: SourceInfo::for_test(),
-            merge_op: MergeOp::default(),
-        };
-        let result = config_value_to_lua(&lua, &config).unwrap();
-        assert_eq!(result.as_integer().unwrap(), 42);
-
-        // Real
-        let config = ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Real("3.14".to_string())),
-            source_info: SourceInfo::for_test(),
-            merge_op: MergeOp::default(),
-        };
-        let result = config_value_to_lua(&lua, &config).unwrap();
-        assert!((result.as_number().unwrap() - 3.14).abs() < 0.01);
-
-        // Null
-        let config = ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Null),
-            source_info: SourceInfo::for_test(),
-            merge_op: MergeOp::default(),
-        };
-        let result = config_value_to_lua(&lua, &config).unwrap();
-        assert!(result.is_nil());
+        let (title_type, meta_type, count, strong_text): (String, String, i64, String) = lua
+            .load(
+                r#"
+                local doc = pandoc.read("---\ntitle: '*Hi*'\ncount: 3\n---\n\ntext", "qmd")
+                local title = doc.meta.title
+                return pandoc.utils.type(title),
+                       pandoc.utils.type(doc.meta),
+                       doc.meta.count,
+                       title[1].content[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(title_type, "Inlines");
+        assert_eq!(meta_type, "Meta");
+        assert_eq!(count, 3);
+        assert_eq!(strong_text, "Hi");
     }
 
     #[test]
-    fn test_config_value_to_lua_array() {
-        use quarto_pandoc_types::{ConfigValueKind, MergeOp};
-        use quarto_source_map::SourceInfo;
-
+    fn test_pandoc_write_accepts_missing_meta() {
+        // A hand-built doc table without a meta field writes fine
+        // (nil meta -> empty map at the boundary).
         let lua = Lua::new();
+        super::super::constructors::register_pandoc_namespace(
+            &lua,
+            std::sync::Arc::new(super::super::runtime::NativeRuntime::new()),
+            super::super::mediabag::create_shared_mediabag(),
+        )
+        .unwrap();
 
-        let items = vec![
-            ConfigValue {
-                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("a".to_string())),
-                source_info: SourceInfo::for_test(),
-                merge_op: MergeOp::default(),
-            },
-            ConfigValue {
-                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("b".to_string())),
-                source_info: SourceInfo::for_test(),
-                merge_op: MergeOp::default(),
-            },
-        ];
-
-        let config = ConfigValue {
-            value: ConfigValueKind::Array(items),
-            source_info: SourceInfo::for_test(),
-            merge_op: MergeOp::default(),
-        };
-
-        let result = config_value_to_lua(&lua, &config).unwrap();
-        let table = result.as_table().unwrap();
-        assert_eq!(table.len().unwrap(), 2);
+        let result: String = lua
+            .load(
+                r#"
+                local doc = { blocks = { pandoc.Para('Hello') } }
+                return pandoc.write(doc, "html")
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert!(result.contains("Hello"));
     }
 
     #[test]
-    fn test_config_value_to_lua_map() {
-        use quarto_pandoc_types::{ConfigMapEntry, ConfigValueKind, MergeOp};
-        use quarto_source_map::SourceInfo;
-
+    fn test_pandoc_write_meta_round_trip_native_shape() {
+        // Meta mutated in native shape survives a write: set a plain
+        // string and check it lands in the JSON output as ConfigValue.
         let lua = Lua::new();
+        super::super::constructors::register_pandoc_namespace(
+            &lua,
+            std::sync::Arc::new(super::super::runtime::NativeRuntime::new()),
+            super::super::mediabag::create_shared_mediabag(),
+        )
+        .unwrap();
 
-        let entries = vec![ConfigMapEntry {
-            key: "key1".to_string(),
-            key_source: SourceInfo::for_test(),
-            value: ConfigValue {
-                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("value1".to_string())),
-                source_info: SourceInfo::for_test(),
-                merge_op: MergeOp::default(),
-            },
-        }];
-
-        let config = ConfigValue {
-            value: ConfigValueKind::Map(entries),
-            source_info: SourceInfo::for_test(),
-            merge_op: MergeOp::default(),
-        };
-
-        let result = config_value_to_lua(&lua, &config).unwrap();
-        let table = result.as_table().unwrap();
-        let val: String = table.get("key1").unwrap();
-        assert_eq!(val, "value1");
-    }
-
-    #[test]
-    fn test_config_value_to_lua_path_glob_expr() {
-        use quarto_pandoc_types::{ConfigValueKind, MergeOp};
-        use quarto_source_map::SourceInfo;
-
-        let lua = Lua::new();
-
-        // Path
-        let config = ConfigValue {
-            value: ConfigValueKind::Path("/some/path".to_string()),
-            source_info: SourceInfo::for_test(),
-            merge_op: MergeOp::default(),
-        };
-        let result = config_value_to_lua(&lua, &config).unwrap();
-        assert_eq!(
-            result.as_string().and_then(|s| s.to_str().ok()).unwrap(),
-            "/some/path"
-        );
-
-        // Glob
-        let config = ConfigValue {
-            value: ConfigValueKind::Glob("*.md".to_string()),
-            source_info: SourceInfo::for_test(),
-            merge_op: MergeOp::default(),
-        };
-        let result = config_value_to_lua(&lua, &config).unwrap();
-        assert_eq!(
-            result.as_string().and_then(|s| s.to_str().ok()).unwrap(),
-            "*.md"
-        );
-
-        // Expr
-        let config = ConfigValue {
-            value: ConfigValueKind::Expr("1 + 2".to_string()),
-            source_info: SourceInfo::for_test(),
-            merge_op: MergeOp::default(),
-        };
-        let result = config_value_to_lua(&lua, &config).unwrap();
-        assert_eq!(
-            result.as_string().and_then(|s| s.to_str().ok()).unwrap(),
-            "1 + 2"
-        );
-    }
-
-    #[test]
-    fn test_lua_to_config_value_basic_types() {
-        let lua = Lua::new();
-
-        // Nil
-        let result = lua_to_config_value(&lua, Value::Nil).unwrap();
-        assert!(matches!(result.value, ConfigValueKind::Map(_)));
-
-        // Boolean
-        let result = lua_to_config_value(&lua, Value::Boolean(true)).unwrap();
-        assert!(matches!(
-            result.value,
-            ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(true))
-        ));
-
-        // Integer
-        let result = lua_to_config_value(&lua, Value::Integer(42)).unwrap();
-        assert!(matches!(
-            result.value,
-            ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(42))
-        ));
-
-        // Number
-        #[allow(clippy::approx_constant)] // 3.14 is config round-trip test data, not π
-        let result = lua_to_config_value(&lua, Value::Number(3.14)).unwrap();
-        if let ConfigValueKind::Scalar(yaml_rust2::Yaml::Real(s)) = result.value {
-            assert!(s.contains("3.14"));
-        } else {
-            panic!("Expected Real");
-        }
-    }
-
-    #[test]
-    fn test_lua_to_config_value_string() {
-        let lua = Lua::new();
-        let s = lua.create_string("hello").unwrap();
-
-        let result = lua_to_config_value(&lua, Value::String(s)).unwrap();
-        if let ConfigValueKind::Scalar(yaml_rust2::Yaml::String(v)) = result.value {
-            assert_eq!(v, "hello");
-        } else {
-            panic!("Expected String");
-        }
-    }
-
-    #[test]
-    fn test_lua_to_config_value_array() {
-        let lua = Lua::new();
-        let table = lua.create_table().unwrap();
-        table.set(1, "a").unwrap();
-        table.set(2, "b").unwrap();
-
-        let result = lua_to_config_value(&lua, Value::Table(table)).unwrap();
-        if let ConfigValueKind::Array(items) = result.value {
-            assert_eq!(items.len(), 2);
-        } else {
-            panic!("Expected Array");
-        }
-    }
-
-    #[test]
-    fn test_lua_to_config_value_map() {
-        let lua = Lua::new();
-        let table = lua.create_table().unwrap();
-        table.set("key", "value").unwrap();
-
-        let result = lua_to_config_value(&lua, Value::Table(table)).unwrap();
-        if let ConfigValueKind::Map(entries) = result.value {
-            assert_eq!(entries.len(), 1);
-            assert_eq!(entries[0].key, "key");
-        } else {
-            panic!("Expected Map");
-        }
-    }
-
-    #[test]
-    fn test_lua_to_config_value_unsupported() {
-        let lua = Lua::new();
-        let func = lua.create_function(|_, ()| Ok(())).unwrap();
-
-        let result = lua_to_config_value(&lua, Value::Function(func));
-        assert!(result.is_err());
+        let result: String = lua
+            .load(
+                r#"
+                local doc = pandoc.read("hello", "qmd")
+                doc.meta.subtitle = 'plain subtitle'
+                doc.meta.priority = 7
+                return pandoc.write(doc, "json")
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert!(result.contains("subtitle"), "json output: {}", result);
+        assert!(result.contains("plain subtitle"), "json output: {}", result);
+        assert!(result.contains("priority"), "json output: {}", result);
     }
 
     #[test]
