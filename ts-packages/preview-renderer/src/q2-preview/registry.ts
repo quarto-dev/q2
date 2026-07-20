@@ -3,6 +3,7 @@ import * as Blocks from './blocks';
 import * as Inlines from './inlines';
 import * as Custom from './custom';
 import { Block, Inline, CustomBlock, CustomInline } from './dispatchers';
+import { MermaidCodeBlock } from './blocks/MermaidCodeBlock';
 import { PreviewDocument } from './PreviewDocument';
 
 /**
@@ -38,6 +39,12 @@ export const previewRegistry: FormatRegistry = {
     ...Blocks,
     ...Inlines,
     ...Custom, // Callout, Theorem, Proof, FloatRefTarget, Equation, CrossrefResolvedRef, Fallback, PreviewTitleBlock
+    // bd-5m4ga0s1: mermaid-aware CodeBlock wrapper — renders
+    // ```mermaid blocks as diagrams (CDN mermaid.js), delegates
+    // everything else to Blocks.CodeBlock. Overrides the plain entry
+    // from the `...Blocks` spread; user render-components overrides
+    // of `CodeBlock` still layer on top via mergedPreviewRegistry.
+    CodeBlock: MermaidCodeBlock,
     __fallback__: Custom.Fallback,
     __title_block__: Custom.PreviewTitleBlock,
     Block,

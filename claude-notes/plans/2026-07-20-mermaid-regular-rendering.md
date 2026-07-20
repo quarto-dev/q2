@@ -300,12 +300,25 @@ Browser-visual verification (diagram actually drawn) is Phase 4.
 
 ### Phase 3 — preview React component
 
-- [ ] vitest tests first (in `ts-packages/preview-renderer`):
-      registry dispatch (mermaid class → diagram component, other
-      code → plain CodeBlock), error rendering path, loader mocked
-- [ ] `MermaidCodeBlock` + `MermaidDiagram` components; registry
-      entry swap in `registry.ts`
+- [x] vitest tests first
+      (`src/q2-preview/blocks/MermaidCodeBlock.test.tsx`, 7 tests):
+      diagram render + SVG injection, delegation to plain CodeBlock,
+      `{mermaid}` brace form ignored, load-once across diagrams,
+      error box (message + source), registry entry identity, version
+      parity with the Rust const. **Verified failing** (module absent)
+      before implementation.
+- [x] `MermaidCodeBlock` + `MermaidDiagram` in
+      `blocks/MermaidCodeBlock.tsx`; registered as the `CodeBlock`
+      entry in `registry.ts` (delegates non-mermaid to
+      `Blocks.CodeBlock`; user overrides still win via
+      mergedPreviewRegistry). CDN dynamic import with
+      `/* @vite-ignore */`, load-once promise cache, injectable
+      loader test seam. Diagram container preserves the edit
+      affordance + data-loc attrs so click-to-edit / scroll-sync
+      keep working on diagram blocks.
+- [x] Full preview-renderer suite: 537 passed.
 - [ ] `npm run build:all` from hub-client (strict production build)
+- [ ] hub-client `npm run test:ci`
 - [ ] `cargo xtask build-q2-preview-spa` + `cargo build --bin q2`
 - [ ] hub-client changelog entries (two-commit workflow)
 
