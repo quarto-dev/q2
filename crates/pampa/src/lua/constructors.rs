@@ -1027,6 +1027,9 @@ pub fn register_pandoc_namespace(
     // Read/Write functions (pandoc.read, pandoc.write, and option constructors)
     super::readwrite::register_pandoc_readwrite(lua, &pandoc)?;
 
+    // Document + meta constructors (pandoc.Pandoc, pandoc.Meta, pandoc.Meta*)
+    super::pandoc_doc::register_doc_constructors(lua, &pandoc)?;
+
     // Set as global
     lua.globals().set("pandoc", pandoc)?;
 

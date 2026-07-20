@@ -3,3 +3,9 @@
 # 2026-07-13: 15 cases, 15 pass, 0 xfail (filter-return cluster fixed, bd-23yvjfmm;
 # earlier: orderedlist-listattributes bd-0xghpvij, content-insert bd-hitjclzp,
 # attr shapes bd-tzwcof0n) (strand bd-grkrb9nj).
+# 2026-07-20: 3 new cases pinning doc-level handler semantics (bd-a9g50za2
+# Phase 4: Pandoc handler invocation + element walk traversing meta values).
+# Red until Phase 4 lands; remove these lines when it does.
+doc-handlers-typewise-order # Pandoc handler not yet invoked (Phase 4)
+doc-handlers-topdown-order # Pandoc handler not yet invoked (Phase 4)
+meta-values-walked-typewise # element walk does not traverse meta values yet (Phase 4)

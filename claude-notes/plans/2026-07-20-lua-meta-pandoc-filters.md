@@ -300,11 +300,26 @@ Phase 2 notes:
   written here; it belongs to that strand's scope.
 
 ### Phase 3 — pandoc.Pandoc/Meta/Meta* constructors + doc value
-- [ ] Port/enable test-pandoc.lua + test-metavalue.lua conformance runs;
-      flip xfails as they pass (expect all but normalize ×2 and
-      numbers-divergence ×2).
-- [ ] `pandoc.Pandoc`, `pandoc.Meta`, `Meta*` coercion constructors.
-- [ ] Doc metatable: `walk`, `clone`, `__concat`, `__eq`.
+- [x] Flip xfails (ratchet-driven TDD: removed the lines first, watched the
+      12 unexpected failures, then implemented). Conformance now 196 pass /
+      7 xfail: normalize ×2 (follow-up strand), walk order ×2 (Phase 4:
+      meta-value traversal + Pandoc leg), D-num numbers ×1 (permanent
+      DIVERGENCE), SimpleTable ×2 (pre-existing DIVERGENCE).
+- [x] `pandoc.Pandoc(blocks, meta?)`, `pandoc.Meta`, and the six `Meta*`
+      coercion constructors, in new module
+      `crates/pampa/src/lua/pandoc_doc.rs`. MetaBool is strictly typed
+      (mlua's bool coercion would have accepted any truthy value —
+      caught by a red test first). MetaString renders numbers (explicit
+      stringification; D-num is about implicit values only).
+- [x] Doc value: shared registry metatable ("Pandoc") with `walk` (element
+      legs + Meta leg in applyFully order; Pandoc leg is Phase 4), deep
+      `clone`, `__concat` (right-biased meta union per pandoc-types
+      Semigroup), `__eq` (source-free structural equality). `pandoc.read`
+      docs now carry the same metatable, so read/constructed docs are
+      interchangeable (`pandoc.read(...) == pandoc.Pandoc(...)` works);
+      readwrite.rs delegates to pandoc_doc.rs.
+- [x] Error-path integration tests (Q-11-3 on bad meta args, strict
+      MetaBool, MetaList/MetaMap normalization, cross-path doc equality).
 
 ### Phase 4 — Pandoc handler + full-doc walk parity + cleanup
 - [ ] **Element walk must traverse meta values** (discovered from upstream

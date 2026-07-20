@@ -11,16 +11,12 @@
 
 use mlua::{Error, Lua, LuaSerdeExt, Result, Table, Value};
 
+use super::pandoc_doc::{peek_pandoc_doc as lua_pandoc_to_rust, push_pandoc_doc};
 use crate::options::{
     ParsedFormat, SUPPORTED_READER_FORMATS, SUPPORTED_WRITER_FORMATS, default_reader_options,
     default_writer_options, is_supported_reader_format, is_supported_writer_format,
     merge_with_defaults, normalize_reader_format, normalize_writer_format, parse_format_string,
 };
-use crate::pandoc::Pandoc;
-use quarto_pandoc_types::{ConfigValue, ConfigValueKind, MergeOp};
-
-use super::config_value::{peek_config_value, push_meta};
-use super::types::{blocks_to_lua_table, filter_source_info, peek_blocks_fuzzy};
 
 /// Register pandoc.read, pandoc.write, and option constructors on the pandoc table.
 pub fn register_pandoc_readwrite(lua: &Lua, pandoc: &Table) -> Result<()> {
@@ -197,62 +193,10 @@ fn parse_format_spec_from_lua(_lua: &Lua, value: Value) -> Result<ParsedFormat> 
     }
 }
 
-/// Convert a Rust Pandoc document to a Lua table.
-///
-/// Returns a table with `blocks`, `meta`, and `pandoc-api-version` fields.
-fn rust_pandoc_to_lua_table(lua: &Lua, pandoc: &Pandoc) -> Result<Value> {
-    let doc = lua.create_table()?;
-
-    // Convert blocks
-    let blocks_lua = blocks_to_lua_table(lua, &pandoc.blocks)?;
-    doc.set("blocks", blocks_lua)?;
-
-    // Native meta shape (modern-pandoc parity): Inlines/Blocks userdata,
-    // native scalars, "Meta"-named top-level table.
-    let meta_lua = push_meta(lua, &pandoc.meta)?;
-    doc.set("meta", meta_lua)?;
-
-    // Set pandoc-api-version (we use 1.23 for compatibility)
-    let api_version = lua.create_table()?;
-    api_version.set(1, 1)?;
-    api_version.set(2, 23)?;
-    doc.set("pandoc-api-version", api_version)?;
-
-    // Set metatable with __name for type identification
-    let mt = lua.create_table()?;
-    mt.set("__name", "Pandoc")?;
-    doc.set_metatable(Some(mt))?;
-
-    Ok(Value::Table(doc))
-}
-
-/// Convert a Lua Pandoc table to a Rust Pandoc struct.
-fn lua_pandoc_to_rust(lua: &Lua, val: Value) -> Result<Pandoc> {
-    match val {
-        Value::Table(t) => {
-            // Get blocks
-            let blocks_val: Value = t.get("blocks").unwrap_or(Value::Nil);
-            let blocks = peek_blocks_fuzzy(lua, blocks_val)?;
-
-            // Native meta shape back to ConfigValue. No original to
-            // reconcile against here (pandoc.write takes arbitrary doc
-            // values); absent meta means an empty map.
-            let meta_val: Value = t.get("meta").unwrap_or(Value::Nil);
-            let meta = if meta_val.is_nil() {
-                ConfigValue {
-                    value: ConfigValueKind::Map(Vec::new()),
-                    source_info: filter_source_info(lua),
-                    merge_op: MergeOp::default(),
-                }
-            } else {
-                peek_config_value(lua, meta_val, None, &filter_source_info(lua))?
-            };
-
-            Ok(Pandoc { blocks, meta })
-        }
-        _ => Err(Error::runtime("Expected Pandoc document table")),
-    }
-}
+// The document <-> Lua conversions live in pandoc_doc.rs (shared with the
+// pandoc.Pandoc constructor and the doc metatable); `rust_pandoc_to_lua_table`
+// below is retained as the local name at the read call sites.
+use push_pandoc_doc as rust_pandoc_to_lua_table;
 
 /// Implementation of pandoc.read(content, format?, reader_options?, read_env?)
 ///

@@ -256,14 +256,20 @@ pub async fn apply_lua_filter(
     //   typewise: element walk -> Meta -> Pandoc
     //   topdown:  Pandoc -> Meta -> element walk
     // (`Pandoc`/`Doc` handler invocation is bd-a9g50za2 Phase 4.)
+    let meta_new_source = quarto_source_map::SourceInfo::generated(quarto_source_map::By::filter(
+        filter_path.to_string_lossy().to_string(),
+        0,
+    ));
     let (filtered_blocks, filtered_meta) = match walking_order {
         WalkingOrder::Typewise => {
             let blocks = apply_typewise_filter(&lua, &filter_table, &pandoc.blocks).await?;
-            let meta = apply_meta_function(&lua, &filter_table, &pandoc.meta, filter_path).await?;
+            let meta =
+                apply_meta_function(&lua, &filter_table, &pandoc.meta, &meta_new_source).await?;
             (blocks, meta)
         }
         WalkingOrder::Topdown => {
-            let meta = apply_meta_function(&lua, &filter_table, &pandoc.meta, filter_path).await?;
+            let meta =
+                apply_meta_function(&lua, &filter_table, &pandoc.meta, &meta_new_source).await?;
             let blocks = apply_topdown_filter(&lua, &filter_table, &pandoc.blocks).await?;
             (blocks, meta)
         }
@@ -429,12 +435,14 @@ fn get_filter_table(lua: &Lua) -> Result<Table> {
 /// `nil` return keeps the document's meta unchanged; a table return is
 /// peeked back as a map, reconciled against the original so untouched
 /// entries keep their provenance. Returns `None` when the handler is
-/// absent or returned nil.
-async fn apply_meta_function(
+/// absent or returned nil. `new_source` attributes changed/new nodes
+/// (the filter pass uses `By::filter(path, 0)`; `doc:walk` uses the
+/// Lua-stack `filter_source_info`).
+pub(crate) async fn apply_meta_function(
     lua: &Lua,
     filter_table: &Table,
     meta: &quarto_pandoc_types::ConfigValue,
-    filter_path: &Path,
+    new_source: &quarto_source_map::SourceInfo,
 ) -> Result<Option<quarto_pandoc_types::ConfigValue>> {
     let func = match filter_table.get::<Function>("Meta") {
         Ok(func) => func,
@@ -444,17 +452,12 @@ async fn apply_meta_function(
     let result: Value = func.call_async(meta_value).await?;
     match result {
         Value::Nil => Ok(None),
-        Value::Table(table) => {
-            let new_source = quarto_source_map::SourceInfo::generated(
-                quarto_source_map::By::filter(filter_path.to_string_lossy().to_string(), 0),
-            );
-            Ok(Some(super::config_value::peek_meta(
-                lua,
-                &table,
-                Some(meta),
-                &new_source,
-            )?))
-        }
+        Value::Table(table) => Ok(Some(super::config_value::peek_meta(
+            lua,
+            &table,
+            Some(meta),
+            new_source,
+        )?)),
         other => Err(filter_return_error(
             "Meta",
             lua_facing_type_name(&other),

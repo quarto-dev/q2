@@ -18,6 +18,7 @@ mod json;
 mod list;
 pub mod mediabag;
 mod os_wasm;
+mod pandoc_doc;
 mod path;
 mod quarto_api;
 mod quarto_doc;
