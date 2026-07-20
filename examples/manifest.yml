@@ -31,3 +31,5 @@ projects:
   - presentations/09-themes
   - presentations/10-footer-logo
   - presentations/11-auto-stretch
+  - diagrams/01-mermaid-basic
+  - diagrams/02-mermaid-revealjs
