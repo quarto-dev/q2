@@ -372,10 +372,16 @@ were the freshly rebuilt `target/debug/q2` (SPA re-embedded).
 
 ### Phase 5 — docs + close-out
 
-- [ ] User-facing docs page under `docs/` — deliberately left to the
-      dedicated docs strand **bd-5ijtt** (child of + blocked by
-      bd-5m4ga0s1); do it in a follow-up session rather than
-      duplicating here.
+- [x] User-facing docs page (bd-5ijtt, commit `e44f184f`):
+      `docs/guides/authoring/diagrams.qmd` filled in (was a TBD stub
+      already wired into the sidebar), with two runnable examples in a
+      new `examples/diagrams/` category embedded via
+      `.embed-example-iframe` (the revealjs-docs pattern). Scoped to
+      `q2 render`/`q2 preview` per user direction (hub-client
+      differences belong in future ancillary docs). Verified:
+      `stage-doc-examples` renders both examples; `q2 render docs/`
+      clean for this page; browser check confirmed both iframes draw
+      live diagrams and `@demo-…` crossrefs resolve.
 - [x] Full `cargo xtask verify` run 2026-07-20. **Steps 1–11 green**
       (clippy/-D warnings, fmt, workspace build, tree-sitter, 10222
       Rust tests, ts-packages builds, hub-client WASM build,
