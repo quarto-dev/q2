@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-20
+
+- [`4202d342`](https://github.com/quarto-dev/q2/commits/4202d342): Mermaid diagrams: a fenced code block marked `mermaid` now renders as a live diagram in the preview (both regular documents and revealjs slides), with a readable error box when the diagram source fails to parse. The diagram library loads on demand from the jsdelivr CDN, so diagram-free documents load no extra code.
+
 ### 2026-07-17
 
 - [`4aabfdaa`](https://github.com/quarto-dev/q2/commits/4aabfdaa): Dates in the preview title block are now formatted like the rendered site: `date` and `date-modified` render in a readable long form (e.g. "July 1, 2026") by default, honor the `date-format` option (named styles like `medium` or format strings like `MMM D, YYYY`), and support the `today`, `now`, and `last-modified` keywords.
