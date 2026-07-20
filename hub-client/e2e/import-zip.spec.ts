@@ -14,20 +14,14 @@ import { zipSync, strToU8 } from 'fflate';
 import { getServerUrl } from './helpers/projectFactory';
 
 /**
- * Bring a fresh browser context to the project-selector landing page with
- * a connected project set, so the "Import from ZIP" action is available.
- * Mirrors the bootstrap in share-link-project-set.spec.ts.
+ * Bring a fresh browser context to the project-selector landing page, so the
+ * "Import from ZIP" action is available. Connection-gated local-first
+ * (bd-u4p8xhdc): the app auto-mints a local project set and lands on the
+ * selector directly — no setup screen to drive.
  */
-async function bootstrapProjectSet(page: Page, syncServer: string): Promise<void> {
+async function bootstrapProjectSet(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Quarto Hub' })).toBeVisible();
-  await expect(
-    page.getByText(/Get started by creating a new project set/i),
-  ).toBeVisible();
-
-  await page.locator('#setup-sync-server').fill(syncServer);
-  await page.getByRole('button', { name: /Create New Project Set/i }).click();
-
   await expect(page.getByRole('heading', { name: 'Your Projects' })).toBeVisible({
     timeout: 20000,
   });
@@ -73,7 +67,7 @@ test.describe('Import from ZIP', () => {
   test('creates a new project from an uploaded ZIP and renders it', async ({ page }) => {
     const syncServer = getServerUrl();
 
-    await bootstrapProjectSet(page, syncServer);
+    await bootstrapProjectSet(page);
 
     // Open the import form.
     await page.getByRole('button', { name: /Import from ZIP/i }).click();

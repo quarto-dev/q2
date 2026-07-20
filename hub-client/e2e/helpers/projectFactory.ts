@@ -129,16 +129,20 @@ async function waitForServerDocuments(
 }
 
 /**
- * Drive the first-time-setup UI to create a synced project set on the running
- * hub server and store its pointer in the browser's IDB. Must be called once
- * per fresh Playwright browser context before {@link seedProjectInBrowser},
- * otherwise the legacy project entry triggers the "Upgrade: Synced Project
- * List" migration screen and blocks all navigation.
+ * Bring a fresh Playwright browser context to the project selector, ready for
+ * {@link seedProjectInBrowser}. Must be called once per fresh context so the
+ * Monaco/auth/preference stubs are installed before any project loads.
  *
- * Modeled after the share-link spec's `bootstrapReceiverProjectSet` — driving
- * the UI lets the app's own `useProjectSet` race-free state machine put us in
- * `connected` status rather than racing a hand-rolled createProjectSet call
- * against the migration check.
+ * Connection-gated local-first (bd-u4p8xhdc): there is no first-time-setup
+ * screen anymore. `useProjectSet` auto-mints a local project set (empty
+ * syncServer, no network) on a fresh browser and goes straight to `connected`,
+ * so the selector renders immediately with no login and no server round-trip.
+ *
+ * The set being local is irrelevant to these tests: each project seeded by
+ * {@link seedProjectInBrowser} keeps its own hub `syncServer` (its docs live
+ * on the hub, created via {@link createProjectOnServer}), and
+ * `projectSet.isConnected()` is peer-independent (`handle !== null`), so
+ * seeding into the local set works exactly as it did into a synced one.
  */
 // Monaco loads from CDN (cdn.jsdelivr.net) by default in the production build.
 // Route those requests to local node_modules so tests work offline and in
@@ -178,7 +182,9 @@ async function interceptMonacoCdn(page: Page): Promise<void> {
 
 export async function bootstrapProjectSet(
   page: Page,
-  syncServer: string,
+  // Retained for a stable call signature (callers also pass this to
+  // seedProjectInBrowser); the selector no longer takes a sync-server input.
+  _syncServer: string,
 ): Promise<void> {
   await mockAuthMe(page);
   await interceptMonacoCdn(page);
@@ -245,15 +251,8 @@ export async function bootstrapProjectSet(
       '  npm run test:e2e\n',
     );
   }
-  await expect(
-    page.getByText(/Get started by creating a new project set/i),
-  ).toBeVisible();
-
-  await page.locator('#setup-sync-server').fill(syncServer);
-  await page
-    .getByRole('button', { name: /Create New Project Set/i })
-    .click();
-
+  // The app auto-mints a local project set and lands on the selector — no
+  // setup screen to drive. Wait for the selector heading before seeding.
   await expect(
     page.getByRole('heading', { name: 'Your Projects' }),
   ).toBeVisible({ timeout: 20000 });
@@ -263,8 +262,7 @@ export async function bootstrapProjectSet(
  * Seed a project entry in the browser's IndexedDB so the app can load it.
  *
  * Call {@link bootstrapProjectSet} once per browser context first so the
- * synced project set is initialized; otherwise the App lands on the
- * needs-migration screen.
+ * project set is initialized and the app has settled on the selector.
  *
  * Returns the local project ID (UUID) used in URL navigation.
  */
