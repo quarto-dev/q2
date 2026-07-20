@@ -317,31 +317,58 @@ Browser-visual verification (diagram actually drawn) is Phase 4.
       affordance + data-loc attrs so click-to-edit / scroll-sync
       keep working on diagram blocks.
 - [x] Full preview-renderer suite: 537 passed.
-- [ ] `npm run build:all` from hub-client (strict production build)
-- [ ] hub-client `npm run test:ci`
-- [ ] `cargo xtask build-q2-preview-spa` + `cargo build --bin q2`
-- [ ] hub-client changelog entries (two-commit workflow)
+- [x] `npm run build:all` from hub-client (strict production build) —
+      green
+- [x] hub-client `npm run test:ci` — 129 passed (incl. WASM smoke-all
+      with the mermaid fixtures)
+- [x] `cargo xtask build-q2-preview-spa` + `cargo build --bin q2` —
+      SPA re-embedded, used for Phase 4 browser checks
+- [x] hub-client changelog entry (`cd7f61fd`, two-commit workflow)
+- [x] Post-Phase-4 addition: vitest lock that a user render-components
+      `CodeBlock` shadows the built-in via the merge expression
+      (8 tests total in MermaidCodeBlock.test.tsx)
 
 ### Phase 4 — end-to-end verification (per CLAUDE.md, record evidence here)
 
-- [ ] `cargo run --bin q2 -- render fixture.qmd` (`format: html`) —
-      inspect output HTML; open in browser; diagram renders
-- [ ] `cargo run --bin q2 -- render fixture.qmd --to revealjs` —
-      open in browser; diagram renders on its slide; note any
-      sizing/visibility issues on later slides
-- [ ] `q2 preview` (rebuilt binary): `format: q2-preview` doc with a
-      mermaid block renders the diagram live; editing the block
-      re-renders
-- [ ] `q2 preview` / hub-client with `format: revealjs`: diagram
-      renders inside `RevealDeck` slides — **explicitly called out by
-      the user as needing particular testing** (slide mount/visibility
-      timing differs from the flat q2-preview flow); check a diagram
-      on slide 1 and on a later slide
-- [ ] Prototype-compat check: the
-      `~/Desktop/daily-log/2026/07/20/mermaid-react` doc (user
-      `render-components` override) still works — user override
-      shadows the new built-in without breaage
-- [ ] Record invocations + output snippets in this file
+All browser checks done 2026-07-20 via chrome-devtools MCP; servers
+were the freshly rebuilt `target/debug/q2` (SPA re-embedded).
+
+- [x] `q2 render` (`format: html`) → opened `demo.html` in Chrome:
+      mermaid drew the a→b→c flowchart from the CDN module
+      (`pre.mermaid` gained `data-processed="true"`, SVG with 3
+      `.node`s); the python block still renders as highlighted
+      sourceCode.
+- [x] `q2 render --to revealjs` → opened `slides.html`: diagram SVG
+      rendered on the (initially hidden) later slide; navigated to it
+      via `Reveal.slide(2)` — visible 250×86 SVG on the `.present`
+      section, screenshot inspected.
+- [x] `q2 preview doc.qmd` (`format: q2-preview`): diagram rendered
+      live in the sandboxed iframe (`[data-mermaid-diagram] svg`,
+      `quarto-mermaid-1`, 3 nodes / 2 edges); screenshot inspected.
+      **Live edit**: changed the fenced block on disk 3→5 nodes and
+      back — preview re-rendered each time without reload.
+- [x] `q2 preview slides.qmd` (`format: revealjs` → q2-slides
+      RevealDeck): diagram rendered inside the slide `<section>`
+      **while the slide was not active** with a correct non-zero
+      layout; navigating to the slide shows it correctly (screenshot
+      inspected). This was the user-flagged risk area — no
+      mount/visibility sizing issue observed with mermaid@11.12.0.
+      (hub-client uses the identical shared
+      Q2PreviewIframe→PreviewRoot→RevealDeck path; hub-client
+      integration itself is covered by test:ci + Playwright, no
+      separate manual hub session was run.)
+- [x] Prototype-compat: covered three ways — (1) new vitest lock:
+      a user `CodeBlock` in the merge expression shadows
+      `MermaidCodeBlock`; (2) the full hub-client Playwright
+      `render-components` suite (8 specs) passes against the changed
+      registry (real browser + hub + automerge); (3) **discovered**:
+      the CLI preview SPA never loads `render-components` at all
+      (parent-side plumbing absent in `PreviewApp.tsx`) —
+      pre-existing, now tracked as **bd-ue80chl0**. Consequence: in
+      CLI preview the prototype doc renders via the new built-in
+      (an improvement — previously the override silently didn't load
+      AND there was no built-in, leaving a dead code block).
+- [x] Evidence recorded (this section + Phase 2 section).
 
 ### Phase 5 — docs + close-out
 

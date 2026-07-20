@@ -121,4 +121,15 @@ describe('MermaidCodeBlock', () => {
         // crates/quarto-core/src/transforms/mermaid.rs.
         expect(MERMAID_VERSION).toBe('11.12.0');
     });
+
+    it('is shadowed by a user render-components CodeBlock override', () => {
+        // Prototype-compat lock (bd-5m4ga0s1): the daily-log mermaid
+        // prototype ships its own CodeBlock via render-components.
+        // PreviewRoot merges `{ ...previewRegistry, ...customRegistry }`,
+        // so a user CodeBlock must win over the mermaid-aware built-in.
+        const UserCodeBlock = () => null;
+        const merged = { ...previewRegistry, ...{ CodeBlock: UserCodeBlock } };
+        expect(merged.CodeBlock).toBe(UserCodeBlock);
+        expect(previewRegistry.CodeBlock).toBe(MermaidCodeBlock);
+    });
 });
