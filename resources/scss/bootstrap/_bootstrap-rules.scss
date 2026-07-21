@@ -943,6 +943,34 @@ caption {
   @include body-secondary;
 }
 
+// Tables base. ported from _quarto-rules.scss:226-241 (bd-dxgcpl02).
+// Verified against live Q2 DOM:
+//   - `<table class="table">` (all Q2 tables) — top/bottom margin;
+//   - `<tr class="header"><th><p>…</p></th>` (multi-block header cells) —
+//     drop the trailing paragraph's bottom margin;
+//   - `<caption>` (plain-caption tables; crossref-captioned tables move the
+//     caption into a `<p class="caption">` float instead) — center it and
+//     pad it. `text-align: center` is the load-bearing override of bootstrap
+//     core's bare `caption { text-align: left }`; this layer compiles after
+//     bootstrap so equal-specificity source order wins.
+// The `.table-caption` selector that TS groups with `caption` (L236) is NOT
+// ported — Q2 emits no `.table-caption` class (audit row 7, blocked).
+tr.header > th > p:last-of-type {
+  margin-bottom: 0px;
+}
+
+table,
+table.table {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+caption {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  text-align: center;
+}
+
 .column-margin figcaption,
 .margin-caption,
 div.aside,
