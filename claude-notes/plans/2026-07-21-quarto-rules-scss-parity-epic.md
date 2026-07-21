@@ -149,12 +149,16 @@ per strand, sequentially):
 
 ### Outcome
 
-All five PORT-NOW strands complete. DOM verification revised the audit on
-several rows (documented in each commit + inventory): **13d** deferred
-(bd-8oyd9dg4), **13e** and **13g** re-dispositioned (bd-bthmzyrc decision),
-**row 24** relocated to engine-output (bd-18410csp), `.fixed-top`/`.visually-
-hidden` found already-handled-or-BE. Open follow-ups for Carlos: the **13g**
-design call (bd-bthmzyrc) and confirming the **row-24 → engine-output** move.
+All five PORT-NOW strands complete, plus the row-13g follow-up. DOM
+verification revised the audit on several rows (documented in each commit +
+inventory): **13d** deferred (bd-8oyd9dg4), **13e** reclassified BE,
+`.fixed-top`/`.visually-hidden` found already-handled-or-BE, **row 24**
+relocated to engine-output (bd-18410csp — record kept as a comment on that
+strand). **Row 13g resolved** (Carlos, 2026-07-21): adopted Quarto 1's
+`code a:any-link{text-decoration:none}` + `code a:hover{underline}`, replacing
+Q2's gray-underline variant; merged (bd-bthmzyrc closed). Remaining epic
+children are all blocked/own-strand specials (engine-output, mermaid, floats,
+backlog) — the row-24 var work rides with engine-output.
 
 Each follows the bd-btjkyylx template (PR #406): failing `css.contains(...)`
 assertion in `crates/quarto-sass/src/compile.rs` `test_compile_default_css`
