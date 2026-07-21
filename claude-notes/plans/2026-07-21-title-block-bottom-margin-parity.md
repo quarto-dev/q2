@@ -127,11 +127,31 @@ Because both `q2 render` and `q2 preview` consume the same compiled bundle from
       *Note: a fresh in-browser screenshot of the served render was blocked by
       the Chrome extension disconnecting mid-session; the emitted-CSS grep plus
       the earlier injection measurement are conclusive without it.*
-- [ ] `q2 preview` check: the running preview embeds a separately-built WASM
+- [x] `q2 preview` check: the running preview embeds a separately-built WASM
       image, so it won't reflect this SCSS change until the WASM chain is
-      rebuilt. `cargo xtask verify` (full, not `--skip-hub-build`) rebuilds it;
-      re-measure the preview gap afterward.
-- [ ] `cargo xtask verify` (full) before requesting push.
+      rebuilt + the preview server is restarted (documented stale-WASM
+      behavior). Confirmed the WASM CSS path is identical to render
+      (`compile_default_bootstrap_css` → `compile_theme_css` →
+      `compile_default_css` → `load_title_block_layer`), and that
+      `load_title_block_layer` embeds this exact file via a target-agnostic
+      `include_dir!(".../resources/scss/html/templates")`. After rebuilding
+      (`npm run build:wasm` → `cargo xtask build-q2-preview-spa` →
+      `cargo build --bin q2`), verified by `strings` that the ported rule is
+      literally embedded in both the freshly-built WASM and the SPA-bundled
+      WASM the `q2` binary carries. **Not** visually re-measured in a browser —
+      the Chrome extension disconnected mid-session; the embed check +
+      native-compile test are the substitute evidence.
+- [x] `cargo xtask verify` (full): Rust build ✓, workspace tests ✓ (10346),
+      WASM build ✓, SPA dist ✓, hub-mcp non-live tests ✓. The 20 `live:`
+      hub-mcp failures are environmental (no `wss://sync.automerge.org`
+      connectivity in this sandbox — `braid` reported the same) and unrelated
+      to this CSS change.
+
+## Status
+
+- Committed `f0de2005`; **PR #406** opened against `main`
+  (branch `feature/bd-btjkyylx-title-block-margin`). Awaiting review/merge.
+- Strand `bd-btjkyylx` remains open until merge.
 
 ## Open questions / notes
 
