@@ -166,6 +166,68 @@ fn render_block(block: &mut Block, terms: Option<&LanguageTerms>, fs: &mut Float
             *block = replacement;
         }
     }
+
+    // Shape 2 (bd-hcp8m3ve): a standalone (non-crossref) `Figure` on an
+    // HTML-family format gets Q1's `renderHtmlFigure` wrapper —
+    // `Div(.quarto-figure .quarto-figure-<align>)` with the figure's id
+    // moved onto the wrapper. Float figures are excluded by their
+    // `quarto-float` class (they were just built with their own wrapper).
+    if fs.html_float_dom {
+        let needs_wrap = matches!(
+            block,
+            Block::Figure(f) if !f.attr.1.iter().any(|c| c == "quarto-float")
+        );
+        if needs_wrap {
+            let Block::Figure(f) = std::mem::replace(
+                block,
+                Block::Div(Div {
+                    attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+                    content: Vec::new(),
+                    source_info: SourceInfo::generated(quarto_source_map::By::unknown()),
+                    attr_source: AttrSourceInfo::empty(),
+                }),
+            ) else {
+                unreachable!("guarded by needs_wrap");
+            };
+            *block = wrap_standalone_figure(f);
+        }
+    }
+}
+
+/// Q1 `renderHtmlFigure` for a non-crossref figure: move the id to a
+/// `Div(.quarto-figure .quarto-figure-<align>)` wrapper; alignment comes
+/// from the contained image's `fig-align` (default `center`, stripped).
+fn wrap_standalone_figure(mut f: Figure) -> Block {
+    let harvested = harvest_figure_attrs(&mut f.content);
+    let (align, style, forwarded_classes) = match harvested {
+        Some(h) => (
+            h.align.unwrap_or_else(|| "center".to_string()),
+            h.style,
+            h.forwarded_classes,
+        ),
+        None => ("center".to_string(), None, Vec::new()),
+    };
+    let id = std::mem::take(&mut f.attr.0);
+    let mut classes = vec![
+        "quarto-figure".to_string(),
+        format!("quarto-figure-{align}"),
+    ];
+    for c in forwarded_classes {
+        if !classes.contains(&c) {
+            classes.push(c);
+        }
+    }
+    let mut kvs: hashlink::LinkedHashMap<String, String> = hashlink::LinkedHashMap::new();
+    if let Some(style) = style {
+        kvs.insert("style".to_string(), style);
+    }
+    let source_info = f.source_info.clone();
+    Block::Div(Div {
+        attr: (id, classes, kvs),
+        content: vec![Block::Figure(f)],
+        source_info,
+        attr_source: AttrSourceInfo::empty(),
+    })
 }
 
 /// Swap out a `CustomNode` in place with a placeholder, returning the
@@ -1538,6 +1600,62 @@ mod tests {
             panic!()
         };
         assert_eq!(s.text, "Table 1: ");
+    }
+
+    #[tokio::test]
+    async fn standalone_captioned_figure_gets_quarto_figure_wrapper() {
+        // Shape 2 (design doc): a non-crossref `![caption](img)` figure —
+        // a native Figure with no id — is wrapped in
+        // `Div(.quarto-figure .quarto-figure-<align>)`, with the figure's id
+        // (when present) moving to the wrapper, Q1's `renderHtmlFigure`.
+        let img = Inline::Image(quarto_pandoc_types::inline::Image {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            content: vec![],
+            target: ("img.png".to_string(), String::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+        let figure = Block::Figure(Figure {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            caption: Caption {
+                short: None,
+                long: Some(vec![para("A caption")]),
+                source_info: si(),
+            },
+            content: vec![Block::Plain(quarto_pandoc_types::block::Plain {
+                content: vec![img],
+                source_info: si(),
+            })],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let ast = run_full(vec![figure]).await;
+        let Block::Div(outer) = &ast.blocks[0] else {
+            panic!("expected wrapper Div, got {:?}", ast.blocks[0]);
+        };
+        assert_classes(
+            &outer.attr,
+            &["quarto-figure", "quarto-figure-center"],
+            "standalone wrapper",
+        );
+        assert!(
+            matches!(outer.content.first(), Some(Block::Figure(_))),
+            "figure inside wrapper"
+        );
+        // Standalone figures carry no float classes or data-qf kvs.
+        let Some(Block::Figure(f)) = outer.content.first() else {
+            unreachable!()
+        };
+        assert!(
+            !f.attr.1.iter().any(|c| c == "quarto-float"),
+            "standalone figure is not a float: {:?}",
+            f.attr.1
+        );
+        assert!(
+            !f.attr.2.keys().any(|k| k.starts_with("data-qf-")),
+            "no float kvs on a standalone figure"
+        );
     }
 
     #[tokio::test]

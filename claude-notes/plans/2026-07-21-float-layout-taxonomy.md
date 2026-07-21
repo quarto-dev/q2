@@ -57,9 +57,11 @@ writer and the preview React renderer.
 - [ ] Listing (`lst`) float DOM is wired (`listing` class + left align) but
       has no e2e fixture exercising `#lst-` floats yet — add one
 
-### Phase 3 — Standalone captioned figures (TDD) — PENDING
-- [ ] Shape 2 wrapper (`quarto-figure quarto-figure-<align>`) for
-      non-crossref `![caption](img)` figures
+### Phase 3 — Standalone captioned figures (TDD) — DONE
+- [x] Shape 2 wrapper (`quarto-figure quarto-figure-<align>`) for
+      non-crossref `![caption](img)` figures (`wrap_standalone_figure`;
+      id moves to wrapper, fig-align harvested/stripped, e2e verified with
+      `fig-align="right"`)
 
 ### Phase 4 — Preview React renderer parity — DONE
 - [x] Figure.tsx figcaption synthesis mirroring the pampa writer (4 new
