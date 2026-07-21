@@ -695,6 +695,33 @@ mod tests {
              margin-block-end rule ported from _quarto-rules.scss (bd-iq08mmnh)"
         );
 
+        // Tables base ported from TS Quarto's _quarto-rules.scss:226-241
+        // (bd-dxgcpl02). Verified against live Q2 DOM: `<table class="table">`
+        // (all tables), `<caption>` (plain-caption tables), and `<th><p>…</p>`
+        // (multi-block header cells). The `.table-caption` half of the caption
+        // group stays BLOCKED — Q2 emits no `.table-caption` class (audit row 7).
+        assert!(
+            css.contains("table,table.table{margin-top:"),
+            "Should contain the grouped table/table.table margin rule ported \
+             from _quarto-rules.scss (bd-dxgcpl02) — bootstrap's bare `table{{}}` \
+             has no top/bottom margin"
+        );
+        assert!(
+            css.contains("tr.header>th>p:last-of-type{margin-bottom:"),
+            "Should contain the tr.header>th>p:last-of-type margin rule ported \
+             from _quarto-rules.scss (bd-dxgcpl02)"
+        );
+        // The caption padding matches bootstrap's defaults; the load-bearing
+        // parity fix is `text-align:center`, which must override bootstrap's
+        // bare `caption{…text-align:left}` (equal specificity → source order,
+        // so this rule must cascade after bootstrap core).
+        assert!(
+            css.contains("caption{padding-top:.5rem;padding-bottom:.5rem;text-align:center}"),
+            "Should contain the bare caption padding + text-align:center rule \
+             ported from _quarto-rules.scss (bd-dxgcpl02), overriding bootstrap's \
+             text-align:left"
+        );
+
         // Should have default syntax-highlight rules for `.hl-*` classes
         // emitted by the HTML writer for tree-sitter captures.
         assert!(

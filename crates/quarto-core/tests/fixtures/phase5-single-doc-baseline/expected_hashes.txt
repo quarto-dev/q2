@@ -199,5 +199,15 @@
 # `<header id="title-block-header">`, so the rules match live DOM. doc.html
 # hash unchanged: CSS-only change; the fixture's title-block markup already
 # existed, so only the compiled CSS gained the rules.
+# Re-captured 2026-07-21 (bd-dxgcpl02, tables base parity):
+# doc_files/styles.css hash updated because three table rules from TS Quarto's
+# `_quarto-rules.scss:226-241` — `tr.header > th > p:last-of-type { margin-bottom:
+# 0px }`, `table,table.table { margin-top/bottom: 0.5rem }`, and `caption {
+# padding-top/bottom: 0.5rem; text-align: center }` — were ported into
+# `_bootstrap-rules.scss`. All three match live Q2 DOM (`<table class="table">`,
+# `<th><p>` in multi-block header cells, `<caption>` in plain-caption tables); the
+# caption `text-align:center` overrides bootstrap core's bare `caption{text-align:
+# left}` via source order. `.table-caption` was NOT ported (no such class emitted).
+# doc.html hash unchanged: CSS-only change (the fixture's table markup pre-existed).
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css 0fc7bc97fb80a5ed0d81ff37f61bbb8afc81d365ad4efc8ad1b28af626bdc37a
+doc_files/styles.css 0a0741ba38fdc77ed408e22b12c9676f71bf4048a3e2ec1102ca84f853badbff
