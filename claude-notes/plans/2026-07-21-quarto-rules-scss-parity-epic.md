@@ -112,6 +112,46 @@ emitter feature and add a `blocks` dep so the CSS work isn't picked up as ready
 prematurely. Known likely-blocked: `widget-subarea` (Jupyter widgets),
 `knitsql-table` (knitr SQL), possibly the layout-panel family.
 
+## Code pointers for the audit (captured while warm, bd-btjkyylx session)
+
+Where the relevant machinery lives — a fresh session can start here instead of
+re-deriving:
+
+- **SCSS bundle assembly:** `crates/quarto-sass/src/bundle.rs`.
+  `load_quarto_layer()` builds the Bootstrap layer from
+  `_bootstrap-rules.scss`; `load_title_block_layer()` loads
+  `title-block.scss`. There is **no** `load_quarto_rules_layer()` — that's the
+  gap. When the audit finds port-now rules that don't belong in either existing
+  layer, decide whether to (a) add them to `_bootstrap-rules.scss`, (b) add to
+  `title-block.scss`, or (c) introduce a new dedicated layer (as was done for
+  `copy-code.scss` / `highlight.scss` / `embed-example.scss`).
+- **Layer resources (embedded dirs):** `crates/quarto-sass/src/resources.rs` —
+  `include_dir!` of `resources/scss/html/templates` (`TEMPLATES_DIR`) and the
+  bootstrap dir. Target-agnostic, so edits reach both native and WASM.
+- **Compile entry / theme pipeline:**
+  `crates/quarto-core/src/stage/stages/compile_theme_css.rs`
+  (`compile_theme_css` → `quarto_sass::compile_default_css`). The WASM preview
+  path is `wasm-quarto-hub-client::compile_default_bootstrap_css` → same
+  `compile_theme_css`.
+- **DOM emission checks (the "does Q2 emit this?" question):** the HTML writer
+  in `crates/pampa/src/writers/` and the AST transforms in
+  `crates/quarto-core/src/transforms/`. Grep these for the class names a
+  selector targets; if nothing emits the class, the rule is
+  BLOCKED-ON-EMITTER.
+- **TDD hook:** extend `test_compile_default_css` in
+  `crates/quarto-sass/src/compile.rs` with a compile-output assertion per
+  ported rule (the bd-btjkyylx pattern — assert on a minified substring unique
+  to the new rule).
+- **Baseline to re-capture on `styles.css` shifts:**
+  `crates/quarto-core/tests/fixtures/phase5-single-doc-baseline/expected_hashes.txt`,
+  checked by `single_doc_render_unchanged_under_scope_refactor` in
+  `crates/quarto-core/tests/integration/artifact_scoping_pipeline.rs`. Copy the
+  failing test's `left:` hash; add a `# Re-captured` note.
+- **The TS Quarto source of truth:**
+  `external-sources/quarto-cli/src/resources/formats/html/_quarto-rules.scss`
+  (774 lines). Cross-reference `_quarto-rules-*.scss` siblings too (copy-code,
+  code-filename) — some were already extracted into Q2 dedicated layers.
+
 ## Notes
 
 - The byte-identity baseline
