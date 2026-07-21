@@ -57,7 +57,7 @@ Notes:
 - The figcaption id suffix is a **fixed uuid constant**
   (`0ceaefa1-69ba-4598-a22c-09a6ac19f8ca`, `floatreftarget.lua:703`) to avoid
   colliding with user ids; `aria-describedby` on the content wrapper points at
-  it.
+  it. **Q2 drops the uuid** — see "The figcaption-uuid finding" below.
 - Listings force `align=left` and add class `listing`.
 
 ### 2. Standalone (non-crossref) captioned figure
@@ -115,14 +115,25 @@ Mechanism options considered:
   for now; can be revisited if figcaption metadata outgrows the kv scheme.
 
 For (A), the transform sets on the Figure's attr kvs (consumed and stripped by
-both writers, never emitted as HTML attributes):
+both writers, never emitted as HTML attributes). Everything expressible as a
+native attr — the outer div's classes, the `<figure>` classes, the content
+wrapper's `aria-describedby` — is set directly by the transform; the kvs exist
+only for figcaption synthesis and placement, which Pandoc's attr-less
+`Caption` cannot carry. The complete list (Q1 FloatRefTarget counterpart in
+parens):
 
-| kv | value | drives |
-| --- | --- | --- |
-| `data-qf-ref-type` | `fig`/`tbl`/`lst`/custom | `quarto-float-<ref>` on figure + figcaption |
-| `data-qf-caption-location` | `top`/`bottom`/`margin` | `quarto-float-caption-<loc>` + placement |
-| `data-qf-uncaptioned` | present/absent | `quarto-uncaptioned` |
-| `data-qf-subfloat` | present/absent | `quarto-subfloat-*` variants |
+| kv | value | Q1 source | drives |
+| --- | --- | --- | --- |
+| `data-qf-ref-type` | `fig`/`tbl`/`lst`/custom kind | `ref_type_from_float(float)` (crossref category) | `quarto-float-<ref>` on the figcaption (the `<figure>` copy is a plain class set by the transform) |
+| `data-qf-caption-location` | `top`/`bottom`/`margin` | `cap_location(float)` (`fig-cap-location` etc.) | `quarto-float-caption-<loc>` class + whether `<figcaption>` is written before or after content |
+| `data-qf-caption-id` | the collision-checked id | `float.identifier .. "-caption-" .. uuid` | `id=` on the figcaption; must equal the `aria-describedby` the transform already set |
+| `data-qf-uncaptioned` | `1`/absent | `float.is_uncaptioned` | `quarto-uncaptioned` class |
+| `data-qf-subfloat` | `1`/absent | `float.parent_id ~= nil` | `quarto-subfloat-caption` + `quarto-subfloat-<ref>` in place of the `quarto-float-*` pair |
+
+Five kvs total; `data-qf-caption-id` is the one added by the uuid decision
+below (Q1 derived the id inline; Q2 computes it transform-side where the
+document-wide id set is available, so the writer must receive the chosen
+value rather than re-derive it).
 
 Both consumers implement the same small synthesis: the pampa HTML writer
 (`writers/html.rs` Figure arm) and the preview React renderer
@@ -162,18 +173,42 @@ change (figure DOM gains wrapper + classes); phase5 baseline `doc.html` is
 title-only and should NOT shift. Every changed snapshot must be itemized in
 the commit per the snapshot policy.
 
-## Open questions (for alignment before implementation)
+## The figcaption-uuid finding (investigated 2026-07-21)
 
-1. **Verbatim uuid**: adopt Q1's literal figcaption-uuid constant
-   (`…-caption-0ceaefa1-…`) for byte-level parity, or a Q2-native suffix like
-   `…-caption`? Verbatim costs nothing and keeps any Q1 tooling that matches
-   the pattern working — proposed: verbatim.
-2. **`quarto-float` on the outer div**: Q1 emits it (alongside
-   `quarto-figure`); no CSS in `_quarto-rules.scss` selects bare
-   `.quarto-float`, but themes might. Verbatim says yes — proposed: yes.
-3. **kv naming** (`data-qf-*`): any preference? They're internal (stripped at
-   write time), so bikeshed-level — but they surface in Pandoc JSON between
-   crossref-render and the writer, where Lua filters could see them.
+Traced `0ceaefa1-69ba-4598-a22c-09a6ac19f8ca` through all of quarto-cli:
+
+- It appears **exactly once** — its definition in `floatreftarget.lua:703` —
+  and the id it builds has **exactly one consumer**: the `aria-describedby`
+  attribute on the float's content wrapper three lines later.
+- No regex, JS, CSS, or other filter matches the id pattern anywhere
+  (`quarto.js` only matches `margin-caption` *classes*; lightbox doesn't read
+  caption ids). Introduced in the FloatRefTarget PR itself (`8ba05ff2a`,
+  #6620, 2023-09-15).
+- Classification: **namespace-collision guard**, not a regex-architecture
+  workaround. It prevents a user-authored `fig-x-caption` id from colliding
+  with the generated one (duplicate ids = invalid HTML + broken aria/anchor
+  resolution). Q1's filter architecture couldn't cheaply see the document's
+  full id set, so an unguessable suffix was the correct cheap move there.
+
+**Decision (Carlos, 2026-07-21): drop the uuid.** Q2 keeps the *purpose*
+(collision-free figcaption id for `aria-describedby`) with a better
+mechanism: emit the human-readable `<float-id>-caption`, checked against a
+document-wide id set collected in one pass over the AST, disambiguating
+(`<float-id>-caption-1`, …) only on actual collision. The chosen id travels
+to the writers via `data-qf-caption-id`. The `aria-describedby` wiring stays
+verbatim.
+
+## Resolved questions
+
+1. **Figcaption uuid**: dropped — semantic id + collision check (above).
+2. **Bare `quarto-float` on the outer div**: **yes**, emit it (Q1-verbatim;
+   themes may select on it even though `_quarto-rules.scss` doesn't).
+3. **kv naming**: `data-qf-*` scheme as tabled above (five kvs). Q1 has no
+   counterpart naming to preserve — these are Q2-internal, stripped at write
+   time; deviation from Q1 is expected since the pipeline differs.
+
+## Open questions
+
 4. **Phase 2 timing**: replacing the table-float Div shape changes rendered
    DOM for existing documents (captions become `<figcaption>`); fine to do in
    the same PR as Phase 1, or staged separately?

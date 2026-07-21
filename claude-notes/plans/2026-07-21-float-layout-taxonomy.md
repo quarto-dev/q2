@@ -23,8 +23,15 @@ writer and the preview React renderer.
 ### Phase 0 — Alignment
 - [x] Q1 DOM inventory (floatreftarget.lua, layout/html.lua, renderHtmlFigure)
 - [x] Design doc with mechanism options + recommendation
-- [ ] Carlos sign-off on the four open questions (uuid verbatim, bare
-      `quarto-float` class, `data-qf-*` kv naming, table-float staging)
+- [x] Carlos sign-off on Q1–Q3 (2026-07-21): **drop the figcaption uuid**
+      (it's a namespace-collision guard, not a regex hack — sole consumer is
+      aria-describedby; Q2 emits `<float-id>-caption` with an AST-wide
+      collision check, disambiguating only on real collision); **emit bare
+      `quarto-float`** on the outer div; **`data-qf-*` kv scheme accepted**
+      (5 kvs: ref-type, caption-location, caption-id, uncaptioned, subfloat —
+      full table in the design doc)
+- [ ] Q4 still open: table-float DOM change (Phase 2) in the same PR as
+      figure floats, or staged separately?
 
 ### Phase 1 — Figure floats (TDD)
 - [ ] Failing tests: pampa writer snapshot for the full shape-1 DOM;
