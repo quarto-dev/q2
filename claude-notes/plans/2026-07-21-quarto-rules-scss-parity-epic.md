@@ -90,6 +90,49 @@ whether the DOM is emitted.
 The MISSING set mixes port-now (Q2 emits the DOM) and blocked (Q2 doesn't yet)
 — separating them is the whole point of the audit.
 
+## Phase 2 execution — decisions + order (Carlos, 2026-07-21)
+
+Green-lit to implement **all PORT-NOW strands** in one pass on integration
+branch `feature/quarto-rules-scss-parity` (each sub-task branches off it,
+`--no-ff` merged back per worktrees.md). The PN batch is the five themed
+strands below; **engine-output (bd-18410csp) and mermaid (bd-sehm2rha) are
+NOT in this batch** — the audit classes them as own-strand specials
+(engine-output needs *executed* jupyter/knitr fixtures; mermaid is theming),
+and bd-9fz5fweg (floats) stays blocked on the taxonomy feature bd-hcp8m3ve.
+
+Two decisions taken before starting:
+
+1. **Row 17 `.quarto-unresolved-ref` (Carlos): additive.** TS emits a
+   `Span.quarto-unresolved-ref`; Q2 emits `Link.quarto-xref` with visible
+   `?id?`. We keep Q2's louder `?id?` Link and *add* `quarto-unresolved-ref`
+   to the class vec in `crossref_render.rs::render_resolved_ref` on the
+   `!resolved` branch (so `<a class="quarto-xref quarto-unresolved-ref">`),
+   then port the CSS. Downstream extensions key off the class (element-
+   agnostic selector), so the additive form satisfies them while preserving
+   Q2's better default. This row carries a pampa emitter test in addition to
+   the compile-output assertion.
+2. **Row 29 light/dark-content (Carlos): own strand.** Pulled out of
+   bd-28iqotrt into **bd-l1rx9yzh** — the dark half is entangled with the
+   not-yet-built dark-mode feature and its own difficulties.
+
+**Execution order** (pure-CSS first to validate the mechanism, emitter-tweak
+strand last; each shifts `styles.css` so the `phase5` hash is re-captured
+per strand, sequentially):
+
+- [ ] 1. **bd-iq08mmnh** title-block remainder (row 6c) — smallest, pure CSS
+- [ ] 2. **bd-dxgcpl02** tables base (row 7) — pure CSS
+- [ ] 3. **bd-u5yvsdgw** code (rows 13a,b,d,e,g,23) — pure CSS
+- [ ] 4. **bd-ih6jrf39** :root vars + print (rows 24,28) — pure CSS
+- [ ] 5. **bd-28iqotrt** misc (rows 1a,10,11,15a,17,22,25) — CSS + the row-17
+      additive emitter tweak
+
+Each follows the bd-btjkyylx template (PR #406): failing `css.contains(...)`
+assertion in `crates/quarto-sass/src/compile.rs` `test_compile_default_css`
+→ port into the thematically-right existing SCSS layer with a
+`// ported from _quarto-rules.scss:<lines> (<strand>)` provenance comment →
+re-capture `phase5-single-doc-baseline/expected_hashes.txt` with a dated
+`# Re-captured` note → e2e `q2 render` grep of emitted `styles.css`.
+
 ## Phase 2 — Themed port-now strands (created by the audit)
 
 Candidate groupings to become child strands of bd-4doe9lvt (final shape decided
