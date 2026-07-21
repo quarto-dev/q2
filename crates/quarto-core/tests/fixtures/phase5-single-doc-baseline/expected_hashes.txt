@@ -189,5 +189,14 @@
 # is CSS-only and the fixture's `#title-block-header` element already
 # existed — only the compiled CSS gained the rule, so the `styles.css`
 # hash shifts.
+# Re-captured 2026-07-21 (bd-obkvhlam, task-list rendering): doc_files/
+# styles.css hash updated because `ul.task-list { padding-left: 1em }` and
+# `input[type="checkbox"] { margin-right: 0.5ch }` were ported from TS
+# Quarto's `_quarto-rules.scss` (lines 338/697) into
+# `_bootstrap-rules.scss`, alongside the new task-list rendering
+# (`- [ ]` -> `<ul class="task-list"><li><label><input type="checkbox">`).
+# doc.html hash unchanged: the fixture has no task list, so the new
+# selectors match nothing in its body — they only appear in the compiled
+# CSS, so the `styles.css` hash shifts.
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css 6eafe1bf027fd735d0c41ecf49cd390f4c627fada4c36cbe5403e2fe877e599a
+doc_files/styles.css f5d4781f51c6f160204053671fc8126446edaadf315c258428aedb3e8188c52a

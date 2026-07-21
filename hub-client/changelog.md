@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-21
+
+- [`5852d0ee`](https://github.com/quarto-dev/q2/commits/5852d0ee): Task lists render as real checkboxes in the preview, and in edit-enabled sessions clicking a checkbox updates the document source (`[ ]` to `[x]` and back). Clicking the item's text still opens the block editor without toggling the box.
+
 ### 2026-07-20
 
 - [`4202d342`](https://github.com/quarto-dev/q2/commits/4202d342): Mermaid diagrams: a fenced code block marked `mermaid` now renders as a live diagram in the preview (both regular documents and revealjs slides), with a readable error box when the diagram source fails to parse. The diagram library loads on demand from the jsdelivr CDN, so diagram-free documents load no extra code.

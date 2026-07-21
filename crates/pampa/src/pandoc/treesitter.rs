@@ -288,6 +288,10 @@ fn process_list_item(
 ) -> PandocNativeIntermediate {
     let mut list_attr: Option<ListAttributes> = None;
     let mut blocks: Vec<Block> = Vec::new();
+    // GFM task-list marker (`[ ]` / `[x]`), captured with its source range so
+    // the ballot-box Str below carries the exact bracket bytes — the
+    // interactive-checkbox feature splices this range to toggle state.
+    let mut task_marker: Option<(bool, quarto_source_map::Range)> = None;
     for (node, child) in children {
         if node == "block_continuation" {
             continue;
@@ -295,6 +299,12 @@ fn process_list_item(
         // Bullet-list markers carry no list-attribute payload (they map to
         // IntermediateUnknown); skip them by node name.
         if node == "list_marker_minus" || node == "list_marker_star" || node == "list_marker_plus" {
+            continue;
+        }
+        if node == "task_list_marker_checked" || node == "task_list_marker_unchecked" {
+            if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
+                task_marker = Some((node == "task_list_marker_checked", range));
+            }
             continue;
         }
         if node == "list_marker_dot"
@@ -344,6 +354,50 @@ fn process_list_item(
                 "Unexpected intermediate in list_item child {:?}: {:?}",
                 node, child
             ),
+        }
+    }
+    // Prepend the task marker as Pandoc does: `Str "☐"`/`Str "☒"` + Space at
+    // the head of the item's first Paragraph/Plain. The marker token's range
+    // includes its required trailing whitespace char; split it so the Str
+    // covers exactly the 3 bracket bytes and the Space covers the rest.
+    if let Some((checked, range)) = task_marker {
+        let file_id = context.current_file_id();
+        let bracket_end = quarto_source_map::Location {
+            offset: range.start.offset + 3,
+            row: range.start.row,
+            column: range.start.column + 3,
+        };
+        let marker_str = Inline::Str(Str {
+            text: if checked { "☒" } else { "☐" }.to_string(),
+            source_info: quarto_source_map::SourceInfo::from_range(
+                file_id,
+                quarto_source_map::Range {
+                    start: range.start,
+                    end: bracket_end,
+                },
+            ),
+        });
+        let marker_space = Inline::Space(Space {
+            source_info: quarto_source_map::SourceInfo::from_range(
+                file_id,
+                quarto_source_map::Range {
+                    start: bracket_end,
+                    end: range.end,
+                },
+            ),
+        });
+        match blocks.first_mut() {
+            Some(Block::Paragraph(p)) => {
+                p.content.splice(0..0, [marker_str, marker_space]);
+            }
+            Some(Block::Plain(p)) => {
+                p.content.splice(0..0, [marker_str, marker_space]);
+            }
+            _ => {
+                // The grammar only produces the marker before a paragraph;
+                // if that invariant ever breaks, drop the marker rather
+                // than panic.
+            }
         }
     }
     let has_blank_line = list_item_has_blank_line_between_blocks(list_item_node);
@@ -654,6 +708,12 @@ fn native_visitor<T: Write>(
         "atx_h1_marker" | "atx_h2_marker" | "atx_h3_marker" | "atx_h4_marker" | "atx_h5_marker"
         | "atx_h6_marker" => {
             // Marker nodes - these are processed by the parent atx_heading node
+            PandocNativeIntermediate::IntermediateUnknown(node_location(node))
+        }
+        "task_list_marker_checked" | "task_list_marker_unchecked" => {
+            // Task-list markers are consumed by the parent list_item
+            // (process_list_item reads the checked state from the node name
+            // and the range from this intermediate).
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
         "$" | "$$" => {
