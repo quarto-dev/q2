@@ -178,5 +178,16 @@
 # glyph). doc.html hash unchanged: the fixture has no authors, so
 # neither the new selectors nor the title-block markup changes touch
 # its body/head.
+# Re-captured 2026-07-21 (bd-btjkyylx, title-block bottom-margin parity):
+# doc_files/styles.css hash updated because the base
+# `#title-block-header { margin-block-end: 1rem; position: relative;
+# margin-top: -1px }` rule from TS Quarto's `_quarto-rules.scss` was
+# ported into `resources/scss/html/templates/title-block.scss`. Q2 had
+# only the `body.nav-sidebar` responsive override (`…margin-block-end: 0`)
+# and no base rule, so the title block sat flush against the first article
+# section (Q1 renders a 1rem/17px gap). doc.html hash unchanged: the change
+# is CSS-only and the fixture's `#title-block-header` element already
+# existed — only the compiled CSS gained the rule, so the `styles.css`
+# hash shifts.
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css d4ca5cf8b3763de4308eefa220028fbe989b6aec6bc5be54127788a940a0e235
+doc_files/styles.css 6eafe1bf027fd735d0c41ecf49cd390f4c627fada4c36cbe5403e2fe877e599a

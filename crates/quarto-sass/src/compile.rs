@@ -664,6 +664,19 @@ mod tests {
             "Should contain .quarto-title-meta class from title-block.scss"
         );
 
+        // Should have the base #title-block-header rule ported from TS Quarto's
+        // _quarto-rules.scss: the unconditional bottom margin that separates the
+        // title block from the first article section. Without it the title block
+        // sits flush against the content (bd-btjkyylx). This is distinct from the
+        // responsive `body.nav-sidebar #title-block-header{margin-block-end:0}`
+        // override, which collapses this margin on small screens — the `1rem`
+        // value uniquely identifies the base rule.
+        assert!(
+            css.contains("#title-block-header{margin-block-end:1rem"),
+            "Should contain the base #title-block-header{{margin-block-end:1rem}} \
+             rule ported from _quarto-rules.scss (bd-btjkyylx)"
+        );
+
         // Should have default syntax-highlight rules for `.hl-*` classes
         // emitted by the HTML writer for tree-sitter captures.
         assert!(
