@@ -677,6 +677,24 @@ mod tests {
              rule ported from _quarto-rules.scss (bd-btjkyylx)"
         );
 
+        // Title-block remainder ported from TS Quarto's _quarto-rules.scss:193-201
+        // (bd-iq08mmnh): unconditional link + author/date/doi margins that apply
+        // to every title-block variant. Q2 emits `<p class="author|date|doi">`
+        // (template.rs:316/319/458, the doi one wraps an `<a>`) inside
+        // `<header id="title-block-header">`, so these are a live parity gap.
+        // Value-agnostic checks (selector + property) so they don't depend on
+        // grass's leading-zero minification of `0.2rem`.
+        assert!(
+            css.contains("#title-block-header a{text-decoration:none"),
+            "Should contain the #title-block-header a{{text-decoration:none}} rule \
+             ported from _quarto-rules.scss (bd-iq08mmnh)"
+        );
+        assert!(
+            css.contains("#title-block-header .doi{margin-block-end:"),
+            "Should contain the grouped #title-block-header .author/.date/.doi \
+             margin-block-end rule ported from _quarto-rules.scss (bd-iq08mmnh)"
+        );
+
         // Should have default syntax-highlight rules for `.hl-*` classes
         // emitted by the HTML writer for tree-sitter captures.
         assert!(
