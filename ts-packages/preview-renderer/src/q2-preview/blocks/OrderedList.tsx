@@ -4,6 +4,7 @@ import type { NodeArgs, OrderedListBlock } from '../../framework';
 import { IncrementalContext } from '../IncrementalContext';
 import { PreviewContext } from '../PreviewContext';
 import { isLeadingBlockBorrowable } from './listBorrow';
+import { makeTaskToggle, TaskItemBody, taskItemChecked } from './taskList';
 
 const NOOP = () => {};
 
@@ -86,6 +87,21 @@ export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
                 const liProps = borrowPoolId !== undefined
                     ? { 'data-block-pool-id': borrowPoolId, tabIndex: -1 as const }
                     : {};
+                // Task items render checkboxes but the <ol> never gets the
+                // task-list class (Pandoc writer parity).
+                const checked = taskItemChecked(item);
+                if (checked !== null) {
+                    return (
+                        <li key={i} {...itemAttrProps} {...liProps}>
+                            <TaskItemBody
+                                item={item}
+                                checked={checked}
+                                onToggle={makeTaskToggle(ctx, resolved, i)}
+                                onNavigateToDocument={args.onNavigateToDocument}
+                            />
+                        </li>
+                    );
+                }
                 return (
                     <li key={i} {...itemAttrProps} {...liProps}>
                         {item.map((block, j) => (

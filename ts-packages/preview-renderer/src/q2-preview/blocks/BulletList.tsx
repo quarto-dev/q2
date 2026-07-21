@@ -4,6 +4,7 @@ import type { BulletListBlock, NodeArgs } from '../../framework';
 import { IncrementalContext } from '../IncrementalContext';
 import { PreviewContext } from '../PreviewContext';
 import { isLeadingBlockBorrowable } from './listBorrow';
+import { allTaskItems, makeTaskToggle, TaskItemBody, taskItemChecked } from './taskList';
 
 const NOOP = () => {};
 
@@ -24,22 +25,38 @@ export const BulletList = (args: NodeArgs<BulletListBlock>) => {
     const { enabled, incremental } = useContext(IncrementalContext);
     const ctx = useContext(PreviewContext);
     const poolId = (args.node as any).s as string | number | undefined;
+    // Pandoc parity: `class="task-list"` iff every item is a task item
+    // (bullet lists only — the native writer never puts the class on <ol>).
+    const taskListClass = allTaskItems(args.node.c) ? { className: 'task-list' } : {};
 
     if (enabled) {
         return (
-            <ul {...dataLocProps(args.node)}>
-                {args.node.c.map((item, i) => (
-                    <li key={i} {...liItemAttrProps(args.node.itemAttr?.[i], incremental)}>
-                        {item.map((block, j) => (
-                            <Node
-                                key={`${i}:${j}`}
-                                node={block}
-                                onNavigateToDocument={args.onNavigateToDocument}
-                                setLocalAst={NOOP}
-                            />
-                        ))}
-                    </li>
-                ))}
+            <ul {...taskListClass} {...dataLocProps(args.node)}>
+                {args.node.c.map((item, i) => {
+                    const checked = taskItemChecked(item);
+                    return (
+                        <li key={i} {...liItemAttrProps(args.node.itemAttr?.[i], incremental)}>
+                            {checked !== null ? (
+                                // Incremental (reveal) surfaces are never edit-enabled:
+                                // render the checkbox, but inert.
+                                <TaskItemBody
+                                    item={item}
+                                    checked={checked}
+                                    onNavigateToDocument={args.onNavigateToDocument}
+                                />
+                            ) : (
+                                item.map((block, j) => (
+                                    <Node
+                                        key={`${i}:${j}`}
+                                        node={block}
+                                        onNavigateToDocument={args.onNavigateToDocument}
+                                        setLocalAst={NOOP}
+                                    />
+                                ))
+                            )}
+                        </li>
+                    );
+                })}
             </ul>
         );
     }
@@ -48,7 +65,7 @@ export const BulletList = (args: NodeArgs<BulletListBlock>) => {
     const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined && !ctx?.editingDisabled;
 
     return (
-        <ul {...(isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {})} {...dataLocProps(args.node)}>
+        <ul {...taskListClass} {...(isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {})} {...dataLocProps(args.node)}>
             {args.node.c.map((item, i) => {
                 // Per-item block attr (bd-aeyss6p5) applies to every <li>.
                 const itemAttrProps = liItemAttrProps(args.node.itemAttr?.[i], false);
@@ -65,16 +82,26 @@ export const BulletList = (args: NodeArgs<BulletListBlock>) => {
                 const liProps = borrowPoolId !== undefined
                     ? { 'data-block-pool-id': borrowPoolId, tabIndex: -1 as const }
                     : {};
+                const checked = taskItemChecked(item);
                 return (
                     <li key={i} {...itemAttrProps} {...liProps}>
-                        {item.map((block, j) => (
-                            <Node
-                                key={`${i}:${j}`}
-                                node={block}
+                        {checked !== null ? (
+                            <TaskItemBody
+                                item={item}
+                                checked={checked}
+                                onToggle={makeTaskToggle(ctx, resolved, i)}
                                 onNavigateToDocument={args.onNavigateToDocument}
-                                setLocalAst={NOOP}
                             />
-                        ))}
+                        ) : (
+                            item.map((block, j) => (
+                                <Node
+                                    key={`${i}:${j}`}
+                                    node={block}
+                                    onNavigateToDocument={args.onNavigateToDocument}
+                                    setLocalAst={NOOP}
+                                />
+                            ))
+                        )}
                     </li>
                 );
             })}
