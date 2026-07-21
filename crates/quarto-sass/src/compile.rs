@@ -786,6 +786,46 @@ mod tests {
              _quarto-rules.scss (bd-ih6jrf39)"
         );
 
+        // Misc element CSS ported from TS Quarto's _quarto-rules.scss (bd-28iqotrt),
+        // each verified against live Q2 DOM. `.visually-hidden` (row 1a) is NOT
+        // ported — bootstrap core already supplies it; row 29 (light/dark-content)
+        // was split to its own strand (bd-l1rx9yzh).
+        assert!(
+            css.contains(".hidden{display:none !important}"),
+            "Should contain .hidden ported from _quarto-rules.scss:24-26 (bd-28iqotrt)"
+        );
+        assert!(
+            css.contains("iframe{margin-bottom:1em}"),
+            "Should contain iframe margin ported from _quarto-rules.scss:262 (bd-28iqotrt)"
+        );
+        assert!(
+            css.contains("details[show]{margin-bottom:0}"),
+            "Should contain details[show] ported from _quarto-rules.scss:270-272 (bd-28iqotrt)"
+        );
+        assert!(
+            css.contains("details>summary>p:only-child{display:inline}"),
+            "Should contain details>summary>p:only-child ported from _quarto-rules.scss:281 (bd-28iqotrt)"
+        );
+        assert!(
+            css.contains(".footnote-back{margin-left:.2em}"),
+            "Should contain .footnote-back ported from _quarto-rules.scss:352 (bd-28iqotrt) \
+             — transforms/footnotes.rs emits <a class=\"footnote-back\">"
+        );
+        assert!(
+            css.contains(".quarto-unresolved-ref{font-weight:600}"),
+            "Should contain .quarto-unresolved-ref ported from _quarto-rules.scss:366 \
+             (bd-28iqotrt); crossref_render.rs now emits the class on unresolved refs"
+        );
+        assert!(
+            css.contains("a{text-underline-offset:3px}"),
+            "Should contain a text-underline-offset ported from _quarto-rules.scss:436 (bd-28iqotrt)"
+        );
+        assert!(
+            css.contains("div.column{display:inline-block"),
+            "Should contain div.column ported from _quarto-rules.scss:658-662 (bd-28iqotrt) \
+             — authored ::: {{.columns}} emits <div class=\"column\">"
+        );
+
         // Should have default syntax-highlight rules for `.hl-*` classes
         // emitted by the HTML writer for tree-sitter captures.
         assert!(

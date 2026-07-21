@@ -231,5 +231,16 @@
 # `.fixed-top{position:relative}` (Q2 emits no .fixed-top element) and audit
 # row 24 (`:root --quarto-*` vars — deferred to land with their engine-output/gt
 # consumers). doc.html hash unchanged: CSS-only change.
+# Re-captured 2026-07-21 (bd-28iqotrt, misc element parity):
+# doc_files/styles.css hash updated because seven misc element rules from TS
+# Quarto's `_quarto-rules.scss` were ported into _bootstrap-rules.scss: `.hidden`
+# (L24), `iframe` margin (L262), the `details`/`summary` set (L267-282),
+# `.footnote-back` (L352), `.quarto-unresolved-ref` (L366), `a` underline-offset
+# (L436), and `div.columns`/`div.column` (L653-662). `.visually-hidden` was NOT
+# ported (bootstrap core supplies it). This strand also changed the crossref
+# emitter (crossref_render.rs) to add `quarto-unresolved-ref` alongside
+# `quarto-xref` on unresolved refs, but doc.html hash is UNCHANGED here because
+# the single-doc baseline fixture contains no unresolved reference. (Row 29
+# light/dark-content split to bd-l1rx9yzh.)
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css 90c78796919751e74983d2236cf7593b37423324861190a816122502e7533ccd
+doc_files/styles.css b06ec21de94741af6a41b023fdf82dce15b4c6cef42c8ce06fb46cf7f43c6122
