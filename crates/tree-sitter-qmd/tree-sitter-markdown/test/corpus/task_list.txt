@@ -1,0 +1,190 @@
+================================================================================
+unchecked task item
+================================================================================
+- [ ] todo
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (task_list_marker_unchecked)
+            (pandoc_paragraph
+              (pandoc_str))))))
+
+================================================================================
+checked task item (lowercase)
+================================================================================
+- [x] done
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (task_list_marker_checked)
+            (pandoc_paragraph
+              (pandoc_str))))))
+
+================================================================================
+checked task item (uppercase)
+================================================================================
+- [X] done
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (task_list_marker_checked)
+            (pandoc_paragraph
+              (pandoc_str))))))
+
+================================================================================
+mixed task list, star and plus markers
+================================================================================
+* [ ] one
++ [x] two
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (task_list_marker_unchecked)
+            (pandoc_paragraph
+              (pandoc_str))))
+        (pandoc_list
+          (list_item
+            (list_marker_plus)
+            (task_list_marker_checked)
+            (pandoc_paragraph
+              (pandoc_str))))))
+
+================================================================================
+task item in ordered list
+================================================================================
+1. [ ] todo
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_dot)
+            (task_list_marker_unchecked)
+            (pandoc_paragraph
+              (pandoc_str))))))
+
+================================================================================
+task marker followed by more text keeps inline structure
+================================================================================
+- [ ] todo with [a span]{.cls}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (task_list_marker_unchecked)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_span
+                (content
+                  (pandoc_str)
+                  (pandoc_space)
+                  (pandoc_str))
+                (attribute_specifier
+                  (commonmark_specifier
+                    (attribute_class)))))))))
+
+================================================================================
+not a task: bracket-x link
+================================================================================
+- [x](https://example.com)
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_span
+                (content
+                  (pandoc_str))
+                (target
+                  (url))))))))
+
+================================================================================
+not a task: two-letter bracket span
+================================================================================
+- [xx] nope
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_span
+                (content
+                  (pandoc_str)))
+              (pandoc_space)
+              (pandoc_str))))))
+
+================================================================================
+not a task: marker not at item start
+================================================================================
+- todo [x] later
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_span
+                (content
+                  (pandoc_str)))
+              (pandoc_space)
+              (pandoc_str))))))
+
+================================================================================
+not a task: bare paragraph bracket
+================================================================================
+[x] alone
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str)))
+          (pandoc_space)
+          (pandoc_str))))
+
+================================================================================
+nested task list
+================================================================================
+- [ ] outer
+  - [x] inner
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (task_list_marker_unchecked)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_list
+              (list_item
+                (list_marker_minus)
+                (task_list_marker_checked)
+                (pandoc_paragraph
+                  (pandoc_str))))))))

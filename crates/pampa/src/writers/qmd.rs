@@ -477,6 +477,43 @@ fn write_div(
     Ok(())
 }
 
+/// Pandoc's `taskListItemToAscii`: when a list item's first block is a
+/// `Plain`/`Paragraph` starting with `Str "☐"`/`Str "☒"` + `Space` (the
+/// task-list convention the reader produces), rewrite the ballot-box `Str`
+/// into `RawInline("markdown", "[ ]"/"[x]")` so the qmd writer round-trips
+/// the source syntax instead of emitting the Unicode character. The raw
+/// inline inherits the marker's source-info (the original bracket bytes).
+fn task_item_to_ascii(item: &[Block]) -> Option<Vec<Block>> {
+    let content = match item.first()? {
+        Block::Plain(p) => &p.content,
+        Block::Paragraph(p) => &p.content,
+        _ => return None,
+    };
+    let crate::pandoc::Inline::Str(s) = content.first()? else {
+        return None;
+    };
+    let ascii = match s.text.as_str() {
+        "☐" => "[ ]",
+        "☒" => "[x]",
+        _ => return None,
+    };
+    if !matches!(content.get(1), Some(crate::pandoc::Inline::Space(_))) {
+        return None;
+    }
+    let marker = crate::pandoc::Inline::RawInline(crate::pandoc::RawInline {
+        format: "markdown".to_string(),
+        text: ascii.to_string(),
+        source_info: s.source_info.clone(),
+    });
+    let mut rewritten: Vec<Block> = item.to_vec();
+    match &mut rewritten[0] {
+        Block::Plain(p) => p.content[0] = marker,
+        Block::Paragraph(p) => p.content[0] = marker,
+        _ => unreachable!("guarded above"),
+    }
+    Some(rewritten)
+}
+
 fn write_bulletlist(
     bulletlist: &BulletList,
     buf: &mut dyn std::io::Write,
@@ -519,6 +556,8 @@ fn write_bulletlist(
         if is_empty_item {
             writeln!(buf, "* []")?;
         } else {
+            let task_rewritten = task_item_to_ascii(item);
+            let item: &[Block] = task_rewritten.as_deref().unwrap_or(item);
             let mut item_writer = BulletListContext::new(buf);
             for (j, block) in item.iter().enumerate() {
                 if j > 0 && !is_tight {
@@ -570,6 +609,8 @@ fn write_orderedlist(
             continue;
         }
 
+        let task_rewritten = task_item_to_ascii(item);
+        let item: &[Block] = task_rewritten.as_deref().unwrap_or(item);
         let mut item_writer =
             OrderedListContext::new(buf, current_num, number_style.clone(), delimiter.clone());
         for (j, block) in item.iter().enumerate() {
