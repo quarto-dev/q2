@@ -2338,10 +2338,17 @@ p.subtitle {
   margin-bottom: 0.5em;
 }
 
-// downlit links
+// downlit / code linking (pkgdown style). ported from _quarto-rules.scss:328-335
+// (bd-bthmzyrc): no underline by default, underline on hover. This adopts
+// Quarto 1's behavior, replacing Q2's earlier `text-decoration-color: $gray-600`
+// gray-underline variant (Carlos, 2026-07-21).
 code a:any-link {
   color: inherit;
-  text-decoration-color: $gray-600;
+  text-decoration: none;
+}
+code a:hover {
+  color: inherit;
+  text-decoration: underline;
 }
 
 // This is a sentinel value that renderers can use to determine
