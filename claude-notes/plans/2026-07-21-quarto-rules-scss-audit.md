@@ -3,7 +3,25 @@
 **Date:** 2026-07-21
 **Braid:** bd-eias3e39 (child of epic bd-4doe9lvt)
 **Checkout:** invoked in the main-branch checkout at `~/rooms/room-2/q2` (no new worktree/branch created)
-**Status:** Investigation — pending design alignment with user. **Do not start the audit sweep until the user answers the design questions below.**
+**Status:** COMPLETE (2026-07-21). Design questions answered by Carlos same
+day; audit executed in the same session. Deliverables:
+`claude-notes/research/2026-07-21-quarto-rules-scss-inventory.md` + 9 filed
+strands (see the inventory's "Strand key" section). bd-eias3e39 closed.
+
+## Design decisions (Carlos, 2026-07-21)
+
+1. **Family granularity** for inventory rows; the audit doubles as a catalog
+   of unimplemented HTML features viewed from the SCSS side.
+2. **No mirrored `_quarto-rules.scss` layer in Q2** — port into the
+   thematically-right existing layer; Q1 drift won't warrant mechanical
+   re-diffing. Mechanism for auditability: provenance comments
+   `// ported from _quarto-rules.scss:<lines> (<strand>)` on every ported rule.
+3. **Grep + kitchen-sink fixture is sufficient evidence** for BLOCKED verdicts
+   (grounded in reading the current code, not plan docs).
+4. **One engine-output styling strand** (ANSI/gt/knitsql/widgets) — hope is a
+   common engine-agnostic stage processes engine output.
+5. **Mermaid theming gets its own strand and session.**
+6. **bd-btjkyylx closed** (PR #406 merged).
 
 ## Triage verdict
 

@@ -41,17 +41,23 @@ features.
 
 For each of the ~80 top-level selectors in `_quarto-rules.scss`:
 
-- [ ] Is the rule **already present** in Q2's SCSS? (grep
+- [x] Is the rule **already present** in Q2's SCSS? (grep
       `_bootstrap-rules.scss`, `title-block.scss`, `copy-code.scss`,
       `highlight.scss`, `embed-example.scss`, page-footer layer.)
-- [ ] Does Q2's HTML writer / transforms **emit the DOM** the selector targets?
+- [x] Does Q2's HTML writer / transforms **emit the DOM** the selector targets?
       (grep `crates/pampa/src/writers/`, `crates/quarto-core/src/transforms/`;
       render a fixture exercising the feature and inspect the HTML.)
-- [ ] **Categorize:** `PORT-NOW` / `BLOCKED-ON-EMITTER` (name the emitter) /
+- [x] **Categorize:** `PORT-NOW` / `BLOCKED-ON-EMITTER` (name the emitter) /
       `ALREADY-PRESENT` / `INTENTIONALLY-DROPPED` (with reason).
-- [ ] Write the inventory table to
-      `claude-notes/research/2026-07-DD-quarto-rules-scss-inventory.md`.
-- [ ] File child strands under bd-4doe9lvt from the inventory (see Phase 2).
+- [x] Write the inventory table to
+      `claude-notes/research/2026-07-21-quarto-rules-scss-inventory.md`.
+- [x] File child strands under bd-4doe9lvt from the inventory (see Phase 2).
+      Filed 2026-07-21: bd-u5yvsdgw (code), bd-dxgcpl02 (tables),
+      bd-28iqotrt (misc), bd-ih6jrf39 (:root vars + print),
+      bd-iq08mmnh (title-block), bd-18410csp (engine output),
+      bd-sehm2rha (mermaid), bd-9fz5fweg (floats/layout CSS, blocked on
+      bd-hcp8m3ve taxonomy feature), bd-q36vnfdp (backlog catalog);
+      plus bug bd-obkvhlam (task-list rendering, discovered-from audit).
 
 ### Initial coverage scan (from the bd-btjkyylx session — NOT authoritative)
 
