@@ -1168,6 +1168,13 @@ div.sourceCode {
   margin-left: initial;
 }
 
+// Code inside a callout aligns flush-left with the callout body. ported from
+// _quarto-rules.scss:442-444 (bd-u5yvsdgw). Q2 emits
+// `<div class="callout …"> … <pre class="sourceCode …">`.
+.callout pre.sourceCode {
+  padding-left: 0;
+}
+
 // bd-j73yw: filename header above code blocks. Ported from Q1's
 // `_quarto-rules-code-filename.scss`. Q2's `CodeBlockRenderTransform`
 // wraps the matching code block in
@@ -1318,6 +1325,12 @@ nav td code:not(.sourceCode) {
   padding: 0;
 }
 
+// Inline code embedded in prose should wrap (the bare `code{white-space:pre}`
+// default in highlight.scss otherwise makes it overflow). Q2 already wrapped
+// `td` inline code; the `p`/`dd` selectors are ported from
+// _quarto-rules.scss:291-294 (bd-u5yvsdgw) — see quarto-cli#2649.
+p code:not(.sourceCode),
+dd code:not(.sourceCode),
 td code:not(.sourceCode) {
   white-space: pre-wrap;
 }
