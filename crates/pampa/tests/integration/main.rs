@@ -65,6 +65,7 @@ pub mod test_raw_json_roundtrip;
 pub mod test_rawblock_to_config_value;
 pub mod test_section_divs;
 pub mod test_shortcode;
+pub mod test_task_list;
 pub mod test_template_integration;
 pub mod test_trailing_linebreak_commonmark;
 pub mod test_treesitter_coverage;

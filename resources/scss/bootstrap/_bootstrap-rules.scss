@@ -2786,3 +2786,16 @@ body .nav-footer {
     order: 10;
   }
 }
+
+// Task lists (bd-obkvhlam). The HTML writer renders `- [ ]`/`- [x]` items as
+// `<ul class="task-list"><li><label><input type="checkbox" …/>…</label></li>`.
+// ported from _quarto-rules.scss:338-340
+ul.task-list {
+  padding-left: 1em;
+}
+
+// Space checkboxes from the following item text.
+// ported from _quarto-rules.scss:697-699
+input[type="checkbox"] {
+  margin-right: 0.5ch;
+}

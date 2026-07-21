@@ -839,6 +839,19 @@ mod tests {
             "code a:hover should underline on hover per Q1 (bd-bthmzyrc)"
         );
 
+        // Should have the task-list rules ported from TS Quarto's
+        // _quarto-rules.scss (bd-obkvhlam): the ul.task-list indent and the
+        // checkbox right-margin that space `<input type="checkbox">` from the
+        // item text emitted by the HTML writer's task-list rendering.
+        assert!(
+            css.contains("ul.task-list{padding-left:1em}"),
+            "Should contain the ul.task-list rule ported from _quarto-rules.scss (bd-obkvhlam)"
+        );
+        assert!(
+            css.contains("input[type=checkbox]{margin-right:.5ch}"),
+            "Should contain the checkbox margin rule ported from _quarto-rules.scss (bd-obkvhlam)"
+        );
+
         // Should have default syntax-highlight rules for `.hl-*` classes
         // emitted by the HTML writer for tree-sitter captures.
         assert!(

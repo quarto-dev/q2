@@ -248,5 +248,19 @@
 # (gray underline) to Quarto 1's behavior — `text-decoration:none` plus a new
 # `code a:hover{text-decoration:underline}` — per Carlos's decision. doc.html
 # hash unchanged: CSS-only change.
+# Re-captured 2026-07-21 (bd-obkvhlam, task-list rendering): doc_files/
+# styles.css hash updated because `ul.task-list { padding-left: 1em }` and
+# `input[type="checkbox"] { margin-right: 0.5ch }` were ported from TS
+# Quarto's `_quarto-rules.scss` (lines 338/697) into
+# `_bootstrap-rules.scss`, alongside the new task-list rendering
+# (`- [ ]` -> `<ul class="task-list"><li><label><input type="checkbox">`).
+# doc.html hash unchanged: the fixture has no task list, so the new
+# selectors match nothing in its body — they only appear in the compiled
+# CSS, so the `styles.css` hash shifts.
+# Re-captured 2026-07-21 (MERGE of feature/quarto-rules-scss-parity into main's
+# task-list PR #407): both branches ported different _quarto-rules.scss rows into
+# the compiled CSS (this branch's title-block/tables/code/print/misc/13g rules +
+# #407's ul.task-list/checkbox rules), so styles.css is re-captured to reflect
+# BOTH rule sets. doc.html unchanged.
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css a5d32eeeab3650fb6da55cb55f14255b88dc02e5cc96c9f8e24d4af67f0b1bb8
+doc_files/styles.css a54a2e6e2cf7beb3b74e1579ed08eb0af881ed9de390a582143a0d58ea34ca99
