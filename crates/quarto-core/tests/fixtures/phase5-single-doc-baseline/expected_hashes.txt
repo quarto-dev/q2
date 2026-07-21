@@ -221,5 +221,15 @@
 # emits no `<span><a>` line-number anchors), 13g `code a:any-link` (Q2 already
 # ships a divergent downlit rule — pending a design call). doc.html hash
 # unchanged: CSS-only change (the fixture's code markup pre-existed).
+# Re-captured 2026-07-21 (bd-ih6jrf39, @media print parity):
+# doc_files/styles.css hash updated because four @media print rules from TS
+# Quarto's `_quarto-rules.scss:744-764` were ported into _bootstrap-rules.scss:
+# `:root{font-size:11pt}`, `#quarto-sidebar,#TOC{display:none}`,
+# `.page-columns .content{grid-column-start:page-start}`, and
+# `.panel-caption,.figure-caption,figcaption{color:#666}`. Each targets live Q2
+# DOM (Q2 already had the `.nav-page`/page-columns print pieces). NOT ported:
+# `.fixed-top{position:relative}` (Q2 emits no .fixed-top element) and audit
+# row 24 (`:root --quarto-*` vars — deferred to land with their engine-output/gt
+# consumers). doc.html hash unchanged: CSS-only change.
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css 0c69b852cc931ed3b12ff2f822c3258550eb3bae2a46191db10453348c087d65
+doc_files/styles.css 90c78796919751e74983d2236cf7593b37423324861190a816122502e7533ccd
