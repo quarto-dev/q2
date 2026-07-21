@@ -758,6 +758,34 @@ mod tests {
              _quarto-rules.scss:442-444 (bd-u5yvsdgw)"
         );
 
+        // @media print additions ported from TS Quarto's _quarto-rules.scss:744-764
+        // (bd-ih6jrf39, audit row 28). Q2 already had the `.nav-page` and
+        // page-columns print pieces; these four fill the gap, each targeting live
+        // Q2 DOM. The `.fixed-top { position: relative }` rule (L757-759) is NOT
+        // ported — Q2 emits no `.fixed-top` element. Row 24 (`:root --quarto-*`
+        // vars) is deferred to land with its consumers (engine-output/gt).
+        assert!(
+            css.contains(":root{font-size:11pt}"),
+            "Should contain the @media print :root{{font-size:11pt}} rule ported \
+             from _quarto-rules.scss (bd-ih6jrf39)"
+        );
+        assert!(
+            css.contains("#TOC{display:none}"),
+            "Should contain the @media print #quarto-sidebar,#TOC{{display:none}} \
+             rule ported from _quarto-rules.scss (bd-ih6jrf39) — Q2 emits \
+             <nav id=\"TOC\">"
+        );
+        assert!(
+            css.contains(".page-columns .content{grid-column-start:page-start}"),
+            "Should contain the @media print .page-columns .content grid rule \
+             ported from _quarto-rules.scss (bd-ih6jrf39)"
+        );
+        assert!(
+            css.contains("figcaption{color:#666}"),
+            "Should contain the @media print caption color rule ported from \
+             _quarto-rules.scss (bd-ih6jrf39)"
+        );
+
         // Should have default syntax-highlight rules for `.hl-*` classes
         // emitted by the HTML writer for tree-sitter captures.
         assert!(

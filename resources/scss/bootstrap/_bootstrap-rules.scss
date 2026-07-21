@@ -411,6 +411,31 @@ body.docked {
   }
 }
 
+// Print refinements. ported from _quarto-rules.scss:744-764 (bd-ih6jrf39,
+// audit row 28). Q2 already had `.nav-page` (above) and the page-columns print
+// pieces (the large `@media print` block further down); these fill the rest,
+// each against live Q2 DOM: `<nav id="TOC">` (template.rs:211), `#quarto-sidebar`
+// (sidebar_render), `<figcaption>` (figures), and the `.page-columns .content`
+// grid element. TS's `.fixed-top { position: relative }` (L757-759) is NOT
+// ported — Q2 emits no `.fixed-top` navbar element.
+@media print {
+  :root {
+    font-size: 11pt;
+  }
+  #quarto-sidebar,
+  #TOC {
+    display: none;
+  }
+  .page-columns .content {
+    grid-column-start: page-start;
+  }
+  .panel-caption,
+  .figure-caption,
+  figcaption {
+    color: #666;
+  }
+}
+
 // Sidebar navigation styling. Ported from Q1's
 // `projects/website/navigation/quarto-nav.scss:315-410, 464-541`. As with
 // the `.nav-page` rules above, the `.sidebar-navigation`/`.sidebar-link`
