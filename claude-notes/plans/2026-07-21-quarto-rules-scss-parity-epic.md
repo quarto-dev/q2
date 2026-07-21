@@ -119,8 +119,15 @@ Two decisions taken before starting:
 strand last; each shifts `styles.css` so the `phase5` hash is re-captured
 per strand, sequentially):
 
-- [ ] 1. **bd-iq08mmnh** title-block remainder (row 6c) — smallest, pure CSS
-- [ ] 2. **bd-dxgcpl02** tables base (row 7) — pure CSS
+- [x] 1. **bd-iq08mmnh** title-block remainder (row 6c) — DONE 2026-07-21,
+      merged de2b9774. `#title-block-header a` + grouped `.author/.date/.doi`
+      margins → title-block.scss; styles.css hash 6eafe1bf→0fc7bc97.
+- [x] 2. **bd-dxgcpl02** tables base (row 7) — DONE 2026-07-21. All three
+      selectors verified live (`table.table` margins; `tr.header>th>p` in
+      multi-block header cells; `<caption>` for plain-caption tables, with
+      `text-align:center` overriding bootstrap's `left`). `.table-caption`
+      left BE. Ported into `_bootstrap-rules.scss`; styles.css hash
+      0fc7bc97→0a0741ba.
 - [ ] 3. **bd-u5yvsdgw** code (rows 13a,b,d,e,g,23) — pure CSS
 - [ ] 4. **bd-ih6jrf39** :root vars + print (rows 24,28) — pure CSS
 - [ ] 5. **bd-28iqotrt** misc (rows 1a,10,11,15a,17,22,25) — CSS + the row-17
