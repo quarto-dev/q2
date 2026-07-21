@@ -128,10 +128,33 @@ per strand, sequentially):
       `text-align:center` overriding bootstrap's `left`). `.table-caption`
       left BE. Ported into `_bootstrap-rules.scss`; styles.css hash
       0fc7bc97→0a0741ba.
-- [ ] 3. **bd-u5yvsdgw** code (rows 13a,b,d,e,g,23) — pure CSS
-- [ ] 4. **bd-ih6jrf39** :root vars + print (rows 24,28) — pure CSS
-- [ ] 5. **bd-28iqotrt** misc (rows 1a,10,11,15a,17,22,25) — CSS + the row-17
-      additive emitter tweak
+- [x] 3. **bd-u5yvsdgw** code (rows 13a,b,23) — DONE 2026-07-21, merged
+      9dd840c7. DOM verification revised three sibling rows: **13d** deferred
+      (→ bd-8oyd9dg4, `$code-white-space` var is theming infra, no visible
+      gap); **13e** reclassified **PN→BE** (Q2 emits no `<span><a>` line
+      anchors); **13g** held for a design call (→ bd-bthmzyrc, Q2 already ships
+      a divergent `code a:any-link` downlit rule). styles.css 0a0741ba→0c69b852.
+- [x] 4. **bd-ih6jrf39** print (row 28) — DONE 2026-07-21, merged a4ac9b24.
+      Ported `:root{font-size:11pt}`, `#quarto-sidebar,#TOC{display:none}`,
+      `.page-columns .content` page-start, caption `#666`. `.fixed-top` skipped
+      (no DOM). **Row 24** (`:root --quarto-*` vars) relocated to bd-18410csp
+      (no consumer today → land with gt). styles.css 0c69b852→90c78796.
+- [x] 5. **bd-28iqotrt** misc (rows 1a,10,11,15a,17,22,25) — DONE 2026-07-21,
+      merged 9d532598. Ported `.hidden`, `iframe`, the `details` set,
+      `.footnote-back`, `.quarto-unresolved-ref`, `a` underline-offset,
+      `div.columns`/`div.column`; `.visually-hidden` skipped (bootstrap-
+      provided). **Row 17 additive emitter**: crossref_render.rs now emits
+      `class="quarto-xref quarto-unresolved-ref"` on unresolved refs. **Row 29**
+      split to bd-l1rx9yzh. styles.css 90c78796→b06ec21d (doc.html unchanged).
+
+### Outcome
+
+All five PORT-NOW strands complete. DOM verification revised the audit on
+several rows (documented in each commit + inventory): **13d** deferred
+(bd-8oyd9dg4), **13e** and **13g** re-dispositioned (bd-bthmzyrc decision),
+**row 24** relocated to engine-output (bd-18410csp), `.fixed-top`/`.visually-
+hidden` found already-handled-or-BE. Open follow-ups for Carlos: the **13g**
+design call (bd-bthmzyrc) and confirming the **row-24 → engine-output** move.
 
 Each follows the bd-btjkyylx template (PR #406): failing `css.contains(...)`
 assertion in `crates/quarto-sass/src/compile.rs` `test_compile_default_css`
