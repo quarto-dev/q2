@@ -722,6 +722,42 @@ mod tests {
              text-align:left"
         );
 
+        // Code CSS ported from TS Quarto's _quarto-rules.scss (bd-u5yvsdgw),
+        // verified against live Q2 DOM. Three cleanly-live rows of audit's code
+        // family; 13d ($code-white-space var — theming infra, no visible gap),
+        // 13e (line-anchor — Q2 emits no <span><a> line anchors, reclassified
+        // BE) and 13g (code a:any-link — Q2 already ships a divergent downlit
+        // rule) are deliberately NOT ported here.
+        //
+        // 13b: bare `code { white-space: pre }` (default non-wrapping inline
+        // code) + its `@media print` pre-wrap override. Distinct from the
+        // sourceCode-scoped rule in highlight.scss.
+        assert!(
+            css.contains("code{white-space:pre}"),
+            "Should contain the bare code{{white-space:pre}} default rule ported \
+             from _quarto-rules.scss:299-303 (bd-u5yvsdgw)"
+        );
+        assert!(
+            css.contains("code{white-space:pre-wrap}"),
+            "Should contain the @media print bare-code pre-wrap override ported \
+             from _quarto-rules.scss:304-306 (bd-u5yvsdgw)"
+        );
+        // 13a: inline code in a paragraph/definition wraps. Q2 already had the
+        // `td` variant; the `dd` selector is the new proof this landed (Q2 emits
+        // `<p>…<code>` / `<dd>…<code>` without the sourceCode class).
+        assert!(
+            css.contains("dd code:not(.sourceCode)"),
+            "Should contain the dd/p code:not(.sourceCode) wrap rule ported from \
+             _quarto-rules.scss:291-294 (bd-u5yvsdgw)"
+        );
+        // 23: callout code blocks drop their left padding. Q2 emits
+        // `<div class="callout …"> … <pre class="sourceCode …">`.
+        assert!(
+            css.contains(".callout pre.sourceCode{padding-left:0}"),
+            "Should contain the .callout pre.sourceCode padding rule ported from \
+             _quarto-rules.scss:442-444 (bd-u5yvsdgw)"
+        );
+
         // Should have default syntax-highlight rules for `.hl-*` classes
         // emitted by the HTML writer for tree-sitter captures.
         assert!(

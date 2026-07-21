@@ -209,5 +209,17 @@
 # caption `text-align:center` overrides bootstrap core's bare `caption{text-align:
 # left}` via source order. `.table-caption` was NOT ported (no such class emitted).
 # doc.html hash unchanged: CSS-only change (the fixture's table markup pre-existed).
+# Re-captured 2026-07-21 (bd-u5yvsdgw, code CSS parity):
+# doc_files/styles.css hash updated because four code rules from TS Quarto's
+# `_quarto-rules.scss` were ported: bare `code{white-space:pre}` + its
+# `@media print{code{white-space:pre-wrap}}` override (L299-306) into
+# highlight.scss; `p/dd code:not(.sourceCode){white-space:pre-wrap}` (L291-294,
+# extending Q2's existing `td` variant) and `.callout pre.sourceCode{padding-
+# left:0}` (L442-444) into _bootstrap-rules.scss. All verified against live DOM.
+# NOT ported (documented in the strand): 13d `$code-white-space` var (theming
+# infra, no visible gap), 13e line-anchor `::before` (reclassified BLOCKED — Q2
+# emits no `<span><a>` line-number anchors), 13g `code a:any-link` (Q2 already
+# ships a divergent downlit rule — pending a design call). doc.html hash
+# unchanged: CSS-only change (the fixture's code markup pre-existed).
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css 0a0741ba38fdc77ed408e22b12c9676f71bf4048a3e2ec1102ca84f853badbff
+doc_files/styles.css 0c69b852cc931ed3b12ff2f822c3258550eb3bae2a46191db10453348c087d65
