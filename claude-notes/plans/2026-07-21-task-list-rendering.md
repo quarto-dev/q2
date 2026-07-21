@@ -30,63 +30,79 @@ source through the existing `apply_node_edit` incremental-write machinery.
   to the unified grammar (inline `[` tokens exist in the same lexer — corpus
   tests must pin `- [x](url)` = link, `- [xx]` = span, mid-paragraph `[x]`
   unchanged).
-- **HTML output matches Pandoc/Q1:** `<ul class="task-list">` and
-  `<li><input type="checkbox" disabled="" [checked=""] />` replacing the
-  marker Str. Static render keeps `disabled` (Q1 parity); the interactive
-  strand un-disables under edit-capable surfaces.
+- **HTML output matches vendored Pandoc:** `<ul class="task-list">` (all-task
+  bullet lists only) and `<li><label><input type="checkbox" [checked=""]
+  />…</label>` replacing the marker Str + Space. No `disabled` attribute —
+  current Pandoc doesn't emit one (checkboxes are enabled-but-inert in static
+  HTML); the preview renderer disables them only when the surface can't
+  commit edits.
 - **qmd writer round-trips** leading ☐/☒+Space in list items back to
   `[ ] `/`[x] ` (same special-case Pandoc's markdown writer has).
 
 ## Phase 0 — Tests first (all must fail before implementation)
 
-- [ ] tree-sitter corpus `test/corpus/task_lists.txt`: unchecked/checked/`[X]`,
+- [x] tree-sitter corpus `test/corpus/task_lists.txt`: unchecked/checked/`[X]`,
       `+`/`*` markers, ordered-list task item, nested, NOT-a-task cases
       (`- [x](url)` link, `- [xx]` span, `[x]` mid-paragraph, `[ ]` not
       followed by whitespace).
-- [ ] pampa reader test: AST = Str ☐/☒ + Space first inlines; marker
+- [x] pampa reader test: AST = Str ☐/☒ + Space first inlines; marker
       source-info spans the bracket bytes.
-- [ ] pampa HTML writer test: `ul.task-list` + checkbox inputs, checked/
+- [x] pampa HTML writer test: `ul.task-list` + checkbox inputs, checked/
       unchecked, disabled.
-- [ ] pampa qmd writer round-trip test: source → AST → source identity.
-- [ ] quarto-sass compile test: compiled CSS contains the `ul.task-list`
+- [x] pampa qmd writer round-trip test: source → AST → source identity.
+- [x] quarto-sass compile test: compiled CSS contains the `ul.task-list`
       padding + checkbox margin rules.
 
 ## Phase 1 — Grammar
 
-- [ ] Add tokens + `_list_item_content` choice; `tree-sitter generate`,
+- [x] Add tokens + `_list_item_content` choice; `tree-sitter generate`,
       `tree-sitter build`, `tree-sitter test` in
       `crates/tree-sitter-qmd/tree-sitter-markdown/`.
 
 ## Phase 2 — Reader (`crates/pampa/src/pandoc/treesitter.rs`)
 
-- [ ] Handle `task_list_marker_{checked,unchecked}` in `process_list_item`:
+- [x] Handle `task_list_marker_{checked,unchecked}` in `process_list_item`:
       prepend Str ☐/☒ + Space to the item's first Plain/Paragraph inlines,
       with the marker node's source range on the Str.
 
 ## Phase 3 — HTML writer (`crates/pampa/src/writers/html.rs`)
 
-- [ ] Detect task items (first inline Str ☐/☒) in list emission; emit
+- [x] Detect task items (first inline Str ☐/☒) in list emission; emit
       `class="task-list"` on the list and the checkbox input in place of the
       marker Str + Space.
 
 ## Phase 4 — qmd writer (`crates/pampa/src/writers/qmd.rs`)
 
-- [ ] Round-trip leading ☐/☒ in list items to `[ ] `/`[x] `.
+- [x] Round-trip leading ☐/☒ in list items to `[ ] `/`[x] `.
 
 ## Phase 5 — SCSS (the bd-obkvhlam CSS follow-through)
 
-- [ ] Port `ul.task-list { padding-left: 1em }` (_quarto-rules.scss:338) and
+- [x] Port `ul.task-list { padding-left: 1em }` (_quarto-rules.scss:338) and
       `input[type="checkbox"] { margin-right: 0.5ch }` (:697) with provenance
       comments; re-capture phase5 baseline hash if styles.css shifts.
 
 ## Phase 6 — Verification
 
-- [ ] `cargo nextest run --workspace` (report snapshot churn per policy).
-- [ ] `cargo xtask verify` (WASM leg affected — pampa changes).
-- [ ] End-to-end: `cargo run --bin q2 -- render` the audit kitchen-sink
+- [x] `cargo nextest run --workspace` (10355/10355; no .snap churn; one error-corpus
+      `_autogen-table.json` regen + one phase5 baseline re-capture) (report snapshot churn per policy).
+- [x] `cargo xtask verify` (Rust legs + manual hub legs: `npm run build:all`,
+      `test:ci`, preview-renderer suites; only known-environmental live-sync
+      failures) (WASM leg affected — pampa changes).
+- [x] End-to-end: `cargo run --bin q2 -- render` the audit kitchen-sink
       fixture; inspect emitted `<ul class="task-list">` markup + CSS.
 
-## Phase 7 — Interactive toggle (separate feature strand)
+## Phase 7 — Interactive toggle (bd-tvtknbhx) — IMPLEMENTED same session
+
+Landed in `5852d0ee` (`ts-packages/preview-renderer/src/q2-preview/blocks/
+taskList.tsx` + BulletList/OrderedList wiring): checkboxes in the React
+renderer, toggle → `commitSubtreeEdit` (flip ☐/☒ in the untransformed
+sourceNode) → `apply_node_edit` → qmd-writer round-trip → disk. Live-verified
+against `q2 preview --allow-edit` (both directions, editor-activation guard,
+label-click guard, rich-text commit preserves the ascii marker). Strand stays
+in_progress for: hub-client live verification, loose-item rendering, editor
+ballot-glyph polish, bullet canonicalization note (see strand comment).
+
+### Original phase sketch (for reference)
 
 Ride the block-editing substrate
 (`claude-notes/designs/2026-06-06-block-editing-design.md`;
