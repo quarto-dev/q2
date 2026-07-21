@@ -41,6 +41,7 @@ pub mod test_diagnostic_path_normalization;
 pub mod test_editorial_mark_spacing;
 pub mod test_emphasis_opening_mark;
 pub mod test_error_corpus;
+pub mod test_figure_figcaption_synthesis;
 pub mod test_grid_table_error;
 pub mod test_hard_soft_break;
 pub mod test_html_attr_handling;

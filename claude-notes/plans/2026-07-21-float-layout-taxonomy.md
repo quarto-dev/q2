@@ -30,31 +30,52 @@ writer and the preview React renderer.
       `quarto-float`** on the outer div; **`data-qf-*` kv scheme accepted**
       (5 kvs: ref-type, caption-location, caption-id, uncaptioned, subfloat —
       full table in the design doc)
-- [ ] Q4 still open: table-float DOM change (Phase 2) in the same PR as
-      figure floats, or staged separately?
+- [x] Q4 (Carlos, 2026-07-21): table-float DOM change ships **in the same
+      PR** — Q2 is 0.x; no backwards-compat obligation on its own output yet.
+      kv names approved as-is.
 
-### Phase 1 — Figure floats (TDD)
-- [ ] Failing tests: pampa writer snapshot for the full shape-1 DOM;
-      crossref_render unit tests for outer-div/figure/figcaption classes,
-      fig-align variants, uncaptioned figcaption
-- [ ] Implement in `render_float_ref_target` + writer figcaption synthesis
-- [ ] `test_build_transform_pipeline_phase_ordering` stays green
+### Phase 1 — Figure floats (TDD) — DONE
+- [x] Failing tests first (5 new crossref_render unit tests: shape, align,
+      collision, uncaptioned, table shape), then implementation in
+      `render_float_ref_target` (format-gated via
+      `ctx.format.identifier.is_html_based()`) + pampa writer figcaption
+      synthesis (`read_qf_caption_kvs`, 4 new integration tests)
+- [x] `test_build_transform_pipeline_phase_ordering` green; full workspace
+      10365/10365; **zero snapshot churn** (phase5 fixture is title-only)
+- [x] revealjs auto-stretch taught the float wrapper shape
+      (`is_float_figure_div`; `count_figure_images`/`figure_image_mut`
+      descend the aria wrapper; id transfers from the outer div)
+- [x] e2e-caught guard: only genuine float kinds (`fig`/`tbl`/`lst`) get the
+      float DOM — `sec`/`demo`/custom FloatRefTargets keep the legacy
+      pass-through (regression test `section_ref_target_is_not_float_wrapped`;
+      the whole 10k-test suite had NOT caught sections being swallowed into
+      `quarto-float-sec` figures — only the kitchen-sink e2e render did)
 
-### Phase 2 — Table/listing floats (TDD)
-- [ ] Replace Div+caption-paragraph with shape 1 (`figure.quarto-float-tbl`)
-- [ ] Listings: `listing` class + forced left align
+### Phase 2 — Table/listing floats (TDD) — DONE
+- [x] Tables render shape 1 (`figure.quarto-float-tbl` + aria wrapper +
+      synthesized figcaption); same-PR per Q4 decision
+- [ ] Listing (`lst`) float DOM is wired (`listing` class + left align) but
+      has no e2e fixture exercising `#lst-` floats yet — add one
 
-### Phase 3 — Standalone captioned figures (TDD)
-- [ ] Shape 2 wrapper (`quarto-figure quarto-figure-<align>`)
+### Phase 3 — Standalone captioned figures (TDD) — PENDING
+- [ ] Shape 2 wrapper (`quarto-figure quarto-figure-<align>`) for
+      non-crossref `![caption](img)` figures
 
-### Phase 4 — Preview React renderer parity
-- [ ] Figure.tsx figcaption synthesis; writer↔React parity test
+### Phase 4 — Preview React renderer parity — DONE
+- [x] Figure.tsx figcaption synthesis mirroring the pampa writer (4 new
+      integration tests); preview-renderer suites 538 + 565 green;
+      hub-client tsc/vite build green
 
 ### Phase 5 — Verification + handoff
-- [ ] Snapshot churn itemized per policy; full workspace + `xtask verify`
-- [ ] e2e render + preview inspection
-- [ ] Notify bd-9fz5fweg (CSS port) that its DOM exists; file the
+- [x] Snapshot churn: none. Full workspace green. e2e render inspected
+      (kitchen-sink + revealjs fixtures; float DOM verbatim, sections clean)
+- [ ] Preview inspection needs the WASM rebuild chain (npm run build:wasm →
+      build-q2-preview-spa → cargo build --bin q2) before `q2 preview` shows
+      the new DOM
+- [ ] Notify bd-9fz5fweg (CSS port) that fig/tbl float DOM exists; file the
       layout-engine sub-strand (shape 3 acceptance)
+- Discovered: bd-hb9a9ik8 — figcaption drops the "Figure 1: " prefix in real
+  renders (pre-existing; prefix_caption only handles Paragraph captions)
 
 ## Notes
 - Layout panels (shape 3) are explicitly out of scope — the layout
