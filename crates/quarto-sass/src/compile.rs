@@ -826,6 +826,19 @@ mod tests {
              — authored ::: {{.columns}} emits <div class=\"column\">"
         );
 
+        // Row 13g (bd-bthmzyrc): adopt Quarto 1's downlit code-link behavior —
+        // no underline by default, underline on hover — replacing Q2's earlier
+        // gray-underline choice (`text-decoration-color: $gray-600`). Decided by
+        // Carlos, 2026-07-21. Ported verbatim from _quarto-rules.scss:328-335.
+        assert!(
+            css.contains("code a:any-link{color:inherit;text-decoration:none}"),
+            "code a:any-link should use Q1's text-decoration:none (bd-bthmzyrc)"
+        );
+        assert!(
+            css.contains("code a:hover{color:inherit;text-decoration:underline}"),
+            "code a:hover should underline on hover per Q1 (bd-bthmzyrc)"
+        );
+
         // Should have default syntax-highlight rules for `.hl-*` classes
         // emitted by the HTML writer for tree-sitter captures.
         assert!(
