@@ -1,0 +1,13 @@
+[package]
+name = "piccolo-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+piccolo = { path = "/Users/gordon/src/piccolo" }
+piccolo-util = { path = "/Users/gordon/src/piccolo/util" }
+lua-patterns = { path = "/Users/gordon/src/lua-patterns" }
+# For WASM: getrandom 0.2 (used by rand) needs "js" feature
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+# For WASM: getrandom 0.3 (used by ahash) needs "wasm_js" feature + cfg flag
+getrandom = { version = "0.3", features = ["wasm_js"] }

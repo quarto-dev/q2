@@ -31,7 +31,7 @@ import type {
   QuartoAPI,
   LanguageClaim,
 } from "@quarto/types";
-import { fallback } from "@quarto/api";
+import { fallback } from "@quarto/api/claims";
 
 // Stash the QuartoAPI reference set during init().
 let _quarto: QuartoAPI | undefined;

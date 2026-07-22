@@ -120,10 +120,9 @@ fn write_file(path: &Path, contents: &str) {
 fn setup_project(ext_names: &[&str]) -> TempDir {
     let tmp = TempDir::new().unwrap();
     for name in ext_names {
-        copy_dir(
-            &fixture_ext_dir(name),
-            &tmp.path().join("_extensions").join(name),
-        );
+        let dest = tmp.path().join("_extensions").join(name);
+        copy_dir(&fixture_ext_dir(name), &dest);
+        crate::engine_fixture_build::ensure_bundle(&dest, name);
     }
     tmp
 }
@@ -376,7 +375,7 @@ fn f6_fc1_result_field_carriage() {
 // So this test instruments the TEST FIXTURE (`behave.ts`, not production
 // code) with a module-level launch counter, logged via `console.error` on
 // every real `launch()` call (`behave.ts`'s `launch()`, `dist/behave.js`
-// rebuilt via `cargo run --bin q2 -- build-ts-extension
+// rebuilt via `cargo run --bin q2 -- call build-ts-extension
 // crates/quarto-core/tests/fixtures/extensions/behave --workspace`). That
 // stderr line reaches the test through an EXISTING, UNMODIFIED production
 // mechanism: `ts_process.rs::stderr_loop` already forwards every child

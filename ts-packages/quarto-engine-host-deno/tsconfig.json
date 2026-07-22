@@ -20,6 +20,7 @@
     "dist",
     "src/deno-host.ts",
     "src/main.ts",
+    "src/control-transport.ts",
     "src/**/*.deno-test.ts"
   ]
 }

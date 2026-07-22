@@ -162,6 +162,45 @@ const echoEngine: ExecutionEngineDiscovery = {
         // match it and the preview pane stays inert (bd-h4rhohhy / Bug B).
         const input = opts.target.markdown.value;
 
+        // plan1a.6 Phase 3, seam #6a (stdout garbage harmless over TCP):
+        // sentinel-gated raw-stdout-garbage branch for
+        // echo_engine_e2e.rs's p3_6a_stdout_garbage_harmless. Fires ONLY
+        // when the document body carries the sentinel -- none of the other
+        // echo E2E fixtures use it. Writes 20 lines of a known NON-JSON
+        // marker directly to the stdout fd (bypassing the protocol framing
+        // entirely), then FALLS THROUGH to the normal transform -- unlike
+        // QUARTO_ECHO_CRASH above, this branch must NOT exit, because the
+        // point of the test is that the render still succeeds. Under the
+        // flipped TCP transport (production today) this garbage never
+        // touches the protocol channel; it is drained by `stdout_loop` and
+        // forwarded to `tracing` as harmless `engine_host`-target INFO
+        // events. 20 lines is deliberate: it is comfortably above the
+        // demux reader's MAX_CONSECUTIVE_MALFORMED_LINES=5 leniency, so a
+        // reverted (stdio-transport) build would escalate->kill on this
+        // input instead of silently tolerating a single stray line.
+        if (input.includes("QUARTO_ECHO_STDOUT_GARBAGE")) {
+          const enc = new TextEncoder();
+          for (let i = 0; i < 20; i++) {
+            Deno.stdout.writeSync(
+              enc.encode(`ECHO_STDOUT_GARBAGE_MARKER not-json line ${i}\n`),
+            );
+          }
+        }
+
+        // plan1a.6 Phase 3, seam #7 (console.log harmless over TCP):
+        // sentinel-gated `console.log` branch for
+        // echo_engine_e2e.rs's p3_7_console_log_harmless. Same shape and
+        // rationale as the #6a branch just above -- `console.log` writes to
+        // stdout too, which is exactly why it's harmless under the TCP
+        // transport (drained by `stdout_loop`) and dangerous under stdio
+        // (interleaves with protocol frames). 20 lines for the same
+        // above-leniency-threshold reason.
+        if (input.includes("QUARTO_ECHO_CONSOLE_LOG")) {
+          for (let i = 0; i < 20; i++) {
+            console.log(`ECHO_CONSOLE_LOG_MARK line ${i}`);
+          }
+        }
+
         // T13 (plan 1c.2 P4, OPTIONAL): sentinel-gated crash branch for the
         // real-process crash-path e2e (echo_engine_e2e.rs's
         // t13_crash_mid_execute_yields_process_crashed_with_stderr). Fires

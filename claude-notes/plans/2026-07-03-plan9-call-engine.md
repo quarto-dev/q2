@@ -19,7 +19,7 @@ Q1's `engine-cmd.ts` dispatcher verbatim (import engine → gate 2 → real clif
 (`NotSupported`) → the CLI prints Q1's exact `Engine <name> does not support
 subcommands`. No new wire verbs; the JSONL protocol is untouched.
 
-**Tech Stack:** Rust (clap string-dispatch arm, `std::process::Command`), Deno 2 +
+**Tech Stack:** Rust (typed `CallCommands::Engine` clap subcommand — see the plan1c3 coordination note in Global Constraints — plus `std::process::Command`), Deno 2 +
 esbuild 0.28.0 (engine-host bundle), vendored cliffy v1.0.0-rc.3 (MIT).
 
 **References:**
@@ -46,6 +46,14 @@ esbuild 0.28.0 (engine-host bundle), vendored cliffy v1.0.0-rc.3 (MIT).
   method sync (no async, matches existing trait style).
 - Integration tests go in `tests/integration/<name>.rs` + registration in `main.rs`
   (never top-level `tests/*.rs`).
+- **Runs after plan1c3, which refactors `Call`.** plan1c3 converts `main.rs`'s
+  `Call { function, args }` into a typed `Call { command: CallCommands }` group
+  (variants `Test` + `build-ts-extension`). This plan therefore adds a **typed
+  `Engine` variant to `CallCommands`**, not a bare clap string-dispatch arm — see
+  Task 7.4. (Without the typed variant, clap rejects `call engine` as an unknown
+  subcommand.) The pre-existing `Some("engine")` arm in `call/mod.rs` still runs:
+  the new variant routes through `commands::call::execute(Some("engine"), args)`,
+  mirroring how plan1c3 routes `CallCommands::Test`.
 - Once a Test Seam row is GREEN its harness/assertions are **frozen** — fix
   production or the spec, never the test. Dated findings are appended to the row,
   never overwritten.
@@ -69,7 +77,8 @@ esbuild 0.28.0 (engine-host bundle), vendored cliffy v1.0.0-rc.3 (MIT).
 | `crates/quarto-core/src/engine/ts_process.rs` (modify) | `extracted_bundle_path` → `pub(crate)`; `TsEngineHost::global_config()` accessor |
 | `crates/quarto-core/src/engine/ts_engine.rs` (modify) | `call_engine_command` override + argv builder |
 | `crates/quarto/src/commands/call/engine.rs` (new) | CLI arm: gates, help, dispatch, exit-code propagation |
-| `crates/quarto/src/commands/call/mod.rs` (modify) | `Some("engine")` arm + usage text |
+| `crates/quarto/src/main.rs` (modify) | add typed `Engine` variant to plan1c3's `CallCommands` enum + its dispatch arm |
+| `crates/quarto/src/commands/call/mod.rs` (modify) | `Some("engine")` arm (reached via the `CallCommands::Engine` dispatch) + usage text |
 | `crates/quarto/tests/fixtures/call-engine-oracle/` (new) | committed byte-oracle copies + README |
 | `crates/quarto/tests/integration/call_engine_e2e.rs` (new) + `main.rs` (modify) | binary-driving e2e |
 | `.github/workflows/ts-test-suite.yml` (modify) | deno test step for call-engine mode |
@@ -805,8 +814,24 @@ Adjust import paths to the crate's actual re-exports (`quarto_core::engine::…`
 §10.3 / earlier survey — `engines_in_order` returns ordered names; if it returns
 `Vec<Arc<dyn ExecutionEngine>>`, map through `.name()`).
 
-- [ ] **7.4 Wire the dispatch arm** in `commands/call/mod.rs` (and update both
-  usage strings):
+- [ ] **7.4 Wire the dispatch arm.** Because plan1c3 made `call` a typed
+  subcommand group, first add an `Engine` variant to `CallCommands` in `main.rs`
+  (mirroring plan1c3's `Test` variant) and route it through the string dispatcher:
+
+```rust
+// in enum CallCommands (main.rs), after Test / BuildTsExtension:
+    /// Access functionality specific to quarto's different rendering engines
+    Engine {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+// in the Commands::Call { command } match arm:
+    CallCommands::Engine { args } =>
+        commands::call::execute(Some("engine".to_string()), args),
+```
+
+Then keep the `commands/call/mod.rs` string arm (now reached via that dispatch)
+and update both usage strings:
 
 ```rust
 mod engine;

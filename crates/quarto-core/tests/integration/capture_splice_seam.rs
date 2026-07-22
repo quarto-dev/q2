@@ -129,7 +129,9 @@ fn real_echo_capture_splices() {
     let tmp = TempDir::new().unwrap();
     let ext_src =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/extensions/echo-engine");
-    copy_dir(&ext_src, &tmp.path().join("_extensions/echo-engine"));
+    let dest = tmp.path().join("_extensions/echo-engine");
+    copy_dir(&ext_src, &dest);
+    crate::engine_fixture_build::ensure_bundle(&dest, "echo-engine");
     let input = tmp.path().join("index.qmd");
     std::fs::write(
         &input,

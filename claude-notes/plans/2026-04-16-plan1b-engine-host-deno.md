@@ -77,21 +77,25 @@ session ledger.
 ## Overview
 
 Build the Deno-side subprocess harness — the TypeScript package that
-receives framed `Request` envelopes on **stdin**, dispatches each to a loaded
+receives framed `Request` envelopes, dispatches each to a loaded
 engine module via a **non-blocking read loop** (concurrent across engines,
-serialized per engine instance), and writes `Response` envelopes to **stdout**.
-This is the counterpart to plan1a-host's Rust-side subprocess manager and its
-demux.
+serialized per engine instance), and writes `Response` envelopes back.
+In the original v1 design this rode the child's **stdin**/**stdout**; Phase
+1.6 has since landed and moved the channel to a private loopback-TCP
+connection (see the blockquote below and
+`claude-notes/plans/2026-07-08-plan1a6-off-stdout-loopback-tcp.md`). This is
+the counterpart to plan1a-host's Rust-side subprocess manager and its demux.
 
 > **Concurrency (Phase 1.5).** Pass-2 render is now parallel, so the shared
 > subprocess is reached concurrently. The wire is **multiplexed** — every frame
 > carries an `id` (plan1a-protocol Phase 1.5), and the harness keeps reading
 > while prior requests are still running, so cross-engine requests interleave on
-> the Deno event loop. **The channel stays stdin/stdout in v1** — multiplexing
-> is all parallel Pass-2 needs, and the existing "stdout is protocol;
-> `console.log` is forbidden" contract is retained. Moving the protocol off
-> stdout onto **loopback TCP** (to delete that footgun) is an orthogonal cleanup
-> deferred to **Phase 1.6**. Canonical model:
+> the Deno event loop. **The channel stayed stdin/stdout in the original v1
+> design** — multiplexing was all parallel Pass-2 needed, and the "stdout is
+> protocol; `console.log` is forbidden" contract held at the time. Moving the
+> protocol off stdout onto **loopback TCP** (to delete that footgun) was an
+> orthogonal cleanup, **Phase 1.6**, which has since landed — that contract no
+> longer applies. Canonical model:
 > `claude-notes/designs/engine-host-concurrency.md`.
 
 **Build model:** the harness is a **generated build artifact** — esbuild bundles
@@ -276,11 +280,12 @@ unguarded *here*, with rationale:
   accepted-untested in 1b. Rationale: the kill is issued and observed on the
   Rust side; the binding test is plan1a-host's "crash/malformed → subprocess
   gone". 1b's contract is the *cooperative* path (T6), not the SIGKILL one.
-- **Stdout-violation detection** (`console.log` corrupts the v1 stdout protocol)
-  — accepted-untested in 1b; owned and tested by plan1a-host (the Rust side parses
-  stdout). 1b's contract is only "the harness writes nothing but `Response`
-  frames to stdout," which T3 indirectly exercises (every asserted line is valid
-  JSON). (Phase 1.6 retires this concern.)
+- **Stdout-violation detection** (`console.log` corrupted the v1 stdout protocol)
+  — accepted-untested in 1b; owned and tested by plan1a-host (the Rust side parsed
+  stdout). 1b's contract was only "the harness writes nothing but `Response`
+  frames to stdout," which T3 indirectly exercised (every asserted line is valid
+  JSON). (Phase 1.6 has since landed and retired this concern — stdout is no
+  longer the protocol channel.)
 - **`htmlDependency` relative-path normalization** and **`loadEngine`
   path-drift error** — already itemized as bound tests in the Engine-API
   contract block below; not re-listed.
@@ -375,13 +380,15 @@ unguarded *here*, with rationale:
 
   ```typescript
   // Sketch (inside runHost(reader, writer, host) — NOT module top-level):
-  // v1: protocol runs on the injected reader/writer (Deno.stdin/stdout in
-  // main()). Capture the protocol-write target BEFORE any engine code runs
-  // (engines must not write to it — see "Stdout/stderr contract"). The harness
-  // does NOT override console.* — engine authors use stderr (console.error/warn
-  // or quarto.console.*). (Phase 1.6 swaps stdin/stdout for a loopback-TCP conn
-  // and frees stdout for diagnostics — see plan1a-host "Deferred: Phase 1.6".)
-  const protocolOut = writer;                        // Deno.stdout in main()
+  // Original v1 design: protocol ran on the injected reader/writer
+  // (Deno.stdin/stdout in main()). Capture the protocol-write target BEFORE
+  // any engine code runs (engines must not write to it — see "Stdout/stderr
+  // contract"). The harness does NOT override console.* — engine authors use
+  // stderr (console.error/warn or quarto.console.*). Phase 1.6 has since
+  // landed: it swaps stdin/stdout for a loopback-TCP conn and frees stdout
+  // for diagnostics — see plan1a-host "Phase 1.6 — the protocol moved off
+  // stdout (loopback TCP) — LANDED".
+  const protocolOut = writer;                        // Deno.stdout in main() (v1); TCP conn since Phase 1.6
   const writeMutex = new AsyncMutex();               // serialize async frame writes
   const perEngineQueue = new Map<string, Promise<unknown>>();  // tail per engine
   const inflight = new Map<number, AbortController>();          // by request id
@@ -1457,24 +1464,31 @@ doubles.*
   - Validate it has a default export with `name`, `claimsLanguage`, `launch`
   - Return the `ExecutionEngineDiscovery` object
 
-- [x] Create `src/framing.ts` — the v1 channel plumbing `host.ts` imports
-    (stdin/stdout):
+- [x] Create `src/framing.ts` — originally the v1 channel plumbing `host.ts`
+    imported (stdin/stdout), since replaced by the Phase 1.6 loopback-TCP
+    plumbing:
   - `readFrames(stream): AsyncIterable<Request>` — newline-framed JSON decoder
-    yielding parsed `Request` envelopes (`{ id, msg }`) from `Deno.stdin`.
+    yielding parsed `Request` envelopes (`{ id, msg }`); originally from
+    `Deno.stdin` (v1), now from the loopback-TCP connection (Phase 1.6).
   - `writeFrame(out, response)` performs an **async** write (`await out.write(line)`)
     serialized under an `AsyncMutex` (`writeMutex`). Async (not `writeSync`) so a
-    large frame yields and the read loop keeps draining stdin — the continuous-drain
-    property that prevents a large-payload pipe deadlock. The mutex serializes
-    concurrent dispatch tasks' writes so two frames never interleave across the
-    `await`. `AsyncMutex` is a tiny hand-rolled promise-chain serializer (each
-    acquirer chains onto a `tail` promise), **not** a dependency.
-  - A stray engine `console.log` is a *separate* complete line on stdout, caught as
-    malformed by the Rust demux — the v1 stdout contract.
-  - **(Phase 1.6, deferred)** a `connectControl(args)` that parses
-    `--control <addr> --token <nonce>`, dials `std::net`-bound **loopback TCP**
-    (`Deno.connect({ hostname: "127.0.0.1", port })`), and presents the token in
-    frame 1 — replacing stdin/stdout as the channel and freeing stdout for
-    diagnostics. **Not UDS / named pipe** (see plan1a-host "Deferred: Phase 1.6").
+    large frame yields and the read loop keeps draining the channel — the
+    continuous-drain property that prevents a large-payload deadlock. The mutex
+    serializes concurrent dispatch tasks' writes so two frames never interleave
+    across the `await`. `AsyncMutex` is a tiny hand-rolled promise-chain
+    serializer (each acquirer chains onto a `tail` promise), **not** a
+    dependency.
+  - In the original v1 design, a stray engine `console.log` was a *separate*
+    complete line on stdout, caught as malformed by the Rust demux — the v1
+    stdout contract. Phase 1.6 has since landed and retired this: stdout is
+    diagnostic-only, and `console.log` is harmless.
+  - **(Phase 1.6 — landed)** a `connectControl(args)` that parses
+    `--control <addr>` and reads the one-time token as the first line on
+    stdin, dials `std::net`-bound **loopback TCP**
+    (`Deno.connect({ hostname: "127.0.0.1", port })`), and presents the token
+    as a pre-line on the socket — replacing stdin/stdout as the channel and
+    freeing stdout for diagnostics. **Not UDS / named pipe** (see plan1a-host
+    "Phase 1.6 — the protocol moved off stdout (loopback TCP) — LANDED").
 
 - [x] Create `src/types.ts` — protocol message type definitions (must match
     the Rust enums **in their post-RTQ form** exactly), **including the Phase 1.5
@@ -1595,39 +1609,43 @@ split, so **1b is gated on RTQ landing first** (see the header callout).
 
 ## Design Notes
 
-### Diagnostic stream (stderr) — v1
+### Diagnostic stream (stderr) — original v1 design; superseded by Phase 1.6
 
-In v1 the protocol runs on stdout, so **stderr is the diagnostic stream**
-(forwarded to q2's logging). The harness prefixes its own log lines with level
-markers so q2 can route them:
+In the original v1 design the protocol ran on stdout, so **stderr was the
+diagnostic stream** (forwarded to q2's logging). The harness prefixes its own
+log lines with level markers so q2 can route them:
 ```
 [INFO] Checking Julia installation...
 [WARN] Julia server connection slow
 [ERROR] Julia process crashed
 ```
-Unprefixed stderr lines (from the engine or Deno) are logged at INFO. (Phase 1.6
-moves the protocol to loopback TCP and frees stdout for diagnostics too.)
+Unprefixed stderr lines (from the engine or Deno) are logged at INFO. **Phase
+1.6 has since landed**: the protocol now rides a loopback-TCP connection, and
+both stdout and stderr are diagnostic-only (see
+`claude-notes/plans/2026-07-08-plan1a6-off-stdout-loopback-tcp.md`).
 
-### Stdout/stderr contract (v1)
+### Stdout/stderr contract — original v1 design; retired by Phase 1.6
 
-**In v1 the protocol runs on stdout**, one `Response` per line, so the existing
-contract holds: engines must **not** write to stdout. The harness captures the
-real `Deno.stdout` for protocol writes at startup and does **not** override
-`console.*` — protection is by contract.
+**In the original v1 design the protocol ran on stdout**, one `Response` per
+line, so the following contract held: engines must **not** write to stdout.
+The harness captured the real `Deno.stdout` for protocol writes at startup and
+did **not** override `console.*` — protection was by contract, not mechanism.
 
 - **Use `quarto.console.*`** (preferred — `[INFO]`/`[WARN]`/`[ERROR]` prefixes,
   written to stderr) or `console.error`/`console.warn` (stderr) for diagnostics.
-- **Do not use `console.log`/`console.info` or `Deno.stdout.writeSync`** — these
-  write to stdout and corrupt the protocol. The Rust side detects a non-`Response`
-  line on stdout as malformed and SIGKILLs (plan1a-host category 9), naming
-  `console.log` as the likely cause.
-- **Do not read `Deno.stdin`** — it is the protocol *input* channel; an engine
-  reading it (e.g. an interactive prompt) steals frames the harness's read loop
-  needs. The symmetric footgun to the stdout one.
+- In v1: **do not use `console.log`/`console.info` or `Deno.stdout.writeSync`**
+  — these wrote to stdout and corrupted the protocol. The Rust side detected a
+  non-`Response` line on stdout as malformed and SIGKILLed (plan1a-host
+  category 9), naming `console.log` as the likely cause.
+- In v1: **do not read `Deno.stdin`** — it was the protocol *input* channel; an
+  engine reading it (e.g. an interactive prompt) stole frames the harness's
+  read loop needed. The symmetric footgun to the stdout one.
 
-**Phase 1.6 retires this contract**: moving the protocol to loopback TCP frees
-both stdin and stdout for the engine, after which `console.log` is a harmless
-INFO line and the capture/contract disappear.
+**This contract is gone.** Phase 1.6 has landed and moved the protocol to a
+loopback-TCP connection, freeing both stdin and stdout for the engine —
+`console.log` is now a harmless INFO-routed line, and the capture/contract
+described above no longer applies. `quarto.console.*` remains the preferred
+diagnostic API regardless.
 
 ### Where is engine-host-deno.js at runtime?
 
@@ -1700,9 +1718,11 @@ needs to cover:
   `launchEngine` — RTQ Item A.)
 - Module top-level access prohibition (no `quarto.*` outside methods).
 - Diagnostics: use `quarto.console.*` (level-routed) or `console.error`/`.warn`
-  (stderr). **In v1 do not use `console.log`/`console.info`** — they write to
-  stdout, the protocol channel, and corrupt it. (Phase 1.6 moves the protocol
-  off stdout and makes `console.log` harmless.)
+  (stderr) as the preferred style. **In the original v1 design, `console.log`/
+  `console.info` were forbidden** — they wrote to stdout, then the protocol
+  channel, and corrupted it. Phase 1.6 has since landed, moving the protocol
+  off stdout — `console.log` is now harmless (forwarded as a diagnostic), so
+  this prohibition no longer applies.
 - Cooperative cancellation: a per-request `Cancel` aborts an `AbortSignal` the
   engine's `execute` may honor; daemon-backed engines should still be
   daemon-detached-by-default (the Q1 transport-file pattern) so a poisoned
@@ -1799,10 +1819,11 @@ this record exists so the divergence is not silently re-introduced by a future
   four deferred bodies throw `notYetImplementedError("Plan 2")` until Plan 2 (a
   missing body, not a gate). No `state.context` and no per-launch unblocking; the
   per-render `project` rides `launchEngine` into the instance closure
-- [x] Protocol runs on stdin/stdout (v1); harness captures `Deno.stdout` for
-  protocol writes; stderr is the diagnostic stream; the stdout contract holds
-  (`console.log` forbidden — corrupts the protocol). (Phase 1.6 moves to loopback
-  TCP and retires the contract.)
+- [x] Protocol ran on stdin/stdout (v1); harness captured `Deno.stdout` for
+  protocol writes; stderr was the diagnostic stream; the stdout contract held
+  at the time (`console.log` forbidden — corrupted the protocol). Phase 1.6
+  has since landed, moving the protocol to loopback TCP and retiring that
+  contract — `console.log` is now harmless.
 - [x] Lifecycle methods that are NOT on the protocol (`filterFormat`,
   `executeTargetSkipped`, `postprocess`, `canKeepSource`, `postRender`)
   are simply not dispatched — the harness has no top-level handler for them

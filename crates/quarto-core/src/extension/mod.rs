@@ -19,6 +19,12 @@ pub mod discover;
 pub mod read;
 pub mod types;
 
+// Native-only: builds an extension's TS engine bundle by shelling out to
+// `deno bundle` (mirrors `engine::ts_process`'s native gate — unavailable
+// on wasm32-unknown-unknown).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod build;
+
 pub use discover::{discover_extensions, find_extension};
 pub use read::read_extension;
 pub use types::{Contributes, Extension, ExtensionFilter, ExtensionId};

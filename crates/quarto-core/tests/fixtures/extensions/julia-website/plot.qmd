@@ -7,34 +7,35 @@ execute:
 
 # A Julia Figure
 
-The cell below renders a Plots.jl figure as a PNG **file** (not an inline
-base64 data-URI). Three things make that happen:
+The cell below emits a PNG figure as a **file** (not an inline base64
+data-URI). The key is *how the value is shown*, not where the bytes come from:
 
-1. `ENV["GKSwstype"] = "100"` (set before `using Plots`) forces GR's GKS
-   backend to the headless cairo-PNG workstation, so no interactive `gksqt`
-   Qt workstation is spawned. In a windowed macOS session GR would otherwise
-   default to `gksqt`, which blocks the notebook worker.
-2. `savefig(p, path)` renders the plot to a PNG file through that headless
-   workstation.
-3. The cell returns a `PngFigure` wrapper that is showable **only** as
-   `image/png` (no `text/html` show method). QuartoNotebookRunner captures
-   only the `image/png` MIME; q2's `displayDataMimeType` then selects
-   `image/png` (a default Plots plot is `text/html`-showable and would be
-   emitted inline instead — see the 4CD MIME finding), and the jupyter
-   `toMarkdown` image branch (`mdImageOutput`) writes the figure to
-   `plot_files/figure-html/*.png` and references it via `<img src=...>`.
+1. The cell returns a `PngFigure` wrapper that is showable **only** as
+   `image/png` (it defines a single `Base.show(::MIME"image/png")` method and
+   no `text/html` one). QuartoNotebookRunner therefore captures only the
+   `image/png` MIME; q2's `displayDataMimeType` selects it (a value that is
+   *also* `text/html`-showable would be emitted inline instead — see the 4CD
+   MIME finding), and the jupyter `toMarkdown` image branch (`mdImageOutput`)
+   writes the figure to `plot_files/figure-html/*.png`, referencing it via
+   `<img src=...>`.
+2. The PNG bytes are a small pre-rendered line chart, embedded as base64 and
+   decoded with the `Base64` **stdlib**. Using a hardcoded image (rather than a
+   `Plots.jl` `savefig`) keeps this fixture **dependency-free**: the notebook
+   environment needs no external packages, so the page renders on a cold Julia
+   depot (e.g. CI, which has no warm `~/.julia`) with no `Pkg.instantiate`.
+   q2's figure-file handling is identical regardless of the byte source — this
+   fixture exercises that path, not Plots.
 
 ```{julia}
-ENV["GKSwstype"] = "100"
-using Plots
-p = plot(1:10, rand(10))
-path = tempname() * ".png"
-savefig(p, path)
+using Base64
+
+# A ~140x90 PNG line chart (axes + a blue sine polyline), base64-encoded.
+const FIGURE_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAIwAAABaCAIAAADlxSlbAAACCUlEQVR42u3cwW3DMAyFYW/SlbxNF+t+6aFADwVSixJFkXw/kWtimp8tGIj1rheVvi5GABIFEkgUSBRIIFEgUSA1Q7rvmxmBRIEEEgUSdRrp4/Pr54NBFqRfkncfJI4hPdrgdBhpkASnY0jWuwSqaKS5ceMUh7QyaJwikFxGDNVGJMfJ4rQFyX2mODkj7ZsmSD5Iu693nFaRAlYkFr0lpLDxgTSJFHyBKzutIoU1qrzoTSIdmRdIBqSDF7Wm0zzSkXY1Fz0z0vEZCTrVQxJc9GxIeaYj5WRASrXOSC16ZqQ8rYP0FynnRNo4/X8WQ0hp15Yei97jKRiQip6hBFL+KZR2Gmm+D1JFp8HOrx4XaWmk1ae7Qidfzmm84WekZktHxW5bbSLret932+lXwsnaJEgg4eTRXluknE5zvfXcfZ4cyfqtthEBCZ2mW2qOlMdppZ/OYRsJkea+2zwRJYnTYhsSSNXfQeufLXTWyeXoEgFQ1d+LVknpKr3DQChKre5eHTmkGCffY2mFEsY4uR9FLjkybCe24w8qxntuddrxy6IZrFujQUDK67TvBlVHcg9D2tGqdOS0Y8bU1ocR9Vzw9bDegDQxwttfc7nKkWnMIJmHHp+XDdIo1cE4c5BG75WDUfPPSLL1jifg0DYkKsMf8CAVKJBAokACiQKJAgkkCiQKJJAokECictY3sWwVPrIIQrsAAAAASUVORK5CYII="
 
 struct PngFigure
     bytes::Vector{UInt8}
 end
 Base.show(io::IO, ::MIME"image/png", f::PngFigure) = write(io, f.bytes)
 
-PngFigure(read(path))
+PngFigure(base64decode(FIGURE_PNG_BASE64))
 ```

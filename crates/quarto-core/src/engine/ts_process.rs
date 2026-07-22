@@ -13,8 +13,9 @@
 //!
 //! Implements:
 //! - [`EngineTransport`] / [`EngineReadHalf`] — the split transport seam.
-//! - [`StdioWriteHalf`] / [`StdioReadHalf`] — v1 newline-framed JSON over
-//!   the child's stdin/stdout.
+//! - [`TcpTransport`] / [`TcpReadHalf`] — v1 newline-framed JSON over a
+//!   private loopback-TCP socket (the child dials back after a one-time token
+//!   handshake).
 //! - [`TsEngineHost`] — the multiplexed demux: one reader thread, one pending
 //!   map, per-request `sync_channel(1)` slots.
 //! - [`MockTransport`] (`#[cfg(test)]`) — id-keyed, blocking `recv()`, for
@@ -23,16 +24,18 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use std::collections::{HashMap, VecDeque};
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::Shutdown;
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicU64, Ordering},
     mpsc::{self, SyncSender},
 };
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 use tracing::{error, info, warn};
@@ -184,10 +187,10 @@ pub trait EngineReadHalf: Send {
     /// - `Ok(Response)` — a well-formed frame.
     /// - `Err(RecvError::Eof)` — channel closed (process exit or crash).
     /// - `Err(RecvError::Malformed(line))` — a line that fails to parse as
-    ///   `Response` (the v1 stdout-protocol footgun). `reader_loop`'s caller
-    ///   does NOT treat a single one of these as fatal — see
-    ///   `MAX_CONSECUTIVE_MALFORMED_LINES` and the `Malformed` arm in
-    ///   `reader_loop` for the bounded log-and-skip policy.
+    ///   `Response`. Post-Phase-4, the engine-host protocol rides a private
+    ///   loopback-TCP control socket, so a single malformed frame is treated
+    ///   as proof the channel is compromised and is fatal immediately — see
+    ///   the `Malformed` arm in `reader_loop`.
     /// - `Err(RecvError::Io(e))` — OS-level I/O error on the pipe.
     fn recv(&mut self) -> Result<Response, RecvError>;
 }
@@ -222,78 +225,72 @@ impl From<serde_json::Error> for TransportError {
 }
 
 // ============================================================================
-// StdioWriteHalf / StdioReadHalf
+// TcpTransport / TcpReadHalf — loopback-TCP transport (Phase 1a.6)
 // ============================================================================
+//
+// Since the plan1a.6 Phase-3 flip this is the ONLY transport: production
+// (`ensure_started`) and the `#[cfg(test)] start_with_command` helper both
+// spawn the child with `--control 127.0.0.1:<port>` and complete the one-time
+// token handshake in `accept_and_handshake`. The former stdio transport
+// (`StdioWriteHalf`/`StdioReadHalf`/`spawn_into`) was deleted at the Phase-4
+// cutover. See
+// `claude-notes/plans/2026-07-08-plan1a6-off-stdout-loopback-tcp.md`.
 
-/// Shared write half (held by the host as `Arc<StdioWriteHalf>`).
+/// Shared write half of the loopback-TCP transport.
 ///
-/// The inner `Option` is **required** (spike-validated): `shutdown(&self)` must
-/// *close* stdin to give the child stdin-EOF, and you can only drop the
-/// `BufWriter` out through `&self` by `take()`-ing it.
-pub struct StdioWriteHalf {
-    write: Mutex<Option<BufWriter<ChildStdin>>>,
+/// Wraps the write side of the accepted `TcpStream`. Internally serialized by
+/// a short-held lock (one JSON line, newline-terminated, flushed per frame).
+pub struct TcpTransport {
+    stream: Mutex<TcpStream>,
 }
 
-impl StdioWriteHalf {
-    fn new(stdin: ChildStdin) -> Self {
-        Self {
-            write: Mutex::new(Some(BufWriter::new(stdin))),
-        }
-    }
-}
-
-impl EngineTransport for StdioWriteHalf {
+impl EngineTransport for TcpTransport {
     fn send(&self, frame: &Request) -> Result<(), TransportError> {
-        let mut guard = self.write.lock().unwrap();
-        if let Some(writer) = guard.as_mut() {
-            let line = serde_json::to_string(frame)?;
-            writer.write_all(line.as_bytes())?;
-            writer.write_all(b"\n")?;
-            writer.flush()?;
-            Ok(())
-        } else {
-            Err(TransportError("stdin already closed".to_string()))
-        }
+        // One JSON line, newline-terminated, flushed per frame.
+        let mut guard = self.stream.lock().unwrap();
+        let line = serde_json::to_string(frame)?;
+        guard.write_all(line.as_bytes())?;
+        guard.write_all(b"\n")?;
+        guard.flush()?;
+        Ok(())
     }
 
     fn shutdown(&self) -> Result<(), TransportError> {
-        // Send Shutdown frame first (best-effort).
-        {
-            let mut guard = self.write.lock().unwrap();
-            if let Some(writer) = guard.as_mut() {
-                let shutdown_frame = Request {
-                    id: u64::MAX, // throwaway id — no slot registered for Shutdown
-                    msg: ToEngine::Shutdown,
-                };
-                if let Ok(line) = serde_json::to_string(&shutdown_frame) {
-                    let _ = writer.write_all(line.as_bytes());
-                    let _ = writer.write_all(b"\n");
-                    let _ = writer.flush();
-                }
-            }
+        let mut guard = self.stream.lock().unwrap();
+        // Send Shutdown frame first (best-effort) — throwaway id, one
+        // newline-framed JSON line.
+        let shutdown_frame = Request {
+            id: u64::MAX, // throwaway id — no slot registered for Shutdown
+            msg: ToEngine::Shutdown,
+        };
+        if let Ok(line) = serde_json::to_string(&shutdown_frame) {
+            let _ = guard.write_all(line.as_bytes());
+            let _ = guard.write_all(b"\n");
+            let _ = guard.flush();
         }
-        // Close stdin by taking the BufWriter out of the Option and dropping it.
-        let _ = self.write.lock().unwrap().take();
+        // Half-close the write side — the TCP analogue of dropping stdin:
+        // the peer's read side sees EOF, but our own read half (a separate
+        // clone of the accepted stream) is untouched.
+        let _ = guard.shutdown(Shutdown::Write);
         Ok(())
     }
 }
 
-/// Owned read half (moved into the demux reader thread).
+/// Owned read half of the loopback-TCP transport.
 ///
-/// Owns stdout directly — taken via `child.stdout.take()` — plus a clone of
-/// the shared child handle to reap on crash-EOF.
-pub struct StdioReadHalf {
-    read: BufReader<ChildStdout>,
-    /// Shared with host for single-shot reap in Part 2 proc-tier tests.
-    /// Not read by the demux logic — `reader_loop` receives its own field-clone
-    /// of the child Arc — but this field is the load-bearing handle that keeps
-    /// the Arc alive from the read half's perspective.
-    #[allow(dead_code)]
-    pub(crate) child: Arc<Mutex<Option<Child>>>,
+/// Holds the handshake `BufReader<TcpStream>` — `accept_and_handshake`
+/// constructs this from the accepted stream's `try_clone()`, the same stream
+/// `TcpTransport` writes to.
+pub struct TcpReadHalf {
+    read: BufReader<TcpStream>,
 }
 
-impl EngineReadHalf for StdioReadHalf {
+impl EngineReadHalf for TcpReadHalf {
     fn recv(&mut self) -> Result<Response, RecvError> {
+        // EOF/read-0 AND an empty line both mean "channel closed"; a non-empty
+        // line that fails to parse as `Response` is `Malformed` (surfaced to
+        // `reader_loop`, which since Phase 4 treats a malformed control-socket
+        // frame as fatal).
         let mut line = String::new();
         match self.read.read_line(&mut line) {
             Ok(0) => Err(RecvError::Eof),
@@ -310,20 +307,195 @@ impl EngineReadHalf for StdioReadHalf {
     }
 }
 
-/// Spawn a child from a `Command` with all three stdio pipes set up. Stores
-/// the `Child` in the provided `child_slot` Arc (which is shared with the read
-/// half), then returns the wired halves.
+/// Constant-time byte-slice equality (XOR-fold over every byte).
 ///
-/// **For tests** that drive an arbitrary child command (a cat/echo script),
-/// build a `Command` and call this function directly.
-pub fn spawn_into(
+/// Hygiene, not load-bearing: the listener accepts exactly once, then closes
+/// (see H-COMMIT / the design note in
+/// `claude-notes/plans/2026-07-08-plan1a6-off-stdout-loopback-tcp.md`), so
+/// there is no repeated-guess timing oracle to defend against in practice.
+/// Unequal-length inputs short-circuit to `false`; equal-length inputs always
+/// walk every byte regardless of where (or whether) they differ.
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut acc: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        acc |= x ^ y;
+    }
+    acc == 0
+}
+
+/// How long between `accept()` polls while waiting for the child to dial
+/// back over loopback TCP (H-ACCEPT).
+const ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(20);
+
+/// Accept the one expected connection on `listener`, perform the one-time
+/// token handshake, and return the split transport halves.
+///
+/// `child` is the shared child-process slot (so a handshake failure can
+/// correlate with a dead child); `token` is the one-time handshake secret;
+/// `deadline` bounds how long `accept()` + the handshake read may take.
+///
+/// `listener` is taken **by value** and is never explicitly closed: it drops
+/// (closing the OS socket) when this function returns by any path, which is
+/// what makes the "at most one dial ever succeeds" property (seam #2c)
+/// structural rather than something this function has to enforce itself.
+fn accept_and_handshake(
+    listener: TcpListener,
+    child: &Arc<Mutex<Option<Child>>>,
+    token: &str,
+    deadline: Duration,
+) -> Result<(Arc<TcpTransport>, TcpReadHalf), ExecutionError> {
+    // Captured before the poll loop purely for the connected-marker log at
+    // commit time; the listener itself is polled by reference below and
+    // drops structurally when this function returns.
+    let port = listener.local_addr().map_or(0, |addr| addr.port());
+
+    listener.set_nonblocking(true).map_err(|e| {
+        ExecutionError::other(format!(
+            "failed to set loopback-TCP listener nonblocking: {e}"
+        ))
+    })?;
+
+    let start = Instant::now();
+
+    // H-ACCEPT: poll accept() against child liveness AND the deadline. A
+    // child that has already exited fails fast (no reason to wait out the
+    // deadline for a dial that will never come); a still-alive child that
+    // simply hasn't dialed yet is bounded by `deadline`.
+    let stream = loop {
+        match listener.accept() {
+            Ok((stream, _peer)) => break stream,
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                let child_exited = child
+                    .lock()
+                    .unwrap()
+                    .as_mut()
+                    .is_some_and(|c| matches!(c.try_wait(), Ok(Some(_))));
+                if child_exited {
+                    return Err(ExecutionError::other(
+                        "engine-host child exited before dialing back over loopback TCP",
+                    ));
+                }
+                if start.elapsed() > deadline {
+                    if let Some(mut c) = child.lock().unwrap().take() {
+                        let _ = c.kill();
+                    }
+                    return Err(ExecutionError::other(format!(
+                        "timed out after {deadline:?} waiting for engine-host to connect over loopback TCP"
+                    )));
+                }
+                std::thread::sleep(ACCEPT_POLL_INTERVAL);
+            }
+            Err(e) => {
+                return Err(ExecutionError::other(format!(
+                    "failed to accept loopback-TCP connection: {e}"
+                )));
+            }
+        }
+    };
+
+    // The listener was switched to nonblocking for the poll loop above; on
+    // Windows the accepted socket inherits that flag (Linux/macOS do not),
+    // so restore blocking mode before the handshake read below.
+    stream.set_nonblocking(false).map_err(|e| {
+        ExecutionError::other(format!(
+            "failed to clear nonblocking mode on accepted stream: {e}"
+        ))
+    })?;
+    stream
+        .set_nodelay(true)
+        .map_err(|e| ExecutionError::other(format!("failed to set TCP_NODELAY: {e}")))?;
+
+    // H-TOKEN / H-READER: exactly one `try_clone()`. The `BufReader` built
+    // here over the clone is THE handshake reader — it becomes `TcpReadHalf`
+    // unchanged at commit, so any bytes coalesced past the token's `\n` in
+    // the same segment are preserved rather than dropped by a fresh reader.
+    let read_clone = stream
+        .try_clone()
+        .map_err(|e| ExecutionError::other(format!("failed to clone accepted stream: {e}")))?;
+    let mut reader = BufReader::new(read_clone);
+
+    let mut token_line = String::new();
+    // Bounded read: `Take` caps the total bytes `read_line` may consume, so a
+    // connector that never sends a newline within `MAX_TOKEN_LINE` bytes
+    // cannot block this read indefinitely — `Take` reports EOF (Ok(0)) once
+    // its limit is exhausted, which `read_line` treats as "no more data".
+    let mut bounded = (&mut reader).take(MAX_TOKEN_LINE as u64);
+    let read_ok = bounded.read_line(&mut token_line).is_ok();
+
+    if !read_ok || !token_line.ends_with('\n') {
+        if let Some(mut c) = child.lock().unwrap().take() {
+            let _ = c.kill();
+        }
+        return Err(ExecutionError::other(
+            "engine-host handshake token line was missing, truncated, or exceeded the length cap",
+        ));
+    }
+
+    let received = token_line
+        .trim_end_matches('\n')
+        .trim_end_matches('\r')
+        .as_bytes();
+    if !ct_eq(received, token.as_bytes()) {
+        if let Some(mut c) = child.lock().unwrap().take() {
+            let _ = c.kill();
+        }
+        return Err(ExecutionError::other(
+            "engine-host handshake token mismatch",
+        ));
+    }
+
+    // H-COMMIT: the original `stream` becomes the write half; the handshake
+    // `BufReader` (already holding any bytes past the token's `\n`) becomes
+    // the read half, unchanged.
+    tracing::info!(target: "engine_host", port, "engine-host connected over loopback TCP");
+
+    let transport = TcpTransport {
+        stream: Mutex::new(stream),
+    };
+    let read_half = TcpReadHalf { read: reader };
+
+    Ok((Arc::new(transport), read_half))
+}
+
+/// Spawn a child from `cmd` (already configured with `--control <port>` or
+/// equivalent by the caller) and complete the loopback-TCP handshake against
+/// `listener`.
+///
+/// Stores the `Child` in `child_slot` (shared with the read half); returns the
+/// write half, read half, and the two drain-thread handles (stderr, stdout).
+///
+/// Order (load-bearing):
+/// 1. Pipe all three stdio streams and spawn; store the `Child` in
+///    `child_slot`.
+/// 2. **H-SPAWN(a):** write `<token>\n` to the child's stdin, flush, then
+///    drop the `ChildStdin` — closing it, so the child sees EOF right after
+///    the token (stdin carries nothing else).
+/// 3. **H-DRAIN:** spawn both drain threads (`stderr_loop` fills the crash
+///    ring; `stdout_loop` forwards to tracing) *before* the accept/handshake,
+///    so a child that dies mid-handshake still has its output fully drained.
+/// 4. Run [`accept_and_handshake`].
+/// 5. On success, hand back both drain-thread handles alongside the split
+///    transport — still running, owned by the caller from here on.
+/// 6. On failure, this function owns cleanup: kill the child if it's still
+///    in `child_slot`, join both drain threads (guaranteeing a dead child's
+///    stderr has fully landed in `recent_stderr`), then return an
+///    [`ExecutionError`] enriched with a snapshot of that ring.
+pub fn spawn_into_tcp(
     mut cmd: Command,
     child_slot: Arc<Mutex<Option<Child>>>,
+    listener: TcpListener,
+    token: &str,
+    deadline: Duration,
+    recent_stderr: Arc<Mutex<VecDeque<String>>>,
 ) -> Result<
     (
-        Arc<StdioWriteHalf>,
-        StdioReadHalf,
-        std::process::ChildStderr,
+        Arc<TcpTransport>,
+        TcpReadHalf,
+        JoinHandle<()>,
+        JoinHandle<()>,
     ),
     ExecutionError,
 > {
@@ -335,7 +507,7 @@ pub fn spawn_into(
         .spawn()
         .map_err(|e| ExecutionError::other(format!("failed to spawn engine host: {e}")))?;
 
-    let stdin = child
+    let mut stdin = child
         .stdin
         .take()
         .ok_or_else(|| ExecutionError::other("child stdin not available"))?;
@@ -348,16 +520,126 @@ pub fn spawn_into(
         .take()
         .ok_or_else(|| ExecutionError::other("child stderr not available"))?;
 
-    // Store the child in the shared slot.
     *child_slot.lock().unwrap() = Some(child);
 
-    let write = Arc::new(StdioWriteHalf::new(stdin));
-    let read = StdioReadHalf {
-        read: BufReader::new(stdout),
-        child: Arc::clone(&child_slot),
-    };
+    // H-SPAWN(a): write the token, flush, then drop stdin — closing it so
+    // the child sees EOF immediately after the token line.
+    if let Err(e) = stdin
+        .write_all(format!("{token}\n").as_bytes())
+        .and_then(|_| stdin.flush())
+    {
+        if let Some(mut c) = child_slot.lock().unwrap().take() {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+        return Err(ExecutionError::other(format!(
+            "failed to write handshake token to engine-host stdin: {e}"
+        )));
+    }
+    drop(stdin);
 
-    Ok((write, read, stderr))
+    // H-DRAIN: both drain threads start now, before the accept — so a child
+    // that dies during the handshake still has stderr/stdout fully drained.
+    let stderr_handle = {
+        let recent_stderr = Arc::clone(&recent_stderr);
+        std::thread::spawn(move || stderr_loop(BufReader::new(stderr), recent_stderr))
+    };
+    let stdout_handle = std::thread::spawn(move || stdout_loop(BufReader::new(stdout)));
+
+    match accept_and_handshake(listener, &child_slot, token, deadline) {
+        Ok((transport, read_half)) => Ok((transport, read_half, stderr_handle, stdout_handle)),
+        Err(e) => {
+            // Own the cleanup: kill the child if accept_and_handshake left it
+            // alive (some of its error paths already killed it; take()
+            // no-ops harmlessly in that case).
+            if let Some(mut c) = child_slot.lock().unwrap().take() {
+                let _ = c.kill();
+                let _ = c.wait();
+            }
+
+            // Join both drains so the dead child's stderr (read to EOF once
+            // its pipe closed) has fully landed in `recent_stderr` before the
+            // snapshot below.
+            let _ = stderr_handle.join();
+            let _ = stdout_handle.join();
+
+            let snapshot = recent_stderr
+                .lock()
+                .unwrap()
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            Err(ExecutionError::other(format!(
+                "{e}; recent engine-host stderr:\n{snapshot}"
+            )))
+        }
+    }
+}
+
+/// The loopback-TCP dial-back preamble that every `deno_dialback_child` test
+/// script begins with: parse `--control 127.0.0.1:<port>` off argv, read the
+/// one-time token from the first line of stdin, `Deno.connect`, and present
+/// the token as the socket pre-line — the tiny hand-rolled equivalent of the
+/// real bundle's `connectControl` (`control-transport.ts`). It leaves three
+/// bindings in scope for the per-test body: the connected socket `conn`, a
+/// `TextDecoder dec`, and a `TextEncoder enc`.
+#[cfg(test)]
+const DIALBACK_PREAMBLE: &str = r#"
+const args = Deno.args;
+let control = null;
+for (let i = 0; i < args.length; i++) if (args[i] === "--control") control = args[i + 1];
+if (!control) { console.error("dialback: no --control arg"); Deno.exit(2); }
+const dec = new TextDecoder();
+const enc = new TextEncoder();
+const sbuf = new Uint8Array(4096);
+let acc = "";
+let token = null;
+while (token === null) {
+  const n = await Deno.stdin.read(sbuf);
+  if (n === null) break;
+  acc += dec.decode(sbuf.subarray(0, n));
+  const idx = acc.indexOf("\n");
+  if (idx !== -1) token = acc.slice(0, idx);
+}
+if (token === null) { console.error("dialback: no token on stdin"); Deno.exit(3); }
+const [ctlHost, ctlPort] = control.split(":");
+const conn = await Deno.connect({ hostname: ctlHost, port: Number(ctlPort) });
+await conn.write(enc.encode(token + "\n"));
+"#;
+
+/// A [`deno_dialback_child`] body that discards everything the host writes and
+/// exits 0 when the socket read side closes (the host's `shutdown()` half-close,
+/// or `Drop`) — the loopback-TCP equivalent of the old `sh -c 'cat >/dev/null'`
+/// liveness child.
+#[cfg(test)]
+pub(crate) const DIALBACK_READ_UNTIL_EOF: &str = r#"
+const rbuf = new Uint8Array(4096);
+while (true) { const n = await conn.read(rbuf); if (n === null) break; }
+Deno.exit(0);
+"#;
+
+/// Test-only: build a `deno run` child that performs the loopback-TCP dial-back
+/// handshake ([`DIALBACK_PREAMBLE`]) and then runs `body` (which may use the
+/// `conn`/`dec`/`enc` bindings the preamble leaves in scope).
+///
+/// Deno reads the script file at process startup, so the returned
+/// `NamedTempFile` must be kept alive until `start_with_command` returns; the
+/// caller binds it (`let (cmd, _script) = ...`) for the duration of the test.
+/// `start_with_command` appends the `--control 127.0.0.1:<port>` argument, so
+/// callers must NOT add it themselves.
+#[cfg(test)]
+pub(crate) fn deno_dialback_child(body: &str) -> (Command, tempfile::NamedTempFile) {
+    use std::io::Write as _;
+    let script = format!("{DIALBACK_PREAMBLE}\n{body}\n");
+    let mut tmp = tempfile::NamedTempFile::new().expect("create dialback tempfile");
+    tmp.write_all(script.as_bytes())
+        .expect("write dialback script");
+    tmp.flush().expect("flush dialback script");
+    let mut cmd = Command::new("deno");
+    cmd.arg("run").arg("--allow-all").arg(tmp.path());
+    (cmd, tmp)
 }
 
 // ============================================================================
@@ -404,6 +686,10 @@ pub struct TsEngineHost {
     reader: Mutex<Option<JoinHandle<()>>>,
     /// The stderr reader/forwarder thread.
     stderr_reader: Mutex<Option<JoinHandle<()>>>,
+    /// The stdout drain thread (loopback-TCP transport — `StartedDrains::Tcp`).
+    /// `None` for mock-transport tests (`StartedDrains::None`), which have no
+    /// real child and thus no stdout to drain.
+    stdout_reader: Mutex<Option<JoinHandle<()>>>,
     /// Bounded ring of recent stderr lines (cap ~100) for crash diagnostics.
     recent_stderr: Arc<Mutex<VecDeque<String>>>,
     /// Process-stable global config sent once via `Init` at spawn.
@@ -432,12 +718,34 @@ const RECENT_STDERR_CAP: usize = 100;
 const CANCEL_TICK: Duration = Duration::from_millis(250);
 const DISCOVERY_WINDOW: Duration = Duration::from_secs(10);
 
-/// Maximum number of *consecutive* non-JSON stray lines `reader_loop` will
-/// log-and-skip before concluding the stdout channel is genuinely
-/// compromised (not just carrying one leaked banner) and falling back to the
-/// kill-everything escalation. The counter resets to 0 on every well-formed
-/// frame — see `reader_loop`'s `Malformed` arm for the full contract.
-const MAX_CONSECUTIVE_MALFORMED_LINES: u32 = 5;
+/// Maximum length (bytes) of the one-time handshake token line read from the
+/// accepted TCP connection before the loopback-TCP transport gives up and
+/// treats the connection as malformed. Bounds the handshake read so a
+/// misbehaving (or malicious-on-loopback) connector can't make the accept
+/// path buffer unboundedly while waiting for a newline.
+const MAX_TOKEN_LINE: usize = 256;
+
+/// What (if anything) `ensure_started_inner`'s `init` spawned to drain the
+/// child's out-of-band output channels, so the caller knows which thread(s)
+/// to start and which join-handle field(s) to populate.
+///
+/// - `Tcp { .. }` — the loopback-TCP transport (the ONLY live transport since
+///   the plan1a.6 Phase-3 flip): neither stdout nor stderr is the demux
+///   channel (that's the accepted socket), so BOTH need drain threads and the
+///   caller stores both handles. Constructed by `ensure_started` (production)
+///   and `#[cfg(test)] start_with_command` (real-child tests).
+/// - `None` — no drain thread needed (mock-transport tests, no real child).
+///   `#[cfg(test)]`-gated: it is constructed only under `cfg(test)`, so in a
+///   plain (non-test / WASM) lib build the enum has just the live `Tcp`
+///   variant and needs no `#[allow(dead_code)]`.
+enum StartedDrains {
+    #[cfg(test)]
+    None,
+    Tcp {
+        stderr: JoinHandle<()>,
+        stdout: JoinHandle<()>,
+    },
+}
 
 impl TsEngineHost {
     /// Construct with the process-stable global config.  Cheap — no subprocess
@@ -451,6 +759,7 @@ impl TsEngineHost {
             next_id: AtomicU64::new(0),
             reader: Mutex::new(None),
             stderr_reader: Mutex::new(None),
+            stdout_reader: Mutex::new(None),
             recent_stderr: Arc::new(Mutex::new(VecDeque::with_capacity(RECENT_STDERR_CAP))),
             global,
             spawn_count: AtomicU64::new(0),
@@ -496,9 +805,15 @@ impl TsEngineHost {
     /// Test-only: build a host wired to a REAL spawned child (full reaping +
     /// stderr thread), without requiring the hardcoded deno-bundle path.
     ///
-    /// Spawns `cmd` via [`spawn_into`], then calls `ensure_started_inner` with
-    /// the resulting halves — so the reader thread, stderr thread, and all
-    /// teardown paths are exercised exactly as in production.
+    /// Drives the exact production loopback-TCP path (bind an ephemeral control
+    /// listener, mint a one-time token, append `--control 127.0.0.1:<port>` to
+    /// `cmd`, spawn via [`spawn_into_tcp`], and complete the token handshake),
+    /// then hands the split halves to `ensure_started_inner` — so the reader
+    /// thread, both drain threads, and all teardown paths are exercised exactly
+    /// as in production. The caller-supplied `cmd` must be a child that dials
+    /// back over the control socket (see the test-only `deno_dialback_child`
+    /// helper); a child that never connects makes this time out at the accept
+    /// deadline, exactly as production would.
     #[cfg(test)]
     pub fn start_with_command(
         cmd: Command,
@@ -506,12 +821,34 @@ impl TsEngineHost {
     ) -> Result<Self, ExecutionError> {
         let host = Self::new(global);
         let child_arc = Arc::clone(&host.child);
-        host.ensure_started_inner(|| {
-            let (write, read, stderr) = spawn_into(cmd, child_arc)?;
+        let recent_stderr = Arc::clone(&host.recent_stderr);
+        host.ensure_started_inner(move || {
+            let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| {
+                ExecutionError::other(format!("failed to bind loopback control listener: {e}"))
+            })?;
+            let port = listener
+                .local_addr()
+                .map_err(|e| {
+                    ExecutionError::other(format!("failed to read control listener addr: {e}"))
+                })?
+                .port();
+            let token = uuid::Uuid::new_v4().to_string();
+
+            let mut cmd = cmd;
+            cmd.arg("--control").arg(format!("127.0.0.1:{port}"));
+
+            let (transport, read_half, stderr, stdout) = spawn_into_tcp(
+                cmd,
+                child_arc,
+                listener,
+                &token,
+                Duration::from_secs(10),
+                recent_stderr,
+            )?;
             Ok((
-                write as Arc<dyn EngineTransport>,
-                Box::new(read) as Box<dyn EngineReadHalf>,
-                Some(stderr),
+                transport as Arc<dyn EngineTransport>,
+                Box::new(read_half) as Box<dyn EngineReadHalf>,
+                StartedDrains::Tcp { stderr, stdout },
             ))
         })?;
         Ok(host)
@@ -532,6 +869,25 @@ impl TsEngineHost {
                 ));
             }
             let bundle_path = extracted_bundle_path()?;
+
+            // plan1a.6: bind an ephemeral loopback control listener BEFORE spawn. std's
+            // TcpListener::bind calls listen(), so the kernel backlogs the child's dial-back
+            // from bind onward — no race window between bind and spawn.
+            let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| {
+                ExecutionError::other(format!("failed to bind loopback control listener: {e}"))
+            })?;
+            let port = listener
+                .local_addr()
+                .map_err(|e| {
+                    ExecutionError::other(format!("failed to read control listener addr: {e}"))
+                })?
+                .port();
+
+            // One-time handshake token (122-bit uuid). Delivered to the child on STDIN by
+            // spawn_into_tcp (NOT argv — argv would leak the secret via ps/cmdline); the
+            // child presents it as the socket pre-line that accept_and_handshake validates.
+            let token = uuid::Uuid::new_v4().to_string();
+
             let mut cmd = Command::new("deno");
             // `--allow-all` is the ACCEPTED v1 security posture (decided 2026-07-01), not an
             // oversight. Extension bundles are third-party code running at full Deno privilege;
@@ -539,12 +895,24 @@ impl TsEngineHost {
             // real boundary is Phase 1.6 (loopback-TCP transport + one-time token auth), not a
             // Deno permission set — so any future narrowing to `--allow-read/write/net/run` here
             // is a deliberate, separately-reviewed change, not a drive-by tightening.
-            cmd.arg("run").arg("--allow-all").arg(bundle_path);
-            let (write, read, stderr) = spawn_into(cmd, Arc::clone(&self.child))?;
+            cmd.arg("run")
+                .arg("--allow-all")
+                .arg(bundle_path)
+                .arg("--control")
+                .arg(format!("127.0.0.1:{port}"));
+
+            let (transport, read_half, stderr, stdout) = spawn_into_tcp(
+                cmd,
+                Arc::clone(&self.child),
+                listener,
+                &token,
+                Duration::from_secs(10),
+                Arc::clone(&self.recent_stderr),
+            )?;
             Ok((
-                write as Arc<dyn EngineTransport>,
-                Box::new(read) as Box<dyn EngineReadHalf>,
-                Some(stderr),
+                transport as Arc<dyn EngineTransport>,
+                Box::new(read_half) as Box<dyn EngineReadHalf>,
+                StartedDrains::Tcp { stderr, stdout },
             ))
         })
     }
@@ -569,7 +937,7 @@ impl TsEngineHost {
             (
                 Arc<dyn EngineTransport>,
                 Box<dyn EngineReadHalf>,
-                Option<std::process::ChildStderr>,
+                StartedDrains,
             ),
             ExecutionError,
         >,
@@ -585,7 +953,7 @@ impl TsEngineHost {
             return Ok(());
         }
 
-        let (write, read, stderr_opt) = init()?;
+        let (write, read, drains) = init()?;
 
         // Record the spawn (one real spawn = one increment). Also serves as
         // the generation counter `TsEngine::ensure_loaded` keys its
@@ -609,12 +977,18 @@ impl TsEngineHost {
         // J6/J9 if you change subscriber scoping here.
         tracing::info!(target: "engine_host", pid = pid.unwrap_or(0), "engine-host spawned");
 
-        // Spawn the stderr reader thread (real path only; mocks pass None).
-        if let Some(stderr) = stderr_opt {
-            let recent_stderr = Arc::clone(&self.recent_stderr);
-            let stderr_handle =
-                std::thread::spawn(move || stderr_loop(BufReader::new(stderr), recent_stderr));
-            *self.stderr_reader.lock().unwrap() = Some(stderr_handle);
+        // Spawn/store drain thread(s) per what `init` actually started.
+        match drains {
+            // Mock transport (tests): no drain thread to spawn.
+            #[cfg(test)]
+            StartedDrains::None => {}
+            // Loopback-TCP transport: `init` already spawned both drain
+            // threads (neither stdout nor stderr is the demux channel there —
+            // that's the accepted socket) — just store the handles.
+            StartedDrains::Tcp { stderr, stdout } => {
+                *self.stderr_reader.lock().unwrap() = Some(stderr);
+                *self.stdout_reader.lock().unwrap() = Some(stdout);
+            }
         }
 
         // Spawn the demux reader thread — captures field-clones, NEVER Arc<Self>.
@@ -954,6 +1328,9 @@ impl TsEngineHost {
         if let Some(handle) = self.stderr_reader.lock().unwrap().take() {
             let _ = handle.join();
         }
+        if let Some(handle) = self.stdout_reader.lock().unwrap().take() {
+            let _ = handle.join();
+        }
 
         Ok(())
     }
@@ -1041,6 +1418,9 @@ impl Drop for TsEngineHost {
         if let Some(handle) = self.stderr_reader.get_mut().unwrap().take() {
             let _ = handle.join();
         }
+        if let Some(handle) = self.stdout_reader.get_mut().unwrap().take() {
+            let _ = handle.join();
+        }
     }
 }
 
@@ -1057,15 +1437,9 @@ fn reader_loop(
     recent_stderr: Arc<Mutex<VecDeque<String>>>,
     shutting_down: Arc<AtomicBool>,
 ) {
-    // Consecutive non-JSON stray lines seen since the last well-formed frame
-    // (or since the reader started). See the `Malformed` arm below for the
-    // full bounded-skip contract; reset to 0 whenever a frame parses.
-    let mut consecutive_malformed: u32 = 0;
-
     loop {
         match read.recv() {
             Ok(Response { id, msg }) => {
-                consecutive_malformed = 0;
                 // Route by id; drop late/unknown ids silently.
                 let slot = pending.lock().unwrap().remove(&id);
                 if let Some(slot) = slot {
@@ -1085,66 +1459,27 @@ fn reader_loop(
                 break;
             }
             Err(RecvError::Malformed(line)) => {
-                // Bug C reader-side resilience (2026-07-02, plan
-                // 2026-07-02-preview-capture-delivery.md, seam PC-C): a stray
-                // non-JSON line on stdout — e.g. a leaked child banner from an
-                // engine that (transiently, or due to an upstream bug) shares
-                // the engine-host's stdout fd — used to be treated as proof
-                // the whole channel was compromised: it killed the ENTIRE
-                // subprocess and broadcast an error to EVERY pending slot,
-                // discarding every in-flight capture over one leaked line
-                // (the original design's finding #7, "one terminal error per
-                // exit"). That was too aggressive: one stray line is not
-                // evidence the channel is actually corrupted.
+                // Post-Phase-4 (plan 2026-07-08-plan1a6-off-stdout-loopback-tcp.md,
+                // H-MALFORMED): the engine-host protocol rides a private
+                // loopback-TCP control socket. Nothing benign can write to
+                // that socket, so a malformed (non-JSON) frame on it is
+                // genuine evidence the channel is compromised — not a stray
+                // console.log leaking onto a shared stdout fd (that footgun
+                // is gone with stdout as the channel). A single malformed
+                // frame is therefore fatal immediately: no tolerate-then-
+                // escalate window (Phases 1-3 kept a bounded log-and-skip
+                // leniency here — `MAX_CONSECUTIVE_MALFORMED_LINES` — which
+                // Phase 4 deletes).
                 //
-                // New policy: log-and-skip up to
-                // MAX_CONSECUTIVE_MALFORMED_LINES consecutive stray lines —
-                // the counter resets on every well-formed frame (the `Ok`
-                // arm above) — so a single leaked banner no longer takes down
-                // the host or fails any in-flight request. Beyond the bound,
-                // the channel IS treated as compromised and the original
-                // kill-everything behavior fires unchanged, preserving the
-                // original protection against a genuinely broken wire (wrong
-                // binary spawned, protocol mismatch, a child that never stops
-                // writing to the shared fd).
-                //
-                // Residual (documented, not fixed — ratified trade-off): if a
-                // request's own response frame IS the line that gets skipped
-                // here (below the bound), that request no longer gets the
-                // old incidental kill-all error to wake it up. A caller that
-                // sent with an explicit `timeout: false` (no window) can then
-                // wait indefinitely for a response that will never arrive.
-                // Callers that pass a per-request `window` timeout are
-                // unaffected — they still time out on schedule; only the
-                // unbounded-wait case is exposed by this change.
-                consecutive_malformed += 1;
-                let excerpt: String = line.chars().take(200).collect();
-
-                if consecutive_malformed <= MAX_CONSECUTIVE_MALFORMED_LINES {
-                    // Bounded log-and-skip: leave shutting_down/pending/child
-                    // untouched and go back to reading the next line. Only
-                    // log "skipping" here — the escalation branch below logs
-                    // its own, accurate "channel considered compromised"
-                    // message instead.
-                    error!(
-                        "engine-host protocol error: non-JSON line on stdout \
-                         (likely a stray console.log/console.info in the engine, \
-                         or a leaked child process's stdout — {consecutive_malformed}/\
-                         {MAX_CONSECUTIVE_MALFORMED_LINES} consecutive, skipping): {excerpt:?}"
-                    );
-                    continue;
-                }
-
-                // Bound exceeded: no longer a single leaked banner — treat the
-                // channel as genuinely compromised. Set shutting_down FIRST so
-                // the kill below doesn't re-enter the crash path (finding #7
-                // — one terminal error per exit).
+                // Set shutting_down FIRST so the kill below doesn't re-enter
+                // the crash path (finding #7 — one terminal error per exit).
                 shutting_down.store(true, Ordering::Relaxed);
 
+                let excerpt: String = line.chars().take(200).collect();
                 let msg = format!(
-                    "engine-host protocol error: {consecutive_malformed} consecutive \
-                     non-JSON lines on stdout — channel considered compromised, \
-                     terminating engine host (last line: {excerpt:?})"
+                    "engine-host protocol error: malformed frame on the control \
+                     socket — channel considered compromised, terminating engine \
+                     host (line: {excerpt:?})"
                 );
                 error!("{}", msg);
 
@@ -1183,12 +1518,22 @@ fn handle_crash(
 ) {
     shutting_down.store(true, Ordering::Relaxed);
 
-    // Reap the exit code (single-shot via take).
+    // Reap the exit code (single-shot via take). Kill before wait: the EOF
+    // that got us here means the demux channel closed, but that is NOT
+    // proof the process itself has exited (e.g. the loopback-TCP transport's
+    // socket can close while the child stays alive) — a bare `wait()` would
+    // then block indefinitely. Kill-then-wait matches the style already used
+    // at `reset_after_crash`, `Drop`, and the malformed-channel escalation
+    // above; harmless when the child already exited (killing a zombie is a
+    // no-op).
     let code = child
         .lock()
         .unwrap()
         .take()
-        .and_then(|mut c| c.wait().ok())
+        .and_then(|mut c| {
+            let _ = c.kill();
+            c.wait().ok()
+        })
         .and_then(|s| s.code());
 
     // Best-effort wait (~250ms) for the stderr thread to drain.
@@ -1263,6 +1608,26 @@ fn stderr_loop(reader: impl BufRead, recent_stderr: Arc<Mutex<VecDeque<String>>>
             ring.pop_front();
         }
         ring.push_back(line);
+    }
+}
+
+/// Drain the child's stdout, logging each line via `tracing::info!`.
+///
+/// Only relevant on the loopback-TCP transport, where stdout is no longer the
+/// demux channel (the accepted socket is) — the child's stdout is just
+/// ordinary process chatter, same status as stderr on the stdio transport
+/// minus the crash-ring bookkeeping: no demux, no `recent_stderr` ring, just
+/// forwarding to tracing. Mirrors `stderr_loop`'s line-reading shape.
+///
+/// Live production since the plan1a.6 Phase-3 flip: its caller `spawn_into_tcp`
+/// is now on the real `ensure_started` path (loopback-TCP transport).
+fn stdout_loop(reader: impl BufRead) {
+    for line_result in reader.lines() {
+        let line = match line_result {
+            Ok(l) => l,
+            Err(_) => break,
+        };
+        info!(target: "engine_host", "{}", line);
     }
 }
 
@@ -2070,108 +2435,25 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Row 10a — Stray lines below the bound: log-and-skip, not fatal
+    // Seam #6b — malformed control-socket frame is fatal (H-MALFORMED)
     // -----------------------------------------------------------------------
     //
-    // Bug C resilience (plan 2026-07-02-preview-capture-delivery.md, seam
-    // PC-C, resilience leg): a stray non-JSON line on the shared engine-host
-    // stdout — e.g. a leaked child banner — must NOT kill the host and must
-    // NOT fail an UNRELATED in-flight request; the real response each request
-    // is waiting on must still be delivered to its own slot afterwards.
+    // Plan 2026-07-08-plan1a6-off-stdout-loopback-tcp.md, Phase 4 (the
+    // cutover). Post-Phase-3 the engine-host protocol rides a private
+    // loopback-TCP control socket; nothing benign can write to it, so a
+    // single malformed (non-JSON) frame is genuine evidence the channel is
+    // compromised. This replaces the Phase 1-3 `MAX_CONSECUTIVE_MALFORMED_LINES`
+    // log-and-skip leniency (a relic of stdout-as-channel, where a stray
+    // `console.log` could leak onto the shared fd): the FIRST malformed
+    // frame must now be fatal, not the sixth.
     //
-    // Named revert hunk: the bounded log-and-skip early-continue in the
-    // `RecvError::Malformed` arm of `reader_loop`. Revert it → the first
-    // stray line broadcasts an error to every pending slot and kills the
-    // channel → both A and B fail immediately with the malformed-channel
-    // error instead of their real responses → RED.
+    // Named revert hunk (H-MALFORMED): re-add the bounded log-and-skip
+    // `continue` for the first malformed line in the `RecvError::Malformed`
+    // arm of `reader_loop` → the single injected line is skipped instead of
+    // escalated → the in-flight request never resolves → the `watchdog`
+    // fires → RED.
     #[test]
-    fn test_stray_lines_below_bound_are_skipped_not_fatal() {
-        watchdog(Duration::from_secs(15), || {
-            let (write, read, mock) = MockTransport::pair_with_handle();
-            let host = Arc::new(TsEngineHost::with_transport(
-                write,
-                read,
-                make_host_global_config(),
-            ));
-
-            // A and B: two unrelated in-flight requests (ids 0 and 1).
-            let host_a = Arc::clone(&host);
-            let a_handle = std::thread::spawn(move || {
-                let cancel = Cancellation::new();
-                host_a.request(
-                    make_load_engine_msg(),
-                    Some(Duration::from_secs(10)),
-                    &cancel,
-                )
-            });
-            std::thread::sleep(Duration::from_millis(30));
-
-            let host_b = Arc::clone(&host);
-            let b_handle = std::thread::spawn(move || {
-                let cancel = Cancellation::new();
-                host_b.request(
-                    ToEngine::LoadEngine {
-                        engine_path: "/engine-b.ts".to_string(),
-                    },
-                    Some(Duration::from_secs(10)),
-                    &cancel,
-                )
-            });
-            std::thread::sleep(Duration::from_millis(30));
-
-            // A couple of stray non-JSON lines (below the bound) — must be
-            // logged and skipped, not escalated.
-            mock.signal_malformed_many(&[
-                "[ Info: Log started at 2026-07-02T13:11:20.379",
-                "console.log('another stray line')",
-            ]);
-
-            // Let the reader drain both stray lines before the real
-            // responses arrive.
-            std::thread::sleep(Duration::from_millis(50));
-
-            // Both A and B's real responses still arrive normally,
-            // out of order, via deliver_late (both requests' `send()`
-            // already happened before we could pre-script by id).
-            mock.deliver_late(1, make_loaded_response("engine-b"));
-            mock.deliver_late(0, make_loaded_response("engine-a"));
-
-            let a_result = a_handle.join().unwrap();
-            let b_result = b_handle.join().unwrap();
-
-            assert!(
-                matches!(a_result, Ok(FromEngine::Loaded { .. })),
-                "A must still receive its own response after unrelated stray lines: {a_result:?}"
-            );
-            assert!(
-                matches!(b_result, Ok(FromEngine::Loaded { .. })),
-                "B (unrelated in-flight request) must not fail because of stray lines \
-                 on the shared channel: {b_result:?}"
-            );
-            assert!(
-                !host.is_shutting_down(),
-                "a below-bound run of stray lines must not tear down the channel"
-            );
-        });
-    }
-
-    // -----------------------------------------------------------------------
-    // Row 10b — Beyond the bound: still escalates, still distinct from crash
-    // -----------------------------------------------------------------------
-    //
-    // The bound is enforced, not decorative: MAX_CONSECUTIVE_MALFORMED_LINES+1
-    // consecutive stray lines (no valid frame in between to reset the
-    // counter) must still fall back to the pre-existing kill-everything
-    // behavior — broadcast an `Other` error (NOT `ProcessCrashed` — this is a
-    // distinct failure mode from a real subprocess crash) and mark
-    // `shutting_down`.
-    //
-    // Named revert hunk: the escalation branch (`consecutive_malformed >
-    // MAX_CONSECUTIVE_MALFORMED_LINES`) in the `RecvError::Malformed` arm.
-    // Revert it to unconditional skip → this request never resolves →
-    // watchdog fires RED (the bound would be decorative).
-    #[test]
-    fn test_malformed_beyond_bound_escalates_distinct_from_crash() {
+    fn test_malformed_frame_is_fatal() {
         watchdog(Duration::from_secs(10), || {
             let (write, read, mock) = MockTransport::pair_with_handle();
             let host = Arc::new(TsEngineHost::with_transport(
@@ -2193,26 +2475,22 @@ mod tests {
             // Let the request register.
             std::thread::sleep(Duration::from_millis(50));
 
-            // One MORE than the bound of consecutive stray lines, with no
-            // valid frame in between to reset the counter.
-            let lines: Vec<String> = (0..=MAX_CONSECUTIVE_MALFORMED_LINES)
-                .map(|i| format!("console.log('stray {i}')"))
-                .collect();
-            let line_refs: Vec<&str> = lines.iter().map(String::as_str).collect();
-            mock.signal_malformed_many(&line_refs);
+            // Exactly ONE malformed line — the strict Phase-4 policy must
+            // treat this as fatal immediately, with no tolerate window.
+            mock.signal_malformed_many(&["console.log('one stray line')"]);
 
             let result = request_handle.join().unwrap();
 
-            // Must be Other(_), NOT ProcessCrashed.
+            // Must be Other(_) (channel-compromised broadcast) — NOT
+            // ProcessCrashed, NOT Ok.
             assert!(
                 matches!(result, Err(ExecutionError::Other(_))),
-                "expected Other, got: {result:?}"
+                "expected Other (channel-compromised broadcast), got: {result:?}"
             );
 
-            // shutting_down must be set once the bound is exceeded.
             assert!(
                 host.is_shutting_down(),
-                "shutting_down should be set once the consecutive-stray-line bound is exceeded"
+                "a single malformed frame on the control socket must mark shutting_down"
             );
         });
     }
@@ -2396,7 +2674,7 @@ mod tests {
                     host.ensure_started_inner(|| {
                         spawn_count.fetch_add(1, Ordering::Relaxed);
                         let (write, read) = MockTransport::pair();
-                        Ok((write, read, None))
+                        Ok((write, read, StartedDrains::None))
                     })
                 }));
             }
@@ -2443,7 +2721,7 @@ mod tests {
 
             // --- Generation 1: publish a mock transport (reader thread runs).
             let (w1, r1, mock1) = MockTransport::pair_with_handle();
-            host.ensure_started_inner(|| Ok((w1, r1, None)))
+            host.ensure_started_inner(|| Ok((w1, r1, StartedDrains::None)))
                 .expect("gen-1 spawn");
             assert_eq!(host.spawn_count(), 1);
             assert!(host.has_transport());
@@ -2464,7 +2742,7 @@ mod tests {
             // --- Generation 2: a sibling respawns a fresh, HEALTHY transport
             // (its reader thread is alive and parked on recv()).
             let (w2, r2, mock2) = MockTransport::pair_with_handle();
-            host.ensure_started_inner(|| Ok((w2, r2, None)))
+            host.ensure_started_inner(|| Ok((w2, r2, StartedDrains::None)))
                 .expect("gen-2 respawn");
             assert_eq!(host.spawn_count(), 2);
             assert!(
@@ -2556,14 +2834,14 @@ mod tests {
             tracing::subscriber::with_default(subscriber, || {
                 host.ensure_started_inner(|| {
                     let (write, read) = MockTransport::pair();
-                    Ok((write, read, None))
+                    Ok((write, read, StartedDrains::None))
                 })
                 .expect("first ensure_started_inner");
                 // Idempotent: write is already committed → init never runs →
                 // no second spawn event.
                 host.ensure_started_inner(|| {
                     let (write, read) = MockTransport::pair();
-                    Ok((write, read, None))
+                    Ok((write, read, StartedDrains::None))
                 })
                 .expect("second ensure_started_inner (idempotent)");
             });
@@ -2600,7 +2878,7 @@ mod tests {
                         barrier.wait();
                         host.ensure_started_inner(|| {
                             let (write, read) = MockTransport::pair();
-                            Ok((write, read, None))
+                            Ok((write, read, StartedDrains::None))
                         })
                     })
                 }));
@@ -2699,6 +2977,875 @@ mod tests {
             );
         });
     }
+
+    // -----------------------------------------------------------------------
+    // TcpTransport / TcpReadHalf — H-FRAME round trip (Phase 1a.6 seam #1)
+    // -----------------------------------------------------------------------
+    //
+    // The peer (a plain `TcpListener`/`TcpStream` pair, NOT the unit under
+    // test) is the mock boundary: it accepts the connection, reads one
+    // framed request line, and echoes back one framed response line under
+    // the same `id`. `TcpTransport`/`TcpReadHalf` are constructed directly
+    // over a `try_clone()`'d connected socket, exactly as `spawn_into_tcp`
+    // will do in a later task.
+    //
+    // Named revert hunk: the trailing-newline write in `TcpTransport::send`.
+    // Reverting it collapses the request line into the peer's next
+    // `read_line` call indefinitely (no frame terminator ever arrives), so
+    // the peer thread hangs in `accept`/`read_line` and `recv()` never sees
+    // a reply — caught here as a `watchdog` timeout, not a silent hang.
+    #[test]
+    fn test_tcp_transport_round_trip() {
+        watchdog(Duration::from_secs(15), || {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+            let addr = listener.local_addr().expect("local_addr");
+
+            let peer = std::thread::spawn(move || {
+                let (stream, _) = listener.accept().expect("peer accept");
+                let mut reader = BufReader::new(stream.try_clone().expect("peer try_clone"));
+                let mut writer = stream;
+
+                let mut line = String::new();
+                reader.read_line(&mut line).expect("peer read_line");
+                let request: Request =
+                    serde_json::from_str(line.trim_end_matches('\n').trim_end_matches('\r'))
+                        .expect("peer parse request");
+
+                let response = Response {
+                    id: request.id,
+                    msg: make_loaded_response("engine-tcp"),
+                };
+                let out = serde_json::to_string(&response).expect("peer serialize response");
+                writer
+                    .write_all(out.as_bytes())
+                    .expect("peer write response");
+                writer.write_all(b"\n").expect("peer write newline");
+                writer.flush().expect("peer flush");
+            });
+
+            let stream = TcpStream::connect(addr).expect("connect to peer");
+            let write_half = TcpTransport {
+                stream: Mutex::new(stream.try_clone().expect("try_clone write half")),
+            };
+            let mut read_half = TcpReadHalf {
+                read: BufReader::new(stream.try_clone().expect("try_clone read half")),
+            };
+
+            let request = Request {
+                id: 42,
+                msg: make_load_engine_msg(),
+            };
+            write_half.send(&request).expect("TcpTransport::send");
+
+            let response = read_half.recv().expect("TcpReadHalf::recv");
+            assert_eq!(
+                response,
+                Response {
+                    id: 42,
+                    msg: make_loaded_response("engine-tcp"),
+                },
+                "round-tripped response must match the peer's echoed frame exactly"
+            );
+
+            peer.join().expect("peer thread panicked");
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // accept_and_handshake — H-ACCEPT / H-TOKEN / H-READER / H-COMMIT
+    // (Phase 1a.6 seams #2(a,b,d,e), #2c, #3)
+    // -----------------------------------------------------------------------
+    //
+    // These tests call `accept_and_handshake` directly against a real
+    // listener + a real (short-lived, non-bundle) child process — the child
+    // only needs to exist/stay alive, never the real deno engine-host.
+
+    /// Spawn a child that stays alive for roughly `secs` seconds and does
+    /// nothing else — a stand-in for the real deno child in these
+    /// handshake-only tests (portable per the cross-platform rule; unix uses
+    /// `sleep`, everything else falls back to `powershell Start-Sleep`).
+    #[cfg(unix)]
+    fn spawn_long_lived_child(secs: u64) -> Child {
+        Command::new("sleep")
+            .arg(secs.to_string())
+            .spawn()
+            .expect("spawn sleep child")
+    }
+
+    #[cfg(not(unix))]
+    fn spawn_long_lived_child(secs: u64) -> Child {
+        Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!("Start-Sleep -Seconds {secs}"),
+            ])
+            .spawn()
+            .expect("spawn Start-Sleep child")
+    }
+
+    // #2a (POSITIVE CONTROL — no revert hunk; #2b/#2d/#2e are the reverts
+    // that redden relative to this green).
+    #[test]
+    fn test_handshake_accepts_correct_token() {
+        watchdog(Duration::from_secs(2), || {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+            let addr = listener.local_addr().expect("local_addr");
+            let token = "correct-token".to_string();
+            let child = Arc::new(Mutex::new(Some(spawn_long_lived_child(5))));
+
+            let dial_token = token.clone();
+            let dialer = std::thread::spawn(move || {
+                let mut stream = TcpStream::connect(addr).expect("dial listener");
+                stream
+                    .write_all(format!("{dial_token}\n").as_bytes())
+                    .expect("write token");
+            });
+
+            let result = accept_and_handshake(listener, &child, &token, Duration::from_secs(1));
+            dialer.join().expect("dialer thread panicked");
+
+            assert!(
+                result.is_ok(),
+                "correct token must be accepted: {:?}",
+                result.err()
+            );
+
+            if let Some(mut c) = child.lock().unwrap().take() {
+                let _ = c.kill();
+            }
+        });
+    }
+
+    // Named revert hunk: the `ct_eq` compare in `accept_and_handshake`'s
+    // H-TOKEN step. Neutralizing it to "always equal" makes a wrong token
+    // get accepted (Ok) instead of rejected → assertion fails RED.
+    #[test]
+    fn test_handshake_rejects_wrong_token() {
+        watchdog(Duration::from_secs(2), || {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+            let addr = listener.local_addr().expect("local_addr");
+            let token = "correct-token".to_string();
+            let child = Arc::new(Mutex::new(Some(spawn_long_lived_child(5))));
+
+            let dialer = std::thread::spawn(move || {
+                let mut stream = TcpStream::connect(addr).expect("dial listener");
+                stream
+                    .write_all(b"wrong-token\n")
+                    .expect("write wrong token");
+            });
+
+            let result = accept_and_handshake(listener, &child, &token, Duration::from_secs(1));
+            dialer.join().expect("dialer thread panicked");
+
+            assert!(result.is_err(), "a wrong token must be rejected");
+
+            if let Some(mut c) = child.lock().unwrap().take() {
+                let _ = c.kill();
+            }
+        });
+    }
+
+    // Named revert hunk: the deadline-expiry branch (`start.elapsed() >
+    // deadline`) in the H-ACCEPT poll loop. Removing it leaves only the
+    // `try_wait`-exited check, so a live child that never dials loops
+    // forever on `WouldBlock` → watchdog RED (not a normal test failure).
+    #[test]
+    fn test_handshake_deadline_with_live_child() {
+        watchdog(Duration::from_secs(2), || {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+            // Child stays alive well past the injected deadline — no dialer
+            // ever connects, so only the deadline path (not the try_wait
+            // fast-exit path) can end this.
+            let child = Arc::new(Mutex::new(Some(spawn_long_lived_child(30))));
+            let token = "deadline-token".to_string();
+
+            let start = Instant::now();
+            let result = accept_and_handshake(listener, &child, &token, Duration::from_millis(400));
+            let elapsed = start.elapsed();
+
+            assert!(
+                result.is_err(),
+                "no dialer + a live child must time out via the deadline path"
+            );
+            assert!(
+                elapsed < Duration::from_secs(2),
+                "deadline path must return well under the watchdog bound, took {elapsed:?}"
+            );
+
+            if let Some(mut c) = child.lock().unwrap().take() {
+                let _ = c.kill();
+            }
+        });
+    }
+
+    // Named revert hunk: the `MAX_TOKEN_LINE` bound on the handshake read
+    // (the `.take(MAX_TOKEN_LINE as u64)` wrapper). Removing it makes the
+    // token read a plain unbounded `read_line`, which blocks forever waiting
+    // for a newline that never comes → watchdog RED.
+    #[test]
+    fn test_handshake_rejects_overlong_token() {
+        watchdog(Duration::from_secs(2), || {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+            let addr = listener.local_addr().expect("local_addr");
+            let token = "overlong-token".to_string();
+            let child = Arc::new(Mutex::new(Some(spawn_long_lived_child(5))));
+
+            let mut dialer_stream = TcpStream::connect(addr).expect("dial listener");
+            // More than MAX_TOKEN_LINE bytes, deliberately no `\n`.
+            let payload = vec![b'x'; MAX_TOKEN_LINE + 64];
+            dialer_stream
+                .write_all(&payload)
+                .expect("write overlong no-newline payload");
+            // Hold the connection open (do NOT close it) rather than
+            // spawning a thread to sleep on it: in the reverted
+            // (unbounded-read) state, a closed connection would make
+            // `read_line` see EOF and return promptly, hiding the very hang
+            // this test exists to catch. Leaking the `TcpStream` keeps the
+            // socket open without a lingering background thread (which would
+            // otherwise trip nextest's leak detector even on the passing,
+            // non-reverted run).
+            std::mem::forget(dialer_stream);
+
+            let result = accept_and_handshake(listener, &child, &token, Duration::from_secs(1));
+
+            assert!(
+                result.is_err(),
+                "an overlong token line with no newline within the cap must be rejected"
+            );
+
+            if let Some(mut c) = child.lock().unwrap().take() {
+                let _ = c.kill();
+            }
+        });
+    }
+
+    // #2c — INVARIANT, no paired revert hunk (the listener-close is
+    // structural: moved into `accept_and_handshake` by value, dropped on
+    // return). Reddens only if a future refactor lets the listener outlive
+    // the handshake.
+    #[test]
+    fn test_single_dial_invariant() {
+        watchdog(Duration::from_secs(2), || {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+            let addr = listener.local_addr().expect("local_addr");
+            let token = "single-dial-token".to_string();
+            let child = Arc::new(Mutex::new(Some(spawn_long_lived_child(5))));
+
+            let dial_token = token.clone();
+            let dialer = std::thread::spawn(move || {
+                let mut stream = TcpStream::connect(addr).expect("dial listener");
+                stream
+                    .write_all(format!("{dial_token}\n").as_bytes())
+                    .expect("write token");
+            });
+
+            let result = accept_and_handshake(listener, &child, &token, Duration::from_secs(1));
+            dialer.join().expect("dialer thread panicked");
+            assert!(
+                result.is_ok(),
+                "setup handshake must succeed: {:?}",
+                result.err()
+            );
+
+            // The listener was moved into accept_and_handshake by value and
+            // dropped (fd closed) before it returned — so a second dial to the
+            // same address must be *refused at connect()* (ECONNREFUSED): with
+            // no LISTEN socket on the port, the SYN gets an RST. This is the
+            // plan's explicit assertion ("must fail — not merely 'not be
+            // accepted'"): asserting only that a read/write later fails would
+            // be VACUOUS, because an open-but-unaccepted listener also lets
+            // connect() succeed while a probe read merely times out. Verified
+            // by leaking the listener past the return — that reddens this test
+            // only with the strict `is_err()` check, not the round-trip check.
+            let second = TcpStream::connect(addr);
+            assert!(
+                second.is_err(),
+                "a second dial after a successful handshake must be REFUSED at connect() \
+                 (the listener must be closed structurally); got Ok, so the listener outlived \
+                 the handshake"
+            );
+
+            if let Some(mut c) = child.lock().unwrap().take() {
+                let _ = c.kill();
+            }
+        });
+    }
+
+    // #3 — Named revert hunk: building `TcpReadHalf` from a FRESH
+    // `BufReader::new(stream.try_clone()?)` instead of the handshake reader.
+    // The coalesced frame bytes were already pulled into the handshake
+    // reader's buffer, so a fresh reader loses them → `recv()` blocks
+    // (watchdog RED) or errors.
+    #[test]
+    fn test_reader_handoff_coalesced_frame() {
+        watchdog(Duration::from_secs(2), || {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+            let addr = listener.local_addr().expect("local_addr");
+            let token = "coalesced-token".to_string();
+            let child = Arc::new(Mutex::new(Some(spawn_long_lived_child(5))));
+
+            let response = Response {
+                id: 7,
+                msg: make_loaded_response("engine-coalesced"),
+            };
+            let frame_line = serde_json::to_string(&response).expect("serialize response");
+
+            let dial_token = token.clone();
+            let dialer = std::thread::spawn(move || {
+                let mut stream = TcpStream::connect(addr).expect("dial listener");
+                // Coalesce token + frame into ONE write_all so both are very
+                // likely to land in the same TCP segment — the hazard
+                // H-READER exists to survive.
+                let payload = format!("{dial_token}\n{frame_line}\n");
+                stream
+                    .write_all(payload.as_bytes())
+                    .expect("write coalesced token+frame payload");
+            });
+
+            let (_write_half, mut read_half) =
+                accept_and_handshake(listener, &child, &token, Duration::from_secs(1))
+                    .expect("handshake must succeed");
+            dialer.join().expect("dialer thread panicked");
+
+            let received = read_half.recv().expect("recv coalesced frame");
+            assert_eq!(
+                received, response,
+                "the frame coalesced with the token in one segment must not be dropped"
+            );
+
+            if let Some(mut c) = child.lock().unwrap().take() {
+                let _ = c.kill();
+            }
+        });
+    }
+
+    // Standing property test — like seam #10, no named revert hunk. Migrated
+    // from the deleted `ts_process_framing_probe.rs` (`pc_c_a`) at the plan1a.6
+    // Phase-4 cutover: the old stdout-reader path (`StdioReadHalf` over a deno
+    // child) is gone, so the property is now pinned over the live TCP transport.
+    //
+    // Property: a >1 MB single-line frame round-trips through `TcpReadHalf::recv`
+    // intact. `read_line` has no size cap — it grows the `String` over the
+    // BufReader's (8 KB) internal buffer until `\n`/EOF — so a multi-MB frame
+    // terminated by a single `\n` must survive without truncation or mis-split.
+    // Distinct from seam #10 (deadlock-freedom under a *small* payload against
+    // shrunk socket buffers); different size, different assertion.
+    #[test]
+    fn test_large_single_line_frame_parses_over_tcp() {
+        watchdog(Duration::from_secs(10), || {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+            let addr = listener.local_addr().expect("local_addr");
+            let token = "large-frame-token".to_string();
+            let child = Arc::new(Mutex::new(Some(spawn_long_lived_child(5))));
+
+            // ~2 MB payload inside a valid FromEngine::Error frame, one newline.
+            let big = "x".repeat(2_000_000);
+            let response = Response {
+                id: 7,
+                msg: FromEngine::Error {
+                    message: big,
+                    stack: None,
+                },
+            };
+            let frame_line = serde_json::to_string(&response).expect("serialize large frame");
+
+            let dial_token = token.clone();
+            let dialer = std::thread::spawn(move || {
+                let mut stream = TcpStream::connect(addr).expect("dial listener");
+                stream
+                    .write_all(format!("{dial_token}\n").as_bytes())
+                    .expect("write token");
+                stream
+                    .write_all(frame_line.as_bytes())
+                    .expect("write frame");
+                stream.write_all(b"\n").expect("write frame newline");
+            });
+
+            let (_write_half, mut read_half) =
+                accept_and_handshake(listener, &child, &token, Duration::from_secs(1))
+                    .expect("handshake must succeed");
+
+            // recv() BEFORE join(): a >1 MB write may block the dialer until the
+            // reader drains the socket, so joining first could deadlock.
+            let received = read_half.recv();
+            dialer.join().expect("dialer thread panicked");
+
+            match received {
+                Ok(resp) => {
+                    assert_eq!(resp.id, 7, "id must round-trip on a large frame");
+                    match resp.msg {
+                        FromEngine::Error { message, .. } => assert_eq!(
+                            message.len(),
+                            2_000_000,
+                            "the full >1MB single-line frame must survive read_line intact \
+                             (no truncation / mis-split); got {} bytes",
+                            message.len()
+                        ),
+                        other => panic!("expected FromEngine::Error, got {other:?}"),
+                    }
+                }
+                Err(e) => panic!(
+                    "a legitimate >1MB single-line frame must parse to Ok(Response); got {e:?}"
+                ),
+            }
+
+            if let Some(mut c) = child.lock().unwrap().take() {
+                let _ = c.kill();
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // spawn_into_tcp — H-DRAIN + H-SPAWN(a) + H-ACCEPT try_wait branch
+    // (Phase 1a.6 seam #4)
+    // -----------------------------------------------------------------------
+
+    /// A child that reads exactly one line from stdin and echoes it to
+    /// stderr, then exits WITHOUT ever dialing back. Portable per the
+    /// cross-platform rule: unix uses `sh -c 'head -n1 >&2'`, everything
+    /// else falls back to a one-line PowerShell script.
+    #[cfg(unix)]
+    fn echo_stdin_to_stderr_cmd() -> Command {
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg("head -n1 >&2");
+        cmd
+    }
+
+    #[cfg(not(unix))]
+    fn echo_stdin_to_stderr_cmd() -> Command {
+        let mut cmd = Command::new("powershell");
+        cmd.args([
+            "-NoProfile",
+            "-Command",
+            "$l=[Console]::In.ReadLine(); [Console]::Error.WriteLine($l)",
+        ]);
+        cmd
+    }
+
+    // Drives the REAL production gate (`ensure_started_inner`) with an
+    // injected `init` that calls the REAL `spawn_into_tcp`. The child echoes
+    // the handshake token to stderr and exits without dialing — this fires
+    // THREE hunks in one assertion:
+    //   - H-SPAWN(a): the token must actually be written to the child's
+    //     stdin for it to have anything to echo.
+    //   - H-DRAIN: the drain threads must be running *during* the handshake
+    //     so the echoed token reaches `recent_stderr` before the accept
+    //     fails — not started only on the (never-taken) success path.
+    //   - H-ACCEPT try_wait branch: `accept_and_handshake` must notice the
+    //     dead child on `WouldBlock` and fail fast, rather than waiting out
+    //     the (long) deadline.
+    // A bare "stderr is non-empty" check would be vacuous against H-SPAWN(a)
+    // and H-DRAIN; asserting the *exact generated token* appears in the
+    // error message binds all three.
+    #[test]
+    fn test_spawn_into_tcp_child_dies_after_echoing_token() {
+        use std::sync::atomic::AtomicUsize;
+
+        watchdog(Duration::from_secs(2), || {
+            let host = TsEngineHost::new(make_host_global_config());
+            let token = uuid::Uuid::new_v4().to_string();
+            let child_slot = Arc::clone(&host.child);
+            let recent_stderr = Arc::clone(&host.recent_stderr);
+            let call_count = Arc::new(AtomicUsize::new(0));
+
+            let start = Instant::now();
+            let result = {
+                let call_count = Arc::clone(&call_count);
+                let token = token.clone();
+                host.ensure_started_inner(move || {
+                    call_count.fetch_add(1, Ordering::Relaxed);
+                    let listener =
+                        TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+                    let cmd = echo_stdin_to_stderr_cmd();
+                    let (transport, read_half, stderr, stdout) = spawn_into_tcp(
+                        cmd,
+                        child_slot,
+                        listener,
+                        &token,
+                        Duration::from_secs(10),
+                        recent_stderr,
+                    )?;
+                    Ok((
+                        transport as Arc<dyn EngineTransport>,
+                        Box::new(read_half) as Box<dyn EngineReadHalf>,
+                        StartedDrains::Tcp { stderr, stdout },
+                    ))
+                })
+            };
+            let elapsed = start.elapsed();
+
+            let err = result.expect_err("a child dying before dialing back must return Err");
+            let message = err.to_string();
+            assert!(
+                message.contains(&token),
+                "error must carry the echoed token via the drained stderr ring: {message:?}"
+            );
+            assert!(
+                elapsed < Duration::from_secs(2),
+                "the try_wait fast-path must fire well before the 10s deadline, took {elapsed:?}"
+            );
+            assert_eq!(
+                host.spawn_count(),
+                0,
+                "a failed init must not advance spawn_count"
+            );
+
+            // Second call, trivially-failing init: no fast-path short-circuit
+            // survives a failed spawn — init must re-enter.
+            let call_count2 = Arc::clone(&call_count);
+            let _ = host.ensure_started_inner(move || {
+                call_count2.fetch_add(1, Ordering::Relaxed);
+                Err(ExecutionError::other("trivially-failing init"))
+            });
+
+            assert_eq!(
+                call_count.load(Ordering::Relaxed),
+                2,
+                "both ensure_started_inner calls must re-enter init (no post-failure short-circuit)"
+            );
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // TcpTransport::shutdown — H-SHUTDOWN (Phase 1a.6 seam #5)
+    // -----------------------------------------------------------------------
+    //
+    // Named revert hunk: the `guard.shutdown(Shutdown::Write)` half-close in
+    // `TcpTransport::shutdown`. Reverting it (keep only the best-effort
+    // Shutdown-frame send) means our write side never closes, so the peer's
+    // drain loop below never observes EOF, never returns, never drops its
+    // stream — so OUR OWN reader thread never observes EOF either. Both
+    // sides then block on `read_line` forever: `host.shutdown()`'s
+    // `reader.join()` hangs → watchdog RED (not a normal assertion failure).
+    #[test]
+    fn test_tcp_shutdown_graceful() {
+        watchdog(Duration::from_secs(10), || {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+            let addr = listener.local_addr().expect("local_addr");
+
+            // Peer: stand-in for the engine-host child. Accepts, echoes
+            // exactly one response, then keeps its read side open — the
+            // ONLY thing that unblocks its next read is OUR half-close
+            // (H-SHUTDOWN). Once it observes clean EOF, it returns, which
+            // drops its own stream handles — closing the connection fully,
+            // so OUR reader (below) then observes EOF too.
+            let peer = std::thread::spawn(move || {
+                let (stream, _) = listener.accept().expect("peer accept");
+                let mut reader = BufReader::new(stream.try_clone().expect("peer try_clone"));
+                let mut writer = stream;
+
+                let mut line = String::new();
+                reader
+                    .read_line(&mut line)
+                    .expect("peer read_line (request)");
+                let request: Request =
+                    serde_json::from_str(line.trim_end_matches('\n').trim_end_matches('\r'))
+                        .expect("peer parse request");
+                let response = Response {
+                    id: request.id,
+                    msg: make_loaded_response("engine-shutdown"),
+                };
+                let out = serde_json::to_string(&response).expect("peer serialize response");
+                writer
+                    .write_all(out.as_bytes())
+                    .expect("peer write response");
+                writer.write_all(b"\n").expect("peer write newline");
+                writer.flush().expect("peer flush");
+
+                // Drain everything else (including the Shutdown frame) until
+                // clean EOF — which can ONLY come from our half-close.
+                loop {
+                    let mut drain = String::new();
+                    match reader.read_line(&mut drain) {
+                        Ok(0) => break,
+                        Ok(_) => continue,
+                        Err(_) => break,
+                    }
+                }
+                // Dropping `reader`/`writer` here closes the peer's last
+                // handles to the socket, so our reader (below) sees EOF too.
+            });
+
+            let stream = TcpStream::connect(addr).expect("connect to peer");
+            let write: Arc<dyn EngineTransport> = Arc::new(TcpTransport {
+                stream: Mutex::new(stream.try_clone().expect("try_clone write half")),
+            });
+            let read: Box<dyn EngineReadHalf> = Box::new(TcpReadHalf {
+                read: BufReader::new(stream.try_clone().expect("try_clone read half")),
+            });
+
+            let host = TsEngineHost::with_transport(write, read, make_host_global_config());
+
+            // Real round trip first — proves the transport is genuinely
+            // wired end-to-end, not a trivial no-op.
+            let cancel = Cancellation::new();
+            let result = host.request(
+                make_load_engine_msg(),
+                Some(Duration::from_secs(5)),
+                &cancel,
+            );
+            assert!(
+                matches!(result, Ok(FromEngine::Loaded { .. })),
+                "setup round trip must succeed before testing shutdown: {result:?}"
+            );
+
+            let start = Instant::now();
+            let shutdown_result = host.shutdown();
+            let elapsed = start.elapsed();
+
+            assert!(
+                shutdown_result.is_ok(),
+                "host.shutdown() must return Ok, got: {shutdown_result:?}"
+            );
+            assert!(
+                elapsed < Duration::from_secs(1),
+                "graceful TCP shutdown must complete promptly (the half-close must reach \
+                 the peer and round-trip back to EOF), took {elapsed:?}"
+            );
+
+            peer.join().expect("peer thread panicked");
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // TCP large-payload deadlock-freedom (Phase 1a.6 seam #10)
+    // -----------------------------------------------------------------------
+    //
+    // Invariant, not a revert hunk: `TcpTransport` (write half) and
+    // `TcpReadHalf` (read half) are independent clones of the accepted
+    // stream, and `reader_loop` runs on its own thread — so a large
+    // outbound `send()` that blocks on a full send buffer must never
+    // prevent the reader thread from draining incoming bytes. A future
+    // refactor that serialized send/recv onto one shared path (e.g. one
+    // mutex guarding both directions) would deadlock the moment a
+    // request's wire size exceeds the socket buffers. The watchdog IS the
+    // assertion here: there is no revert hunk to point at, because the
+    // failure mode is a hang, not a wrong value.
+    //
+    // Anti-vacuity guard #1: Linux loopback autotunes send/recv buffers
+    // into the megabytes, so a naively fixed payload would sail through
+    // even a broken implementation. We shrink both sides via `socket2`
+    // and read the EFFECTIVE size back (the kernel doubles/clamps
+    // whatever we request), then size the payload comfortably above the
+    // observed combined buffer.
+    //
+    // Anti-vacuity guard #2: the peer withholds reads for ~300ms after
+    // accept — long enough for the sender's `write_all` to fill the
+    // shrunk send buffer and block — before it starts draining. A peer
+    // that reads immediately would let even a buggy whole-message-
+    // buffered `send()` complete before backpressure ever mattered.
+    #[test]
+    fn test_tcp_large_payload_no_deadlock() {
+        use socket2::{Domain, SockRef, Socket, Type};
+
+        const SHRUNK_BUF: usize = 4096;
+
+        watchdog(Duration::from_secs(15), || {
+            // The recv buffer MUST be shrunk BEFORE the connection is
+            // established: SO_RCVBUF governs the TCP receive window advertised
+            // during the handshake, so setting it post-accept (as an earlier
+            // draft did) reports a small value back but does NOT shrink the
+            // effective window — on macOS a 256 KB write then completes without
+            // ever blocking, making the whole back-pressure test vacuous.
+            // Build the listener via socket2 with SO_RCVBUF set before
+            // bind+listen; the accepted socket inherits it.
+            let listener: TcpListener = {
+                let sock =
+                    Socket::new(Domain::IPV4, Type::STREAM, None).expect("socket2 listener socket");
+                sock.set_recv_buffer_size(SHRUNK_BUF)
+                    .expect("listener set_recv_buffer_size (pre-bind)");
+                let bind_addr: std::net::SocketAddr =
+                    "127.0.0.1:0".parse().expect("parse bind addr");
+                sock.bind(&bind_addr.into()).expect("socket2 bind");
+                sock.listen(16).expect("socket2 listen");
+                sock.into()
+            };
+            let addr = listener.local_addr().expect("local_addr");
+
+            // Peer reports its effective (inherited) recv-buffer size back to
+            // the main thread before withholding reads.
+            let (recv_size_tx, recv_size_rx) = mpsc::sync_channel::<usize>(1);
+
+            let peer = std::thread::spawn(move || {
+                let (stream, _) = listener.accept().expect("peer accept");
+                let effective_recv = SockRef::from(&stream)
+                    .recv_buffer_size()
+                    .expect("peer recv_buffer_size");
+                recv_size_tx
+                    .send(effective_recv)
+                    .expect("report effective recv buffer size");
+
+                // Guard #2: withhold reads long enough for the sender's
+                // write_all to fill the shrunk send buffer and block.
+                std::thread::sleep(Duration::from_millis(300));
+
+                let mut reader = BufReader::new(stream.try_clone().expect("peer try_clone"));
+                let mut writer = stream;
+
+                let mut line = String::new();
+                reader
+                    .read_line(&mut line)
+                    .expect("peer read_line (large request)");
+                let request: Request =
+                    serde_json::from_str(line.trim_end_matches('\n').trim_end_matches('\r'))
+                        .expect("peer parse large request");
+
+                let response = Response {
+                    id: request.id,
+                    msg: make_loaded_response("engine-large-payload"),
+                };
+                let out = serde_json::to_string(&response).expect("peer serialize response");
+                writer
+                    .write_all(out.as_bytes())
+                    .expect("peer write response");
+                writer.write_all(b"\n").expect("peer write newline");
+                writer.flush().expect("peer flush");
+            });
+
+            // Likewise set SO_SNDBUF before connect so the sender's local
+            // buffering is small too.
+            let stream: TcpStream = {
+                let sock =
+                    Socket::new(Domain::IPV4, Type::STREAM, None).expect("socket2 client socket");
+                sock.set_send_buffer_size(SHRUNK_BUF)
+                    .expect("client set_send_buffer_size (pre-connect)");
+                sock.connect(&addr.into()).expect("socket2 connect");
+                sock.into()
+            };
+            let effective_send = SockRef::from(&stream)
+                .send_buffer_size()
+                .expect("sender send_buffer_size");
+
+            let effective_recv = recv_size_rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("peer never reported its effective recv buffer size");
+
+            let effective_combined = effective_send + effective_recv;
+            let payload_size = (256 * 1024).max(8 * effective_combined);
+
+            eprintln!(
+                "test_tcp_large_payload_no_deadlock: effective_send={effective_send} \
+                 effective_recv={effective_recv} effective_combined={effective_combined} \
+                 payload_size={payload_size}"
+            );
+            // Non-vacuity guard #1: the payload must comfortably exceed the
+            // *measured* effective combined buffer so write_all provably blocks
+            // mid-write (the peer withholds reads, so the window cannot grow).
+            // Setting SO_*BUF before connect/listen is what makes this read-back
+            // truthful: an earlier draft set them post-connect, read back a
+            // misleading 4096, and sized the payload too small to exceed the
+            // real (unshrunk) window — so the write completed and the test was
+            // vacuous. macOS clamps the buffers up (won't honor a few KB), but
+            // the 8x-over-measured payload still forces a block. The margin is
+            // generous (8x) because with the peer not draining the window
+            // cannot autotune upward.
+            assert!(
+                payload_size >= 8 * effective_combined,
+                "payload ({payload_size} bytes) must be >= 8x the effective combined \
+                 socket buffer ({effective_combined} bytes) to force a blocking write, \
+                 or this test is vacuous"
+            );
+
+            let write: Arc<dyn EngineTransport> = Arc::new(TcpTransport {
+                stream: Mutex::new(stream.try_clone().expect("try_clone write half")),
+            });
+            let read: Box<dyn EngineReadHalf> = Box::new(TcpReadHalf {
+                read: BufReader::new(stream.try_clone().expect("try_clone read half")),
+            });
+
+            let host = TsEngineHost::with_transport(write, read, make_host_global_config());
+
+            // A large `engine_path` string is enough to blow the wire size
+            // past the shrunk buffers — `LoadEngine`'s single `String`
+            // field is the simplest carrier available for this purpose.
+            let large_payload = "A".repeat(payload_size);
+            let cancel = Cancellation::new();
+            let result = host.request(
+                ToEngine::LoadEngine {
+                    engine_path: large_payload,
+                },
+                Some(Duration::from_secs(10)),
+                &cancel,
+            );
+
+            assert!(
+                matches!(result, Ok(FromEngine::Loaded { .. })),
+                "large-payload round trip must complete despite the send blocking \
+                 mid-write — a refactor that serialized send/recv onto one path would \
+                 deadlock here instead: {result:?}"
+            );
+
+            peer.join().expect("peer thread panicked");
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // handle_crash — H-CRASH-REAP (Phase 1a.6 seam #5r, GLOBAL fix)
+    // -----------------------------------------------------------------------
+    //
+    // Named revert hunk: the `c.kill()` call added ahead of `c.wait()` in
+    // `handle_crash`. Reverting to a bare `wait()` (no prior `kill()`) means
+    // `handle_crash` blocks on the LIVE child until it exits on its own — 30
+    // real seconds for `spawn_long_lived_child(30)` — well past this test's
+    // watchdog bound → watchdog RED.
+    //
+    // Vacuity guard: the child MUST stay alive while only the socket closes
+    // (a `sleep 30`/`Start-Sleep`, never touched by the socket close below)
+    // — otherwise a no-kill `wait()` would return anyway (child already
+    // exited) and this test would pass regardless of the fix.
+    #[test]
+    fn test_tcp_crash_reap_kills_live_child() {
+        watchdog(Duration::from_secs(2), || {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+            let addr = listener.local_addr().expect("local_addr");
+
+            // Peer: connects, then closes ONLY the socket — no child process
+            // involvement on the peer side at all. This is what drives our
+            // reader to observe EOF (a "crash", since `shutting_down` stays
+            // false below).
+            let peer = std::thread::spawn(move || {
+                let (stream, _) = listener.accept().expect("peer accept");
+                let _ = stream.shutdown(Shutdown::Both);
+            });
+
+            let stream = TcpStream::connect(addr).expect("connect to peer");
+            let read_half = TcpReadHalf {
+                read: BufReader::new(stream.try_clone().expect("try_clone read half")),
+            };
+            peer.join().expect("peer thread panicked");
+
+            // The discriminator: a REAL, still-alive child in the shared
+            // slot — NOT one that has already exited. It never touches the
+            // socket above, so it stays alive independent of the peer's
+            // close.
+            let child_slot: Arc<Mutex<Option<Child>>> =
+                Arc::new(Mutex::new(Some(spawn_long_lived_child(30))));
+            let pending: Arc<Mutex<HashMap<u64, PendingSlot>>> =
+                Arc::new(Mutex::new(HashMap::new()));
+            let recent_stderr: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
+            let shutting_down = Arc::new(AtomicBool::new(false));
+
+            let start = Instant::now();
+            reader_loop(
+                Box::new(read_half),
+                pending,
+                Arc::clone(&child_slot),
+                recent_stderr,
+                shutting_down,
+            );
+            let elapsed = start.elapsed();
+
+            assert!(
+                elapsed < Duration::from_secs(2),
+                "handle_crash must kill the live child before waiting on it, took {elapsed:?}"
+            );
+            assert!(
+                child_slot.lock().unwrap().is_none(),
+                "handle_crash must reap (take) the child"
+            );
+        });
+    }
 }
 
 // ============================================================================
@@ -2746,13 +3893,24 @@ mod proc_tests {
     // Named revert hunk: field-clones capture in reader thread (vs Arc<Self>).
     // Revert Arc<Self> → Drop never runs → child PID survives → assertion fails.
     //
-    // Child: `sleep 60` — ignores stdin, never exits on its own.
+    // Child: a deno dial-back child that hangs forever after completing the
+    // handshake (never replies), so it only dies when `Drop` kills it.
+    // Deno-gated (the dial-back is a deno child); CI always has deno.
     // Assert: (a) drop returned within bound and (b) PID is gone (kill -0 fails).
     #[test]
     fn test_drop_reaps_no_hang() {
-        watchdog(Duration::from_secs(10), || {
-            let mut cmd = Command::new("sleep");
-            cmd.arg("60");
+        if !is_available() {
+            return;
+        }
+        watchdog(Duration::from_secs(30), || {
+            // Hang forever via an idle-timer loop — NOT `new Promise(() => {})`,
+            // which deno's deadlock detector aborts with "Top-level await promise
+            // never resolved" (no pending op keeps the loop alive), making the
+            // child exit and get crash-reaped before we capture its PID. A pending
+            // timer is a real op, so the child stays alive until Drop kills it.
+            let (cmd, _script) = deno_dialback_child(
+                "while (true) { await new Promise((r) => setTimeout(r, 3600000)); }",
+            );
             let host = TsEngineHost::start_with_command(cmd, make_host_global_config())
                 .expect("start_with_command failed");
 
@@ -2787,21 +3945,19 @@ mod proc_tests {
     // -----------------------------------------------------------------------
     //
     // Named revert hunk: `reader.lock().take().join()` / `write.take()` close
-    // in `shutdown`.  Revert → threads not joined / stdin not closed → hang.
+    // in `shutdown`.  Revert → threads not joined / socket not closed → hang.
     //
-    // Child: `sh -c 'cat >/dev/null'` — reads+discards stdin, exits 0 on EOF.
+    // Child: a deno dial-back child that discards frames and exits 0 when the
+    // socket read side closes (shutdown's half-close). Deno-gated.
     #[test]
     fn test_graceful_shutdown_joins() {
-        watchdog(Duration::from_secs(10), || {
-            let host = TsEngineHost::start_with_command(
-                {
-                    let mut cmd = Command::new("sh");
-                    cmd.arg("-c").arg("cat >/dev/null");
-                    cmd
-                },
-                make_host_global_config(),
-            )
-            .expect("start_with_command failed");
+        if !is_available() {
+            return;
+        }
+        watchdog(Duration::from_secs(30), || {
+            let (cmd, _script) = deno_dialback_child(DIALBACK_READ_UNTIL_EOF);
+            let host = TsEngineHost::start_with_command(cmd, make_host_global_config())
+                .expect("start_with_command failed");
 
             let result = host.shutdown();
             assert!(
@@ -2819,19 +3975,16 @@ mod proc_tests {
     // Named revert hunk: `Option::take()` single-shot guards on child/handles.
     // Revert plain value → shutdown then drop double-wait/join → panic or UB.
     //
-    // Child: same `sh -c 'cat >/dev/null'`.
+    // Child: same deno dial-back read-until-EOF child. Deno-gated.
     #[test]
     fn test_double_teardown_idempotent() {
-        watchdog(Duration::from_secs(10), || {
-            let host = TsEngineHost::start_with_command(
-                {
-                    let mut cmd = Command::new("sh");
-                    cmd.arg("-c").arg("cat >/dev/null");
-                    cmd
-                },
-                make_host_global_config(),
-            )
-            .expect("start_with_command failed");
+        if !is_available() {
+            return;
+        }
+        watchdog(Duration::from_secs(30), || {
+            let (cmd, _script) = deno_dialback_child(DIALBACK_READ_UNTIL_EOF);
+            let host = TsEngineHost::start_with_command(cmd, make_host_global_config())
+                .expect("start_with_command failed");
 
             // First teardown: explicit shutdown.
             let _ = host.shutdown();
@@ -2845,10 +3998,12 @@ mod proc_tests {
     // Row 14 — Real multiplex smoke (deno-gated; SKIPPED if deno not on PATH)
     // -----------------------------------------------------------------------
     //
-    // Named revert hunk: newline-delimiter framing in StdioWriteHalf/StdioReadHalf.
+    // Named revert hunk: newline-delimiter framing in TcpTransport/TcpReadHalf.
     // Revert framing → N distinct ids fail to round-trip → assertion fails.
     //
-    // SKIPPED in CI (no deno installed).
+    // Child: a deno dial-back echo child that reads Request frames off the
+    // control socket and replies Loaded{name: enginePath} per LoadEngine.
+    // SKIPPED in CI only if deno is absent (CI always installs it).
     #[test]
     fn test_real_multiplex_smoke_deno() {
         // Skip if deno is not on PATH.
@@ -2857,50 +4012,37 @@ mod proc_tests {
         }
 
         watchdog(Duration::from_secs(30), || {
-            use std::io::Write as _;
-            use tempfile::NamedTempFile;
-
-            // Write a tiny deno echo script: reads Request lines from stdin,
-            // echoes Loaded{name: enginePath} back for each LoadEngine.
-            let script = r#"
-const dec = new TextDecoder();
-const enc = new TextEncoder();
+            // Echo body: reads Request lines off the control socket (`conn`),
+            // echoes Loaded{name: enginePath} back for each LoadEngine, exits on
+            // Shutdown. Uses the `conn`/`dec`/`enc` bindings the preamble leaves
+            // in scope.
+            let body = r#"
 const buf = new Uint8Array(1024 * 64);
 let pending = "";
-async function readLines() {
-  while (true) {
-    const n = await Deno.stdin.read(buf);
-    if (n === null) break;
-    pending += dec.decode(buf.subarray(0, n));
-    let idx;
-    while ((idx = pending.indexOf("\n")) !== -1) {
-      const line = pending.slice(0, idx).trim();
-      pending = pending.slice(idx + 1);
-      if (!line) continue;
-      const req = JSON.parse(line);
-      if (req.msg && req.msg.type === "loadEngine") {
-        const resp = JSON.stringify({
-          id: req.id,
-          msg: {
-            type: "loaded",
-            discovery: { name: req.msg.enginePath, validExtensions: [] }
-          }
-        }) + "\n";
-        await Deno.stdout.write(enc.encode(resp));
-      } else if (req.msg && req.msg.type === "shutdown") {
-        Deno.exit(0);
-      }
+while (true) {
+  const n = await conn.read(buf);
+  if (n === null) break;
+  pending += dec.decode(buf.subarray(0, n));
+  let idx;
+  while ((idx = pending.indexOf("\n")) !== -1) {
+    const line = pending.slice(0, idx).trim();
+    pending = pending.slice(idx + 1);
+    if (!line) continue;
+    const req = JSON.parse(line);
+    if (req.msg && req.msg.type === "loadEngine") {
+      const resp = JSON.stringify({
+        id: req.id,
+        msg: { type: "loaded", discovery: { name: req.msg.enginePath, validExtensions: [] } }
+      }) + "\n";
+      await conn.write(enc.encode(resp));
+    } else if (req.msg && req.msg.type === "shutdown") {
+      Deno.exit(0);
     }
   }
 }
-await readLines();
+Deno.exit(0);
 "#;
-            let mut tmp = NamedTempFile::new().expect("tempfile");
-            tmp.write_all(script.as_bytes()).expect("write script");
-            let script_path = tmp.path().to_path_buf();
-
-            let mut cmd = Command::new("deno");
-            cmd.arg("run").arg("--allow-all").arg(&script_path);
+            let (cmd, _script) = deno_dialback_child(body);
 
             let host = Arc::new(
                 TsEngineHost::start_with_command(cmd, make_host_global_config())
@@ -2949,27 +4091,35 @@ await readLines();
     // Named revert hunk: shared `Arc<Mutex<Option<Child>>>` reap in
     // `handle_crash`.  Revert → code/stderr not captured → assertion fails.
     //
-    // Child: writes a stderr line, sleeps 0.3s, then kills itself with SIGKILL
-    // (so ExitStatus::code() == None).  Never replies on stdout, so any
-    // in-flight request will block until the crash.
+    // Child: a deno dial-back child that writes a stderr line, sleeps 0.3s,
+    // then SIGKILLs itself (so ExitStatus::code() == None). It dials back but
+    // never replies on the socket, so any in-flight request blocks until the
+    // crash. Deno-gated.
     #[test]
     fn test_real_crash_reaps_and_reports() {
-        watchdog(Duration::from_secs(15), || {
+        if !is_available() {
+            return;
+        }
+        watchdog(Duration::from_secs(30), || {
+            let (cmd, _script) = deno_dialback_child(
+                r#"
+console.error("fatal: boom");
+await new Promise((r) => setTimeout(r, 300));
+Deno.kill(Deno.pid, "SIGKILL");
+// Idle-timer loop (a real pending op), NOT `new Promise(() => {})`: if SIGKILL
+// is momentarily delayed, deno's deadlock detector would otherwise abort with
+// "Top-level await promise never resolved" and exit code 1, breaking the
+// code==None (killed-by-signal) assertion. Wait on a timer until the signal lands.
+while (true) { await new Promise((r) => setTimeout(r, 3600000)); }
+"#,
+            );
             let host = Arc::new(
-                TsEngineHost::start_with_command(
-                    {
-                        let mut cmd = Command::new("sh");
-                        cmd.arg("-c")
-                            .arg("echo 'fatal: boom' >&2; sleep 0.3; kill -9 \"$$\"");
-                        cmd
-                    },
-                    make_host_global_config(),
-                )
-                .expect("start_with_command failed"),
+                TsEngineHost::start_with_command(cmd, make_host_global_config())
+                    .expect("start_with_command failed"),
             );
 
             // Spawn a worker that issues a request — it will never get a reply
-            // because the child never writes to stdout.
+            // because the child never writes back on the control socket.
             let host_req = Arc::clone(&host);
             let worker = std::thread::spawn(move || {
                 let cancel = Cancellation::new();
@@ -3008,20 +4158,17 @@ await readLines();
     // Named revert hunk: `is_alive()` — `child.lock().unwrap().is_some()`.
     // Revert (always false) → `assert!(host.is_alive())` after start → RED.
     //
-    // Child: `sh -c 'cat >/dev/null'` — stays alive until stdin closes (i.e.
-    // until shutdown).  No Deno gate needed: uses only sh/cat.
+    // Child: a deno dial-back read-until-EOF child — stays alive until the
+    // socket read side closes (i.e. until shutdown). Deno-gated.
     #[test]
     fn test_is_alive_lifecycle_real_spawn() {
-        watchdog(Duration::from_secs(10), || {
-            let host = TsEngineHost::start_with_command(
-                {
-                    let mut cmd = Command::new("sh");
-                    cmd.arg("-c").arg("cat >/dev/null");
-                    cmd
-                },
-                make_host_global_config(),
-            )
-            .expect("start_with_command failed");
+        if !is_available() {
+            return;
+        }
+        watchdog(Duration::from_secs(30), || {
+            let (cmd, _script) = deno_dialback_child(DIALBACK_READ_UNTIL_EOF);
+            let host = TsEngineHost::start_with_command(cmd, make_host_global_config())
+                .expect("start_with_command failed");
 
             assert!(
                 host.is_alive(),
@@ -3045,31 +4192,15 @@ await readLines();
     // `ensure_started_inner`.
     // Revert → count stays 0 → `spawn_count() == 1` assertion fails RED.
     //
-    // Gate: skip if Deno is absent.  Uses a trivial `cat >/dev/null`-style
-    // deno script so we exercise the real spawn path via `start_with_command`.
+    // Gate: skip if Deno is absent.  Uses a trivial dial-back read-until-EOF
+    // child so we exercise the real spawn path via `start_with_command`.
     #[test]
     fn test_spawn_count_increments_once() {
         if !is_available() {
             return;
         }
         watchdog(Duration::from_secs(30), || {
-            use std::io::Write as _;
-            use tempfile::NamedTempFile;
-
-            // Minimal Deno script: reads stdin until EOF, then exits.
-            let script = r#"
-const buf = new Uint8Array(1024);
-while (true) {
-    const n = await Deno.stdin.read(buf);
-    if (n === null) break;
-}
-"#;
-            let mut tmp = NamedTempFile::new().expect("tempfile");
-            tmp.write_all(script.as_bytes()).expect("write script");
-            let script_path = tmp.path().to_path_buf();
-
-            let mut cmd = Command::new("deno");
-            cmd.arg("run").arg("--allow-all").arg(&script_path);
+            let (cmd, _script) = deno_dialback_child(DIALBACK_READ_UNTIL_EOF);
             let host = TsEngineHost::start_with_command(cmd, make_host_global_config())
                 .expect("start_with_command failed");
 

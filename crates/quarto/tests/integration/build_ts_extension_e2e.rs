@@ -1,9 +1,9 @@
 /*
  * build_ts_extension_e2e.rs
  *
- * P2-18 — end-to-end test for `q2 build-ts-extension`.
+ * P2-18 — end-to-end test for `q2 call build-ts-extension`.
  *
- * Invokes `q2 build-ts-extension` on a temp COPY of the echo-engine fixture,
+ * Invokes `q2 call build-ts-extension` on a temp COPY of the echo-engine fixture,
  * then verifies that the output `.js` bundle is produced, non-empty, and
  * contains a recognisable token from the source.
  *
@@ -48,7 +48,7 @@ fn deno_available() -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
-/// P2-18: `q2 build-ts-extension` produces a loadable `.js` bundle.
+/// P2-18: `q2 call build-ts-extension` produces a loadable `.js` bundle.
 ///
 /// Runs the command on the committed `echo-engine` fixture under
 /// `crates/quarto-core/tests/fixtures/extensions/echo-engine/`, copied to a
@@ -97,9 +97,9 @@ fn build_ts_extension_produces_bundle() {
         "precondition: dist bundle must not exist before the build"
     );
 
-    // Run q2 build-ts-extension on the temp copy.
+    // Run q2 call build-ts-extension on the temp copy.
     let output = Command::new(Q2_BIN)
-        .arg("build-ts-extension")
+        .args(["call", "build-ts-extension"])
         .arg(&ext_dir)
         .current_dir(workspace_root)
         .output()
@@ -109,7 +109,7 @@ fn build_ts_extension_produces_bundle() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         output.status.success(),
-        "q2 build-ts-extension failed.\nstdout: {stdout}\nstderr: {stderr}"
+        "q2 call build-ts-extension failed.\nstdout: {stdout}\nstderr: {stderr}"
     );
 
     // Assert the declared output path was produced BY THIS BUILD (it did not
@@ -143,5 +143,40 @@ fn build_ts_extension_produces_bundle() {
         js_content.contains("export"),
         "Bundle does not contain 'export' — may not be a valid ES module:\n{}",
         &js_content[..js_content.len().min(500)]
+    );
+}
+
+/// Missing-test #1 (seam T2): the top-level `q2 build-ts-extension` command
+/// (without `call`) must no longer exist — Q1 parity moved it under
+/// `q2 call build-ts-extension`. Does not require `deno` (clap rejects the
+/// subcommand before dispatch ever runs).
+///
+/// Named revert: re-adding the top-level
+/// `#[command(name = "build-ts-extension")] BuildTsExtension { .. }` variant
+/// to `Commands` in main.rs makes this command parse again → RED.
+#[test]
+fn top_level_build_ts_extension_removed() {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let workspace_root = Path::new(manifest_dir)
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("Failed to find workspace root from CARGO_MANIFEST_DIR");
+
+    let output = Command::new(Q2_BIN)
+        .arg("build-ts-extension")
+        .arg(".")
+        .current_dir(workspace_root)
+        .output()
+        .expect("Failed to spawn q2");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "q2 build-ts-extension (no `call`) unexpectedly succeeded — the \
+        top-level command should have been removed.\nstderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("unrecognized subcommand") || stderr.contains("error:"),
+        "expected clap to reject the removed top-level subcommand; stderr: {stderr}"
     );
 }

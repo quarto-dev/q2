@@ -412,7 +412,7 @@ fn parse_external_engine(
         let expected_js_path = raw_path.with_extension("js").to_string_lossy().into_owned();
         return Err(crate::error::QuartoError::Other(format!(
             "Engine extension '{}' has 'path: {}'; only pre-built lowercase '.js' bundles are \
-            loadable. Run 'q2 build-ts-extension' to produce {} and update _extension.yml.",
+            loadable. Run 'q2 call build-ts-extension' to produce {} and update _extension.yml.",
             ext_name, path_str, expected_js_path,
         )));
     }
@@ -1406,7 +1406,7 @@ contributes:
     // --- Engine parsing tests (P1-8, P1-9, happy path, None vs Some(empty), shorthand) ---
 
     /// P1-8: a `.ts` path is rejected with an actionable message naming
-    /// `q2 build-ts-extension`. (RED if the .js validation is removed.)
+    /// `q2 call build-ts-extension`. (RED if the .js validation is removed.)
     #[test]
     fn test_engine_ts_path_rejected() {
         let tmp = TempDir::new().unwrap();
@@ -1424,8 +1424,8 @@ contributes:
         let runtime = make_runtime();
         let err = read_extension(&file, &runtime).unwrap_err();
         assert!(
-            err.to_string().contains("build-ts-extension"),
-            "Error should mention 'build-ts-extension': {}",
+            err.to_string().contains("call build-ts-extension"),
+            "Error should mention 'call build-ts-extension': {}",
             err
         );
     }
@@ -1448,8 +1448,8 @@ contributes:
         let runtime = make_runtime();
         let err = read_extension(&file, &runtime).unwrap_err();
         assert!(
-            err.to_string().contains("build-ts-extension"),
-            "Error should mention 'build-ts-extension': {}",
+            err.to_string().contains("call build-ts-extension"),
+            "Error should mention 'call build-ts-extension': {}",
             err
         );
     }
@@ -1472,8 +1472,8 @@ contributes:
         let runtime = make_runtime();
         let err = read_extension(&file, &runtime).unwrap_err();
         assert!(
-            err.to_string().contains("build-ts-extension"),
-            "Error should mention 'build-ts-extension': {}",
+            err.to_string().contains("call build-ts-extension"),
+            "Error should mention 'call build-ts-extension': {}",
             err
         );
     }

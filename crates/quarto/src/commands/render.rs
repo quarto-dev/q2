@@ -1685,6 +1685,15 @@ mod tests {
             fixture_ext.display()
         );
         copy_dir(&fixture_ext, &dir.join("_extensions/echo-engine"));
+        // The committed echo-engine bundle is deleted (plan1c3: hermetic
+        // fixtures are regenerated at test time). This classify-only path never
+        // executes the engine — it only needs the bundle file to EXIST for
+        // `build_engine_registry`'s bundle-exists guard — so write a stub,
+        // mirroring `engine_registry_build`'s deno-free T5 stub approach.
+        write_file(
+            &dir.join("_extensions/echo-engine/dist/echo-engine.js"),
+            "// stub for registry existence check\n",
+        );
         write_file(&dir.join("a.echo"), "Whole-file echo body.\n");
 
         let runtime = NativeRuntime::new();

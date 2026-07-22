@@ -166,6 +166,16 @@ jobs:
         shell: bash
         run: deno test --allow-all ts-packages/quarto-engine-host-deno/src/deno-host.deno-test.ts
 
+      # plan1a.6 Phase 2 (Deno dial-back) — seam #8: connectControl round-trip
+      # over a REAL loopback socket (Deno.listen({ port: 0 }) in-test); no mock
+      # Deno.Conn. CI-only tier (cannot be a vitest test — the module references
+      # Deno.*). `--sloppy-imports` lets deno's type-checker resolve
+      # @quarto/types' `.js` internal specifiers pulled in transitively via
+      # ./types.ts (same reason the wire-parity step below needs it).
+      - name: Run engine-host-deno control-transport deno test
+        shell: bash
+        run: deno test --allow-all --sloppy-imports ts-packages/quarto-engine-host-deno/src/control-transport.deno-test.ts
+
       # T-Gate-parity: TS↔Rust wire-dual parity (Plan 2 Phase B gate). Reads the
       # Rust-serialized fixture (crates/quarto-core/tests/fixtures/ts_wire_parity.json,
       # produced by the regen-gated #[test] in ts_protocol.rs) and set-equates each

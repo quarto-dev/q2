@@ -37,7 +37,7 @@ import type {
   QuartoAPI,
   LanguageClaim,
 } from "@quarto/types";
-import { interop } from "@quarto/api";
+import { interop } from "@quarto/api/claims";
 
 // Stash the QuartoAPI reference set during init().
 let _quarto: QuartoAPI | undefined;

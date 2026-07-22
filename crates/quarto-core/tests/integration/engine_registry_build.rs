@@ -101,21 +101,22 @@ mod registry_build_tests {
     /// filesystem, because `fs::read_dir` happened to return beta before
     /// alpha.
     ///
-    /// Reuses the REAL committed Task-A1 `dist/<name>.js` bundles and their
-    /// identical static Primary(1)-on-`synth` claim shape (verbatim from
-    /// each fixture's own `_extension.yml`), just declared from one
+    /// Writes placeholder stub `dist/{alpha,beta}.js` files (existence-only;
+    /// never loaded/executed — this suite is zero-spawn/no-deno) alongside
+    /// their identical static Primary(1)-on-`synth` claim shape (verbatim
+    /// from each fixture's own `_extension.yml`), declared from one
     /// consolidated YAML document instead of two.
     fn install_combo_alpha_beta_extension(project_dir: &Path) {
         let combo_dist = project_dir.join("_extensions/combo/dist");
         fs::create_dir_all(&combo_dist).unwrap();
-        fs::copy(
-            fixture_ext_dir("alpha").join("dist/alpha.js"),
+        fs::write(
             combo_dist.join("alpha.js"),
+            "// stub for registry existence check\n",
         )
         .unwrap();
-        fs::copy(
-            fixture_ext_dir("beta").join("dist/beta.js"),
+        fs::write(
             combo_dist.join("beta.js"),
+            "// stub for registry existence check\n",
         )
         .unwrap();
         write_file(
@@ -671,8 +672,8 @@ contributes:
         );
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("build-ts-extension"),
-            "error should suggest 'q2 build-ts-extension': {}",
+            err.contains("call build-ts-extension"),
+            "error should suggest 'q2 call build-ts-extension': {}",
             err
         );
     }

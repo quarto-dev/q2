@@ -20,6 +20,7 @@ pub mod crossref_fixtures;
 pub mod document_profile_pipeline;
 pub mod echo_engine_e2e;
 pub mod engine_error_policy;
+pub mod engine_fixture_build;
 pub mod engine_merge;
 pub mod engine_output_parity;
 pub mod engine_registry_build;

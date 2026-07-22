@@ -751,7 +751,7 @@ fn build_engine_registry(
                         if !path.exists() {
                             return Err(QuartoError::Other(format!(
                                 "Engine extension '{}' has no bundled .js file at {}. \
-                                Run 'q2 build-ts-extension' in {} to build it.",
+                                Run 'q2 call build-ts-extension' in {} to build it.",
                                 ext_label,
                                 path.display(),
                                 ext.path.display()

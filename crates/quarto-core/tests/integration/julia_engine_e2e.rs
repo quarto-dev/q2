@@ -588,9 +588,13 @@ fn julia_website_fixture_root() -> PathBuf {
 
 /// Build a temp WEBSITE project for the Phase-4H rows: the committed
 /// `julia-website` pages plus, copied in at runtime, the `julia-engine`
-/// extension AND its notebook environment (`Project.toml` + `Manifest.toml`,
-/// which declare `Plots` — the plot page needs them to render). Returns the
-/// `TempDir` (keep alive for the test's duration).
+/// extension. Deliberately ships **no** notebook `Project.toml`/`Manifest.toml`
+/// — `plot.qmd` emits its PNG figure from a hardcoded byte array via the
+/// `Base64` stdlib, so no notebook Julia environment is needed. (This mirrors
+/// `setup_julia_project` used by j1–j4, which also ship no notebook env and
+/// pass on a cold CI depot; a version-pinned notebook `Manifest.toml` here was
+/// what made j5 fail on CI's fresh depot — see the git history of this file.)
+/// Returns the `TempDir` (keep alive for the test's duration).
 fn setup_julia_website_project() -> TempDir {
     let tmp = TempDir::new().unwrap();
     // The two committed pages + project config.
@@ -607,15 +611,6 @@ fn setup_julia_website_project() -> TempDir {
         &julia_fixture_root().join("_extensions/julia-engine"),
         &tmp.path().join("_extensions").join("julia-engine"),
     );
-    // The notebook Julia environment (Plots dependency), also from the sibling
-    // fixture root — the plot worker resolves `@.` up from the notebook dir.
-    for env_file in ["Project.toml", "Manifest.toml"] {
-        std::fs::copy(
-            julia_fixture_root().join(env_file),
-            tmp.path().join(env_file),
-        )
-        .unwrap();
-    }
     tmp
 }
 
@@ -649,6 +644,23 @@ fn render_julia_website(
         );
         summary = pollster::block_on(pipeline.run()).expect("website orchestrator run");
     }
+    // Surface per-document render failures. The orchestrator records a failed
+    // page in `summary.pass{1,2}_failures` and still returns `Ok` (the CLI
+    // decides exit status), so without this a broken page would otherwise show
+    // up only as a downstream "file missing" panic with the real engine error
+    // (e.g. a Julia stacktrace) silently swallowed. Both callers (j5, j6)
+    // expect every page to render, so any failure here is a genuine bug worth
+    // reporting verbatim.
+    if summary.has_failures() {
+        let detail = summary
+            .pass1_failures
+            .iter()
+            .chain(summary.pass2_failures.iter())
+            .map(|f| format!("  {}: {}", f.input.display(), f.error))
+            .collect::<Vec<_>>()
+            .join("\n");
+        panic!("website render reported per-document failures:\n{detail}");
+    }
     (project, summary)
 }
 
@@ -659,18 +671,23 @@ fn render_julia_website(
 // (`_site/plot_files/figure-html/*.png`) and `plot.html` references it via
 // `<img src=...>`, plus both pages produced HTML.
 //
-// CRITICAL vacuity note (from the 4CD MIME finding): a default Plots.jl GR
-// plot is `text/html`-showable, and q2's faithfully-ported `displayDataMimeType`
-// prefers `text/html` for HTML targets — so `plot(...)` alone yields an INLINE
-// base64 `<img>` and NO figure file, which would make the `supporting`-forward
-// assertion VACUOUS. The `plot.qmd` fixture therefore renders the plot to a
-// PNG file with `savefig` and returns a `PngFigure` wrapper struct showable
-// ONLY as `image/png` (no `text/html` show method): QuartoNotebookRunner's
-// `render_mimetypes` then captures only `image/png`, so the wire `data`
-// bundle carries ONLY `image/png` → `displayDataMimeType` selects it →
-// jupyter `toMarkdown`'s `mdImageOutput` WRITES the file. Verified
-// empirically (a PNG file materialized under `plot_files/figure-html/`) before
-// this row was frozen.
+// CRITICAL vacuity note (from the 4CD MIME finding): q2's faithfully-ported
+// `displayDataMimeType` prefers `text/html` for HTML targets, so any value
+// that is *also* `text/html`-showable (e.g. a default Plots.jl GR plot) yields
+// an INLINE base64 `<img>` and NO figure file — which would make the
+// `supporting`-forward assertion VACUOUS. The `plot.qmd` fixture therefore
+// returns a `PngFigure` wrapper struct showable ONLY as `image/png` (no
+// `text/html` show method): QuartoNotebookRunner's `render_mimetypes` then
+// captures only `image/png`, so the wire `data` bundle carries ONLY
+// `image/png` → `displayDataMimeType` selects it → jupyter `toMarkdown`'s
+// `mdImageOutput` WRITES the file. The PNG bytes themselves come from a
+// hardcoded base64 image decoded via the `Base64` stdlib (NOT `Plots.savefig`),
+// so the notebook env is dependency-free and the render needs no warm Julia
+// depot — q2's figure-file handling is identical regardless of byte source.
+// (Before 2026-07-23 the fixture used `Plots.savefig`; on a cold CI depot
+// `using Plots` failed with "Package Plots ... not installed" because nothing
+// instantiates the notebook env, so `plot.html` was silently never produced —
+// see the git history for this file.)
 //
 // Named revert (Test Seam Spec J5): the `supporting` forward in
 // `map_execute_result` (`ts_engine.rs`, `supporting_files` at ~:463/467) →
@@ -798,7 +815,7 @@ fn j5_website_figure_lands_as_file_and_is_referenced() {
 // worker threads never call `tracing::subscriber::with_default`, so
 // they run under tracing's `Unset` per-thread state and never observe
 // a THREAD-LOCAL override — the `engine-host spawned` event is emitted
-// but the capture layer never sees it (`capture.count("engine_host")`
+// but the capture layer never sees it (`capture.count_spawns()`
 // silently reads 0, independent of whether one host or two were
 // spawned). Forcing sequential dispatch keeps the whole render on the
 // test thread the capture is scoped to, making the one-spawn assertion
@@ -837,12 +854,12 @@ fn j6_one_engine_host_per_project_render() {
          assertion to be non-vacuous"
     );
     assert_eq!(
-        capture.count("engine_host"),
+        capture.count_spawns(),
         1,
         "exactly ONE engine_host spawn event across the whole two-page project \
          render (the shared Arc<TsEngineHost> is built once in discover, not \
          per file); saw {} events",
-        capture.count("engine_host")
+        capture.count_spawns()
     );
 }
 
@@ -884,22 +901,38 @@ fn j6_capture_discriminates_two_hosts() {
         let _ = h2.shutdown();
     });
     assert_eq!(
-        capture.count("engine_host"),
+        capture.count_spawns(),
         2,
         "two independently-started hosts must emit two engine_host events — \
          proving the capture discriminates (so J6's single-event assertion is \
          non-vacuous); saw {}",
-        capture.count("engine_host")
+        capture.count_spawns()
     );
 }
 
-/// A tracing-capture layer recording each event's `target`, shared across
-/// threads via `Arc<Mutex<Vec<String>>>` (mirrors the unit-test helper in
-/// `ts_process.rs`; the integration binary is a separate crate so it needs its
-/// own copy).
+/// A tracing-capture layer recording each event's (`target`, `message`),
+/// shared across threads via `Arc<Mutex<Vec<(String, String)>>>` (mirrors the
+/// unit-test helper in `ts_process.rs`; the integration binary is a separate
+/// crate so it needs its own copy).
+///
+/// Captures the message alongside the target because the plan1a.6 Phase-3 TCP
+/// flip made a single engine-host spawn fire TWO `target: "engine_host"`
+/// events — `"engine-host spawned"` and `"engine-host connected over loopback
+/// TCP"` — so counting by target alone double-counts spawns.
 #[derive(Clone, Default)]
 struct TargetCapture {
-    targets: Arc<std::sync::Mutex<Vec<String>>>,
+    events: Arc<std::sync::Mutex<Vec<(String, String)>>>,
+}
+
+/// Grabs the `message` field off a tracing event.
+#[derive(Default)]
+struct MsgVisitor(String);
+impl tracing::field::Visit for MsgVisitor {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() == "message" {
+            self.0 = format!("{value:?}");
+        }
+    }
 }
 
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for TargetCapture {
@@ -908,20 +941,25 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for TargetCapture {
         event: &tracing::Event<'_>,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        self.targets
+        let mut visitor = MsgVisitor::default();
+        event.record(&mut visitor);
+        self.events
             .lock()
             .unwrap()
-            .push(event.metadata().target().to_string());
+            .push((event.metadata().target().to_string(), visitor.0));
     }
 }
 
 impl TargetCapture {
-    fn count(&self, target: &str) -> usize {
-        self.targets
+    /// Count of `target == "engine_host"` events whose message is the
+    /// per-spawn lifecycle marker `"engine-host spawned"` (as distinct from
+    /// the TCP-connect marker on the same target).
+    fn count_spawns(&self) -> usize {
+        self.events
             .lock()
             .unwrap()
             .iter()
-            .filter(|t| t.as_str() == target)
+            .filter(|(t, m)| t.as_str() == "engine_host" && m.contains("engine-host spawned"))
             .count()
     }
 }

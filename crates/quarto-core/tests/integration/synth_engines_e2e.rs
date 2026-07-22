@@ -32,8 +32,11 @@
  *   `b11_dynamic_claims_file_round_trip`, which drives both the positive
  *   (marker present → claimed) and negative (marker absent → not claimed)
  *   directions of the real `ClaimsFile` wire dispatch.
- * Both fixtures' `dist/<name>.js` bundles ARE built and committed (see the
- * Task A1 report).
+ * Both fixtures' `dist/<name>.js` bundles are regenerated at test time (not
+ * committed) via `crate::engine_fixture_build`: they import only
+ * `@quarto/api/claims` (pure, type-only transitive deps), so `deno bundle`
+ * resolves hermetically from local `ts-packages/` with no network/lock —
+ * real deno bundle output, built fresh into each test's tempdir copy.
  */
 
 // Native-only: TsEngine / TsEngineHost are behind cfg(not(target_arch = "wasm32")).
@@ -92,10 +95,9 @@ fn write_file(path: &Path, contents: &str) {
 fn setup_project(ext_names: &[&str]) -> TempDir {
     let tmp = TempDir::new().unwrap();
     for name in ext_names {
-        copy_dir(
-            &fixture_ext_dir(name),
-            &tmp.path().join("_extensions").join(name),
-        );
+        let dest = tmp.path().join("_extensions").join(name);
+        copy_dir(&fixture_ext_dir(name), &dest);
+        crate::engine_fixture_build::ensure_bundle(&dest, name);
     }
     tmp
 }

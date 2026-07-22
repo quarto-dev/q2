@@ -514,10 +514,27 @@ mod tests {
         content: &str,
     ) -> (TempDir, Arc<HubContext>, Arc<dyn SystemRuntime>) {
         let project = TempDir::with_prefix("r5-echo-preview-").unwrap();
-        copy_dir(
-            &echo_engine_fixture_dir(),
-            &project.path().join("_extensions").join("echo-engine"),
-        );
+        let echo_dst = project.path().join("_extensions").join("echo-engine");
+        copy_dir(&echo_engine_fixture_dir(), &echo_dst);
+        // The committed echo-engine bundle is deleted (plan1c3: hermetic fixtures
+        // are regenerated at test time). These tests execute the engine, so
+        // regenerate the real bundle in-place via the same public build lib the
+        // quarto-core suites use (callers are `deno_available()`-gated, which is
+        // exactly what `build_ts_extension` requires). Mirrors
+        // `engine_fixture_build::build_bundle` — the `../../resources/...` depth is
+        // identical because quarto-preview and quarto-core are both one level under
+        // `crates/`.
+        quarto_core::extension::build::build_ts_extension(
+            quarto_core::extension::build::BuildOptions {
+                ext_dir: Some(echo_dst.clone()),
+                config: Some(
+                    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("../../resources/extension-build/deno.workspace.json"),
+                ),
+                workspace: false,
+            },
+        )
+        .expect("regenerate echo-engine bundle for preview capture test");
         let doc_path = project.path().join(rel);
         if let Some(parent) = doc_path.parent() {
             std::fs::create_dir_all(parent).unwrap();

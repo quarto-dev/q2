@@ -5,6 +5,9 @@
 //! ## Available functions:
 //!
 //! - `test`: Run embedded document tests
+//! - `build-ts-extension`: Build a TypeScript engine extension into a
+//!   deployable `.js` bundle (dispatched from `CallCommands::BuildTsExtension`
+//!   in `main.rs`, not through this module's string-based `execute`)
 
 mod test;
 

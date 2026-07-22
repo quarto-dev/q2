@@ -521,7 +521,8 @@ mod tests {
     /// Exercised-guard: `is_alive()==true` before shutdown prevents a vacuously
     /// passing test where the process never started.
     #[test]
-    // Spawns `sh` (Unix-only); gate on unix so a future Windows runner with Deno doesn't panic.
+    // Drives a real deno dial-back child + reaping teardown; conservatively
+    // gated to non-wasm unix (matches the proc-tier engine-host tests).
     #[cfg(all(not(target_arch = "wasm32"), unix))]
     fn test_shutdown_all_kills_ts_engine() {
         use crate::engine::ts_engine::TsEngine;
@@ -529,7 +530,6 @@ mod tests {
         use crate::engine::ts_protocol::HostGlobalConfig;
         use crate::extension::types::ExtensionId;
         use std::path::PathBuf;
-        use std::process::Command;
 
         if !deno_is_available() {
             return;
@@ -545,10 +545,11 @@ mod tests {
             quarto_version: "0.1.0".to_string(),
         };
 
-        // Spawn a simple subprocess that reads stdin indefinitely (exits on EOF,
-        // which shutdown() triggers by closing stdin).
-        let mut cmd = Command::new("sh");
-        cmd.arg("-c").arg("cat >/dev/null");
+        // Spawn a deno dial-back child that completes the loopback-TCP handshake
+        // then discards frames and exits when the control socket closes (which
+        // shutdown() triggers by half-closing the write side).
+        use crate::engine::ts_process::{DIALBACK_READ_UNTIL_EOF, deno_dialback_child};
+        let (cmd, _script) = deno_dialback_child(DIALBACK_READ_UNTIL_EOF);
 
         let host = Arc::new(
             TsEngineHost::start_with_command(cmd, global).expect("start_with_command failed"),

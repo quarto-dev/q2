@@ -84,10 +84,9 @@ fn write_file(path: &Path, contents: &str) {
 fn setup_project(ext_names: &[&str]) -> TempDir {
     let tmp = TempDir::new().unwrap();
     for name in ext_names {
-        copy_dir(
-            &fixture_ext_dir(name),
-            &tmp.path().join("_extensions").join(name),
-        );
+        let dest = tmp.path().join("_extensions").join(name);
+        copy_dir(&fixture_ext_dir(name), &dest);
+        crate::engine_fixture_build::ensure_bundle(&dest, name);
     }
     tmp
 }
@@ -240,6 +239,7 @@ fn p1_7_engine_name_mismatch_hard_errors() {
     // Copy the echo-engine bundle but declare a mismatched name.
     let ext_dir = tmp.path().join("_extensions/echo-wrong");
     copy_dir(&fixture_ext_dir("echo-engine"), &ext_dir);
+    crate::engine_fixture_build::build_bundle(&ext_dir);
     write_file(
         &ext_dir.join("_extension.yml"),
         "title: Echo Wrong Name\n\
@@ -657,7 +657,7 @@ fn j9_resolution_before_spawn_zero_load() {
     );
 
     let resolution_indices = capture.indices_of("engine_resolution");
-    let spawn_indices = capture.indices_of("engine_host");
+    let spawn_indices = capture.spawn_indices();
 
     // A missing resolution-complete event must FAIL the test outright, not
     // vacuously pass the ordering check below.
@@ -698,7 +698,24 @@ fn j9_resolution_before_spawn_zero_load() {
 /// an `indices_of` accessor J9 needs to compare event ORDER, not just count.
 #[derive(Clone, Default)]
 struct OrderedCapture {
-    targets: Arc<std::sync::Mutex<Vec<String>>>,
+    /// (target, message) pairs, in firing order.
+    events: Arc<std::sync::Mutex<Vec<(String, String)>>>,
+}
+
+/// Grabs the `message` field off a tracing event so capture layers can
+/// discriminate same-target events by their message text (see the
+/// plan1a.6 Phase-3 TCP flip: engine-host spawn now fires TWO
+/// `target: "engine_host"` events — "engine-host spawned" and
+/// "engine-host connected over loopback TCP" — so counting by target
+/// alone double-counts spawns).
+#[derive(Default)]
+struct MsgVisitor(String);
+impl tracing::field::Visit for MsgVisitor {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() == "message" {
+            self.0 = format!("{value:?}");
+        }
+    }
 }
 
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for OrderedCapture {
@@ -707,29 +724,239 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for OrderedCapture {
         event: &tracing::Event<'_>,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        self.targets
+        let mut visitor = MsgVisitor::default();
+        event.record(&mut visitor);
+        self.events
             .lock()
             .unwrap()
-            .push(event.metadata().target().to_string());
+            .push((event.metadata().target().to_string(), visitor.0));
     }
 }
 
 impl OrderedCapture {
     /// Indices (in firing order) of every event whose target equals `target`.
     fn indices_of(&self, target: &str) -> Vec<usize> {
-        self.targets
+        self.events
             .lock()
             .unwrap()
             .iter()
             .enumerate()
-            .filter(|(_, t)| t.as_str() == target)
+            .filter(|(_, (t, _))| t.as_str() == target)
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// Indices (in firing order) of the `"engine-host spawned"` lifecycle
+    /// events specifically — the per-spawn marker — as distinct from other
+    /// `target == "engine_host"` events (e.g. the TCP-connect marker).
+    fn spawn_indices(&self) -> Vec<usize> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .filter(|(_, (t, m))| t.as_str() == "engine_host" && m.contains("engine-host spawned"))
             .map(|(i, _)| i)
             .collect()
     }
 
     fn all_targets(&self) -> Vec<String> {
-        self.targets.lock().unwrap().clone()
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(t, _)| t.clone())
+            .collect()
     }
+
+    /// Count of `target == "engine_host"` events whose message contains
+    /// `needle`. Used by the plan1a.6 Phase-3 seams #6a/#7 tests as the
+    /// exercised-guard: proof that a stdout-garbage/console.log marker the
+    /// fixture wrote was actually observed on the `stdout_loop` drain (a
+    /// captured `engine_host`-target tracing event), not just that the
+    /// render happened to succeed.
+    fn count_containing(&self, needle: &str) -> usize {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(t, m)| t.as_str() == "engine_host" && m.contains(needle))
+            .count()
+    }
+}
+
+// ── P3-6a (plan1a.6 Phase 3): raw stdout garbage is harmless over TCP ────────
+//
+// Binds the Phase-3 production flip (engine-host protocol moved off the
+// child's stdout onto a private loopback-TCP socket): under the flipped
+// transport, anything the Deno child writes DIRECTLY to its stdout fd
+// (bypassing the protocol framing entirely) can never corrupt a request,
+// because stdout is no longer the protocol channel -- it is drained by
+// `stdout_loop` (`ts_process.rs`, ~line 1734) and forwarded line-by-line to
+// `tracing::info!(target: "engine_host", "{line}")`.
+//
+// The echo fixture's `execute()` recognizes the sentinel
+// `QUARTO_ECHO_STDOUT_GARBAGE` in the cell body and, unlike
+// `QUARTO_ECHO_CRASH`, does NOT exit -- it writes a burst of 20 non-JSON
+// lines to `Deno.stdout` and then falls through to the normal
+// echo-transform, so a correct render still succeeds.
+//
+// Two assertions:
+//   (i)  the render round-trips: `html` contains `ECHO_EXECUTED` -- proves
+//        the in-flight execute request was NOT killed by the garbage.
+//   (ii) EXERCISED-GUARD (vacuity guard): a captured `engine_host`-target
+//        tracing event's message contains `ECHO_STDOUT_GARBAGE_MARKER` --
+//        proves the garbage was REALLY emitted and REALLY flowed through
+//        `stdout_loop`'s drain, not merely that the fixture silently
+//        skipped the write (which would pass (i) vacuously under BOTH the
+//        correct-TCP state AND a reverted-stdio state where the branch
+//        never fires).
+//
+// Why 20 lines, not one: the demux reader tolerates up to
+// `MAX_CONSECUTIVE_MALFORMED_LINES = 5` consecutive malformed lines
+// (log-and-skip) before the 6th escalates -- setting `shutting_down`,
+// broadcasting an error to every pending request, and killing the
+// subprocess (`ts_process.rs` `reader_loop`, the `RecvError::Malformed` arm,
+// ~lines 1565-1600). A single stray stdout line would be silently tolerated
+// even on the REVERTED (stdio-transport) path, making the test vacuous
+// against that revert. 20 lines is comfortably above the threshold, so the
+// reverted path escalates -> kills the subprocess -> the in-flight execute
+// request receives the broadcast error -> `render_html`'s internal `.expect`
+// panics -> RED.
+//
+// Named revert: D-MAIN (`main.ts` wiring `runHost` back to
+// `Deno.stdin`/`Deno.stdout` instead of the loopback-TCP socket) -- under
+// that revert stdout IS the protocol channel again, so this fixture's raw
+// writes interleave with real protocol frames and trigger the
+// malformed-line escalation described above.
+//
+// Capture note: `stdout_loop` runs on a background thread spawned inside
+// `spawn_into_tcp`, so a thread-local `tracing::subscriber::with_default`
+// (as J9 uses) would NOT see its events. This test installs a **process-
+// global** subscriber via `tracing::dispatcher::set_global_default`, the
+// same pattern as `behave_engine_e2e.rs`'s
+// `f3_timeout_poisons_then_transparently_relaunches` -- safe because
+// nextest runs each `#[test]` in its own process.
+#[test]
+fn p3_6a_stdout_garbage_harmless() {
+    use tracing_subscriber::layer::SubscriberExt;
+
+    if !deno_available() {
+        eprintln!("SKIP: deno not on PATH — p3_6a_stdout_garbage_harmless");
+        return;
+    }
+    let tmp = setup_project(&["echo-engine"]);
+    let input = tmp.path().join("stdout_garbage.qmd");
+    write_file(
+        &input,
+        "---\ntitle: Echo Stdout Garbage\n---\n\n```{echo}\nQUARTO_ECHO_STDOUT_GARBAGE\n```\n",
+    );
+
+    let capture = OrderedCapture::default();
+    let subscriber = tracing_subscriber::registry().with(capture.clone());
+    // GLOBAL default (not thread-scoped `with_default`): see the doc
+    // comment above -- `stdout_loop` runs on a background thread that does
+    // not inherit a `with_default` thread-local scope.
+    tracing::dispatcher::set_global_default(tracing::Dispatch::new(subscriber))
+        .expect("install global tracing dispatch for engine_host capture");
+
+    let html = render_html(&input);
+
+    // Assertion (i): the render round-tripped -- the in-flight execute
+    // request was not killed by the stdout garbage.
+    assert!(
+        html.contains("ECHO_EXECUTED"),
+        "expected render to succeed over the TCP transport despite raw \
+         stdout garbage; got:\n{}",
+        body_excerpt(&html)
+    );
+
+    // Give the background stdout-drain thread a moment to forward the
+    // burst's lines through `tracing` before checking the capture (same
+    // reason behave F3 sleeps before checking its background-thread
+    // capture).
+    std::thread::sleep(std::time::Duration::from_millis(200));
+
+    // Assertion (ii): EXERCISED-GUARD -- the garbage marker was actually
+    // observed on the stdout drain. `>= 1`, not `== 20`: some of the 20
+    // lines may still be in flight by the time the sleep above elapses, and
+    // this test only needs to prove the branch fired and flowed through
+    // `stdout_loop`, not that every line landed.
+    assert!(
+        capture.count_containing("ECHO_STDOUT_GARBAGE_MARKER") >= 1,
+        "exercised-guard: expected at least one engine_host-target tracing \
+         event carrying the ECHO_STDOUT_GARBAGE_MARKER (proves the garbage \
+         was really emitted and really drained via stdout_loop); captured \
+         targets: {:?}",
+        capture.all_targets()
+    );
+}
+
+// ── P3-7 (plan1a.6 Phase 3): console.log is harmless over TCP ───────────────
+//
+// Same seam family as P3-6a, but through `console.log` instead of a raw
+// `Deno.stdout.writeSync` -- `console.log` also writes to stdout (Deno's
+// console implementation), so it exercises the same stdout-is-harmless
+// property via a different, more idiomatic TS-code path (a fixture calling
+// `console.log` for debugging is a much more realistic accident than a raw
+// fd write).
+//
+// The echo fixture's `execute()` recognizes the sentinel
+// `QUARTO_ECHO_CONSOLE_LOG` and writes a burst of 20 `console.log` lines
+// carrying a distinct marker (`ECHO_CONSOLE_LOG_MARK`), then falls through
+// to the normal echo-transform.
+//
+// Same two assertions as P3-6a:
+//   (i)  the render round-trips (`html` contains `ECHO_EXECUTED`).
+//   (ii) EXERCISED-GUARD (vacuity guard): a captured `engine_host`-target
+//        tracing event's message contains `ECHO_CONSOLE_LOG_MARK`.
+//
+// Same 20-line rationale (above `MAX_CONSECUTIVE_MALFORMED_LINES = 5`) and
+// same named revert (D-MAIN) as P3-6a -- see that test's doc comment for the
+// full explanation; not repeated here to avoid duplication drift.
+//
+// Same `set_global_default` capture note as P3-6a applies here too.
+#[test]
+fn p3_7_console_log_harmless() {
+    use tracing_subscriber::layer::SubscriberExt;
+
+    if !deno_available() {
+        eprintln!("SKIP: deno not on PATH — p3_7_console_log_harmless");
+        return;
+    }
+    let tmp = setup_project(&["echo-engine"]);
+    let input = tmp.path().join("console_log.qmd");
+    write_file(
+        &input,
+        "---\ntitle: Echo Console Log\n---\n\n```{echo}\nQUARTO_ECHO_CONSOLE_LOG\n```\n",
+    );
+
+    let capture = OrderedCapture::default();
+    let subscriber = tracing_subscriber::registry().with(capture.clone());
+    tracing::dispatcher::set_global_default(tracing::Dispatch::new(subscriber))
+        .expect("install global tracing dispatch for engine_host capture");
+
+    let html = render_html(&input);
+
+    // Assertion (i): the render round-tripped.
+    assert!(
+        html.contains("ECHO_EXECUTED"),
+        "expected render to succeed over the TCP transport despite \
+         console.log noise; got:\n{}",
+        body_excerpt(&html)
+    );
+
+    std::thread::sleep(std::time::Duration::from_millis(200));
+
+    // Assertion (ii): EXERCISED-GUARD.
+    assert!(
+        capture.count_containing("ECHO_CONSOLE_LOG_MARK") >= 1,
+        "exercised-guard: expected at least one engine_host-target tracing \
+         event carrying the ECHO_CONSOLE_LOG_MARK (proves console.log's \
+         stdout output was really drained via stdout_loop); captured \
+         targets: {:?}",
+        capture.all_targets()
+    );
 }
 
 // ── T8 (plan 1c.2 P2): discovery-set union + echo conversion, via the walk ────
