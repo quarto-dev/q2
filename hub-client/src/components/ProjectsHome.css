@@ -1070,3 +1070,42 @@ select.ph-input { appearance: auto; }
   .ph-card-grid { grid-template-columns: repeat(2, 1fr); }
   .ph-logo span { display: none; }
 }
+
+/* ---- per-collection sort button ---- */
+
+.ph-collection-sort-anchor {
+  position: relative;
+  display: inline-flex;
+  align-self: center;
+}
+
+.ph-collection-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 7px;
+}
+
+/* A non-default sort stays visibly "on" so reordered collections are legible */
+.ph-collection-sort-btn.active {
+  color: var(--accent-secondary);
+  background: var(--input-bg-alpha);
+}
+
+/* ---- dark mode ----
+   The shared dark tokens sit on a saturated navy ramp (--posit-blue-dark-*),
+   which reads poorly on a full-page surface — low-contrast pairs like the
+   Connect/Import outline button (--posit-blue on navy) get hard to read.
+   Scope a darker, desaturated slate ramp to the projects home only; custom
+   properties cascade, so everything inside (cards, dialogs, buttons) follows.
+   Global theme.css tokens — and every other modal in the app — are untouched. */
+
+:root.dark .projects-home {
+  --bg-modal: #191e23;
+  --bg-card: #242b32;
+  --bg-card-hover: #2d3640;
+  --bg-input: #14181c;
+  --border-color: #353e48;
+  --text-secondary: #a9b6c0;
+  --text-muted: #8494a1;
+  --accent-secondary: #93b3d0;
+}

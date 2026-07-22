@@ -41,6 +41,7 @@ import {
   resolveSyncServerUrl,
 } from '../utils/routing';
 import ShareDialog from './ShareDialog';
+import { sortProjectItems, sortOrderLabel, type SortOrder } from '../utils/projectSort';
 import type { Face } from '../utils/facepile';
 import type { CollectionSnapshot } from '../services/projectSetService';
 import './ProjectsHome.css';
@@ -211,8 +212,6 @@ function parseConnectInput(input: string): { docId: string; server?: string; nam
   return null;
 }
 
-type SortOrder = 'newest' | 'oldest' | 'name';
-
 export default function ProjectsHome({
   onSelectProject,
   isConnecting,
@@ -357,6 +356,11 @@ export default function ProjectsHome({
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  // Per-collection sort choice (view preference, not synced). Missing entry
+  // means the default, newest first. The open sort menu is tracked in
+  // openMenu under `sort:<collection id>` so the usual close-on-outside-click
+  // and one-menu-at-a-time behavior applies.
+  const [collectionSorts, setCollectionSorts] = useState<Record<string, SortOrder>>({});
 
   const projectSetLinkUrl = projectSetDocId && projectSetSyncServer
     ? buildProjectSetLinkUrl(projectSetDocId, projectSetSyncServer)
@@ -946,20 +950,12 @@ export default function ProjectsHome({
     return s;
   }, [collections]);
 
-  const everythingElse = useMemo(() => {
-    const rest = items.filter((it) => !shelvedIds.has(it.indexDocId)).filter(matches);
-    const sorted = [...rest];
-    if (sortOrder === 'newest') {
-      sorted.sort((a, b) => (a.lastAccessed < b.lastAccessed ? 1 : -1));
-    } else if (sortOrder === 'oldest') {
-      sorted.sort((a, b) => (a.lastAccessed > b.lastAccessed ? 1 : -1));
-    } else {
-      sorted.sort((a, b) => a.description.localeCompare(b.description));
-    }
-    return sorted;
-  }, [items, shelvedIds, matches, sortOrder]);
+  const everythingElse = useMemo(
+    () => sortProjectItems(items.filter((it) => !shelvedIds.has(it.indexDocId)).filter(matches), sortOrder),
+    [items, shelvedIds, matches, sortOrder],
+  );
 
-  const sortLabel = sortOrder === 'newest' ? 'newest first' : sortOrder === 'oldest' ? 'oldest first' : 'A to Z';
+  const sortLabel = sortOrderLabel(sortOrder);
 
   // The current user, as a face (real identity from user settings).
   const selfUser: Face | undefined = userSettings
@@ -1284,6 +1280,12 @@ export default function ProjectsHome({
       draggable
       onDragStart={handleDragStart(item)}
       onDragEnd={handleDragEnd}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setMoveSubmenuOpen(false);
+        setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
+      }}
     >
       <button className="ph-card-body" onClick={() => handleOpen(item)} title={item.description}>
         <span className={`ph-card-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
@@ -1337,18 +1339,19 @@ export default function ProjectsHome({
   );
 
   const renderCollection = (collection: CollectionView) => {
-    // Collection order is by recency (lastAccessed, newest first), not by stored
-    // position — paging walks toward older projects, per the design. True
+    // Default collection order is by recency (lastAccessed, newest first), not
+    // by stored position — paging walks toward older projects, per the design;
+    // the header's sort button switches to oldest-first or by name. True
     // "recent edits" ordering needs automerge-history attribution (Future
     // phase); last-opened is the closest signal in today's metadata.
-    const collectionItems = collectionItemsOf(collection)
-      .filter(matches)
-      .sort((a, b) => (a.lastAccessed < b.lastAccessed ? 1 : -1));
+    const collectionSort = collectionSorts[collection.id] ?? 'newest';
+    const collectionItems = sortProjectItems(collectionItemsOf(collection).filter(matches), collectionSort);
     if (query && collectionItems.length === 0) return null;
     const pageCount = Math.max(1, Math.ceil(collectionItems.length / COLLECTION_PAGE_SIZE));
     const page = Math.min(collectionPages[collection.id] ?? 0, pageCount - 1);
     const pageItems = collectionItems.slice(page * COLLECTION_PAGE_SIZE, (page + 1) * COLLECTION_PAGE_SIZE);
     const menuKey = `collection:${collection.id}`;
+    const sortMenuKey = `sort:${collection.id}`;
     return (
       <section
         key={collection.id}
@@ -1386,6 +1389,39 @@ export default function ProjectsHome({
             );
           })()}
           <span className="ph-flex-spacer" />
+          <span className="ph-collection-sort-anchor">
+            <button
+              className={`ph-icon-btn ph-collection-sort-btn ${collectionSort !== 'newest' ? 'active' : ''}`}
+              title={`Sort collection (${sortOrderLabel(collectionSort)})`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMembersFor(null);
+                setOpenMenu(openMenu === sortMenuKey ? null : sortMenuKey);
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M7 4v14M7 18l-3.5-3.5M7 18l3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M17 20V6M17 6l-3.5 3.5M17 6l3.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {openMenu === sortMenuKey && (
+              <div className="ph-menu ph-menu-right" role="menu">
+                {(['newest', 'oldest', 'name'] as SortOrder[]).map((o) => (
+                  <button
+                    key={o}
+                    className={`ph-menu-item ${collectionSort === o ? 'strong' : ''}`}
+                    onClick={() => {
+                      setCollectionSorts((s) => ({ ...s, [collection.id]: o }));
+                      setCollectionPages((p) => ({ ...p, [collection.id]: 0 }));
+                      setOpenMenu(null);
+                    }}
+                  >
+                    {o === 'newest' ? 'Newest first' : o === 'oldest' ? 'Oldest first' : 'A to Z'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </span>
           <button
             className="ph-icon-btn"
             title="Collection actions"
@@ -1443,7 +1479,7 @@ export default function ProjectsHome({
             {page > 0 && (
               <button
                 className="ph-pager"
-                title="Newer projects"
+                title={collectionSort === 'newest' ? 'Newer projects' : collectionSort === 'oldest' ? 'Older projects' : 'Previous page'}
                 onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page - 1 }))}
               >
                 ‹
@@ -1453,7 +1489,7 @@ export default function ProjectsHome({
             {page < pageCount - 1 ? (
               <button
                 className="ph-pager"
-                title="Older projects"
+                title={collectionSort === 'newest' ? 'Older projects' : collectionSort === 'oldest' ? 'Newer projects' : 'Next page'}
                 onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page + 1 }))}
               >
                 ›
@@ -1664,6 +1700,12 @@ export default function ProjectsHome({
                       draggable
                       onDragStart={handleDragStart(item)}
                       onDragEnd={handleDragEnd}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setMoveSubmenuOpen(false);
+                        setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
+                      }}
                     >
                       <button
                         className={`ph-row-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}
