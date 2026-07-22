@@ -189,6 +189,65 @@
 # is CSS-only and the fixture's `#title-block-header` element already
 # existed — only the compiled CSS gained the rule, so the `styles.css`
 # hash shifts.
+# Re-captured 2026-07-21 (bd-iq08mmnh, title-block remainder parity):
+# doc_files/styles.css hash updated because the two unconditional
+# title-block rules from TS Quarto's `_quarto-rules.scss:193-201` —
+# `#title-block-header a { text-decoration: none }` and the grouped
+# `#title-block-header .author,.date,.doi { margin-block-end: 0.2rem }` —
+# were ported into `resources/scss/html/templates/title-block.scss`. Q2
+# emits `<p class="author|date|doi">` (the doi wraps an `<a>`) inside
+# `<header id="title-block-header">`, so the rules match live DOM. doc.html
+# hash unchanged: CSS-only change; the fixture's title-block markup already
+# existed, so only the compiled CSS gained the rules.
+# Re-captured 2026-07-21 (bd-dxgcpl02, tables base parity):
+# doc_files/styles.css hash updated because three table rules from TS Quarto's
+# `_quarto-rules.scss:226-241` — `tr.header > th > p:last-of-type { margin-bottom:
+# 0px }`, `table,table.table { margin-top/bottom: 0.5rem }`, and `caption {
+# padding-top/bottom: 0.5rem; text-align: center }` — were ported into
+# `_bootstrap-rules.scss`. All three match live Q2 DOM (`<table class="table">`,
+# `<th><p>` in multi-block header cells, `<caption>` in plain-caption tables); the
+# caption `text-align:center` overrides bootstrap core's bare `caption{text-align:
+# left}` via source order. `.table-caption` was NOT ported (no such class emitted).
+# doc.html hash unchanged: CSS-only change (the fixture's table markup pre-existed).
+# Re-captured 2026-07-21 (bd-u5yvsdgw, code CSS parity):
+# doc_files/styles.css hash updated because four code rules from TS Quarto's
+# `_quarto-rules.scss` were ported: bare `code{white-space:pre}` + its
+# `@media print{code{white-space:pre-wrap}}` override (L299-306) into
+# highlight.scss; `p/dd code:not(.sourceCode){white-space:pre-wrap}` (L291-294,
+# extending Q2's existing `td` variant) and `.callout pre.sourceCode{padding-
+# left:0}` (L442-444) into _bootstrap-rules.scss. All verified against live DOM.
+# NOT ported (documented in the strand): 13d `$code-white-space` var (theming
+# infra, no visible gap), 13e line-anchor `::before` (reclassified BLOCKED — Q2
+# emits no `<span><a>` line-number anchors), 13g `code a:any-link` (Q2 already
+# ships a divergent downlit rule — pending a design call). doc.html hash
+# unchanged: CSS-only change (the fixture's code markup pre-existed).
+# Re-captured 2026-07-21 (bd-ih6jrf39, @media print parity):
+# doc_files/styles.css hash updated because four @media print rules from TS
+# Quarto's `_quarto-rules.scss:744-764` were ported into _bootstrap-rules.scss:
+# `:root{font-size:11pt}`, `#quarto-sidebar,#TOC{display:none}`,
+# `.page-columns .content{grid-column-start:page-start}`, and
+# `.panel-caption,.figure-caption,figcaption{color:#666}`. Each targets live Q2
+# DOM (Q2 already had the `.nav-page`/page-columns print pieces). NOT ported:
+# `.fixed-top{position:relative}` (Q2 emits no .fixed-top element) and audit
+# row 24 (`:root --quarto-*` vars — deferred to land with their engine-output/gt
+# consumers). doc.html hash unchanged: CSS-only change.
+# Re-captured 2026-07-21 (bd-28iqotrt, misc element parity):
+# doc_files/styles.css hash updated because seven misc element rules from TS
+# Quarto's `_quarto-rules.scss` were ported into _bootstrap-rules.scss: `.hidden`
+# (L24), `iframe` margin (L262), the `details`/`summary` set (L267-282),
+# `.footnote-back` (L352), `.quarto-unresolved-ref` (L366), `a` underline-offset
+# (L436), and `div.columns`/`div.column` (L653-662). `.visually-hidden` was NOT
+# ported (bootstrap core supplies it). This strand also changed the crossref
+# emitter (crossref_render.rs) to add `quarto-unresolved-ref` alongside
+# `quarto-xref` on unresolved refs, but doc.html hash is UNCHANGED here because
+# the single-doc baseline fixture contains no unresolved reference. (Row 29
+# light/dark-content split to bd-l1rx9yzh.)
+# Re-captured 2026-07-21 (bd-bthmzyrc, code-link underline — audit row 13g):
+# doc_files/styles.css hash updated because `code a:any-link` in
+# _bootstrap-rules.scss was changed from Q2's `text-decoration-color:$gray-600`
+# (gray underline) to Quarto 1's behavior — `text-decoration:none` plus a new
+# `code a:hover{text-decoration:underline}` — per Carlos's decision. doc.html
+# hash unchanged: CSS-only change.
 # Re-captured 2026-07-21 (bd-obkvhlam, task-list rendering): doc_files/
 # styles.css hash updated because `ul.task-list { padding-left: 1em }` and
 # `input[type="checkbox"] { margin-right: 0.5ch }` were ported from TS
@@ -198,5 +257,10 @@
 # doc.html hash unchanged: the fixture has no task list, so the new
 # selectors match nothing in its body — they only appear in the compiled
 # CSS, so the `styles.css` hash shifts.
+# Re-captured 2026-07-21 (MERGE of feature/quarto-rules-scss-parity into main's
+# task-list PR #407): both branches ported different _quarto-rules.scss rows into
+# the compiled CSS (this branch's title-block/tables/code/print/misc/13g rules +
+# #407's ul.task-list/checkbox rules), so styles.css is re-captured to reflect
+# BOTH rule sets. doc.html unchanged.
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css f5d4781f51c6f160204053671fc8126446edaadf315c258428aedb3e8188c52a
+doc_files/styles.css a54a2e6e2cf7beb3b74e1579ed08eb0af881ed9de390a582143a0d58ea34ca99

@@ -411,6 +411,31 @@ body.docked {
   }
 }
 
+// Print refinements. ported from _quarto-rules.scss:744-764 (bd-ih6jrf39,
+// audit row 28). Q2 already had `.nav-page` (above) and the page-columns print
+// pieces (the large `@media print` block further down); these fill the rest,
+// each against live Q2 DOM: `<nav id="TOC">` (template.rs:211), `#quarto-sidebar`
+// (sidebar_render), `<figcaption>` (figures), and the `.page-columns .content`
+// grid element. TS's `.fixed-top { position: relative }` (L757-759) is NOT
+// ported — Q2 emits no `.fixed-top` navbar element.
+@media print {
+  :root {
+    font-size: 11pt;
+  }
+  #quarto-sidebar,
+  #TOC {
+    display: none;
+  }
+  .page-columns .content {
+    grid-column-start: page-start;
+  }
+  .panel-caption,
+  .figure-caption,
+  figcaption {
+    color: #666;
+  }
+}
+
 // Sidebar navigation styling. Ported from Q1's
 // `projects/website/navigation/quarto-nav.scss:315-410, 464-541`. As with
 // the `.nav-page` rules above, the `.sidebar-navigation`/`.sidebar-link`
@@ -943,6 +968,96 @@ caption {
   @include body-secondary;
 }
 
+// Tables base. ported from _quarto-rules.scss:226-241 (bd-dxgcpl02).
+// Verified against live Q2 DOM:
+//   - `<table class="table">` (all Q2 tables) — top/bottom margin;
+//   - `<tr class="header"><th><p>…</p></th>` (multi-block header cells) —
+//     drop the trailing paragraph's bottom margin;
+//   - `<caption>` (plain-caption tables; crossref-captioned tables move the
+//     caption into a `<p class="caption">` float instead) — center it and
+//     pad it. `text-align: center` is the load-bearing override of bootstrap
+//     core's bare `caption { text-align: left }`; this layer compiles after
+//     bootstrap so equal-specificity source order wins.
+// The `.table-caption` selector that TS groups with `caption` (L236) is NOT
+// ported — Q2 emits no `.table-caption` class (audit row 7, blocked).
+tr.header > th > p:last-of-type {
+  margin-bottom: 0px;
+}
+
+table,
+table.table {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+caption {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  text-align: center;
+}
+
+// Misc element parity. ported from _quarto-rules.scss (bd-28iqotrt), each
+// verified against live Q2 DOM via `q2 render`. `.visually-hidden` (L13-24) is
+// NOT ported — bootstrap core already supplies it (+ `.visually-hidden-
+// focusable`). `.zindex-bottom`/`.top-right` (row 1b) stay BLOCKED (client-JS
+// features). Row 29 (light/dark-content) was split to its own strand.
+.hidden {
+  display: none !important;
+}
+
+// Raw-HTML <iframe> passthrough. from _quarto-rules.scss:262-264.
+iframe {
+  margin-bottom: 1em;
+}
+
+// Raw-HTML <details>/<summary> passthrough (the code-fold emitter will later
+// land on these too). from _quarto-rules.scss:267-282.
+details {
+  margin-bottom: 1em;
+}
+details[show] {
+  margin-bottom: 0;
+}
+details > summary {
+  @if variable-exists(text-muted) {
+    color: $text-muted;
+  }
+}
+details > summary > p:only-child {
+  display: inline;
+}
+
+// Footnote back-reference link (transforms/footnotes.rs emits
+// `<a class="footnote-back" role="doc-backlink">`). from _quarto-rules.scss:352-354.
+.footnote-back {
+  margin-left: 0.2em;
+}
+
+// Unresolved crossref marker. from _quarto-rules.scss:366-368. crossref_render.rs
+// now adds `quarto-unresolved-ref` (alongside `quarto-xref`) to unresolved refs
+// so this loudly flags a missing reference — matching TS's failure signal.
+.quarto-unresolved-ref {
+  font-weight: 600;
+}
+
+// from _quarto-rules.scss:436-438.
+a {
+  text-underline-offset: 3px;
+}
+
+// Pandoc HTML `::: {.columns}` / `::: {.column}` layout (authored;
+// `<div class="columns">`/`<div class="column">`). from _quarto-rules.scss:653-662.
+div.columns {
+  display: initial;
+  gap: initial;
+}
+div.column {
+  display: inline-block;
+  overflow-x: initial;
+  vertical-align: top;
+  width: 50%;
+}
+
 .column-margin figcaption,
 .margin-caption,
 div.aside,
@@ -1140,6 +1255,13 @@ div.sourceCode {
   margin-left: initial;
 }
 
+// Code inside a callout aligns flush-left with the callout body. ported from
+// _quarto-rules.scss:442-444 (bd-u5yvsdgw). Q2 emits
+// `<div class="callout …"> … <pre class="sourceCode …">`.
+.callout pre.sourceCode {
+  padding-left: 0;
+}
+
 // bd-j73yw: filename header above code blocks. Ported from Q1's
 // `_quarto-rules-code-filename.scss`. Q2's `CodeBlockRenderTransform`
 // wraps the matching code block in
@@ -1290,6 +1412,12 @@ nav td code:not(.sourceCode) {
   padding: 0;
 }
 
+// Inline code embedded in prose should wrap (the bare `code{white-space:pre}`
+// default in highlight.scss otherwise makes it overflow). Q2 already wrapped
+// `td` inline code; the `p`/`dd` selectors are ported from
+// _quarto-rules.scss:291-294 (bd-u5yvsdgw) — see quarto-cli#2649.
+p code:not(.sourceCode),
+dd code:not(.sourceCode),
 td code:not(.sourceCode) {
   white-space: pre-wrap;
 }
@@ -2210,10 +2338,17 @@ p.subtitle {
   margin-bottom: 0.5em;
 }
 
-// downlit links
+// downlit / code linking (pkgdown style). ported from _quarto-rules.scss:328-335
+// (bd-bthmzyrc): no underline by default, underline on hover. This adopts
+// Quarto 1's behavior, replacing Q2's earlier `text-decoration-color: $gray-600`
+// gray-underline variant (Carlos, 2026-07-21).
 code a:any-link {
   color: inherit;
-  text-decoration-color: $gray-600;
+  text-decoration: none;
+}
+code a:hover {
+  color: inherit;
+  text-decoration: underline;
 }
 
 // This is a sentinel value that renderers can use to determine
