@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-22
+
+- [`6346c2c0`](https://github.com/quarto-dev/q2/commits/6346c2c0): UI exploration (branch only): the projects home's dark mode is darker and less saturated (the old navy made the Connect/Import button hard to read), right-clicking a project opens the same menu as its ⋯ button, and every collection header has a sort button (newest / oldest / A to Z).
+
 ### 2026-07-21
 
 - [`5852d0ee`](https://github.com/quarto-dev/q2/commits/5852d0ee): Task lists render as real checkboxes in the preview, and in edit-enabled sessions clicking a checkbox updates the document source (`[ ]` to `[x]` and back). Clicking the item's text still opens the block editor without toggling the box.
