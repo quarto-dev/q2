@@ -20,6 +20,7 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   createProjectOnServer,
   getServerUrl,
+  seedUiVariant,
 } from './helpers/projectFactory';
 import type {} from './helpers/testHooks';
 
@@ -120,6 +121,9 @@ test.describe('Share link → synced project set', () => {
       // `initialLoadRef` that only runs once per mount, so we must visit the
       // share URL in a page that hasn't mounted the app before.
       const receiver = await browser.newContext();
+      // This spec drives the classic ProjectSelector; pin the variant at the
+      // context level so every page (bootstrap, share, reload) inherits it.
+      await seedUiVariant(receiver, 'classic');
 
       try {
         // Step 1: bootstrap the receiver's existing synced project set in a
@@ -179,6 +183,9 @@ test.describe('Share link → synced project set', () => {
       ]);
 
       const receiver = await browser.newContext();
+      // This spec drives the classic ProjectSelector; pin the variant at the
+      // context level so every page (bootstrap, share, reload) inherits it.
+      await seedUiVariant(receiver, 'classic');
 
       try {
         // Bootstrap in a throwaway page — see the explanation in the other test.
@@ -262,6 +269,9 @@ test.describe('Share link → synced project set', () => {
       ]);
 
       const receiver = await browser.newContext();
+      // This spec drives the classic ProjectSelector; pin the variant at the
+      // context level so every page (bootstrap, share, reload) inherits it.
+      await seedUiVariant(receiver, 'classic');
 
       try {
         const bootstrapPage = await receiver.newPage();

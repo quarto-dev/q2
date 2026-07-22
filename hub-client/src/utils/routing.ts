@@ -125,6 +125,35 @@ export interface LinkProjectSetRoute {
 }
 
 /**
+ * Route from a collection invite link (explore/projects-collections-ui exploration).
+ *
+ * The invite carries the collection identity plus the collection's project entries
+ * inline, so joining delivers real, syncable projects; only collection
+ * membership itself is mock data until shared collections become synced docs.
+ *
+ * SECURITY: Like ShareRoute, the entries contain bearer document IDs and
+ * the route should only exist transiently.
+ *
+ * URL format: #/join-collection/<collectionId>?name=<collection>&from=<inviter>&entries=<json>
+ */
+export interface JoinCollectionRoute {
+  type: 'join-collection';
+  /** Automerge doc id of the collection's ProjectSetDocument (no prefix). */
+  collectionId: string;
+  collectionName: string;
+  /** Display name of the person who sent the invite. */
+  inviter: string;
+  /** Sync server hosting the collection document. */
+  syncServer: string;
+  /**
+   * Legacy payload from pre-architecture invites (projects inlined in the
+   * URL). Still parsed for backward compatibility; the join flow now
+   * subscribes to the collection document instead.
+   */
+  entries: Array<{ indexDocId: string; syncServer: string; description: string }>;
+}
+
+/**
  * Route for dev-only harness pages (component previews, visual testing).
  * Only parsed in development builds; in production, #/dev/... falls through to project-selector.
  */
@@ -137,7 +166,7 @@ export interface DevRoute {
 /**
  * Union of all possible routes.
  */
-export type Route = ProjectSelectorRoute | ProjectRoute | FileRoute | ShareRoute | LinkProjectSetRoute | DevRoute;
+export type Route = ProjectSelectorRoute | ProjectRoute | FileRoute | ShareRoute | LinkProjectSetRoute | JoinCollectionRoute | DevRoute;
 
 // ============================================================================
 // URL Parsing
@@ -218,6 +247,29 @@ export function parseHashRoute(hash: string): Route {
       type: 'link-project-set',
       projectSetDocId,
       syncServer: server,
+    };
+  }
+
+  // Parse join-collection route: /join-collection/<collectionId>?name=<collection>&from=<inviter>&entries=<json>
+  if (segments[0] === 'join-collection' && segments[1]) {
+    let entries: JoinCollectionRoute['entries'] = [];
+    try {
+      const raw = JSON.parse(queryParams.get('entries') ?? '[]');
+      if (Array.isArray(raw)) {
+        entries = raw
+          .filter((e) => typeof e?.d === 'string' && typeof e?.s === 'string')
+          .map((e) => ({ indexDocId: e.d, syncServer: e.s, description: String(e.n ?? '') }));
+      }
+    } catch {
+      // Malformed entries — join proceeds with an empty collection
+    }
+    return {
+      type: 'join-collection',
+      collectionId: decodeURIComponent(segments[1]),
+      collectionName: queryParams.get('name') ?? 'Shared collection',
+      inviter: queryParams.get('from') ?? 'A collaborator',
+      syncServer: queryParams.get('server') ?? '',
+      entries,
     };
   }
 
@@ -305,6 +357,19 @@ export function buildHashRoute(route: Route): string {
       const params = new URLSearchParams();
       params.set('server', route.syncServer);
       return `#/link-project-set/${encodeURIComponent(route.projectSetDocId)}?${params.toString()}`;
+    }
+
+    case 'join-collection': {
+      const params = new URLSearchParams();
+      params.set('name', route.collectionName);
+      params.set('from', route.inviter);
+      if (route.syncServer) params.set('server', route.syncServer);
+      if (route.entries.length > 0) {
+        params.set('entries', JSON.stringify(
+          route.entries.map((e) => ({ d: e.indexDocId, s: e.syncServer, n: e.description })),
+        ));
+      }
+      return `#/join-collection/${encodeURIComponent(route.collectionId)}?${params.toString()}`;
     }
 
     case 'dev':
@@ -464,6 +529,9 @@ export function routesEqual(a: Route, b: Route): boolean {
         a.syncServer === bLink.syncServer
       );
     }
+
+    case 'join-collection':
+      return a.collectionId === (b as JoinCollectionRoute).collectionId;
 
     case 'dev':
       return a.page === (b as DevRoute).page;

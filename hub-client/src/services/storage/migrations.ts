@@ -35,7 +35,7 @@ export const CURRENT_DB_VERSION = 4;
  * Current application schema version.
  * This is the version number after all migrations have been applied.
  */
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 /**
  * Baseline schema version for databases that existed before the migration system.
@@ -107,7 +107,44 @@ export const migrations: Migration[] = [
       }
     },
   },
+  // Migration 4→5: Collections. The root pointer goes from a single project
+  // set to an array of collection pointers (each collection is its own
+  // ProjectSetDocument). Transform-only: the array lives in the existing
+  // projectSet store under the 'collections' key, and the legacy singleton
+  // pointer is kept untouched as a safety net.
+  {
+    version: 5,
+    description: 'Convert singleton project set pointer to collections array',
+    transform: async (db) => {
+      await migratePointerToCollections(db);
+    },
+  },
 ];
+
+/**
+ * Convert the legacy singleton project set pointer into a one-element
+ * collections array. Idempotent: a no-op when the collections record
+ * already exists or there is nothing to migrate. The legacy pointer is
+ * never deleted here.
+ *
+ * Exported for direct unit testing and for lazy self-healing reads
+ * (see projectSetStorage.getCollectionPointers).
+ */
+export async function migratePointerToCollections(
+  db: import('idb').IDBPDatabase,
+): Promise<void> {
+  if (!db.objectStoreNames.contains(STORES.PROJECT_SET)) return;
+  const existing = await db.get(STORES.PROJECT_SET, 'collections');
+  if (existing) return;
+  const legacy = await db.get(STORES.PROJECT_SET, 'projectSet');
+  if (!legacy) return;
+  await db.put(STORES.PROJECT_SET, {
+    key: 'collections',
+    collections: [
+      { projectSetDocId: legacy.projectSetDocId, syncServer: legacy.syncServer },
+    ],
+  });
+}
 
 /**
  * Get migrations that need to be applied to upgrade from a given version.

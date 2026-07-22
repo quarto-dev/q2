@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
 import ProjectSelector from './components/ProjectSelector';
+import ProjectsHome from './components/ProjectsHome';
+import JoinCollectionLanding from './components/JoinCollectionLanding';
 import ProjectSetSetup from './components/ProjectSetSetup';
 
 // Lazy-loaded dev harness — only fetched when navigating to #/dev/... routes.
@@ -32,15 +34,15 @@ import {
 import type { ProjectFile } from '@quarto/preview-runtime';
 import * as projectStorage from './services/projectStorage';
 import { installDebugApi } from './services/debugApi';
-import { getUserIdentity, updateUserName } from './services/userSettings';
+import { getUserIdentity, updateUserName, actorIdFromUserId } from './services/userSettings';
 import { useRouting } from './hooks/useRouting';
-import { useProjectSet } from './hooks/useProjectSet';
+import { useCollectionSets } from './hooks/useCollectionSets';
 import { useAuth } from './hooks/useAuth';
 import { useAuthProbe } from './hooks/useAuthProbe';
 import { useExecutionChannel } from './hooks/useExecutionChannel';
 import { resolveActorId as resolveActorIdRequest } from './services/authService';
 import type { Route, ShareRoute, LinkProjectSetRoute } from './utils/routing';
-import { resolveSyncServerUrl } from './utils/routing';
+import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER } from './utils/routing';
 import './App.css';
 
 /**
@@ -102,6 +104,8 @@ function App() {
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [screenName, setScreenName] = useState<string | undefined>();
   const [cursorColor, setCursorColor] = useState<string | undefined>();
+  // Local user id → stable Automerge actor when auth is disabled (local-prod).
+  const [localActorId, setLocalActorId] = useState<string | undefined>();
   const [identities, setIdentities] = useState<Record<string, ActorIdentity>>({});
   // bd-sfet3264 (Phase 1C): IndexDocument V2 capture sidecar (path → CaptureRef).
   // Populated by the sync client's onCapturesChange; threaded down to the
@@ -130,7 +134,7 @@ function App() {
   });
 
   // Project set management (synced project list)
-  const [projectSetState, projectSetActions] = useProjectSet();
+  const [projectSetState, projectSetActions] = useCollectionSets();
 
   // Keep a ref so callbacks that intentionally omit projectSetState from their
   // dependency arrays (to avoid re-creation churn) can still read the latest status.
@@ -141,8 +145,8 @@ function App() {
   // `resolveActorIdRequest` for the three-valued contract; callers abandon
   // the open only on `null` (auth failure), proceed on `string`/`undefined`.
   const resolveActorId = useCallback(
-    (indexDocId: string) => resolveActorIdRequest(indexDocId, AUTH_ENABLED, triggerRefresh),
-    [triggerRefresh],
+    (indexDocId: string) => resolveActorIdRequest(indexDocId, AUTH_ENABLED, triggerRefresh, localActorId),
+    [triggerRefresh, localActorId],
   );
 
   // Capture auth error from redirect query param (once, before URL is cleaned).
@@ -158,6 +162,7 @@ function App() {
   useEffect(() => {
     if (AUTH_ENABLED && authLoading) return;
     getUserIdentity().then(async (settings) => {
+      setLocalActorId(actorIdFromUserId(settings.userId));
       if (auth?.name && settings.createdAt === settings.updatedAt) {
         const updated = await updateUserName(auth.name);
         setScreenName(updated.userName);
@@ -173,6 +178,17 @@ function App() {
   // Track if we've done the initial URL-based navigation
   const initialLoadRef = useRef(false);
 
+  // UI exploration (explore/projects-collections-ui): choose between the new
+  // collections-based projects home and the classic modal selector. Persisted so
+  // UX testing can flip back and forth across reloads.
+  const [uiVariant, setUiVariant] = useState<'collections' | 'classic'>(() =>
+    localStorage.getItem('qh-ui-variant') === 'classic' ? 'classic' : 'collections',
+  );
+  const switchUiVariant = useCallback((variant: 'collections' | 'classic') => {
+    localStorage.setItem('qh-ui-variant', variant);
+    setUiVariant(variant);
+  }, []);
+
   // URL-based routing
   const {
     route,
@@ -180,6 +196,50 @@ function App() {
     navigateToProject,
     navigateToFile,
   } = useRouting();
+
+  // Invite-first onboarding: opening a collection invite establishes a
+  // personal root behind the landing screen, so the invitee only ever sees
+  // "join Team docs" — never the setup or migration prompts. A browser with a
+  // stray legacy project (needs-migration) migrates it silently into the new
+  // root (non-destructive: the legacy store is retained); a fresh browser
+  // (needs-setup) just creates an empty root. The landing shows "Connecting…"
+  // until the root is ready, then Join subscribes to the collection.
+  const inviteRootInitiatedRef = useRef(false);
+  useEffect(() => {
+    if (route.type !== 'join-collection' || inviteRootInitiatedRef.current) return;
+    if (projectSetState.status === 'needs-setup') {
+      inviteRootInitiatedRef.current = true;
+      projectSetActions.createProjectSet(DEFAULT_SYNC_SERVER);
+    } else if (projectSetState.status === 'needs-migration') {
+      // Fire once: migrateProjects resets to needs-migration on failure, so
+      // an unguarded effect would retry-loop against an unreachable server.
+      inviteRootInitiatedRef.current = true;
+      projectSetActions.migrateProjects(DEFAULT_SYNC_SERVER);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.type, projectSetState.status]);
+
+  // Denormalize a peek summary onto this user's project-set entry while a
+  // project is open. Kept current as files and identities change (both are
+  // low-frequency: file add/remove/rename, presence join). This is a per-user
+  // cache of "the project as I last saw it" — list surfaces (cards, peek)
+  // read it so they never need a sync connection per project.
+  useEffect(() => {
+    if (!project || projectSetState.status !== 'connected' || files.length === 0) return;
+    // You are always a contributor; presence identities fill in everyone else
+    // (they can lag connection, so self is added explicitly).
+    const seen = screenName ? [{ name: screenName, color: cursorColor ?? '#447099' }] : [];
+    for (const i of Object.values(identities)) {
+      if (!seen.some((s) => s.name === i.name)) seen.push({ name: i.name, color: i.color });
+    }
+    projectSetActions.updateProjectSummary(project.indexDocId, {
+      fileCount: files.length,
+      topFiles: files.slice(0, 5).map((f) => f.path),
+      contributors: seen.slice(0, 6),
+      asOf: new Date().toISOString(),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, files, identities, screenName, cursorColor, projectSetState.status]);
 
   // Live refs for the dev-only console debug API. The API itself
   // is installed once (per the gate below) and reads current state
@@ -629,6 +689,21 @@ function App() {
     return <DevHarnessLazy page={route.page} />;
   }
 
+  // Collection invite landing (explore/projects-collections-ui). Always shown
+  // for an invite route, ahead of the setup/migration screens: the effect
+  // above establishes the personal root (creating or silently migrating) so
+  // the invitee only ever sees "join <collection>", never onboarding prompts.
+  if (route.type === 'join-collection') {
+    return (
+      <JoinCollectionLanding
+        route={route}
+        status={projectSetState.status}
+        onSubscribe={projectSetActions.subscribeCollection}
+        onDone={() => navigateToProjectSelector({ replace: true })}
+      />
+    );
+  }
+
   // Show project set setup/migration screen if needed
   if (
     projectSetState.status === 'needs-setup' ||
@@ -667,25 +742,64 @@ function App() {
   return (
     <>
       {!project ? (
-        <ProjectSelector
-          onSelectProject={handleSelectProject}
-          onProjectCreated={handleProjectCreated}
-          isConnecting={isConnecting}
-          error={connectionError}
-          onSignOut={AUTH_ENABLED ? logout : undefined}
-          authEmail={auth?.email}
-          authPicture={auth?.picture}
-          onScreenNameChange={setScreenName}
-          onColorChange={setCursorColor}
-          authName={auth?.name}
-          projectSetDocId={projectSetActions.getProjectSetDocId()}
-          projectSetSyncServer={projectSetActions.getSyncServer()}
-          projectSetStatus={projectSetState.status}
-          projectSetEntries={projectSetState.status === 'connected' ? projectSetState.projects : undefined}
-          onRemoveProjectFromSet={projectSetActions.removeProject}
-          onTouchProject={projectSetActions.touchProject}
-          onAddProjectToSet={projectSetActions.addProject}
-        />
+        uiVariant === 'collections' ? (
+          <ProjectsHome
+            onSelectProject={handleSelectProject}
+            onProjectCreated={handleProjectCreated}
+            isConnecting={isConnecting}
+            error={connectionError}
+            onSignOut={AUTH_ENABLED ? logout : undefined}
+            authEmail={auth?.email}
+            onScreenNameChange={setScreenName}
+            onColorChange={setCursorColor}
+            projectSetDocId={projectSetActions.getProjectSetDocId()}
+            projectSetSyncServer={projectSetActions.getSyncServer()}
+            projectSetStatus={projectSetState.status}
+            projectSetEntries={projectSetState.status === 'connected' ? projectSetState.projects : undefined}
+            onRemoveProjectFromSet={projectSetActions.removeProject}
+            onTouchProject={projectSetActions.touchProject}
+            onAddProjectToSet={projectSetActions.addProject}
+            onRenameProject={projectSetActions.updateProjectDescription}
+            onUpdateProjectSummary={projectSetActions.updateProjectSummary}
+            collections={projectSetState.collections}
+            onCreateCollection={projectSetActions.createCollection}
+            onUnsubscribeCollection={projectSetActions.unsubscribeCollection}
+            onRenameCollection={projectSetActions.renameCollection}
+            onAddProjectToCollection={projectSetActions.addProjectToCollection}
+            onRemoveProjectFromCollection={projectSetActions.removeProjectFromCollection}
+            onMoveProjectBetweenCollections={projectSetActions.moveProjectBetweenCollections}
+            onSwitchToClassicUi={() => switchUiVariant('classic')}
+          />
+        ) : (
+          <>
+            <ProjectSelector
+              onSelectProject={handleSelectProject}
+              onProjectCreated={handleProjectCreated}
+              isConnecting={isConnecting}
+              error={connectionError}
+              onSignOut={AUTH_ENABLED ? logout : undefined}
+              authEmail={auth?.email}
+              authPicture={auth?.picture}
+              onScreenNameChange={setScreenName}
+              onColorChange={setCursorColor}
+              authName={auth?.name}
+              projectSetDocId={projectSetActions.getProjectSetDocId()}
+              projectSetSyncServer={projectSetActions.getSyncServer()}
+              projectSetStatus={projectSetState.status}
+              projectSetEntries={projectSetState.status === 'connected' ? projectSetState.projects : undefined}
+              onRemoveProjectFromSet={projectSetActions.removeProject}
+              onTouchProject={projectSetActions.touchProject}
+              onAddProjectToSet={projectSetActions.addProject}
+            />
+            <button
+              className="ui-variant-toggle"
+              onClick={() => switchUiVariant('collections')}
+              title="Collections-based projects home (UI exploration)"
+            >
+              Try the new projects home
+            </button>
+          </>
+        )
       ) : (
         <ViewModeProvider>
           <ErrorBoundary>

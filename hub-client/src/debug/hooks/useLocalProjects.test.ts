@@ -11,14 +11,23 @@ import { DB_NAME, STORES } from '../../services/storage/types'
 import { _resetLocalDbCacheForTesting } from '../services/localProjects'
 import { useLocalProjects } from './useLocalProjects'
 
-async function seed(projects: unknown[]) {
+async function seed(
+  projects: unknown[],
+  collections?: Array<{ projectSetDocId: string; syncServer: string }>,
+) {
   const db = await openDB(DB_NAME, 1, {
     upgrade(db) {
       db.createObjectStore(STORES.PROJECTS, { keyPath: 'id' })
+      if (collections) {
+        db.createObjectStore(STORES.PROJECT_SET, { keyPath: 'key' })
+      }
     },
   })
   for (const p of projects) {
     await db.put(STORES.PROJECTS, p)
+  }
+  if (collections) {
+    await db.put(STORES.PROJECT_SET, { key: 'collections', collections })
   }
   db.close()
 }
@@ -62,5 +71,20 @@ describe('useLocalProjects', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.projects).toEqual([])
     expect(result.current.projectSetPointer).toBeNull()
+    expect(result.current.collectionPointers).toEqual([])
+  })
+
+  it('surfaces every collection pointer so each synced doc is inspectable', async () => {
+    await seed([], [
+      { projectSetDocId: 'root-doc', syncServer: 'wss://h' },
+      { projectSetDocId: 'team-doc', syncServer: 'wss://h' },
+    ])
+
+    const { result } = renderHook(() => useLocalProjects())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.collectionPointers.map((c) => c.projectSetDocId)).toEqual([
+      'root-doc',
+      'team-doc',
+    ])
   })
 })
