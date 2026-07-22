@@ -1294,6 +1294,60 @@ fn composed_list_item_attr<W: Write>(item_attr: &Attr, ctx: &HtmlWriterContext<'
     (id.clone(), out_classes, kvs.clone())
 }
 
+/// Task-list detection, mirroring Pandoc's `Writers.Shared.toTaskListItem`:
+/// the item's first block is a `Plain`/`Paragraph` whose inlines start with
+/// `Str "☐"` (unchecked) or `Str "☒"` (checked) followed by `Space`.
+/// Returns the checked state without rewriting.
+fn task_item_checked(item: &[Block]) -> Option<bool> {
+    let content = match item.first()? {
+        Block::Plain(p) => &p.content,
+        Block::Paragraph(p) => &p.content,
+        _ => return None,
+    };
+    let Some(Inline::Str(s)) = content.first() else {
+        return None;
+    };
+    let checked = match s.text.as_str() {
+        "☐" => false,
+        "☒" => true,
+        _ => return None,
+    };
+    matches!(content.get(1), Some(Inline::Space(_))).then_some(checked)
+}
+
+/// Rewrite a task item the way Pandoc's HTML writer renders it: the marker
+/// `Str`+`Space` is replaced by `<label><input type="checkbox" [checked=""]
+/// />` and a closing `</label>` after the head block's inlines, so a tight
+/// item renders `<li><label>…</label></li>` and a loose one
+/// `<li><p><label>…</label></p></li>`.
+fn rewrite_task_item(item: &[Block]) -> Option<Vec<Block>> {
+    let checked = task_item_checked(item)?;
+    let raw = |text: &str| {
+        Inline::RawInline(crate::pandoc::RawInline {
+            format: "html".to_string(),
+            text: text.to_string(),
+            source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By {
+                kind: "task-list-checkbox".to_string(),
+                data: serde_json::Value::Null,
+            }),
+        })
+    };
+    let checkbox = if checked {
+        "<label><input type=\"checkbox\" checked=\"\" />"
+    } else {
+        "<label><input type=\"checkbox\" />"
+    };
+    let mut rewritten: Vec<Block> = item.to_vec();
+    let content = match &mut rewritten[0] {
+        Block::Plain(p) => &mut p.content,
+        Block::Paragraph(p) => &mut p.content,
+        _ => unreachable!("task_item_checked only matches Plain/Paragraph"),
+    };
+    content.splice(0..2, [raw(checkbox)]);
+    content.push(raw("</label>"));
+    Some(rewritten)
+}
+
 /// Write one list item as `<li …>…</li>`. Hoists a trailing block attribute from
 /// the item's last block onto the `<li>` (composing with the incremental
 /// `fragment` class), and renders the item with that trailing attr stripped so
@@ -1302,6 +1356,8 @@ fn write_list_item<W: Write>(
     item: &[Block],
     ctx: &mut HtmlWriterContext<'_, W>,
 ) -> std::io::Result<()> {
+    let rewritten_task_item = rewrite_task_item(item);
+    let item: &[Block] = rewritten_task_item.as_deref().unwrap_or(item);
     let (attr, stripped) = super::block_attr::split_list_item_attr(item);
     let li_attr = composed_list_item_attr(&attr, ctx);
     write!(ctx, "<li")?;
@@ -1408,6 +1464,16 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
         }
         Block::BulletList(list) => {
             write!(ctx, "<ul")?;
+            // Pandoc parity: `class="task-list"` iff every item is a task
+            // item (bullet lists only — Pandoc never puts the class on <ol>).
+            if !list.content.is_empty()
+                && list
+                    .content
+                    .iter()
+                    .all(|item| task_item_checked(item).is_some())
+            {
+                write!(ctx, " class=\"task-list\"")?;
+            }
             write_block_source_attrs(block, ctx)?;
             writeln!(ctx, ">")?;
             for item in &list.content {

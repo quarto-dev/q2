@@ -1,0 +1,18 @@
+---
+title: Original Title
+format: html
+filters:
+  - set-meta.lua
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["p.subtitle"]
+        - []
+      ensureFileRegexMatches:
+        - ["<title>Title From Meta</title>", "Subtitle from Meta handler", "seen-[1-9][0-9]*-strs"]
+        - ["Original Title"]
+---
+
+hello world

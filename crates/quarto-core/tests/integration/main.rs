@@ -25,6 +25,9 @@ pub mod idempotence;
 pub mod include_resolve_pipeline;
 pub mod incremental_rebuild;
 pub mod jupyter_integration;
+pub mod language_catalog;
+pub mod language_pipeline;
+pub mod language_resolve;
 pub mod link_rewriting_pipeline;
 pub mod listing_pipeline;
 pub mod math_mode_pipeline;
@@ -45,6 +48,7 @@ pub mod replay_engine;
 pub mod revealjs_features;
 pub mod revealjs_format;
 pub mod sidebar_pipeline;
+pub mod title_block_pipeline;
 pub mod video_shortcode_preview;
 pub mod website_post_render;
 

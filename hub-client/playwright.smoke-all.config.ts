@@ -27,9 +27,19 @@ export default defineConfig({
   // match so only the smoke-all spec runs under this config.
   testIgnore: undefined,
   testMatch: '**/smoke-all.spec.ts',
-  // Run smoke-all serially. The base config uses 2 workers on CI, but the
-  // WASM render pipeline stalls under contention on a 2-core runner, which is
-  // the dominant source of the 75s-timeout flakiness in this suite. A single
-  // worker trades wall-clock for stability — acceptable for a nightly run.
-  workers: 1,
+  // Parallel workers for smoke-all. This suite historically ran at `workers: 1`
+  // because the 75s-timeout flakiness was blamed on the WASM render pipeline
+  // stalling under CPU contention. That diagnosis was wrong: the public-repo
+  // `ubuntu-latest` runner has 4 vCPUs (not 2), and the real cause was
+  // server-side sync contention, fixed by the samod-0.12 hub upgrade (PR #355,
+  // 2026-07-03). Since that landed the nightly has been clean, and dispatch
+  // stress runs confirmed 78/78 with zero flaky at both 3 and 4 workers
+  // (~3.4m vs the serial ~4.8m). We restore parallelism at 3, which reserves
+  // one core for the co-resident hub + vite-preview + node processes.
+  //
+  // `SMOKE_ALL_WORKERS` overrides the count for a workflow_dispatch run (e.g.
+  // to re-stress at 4 if flakiness ever returns).
+  workers: process.env.SMOKE_ALL_WORKERS
+    ? parseInt(process.env.SMOKE_ALL_WORKERS, 10)
+    : 3,
 });

@@ -11,8 +11,12 @@
 //! derived fields:
 //!
 //! - `pagetitle`: Plain-text version of `title` (for HTML `<title>` element)
+//! - `description-meta`: Plain-text version of `description` (for the head's
+//!   `<meta name="description">` — the same split Pandoc's HTML writer and
+//!   Q1's `html.template` use, so `description` itself can render rich in
+//!   the title block; bd-j6huijli)
 //!
-//! More derived fields can be added in the future (author-meta, date-meta, etc.)
+//! More derived fields can be added in the future (date-meta, etc.)
 
 use quarto_pandoc_types::block::Block;
 use quarto_pandoc_types::inline::Inline;
@@ -28,6 +32,7 @@ use crate::transform::{AstTransform, TransformPhase};
 ///
 /// This adds derived metadata fields needed for template rendering:
 /// - `pagetitle` from `title` (plain text version)
+/// - `description-meta` from `description` (plain text version)
 ///
 /// The transform is idempotent - running it multiple times has no effect
 /// if the derived fields already exist.
@@ -70,25 +75,28 @@ fn normalize_metadata(meta: &mut ConfigValue) {
     };
     let source_info = meta.source_info.clone();
 
-    // Add pagetitle if not present
-    add_pagetitle_if_missing(entries, source_info);
+    // Add pagetitle / description-meta if not present
+    add_plain_text_derivation(entries, "title", "pagetitle", source_info.clone());
+    add_plain_text_derivation(entries, "description", "description-meta", source_info);
 }
 
-/// Add `pagetitle` field derived from `title` if not already present.
-fn add_pagetitle_if_missing(entries: &mut Vec<ConfigMapEntry>, source_info: SourceInfo) {
-    // Check if pagetitle already exists
-    let has_pagetitle = entries.iter().any(|e| e.key == "pagetitle");
-    if has_pagetitle {
+/// Add `derived_key` — the plain-text form of `source_key`'s value —
+/// if not already present (so an explicit value wins).
+fn add_plain_text_derivation(
+    entries: &mut Vec<ConfigMapEntry>,
+    source_key: &str,
+    derived_key: &str,
+    source_info: SourceInfo,
+) {
+    if entries.iter().any(|e| e.key == derived_key) {
         return;
     }
 
-    // Look for title field
-    let title_entry = entries.iter().find(|e| e.key == "title");
-    if let Some(entry) = title_entry {
+    if let Some(entry) = entries.iter().find(|e| e.key == source_key) {
         let plain_text = extract_plain_text(&entry.value);
         if let Some(text) = plain_text {
             entries.push(ConfigMapEntry {
-                key: "pagetitle".to_string(),
+                key: derived_key.to_string(),
                 key_source: source_info.clone(),
                 value: ConfigValue::new_string(text, source_info),
             });
@@ -419,6 +427,72 @@ mod tests {
                 .expect("Expected string for pagetitle");
             assert_eq!(value, "Custom Page Title");
         }
+    }
+
+    #[tokio::test]
+    async fn test_adds_description_meta_from_inlines_description() {
+        use quarto_pandoc_types::inline::Emph;
+        // `A *fine* doc` — the head meta needs the plain-text form.
+        let mut meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "description".to_string(),
+                key_source: dummy_source_info(),
+                value: ConfigValue::new_inlines(
+                    vec![
+                        Inline::Str(Str {
+                            text: "A".to_string(),
+                            source_info: dummy_source_info(),
+                        }),
+                        Inline::Space(quarto_pandoc_types::inline::Space {
+                            source_info: dummy_source_info(),
+                        }),
+                        Inline::Emph(Emph {
+                            content: vec![Inline::Str(Str {
+                                text: "fine".to_string(),
+                                source_info: dummy_source_info(),
+                            })],
+                            source_info: dummy_source_info(),
+                        }),
+                        Inline::Space(quarto_pandoc_types::inline::Space {
+                            source_info: dummy_source_info(),
+                        }),
+                        Inline::Str(Str {
+                            text: "doc".to_string(),
+                            source_info: dummy_source_info(),
+                        }),
+                    ],
+                    dummy_source_info(),
+                ),
+            }],
+            dummy_source_info(),
+        );
+        normalize_metadata(&mut meta);
+        let derived = meta.get("description-meta").expect("description-meta");
+        assert_eq!(derived.as_str(), Some("A fine doc"));
+    }
+
+    #[tokio::test]
+    async fn test_preserves_existing_description_meta() {
+        let mut meta = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "description".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_string("Doc description", dummy_source_info()),
+                },
+                ConfigMapEntry {
+                    key: "description-meta".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_string("Custom meta", dummy_source_info()),
+                },
+            ],
+            dummy_source_info(),
+        );
+        normalize_metadata(&mut meta);
+        assert_eq!(
+            meta.get("description-meta").unwrap().as_str(),
+            Some("Custom meta")
+        );
     }
 
     #[tokio::test]

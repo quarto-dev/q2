@@ -1,0 +1,32 @@
+---
+source: crates/quarto-core/tests/integration/title_block_pipeline.rs
+expression: extract_title_block(&html)
+---
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">A Simple Document</h1>
+<p class="subtitle lead">With a subtitle</p>
+</div>
+<div class="quarto-title-meta">
+<div>
+<div class="quarto-title-meta-heading">Author</div>
+<div class="quarto-title-meta-contents">
+<p>Norah Jones</p>
+</div>
+</div>
+<div>
+<div class="quarto-title-meta-heading">Published</div>
+<div class="quarto-title-meta-contents">
+<p class="date">July 1, 2026</p>
+</div>
+</div>
+</div>
+<div>
+<div class="abstract">
+<div class="block-title">Abstract</div>
+<p>This is the abstract. It has more than one sentence so we can
+see how the abstract is laid out.</p>
+</div>
+</div>
+
+</header>

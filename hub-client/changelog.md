@@ -23,11 +23,36 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-21
+
+- [`5852d0ee`](https://github.com/quarto-dev/q2/commits/5852d0ee): Task lists render as real checkboxes in the preview, and in edit-enabled sessions clicking a checkbox updates the document source (`[ ]` to `[x]` and back). Clicking the item's text still opens the block editor without toggling the box.
+
+### 2026-07-20
+
+- [`4202d342`](https://github.com/quarto-dev/q2/commits/4202d342): Mermaid diagrams: a fenced code block marked `mermaid` now renders as a live diagram in the preview (both regular documents and revealjs slides), with a readable error box when the diagram source fails to parse. The diagram library loads on demand from the jsdelivr CDN, so diagram-free documents load no extra code.
+
+### 2026-07-17
+
+- [`4aabfdaa`](https://github.com/quarto-dev/q2/commits/4aabfdaa): Dates in the preview title block are now formatted like the rendered site: `date` and `date-modified` render in a readable long form (e.g. "July 1, 2026") by default, honor the `date-format` option (named styles like `medium` or format strings like `MMM D, YYYY`), and support the `today`, `now`, and `last-modified` keywords.
+- [`25b8c870`](https://github.com/quarto-dev/q2/commits/25b8c870): The preview honors `title-block-style`: `none` shows the minimal Pandoc-style title block (plain title, author, and date lines with no styled layout), matching the rendered site; `plain` keeps the standard structure.
+
+### 2026-07-16
+
+- [`7907d35b`](https://github.com/quarto-dev/q2/commits/7907d35b): The preview supports title-block banner mode, matching the rendered site: with `title-block-banner` set, the title (plus subtitle, description, and category chips) renders in a full-width colored banner above the content area, with the author/date metadata grid below it.
+- [`d9ff92af`](https://github.com/quarto-dev/q2/commits/d9ff92af): The preview title block now renders the complete metadata grid, matching the rendered site: category chips under the title, the `description`, "Modified" (`date-modified`) and "Doi" (linked to doi.org) entries, and a trailing "Keywords" block; `title-block-categories: false` hides the chips.
+
 ### 2026-07-15
 
+- [`64ba0e38`](https://github.com/quarto-dev/q2/commits/64ba0e38): Dropping an image into the editor now defaults the upload to the current document's folder and inserts a correctly relativized path (e.g. `![](../photo.png)`), instead of uploading to the project root with a broken document-relative reference; sidebar drags into a subdirectory document are fixed the same way.
+- [`633ab60f`](https://github.com/quarto-dev/q2/commits/633ab60f): Structured authors now render fully in the preview title block, matching the rendered site: authors with affiliations appear in a two-column Authors/Affiliations grid, names link to the author's `url` with degrees shown after the name, and email and ORCID entries render as icon links.
+- [`faae3684`](https://github.com/quarto-dev/q2/commits/faae3684): The preview's title block now matches the rendered site's Quarto-1-style markup — multiple authors each get their own line under a pluralized "Authors" heading (structured author lists no longer render as garbage), a date without an author shows its "Published" entry, and the `author-title` / `published-title` / `abstract-title` options are honored.
 - [`3992e45d`](https://github.com/quarto-dev/q2/commits/3992e45d): UI exploration (branch only): opening a project on a local hub without sign-in now records you as a contributor, so collection avatar chips fill in during local testing instead of staying empty.
 - [`3992e45d`](https://github.com/quarto-dev/q2/commits/3992e45d): UI exploration (branch only): the Automerge debugger now opens against an auth-disabled local hub and lists every collection as its own named synced document, instead of showing only a single project set.
 - [`3992e45d`](https://github.com/quarto-dev/q2/commits/3992e45d): UI exploration (branch only): project cards fade their hover action icons (peek, fork, menu) beneath long titles so they no longer overlap the text, and the empty-state now reads "Everything is in a collection".
+
+### 2026-07-13
+
+- [`3fc6e610`](https://github.com/quarto-dev/q2/commits/3fc6e610): Editing a block in the preview now uses one pop-up toolbar — the rich/plain switch is a Markdown-mark icon on it, the toolbar appears for every editable block (code chunks included), and the type/nesting breadcrumb folds into it, replacing the cut-off left-margin "Editing…" label and the separate floating breadcrumb.
 
 ### 2026-07-10
 
@@ -45,6 +70,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-07-09
 
+- [`d31e6118`](https://github.com/quarto-dev/q2/commits/d31e6118): Quoted text in the rich-text editor now appears as ordinary editable quote characters (straight `"…"` or `'…'`) instead of a non-editable pill, so you can edit inside quotes; formatting inside a quote (bold, italic) still renders live.
 - [`52c92f94`](https://github.com/quarto-dev/q2/commits/52c92f94): UI exploration (branch only): projects can be downloaded as a ZIP straight from the projects home (project menu → "Download as ZIP") without opening them; the avatar-menu backup entries are now named "Export/Import project list (JSON)".
 - [`1c447eea`](https://github.com/quarto-dev/q2/commits/1c447eea): UI exploration (branch only): moving a project out of a collection that's shared with other people now asks for confirmation ("you're changing other people's view of this collection"), with a "Don't show this again" opt-out. Private collections are unaffected.
 - [`dbd1bc44`](https://github.com/quarto-dev/q2/commits/dbd1bc44): UI exploration (branch only): every collection header now shows avatar chips — dimmed and just you while private, glyph plus member facepile when shared. Clicking the chips opens the members popover; for a private collection, copying the invite link is what turns sharing on.

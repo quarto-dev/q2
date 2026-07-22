@@ -48,6 +48,7 @@ mod document_profile;
 mod engine_execution;
 mod include_expansion;
 mod include_resolve;
+mod language_resolve;
 mod link_resolution;
 mod listing_item_info;
 // Math-mode stage: injects a math-rendering JS engine (MathJax / KaTeX)
@@ -82,6 +83,7 @@ pub use document_profile::DocumentProfileStage;
 pub use engine_execution::{ENGINE_CAPTURE_KIND, EngineExecutionStage};
 pub use include_expansion::{IncludeExpansionStage, extract_include_path};
 pub use include_resolve::IncludeResolveStage;
+pub use language_resolve::LanguageResolveStage;
 pub use link_resolution::LinkResolutionStage;
 pub use listing_item_info::ListingItemInfoStage;
 pub use math_js::{DEFAULT_KATEX_URL_BASE, DEFAULT_MATHJAX_URL, MathEngine, MathJsStage};

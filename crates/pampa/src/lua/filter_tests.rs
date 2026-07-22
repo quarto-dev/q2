@@ -1564,18 +1564,20 @@ end
     let order = fs::read_to_string(&order_file).unwrap();
     let lines: Vec<&str> = order.lines().collect();
 
-    // Expected four-pass order:
+    // Expected four-pass order (pandoc subtree rule, bd-2j048yfm):
     // Pass 1: All inline elements (Str:a, Str:b)
     // Pass 2: All inline lists (Inlines, Inlines) - one per Para
     // Pass 3: All block elements (Para, Para)
-    // Pass 4: All block lists - there are TWO:
-    //         - Div.content (the inner [Para, Para] list)
-    //         - The wrapper list [Div] from wrapping the single element
-    // Note: The Div filter itself is NOT called because we're inside elem:walk
+    // Pass 4: All block lists - exactly ONE: Div.content. elem:walk
+    //         visits the element's children only; neither the Div
+    //         itself nor any synthetic [Div] wrapper list is offered
+    //         to the filter (matches pandoc; pinned upstream by
+    //         test-block.lua::walk::uses order Inline -> Inlines ->
+    //         Block -> Blocks).
     assert_eq!(
         lines,
         vec![
-            "Str:a", "Str:b", "Inlines", "Inlines", "Para", "Para", "Blocks", "Blocks"
+            "Str:a", "Str:b", "Inlines", "Inlines", "Para", "Para", "Blocks"
         ],
         "Expected four-pass order: all inlines first, then Inlines lists, then blocks, then Blocks lists"
     );
@@ -7220,4 +7222,531 @@ end
         },
         other => panic!("Expected Paragraph, got {:?}", other),
     }
+}
+
+// ============================================================================
+// `function Meta` doc-level handler (bd-a9g50za2 / bd-2llqjsms Phase 2)
+// ============================================================================
+
+/// Distinct SourceInfo values for provenance-preservation assertions.
+fn meta_si(offset: usize) -> quarto_source_map::SourceInfo {
+    quarto_source_map::SourceInfo::from_range(
+        quarto_source_map::FileId(3),
+        quarto_source_map::Range {
+            start: quarto_source_map::Location {
+                offset,
+                row: offset,
+                column: 0,
+            },
+            end: quarto_source_map::Location {
+                offset: offset + 1,
+                row: offset,
+                column: 1,
+            },
+        },
+    )
+}
+
+/// A doc with one Str block and metadata `title` (Inlines) + `draft` (Bool),
+/// every node carrying distinct provenance.
+fn meta_test_doc() -> Pandoc {
+    use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp};
+    let title_inlines = vec![Inline::Str(crate::pandoc::Str {
+        text: "Original".to_string(),
+        source_info: meta_si(10),
+    })];
+    let meta = ConfigValue {
+        value: ConfigValueKind::Map(vec![
+            ConfigMapEntry {
+                key: "title".to_string(),
+                key_source: meta_si(11),
+                value: ConfigValue {
+                    value: ConfigValueKind::PandocInlines(title_inlines),
+                    source_info: meta_si(12),
+                    merge_op: MergeOp::default(),
+                },
+            },
+            ConfigMapEntry {
+                key: "draft".to_string(),
+                key_source: meta_si(13),
+                value: ConfigValue {
+                    value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(true)),
+                    source_info: meta_si(14),
+                    merge_op: MergeOp::default(),
+                },
+            },
+        ]),
+        source_info: meta_si(1),
+        merge_op: MergeOp::default(),
+    };
+    Pandoc {
+        meta,
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![
+                Inline::Str(crate::pandoc::Str {
+                    text: "one".to_string(),
+                    source_info: meta_si(20),
+                }),
+                Inline::Str(crate::pandoc::Str {
+                    text: "two".to_string(),
+                    source_info: meta_si(21),
+                }),
+            ],
+            source_info: meta_si(22),
+        })],
+    }
+}
+
+async fn run_meta_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, std::path::PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("meta_filter.lua");
+    fs::write(&filter_path, filter_code).unwrap();
+    let context = ASTContext::new();
+    let out = apply_lua_filter(&doc, &context, &filter_path, "html", native_runtime(), None)
+        .await
+        .unwrap()
+        .pandoc;
+    (out, filter_path)
+}
+
+/// The SourceInfo the Meta return path stamps on changed/new nodes.
+fn expected_filter_source(filter_path: &std::path::Path) -> quarto_source_map::SourceInfo {
+    quarto_source_map::SourceInfo::generated(quarto_source_map::By::filter(
+        filter_path.to_string_lossy().to_string(),
+        0,
+    ))
+}
+
+#[tokio::test]
+async fn test_meta_handler_mutates_meta() {
+    use quarto_pandoc_types::ConfigValueKind;
+    let (out, filter_path) = run_meta_filter(
+        r#"
+function Meta(meta)
+    meta.subtitle = 'added by filter'
+    return meta
+end
+"#,
+        meta_test_doc(),
+    )
+    .await;
+
+    let entries = match &out.meta.value {
+        ConfigValueKind::Map(e) => e,
+        other => panic!("expected Map, got {:?}", other),
+    };
+    // New key present, filter-attributed.
+    let subtitle = entries.iter().find(|e| e.key == "subtitle").unwrap();
+    assert_eq!(
+        subtitle.value.value,
+        ConfigValueKind::Scalar(yaml_rust2::Yaml::String("added by filter".into()))
+    );
+    assert_eq!(
+        subtitle.value.source_info,
+        expected_filter_source(&filter_path)
+    );
+    assert_eq!(subtitle.key_source, expected_filter_source(&filter_path));
+    // Untouched entries keep their exact original nodes.
+    let title = entries.iter().find(|e| e.key == "title").unwrap();
+    assert_eq!(title.value.source_info, meta_si(12));
+    assert_eq!(title.key_source, meta_si(11));
+    let draft = entries.iter().find(|e| e.key == "draft").unwrap();
+    assert_eq!(draft.value.source_info, meta_si(14));
+    // Edited top-level map keeps its own (YAML) provenance.
+    assert_eq!(out.meta.source_info, meta_si(1));
+}
+
+#[tokio::test]
+async fn test_meta_handler_nil_return_keeps_meta() {
+    let original = meta_test_doc();
+    let expected_meta = original.meta.clone();
+    let (out, _) = run_meta_filter(
+        r#"
+function Meta(meta)
+    -- reads but returns nothing: document unchanged (pandoc semantics)
+    local _ = meta.title
+    meta.subtitle = 'mutation without return is discarded'
+end
+"#,
+        original,
+    )
+    .await;
+    assert_eq!(out.meta, expected_meta);
+}
+
+#[tokio::test]
+async fn test_meta_handler_passthrough_preserves_provenance() {
+    let original = meta_test_doc();
+    let expected_meta = original.meta.clone();
+    let (out, _) = run_meta_filter(
+        r#"
+function Meta(meta)
+    return meta
+end
+"#,
+        original,
+    )
+    .await;
+    // Byte-for-byte: every SourceInfo, merge_op, and entry order survives.
+    assert_eq!(out.meta, expected_meta);
+}
+
+#[tokio::test]
+async fn test_meta_handler_runs_after_walk_typewise() {
+    use quarto_pandoc_types::ConfigValueKind;
+    // Typewise order is element walk -> Meta -> (Pandoc): the Meta handler
+    // must observe side effects left by element handlers.
+    let (out, _) = run_meta_filter(
+        r#"
+seen = 0
+function Str(elem)
+    seen = seen + 1
+end
+function Meta(meta)
+    meta.seen = seen
+    return meta
+end
+"#,
+        meta_test_doc(),
+    )
+    .await;
+    let entries = match &out.meta.value {
+        ConfigValueKind::Map(e) => e,
+        other => panic!("expected Map, got {:?}", other),
+    };
+    let seen = entries.iter().find(|e| e.key == "seen").unwrap();
+    // 3 = the title's Str in meta (element walks traverse meta values,
+    // Phase 4) + the two body Strs.
+    assert_eq!(
+        seen.value.value,
+        ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(3))
+    );
+}
+
+#[tokio::test]
+async fn test_meta_handler_topdown_runs_before_walk() {
+    // Topdown order is (Pandoc) -> Meta -> element walk: element handlers
+    // must observe side effects left by the Meta handler.
+    let (out, _) = run_meta_filter(
+        r#"
+traverse = 'topdown'
+flag = false
+function Meta(meta)
+    flag = true
+end
+function Str(elem)
+    if flag then
+        return pandoc.Str(elem.text .. "-after-meta")
+    end
+    return elem
+end
+"#,
+        meta_test_doc(),
+    )
+    .await;
+    match &out.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Str(s) => assert_eq!(s.text, "one-after-meta"),
+            other => panic!("expected Str, got {:?}", other),
+        },
+        other => panic!("expected Paragraph, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_meta_handler_sets_inlines_value() {
+    use quarto_pandoc_types::ConfigValueKind;
+    let (out, _) = run_meta_filter(
+        r#"
+function Meta(meta)
+    meta.fancy = pandoc.Inlines{pandoc.Emph('styled')}
+    return meta
+end
+"#,
+        meta_test_doc(),
+    )
+    .await;
+    let entries = match &out.meta.value {
+        ConfigValueKind::Map(e) => e,
+        other => panic!("expected Map, got {:?}", other),
+    };
+    let fancy = entries.iter().find(|e| e.key == "fancy").unwrap();
+    match &fancy.value.value {
+        ConfigValueKind::PandocInlines(inls) => {
+            assert!(matches!(inls[0], Inline::Emph(_)));
+        }
+        other => panic!("expected PandocInlines, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_meta_handler_invalid_return_is_error() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("bad_meta.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Meta(meta)
+    return 5
+end
+"#,
+    )
+    .unwrap();
+    let doc = meta_test_doc();
+    let context = ASTContext::new();
+    let err = match apply_lua_filter(&doc, &context, &filter_path, "html", native_runtime(), None)
+        .await
+    {
+        Err(e) => e.to_string(),
+        Ok(_) => panic!("expected the Meta handler's invalid return to error"),
+    };
+    assert!(err.contains("Q-11-4"), "expected Q-11-4 in: {err}");
+    assert!(err.contains("'Meta'"), "expected handler name in: {err}");
+    assert!(err.contains("got number"), "expected got-type in: {err}");
+}
+
+#[tokio::test]
+async fn test_meta_handler_receives_meta_typed_table() {
+    use quarto_pandoc_types::ConfigValueKind;
+    // The pushed meta carries the "Meta" named metatable and native values.
+    let (out, _) = run_meta_filter(
+        r#"
+function Meta(meta)
+    meta.meta_type = pandoc.utils.type(meta)
+    meta.title_type = pandoc.utils.type(meta.title)
+    meta.draft_type = type(meta.draft)
+    return meta
+end
+"#,
+        meta_test_doc(),
+    )
+    .await;
+    let entries = match &out.meta.value {
+        ConfigValueKind::Map(e) => e,
+        other => panic!("expected Map, got {:?}", other),
+    };
+    let get = |k: &str| {
+        entries
+            .iter()
+            .find(|e| e.key == k)
+            .unwrap_or_else(|| panic!("missing key {k}"))
+    };
+    assert_eq!(
+        get("meta_type").value.value,
+        ConfigValueKind::Scalar(yaml_rust2::Yaml::String("Meta".into()))
+    );
+    assert_eq!(
+        get("title_type").value.value,
+        ConfigValueKind::Scalar(yaml_rust2::Yaml::String("Inlines".into()))
+    );
+    assert_eq!(
+        get("draft_type").value.value,
+        ConfigValueKind::Scalar(yaml_rust2::Yaml::String("boolean".into()))
+    );
+}
+
+// ============================================================================
+// `function Pandoc` / `Doc` doc-level handler + full-doc walk parity
+// (bd-a9g50za2 Phase 4)
+// ============================================================================
+
+#[tokio::test]
+async fn test_pandoc_handler_invoked_typewise_last() {
+    use quarto_pandoc_types::ConfigValueKind;
+    // Typewise: element walk -> Meta -> Pandoc. The Pandoc handler must
+    // see the Meta handler's result and can replace blocks and meta.
+    let (out, _) = run_meta_filter(
+        r#"
+function Meta(meta)
+    meta.stage = 'meta-ran'
+    return meta
+end
+function Pandoc(doc)
+    local blocks = doc.blocks
+    blocks:insert(pandoc.Para('appended-' .. tostring(doc.meta.stage)))
+    doc.blocks = blocks
+    doc.meta.stage = 'pandoc-ran'
+    return doc
+end
+"#,
+        meta_test_doc(),
+    )
+    .await;
+    // Appended block proves invocation and that Meta ran first.
+    match out.blocks.last().unwrap() {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Str(s) => assert_eq!(s.text, "appended-meta-ran"),
+            other => panic!("expected Str, got {:?}", other),
+        },
+        other => panic!("expected Paragraph, got {:?}", other),
+    }
+    let entries = match &out.meta.value {
+        ConfigValueKind::Map(e) => e,
+        other => panic!("expected Map, got {:?}", other),
+    };
+    let stage = entries.iter().find(|e| e.key == "stage").unwrap();
+    assert_eq!(
+        stage.value.value,
+        ConfigValueKind::Scalar(yaml_rust2::Yaml::String("pandoc-ran".into()))
+    );
+    // Meta keys untouched by both handlers keep their exact provenance
+    // through the whole doc round-trip.
+    let title = entries.iter().find(|e| e.key == "title").unwrap();
+    assert_eq!(title.value.source_info, meta_si(12));
+    assert_eq!(title.key_source, meta_si(11));
+}
+
+#[tokio::test]
+async fn test_pandoc_handler_nil_return_keeps_doc() {
+    let original = meta_test_doc();
+    let expected_meta = original.meta.clone();
+    let (out, _) = run_meta_filter(
+        r#"
+function Pandoc(doc)
+    -- observe only
+end
+"#,
+        original,
+    )
+    .await;
+    assert_eq!(out.meta, expected_meta);
+}
+
+#[tokio::test]
+async fn test_doc_alias_is_invoked() {
+    use quarto_pandoc_types::ConfigValueKind;
+    // "Doc" is the deprecated pandoc alias for the Pandoc handler.
+    let (out, _) = run_meta_filter(
+        r#"
+function Doc(doc)
+    doc.meta.via = 'doc-alias'
+    return doc
+end
+"#,
+        meta_test_doc(),
+    )
+    .await;
+    let entries = match &out.meta.value {
+        ConfigValueKind::Map(e) => e,
+        other => panic!("expected Map, got {:?}", other),
+    };
+    let via = entries.iter().find(|e| e.key == "via").unwrap();
+    assert_eq!(
+        via.value.value,
+        ConfigValueKind::Scalar(yaml_rust2::Yaml::String("doc-alias".into()))
+    );
+}
+
+#[tokio::test]
+async fn test_pandoc_handler_invalid_return_is_error() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("bad_pandoc.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Pandoc(doc)
+    return 'nonsense'
+end
+"#,
+    )
+    .unwrap();
+    let doc = meta_test_doc();
+    let context = ASTContext::new();
+    let err = match apply_lua_filter(&doc, &context, &filter_path, "html", native_runtime(), None)
+        .await
+    {
+        Err(e) => e.to_string(),
+        Ok(_) => panic!("expected the Pandoc handler's invalid return to error"),
+    };
+    assert!(err.contains("Q-11-4"), "expected Q-11-4 in: {err}");
+    assert!(err.contains("'Pandoc'"), "expected handler name in: {err}");
+    assert!(err.contains("got string"), "expected got-type in: {err}");
+}
+
+#[tokio::test]
+async fn test_topdown_pandoc_runs_before_meta_and_walk() {
+    // Topdown: Pandoc -> Meta -> element walk.
+    let (out, _) = run_meta_filter(
+        r#"
+traverse = 'topdown'
+order = {}
+function Pandoc(doc)
+    order[#order + 1] = 'P'
+end
+function Meta(meta)
+    order[#order + 1] = 'M'
+end
+function Str(elem)
+    return pandoc.Str(elem.text .. '/' .. table.concat(order))
+end
+"#,
+        meta_test_doc(),
+    )
+    .await;
+    match &out.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Str(s) => assert_eq!(s.text, "one/PM"),
+            other => panic!("expected Str, got {:?}", other),
+        },
+        other => panic!("expected Paragraph, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_element_walk_traverses_meta_values() {
+    use quarto_pandoc_types::ConfigValueKind;
+    // Pandoc's walkBlocksAndInlines covers metadata: the Str handler
+    // must transform title inlines. The changed payload lives inside a
+    // node that keeps its original provenance.
+    let (out, _) = run_meta_filter(
+        r#"
+function Str(elem)
+    return pandoc.Str(elem.text:upper())
+end
+"#,
+        meta_test_doc(),
+    )
+    .await;
+    let entries = match &out.meta.value {
+        ConfigValueKind::Map(e) => e,
+        other => panic!("expected Map, got {:?}", other),
+    };
+    let title = entries.iter().find(|e| e.key == "title").unwrap();
+    match &title.value.value {
+        ConfigValueKind::PandocInlines(inls) => match &inls[0] {
+            Inline::Str(s) => assert_eq!(s.text, "ORIGINAL"),
+            other => panic!("expected Str, got {:?}", other),
+        },
+        other => panic!("expected PandocInlines, got {:?}", other),
+    }
+    // The PandocInlines node and entry keep their provenance.
+    assert_eq!(title.value.source_info, meta_si(12));
+    assert_eq!(title.key_source, meta_si(11));
+    // Body walked too.
+    match &out.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Str(s) => assert_eq!(s.text, "ONE"),
+            other => panic!("expected Str, got {:?}", other),
+        },
+        other => panic!("expected Paragraph, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_meta_untouched_when_no_element_functions_match() {
+    // A filter with handlers that never fire must leave meta
+    // byte-for-byte identical (walk reconstruction must not disturb
+    // provenance).
+    let original = meta_test_doc();
+    let expected_meta = original.meta.clone();
+    let (out, _) = run_meta_filter(
+        r#"
+function CodeBlock(elem)
+    return elem
+end
+"#,
+        original,
+    )
+    .await;
+    assert_eq!(out.meta, expected_meta);
 }

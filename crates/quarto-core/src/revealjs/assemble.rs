@@ -376,6 +376,15 @@ pub fn render_revealjs_document(
         .get("title")
         .and_then(|v| v.as_plain_text())
         .unwrap_or_default();
+    // Document language for `<html lang>`; previously hardcoded "en"
+    // (bd-llhlzd7p). Falls back to "en" when unset, matching the html
+    // template's default-less behavior for reveal (the scaffold always
+    // emits the attribute).
+    let lang = meta
+        .get("lang")
+        .and_then(|v| v.as_plain_text())
+        .unwrap_or_else(|| "en".to_string());
+    let lang = attr_escape(&lang);
     let config = reveal_config_json(meta);
 
     // Deck-level footer/logo live OUTSIDE `.slides` (see `footer_logo_html`).
@@ -403,14 +412,27 @@ pub fn render_revealjs_document(
         .collect::<Vec<_>>()
         .join("\n");
 
+    // Canonical include slots (bd-5m4ga0s1). The Bootstrap HTML
+    // template consumes `rendered.includes.{header,after-body}` via
+    // `$header-includes$` / `$include-after$`; the reveal scaffold
+    // bypasses doctemplate, so wire the same two slots in here. This
+    // is what carries `include-in-header` / `include-after-body`
+    // authored keys and Finalization-transform injections (mermaid
+    // CDN loader, attribution viewer) into reveal decks.
+    // (`before-body` has no natural anchor in the deck scaffold —
+    // reveal.js owns everything inside `.reveal` — and is deferred
+    // until a concrete consumer appears.)
+    let header_includes_block = includes_block(meta, "header");
+    let after_body_block = includes_block(meta, "after-body");
+
     format!(
         r#"<!DOCTYPE html>
-<html lang="en">
+<html lang="{lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>{title}</title>
-{links}
+{links}{header_includes_block}
 </head>
 <body>
 <div class="{reveal_class}">
@@ -421,18 +443,37 @@ pub fn render_revealjs_document(
 {scripts}
 <script>
 Reveal.initialize({config});
-</script>
+</script>{after_body_block}
 </body>
 </html>
 "#,
         title = escape_html(&title),
         reveal_class = reveal_class,
         links = links,
+        header_includes_block = header_includes_block,
         body = body,
         footer_logo_block = footer_logo_block,
         scripts = scripts,
         config = config,
+        after_body_block = after_body_block,
     )
+}
+
+/// Join the `rendered.includes.<slot>` string entries into a block
+/// ready for interpolation: empty string when the slot is absent or
+/// empty, otherwise `\n`-prefixed so it lands on its own line without
+/// leaving a blank one when unused (same shape as `footer_logo_block`).
+fn includes_block(meta: &ConfigValue, slot: &str) -> String {
+    let entries: Vec<&str> = meta
+        .get_path(&["rendered", "includes", slot])
+        .and_then(|v| v.as_array())
+        .map(|items| items.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+    if entries.is_empty() {
+        String::new()
+    } else {
+        format!("\n{}", entries.join("\n"))
+    }
 }
 
 /// Escape a string for use inside a double-quoted HTML attribute value.
@@ -548,6 +589,97 @@ mod tests {
         vec!["site_libs/revealjs/reveal.js".to_string()]
     }
 
+    /// Build a meta map carrying `rendered.includes.{header,after-body}`
+    /// lists, the canonical include slots populated by
+    /// `IncludeResolveStage` and appended to by Finalization transforms
+    /// (mermaid-render, attribution-viewer, …).
+    fn meta_with_includes(header: Vec<&str>, after_body: Vec<&str>) -> ConfigValue {
+        let arr = |items: Vec<&str>| {
+            ConfigValue::new_array(
+                items.into_iter().map(s).collect(),
+                SourceInfo::generated(By::revealjs()),
+            )
+        };
+        meta(vec![
+            ("title", s("T")),
+            (
+                "rendered",
+                meta(vec![(
+                    "includes",
+                    meta(vec![
+                        ("header", arr(header)),
+                        ("after-body", arr(after_body)),
+                    ]),
+                )]),
+            ),
+        ])
+    }
+
+    /// `rendered.includes.header` entries land inside `<head>`,
+    /// mirroring the Bootstrap HTML template's `$header-includes$`
+    /// slot. Reveal decks previously dropped all includes (the
+    /// scaffold bypasses the doctemplate path) — bd-5m4ga0s1 wires the
+    /// two slots in.
+    #[test]
+    fn includes_header_lands_in_head() {
+        let m = meta_with_includes(vec![r#"<meta name="probe" content="x">"#], vec![]);
+        let html = render_revealjs_document("<section></section>", &m, &sample_css(), &sample_js());
+        let head_end = html.find("</head>").expect("scaffold has </head>");
+        let pos = html
+            .find(r#"<meta name="probe" content="x">"#)
+            .expect("header include must be emitted");
+        assert!(
+            pos < head_end,
+            "header include must appear inside <head>; found at {pos}, </head> at {head_end}"
+        );
+    }
+
+    /// `rendered.includes.after-body` entries land after the
+    /// `Reveal.initialize` script and before `</body>`, mirroring the
+    /// HTML template's `$include-after$` slot. Order matters: an
+    /// after-body script (e.g. the mermaid CDN loader) must not run
+    /// before the deck scaffold exists.
+    #[test]
+    fn includes_after_body_lands_before_body_close() {
+        let m = meta_with_includes(vec![], vec!["<script>window.__probe = 1;</script>"]);
+        let html = render_revealjs_document("<section></section>", &m, &sample_css(), &sample_js());
+        let pos = html
+            .find("<script>window.__probe = 1;</script>")
+            .expect("after-body include must be emitted");
+        let init_pos = html
+            .find("Reveal.initialize")
+            .expect("scaffold has Reveal.initialize");
+        let body_end = html.find("</body>").expect("scaffold has </body>");
+        assert!(
+            init_pos < pos && pos < body_end,
+            "after-body include must sit between Reveal.initialize ({init_pos}) and </body> ({body_end}); found at {pos}"
+        );
+    }
+
+    /// Both slots at once: header and after-body each reach their own
+    /// side of the document.
+    #[test]
+    fn includes_both_slots_render() {
+        let m = meta_with_includes(
+            vec![r#"<link rel="probe" href="p.css">"#],
+            vec!["<script>1</script>"],
+        );
+        let html = render_revealjs_document("<section></section>", &m, &sample_css(), &sample_js());
+        let head_end = html.find("</head>").unwrap();
+        assert!(html.find(r#"<link rel="probe" href="p.css">"#).unwrap() < head_end);
+        assert!(html.find("<script>1</script>").unwrap() > head_end);
+    }
+
+    /// No `rendered.includes` in meta: scaffold renders as before,
+    /// with no stray blank sections.
+    #[test]
+    fn includes_absent_is_clean() {
+        let m = meta(vec![("title", s("T"))]);
+        let html = render_revealjs_document("<section></section>", &m, &sample_css(), &sample_js());
+        assert!(html.contains("<title>T</title>"));
+        assert!(!html.contains("\n\n\n"), "no triple blank lines expected");
+    }
+
     /// bd-ibqkf9ry: `q2 render` embeds the **vendored** `resources/revealjs/`
     /// copy (via `include_str!`, the constants below); `q2 preview` renders via
     /// `@revealjs/react`, which peer-depends on the **npm** `reveal.js` package
@@ -555,8 +687,10 @@ mod tests {
     /// pipelines drift on reveal version/CSS. This test compares the embedded
     /// constants to the npm dist and fails if the vendored copy is stale —
     /// re-sync `resources/revealjs/` from `node_modules/reveal.js/dist/` (see
-    /// `resources/revealjs/README.md`). Skips when node_modules is absent
-    /// (fresh checkout before `npm install`).
+    /// `resources/revealjs/README.md`). Line endings are normalized before the
+    /// compare, so a Windows checkout (`core.autocrlf` rewriting the committed-LF
+    /// files to CRLF) does not false-positive on EOL — only real content drift
+    /// fails. Skips when node_modules is absent (fresh checkout before `npm install`).
     #[test]
     fn vendored_reveal_assets_match_npm_package() {
         let npm_dist = concat!(
@@ -569,12 +703,20 @@ mod tests {
             );
             return;
         }
+        // Compare content only, with line endings normalized. These assets are
+        // served verbatim, but CRLF vs LF is irrelevant to every browser, and a
+        // Windows checkout (core.autocrlf) rewrites the committed-LF vendored
+        // files to CRLF on disk — a byte-exact compare against the always-LF npm
+        // copy would then false-positive on line endings alone. This test's job
+        // is to catch *content* drift (a reveal.js version bump), not EOL noise.
+        let norm = |s: &str| s.replace("\r\n", "\n");
         let check = |embedded: &str, rel: &str| {
             let path = format!("{npm_dist}/{rel}");
             let npm =
                 std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("reading {path}: {e}"));
             assert_eq!(
-                embedded, npm,
+                norm(embedded),
+                norm(&npm),
                 "vendored resources/revealjs/{rel} has drifted from \
                  node_modules/reveal.js/dist/{rel} — re-sync the vendored copy \
                  (q2 render and q2 preview must use identical reveal assets)"

@@ -1,0 +1,45 @@
+# Lua conformance expected failures — the parity burn-down scoreboard.
+# See tests/lua-conformance/README.md (ratchet: unexpected fail OR unexpected pass breaks CI).
+# Format: <file>::<group>::…::<test name>  [# observed failure message]
+# Baseline 2026-07-13: 133 cases, 11 pass, 122 xfail (strand bd-grkrb9nj).
+# After bd-55mb0rjz (__eq + tostring): 69 pass, 64 xfail.
+# After bd-hitjclzp (property cache+readback): 73 pass, 60 xfail.
+# After bd-tzwcof0n (Attr shapes, AttributeList, classes as List): 90 pass, 43 xfail.
+# After bd-1fjtodu8 (List module callable, deep Inlines/Blocks clone): 98 pass, 35 xfail.
+# After bd-2j048yfm (walk engine rewrite: subtree rule, Note descent, topdown): 110 pass, 23 xfail.
+# 2026-07-13 (bd-sgfiiktn phase 0): vendored the remaining 7 upstream files
+# (citation, listattributes, metavalue, pandoc, simpletable, table, cell) —
+# corpus 133 -> 203 cases; new baseline 122 pass, 81 xfail overall.
+# After bd-sgfiiktn S1 (Citation userdata + Cite(content, citations) peekers):
+# 131 pass, 72 xfail.
+# After bd-sgfiiktn S2 (ListAttributes userdata + OrderedList aliases +
+# strict triple peeker): 144 pass, 59 xfail.
+# After bd-sgfiiktn S3a (Cell/Row/TableHead/TableFoot/TableBody as
+# cache-backed userdata + fuzzy row/cell peekers + Cell/Row walk):
+# 165 pass, 38 xfail.
+# After bd-sgfiiktn S3b (Caption userdata + Caption(long, short) arg
+# order + Table head/foot/bodies/colspecs round-trips + Image caption
+# alias): 173 pass, 30 xfail.
+# After bd-0g2yp61w (attr assignment re-runs parse_attr; quotetype/
+# mathtype setters): 178 pass, 25 xfail.
+# After bd-olz91r4v (__toinline/__toblock metamethod hooks in the
+# fuzzy peekers): 182 pass, 21 xfail.
+# After bd-9p2686pc (marshaling error contract: Q-11-3/4/5,
+# Inlines/Blocks error on nil like pandoc): 184 pass, 19 xfail.
+
+# After bd-2llqjsms/bd-a9g50za2 Phases 1-3 (Meta<->ConfigValue marshaling,
+# function Meta invocation, pandoc.Pandoc/Meta/Meta* constructors, doc
+# walk/clone/__eq/__concat): 196 pass, 7 xfail (2 of them DIVERGENCE).
+
+# --- Remaining (bd-2llqjsms follow-ups) ---
+# normalize(): deferred to follow-up strand bd-62lppjuy (plan Phase 0 decision 4).
+test-pandoc.lua::normalize::normalizes table # doc:normalize() not implemented (bd-62lppjuy)
+test-pandoc.lua::normalize::removes repeated whitespace # doc:normalize() not implemented (bd-62lppjuy)
+# DIVERGENCE (permanent, D-num, 2026-07-20): q2 metadata numbers are
+# first-class, never stringified. See tests/lua-conformance/divergences.md.
+test-metavalue.lua::MetaValue elements::Numbers are treated as strings # DIVERGENCE: meta numbers stay numbers (D-num)
+# DIVERGENCE (permanent, Decision 6 / bd-d4wd6r3i): q2 does not implement
+# the legacy pre-pandoc-2.10 SimpleTable API; pandoc.SimpleTable raises the
+# actionable Q-11-2 error. See tests/lua-conformance/divergences.md.
+test-simpletable.lua::SimpleTable::can access properties # DIVERGENCE: runtime error: Q-11-2: pandoc.SimpleTable is not supported
+test-simpletable.lua::SimpleTable::can modify properties # DIVERGENCE: runtime error: Q-11-2: pandoc.SimpleTable is not supported

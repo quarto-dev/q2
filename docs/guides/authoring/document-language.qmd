@@ -1,0 +1,153 @@
+---
+title: "Document Language"
+---
+
+## Overview
+
+Quarto sometimes generates textual output in your rendered documents: cross-reference labels like "Figure" or "Table", callout titles like "Note" or "Warning", the table-of-contents title, and the labels in a document's title block. These strings are *localized* — they follow the language of your document, not the language of Quarto's own interface (which stays in English).
+
+## `lang` Option
+
+The `lang` document option identifies the main language of the document using [BCP 47](https://tools.ietf.org/html/bcp47) language tags (such as `en` or `en-GB`). For example, this document specifies French:
+
+``` yaml
+---
+title: "Mon Document"
+lang: fr
+---
+```
+
+This selects the French translations for generated text and sets the `lang` attribute of the rendered HTML document. The following languages currently ship with full translations:
+
+-   English (`en`, used by default)
+-   Basque (`eu`)
+-   Bulgarian (`bg`)
+-   Catalan (`ca`)
+-   Chinese (`zh`; Traditional: `zh-TW`)
+-   Czech (`cs`)
+-   Danish (`da`)
+-   Dutch (`nl`)
+-   Finnish (`fi`)
+-   French (`fr`; Canadian: `fr-CA`)
+-   German (`de`; Swiss: `de-CH`)
+-   Greek (`el`)
+-   Hebrew (`he`)
+-   Icelandic (`is`)
+-   Indonesian (`id`)
+-   Italian (`it`)
+-   Japanese (`ja`)
+-   Korean (`ko`)
+-   Lithuanian (`lt`)
+-   Norwegian Bokmål (`nb`)
+-   Norwegian Nynorsk (`nn`)
+-   Polish (`pl`)
+-   Portuguese (`pt`; Brazilian: `pt-BR`)
+-   Russian (`ru`)
+-   Serbian, Latin script (`sr-Latn`)
+-   Slovak (`sk`)
+-   Slovenian (`sl`)
+-   Spanish (`es`)
+-   Swedish (`sv`)
+-   Turkish (`tr`)
+-   Ukrainian (`ua`)
+
+Regional variants fall back to their base language: with `lang: pt-BR`, Quarto first applies the Portuguese (`pt`) translations, then the Brazilian overrides on top. A region without its own translation file (say `es-MX`) simply uses the base language (`es`).
+
+`lang` can be set at the project level (in `_quarto.yml`) or per document; document settings win.
+
+## Alternate Language
+
+If you aren't happy with the generated text for a given part of a document, you can provide alternate values via the `language` key (at a project or document level). For example, to override the labels used within title blocks:
+
+``` yaml
+---
+title: "My Document"
+author: "Norah Jones"
+date: 5/22/2022
+language:
+  title-block-author-single: "Writer"
+  title-block-published: "Updated"
+---
+```
+
+You can also provide these values in a standalone YAML file and reference it as follows:
+
+``` yaml
+---
+title: "My Document"
+language: custom.yml
+---
+```
+
+The file path is resolved relative to the document, then to the project root. All customizable keys are listed in Quarto's built-in [`_language.yml`](https://github.com/quarto-dev/q2/blob/main/resources/language/_language.yml) file. If you use a key Quarto doesn't recognize, the render emits a warning pointing at the key (the value is still kept, and remains usable from custom templates — see below).
+
+### Per-Language Alternates
+
+Alternate values can be restricted to a particular target language using subkeys of the `language` key. For example, to override the English and French versions of the "Published" caption:
+
+``` yaml
+---
+title: "My Document"
+date: 5/22/2022
+lang: fr
+language:
+  en:
+    title-block-published: "Updated"
+  fr:
+    title-block-published: "Mis à jour"
+---
+```
+
+In this case "Mis à jour" is used, since `lang` is set to `fr`. Per-language subkeys also follow the BCP 47 fallback: a `fr:` subkey applies to `fr-CA` documents unless a more specific `fr-CA:` subkey is present. These language-restricted values can also live in a standalone YAML file:
+
+``` {.yaml filename="custom-language.yml"}
+en:
+  title-block-published: "Updated"
+fr:
+  title-block-published: "Mis à jour"
+```
+
+### Cross-Reference Titles and Prefixes
+
+Cross-reference labels follow the same mechanism. Keys of the form `crossref-{type}-title` control the caption prefix ("Figura 1: …"), and `crossref-{type}-prefix` controls the reference text ("see Figura 1"), where `{type}` is a built-in category (`fig`, `tbl`, `lst`, `sec`, `eq`), a theorem environment (`thm`, `lem`, `cor`, `prp`, `cnj`, `def`, `exm`, `exr`), or a custom cross-reference kind. When `crossref-{type}-prefix` is omitted it falls back to `crossref-{type}-title`.
+
+For example, to localize figure and table labels in a Spanish document:
+
+``` yaml
+---
+title: "Mi Documento"
+lang: es
+language:
+  crossref-fig-title: "Figura"
+  crossref-tbl-title: "Tabla"
+  crossref-eq-prefix: "Ecuación"
+---
+```
+
+## Custom Translations
+
+To use a language Quarto doesn't ship a translation for:
+
+1.  Make a copy of the default [`_language.yml`](https://github.com/quarto-dev/q2/blob/main/resources/language/_language.yml).
+
+2.  Translate the values from the English defaults.
+
+3.  Reference the file from your document or project:
+
+    ``` yaml
+    ---
+    language: custom.yml
+    ---
+    ```
+
+Additionally, if you place a `_language.yml` file in the root of your project alongside `_quarto.yml`, it is used automatically. Sibling files named `_language-{tag}.yml` (for example `_language-fr.yml`) provide per-language overrides that activate when `lang` matches.
+
+## Language Terms in Templates
+
+Every resolved term — including custom keys you define under `language` — is available to [custom templates](templates.qmd) under the `quarto.language` namespace:
+
+``` html
+<h2>$quarto.language.toc-title-document$</h2>
+```
+
+The `quarto.language` metadata subtree is reserved: Quarto injects the resolved term table there during rendering.

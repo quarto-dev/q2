@@ -22,7 +22,9 @@
 
 use std::path::Path;
 
-use quarto_doctemplate::{PartialResolver, Template, TemplateContext, TemplateValue};
+use quarto_doctemplate::{
+    ChainedResolver, MemoryResolver, PartialResolver, Template, TemplateContext, TemplateValue,
+};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
 use quarto_system_runtime::SystemRuntime;
@@ -118,12 +120,22 @@ $endfor$
 /// - `<div id="quarto-content">` for layout structure
 /// - Optional Table of Contents sidebar
 ///
+/// The title block is emitted by the built-in `title-block` partial
+/// (see [`TITLE_BLOCK_PARTIAL`] / [`TITLE_METADATA_PARTIAL`]), which a
+/// document can override via `template-partials` with a file named
+/// `title-block.html` (Q1 compatibility).
+///
 /// Template variables (in addition to minimal):
 /// - `$title$` - document title (for title block)
 /// - `$subtitle$` - document subtitle
 /// - `$author$` - document author(s)
+/// - `$by-author$` - normalized author list (written by
+///   `AuthorsNormalizeTransform`; `$it.name.literal$` per entry)
+/// - `$labels.*$` - title-block heading labels (same transform)
+/// - `$rendered.has-title-block$` - whether any title-block content
+///   exists (same transform); gates the `<header>` emission
 /// - `$date$` - publication date
-/// - `$abstract$` - document abstract
+/// - `$abstract$` - document abstract (rendered as HTML blocks)
 /// - `$body-classes$` - CSS classes for body element. When set, replaces
 ///   the `fullcontent` default entirely. Typically computed by
 ///   `SidebarRenderTransform` (which writes `rendered.navigation.body-classes`)
@@ -148,17 +160,17 @@ const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="quarto-rust-$version$">
-$if(author)$
-<meta name="author" content="$author$">
-$endif$
-$if(date)$
-<meta name="dcterms.date" content="$date$">
+$for(author-meta)$
+<meta name="author" content="$author-meta$">
+$endfor$
+$if(date-meta)$
+<meta name="dcterms.date" content="$date-meta$">
 $endif$
 $if(keywords)$
-<meta name="keywords" content="$keywords$">
+<meta name="keywords" content="$for(keywords)$$it$$sep$, $endfor$">
 $endif$
-$if(description)$
-<meta name="description" content="$description$">
+$if(description-meta)$
+<meta name="description" content="$description-meta$">
 $endif$
 $if(canonical-url)$
 <link rel="canonical" href="$canonical-url$">
@@ -186,6 +198,9 @@ $endif$
 $for(include-before)$
 $include-before$
 $endfor$
+$if(rendered.title-block-banner)$
+$title-block()$
+$endif$
 
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-$page-layout$">
 $if(rendered.navigation.sidebar)$
@@ -211,37 +226,11 @@ $rendered.navigation.margin_categories$
 $endif$
 $endif$
 
-<main class="content" id="quarto-document-content">
+<main class="content$if(rendered.title-block-banner)$ quarto-banner-title-block$endif$" id="quarto-document-content">
 
-$if(title)$
-<header id="title-block-header" class="quarto-title-block default">
-<div class="quarto-title">
-<h1 class="title">$title$</h1>
-$if(subtitle)$
-<p class="subtitle">$subtitle$</p>
-$endif$
-</div>
-$if(author)$
-<div class="quarto-title-meta">
-<div class="quarto-title-meta-author">
-<div class="quarto-title-meta-heading">Author</div>
-<div class="quarto-title-meta-contents">$author$</div>
-</div>
-$if(date)$
-<div class="quarto-title-meta-date">
-<div class="quarto-title-meta-heading">Published</div>
-<div class="quarto-title-meta-contents">$date$</div>
-</div>
-$endif$
-</div>
-$endif$
-$if(abstract)$
-<div class="abstract">
-<div class="abstract-title">Abstract</div>
-$abstract$
-</div>
-$endif$
-</header>
+$if(rendered.title-block-banner)$
+$else$
+$title-block()$
 $endif$
 
 $body$
@@ -262,6 +251,271 @@ $endif$
 "#;
 
 // =============================================================================
+// Built-in template partials (title block)
+// =============================================================================
+
+/// Built-in `title-block` partial — the styled Quarto title block,
+/// ported from Quarto 1's
+/// `src/resources/formats/html/templates/title-block.html` (default
+/// style; the banner variant lands with bd-364ol5lu).
+///
+/// Emitted only when `rendered.has-title-block` is set (written by
+/// `AuthorsNormalizeTransform` when any title-block content exists),
+/// so metadata-less documents produce no empty `<header>`.
+///
+/// P3 (bd-j6huijli) additions, both Q1-verbatim: the category chips
+/// (gated on `quarto-template-params.title-block-categories`, written
+/// by `AuthorsNormalizeTransform` unless the document sets
+/// `title-block-categories: false`) and the `description` block. The
+/// `hide-description` gate is ported with it; nothing in Q2 sets that
+/// flag yet (Q1's book pipeline does, for chapter pages — design
+/// decision Q11), so it is inert until a project pipeline needs it.
+///
+/// P5 (bd-364ol5lu): the partial branches internally on
+/// `rendered.title-block-banner` (written by `TitleBannerTransform`)
+/// instead of registering a separate `banner/title-block` partial —
+/// in Q1 a user's `template-partials` file named `title-block.html`
+/// shadows the built-in in *both* modes (Pandoc resolves partials by
+/// basename; Q1's banner file is `banner/title-block.html`), and the
+/// single Q2 name preserves exactly that override semantics. The
+/// banner branch is Q1's `banner/title-block.html` verbatim:
+/// title/subtitle/description/categories move *inside*
+/// `div.quarto-title-banner > div.quarto-title.column-body`, the meta
+/// grid stays below the banner, and there is no `hide-description`
+/// gate (Q1 parity). The `page-columns page-full` classes on the
+/// header and banner div are baked into the markup — Q1 gets them
+/// from its generic bootstrap grid DOM postprocessor, which Q2
+/// doesn't have. `quarto-template-params.banner-header-class` is
+/// ported verbatim but currently has no producer (Q1 sets `toc-left`
+/// from `toc-location`, which Q2 doesn't support yet).
+///
+/// P6 (bd-vkiwhcny): `title-block-style: none` renders Q1's fallback
+/// — Pandoc's own plain title block
+/// (`formats/html/pandoc/title-block.html`): a bare header with no
+/// quarto classes, `h1.title`, `p.subtitle` without `lead`, one
+/// `p.author` per author, `p.date`, and `div.abstract >
+/// div.abstract-title`. Gated on `rendered.title-block-none` (written
+/// by `AuthorsNormalizeTransform`); the fallback iterates the
+/// normalized `by-author` names (Pandoc iterates raw `$author$`;
+/// same output for every supported author shape) and uses
+/// `$labels.abstract$` where Pandoc uses its own `$abstract-title$`
+/// variable (same "Abstract" default, and the `abstract-title`
+/// override keeps working — deviation documented here).
+///
+/// A document can replace this partial by listing a file named
+/// `title-block.html` under `template-partials` (Q1 compatibility).
+pub const TITLE_BLOCK_PARTIAL: &str = r#"$if(rendered.has-title-block)$
+$if(rendered.title-block-none)$
+<header id="title-block-header">
+$if(title)$<h1 class="title">$title$</h1>
+$endif$
+$if(subtitle)$
+<p class="subtitle">$subtitle$</p>
+$endif$
+$for(by-author)$
+<p class="author">$it.name.literal$</p>
+$endfor$
+$if(date)$
+<p class="date">$date$</p>
+$endif$
+$if(abstract)$
+<div class="abstract">
+<div class="abstract-title">$labels.abstract$</div>
+$abstract$
+</div>
+$endif$
+</header>
+$elseif(rendered.title-block-banner)$
+<header id="title-block-header" class="quarto-title-block default page-columns page-full$if(quarto-template-params.banner-header-class)$ $quarto-template-params.banner-header-class$$endif$">
+<div class="quarto-title-banner page-columns page-full">
+<div class="quarto-title column-body">
+$if(title)$
+<h1 class="title">$title$</h1>
+$endif$
+$if(subtitle)$
+<p class="subtitle lead">$subtitle$</p>
+$endif$
+$if(description)$
+<div>
+<div class="description">
+$description$
+</div>
+</div>
+$endif$
+$if(categories)$
+$if(quarto-template-params.title-block-categories)$
+<div class="quarto-categories">
+$for(categories)$
+<div class="quarto-category">$it$</div>
+$endfor$
+</div>
+$endif$
+$endif$
+</div>
+</div>
+$title-metadata()$
+</header>
+$else$
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+$if(title)$
+<h1 class="title">$title$</h1>
+$endif$
+$if(subtitle)$
+<p class="subtitle lead">$subtitle$</p>
+$endif$
+$if(categories)$
+$if(quarto-template-params.title-block-categories)$
+<div class="quarto-categories">
+$for(categories)$
+<div class="quarto-category">$it$</div>
+$endfor$
+</div>
+$endif$
+$endif$
+</div>
+$if(hide-description)$
+$elseif(description)$
+<div>
+<div class="description">
+$description$
+</div>
+</div>
+$endif$
+$title-metadata()$
+</header>
+$endif$
+$endif$"#;
+
+/// Built-in `title-metadata` partial — the metadata grid below the
+/// title, ported from Quarto 1's `title-metadata.html`.
+///
+/// When affiliations exist, authors render in the two-column
+/// `.quarto-title-meta-author` grid (Authors/Affiliations headings)
+/// and the plain `.quarto-title-meta` grid carries no authors cell
+/// (Q1's `$if(by-affiliation)$` / `$elseif(by-author)$` split —
+/// bd-ez0hiowa). P3 (bd-j6huijli) completes the grid with the
+/// Modified and Doi cells (the doi linked to doi.org, Q1-verbatim)
+/// and the trailing keywords block. (The description block lives in
+/// [`TITLE_BLOCK_PARTIAL`], matching Q1's template split.)
+///
+/// Deviation from Q1's template text: Q1 gates the two-column grid on
+/// `$if(by-affiliation/first)$`; doctemplate conditions don't take
+/// pipes, and `AuthorsNormalizeTransform` only writes
+/// `by-affiliation` when non-empty, so the plain variable test is
+/// equivalent.
+///
+/// Like Q1, the `quarto-title-meta` grid div is emitted whenever the
+/// title block renders, even if all its cells are empty.
+pub const TITLE_METADATA_PARTIAL: &str = r#"$if(by-affiliation)$
+<div class="quarto-title-meta-author">
+<div class="quarto-title-meta-heading">$labels.authors$</div>
+<div class="quarto-title-meta-heading">$labels.affiliations$</div>
+$for(by-author)$
+<div class="quarto-title-meta-contents">
+<p class="author">$_title-meta-author()$</p>
+</div>
+<div class="quarto-title-meta-contents">
+$for(by-author.affiliations)$
+<p class="affiliation">$if(it.url)$<a href="$it.url$">$endif$$it.name$$if(it.url)$</a>$endif$</p>
+$endfor$
+</div>
+$endfor$
+</div>
+$endif$
+<div class="quarto-title-meta">
+$if(by-affiliation)$
+$elseif(by-author)$
+<div>
+<div class="quarto-title-meta-heading">$labels.authors$</div>
+<div class="quarto-title-meta-contents">
+$for(by-author)$
+<p>$_title-meta-author()$</p>
+$endfor$
+</div>
+</div>
+$endif$
+$if(date)$
+<div>
+<div class="quarto-title-meta-heading">$labels.published$</div>
+<div class="quarto-title-meta-contents">
+<p class="date">$date$</p>
+</div>
+</div>
+$endif$
+$if(date-modified)$
+<div>
+<div class="quarto-title-meta-heading">$labels.modified$</div>
+<div class="quarto-title-meta-contents">
+<p class="date-modified">$date-modified$</p>
+</div>
+</div>
+$endif$
+$if(doi)$
+<div>
+<div class="quarto-title-meta-heading">$labels.doi$</div>
+<div class="quarto-title-meta-contents">
+<p class="doi"><a href="https://doi.org/$doi$">$doi$</a></p>
+</div>
+</div>
+$endif$
+</div>
+$if(abstract)$
+<div>
+<div class="abstract">
+<div class="block-title">$labels.abstract$</div>
+$abstract$
+</div>
+</div>
+$endif$
+$if(keywords)$
+<div>
+<div class="keywords">
+<div class="block-title">$labels.keywords$</div>
+<p>$for(keywords)$$it$$sep$, $endfor$</p>
+</div>
+</div>
+$endif$"#;
+
+/// Built-in `_title-meta-author` partial — one author's rendering
+/// inside the title-block author lists, ported from Quarto 1's
+/// `_title-meta-author.html`: the name (linked when the author has a
+/// `url`), degrees after the name inside the link, an email icon
+/// anchor (`quarto-title-author-email`), and an ORCID badge anchor
+/// (`quarto-title-author-orcid`).
+///
+/// Deviations from Q1 (per design decision Q8): the ORCID badge is an
+/// inline SVG (the ORCID glyph in brand green) instead of Q1's
+/// base64 PNG `<img>`, and the email icon is an inline SVG of
+/// Bootstrap Icons' `envelope` instead of the `bi bi-envelope` font
+/// glyph (the icon font only ships with website projects). The
+/// anchor class names — the extension/SCSS targets — are identical
+/// to Q1's.
+///
+/// Evaluated inside `$for(by-author)$`, so `it` is one normalized
+/// by-author entry.
+pub const TITLE_META_AUTHOR_PARTIAL: &str = r##"$if(it.url)$<a href="$it.url$">$endif$$it.name.literal$$if(it.degrees)$, $for(it.degrees)$$it$$sep$, $endfor$$endif$$if(it.url)$</a>$endif$$if(it.email)$ <a href="mailto:$it.email$" class="quarto-title-author-email"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-envelope" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1zm13 2.383-4.708 2.825L15 11.105zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741M1 11.105l4.708-2.897L1 5.383z"/></svg></a>$endif$$if(it.orcid)$ <a href="https://orcid.org/$it.orcid$" class="quarto-title-author-orcid" aria-label="ORCID profile for $it.name.literal$"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#A6CE39" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 0C5.372 0 0 5.372 0 12s5.372 12 12 12 12-5.372 12-12S18.628 0 12 0zM7.369 4.378c.525 0 .947.431.947.947s-.422.947-.947.947a.95.95 0 0 1-.947-.947c0-.525.422-.947.947-.947zm-.722 3.038h1.444v10.041H6.647V7.416zm3.562 0h3.9c3.712 0 5.344 2.653 5.344 5.025 0 2.578-2.016 5.025-5.325 5.025h-3.919V7.416zm1.444 1.303v7.444h2.297c3.272 0 4.022-2.484 4.022-3.722 0-2.016-1.284-3.722-4.097-3.722h-2.222z"/></svg></a>$endif$"##;
+
+/// Resolver holding the built-in HTML template partials.
+///
+/// Each partial is registered under both its bare name
+/// (`title-block`, the form the built-in template uses) and its
+/// `.html`-suffixed alias (`title-block.html`, the form Q1-ported
+/// custom templates use), so either call syntax resolves.
+pub fn builtin_html_partials() -> MemoryResolver {
+    let mut resolver = MemoryResolver::new();
+    for (name, content) in [
+        ("title-block", TITLE_BLOCK_PARTIAL),
+        ("title-metadata", TITLE_METADATA_PARTIAL),
+        ("_title-meta-author", TITLE_META_AUTHOR_PARTIAL),
+    ] {
+        resolver.add(name, content);
+        resolver.add(format!("{name}.html"), content);
+    }
+    resolver
+}
+
+// =============================================================================
 // Template Compilation
 // =============================================================================
 
@@ -271,10 +525,15 @@ pub fn minimal_html_template() -> Result<Template> {
         .map_err(|e| crate::error::QuartoError::other(e.to_string()))
 }
 
-/// Compile the full HTML template.
+/// Compile the full HTML template (resolving built-in partials).
 pub fn full_html_template() -> Result<Template> {
-    Template::compile(FULL_HTML_TEMPLATE)
-        .map_err(|e| crate::error::QuartoError::other(e.to_string()))
+    Template::compile_with_resolver(
+        FULL_HTML_TEMPLATE,
+        std::path::Path::new("<builtin>.html"),
+        &builtin_html_partials(),
+        0,
+    )
+    .map_err(|e| crate::error::QuartoError::other(e.to_string()))
 }
 
 /// Compile the default HTML template (minimal template for backwards compatibility).
@@ -555,7 +814,15 @@ pub fn render_with_format(
 ) -> Result<(String, Vec<DiagnosticMessage>)> {
     let minimal = is_minimal_html(meta);
     let template = select_template(minimal)?;
-    render_with_compiled_template(&template, body, meta, css_paths, &[])
+    // This convenience API takes raw (untransformed) metadata, so run
+    // the author/label normalization the pipeline's
+    // AuthorsNormalizeTransform would otherwise provide — the full
+    // template's title block consumes its derived fields
+    // (`by-author`, `labels`, `rendered.has-title-block`,
+    // `author-meta`).
+    let mut meta = meta.clone();
+    crate::transforms::normalize_authors_meta(&mut meta);
+    render_with_compiled_template(&template, body, &meta, css_paths, &[])
 }
 
 /// Compile the appropriate built-in template (minimal or full) with a custom
@@ -576,10 +843,14 @@ pub fn compile_builtin_template_with_partials(
     } else {
         FULL_HTML_TEMPLATE
     };
+    // User-supplied partials shadow the built-in ones (so a document
+    // can override `title-block.html` Q1-style); built-ins resolve
+    // anything the user didn't provide.
+    let chained = ChainedResolver::new(resolver, builtin_html_partials());
     Template::compile_with_resolver_and_context(
         source,
-        std::path::Path::new("<builtin>"),
-        resolver,
+        std::path::Path::new("<builtin>.html"),
+        &chained,
         0,
         source_context,
     )
@@ -640,18 +911,34 @@ fn add_metadata_to_context(meta: &ConfigValue, ctx: &mut TemplateContext) {
 /// `pagetitle` is deliberately *not* listed: it feeds the head `<title>`
 /// element, where HTML tags are invalid. It is derived as plain text by
 /// `derive_pagetitle` (pampa's `template::config_merge`) and must stay so.
+/// Likewise `description-meta` (not listed): the head's
+/// `<meta name="description">` consumes it, derived as plain text from
+/// `description` by `MetadataNormalizeTransform` — the same
+/// `description`/`description-meta` split Pandoc's HTML writer and
+/// Q1's `html.template` use, which is what lets `description` itself
+/// render rich in the title block.
 ///
 /// `author`/`date` are out of scope for now (an author can be an object or
 /// list, and also feeds `<meta>` attribute contexts that require plain
 /// text); they continue to flatten via the generic conversion. See
-/// strand bd-5706gcrq.
-const RICH_TITLE_BLOCK_FIELDS: &[&str] = &["title", "subtitle", "abstract"];
+/// strand bd-5706gcrq. (The *display* author list is separately
+/// normalized into `by-author` by `AuthorsNormalizeTransform`.)
+///
+/// `abstract` is not listed here: it renders in *block* context (its
+/// paragraphs become `<p>` elements, Q1 parity) via
+/// [`titleblock_field_to_block_html`].
+const RICH_TITLE_BLOCK_FIELDS: &[&str] = &["title", "subtitle", "description"];
 
 /// Convert a metadata entry to a template value, honoring the rich
 /// title-block allowlist. Allowlisted fields whose value is Pandoc
 /// inlines/blocks are rendered to HTML; everything else (and every
 /// non-allowlisted field) uses the generic plain-text conversion.
 fn metadata_entry_to_template_value(key: &str, value: &ConfigValue) -> TemplateValue {
+    if key == "abstract"
+        && let Some(html) = titleblock_field_to_block_html(value)
+    {
+        return TemplateValue::String(html);
+    }
     if RICH_TITLE_BLOCK_FIELDS.contains(&key)
         && let Some(html) = titleblock_field_to_html(value)
     {
@@ -680,6 +967,43 @@ fn titleblock_field_to_html(value: &ConfigValue) -> Option<String> {
             Some(String::from_utf8_lossy(&out).into_owned())
         }
         _ => None,
+    }
+}
+
+/// Render a title-block field's Pandoc content to HTML in **block**
+/// context: paragraphs become `<p>` elements (Q1 title-block parity
+/// for `abstract`). Inline content and scalar strings are wrapped in
+/// a synthetic paragraph first.
+fn titleblock_field_to_block_html(value: &ConfigValue) -> Option<String> {
+    use quarto_pandoc_types::block::{Block, Paragraph};
+    use quarto_pandoc_types::inline::{Inline, Str};
+
+    let write = |blocks: &[Block]| -> Option<String> {
+        let mut out: Vec<u8> = Vec::new();
+        pampa::writers::html::write_blocks_to(blocks, &mut out).ok()?;
+        Some(String::from_utf8_lossy(&out).into_owned())
+    };
+
+    match &value.value {
+        ConfigValueKind::PandocBlocks(blocks) => write(blocks),
+        ConfigValueKind::PandocInlines(inlines) => {
+            let para = Block::Paragraph(Paragraph {
+                content: inlines.clone(),
+                source_info: value.source_info.clone(),
+            });
+            write(&[para])
+        }
+        _ => {
+            let text = value.as_str()?;
+            let para = Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: text.to_string(),
+                    source_info: value.source_info.clone(),
+                })],
+                source_info: value.source_info.clone(),
+            });
+            write(&[para])
+        }
     }
 }
 
@@ -1647,12 +1971,17 @@ mod tests {
         ctx.insert("subtitle", TemplateValue::String("A Subtitle".to_string()));
         ctx.insert("page-layout", TemplateValue::String("article".to_string()));
         ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+        // The title-block partial gates on the flag the pipeline's
+        // AuthorsNormalizeTransform derives.
+        let mut rendered = std::collections::HashMap::new();
+        rendered.insert("has-title-block".to_string(), TemplateValue::Bool(true));
+        ctx.insert("rendered", TemplateValue::Map(rendered));
 
         let html = template.render(&ctx).unwrap();
 
         assert!(html.contains("<header id=\"title-block-header\""));
         assert!(html.contains("<h1 class=\"title\">My Document</h1>"));
-        assert!(html.contains("<p class=\"subtitle\">A Subtitle</p>"));
+        assert!(html.contains("<p class=\"subtitle lead\">A Subtitle</p>"));
     }
 
     #[test]
@@ -1679,14 +2008,30 @@ mod tests {
 
         let mut ctx = TemplateContext::new();
         ctx.insert("body", TemplateValue::String("<p>Content</p>".to_string()));
-        ctx.insert("author", TemplateValue::String("Jane Doe".to_string()));
-        ctx.insert("date", TemplateValue::String("2024-01-15".to_string()));
+        // The head's author tag iterates the normalized `author-meta`
+        // list (one <meta> per author), not the raw `author` value.
+        ctx.insert(
+            "author-meta",
+            TemplateValue::List(vec![TemplateValue::String("Jane Doe".to_string())]),
+        );
+        // The head's dcterms.date consumes the ISO `date-meta` derived
+        // by DateNormalizeTransform (never the possibly-formatted
+        // `date` itself — bd-13f821l5).
+        ctx.insert("date-meta", TemplateValue::String("2024-01-15".to_string()));
+        // Keywords arrive as a list (YAML `keywords: [rust, quarto]`);
+        // the head meta joins them with ", ". The description meta
+        // consumes the plain-text `description-meta` derived by
+        // MetadataNormalizeTransform, never the (possibly rich)
+        // `description` itself.
         ctx.insert(
             "keywords",
-            TemplateValue::String("rust, quarto".to_string()),
+            TemplateValue::List(vec![
+                TemplateValue::String("rust".to_string()),
+                TemplateValue::String("quarto".to_string()),
+            ]),
         );
         ctx.insert(
-            "description",
+            "description-meta",
             TemplateValue::String("A sample document".to_string()),
         );
         ctx.insert("page-layout", TemplateValue::String("article".to_string()));
@@ -2308,7 +2653,13 @@ mod tests {
         let template = full_html_template().expect("full template compiles");
         let mut ctx = TemplateContext::new();
         ctx.insert("body", TemplateValue::String(body.to_string()));
-        add_metadata_to_context(meta, &mut ctx);
+        // The full template's title block consumes derived metadata
+        // (`by-author`, `labels`, `rendered.has-title-block`) that the
+        // pipeline's AuthorsNormalizeTransform writes before the
+        // template stage; apply the same normalization here.
+        let mut meta = meta.clone();
+        crate::transforms::normalize_authors_meta(&mut meta);
+        add_metadata_to_context(&meta, &mut ctx);
         let (html, _diags) = template.render_with_diagnostics(&ctx);
         html.expect("template renders")
     }
@@ -2527,7 +2878,7 @@ mod tests {
         );
         let html = render_full("<p>body</p>", &meta);
         assert!(
-            html.contains(r#"<p class="subtitle">about <code>things</code></p>"#),
+            html.contains(r#"<p class="subtitle lead">about <code>things</code></p>"#),
             "subtitle code span must render as <code>; got: {html}"
         );
     }

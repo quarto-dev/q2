@@ -10,7 +10,7 @@ HUB_CLIENT_DIR="$PROJECT_ROOT/hub-client"
 DATA_DIR="$PROJECT_ROOT/.local-prod-data"
 HUB_PORT=3001
 STATIC_PORT=8080
-Q2_RAW_PORT=8081
+Q2_SANDBOXED_PREVIEW_PORT=8081
 
 # Color output
 RED='\033[0;31m'
@@ -39,8 +39,8 @@ cleanup() {
     if [ ! -z "${STATIC_PID:-}" ]; then
         kill "$STATIC_PID" 2>/dev/null || true
     fi
-    if [ ! -z "${Q2_RAW_PID:-}" ]; then
-        kill "$Q2_RAW_PID" 2>/dev/null || true
+    if [ ! -z "${Q2_SANDBOXED_PREVIEW_PID:-}" ]; then
+        kill "$Q2_SANDBOXED_PREVIEW_PID" 2>/dev/null || true
     fi
     exit 0
 }
@@ -79,8 +79,8 @@ if lsof -Pi :$STATIC_PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
     exit 1
 fi
 
-if lsof -Pi :$Q2_RAW_PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
-    log_error "Port $Q2_RAW_PORT is already in use. Stop the other process first."
+if lsof -Pi :$Q2_SANDBOXED_PREVIEW_PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+    log_error "Port $Q2_SANDBOXED_PREVIEW_PORT is already in use. Stop the other process first."
     exit 1
 fi
 
@@ -123,34 +123,34 @@ fi
 
 log_info "Static server started (PID: $STATIC_PID)"
 
-# Start q2-raw server
-log_info "Starting q2-raw server on http://127.0.0.1:$Q2_RAW_PORT"
-Q2_RAW_PORT=$Q2_RAW_PORT \
-    node "$SCRIPT_DIR/q2-raw-server.mjs" > "$DATA_DIR/q2-raw.log" 2>&1 &
-Q2_RAW_PID=$!
+# Start q2-sandboxed-preview server
+log_info "Starting q2-sandboxed-preview server on http://127.0.0.1:$Q2_SANDBOXED_PREVIEW_PORT"
+Q2_SANDBOXED_PREVIEW_PORT=$Q2_SANDBOXED_PREVIEW_PORT \
+    node "$SCRIPT_DIR/q2-sandboxed-preview-server.mjs" > "$DATA_DIR/q2-sandboxed-preview.log" 2>&1 &
+Q2_SANDBOXED_PREVIEW_PID=$!
 
-# Wait for q2-raw server to start
+# Wait for q2-sandboxed-preview server to start
 sleep 1
-if ! kill -0 "$Q2_RAW_PID" 2>/dev/null; then
-    log_error "q2-raw server failed to start. Check $DATA_DIR/q2-raw.log for details."
-    tail -20 "$DATA_DIR/q2-raw.log"
+if ! kill -0 "$Q2_SANDBOXED_PREVIEW_PID" 2>/dev/null; then
+    log_error "q2-sandboxed-preview server failed to start. Check $DATA_DIR/q2-sandboxed-preview.log for details."
+    tail -20 "$DATA_DIR/q2-sandboxed-preview.log"
     exit 1
 fi
 
-log_info "q2-raw server started (PID: $Q2_RAW_PID)"
+log_info "q2-sandboxed-preview server started (PID: $Q2_SANDBOXED_PREVIEW_PID)"
 echo ""
 log_info "============================================"
 log_info "Local production mode running!"
 log_info "============================================"
-log_info "Main app:  ${GREEN}http://127.0.0.1:$STATIC_PORT${NC}"
-log_info "q2-raw:    ${GREEN}http://127.0.0.1:$Q2_RAW_PORT${NC}"
+log_info "Main app:              ${GREEN}http://127.0.0.1:$STATIC_PORT${NC}"
+log_info "q2-sandboxed-preview:  ${GREEN}http://127.0.0.1:$Q2_SANDBOXED_PREVIEW_PORT${NC}"
 log_info ""
 log_info "Proxying /auth and /ws to hub (http://127.0.0.1:$HUB_PORT)"
 log_info ""
 log_info "Logs:"
-log_info "  Hub:    $DATA_DIR/hub.log"
-log_info "  Static: $DATA_DIR/static.log"
-log_info "  q2-raw: $DATA_DIR/q2-raw.log"
+log_info "  Hub:                  $DATA_DIR/hub.log"
+log_info "  Static:               $DATA_DIR/static.log"
+log_info "  q2-sandboxed-preview: $DATA_DIR/q2-sandboxed-preview.log"
 log_info ""
 log_info "Press Ctrl-C to stop"
 echo ""

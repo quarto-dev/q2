@@ -772,6 +772,26 @@ mod tests {
     }
 
     #[test]
+    fn test_bare_partial_underscore_leading_name() {
+        // Pandoc partial files may start with an underscore (Quarto 1
+        // ships `_title-meta-author.html`); the bare-partial call
+        // syntax must accept the leading underscore.
+        let template = compile_with_partials(
+            "$for(items)$$_item-row()$$sep$, $endfor$",
+            [("_item-row", "[$it$]")],
+        );
+        let mut ctx = ctx();
+        ctx.insert(
+            "items",
+            TemplateValue::List(vec![
+                TemplateValue::String("a".to_string()),
+                TemplateValue::String("b".to_string()),
+            ]),
+        );
+        assert_eq!(template.render(&ctx).unwrap(), "[a], [b]");
+    }
+
+    #[test]
     fn test_bare_partial() {
         // Bare partial: $header()$ evaluates with current context
         let template = compile_with_partials("$header()$", [("header", "<h1>$title$</h1>")]);

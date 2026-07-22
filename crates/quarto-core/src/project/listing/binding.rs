@@ -26,6 +26,7 @@ use quarto_pandoc_types::ConfigValue;
 use super::config::{GridItemAlign, ImageAlign, Listing, ListingCategoriesMode, ListingType};
 use super::helpers;
 use super::item::ListingItem;
+use crate::dates::{DateStyle, format_date, parse_date};
 
 /// Build the full [`TemplateContext`] for one [`Listing`] +
 /// hydrated items. The returned context has a single entry,
@@ -53,7 +54,24 @@ pub fn build_listing_context(
     let mut ctx = TemplateContext::new();
 
     ctx.insert("listing", build_listing_map(listing));
-    ctx.insert("items", build_items_list(listing, items, host_dir));
+    // Effective date style for date-typed item fields (bd-13f821l5):
+    // listing-level `date-format` > document `date-format` > `medium`
+    // — Q1's precedence in website-listing-template.ts, with items
+    // pre-formatted before the (logic-less) template interpolates
+    // them, exactly like Q1 pre-formats its EJS records.
+    let date_style = listing
+        .date_format
+        .clone()
+        .or_else(|| {
+            project_meta
+                .get("date-format")
+                .and_then(|v| v.as_plain_text())
+        })
+        .map_or(DateStyle::Medium, |s| DateStyle::parse(&s));
+    ctx.insert(
+        "items",
+        build_items_list(listing, items, host_dir, &date_style),
+    );
     ctx.insert("project", build_project_map(project_meta));
 
     ctx
@@ -152,14 +170,28 @@ fn build_listing_map(listing: &Listing) -> TemplateValue {
     TemplateValue::Map(m)
 }
 
-fn build_items_list(listing: &Listing, items: &[ListingItem], host_dir: &str) -> TemplateValue {
+fn build_items_list(
+    listing: &Listing,
+    items: &[ListingItem],
+    host_dir: &str,
+    date_style: &DateStyle,
+) -> TemplateValue {
     TemplateValue::List(
         items
             .iter()
             .enumerate()
-            .map(|(i, item)| build_item_map(listing, item, i, host_dir))
+            .map(|(i, item)| build_item_map(listing, item, i, host_dir, date_style))
             .collect(),
     )
+}
+
+/// Format a raw item date for display; unparseable values pass
+/// through unchanged (the item metadata may carry arbitrary strings).
+fn display_date(raw: &str, style: &DateStyle) -> String {
+    match parse_date(raw) {
+        Some(parsed) => format_date(&parsed, style).0,
+        None => raw.to_string(),
+    }
 }
 
 fn build_item_map(
@@ -167,6 +199,7 @@ fn build_item_map(
     item: &ListingItem,
     index: usize,
     host_dir: &str,
+    date_style: &DateStyle,
 ) -> TemplateValue {
     let mut m = HashMap::new();
 
@@ -201,12 +234,15 @@ fn build_item_map(
         );
     }
     if let Some(s) = item.date.as_deref() {
-        m.insert("date".to_string(), TemplateValue::String(s.to_string()));
+        m.insert(
+            "date".to_string(),
+            TemplateValue::String(display_date(s, date_style)),
+        );
     }
     if let Some(s) = item.date_modified.as_deref() {
         m.insert(
             "date-modified".to_string(),
-            TemplateValue::String(s.to_string()),
+            TemplateValue::String(display_date(s, date_style)),
         );
     }
     if !item.categories.is_empty() {
@@ -512,9 +548,11 @@ mod tests {
             m.get("title"),
             Some(&TemplateValue::String("Hello".to_string()))
         );
+        // Dates are pre-formatted at record-build (bd-13f821l5);
+        // `medium` is the default style, Q1's listing default.
         assert_eq!(
             m.get("date"),
-            Some(&TemplateValue::String("2026-01-01".to_string()))
+            Some(&TemplateValue::String("Jan 1, 2026".to_string()))
         );
         assert_eq!(
             m.get("description"),

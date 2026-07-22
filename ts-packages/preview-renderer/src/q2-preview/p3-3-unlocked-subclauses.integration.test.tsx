@@ -12,17 +12,18 @@
  *    cursor unchanged.
  *    An external re-render that changes only an ancestor's label (AST attr), with
  *    the cursor node's byte range held fixed, keeps the editor open (self-heal KEEP)
- *    AND the breadcrumb chip re-derives its labels from the new AST.
+ *    AND the toolbar breadcrumb re-derives its labels from the new AST.
  *
  * Both tests drive the REAL PreviewRoot + real useBlockEditHover click path + real
- * BreadcrumbChip. The resolution / ancestor-path logic is never re-implemented here.
+ * EditToolbar (folded-in breadcrumb). The resolution / ancestor-path logic is never
+ * re-implemented here.
  *
  * Fail-on-revert probes:
  *  Test 1: forcing the locked branch (`resolveOuterBlock`) in activate() makes the
  *    editor open on the whole BlockQuote → textarea.value === '> BBB', not 'BBB'.
  *  Test 2: memoizing buildAncestorPath on [anchorR0, anchorR1] (stable across the
- *    ancestor-only change) causes the chip to show stale 'Div.a' labels after the
- *    re-render where the class becomes 'b'.
+ *    ancestor-only change) causes the toolbar breadcrumb to show stale 'Div.a' labels
+ *    after the re-render where the class becomes 'b'.
  */
 
 // @vitest-environment jsdom
@@ -198,8 +199,9 @@ describe('P3.3 §3b test 1 ★ — click-outside-resets-to-leaf (unlocked)', () 
  * But the ancestor label changes: chip crumbs must re-derive from the new AST.
  *
  * FAIL-ON-REVERT: memoizing buildAncestorPath on [anchorR0, anchorR1] (stable
- * across this ancestor-only change) causes the chip to show stale 'Div.a' after
- * the re-render → chip crumbs remain ['Div.a', 'Para'] → step 5 asserts RED.
+ * across this ancestor-only change) causes the toolbar breadcrumb to show stale
+ * 'Div.a' after the re-render → toolbar crumbs remain ['Div.a', 'Para'] → step 5
+ * asserts RED.
  * ─────────────────────────────────────────────────────────────────────────── */
 
 // content (14 bytes): "::: a\nAAA\n:::\n"
@@ -254,11 +256,13 @@ describe('P3.3 §3b test 2 ★ — ancestor-only change re-derives path, cursor 
         expect(textarea, 'editor should open on child').not.toBeNull();
         expect(textarea!.value).toBe('AAA');
 
-        // Step 2: assert chip crumbs = ['Div.a', 'Para'] with 'Para' as current.
-        const chipEl = container.querySelector<HTMLElement>('[data-testid="q2-breadcrumb-chip"]');
-        expect(chipEl, 'breadcrumb chip should be visible').not.toBeNull();
+        // Step 2: assert toolbar crumbs = ['Div.a', 'Para'] with 'Para' as current.
+        // The nesting-on + plain-block breadcrumb now folds into the pop-up toolbar
+        // (the standalone floating chip was retired).
+        const toolbarEl = container.querySelector<HTMLElement>('.q2-rt-toolbar');
+        expect(toolbarEl, 'edit toolbar should be visible').not.toBeNull();
 
-        const crumbs1 = Array.from(chipEl!.querySelectorAll<HTMLElement>('.q2-crumb'));
+        const crumbs1 = Array.from(toolbarEl!.querySelectorAll<HTMLElement>('.q2-crumb'));
         expect(crumbs1.map(c => c.textContent)).toEqual(['Dv', '¶']);
         // Discriminate by full label via title (abbreviation collapses both Div.a and Div.b to 'Dv').
         expect(crumbs1[0].getAttribute('title')).toBe('Div.a');
@@ -291,14 +295,14 @@ describe('P3.3 §3b test 2 ★ — ancestor-only change re-derives path, cursor 
         expect(textareaAfter!.value).toBe('AAA');
         expect(setAst).not.toHaveBeenCalled();
 
-        // Step 5: path re-derived — chip crumbs now ['Div.b', 'Para'], 'Para' still current.
+        // Step 5: path re-derived — toolbar crumbs now ['Div.b', 'Para'], 'Para' still current.
         // This assertion goes RED if buildAncestorPath is memoized on [anchorR0, anchorR1],
         // because those are stable across the ancestor-only change and the memo would
         // return stale crumbs from the previous AST ('Div.a').
-        const chipAfter = container.querySelector<HTMLElement>('[data-testid="q2-breadcrumb-chip"]');
-        expect(chipAfter, 'breadcrumb chip should still be visible').not.toBeNull();
+        const toolbarAfter = container.querySelector<HTMLElement>('.q2-rt-toolbar');
+        expect(toolbarAfter, 'edit toolbar should still be visible').not.toBeNull();
 
-        const crumbs2 = Array.from(chipAfter!.querySelectorAll<HTMLElement>('.q2-crumb'));
+        const crumbs2 = Array.from(toolbarAfter!.querySelectorAll<HTMLElement>('.q2-crumb'));
         expect(crumbs2.map(c => c.textContent)).toEqual(['Dv', '¶']);
         // Discriminate by full label via title — after rerender the ancestor is now Div.b.
         expect(crumbs2[0].getAttribute('title')).toBe('Div.b');

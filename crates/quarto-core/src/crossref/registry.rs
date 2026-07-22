@@ -105,6 +105,27 @@ const BUILTINS: &[(&str, &str)] = &[
 ];
 
 impl RefTypeRegistry {
+    /// Localize built-in display names from the resolved language table
+    /// (bd-llhlzd7p): `kind` becomes the `crossref-<type>-title` term,
+    /// falling back to `crossref-<type>-prefix` for types that only define
+    /// a prefix (`sec`, `eq`). Only [`RefTypeSource::BuiltIn`] entries are
+    /// touched — `crossref.custom` display names are user config and win
+    /// over locale defaults, so call this *before*
+    /// [`Self::extend_from_metadata`].
+    pub fn localize_builtin_display_names(&mut self, terms: &crate::language::LanguageTerms) {
+        for def in self.entries.values_mut() {
+            if def.source != RefTypeSource::BuiltIn {
+                continue;
+            }
+            let localized = terms
+                .crossref_title(&def.ref_type)
+                .or_else(|| terms.get(&format!("crossref-{}-prefix", def.ref_type)));
+            if let Some(name) = localized {
+                def.kind = name.to_string();
+            }
+        }
+    }
+
     /// Seed with built-ins only. Call [`Self::extend_from_metadata`] and
     /// [`Self::extend_from_promised`] next to complete the registry.
     pub fn builtin() -> Self {

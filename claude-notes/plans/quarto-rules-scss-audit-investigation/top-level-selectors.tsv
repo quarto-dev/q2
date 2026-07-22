@@ -1,0 +1,144 @@
+3	.top-right
+12	.visually-hidden
+24	.hidden
+28	.zindex-bottom
+34	figure.figure
+38	.quarto-layout-panel
+42	.quarto-layout-panel > figure
+46	.quarto-layout-panel > figure > figcaption, .quarto-layout-panel > .panel-caption
+50	.quarto-layout-panel > .table-caption
+54	.table-caption p
+58	.quarto-layout-row
+63	.quarto-layout-valign-top
+66	.quarto-layout-valign-bottom
+69	.quarto-layout-valign-center
+72	.quarto-layout-cell
+76	.quarto-layout-cell:last-child
+80	.quarto-layout-cell figure, .quarto-layout-cell > p
+83	.quarto-layout-cell img
+86	.quarto-layout-cell .html-widget
+89	.quarto-layout-cell div figure p
+92	.quarto-layout-cell figure
+97	.quarto-layout-cell table
+101	.quarto-layout-cell-subref figcaption, figure .quarto-layout-row figure figcaption
+105	.quarto-figure
+110	.quarto-figure > figure
+115	.quarto-figure-left > figure > p, .quarto-figure-left > figure > div /* for mermaid and dot diagrams */
+119	.quarto-figure-center > figure > p, .quarto-figure-center > figure > div /* for mermaid and dot diagrams */
+123	.quarto-figure-right > figure > p, .quarto-figure-right > figure > div /* for mermaid and dot diagrams */
+128	.quarto-figure > figure > div.cell-annotation, .quarto-figure > figure > div code
+132	figure > p:empty
+135	figure > p:first-child
+140	figure > figcaption.quarto-float-caption-bottom
+143	figure > figcaption.quarto-float-caption-top
+151	div[id^="tbl-"]
+155	.quarto-figure > .anchorjs-link
+161	div[id^="tbl-"] > .anchorjs-link
+175	.quarto-figure:hover > .anchorjs-link, div[id^="tbl-"]:hover > .anchorjs-link, h2:hover > .anchorjs-link, h3:hover > .anchorjs-link, h4:hover > .anchorjs-link, h5:hover > .anchorjs-link, h6:hover > .anchorjs-link, .reveal-anchorjs-link > .anchorjs-link
+179	#title-block-header
+185	#title-block-header .abstract
+189	#title-block-header .abstract .abstract-title
+193	#title-block-header a
+199	#title-block-header .author, #title-block-header .date, #title-block-header .doi
+203	#title-block-header .quarto-title-block > div
+207	#title-block-header .quarto-title-block > div > h1
+211	#title-block-header .quarto-title-block > div > button
+217	#title-block-header .quarto-title-block > div > button
+226	tr.header > th > p:last-of-type
+231	table, table.table
+237	caption, .table-caption
+243	figure.quarto-float-tbl figcaption.quarto-float-caption-top
+249	figure.quarto-float-tbl figcaption.quarto-float-caption-bottom
+256	.utterances
+262	iframe
+267	details
+270	details[show]
+274	details > summary
+280	details > summary > p:only-child
+285	div.code-copy-outer-scaffold
+292	dd code:not(.sourceCode), p code:not(.sourceCode)
+299	code
+302	@media print
+307	pre > code
+311	pre > code.sourceCode
+315	pre > code.sourceCode > span > a:first-child::before
+319	pre.code-overflow-wrap > code.sourceCode
+323	pre.code-overflow-scroll > code.sourceCode
+328	code a:any-link
+332	code a:hover
+338	ul.task-list
+344	[data-tippy-root]
+348	.tippy-content .footnote-back
+352	.footnote-back
+356	.tippy-content
+361	.quarto-embedded-source-code
+366	.quarto-unresolved-ref
+371	.quarto-cover-image
+378	.cell-output-display .widget-subarea
+385	.cell-output-display:not(.no-overflow-x), .knitsql-table:not(.no-overflow-x)
+389	.panel-input
+394	.panel-input > div, .panel-input > div > div
+400	.panel-input > p:last-child
+404	.layout-sidebar
+408	.layout-sidebar .tab-content
+412	.tab-content > .page-columns.active
+417	div.sourceCode > iframe
+436	a
+442	.callout pre.sourceCode
+447	div.ansi-escaped-output
+464	* * ansi colors from IPython notebook's * * we also add `bright-[color]-` synonyms for the `-[color]-intense` classes since * that seems to be what ansi_up emits * */ http://www.xcolors.net/dl/baskerville-ivorylight and http://www.xcolors.net/dl/euphrasia */ .ansi-black-fg
+467	.ansi-black-bg
+471	.ansi-black-intense-black, .ansi-bright-black-fg
+475	.ansi-black-intense-black, .ansi-bright-black-bg
+478	.ansi-red-fg
+481	.ansi-red-bg
+485	.ansi-red-intense-red, .ansi-bright-red-fg
+489	.ansi-red-intense-red, .ansi-bright-red-bg
+492	.ansi-green-fg
+495	.ansi-green-bg
+499	.ansi-green-intense-green, .ansi-bright-green-fg
+503	.ansi-green-intense-green, .ansi-bright-green-bg
+506	.ansi-yellow-fg
+509	.ansi-yellow-bg
+513	.ansi-yellow-intense-yellow, .ansi-bright-yellow-fg
+517	.ansi-yellow-intense-yellow, .ansi-bright-yellow-bg
+520	.ansi-blue-fg
+523	.ansi-blue-bg
+527	.ansi-blue-intense-blue, .ansi-bright-blue-fg
+531	.ansi-blue-intense-blue, .ansi-bright-blue-bg
+534	.ansi-magenta-fg
+537	.ansi-magenta-bg
+541	.ansi-magenta-intense-magenta, .ansi-bright-magenta-fg
+545	.ansi-magenta-intense-magenta, .ansi-bright-magenta-bg
+548	.ansi-cyan-fg
+551	.ansi-cyan-bg
+555	.ansi-cyan-intense-cyan, .ansi-bright-cyan-fg
+559	.ansi-cyan-intense-cyan, .ansi-bright-cyan-bg
+562	.ansi-white-fg
+565	.ansi-white-bg
+569	.ansi-white-intense-white, .ansi-bright-white-fg
+573	.ansi-white-intense-white, .ansi-bright-white-bg
+576	.ansi-default-inverse-fg
+579	.ansi-default-inverse-bg
+582	.ansi-bold
+585	.ansi-underline
+589	:root
+601	table.gt_table
+611	table.gt_table th.gt_column_spanner_outer
+619	table.gt_table th.gt_col_heading
+625	table.gt_table thead.gt_col_headings
+631	table.gt_table thead.gt_col_headings:not(:first-child)
+636	table.gt_table td.gt_row
+642	table.gt_table tbody.gt_table_body
+653	(too many reports of slide layout breaking) see https://github.com/jgm/pandoc/pull/8237 */ div.columns
+657	div.column
+665	.code-annotation-tip-content
+669	.code-annotation-container-hidden
+673	dl.code-annotation-container-grid
+684	pre.sourceCode.code-annotation-code
+688	code.sourceCode .code-annotation-anchor
+697	input[type="checkbox"]
+730	$body-color: #222 !default; $body-bg: #fff !default; $primary: #468 !default; $secondary: #999 !default; $font-family-sans-serif: sans-serif !default; $font-weight-base: 400 !default; These are documented in quarto-cli/quarto-web:docs/authoring/_mermaid-theming.qmd Make sure to update the docs if you change these. */ $mermaid-bg-color: $body-bg !default; $mermaid-edge-color: $secondary !default; $mermaid-node-fg-color: $body-color !default; $mermaid-fg-color: $body-color !default; $mermaid-fg-color--lighter: lighten($body-color, 10%) !default; $mermaid-fg-color--lightest: lighten($body-color, 20%) !default; $mermaid-font-family: $font-family-sans-serif !default; $mermaid-font-weight: $font-weight-base !default; $mermaid-label-bg-color: $body-bg !default; $mermaid-label-fg-color: $primary !default; $mermaid-node-bg-color: rgba($primary, 0.1) !default; $mermaid-node-fg-color: $primary !default; :root
+744	@media print
+768	body.quarto-light .dark-content
+772	body.quarto-dark .light-content

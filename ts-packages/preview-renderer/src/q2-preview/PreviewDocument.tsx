@@ -19,7 +19,6 @@ import {
     HeaderIncludesEffect,
 } from './chromeSlots';
 import { useBlockEditHover } from './useBlockEditHover';
-import { BreadcrumbChip } from './BreadcrumbChip';
 
 /**
  * bd-elgxx (D6 react): mirror of Rust
@@ -187,10 +186,18 @@ export const PreviewDocument = ({
         '';
     // `meta.rendered.includes.header` collects favicon / RSS links /
     // any user includes-in-header (already a list; q2 render's
-    // template wires `$header-includes$` into `<head>`).
+    // template wires `$header-includes$` into `<head>`). The banner
+    // mode's generated <style> arrives through the same list.
     const headerIncludes = extractMetaStringList(
         getMetaPath(meta, ['rendered', 'includes', 'header']),
     );
+    // Banner mode flag (P5, bd-364ol5lu), written by the pipeline's
+    // `TitleBannerTransform`: hoists the title block above
+    // #quarto-content and adds `quarto-banner-title-block` to <main>.
+    const bannerTitleBlock =
+        extractMetaBool(
+            getMetaPath(meta, ['rendered', 'title-block-banner']),
+        ) === true;
 
     // Attribution wiring (Phase 3 of
     // `2026-05-13-q2-preview-attribution.md`): delegated to
@@ -263,6 +270,17 @@ export const PreviewDocument = ({
             {/* Navbar lives BEFORE quarto-content (template.rs:178-180). */}
             {navbarHtml ? <NavbarSlot html={navbarHtml} /> : null}
 
+            {/* Banner mode (P5, bd-364ol5lu): the title block renders
+                ABOVE #quarto-content, mirroring FULL_HTML_TEMPLATE's
+                $if(rendered.title-block-banner)$ conditional. */}
+            {bannerTitleBlock ? (
+                <TitleBlock
+                    ast={ast}
+                    setAst={setAst}
+                    onNavigateToDocument={onNavigateToDocument}
+                />
+            ) : null}
+
             <div
                 id="quarto-content"
                 className={`quarto-container page-columns page-rows-contents page-layout-${pageLayout}`}
@@ -277,25 +295,23 @@ export const PreviewDocument = ({
                     (template.rs:189-200). */}
                 {tocHtml ? <TocSlot html={tocHtml} title={tocTitle} /> : null}
 
-                <main className="content" id="quarto-document-content">
-                    <TitleBlock
-                        ast={ast}
-                        setAst={setAst}
-                        onNavigateToDocument={onNavigateToDocument}
-                    />
+                <main
+                    className={`content${bannerTitleBlock ? ' quarto-banner-title-block' : ''}`}
+                    id="quarto-document-content"
+                >
+                    {!bannerTitleBlock ? (
+                        <TitleBlock
+                            ast={ast}
+                            setAst={setAst}
+                            onNavigateToDocument={onNavigateToDocument}
+                        />
+                    ) : null}
                     {children}
 
                     {/* Page-nav (prev/next) — INSIDE main, after body
                         content (template.rs:244-246). */}
                     {pageNavHtml ? <PageNavSlot html={pageNavHtml} /> : null}
                 </main>
-
-                {/* P3.4: floating breadcrumb chip for nesting cursor navigation.
-                    Must be a child of #quarto-content (inside the blockEdit.hostProps
-                    div) so its synthetic pointer events bubble to the host handlers,
-                    which stopPropagation then intercepts. Self-gating: renders null
-                    unless unlockNestingCursor && editTarget. */}
-                <BreadcrumbChip />
             </div>
 
             {/* Page-footer lives AFTER quarto-content

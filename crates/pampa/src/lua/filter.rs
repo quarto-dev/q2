@@ -9,7 +9,7 @@
  * - Filter return semantics: nil=unchanged, element=replace, list=splice, {}=delete
  */
 
-use mlua::{Function, Lua, MultiValue, Result, Table, Value};
+use mlua::{Error, Function, Lua, MultiValue, Result, Table, Value};
 use quarto_error_reporting::DiagnosticMessage;
 use std::path::Path;
 use std::sync::Arc;
@@ -22,7 +22,7 @@ use super::mediabag::create_shared_mediabag;
 use super::quarto_api::register_quarto_api;
 use super::readwrite::{create_reader_options_table, create_writer_options_table};
 use super::runtime::SystemRuntime;
-use super::types::{LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_table};
+use super::types::{LuaBlock, LuaInline, peek_blocks_fuzzy, peek_inlines_fuzzy};
 
 // ============================================================================
 // TRAVERSAL CONTROL FOR TOPDOWN MODE
@@ -30,7 +30,7 @@ use super::types::{LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_tabl
 
 /// Control signal for topdown traversal - determines whether to descend into children
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TraversalControl {
+pub(crate) enum TraversalControl {
     /// Continue descent into children
     Continue,
     /// Stop descent - don't process children
@@ -108,35 +108,24 @@ pub struct FilterOutput {
     pub resources: Vec<std::path::PathBuf>,
 }
 
-/// Apply a single Lua filter to a document.
+/// Create the Lua environment exactly as user filters see it.
 ///
-/// Returns the filtered document, context, diagnostics, and any HTML
-/// dependencies or text includes registered via the `quarto.doc` API.
+/// This is the single place the filter execution environment is
+/// assembled: the `pandoc` and `quarto` namespaces, the
+/// `FORMAT`/`PANDOC_*` globals, and (on WASM) the synthetic
+/// `io`/`os`/`dofile`. `apply_lua_filter` delegates here; the Lua
+/// conformance suite (`tests/integration/lua_conformance.rs`) uses it
+/// directly so that conformance is measured against the production
+/// environment rather than a synthetic registration.
 ///
-/// The `attribution` handle backs the `quarto.attribution.*` Lua host
-/// binding. Passing `None` registers no-op stubs (the binding is
-/// alive but `lookup` / `lookup_range` return nil and `identities`
-/// returns an empty table). Most callers pass `None`; only
-/// `quarto-core::UserFiltersStage` passes `Some(handle)`.
-pub async fn apply_lua_filter(
-    pandoc: &Pandoc,
-    context: &ASTContext,
-    filter_path: &Path,
-    target_format: &str,
+/// `script_path` seeds `PANDOC_SCRIPT_FILE` and the script directory
+/// used by `quarto.utils.resolve_path`.
+pub fn create_filter_environment(
     runtime: Arc<dyn SystemRuntime>,
+    target_format: &str,
+    script_path: &Path,
     attribution: Option<Arc<dyn crate::attribution::AttributionLookup>>,
-) -> FilterResult<FilterOutput> {
-    // Read filter file via runtime (supports VFS on WASM)
-    let filter_bytes = runtime.file_read(filter_path).map_err(|e| {
-        LuaFilterError::FileReadError(filter_path.to_owned(), std::io::Error::other(e.to_string()))
-    })?;
-    let filter_source = String::from_utf8(filter_bytes).map_err(|e| {
-        LuaFilterError::FileReadError(
-            filter_path.to_owned(),
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()),
-        )
-    })?;
-
+) -> FilterResult<Lua> {
     // Create Lua state
     // On WASM, we can't load all libraries (no package/io/os/debug support),
     // so use a restricted set. On native, load everything for full compatibility.
@@ -174,7 +163,7 @@ pub async fn apply_lua_filter(
     super::quarto_doc::register_quarto_doc(&lua)?;
 
     // Push script dir for quarto.utils.resolve_path
-    let script_dir = filter_path
+    let script_dir = script_path
         .parent()
         .unwrap_or(Path::new(""))
         .to_string_lossy()
@@ -203,7 +192,7 @@ pub async fn apply_lua_filter(
     // PANDOC_SCRIPT_FILE - path to the current filter script
     lua.globals().set(
         "PANDOC_SCRIPT_FILE",
-        filter_path.to_string_lossy().to_string(),
+        script_path.to_string_lossy().to_string(),
     )?;
 
     // PANDOC_READER_OPTIONS - reader options used for the input
@@ -216,6 +205,40 @@ pub async fn apply_lua_filter(
     let writer_options = create_writer_options_table(&lua, None)?;
     lua.globals().set("PANDOC_WRITER_OPTIONS", writer_options)?;
 
+    Ok(lua)
+}
+
+/// Apply a single Lua filter to a document.
+///
+/// Returns the filtered document, context, diagnostics, and any HTML
+/// dependencies or text includes registered via the `quarto.doc` API.
+///
+/// The `attribution` handle backs the `quarto.attribution.*` Lua host
+/// binding. Passing `None` registers no-op stubs (the binding is
+/// alive but `lookup` / `lookup_range` return nil and `identities`
+/// returns an empty table). Most callers pass `None`; only
+/// `quarto-core::UserFiltersStage` passes `Some(handle)`.
+pub async fn apply_lua_filter(
+    pandoc: &Pandoc,
+    context: &ASTContext,
+    filter_path: &Path,
+    target_format: &str,
+    runtime: Arc<dyn SystemRuntime>,
+    attribution: Option<Arc<dyn crate::attribution::AttributionLookup>>,
+) -> FilterResult<FilterOutput> {
+    // Read filter file via runtime (supports VFS on WASM)
+    let filter_bytes = runtime.file_read(filter_path).map_err(|e| {
+        LuaFilterError::FileReadError(filter_path.to_owned(), std::io::Error::other(e.to_string()))
+    })?;
+    let filter_source = String::from_utf8(filter_bytes).map_err(|e| {
+        LuaFilterError::FileReadError(
+            filter_path.to_owned(),
+            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()),
+        )
+    })?;
+
+    let lua = create_filter_environment(runtime, target_format, filter_path, attribution)?;
+
     // Load and execute filter script
     lua.load(&filter_source)
         .set_name(filter_path.to_string_lossy())
@@ -225,28 +248,17 @@ pub async fn apply_lua_filter(
     // Get filter functions from globals or return value
     let filter_table = get_filter_table(&lua)?;
 
-    // Determine traversal mode
-    let walking_order = get_walking_order(&filter_table)?;
-
-    // Apply the filter using the appropriate traversal
-    let filtered_blocks = match walking_order {
-        WalkingOrder::Typewise => {
-            apply_typewise_filter(&lua, &filter_table, &pandoc.blocks).await?
-        }
-        WalkingOrder::Topdown => apply_topdown_filter(&lua, &filter_table, &pandoc.blocks).await?,
-    };
+    let meta_new_source = quarto_source_map::SourceInfo::generated(quarto_source_map::By::filter(
+        filter_path.to_string_lossy().to_string(),
+        0,
+    ));
+    let filtered_pandoc = apply_full_filter(&lua, &filter_table, pandoc, &meta_new_source).await?;
 
     // Extract diagnostics, HTML dependencies, and text includes from Lua state
     let diagnostics = super::diagnostics::extract_lua_diagnostics(&lua)?;
     let html_dependencies = super::quarto_doc::extract_html_dependencies(&lua)?;
     let text_includes = super::quarto_doc::extract_text_includes(&lua)?;
     let resources = super::quarto_doc::extract_resources(&lua)?;
-
-    // Return filtered document with all extracted data
-    let filtered_pandoc = Pandoc {
-        meta: pandoc.meta.clone(),
-        blocks: filtered_blocks,
-    };
 
     Ok(FilterOutput {
         pandoc: filtered_pandoc,
@@ -371,6 +383,7 @@ fn get_filter_table(lua: &Lua) -> Result<Table> {
         // Document-level
         "Pandoc",
         "Doc",
+        "Meta",
     ];
 
     for name in &filter_names {
@@ -387,99 +400,256 @@ fn get_filter_table(lua: &Lua) -> Result<Table> {
     Ok(filter_table)
 }
 
-/// Extract an Inline from a Lua UserData value.
-pub(crate) fn extract_lua_inline(ud: &mlua::AnyUserData) -> Result<Inline> {
-    Ok(ud.borrow::<LuaInline>()?.clone_inline())
+/// Invoke the `Meta` doc-level handler, if the filter defines one.
+///
+/// Pandoc semantics (applyMetaFunction / applyStraight): the handler
+/// receives the materialized meta (native shapes, "Meta"-named table);
+/// `nil` return keeps the document's meta unchanged; a table return is
+/// peeked back as a map, reconciled against the original so untouched
+/// entries keep their provenance. Returns `None` when the handler is
+/// absent or returned nil. `new_source` attributes changed/new nodes
+/// (the filter pass uses `By::filter(path, 0)`; `doc:walk` uses the
+/// Lua-stack `filter_source_info`).
+pub(crate) async fn apply_meta_function(
+    lua: &Lua,
+    filter_table: &Table,
+    meta: &quarto_pandoc_types::ConfigValue,
+    new_source: &quarto_source_map::SourceInfo,
+) -> Result<Option<quarto_pandoc_types::ConfigValue>> {
+    let func = match filter_table.get::<Function>("Meta") {
+        Ok(func) => func,
+        Err(_) => return Ok(None),
+    };
+    let meta_value = super::config_value::push_meta(lua, meta)?;
+    let result: Value = func.call_async(meta_value).await?;
+    match result {
+        Value::Nil => Ok(None),
+        Value::Table(table) => Ok(Some(super::config_value::peek_meta(
+            lua,
+            &table,
+            Some(meta),
+            new_source,
+        )?)),
+        other => Err(filter_return_error(
+            "Meta",
+            lua_facing_type_name(&other),
+            Error::runtime("table or nil expected"),
+        )),
+    }
 }
 
-/// Extract a Block from a Lua UserData value.
-pub(crate) fn extract_lua_block(ud: &mlua::AnyUserData) -> Result<Block> {
-    Ok(ud.borrow::<LuaBlock>()?.clone_block())
+/// Invoke the `Pandoc` (or deprecated alias `Doc`) whole-document
+/// handler, if the filter defines one.
+///
+/// Pandoc semantics (applyPandocFunction / applyStraight): the handler
+/// receives the whole document value; `nil` return keeps the document;
+/// a doc-shaped table return replaces it, with the meta reconciled
+/// against the pre-handler meta so untouched entries keep their
+/// provenance. Returns `None` when no handler is defined or it
+/// returned nil.
+pub(crate) async fn apply_pandoc_function(
+    lua: &Lua,
+    filter_table: &Table,
+    pandoc: &Pandoc,
+    new_source: &quarto_source_map::SourceInfo,
+) -> Result<Option<Pandoc>> {
+    let func = match filter_table.get::<Function>("Pandoc") {
+        Ok(func) => func,
+        Err(_) => match filter_table.get::<Function>("Doc") {
+            Ok(func) => func,
+            Err(_) => return Ok(None),
+        },
+    };
+    let doc_value = super::pandoc_doc::push_pandoc_doc(lua, pandoc)?;
+    let result: Value = func.call_async(doc_value).await?;
+    match result {
+        Value::Nil => Ok(None),
+        Value::Table(t) => {
+            let blocks_val: Value = t.get("blocks").unwrap_or(Value::Nil);
+            let blocks = super::types::peek_blocks_fuzzy(lua, blocks_val)?;
+            let meta_val: Value = t.get("meta").unwrap_or(Value::Nil);
+            let meta = match meta_val {
+                // A doc table without meta: empty map (matches the
+                // pandoc.Pandoc(blocks) constructor's default).
+                Value::Nil => quarto_pandoc_types::ConfigValue {
+                    value: quarto_pandoc_types::ConfigValueKind::Map(Vec::new()),
+                    source_info: new_source.clone(),
+                    merge_op: quarto_pandoc_types::MergeOp::default(),
+                },
+                Value::Table(mt) => {
+                    super::config_value::peek_meta(lua, &mt, Some(&pandoc.meta), new_source)?
+                }
+                other => {
+                    return Err(filter_return_error(
+                        "Pandoc",
+                        lua_facing_type_name(&other),
+                        Error::runtime("table (Meta) expected for doc.meta"),
+                    ));
+                }
+            };
+            Ok(Some(Pandoc { blocks, meta }))
+        }
+        other => Err(filter_return_error(
+            "Pandoc",
+            lua_facing_type_name(&other),
+            Error::runtime("Pandoc document or nil expected"),
+        )),
+    }
 }
 
-/// Extract a Vec<Inline> from a Lua table of UserData values.
-pub(crate) fn extract_lua_inlines_from_table(table: &mlua::Table) -> Result<Vec<Inline>> {
-    let len = table.raw_len();
-    let mut inlines = Vec::new();
-    for i in 1..=len {
-        let value: Value = table.get(i)?;
-        if let Value::UserData(ud) = value {
-            inlines.push(extract_lua_inline(&ud)?);
+/// Apply one filter table to a whole document — pandoc's `applyFully`
+/// (pandoc-lua-marshal Pandoc.hs):
+///   typewise: element walk (meta values first, then blocks) -> Meta -> Pandoc
+///   topdown:  Pandoc -> Meta -> element walk (meta values, then blocks)
+/// Shared by the filter pass (`apply_lua_filter`) and `doc:walk`.
+pub(crate) async fn apply_full_filter(
+    lua: &Lua,
+    filter_table: &Table,
+    pandoc: &Pandoc,
+    new_source: &quarto_source_map::SourceInfo,
+) -> Result<Pandoc> {
+    match get_walking_order(filter_table)? {
+        WalkingOrder::Typewise => {
+            let (meta, blocks) =
+                super::walk::typewise_pandoc(lua, filter_table, &pandoc.meta, &pandoc.blocks)
+                    .await?;
+            let meta = apply_meta_function(lua, filter_table, &meta, new_source)
+                .await?
+                .unwrap_or(meta);
+            let doc = Pandoc { meta, blocks };
+            Ok(apply_pandoc_function(lua, filter_table, &doc, new_source)
+                .await?
+                .unwrap_or(doc))
+        }
+        WalkingOrder::Topdown => {
+            let doc = apply_pandoc_function(lua, filter_table, pandoc, new_source)
+                .await?
+                .unwrap_or_else(|| pandoc.clone());
+            let meta = apply_meta_function(lua, filter_table, &doc.meta, new_source)
+                .await?
+                .unwrap_or(doc.meta);
+            let (meta, blocks) =
+                super::walk::topdown_pandoc(lua, filter_table, &meta, &doc.blocks).await?;
+            Ok(Pandoc { meta, blocks })
         }
     }
-    Ok(inlines)
 }
 
-/// Extract a Vec<Block> from a Lua table of UserData values.
-pub(crate) fn extract_lua_blocks_from_table(table: &mlua::Table) -> Result<Vec<Block>> {
-    let len = table.raw_len();
-    let mut blocks = Vec::new();
-    for i in 1..=len {
-        let value: Value = table.get(i)?;
-        if let Value::UserData(ud) = value {
-            blocks.push(extract_lua_block(&ud)?);
-        }
+/// Extract an Inline from a Lua UserData value (flushing any cached
+/// property mutations first — see PropertyCache in types.rs).
+pub(crate) fn extract_lua_inline(lua: &Lua, ud: &mlua::AnyUserData) -> Result<Inline> {
+    ud.borrow::<LuaInline>()?.extract_flushed(lua)
+}
+
+/// Extract a Block from a Lua UserData value (flushing any cached
+/// property mutations first).
+pub(crate) fn extract_lua_block(lua: &Lua, ud: &mlua::AnyUserData) -> Result<Block> {
+    ud.borrow::<LuaBlock>()?.extract_flushed(lua)
+}
+
+use super::types::lua_facing_type_name;
+
+/// Wrap a fuzzy-peeker failure on a filter's return value in an error
+/// naming the filter function and the Lua type it returned.
+///
+/// Pandoc errors on non-coercible filter returns (e.g. `return 5` →
+/// "Inline, list of Inlines, or string expected, got number"); we match,
+/// with the filter function named for actionability and the Q-11-4
+/// code of the marshaling error contract (bd-9p2686pc). The inner
+/// peeker error already carries its own Q-11-3 "expected, got" detail;
+/// strip that code so the user sees one code, one message.
+fn filter_return_error(fn_name: &str, got: &'static str, inner: Error) -> Error {
+    let detail = match &inner {
+        Error::RuntimeError(msg) => msg.clone(),
+        other => other.to_string(),
+    };
+    let detail = detail.strip_prefix("Q-11-3: ").unwrap_or(&detail);
+    // A contract-shaped inner error already ends in "…expected, got X";
+    // only append the got-type when the detail doesn't state it.
+    if detail.contains("expected, got") {
+        Error::runtime(format!(
+            "Q-11-4: invalid value returned from filter function '{fn_name}': {detail}"
+        ))
+    } else {
+        Error::runtime(format!(
+            "Q-11-4: invalid value returned from filter function '{fn_name}': {detail}, got {got}"
+        ))
     }
-    Ok(blocks)
 }
 
-/// Handle return value from an inline filter
-fn handle_inline_return(ret: Value, original: &Inline) -> Result<Vec<Inline>> {
+/// Handle return value from an inline filter.
+///
+/// Matches pandoc's semantics: nil keeps the original, everything else
+/// is coerced through `peek_inlines_fuzzy` (bare string → word-split;
+/// table → element-wise coercion, empty table deletes; single userdata
+/// → singleton; non-coercible values are loud errors).
+pub(crate) fn handle_inline_return(
+    lua: &Lua,
+    ret: Value,
+    original: &Inline,
+    fn_name: &str,
+) -> Result<Vec<Inline>> {
     match ret {
         Value::Nil => Ok(vec![original.clone()]),
-        Value::UserData(ud) => {
-            // Single element return - replace
-            let lua_inline = ud.borrow::<LuaInline>()?;
-            Ok(vec![lua_inline.0.borrow().clone()])
+        other => {
+            let got = lua_facing_type_name(&other);
+            peek_inlines_fuzzy(lua, other).map_err(|e| filter_return_error(fn_name, got, e))
         }
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                // Empty table - delete
-                return Ok(vec![]);
-            }
-            // Table of elements - splice
-            let mut inlines = Vec::new();
-            for i in 1..=len {
-                let value: Value = table.get(i)?;
-                if let Value::UserData(ud) = value {
-                    let lua_inline = ud.borrow::<LuaInline>()?;
-                    inlines.push(lua_inline.0.borrow().clone());
-                }
-            }
-            Ok(inlines)
-        }
-        _ => Ok(vec![original.clone()]),
     }
 }
 
-/// Handle return value from a block filter
-fn handle_block_return(ret: Value, original: &Block) -> Result<Vec<Block>> {
+/// Handle return value from a block filter.
+///
+/// Matches pandoc's semantics: nil keeps the original, everything else
+/// is coerced through `peek_blocks_fuzzy` (bare string / Inline →
+/// `Plain`-wrapped; table → element-wise coercion, empty table deletes;
+/// non-coercible values are loud errors).
+pub(crate) fn handle_block_return(
+    lua: &Lua,
+    ret: Value,
+    original: &Block,
+    fn_name: &str,
+) -> Result<Vec<Block>> {
     match ret {
         Value::Nil => Ok(vec![original.clone()]),
-        Value::UserData(ud) => {
-            // Single element return - replace
-            let lua_block = ud.borrow::<LuaBlock>()?;
-            Ok(vec![lua_block.0.borrow().clone()])
+        other => {
+            let got = lua_facing_type_name(&other);
+            peek_blocks_fuzzy(lua, other).map_err(|e| filter_return_error(fn_name, got, e))
         }
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                // Empty table - delete
-                return Ok(vec![]);
-            }
-            // Table of elements - splice
-            let mut blocks = Vec::new();
-            for i in 1..=len {
-                let value: Value = table.get(i)?;
-                if let Value::UserData(ud) = value {
-                    let lua_block = ud.borrow::<LuaBlock>()?;
-                    blocks.push(lua_block.0.borrow().clone());
-                }
-            }
-            Ok(blocks)
+    }
+}
+
+/// Handle return value from an Inlines list filter (nil keeps the
+/// original list; anything else is coerced like an inline-filter return).
+pub(crate) fn handle_inlines_return(
+    lua: &Lua,
+    ret: Value,
+    original: &[Inline],
+    fn_name: &str,
+) -> Result<Vec<Inline>> {
+    match ret {
+        Value::Nil => Ok(original.to_vec()),
+        other => {
+            let got = lua_facing_type_name(&other);
+            peek_inlines_fuzzy(lua, other).map_err(|e| filter_return_error(fn_name, got, e))
         }
-        _ => Ok(vec![original.clone()]),
+    }
+}
+
+/// Handle return value from a Blocks list filter (nil keeps the
+/// original list; anything else is coerced like a block-filter return).
+pub(crate) fn handle_blocks_return(
+    lua: &Lua,
+    ret: Value,
+    original: &[Block],
+    fn_name: &str,
+) -> Result<Vec<Block>> {
+    match ret {
+        Value::Nil => Ok(original.to_vec()),
+        other => {
+            let got = lua_facing_type_name(&other);
+            peek_blocks_fuzzy(lua, other).map_err(|e| filter_return_error(fn_name, got, e))
+        }
     }
 }
 
@@ -497,38 +667,15 @@ fn handle_block_return(ret: Value, original: &Block) -> Result<Vec<Block>> {
 /// - element, false → (element, Stop)
 /// - {elements} → (elements, Continue)
 /// - {elements}, false → (elements, Stop)
-fn handle_inline_return_with_control(
+pub(crate) fn handle_inline_return_with_control(
+    lua: &Lua,
     ret: MultiValue,
     original: &Inline,
+    fn_name: &str,
 ) -> Result<(Vec<Inline>, TraversalControl)> {
     let mut iter = ret.into_iter();
-
-    // First return value: the element(s)
     let first = iter.next().unwrap_or(Value::Nil);
-    let elements = match first {
-        Value::Nil => vec![original.clone()],
-        Value::UserData(ud) => {
-            let lua_inline = ud.borrow::<LuaInline>()?;
-            vec![lua_inline.0.borrow().clone()]
-        }
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                vec![]
-            } else {
-                let mut inlines = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_inline = ud.borrow::<LuaInline>()?;
-                        inlines.push(lua_inline.0.borrow().clone());
-                    }
-                }
-                inlines
-            }
-        }
-        _ => vec![original.clone()],
-    };
+    let elements = handle_inline_return(lua, first, original, fn_name)?;
 
     // Second return value: traversal control (nil/missing = Continue, false = Stop)
     let control = match iter.next() {
@@ -541,38 +688,15 @@ fn handle_inline_return_with_control(
 
 /// Handle return value from a block filter with traversal control.
 /// Returns (elements, control) where control indicates whether to descend into children.
-fn handle_block_return_with_control(
+pub(crate) fn handle_block_return_with_control(
+    lua: &Lua,
     ret: MultiValue,
     original: &Block,
+    fn_name: &str,
 ) -> Result<(Vec<Block>, TraversalControl)> {
     let mut iter = ret.into_iter();
-
-    // First return value: the element(s)
     let first = iter.next().unwrap_or(Value::Nil);
-    let elements = match first {
-        Value::Nil => vec![original.clone()],
-        Value::UserData(ud) => {
-            let lua_block = ud.borrow::<LuaBlock>()?;
-            vec![lua_block.0.borrow().clone()]
-        }
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                vec![]
-            } else {
-                let mut blocks = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_block = ud.borrow::<LuaBlock>()?;
-                        blocks.push(lua_block.0.borrow().clone());
-                    }
-                }
-                blocks
-            }
-        }
-        _ => vec![original.clone()],
-    };
+    let elements = handle_block_return(lua, first, original, fn_name)?;
 
     // Second return value: traversal control (nil/missing = Continue, false = Stop)
     let control = match iter.next() {
@@ -584,34 +708,15 @@ fn handle_block_return_with_control(
 }
 
 /// Handle return value from a Blocks list filter with traversal control.
-fn handle_blocks_return_with_control(
+pub(crate) fn handle_blocks_return_with_control(
+    lua: &Lua,
     ret: MultiValue,
     original: &[Block],
+    fn_name: &str,
 ) -> Result<(Vec<Block>, TraversalControl)> {
     let mut iter = ret.into_iter();
-
-    // First return value: the block list
     let first = iter.next().unwrap_or(Value::Nil);
-    let blocks = match first {
-        Value::Nil => original.to_vec(),
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                vec![]
-            } else {
-                let mut result = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_block = ud.borrow::<LuaBlock>()?;
-                        result.push(lua_block.0.borrow().clone());
-                    }
-                }
-                result
-            }
-        }
-        _ => original.to_vec(),
-    };
+    let blocks = handle_blocks_return(lua, first, original, fn_name)?;
 
     // Second return value: traversal control
     let control = match iter.next() {
@@ -623,34 +728,15 @@ fn handle_blocks_return_with_control(
 }
 
 /// Handle return value from an Inlines list filter with traversal control.
-fn handle_inlines_return_with_control(
+pub(crate) fn handle_inlines_return_with_control(
+    lua: &Lua,
     ret: MultiValue,
     original: &[Inline],
+    fn_name: &str,
 ) -> Result<(Vec<Inline>, TraversalControl)> {
     let mut iter = ret.into_iter();
-
-    // First return value: the inline list
     let first = iter.next().unwrap_or(Value::Nil);
-    let inlines = match first {
-        Value::Nil => original.to_vec(),
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                vec![]
-            } else {
-                let mut result = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_inline = ud.borrow::<LuaInline>()?;
-                        result.push(lua_inline.0.borrow().clone());
-                    }
-                }
-                result
-            }
-        }
-        _ => original.to_vec(),
-    };
+    let inlines = handle_inlines_return(lua, first, original, fn_name)?;
 
     // Second return value: traversal control
     let control = match iter.next() {
@@ -662,7 +748,7 @@ fn handle_inlines_return_with_control(
 }
 
 /// Get the tag name for a block
-fn block_tag(block: &Block) -> &'static str {
+pub(crate) fn block_tag(block: &Block) -> &'static str {
     match block {
         Block::Plain(_) => "Plain",
         Block::Paragraph(_) => "Para",
@@ -687,7 +773,7 @@ fn block_tag(block: &Block) -> &'static str {
 }
 
 /// Get the tag name for an inline
-fn inline_tag(inline: &Inline) -> &'static str {
+pub(crate) fn inline_tag(inline: &Inline) -> &'static str {
     match inline {
         Inline::Str(_) => "Str",
         Inline::Emph(_) => "Emph",
@@ -732,635 +818,6 @@ fn inline_tag(inline: &Inline) -> &'static str {
 //
 // Each pass traverses the ENTIRE document before the next pass begins.
 
-/// Pass 1: Walk the entire document and apply inline element filters.
-/// This visits all Str, Emph, Strong, etc. elements bottom-up.
-async fn walk_inline_splicing(
-    lua: &Lua,
-    filter_table: &Table,
-    blocks: &[Block],
-) -> Result<Vec<Block>> {
-    let mut result = Vec::new();
-    for block in blocks {
-        result.push(walk_block_for_inline_splicing(lua, filter_table, block).await?);
-    }
-    Ok(result)
-}
-
-/// Helper: Walk a single block, applying inline element filters to its inline content
-fn walk_block_for_inline_splicing<'a>(
-    lua: &'a Lua,
-    filter_table: &'a Table,
-    block: &'a Block,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Block>> + 'a>> {
-    Box::pin(async move {
-        match block {
-            // Blocks with inline content
-            Block::Paragraph(p) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &p.content).await?;
-                Ok(Block::Paragraph(crate::pandoc::Paragraph {
-                    content: filtered,
-                    ..p.clone()
-                }))
-            }
-            Block::Plain(p) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &p.content).await?;
-                Ok(Block::Plain(crate::pandoc::Plain {
-                    content: filtered,
-                    ..p.clone()
-                }))
-            }
-            Block::Header(h) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &h.content).await?;
-                Ok(Block::Header(crate::pandoc::Header {
-                    content: filtered,
-                    ..h.clone()
-                }))
-            }
-            // Blocks with nested block content
-            Block::BlockQuote(b) => {
-                let filtered = walk_inline_splicing(lua, filter_table, &b.content).await?;
-                Ok(Block::BlockQuote(crate::pandoc::BlockQuote {
-                    content: filtered,
-                    ..b.clone()
-                }))
-            }
-            Block::BulletList(l) => {
-                let mut filtered_items = Vec::new();
-                for item in &l.content {
-                    filtered_items.push(walk_inline_splicing(lua, filter_table, item).await?);
-                }
-                Ok(Block::BulletList(crate::pandoc::BulletList {
-                    content: filtered_items,
-                    ..l.clone()
-                }))
-            }
-            Block::OrderedList(l) => {
-                let mut filtered_items = Vec::new();
-                for item in &l.content {
-                    filtered_items.push(walk_inline_splicing(lua, filter_table, item).await?);
-                }
-                Ok(Block::OrderedList(crate::pandoc::OrderedList {
-                    content: filtered_items,
-                    ..l.clone()
-                }))
-            }
-            Block::Div(d) => {
-                let filtered = walk_inline_splicing(lua, filter_table, &d.content).await?;
-                Ok(Block::Div(crate::pandoc::Div {
-                    content: filtered,
-                    ..d.clone()
-                }))
-            }
-            Block::Figure(f) => {
-                let filtered = walk_inline_splicing(lua, filter_table, &f.content).await?;
-                Ok(Block::Figure(crate::pandoc::Figure {
-                    content: filtered,
-                    ..f.clone()
-                }))
-            }
-            Block::LineBlock(l) => {
-                let mut filtered_lines = Vec::new();
-                for line in &l.content {
-                    filtered_lines
-                        .push(walk_inlines_for_element_filters(lua, filter_table, line).await?);
-                }
-                Ok(Block::LineBlock(crate::pandoc::LineBlock {
-                    content: filtered_lines,
-                    ..l.clone()
-                }))
-            }
-            // Terminal blocks (no inline/block children to filter)
-            Block::CodeBlock(_)
-            | Block::RawBlock(_)
-            | Block::HorizontalRule(_)
-            | Block::Table(_)
-            | Block::DefinitionList(_)
-            | Block::BlockMetadata(_)
-            | Block::NoteDefinitionPara(_)
-            | Block::NoteDefinitionFencedBlock(_)
-            | Block::CaptionBlock(_)
-            | Block::Custom(_) => Ok(block.clone()),
-        }
-    })
-}
-
-/// Helper: Walk inlines applying element filters (Str, Emph, etc.) but NOT Inlines filter
-async fn walk_inlines_for_element_filters(
-    lua: &Lua,
-    filter_table: &Table,
-    inlines: &[Inline],
-) -> Result<Vec<Inline>> {
-    let mut result = Vec::new();
-    for inline in inlines {
-        // First walk children (bottom-up)
-        let walked = walk_inline_children_for_element_filters(lua, filter_table, inline).await?;
-
-        // Then apply type-specific or generic Inline filter
-        let tag = inline_tag(&walked);
-        let filtered = if let Ok(filter_fn) = filter_table.get::<Function>(tag) {
-            let inline_ud = lua.create_userdata(LuaInline::new(walked.clone()))?;
-            let ret: Value = filter_fn.call_async(inline_ud).await?;
-            handle_inline_return(ret, &walked)?
-        } else if let Ok(filter_fn) = filter_table.get::<Function>("Inline") {
-            let inline_ud = lua.create_userdata(LuaInline::new(walked.clone()))?;
-            let ret: Value = filter_fn.call_async(inline_ud).await?;
-            handle_inline_return(ret, &walked)?
-        } else {
-            vec![walked]
-        };
-        result.extend(filtered);
-    }
-    Ok(result)
-}
-
-/// Helper: Walk children of an inline for element filters
-fn walk_inline_children_for_element_filters<'a>(
-    lua: &'a Lua,
-    filter_table: &'a Table,
-    inline: &'a Inline,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Inline>> + 'a>> {
-    Box::pin(async move {
-        match inline {
-            // Inlines with content children
-            Inline::Emph(e) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &e.content).await?;
-                Ok(Inline::Emph(crate::pandoc::Emph {
-                    content: filtered,
-                    ..e.clone()
-                }))
-            }
-            Inline::Strong(s) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &s.content).await?;
-                Ok(Inline::Strong(crate::pandoc::Strong {
-                    content: filtered,
-                    ..s.clone()
-                }))
-            }
-            Inline::Underline(u) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &u.content).await?;
-                Ok(Inline::Underline(crate::pandoc::Underline {
-                    content: filtered,
-                    ..u.clone()
-                }))
-            }
-            Inline::Strikeout(s) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &s.content).await?;
-                Ok(Inline::Strikeout(crate::pandoc::Strikeout {
-                    content: filtered,
-                    ..s.clone()
-                }))
-            }
-            Inline::Superscript(s) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &s.content).await?;
-                Ok(Inline::Superscript(crate::pandoc::Superscript {
-                    content: filtered,
-                    ..s.clone()
-                }))
-            }
-            Inline::Subscript(s) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &s.content).await?;
-                Ok(Inline::Subscript(crate::pandoc::Subscript {
-                    content: filtered,
-                    ..s.clone()
-                }))
-            }
-            Inline::SmallCaps(s) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &s.content).await?;
-                Ok(Inline::SmallCaps(crate::pandoc::SmallCaps {
-                    content: filtered,
-                    ..s.clone()
-                }))
-            }
-            Inline::Quoted(q) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &q.content).await?;
-                Ok(Inline::Quoted(crate::pandoc::Quoted {
-                    content: filtered,
-                    ..q.clone()
-                }))
-            }
-            Inline::Link(l) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &l.content).await?;
-                Ok(Inline::Link(crate::pandoc::Link {
-                    content: filtered,
-                    ..l.clone()
-                }))
-            }
-            Inline::Image(i) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &i.content).await?;
-                Ok(Inline::Image(crate::pandoc::Image {
-                    content: filtered,
-                    ..i.clone()
-                }))
-            }
-            Inline::Span(s) => {
-                let filtered =
-                    walk_inlines_for_element_filters(lua, filter_table, &s.content).await?;
-                Ok(Inline::Span(crate::pandoc::Span {
-                    content: filtered,
-                    ..s.clone()
-                }))
-            }
-            // Note contains blocks - need to recurse into blocks
-            Inline::Note(n) => {
-                let filtered = walk_inline_splicing(lua, filter_table, &n.content).await?;
-                Ok(Inline::Note(crate::pandoc::Note {
-                    content: filtered,
-                    ..n.clone()
-                }))
-            }
-            // Terminal inlines
-            Inline::Str(_)
-            | Inline::Code(_)
-            | Inline::Space(_)
-            | Inline::SoftBreak(_)
-            | Inline::LineBreak(_)
-            | Inline::Math(_)
-            | Inline::RawInline(_)
-            | Inline::Cite(_)
-            | Inline::Shortcode(_)
-            | Inline::NoteReference(_)
-            | Inline::Attr(_)
-            | Inline::Insert(_)
-            | Inline::Delete(_)
-            | Inline::Highlight(_)
-            | Inline::EditComment(_)
-            | Inline::Custom(_) => Ok(inline.clone()),
-        }
-    })
-}
-
-/// Pass 2: Walk the entire document and apply Inlines list filter.
-/// This visits all inline LISTS (not individual elements).
-async fn walk_inlines_straight(
-    lua: &Lua,
-    filter_table: &Table,
-    blocks: &[Block],
-) -> Result<Vec<Block>> {
-    // If no Inlines filter, pass through
-    if filter_table.get::<Function>("Inlines").is_err() {
-        return Ok(blocks.to_vec());
-    }
-
-    let mut result = Vec::new();
-    for block in blocks {
-        result.push(walk_block_for_inlines_straight(lua, filter_table, block).await?);
-    }
-    Ok(result)
-}
-
-/// Helper: Walk a single block, applying Inlines filter to inline lists
-fn walk_block_for_inlines_straight<'a>(
-    lua: &'a Lua,
-    filter_table: &'a Table,
-    block: &'a Block,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Block>> + 'a>> {
-    Box::pin(async move {
-        match block {
-            // Blocks with inline content - apply Inlines filter
-            Block::Paragraph(p) => {
-                let filtered = apply_inlines_filter(lua, filter_table, &p.content).await?;
-                Ok(Block::Paragraph(crate::pandoc::Paragraph {
-                    content: filtered,
-                    ..p.clone()
-                }))
-            }
-            Block::Plain(p) => {
-                let filtered = apply_inlines_filter(lua, filter_table, &p.content).await?;
-                Ok(Block::Plain(crate::pandoc::Plain {
-                    content: filtered,
-                    ..p.clone()
-                }))
-            }
-            Block::Header(h) => {
-                let filtered = apply_inlines_filter(lua, filter_table, &h.content).await?;
-                Ok(Block::Header(crate::pandoc::Header {
-                    content: filtered,
-                    ..h.clone()
-                }))
-            }
-            // Blocks with nested block content
-            Block::BlockQuote(b) => {
-                let filtered = walk_inlines_straight(lua, filter_table, &b.content).await?;
-                Ok(Block::BlockQuote(crate::pandoc::BlockQuote {
-                    content: filtered,
-                    ..b.clone()
-                }))
-            }
-            Block::BulletList(l) => {
-                let mut filtered_items = Vec::new();
-                for item in &l.content {
-                    filtered_items.push(walk_inlines_straight(lua, filter_table, item).await?);
-                }
-                Ok(Block::BulletList(crate::pandoc::BulletList {
-                    content: filtered_items,
-                    ..l.clone()
-                }))
-            }
-            Block::OrderedList(l) => {
-                let mut filtered_items = Vec::new();
-                for item in &l.content {
-                    filtered_items.push(walk_inlines_straight(lua, filter_table, item).await?);
-                }
-                Ok(Block::OrderedList(crate::pandoc::OrderedList {
-                    content: filtered_items,
-                    ..l.clone()
-                }))
-            }
-            Block::Div(d) => {
-                let filtered = walk_inlines_straight(lua, filter_table, &d.content).await?;
-                Ok(Block::Div(crate::pandoc::Div {
-                    content: filtered,
-                    ..d.clone()
-                }))
-            }
-            Block::Figure(f) => {
-                let filtered = walk_inlines_straight(lua, filter_table, &f.content).await?;
-                Ok(Block::Figure(crate::pandoc::Figure {
-                    content: filtered,
-                    ..f.clone()
-                }))
-            }
-            Block::LineBlock(l) => {
-                // Each line is a separate inline list
-                let mut filtered_lines = Vec::new();
-                for line in &l.content {
-                    filtered_lines.push(apply_inlines_filter(lua, filter_table, line).await?);
-                }
-                Ok(Block::LineBlock(crate::pandoc::LineBlock {
-                    content: filtered_lines,
-                    ..l.clone()
-                }))
-            }
-            // Terminal blocks
-            Block::CodeBlock(_)
-            | Block::RawBlock(_)
-            | Block::HorizontalRule(_)
-            | Block::Table(_)
-            | Block::DefinitionList(_)
-            | Block::BlockMetadata(_)
-            | Block::NoteDefinitionPara(_)
-            | Block::NoteDefinitionFencedBlock(_)
-            | Block::CaptionBlock(_)
-            | Block::Custom(_) => Ok(block.clone()),
-        }
-    })
-}
-
-/// Helper: Apply the Inlines filter to a list of inlines
-async fn apply_inlines_filter(
-    lua: &Lua,
-    filter_table: &Table,
-    inlines: &[Inline],
-) -> Result<Vec<Inline>> {
-    if let Ok(inlines_fn) = filter_table.get::<Function>("Inlines") {
-        let inlines_table = inlines_to_lua_table(lua, inlines)?;
-        let ret: Value = inlines_fn.call_async(inlines_table).await?;
-        match ret {
-            Value::Nil => Ok(inlines.to_vec()),
-            Value::Table(table) => {
-                let len = table.raw_len();
-                if len == 0 {
-                    return Ok(vec![]);
-                }
-                let mut result = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_inline = ud.borrow::<LuaInline>()?;
-                        result.push(lua_inline.0.borrow().clone());
-                    }
-                }
-                Ok(result)
-            }
-            _ => Ok(inlines.to_vec()),
-        }
-    } else {
-        Ok(inlines.to_vec())
-    }
-}
-
-/// Pass 3: Walk the entire document and apply block element filters.
-/// This visits all Para, Div, Header, etc. elements bottom-up.
-async fn walk_block_splicing(
-    lua: &Lua,
-    filter_table: &Table,
-    blocks: &[Block],
-) -> Result<Vec<Block>> {
-    let mut result = Vec::new();
-    for block in blocks {
-        // First walk children (bottom-up)
-        let walked = walk_block_children_for_element_filters(lua, filter_table, block).await?;
-
-        // Then apply type-specific or generic Block filter
-        let tag = block_tag(&walked);
-        let filtered = if let Ok(filter_fn) = filter_table.get::<Function>(tag) {
-            let block_ud = lua.create_userdata(LuaBlock::new(walked.clone()))?;
-            let ret: Value = filter_fn.call_async(block_ud).await?;
-            handle_block_return(ret, &walked)?
-        } else if let Ok(filter_fn) = filter_table.get::<Function>("Block") {
-            let block_ud = lua.create_userdata(LuaBlock::new(walked.clone()))?;
-            let ret: Value = filter_fn.call_async(block_ud).await?;
-            handle_block_return(ret, &walked)?
-        } else {
-            vec![walked]
-        };
-        result.extend(filtered);
-    }
-    Ok(result)
-}
-
-/// Helper: Walk children of a block for element filters (but don't apply filter to block itself)
-fn walk_block_children_for_element_filters<'a>(
-    lua: &'a Lua,
-    filter_table: &'a Table,
-    block: &'a Block,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Block>> + 'a>> {
-    Box::pin(async move {
-        match block {
-            // Blocks with nested block content
-            Block::BlockQuote(b) => {
-                let filtered = walk_block_splicing(lua, filter_table, &b.content).await?;
-                Ok(Block::BlockQuote(crate::pandoc::BlockQuote {
-                    content: filtered,
-                    ..b.clone()
-                }))
-            }
-            Block::BulletList(l) => {
-                let mut filtered_items = Vec::new();
-                for item in &l.content {
-                    filtered_items.push(walk_block_splicing(lua, filter_table, item).await?);
-                }
-                Ok(Block::BulletList(crate::pandoc::BulletList {
-                    content: filtered_items,
-                    ..l.clone()
-                }))
-            }
-            Block::OrderedList(l) => {
-                let mut filtered_items = Vec::new();
-                for item in &l.content {
-                    filtered_items.push(walk_block_splicing(lua, filter_table, item).await?);
-                }
-                Ok(Block::OrderedList(crate::pandoc::OrderedList {
-                    content: filtered_items,
-                    ..l.clone()
-                }))
-            }
-            Block::Div(d) => {
-                let filtered = walk_block_splicing(lua, filter_table, &d.content).await?;
-                Ok(Block::Div(crate::pandoc::Div {
-                    content: filtered,
-                    ..d.clone()
-                }))
-            }
-            Block::Figure(f) => {
-                let filtered = walk_block_splicing(lua, filter_table, &f.content).await?;
-                Ok(Block::Figure(crate::pandoc::Figure {
-                    content: filtered,
-                    ..f.clone()
-                }))
-            }
-            // Other blocks don't have block children (inline content was already handled in pass 1-2)
-            Block::Paragraph(_)
-            | Block::Plain(_)
-            | Block::Header(_)
-            | Block::LineBlock(_)
-            | Block::CodeBlock(_)
-            | Block::RawBlock(_)
-            | Block::HorizontalRule(_)
-            | Block::Table(_)
-            | Block::DefinitionList(_)
-            | Block::BlockMetadata(_)
-            | Block::NoteDefinitionPara(_)
-            | Block::NoteDefinitionFencedBlock(_)
-            | Block::CaptionBlock(_)
-            | Block::Custom(_) => Ok(block.clone()),
-        }
-    })
-}
-
-/// Pass 4: Walk the entire document and apply Blocks list filter.
-/// This visits all block LISTS (not individual elements).
-async fn walk_blocks_straight(
-    lua: &Lua,
-    filter_table: &Table,
-    blocks: &[Block],
-) -> Result<Vec<Block>> {
-    // First recurse into nested block lists
-    let mut walked = Vec::new();
-    for block in blocks {
-        walked.push(walk_block_for_blocks_straight(lua, filter_table, block).await?);
-    }
-
-    // Then apply Blocks filter to this list
-    if let Ok(blocks_fn) = filter_table.get::<Function>("Blocks") {
-        let blocks_table = blocks_to_lua_table(lua, &walked)?;
-        let ret: Value = blocks_fn.call_async(blocks_table).await?;
-        match ret {
-            Value::Nil => Ok(walked),
-            Value::Table(table) => {
-                let len = table.raw_len();
-                if len == 0 {
-                    return Ok(vec![]);
-                }
-                let mut result = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_block = ud.borrow::<LuaBlock>()?;
-                        result.push(lua_block.0.borrow().clone());
-                    }
-                }
-                Ok(result)
-            }
-            _ => Ok(walked),
-        }
-    } else {
-        Ok(walked)
-    }
-}
-
-/// Helper: Walk a single block for Blocks filter (recursing into nested block lists)
-fn walk_block_for_blocks_straight<'a>(
-    lua: &'a Lua,
-    filter_table: &'a Table,
-    block: &'a Block,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Block>> + 'a>> {
-    Box::pin(async move {
-        match block {
-            // Blocks with nested block content
-            Block::BlockQuote(b) => {
-                let filtered = walk_blocks_straight(lua, filter_table, &b.content).await?;
-                Ok(Block::BlockQuote(crate::pandoc::BlockQuote {
-                    content: filtered,
-                    ..b.clone()
-                }))
-            }
-            Block::BulletList(l) => {
-                let mut filtered_items = Vec::new();
-                for item in &l.content {
-                    filtered_items.push(walk_blocks_straight(lua, filter_table, item).await?);
-                }
-                Ok(Block::BulletList(crate::pandoc::BulletList {
-                    content: filtered_items,
-                    ..l.clone()
-                }))
-            }
-            Block::OrderedList(l) => {
-                let mut filtered_items = Vec::new();
-                for item in &l.content {
-                    filtered_items.push(walk_blocks_straight(lua, filter_table, item).await?);
-                }
-                Ok(Block::OrderedList(crate::pandoc::OrderedList {
-                    content: filtered_items,
-                    ..l.clone()
-                }))
-            }
-            Block::Div(d) => {
-                let filtered = walk_blocks_straight(lua, filter_table, &d.content).await?;
-                Ok(Block::Div(crate::pandoc::Div {
-                    content: filtered,
-                    ..d.clone()
-                }))
-            }
-            Block::Figure(f) => {
-                let filtered = walk_blocks_straight(lua, filter_table, &f.content).await?;
-                Ok(Block::Figure(crate::pandoc::Figure {
-                    content: filtered,
-                    ..f.clone()
-                }))
-            }
-            // Other blocks don't have block children
-            Block::Paragraph(_)
-            | Block::Plain(_)
-            | Block::Header(_)
-            | Block::LineBlock(_)
-            | Block::CodeBlock(_)
-            | Block::RawBlock(_)
-            | Block::HorizontalRule(_)
-            | Block::Table(_)
-            | Block::DefinitionList(_)
-            | Block::BlockMetadata(_)
-            | Block::NoteDefinitionPara(_)
-            | Block::NoteDefinitionFencedBlock(_)
-            | Block::CaptionBlock(_)
-            | Block::Custom(_) => Ok(block.clone()),
-        }
-    })
-}
-
 // ============================================================================
 // TOPDOWN TRAVERSAL
 // ============================================================================
@@ -1380,393 +837,27 @@ async fn apply_topdown_filter(
     filter_table: &Table,
     blocks: &[Block],
 ) -> Result<Vec<Block>> {
-    walk_blocks_topdown(lua, filter_table, blocks).await
+    super::walk::topdown_blocks(lua, filter_table, blocks).await
 }
 
-/// Walk blocks in topdown order: apply Blocks filter, then each block, then children
-pub async fn walk_blocks_topdown(
-    lua: &Lua,
-    filter_table: &Table,
-    blocks: &[Block],
-) -> Result<Vec<Block>> {
-    // Step 1: Apply Blocks filter first (operates on whole list)
-    let (blocks, ctrl) = if let Ok(blocks_fn) = filter_table.get::<Function>("Blocks") {
-        let blocks_table = blocks_to_lua_table(lua, blocks)?;
-        let ret: MultiValue = blocks_fn.call_async(blocks_table).await?;
-        handle_blocks_return_with_control(ret, blocks)?
-    } else {
-        (blocks.to_vec(), TraversalControl::Continue)
-    };
-
-    // If Stop, return without descending into individual blocks
-    if ctrl == TraversalControl::Stop {
-        return Ok(blocks);
-    }
-
-    // Step 2: For each block, apply block filter then recurse
-    let mut result = Vec::new();
-    for block in &blocks {
-        let (filtered, ctrl) = apply_block_filter_topdown(lua, filter_table, block).await?;
-        for b in filtered {
-            if ctrl == TraversalControl::Stop {
-                // Don't descend into children
-                result.push(b);
-            } else {
-                // Recurse into children
-                let walked = walk_block_children_topdown(lua, filter_table, &b).await?;
-                result.push(walked);
-            }
-        }
-    }
-    Ok(result)
-}
-
-/// Apply filter to a single block and return (result, control)
-async fn apply_block_filter_topdown(
-    lua: &Lua,
-    filter_table: &Table,
-    block: &Block,
-) -> Result<(Vec<Block>, TraversalControl)> {
-    let tag = block_tag(block);
-
-    // Try type-specific filter first, then generic Block filter
-    if let Ok(filter_fn) = filter_table.get::<Function>(tag) {
-        let block_ud = lua.create_userdata(LuaBlock::new(block.clone()))?;
-        let ret: MultiValue = filter_fn.call_async(block_ud).await?;
-        handle_block_return_with_control(ret, block)
-    } else if let Ok(filter_fn) = filter_table.get::<Function>("Block") {
-        let block_ud = lua.create_userdata(LuaBlock::new(block.clone()))?;
-        let ret: MultiValue = filter_fn.call_async(block_ud).await?;
-        handle_block_return_with_control(ret, block)
-    } else {
-        Ok((vec![block.clone()], TraversalControl::Continue))
-    }
-}
-
-/// Walk children of a block in topdown order
-fn walk_block_children_topdown<'a>(
-    lua: &'a Lua,
-    filter_table: &'a Table,
-    block: &'a Block,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Block>> + 'a>> {
-    Box::pin(async move {
-        match block {
-            // Blocks with inline content
-            Block::Paragraph(p) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &p.content).await?;
-                Ok(Block::Paragraph(crate::pandoc::Paragraph {
-                    content: filtered,
-                    ..p.clone()
-                }))
-            }
-            Block::Plain(p) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &p.content).await?;
-                Ok(Block::Plain(crate::pandoc::Plain {
-                    content: filtered,
-                    ..p.clone()
-                }))
-            }
-            Block::Header(h) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &h.content).await?;
-                Ok(Block::Header(crate::pandoc::Header {
-                    content: filtered,
-                    ..h.clone()
-                }))
-            }
-            // Blocks with nested block content
-            Block::BlockQuote(b) => {
-                let filtered = walk_blocks_topdown(lua, filter_table, &b.content).await?;
-                Ok(Block::BlockQuote(crate::pandoc::BlockQuote {
-                    content: filtered,
-                    ..b.clone()
-                }))
-            }
-            Block::BulletList(l) => {
-                let mut filtered_items = Vec::new();
-                for item in &l.content {
-                    filtered_items.push(walk_blocks_topdown(lua, filter_table, item).await?);
-                }
-                Ok(Block::BulletList(crate::pandoc::BulletList {
-                    content: filtered_items,
-                    ..l.clone()
-                }))
-            }
-            Block::OrderedList(l) => {
-                let mut filtered_items = Vec::new();
-                for item in &l.content {
-                    filtered_items.push(walk_blocks_topdown(lua, filter_table, item).await?);
-                }
-                Ok(Block::OrderedList(crate::pandoc::OrderedList {
-                    content: filtered_items,
-                    ..l.clone()
-                }))
-            }
-            Block::Div(d) => {
-                let filtered = walk_blocks_topdown(lua, filter_table, &d.content).await?;
-                Ok(Block::Div(crate::pandoc::Div {
-                    content: filtered,
-                    ..d.clone()
-                }))
-            }
-            Block::Figure(f) => {
-                let filtered = walk_blocks_topdown(lua, filter_table, &f.content).await?;
-                Ok(Block::Figure(crate::pandoc::Figure {
-                    content: filtered,
-                    ..f.clone()
-                }))
-            }
-            Block::LineBlock(l) => {
-                let mut filtered_lines = Vec::new();
-                for line in &l.content {
-                    filtered_lines.push(walk_inlines_topdown(lua, filter_table, line).await?);
-                }
-                Ok(Block::LineBlock(crate::pandoc::LineBlock {
-                    content: filtered_lines,
-                    ..l.clone()
-                }))
-            }
-            // Terminal blocks (no children to walk)
-            Block::CodeBlock(_)
-            | Block::RawBlock(_)
-            | Block::HorizontalRule(_)
-            | Block::Table(_)
-            | Block::DefinitionList(_)
-            | Block::BlockMetadata(_)
-            | Block::NoteDefinitionPara(_)
-            | Block::NoteDefinitionFencedBlock(_)
-            | Block::CaptionBlock(_)
-            | Block::Custom(_) => Ok(block.clone()),
-        }
-    })
-}
-
-/// Walk inlines in topdown order: apply Inlines filter, then each inline, then children
-pub async fn walk_inlines_topdown(
-    lua: &Lua,
-    filter_table: &Table,
-    inlines: &[Inline],
-) -> Result<Vec<Inline>> {
-    // Step 1: Apply Inlines filter first (operates on whole list)
-    let (inlines, ctrl) = if let Ok(inlines_fn) = filter_table.get::<Function>("Inlines") {
-        let inlines_table = inlines_to_lua_table(lua, inlines)?;
-        let ret: MultiValue = inlines_fn.call_async(inlines_table).await?;
-        handle_inlines_return_with_control(ret, inlines)?
-    } else {
-        (inlines.to_vec(), TraversalControl::Continue)
-    };
-
-    // If Stop, return without descending into individual inlines
-    if ctrl == TraversalControl::Stop {
-        return Ok(inlines);
-    }
-
-    // Step 2: For each inline, apply inline filter then recurse
-    let mut result = Vec::new();
-    for inline in &inlines {
-        let (filtered, ctrl) = apply_inline_filter_topdown(lua, filter_table, inline).await?;
-        for i in filtered {
-            if ctrl == TraversalControl::Stop {
-                // Don't descend into children
-                result.push(i);
-            } else {
-                // Recurse into children
-                let walked = walk_inline_children_topdown(lua, filter_table, &i).await?;
-                result.push(walked);
-            }
-        }
-    }
-    Ok(result)
-}
-
-/// Apply filter to a single inline and return (result, control)
-async fn apply_inline_filter_topdown(
-    lua: &Lua,
-    filter_table: &Table,
-    inline: &Inline,
-) -> Result<(Vec<Inline>, TraversalControl)> {
-    let tag = inline_tag(inline);
-
-    // Try type-specific filter first, then generic Inline filter
-    if let Ok(filter_fn) = filter_table.get::<Function>(tag) {
-        let inline_ud = lua.create_userdata(LuaInline::new(inline.clone()))?;
-        let ret: MultiValue = filter_fn.call_async(inline_ud).await?;
-        handle_inline_return_with_control(ret, inline)
-    } else if let Ok(filter_fn) = filter_table.get::<Function>("Inline") {
-        let inline_ud = lua.create_userdata(LuaInline::new(inline.clone()))?;
-        let ret: MultiValue = filter_fn.call_async(inline_ud).await?;
-        handle_inline_return_with_control(ret, inline)
-    } else {
-        Ok((vec![inline.clone()], TraversalControl::Continue))
-    }
-}
-
-/// Walk children of an inline in topdown order
-fn walk_inline_children_topdown<'a>(
-    lua: &'a Lua,
-    filter_table: &'a Table,
-    inline: &'a Inline,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Inline>> + 'a>> {
-    Box::pin(async move {
-        match inline {
-            // Inlines with content children
-            Inline::Emph(e) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &e.content).await?;
-                Ok(Inline::Emph(crate::pandoc::Emph {
-                    content: filtered,
-                    ..e.clone()
-                }))
-            }
-            Inline::Strong(s) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &s.content).await?;
-                Ok(Inline::Strong(crate::pandoc::Strong {
-                    content: filtered,
-                    ..s.clone()
-                }))
-            }
-            Inline::Underline(u) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &u.content).await?;
-                Ok(Inline::Underline(crate::pandoc::Underline {
-                    content: filtered,
-                    ..u.clone()
-                }))
-            }
-            Inline::Strikeout(s) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &s.content).await?;
-                Ok(Inline::Strikeout(crate::pandoc::Strikeout {
-                    content: filtered,
-                    ..s.clone()
-                }))
-            }
-            Inline::Superscript(s) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &s.content).await?;
-                Ok(Inline::Superscript(crate::pandoc::Superscript {
-                    content: filtered,
-                    ..s.clone()
-                }))
-            }
-            Inline::Subscript(s) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &s.content).await?;
-                Ok(Inline::Subscript(crate::pandoc::Subscript {
-                    content: filtered,
-                    ..s.clone()
-                }))
-            }
-            Inline::SmallCaps(s) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &s.content).await?;
-                Ok(Inline::SmallCaps(crate::pandoc::SmallCaps {
-                    content: filtered,
-                    ..s.clone()
-                }))
-            }
-            Inline::Quoted(q) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &q.content).await?;
-                Ok(Inline::Quoted(crate::pandoc::Quoted {
-                    content: filtered,
-                    ..q.clone()
-                }))
-            }
-            Inline::Link(l) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &l.content).await?;
-                Ok(Inline::Link(crate::pandoc::Link {
-                    content: filtered,
-                    ..l.clone()
-                }))
-            }
-            Inline::Image(i) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &i.content).await?;
-                Ok(Inline::Image(crate::pandoc::Image {
-                    content: filtered,
-                    ..i.clone()
-                }))
-            }
-            Inline::Span(s) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &s.content).await?;
-                Ok(Inline::Span(crate::pandoc::Span {
-                    content: filtered,
-                    ..s.clone()
-                }))
-            }
-            // Note contains blocks
-            Inline::Note(n) => {
-                let filtered = walk_blocks_topdown(lua, filter_table, &n.content).await?;
-                Ok(Inline::Note(crate::pandoc::Note {
-                    content: filtered,
-                    ..n.clone()
-                }))
-            }
-            // CriticMarkup types
-            Inline::Insert(i) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &i.content).await?;
-                Ok(Inline::Insert(crate::pandoc::Insert {
-                    content: filtered,
-                    ..i.clone()
-                }))
-            }
-            Inline::Delete(d) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &d.content).await?;
-                Ok(Inline::Delete(crate::pandoc::Delete {
-                    content: filtered,
-                    ..d.clone()
-                }))
-            }
-            Inline::Highlight(h) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &h.content).await?;
-                Ok(Inline::Highlight(crate::pandoc::Highlight {
-                    content: filtered,
-                    ..h.clone()
-                }))
-            }
-            Inline::EditComment(ec) => {
-                let filtered = walk_inlines_topdown(lua, filter_table, &ec.content).await?;
-                Ok(Inline::EditComment(crate::pandoc::EditComment {
-                    content: filtered,
-                    ..ec.clone()
-                }))
-            }
-            // Terminal inlines - no children to walk
-            Inline::Str(_)
-            | Inline::Code(_)
-            | Inline::Space(_)
-            | Inline::SoftBreak(_)
-            | Inline::LineBreak(_)
-            | Inline::Math(_)
-            | Inline::RawInline(_)
-            | Inline::Cite(_)
-            | Inline::Shortcode(_)
-            | Inline::NoteReference(_)
-            | Inline::Attr(_)
-            | Inline::Custom(_) => Ok(inline.clone()),
-        }
-    })
-}
-
-/// Apply typewise filter traversal (four separate passes)
+/// Apply typewise filter traversal (four separate passes) to a block
+/// list. Delegates to the shared walk engine in `super::walk`.
 pub async fn apply_typewise_filter(
     lua: &Lua,
     filter_table: &Table,
     blocks: &[Block],
 ) -> Result<Vec<Block>> {
-    // Pass 1: Walk all inlines (splicing)
-    let blocks = walk_inline_splicing(lua, filter_table, blocks).await?;
-    // Pass 2: Walk all inline lists (Inlines filter)
-    let blocks = walk_inlines_straight(lua, filter_table, &blocks).await?;
-    // Pass 3: Walk all blocks (splicing)
-    let blocks = walk_block_splicing(lua, filter_table, &blocks).await?;
-    // Pass 4: Walk all block lists (Blocks filter)
-    walk_blocks_straight(lua, filter_table, &blocks).await
+    super::walk::typewise_blocks(lua, filter_table, blocks).await
 }
 
-/// Apply typewise filter traversal to inlines only (two passes)
-/// Used for elem:walk{} on inline elements and inline lists
+/// Apply typewise filter traversal to an inline list. All four passes
+/// run: block filter functions reach blocks nested inside Notes.
 pub async fn apply_typewise_inlines(
     lua: &Lua,
     filter_table: &Table,
     inlines: &[Inline],
 ) -> Result<Vec<Inline>> {
-    // Pass 1: Walk all inline elements (splicing)
-    let inlines = walk_inlines_for_element_filters(lua, filter_table, inlines).await?;
-    // Pass 2: Apply Inlines list filter
-    apply_inlines_filter(lua, filter_table, &inlines).await
+    super::walk::typewise_inlines(lua, filter_table, inlines).await
 }
 
 #[cfg(test)]
@@ -2309,6 +1400,7 @@ mod unit_tests {
 
     #[test]
     fn test_handle_inline_return_nil() {
+        let lua = Lua::new();
         use crate::pandoc::Inline;
         use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
@@ -2317,7 +1409,7 @@ mod unit_tests {
             text: "original".to_string(),
             source_info: SourceInfo::for_test(),
         });
-        let result = handle_inline_return(Value::Nil, &original).unwrap();
+        let result = handle_inline_return(&lua, Value::Nil, &original, "Str").unwrap();
         assert_eq!(result.len(), 1);
         match &result[0] {
             Inline::Str(s) => assert_eq!(s.text, "original"),
@@ -2337,12 +1429,14 @@ mod unit_tests {
             text: "original".to_string(),
             source_info: SourceInfo::for_test(),
         });
-        let result = handle_inline_return(Value::Table(empty_table), &original).unwrap();
+        let result =
+            handle_inline_return(&lua, Value::Table(empty_table), &original, "Str").unwrap();
         assert_eq!(result.len(), 0); // Empty table means delete
     }
 
     #[test]
-    fn test_handle_inline_return_other_value() {
+    fn test_handle_inline_return_number_errors() {
+        let lua = Lua::new();
         use crate::pandoc::Inline;
         use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
@@ -2351,13 +1445,76 @@ mod unit_tests {
             text: "original".to_string(),
             source_info: SourceInfo::for_test(),
         });
-        // Non-nil, non-table, non-userdata returns original unchanged
-        let result = handle_inline_return(Value::Integer(42), &original).unwrap();
-        assert_eq!(result.len(), 1);
-        match &result[0] {
-            Inline::Str(s) => assert_eq!(s.text, "original"),
-            _ => panic!("Expected Str"),
-        }
+        // Pandoc errors on non-coercible returns; so do we, loudly.
+        let err = handle_inline_return(&lua, Value::Integer(42), &original, "Str").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("number"), "should name the got-type: {msg}");
+        assert!(
+            msg.contains("'Str'"),
+            "should name the filter function: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_handle_inline_return_boolean_errors() {
+        let lua = Lua::new();
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::for_test(),
+        });
+        let err = handle_inline_return(&lua, Value::Boolean(true), &original, "Str").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("boolean"), "should name the got-type: {msg}");
+        assert!(
+            msg.contains("'Str'"),
+            "should name the filter function: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_handle_inline_return_string_wordsplit() {
+        let lua = Lua::new();
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::for_test(),
+        });
+        // Bare string return is word-split like peekInlinesFuzzy.
+        let ret = Value::String(lua.create_string("two words").unwrap());
+        let result = handle_inline_return(&lua, ret, &original, "Str").unwrap();
+        assert_eq!(result.len(), 3);
+        assert!(matches!(&result[0], Inline::Str(s) if s.text == "two"));
+        assert!(matches!(&result[1], Inline::Space(_)));
+        assert!(matches!(&result[2], Inline::Str(s) if s.text == "words"));
+    }
+
+    #[test]
+    fn test_handle_inline_return_table_string_entries() {
+        let lua = Lua::new();
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::for_test(),
+        });
+        // Strings inside a returned table become single Strs (element-wise
+        // peekInlineFuzzy: NO word-split inside lists).
+        let table = lua.create_table().unwrap();
+        table.push("a b").unwrap();
+        table.push("c").unwrap();
+        let result = handle_inline_return(&lua, Value::Table(table), &original, "Str").unwrap();
+        assert_eq!(result.len(), 2);
+        assert!(matches!(&result[0], Inline::Str(s) if s.text == "a b"));
+        assert!(matches!(&result[1], Inline::Str(s) if s.text == "c"));
     }
 
     // =========================================================================
@@ -2366,6 +1523,7 @@ mod unit_tests {
 
     #[test]
     fn test_handle_block_return_nil() {
+        let lua = Lua::new();
         use crate::pandoc::Block;
         use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
@@ -2374,7 +1532,7 @@ mod unit_tests {
             content: vec![],
             source_info: SourceInfo::for_test(),
         });
-        let result = handle_block_return(Value::Nil, &original).unwrap();
+        let result = handle_block_return(&lua, Value::Nil, &original, "Para").unwrap();
         assert_eq!(result.len(), 1);
         assert!(matches!(&result[0], Block::Plain(_)));
     }
@@ -2391,12 +1549,14 @@ mod unit_tests {
             content: vec![],
             source_info: SourceInfo::for_test(),
         });
-        let result = handle_block_return(Value::Table(empty_table), &original).unwrap();
+        let result =
+            handle_block_return(&lua, Value::Table(empty_table), &original, "Para").unwrap();
         assert_eq!(result.len(), 0); // Empty table means delete
     }
 
     #[test]
-    fn test_handle_block_return_other_value() {
+    fn test_handle_block_return_number_errors() {
+        let lua = Lua::new();
         use crate::pandoc::Block;
         use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
@@ -2405,10 +1565,66 @@ mod unit_tests {
             content: vec![],
             source_info: SourceInfo::for_test(),
         });
-        // Non-nil, non-table, non-userdata returns original unchanged
-        let result = handle_block_return(Value::Integer(42), &original).unwrap();
+        // Pandoc errors on non-coercible returns; so do we, loudly.
+        let err = handle_block_return(&lua, Value::Integer(42), &original, "Para").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("number"), "should name the got-type: {msg}");
+        assert!(
+            msg.contains("'Para'"),
+            "should name the filter function: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_handle_block_return_string_plain() {
+        let lua = Lua::new();
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::{Block, Inline};
+        use quarto_source_map::SourceInfo;
+
+        let original = Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::for_test(),
+        });
+        // Bare string return from a Block filter → Plain(word-split).
+        let ret = Value::String(lua.create_string("plain text").unwrap());
+        let result = handle_block_return(&lua, ret, &original, "Para").unwrap();
         assert_eq!(result.len(), 1);
-        assert!(matches!(&result[0], Block::Plain(_)));
+        match &result[0] {
+            Block::Plain(p) => {
+                assert_eq!(p.content.len(), 3);
+                assert!(matches!(&p.content[0], Inline::Str(s) if s.text == "plain"));
+                assert!(matches!(&p.content[1], Inline::Space(_)));
+                assert!(matches!(&p.content[2], Inline::Str(s) if s.text == "text"));
+            }
+            other => panic!("Expected Plain, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_block_return_table_string_entry() {
+        let lua = Lua::new();
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::{Block, Inline};
+        use quarto_source_map::SourceInfo;
+
+        let original = Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::for_test(),
+        });
+        // A string entry in a Block-filter table → Plain(word-split),
+        // element-wise peekBlockFuzzy.
+        let table = lua.create_table().unwrap();
+        table.push("two words").unwrap();
+        let result = handle_block_return(&lua, Value::Table(table), &original, "Para").unwrap();
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Block::Plain(p) => {
+                assert_eq!(p.content.len(), 3);
+                assert!(matches!(&p.content[0], Inline::Str(s) if s.text == "two"));
+            }
+            other => panic!("Expected Plain, got {other:?}"),
+        }
     }
 
     // =========================================================================
@@ -2417,6 +1633,7 @@ mod unit_tests {
 
     #[test]
     fn test_handle_inline_return_with_control_nil() {
+        let lua = Lua::new();
         use crate::pandoc::Inline;
         use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
@@ -2426,13 +1643,14 @@ mod unit_tests {
             source_info: SourceInfo::for_test(),
         });
         let (elements, control) =
-            handle_inline_return_with_control(MultiValue::new(), &original).unwrap();
+            handle_inline_return_with_control(&lua, MultiValue::new(), &original, "Str").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Continue);
     }
 
     #[test]
     fn test_handle_inline_return_with_control_stop() {
+        let lua = Lua::new();
         use crate::pandoc::Inline;
         use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
@@ -2444,13 +1662,15 @@ mod unit_tests {
         let mut values = MultiValue::new();
         values.push_front(Value::Nil);
         values.push_back(Value::Boolean(false));
-        let (elements, control) = handle_inline_return_with_control(values, &original).unwrap();
+        let (elements, control) =
+            handle_inline_return_with_control(&lua, values, &original, "Str").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Stop);
     }
 
     #[test]
     fn test_handle_inline_return_with_control_continue_explicit() {
+        let lua = Lua::new();
         use crate::pandoc::Inline;
         use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
@@ -2462,13 +1682,15 @@ mod unit_tests {
         let mut values = MultiValue::new();
         values.push_front(Value::Nil);
         values.push_back(Value::Boolean(true));
-        let (elements, control) = handle_inline_return_with_control(values, &original).unwrap();
+        let (elements, control) =
+            handle_inline_return_with_control(&lua, values, &original, "Str").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Continue);
     }
 
     #[test]
     fn test_handle_block_return_with_control_nil() {
+        let lua = Lua::new();
         use crate::pandoc::Block;
         use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
@@ -2478,13 +1700,14 @@ mod unit_tests {
             source_info: SourceInfo::for_test(),
         });
         let (elements, control) =
-            handle_block_return_with_control(MultiValue::new(), &original).unwrap();
+            handle_block_return_with_control(&lua, MultiValue::new(), &original, "Para").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Continue);
     }
 
     #[test]
     fn test_handle_block_return_with_control_stop() {
+        let lua = Lua::new();
         use crate::pandoc::Block;
         use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
@@ -2496,13 +1719,15 @@ mod unit_tests {
         let mut values = MultiValue::new();
         values.push_front(Value::Nil);
         values.push_back(Value::Boolean(false));
-        let (elements, control) = handle_block_return_with_control(values, &original).unwrap();
+        let (elements, control) =
+            handle_block_return_with_control(&lua, values, &original, "Para").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Stop);
     }
 
     #[test]
     fn test_handle_blocks_return_with_control_nil() {
+        let lua = Lua::new();
         use crate::pandoc::Block;
         use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
@@ -2512,13 +1737,15 @@ mod unit_tests {
             source_info: SourceInfo::for_test(),
         })];
         let (elements, control) =
-            handle_blocks_return_with_control(MultiValue::new(), &original).unwrap();
+            handle_blocks_return_with_control(&lua, MultiValue::new(), &original, "Blocks")
+                .unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Continue);
     }
 
     #[test]
     fn test_handle_blocks_return_with_control_stop() {
+        let lua = Lua::new();
         use crate::pandoc::Block;
         use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
@@ -2530,13 +1757,15 @@ mod unit_tests {
         let mut values = MultiValue::new();
         values.push_front(Value::Nil);
         values.push_back(Value::Boolean(false));
-        let (elements, control) = handle_blocks_return_with_control(values, &original).unwrap();
+        let (elements, control) =
+            handle_blocks_return_with_control(&lua, values, &original, "Blocks").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Stop);
     }
 
     #[test]
     fn test_handle_inlines_return_with_control_nil() {
+        let lua = Lua::new();
         use crate::pandoc::Inline;
         use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
@@ -2546,13 +1775,15 @@ mod unit_tests {
             source_info: SourceInfo::for_test(),
         })];
         let (elements, control) =
-            handle_inlines_return_with_control(MultiValue::new(), &original).unwrap();
+            handle_inlines_return_with_control(&lua, MultiValue::new(), &original, "Inlines")
+                .unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Continue);
     }
 
     #[test]
     fn test_handle_inlines_return_with_control_stop() {
+        let lua = Lua::new();
         use crate::pandoc::Inline;
         use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
@@ -2564,13 +1795,15 @@ mod unit_tests {
         let mut values = MultiValue::new();
         values.push_front(Value::Nil);
         values.push_back(Value::Boolean(false));
-        let (elements, control) = handle_inlines_return_with_control(values, &original).unwrap();
+        let (elements, control) =
+            handle_inlines_return_with_control(&lua, values, &original, "Inlines").unwrap();
         assert_eq!(elements.len(), 1);
         assert_eq!(control, TraversalControl::Stop);
     }
 
     #[test]
-    fn test_handle_inlines_return_with_control_other_value() {
+    fn test_handle_inlines_return_with_control_number_errors() {
+        let lua = Lua::new();
         use crate::pandoc::Inline;
         use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
@@ -2580,14 +1813,16 @@ mod unit_tests {
             source_info: SourceInfo::for_test(),
         })];
         let mut values = MultiValue::new();
-        values.push_front(Value::Integer(42)); // Not a table or nil
-        let (elements, control) = handle_inlines_return_with_control(values, &original).unwrap();
-        assert_eq!(elements.len(), 1); // Falls back to original
-        assert_eq!(control, TraversalControl::Continue);
+        values.push_front(Value::Integer(42)); // Not coercible to Inlines
+        let err =
+            handle_inlines_return_with_control(&lua, values, &original, "Inlines").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("number"), "should name the got-type: {msg}");
     }
 
     #[test]
-    fn test_handle_blocks_return_with_control_other_value() {
+    fn test_handle_blocks_return_with_control_number_errors() {
+        let lua = Lua::new();
         use crate::pandoc::Block;
         use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
@@ -2597,9 +1832,82 @@ mod unit_tests {
             source_info: SourceInfo::for_test(),
         })];
         let mut values = MultiValue::new();
-        values.push_front(Value::Integer(42)); // Not a table or nil
-        let (elements, control) = handle_blocks_return_with_control(values, &original).unwrap();
-        assert_eq!(elements.len(), 1); // Falls back to original
+        values.push_front(Value::Integer(42)); // Not coercible to Blocks
+        let err = handle_blocks_return_with_control(&lua, values, &original, "Blocks").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("number"), "should name the got-type: {msg}");
+        assert!(
+            msg.contains("'Blocks'"),
+            "should name the filter function: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_handle_inline_return_with_control_string_wordsplit() {
+        let lua = Lua::new();
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::for_test(),
+        });
+        let mut values = MultiValue::new();
+        values.push_front(Value::String(lua.create_string("x y").unwrap()));
+        values.push_back(Value::Boolean(false));
+        let (elements, control) =
+            handle_inline_return_with_control(&lua, values, &original, "Str").unwrap();
+        assert_eq!(elements.len(), 3); // word-split: Str, Space, Str
+        assert!(matches!(&elements[0], Inline::Str(s) if s.text == "x"));
+        assert_eq!(control, TraversalControl::Stop);
+    }
+
+    #[test]
+    fn test_handle_inlines_return_with_control_string_wordsplit() {
+        let lua = Lua::new();
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
+        use quarto_source_map::SourceInfo;
+
+        let original = vec![Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::for_test(),
+        })];
+        let mut values = MultiValue::new();
+        values.push_front(Value::String(lua.create_string("x y").unwrap()));
+        let (elements, control) =
+            handle_inlines_return_with_control(&lua, values, &original, "Inlines").unwrap();
+        assert_eq!(elements.len(), 3);
+        assert!(matches!(&elements[0], Inline::Str(s) if s.text == "x"));
+        assert!(matches!(&elements[1], Inline::Space(_)));
+        assert!(matches!(&elements[2], Inline::Str(s) if s.text == "y"));
+        assert_eq!(control, TraversalControl::Continue);
+    }
+
+    #[test]
+    fn test_handle_blocks_return_with_control_string_plain() {
+        let lua = Lua::new();
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::{Block, Inline};
+        use quarto_source_map::SourceInfo;
+
+        let original = vec![Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::for_test(),
+        })];
+        let mut values = MultiValue::new();
+        values.push_front(Value::String(lua.create_string("block text").unwrap()));
+        let (elements, control) =
+            handle_blocks_return_with_control(&lua, values, &original, "Blocks").unwrap();
+        assert_eq!(elements.len(), 1);
+        match &elements[0] {
+            Block::Plain(p) => {
+                assert_eq!(p.content.len(), 3);
+                assert!(matches!(&p.content[0], Inline::Str(s) if s.text == "block"));
+            }
+            other => panic!("Expected Plain, got {other:?}"),
+        }
         assert_eq!(control, TraversalControl::Continue);
     }
 

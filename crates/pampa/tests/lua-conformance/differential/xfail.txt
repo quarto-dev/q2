@@ -1,0 +1,7 @@
+# Lua differential expected failures (Track 2) — see ../README.md ratchet semantics.
+# Format: <case-name>  [# reason / class / strand]
+# 2026-07-13: 15 cases, 15 pass, 0 xfail (filter-return cluster fixed, bd-23yvjfmm;
+# earlier: orderedlist-listattributes bd-0xghpvij, content-insert bd-hitjclzp,
+# attr shapes bd-tzwcof0n) (strand bd-grkrb9nj).
+# 2026-07-20 (bd-a9g50za2 Phase 4): doc-level handler semantics implemented —
+# 30 cases, 30 pass, 0 xfail.

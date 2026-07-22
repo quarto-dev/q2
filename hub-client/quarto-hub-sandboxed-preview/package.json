@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite build --watch --mode production",
-    "build": "vite build",
+    "dev": "npm run build",
+    "build": "npm run build:main && npm run build:sw",
+    "build:main": "vite build",
+    "build:sw": "BUILD_TARGET=service-worker vite build",
     "preview": "vite preview"
   },
   "dependencies": {

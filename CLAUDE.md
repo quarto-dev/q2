@@ -369,18 +369,18 @@ Open `http://127.0.0.1:8080` in your browser. Data is stored in `.local-prod-dat
 
 For testing the actual nginx configuration and headers:
 ```bash
-# Prerequisites: Docker Desktop installed
+# Prerequisites: local nginx installation (brew install nginx)
 cd hub-client
 npm run local-prod:nginx
 ```
 
-This runs nginx in Docker (mirroring production config) with the hub binary on the host. Useful for validating nginx configs, gzip compression, security headers before deploying.
+This runs your local nginx with the hub binary on the host. Useful for validating nginx configs, gzip compression, security headers before deploying.
 
 **Differences from production:**
 - HTTP instead of HTTPS (no TLS)
 - No OIDC authentication (uses `--allow-insecure-auth`)
 - `local-prod`: Node.js proxy instead of nginx (faster, recommended for daily dev)
-- `local-prod:nginx`: nginx in Docker, hub on host (production has both native)
+- `local-prod:nginx`: local nginx + hub on host (production has both but with TLS)
 - Single-machine setup (production uses separate EC2 + EBS + S3)
 
 ## Architecture Notes

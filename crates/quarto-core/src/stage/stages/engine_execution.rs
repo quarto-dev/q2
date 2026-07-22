@@ -494,10 +494,8 @@ fn intermediate_filename(source_path: &std::path::Path, engine_name: &str) -> St
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    source_path
-        .with_file_name(format!("{stem}.{engine_name}.rmarkdown"))
-        .display()
-        .to_string()
+    let joined = source_path.with_file_name(format!("{stem}.{engine_name}.rmarkdown"));
+    quarto_util::to_forward_slashes(&joined)
 }
 
 /// Serialize a Pandoc AST to QMD text.

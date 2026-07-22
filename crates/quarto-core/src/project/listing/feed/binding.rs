@@ -43,8 +43,7 @@ use std::path::Path;
 
 use quarto_pandoc_types::ConfigValue;
 use time::OffsetDateTime;
-use time::format_description::well_known::{Rfc2822, Rfc3339};
-use time::macros::format_description;
+use time::format_description::well_known::Rfc2822;
 
 use crate::project::listing::config::{FeedType, ListingFeedOptions};
 use crate::project::listing::item::ListingItem;
@@ -481,17 +480,16 @@ fn website_image(meta: &ConfigValue) -> Option<String> {
 /// Returns `None` for unparseable inputs (the caller omits
 /// `<pubDate>` rather than emitting garbage).
 pub fn format_pub_date_rfc822(date: &str) -> Option<String> {
-    let dt = OffsetDateTime::parse(date, &Rfc3339)
-        .or_else(|_| OffsetDateTime::parse(date, &Rfc2822))
-        .or_else(|_| {
-            let date_only = format_description!("[year]-[month]-[day]");
-            time::Date::parse(date, &date_only).map(|d| {
-                d.with_hms(0, 0, 0)
-                    .expect("0:0:0 is always valid")
-                    .assume_utc()
-            })
-        })
-        .ok()?;
+    // Shared parse (bd-13f821l5): item dates go through the same
+    // `crate::dates` parser as the title block and listing display
+    // (closing the two-parsers-drift hole), with RFC 2822 accepted
+    // additionally since feeds may round-trip their own output.
+    let dt = match crate::dates::parse_date(date) {
+        Some(parsed) => parsed
+            .datetime
+            .assume_offset(parsed.offset.unwrap_or(time::UtcOffset::UTC)),
+        None => OffsetDateTime::parse(date, &Rfc2822).ok()?,
+    };
     dt.format(&Rfc2822).ok()
 }
 

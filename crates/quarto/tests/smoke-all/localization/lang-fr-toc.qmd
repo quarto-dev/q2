@@ -1,0 +1,21 @@
+---
+title: TOC localization
+lang: fr
+format: html
+toc: true
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["Table des matières"]
+        - ["Table of Contents"]
+---
+
+# Première
+
+Texte.
+
+# Deuxième
+
+Texte.

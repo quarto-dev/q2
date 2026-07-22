@@ -205,8 +205,12 @@ impl PipelineStage for ApplyTemplateStage {
                 })?;
 
                 let compiled = if partial_paths.is_empty() {
-                    // Custom template, no explicit partials: use RuntimeResolver
-                    let resolver = RuntimeResolver::new(ctx.runtime.as_ref());
+                    // Custom template, no explicit partials: RuntimeResolver
+                    // (template-adjacent files), falling back to the built-in
+                    // partials so Q1-ported templates can call
+                    // `$title-block.html()$` without shipping a copy.
+                    let runtime = RuntimeResolver::new(ctx.runtime.as_ref());
+                    let resolver = ChainedResolver::new(runtime, template::builtin_html_partials());
                     Template::compile_with_resolver_and_context(
                         &template_content,
                         &abs_path,
@@ -221,7 +225,8 @@ impl PipelineStage for ApplyTemplateStage {
                         )
                     })?
                 } else {
-                    // Custom template + explicit partials: chain MemoryResolver → RuntimeResolver
+                    // Custom template + explicit partials: chain
+                    // MemoryResolver → RuntimeResolver → built-in partials.
                     let memory = build_partial_resolver(
                         &partial_paths,
                         document_dir,
@@ -229,7 +234,10 @@ impl PipelineStage for ApplyTemplateStage {
                         self.name(),
                     )?;
                     let runtime = RuntimeResolver::new(ctx.runtime.as_ref());
-                    let chained = ChainedResolver::new(memory, runtime);
+                    let chained = ChainedResolver::new(
+                        memory,
+                        ChainedResolver::new(runtime, template::builtin_html_partials()),
+                    );
                     Template::compile_with_resolver_and_context(
                         &template_content,
                         &abs_path,

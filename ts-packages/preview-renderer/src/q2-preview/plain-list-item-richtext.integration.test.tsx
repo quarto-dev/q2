@@ -126,17 +126,28 @@ describe('bd-7pxub583 — tight-list item (Plain) opens the rich-text editor', (
         expect(textarea(container), 'no monospaced textarea when the rich editor is active').toBeNull();
     });
 
-    it('falls back to the textarea (no toolbar) for the same item when richText is off', async () => {
+    it('falls back to the textarea (no rich chrome) for the same item when richText is off', async () => {
         const { container } = mountFixture({ richText: false });
         await act(async () => {});
         mockTileRects(container);
 
         await openEditor(container, '0');
 
-        expect(toolbar(container), 'no rich toolbar when the flag is off').toBeNull();
+        // The edit surface is the monospaced textarea, not the rich editor.
         expect(
             textarea(container),
             'the textarea is the edit surface when richText is off',
         ).not.toBeNull();
+        // The pop-up toolbar still renders (unlockNestingCursor is on for this
+        // fixture, so it hosts the nesting breadcrumb), but with NO rich chrome:
+        // no rich/plain mode toggle and no formatting marks.
+        expect(
+            container.querySelector('.q2-rt-tb-mode'),
+            'no rich/plain toggle when richText is off',
+        ).toBeNull();
+        expect(
+            container.querySelector('.q2-rt-tb-bold'),
+            'no formatting marks on the plain surface',
+        ).toBeNull();
     });
 });

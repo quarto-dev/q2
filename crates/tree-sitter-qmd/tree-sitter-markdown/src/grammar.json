@@ -4406,8 +4406,63 @@
               "type": "SYMBOL",
               "name": "_block"
             }
+          },
+          {
+            "type": "PREC",
+            "value": 1,
+            "content": {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "task_list_marker_checked"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "task_list_marker_unchecked"
+                    }
+                  ]
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "pandoc_paragraph"
+                },
+                {
+                  "type": "REPEAT",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_block"
+                  }
+                }
+              ]
+            }
           }
         ]
+      }
+    },
+    "task_list_marker_checked": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PREC",
+        "value": 1,
+        "content": {
+          "type": "PATTERN",
+          "value": "\\[[xX]\\][ \\t]"
+        }
+      }
+    },
+    "task_list_marker_unchecked": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PREC",
+        "value": 1,
+        "content": {
+          "type": "PATTERN",
+          "value": "\\[[ \\t]\\][ \\t]"
+        }
       }
     },
     "pandoc_code_block": {

@@ -42,6 +42,10 @@ pub fn register_quarto_namespace(lua: &Lua) -> Result<()> {
         })?,
     )?;
 
+    // Register quarto.config.* (ConfigValue constructors mirroring the
+    // YAML tag system — see lua/config_value.rs)
+    super::config_value::register_quarto_config(lua, &quarto)?;
+
     // Set as global
     lua.globals().set("quarto", quarto)?;
 

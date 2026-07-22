@@ -12,3 +12,4 @@ export {
   type ResolveDefaultDestinationOpts,
 } from './resolveDefaultDestination';
 export { processAssetFiles, type AssetFilePreview } from './processAssetFiles';
+export { buildDropMarkdown, type DropMarkdownKind } from './dropMarkdown';

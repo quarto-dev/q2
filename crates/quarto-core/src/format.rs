@@ -125,7 +125,7 @@ fn builtin_pseudo_format(name: &str) -> Option<(&'static str, Option<&'static st
         "q2-slides" => Some(("html", Some("preview"))),
         "q2-debug" => Some(("html", None)),
         "q2-preview" => Some(("html", Some("preview"))),
-        "q2-raw" => Some(("html", None)),
+        "q2-sandboxed-preview" => Some(("html", None)),
         _ => None,
     }
 }
@@ -153,7 +153,7 @@ pub fn is_revealjs_target(target_format: &str) -> bool {
 ///
 /// This maps each preview pseudo-format back to the real format it emulates so
 /// preview Lua behaves identically to render:
-/// - `q2-preview` / `q2-debug` / `q2-raw` → `html`
+/// - `q2-preview` / `q2-debug` / `q2-sandboxed-preview` → `html`
 /// - `q2-slides` → `revealjs` (so `is_format("revealjs")` is true, matching
 ///   what [`is_revealjs_target`] already does for pipeline decisions; note this
 ///   intentionally differs from [`builtin_pseudo_format`], which reports the
@@ -163,7 +163,7 @@ pub fn is_revealjs_target(target_format: &str) -> bool {
 /// through unchanged.
 pub fn lua_format_for(target_format: &str) -> &str {
     match target_format {
-        "q2-preview" | "q2-debug" | "q2-raw" => "html",
+        "q2-preview" | "q2-debug" | "q2-sandboxed-preview" => "html",
         "q2-slides" => "revealjs",
         other => other,
     }
@@ -375,7 +375,7 @@ impl Format {
     ///   `"html"` (bd-5b21rbaq).
     /// - everything else → the identifier base (`html`, `pdf`, …), which
     ///   already canonicalizes extension formats (`acm-pdf` → `pdf`) and the
-    ///   HTML preview pseudo-formats (`q2-preview`/`q2-debug`/`q2-raw` → `html`).
+    ///   HTML preview pseudo-formats (`q2-preview`/`q2-debug`/`q2-sandboxed-preview` → `html`).
     ///
     /// This is the [`Format`]-aware companion to the string-only
     /// [`lua_format_for`] (used where only a `target_format` string is in hand,
@@ -887,7 +887,7 @@ mod tests {
         // `is_format("html:js")` fires in preview (bd-5b21rbaq).
         assert_eq!(lua_format_for("q2-preview"), "html");
         assert_eq!(lua_format_for("q2-debug"), "html");
-        assert_eq!(lua_format_for("q2-raw"), "html");
+        assert_eq!(lua_format_for("q2-sandboxed-preview"), "html");
         // The reveal preview pseudo-format resolves to `revealjs` so
         // `is_format("revealjs")` fires — distinct from
         // `builtin_pseudo_format`, which reports the output-writer base `html`.

@@ -9,18 +9,21 @@
  */
 
 use hashlink::LinkedHashMap;
-use mlua::{Error, IntoLua, Lua, Result, Table as LuaTable, Value};
+use mlua::{
+    Error, FromLua, IntoLua, Lua, MetaMethod, Result, Table as LuaTable, UserDataMethods, Value,
+};
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use super::mediabag::SharedMediaBag;
 use super::runtime::SystemRuntime;
 
 use crate::pandoc::{
-    Block, BlockQuote, BulletList, Caption, Citation, CitationMode, Cite, CodeBlock,
-    DefinitionList, Div, Emph, Figure, Header, HorizontalRule, Image, Inline, LineBlock, LineBreak,
-    Link, Math, MathType, Note, OrderedList, Paragraph, Plain, QuoteType, Quoted, RawBlock,
-    RawInline, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript, Superscript,
-    Underline,
+    Block, BlockQuote, BulletList, Caption, Citation, Cite, CodeBlock, DefinitionList, Div, Emph,
+    Figure, Header, HorizontalRule, Image, Inline, LineBlock, LineBreak, Link, Math, MathType,
+    Note, OrderedList, Paragraph, Plain, QuoteType, Quoted, RawBlock, RawInline, SmallCaps,
+    SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript, Superscript, Underline,
     attr::AttrSourceInfo,
     list::{ListAttributes, ListNumberDelim, ListNumberStyle},
     table::{
@@ -33,35 +36,176 @@ use super::list::{
     get_or_create_blocks_metatable, get_or_create_inlines_metatable, get_or_create_list_metatable,
 };
 use super::types::{
-    LuaAttr, LuaBlock, LuaInline, filter_source_info, peek_blocks_fuzzy, peek_inlines_fuzzy,
+    LuaAttr, LuaBlock, LuaInline, filter_source_info, invalid_value_error, lua_table_to_strings,
+    peek_blocks_fuzzy, peek_inlines_fuzzy, type_mismatch_error, type_mismatch_error_named,
+    unknown_field_error, userdata_type_name,
 };
 use mlua::UserData;
 
 // Lua userdata wrappers for table-related types
 
-/// Wrapper for Caption
-#[derive(Debug, Clone)]
-pub struct LuaCaption(pub Caption);
+/// Shared skeleton for the table-part UserData impls: cache-aware
+/// Index/NewIndex, flush-then-show ToString, flush-then-compare Eq.
+macro_rules! table_part_userdata {
+    ($ty:ident, $show:path, $is_cacheable:expr) => {
+        impl UserData for $ty {
+            fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+                methods.add_meta_method(MetaMethod::Index, |lua, this, key: String| {
+                    if let Some(cached) = this.cache.get(&key) {
+                        return Ok(cached);
+                    }
+                    let value = this.get_field(lua, &key)?;
+                    // ("attr" is cached inside get_field via
+                    // table_part_attr_handle.)
+                    if ($is_cacheable)(key.as_str()) && matches!(value, Value::Table(_)) {
+                        this.cache.store(&key, &value);
+                    }
+                    Ok(value)
+                });
 
-impl UserData for LuaCaption {
-    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method(
-            mlua::MetaMethod::Index,
-            |lua, this, key: String| match key.as_str() {
-                "short" => match &this.0.short {
-                    Some(inlines) => super::types::inlines_to_lua_table(lua, inlines),
-                    None => Ok(Value::Nil),
-                },
-                "long" => match &this.0.long {
-                    Some(blocks) => super::types::blocks_to_lua_table(lua, blocks),
-                    None => Ok(Value::Nil),
-                },
-                "t" | "tag" => "Caption".into_lua(lua),
-                _ => Ok(Value::Nil),
+                methods.add_meta_method(
+                    MetaMethod::NewIndex,
+                    |lua, this, (key, val): (String, Value)| {
+                        this.set_field(&key, val.clone(), lua)?;
+                        if ($is_cacheable)(key.as_str()) && matches!(val, Value::Table(_)) {
+                            this.cache.store(&key, &val);
+                        } else if ($is_cacheable)(key.as_str()) || key == "attr" {
+                            // Whole-value assignment replaces any
+                            // aliased handle (next read re-creates it
+                            // from the inner value).
+                            this.cache.remove(&key);
+                        }
+                        Ok(())
+                    },
+                );
+
+                methods.add_meta_method(MetaMethod::ToString, |lua, this, ()| {
+                    this.flush_property_cache(lua)?;
+                    Ok($show(&this.cell.borrow()))
+                });
+
+                methods.add_meta_method(MetaMethod::Eq, |lua, this, other: Value| {
+                    Ok(match other {
+                        Value::UserData(ud) => match ud.borrow::<$ty>() {
+                            Ok(other_part) => {
+                                this.flush_property_cache(lua)?;
+                                other_part.flush_property_cache(lua)?;
+                                this.structurally_eq(&other_part)
+                            }
+                            Err(_) => false,
+                        },
+                        _ => false,
+                    })
+                });
+            }
+        }
+
+        impl $ty {
+            /// Write cached property values back into the inner cell
+            /// (hslua readback semantics). Idempotent.
+            pub fn flush_property_cache(&self, lua: &Lua) -> Result<()> {
+                let entries = match self.cache.begin_flush() {
+                    Some(entries) => entries,
+                    None => return Ok(()),
+                };
+                let mut result = Ok(());
+                for (key, value) in entries {
+                    if let Err(e) = self.set_field(&key, value, lua) {
+                        result = Err(e);
+                        break;
+                    }
+                }
+                self.cache.end_flush();
+                result
+            }
+        }
+    };
+}
+
+/// Wrapper for Caption as typed userdata (bd-sgfiiktn S3b): `short`
+/// (Inlines or nil) and `long` (Blocks or nil) properties with
+/// cache+readback so `tbl.caption.long = {…}` and in-place list
+/// mutation persist to the flush.
+#[derive(Debug, Clone)]
+pub struct LuaCaption {
+    pub cell: Rc<RefCell<Caption>>,
+    pub(crate) cache: super::types::PropertyCache,
+}
+
+impl LuaCaption {
+    pub fn new(caption: Caption) -> Self {
+        LuaCaption {
+            cell: Rc::new(RefCell::new(caption)),
+            cache: super::types::PropertyCache::default(),
+        }
+    }
+
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<Caption> {
+        self.flush_property_cache(lua)?;
+        Ok(self.cell.borrow().clone())
+    }
+
+    fn structurally_eq(&self, other: &LuaCaption) -> bool {
+        let wrap = |c: &LuaCaption| {
+            let mut t = empty_synthetic_table();
+            t.caption = c.cell.borrow().clone();
+            t
+        };
+        synthetic_table_eq(wrap(self), wrap(other))
+    }
+
+    fn get_field(&self, lua: &Lua, key: &str) -> Result<Value> {
+        if key == "clone" {
+            self.flush_property_cache(lua)?;
+            let snapshot = self.cell.borrow().clone();
+            return lua
+                .create_function(move |lua, ()| {
+                    lua.create_userdata(LuaCaption::new(snapshot.clone()))
+                })?
+                .into_lua(lua);
+        }
+        let inner = self.cell.borrow();
+        match key {
+            "short" => match &inner.short {
+                Some(inlines) => super::types::inlines_to_lua_table(lua, inlines),
+                None => Ok(Value::Nil),
             },
-        );
+            "long" => match &inner.long {
+                Some(blocks) => super::types::blocks_to_lua_table(lua, blocks),
+                None => Ok(Value::Nil),
+            },
+            "t" | "tag" => "Caption".into_lua(lua),
+            _ => Ok(Value::Nil),
+        }
+    }
+
+    fn set_field(&self, key: &str, val: Value, lua: &Lua) -> Result<()> {
+        match key {
+            "short" => {
+                let short = match val {
+                    Value::Nil => None,
+                    v => Some(peek_inlines_fuzzy(lua, v)?),
+                };
+                self.cell.borrow_mut().short = short;
+                Ok(())
+            }
+            "long" => {
+                let long = match val {
+                    Value::Nil => None,
+                    v => Some(peek_blocks_fuzzy(lua, v)?),
+                };
+                self.cell.borrow_mut().long = long;
+                Ok(())
+            }
+            _ => Err(unknown_field_error(key, "Caption")),
+        }
     }
 }
+
+table_part_userdata!(LuaCaption, super::show::show_caption, |k: &str| matches!(
+    k,
+    "short" | "long"
+));
 
 /// Wrapper for Alignment sentinel values
 #[derive(Debug, Clone)]
@@ -75,144 +219,772 @@ pub struct LuaColWidth(pub ColWidth);
 
 impl UserData for LuaColWidth {}
 
-/// Wrapper for TableHead
-#[derive(Debug, Clone)]
-pub struct LuaTableHead(pub TableHead);
+// ============================================================================
+// Table-part userdata (Cell/Row/TableHead/TableFoot/TableBody).
+//
+// Each wraps its inner value in `Rc<RefCell<…>>` with a hslua-style
+// PropertyCache (bd-sgfiiktn S3): container-valued property reads
+// alias the same Lua value across reads, nested mutation lands in the
+// handed-out userdata cells, and every marshal-out path flushes the
+// cache back through `set_field`. All attr reads/writes (including
+// the identifier/classes/attributes aliases) route through a cached
+// `LuaAttr` handle so `cell.attributes.k = v` persists to the flush.
+// ============================================================================
 
-impl UserData for LuaTableHead {
-    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method(
-            mlua::MetaMethod::Index,
-            |lua, this, key: String| match key.as_str() {
-                "rows" => {
-                    let table = lua.create_table()?;
-                    for (i, row) in this.0.rows.iter().enumerate() {
-                        table.set(i + 1, lua.create_userdata(LuaRow(row.clone()))?)?;
-                    }
-                    Ok(Value::Table(table))
-                }
-                "attr" => super::types::attr_to_lua_userdata(lua, &this.0.attr),
-                "t" | "tag" => "TableHead".into_lua(lua),
-                _ => Ok(Value::Nil),
-            },
-        );
+/// Get-or-create the cached `attr` handle for a table-part userdata.
+/// Returns the Lua value to hand out plus a shared `LuaAttr` clone
+/// (both alias the same underlying Attr cell).
+fn table_part_attr_handle(
+    cache: &super::types::PropertyCache,
+    lua: &Lua,
+    current_attr: &crate::pandoc::Attr,
+) -> Result<(Value, LuaAttr)> {
+    if let Some(v) = cache.get("attr")
+        && let Value::UserData(ud) = &v
+        && let Ok(a) = ud.borrow::<LuaAttr>()
+    {
+        let a = a.clone();
+        return Ok((v, a));
+    }
+    let attr = LuaAttr::new(current_attr.clone());
+    let ud = lua.create_userdata(attr.clone())?;
+    let v = Value::UserData(ud);
+    cache.store("attr", &v);
+    Ok((v, attr))
+}
+
+/// Marshal a Lua value into an Attr for a table-part `attr` write:
+/// LuaAttr userdata (flushed) or any shape `parse_attr` accepts.
+fn table_part_attr_from_value(lua: &Lua, val: Value) -> Result<crate::pandoc::Attr> {
+    if let Value::UserData(ud) = &val
+        && let Ok(a) = ud.borrow::<LuaAttr>()
+    {
+        return a.extract_flushed(lua);
+    }
+    parse_attr(lua, Some(val))
+}
+
+/// Is `key` an attr alias handled through the cached LuaAttr?
+fn is_attr_alias(key: &str) -> bool {
+    matches!(key, "identifier" | "classes" | "attributes")
+}
+
+/// Structural equality for table parts, ignoring source info: wrap
+/// both sides in a synthetic Table block and reuse the JSON writer's
+/// source-free comparison (same approach as elements and Citation).
+fn synthetic_table_eq(a: PandocTable, b: PandocTable) -> bool {
+    super::types::block_structurally_eq(&Block::Table(a), &Block::Table(b))
+}
+
+fn empty_synthetic_table() -> PandocTable {
+    let si = || quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown());
+    PandocTable {
+        attr: (String::new(), vec![], LinkedHashMap::new()),
+        caption: Caption {
+            short: None,
+            long: None,
+            source_info: si(),
+        },
+        colspec: vec![],
+        head: TableHead {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            rows: vec![],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        },
+        bodies: vec![],
+        foot: TableFoot {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            rows: vec![],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        },
+        source_info: si(),
+        attr_source: AttrSourceInfo::empty(),
     }
 }
+
+fn synthetic_body_of_rows(rows: Vec<Row>) -> TableBody {
+    TableBody {
+        attr: (String::new(), vec![], LinkedHashMap::new()),
+        rowhead_columns: 0,
+        head: vec![],
+        body: rows,
+        source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
+        attr_source: AttrSourceInfo::empty(),
+    }
+}
+
+/// Wrapper for TableHead
+#[derive(Debug, Clone)]
+pub struct LuaTableHead {
+    pub cell: Rc<RefCell<TableHead>>,
+    pub(crate) cache: super::types::PropertyCache,
+}
+
+impl LuaTableHead {
+    pub fn new(head: TableHead) -> Self {
+        LuaTableHead {
+            cell: Rc::new(RefCell::new(head)),
+            cache: super::types::PropertyCache::default(),
+        }
+    }
+
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<TableHead> {
+        self.flush_property_cache(lua)?;
+        Ok(self.cell.borrow().clone())
+    }
+
+    fn structurally_eq(&self, other: &LuaTableHead) -> bool {
+        let wrap = |h: &LuaTableHead| {
+            let mut t = empty_synthetic_table();
+            t.head = h.cell.borrow().clone();
+            t
+        };
+        synthetic_table_eq(wrap(self), wrap(other))
+    }
+
+    fn get_field(&self, lua: &Lua, key: &str) -> Result<Value> {
+        if key == "clone" {
+            self.flush_property_cache(lua)?;
+            let snapshot = self.cell.borrow().clone();
+            return lua
+                .create_function(move |lua, ()| {
+                    lua.create_userdata(LuaTableHead::new(snapshot.clone()))
+                })?
+                .into_lua(lua);
+        }
+        if key == "attr" {
+            let current = self.cell.borrow().attr.clone();
+            return Ok(table_part_attr_handle(&self.cache, lua, &current)?.0);
+        }
+        if is_attr_alias(key) {
+            let current = self.cell.borrow().attr.clone();
+            let (_, attr) = table_part_attr_handle(&self.cache, lua, &current)?;
+            return attr.get_field(lua, Value::String(lua.create_string(key)?));
+        }
+        let inner = self.cell.borrow();
+        match key {
+            "rows" => rows_to_lua_list(lua, &inner.rows),
+            "t" | "tag" => "TableHead".into_lua(lua),
+            _ => Ok(Value::Nil),
+        }
+    }
+
+    fn set_field(&self, key: &str, val: Value, lua: &Lua) -> Result<()> {
+        if is_attr_alias(key) {
+            let current = self.cell.borrow().attr.clone();
+            let (_, attr) = table_part_attr_handle(&self.cache, lua, &current)?;
+            return attr.set_field(Value::String(lua.create_string(key)?), val, lua);
+        }
+        match key {
+            "attr" => {
+                let attr = table_part_attr_from_value(lua, val)?;
+                self.cell.borrow_mut().attr = attr;
+                Ok(())
+            }
+            "rows" => {
+                let rows = parse_rows_strict(lua, val)?;
+                self.cell.borrow_mut().rows = rows;
+                Ok(())
+            }
+            _ => Err(unknown_field_error(key, "TableHead")),
+        }
+    }
+}
+
+table_part_userdata!(LuaTableHead, super::show::show_table_head, |k: &str| k
+    == "rows");
 
 /// Wrapper for TableFoot
 #[derive(Debug, Clone)]
-pub struct LuaTableFoot(pub TableFoot);
+pub struct LuaTableFoot {
+    pub cell: Rc<RefCell<TableFoot>>,
+    pub(crate) cache: super::types::PropertyCache,
+}
 
-impl UserData for LuaTableFoot {
-    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method(
-            mlua::MetaMethod::Index,
-            |lua, this, key: String| match key.as_str() {
-                "rows" => {
-                    let table = lua.create_table()?;
-                    for (i, row) in this.0.rows.iter().enumerate() {
-                        table.set(i + 1, lua.create_userdata(LuaRow(row.clone()))?)?;
-                    }
-                    Ok(Value::Table(table))
-                }
-                "attr" => super::types::attr_to_lua_userdata(lua, &this.0.attr),
-                "t" | "tag" => "TableFoot".into_lua(lua),
-                _ => Ok(Value::Nil),
-            },
-        );
+impl LuaTableFoot {
+    pub fn new(foot: TableFoot) -> Self {
+        LuaTableFoot {
+            cell: Rc::new(RefCell::new(foot)),
+            cache: super::types::PropertyCache::default(),
+        }
+    }
+
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<TableFoot> {
+        self.flush_property_cache(lua)?;
+        Ok(self.cell.borrow().clone())
+    }
+
+    fn structurally_eq(&self, other: &LuaTableFoot) -> bool {
+        let wrap = |f: &LuaTableFoot| {
+            let mut t = empty_synthetic_table();
+            t.foot = f.cell.borrow().clone();
+            t
+        };
+        synthetic_table_eq(wrap(self), wrap(other))
+    }
+
+    fn get_field(&self, lua: &Lua, key: &str) -> Result<Value> {
+        if key == "clone" {
+            self.flush_property_cache(lua)?;
+            let snapshot = self.cell.borrow().clone();
+            return lua
+                .create_function(move |lua, ()| {
+                    lua.create_userdata(LuaTableFoot::new(snapshot.clone()))
+                })?
+                .into_lua(lua);
+        }
+        if key == "attr" {
+            let current = self.cell.borrow().attr.clone();
+            return Ok(table_part_attr_handle(&self.cache, lua, &current)?.0);
+        }
+        if is_attr_alias(key) {
+            let current = self.cell.borrow().attr.clone();
+            let (_, attr) = table_part_attr_handle(&self.cache, lua, &current)?;
+            return attr.get_field(lua, Value::String(lua.create_string(key)?));
+        }
+        let inner = self.cell.borrow();
+        match key {
+            "rows" => rows_to_lua_list(lua, &inner.rows),
+            "t" | "tag" => "TableFoot".into_lua(lua),
+            _ => Ok(Value::Nil),
+        }
+    }
+
+    fn set_field(&self, key: &str, val: Value, lua: &Lua) -> Result<()> {
+        if is_attr_alias(key) {
+            let current = self.cell.borrow().attr.clone();
+            let (_, attr) = table_part_attr_handle(&self.cache, lua, &current)?;
+            return attr.set_field(Value::String(lua.create_string(key)?), val, lua);
+        }
+        match key {
+            "attr" => {
+                let attr = table_part_attr_from_value(lua, val)?;
+                self.cell.borrow_mut().attr = attr;
+                Ok(())
+            }
+            "rows" => {
+                let rows = parse_rows_strict(lua, val)?;
+                self.cell.borrow_mut().rows = rows;
+                Ok(())
+            }
+            _ => Err(unknown_field_error(key, "TableFoot")),
+        }
     }
 }
+
+table_part_userdata!(LuaTableFoot, super::show::show_table_foot, |k: &str| k
+    == "rows");
 
 /// Wrapper for TableBody
 #[derive(Debug, Clone)]
-pub struct LuaTableBody(pub TableBody);
+pub struct LuaTableBody {
+    pub cell: Rc<RefCell<TableBody>>,
+    pub(crate) cache: super::types::PropertyCache,
+}
 
-impl UserData for LuaTableBody {
-    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method(
-            mlua::MetaMethod::Index,
-            |lua, this, key: String| match key.as_str() {
-                "body" => {
-                    let table = lua.create_table()?;
-                    for (i, row) in this.0.body.iter().enumerate() {
-                        table.set(i + 1, lua.create_userdata(LuaRow(row.clone()))?)?;
-                    }
-                    Ok(Value::Table(table))
-                }
-                "head" => {
-                    let table = lua.create_table()?;
-                    for (i, row) in this.0.head.iter().enumerate() {
-                        table.set(i + 1, lua.create_userdata(LuaRow(row.clone()))?)?;
-                    }
-                    Ok(Value::Table(table))
-                }
-                "row_head_columns" => (this.0.rowhead_columns as i64).into_lua(lua),
-                "attr" => super::types::attr_to_lua_userdata(lua, &this.0.attr),
-                "t" | "tag" => "TableBody".into_lua(lua),
-                _ => Ok(Value::Nil),
-            },
-        );
+impl LuaTableBody {
+    pub fn new(body: TableBody) -> Self {
+        LuaTableBody {
+            cell: Rc::new(RefCell::new(body)),
+            cache: super::types::PropertyCache::default(),
+        }
+    }
+
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<TableBody> {
+        self.flush_property_cache(lua)?;
+        Ok(self.cell.borrow().clone())
+    }
+
+    fn structurally_eq(&self, other: &LuaTableBody) -> bool {
+        let wrap = |b: &LuaTableBody| {
+            let mut t = empty_synthetic_table();
+            t.bodies = vec![b.cell.borrow().clone()];
+            t
+        };
+        synthetic_table_eq(wrap(self), wrap(other))
+    }
+
+    fn get_field(&self, lua: &Lua, key: &str) -> Result<Value> {
+        if key == "clone" {
+            self.flush_property_cache(lua)?;
+            let snapshot = self.cell.borrow().clone();
+            return lua
+                .create_function(move |lua, ()| {
+                    lua.create_userdata(LuaTableBody::new(snapshot.clone()))
+                })?
+                .into_lua(lua);
+        }
+        if key == "attr" {
+            let current = self.cell.borrow().attr.clone();
+            return Ok(table_part_attr_handle(&self.cache, lua, &current)?.0);
+        }
+        if is_attr_alias(key) {
+            let current = self.cell.borrow().attr.clone();
+            let (_, attr) = table_part_attr_handle(&self.cache, lua, &current)?;
+            return attr.get_field(lua, Value::String(lua.create_string(key)?));
+        }
+        let inner = self.cell.borrow();
+        match key {
+            "body" => rows_to_lua_list(lua, &inner.body),
+            "head" => rows_to_lua_list(lua, &inner.head),
+            "row_head_columns" => (inner.rowhead_columns as i64).into_lua(lua),
+            "t" | "tag" => "TableBody".into_lua(lua),
+            _ => Ok(Value::Nil),
+        }
+    }
+
+    fn set_field(&self, key: &str, val: Value, lua: &Lua) -> Result<()> {
+        if is_attr_alias(key) {
+            let current = self.cell.borrow().attr.clone();
+            let (_, attr) = table_part_attr_handle(&self.cache, lua, &current)?;
+            return attr.set_field(Value::String(lua.create_string(key)?), val, lua);
+        }
+        match key {
+            "attr" => {
+                let attr = table_part_attr_from_value(lua, val)?;
+                self.cell.borrow_mut().attr = attr;
+                Ok(())
+            }
+            "body" => {
+                let rows = parse_rows_strict(lua, val)?;
+                self.cell.borrow_mut().body = rows;
+                Ok(())
+            }
+            "head" => {
+                let rows = parse_rows_strict(lua, val)?;
+                self.cell.borrow_mut().head = rows;
+                Ok(())
+            }
+            "row_head_columns" => {
+                let n = i64::from_lua(val, lua)?;
+                self.cell.borrow_mut().rowhead_columns = n as usize;
+                Ok(())
+            }
+            _ => Err(unknown_field_error(key, "TableBody")),
+        }
     }
 }
+
+table_part_userdata!(
+    LuaTableBody,
+    super::show::show_table_body,
+    |k: &str| matches!(k, "body" | "head")
+);
 
 /// Wrapper for Row
 #[derive(Debug, Clone)]
-pub struct LuaRow(pub Row);
+pub struct LuaRow {
+    pub cell: Rc<RefCell<Row>>,
+    pub(crate) cache: super::types::PropertyCache,
+}
 
-impl UserData for LuaRow {
-    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method(
-            mlua::MetaMethod::Index,
-            |lua, this, key: String| match key.as_str() {
-                "cells" => {
-                    let table = lua.create_table()?;
-                    for (i, cell) in this.0.cells.iter().enumerate() {
-                        table.set(i + 1, lua.create_userdata(LuaCell(cell.clone()))?)?;
-                    }
-                    Ok(Value::Table(table))
-                }
-                "attr" => super::types::attr_to_lua_userdata(lua, &this.0.attr),
-                "t" | "tag" => "Row".into_lua(lua),
-                _ => Ok(Value::Nil),
-            },
-        );
+impl LuaRow {
+    pub fn new(row: Row) -> Self {
+        LuaRow {
+            cell: Rc::new(RefCell::new(row)),
+            cache: super::types::PropertyCache::default(),
+        }
+    }
+
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<Row> {
+        self.flush_property_cache(lua)?;
+        Ok(self.cell.borrow().clone())
+    }
+
+    fn structurally_eq(&self, other: &LuaRow) -> bool {
+        let wrap = |r: &LuaRow| {
+            let mut t = empty_synthetic_table();
+            t.bodies = vec![synthetic_body_of_rows(vec![r.cell.borrow().clone()])];
+            t
+        };
+        synthetic_table_eq(wrap(self), wrap(other))
+    }
+
+    fn get_field(&self, lua: &Lua, key: &str) -> Result<Value> {
+        match key {
+            "clone" => {
+                self.flush_property_cache(lua)?;
+                let snapshot = self.cell.borrow().clone();
+                return lua
+                    .create_function(move |lua, ()| {
+                        lua.create_userdata(LuaRow::new(snapshot.clone()))
+                    })?
+                    .into_lua(lua);
+            }
+            "walk" => {
+                return lua
+                    .create_async_function(
+                        |lua, (ud, filter): (mlua::UserDataRef<LuaRow>, LuaTable)| async move {
+                            ud.flush_property_cache(&lua)?;
+                            let snapshot = ud.cell.borrow().clone();
+                            let walked = match super::filter::get_walking_order(&filter)? {
+                                super::filter::WalkingOrder::Typewise => {
+                                    super::walk::typewise_row(&lua, &filter, &snapshot).await?
+                                }
+                                super::filter::WalkingOrder::Topdown => {
+                                    super::walk::topdown_row(&lua, &filter, &snapshot).await?
+                                }
+                            };
+                            lua.create_userdata(LuaRow::new(walked))
+                        },
+                    )?
+                    .into_lua(lua);
+            }
+            _ => {}
+        }
+        if key == "attr" {
+            let current = self.cell.borrow().attr.clone();
+            return Ok(table_part_attr_handle(&self.cache, lua, &current)?.0);
+        }
+        if is_attr_alias(key) {
+            let current = self.cell.borrow().attr.clone();
+            let (_, attr) = table_part_attr_handle(&self.cache, lua, &current)?;
+            return attr.get_field(lua, Value::String(lua.create_string(key)?));
+        }
+        let inner = self.cell.borrow();
+        match key {
+            "cells" => cells_to_lua_list(lua, &inner.cells),
+            "t" | "tag" => "Row".into_lua(lua),
+            _ => Ok(Value::Nil),
+        }
+    }
+
+    fn set_field(&self, key: &str, val: Value, lua: &Lua) -> Result<()> {
+        if is_attr_alias(key) {
+            let current = self.cell.borrow().attr.clone();
+            let (_, attr) = table_part_attr_handle(&self.cache, lua, &current)?;
+            return attr.set_field(Value::String(lua.create_string(key)?), val, lua);
+        }
+        match key {
+            "attr" => {
+                let attr = table_part_attr_from_value(lua, val)?;
+                self.cell.borrow_mut().attr = attr;
+                Ok(())
+            }
+            "cells" => {
+                let cells = parse_cells_strict(lua, val)?;
+                self.cell.borrow_mut().cells = cells;
+                Ok(())
+            }
+            _ => Err(unknown_field_error(key, "Row")),
+        }
     }
 }
+
+table_part_userdata!(LuaRow, super::show::show_row, |k: &str| k == "cells");
 
 /// Wrapper for Cell
 #[derive(Debug, Clone)]
-pub struct LuaCell(pub Cell);
+pub struct LuaCell {
+    pub cell: Rc<RefCell<Cell>>,
+    pub(crate) cache: super::types::PropertyCache,
+}
 
-impl UserData for LuaCell {
-    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method(
-            mlua::MetaMethod::Index,
-            |lua, this, key: String| match key.as_str() {
-                "content" => super::types::blocks_to_lua_table(lua, &this.0.content),
-                "alignment" => {
-                    let align_str = match this.0.alignment {
-                        Alignment::Default => "AlignDefault",
-                        Alignment::Left => "AlignLeft",
-                        Alignment::Center => "AlignCenter",
-                        Alignment::Right => "AlignRight",
-                    };
-                    align_str.into_lua(lua)
-                }
-                "row_span" => (this.0.row_span as i64).into_lua(lua),
-                "col_span" => (this.0.col_span as i64).into_lua(lua),
-                "attr" => super::types::attr_to_lua_userdata(lua, &this.0.attr),
-                "t" | "tag" => "Cell".into_lua(lua),
-                _ => Ok(Value::Nil),
-            },
-        );
+impl LuaCell {
+    pub fn new(cell: Cell) -> Self {
+        LuaCell {
+            cell: Rc::new(RefCell::new(cell)),
+            cache: super::types::PropertyCache::default(),
+        }
+    }
+
+    pub fn extract_flushed(&self, lua: &Lua) -> Result<Cell> {
+        self.flush_property_cache(lua)?;
+        Ok(self.cell.borrow().clone())
+    }
+
+    fn structurally_eq(&self, other: &LuaCell) -> bool {
+        let wrap = |c: &LuaCell| {
+            let mut t = empty_synthetic_table();
+            let row = Row {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                cells: vec![c.cell.borrow().clone()],
+                source_info: quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::unknown(),
+                ),
+                attr_source: AttrSourceInfo::empty(),
+            };
+            t.bodies = vec![synthetic_body_of_rows(vec![row])];
+            t
+        };
+        synthetic_table_eq(wrap(self), wrap(other))
+    }
+
+    fn get_field(&self, lua: &Lua, key: &str) -> Result<Value> {
+        match key {
+            "clone" => {
+                self.flush_property_cache(lua)?;
+                let snapshot = self.cell.borrow().clone();
+                return lua
+                    .create_function(move |lua, ()| {
+                        lua.create_userdata(LuaCell::new(snapshot.clone()))
+                    })?
+                    .into_lua(lua);
+            }
+            "walk" => {
+                return lua
+                    .create_async_function(
+                        |lua, (ud, filter): (mlua::UserDataRef<LuaCell>, LuaTable)| async move {
+                            ud.flush_property_cache(&lua)?;
+                            let snapshot = ud.cell.borrow().clone();
+                            let walked = match super::filter::get_walking_order(&filter)? {
+                                super::filter::WalkingOrder::Typewise => {
+                                    super::walk::typewise_cell(&lua, &filter, &snapshot).await?
+                                }
+                                super::filter::WalkingOrder::Topdown => {
+                                    super::walk::topdown_cell(&lua, &filter, &snapshot).await?
+                                }
+                            };
+                            lua.create_userdata(LuaCell::new(walked))
+                        },
+                    )?
+                    .into_lua(lua);
+            }
+            _ => {}
+        }
+        if key == "attr" {
+            let current = self.cell.borrow().attr.clone();
+            return Ok(table_part_attr_handle(&self.cache, lua, &current)?.0);
+        }
+        if is_attr_alias(key) {
+            let current = self.cell.borrow().attr.clone();
+            let (_, attr) = table_part_attr_handle(&self.cache, lua, &current)?;
+            return attr.get_field(lua, Value::String(lua.create_string(key)?));
+        }
+        let inner = self.cell.borrow();
+        match key {
+            // Pandoc's property is `contents`; `content` is an alias
+            // (and the historical q2 name).
+            "contents" | "content" => super::types::blocks_to_lua_table(lua, &inner.content),
+            "alignment" => alignment_name(&inner.alignment).into_lua(lua),
+            "row_span" => (inner.row_span as i64).into_lua(lua),
+            "col_span" => (inner.col_span as i64).into_lua(lua),
+            "t" | "tag" => "Cell".into_lua(lua),
+            _ => Ok(Value::Nil),
+        }
+    }
+
+    fn set_field(&self, key: &str, val: Value, lua: &Lua) -> Result<()> {
+        if is_attr_alias(key) {
+            let current = self.cell.borrow().attr.clone();
+            let (_, attr) = table_part_attr_handle(&self.cache, lua, &current)?;
+            return attr.set_field(Value::String(lua.create_string(key)?), val, lua);
+        }
+        match key {
+            "attr" => {
+                let attr = table_part_attr_from_value(lua, val)?;
+                self.cell.borrow_mut().attr = attr;
+                Ok(())
+            }
+            "contents" | "content" => {
+                let blocks = peek_blocks_fuzzy(lua, val)?;
+                self.cell.borrow_mut().content = blocks;
+                Ok(())
+            }
+            "alignment" => {
+                let alignment = parse_alignment(val)?;
+                self.cell.borrow_mut().alignment = alignment;
+                Ok(())
+            }
+            "row_span" => {
+                let n = i64::from_lua(val, lua)?;
+                self.cell.borrow_mut().row_span = n as usize;
+                Ok(())
+            }
+            "col_span" => {
+                let n = i64::from_lua(val, lua)?;
+                self.cell.borrow_mut().col_span = n as usize;
+                Ok(())
+            }
+            _ => Err(unknown_field_error(key, "Cell")),
+        }
     }
 }
 
-/// Wrapper for ListAttributes
-#[derive(Debug, Clone)]
-pub struct LuaListAttributes(pub ListAttributes);
+table_part_userdata!(LuaCell, super::show::show_cell, |k: &str| matches!(
+    k,
+    "contents" | "content"
+));
 
-impl UserData for LuaListAttributes {}
+/// Push a Vec<Row> as a pandoc-List of Row userdata.
+fn rows_to_lua_list(lua: &Lua, rows: &[Row]) -> Result<Value> {
+    let values = rows
+        .iter()
+        .map(|row| {
+            lua.create_userdata(LuaRow::new(row.clone()))
+                .map(Value::UserData)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    super::list::create_list_table(lua, values)
+}
+
+/// Push a Vec<Cell> as a pandoc-List of Cell userdata.
+fn cells_to_lua_list(lua: &Lua, cells: &[Cell]) -> Result<Value> {
+    let values = cells
+        .iter()
+        .map(|cell| {
+            lua.create_userdata(LuaCell::new(cell.clone()))
+                .map(Value::UserData)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    super::list::create_list_table(lua, values)
+}
+
+/// Parse a ListNumberStyle name, erroring loudly on anything that is
+/// not one of Pandoc's constructor names (Pandoc's `peekRead` errors
+/// with `Could not read: <value>`).
+pub(crate) fn parse_list_number_style(s: &str) -> Result<ListNumberStyle> {
+    match s {
+        "DefaultStyle" => Ok(ListNumberStyle::Default),
+        "Example" => Ok(ListNumberStyle::Example),
+        "Decimal" => Ok(ListNumberStyle::Decimal),
+        "LowerRoman" => Ok(ListNumberStyle::LowerRoman),
+        "UpperRoman" => Ok(ListNumberStyle::UpperRoman),
+        "LowerAlpha" => Ok(ListNumberStyle::LowerAlpha),
+        "UpperAlpha" => Ok(ListNumberStyle::UpperAlpha),
+        other => Err(invalid_value_error(
+            "list number style",
+            other,
+            "DefaultStyle, Example, Decimal, LowerRoman, UpperRoman, LowerAlpha, or UpperAlpha",
+        )),
+    }
+}
+
+pub(crate) fn list_number_style_name(style: &ListNumberStyle) -> &'static str {
+    match style {
+        ListNumberStyle::Default => "DefaultStyle",
+        ListNumberStyle::Example => "Example",
+        ListNumberStyle::Decimal => "Decimal",
+        ListNumberStyle::LowerRoman => "LowerRoman",
+        ListNumberStyle::UpperRoman => "UpperRoman",
+        ListNumberStyle::LowerAlpha => "LowerAlpha",
+        ListNumberStyle::UpperAlpha => "UpperAlpha",
+    }
+}
+
+/// Parse a ListNumberDelim name; loud error on garbage (see
+/// [`parse_list_number_style`]).
+pub(crate) fn parse_list_number_delim(s: &str) -> Result<ListNumberDelim> {
+    match s {
+        "DefaultDelim" => Ok(ListNumberDelim::Default),
+        "Period" => Ok(ListNumberDelim::Period),
+        "OneParen" => Ok(ListNumberDelim::OneParen),
+        "TwoParens" => Ok(ListNumberDelim::TwoParens),
+        other => Err(invalid_value_error(
+            "list number delimiter",
+            other,
+            "DefaultDelim, Period, OneParen, or TwoParens",
+        )),
+    }
+}
+
+pub(crate) fn list_number_delim_name(delim: &ListNumberDelim) -> &'static str {
+    match delim {
+        ListNumberDelim::Default => "DefaultDelim",
+        ListNumberDelim::Period => "Period",
+        ListNumberDelim::OneParen => "OneParen",
+        ListNumberDelim::TwoParens => "TwoParens",
+    }
+}
+
+/// Wrapper for a Pandoc `ListAttributes` triple as typed Lua userdata,
+/// matching pandoc-lua-marshal's `typeListAttributes` (bd-sgfiiktn S2;
+/// previously `pandoc.ListAttributes` returned a plain positional
+/// table).
+///
+/// The triple lives behind `Rc<RefCell<…>>` so the userdata cached on
+/// an OrderedList's `listAttributes` property stays live: nested
+/// mutation (`ol.listAttributes.start = 42`) lands in the cell and is
+/// written back at the element's cache flush. All three properties
+/// are scalars, so no `PropertyCache` is needed on the userdata
+/// itself; setters validate eagerly (Pandoc defers the same errors to
+/// marshal-out — timing-only divergence, as with Citation).
+#[derive(Debug, Clone)]
+pub struct LuaListAttributes {
+    pub cell: Rc<RefCell<ListAttributes>>,
+}
+
+impl LuaListAttributes {
+    pub fn new(attrs: ListAttributes) -> Self {
+        LuaListAttributes {
+            cell: Rc::new(RefCell::new(attrs)),
+        }
+    }
+
+    /// Deep-clone the triple out of the cell.
+    pub fn clone_attrs(&self) -> ListAttributes {
+        self.cell.borrow().clone()
+    }
+
+    pub(crate) fn get_field(&self, lua: &Lua, key: &str) -> Result<Value> {
+        if key == "clone" {
+            let snapshot = self.cell.borrow().clone();
+            return lua
+                .create_function(move |lua, ()| {
+                    lua.create_userdata(LuaListAttributes::new(snapshot.clone()))
+                })?
+                .into_lua(lua);
+        }
+        let inner = self.cell.borrow();
+        match key {
+            "start" => (inner.0 as i64).into_lua(lua),
+            "style" => list_number_style_name(&inner.1).into_lua(lua),
+            "delimiter" => list_number_delim_name(&inner.2).into_lua(lua),
+            _ => Ok(Value::Nil),
+        }
+    }
+
+    pub(crate) fn set_field(&self, key: &str, val: Value, lua: &Lua) -> Result<()> {
+        match key {
+            "start" => {
+                let n = i64::from_lua(val, lua)?;
+                self.cell.borrow_mut().0 = n as usize;
+                Ok(())
+            }
+            "style" => {
+                let s = String::from_lua(val, lua)?;
+                let style = parse_list_number_style(&s)?;
+                self.cell.borrow_mut().1 = style;
+                Ok(())
+            }
+            "delimiter" => {
+                let s = String::from_lua(val, lua)?;
+                let delim = parse_list_number_delim(&s)?;
+                self.cell.borrow_mut().2 = delim;
+                Ok(())
+            }
+            _ => Err(unknown_field_error(key, "ListAttributes")),
+        }
+    }
+}
+
+impl UserData for LuaListAttributes {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method(MetaMethod::Index, |lua, this, key: String| {
+            this.get_field(lua, &key)
+        });
+
+        methods.add_meta_method(
+            MetaMethod::NewIndex,
+            |lua, this, (key, val): (String, Value)| this.set_field(&key, val, lua),
+        );
+
+        // Structural equality (the triple's derived PartialEq; no
+        // source info to ignore). False against non-ListAttributes,
+        // including the equivalent raw triple table — matching pandoc.
+        methods.add_meta_method(MetaMethod::Eq, |_, this, other: Value| {
+            Ok(match other {
+                Value::UserData(ud) => match ud.borrow::<LuaListAttributes>() {
+                    Ok(other_la) => *this.cell.borrow() == *other_la.cell.borrow(),
+                    Err(_) => false,
+                },
+                _ => false,
+            })
+        });
+    }
+}
 
 /// Register the pandoc namespace with element constructors
 pub fn register_pandoc_namespace(
@@ -254,6 +1026,9 @@ pub fn register_pandoc_namespace(
 
     // Read/Write functions (pandoc.read, pandoc.write, and option constructors)
     super::readwrite::register_pandoc_readwrite(lua, &pandoc)?;
+
+    // Document + meta constructors (pandoc.Pandoc, pandoc.Meta, pandoc.Meta*)
+    super::pandoc_doc::register_doc_constructors(lua, &pandoc)?;
 
     // Set as global
     lua.globals().set("pandoc", pandoc)?;
@@ -398,10 +1173,11 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 "SingleQuote" => QuoteType::SingleQuote,
                 "DoubleQuote" => QuoteType::DoubleQuote,
                 _ => {
-                    return Err(Error::runtime(format!(
-                        "invalid quote type: {}",
-                        quote_type
-                    )));
+                    return Err(invalid_value_error(
+                        "quote type",
+                        &quote_type,
+                        "SingleQuote or DoubleQuote",
+                    ));
                 }
             };
             let inlines = peek_inlines_fuzzy(lua, content)?;
@@ -434,7 +1210,13 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
             let mt = match math_type.as_str() {
                 "InlineMath" => MathType::InlineMath,
                 "DisplayMath" => MathType::DisplayMath,
-                _ => return Err(Error::runtime(format!("invalid math type: {}", math_type))),
+                _ => {
+                    return Err(invalid_value_error(
+                        "math type",
+                        &math_type,
+                        "InlineMath or DisplayMath",
+                    ));
+                }
             };
             lua.create_userdata(LuaInline::new(Inline::Math(Math {
                 math_type: mt,
@@ -523,12 +1305,15 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         })?,
     )?;
 
-    // pandoc.Cite(citations, content)
+    // pandoc.Cite(content, citations) — Pandoc's argument order
+    // (mkCite is `flip Cite`): placeholder content first, then the
+    // list of Citation userdata. q2 historically took (citations,
+    // content); flipped for parity (bd-sgfiiktn, comment c-inqf5qlb).
     pandoc.set(
         "Cite",
-        lua.create_function(|lua, (citations, content): (Value, Value)| {
-            let citations = parse_citations(lua, citations)?;
+        lua.create_function(|lua, (content, citations): (Value, Value)| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
+            let citations = super::types::lua_table_to_citations(lua, citations)?;
             lua.create_userdata(LuaInline::new(Inline::Cite(Cite {
                 citations,
                 content: inlines,
@@ -634,15 +1419,19 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     // pandoc.OrderedList(items, listattributes?)
     pandoc.set(
         "OrderedList",
-        lua.create_function(|lua, (items, _list_attr): (Value, Option<Value>)| {
+        lua.create_function(|lua, (items, list_attr): (Value, Option<Value>)| {
             let content = parse_list_items(lua, items)?;
-            lua.create_userdata(LuaBlock::new(Block::OrderedList(OrderedList {
-                content,
-                attr: (
-                    1, // start
+            let attr = match list_attr {
+                Some(v) => parse_list_attributes(v)?,
+                None => (
+                    1,
                     crate::pandoc::ListNumberStyle::Default,
                     crate::pandoc::ListNumberDelim::Default,
                 ),
+            };
+            lua.create_userdata(LuaBlock::new(Block::OrderedList(OrderedList {
+                content,
+                attr,
                 source_info: filter_source_info(lua),
             })))
         })?,
@@ -752,46 +1541,188 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         )?,
     )?;
 
+    // pandoc.SimpleTable: deliberate divergence (Decision 6, bd-d4wd6r3i).
+    // q2 does not implement the legacy pre-pandoc-2.10 simple-table
+    // representation; the constructor exists only to raise an actionable
+    // error. Registry: crates/pampa/tests/lua-conformance/divergences.md
+    pandoc.set(
+        "SimpleTable",
+        lua.create_function(|_lua, _args: mlua::MultiValue| -> Result<Value> {
+            Err(simpletable_divergence_error("pandoc.SimpleTable"))
+        })?,
+    )?;
+
     Ok(())
 }
 
-/// Parse optional attr argument into Attr tuple
-fn parse_attr(_lua: &Lua, attr: Option<Value>) -> Result<crate::pandoc::Attr> {
+/// The Q-11-2 error shared by all three legacy simple-table entry points
+/// (`pandoc.SimpleTable`, `pandoc.utils.to_simple_table`,
+/// `pandoc.utils.from_simple_table`).
+pub(crate) fn simpletable_divergence_error(entry_point: &str) -> mlua::Error {
+    mlua::Error::RuntimeError(format!(
+        "Q-11-2: {entry_point} is not supported: Quarto does not implement \
+         the legacy pre-pandoc-2.10 SimpleTable API. Construct a pandoc.Table \
+         instead (see https://quarto.org/docs/errors/lua/Q-11-2)."
+    ))
+}
+
+/// Parse an optional attr argument into an Attr tuple, accepting every
+/// shape Pandoc's `peekAttr` accepts (pandoc-lua-marshal Attr.hs:202)
+/// plus the q2 named-key extension (kept per plan Decision 2):
+///
+/// - `nil`/absent → null attr
+/// - string → identifier only
+/// - Attr userdata (any variant) → cloned out (cache flushed first)
+/// - table with positional entries → `{id, {classes}, {attributes}}`
+/// - table without positional entries → HTML-like map: `id` →
+///   identifier, `class` → space-split classes, table-valued
+///   `classes`/`attributes` and `identifier` → q2 named-key form,
+///   any other string/number value → attribute
+pub(crate) fn parse_attr(lua: &Lua, attr: Option<Value>) -> Result<crate::pandoc::Attr> {
     match attr {
-        None => Ok((String::new(), vec![], LinkedHashMap::new())),
+        None | Some(Value::Nil) => Ok((String::new(), vec![], LinkedHashMap::new())),
         Some(Value::UserData(ud)) => {
-            // Support LuaAttr userdata (all variants — Owned / BlockRef /
-            // InlineRef clone out to an independent Attr value)
-            let lua_attr = ud.borrow::<LuaAttr>()?;
-            Ok(lua_attr.clone_attr())
+            if let Ok(lua_attr) = ud.borrow::<LuaAttr>() {
+                // All variants — Owned / BlockRef / InlineRef — clone
+                // out to an independent Attr value.
+                return lua_attr.extract_flushed(lua);
+            }
+            if let Ok(proxy) = ud.borrow::<super::types::LuaAttributesProxy>() {
+                // An AttributeList value: attributes-only Attr,
+                // matching pandoc's mkAttr userdata branch.
+                return Ok((String::new(), vec![], proxy.snapshot_map()));
+            }
+            Err(type_mismatch_error_named(
+                "Attr or AttributeList userdata, table, or string",
+                &userdata_type_name(&ud),
+            ))
         }
-        Some(Value::Table(table)) => {
-            // Support table format: {identifier, classes, attributes}
-            let identifier: String = table.get("identifier").unwrap_or_default();
-            let classes: Vec<String> = table
-                .get::<Option<LuaTable>>("classes")?
-                .map(|t| {
-                    t.sequence_values::<String>()
-                        .filter_map(|r| r.ok())
-                        .collect()
-                })
-                .unwrap_or_default();
-            let attributes: LinkedHashMap<String, String> = table
-                .get::<Option<LuaTable>>("attributes")?
-                .map(|t| t.pairs::<String, String>().filter_map(|r| r.ok()).collect())
-                .unwrap_or_default();
-            Ok((identifier, classes, attributes))
-        }
+        Some(Value::Table(table)) => parse_attr_table(lua, &table),
         Some(Value::String(s)) => {
-            // Support simple string format for identifier
+            // Simple string format: identifier only
             Ok((s.to_str()?.to_string(), vec![], LinkedHashMap::new()))
         }
-        Some(_) => Err(Error::runtime("invalid attr format")),
+        Some(other) => Err(type_mismatch_error(
+            "Attr userdata, table, or string",
+            &other,
+        )),
+    }
+}
+
+/// Table form of an Attr (see `parse_attr`). Mirrors pandoc's
+/// `peekAttrTable`: positional entries win; otherwise the table is
+/// read as an HTML-like map (extended with q2's named keys).
+fn parse_attr_table(lua: &Lua, table: &LuaTable) -> Result<crate::pandoc::Attr> {
+    if table.raw_len() > 0 {
+        // Positional triple {id, classes?, attributes?}
+        let identifier: String = match table.raw_get::<Value>(1)? {
+            Value::Nil => String::new(),
+            v => String::from_lua(v, lua)
+                .map_err(|_| Error::runtime("Q-11-3: attr identifier must be a string"))?,
+        };
+        let classes = match table.raw_get::<Value>(2)? {
+            Value::Nil => vec![],
+            v => parse_class_list(lua, v)?,
+        };
+        let attributes = match table.raw_get::<Value>(3)? {
+            Value::Nil => LinkedHashMap::new(),
+            v => parse_attribute_list(lua, v)?,
+        };
+        return Ok((identifier, classes, attributes));
+    }
+
+    // HTML-like map (+ q2 named-key extension)
+    let mut identifier = String::new();
+    let mut classes: Vec<String> = vec![];
+    let mut attributes: LinkedHashMap<String, String> = LinkedHashMap::new();
+    for pair in table.pairs::<String, Value>() {
+        let (key, value) = pair?;
+        match (key.as_str(), &value) {
+            ("id" | "identifier", _) => {
+                identifier = String::from_lua(value, lua)
+                    .map_err(|_| Error::runtime("Q-11-3: attr identifier must be a string"))?;
+            }
+            // HTML-like: class is a space-separated string
+            ("class", Value::String(s)) => {
+                classes.extend(s.to_str()?.split_whitespace().map(String::from));
+            }
+            // q2 named-key extension: classes as a list
+            ("classes", Value::Table(_)) => {
+                classes.extend(parse_class_list(lua, value)?);
+            }
+            // q2 named-key extension: attributes as a nested map/list
+            ("attributes", Value::Table(_)) => {
+                for (k, v) in parse_attribute_list(lua, value)? {
+                    attributes.insert(k, v);
+                }
+            }
+            _ => {
+                let v = String::from_lua(value, lua).map_err(|_| {
+                    Error::runtime(format!(
+                        "Q-11-3: attr: value for key '{key}' must be a string or number"
+                    ))
+                })?;
+                attributes.insert(key, v);
+            }
+        }
+    }
+    Ok((identifier, classes, attributes))
+}
+
+/// A class list: table of strings (numbers coerce, like pandoc's
+/// peekText), or a classes proxy userdata.
+pub(crate) fn parse_class_list(lua: &Lua, val: Value) -> Result<Vec<String>> {
+    lua_table_to_strings(lua, val)
+}
+
+/// An attribute list, in any of the shapes pandoc's
+/// `peekAttributeList` accepts (Attr.hs:83): a string-keyed map, a
+/// list of `{key, value}` pairs, or an AttributeList userdata.
+pub(crate) fn parse_attribute_list(lua: &Lua, val: Value) -> Result<LinkedHashMap<String, String>> {
+    match val {
+        Value::UserData(ud) => {
+            if let Ok(proxy) = ud.borrow::<super::types::LuaAttributesProxy>() {
+                return Ok(proxy.snapshot_map());
+            }
+            Err(type_mismatch_error_named(
+                "table or AttributeList",
+                &userdata_type_name(&ud),
+            ))
+        }
+        Value::Table(table) => {
+            if table.raw_len() > 0 {
+                // List of {key, value} pairs
+                let mut map = LinkedHashMap::new();
+                for entry in table.sequence_values::<LuaTable>() {
+                    let pair = entry.map_err(|_| {
+                        Error::runtime("Q-11-3: attributes list entries must be {key, value} pairs")
+                    })?;
+                    let k: String = pair.get(1)?;
+                    let v = String::from_lua(pair.get::<Value>(2)?, lua).map_err(|_| {
+                        Error::runtime("Q-11-3: attribute values must be strings or numbers")
+                    })?;
+                    map.insert(k, v);
+                }
+                Ok(map)
+            } else {
+                // String-keyed map
+                let mut map = LinkedHashMap::new();
+                for pair in table.pairs::<String, Value>() {
+                    let (k, value) = pair?;
+                    let v = String::from_lua(value, lua).map_err(|_| {
+                        Error::runtime("Q-11-3: attribute values must be strings or numbers")
+                    })?;
+                    map.insert(k, v);
+                }
+                Ok(map)
+            }
+        }
+        other => Err(type_mismatch_error("table or AttributeList", &other)),
     }
 }
 
 /// Parse list items (each item is a list of blocks)
-fn parse_list_items(lua: &Lua, items: Value) -> Result<Vec<Vec<Block>>> {
+pub(crate) fn parse_list_items(lua: &Lua, items: Value) -> Result<Vec<Vec<Block>>> {
     match items {
         Value::Table(table) => {
             let mut result = Vec::new();
@@ -810,62 +1741,8 @@ fn parse_list_items(lua: &Lua, items: Value) -> Result<Vec<Vec<Block>>> {
     }
 }
 
-/// Parse citations from Lua table
-fn parse_citations(lua: &Lua, val: Value) -> Result<Vec<Citation>> {
-    match val {
-        Value::Table(table) => {
-            let mut result = Vec::new();
-            for item in table.sequence_values::<Value>() {
-                let item = item?;
-                let citation = parse_single_citation(lua, item)?;
-                result.push(citation);
-            }
-            Ok(result)
-        }
-        _ => Err(Error::runtime("expected table of citations")),
-    }
-}
-
-/// Parse a single Citation from a Lua table
-fn parse_single_citation(lua: &Lua, val: Value) -> Result<Citation> {
-    match val {
-        Value::Table(table) => {
-            let id: String = table.get("id")?;
-            let mode_str: String = table
-                .get("mode")
-                .unwrap_or_else(|_| "NormalCitation".to_string());
-            let mode = match mode_str.as_str() {
-                "AuthorInText" => CitationMode::AuthorInText,
-                "SuppressAuthor" => CitationMode::SuppressAuthor,
-                _ => CitationMode::NormalCitation,
-            };
-            let prefix: Value = table
-                .get("prefix")
-                .unwrap_or(Value::Table(lua.create_table()?));
-            let prefix = peek_inlines_fuzzy(lua, prefix).unwrap_or_default();
-            let suffix: Value = table
-                .get("suffix")
-                .unwrap_or(Value::Table(lua.create_table()?));
-            let suffix = peek_inlines_fuzzy(lua, suffix).unwrap_or_default();
-            let note_num: i64 = table.get("note_num").unwrap_or(0);
-            let hash: i64 = table.get("hash").unwrap_or(0);
-
-            Ok(Citation {
-                id,
-                mode,
-                prefix,
-                suffix,
-                note_num: note_num as usize,
-                hash: hash as usize,
-                id_source: None,
-            })
-        }
-        _ => Err(Error::runtime("expected citation table")),
-    }
-}
-
 /// Parse definition list items: list of {term, definitions}
-fn parse_definition_list_items(
+pub(crate) fn parse_definition_list_items(
     lua: &Lua,
     val: Value,
 ) -> Result<Vec<(Vec<Inline>, Vec<Vec<Block>>)>> {
@@ -883,17 +1760,22 @@ fn parse_definition_list_items(
                         let defs = parse_list_items(lua, defs_val)?;
                         result.push((term, defs));
                     }
-                    _ => return Err(Error::runtime("expected definition list item as table")),
+                    other => {
+                        return Err(type_mismatch_error("definition list item table", &other));
+                    }
                 }
             }
             Ok(result)
         }
-        _ => Err(Error::runtime("expected table for definition list")),
+        other => Err(type_mismatch_error(
+            "table of definition list items",
+            &other,
+        )),
     }
 }
 
 /// Parse line block content: list of lines (each line is a list of inlines)
-fn parse_line_block_content(lua: &Lua, val: Value) -> Result<Vec<Vec<Inline>>> {
+pub(crate) fn parse_line_block_content(lua: &Lua, val: Value) -> Result<Vec<Vec<Inline>>> {
     match val {
         Value::Table(table) => {
             let mut result = Vec::new();
@@ -904,12 +1786,12 @@ fn parse_line_block_content(lua: &Lua, val: Value) -> Result<Vec<Vec<Inline>>> {
             }
             Ok(result)
         }
-        _ => Err(Error::runtime("expected table of lines")),
+        other => Err(type_mismatch_error("table of lines", &other)),
     }
 }
 
 /// Parse Caption from Lua value
-fn parse_caption(lua: &Lua, val: Option<Value>) -> Result<Caption> {
+pub(crate) fn parse_caption(lua: &Lua, val: Option<Value>) -> Result<Caption> {
     match val {
         None | Some(Value::Nil) => Ok(Caption {
             short: None,
@@ -917,14 +1799,25 @@ fn parse_caption(lua: &Lua, val: Option<Value>) -> Result<Caption> {
             source_info: filter_source_info(lua),
         }),
         Some(Value::Table(table)) => {
-            let short_val: Option<Value> = table.get("short").ok();
+            let short_val: Option<Value> = table.get("short").ok().filter(|v| v != &Value::Nil);
+            let long_val: Option<Value> = table.get("long").ok().filter(|v| v != &Value::Nil);
+            // A table without short/long keys is a bare list of
+            // blocks (pandoc's peekCaptionFuzzy: any blocks-coercible
+            // value becomes the long caption).
+            if short_val.is_none() && long_val.is_none() && table.raw_len() > 0 {
+                let long = peek_blocks_fuzzy(lua, Value::Table(table))?;
+                return Ok(Caption {
+                    short: None,
+                    long: Some(long),
+                    source_info: filter_source_info(lua),
+                });
+            }
             let short = match short_val {
-                Some(Value::Nil) | None => None,
+                None => None,
                 Some(v) => Some(peek_inlines_fuzzy(lua, v)?),
             };
-            let long_val: Option<Value> = table.get("long").ok();
             let long = match long_val {
-                Some(Value::Nil) | None => None,
+                None => None,
                 Some(v) => Some(peek_blocks_fuzzy(lua, v)?),
             };
             Ok(Caption {
@@ -936,9 +1829,12 @@ fn parse_caption(lua: &Lua, val: Option<Value>) -> Result<Caption> {
         Some(Value::UserData(ud)) => {
             // If it's a LuaCaption userdata
             if let Ok(lua_caption) = ud.borrow::<LuaCaption>() {
-                Ok(lua_caption.0.clone())
+                lua_caption.extract_flushed(lua)
             } else {
-                Err(Error::runtime("expected Caption userdata"))
+                Err(type_mismatch_error_named(
+                    "Caption userdata",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
         // Fallback: try as blocks-like value (matching Pandoc's peekCaptionFuzzy)
@@ -954,7 +1850,7 @@ fn parse_caption(lua: &Lua, val: Option<Value>) -> Result<Caption> {
 }
 
 /// Parse column specifications
-fn parse_colspecs(_lua: &Lua, val: Value) -> Result<Vec<ColSpec>> {
+pub(crate) fn parse_colspecs(_lua: &Lua, val: Value) -> Result<Vec<ColSpec>> {
     match val {
         Value::Table(table) => {
             let mut result = Vec::new();
@@ -968,25 +1864,33 @@ fn parse_colspecs(_lua: &Lua, val: Value) -> Result<Vec<ColSpec>> {
                         let width = parse_col_width(width_val)?;
                         result.push((alignment, width));
                     }
-                    _ => return Err(Error::runtime("expected colspec as table")),
+                    other => return Err(type_mismatch_error("colspec table", &other)),
                 }
             }
             Ok(result)
         }
-        _ => Err(Error::runtime("expected table of colspecs")),
+        other => Err(type_mismatch_error("table of colspecs", &other)),
     }
 }
 
-/// Parse alignment value
+/// Parse alignment value: an alignment name string or a
+/// `pandoc.AlignDefault`-style sentinel. Garbage errors loudly,
+/// matching Pandoc's `peekAlignment` (peekRead) — the old code
+/// silently defaulted, masking typos like "AlignLeftt".
 fn parse_alignment(val: Value) -> Result<Alignment> {
     match val {
         Value::String(s) => {
             let s = s.to_str()?;
             match s.as_ref() {
+                "AlignDefault" => Ok(Alignment::Default),
                 "AlignLeft" => Ok(Alignment::Left),
                 "AlignCenter" => Ok(Alignment::Center),
                 "AlignRight" => Ok(Alignment::Right),
-                _ => Ok(Alignment::Default),
+                other => Err(invalid_value_error(
+                    "alignment",
+                    other,
+                    "AlignDefault, AlignLeft, AlignCenter, or AlignRight",
+                )),
             }
         }
         Value::UserData(ud) => {
@@ -994,10 +1898,23 @@ fn parse_alignment(val: Value) -> Result<Alignment> {
             if let Ok(align) = ud.borrow::<LuaAlignment>() {
                 Ok(align.0.clone())
             } else {
-                Ok(Alignment::Default)
+                Err(type_mismatch_error_named(
+                    "Alignment name or sentinel",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Ok(Alignment::Default),
+        other => Err(type_mismatch_error("Alignment name or sentinel", &other)),
+    }
+}
+
+/// Alignment constructor name (Haskell show form).
+fn alignment_name(a: &Alignment) -> &'static str {
+    match a {
+        Alignment::Default => "AlignDefault",
+        Alignment::Left => "AlignLeft",
+        Alignment::Center => "AlignCenter",
+        Alignment::Right => "AlignRight",
     }
 }
 
@@ -1018,14 +1935,14 @@ fn parse_col_width(val: Value) -> Result<ColWidth> {
 }
 
 /// Parse TableHead from Lua value
-fn parse_table_head(lua: &Lua, val: Value) -> Result<TableHead> {
+pub(crate) fn parse_table_head(lua: &Lua, val: Value) -> Result<TableHead> {
     match val {
         Value::Table(table) => {
             // Check if it has a 'rows' field (userdata-style) or is just a list of rows
             let rows_val: Value = table
                 .get("rows")
                 .unwrap_or_else(|_| Value::Table(table.clone()));
-            let rows = parse_rows(lua, rows_val)?;
+            let rows = parse_rows_strict(lua, rows_val)?;
             let attr = match table.get::<Option<Value>>("attr")? {
                 Some(v) => parse_attr(lua, Some(v))?,
                 None => (String::new(), vec![], LinkedHashMap::new()),
@@ -1039,23 +1956,27 @@ fn parse_table_head(lua: &Lua, val: Value) -> Result<TableHead> {
         }
         Value::UserData(ud) => {
             if let Ok(head) = ud.borrow::<LuaTableHead>() {
-                Ok(head.0.clone())
+                head.extract_flushed(lua)
             } else {
-                Err(Error::runtime("expected TableHead userdata"))
+                Err(type_mismatch_error_named(
+                    "table or TableHead",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table or TableHead")),
+        other => Err(type_mismatch_error("table or TableHead", &other)),
     }
 }
 
-/// Parse TableFoot from Lua value
-fn parse_table_foot(lua: &Lua, val: Value) -> Result<TableFoot> {
+/// Parse TableFoot from Lua value (userdata, `{rows=…, attr=…}` named
+/// table, or a bare list of rows).
+pub(crate) fn parse_table_foot(lua: &Lua, val: Value) -> Result<TableFoot> {
     match val {
         Value::Table(table) => {
             let rows_val: Value = table
                 .get("rows")
                 .unwrap_or_else(|_| Value::Table(table.clone()));
-            let rows = parse_rows(lua, rows_val)?;
+            let rows = parse_rows_strict(lua, rows_val)?;
             let attr = match table.get::<Option<Value>>("attr")? {
                 Some(v) => parse_attr(lua, Some(v))?,
                 None => (String::new(), vec![], LinkedHashMap::new()),
@@ -1069,17 +1990,20 @@ fn parse_table_foot(lua: &Lua, val: Value) -> Result<TableFoot> {
         }
         Value::UserData(ud) => {
             if let Ok(foot) = ud.borrow::<LuaTableFoot>() {
-                Ok(foot.0.clone())
+                foot.extract_flushed(lua)
             } else {
-                Err(Error::runtime("expected TableFoot userdata"))
+                Err(type_mismatch_error_named(
+                    "table or TableFoot",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table or TableFoot")),
+        other => Err(type_mismatch_error("table or TableFoot", &other)),
     }
 }
 
-/// Parse list of TableBody from Lua value
-fn parse_table_bodies(lua: &Lua, val: Value) -> Result<Vec<TableBody>> {
+/// Parse list of TableBody from Lua value.
+pub(crate) fn parse_table_bodies(lua: &Lua, val: Value) -> Result<Vec<TableBody>> {
     match val {
         Value::Table(table) => {
             let mut result = Vec::new();
@@ -1090,11 +2014,47 @@ fn parse_table_bodies(lua: &Lua, val: Value) -> Result<Vec<TableBody>> {
             }
             Ok(result)
         }
-        _ => Err(Error::runtime("expected table of TableBody")),
+        // A single TableBody userdata becomes a singleton list (the
+        // "bodies field accepts single TableBody" contract pinned by
+        // the vendored suite).
+        Value::UserData(ud) if ud.borrow::<LuaTableBody>().is_ok() => {
+            let body = ud.borrow::<LuaTableBody>().unwrap().extract_flushed(lua)?;
+            Ok(vec![body])
+        }
+        other => Err(type_mismatch_error("table of TableBody", &other)),
     }
 }
 
-/// Parse a single TableBody from Lua value
+/// Push a Vec<TableBody> as a pandoc-List of TableBody userdata.
+pub(crate) fn table_bodies_to_lua_list(lua: &Lua, bodies: &[TableBody]) -> Result<Value> {
+    let values = bodies
+        .iter()
+        .map(|body| {
+            lua.create_userdata(LuaTableBody::new(body.clone()))
+                .map(Value::UserData)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    super::list::create_list_table(lua, values)
+}
+
+/// Push colspecs as a pandoc-List of `{alignment, width?}` pairs
+/// (width omitted for ColWidthDefault, matching pandoc).
+pub(crate) fn colspecs_to_lua_table(lua: &Lua, colspecs: &[ColSpec]) -> Result<Value> {
+    let mut values = Vec::with_capacity(colspecs.len());
+    for (alignment, width) in colspecs {
+        let pair = lua.create_table()?;
+        pair.set(1, alignment_name(alignment))?;
+        if let ColWidth::Percentage(w) = width {
+            pair.set(2, *w)?;
+        }
+        values.push(Value::Table(pair));
+    }
+    super::list::create_list_table(lua, values)
+}
+
+/// Parse a single TableBody: userdata or the named-field table form
+/// (`{attr=…, body=…, head=…, row_head_columns=…}`), matching
+/// pandoc's `peekTableBodyFuzzy`.
 fn parse_single_table_body(lua: &Lua, val: Value) -> Result<TableBody> {
     match val {
         Value::Table(table) => {
@@ -1102,11 +2062,12 @@ fn parse_single_table_body(lua: &Lua, val: Value) -> Result<TableBody> {
             let body_val: Value = table
                 .get("body")
                 .unwrap_or_else(|_| Value::Table(table.clone()));
-            let body = parse_rows(lua, body_val)?;
-            let head_val: Value = table
-                .get("head")
-                .unwrap_or_else(|_| Value::Table(lua.create_table().unwrap()));
-            let head = parse_rows(lua, head_val).unwrap_or_default();
+            let body = parse_rows_strict(lua, body_val)?;
+            let head_val: Option<Value> = table.get("head")?;
+            let head = match head_val {
+                Some(Value::Nil) | None => vec![],
+                Some(v) => parse_rows_strict(lua, v)?,
+            };
             let rowhead_columns: i64 = table.get("row_head_columns").unwrap_or(0);
             let attr = match table.get::<Option<Value>>("attr")? {
                 Some(v) => parse_attr(lua, Some(v))?,
@@ -1123,17 +2084,20 @@ fn parse_single_table_body(lua: &Lua, val: Value) -> Result<TableBody> {
         }
         Value::UserData(ud) => {
             if let Ok(body) = ud.borrow::<LuaTableBody>() {
-                Ok(body.0.clone())
+                body.extract_flushed(lua)
             } else {
-                Err(Error::runtime("expected TableBody userdata"))
+                Err(type_mismatch_error_named(
+                    "table or TableBody",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table or TableBody")),
+        other => Err(type_mismatch_error("table or TableBody", &other)),
     }
 }
 
-/// Parse rows from Lua value
-fn parse_rows(lua: &Lua, val: Value) -> Result<Vec<Row>> {
+/// Parse a sequence of Rows (each entry row-fuzzy).
+fn parse_rows_strict(lua: &Lua, val: Value) -> Result<Vec<Row>> {
     match val {
         Value::Table(table) => {
             let mut result = Vec::new();
@@ -1144,43 +2108,71 @@ fn parse_rows(lua: &Lua, val: Value) -> Result<Vec<Row>> {
             }
             Ok(result)
         }
-        _ => Ok(vec![]),
+        other => Err(type_mismatch_error("table of Rows", &other)),
     }
 }
 
-/// Parse a single Row from Lua value
+/// Parse a single Row, matching pandoc's `peekRowFuzzy`: Row userdata,
+/// the q2 named form `{cells=…, attr=…}`, an `{attr, {cells}}` pair,
+/// or a bare list of cells.
 fn parse_single_row(lua: &Lua, val: Value) -> Result<Row> {
     match val {
         Value::Table(table) => {
-            // Check for cells field
-            let cells_val: Value = table
-                .get("cells")
-                .unwrap_or_else(|_| Value::Table(table.clone()));
-            let cells = parse_cells(lua, cells_val)?;
-            let attr = match table.get::<Option<Value>>("attr")? {
-                Some(v) => parse_attr(lua, Some(v))?,
-                None => (String::new(), vec![], LinkedHashMap::new()),
-            };
+            // q2 named form
+            if let Some(cells_val) = table.get::<Option<Value>>("cells")? {
+                let cells = parse_cells_strict(lua, cells_val)?;
+                let attr = match table.get::<Option<Value>>("attr")? {
+                    Some(v) => parse_attr(lua, Some(v))?,
+                    None => (String::new(), vec![], LinkedHashMap::new()),
+                };
+                return Ok(Row {
+                    cells,
+                    attr,
+                    source_info: filter_source_info(lua),
+                    attr_source: AttrSourceInfo::empty(),
+                });
+            }
+            // Pair form {attr, cells} (pandoc's peekPair branch)
+            let pair = (|| -> Result<Row> {
+                let attr_val: Value = table.get(1)?;
+                let cells_val: Value = table.get(2)?;
+                let attr = parse_attr(lua, Some(attr_val))?;
+                let cells = parse_cells_strict(lua, cells_val)?;
+                Ok(Row {
+                    cells,
+                    attr,
+                    source_info: filter_source_info(lua),
+                    attr_source: AttrSourceInfo::empty(),
+                })
+            })();
+            if let Ok(row) = pair {
+                return Ok(row);
+            }
+            // Bare list of cells
+            let cells = parse_cells_strict(lua, Value::Table(table))?;
             Ok(Row {
                 cells,
-                attr,
+                attr: (String::new(), vec![], LinkedHashMap::new()),
                 source_info: filter_source_info(lua),
                 attr_source: AttrSourceInfo::empty(),
             })
         }
         Value::UserData(ud) => {
             if let Ok(row) = ud.borrow::<LuaRow>() {
-                Ok(row.0.clone())
+                row.extract_flushed(lua)
             } else {
-                Err(Error::runtime("expected Row userdata"))
+                Err(type_mismatch_error_named(
+                    "table or Row",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table or Row")),
+        other => Err(type_mismatch_error("table or Row", &other)),
     }
 }
 
-/// Parse cells from Lua value
-fn parse_cells(lua: &Lua, val: Value) -> Result<Vec<Cell>> {
+/// Parse a sequence of Cells (each entry cell-fuzzy).
+fn parse_cells_strict(lua: &Lua, val: Value) -> Result<Vec<Cell>> {
     match val {
         Value::Table(table) => {
             let mut result = Vec::new();
@@ -1191,22 +2183,27 @@ fn parse_cells(lua: &Lua, val: Value) -> Result<Vec<Cell>> {
             }
             Ok(result)
         }
-        _ => Ok(vec![]),
+        other => Err(type_mismatch_error("table of Cells", &other)),
     }
 }
 
-/// Parse a single Cell from Lua value
+/// Parse a single Cell, matching pandoc's `peekCellFuzzy`: Cell
+/// userdata or a table (named `contents`/`content` field with
+/// optional alignment/row_span/col_span/attr, else the whole table
+/// is treated as the cell's blocks — q2's lenient extension).
 fn parse_single_cell(lua: &Lua, val: Value) -> Result<Cell> {
     match val {
         Value::Table(table) => {
-            // Check if it has a content field or is just a list of blocks
-            let content_val: Value = table.get("content").unwrap_or_else(|_| {
-                // Try to treat the table itself as blocks content
-                Value::Table(table.clone())
-            });
+            let named: Option<Value> = match table.get::<Option<Value>>("contents")? {
+                Some(v) => Some(v),
+                None => table.get::<Option<Value>>("content")?,
+            };
+            let content_val = named.unwrap_or_else(|| Value::Table(table.clone()));
             let content = peek_blocks_fuzzy(lua, content_val)?;
-            let align_val: Value = table.get("alignment").unwrap_or(Value::Nil);
-            let alignment = parse_alignment(align_val).unwrap_or(Alignment::Default);
+            let alignment = match table.get::<Option<Value>>("alignment")? {
+                Some(Value::Nil) | None => Alignment::Default,
+                Some(v) => parse_alignment(v)?,
+            };
             let row_span: i64 = table.get("row_span").unwrap_or(1);
             let col_span: i64 = table.get("col_span").unwrap_or(1);
             let attr = match table.get::<Option<Value>>("attr")? {
@@ -1225,83 +2222,119 @@ fn parse_single_cell(lua: &Lua, val: Value) -> Result<Cell> {
         }
         Value::UserData(ud) => {
             if let Ok(cell) = ud.borrow::<LuaCell>() {
-                Ok(cell.0.clone())
+                cell.extract_flushed(lua)
             } else {
-                Err(Error::runtime("expected Cell userdata"))
+                Err(type_mismatch_error_named(
+                    "table or Cell",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Err(Error::runtime("expected table or Cell")),
+        other => Err(type_mismatch_error("table or Cell", &other)),
     }
 }
 
-/// Parse ListAttributes from Lua value
-fn parse_list_attributes(val: Value) -> Result<ListAttributes> {
+/// Parse ListAttributes from a Lua value: ListAttributes userdata or
+/// a full positional triple `{start, style, delimiter}`, matching
+/// Pandoc's `peekListAttributes` (userdata-or-peekTriple choice; a
+/// partial triple like `{3}` is an error there too — "all choices
+/// failed" — and silently-defaulting garbage would mask typos).
+/// `Nil` means "argument omitted" and yields the Pandoc defaults
+/// `(1, DefaultStyle, DefaultDelim)`.
+pub(crate) fn parse_list_attributes(val: Value) -> Result<ListAttributes> {
     match val {
+        Value::Nil => Ok((1, ListNumberStyle::Default, ListNumberDelim::Default)),
         Value::Table(table) => {
-            let start: i64 = table.get(1).unwrap_or(1);
-            let style_str: String = table.get(2).unwrap_or_else(|_| "DefaultStyle".to_string());
-            let delim_str: String = table.get(3).unwrap_or_else(|_| "DefaultDelim".to_string());
-
-            let style = match style_str.as_str() {
-                "Decimal" => ListNumberStyle::Decimal,
-                "LowerAlpha" => ListNumberStyle::LowerAlpha,
-                "UpperAlpha" => ListNumberStyle::UpperAlpha,
-                "LowerRoman" => ListNumberStyle::LowerRoman,
-                "UpperRoman" => ListNumberStyle::UpperRoman,
-                "Example" => ListNumberStyle::Example,
-                _ => ListNumberStyle::Default,
-            };
-
-            let delim = match delim_str.as_str() {
-                "Period" => ListNumberDelim::Period,
-                "OneParen" => ListNumberDelim::OneParen,
-                "TwoParens" => ListNumberDelim::TwoParens,
-                _ => ListNumberDelim::Default,
-            };
-
+            let start: i64 = table.get(1).map_err(|_| {
+                Error::runtime("Q-11-3: ListAttributes triple: expected integer start at index 1")
+            })?;
+            let style_str: String = table.get(2).map_err(|_| {
+                Error::runtime("Q-11-3: ListAttributes triple: expected style string at index 2")
+            })?;
+            let delim_str: String = table.get(3).map_err(|_| {
+                Error::runtime(
+                    "Q-11-3: ListAttributes triple: expected delimiter string at index 3",
+                )
+            })?;
+            let style = parse_list_number_style(&style_str)?;
+            let delim = parse_list_number_delim(&delim_str)?;
             Ok((start as usize, style, delim))
         }
         Value::UserData(ud) => {
             if let Ok(attr) = ud.borrow::<LuaListAttributes>() {
-                Ok(attr.0.clone())
+                Ok(attr.clone_attrs())
             } else {
-                Err(Error::runtime("expected ListAttributes userdata"))
+                Err(type_mismatch_error_named(
+                    "ListAttributes userdata or {start, style, delimiter} triple",
+                    &userdata_type_name(&ud),
+                ))
             }
         }
-        _ => Ok((1, ListNumberStyle::Default, ListNumberDelim::Default)),
+        other => Err(type_mismatch_error(
+            "ListAttributes userdata or {start, style, delimiter} triple",
+            &other,
+        )),
     }
 }
 
 /// Register the pandoc.Attr() constructor and other utility constructors
 fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
-    // pandoc.Attr(identifier, classes, attributes)
-    // All parameters are optional with default empty values
+    // pandoc.Attr([identifier[, classes[, attributes]]])
+    // Dispatches on the FIRST argument's type, like pandoc's mkAttr
+    // (pandoc-lua-marshal Attr.hs:230): a string starts the positional
+    // form; a table is a full attr table (positional triple or
+    // HTML-like map); Attr/AttributeList userdata convert; nil → null.
     pandoc.set(
         "Attr",
         lua.create_function(
-            |lua, (identifier, classes, attributes): (Option<String>, Option<Value>, Option<Value>)| {
-                let id = identifier.unwrap_or_default();
-                // Both `classes` and `attributes` accept a plain Lua
-                // table OR a corresponding proxy userdata (so
-                // `pandoc.Attr(id, cb.attr.classes, cb.attr.attributes)`
-                // works without the user having to materialize a table
-                // first).
-                let cls = match classes {
-                    None | Some(Value::Nil) => Vec::new(),
-                    Some(v) => super::types::lua_table_to_strings(lua, v)
-                        .map_err(|_| Error::runtime("classes must be a table of strings"))?,
+            |lua, (first, classes, attributes): (Option<Value>, Option<Value>, Option<Value>)| {
+                let attr = match first {
+                    None | Some(Value::Nil) => (String::new(), Vec::new(), LinkedHashMap::new()),
+                    Some(Value::String(s)) => {
+                        let id = s.to_str()?.to_string();
+                        // `classes` and `attributes` accept plain Lua
+                        // tables OR the corresponding proxy userdata
+                        // (so pandoc.Attr(id, cb.attr.classes,
+                        // cb.attr.attributes) works directly).
+                        let cls = match classes {
+                            None | Some(Value::Nil) => Vec::new(),
+                            Some(v) => parse_class_list(lua, v).map_err(|_| {
+                                Error::runtime("Q-11-3: classes must be a table of strings")
+                            })?,
+                        };
+                        let attrs = match attributes {
+                            None | Some(Value::Nil) => LinkedHashMap::new(),
+                            Some(v) => parse_attribute_list(lua, v)?,
+                        };
+                        (id, cls, attrs)
+                    }
+                    // Table or userdata first arg: the whole attr in
+                    // one value (remaining args ignored, like pandoc).
+                    Some(v) => parse_attr(lua, Some(v))?,
                 };
-                let attrs = match attributes {
-                    None | Some(Value::Nil) => LinkedHashMap::new(),
-                    Some(v) => super::types::lua_table_to_string_map(lua, v)
-                        .map_err(|_| Error::runtime("attributes must be a table"))?,
-                };
-                lua.create_userdata(LuaAttr::new((id, cls, attrs)))
+                lua.create_userdata(LuaAttr::new(attr))
             },
         )?,
     )?;
 
+    // pandoc.AttributeList(value) — an attribute list from a
+    // string-keyed map, a list of {key, value} pairs, or another
+    // AttributeList. Returned as the same userdata type element
+    // `.attributes` reads produce.
+    pandoc.set(
+        "AttributeList",
+        lua.create_function(|lua, value: Value| {
+            let map = parse_attribute_list(lua, value)?;
+            let owner = LuaAttr::new((String::new(), Vec::new(), map));
+            lua.create_userdata(super::types::LuaAttributesProxy::new(owner))
+        })?,
+    )?;
+
     // pandoc.Citation(id, mode, prefix?, suffix?, note_num?, hash?)
+    // Returns typed Citation userdata (bd-sgfiiktn S1). id and mode are
+    // required and validated eagerly, matching Pandoc's mkCitation;
+    // prefix/suffix run through the fuzzy Inlines peeker (a bare string
+    // word-splits); note_num/hash default to 0.
     pandoc.set(
         "Citation",
         lua.create_function(
@@ -1314,18 +2347,14 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 Option<i64>,
                 Option<i64>,
             )| {
-                let mode = match mode.as_str() {
-                    "AuthorInText" => CitationMode::AuthorInText,
-                    "SuppressAuthor" => CitationMode::SuppressAuthor,
-                    _ => CitationMode::NormalCitation,
-                };
+                let mode = super::types::parse_citation_mode(&mode)?;
                 let prefix = match prefix {
-                    Some(v) => peek_inlines_fuzzy(lua, v).unwrap_or_default(),
-                    None => vec![],
+                    Some(Value::Nil) | None => vec![],
+                    Some(v) => peek_inlines_fuzzy(lua, v)?,
                 };
                 let suffix = match suffix {
-                    Some(v) => peek_inlines_fuzzy(lua, v).unwrap_or_default(),
-                    None => vec![],
+                    Some(Value::Nil) | None => vec![],
+                    Some(v) => peek_inlines_fuzzy(lua, v)?,
                 };
                 let citation = Citation {
                     id,
@@ -1336,99 +2365,54 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     hash: hash.unwrap_or(0) as usize,
                     id_source: None,
                 };
-                // Return as a table so it can be used with Cite constructor
-                let table = lua.create_table()?;
-                table.set("id", citation.id.clone())?;
-                table.set(
-                    "mode",
-                    match citation.mode {
-                        CitationMode::AuthorInText => "AuthorInText",
-                        CitationMode::SuppressAuthor => "SuppressAuthor",
-                        CitationMode::NormalCitation => "NormalCitation",
-                    },
-                )?;
-                table.set(
-                    "prefix",
-                    super::types::inlines_to_lua_table(lua, &citation.prefix)?,
-                )?;
-                table.set(
-                    "suffix",
-                    super::types::inlines_to_lua_table(lua, &citation.suffix)?,
-                )?;
-                table.set("note_num", citation.note_num as i64)?;
-                table.set("hash", citation.hash as i64)?;
-                Ok(table)
+                lua.create_userdata(super::types::LuaCitation::new(citation))
             },
         )?,
     )?;
 
-    // pandoc.Caption(short?, long?)
+    // pandoc.Caption(long?, short?) — Pandoc's mkCaption argument
+    // order: the full (blocks) caption first, then the short summary.
+    // q2 historically took (short, long); flipped for parity
+    // (bd-sgfiiktn S3b).
     pandoc.set(
         "Caption",
-        lua.create_function(|lua, (short, long): (Option<Value>, Option<Value>)| {
-            let short_inlines = match short {
-                Some(Value::Nil) | None => None,
-                Some(v) => Some(peek_inlines_fuzzy(lua, v)?),
-            };
+        lua.create_function(|lua, (long, short): (Option<Value>, Option<Value>)| {
             let long_blocks = match long {
                 Some(Value::Nil) | None => None,
                 Some(v) => Some(peek_blocks_fuzzy(lua, v)?),
+            };
+            let short_inlines = match short {
+                Some(Value::Nil) | None => None,
+                Some(v) => Some(peek_inlines_fuzzy(lua, v)?),
             };
             let caption = Caption {
                 short: short_inlines,
                 long: long_blocks,
                 source_info: filter_source_info(lua),
             };
-            lua.create_userdata(LuaCaption(caption))
+            lua.create_userdata(LuaCaption::new(caption))
         })?,
     )?;
 
-    // pandoc.ListAttributes(start?, style?, delim?)
+    // pandoc.ListAttributes(start?, style?, delim?) — typed userdata
+    // (bd-sgfiiktn S2). All arguments optional with Pandoc defaults
+    // (1, DefaultStyle, DefaultDelim); style/delimiter validated
+    // eagerly, matching mkListAttributes' peekRead (loud error on
+    // garbage — the old code silently defaulted, masking typos).
     pandoc.set(
         "ListAttributes",
         lua.create_function(
             |lua, (start, style, delim): (Option<i64>, Option<String>, Option<String>)| {
                 let start = start.unwrap_or(1) as usize;
                 let style = match style.as_deref() {
-                    Some("Decimal") => ListNumberStyle::Decimal,
-                    Some("LowerAlpha") => ListNumberStyle::LowerAlpha,
-                    Some("UpperAlpha") => ListNumberStyle::UpperAlpha,
-                    Some("LowerRoman") => ListNumberStyle::LowerRoman,
-                    Some("UpperRoman") => ListNumberStyle::UpperRoman,
-                    Some("Example") => ListNumberStyle::Example,
-                    _ => ListNumberStyle::Default,
+                    None => ListNumberStyle::Default,
+                    Some(s) => parse_list_number_style(s)?,
                 };
                 let delim = match delim.as_deref() {
-                    Some("Period") => ListNumberDelim::Period,
-                    Some("OneParen") => ListNumberDelim::OneParen,
-                    Some("TwoParens") => ListNumberDelim::TwoParens,
-                    _ => ListNumberDelim::Default,
+                    None => ListNumberDelim::Default,
+                    Some(s) => parse_list_number_delim(s)?,
                 };
-                // Return as a table with positional access like Pandoc
-                let table = lua.create_table()?;
-                table.set(1, start as i64)?;
-                table.set(
-                    2,
-                    match style {
-                        ListNumberStyle::Decimal => "Decimal",
-                        ListNumberStyle::LowerAlpha => "LowerAlpha",
-                        ListNumberStyle::UpperAlpha => "UpperAlpha",
-                        ListNumberStyle::LowerRoman => "LowerRoman",
-                        ListNumberStyle::UpperRoman => "UpperRoman",
-                        ListNumberStyle::Example => "Example",
-                        ListNumberStyle::Default => "DefaultStyle",
-                    },
-                )?;
-                table.set(
-                    3,
-                    match delim {
-                        ListNumberDelim::Period => "Period",
-                        ListNumberDelim::OneParen => "OneParen",
-                        ListNumberDelim::TwoParens => "TwoParens",
-                        ListNumberDelim::Default => "DefaultDelim",
-                    },
-                )?;
-                Ok(table)
+                lua.create_userdata(LuaListAttributes::new((start, style, delim)))
             },
         )?,
     )?;
@@ -1457,7 +2441,8 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_userdata(LuaColWidth(ColWidth::Default))?,
     )?;
 
-    // pandoc.Cell(content, align?, row_span?, col_span?, attr?)
+    // pandoc.Cell(blocks, align?, rowspan?, colspan?, attr?) — all
+    // trailing args optional (mkCell); alignment validated eagerly.
     pandoc.set(
         "Cell",
         lua.create_function(
@@ -1471,13 +2456,13 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
             )| {
                 let blocks = peek_blocks_fuzzy(lua, content)?;
                 let alignment = match align {
-                    Some(v) => parse_alignment(v).unwrap_or(Alignment::Default),
-                    None => Alignment::Default,
+                    Some(Value::Nil) | None => Alignment::Default,
+                    Some(v) => parse_alignment(v)?,
                 };
                 let row_span = row_span.unwrap_or(1) as usize;
                 let col_span = col_span.unwrap_or(1) as usize;
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaCell(Cell {
+                lua.create_userdata(LuaCell::new(Cell {
                     content: blocks,
                     alignment,
                     row_span,
@@ -1490,13 +2475,16 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         )?,
     )?;
 
-    // pandoc.Row(cells, attr?)
+    // pandoc.Row(cells?, attr?) — both optional (mkRow; `Row()` works).
     pandoc.set(
         "Row",
-        lua.create_function(|lua, (cells, attr): (Value, Option<Value>)| {
-            let cells = parse_cells(lua, cells)?;
+        lua.create_function(|lua, (cells, attr): (Option<Value>, Option<Value>)| {
+            let cells = match cells {
+                Some(Value::Nil) | None => vec![],
+                Some(v) => parse_cells_strict(lua, v)?,
+            };
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaRow(Row {
+            lua.create_userdata(LuaRow::new(Row {
                 cells,
                 attr,
                 source_info: filter_source_info(lua),
@@ -1505,13 +2493,16 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         })?,
     )?;
 
-    // pandoc.TableHead(rows, attr?)
+    // pandoc.TableHead(rows?, attr?) — both optional (mkTableHead).
     pandoc.set(
         "TableHead",
-        lua.create_function(|lua, (rows, attr): (Value, Option<Value>)| {
-            let rows = parse_rows(lua, rows)?;
+        lua.create_function(|lua, (rows, attr): (Option<Value>, Option<Value>)| {
+            let rows = match rows {
+                Some(Value::Nil) | None => vec![],
+                Some(v) => parse_rows_strict(lua, v)?,
+            };
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaTableHead(TableHead {
+            lua.create_userdata(LuaTableHead::new(TableHead {
                 rows,
                 attr,
                 source_info: filter_source_info(lua),
@@ -1520,13 +2511,16 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         })?,
     )?;
 
-    // pandoc.TableFoot(rows, attr?)
+    // pandoc.TableFoot(rows?, attr?) — both optional (mkTableFoot).
     pandoc.set(
         "TableFoot",
-        lua.create_function(|lua, (rows, attr): (Value, Option<Value>)| {
-            let rows = parse_rows(lua, rows)?;
+        lua.create_function(|lua, (rows, attr): (Option<Value>, Option<Value>)| {
+            let rows = match rows {
+                Some(Value::Nil) | None => vec![],
+                Some(v) => parse_rows_strict(lua, v)?,
+            };
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaTableFoot(TableFoot {
+            lua.create_userdata(LuaTableFoot::new(TableFoot {
                 rows,
                 attr,
                 source_info: filter_source_info(lua),
@@ -1535,25 +2529,33 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         })?,
     )?;
 
-    // pandoc.TableBody(body, attr?, row_head_columns?, head?)
+    // pandoc.TableBody(body?, head?, row_head_columns?, attr?) —
+    // Pandoc's mkTableBody argument order. q2 historically took
+    // (body, attr, row_head_columns, head); flipped for parity
+    // (bd-sgfiiktn S3). Note pandoc 3.9.0.2 does not export this
+    // constructor at all — the contract is pandoc-lua-marshal
+    // c2dc4e11, which the vendored suite tests.
     pandoc.set(
         "TableBody",
         lua.create_function(
             |lua,
-             (body, attr, row_head_columns, head): (
-                Value,
+             (body, head, row_head_columns, attr): (
+                Option<Value>,
                 Option<Value>,
                 Option<i64>,
                 Option<Value>,
             )| {
-                let body_rows = parse_rows(lua, body)?;
+                let body_rows = match body {
+                    Some(Value::Nil) | None => vec![],
+                    Some(v) => parse_rows_strict(lua, v)?,
+                };
                 let head_rows = match head {
-                    Some(v) => parse_rows(lua, v).unwrap_or_default(),
-                    None => vec![],
+                    Some(Value::Nil) | None => vec![],
+                    Some(v) => parse_rows_strict(lua, v)?,
                 };
                 let attr = parse_attr(lua, attr)?;
                 let rowhead_columns = row_head_columns.unwrap_or(0) as usize;
-                lua.create_userdata(LuaTableBody(TableBody {
+                lua.create_userdata(LuaTableBody::new(TableBody {
                     body: body_rows,
                     head: head_rows,
                     rowhead_columns,
@@ -1575,44 +2577,37 @@ fn register_list_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set("List", list_mt)?;
 
     // pandoc.Inlines(content) - creates an Inlines list
-    // Delegates to peek_inlines_fuzzy for coercion, matching Pandoc behavior
+    // Delegates to peek_inlines_fuzzy for coercion, matching Pandoc
+    // behavior — including erroring on nil/no-arg (bd-9p2686pc: nil is
+    // ambiguous between "keep" and "remove" in filter contexts, so it
+    // is never silently read as an empty list).
     pandoc.set(
         "Inlines",
         lua.create_function(|lua, content: Option<Value>| {
             let mt = get_or_create_inlines_metatable(lua)?;
-            let table = match content {
-                None | Some(Value::Nil) => lua.create_table()?,
-                Some(val) => {
-                    let inlines = peek_inlines_fuzzy(lua, val)?;
-                    let result = lua.create_table()?;
-                    for (i, inline) in inlines.into_iter().enumerate() {
-                        result.raw_set(i + 1, lua.create_userdata(LuaInline::new(inline))?)?;
-                    }
-                    result
-                }
-            };
+            let inlines = peek_inlines_fuzzy(lua, content.unwrap_or(Value::Nil))?;
+            let table = lua.create_table()?;
+            for (i, inline) in inlines.into_iter().enumerate() {
+                table.raw_set(i + 1, lua.create_userdata(LuaInline::new(inline))?)?;
+            }
             table.set_metatable(Some(mt))?;
             Ok(table)
         })?,
     )?;
 
     // pandoc.Blocks(content) - creates a Blocks list
-    // Delegates to peek_blocks_fuzzy for coercion, matching Pandoc behavior
+    // Delegates to peek_blocks_fuzzy for coercion, matching Pandoc
+    // behavior — including erroring on nil/no-arg (see pandoc.Inlines
+    // above; bd-9p2686pc).
     pandoc.set(
         "Blocks",
         lua.create_function(|lua, content: Option<Value>| {
             let mt = get_or_create_blocks_metatable(lua)?;
-            let table = match content {
-                None | Some(Value::Nil) => lua.create_table()?,
-                Some(val) => {
-                    let blocks = peek_blocks_fuzzy(lua, val)?;
-                    let result = lua.create_table()?;
-                    for (i, block) in blocks.into_iter().enumerate() {
-                        result.raw_set(i + 1, lua.create_userdata(LuaBlock::new(block))?)?;
-                    }
-                    result
-                }
-            };
+            let blocks = peek_blocks_fuzzy(lua, content.unwrap_or(Value::Nil))?;
+            let table = lua.create_table()?;
+            for (i, block) in blocks.into_iter().enumerate() {
+                table.raw_set(i + 1, lua.create_userdata(LuaBlock::new(block))?)?;
+            }
             table.set_metatable(Some(mt))?;
             Ok(table)
         })?,
@@ -1657,7 +2652,7 @@ mod tests {
             long: None,
             source_info: si(),
         };
-        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        let ud = lua.create_userdata(LuaCaption::new(caption)).unwrap();
         lua.globals().set("caption", ud).unwrap();
 
         let result: mlua::Table = lua.load("return caption.short").eval().unwrap();
@@ -1672,7 +2667,7 @@ mod tests {
             long: None,
             source_info: si(),
         };
-        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        let ud = lua.create_userdata(LuaCaption::new(caption)).unwrap();
         lua.globals().set("caption", ud).unwrap();
 
         let result: Value = lua.load("return caption.short").eval().unwrap();
@@ -1693,7 +2688,7 @@ mod tests {
             })]),
             source_info: si(),
         };
-        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        let ud = lua.create_userdata(LuaCaption::new(caption)).unwrap();
         lua.globals().set("caption", ud).unwrap();
 
         let result: mlua::Table = lua.load("return caption.long").eval().unwrap();
@@ -1708,7 +2703,7 @@ mod tests {
             long: None,
             source_info: si(),
         };
-        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        let ud = lua.create_userdata(LuaCaption::new(caption)).unwrap();
         lua.globals().set("caption", ud).unwrap();
 
         let result: Value = lua.load("return caption.long").eval().unwrap();
@@ -1723,7 +2718,7 @@ mod tests {
             long: None,
             source_info: si(),
         };
-        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        let ud = lua.create_userdata(LuaCaption::new(caption)).unwrap();
         lua.globals().set("caption", ud).unwrap();
 
         let result: String = lua.load("return caption.t").eval().unwrap();
@@ -1741,7 +2736,7 @@ mod tests {
             long: None,
             source_info: si(),
         };
-        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        let ud = lua.create_userdata(LuaCaption::new(caption)).unwrap();
         lua.globals().set("caption", ud).unwrap();
 
         let result: Value = lua.load("return caption.unknown").eval().unwrap();
@@ -1764,7 +2759,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableHead(head)).unwrap();
+        let ud = lua.create_userdata(LuaTableHead::new(head)).unwrap();
         lua.globals().set("head", ud).unwrap();
 
         let result: mlua::Table = lua.load("return head.rows").eval().unwrap();
@@ -1784,7 +2779,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableHead(head)).unwrap();
+        let ud = lua.create_userdata(LuaTableHead::new(head)).unwrap();
         lua.globals().set("head", ud).unwrap();
 
         let result: Value = lua.load("return head.attr").eval().unwrap();
@@ -1800,7 +2795,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableHead(head)).unwrap();
+        let ud = lua.create_userdata(LuaTableHead::new(head)).unwrap();
         lua.globals().set("head", ud).unwrap();
 
         let result: String = lua.load("return head.t").eval().unwrap();
@@ -1816,7 +2811,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableHead(head)).unwrap();
+        let ud = lua.create_userdata(LuaTableHead::new(head)).unwrap();
         lua.globals().set("head", ud).unwrap();
 
         let result: Value = lua.load("return head.unknown").eval().unwrap();
@@ -1839,7 +2834,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableFoot(foot)).unwrap();
+        let ud = lua.create_userdata(LuaTableFoot::new(foot)).unwrap();
         lua.globals().set("foot", ud).unwrap();
 
         let result: mlua::Table = lua.load("return foot.rows").eval().unwrap();
@@ -1855,7 +2850,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableFoot(foot)).unwrap();
+        let ud = lua.create_userdata(LuaTableFoot::new(foot)).unwrap();
         lua.globals().set("foot", ud).unwrap();
 
         let result: Value = lua.load("return foot.attr").eval().unwrap();
@@ -1871,7 +2866,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableFoot(foot)).unwrap();
+        let ud = lua.create_userdata(LuaTableFoot::new(foot)).unwrap();
         lua.globals().set("foot", ud).unwrap();
 
         let result: String = lua.load("return foot.tag").eval().unwrap();
@@ -1887,7 +2882,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableFoot(foot)).unwrap();
+        let ud = lua.create_userdata(LuaTableFoot::new(foot)).unwrap();
         lua.globals().set("foot", ud).unwrap();
 
         let result: Value = lua.load("return foot.unknown").eval().unwrap();
@@ -1912,7 +2907,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        let ud = lua.create_userdata(LuaTableBody::new(body)).unwrap();
         lua.globals().set("body", ud).unwrap();
 
         let result: mlua::Table = lua.load("return body.body").eval().unwrap();
@@ -1935,7 +2930,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        let ud = lua.create_userdata(LuaTableBody::new(body)).unwrap();
         lua.globals().set("body", ud).unwrap();
 
         let result: mlua::Table = lua.load("return body.head").eval().unwrap();
@@ -1953,7 +2948,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        let ud = lua.create_userdata(LuaTableBody::new(body)).unwrap();
         lua.globals().set("body", ud).unwrap();
 
         let result: i64 = lua.load("return body.row_head_columns").eval().unwrap();
@@ -1971,7 +2966,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        let ud = lua.create_userdata(LuaTableBody::new(body)).unwrap();
         lua.globals().set("body", ud).unwrap();
 
         let result: Value = lua.load("return body.attr").eval().unwrap();
@@ -1989,7 +2984,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        let ud = lua.create_userdata(LuaTableBody::new(body)).unwrap();
         lua.globals().set("body", ud).unwrap();
 
         let result: String = lua.load("return body.t").eval().unwrap();
@@ -2007,7 +3002,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        let ud = lua.create_userdata(LuaTableBody::new(body)).unwrap();
         lua.globals().set("body", ud).unwrap();
 
         let result: Value = lua.load("return body.unknown").eval().unwrap();
@@ -2033,7 +3028,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaRow(row)).unwrap();
+        let ud = lua.create_userdata(LuaRow::new(row)).unwrap();
         lua.globals().set("row", ud).unwrap();
 
         let result: mlua::Table = lua.load("return row.cells").eval().unwrap();
@@ -2049,7 +3044,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaRow(row)).unwrap();
+        let ud = lua.create_userdata(LuaRow::new(row)).unwrap();
         lua.globals().set("row", ud).unwrap();
 
         let result: Value = lua.load("return row.attr").eval().unwrap();
@@ -2065,7 +3060,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaRow(row)).unwrap();
+        let ud = lua.create_userdata(LuaRow::new(row)).unwrap();
         lua.globals().set("row", ud).unwrap();
 
         let result: String = lua.load("return row.t").eval().unwrap();
@@ -2081,7 +3076,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaRow(row)).unwrap();
+        let ud = lua.create_userdata(LuaRow::new(row)).unwrap();
         lua.globals().set("row", ud).unwrap();
 
         let result: Value = lua.load("return row.unknown").eval().unwrap();
@@ -2105,7 +3100,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        let ud = lua.create_userdata(LuaCell::new(cell)).unwrap();
         lua.globals().set("cell", ud).unwrap();
 
         let result: mlua::Table = lua.load("return cell.content").eval().unwrap();
@@ -2124,7 +3119,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        let ud = lua.create_userdata(LuaCell::new(cell)).unwrap();
         lua.globals().set("cell", ud).unwrap();
 
         let result: String = lua.load("return cell.alignment").eval().unwrap();
@@ -2143,7 +3138,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        let ud = lua.create_userdata(LuaCell::new(cell)).unwrap();
         lua.globals().set("cell", ud).unwrap();
 
         let result: String = lua.load("return cell.alignment").eval().unwrap();
@@ -2162,7 +3157,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        let ud = lua.create_userdata(LuaCell::new(cell)).unwrap();
         lua.globals().set("cell", ud).unwrap();
 
         let result: String = lua.load("return cell.alignment").eval().unwrap();
@@ -2181,7 +3176,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        let ud = lua.create_userdata(LuaCell::new(cell)).unwrap();
         lua.globals().set("cell", ud).unwrap();
 
         let result: String = lua.load("return cell.alignment").eval().unwrap();
@@ -2200,7 +3195,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        let ud = lua.create_userdata(LuaCell::new(cell)).unwrap();
         lua.globals().set("cell", ud).unwrap();
 
         let result: i64 = lua.load("return cell.row_span").eval().unwrap();
@@ -2219,7 +3214,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        let ud = lua.create_userdata(LuaCell::new(cell)).unwrap();
         lua.globals().set("cell", ud).unwrap();
 
         let result: i64 = lua.load("return cell.col_span").eval().unwrap();
@@ -2238,7 +3233,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        let ud = lua.create_userdata(LuaCell::new(cell)).unwrap();
         lua.globals().set("cell", ud).unwrap();
 
         let result: Value = lua.load("return cell.attr").eval().unwrap();
@@ -2257,7 +3252,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        let ud = lua.create_userdata(LuaCell::new(cell)).unwrap();
         lua.globals().set("cell", ud).unwrap();
 
         let result: String = lua.load("return cell.t").eval().unwrap();
@@ -2276,7 +3271,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        let ud = lua.create_userdata(LuaCell::new(cell)).unwrap();
         lua.globals().set("cell", ud).unwrap();
 
         let result: Value = lua.load("return cell.unknown").eval().unwrap();
@@ -2654,7 +3649,7 @@ mod tests {
             .load(
                 r#"
                 local citation = pandoc.Citation("smith2020", "NormalCitation")
-                local c = pandoc.Cite({citation}, {pandoc.Str("@smith2020")})
+                local c = pandoc.Cite({pandoc.Str("@smith2020")}, {citation})
                 return c.t
             "#,
             )
@@ -2901,7 +3896,7 @@ mod tests {
         let result: String = lua
             .load(
                 r#"
-                local caption = pandoc.Caption({pandoc.Str("short")}, {pandoc.Para({pandoc.Str("long")})})
+                local caption = pandoc.Caption({pandoc.Para({pandoc.Str("long")})}, {pandoc.Str("short")})
                 local f = pandoc.Figure({pandoc.Para({pandoc.Str("content")})}, caption)
                 return f.t
             "#,
@@ -3013,7 +4008,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ========== parse_citations tests ==========
+    // ========== citation marshaling tests ==========
 
     #[test]
     fn test_parse_citations_valid() {
@@ -3023,7 +4018,7 @@ mod tests {
                 r#"
                 local citation = pandoc.Citation("smith2020", "AuthorInText")
                 local citations = {citation}
-                local cite = pandoc.Cite(citations, {pandoc.Str("@smith2020")})
+                local cite = pandoc.Cite({pandoc.Str("@smith2020")}, citations)
                 return cite.t
             "#,
             )
@@ -3035,11 +4030,9 @@ mod tests {
     #[test]
     fn test_parse_citations_invalid() {
         let lua = Lua::new();
-        let result = parse_citations(&lua, Value::Integer(42));
+        let result = super::super::types::lua_table_to_citations(&lua, Value::Integer(42));
         assert!(result.is_err());
     }
-
-    // ========== parse_single_citation tests ==========
 
     #[test]
     fn test_parse_single_citation_author_in_text() {
@@ -3089,7 +4082,7 @@ mod tests {
     #[test]
     fn test_parse_single_citation_invalid() {
         let lua = Lua::new();
-        let result = parse_single_citation(&lua, Value::Integer(42));
+        let result = super::super::types::lua_value_to_citation(&lua, Value::Integer(42));
         assert!(result.is_err());
     }
 
@@ -3156,7 +4149,7 @@ mod tests {
             long: None,
             source_info: si(),
         };
-        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        let ud = lua.create_userdata(LuaCaption::new(caption)).unwrap();
         let result = parse_caption(&lua, Some(Value::UserData(ud))).unwrap();
         assert!(result.short.is_some());
     }
@@ -3237,17 +4230,25 @@ mod tests {
     #[test]
     fn test_parse_alignment_userdata_invalid() {
         let lua = create_lua_env();
-        // Use a different userdata type
+        // Wrong userdata type errors loudly (the old code silently
+        // defaulted; pandoc's peekAlignment errors too).
         let ud = lua.create_userdata(LuaColWidth(ColWidth::Default)).unwrap();
-        let result = parse_alignment(Value::UserData(ud)).unwrap();
-        // Falls back to Default when userdata is wrong type
-        assert!(matches!(result, Alignment::Default));
+        let result = parse_alignment(Value::UserData(ud));
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_parse_alignment_other() {
-        let result = parse_alignment(Value::Nil).unwrap();
-        assert!(matches!(result, Alignment::Default));
+        // Garbage values error loudly (see above); callers that allow
+        // omission handle the Nil/None default themselves.
+        let result = parse_alignment(Value::Nil);
+        assert!(result.is_err());
+
+        let err = parse_alignment(Value::String(
+            create_lua_env().create_string("AlignLeftt").unwrap(),
+        ))
+        .unwrap_err();
+        assert!(err.to_string().contains("invalid alignment"));
     }
 
     // ========== parse_col_width tests ==========
@@ -3301,7 +4302,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableHead(head)).unwrap();
+        let ud = lua.create_userdata(LuaTableHead::new(head)).unwrap();
         let result = parse_table_head(&lua, Value::UserData(ud)).unwrap();
         assert_eq!(result.attr.0, "head-id");
     }
@@ -3334,7 +4335,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableFoot(foot)).unwrap();
+        let ud = lua.create_userdata(LuaTableFoot::new(foot)).unwrap();
         let result = parse_table_foot(&lua, Value::UserData(ud)).unwrap();
         assert_eq!(result.attr.0, "foot-id");
     }
@@ -3378,7 +4379,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        let ud = lua.create_userdata(LuaTableBody::new(body)).unwrap();
         let result = parse_single_table_body(&lua, Value::UserData(ud)).unwrap();
         assert_eq!(result.attr.0, "body-id");
         assert_eq!(result.rowhead_columns, 1);
@@ -3405,9 +4406,11 @@ mod tests {
 
     #[test]
     fn test_parse_rows_non_table() {
+        // Non-table row lists error loudly (pandoc's peekList does
+        // too; the old code silently returned empty).
         let lua = Lua::new();
-        let result = parse_rows(&lua, Value::Integer(42)).unwrap();
-        assert!(result.is_empty());
+        let result = parse_rows_strict(&lua, Value::Integer(42));
+        assert!(result.is_err());
     }
 
     // ========== parse_single_row tests ==========
@@ -3421,7 +4424,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaRow(row)).unwrap();
+        let ud = lua.create_userdata(LuaRow::new(row)).unwrap();
         let result = parse_single_row(&lua, Value::UserData(ud)).unwrap();
         assert_eq!(result.attr.0, "row-id");
     }
@@ -3447,9 +4450,10 @@ mod tests {
 
     #[test]
     fn test_parse_cells_non_table() {
+        // Non-table cell lists error loudly (see parse_rows above).
         let lua = Lua::new();
-        let result = parse_cells(&lua, Value::Integer(42)).unwrap();
-        assert!(result.is_empty());
+        let result = parse_cells_strict(&lua, Value::Integer(42));
+        assert!(result.is_err());
     }
 
     // ========== parse_single_cell tests ==========
@@ -3466,7 +4470,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        let ud = lua.create_userdata(LuaCell::new(cell)).unwrap();
         let result = parse_single_cell(&lua, Value::UserData(ud)).unwrap();
         assert_eq!(result.attr.0, "cell-id");
         assert_eq!(result.row_span, 2);
@@ -3518,42 +4522,53 @@ mod tests {
         assert!(matches!(result.1, ListNumberStyle::LowerAlpha));
         assert!(matches!(result.2, ListNumberDelim::OneParen));
 
-        // Test UpperAlpha
-        let table = lua.create_table().unwrap();
-        table.raw_set(2, "UpperAlpha").unwrap();
-        let result = parse_list_attributes(Value::Table(table)).unwrap();
-        assert!(matches!(result.1, ListNumberStyle::UpperAlpha));
+        // Every remaining style/delimiter name parses inside a FULL
+        // triple (a partial triple is an error, matching Pandoc's
+        // peekTriple — pinned below).
+        for (style_name, expected) in [
+            ("UpperAlpha", ListNumberStyle::UpperAlpha),
+            ("LowerRoman", ListNumberStyle::LowerRoman),
+            ("UpperRoman", ListNumberStyle::UpperRoman),
+            ("Example", ListNumberStyle::Example),
+        ] {
+            let table = lua.create_table().unwrap();
+            table.raw_set(1, 1).unwrap();
+            table.raw_set(2, style_name).unwrap();
+            table.raw_set(3, "TwoParens").unwrap();
+            let result = parse_list_attributes(Value::Table(table)).unwrap();
+            assert_eq!(result.1, expected);
+            assert!(matches!(result.2, ListNumberDelim::TwoParens));
+        }
+    }
 
-        // Test LowerRoman
+    #[test]
+    fn test_parse_list_attributes_partial_triple_errors() {
+        // Pandoc rejects a partial triple ("all choices failed"); so
+        // do we, with a message naming the missing slot.
+        let lua = Lua::new();
         let table = lua.create_table().unwrap();
-        table.raw_set(2, "LowerRoman").unwrap();
-        let result = parse_list_attributes(Value::Table(table)).unwrap();
-        assert!(matches!(result.1, ListNumberStyle::LowerRoman));
+        table.raw_set(1, 3).unwrap();
+        let result = parse_list_attributes(Value::Table(table));
+        assert!(result.is_err());
+    }
 
-        // Test UpperRoman
+    #[test]
+    fn test_parse_list_attributes_garbage_style_errors() {
+        // The old code silently defaulted garbage styles; now loud.
+        let lua = Lua::new();
         let table = lua.create_table().unwrap();
-        table.raw_set(2, "UpperRoman").unwrap();
-        let result = parse_list_attributes(Value::Table(table)).unwrap();
-        assert!(matches!(result.1, ListNumberStyle::UpperRoman));
-
-        // Test Example
-        let table = lua.create_table().unwrap();
-        table.raw_set(2, "Example").unwrap();
-        let result = parse_list_attributes(Value::Table(table)).unwrap();
-        assert!(matches!(result.1, ListNumberStyle::Example));
-
-        // Test TwoParens
-        let table = lua.create_table().unwrap();
-        table.raw_set(3, "TwoParens").unwrap();
-        let result = parse_list_attributes(Value::Table(table)).unwrap();
-        assert!(matches!(result.2, ListNumberDelim::TwoParens));
+        table.raw_set(1, 1).unwrap();
+        table.raw_set(2, "Garbage").unwrap();
+        table.raw_set(3, "Period").unwrap();
+        let err = parse_list_attributes(Value::Table(table)).unwrap_err();
+        assert!(err.to_string().contains("invalid list number style"));
     }
 
     #[test]
     fn test_parse_list_attributes_userdata() {
         let lua = create_lua_env();
         let attrs = (2usize, ListNumberStyle::Decimal, ListNumberDelim::Period);
-        let ud = lua.create_userdata(LuaListAttributes(attrs)).unwrap();
+        let ud = lua.create_userdata(LuaListAttributes::new(attrs)).unwrap();
         let result = parse_list_attributes(Value::UserData(ud)).unwrap();
         assert_eq!(result.0, 2);
     }
@@ -3667,7 +4682,7 @@ mod tests {
         let result: String = lua
             .load(
                 r#"
-                local c = pandoc.Caption({pandoc.Str("short")}, {pandoc.Para({pandoc.Str("long")})})
+                local c = pandoc.Caption({pandoc.Para({pandoc.Str("long")})}, {pandoc.Str("short")})
                 return c.t
             "#,
             )
@@ -3700,7 +4715,7 @@ mod tests {
             .load(
                 r#"
                 local l = pandoc.ListAttributes(5, "Decimal", "Period")
-                return l[1]
+                return l.start
             "#,
             )
             .eval()
@@ -3723,7 +4738,7 @@ mod tests {
         ] {
             let result: String = lua
                 .load(format!(
-                    r#"local l = pandoc.ListAttributes(1, "{}", "Period"); return l[2]"#,
+                    r#"local l = pandoc.ListAttributes(1, "{}", "Period"); return l.style"#,
                     style
                 ))
                 .eval()
@@ -3743,7 +4758,7 @@ mod tests {
         ] {
             let result: String = lua
                 .load(format!(
-                    r#"local l = pandoc.ListAttributes(1, "Decimal", "{}"); return l[3]"#,
+                    r#"local l = pandoc.ListAttributes(1, "Decimal", "{}"); return l.delimiter"#,
                     delim
                 ))
                 .eval()
@@ -3763,7 +4778,7 @@ mod tests {
             .load(
                 r#"
                 local l = pandoc.ListAttributes()
-                return l[2]
+                return l.style
             "#,
             )
             .eval()
@@ -3888,18 +4903,23 @@ mod tests {
     // ========== List constructors tests ==========
 
     #[test]
-    fn test_inlines_constructor_nil() {
+    fn test_inlines_constructor_nil_errors() {
+        // Decision (bd-9p2686pc, 2026-07-14): match pandoc — nil/no-arg
+        // errors. The permissive empty-list reading was ambiguous (nil
+        // = "keep element" vs {} = "remove element" in filter returns).
         let lua = create_lua_env();
-        let result: i64 = lua
-            .load(
-                r#"
-                local i = pandoc.Inlines()
-                return #i
-            "#,
-            )
-            .eval()
-            .unwrap();
-        assert_eq!(result, 0);
+        for call in ["pandoc.Inlines()", "pandoc.Inlines(nil)"] {
+            let err = lua
+                .load(format!("return {call}"))
+                .eval::<Value>()
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("Q-11-3"), "{call}: {err}");
+            assert!(
+                err.contains("Inline, list of Inlines, or string expected, got nil"),
+                "{call}: {err}"
+            );
+        }
     }
 
     #[test]
@@ -3970,18 +4990,21 @@ mod tests {
     }
 
     #[test]
-    fn test_blocks_constructor_nil() {
+    fn test_blocks_constructor_nil_errors() {
+        // See test_inlines_constructor_nil_errors (bd-9p2686pc).
         let lua = create_lua_env();
-        let result: i64 = lua
-            .load(
-                r#"
-                local b = pandoc.Blocks()
-                return #b
-            "#,
-            )
-            .eval()
-            .unwrap();
-        assert_eq!(result, 0);
+        for call in ["pandoc.Blocks()", "pandoc.Blocks(nil)"] {
+            let err = lua
+                .load(format!("return {call}"))
+                .eval::<Value>()
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("Q-11-3"), "{call}: {err}");
+            assert!(
+                err.contains("Block, list of Blocks, or compatible element expected, got nil"),
+                "{call}: {err}"
+            );
+        }
     }
 
     #[test]
@@ -4019,6 +5042,163 @@ mod tests {
         let lua = create_lua_env();
         let result: mlua::Result<Value> = lua.load(r#"return pandoc.Blocks(123)"#).eval();
         assert!(result.is_err());
+    }
+
+    /// Run a Lua chunk that must fail, asserting the error carries the
+    /// given Q-code and message fragment (bd-ixnp4uqj sweep).
+    fn assert_lua_error(lua: &Lua, chunk: &str, code: &str, fragment: &str) {
+        let err = lua
+            .load(chunk)
+            .exec()
+            .expect_err(&format!("expected error from: {chunk}"))
+            .to_string();
+        assert!(err.contains(code), "{chunk}: missing {code} in: {err}");
+        assert!(
+            err.contains(fragment),
+            "{chunk}: missing {fragment:?} in: {err}"
+        );
+    }
+
+    #[test]
+    fn test_marshaling_argument_errors_are_q11_3() {
+        // bd-ixnp4uqj: value-conversion failures carry Q-11-3 wherever
+        // they occur — constructor argument or setter value alike (the
+        // fuzzy peekers already behave this way since bd-9p2686pc).
+        let lua = create_lua_env();
+        for (chunk, fragment) in [
+            // enum-value validation: constructor + setter give the same code
+            (
+                r#"pandoc.Math("Bogus", "x")"#,
+                "invalid math type 'Bogus' (expected InlineMath or DisplayMath)",
+            ),
+            (
+                r#"local m = pandoc.Math("InlineMath", "x"); m.mathtype = "Bogus""#,
+                "invalid math type 'Bogus'",
+            ),
+            (
+                r#"pandoc.Quoted("Bogus", {pandoc.Str("a")})"#,
+                "invalid quote type 'Bogus' (expected SingleQuote or DoubleQuote)",
+            ),
+            (
+                r#"local q = pandoc.Quoted("SingleQuote", {pandoc.Str("a")}); q.quotetype = "Bogus""#,
+                "invalid quote type 'Bogus'",
+            ),
+            (
+                r#"pandoc.Citation("id", "Bogus")"#,
+                "invalid citation mode 'Bogus'",
+            ),
+            (
+                r#"pandoc.OrderedList({{pandoc.Plain({})}}, {1, "Bogus", "DefaultDelim"})"#,
+                "invalid list number style 'Bogus'",
+            ),
+            (
+                r#"pandoc.OrderedList({{pandoc.Plain({})}}, {1, "Decimal", "Bogus"})"#,
+                "invalid list number delimiter 'Bogus'",
+            ),
+            (r#"pandoc.Cell({}, "Bogus")"#, "invalid alignment 'Bogus'"),
+            // peekers / parsers: hslua "<expected> expected, got <type>"
+            (
+                r#"pandoc.Cite({pandoc.Str("a")}, 5)"#,
+                "table of Citations expected, got number",
+            ),
+            (
+                r#"pandoc.Cite({pandoc.Str("a")}, pandoc.Citation("id", "NormalCitation"))"#,
+                "must be wrapped in a list",
+            ),
+            (
+                r#"pandoc.Span({pandoc.Str("a")}, 5)"#,
+                "Attr userdata, table, or string expected, got number",
+            ),
+            (
+                r#"pandoc.DefinitionList(5)"#,
+                "table of definition list items expected, got number",
+            ),
+            (
+                r#"pandoc.LineBlock(5)"#,
+                "table of lines expected, got number",
+            ),
+            (
+                r#"pandoc.OrderedList({{pandoc.Plain({})}}, {"x", "Decimal", "DefaultDelim"})"#,
+                "expected integer start at index 1",
+            ),
+            (
+                r#"pandoc.List(5)"#,
+                "bad argument #1 to 'List' (table expected, got number)",
+            ),
+        ] {
+            assert_lua_error(&lua, chunk, "Q-11-3", fragment);
+        }
+    }
+
+    #[test]
+    fn test_property_assignment_errors_are_q11_5() {
+        // bd-ixnp4uqj: setter-specific structural refusals carry Q-11-5
+        // (unknown field, read-only field, wrong variant, proxy keys).
+        let lua = create_lua_env();
+        for (chunk, fragment) in [
+            (
+                r#"local s = pandoc.Str("a"); s.attributes = {x = "y"}"#,
+                "cannot set 'attributes' on this inline variant",
+            ),
+            (
+                r#"local p = pandoc.Para({}); p.classes = {"c"}"#,
+                "cannot set 'classes' on this block variant",
+            ),
+            (
+                r#"local c = pandoc.Cell({}); c.bogus = 1"#,
+                "cannot set unknown field 'bogus' on Cell",
+            ),
+            (
+                r#"local r = pandoc.Row({}); r.bogus = 1"#,
+                "cannot set unknown field 'bogus' on Row",
+            ),
+            (
+                r#"local h = pandoc.TableHead({}); h.bogus = 1"#,
+                "cannot set unknown field 'bogus' on TableHead",
+            ),
+            (
+                r#"local b = pandoc.TableBody({}); b.bogus = 1"#,
+                "cannot set unknown field 'bogus' on TableBody",
+            ),
+            (
+                r#"local cap = pandoc.Caption({}); cap.bogus = 1"#,
+                "cannot set unknown field 'bogus' on Caption",
+            ),
+            (
+                r#"local la = pandoc.ListAttributes(); la.bogus = 1"#,
+                "cannot set unknown field 'bogus' on ListAttributes",
+            ),
+            (
+                r#"local ct = pandoc.Citation("a", "NormalCitation"); ct.bogus = 1"#,
+                "cannot set unknown field 'bogus' on Citation",
+            ),
+            (
+                r#"local a = pandoc.Attr(); a.bogus = "x""#,
+                "cannot set unknown field 'bogus' on Attr",
+            ),
+            (
+                r#"local a = pandoc.Attr(); a.tag = "x""#,
+                "cannot set read-only field 'tag'",
+            ),
+            (
+                r#"local a = pandoc.Attr(); a[true] = "x""#,
+                "invalid key type for Attr",
+            ),
+            // NOTE: no LuaClassesProxy cases — `attr.classes` is a plain
+            // pandoc-List table since bd-tzwcof0n; the proxy is accepted
+            // as input but never handed out, so its __newindex errors are
+            // unreachable from Lua (tagged Q-11-5 anyway).
+            (
+                r#"local a = pandoc.Attr(); a.attributes[true] = "x""#,
+                "only string or integer keys are supported",
+            ),
+            (
+                r#"local a = pandoc.Attr(); a.attributes[1] = 5"#,
+                "{key, value} pairs or nil",
+            ),
+        ] {
+            assert_lua_error(&lua, chunk, "Q-11-5", fragment);
+        }
     }
 
     // ========== Fuzzy coercion constructor tests ==========

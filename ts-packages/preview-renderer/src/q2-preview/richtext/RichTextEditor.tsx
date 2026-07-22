@@ -18,12 +18,11 @@ import { Extension } from '@tiptap/core';
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { PreviewContextValue, ResolvedSource } from './../PreviewContext';
-import { buildNestingCommitDestination, buildAncestorPath } from './../nestingNav';
-import { BreadcrumbCrumbs } from './../BreadcrumbCrumbs';
+import { buildNestingCommitDestination } from './../nestingNav';
 import { astToDoc } from './astToProseMirror';
 import { docToMarkdown } from './serializer';
 import { buildRichTextExtensions } from './editorConfig';
-import { RichTextToolbar } from './RichTextToolbar';
+import { EditToolbar } from './EditToolbar';
 import type { AstNode, PoolEntry } from './ast';
 import { ensureRichTextStyles } from './styles';
 import { placeCaretFromClick, placeSelectionFromDrag } from './caretFromClick';
@@ -262,33 +261,12 @@ export function RichTextEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]);
 
-  // Inline nesting breadcrumb (bd-9x3zbuj8 Task 2): when the nesting cursor is
-  // on, the hierarchy navigator renders to the RIGHT of the formatting buttons in
-  // the SAME toolbar row, instead of as a separate floating chip that would
-  // overlap the toolbar. The standalone BreadcrumbChip self-suppresses for this
-  // exact case (rich editor active for the target). Built here from the live edit
-  // target so it tracks nesting in/out moves.
-  const et = ctx.editTarget;
-  const inlineBreadcrumb =
-    ctx.unlockNestingCursor && et
-      ? (() => {
-          const crumbs = buildAncestorPath(ctx.sourceIndex, et.anchorR0, et.anchorR1);
-          if (crumbs.length === 0) return null;
-          return (
-            <BreadcrumbCrumbs
-              layout="inline"
-              displayItems={crumbs.map((crumb) => ({ kind: 'crumb' as const, crumb }))}
-            />
-          );
-        })()
-      : null;
-
-  // The left-margin affordance (Editing… + rich/plain toggle) is rendered by
-  // renderMeasuredEdit so it is shared with the plain-text surface. The
-  // formatting toolbar is rich-only and lives here (it needs the editor).
+  // The rich surface owns the tiptap `editor`, so its EditToolbar carries the marks
+  // (plus the mode toggle — always rich-supported here — and the type indicator).
+  // `{editor && …}` defers the toolbar past the transient pre-editor window (as before).
   return (
     <div className="q2-richtext-editor" ref={rootRef}>
-      {editor && <RichTextToolbar editor={editor} trailing={inlineBreadcrumb} />}
+      {editor && <EditToolbar editor={editor} richSupported />}
       {editor && <EditorContent editor={editor} />}
     </div>
   );

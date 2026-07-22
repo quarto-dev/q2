@@ -1,0 +1,20 @@
+---
+title: "No Mermaid, No Script"
+# bd-5m4ga0s1: the CDN script is injected only when a mermaid block
+# exists. A doc with only ordinary code blocks must not reference the
+# mermaid CDN, and the ordinary block must keep its normal rendering.
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - []
+        - ["pre.mermaid"]
+      ensureFileRegexMatches:
+        - []
+        - ["cdn\\.jsdelivr\\.net/npm/mermaid"]
+---
+
+```python
+print("hello")
+```

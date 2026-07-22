@@ -1,0 +1,38 @@
+{
+  "blocks": [
+    {
+      "c": [
+        [
+          3,
+          {
+            "t": "Decimal"
+          },
+          {
+            "t": "Period"
+          }
+        ],
+        [
+          [
+            {
+              "c": [
+                {
+                  "c": "hello",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ]
+        ]
+      ],
+      "t": "OrderedList"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    1
+  ]
+}

@@ -892,7 +892,21 @@ module.exports = grammar({
                 optional($.block_continuation)
             ),
             repeat1($._block),
+            // GFM task-list item: `[ ]` / `[x]` / `[X]` immediately after the
+            // list marker, then the item's paragraph. The required trailing
+            // whitespace is part of the marker token — without it, `[x](url)`
+            // would lex as a marker and could never backtrack to the inline
+            // `[` interpretation; with it, `[x](`/`[xx]` fail the token and
+            // parse as inline spans/links.
+            prec(1, seq(
+                choice($.task_list_marker_checked, $.task_list_marker_unchecked),
+                $.pandoc_paragraph,
+                repeat($._block),
+            )),
         )),
+
+        task_list_marker_checked: $ => token(prec(1, /\[[xX]\][ \t]/)),
+        task_list_marker_unchecked: $ => token(prec(1, /\[[ \t]\][ \t]/)),
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         // A fenced code block. Fenced code blocks are mainly handled by the external scanner. In

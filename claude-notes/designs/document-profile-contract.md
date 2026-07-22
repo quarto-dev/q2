@@ -409,3 +409,28 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   Plan: `claude-notes/plans/2026-05-07-listings-L6-dep-graph.md`.
   Parent epic: `bd-61cd`
   (`claude-notes/plans/2026-05-05-listings-epic.md`).
+- **2026-06-?? — v6 (`bd-c1et2`).** (Entry added retroactively —
+  the bump was documented only in the code doc-comment at the
+  time.) `DOCUMENT_PROFILE_VERSION` bumped 5 → 6. `resources`
+  changed from `Vec<String>` to `Vec<RawResourcePattern>` so each
+  pattern carries its YAML `SourceInfo` for Ariadne-span
+  diagnostics.
+- **2026-07-15 — v7 (`bd-ez0hiowa`, title-block parity epic P2).**
+  `DOCUMENT_PROFILE_VERSION` bumped 6 → 7. One new field:
+  - `authors_structured: Vec<ProfileAuthor>` — the structured
+    author model (name literal + given/family components, ORCID,
+    email, url, degrees, attribute flags, denormalized
+    affiliations as `ProfileAffiliation { name, department,
+    url }`). Produced by the shared normalization in
+    `crates/quarto-core/src/metadata/authors.rs`
+    (`parse_authors_model`) — the same pass
+    `AuthorsNormalizeTransform` uses to derive the
+    `by-author`/`by-affiliation` metadata the HTML title block
+    renders. The flat `authors: Vec<String>` field keeps its type
+    and now derives its literals from the same model, so the two
+    fields always agree. Fields the profile does not carry yet
+    (roles, notes, funding) join later with another bump.
+  v6 cache entries on disk are rejected with
+  `DocumentProfileError::VersionMismatch` and silently
+  regenerated, identical to every prior bump.
+  Plan: `claude-notes/plans/2026-07-15-html-title-block-parity.md`.

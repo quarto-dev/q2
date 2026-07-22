@@ -1,0 +1,9 @@
+---
+source: crates/quarto-core/tests/integration/title_block_pipeline.rs
+expression: extract_title_block(&html)
+---
+<header id="title-block-header">
+<h1 class="title">No Title Block</h1>
+
+<p class="author">Norah Jones</p>
+</header>

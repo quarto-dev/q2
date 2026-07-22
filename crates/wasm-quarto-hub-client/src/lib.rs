@@ -680,12 +680,12 @@ fn map_format_for_preview(format_str: &str) -> &str {
 /// `q2-preview → html` (a normal HTML page) and `q2-slides → revealjs`
 /// (so the reveal deck **assembler** runs — note this is *not*
 /// `builtin_pseudo_format`'s `html` base, which would drop the deck).
-/// The developer views `q2-debug`/`q2-raw` fall back to `html`.
+/// The developer views `q2-debug`/`q2-sandboxed-preview` fall back to `html`.
 /// Non-preview formats (including `revealjs` and `html` themselves)
 /// pass through unchanged so they render via their own HTML pipeline.
 fn coerce_format_for_print(format_str: &str) -> &str {
     match format_str {
-        "q2-preview" | "q2-debug" | "q2-raw" => "html",
+        "q2-preview" | "q2-debug" | "q2-sandboxed-preview" => "html",
         "q2-slides" => "revealjs",
         other => other,
     }
@@ -920,6 +920,7 @@ pub async fn parse_qmd_to_ast_with_attribution(
         include_inline_locations: true,
         attribution_by_node,
         attribution_actors,
+        ..Default::default()
     };
 
     let ast_json = match pampa::writers::json::write_with_config(

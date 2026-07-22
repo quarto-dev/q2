@@ -85,16 +85,16 @@ pub fn assemble_theme_scss(
     // (like TS Quarto's order for built-in user layers), then any theme
     // layers from the config. User themes can override any `.hl-*` or
     // title-block rule by declaring the same selector in a later layer.
-    let title_block_layer = load_title_block_layer()?;
     let highlight_layer = load_highlight_layer()?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
-    let mut user_layers = vec![
-        title_block_layer,
-        highlight_layer,
-        embed_example_layer,
-        copy_code_layer,
-    ];
+    let mut user_layers = Vec::new();
+    // `title-block-style: plain|none` drops the title-block layer
+    // (bd-gx9cic8z P6); all other built-in layers are unconditional.
+    if config.title_block_layer {
+        user_layers.push(load_title_block_layer()?);
+    }
+    user_layers.extend([highlight_layer, embed_example_layer, copy_code_layer]);
     user_layers.extend(result.layers);
 
     // Assemble SCSS
@@ -204,28 +204,33 @@ pub fn compile_with_doc_vars(
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
 
     // Fast paths: no doc-vars to inject — defer to existing entry points
-    // so we keep the OnceLock cache for the no-theme case.
+    // so we keep the OnceLock cache for the no-theme case. When the
+    // title-block layer is dropped (`title-block-style: plain|none`),
+    // the shared default bundle no longer matches, so fall through to
+    // a direct assembly instead (the themed path honors the flag via
+    // `assemble_theme_scss`).
     if doc_vars.is_empty() {
         if config.has_themes() {
             return compile_theme_css(config, context);
         }
-        return compile_default_css(context.runtime(), config.minified);
+        if config.title_block_layer {
+            return compile_default_css(context.runtime(), config.minified);
+        }
     }
 
-    // Build user layers: title-block + highlight (always-present built-ins,
-    // matching `compile_default_css` and `assemble_theme_scss`), then any
+    // Build user layers: title-block (unless dropped by
+    // `title-block-style: plain|none`) + highlight built-ins,
+    // matching `compile_default_css` and `assemble_theme_scss`, then any
     // theme layers, then doc_vars LAST so it lands at the top of the
     // merged-defaults section and wins the `!default` race.
-    let title_block_layer = load_title_block_layer()?;
     let highlight_layer = load_highlight_layer()?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
-    let mut user_layers = vec![
-        title_block_layer,
-        highlight_layer,
-        embed_example_layer,
-        copy_code_layer,
-    ];
+    let mut user_layers = Vec::new();
+    if config.title_block_layer {
+        user_layers.push(load_title_block_layer()?);
+    }
+    user_layers.extend([highlight_layer, embed_example_layer, copy_code_layer]);
 
     let mut load_paths = default_load_paths();
     if config.has_themes() {
@@ -478,23 +483,26 @@ pub async fn compile_with_doc_vars(
     };
     use crate::themes::process_theme_specs;
 
+    // Same fast-path rule as the native variant: the shared default
+    // bundle only matches when the title-block layer is included
+    // (`title-block-style: plain|none` drops it — bd-gx9cic8z P6).
     if doc_vars.is_empty() {
         if config.has_themes() {
             return compile_theme_css(config, context).await;
         }
-        return compile_default_css(context.runtime(), config.minified).await;
+        if config.title_block_layer {
+            return compile_default_css(context.runtime(), config.minified).await;
+        }
     }
 
-    let title_block_layer = load_title_block_layer()?;
     let highlight_layer = load_highlight_layer()?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
-    let mut user_layers = vec![
-        title_block_layer,
-        highlight_layer,
-        embed_example_layer,
-        copy_code_layer,
-    ];
+    let mut user_layers = Vec::new();
+    if config.title_block_layer {
+        user_layers.push(load_title_block_layer()?);
+    }
+    user_layers.extend([highlight_layer, embed_example_layer, copy_code_layer]);
 
     let mut load_paths = default_load_paths();
     if config.has_themes() {
@@ -654,6 +662,194 @@ mod tests {
         assert!(
             css.contains(".quarto-title-meta"),
             "Should contain .quarto-title-meta class from title-block.scss"
+        );
+
+        // Should have the base #title-block-header rule ported from TS Quarto's
+        // _quarto-rules.scss: the unconditional bottom margin that separates the
+        // title block from the first article section. Without it the title block
+        // sits flush against the content (bd-btjkyylx). This is distinct from the
+        // responsive `body.nav-sidebar #title-block-header{margin-block-end:0}`
+        // override, which collapses this margin on small screens — the `1rem`
+        // value uniquely identifies the base rule.
+        assert!(
+            css.contains("#title-block-header{margin-block-end:1rem"),
+            "Should contain the base #title-block-header{{margin-block-end:1rem}} \
+             rule ported from _quarto-rules.scss (bd-btjkyylx)"
+        );
+
+        // Title-block remainder ported from TS Quarto's _quarto-rules.scss:193-201
+        // (bd-iq08mmnh): unconditional link + author/date/doi margins that apply
+        // to every title-block variant. Q2 emits `<p class="author|date|doi">`
+        // (template.rs:316/319/458, the doi one wraps an `<a>`) inside
+        // `<header id="title-block-header">`, so these are a live parity gap.
+        // Value-agnostic checks (selector + property) so they don't depend on
+        // grass's leading-zero minification of `0.2rem`.
+        assert!(
+            css.contains("#title-block-header a{text-decoration:none"),
+            "Should contain the #title-block-header a{{text-decoration:none}} rule \
+             ported from _quarto-rules.scss (bd-iq08mmnh)"
+        );
+        assert!(
+            css.contains("#title-block-header .doi{margin-block-end:"),
+            "Should contain the grouped #title-block-header .author/.date/.doi \
+             margin-block-end rule ported from _quarto-rules.scss (bd-iq08mmnh)"
+        );
+
+        // Tables base ported from TS Quarto's _quarto-rules.scss:226-241
+        // (bd-dxgcpl02). Verified against live Q2 DOM: `<table class="table">`
+        // (all tables), `<caption>` (plain-caption tables), and `<th><p>…</p>`
+        // (multi-block header cells). The `.table-caption` half of the caption
+        // group stays BLOCKED — Q2 emits no `.table-caption` class (audit row 7).
+        assert!(
+            css.contains("table,table.table{margin-top:"),
+            "Should contain the grouped table/table.table margin rule ported \
+             from _quarto-rules.scss (bd-dxgcpl02) — bootstrap's bare `table{{}}` \
+             has no top/bottom margin"
+        );
+        assert!(
+            css.contains("tr.header>th>p:last-of-type{margin-bottom:"),
+            "Should contain the tr.header>th>p:last-of-type margin rule ported \
+             from _quarto-rules.scss (bd-dxgcpl02)"
+        );
+        // The caption padding matches bootstrap's defaults; the load-bearing
+        // parity fix is `text-align:center`, which must override bootstrap's
+        // bare `caption{…text-align:left}` (equal specificity → source order,
+        // so this rule must cascade after bootstrap core).
+        assert!(
+            css.contains("caption{padding-top:.5rem;padding-bottom:.5rem;text-align:center}"),
+            "Should contain the bare caption padding + text-align:center rule \
+             ported from _quarto-rules.scss (bd-dxgcpl02), overriding bootstrap's \
+             text-align:left"
+        );
+
+        // Code CSS ported from TS Quarto's _quarto-rules.scss (bd-u5yvsdgw),
+        // verified against live Q2 DOM. Three cleanly-live rows of audit's code
+        // family; 13d ($code-white-space var — theming infra, no visible gap),
+        // 13e (line-anchor — Q2 emits no <span><a> line anchors, reclassified
+        // BE) and 13g (code a:any-link — Q2 already ships a divergent downlit
+        // rule) are deliberately NOT ported here.
+        //
+        // 13b: bare `code { white-space: pre }` (default non-wrapping inline
+        // code) + its `@media print` pre-wrap override. Distinct from the
+        // sourceCode-scoped rule in highlight.scss.
+        assert!(
+            css.contains("code{white-space:pre}"),
+            "Should contain the bare code{{white-space:pre}} default rule ported \
+             from _quarto-rules.scss:299-303 (bd-u5yvsdgw)"
+        );
+        assert!(
+            css.contains("code{white-space:pre-wrap}"),
+            "Should contain the @media print bare-code pre-wrap override ported \
+             from _quarto-rules.scss:304-306 (bd-u5yvsdgw)"
+        );
+        // 13a: inline code in a paragraph/definition wraps. Q2 already had the
+        // `td` variant; the `dd` selector is the new proof this landed (Q2 emits
+        // `<p>…<code>` / `<dd>…<code>` without the sourceCode class).
+        assert!(
+            css.contains("dd code:not(.sourceCode)"),
+            "Should contain the dd/p code:not(.sourceCode) wrap rule ported from \
+             _quarto-rules.scss:291-294 (bd-u5yvsdgw)"
+        );
+        // 23: callout code blocks drop their left padding. Q2 emits
+        // `<div class="callout …"> … <pre class="sourceCode …">`.
+        assert!(
+            css.contains(".callout pre.sourceCode{padding-left:0}"),
+            "Should contain the .callout pre.sourceCode padding rule ported from \
+             _quarto-rules.scss:442-444 (bd-u5yvsdgw)"
+        );
+
+        // @media print additions ported from TS Quarto's _quarto-rules.scss:744-764
+        // (bd-ih6jrf39, audit row 28). Q2 already had the `.nav-page` and
+        // page-columns print pieces; these four fill the gap, each targeting live
+        // Q2 DOM. The `.fixed-top { position: relative }` rule (L757-759) is NOT
+        // ported — Q2 emits no `.fixed-top` element. Row 24 (`:root --quarto-*`
+        // vars) is deferred to land with its consumers (engine-output/gt).
+        assert!(
+            css.contains(":root{font-size:11pt}"),
+            "Should contain the @media print :root{{font-size:11pt}} rule ported \
+             from _quarto-rules.scss (bd-ih6jrf39)"
+        );
+        assert!(
+            css.contains("#TOC{display:none}"),
+            "Should contain the @media print #quarto-sidebar,#TOC{{display:none}} \
+             rule ported from _quarto-rules.scss (bd-ih6jrf39) — Q2 emits \
+             <nav id=\"TOC\">"
+        );
+        assert!(
+            css.contains(".page-columns .content{grid-column-start:page-start}"),
+            "Should contain the @media print .page-columns .content grid rule \
+             ported from _quarto-rules.scss (bd-ih6jrf39)"
+        );
+        assert!(
+            css.contains("figcaption{color:#666}"),
+            "Should contain the @media print caption color rule ported from \
+             _quarto-rules.scss (bd-ih6jrf39)"
+        );
+
+        // Misc element CSS ported from TS Quarto's _quarto-rules.scss (bd-28iqotrt),
+        // each verified against live Q2 DOM. `.visually-hidden` (row 1a) is NOT
+        // ported — bootstrap core already supplies it; row 29 (light/dark-content)
+        // was split to its own strand (bd-l1rx9yzh).
+        assert!(
+            css.contains(".hidden{display:none !important}"),
+            "Should contain .hidden ported from _quarto-rules.scss:24-26 (bd-28iqotrt)"
+        );
+        assert!(
+            css.contains("iframe{margin-bottom:1em}"),
+            "Should contain iframe margin ported from _quarto-rules.scss:262 (bd-28iqotrt)"
+        );
+        assert!(
+            css.contains("details[show]{margin-bottom:0}"),
+            "Should contain details[show] ported from _quarto-rules.scss:270-272 (bd-28iqotrt)"
+        );
+        assert!(
+            css.contains("details>summary>p:only-child{display:inline}"),
+            "Should contain details>summary>p:only-child ported from _quarto-rules.scss:281 (bd-28iqotrt)"
+        );
+        assert!(
+            css.contains(".footnote-back{margin-left:.2em}"),
+            "Should contain .footnote-back ported from _quarto-rules.scss:352 (bd-28iqotrt) \
+             — transforms/footnotes.rs emits <a class=\"footnote-back\">"
+        );
+        assert!(
+            css.contains(".quarto-unresolved-ref{font-weight:600}"),
+            "Should contain .quarto-unresolved-ref ported from _quarto-rules.scss:366 \
+             (bd-28iqotrt); crossref_render.rs now emits the class on unresolved refs"
+        );
+        assert!(
+            css.contains("a{text-underline-offset:3px}"),
+            "Should contain a text-underline-offset ported from _quarto-rules.scss:436 (bd-28iqotrt)"
+        );
+        assert!(
+            css.contains("div.column{display:inline-block"),
+            "Should contain div.column ported from _quarto-rules.scss:658-662 (bd-28iqotrt) \
+             — authored ::: {{.columns}} emits <div class=\"column\">"
+        );
+
+        // Row 13g (bd-bthmzyrc): adopt Quarto 1's downlit code-link behavior —
+        // no underline by default, underline on hover — replacing Q2's earlier
+        // gray-underline choice (`text-decoration-color: $gray-600`). Decided by
+        // Carlos, 2026-07-21. Ported verbatim from _quarto-rules.scss:328-335.
+        assert!(
+            css.contains("code a:any-link{color:inherit;text-decoration:none}"),
+            "code a:any-link should use Q1's text-decoration:none (bd-bthmzyrc)"
+        );
+        assert!(
+            css.contains("code a:hover{color:inherit;text-decoration:underline}"),
+            "code a:hover should underline on hover per Q1 (bd-bthmzyrc)"
+        );
+
+        // Should have the task-list rules ported from TS Quarto's
+        // _quarto-rules.scss (bd-obkvhlam): the ul.task-list indent and the
+        // checkbox right-margin that space `<input type="checkbox">` from the
+        // item text emitted by the HTML writer's task-list rendering.
+        assert!(
+            css.contains("ul.task-list{padding-left:1em}"),
+            "Should contain the ul.task-list rule ported from _quarto-rules.scss (bd-obkvhlam)"
+        );
+        assert!(
+            css.contains("input[type=checkbox]{margin-right:.5ch}"),
+            "Should contain the checkbox margin rule ported from _quarto-rules.scss (bd-obkvhlam)"
         );
 
         // Should have default syntax-highlight rules for `.hl-*` classes

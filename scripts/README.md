@@ -14,7 +14,7 @@ Two modes available:
 Mirrors the production deployment architecture:
 - Starts the `hub` binary (Rust server) on port 3001
 - Serves the built hub-client on port 8080
-- Serves q2-raw.html on port 8081 (sandboxed, simulates separate domain)
+- Serves q2-sandboxed-preview.html on port 8081 (sandboxed, simulates separate domain)
 - Proxies `/auth` and `/ws` requests to the hub server
 - Uses production-like cache headers
 
@@ -46,15 +46,15 @@ Browser → http://127.0.0.1:8080 (Node.js proxy - main app)
   ├─ /assets/* → serve from dist/ (immutable cache)
   └─ /* → serve from dist/ (no-cache, SPA fallback)
 
-Browser → http://127.0.0.1:8081 (q2-raw server - sandboxed)
-  └─ /q2-raw.html → sandboxed AST renderer (separate origin)
+Browser → http://127.0.0.1:8081 (q2-sandboxed-preview server - sandboxed)
+  └─ /q2-sandboxed-preview.html → sandboxed AST renderer (separate origin)
   
 hub:3001 (Rust binary) → .local-prod-data/
 ```
 
-**Why q2-raw.html on a separate port?**
+**Why q2-sandboxed-preview.html on a separate port?**
 
-In production, q2-raw.html will be served from a separate domain (e.g., `raw.quarto.pub`) for security isolation. The separate port in local-prod simulates this cross-origin setup. The iframe uses `sandbox="allow-scripts allow-same-origin"` and communicates via postMessage.
+In production, q2-sandboxed-preview.html will be served from a separate domain (e.g., `raw.quarto.pub`) for security isolation. The separate port in local-prod simulates this cross-origin setup. The iframe uses `sandbox="allow-scripts allow-same-origin"` and communicates via postMessage.
 
 ### Node.js Proxy Mode (Recommended)
 
@@ -89,8 +89,8 @@ Tests the actual nginx configuration from production. Use when:
 **Differences from production:** HTTP (no TLS), no OIDC auth, single-machine.
 
 **Logs:**
-- Node.js mode: `.local-prod-data/{hub,static,q2-raw}.log`
-- Nginx mode: `.local-prod-data/{hub,q2-raw}.log` + `docker compose -f docker-compose.local-prod.yml logs nginx`
+- Node.js mode: `.local-prod-data/{hub,static,q2-sandboxed-preview}.log`
+- Nginx mode: `.local-prod-data/{hub,q2-sandboxed-preview}.log` + `docker compose -f docker-compose.local-prod.yml logs nginx`
 
 **See also:** [`claude-notes/plans/2026-07-03-local-prod-mode.md`](../claude-notes/plans/2026-07-03-local-prod-mode.md) for implementation details.
 

@@ -1,0 +1,88 @@
+---
+title: Audit fixture
+abstract: |
+  An abstract paragraph.
+author: Someone
+date: 2026-07-21
+---
+
+## Figures {#sec-figs}
+
+![A figure caption](img.png){#fig-a}
+
+See @fig-a, @tbl-t, and the unresolved @fig-nope.
+
+## Tables
+
+| a | b |
+|---|---|
+| 1 | 2 |
+
+: A table caption {#tbl-t}
+
+## Code
+
+```python
+print("hello")
+```
+
+Inline `code span` and a [link](https://example.com).
+
+## Task list
+
+- [ ] todo item
+- [x] done item
+
+## Footnote
+
+Text with a footnote.[^1]
+
+[^1]: The footnote body.
+
+## Columns
+
+::: {.columns}
+:::: {.column width="50%"}
+left column
+::::
+:::: {.column width="50%"}
+right column
+::::
+:::
+
+## Layout panel
+
+::: {layout-ncol="2"}
+![left fig](img.png)
+
+![right fig](img.png)
+:::
+
+## Callout
+
+::: {.callout-note}
+A callout with code:
+
+```r
+x <- 1
+```
+:::
+
+## Mermaid
+
+```mermaid
+flowchart LR
+  a --> b
+```
+
+## Raw details
+
+<details><summary>More</summary>
+Hidden content.
+</details>
+
+## Dark content
+
+::: {.dark-content}
+Only in dark mode.
+:::

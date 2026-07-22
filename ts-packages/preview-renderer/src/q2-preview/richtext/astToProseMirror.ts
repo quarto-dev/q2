@@ -66,9 +66,22 @@ function inlines(items: AstNode[], marks: readonly Mark[], ctx: Ctx): PMNode[] {
       case 'Superscript':
         out.push(...inlines(asArray(node.c), marks.concat(M.superscript.create()), ctx));
         break;
+      case 'Quoted': {
+        // Pandoc Quoted is [QuoteType, Inline[]]. Unlike Emph/Strong (rendered
+        // as marks) a quote's visible form IS its delimiter characters, so we
+        // emit literal STRAIGHT quotes around still-WYSIWYG content (marks and
+        // nested quotes recurse). Straight quotes round-trip: pampa's reader
+        // re-parses "…"/'…' back into Quoted and its qmd writer emits straight
+        // quotes; prosemirror-markdown's esc() never escapes `"`/`'`. (bd-iwv3708i)
+        const [qt, content] = (node.c as [{ t?: string }, AstNode[]]) ?? [{}, []];
+        const q = qt?.t === 'SingleQuote' ? "'" : '"';
+        out.push(S.text(q, marks));
+        out.push(...inlines(asArray(content), marks, ctx));
+        out.push(S.text(q, marks));
+        break;
+      }
       case 'Underline':
       case 'SmallCaps':
-      case 'Quoted':
         // Outside the v1 mark set -> chip the whole construct verbatim.
         out.push(chip(node, 'span', ctx, ''));
         break;

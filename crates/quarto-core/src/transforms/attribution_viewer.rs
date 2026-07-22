@@ -43,14 +43,13 @@
 
 use std::fmt::Write as _;
 
-use quarto_pandoc_types::ConfigValue;
-use quarto_pandoc_types::config_value::ConfigValueKind;
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
 use crate::attribution::{IdentityMap, VIEWER_CSS, VIEWER_JS};
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
+use crate::transforms::append_with_sentinel;
 
 /// HTML-comment sentinel embedded in the injected `<style>` block.
 /// Used by the dedup scan so a transform re-run is idempotent.
@@ -220,36 +219,4 @@ mod tests {
         // Newlines and quotes get escaped. Backslash too.
         assert_eq!(escape_css_string("a\"b\\c\nd"), "a\\\"b\\\\c\\A d");
     }
-}
-
-/// Append `payload` to `meta.rendered.includes.<slot>`, skipping if
-/// any existing string in that slot already contains `sentinel`. The
-/// dedup keeps the transform idempotent under accidental double
-/// invocation (e.g. tests that rerun the same transform).
-fn append_with_sentinel(meta: &mut ConfigValue, slot: &str, sentinel: &str, payload: String) {
-    if !matches!(&meta.value, ConfigValueKind::Map(_)) {
-        return;
-    }
-    let source_info = meta.source_info.clone();
-
-    if !meta.contains_path(&["rendered", "includes", slot]) {
-        meta.insert_path(
-            &["rendered", "includes", slot],
-            ConfigValue::new_array(vec![], source_info.clone()),
-        );
-    }
-
-    let Some(target) = meta.get_path_mut(&["rendered", "includes", slot]) else {
-        return;
-    };
-    let ConfigValueKind::Array(items) = &mut target.value else {
-        return;
-    };
-    if items
-        .iter()
-        .any(|item| item.as_str().is_some_and(|s| s.contains(sentinel)))
-    {
-        return;
-    }
-    items.push(ConfigValue::new_string(payload, source_info));
 }

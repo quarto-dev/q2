@@ -1,0 +1,16 @@
+---
+title: Callout localization
+lang: es
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["Nota"]
+        - [">Note<"]
+---
+
+::: {.callout-note}
+Contenido de la nota.
+:::

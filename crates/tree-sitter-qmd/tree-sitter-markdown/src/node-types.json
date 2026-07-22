@@ -986,6 +986,14 @@
         {
           "type": "section",
           "named": true
+        },
+        {
+          "type": "task_list_marker_checked",
+          "named": true
+        },
+        {
+          "type": "task_list_marker_unchecked",
+          "named": true
         }
       ]
     }
@@ -2962,6 +2970,14 @@
   },
   {
     "type": "superscript_delimiter",
+    "named": true
+  },
+  {
+    "type": "task_list_marker_checked",
+    "named": true
+  },
+  {
+    "type": "task_list_marker_unchecked",
     "named": true
   },
   {

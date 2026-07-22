@@ -23,6 +23,24 @@ pre > code {
   display: block;
 }
 
+// Default <code> to non-wrapping. ported from _quarto-rules.scss:299-306
+// (bd-u5yvsdgw): multi-column tabular output (very common for R & Python) is
+// unreadable when wrapped, so code scrolls rather than wraps by default. The
+// `p/dd/td code:not(.sourceCode)` overrides in _bootstrap-rules.scss re-enable
+// wrapping for prose-embedded inline code; print re-wraps so nothing is
+// clipped on paper. (The `$code-white-space` themable-variable form of the
+// sourceCode rule — TS L311-313, audit row 13d — is deferred: it is pure
+// themability with no visible-parity gap over the hard-coded `pre` below, and
+// needs a scss:defaults section this layer doesn't have.)
+code {
+  white-space: pre;
+}
+@media print {
+  code {
+    white-space: pre-wrap;
+  }
+}
+
 pre.sourceCode > code,
 code.sourceCode {
   // Keep code containers reading as code. Actual font-family is

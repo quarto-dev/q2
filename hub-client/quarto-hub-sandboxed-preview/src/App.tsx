@@ -1,31 +1,24 @@
 import { useEffect, useState } from 'react';
 import katex from 'katex';
+// @ts-ignore
 import 'katex/dist/katex.min.css';
+import { init } from './registerServiceWorker';
+import { AstRenderer } from './basicRenderer';
 
 interface UpdateAstPayload {
   astJson: string;
   currentFilePath: string;
 }
 
-const requestVFS = (path: string): Promise<any> => {
-  const ret = new Promise((resolve, reject) => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data.type === 'url_response') {
-        window.removeEventListener('message', handleMessage);
-
-        if (event.data.success === true) resolve(event.data.content)
-        else reject(event.data.error)
-      }
-    };
-    window.addEventListener('message', handleMessage);
-  })
-  window.parent.postMessage({ type: 'url', path }, '*');
-  return ret
-}
-
 export function App() {
   const [astJson, setAstJson] = useState<string>('');
-  const [dogImage, setDogImage] = useState<string>('');
+  // const [dogImage, setDogImage] = useState<string>('');
+
+  useEffect(() => {
+    init().then(() => {
+      window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
+    })
+  }, [])
 
   useEffect(() => {
     // Listen for messages from parent
@@ -34,43 +27,23 @@ export function App() {
       if (event.data.type === 'UPDATE_AST') {
         const payload = event.data.payload as UpdateAstPayload;
         setAstJson(payload.astJson);
-        const dog = await requestVFS('dog_room.png')
-        console.log('yo yo', { dog })
-        setDogImage(dog);
       }
     };
     window.addEventListener('message', handleMessage);
-
-    window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
 
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
   if (!astJson) {
-    return <div style={{ padding: '20px' }}>Loading q2-raw renderer...</div>;
+    return <div style={{ padding: '20px' }}>Loading q2-sandboxed-preview renderer...</div>;
   }
 
   try {
     const ast = JSON.parse(astJson);
-    const prettyJson = JSON.stringify(ast, null, 2);
 
     return (
-      <div>
-        {dogImage && (
-          <img src={`data:image/png;base64,${dogImage}`} alt="Dog" style={{ maxWidth: '100%' }} />
-        )}
-        <pre
-          style={{
-            margin: 0,
-            padding: 16,
-            fontFamily: "'Courier New', monospace",
-            fontSize: 12,
-            whiteSpace: 'pre-wrap',
-            wordWrap: 'break-word',
-          }}
-        >
-          {prettyJson}
-        </pre>
+      <div style={{ padding: '20px' }}>
+        <AstRenderer node={ast} />
       </div>
     );
   } catch (err) {

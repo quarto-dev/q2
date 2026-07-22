@@ -1,0 +1,19 @@
+---
+source: crates/quarto-core/tests/integration/title_block_pipeline.rs
+assertion_line: 278
+expression: extract_title_block(&html)
+---
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Plain Style</h1>
+</div>
+<div class="quarto-title-meta">
+<div>
+<div class="quarto-title-meta-heading">Author</div>
+<div class="quarto-title-meta-contents">
+<p>Norah Jones</p>
+</div>
+</div>
+</div>
+
+</header>

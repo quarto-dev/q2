@@ -38,7 +38,7 @@ The "react preview formats" in scope are the ones on the **React/AST path**:
 Out of primary scope: `format: dashboard` is coming later, will be structured
 like `q2-preview`, and is **not a fundamental blocker** — the doc path below is
 designed generically so a preview-pipeline format like dashboard can reuse it.
-`q2-debug` / `q2-raw` are developer views, not meant to be printed. The legacy
+`q2-debug` / `q2-sandboxed-preview` are developer views, not meant to be printed. The legacy
 `MorphIframe` (`format: html`) path is being subsumed by `q2-preview`; it can
 share the same "open printable version" plumbing trivially (it already holds a
 standalone HTML string) but is not the focus.
@@ -63,7 +63,7 @@ Two preview paths, selected by `getQ2Format`
 
 ### 2a. React/AST path — `ReactPreview` → `Q2PreviewIframe` (in scope)
 
-- Formats: `q2-preview`, `q2-slides`, `revealjs`, `q2-debug`, `q2-raw`
+- Formats: `q2-preview`, `q2-slides`, `revealjs`, `q2-debug`, `q2-sandboxed-preview`
   (`hub-client/src/components/render/ReactRenderer.tsx:253-330`).
 - The iframe loads a real page (`src="q2-preview.html"`) and receives the
   **AST as JSON over `postMessage`**; the DOM is **React-rendered inside the
@@ -265,7 +265,7 @@ new tab; no auto-print.
       contract lives here.)
 - [x] Implemented: `coerce_format_for_print` (inverse of
       `map_format_for_preview`: `q2-preview→html`, `q2-slides→revealjs`,
-      `q2-debug`/`q2-raw`→html, else passthrough) + a `format_override:
+      `q2-debug`/`q2-sandboxed-preview`→html, else passthrough) + a `format_override:
       Option<&str>` param threaded through `render_single_doc_to_response`
       (4 existing callers pass `None`) + the `render_printable(path)`
       `#[wasm_bindgen]` export. `wasmRenderer.ts` gets a `renderPrintable`
@@ -381,7 +381,7 @@ new tab; no auto-print.
   deck assembly minimizes maintenance surface. (Q3)
 - **On click:** just open the page; user prints with ⌘P (no auto-print). (Q4)
 - **Scope:** `q2-preview` (doc) + `revealjs` (slides) now; `dashboard` later
-  via the generic doc path; `q2-debug`/`q2-raw` excluded; legacy
+  via the generic doc path; `q2-debug`/`q2-sandboxed-preview` excluded; legacy
   `format: html`/MorphIframe can reuse the same plumbing but isn't the focus.
   (Q5)
 
