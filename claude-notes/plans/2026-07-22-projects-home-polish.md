@@ -49,28 +49,56 @@ Three UI improvements to `hub-client/src/components/ProjectsHome.tsx` / `.css`:
 
 ### Phase 1 — tests first
 
-- [ ] `src/utils/projectSort.test.ts`: newest / oldest / name orderings,
+- [x] `src/utils/projectSort.test.ts`: newest / oldest / name orderings,
       tie and empty-list behavior (comparator does not throw, stable input
       untouched). Verify tests fail against a stub before implementing.
 
 ### Phase 2 — implementation
 
-- [ ] `src/utils/projectSort.ts`: extract comparator; rewire `everythingElse`.
-- [ ] `ProjectsHome.tsx`: `onContextMenu` on `.ph-card` and `.ph-row`.
-- [ ] `ProjectsHome.tsx`: per-collection sort state + header button + menu;
+- [x] `src/utils/projectSort.ts`: extract comparator; rewire `everythingElse`.
+- [x] `ProjectsHome.tsx`: `onContextMenu` on `.ph-card` and `.ph-row`.
+- [x] `ProjectsHome.tsx`: per-collection sort state + header button + menu;
       `renderCollection` sorts via the helper.
-- [ ] `ProjectsHome.css`: `:root.dark .projects-home` token overrides;
+- [x] `ProjectsHome.css`: `:root.dark .projects-home` token overrides;
       readable outline-button color in dark mode.
 
 ### Phase 3 — verification
 
-- [ ] `cd hub-client && npm run test` (vitest) — new tests green.
-- [ ] `npm run build:all` — production build green.
-- [ ] End-to-end against the running dev server (localhost:5173) via Chrome:
+- [x] `cd hub-client && npm run test` (vitest) — new tests green.
+- [x] `npm run build:all` — production build green.
+- [x] End-to-end against the running dev server (localhost:5173) via Chrome:
       dark-mode contrast inspected, right-click menu exercised on a card in a
       collection, per-collection sort toggled; screenshots/notes recorded here.
-- [ ] Changelog entries (two-commit workflow) + `npm run test:wasm`.
+- [x] Changelog entries (two-commit workflow) + `npm run test:wasm`.
 
 ## Verification record
 
-_(to be filled in during Phase 3)_
+All three features verified end-to-end on 2026-07-22 against the running
+`npm run dev:fresh` server at `localhost:5173` (footer showed merge commit
+`92d42bed`, confirming the dev server was serving the branch under test),
+via Chrome DevTools MCP:
+
+- **TDD order followed**: `projectSort.test.ts` written first, observed
+  failing (module not found), then `projectSort.ts` implemented; 6/6 tests
+  pass.
+- **Dark mode**: screenshot confirmed the darker desaturated slate surface;
+  "Connect / Import" clearly readable. Carlos confirmed in-session: "Those
+  colors look a lot better." Light mode visually unchanged (verified by
+  toggling the root `dark` class off and back).
+- **Right-click**: created collection "claude-test", moved three projects in,
+  dispatched a `contextmenu` MouseEvent on the "image-drop-path-repro" card —
+  the full project menu opened and `defaultPrevented === true` (native menu
+  suppressed). Note: the DevTools MCP cannot synthesize an OS-level right
+  click, so this was a dispatched (trusted-bubbling) event rather than a real
+  mouse button press; the handler path exercised is identical.
+- **Per-collection sort**: sort button visible in the collection header;
+  switching newest → oldest reversed the card order; A to Z ordered
+  A `quarto-hub` update, Debug, image-drop-path-repro; button title updated
+  each time ("Sort collection (oldest first)" / "(A to Z)") and the global
+  "Everything else" sort stayed independently at "newest first".
+
+Build/test gates: `tsc -b` clean, `npm run build:all` green,
+`npm run test:ci` green (unit + integration + wasm legs),
+`npm run test:wasm` re-run green after each changelog edit.
+
+Commits: `6346c2c0` (implementation), `45e8b333` (changelog).
