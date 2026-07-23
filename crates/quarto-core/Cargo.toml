@@ -74,6 +74,10 @@ include_dir = "0.7"
 # or other non-CLI consumers. The `quarto` crate enables this via
 # `quarto-core/clap`; no other consumer needs it.
 clap = { workspace = true, optional = true, features = ["derive"] }
+# Capture-doc wire format (engine/capture_files.rs::gzip_captures).
+# Needed on wasm32 too — the module compiles on both targets, and
+# flate2 (miniz_oxide backend) builds cleanly for wasm.
+flate2.workspace = true
 
 [features]
 clap = ["dep:clap"]
@@ -113,9 +117,6 @@ runtimelib = { version = "2.0", features = ["tokio-runtime"] }
 jupyter-protocol = "2.0"
 tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "process", "fs", "net", "io-util"] }
 uuid.workspace = true
-# Capture-doc wire format (engine/capture_files.rs::gzip_captures).
-# Already in the dependency graph via quarto-trace.
-flate2.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

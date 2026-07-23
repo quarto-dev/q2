@@ -271,7 +271,52 @@ plt.plot([1,2,3])
       engine_execution wiring) — failing test first
 - [x] Phase 3: replay-side VFS materialization in CaptureSpliceStage —
       failing test first
-- [ ] Phase 4: shared gzip helper + 10 MB warning in the three writers
-- [ ] Phase 5: end-to-end verification (knitr + jupyter; `q2 preview` +
-      hub-client WASM build; `cargo xtask verify`)
+- [x] Phase 4: shared gzip helper + 10 MB warning in the three writers
+- [x] Phase 5: end-to-end verification — knitr confirmed in a real
+      browser; jupyter blocked upstream (see below); `cargo xtask verify`
+      run at the end
 - [ ] Phase 6: docs/changelog (hub-client changelog if hub-client touched)
+
+## End-to-end verification record (2026-07-23)
+
+Per the repo's end-to-end policy — exact invocations, observed output,
+output inspected.
+
+**knitr (the reported bug) — FIXED, verified in a real browser:**
+
+```bash
+# fresh scratch copy of the repro doc (hello.qmd, ggplot cell)
+target/debug/q2 preview hello.qmd --no-browser     # after full WASM chain rebuild:
+#   cd hub-client && npm run build:wasm
+#   cargo xtask build-q2-preview-spa
+#   cargo build --bin q2
+```
+
+1. Server-side capture now embeds the figure (gunzip of the session's
+   `captures/*.bin`):
+   `[{"path": "hello_files/figure-html/unnamed-chunk-2-1.png", "bytes": 29276}]`
+   (base64 length; ≈22 KB of PNG).
+2. In Chrome (DevTools MCP) against the running preview, the rendered
+   iframe contains
+   `{"src": "blob:http://127.0.0.1:55919/…", "loaded": true, "naturalWidth": 672, "naturalHeight": 480}`
+   — the ggplot scatter is visibly rendered (screenshot inspected).
+   This is precisely the predicted mechanism: capture → VFS
+   materialization in `CaptureSpliceStage` → `assetWalker` blob URL.
+   No TS/renderer changes were needed. Console shows no errors.
+
+**jupyter — capture transport confirmed, but blocked upstream:**
+
+The matplotlib fixture produces *no image anywhere*: `q2 render` emits
+only the text reprs (`[<matplotlib.lines.Line2D …>]`, `<Figure size
+640x480 with 1 Axes>`), `ExecuteResult.supporting_files` is empty, and
+the capture consequently has nothing to transport. Render/preview
+parity holds; this is a jupyter-engine display_data gap, filed as
+**bd-rwz8kwia** (discovered-from bd-qbhp2cvv). Once the engine emits
+figures + supporting files, this fix transports them with no further
+work (the transport is engine-agnostic, pinned by the
+figure-writing-engine unit test).
+
+**Gotcha fixed during E2E:** the first WASM build failed because
+`flate2` had been added to quarto-core's *native-only* dependency
+section; moved to `[dependencies]` (flate2 builds cleanly on wasm32 via
+miniz_oxide — the WASM client already gunzips captures with it).
