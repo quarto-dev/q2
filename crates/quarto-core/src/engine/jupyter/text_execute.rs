@@ -586,8 +586,17 @@ fn format_outputs(result: &KernelExecuteResult, fig: &mut FigureWriter) -> Strin
                 } else if let Some(rel_path) =
                     image_entry.and_then(|(mime, value)| fig.write_image(mime, value))
                 {
+                    // Figure divs carry ONLY `cell-output-display` — no
+                    // generic `cell-output` — matching q2-knitr's
+                    // vendored figure hook (hooks.R:627) so the
+                    // cross-engine parity contract holds. (Q1's jupyter
+                    // adds `.cell-output` here and thus disagrees with
+                    // Q1's own knitr; q2 resolves the asymmetry toward
+                    // knitr. The only generic `.cell-output` consumer,
+                    // the print stylesheet, also matches `img`
+                    // directly.)
                     output.push_str(&format!(
-                        "\n::: {{.cell-output .cell-output-display}}\n\n![]({rel_path})\n\n:::\n",
+                        "\n::: {{.cell-output-display}}\n\n![]({rel_path})\n\n:::\n",
                     ));
                 } else if let Some(text) = data.get("text/plain") {
                     let s = extract_text_content(text);
@@ -1017,7 +1026,7 @@ print("hello")
         let md = format_outputs(&result, &mut fig);
         assert_eq!(
             md,
-            "\n::: {.cell-output .cell-output-display}\n\n![](pyfig_files/figure-html/cell-1-output-1.png)\n\n:::\n"
+            "\n::: {.cell-output-display}\n\n![](pyfig_files/figure-html/cell-1-output-1.png)\n\n:::\n"
         );
         // Multiline base64 decoded and written to disk.
         let bytes = std::fs::read(
