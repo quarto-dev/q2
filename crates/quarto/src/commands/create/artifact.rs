@@ -2,11 +2,11 @@
 //!
 //! Rust port of Quarto 1's `ArtifactCreator` interface
 //! (`external-sources/quarto-cli/src/command/create/cmd-types.ts`),
-//! reduced to the non-interactive subset q2 supports. Each artifact
-//! type (project today; extension later) implements
-//! [`ArtifactProvider`]; the command layer stays agnostic to what is
-//! being created. An interactive-prompt hook can be grafted onto the
-//! trait when prompting lands (see the plan's follow-up list).
+//! expressed as three resolution paths over one plan/writer engine:
+//! positional CLI args, a JSON directive payload, and interactive
+//! gap-filling prompts (bd-hh1erpfx). Each artifact type (project
+//! today; extension later) implements [`ArtifactProvider`]; the
+//! command layer stays agnostic to what is being created.
 
 use std::path::{Path, PathBuf};
 
@@ -14,12 +14,14 @@ use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use serde::Serialize;
 
 /// Content of a planned scaffold file.
+#[derive(Debug)]
 pub enum FileContent {
     Text(String),
     Binary(Vec<u8>),
 }
 
 /// One file the create operation intends to write.
+#[derive(Debug)]
 pub struct PlannedFile {
     /// Path relative to the target directory.
     pub path: PathBuf,
@@ -28,6 +30,7 @@ pub struct PlannedFile {
 
 /// The resolved intent of a create invocation: where to write, what
 /// to write, and whether to actually write it.
+#[derive(Debug)]
 pub struct CreatePlan {
     /// Absolute target directory.
     pub root: PathBuf,
@@ -43,6 +46,7 @@ pub struct CreatePlan {
 
 /// A resolved create plus any non-fatal diagnostics produced while
 /// resolving (e.g. a defaulted title).
+#[derive(Debug)]
 pub struct ResolvedCreate {
     pub plan: CreatePlan,
     pub warnings: Vec<DiagnosticMessage>,
@@ -51,6 +55,7 @@ pub struct ResolvedCreate {
 /// A create failure, carried as a structured diagnostic so the human
 /// path (pretty text) and the JSON path (wire shape) render the same
 /// content.
+#[derive(Debug)]
 pub struct CreateFailure(pub DiagnosticMessage);
 
 impl CreateFailure {
@@ -60,6 +65,11 @@ impl CreateFailure {
                 .problem(problem.into())
                 .build(),
         )
+    }
+
+    /// The user cancelled an interactive prompt (Esc / Ctrl-C).
+    pub fn cancelled() -> Self {
+        Self::new("Create cancelled", "No files were written.")
     }
 }
 
@@ -98,6 +108,20 @@ pub trait ArtifactProvider {
         payload: serde_json::Value,
         cwd: &Path,
         dry_run: bool,
+    ) -> Result<ResolvedCreate, CreateFailure>;
+
+    /// Resolve with interactive gap-filling: consume whatever
+    /// positional args were provided and prompt (via `prompter`) only
+    /// for what is missing. With a complete argument list this must
+    /// behave identically to [`Self::resolve_cli`] — except that a
+    /// prompted-and-accepted default title is explicit consent, so no
+    /// defaulted-title warning is emitted on this path.
+    fn resolve_interactive(
+        &self,
+        args: &[String],
+        cwd: &Path,
+        dry_run: bool,
+        prompter: &mut dyn super::prompter::Prompter,
     ) -> Result<ResolvedCreate, CreateFailure>;
 
     /// Choices offered by this artifact type, for `--list`.

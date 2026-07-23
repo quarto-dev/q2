@@ -11,7 +11,7 @@ use std::path::Path;
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_project_create::{
     ProjectTypeWithTemplate, ScaffoldedFile, available_choices, create_scaffolded_files,
-    find_choice, get_scaffold,
+    find_choice, get_scaffold, implemented_choices,
 };
 use serde::Deserialize;
 
@@ -19,6 +19,7 @@ use super::artifact::{
     ArtifactProvider, ChoiceListing, CreateFailure, CreatePlan, FileContent, PlannedFile,
     ResolvedCreate,
 };
+use super::prompter::{PromptItem, Prompter};
 
 pub struct ProjectProvider;
 
@@ -201,6 +202,73 @@ impl ArtifactProvider for ProjectProvider {
             directive.dry_run || dry_run,
             cwd,
         )
+    }
+
+    fn resolve_interactive(
+        &self,
+        args: &[String],
+        cwd: &Path,
+        dry_run: bool,
+        prompter: &mut dyn Prompter,
+    ) -> Result<ResolvedCreate, CreateFailure> {
+        if let [_, _, _, extra, ..] = args {
+            return Err(CreateFailure::new(
+                format!("Unexpected argument '{extra}'"),
+                "Usage: q2 create project <type> <directory> [title]",
+            ));
+        }
+
+        let choice = match args.first() {
+            Some(c) => {
+                // Validate a typed choice up front so a bad one fails
+                // before any prompting happens.
+                resolve_target(c)?;
+                c.clone()
+            }
+            None => {
+                let choices = implemented_choices();
+                let items: Vec<PromptItem> = choices
+                    .iter()
+                    .map(|c| PromptItem {
+                        label: c.name.clone(),
+                        help: c.description.clone(),
+                    })
+                    .collect();
+                let idx = prompter.select("Project type", &items)?;
+                choices[idx].id.clone()
+            }
+        };
+
+        let directory = match args.get(1) {
+            Some(d) => d.clone(),
+            None => {
+                let d = prompter.input("Directory", None)?.trim().to_string();
+                if d.is_empty() {
+                    return Err(CreateFailure::new(
+                        "Directory must not be empty",
+                        "Provide a directory name, or `.` for the current directory",
+                    ));
+                }
+                d
+            }
+        };
+
+        let title = match args.get(2) {
+            Some(t) => t.clone(),
+            None => {
+                // Same defaulting rule as the non-interactive path,
+                // but shown to the user for acceptance — which is why
+                // this path never emits the defaulted-title warning.
+                let default = if directory == "." {
+                    choice.clone()
+                } else {
+                    directory.clone()
+                };
+                prompter.input("Title", Some(&default))?
+            }
+        };
+
+        self.resolve(&choice, &directory, Some(&title), dry_run, cwd)
     }
 
     fn choices(&self) -> Vec<ChoiceListing> {

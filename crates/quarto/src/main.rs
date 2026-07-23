@@ -273,6 +273,11 @@ enum Commands {
         /// Report the file plan without writing anything
         #[arg(long)]
         dry_run: bool,
+
+        /// Never prompt interactively, even on a terminal; missing
+        /// arguments are errors
+        #[arg(long)]
+        no_prompt: bool,
     },
 
     /// Automate document or project setup tasks
@@ -751,7 +756,8 @@ fn main() -> Result<()> {
             json,
             list,
             dry_run,
-        } => commands::create::execute(type_, args, json, list, dry_run),
+            no_prompt,
+        } => commands::create::execute(type_, args, json, list, dry_run, no_prompt),
         Commands::Use { .. } => commands::use_cmd::execute(),
         Commands::Add { .. } => commands::add::execute(),
         Commands::Update { .. } => commands::update::execute(),

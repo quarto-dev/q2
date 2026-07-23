@@ -607,3 +607,39 @@ fn list_human_output_names_choices() {
     assert!(stdout.contains("website"), "stdout: {stdout}");
     assert!(stdout.contains("default"), "stdout: {stdout}");
 }
+
+// ====================================================================
+// Interactive-prompt gating (bd-hh1erpfx)
+// ====================================================================
+//
+// All tests in this file run with piped stdio, so nothing here can
+// ever legitimately prompt — these tests pin the non-interactive
+// contract and the explicit opt-outs.
+
+#[test]
+fn no_prompt_flag_with_missing_args_errors() {
+    let tmp = TempDir::new().unwrap();
+    let out = run_q2_create(tmp.path(), &["project", "website", "--no-prompt"]);
+    assert!(!out.status.success());
+    assert!(
+        stderr_str(&out).contains("directory"),
+        "stderr: {}",
+        stderr_str(&out)
+    );
+}
+
+#[test]
+fn ci_env_with_missing_args_errors_without_prompting() {
+    let tmp = TempDir::new().unwrap();
+    let mut cmd = Command::new(Q2_BIN);
+    cmd.current_dir(tmp.path());
+    cmd.env("CI", "1");
+    cmd.args(["create", "project", "website"]);
+    let out = cmd.output().expect("spawn q2 binary");
+    assert!(!out.status.success());
+    assert!(
+        stderr_str(&out).contains("directory"),
+        "stderr: {}",
+        stderr_str(&out)
+    );
+}

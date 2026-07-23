@@ -18,6 +18,7 @@
 
 mod artifact;
 mod project;
+mod prompter;
 mod writer;
 
 use std::io::Read;
@@ -37,6 +38,7 @@ pub fn execute(
     json: bool,
     list: bool,
     dry_run: bool,
+    no_prompt: bool,
 ) -> Result<()> {
     let providers = artifact::providers();
     let cwd = std::env::current_dir().context("determine current directory")?;
@@ -46,11 +48,41 @@ pub fn execute(
         return Ok(());
     }
     if json {
+        // The machine path never prompts, TTY or not.
         run_json(&providers, &cwd, type_, &args, dry_run);
         return Ok(());
     }
-    run_human(&providers, &cwd, type_, &args, dry_run);
+    run_human(&providers, &cwd, type_, &args, dry_run, no_prompt);
     Ok(())
+}
+
+/// Q1-parity prompt gate (`cmd.ts:62–74`): prompts fire only on a real
+/// terminal (stdin *and* stderr — the prompt UI renders on stderr),
+/// outside CI, without an explicit opt-out.
+fn allow_prompt(no_prompt: bool) -> bool {
+    use std::io::IsTerminal;
+    !no_prompt
+        && std::env::var_os("CI").is_none()
+        && std::io::stdin().is_terminal()
+        && std::io::stderr().is_terminal()
+}
+
+/// Interactive artifact-type selection over the provider registry.
+/// Deliberately prompts even with a single registered provider, so
+/// behavior stays stable when `extension` lands.
+fn select_artifact<'a>(
+    providers: &'a [Box<dyn ArtifactProvider>],
+    prompter: &mut dyn prompter::Prompter,
+) -> Result<&'a dyn ArtifactProvider, CreateFailure> {
+    let items: Vec<prompter::PromptItem> = providers
+        .iter()
+        .map(|p| prompter::PromptItem {
+            label: p.type_id().to_string(),
+            help: p.display_name().to_string(),
+        })
+        .collect();
+    let idx = prompter.select("Artifact type", &items)?;
+    Ok(providers[idx].as_ref())
 }
 
 // ====================================================================
@@ -69,9 +101,26 @@ fn run_human(
     type_: Option<String>,
     args: &[String],
     dry_run: bool,
+    no_prompt: bool,
 ) {
-    let Some(type_id) = type_ else {
-        fail_human(
+    let interactive = allow_prompt(no_prompt);
+
+    let provider: &dyn ArtifactProvider = match &type_ {
+        Some(type_id) => match artifact::find_provider(providers, type_id) {
+            Some(p) => p,
+            None => fail_human(
+                &CreateFailure::new(
+                    format!("Unknown artifact type '{type_id}'"),
+                    format!("Valid types: {}", artifact::type_ids(providers)),
+                )
+                .0,
+            ),
+        },
+        None if interactive => match select_artifact(providers, &mut prompter::InquirePrompter) {
+            Ok(p) => p,
+            Err(f) => fail_human(&f.0),
+        },
+        None => fail_human(
             &CreateFailure::new(
                 "Missing artifact type",
                 format!(
@@ -80,19 +129,15 @@ fn run_human(
                 ),
             )
             .0,
-        );
-    };
-    let Some(provider) = artifact::find_provider(providers, &type_id) else {
-        fail_human(
-            &CreateFailure::new(
-                format!("Unknown artifact type '{type_id}'"),
-                format!("Valid types: {}", artifact::type_ids(providers)),
-            )
-            .0,
-        );
+        ),
     };
 
-    let resolved = match provider.resolve_cli(args, cwd, dry_run) {
+    let resolution = if interactive {
+        provider.resolve_interactive(args, cwd, dry_run, &mut prompter::InquirePrompter)
+    } else {
+        provider.resolve_cli(args, cwd, dry_run)
+    };
+    let resolved = match resolution {
         Ok(r) => r,
         Err(f) => fail_human(&f.0),
     };
@@ -317,4 +362,202 @@ fn run_list(providers: &[Box<dyn ArtifactProvider>], json: bool) {
     }
     println!();
     println!("Usage: q2 create project <type> <directory> [title]");
+}
+
+// ====================================================================
+// Interactive prompt-flow tests (bd-hh1erpfx)
+// ====================================================================
+//
+// These drive `resolve_interactive` through a scripted `Prompter`, so
+// the prompt *flow* (which prompts appear, in what order, with what
+// defaults and choices) is covered deterministically in CI without a
+// PTY. The real terminal implementation is verified manually via an
+// expect-script PTY run (see the plan's Phase 3).
+#[cfg(test)]
+mod interactive_tests {
+    use std::path::Path;
+
+    use super::artifact::{ArtifactProvider, CreateFailure, CreatePlan, FileContent};
+    use super::project::ProjectProvider;
+    use super::prompter::{PromptItem, Prompter};
+    use super::select_artifact;
+
+    /// Scripted prompter: queued answers plus a transcript of every
+    /// prompt shown, so tests assert both the answers' effect and
+    /// which prompts appeared, in what order, with what payload.
+    struct ScriptedPrompter {
+        select_answers: Vec<usize>,
+        /// `None` = accept the offered default.
+        input_answers: Vec<Option<&'static str>>,
+        cancel_at: Option<usize>,
+        prompt_count: usize,
+        transcript: Vec<String>,
+        select_items: Vec<Vec<PromptItem>>,
+        input_defaults: Vec<Option<String>>,
+    }
+
+    impl ScriptedPrompter {
+        fn new(select_answers: Vec<usize>, input_answers: Vec<Option<&'static str>>) -> Self {
+            Self {
+                select_answers,
+                input_answers,
+                cancel_at: None,
+                prompt_count: 0,
+                transcript: Vec::new(),
+                select_items: Vec::new(),
+                input_defaults: Vec::new(),
+            }
+        }
+
+        fn cancel_at(mut self, idx: usize) -> Self {
+            self.cancel_at = Some(idx);
+            self
+        }
+    }
+
+    impl Prompter for ScriptedPrompter {
+        fn select(&mut self, prompt: &str, items: &[PromptItem]) -> Result<usize, CreateFailure> {
+            let idx = self.prompt_count;
+            self.prompt_count += 1;
+            if self.cancel_at == Some(idx) {
+                return Err(CreateFailure::cancelled());
+            }
+            self.transcript.push(format!("select:{prompt}"));
+            self.select_items.push(items.to_vec());
+            Ok(self.select_answers.remove(0))
+        }
+
+        fn input(&mut self, prompt: &str, default: Option<&str>) -> Result<String, CreateFailure> {
+            let idx = self.prompt_count;
+            self.prompt_count += 1;
+            if self.cancel_at == Some(idx) {
+                return Err(CreateFailure::cancelled());
+            }
+            self.transcript.push(format!("input:{prompt}"));
+            self.input_defaults.push(default.map(str::to_string));
+            match self.input_answers.remove(0) {
+                Some(v) => Ok(v.to_string()),
+                None => Ok(default
+                    .expect("test accepted a default where none was offered")
+                    .to_string()),
+            }
+        }
+    }
+
+    fn args(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn quarto_yml(plan: &CreatePlan) -> &str {
+        plan.files
+            .iter()
+            .find_map(|f| match &f.content {
+                FileContent::Text(s) if f.path.to_str() == Some("_quarto.yml") => Some(s.as_str()),
+                _ => None,
+            })
+            .expect("_quarto.yml in plan")
+    }
+
+    #[test]
+    fn no_args_prompts_type_directory_title() {
+        // Registry order of implemented choices is [default, website];
+        // select index 1 = website, type a directory, accept the
+        // default title.
+        let mut p = ScriptedPrompter::new(vec![1], vec![Some("mysite"), None]);
+        let resolved = ProjectProvider
+            .resolve_interactive(&args(&[]), Path::new("/x"), false, &mut p)
+            .unwrap();
+
+        assert_eq!(
+            p.transcript,
+            ["select:Project type", "input:Directory", "input:Title"]
+        );
+        // Only implemented choices are offered.
+        let labels: Vec<&str> = p.select_items[0].iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(labels, ["Default", "Website"]);
+        // The accepted default title is the directory name, and the
+        // interactive path emits no defaulted-title warning — the user
+        // saw and accepted the default.
+        assert_eq!(p.input_defaults.last().unwrap().as_deref(), Some("mysite"));
+        assert!(resolved.warnings.is_empty());
+        assert!(quarto_yml(&resolved.plan).contains("title: \"mysite\""));
+        assert!(resolved.plan.root.ends_with("mysite"));
+    }
+
+    #[test]
+    fn choice_arg_skips_type_prompt() {
+        let mut p = ScriptedPrompter::new(vec![], vec![Some("d"), Some("My T")]);
+        let resolved = ProjectProvider
+            .resolve_interactive(&args(&["website"]), Path::new("/x"), false, &mut p)
+            .unwrap();
+        assert_eq!(p.transcript, ["input:Directory", "input:Title"]);
+        assert!(quarto_yml(&resolved.plan).contains("title: \"My T\""));
+    }
+
+    #[test]
+    fn dir_arg_prompts_title_only_with_dir_default() {
+        let mut p = ScriptedPrompter::new(vec![], vec![None]);
+        let resolved = ProjectProvider
+            .resolve_interactive(&args(&["website", "proj"]), Path::new("/x"), false, &mut p)
+            .unwrap();
+        assert_eq!(p.transcript, ["input:Title"]);
+        assert_eq!(p.input_defaults[0].as_deref(), Some("proj"));
+        assert!(quarto_yml(&resolved.plan).contains("title: \"proj\""));
+        assert!(resolved.warnings.is_empty());
+    }
+
+    #[test]
+    fn dot_directory_title_default_is_choice_id() {
+        let mut p = ScriptedPrompter::new(vec![], vec![None]);
+        let resolved = ProjectProvider
+            .resolve_interactive(&args(&["website", "."]), Path::new("/x"), false, &mut p)
+            .unwrap();
+        assert_eq!(p.input_defaults[0].as_deref(), Some("website"));
+        assert!(quarto_yml(&resolved.plan).contains("title: \"website\""));
+    }
+
+    #[test]
+    fn full_args_prompt_nothing_and_propagate_dry_run() {
+        let mut p = ScriptedPrompter::new(vec![], vec![]);
+        let resolved = ProjectProvider
+            .resolve_interactive(&args(&["website", "d", "T"]), Path::new("/x"), true, &mut p)
+            .unwrap();
+        assert!(p.transcript.is_empty());
+        assert!(resolved.plan.dry_run);
+        assert!(quarto_yml(&resolved.plan).contains("title: \"T\""));
+    }
+
+    #[test]
+    fn cancel_at_first_prompt_fails() {
+        let mut p = ScriptedPrompter::new(vec![0], vec![]).cancel_at(0);
+        let err = ProjectProvider
+            .resolve_interactive(&args(&[]), Path::new("/x"), false, &mut p)
+            .unwrap_err();
+        assert!(
+            err.0.to_text(None).to_lowercase().contains("cancel"),
+            "error should mention cancellation: {}",
+            err.0.to_text(None)
+        );
+    }
+
+    #[test]
+    fn typed_unimplemented_choice_errors_without_prompting_further() {
+        let mut p = ScriptedPrompter::new(vec![], vec![]);
+        let err = ProjectProvider
+            .resolve_interactive(&args(&["blog", "d"]), Path::new("/x"), false, &mut p)
+            .unwrap_err();
+        assert!(err.0.to_text(None).contains("not yet implemented"));
+    }
+
+    #[test]
+    fn artifact_select_prompts_even_with_single_provider() {
+        // Prompting (rather than auto-selecting) keeps behavior stable
+        // when a second artifact type (extension) is registered.
+        let providers = super::artifact::providers();
+        let mut p = ScriptedPrompter::new(vec![0], vec![]);
+        let provider = select_artifact(&providers, &mut p).unwrap();
+        assert_eq!(provider.type_id(), "project");
+        assert_eq!(p.transcript, ["select:Artifact type"]);
+        assert_eq!(p.select_items[0][0].label, "project");
+    }
 }
