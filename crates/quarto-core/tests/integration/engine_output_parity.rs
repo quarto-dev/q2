@@ -245,8 +245,7 @@ fn matplotlib_available() -> bool {
     std::process::Command::new("python3")
         .args(["-c", "import matplotlib"])
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Figure output parity (bd-5t6wvu7m): a plotting cell must produce
