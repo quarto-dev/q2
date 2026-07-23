@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-23
+
+- [`79f3d808`](https://github.com/quarto-dev/q2/commits/79f3d808): New-project scaffolds upgraded: website projects now include an About page, a starter stylesheet, and a navbar wired to the site title (previously the title was placed where the website pipeline never read it); default projects gain a starter document. Shared with the new `q2 create` CLI command, so projects created in the hub and on the command line match.
+
 ### 2026-07-21
 
 - [`5852d0ee`](https://github.com/quarto-dev/q2/commits/5852d0ee): Task lists render as real checkboxes in the preview, and in edit-enabled sessions clicking a checkbox updates the document source (`[ ]` to `[x]` and back). Clicking the item's text still opens the block editor without toggling the box.
