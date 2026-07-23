@@ -18,7 +18,6 @@
 //! server is bound to 127.0.0.1.
 
 use std::collections::HashSet;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -333,16 +332,15 @@ async fn perform_re_execute(
 /// Mirror of `capture_driver::write_capture_doc` (private there).
 /// Duplicated here to avoid widening that module's public surface
 /// for the C.5-only handler. Both call sites stay in sync via the
-/// shared `CAPTURE_MIME_TYPE` constant.
+/// shared `CAPTURE_MIME_TYPE` constant and the shared wire-format
+/// helper `gzip_captures` (serialize + gzip + 10MB size warning,
+/// bd-qbhp2cvv).
 async fn write_capture_doc(
     ctx: &Arc<HubContext>,
     captures: &[EngineCapture],
 ) -> Result<String, String> {
-    let json = serde_json::to_vec(captures).map_err(|e| format!("serialize: {e}"))?;
-    let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-    enc.write_all(&json)
-        .map_err(|e| format!("gzip write: {e}"))?;
-    let gzipped = enc.finish().map_err(|e| format!("gzip finish: {e}"))?;
+    let gzipped = quarto_core::engine::capture_files::gzip_captures(captures)
+        .map_err(|e| format!("serialize/gzip: {e}"))?;
     let doc = create_binary_document(&gzipped, CAPTURE_MIME_TYPE)
         .map_err(|e| format!("binary doc: {e}"))?;
     let handle = ctx

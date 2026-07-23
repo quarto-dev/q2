@@ -198,6 +198,48 @@ pub fn materialize_capture_files(
     }
 }
 
+/// Warn threshold for a gzipped capture doc: 10 MB (decision recorded
+/// in `claude-notes/plans/2026-07-23-preview-engine-supporting-files.md`).
+/// Embedded figure bytes (Phase 2) can push multi-plot docs past the
+/// point where syncing the capture binary doc hurts; no hard cap in
+/// v1, but the operator gets a signal.
+pub const CAPTURE_DOC_WARN_BYTES: usize = 10 * 1024 * 1024;
+
+/// If a gzipped capture doc of `gzipped_len` bytes exceeds
+/// [`CAPTURE_DOC_WARN_BYTES`], return the warning message to log.
+/// Pure so the threshold behaviour is directly unit-testable; the
+/// callers ([`gzip_captures`] and the capture-doc writers) feed it to
+/// `tracing::warn!`.
+pub fn capture_doc_size_warning(gzipped_len: usize) -> Option<String> {
+    (gzipped_len > CAPTURE_DOC_WARN_BYTES).then(|| {
+        format!(
+            "capture doc is {:.1} MB gzipped (> {} MB): engine output embeds large \
+             supporting files; syncing and storing this capture may be slow",
+            gzipped_len as f64 / (1024.0 * 1024.0),
+            CAPTURE_DOC_WARN_BYTES / (1024 * 1024),
+        )
+    })
+}
+
+/// Serialize + gzip an `EngineCapture` sequence — the shared wire
+/// format of the capture binary doc (`application/x-engine-capture+gzip`).
+/// Single implementation for the three capture writers
+/// (`quarto-preview`'s eager driver and re-execute handler,
+/// `quarto-hub-provider`'s exec server), all of which previously
+/// duplicated the gzip block. Logs [`capture_doc_size_warning`] when
+/// the result is oversized.
+pub fn gzip_captures(captures: &[quarto_trace::EngineCapture]) -> std::io::Result<Vec<u8>> {
+    use std::io::Write as _;
+    let json = serde_json::to_vec(captures)?;
+    let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    enc.write_all(&json)?;
+    let gzipped = enc.finish()?;
+    if let Some(msg) = capture_doc_size_warning(gzipped.len()) {
+        tracing::warn!("{msg}");
+    }
+    Ok(gzipped)
+}
+
 /// A capture file path is safe when it is relative and contains no
 /// `..` or root components — it must resolve strictly under the
 /// document directory.
@@ -341,6 +383,37 @@ mod tests {
             }],
         );
         assert!(!doc_dir.join("fig.png").exists());
+    }
+
+    #[test]
+    fn size_warning_fires_only_above_threshold() {
+        assert!(capture_doc_size_warning(0).is_none());
+        assert!(capture_doc_size_warning(CAPTURE_DOC_WARN_BYTES).is_none());
+        let msg = capture_doc_size_warning(CAPTURE_DOC_WARN_BYTES + 1)
+            .expect("one byte over the threshold must warn");
+        assert!(msg.contains("10 MB"), "message names the threshold: {msg}");
+    }
+
+    #[test]
+    fn gzip_captures_roundtrips_through_gunzip() {
+        use std::io::Read as _;
+        let capture = quarto_trace::EngineCapture {
+            engine_name: "knitr".into(),
+            input_qmd: "```{r}\n1\n```\n".into(),
+            result: serde_json::json!({"markdown": "out"}),
+            files: vec![CaptureFile {
+                path: "f.png".into(),
+                contents_base64: BASE64.encode(b"PNG"),
+            }],
+        };
+        let gzipped = gzip_captures(std::slice::from_ref(&capture)).unwrap();
+        let mut json = Vec::new();
+        flate2::read::GzDecoder::new(&gzipped[..])
+            .read_to_end(&mut json)
+            .unwrap();
+        let back: Vec<quarto_trace::EngineCapture> = serde_json::from_slice(&json).unwrap();
+        assert_eq!(back.len(), 1);
+        assert_eq!(back[0].files[0].path, "f.png");
     }
 
     #[test]

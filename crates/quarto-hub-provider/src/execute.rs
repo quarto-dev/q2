@@ -36,8 +36,6 @@ use std::str::FromStr as _;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use flate2::Compression;
-use flate2::write::GzEncoder;
 use futures::StreamExt;
 use quarto_core::engine::EngineRegistry;
 use quarto_core::engine::preview_record::{compute_input_qmd, record_capture};
@@ -47,7 +45,6 @@ use quarto_hub::resource::create_binary_document;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 use quarto_trace::EngineCapture;
 use samod::Repo;
-use std::io::Write as _;
 
 use crate::ProviderError;
 use crate::consent::ConsentGate;
@@ -432,19 +429,14 @@ fn is_safe_relative(rel_path: &str) -> bool {
 
 /// Gzip the captures to JSON and store them as a capture binary automerge doc.
 /// Mirror of `quarto-preview`'s `write_capture_doc` (kept in sync via the
-/// shared [`CAPTURE_MIME_TYPE`] and JSON+gzip wire format).
+/// shared [`CAPTURE_MIME_TYPE`] and the shared wire-format helper
+/// `gzip_captures` — serialize + gzip + 10MB size warning, bd-qbhp2cvv).
 async fn write_capture_doc(
     repo: &Repo,
     captures: &[EngineCapture],
 ) -> Result<String, ProviderError> {
-    let json = serde_json::to_vec(captures)
-        .map_err(|e| ProviderError::Protocol(format!("serialize captures: {e}")))?;
-    let mut enc = GzEncoder::new(Vec::new(), Compression::default());
-    enc.write_all(&json)
-        .map_err(|e| ProviderError::Protocol(format!("gzip write: {e}")))?;
-    let gzipped = enc
-        .finish()
-        .map_err(|e| ProviderError::Protocol(format!("gzip finish: {e}")))?;
+    let gzipped = quarto_core::engine::capture_files::gzip_captures(captures)
+        .map_err(|e| ProviderError::Protocol(format!("serialize/gzip captures: {e}")))?;
     let doc = create_binary_document(&gzipped, CAPTURE_MIME_TYPE)
         .map_err(|e| ProviderError::Protocol(format!("binary doc: {e}")))?;
     let handle = repo

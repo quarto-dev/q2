@@ -113,9 +113,11 @@ runtimelib = { version = "2.0", features = ["tokio-runtime"] }
 jupyter-protocol = "2.0"
 tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "process", "fs", "net", "io-util"] }
 uuid.workspace = true
+# Capture-doc wire format (engine/capture_files.rs::gzip_captures).
+# Already in the dependency graph via quarto-trace.
+flate2.workspace = true
 
 [dev-dependencies]
-flate2.workspace = true
 insta.workspace = true
 quarto-error-catalog = { workspace = true }
 tempfile = "3"

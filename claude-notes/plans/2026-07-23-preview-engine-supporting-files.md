@@ -267,9 +267,9 @@ plt.plot([1,2,3])
 ## Work items
 
 - [x] Phase 1: `EngineCapture.files` schema (quarto-trace) + literal-site updates
-- [ ] Phase 2: capture-side embedding (observer gate, collect_capture_files,
+- [x] Phase 2: capture-side embedding (observer gate, collect_capture_files,
       engine_execution wiring) — failing test first
-- [ ] Phase 3: replay-side VFS materialization in CaptureSpliceStage —
+- [x] Phase 3: replay-side VFS materialization in CaptureSpliceStage —
       failing test first
 - [ ] Phase 4: shared gzip helper + 10 MB warning in the three writers
 - [ ] Phase 5: end-to-end verification (knitr + jupyter; `q2 preview` +

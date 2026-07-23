@@ -31,7 +31,6 @@ quarto-system-runtime = { workspace = true }
 quarto-trace = { workspace = true }
 # Gzip the capture JSON before storing it as a binary automerge doc (same wire
 # format q2-preview uses; see CAPTURE_MIME_TYPE in execute.rs).
-flate2 = { workspace = true }
 # CBOR for the ephemeral exec channel. The browser's DocHandle.broadcast
 # CBOR-encodes payloads (cbor-x, useRecords:false → standard CBOR maps), so we
 # mirror it with ciborium for cross-language interop.
@@ -58,6 +57,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+flate2 = { workspace = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "net", "test-util"] }
 tokio-tungstenite = { version = "0.27.0", features = ["native-tls"] }
 
