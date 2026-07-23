@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-23
+
+- [`21142631`](https://github.com/quarto-dev/q2/commits/21142631): Fixed a race where opening a project sometimes showed a working preview but a blank source editor until refresh — content that arrived while the editor was still initializing is now synced into it as soon as it mounts.
+
 ### 2026-07-22
 
 - [`6346c2c0`](https://github.com/quarto-dev/q2/commits/6346c2c0): UI exploration (branch only): the projects home's dark mode is darker and less saturated (the old navy made the Connect/Import button hard to read), right-clicking a project opens the same menu as its ⋯ button, and every collection header has a sort button (newest / oldest / A to Z).
