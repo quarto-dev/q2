@@ -158,6 +158,7 @@ fn replay_capture_in_options_overrides_engine_through_render_to_file() {
             },
             "needs_postprocess": false,
         }),
+        files: Vec::new(),
     };
 
     let options = RenderToFileOptions {
@@ -218,6 +219,7 @@ fn replay_capture_miss_surfaces_as_render_error() {
             },
             "needs_postprocess": false,
         }),
+        files: Vec::new(),
     };
 
     let options = RenderToFileOptions {

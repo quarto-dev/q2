@@ -1609,6 +1609,7 @@ mod tests {
             result: serde_json::json!({
                 "markdown": "::: {.cell}\n```{.markerlang .cell-code}\n1 + 1\n```\n\n::: {.cell-output .cell-output-stdout}\n```\nSPLICEMARKER_ZX9\n```\n:::\n:::\n"
             }),
+            files: Vec::new(),
         };
 
         let project = make_test_project();
@@ -1649,6 +1650,69 @@ mod tests {
         assert!(
             !out2.html.contains("SPLICEMARKER_ZX9"),
             "no capture => source-only render"
+        );
+    }
+
+    /// bd-qbhp2cvv: a capture carrying embedded supporting-file bytes
+    /// must have them materialized next to the document when the
+    /// splice runs — that is how engine-generated figures become
+    /// readable by the preview's VFS-based image resolvers (and, in
+    /// this native test, appear on disk under the doc's directory).
+    #[tokio::test]
+    async fn capture_splice_materializes_embedded_files_next_to_doc() {
+        use base64::Engine as _;
+        use quarto_trace::{CaptureFile, EngineCapture};
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path().canonicalize().unwrap();
+        let doc_path = dir.join("test.qmd");
+
+        let qmd = "---\ntitle: T\nengine: markerlang\n---\n\n```{markerlang}\nplot(1)\n```\n";
+        let capture = EngineCapture {
+            engine_name: "markerlang".into(),
+            input_qmd: "```{markerlang}\nplot(1)\n```\n".into(),
+            result: serde_json::json!({
+                "markdown": "::: {.cell}\n![](test_files/figure-html/fig.png)\n:::\n"
+            }),
+            files: vec![CaptureFile {
+                path: "test_files/figure-html/fig.png".into(),
+                contents_base64: base64::engine::general_purpose::STANDARD.encode(b"FAKE-PNG"),
+            }],
+        };
+
+        let project = ProjectContext {
+            dir: dir.clone(),
+            config: crate::project::ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![DocumentInfo::from_path(&doc_path)],
+            output_dir: dir.clone(),
+        };
+        let doc = DocumentInfo::from_path(&doc_path);
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let config = HtmlRenderConfig::default().with_captures(vec![capture]);
+        let out = render_qmd_to_html(
+            qmd.as_bytes(),
+            &doc_path.to_string_lossy(),
+            &mut ctx,
+            &config,
+            make_test_runtime(),
+        )
+        .await
+        .unwrap();
+
+        // The spliced output references the figure...
+        assert!(
+            out.html.contains("test_files/figure-html/fig.png"),
+            "spliced image ref must appear in the HTML; got:\n{}",
+            out.html
+        );
+        // ...and the splice materialized its bytes next to the doc.
+        let materialized = dir.join("test_files/figure-html/fig.png");
+        assert_eq!(
+            std::fs::read(&materialized).expect("figure file materialized next to the doc"),
+            b"FAKE-PNG"
         );
     }
 
@@ -2484,6 +2548,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            files: Vec::new(),
         };
 
         let replay_registry = EngineRegistry::with_replay(capture);
@@ -2538,6 +2603,7 @@ mod tests {
             engine_name: "replay-only-engine".into(),
             input_qmd: String::new(),
             result: serde_json::json!({ "markdown": "" }),
+            files: Vec::new(),
         };
 
         let project = make_test_project();
