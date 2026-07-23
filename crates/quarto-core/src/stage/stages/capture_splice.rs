@@ -129,6 +129,38 @@ impl PipelineStage for CaptureSpliceStage {
             return Ok(PipelineData::DocumentAst(doc_ast));
         }
 
+        // bd-qbhp2cvv: before splicing, materialize each capture's
+        // embedded supporting files (engine-generated figures) next to
+        // the live document, so the relative image references in the
+        // spliced output resolve. In WASM `ctx.runtime` writes to the
+        // preview VFS — exactly where the SPA/hub-client image
+        // resolvers (assetWalker / iframePostProcessor) read. The doc
+        // dir comes from the AST's path (absolute in the WASM VFS and
+        // in `q2 render`); a bare source name (some native test
+        // harnesses) falls back to the project dir.
+        let doc_dir = doc_ast
+            .path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .map(std::path::Path::to_path_buf)
+            .unwrap_or_else(|| ctx.project.dir.clone());
+        for capture in &self.captures {
+            if !capture.files.is_empty() {
+                trace_event!(
+                    ctx,
+                    EventLevel::Debug,
+                    "capture-splice: materializing {} supporting file(s) for engine={}",
+                    capture.files.len(),
+                    capture.engine_name
+                );
+                crate::engine::capture_files::materialize_capture_files(
+                    ctx.runtime.as_ref(),
+                    &doc_dir,
+                    &capture.files,
+                );
+            }
+        }
+
         // bd-5yff4: fold the captures in order. Engine N+1's splice runs
         // on engine N's spliced output, mirroring the server-side
         // sequence. Each capture is fail-soft: a parse failure or an
