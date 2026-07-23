@@ -254,13 +254,25 @@ enum Commands {
 
     /// Create a Quarto project or extension
     Create {
-        /// Type of project or extension to create
+        /// Type of artifact to create (e.g. "project")
         #[arg(value_name = "TYPE")]
         type_: Option<String>,
 
-        /// Additional arguments
-        #[arg(trailing_var_arg = true)]
+        /// Additional arguments (for "project": <type> <directory> [title])
         args: Vec<String>,
+
+        /// Read a JSON create directive from stdin and emit a JSON
+        /// result on stdout (diagnostics go to stderr as JSON lines)
+        #[arg(long)]
+        json: bool,
+
+        /// List available artifact types and choices
+        #[arg(long)]
+        list: bool,
+
+        /// Report the file plan without writing anything
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Automate document or project setup tasks
@@ -733,7 +745,13 @@ fn main() -> Result<()> {
             allow_edit,
         }),
         Commands::Serve { .. } => commands::serve::execute(),
-        Commands::Create { .. } => commands::create::execute(),
+        Commands::Create {
+            type_,
+            args,
+            json,
+            list,
+            dry_run,
+        } => commands::create::execute(type_, args, json, list, dry_run),
         Commands::Use { .. } => commands::use_cmd::execute(),
         Commands::Add { .. } => commands::add::execute(),
         Commands::Update { .. } => commands::update::execute(),

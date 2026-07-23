@@ -3506,6 +3506,7 @@ dependencies = [
  "quarto-lsp",
  "quarto-mcp-launcher",
  "quarto-preview",
+ "quarto-project-create",
  "quarto-publish",
  "quarto-sass",
  "quarto-source-map",
@@ -3950,6 +3951,7 @@ version = "0.10.0"
 dependencies = [
  "quarto-doctemplate",
  "serde",
+ "serde_yaml",
  "thiserror 2.0.18",
 ]
 
