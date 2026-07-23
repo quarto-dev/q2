@@ -11,9 +11,12 @@
  *    position-correctness bug described in PR #102.
  *
  * 2. **Reconciliation on mount / file switch** — A React effect that runs when
- *    `fileContents` changes or the active file switches. Handles cases where no
- *    Automerge change event fires: initial mount, file switching, and Monaco not
- *    yet ready (sets React state for preview).
+ *    `fileContents` changes, the active file switches, or a Monaco editor
+ *    instance mounts. Handles cases where no Automerge change event fires:
+ *    initial mount, file switching, and Monaco not yet ready (sets React state
+ *    for preview). Editor mount must be a trigger (bd-eakukmlr): onMount lands
+ *    a commit after the editor is created, so content arriving in that window
+ *    would otherwise never reach the (uncontrolled) editor — blank until reload.
  *
  * In the opposite direction, `handleEditorChange` forwards local Monaco edits
  * to Automerge as positional splice operations.
@@ -73,6 +76,10 @@ export function useAutomergeSync({
   const applyingRemoteRef = useRef(false);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
 
+  // Bumped on every onEditorMount so reconciliation re-runs once the editor
+  // is reachable. A counter, not a boolean: key remounts must reconcile too.
+  const [editorMountGen, setEditorMountGen] = useState(0);
+
   // Latest remote content deferred while the tab is hidden — flushed as one
   // edit on visibilitychange→visible (or window focus). See plan
   // claude-notes/plans/2026-04-24-hub-client-visibility-gating.md. Keyed on
@@ -87,6 +94,7 @@ export function useAutomergeSync({
 
   const onEditorMount = useCallback((editor: Monaco.editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
+    setEditorMountGen((gen) => gen + 1);
   }, []);
 
   // ── Real-time remote edits ────────────────────────────────────────────
@@ -178,10 +186,11 @@ export function useAutomergeSync({
     };
   }, [currentFile, replayIsActive]);
 
-  // ── Reconciliation on mount / file switch ─────────────────────────────
+  // ── Reconciliation on mount / file switch / editor mount ─────────────
   //
-  // React effect that fires on initial mount, file switch, or when
-  // fileContents changes. Reads live Automerge content (not the stale
+  // React effect that fires on initial mount, file switch, when
+  // fileContents changes, or when a Monaco editor instance mounts
+  // (editorMountGen). Reads live Automerge content (not the stale
   // closure value) and reconciles Monaco. For ongoing remote edits this
   // is usually a no-op since the real-time callback above already handled it.
   useEffect(() => {
@@ -210,7 +219,7 @@ export function useAutomergeSync({
     }
 
     setContent(automergeContent);
-  }, [currentFile, fileContents, replayIsActive]);
+  }, [currentFile, fileContents, replayIsActive, editorMountGen]);
 
   // ── Monaco → Automerge ───────────────────────────────────────────────
   //
