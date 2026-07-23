@@ -1,9 +1,18 @@
 project:
   type: website
-  title: "$title$"
+  resources:
+    - styles.css
 
 website:
+  title: "$title$"
   navbar:
     left:
       - href: index.qmd
         text: Home
+      - about.qmd
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true

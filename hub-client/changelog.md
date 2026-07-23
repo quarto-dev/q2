@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-07-23
 
+- [`79f3d808`](https://github.com/quarto-dev/q2/commits/79f3d808): New-project scaffolds upgraded: website projects now include an About page, a starter stylesheet, and a navbar wired to the site title (previously the title was placed where the website pipeline never read it); default projects gain a starter document. Shared with the new `q2 create` CLI command, so projects created in the hub and on the command line match.
 - [`9d6a764f`](https://github.com/quarto-dev/q2/commits/9d6a764f): The code editor is now bundled with the app instead of being fetched from a CDN when a project opens — the source pane no longer sticks at "Loading..." on slow or blocked networks, and it works fully offline.
 - [`21142631`](https://github.com/quarto-dev/q2/commits/21142631): Fixed a race where opening a project sometimes showed a working preview but a blank source editor until refresh — content that arrived while the editor was still initializing is now synced into it as soon as it mounts.
 

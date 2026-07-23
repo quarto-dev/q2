@@ -2,22 +2,29 @@
  * templates.rs
  * Copyright (c) 2025 Posit, PBC
  *
- * Template loading for project scaffolding.
+ * Embedded scaffold file contents.
  *
- * Templates are embedded at compile time via `include_str!()`.
- * This works for both native and WASM targets.
+ * Files are embedded at compile time via `include_str!()`, which works
+ * for both native and WASM targets. `*.template` files are doctemplate
+ * (Pandoc template syntax) sources rendered with project data; the
+ * rest are static files copied as-is.
+ *
+ * The single registry mapping these constants to scaffold file sets is
+ * `scaffold::get_scaffold` — there is deliberately no second, parallel
+ * per-project-type file list here.
  */
 
-use crate::types::ProjectType;
-
-/// Templates for default project type.
+/// Scaffold contents for the default project type.
 pub mod default {
     /// `_quarto.yml` template for default projects.
     pub const QUARTO_YML: &str =
         include_str!("../resources/templates/default/_quarto.yml.template");
+
+    /// Starter `index.qmd` template for default projects.
+    pub const INDEX_QMD: &str = include_str!("../resources/templates/default/index.qmd.template");
 }
 
-/// Templates for website project type.
+/// Scaffold contents for the website project type.
 pub mod website {
     /// `_quarto.yml` template for website projects.
     pub const QUARTO_YML: &str =
@@ -25,94 +32,10 @@ pub mod website {
 
     /// `index.qmd` template for website projects.
     pub const INDEX_QMD: &str = include_str!("../resources/templates/website/index.qmd.template");
-}
 
-/// A template file with its target path.
-#[derive(Debug, Clone)]
-pub struct TemplateFile {
-    /// Relative path where the file should be created
-    pub path: &'static str,
-    /// Doctemplate (Pandoc template syntax) content
-    pub template: &'static str,
-}
+    /// Static `about.qmd` page for website projects.
+    pub const ABOUT_QMD: &str = include_str!("../resources/templates/website/about.qmd");
 
-impl TemplateFile {
-    const fn new(path: &'static str, template: &'static str) -> Self {
-        Self { path, template }
-    }
-}
-
-/// Get the template files for a project type.
-///
-/// Returns a list of template files that should be rendered and created
-/// for the given project type.
-pub fn get_templates(project_type: ProjectType) -> &'static [TemplateFile] {
-    match project_type {
-        ProjectType::Default => &DEFAULT_TEMPLATES,
-        ProjectType::Website => &WEBSITE_TEMPLATES,
-        // Not yet implemented - fall back to default
-        ProjectType::Blog | ProjectType::Manuscript | ProjectType::Book => &DEFAULT_TEMPLATES,
-    }
-}
-
-/// Templates for default project type.
-static DEFAULT_TEMPLATES: [TemplateFile; 1] =
-    [TemplateFile::new("_quarto.yml", default::QUARTO_YML)];
-
-/// Templates for website project type.
-static WEBSITE_TEMPLATES: [TemplateFile; 2] = [
-    TemplateFile::new("_quarto.yml", website::QUARTO_YML),
-    TemplateFile::new("index.qmd", website::INDEX_QMD),
-];
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_default_templates_exist() {
-        let templates = get_templates(ProjectType::Default);
-        assert_eq!(templates.len(), 1);
-        assert_eq!(templates[0].path, "_quarto.yml");
-        assert!(templates[0].template.contains("project:"));
-    }
-
-    #[test]
-    fn test_website_templates_exist() {
-        let templates = get_templates(ProjectType::Website);
-        assert_eq!(templates.len(), 2);
-
-        let paths: Vec<_> = templates.iter().map(|t| t.path).collect();
-        assert!(paths.contains(&"_quarto.yml"));
-        assert!(paths.contains(&"index.qmd"));
-    }
-
-    #[test]
-    fn test_templates_are_valid_doctemplate() {
-        for project_type in ProjectType::implemented() {
-            for template in get_templates(*project_type) {
-                // Every template must compile with the doctemplate engine
-                quarto_doctemplate::Template::compile(template.template).unwrap_or_else(|e| {
-                    panic!(
-                        "Template {} for {:?} failed to compile: {}",
-                        template.path, project_type, e
-                    )
-                });
-
-                // All our templates use $title$ at minimum, and no EJS residue
-                assert!(
-                    template.template.contains("$title$"),
-                    "Template {} for {:?} should contain $title$",
-                    template.path,
-                    project_type
-                );
-                assert!(
-                    !template.template.contains("<%"),
-                    "Template {} for {:?} still contains EJS syntax",
-                    template.path,
-                    project_type
-                );
-            }
-        }
-    }
+    /// Static starter stylesheet for website projects.
+    pub const STYLES_CSS: &str = include_str!("../resources/templates/website/styles.css");
 }

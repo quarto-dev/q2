@@ -13,13 +13,13 @@
  * # Usage
  *
  * ```ignore
- * use quarto_project_create::{create_project, CreateProjectOptions, ProjectType};
+ * use quarto_project_create::{CreateFromChoiceOptions, create_project_from_choice};
  *
- * let options = CreateProjectOptions::new(ProjectType::Website, "My Website");
- * let files = create_project(options)?;
+ * let options = CreateFromChoiceOptions::new("website", "My Website");
+ * let files = create_project_from_choice(options)?;
  *
  * for file in files {
- *     println!("Create: {} ({} bytes)", file.path.display(), file.content.len());
+ *     println!("Create: {}", file.path().display());
  * }
  * ```
  */
@@ -36,10 +36,9 @@ pub use choices::{
 pub use scaffold::{
     ProjectScaffold, ScaffoldContent, ScaffoldFileDef, ScaffoldedFile, get_scaffold,
 };
-pub use types::{CreateError, CreateProjectOptions, ProjectFile, ProjectType};
+pub use types::{CreateError, ProjectType};
 
 use quarto_doctemplate::{Template, TemplateContext, TemplateValue};
-use std::path::PathBuf;
 
 /// Escape a string for interpolation inside a YAML double-quoted scalar.
 ///
@@ -87,58 +86,6 @@ fn render_template(template: &str, ctx: &TemplateContext) -> Result<String, Crea
         .render(ctx)
         .map_err(|e| CreateError::TemplateRender(e.to_string()))
 }
-
-/// Create a new Quarto project with the given options.
-///
-/// This renders all template files for the specified project type and returns
-/// the list of files to be created. The caller is responsible for writing
-/// the files to disk or VFS.
-///
-/// # Arguments
-///
-/// * `options` - Project creation options (type, title, etc.)
-///
-/// # Returns
-///
-/// A list of `ProjectFile` structs containing the path and rendered content
-/// for each file in the project scaffold.
-///
-/// # Errors
-///
-/// Returns `CreateError::TemplateRender` if template rendering fails.
-///
-/// # Example
-///
-/// ```ignore
-/// let files = create_project(CreateProjectOptions::new(
-///     ProjectType::Website,
-///     "My Website"
-/// ))?;
-/// ```
-pub fn create_project(options: CreateProjectOptions) -> Result<Vec<ProjectFile>, CreateError> {
-    let ctx = template_context(&options.title, options.project_type.id(), None);
-
-    // Get templates for this project type
-    let template_files = templates::get_templates(options.project_type);
-
-    // Render each template
-    let mut files = Vec::with_capacity(template_files.len());
-
-    for template_file in template_files {
-        let content = render_template(template_file.template, &ctx)?;
-
-        files.push(ProjectFile {
-            path: PathBuf::from(template_file.path),
-            content,
-        });
-    }
-
-    Ok(files)
-}
-
-// ============================================================================
-// New scaffold-based API
-// ============================================================================
 
 /// Options for creating a project from a choice.
 #[derive(Debug, Clone)]
@@ -340,13 +287,6 @@ mod tests {
     }
 
     #[test]
-    fn test_create_project_options() {
-        let options = CreateProjectOptions::new(ProjectType::Website, "My Site");
-        assert_eq!(options.project_type, ProjectType::Website);
-        assert_eq!(options.title, "My Site");
-    }
-
-    #[test]
     fn test_yaml_escape_double_quoted() {
         assert_eq!(yaml_escape_double_quoted("plain title"), "plain title");
         assert_eq!(yaml_escape_double_quoted(r#"a "b" c"#), r#"a \"b\" c"#);
@@ -360,163 +300,144 @@ mod tests {
 // Rendering tests for the doctemplate-based scaffolding path.
 //
 // These run on every platform: template rendering is pure Rust
-// (quarto-doctemplate), with no JS runtime involved.
+// (quarto-doctemplate), with no JS runtime involved. Assertions parse
+// the rendered `_quarto.yml` with serde_yaml so they check field
+// *values* (and prove the output is valid YAML), not just substrings.
 #[cfg(test)]
 mod render_tests {
     use super::*;
 
-    #[test]
-    fn test_create_default_project() {
-        let options = CreateProjectOptions::new(ProjectType::Default, "Test Project");
-
-        let files = create_project(options).unwrap();
-
-        // Should have exactly one file: _quarto.yml
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].path.to_str().unwrap(), "_quarto.yml");
-
-        // The title must land inside the YAML double-quoted string
-        assert!(files[0].content.contains("title: \"Test Project\""));
-        assert!(files[0].content.contains("project:"));
-
-        // No template-syntax residue of either engine
-        assert!(!files[0].content.contains("$title$"));
-        assert!(!files[0].content.contains("<%"));
-    }
-
-    #[test]
-    fn test_create_website_project() {
-        let options = CreateProjectOptions::new(ProjectType::Website, "My Website");
-
-        let files = create_project(options).unwrap();
-
-        // Should have two files: _quarto.yml and index.qmd
-        assert_eq!(files.len(), 2);
-
-        let paths: Vec<_> = files.iter().map(|f| f.path.to_str().unwrap()).collect();
-        assert!(paths.contains(&"_quarto.yml"));
-        assert!(paths.contains(&"index.qmd"));
-
-        // Check _quarto.yml content
-        let quarto_yml = files
+    /// Panic-on-missing lookup of a text file's content in a scaffold result.
+    fn file_content<'a>(files: &'a [ScaffoldedFile], path: &str) -> &'a str {
+        files
             .iter()
-            .find(|f| f.path.to_str() == Some("_quarto.yml"))
-            .unwrap();
-        assert!(quarto_yml.content.contains("title: \"My Website\""));
-        assert!(quarto_yml.content.contains("type: website"));
-
-        // Check index.qmd content (title in YAML front matter)
-        let index_qmd = files
-            .iter()
-            .find(|f| f.path.to_str() == Some("index.qmd"))
-            .unwrap();
-        assert!(index_qmd.content.contains("title: \"My Website\""));
-        assert!(index_qmd.content.contains("Quarto website"));
-
-        // No template-syntax residue in any file
-        for file in &files {
-            assert!(!file.content.contains("$title$"));
-            assert!(!file.content.contains("<%"));
-        }
-    }
-
-    #[test]
-    fn test_title_special_characters_yaml_escaped() {
-        let options =
-            CreateProjectOptions::new(ProjectType::Default, r#"R & D "quoted" \ backslash"#);
-
-        let files = create_project(options).unwrap();
-        assert_eq!(files.len(), 1);
-
-        // `&` passes through raw. (The old EJS path HTML-escaped it to
-        // `&amp;` — a latent bug for YAML output.)
-        assert!(!files[0].content.contains("&amp;"));
-
-        // `"` and `\` are escaped for the YAML double-quoted context,
-        // keeping the output valid YAML.
-        assert!(
-            files[0]
-                .content
-                .contains(r#"title: "R & D \"quoted\" \\ backslash""#),
-            "unexpected rendering: {}",
-            files[0].content
-        );
-    }
-
-    #[test]
-    fn test_title_with_newline_yaml_escaped() {
-        let options = CreateProjectOptions::new(ProjectType::Default, "Line one\nLine two");
-
-        let files = create_project(options).unwrap();
-        assert_eq!(files.len(), 1);
-
-        // A literal newline would break the single-line YAML string; it must
-        // be emitted as the YAML escape sequence `\n`.
-        assert!(files[0].content.contains(r#"title: "Line one\nLine two""#));
-    }
-
-    // ========================================================================
-    // Scaffold-based API tests
-    // ========================================================================
-
-    #[test]
-    fn test_create_project_from_choice_website() {
-        let options = CreateFromChoiceOptions::new("website", "My Website");
-
-        let files = create_project_from_choice(options).unwrap();
-
-        // Should have two files: _quarto.yml and index.qmd
-        assert_eq!(files.len(), 2);
-
-        // Check we have the expected files
-        let text_files: Vec<_> = files
-            .iter()
-            .filter_map(|f| match f {
-                ScaffoldedFile::Text { path, content } => {
-                    Some((path.to_str().unwrap(), content.as_str()))
+            .find_map(|f| match f {
+                ScaffoldedFile::Text { path: p, content } if p.to_str() == Some(path) => {
+                    Some(content.as_str())
                 }
-                ScaffoldedFile::Binary { .. } => None,
+                _ => None,
             })
-            .collect();
+            .unwrap_or_else(|| panic!("expected text file {path} in scaffold output"))
+    }
 
-        let paths: Vec<_> = text_files.iter().map(|(p, _)| *p).collect();
-        assert!(paths.contains(&"_quarto.yml"));
-        assert!(paths.contains(&"index.qmd"));
-
-        // Check _quarto.yml content
-        let (_, quarto_yml) = text_files
-            .iter()
-            .find(|(p, _)| *p == "_quarto.yml")
-            .unwrap();
-        assert!(quarto_yml.contains("title: \"My Website\""));
-        assert!(quarto_yml.contains("type: website"));
+    fn parse_yaml(src: &str) -> serde_yaml::Value {
+        serde_yaml::from_str(src).expect("scaffolded _quarto.yml must be valid YAML")
     }
 
     #[test]
-    fn test_create_project_from_choice_default() {
-        let options = CreateFromChoiceOptions::new("default", "Test Project");
+    fn default_scaffold_produces_config_and_starter_doc() {
+        let files =
+            create_project_from_choice(CreateFromChoiceOptions::new("default", "Test Project"))
+                .unwrap();
 
-        let files = create_project_from_choice(options).unwrap();
+        let paths: Vec<_> = files.iter().map(|f| f.path().to_str().unwrap()).collect();
+        assert_eq!(paths, ["_quarto.yml", "index.qmd"]);
 
-        // Should have one file: _quarto.yml
-        assert_eq!(files.len(), 1);
-        assert!(files[0].is_text());
+        let yml = parse_yaml(file_content(&files, "_quarto.yml"));
+        assert_eq!(yml["project"]["title"].as_str(), Some("Test Project"));
 
-        if let ScaffoldedFile::Text { path, content } = &files[0] {
-            assert_eq!(path.to_str().unwrap(), "_quarto.yml");
-            assert!(content.contains("title: \"Test Project\""));
-        } else {
-            panic!("Expected text file");
+        let index = file_content(&files, "index.qmd");
+        assert!(
+            index.starts_with("---\ntitle: \"Test Project\"\n---\n"),
+            "starter doc must carry the title in front matter; got:\n{index}"
+        );
+        assert!(index.contains("## Quarto"));
+        assert!(index.contains("<https://quarto.org>"));
+    }
+
+    #[test]
+    fn website_scaffold_produces_q1_familiar_file_set() {
+        let files =
+            create_project_from_choice(CreateFromChoiceOptions::new("website", "My Website"))
+                .unwrap();
+
+        let paths: Vec<_> = files.iter().map(|f| f.path().to_str().unwrap()).collect();
+        assert_eq!(
+            paths,
+            ["_quarto.yml", "index.qmd", "about.qmd", "styles.css"]
+        );
+
+        let yml_src = file_content(&files, "_quarto.yml");
+        let yml = parse_yaml(yml_src);
+
+        assert_eq!(yml["project"]["type"].as_str(), Some("website"));
+        // Q2's website pipeline reads `website.title` (website_config.rs);
+        // the title must live there, not under `project:`.
+        assert_eq!(yml["website"]["title"].as_str(), Some("My Website"));
+        assert!(yml["project"].get("title").is_none());
+
+        let left = &yml["website"]["navbar"]["left"];
+        assert_eq!(left[0]["href"].as_str(), Some("index.qmd"));
+        assert_eq!(left[0]["text"].as_str(), Some("Home"));
+        assert_eq!(left[1].as_str(), Some("about.qmd"));
+
+        assert_eq!(yml["format"]["html"]["theme"].as_str(), Some("cosmo"));
+        assert_eq!(yml["format"]["html"]["css"].as_str(), Some("styles.css"));
+        assert_eq!(yml["format"]["html"]["toc"].as_bool(), Some(true));
+
+        // styles.css must be declared a project resource so it is
+        // copied into _site/ — Q2 does not (yet) treat `css:`-referenced
+        // files as implicit resources (bd-b87tmmi4).
+        assert_eq!(yml["project"]["resources"][0].as_str(), Some("styles.css"));
+
+        // Q2 hard-errors (Q-14-1) on a `brand` theme marker with no brand
+        // configured; the scaffold must not emit one.
+        assert!(
+            !yml_src.contains("brand"),
+            "scaffolded _quarto.yml must not reference brand:\n{yml_src}"
+        );
+
+        let index = file_content(&files, "index.qmd");
+        assert!(index.contains("title: \"My Website\""));
+        assert!(index.contains("This is a Quarto website"));
+
+        let about = file_content(&files, "about.qmd");
+        assert!(about.contains("title: \"About\""));
+        assert!(about.contains("About this site"));
+
+        assert_eq!(file_content(&files, "styles.css"), "/* css styles */\n");
+
+        for f in &files {
+            if let ScaffoldedFile::Text { path, content } = f {
+                assert!(
+                    !content.contains("$title$") && !content.contains("<%"),
+                    "template residue in {}",
+                    path.display()
+                );
+            }
         }
     }
 
     #[test]
-    fn test_create_project_from_choice_unknown() {
-        let options = CreateFromChoiceOptions::new("nonexistent", "Test");
+    fn special_characters_title_stays_valid_yaml() {
+        let title = r#"R & D "quoted" \ backslash"#;
+        let files =
+            create_project_from_choice(CreateFromChoiceOptions::new("website", title)).unwrap();
 
-        let result = create_project_from_choice(options);
+        let yml_src = file_content(&files, "_quarto.yml");
+        // `&` passes through raw (the old EJS path HTML-escaped it).
+        assert!(!yml_src.contains("&amp;"));
+        // Escaping must keep the config valid YAML that round-trips to
+        // the original title.
+        let yml = parse_yaml(yml_src);
+        assert_eq!(yml["website"]["title"].as_str(), Some(title));
+    }
 
-        assert!(result.is_err());
+    #[test]
+    fn newline_title_stays_valid_yaml() {
+        let files = create_project_from_choice(CreateFromChoiceOptions::new(
+            "default",
+            "Line one\nLine two",
+        ))
+        .unwrap();
+
+        let yml = parse_yaml(file_content(&files, "_quarto.yml"));
+        assert_eq!(yml["project"]["title"].as_str(), Some("Line one\nLine two"));
+    }
+
+    #[test]
+    fn unknown_choice_is_rejected() {
+        let result = create_project_from_choice(CreateFromChoiceOptions::new("nonexistent", "T"));
         assert!(matches!(
             result.unwrap_err(),
             CreateError::UnknownProjectType(_)
@@ -524,26 +445,22 @@ mod render_tests {
     }
 
     #[test]
-    fn test_create_project_from_choice_unimplemented() {
+    fn unimplemented_choice_is_rejected() {
         // "blog" is defined but marked as unimplemented
-        let options = CreateFromChoiceOptions::new("blog", "My Blog");
-
-        let result = create_project_from_choice(options);
-
-        assert!(result.is_err());
+        let result = create_project_from_choice(CreateFromChoiceOptions::new("blog", "My Blog"));
         assert!(matches!(result.unwrap_err(), CreateError::InvalidConfig(_)));
     }
 
     #[test]
-    fn test_implemented_choices_are_usable() {
-        // All implemented choices should successfully create projects
+    fn implemented_choices_are_usable() {
         for choice in implemented_choices() {
-            let options = CreateFromChoiceOptions::new(&choice.id, "Test Project");
-            let result = create_project_from_choice(options);
-
+            let result = create_project_from_choice(CreateFromChoiceOptions::new(
+                &choice.id,
+                "Test Project",
+            ));
             assert!(
                 result.is_ok(),
-                "Failed to create project for implemented choice '{}': {:?}",
+                "implemented choice '{}' failed: {:?}",
                 choice.id,
                 result.err()
             );

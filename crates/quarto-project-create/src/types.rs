@@ -6,7 +6,6 @@
  */
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use thiserror::Error;
 
 /// Error type for project creation operations.
@@ -112,45 +111,5 @@ impl std::str::FromStr for ProjectType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         ProjectType::from_id(s)
-    }
-}
-
-/// A file to be created as part of a project.
-#[derive(Debug, Clone)]
-pub struct ProjectFile {
-    /// Relative path within the project directory
-    pub path: PathBuf,
-
-    /// File content (already rendered from template)
-    pub content: String,
-}
-
-impl ProjectFile {
-    /// Create a new project file.
-    pub fn new(path: impl Into<PathBuf>, content: impl Into<String>) -> Self {
-        Self {
-            path: path.into(),
-            content: content.into(),
-        }
-    }
-}
-
-/// Options for creating a new project.
-#[derive(Debug, Clone)]
-pub struct CreateProjectOptions {
-    /// The type of project to create
-    pub project_type: ProjectType,
-
-    /// Project title (used in `_quarto.yml` and document titles)
-    pub title: String,
-}
-
-impl CreateProjectOptions {
-    /// Create options for a new project.
-    pub fn new(project_type: ProjectType, title: impl Into<String>) -> Self {
-        Self {
-            project_type,
-            title: title.into(),
-        }
     }
 }
