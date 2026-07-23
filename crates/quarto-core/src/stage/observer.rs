@@ -215,6 +215,21 @@ pub trait PipelineObserver: Send + Sync {
         _data: &serde_json::Value,
     ) {
     }
+
+    /// Whether this observer wants engine-generated supporting-file
+    /// *bytes* embedded in the `EngineCapture` aux payload
+    /// (bd-qbhp2cvv).
+    ///
+    /// Reading and base64-encoding figure files costs real I/O on
+    /// every engine run, so `EngineExecutionStage` only collects them
+    /// when the observer opts in. The preview capture recorder
+    /// (`preview_record::CaptureCollector`) opts in — its captures
+    /// replay on machines that can't see the recorder's disk.
+    /// Everything else (plain renders, trace observers) keeps the
+    /// default `false` and captures paths only.
+    fn wants_engine_capture_files(&self) -> bool {
+        false
+    }
 }
 
 /// No-op observer implementation.
