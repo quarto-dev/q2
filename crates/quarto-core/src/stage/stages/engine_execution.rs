@@ -342,11 +342,35 @@ impl PipelineStage for EngineExecutionStage {
             // engine capture(s); other observers ignore the kind.
             match serde_json::to_value(&result) {
                 Ok(result_json) => {
-                    let payload = serde_json::json!({
+                    // bd-qbhp2cvv: when the observer wants them (the
+                    // preview capture recorder does; plain renders
+                    // don't), embed the supporting files' *bytes* in
+                    // the capture. This is the only moment they are
+                    // guaranteed to exist — the hub records captures
+                    // in a temp dir that is deleted right after.
+                    let capture_files = if ctx.observer.wants_engine_capture_files()
+                        && !result.supporting_files.is_empty()
+                    {
+                        path.parent().map_or_else(Vec::new, |doc_dir| {
+                            crate::engine::capture_files::collect_capture_files(
+                                ctx.runtime.as_ref(),
+                                doc_dir,
+                                &result.supporting_files,
+                            )
+                        })
+                    } else {
+                        Vec::new()
+                    };
+                    let mut payload = serde_json::json!({
                         "engine_name": engine.name(),
                         "input_qmd": qmd,
                         "result": result_json,
                     });
+                    if !capture_files.is_empty()
+                        && let Ok(files_json) = serde_json::to_value(&capture_files)
+                    {
+                        payload["files"] = files_json;
+                    }
                     ctx.observer.on_auxiliary_data(
                         self.name(),
                         run_index,
@@ -1629,6 +1653,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            files: Vec::new(),
         };
 
         let mut registry = EngineRegistry::new();
@@ -2013,6 +2038,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            files: Vec::new(),
         };
 
         let mut registry = EngineRegistry::new();

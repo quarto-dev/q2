@@ -26,6 +26,12 @@ WASM rebuild is needed for a changelog-only edit.
 ### 2026-07-23
 
 - [`79f3d808`](https://github.com/quarto-dev/q2/commits/79f3d808): New-project scaffolds upgraded: website projects now include an About page, a starter stylesheet, and a navbar wired to the site title (previously the title was placed where the website pipeline never read it); default projects gain a starter document. Shared with the new `q2 create` CLI command, so projects created in the hub and on the command line match.
+- [`9d6a764f`](https://github.com/quarto-dev/q2/commits/9d6a764f): The code editor is now bundled with the app instead of being fetched from a CDN when a project opens — the source pane no longer sticks at "Loading..." on slow or blocked networks, and it works fully offline.
+- [`21142631`](https://github.com/quarto-dev/q2/commits/21142631): Fixed a race where opening a project sometimes showed a working preview but a blank source editor until refresh — content that arrived while the editor was still initializing is now synced into it as soon as it mounts.
+
+### 2026-07-22
+
+- [`6346c2c0`](https://github.com/quarto-dev/q2/commits/6346c2c0): UI exploration (branch only): the projects home's dark mode is darker and less saturated (the old navy made the Connect/Import button hard to read), right-clicking a project opens the same menu as its ⋯ button, and every collection header has a sort button (newest / oldest / A to Z).
 
 ### 2026-07-21
 
@@ -50,17 +56,45 @@ WASM rebuild is needed for a changelog-only edit.
 - [`64ba0e38`](https://github.com/quarto-dev/q2/commits/64ba0e38): Dropping an image into the editor now defaults the upload to the current document's folder and inserts a correctly relativized path (e.g. `![](../photo.png)`), instead of uploading to the project root with a broken document-relative reference; sidebar drags into a subdirectory document are fixed the same way.
 - [`633ab60f`](https://github.com/quarto-dev/q2/commits/633ab60f): Structured authors now render fully in the preview title block, matching the rendered site: authors with affiliations appear in a two-column Authors/Affiliations grid, names link to the author's `url` with degrees shown after the name, and email and ORCID entries render as icon links.
 - [`faae3684`](https://github.com/quarto-dev/q2/commits/faae3684): The preview's title block now matches the rendered site's Quarto-1-style markup — multiple authors each get their own line under a pluralized "Authors" heading (structured author lists no longer render as garbage), a date without an author shows its "Published" entry, and the `author-title` / `published-title` / `abstract-title` options are honored.
+- [`3992e45d`](https://github.com/quarto-dev/q2/commits/3992e45d): UI exploration (branch only): opening a project on a local hub without sign-in now records you as a contributor, so collection avatar chips fill in during local testing instead of staying empty.
+- [`3992e45d`](https://github.com/quarto-dev/q2/commits/3992e45d): UI exploration (branch only): the Automerge debugger now opens against an auth-disabled local hub and lists every collection as its own named synced document, instead of showing only a single project set.
+- [`3992e45d`](https://github.com/quarto-dev/q2/commits/3992e45d): UI exploration (branch only): project cards fade their hover action icons (peek, fork, menu) beneath long titles so they no longer overlap the text, and the empty-state now reads "Everything is in a collection".
 
 ### 2026-07-13
 
 - [`3fc6e610`](https://github.com/quarto-dev/q2/commits/3fc6e610): Editing a block in the preview now uses one pop-up toolbar — the rich/plain switch is a Markdown-mark icon on it, the toolbar appears for every editable block (code chunks included), and the type/nesting breadcrumb folds into it, replacing the cut-off left-margin "Editing…" label and the separate floating breadcrumb.
 
+### 2026-07-10
+
+- [`a2391089`](https://github.com/quarto-dev/q2/commits/a2391089): UI exploration (branch only): projects can be duplicated from the projects home (project menu → Duplicate) — the copy gets all files, the name "(copy)", and the same collection as the original.
+- [`02095b9a`](https://github.com/quarto-dev/q2/commits/02095b9a): UI exploration (branch only): the Peek preview no longer repeats Rename/Open/Remove (those are in the ⋯ menu) — it's a read-only preview with just a Refresh action.
+- [`f0ce3a31`](https://github.com/quarto-dev/q2/commits/f0ce3a31): UI exploration (branch only): Peek is now a magnifying-glass icon next to the fork icon on each project — hover it to get a floating preview of the project (files, who's joined), instead of a menu item.
+- [`214d62e4`](https://github.com/quarto-dev/q2/commits/214d62e4): UI exploration (branch only): author chips on shared collections now accumulate instead of overwriting — when a second person opens a shared project, both show as authors rather than the latest editor replacing the previous one.
+- [`7a7dafdf`](https://github.com/quarto-dev/q2/commits/7a7dafdf): UI exploration (branch only): project cards no longer show placeholder "authors" — a new file starts with just you, and cards show the real people who've opened the project.
+- [`645d5b53`](https://github.com/quarto-dev/q2/commits/645d5b53): UI exploration (branch only): opening a collection invite in a browser that already had a project no longer shows a confusing "migrate your project list" screen — it shows the invitation and quietly folds any existing project into your list.
+- [`85108dde`](https://github.com/quarto-dev/q2/commits/85108dde): UI exploration (branch only): fixed a just-joined collection not appearing when your own project list was still empty.
+- [`19c69ff3`](https://github.com/quarto-dev/q2/commits/19c69ff3): UI exploration (branch only): collections are now real synced documents rather than a per-browser list — they sync across your browsers, sharing one genuinely gives collaborators access, and a project can live in more than one collection ("Add to collection"). Existing collections migrate automatically on first load.
+- [`a997d3fb`](https://github.com/quarto-dev/q2/commits/a997d3fb): UI exploration (branch only): duplicating a project now opens a dialog to rename the copy and pick its collection, and a fork button appears on hover on every project card and row.
+- [`3e3e1495`](https://github.com/quarto-dev/q2/commits/3e3e1495): UI exploration (branch only): project cards now show real file counts, facepiles show the actual people seen on a project once you've opened it, and Peek is available on every project — opening instantly with the cached file list, plus a refresh that fetches details for projects never opened on this device.
+- [`60abc1db`](https://github.com/quarto-dev/q2/commits/60abc1db): UI exploration (branch only): fixed "New collection" doing nothing in some browsers — creating and renaming collections now use proper dialogs, and remove/leave/delete confirmations are in-app dialogs instead of native popups.
+
 ### 2026-07-09
 
 - [`d31e6118`](https://github.com/quarto-dev/q2/commits/d31e6118): Quoted text in the rich-text editor now appears as ordinary editable quote characters (straight `"…"` or `'…'`) instead of a non-editable pill, so you can edit inside quotes; formatting inside a quote (bold, italic) still renders live.
+- [`52c92f94`](https://github.com/quarto-dev/q2/commits/52c92f94): UI exploration (branch only): projects can be downloaded as a ZIP straight from the projects home (project menu → "Download as ZIP") without opening them; the avatar-menu backup entries are now named "Export/Import project list (JSON)".
+- [`1c447eea`](https://github.com/quarto-dev/q2/commits/1c447eea): UI exploration (branch only): moving a project out of a collection that's shared with other people now asks for confirmation ("you're changing other people's view of this collection"), with a "Don't show this again" opt-out. Private collections are unaffected.
+- [`dbd1bc44`](https://github.com/quarto-dev/q2/commits/dbd1bc44): UI exploration (branch only): every collection header now shows avatar chips — dimmed and just you while private, glyph plus member facepile when shared. Clicking the chips opens the members popover; for a private collection, copying the invite link is what turns sharing on.
+- [`b379c89d`](https://github.com/quarto-dev/q2/commits/b379c89d): UI exploration (branch only): "shelf" is now called "collection" everywhere — menus, dialogs, and invite links. Existing arrangements carry over automatically.
+
+### 2026-07-08
+
+- [`71b6c585`](https://github.com/quarto-dev/q2/commits/71b6c585): UI exploration (branch only): shelves can be explicitly shared — a people glyph and member facepile appear on shared shelves, opening a members popover with an invite link. Invite links carry the shelf's projects, so joining from another browser delivers them for real; a brand-new browser skips setup and is asked only for a name and cursor color. Membership itself is still local mock data.
 
 ### 2026-07-07
 
+- [`0f338475`](https://github.com/quarto-dev/q2/commits/0f338475): UI exploration (branch only): project cards, shelf headers, and the Peek popover show collaborator facepiles (colored initial disks). Collaborators are mock data for now — real attribution needs automerge-history plumbing.
+- [`1a37f9eb`](https://github.com/quarto-dev/q2/commits/1a37f9eb): UI exploration (branch only): projects can be dragged between shelves and the unshelved list, with the drop target highlighted while dragging.
+- [`389af46b`](https://github.com/quarto-dev/q2/commits/389af46b): UI exploration (branch only): a shelves-based full-page projects home replaces the project-selector modal — search with Cmd+K, personal shelves to group projects, streamlined New/Connect/Import dialogs, and an avatar menu holding identity, cursor color, device linking, and JSON backup. An avatar-menu item switches back to the classic UI.
 - [`4af08ef3`](https://github.com/quarto-dev/q2/commits/4af08ef3): Dragging a text selection in the preview now opens the rich-text editor with that selection already active (so Bold/Italic/Link apply immediately); a selection dragged across multiple blocks no longer opens an editor, keeping the selection available for copying.
 - [`6cfc098f`](https://github.com/quarto-dev/q2/commits/6cfc098f): Raised the service-worker precache size limit so the (now about 37 MB) WASM module is cached again for offline use, and to stop continued WASM growth from breaking the production build.
 

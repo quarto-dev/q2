@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react'
 import {
   listLocalProjects,
   getLocalProjectSetPointer,
+  getLocalCollectionPointers,
 } from '../services/localProjects'
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project'
-import type { ProjectSetPointer } from '../../services/storage/types'
+import type { ProjectSetPointer, CollectionPointerEntry } from '../../services/storage/types'
 
 export interface LocalProjectsState {
   loading: boolean
   projects: ProjectEntry[]
   projectSetPointer: ProjectSetPointer | null
+  collectionPointers: CollectionPointerEntry[]
   error?: string
 }
 
@@ -25,14 +27,19 @@ export function useLocalProjects(): LocalProjectsState {
     loading: true,
     projects: [],
     projectSetPointer: null,
+    collectionPointers: [],
   })
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([listLocalProjects(), getLocalProjectSetPointer()])
-      .then(([projects, projectSetPointer]) => {
+    Promise.all([
+      listLocalProjects(),
+      getLocalProjectSetPointer(),
+      getLocalCollectionPointers(),
+    ])
+      .then(([projects, projectSetPointer, collectionPointers]) => {
         if (cancelled) return
-        setState({ loading: false, projects, projectSetPointer })
+        setState({ loading: false, projects, projectSetPointer, collectionPointers })
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -41,6 +48,7 @@ export function useLocalProjects(): LocalProjectsState {
           loading: false,
           projects: [],
           projectSetPointer: null,
+          collectionPointers: [],
           error: message,
         })
       })

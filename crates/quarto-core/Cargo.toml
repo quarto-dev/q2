@@ -74,6 +74,10 @@ include_dir = "0.7"
 # or other non-CLI consumers. The `quarto` crate enables this via
 # `quarto-core/clap`; no other consumer needs it.
 clap = { workspace = true, optional = true, features = ["derive"] }
+# Capture-doc wire format (engine/capture_files.rs::gzip_captures).
+# Needed on wasm32 too — the module compiles on both targets, and
+# flate2 (miniz_oxide backend) builds cleanly for wasm.
+flate2.workspace = true
 
 [features]
 clap = ["dep:clap"]
@@ -115,7 +119,6 @@ tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "process
 uuid.workspace = true
 
 [dev-dependencies]
-flate2.workspace = true
 insta.workspace = true
 quarto-error-catalog = { workspace = true }
 tempfile = "3"

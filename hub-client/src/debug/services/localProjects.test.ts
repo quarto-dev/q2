@@ -17,20 +17,23 @@ import { DB_NAME, STORES } from '../../services/storage/types'
 import {
   listLocalProjects,
   getLocalProjectSetPointer,
+  getLocalCollectionPointers,
   _resetLocalDbCacheForTesting,
 } from './localProjects'
 
 async function seedDatabase(
   projects: Array<Record<string, unknown>>,
   pointer?: { projectSetDocId: string; syncServer: string },
+  collections?: Array<{ projectSetDocId: string; syncServer: string }>,
 ) {
+  const needsProjectSetStore = !!pointer || !!collections
   const db = await openDB(DB_NAME, 1, {
     upgrade(db) {
       db.createObjectStore(STORES.PROJECTS, { keyPath: 'id' })
       // Only create the projectSet store when the caller actually wants to
       // seed a pointer — this lets tests verify the read helper's behavior
       // when the store is missing entirely.
-      if (pointer) {
+      if (needsProjectSetStore) {
         db.createObjectStore(STORES.PROJECT_SET, { keyPath: 'key' })
       }
     },
@@ -40,6 +43,9 @@ async function seedDatabase(
   }
   if (pointer) {
     await db.put(STORES.PROJECT_SET, { key: 'projectSet', ...pointer })
+  }
+  if (collections) {
+    await db.put(STORES.PROJECT_SET, { key: 'collections', collections })
   }
   db.close()
 }
@@ -104,6 +110,32 @@ describe('localProjects (debug page IndexedDB read helpers)', () => {
     expect(pointer).not.toBeNull()
     expect(pointer!.projectSetDocId).toBe('pset-xyz')
     expect(pointer!.syncServer).toBe('wss://sync.example.com')
+  })
+
+  it('returns [] for collection pointers when none are seeded', async () => {
+    expect(await getLocalCollectionPointers()).toEqual([])
+  })
+
+  it('returns every collection pointer (each its own synced ProjectSetDocument)', async () => {
+    await seedDatabase([], undefined, [
+      { projectSetDocId: 'root-doc', syncServer: 'wss://s' },
+      { projectSetDocId: 'team-doc', syncServer: 'wss://s' },
+      { projectSetDocId: 'synctest-doc', syncServer: 'wss://s' },
+    ])
+
+    const collections = await getLocalCollectionPointers()
+    expect(collections.map((c) => c.projectSetDocId)).toEqual([
+      'root-doc',
+      'team-doc',
+      'synctest-doc',
+    ])
+  })
+
+  it('does not run the pointer→collections migration (read-only)', async () => {
+    // A browser with only the legacy singleton (no collections record yet):
+    // the read helper must NOT synthesize/migrate — it just reports [].
+    await seedDatabase([], { projectSetDocId: 'legacy-root', syncServer: 'wss://s' })
+    expect(await getLocalCollectionPointers()).toEqual([])
   })
 
   it('does not upgrade or create stores that are missing (read-only)', async () => {

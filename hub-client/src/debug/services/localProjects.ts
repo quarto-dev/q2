@@ -13,7 +13,13 @@
  */
 
 import { openDB, type IDBPDatabase } from 'idb'
-import { DB_NAME, STORES, type ProjectSetPointer } from '../../services/storage/types'
+import {
+  DB_NAME,
+  STORES,
+  type ProjectSetPointer,
+  type CollectionsPointer,
+  type CollectionPointerEntry,
+} from '../../services/storage/types'
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project'
 
 let dbPromise: Promise<IDBPDatabase> | null = null
@@ -61,6 +67,29 @@ export async function getLocalProjectSetPointer(): Promise<ProjectSetPointer | n
   }
   const entry = await db.get(STORES.PROJECT_SET, 'projectSet')
   return (entry as ProjectSetPointer | undefined) ?? null
+}
+
+/**
+ * Return the collections pointer array. Each entry is its own synced
+ * Automerge `ProjectSetDocument` (the root plus every named collection), so
+ * the debug page can list and subscribe to them individually.
+ *
+ * Returns `[]` when the `collections` record is absent — e.g. a browser that
+ * predates the v5 pointer→collections migration, whose root still lives in the
+ * legacy singleton (see `getLocalProjectSetPointer`). Unlike the app's
+ * `getCollectionPointers`, this is strictly read-only: it does NOT run the
+ * migration or self-heal, because the debug page must not write to the shared
+ * database.
+ */
+export async function getLocalCollectionPointers(): Promise<CollectionPointerEntry[]> {
+  const db = await getReadOnlyDb()
+  if (!db.objectStoreNames.contains(STORES.PROJECT_SET)) {
+    return []
+  }
+  const entry = (await db.get(STORES.PROJECT_SET, 'collections')) as
+    | CollectionsPointer
+    | undefined
+  return entry?.collections ?? []
 }
 
 /** @internal Test-only helper to reset the cached DB promise between tests. */

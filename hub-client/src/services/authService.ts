@@ -71,8 +71,13 @@ export async function fetchActorId(projectId: string): Promise<string | null> {
  * Resolve the per-project actor ID for a document open. Three-valued contract
  * the callers depend on:
  *   - string    → actor ID resolved; open with it
- *   - undefined → auth disabled; open with no (random) actor ID
+ *   - undefined → auth disabled and no fallback; open with a random actor ID
  *   - null      → auth failure (401/403); abandon the open
+ *
+ * When auth is disabled, `fallbackActorId` (if provided) is returned so the
+ * open uses a *stable* local actor — this is how auth-less deployments
+ * (local-prod / `--allow-insecure-auth`) still stamp a consistent identity into
+ * documents. The network is never touched in the auth-disabled branch.
  *
  * On auth failure we fire `onSessionExpired` (a silent refresh) and return
  * `null` so callers' `=== null` guard abandons this attempt; One Tap either
@@ -83,8 +88,9 @@ export async function resolveActorId(
   indexDocId: string,
   authEnabled: boolean,
   onSessionExpired: () => void,
+  fallbackActorId?: string,
 ): Promise<string | undefined | null> {
-  if (!authEnabled) return undefined;
+  if (!authEnabled) return fallbackActorId;
   const id = await fetchActorId(indexDocId);
   if (id === null) {
     onSessionExpired();

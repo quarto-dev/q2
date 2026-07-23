@@ -2142,6 +2142,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64",
+ "flate2",
  "glob",
  "hashlink",
  "hex",

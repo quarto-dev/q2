@@ -201,6 +201,36 @@ pub struct EngineCapture {
     /// `quarto-core::engine::replay` deserializes via
     /// `serde_json::from_value`.
     pub result: serde_json::Value,
+
+    /// Contents of engine-generated supporting files (bd-qbhp2cvv).
+    ///
+    /// `result.supporting_files` records *paths* only; those files
+    /// exist only on the machine (often only in the temp dir) where
+    /// the engine ran. For preview replay on another machine — or in
+    /// the browser WASM VFS — the bytes must travel with the capture.
+    /// Recording embeds them here; `CaptureSpliceStage` materializes
+    /// them next to the document before splicing.
+    ///
+    /// Empty for captures that predate this field (`serde(default)`)
+    /// and for engines that produced no supporting files; such
+    /// captures serialize without the key, byte-identical to the
+    /// pre-field wire format.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<CaptureFile>,
+}
+
+/// One engine-generated supporting file embedded in an
+/// [`EngineCapture`] (bd-qbhp2cvv).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaptureFile {
+    /// Path relative to the source document's directory, always with
+    /// forward-slash separators (e.g.
+    /// `"doc_files/figure-html/cell-1.png"`) so captures recorded on
+    /// one platform replay on any other.
+    pub path: String,
+
+    /// Base64-encoded (standard alphabet, padded) file contents.
+    pub contents_base64: String,
 }
 
 /// Top-level metadata about a render invocation.

@@ -26,7 +26,7 @@ import {
 } from '@quarto/quarto-sync-client';
 import { SERVER_INFO_PATH } from './globalSetup';
 import type { ServerInfo } from './globalSetup';
-import { expect, type Page } from '@playwright/test';
+import { expect, type BrowserContext, type Page } from '@playwright/test';
 import { DEFAULT_PREFERENCES } from '../../src/services/preferences/schema';
 import type {} from './testHooks';
 
@@ -159,6 +159,26 @@ async function mockAuthMe(page: Page): Promise<void> {
   );
 }
 
+/**
+ * Pin the projects-home UI variant before any page JS runs. `App.tsx` reads
+ * `qh-ui-variant` from localStorage in its useState initializer, so this must
+ * be an addInitScript, not a post-load evaluate.
+ *
+ * The bulk of the suite predates the collections-based projects home and
+ * drives the classic ProjectSelector ("Your Projects"); those specs pin
+ * `'classic'`. The classic variant remains user-reachable (avatar menu →
+ * "Switch to classic UI"), so this keeps real coverage, not a dead path.
+ * Collections-home coverage lives in `projects-home.spec.ts`.
+ */
+export async function seedUiVariant(
+  target: Page | BrowserContext,
+  variant: 'classic' | 'collections',
+): Promise<void> {
+  await target.addInitScript((v) => {
+    localStorage.setItem('qh-ui-variant', v);
+  }, variant);
+}
+
 async function interceptMonacoCdn(page: Page): Promise<void> {
   await page.route(
     '**/cdn.jsdelivr.net/npm/monaco-editor@*/min/vs/**',
@@ -180,8 +200,28 @@ export async function bootstrapProjectSet(
   page: Page,
   syncServer: string,
 ): Promise<void> {
+  await bootstrapProjectSetVariant(page, syncServer, 'classic');
+}
+
+/**
+ * Like {@link bootstrapProjectSet}, but lands on the collections-based
+ * projects home (the app's default variant) instead of the classic selector.
+ */
+export async function bootstrapProjectsHome(
+  page: Page,
+  syncServer: string,
+): Promise<void> {
+  await bootstrapProjectSetVariant(page, syncServer, 'collections');
+}
+
+async function bootstrapProjectSetVariant(
+  page: Page,
+  syncServer: string,
+  variant: 'classic' | 'collections',
+): Promise<void> {
   await mockAuthMe(page);
   await interceptMonacoCdn(page);
+  await seedUiVariant(page, variant);
   // Monaco 0.55+ requires MonacoEnvironment.getWorkerUrl. Without it the
   // workers AMD module throws and editor.main.js never finishes — Monaco
   // stays on "Loading..." indefinitely. This initScript is injected before
@@ -254,9 +294,18 @@ export async function bootstrapProjectSet(
     .getByRole('button', { name: /Create New Project Set/i })
     .click();
 
-  await expect(
-    page.getByRole('heading', { name: 'Your Projects' }),
-  ).toBeVisible({ timeout: 20000 });
+  if (variant === 'classic') {
+    await expect(
+      page.getByRole('heading', { name: 'Your Projects' }),
+    ).toBeVisible({ timeout: 20000 });
+  } else {
+    // The collections home has no landmark heading, and with an empty project
+    // set it shows a "No projects yet" empty state without the collection
+    // controls — the header search box is the element present in every state.
+    await expect(
+      page.getByPlaceholder('Search projects…'),
+    ).toBeVisible({ timeout: 20000 });
+  }
 }
 
 /**
