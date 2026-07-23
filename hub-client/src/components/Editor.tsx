@@ -1,4 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+// Side effects only: bundles Monaco + workers so no runtime CDN fetch occurs.
+import '../monacoSetup';
 import MonacoEditor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';

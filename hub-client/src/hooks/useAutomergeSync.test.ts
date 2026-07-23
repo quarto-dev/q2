@@ -154,6 +154,57 @@ describe('useAutomergeSync', () => {
       // Content should remain empty (initial state), not synced from Automerge
       expect(result.current.content).toBe('');
     });
+
+    it('reconciles into Monaco when the editor mounts after content arrived (blank-editor regression)', () => {
+      // Regression (bd-eakukmlr): content can arrive before onMount stores the
+      // editor ref, and the editor is created from a stale empty defaultValue.
+      // Mounting must itself reconcile, or the editor stays blank until reload.
+      mockGetFileContent.mockReturnValue('# Hello');
+      const fakeEdits = [{ range: {}, text: '# Hello', forceMoveMarkers: true }];
+
+      const { result } = renderHook(() => useAutomergeSync(defaultOptions()));
+
+      // Content reconciled into React state while Monaco is absent
+      expect(result.current.content).toBe('# Hello');
+
+      // Monaco mounts late, created from the stale (empty) defaultValue
+      const mockEditor = createMockEditor('');
+      mockDiffToMonacoEdits.mockClear();
+      mockDiffToMonacoEdits.mockReturnValue(fakeEdits as never);
+
+      act(() => {
+        result.current.onEditorMount(mockEditor as never);
+      });
+
+      expect(mockDiffToMonacoEdits).toHaveBeenCalledWith('', '# Hello');
+      expect(mockEditor.executeEdits).toHaveBeenCalledWith('remote-sync', fakeEdits);
+    });
+
+    it('reconciles a fresh editor instance on key remount (stale ref to disposed editor)', () => {
+      // Every mount must reconcile, not just the first: after a file-switch
+      // key remount, a new empty editor replaces the disposed one.
+      mockGetFileContent.mockReturnValue('# Hello');
+      const fakeEdits = [{ range: {}, text: '# Hello', forceMoveMarkers: true }];
+
+      const { result } = renderHook(() => useAutomergeSync(defaultOptions()));
+
+      const editor1 = createMockEditor('# Hello');
+      act(() => {
+        result.current.onEditorMount(editor1 as never);
+      });
+
+      // Remount: a fresh, empty editor instance replaces the disposed one
+      const editor2 = createMockEditor('');
+      mockDiffToMonacoEdits.mockClear();
+      mockDiffToMonacoEdits.mockReturnValue(fakeEdits as never);
+
+      act(() => {
+        result.current.onEditorMount(editor2 as never);
+      });
+
+      expect(mockDiffToMonacoEdits).toHaveBeenCalledWith('', '# Hello');
+      expect(editor2.executeEdits).toHaveBeenCalledWith('remote-sync', fakeEdits);
+    });
   });
 
   describe('real-time remote edits', () => {
