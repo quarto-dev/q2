@@ -99,6 +99,8 @@ interface WasmModuleExtended {
   ) => Promise<string>;
   write_qmd: (astJson: string) => Promise<string>;
   incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
+  /** Diff two Pandoc JSON ASTs and write the change-annotated result as QMD. */
+  diff_asts_to_qmd(before_ast_json: string, after_ast_json: string): string;
   parse_qmd_content(content: string): string;
   apply_node_edit(
     content: string,
@@ -786,6 +788,40 @@ export function incrementalWriteQmd(originalQmd: string, newAst: RustQmdJson): s
   }
 
   return response.qmd
+}
+
+export interface DiffAstsResult {
+  /** Annotated qmd text: `[++ ...]`/`[-- ...]` marks, `::: {.added}`/`::: {.removed}` divs. */
+  qmd: string
+  /**
+   * Annotated AST JSON, directly renderable (editorial marks desugared to
+   * Spans with `quarto-insert` / `quarto-delete` classes, boundary spaces
+   * preserved). Feed this straight to the preview renderer — do NOT
+   * round-trip through the qmd text, which collapses whitespace.
+   */
+  astJson: string
+}
+
+/**
+ * Diff two Pandoc JSON ASTs into a change-annotated document.
+ *
+ * @param beforeAstJson - JSON-serialized Pandoc AST of the older state
+ * @param afterAstJson  - JSON-serialized Pandoc AST of the newer state
+ * @throws if WASM is not initialized or the diff fails
+ */
+export function diffAsts(beforeAstJson: string, afterAstJson: string): DiffAstsResult {
+  if (!wasmModule) {
+    throw new Error('WASM not initialized. Call initWasm() first.')
+  }
+
+  const responseJson = wasmModule.diff_asts_to_qmd(beforeAstJson, afterAstJson)
+  const response: AstResponse = JSON.parse(responseJson)
+
+  if (!response.success || response.qmd === undefined || response.ast === undefined) {
+    throw new Error(`AST diff failed: ${response.error}`)
+  }
+
+  return { qmd: response.qmd, astJson: response.ast }
 }
 
 /**

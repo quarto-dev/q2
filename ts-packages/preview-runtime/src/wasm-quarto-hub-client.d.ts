@@ -75,6 +75,8 @@ declare module 'wasm-quarto-hub-client' {
   export function ast_to_qmd(ast_json: string): string;
   /** Incrementally write a modified AST back to QMD, preserving unchanged source text. */
   export function incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
+  /** Diff two Pandoc JSON ASTs and write the change-annotated result as QMD. */
+  export function diff_asts_to_qmd(before_ast_json: string, after_ast_json: string): string;
 
   // Response type for parse/write operations
   export interface AstResponse {

@@ -295,6 +295,14 @@
   min-width: 0;
 }
 
+/* AST diff debug controls — visually muted so the debug bar reads as
+   tooling, not document status. */
+.ast-diff-debug-bar {
+  background: #f6f3ee;
+  border-bottom-color: #e2dccf;
+  color: #5a5344;
+}
+
 .preview-status-error {
   color: #a12d2d;
 }

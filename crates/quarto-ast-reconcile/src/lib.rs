@@ -16,6 +16,7 @@
  * using structural hashes as "virtual keys" for node matching.
  */
 
+pub mod annotate;
 mod apply;
 mod compute;
 #[cfg(test)]
@@ -24,6 +25,7 @@ mod hash;
 mod remap;
 pub mod types;
 
+pub use annotate::annotate_diff;
 pub use apply::apply_reconciliation;
 pub use compute::{compute_reconciliation, compute_reconciliation_for_blocks};
 pub use hash::{

@@ -15,6 +15,7 @@ import {
 } from '@quarto/preview-runtime';
 import { vfsAddFile, isWasmReady, clearCapture } from '@quarto/preview-runtime';
 import { PreviewStatusBar } from './render/PreviewStatusBar';
+import { AstDiffDebugControls } from './render/AstDiffDebugControls';
 import { hasExecutableCells } from '../services/executableCells';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
@@ -1111,6 +1112,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onRun={(p) => { onRequestExecution?.(p); }}
             onClear={(p) => clearCapture(p)}
           />
+          <AstDiffDebugControls content={displayContent} />
           <PreviewRouter
             content={displayContent}
             currentFile={currentFile}

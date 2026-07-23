@@ -2874,6 +2874,140 @@ pub fn ast_to_qmd(ast_json: &str) -> String {
     }
 }
 
+/// Diff two Pandoc JSON ASTs, returning the change-annotated result both as
+/// QMD text and as a renderable AST JSON.
+///
+/// Computes the AST diff (`quarto_ast_reconcile::annotate_diff`) between a
+/// `before` and an `after` AST. In the `qmd` output, added inlines appear as
+/// `[++ ...]`, removed inlines as `[-- ...]`, added blocks inside
+/// `::: {.added}` divs, removed blocks inside `::: {.removed}` divs.
+///
+/// The `ast` output is the same annotated AST with the editorial marks
+/// desugared to Spans (`quarto-insert` / `quarto-delete` classes — same
+/// classes the parse-tier postprocess uses, but WITHOUT `trim_inlines`:
+/// boundary spaces are part of the diff and must be preserved). This is what
+/// the hub-client diff modal feeds directly to the q2-preview renderer,
+/// avoiding a lossy qmd round-trip.
+///
+/// # Arguments
+/// * `before_ast_json` - JSON-serialized Pandoc AST of the older state
+/// * `after_ast_json` - JSON-serialized Pandoc AST of the newer state
+///
+/// # Returns
+/// JSON: `{ "success": true, "qmd": "<annotated-qmd>", "ast": "<annotated-ast-json>" }`
+/// or `{ "success": false, "error": "..." }`
+#[wasm_bindgen]
+pub fn diff_asts_to_qmd(before_ast_json: &str, after_ast_json: &str) -> String {
+    use pampa::filter_context::FilterContext;
+    use pampa::filters::{Filter, FilterReturn::FilterResult, topdown_traverse};
+    use pampa::pandoc::attr::AttrSourceInfo;
+    use pampa::pandoc::{Inline, Span};
+    use pampa::readers::json::read as json_read;
+    use pampa::writers::json::{JsonConfig, write_with_config};
+    use pampa::writers::qmd::write as qmd_write;
+    use quarto_ast_reconcile::annotate_diff;
+
+    let fail = |error: String| -> String {
+        serde_json::to_string(&AstResponse {
+            success: false,
+            ast: None,
+            qmd: None,
+            error: Some(error),
+            diagnostics: None,
+            warnings: None,
+        })
+        .unwrap()
+    };
+
+    let mut before_cursor = std::io::Cursor::new(before_ast_json.as_bytes());
+    let before = match json_read(&mut before_cursor) {
+        Ok((pandoc, _context)) => pandoc,
+        Err(e) => return fail(format!("Failed to parse before JSON AST: {}", e)),
+    };
+    let mut after_cursor = std::io::Cursor::new(after_ast_json.as_bytes());
+    let (after, after_context) = match json_read(&mut after_cursor) {
+        Ok((pandoc, context)) => (pandoc, context),
+        Err(e) => return fail(format!("Failed to parse after JSON AST: {}", e)),
+    };
+
+    let annotated = annotate_diff(&before, &after);
+
+    // qmd text (for logging / inspection).
+    let mut buf = Vec::new();
+    if let Err(diags) = qmd_write(&annotated, &mut buf) {
+        let error_msg = diags
+            .iter()
+            .map(|d| d.to_text(None))
+            .collect::<Vec<_>>()
+            .join("\n");
+        return fail(format!("Failed to write annotated QMD: {}", error_msg));
+    }
+    let qmd_text = String::from_utf8(buf).unwrap_or_default();
+
+    // Desugar Insert/Delete marks to Spans so the AST serializes cleanly
+    // (Pandoc JSON has no editorial-mark inlines). Unlike the parse-tier
+    // postprocess, content is NOT trimmed — boundary spaces stay inside.
+    let mut filter = Filter::new()
+        .with_insert(|ins, _ctx| {
+            let mut classes = vec!["quarto-insert".to_string()];
+            classes.extend(ins.attr.1);
+            FilterResult(
+                vec![Inline::Span(Span {
+                    attr: (ins.attr.0, classes, ins.attr.2),
+                    content: ins.content,
+                    source_info: ins.source_info,
+                    attr_source: AttrSourceInfo::empty(),
+                })],
+                true,
+            )
+        })
+        .with_delete(|del, _ctx| {
+            let mut classes = vec!["quarto-delete".to_string()];
+            classes.extend(del.attr.1);
+            FilterResult(
+                vec![Inline::Span(Span {
+                    attr: (del.attr.0, classes, del.attr.2),
+                    content: del.content,
+                    source_info: del.source_info,
+                    attr_source: AttrSourceInfo::empty(),
+                })],
+                true,
+            )
+        });
+    let desugared = topdown_traverse(annotated, &mut filter, &mut FilterContext::new());
+
+    // Serialize the annotated AST. The after-side context supplies the file
+    // table; before-side nodes may reference slightly skewed byte ranges,
+    // which is acceptable for this read-only diff view.
+    let mut ast_buf = Vec::new();
+    let config = JsonConfig {
+        include_inline_locations: false,
+        ..JsonConfig::default()
+    };
+    match write_with_config(&desugared, &after_context, &mut ast_buf, &config) {
+        Ok(_) => {
+            let ast_json = String::from_utf8(ast_buf).unwrap_or_default();
+            serde_json::to_string(&AstResponse {
+                success: true,
+                ast: Some(ast_json),
+                qmd: Some(qmd_text),
+                error: None,
+                diagnostics: None,
+                warnings: None,
+            })
+            .unwrap()
+        }
+        Err(diags) => {
+            let error_msg = diags
+                .iter()
+                .map(|d| d.to_text(None))
+                .collect::<Vec<_>>()
+                .join("\n");
+            fail(format!("Failed to serialize annotated AST: {}", error_msg))
+        }
+    }
+}
+
 /// Incrementally write a modified AST back to QMD, preserving unchanged
 /// portions of the original source text verbatim.
 ///

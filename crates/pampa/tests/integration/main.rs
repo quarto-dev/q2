@@ -10,6 +10,7 @@
 //! The harness handles `#[test]` discovery across all modules, and
 //! nextest still runs each test in its own process for isolation.
 
+pub mod ast_diff_annotate;
 pub mod attribution_html_coalescing_test;
 pub mod attribution_json_wire_test;
 pub mod incremental_writer_investigation;
