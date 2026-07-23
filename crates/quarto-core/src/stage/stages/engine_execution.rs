@@ -1629,6 +1629,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            files: Vec::new(),
         };
 
         let mut registry = EngineRegistry::new();
@@ -2013,6 +2014,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            files: Vec::new(),
         };
 
         let mut registry = EngineRegistry::new();

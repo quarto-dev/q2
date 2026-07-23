@@ -352,6 +352,7 @@ fn test_engine_capture_roundtrip_through_disk() {
         engine_name: "jupyter".into(),
         input_qmd: "---\nengine: jupyter\n---\n\n# Hello\n".into(),
         result: result_json.clone(),
+        files: Vec::new(),
     }];
 
     write_trace(&doc, &path).unwrap();
@@ -783,4 +784,58 @@ fn test_v2_dedup_actually_shrinks_repeated_asts() {
     );
 
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+// ── bd-qbhp2cvv: EngineCapture.files wire-format compatibility ─────────
+
+/// A capture JSON that predates the `files` field must deserialize
+/// with an empty `files` vec (serde default).
+#[test]
+fn test_engine_capture_without_files_field_deserializes() {
+    let old_wire = serde_json::json!({
+        "engine_name": "knitr",
+        "input_qmd": "```{r}\n1\n```\n",
+        "result": {"markdown": "output", "supporting_files": []},
+    });
+    let capture: EngineCapture = serde_json::from_value(old_wire).unwrap();
+    assert!(capture.files.is_empty());
+}
+
+/// A capture with no files must serialize WITHOUT the `files` key —
+/// byte-identical wire shape to the pre-field format, so existing
+/// snapshots and hash-keyed caches are unaffected.
+#[test]
+fn test_engine_capture_empty_files_serializes_without_key() {
+    let capture = EngineCapture {
+        engine_name: "knitr".into(),
+        input_qmd: "```{r}\n1\n```\n".into(),
+        result: serde_json::json!({"markdown": "output"}),
+        files: Vec::new(),
+    };
+    let value = serde_json::to_value(&capture).unwrap();
+    assert!(
+        value.get("files").is_none(),
+        "empty files must not appear on the wire; got: {value}"
+    );
+}
+
+/// Files round-trip: path + base64 contents survive serialize →
+/// deserialize unchanged.
+#[test]
+fn test_engine_capture_files_roundtrip() {
+    use quarto_trace::CaptureFile;
+    let capture = EngineCapture {
+        engine_name: "knitr".into(),
+        input_qmd: "```{r}\nplot(1)\n```\n".into(),
+        result: serde_json::json!({"markdown": "![](doc_files/figure-html/f.png)"}),
+        files: vec![CaptureFile {
+            path: "doc_files/figure-html/f.png".into(),
+            contents_base64: "iVBORw0KGgo=".into(),
+        }],
+    };
+    let json = serde_json::to_vec(&capture).unwrap();
+    let back: EngineCapture = serde_json::from_slice(&json).unwrap();
+    assert_eq!(back.files.len(), 1);
+    assert_eq!(back.files[0].path, "doc_files/figure-html/f.png");
+    assert_eq!(back.files[0].contents_base64, "iVBORw0KGgo=");
 }

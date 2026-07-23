@@ -1609,6 +1609,7 @@ mod tests {
             result: serde_json::json!({
                 "markdown": "::: {.cell}\n```{.markerlang .cell-code}\n1 + 1\n```\n\n::: {.cell-output .cell-output-stdout}\n```\nSPLICEMARKER_ZX9\n```\n:::\n:::\n"
             }),
+            files: Vec::new(),
         };
 
         let project = make_test_project();
@@ -2484,6 +2485,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            files: Vec::new(),
         };
 
         let replay_registry = EngineRegistry::with_replay(capture);
@@ -2538,6 +2540,7 @@ mod tests {
             engine_name: "replay-only-engine".into(),
             input_qmd: String::new(),
             result: serde_json::json!({ "markdown": "" }),
+            files: Vec::new(),
         };
 
         let project = make_test_project();

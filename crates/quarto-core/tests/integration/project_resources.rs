@@ -656,6 +656,7 @@ mod orchestrator_engine_channel {
                 },
                 "needs_postprocess": false,
             }),
+            files: Vec::new(),
         };
 
         // Now run the *real* pipeline through ProjectPipeline::new
