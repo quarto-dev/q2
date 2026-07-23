@@ -142,8 +142,7 @@ impl PipelineStage for CaptureSpliceStage {
             .path
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
-            .map(std::path::Path::to_path_buf)
-            .unwrap_or_else(|| ctx.project.dir.clone());
+            .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
         for capture in &self.captures {
             if !capture.files.is_empty() {
                 trace_event!(

@@ -276,7 +276,7 @@ mod tests {
         let files = collect_capture_files(runtime.as_ref(), &doc_dir, &[doc_dir.join("doc_files")]);
 
         let mut paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-        paths.sort();
+        paths.sort_unstable();
         assert_eq!(
             paths,
             vec![

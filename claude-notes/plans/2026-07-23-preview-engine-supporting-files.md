@@ -1,7 +1,9 @@
 # Preview: engine-generated images missing (`q2 preview` + hub-client q2-preview)
 
 **Braid strand:** bd-qbhp2cvv
-**Status:** plan draft — awaiting review, do not execute yet
+**Status:** implemented on branch
+`braid/bd-qbhp2cvv-preview-knitrjupyter-engine-generated`; E2E-verified
+(knitr, real browser). jupyter blocked upstream by bd-rwz8kwia.
 
 ## Overview
 
@@ -275,7 +277,10 @@ plt.plot([1,2,3])
 - [x] Phase 5: end-to-end verification — knitr confirmed in a real
       browser; jupyter blocked upstream (see below); `cargo xtask verify`
       run at the end
-- [ ] Phase 6: docs/changelog (hub-client changelog if hub-client touched)
+- [x] Phase 6: docs/changelog — no `hub-client/` files changed (the fix
+      is entirely Rust-side; hub-client picks it up on its next WASM
+      rebuild), so the file-based changelog rule doesn't trigger. No
+      user-facing docs impact (bug fix, no new options).
 
 ## End-to-end verification record (2026-07-23)
 
