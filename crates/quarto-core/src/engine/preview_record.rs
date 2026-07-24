@@ -434,6 +434,18 @@ mod tests {
             out.push_str("\n![](doc_files/figure-html/fig.png)\n");
             Ok(ExecuteResult::new(out).with_supporting_files(vec![self.doc_dir.join("doc_files")]))
         }
+
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "test-figures" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
+            }
+        }
     }
 
     #[tokio::test]
@@ -451,7 +463,7 @@ mod tests {
             doc_dir: path.parent().unwrap().to_path_buf(),
         }));
 
-        let captures = record_capture(&path, &project, runtime, Some(registry))
+        let captures = record_capture(&path, &project, runtime, Some(Arc::new(registry)))
             .await
             .expect("pipeline runs");
         let capture = captures.first().expect("capture present");

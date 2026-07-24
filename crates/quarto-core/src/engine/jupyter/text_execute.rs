@@ -801,6 +801,7 @@ mod tests {
         CodeBlock {
             start: 0,
             end: language.len() + code.len() + 10, // approximate, not checked by tests
+            code_start: language.len() + 5,        // approximate; not checked by tests
             language: language.to_string(),
             code: code.to_string(),
         }

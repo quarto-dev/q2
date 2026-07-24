@@ -325,6 +325,7 @@ mod tests {
                     "include_after": after,
                 },
             }),
+            files: Vec::new(),
         }
     }
 
@@ -378,6 +379,7 @@ mod tests {
             engine_name: "marimo".to_string(),
             input_qmd: String::new(),
             result: serde_json::json!({ "markdown": "" }),
+            files: Vec::new(),
         };
         fold_capture_includes_into_meta(&mut meta, &cap_no_includes);
         assert!(rendered_strings(&meta, "header").is_empty());

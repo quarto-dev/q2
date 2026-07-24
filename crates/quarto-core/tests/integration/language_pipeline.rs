@@ -28,6 +28,7 @@ fn make_context(project_dir: PathBuf, doc_path: PathBuf, is_single_file: bool) -
         is_single_file,
         files: vec![DocumentInfo::from_path(doc_path.clone())],
         output_dir: project_dir,
+        ..Default::default()
     };
     let document = DocumentInfo::from_path(doc_path);
     StageContext::new(runtime, format, project, document).expect("stage context")

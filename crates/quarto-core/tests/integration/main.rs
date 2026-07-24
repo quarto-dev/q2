@@ -59,7 +59,6 @@ pub mod revealjs_format;
 pub mod sidebar_pipeline;
 pub mod synth_engines_e2e;
 pub mod title_block_pipeline;
-pub mod ts_process_framing_probe;
 pub mod video_shortcode_preview;
 pub mod website_post_render;
 
