@@ -396,6 +396,24 @@ pub fn mint_session(
     identity: &SessionIdentity,
     now: i64,
 ) -> Result<String, jsonwebtoken::errors::Error> {
+    mint_session_at(keys, lifetimes, identity, now, now)
+}
+
+/// [`mint_session`] with an explicit `auth_time` anchor.
+///
+/// Used by the login path when the user has a live revocation event:
+/// `auth_time` is bumped to the revocation ledger's
+/// [`crate::revocation::RevocationLedger::min_auth_time`] (at most one
+/// second ahead of `now`), so a re-login in the same second as a
+/// logout-everywhere is provably post-revocation instead of dying with
+/// the revoked family.
+pub fn mint_session_at(
+    keys: &SessionKeys,
+    lifetimes: SessionLifetimes,
+    identity: &SessionIdentity,
+    now: i64,
+    auth_time: i64,
+) -> Result<String, jsonwebtoken::errors::Error> {
     let claims = SessionClaims {
         iss: SESSION_ISSUER.to_string(),
         sub: identity.sub.clone(),
@@ -404,8 +422,8 @@ pub fn mint_session(
         name: identity.name.clone(),
         picture: identity.picture.clone(),
         iat: now,
-        auth_time: now,
-        exp: lifetimes.expiry(now, now),
+        auth_time,
+        exp: lifetimes.expiry(now, auth_time),
         sid: generate_sid(),
     };
     sign_claims(keys, &claims)

@@ -308,17 +308,26 @@ fn build_auth_cookie(token: &str, secure: bool, max_age_secs: i64) -> String {
 }
 
 /// Mint a fresh hub session cookie (§1) for Google-validated claims:
-/// `auth_time = now`, fresh random `sid`, identity stamped from the
-/// validated Google claims. Returns the full `Set-Cookie` value.
-fn mint_session_cookie(
+/// fresh random `sid`, identity stamped from the validated Google
+/// claims, `auth_time = now` — bumped to the revocation ledger's
+/// re-login floor when one exists, so a login in the same second as a
+/// logout-everywhere doesn't die with the revoked family (clocks are
+/// second-granular). Returns the full `Set-Cookie` value.
+async fn mint_session_cookie(
     ctx: &HubContext,
     claims: &auth::OidcClaims,
 ) -> std::result::Result<String, jsonwebtoken::errors::Error> {
     let now = crate::session::unix_now();
     let lifetimes = ctx.session_lifetimes();
     let identity = crate::session::SessionIdentity::from_oidc(claims);
-    let token = crate::session::mint_session(ctx.session_keys(), lifetimes, &identity, now)?;
-    let max_age = lifetimes.expiry(now, now) - now;
+    let auth_time = ctx
+        .revocations()
+        .min_auth_time(&claims.sub)
+        .await
+        .map_or(now, |floor| floor.max(now));
+    let token =
+        crate::session::mint_session_at(ctx.session_keys(), lifetimes, &identity, now, auth_time)?;
+    let max_age = lifetimes.expiry(now, auth_time) - now;
     Ok(build_auth_cookie(
         &token,
         !ctx.allow_insecure_auth(),
@@ -753,7 +762,7 @@ async fn auth_callback(
         return Redirect::to("/?auth_error").into_response();
     }
 
-    let cookie = match mint_session_cookie(&ctx, &claims) {
+    let cookie = match mint_session_cookie(&ctx, &claims).await {
         Ok(cookie) => cookie,
         Err(err) => {
             tracing::error!(error = %err, "failed to mint session token");
@@ -1033,7 +1042,7 @@ async fn auth_refresh(
         ));
     }
 
-    let cookie = mint_session_cookie(&ctx, &claims).map_err(|err| {
+    let cookie = mint_session_cookie(&ctx, &claims).await.map_err(|err| {
         tracing::error!(error = %err, "failed to mint session token");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
