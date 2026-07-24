@@ -94,13 +94,15 @@ hex = "0.4"
 # MIME type detection from file content
 infer = "0.19"
 
+# RFC 3339 createdAt stamps on capture-doc meta (bd-eiku4ymo).
+chrono = "0.4"
+
 [dev-dependencies]
 tempfile = "3"
 # Phase 2 Bearer-auth integration tests: spin up a mock OIDC provider,
 # mint signed JWTs, exercise the hub router against random ports.
 rsa = { version = "0.9", features = ["pem", "getrandom"] }
 base64 = "0.22"
-chrono = "0.4"
 parking_lot = "0.12"
 
 [lints]
