@@ -1,6 +1,8 @@
 # Hub server-minted sliding sessions
 
-**Status:** in progress (kicked off 2026-07-24)
+**Status:** implementation complete (2026-07-24) — all phases C0–C7 done on
+`feature/hub-sliding-sessions` (unpushed); remaining: human browser-visual
+verification with a real Google client id (see C7 note), PR review, deploy.
 **Strand:** `bd-ey6jg70f` (epic)
 **Phase strands:** C0 `bd-j1241nof` · C1 `bd-sekcpmv1` · C2 `bd-jyzz8o97` ·
 C3 `bd-nh5pt1pd` · C4 `bd-74iiwb3l` · C5 `bd-3dq0x6ut` · C5b `bd-6kll0jr6` ·
