@@ -164,6 +164,55 @@ async fn legacy_google_jwt_cookie_rejected_401() {
     assert_eq!(body["error"], "unauthorized");
 }
 
+#[tokio::test]
+async fn ws_upgrade_rejects_legacy_google_cookie() {
+    let (provider, hub) = session_setup().await;
+    let google_token = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("legacy-ws-sub")
+            .to_value(),
+    );
+
+    let resp = hub
+        .ws_upgrade()
+        .header("origin", &hub.base_url)
+        .header("cookie", cookie_header(&google_token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        401,
+        "hard break applies to the WS upgrade too"
+    );
+}
+
+/// The failure path of the cutover is a clean logged-out flow: one
+/// redirect to `/?auth_error`, no cookie set, no loop.
+#[tokio::test]
+async fn callback_failure_redirects_once_without_cookie() {
+    let (_provider, hub) = google_session_setup().await;
+
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let resp = client
+        .post(hub.url("/auth/callback"))
+        .header("cookie", "g_csrf_token=csrf123")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("credential=not-a-valid-jwt&g_csrf_token=csrf123")
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_redirection());
+    assert_eq!(resp.headers().get("location").unwrap(), "/?auth_error");
+    assert!(
+        TestHub::set_auth_cookie(&resp).is_none(),
+        "no cookie may be set on a failed login"
+    );
+}
+
 // ── C2: cross-path rejection ──────────────────────────────────────
 
 #[tokio::test]
