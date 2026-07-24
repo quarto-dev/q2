@@ -54,6 +54,30 @@ pub struct HubStorageConfig {
     /// Absent in old configs; a new secret is generated on first startup.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_secret: Option<String>,
+
+    /// Session-token signing secret (hex-encoded 32 bytes), used to mint
+    /// and verify hub session cookies (HS256). Deliberately distinct from
+    /// `server_secret`: leaking this one enables full session forgery,
+    /// not just actor-id correlation. Auto-generated on first run.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_secret: Option<String>,
+
+    /// Previous session secret during a **graceful** rotation (hex).
+    /// Verification-only; signing always uses `session_secret`. Both
+    /// verify during an overlap window of one idle timeout from
+    /// `session_secret_rotated_at`, after which this entry is ignored.
+    /// **Never set this when rotating in response to a compromise** —
+    /// an overlap window keeps accepting attacker-forgeable cookies;
+    /// the emergency procedure is a new `session_secret` with no
+    /// previous (immediate global invalidation).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_session_secret: Option<String>,
+
+    /// When the graceful rotation happened (epoch seconds). Required
+    /// whenever `previous_session_secret` is set — it bounds the
+    /// overlap window.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_secret_rotated_at: Option<i64>,
 }
 
 impl HubStorageConfig {
@@ -66,6 +90,9 @@ impl HubStorageConfig {
             index_document_id: None,
             peers: Vec::new(),
             server_secret: None,
+            session_secret: None,
+            previous_session_secret: None,
+            session_secret_rotated_at: None,
         }
     }
 
@@ -196,6 +223,105 @@ pub fn resolve_server_secret(config: &mut HubStorageConfig, hub_dir: &Path) -> R
     Ok(bytes)
 }
 
+/// Resolve the session-token signing secret.
+///
+/// Same resolution order as [`resolve_server_secret`], with its own
+/// sources (the two secrets must never be shared — different blast
+/// radius):
+/// 1. `QUARTO_HUB_SESSION_SECRET` environment variable (64-char hex).
+///    Also the multi-instance deployment mechanism: hubs sharing this
+///    env var accept each other's session cookies.
+/// 2. `config.session_secret` field in `hub.json`.
+/// 3. Auto-generate 32 random bytes, persist via `config.save(hub_dir)`.
+pub fn resolve_session_secret(config: &mut HubStorageConfig, hub_dir: &Path) -> Result<[u8; 32]> {
+    // 1. Environment variable (highest priority — no file I/O, no config mutation)
+    if let Ok(hex) = std::env::var("QUARTO_HUB_SESSION_SECRET") {
+        return decode_secret_hex(&hex, "QUARTO_HUB_SESSION_SECRET");
+    }
+
+    // 2. Existing config value
+    if let Some(ref hex) = config.session_secret {
+        return decode_secret_hex(hex, "hub.json session_secret");
+    }
+
+    // 3. Auto-generate, persist, and return
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
+    config.session_secret = Some(hex::encode(bytes));
+    config.save(hub_dir)?;
+    Ok(bytes)
+}
+
+/// Resolve the **previous** session secret for a graceful-rotation
+/// overlap window (verification-only; C5b).
+///
+/// Sources, strictly paired (an env previous requires an env
+/// rotated-at; a `hub.json` previous requires the `hub.json` field):
+/// 1. `QUARTO_HUB_SESSION_SECRET_PREVIOUS` +
+///    `QUARTO_HUB_SESSION_SECRET_ROTATED_AT` (epoch seconds);
+/// 2. `config.previous_session_secret` + `config.session_secret_rotated_at`.
+///
+/// Returns `None` when no previous secret is configured **or the
+/// overlap window has lapsed** (`rotated_at + idle ≤ now` — every
+/// active session has re-minted under the current `kid` by then, §2c).
+/// A previous secret without its rotated-at timestamp is a hard config
+/// error: an unbounded overlap window silently defeats rotation.
+///
+/// **Emergency rotation (secret compromise)** is the *absence* of this
+/// configuration: supply only the new current secret — every
+/// outstanding token dies immediately. Never respond to a compromise
+/// with a graceful rotation; the overlap window would keep accepting
+/// attacker-minted cookies.
+pub fn resolve_previous_session_secret(
+    config: &HubStorageConfig,
+    idle_secs: i64,
+    now: i64,
+) -> Result<Option<[u8; 32]>> {
+    let (hex, rotated_at, source) =
+        if let Ok(hex) = std::env::var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") {
+            let rotated_at = match std::env::var("QUARTO_HUB_SESSION_SECRET_ROTATED_AT") {
+                Ok(raw) => raw.parse::<i64>().map_err(|e| {
+                    Error::ConfigParse(format!(
+                        "QUARTO_HUB_SESSION_SECRET_ROTATED_AT: invalid epoch seconds '{raw}': {e}"
+                    ))
+                })?,
+                Err(_) => {
+                    return Err(Error::ConfigParse(
+                        "QUARTO_HUB_SESSION_SECRET_PREVIOUS requires \
+                     QUARTO_HUB_SESSION_SECRET_ROTATED_AT (epoch seconds): an unbounded \
+                     overlap window would silently defeat the rotation"
+                            .to_string(),
+                    ));
+                }
+            };
+            (hex, rotated_at, "QUARTO_HUB_SESSION_SECRET_PREVIOUS")
+        } else if let Some(ref hex) = config.previous_session_secret {
+            let Some(rotated_at) = config.session_secret_rotated_at else {
+                return Err(Error::ConfigParse(
+                    "hub.json previous_session_secret requires session_secret_rotated_at \
+                 (epoch seconds): an unbounded overlap window would silently defeat \
+                 the rotation"
+                        .to_string(),
+                ));
+            };
+            (hex.clone(), rotated_at, "hub.json previous_session_secret")
+        } else {
+            return Ok(None);
+        };
+
+    if rotated_at + idle_secs <= now {
+        tracing::info!(
+            rotated_at,
+            "previous session secret overlap window has lapsed; ignoring it \
+             (remove it from hub.json / the environment)"
+        );
+        return Ok(None);
+    }
+
+    decode_secret_hex(&hex, source).map(Some)
+}
+
 /// Get current time as ISO 8601 string (without external crate).
 fn chrono_now() -> String {
     use std::time::SystemTime;
@@ -230,6 +356,10 @@ pub struct StorageManager {
     /// Resolved server secret (32 bytes). Decoded once at startup from the
     /// env var or `hub.json`; never re-derived per request.
     server_secret: [u8; 32],
+
+    /// Resolved session-token signing secret (32 bytes). Decoded once at
+    /// startup; distinct from `server_secret` (session-forgery blast radius).
+    session_secret: [u8; 32],
 }
 
 impl StorageManager {
@@ -293,6 +423,16 @@ impl StorageManager {
     fn init(project_root: Option<PathBuf>, hub_dir: PathBuf) -> Result<Self> {
         fs::create_dir_all(&hub_dir).map_err(Error::CreateHubDir)?;
 
+        // The hub dir holds signing secrets (`hub.json`). In project mode it
+        // sits inside the user's project tree, so a catch-all .gitignore is
+        // written on every startup that finds it missing — a committed
+        // session secret means full session forgery, not just actor-id
+        // correlation.
+        let gitignore_path = hub_dir.join(".gitignore");
+        if !gitignore_path.exists() {
+            fs::write(&gitignore_path, "*\n")?;
+        }
+
         let lock_path = hub_dir.join("hub.lock");
         debug!(?lock_path, "Acquiring lockfile");
 
@@ -316,6 +456,9 @@ impl StorageManager {
         // Resolve and cache the server secret for HMAC actor ID derivation.
         let server_secret = resolve_server_secret(&mut config, &hub_dir)?;
 
+        // Resolve and cache the session-token signing secret.
+        let session_secret = resolve_session_secret(&mut config, &hub_dir)?;
+
         if let Some(ref project_root) = project_root {
             info!(
                 project_root = %project_root.display(),
@@ -337,6 +480,7 @@ impl StorageManager {
             lock_file,
             config,
             server_secret,
+            session_secret,
         })
     }
 
@@ -390,6 +534,14 @@ impl StorageManager {
     /// per-project actor IDs.
     pub fn server_secret(&self) -> &[u8] {
         &self.server_secret
+    }
+
+    /// Returns the resolved session-token signing secret (32 bytes).
+    ///
+    /// Decoded once at startup. Feed to [`crate::session::SessionKeys`]
+    /// to mint/verify hub session cookies; never reuse for actor IDs.
+    pub fn session_secret(&self) -> &[u8; 32] {
+        &self.session_secret
     }
 
     /// Returns the configured peer URLs.
@@ -615,6 +767,255 @@ mod tests {
         let secret2 = resolve_server_secret(&mut config, &hub_dir).unwrap();
 
         assert_eq!(secret1, secret2);
+    }
+
+    // ── resolve_session_secret (C1, bd-sekcpmv1) ─────────────────
+
+    #[test]
+    fn resolve_session_secret_env_var_used_directly() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join("hub");
+        fs::create_dir_all(&hub_dir).unwrap();
+
+        let expected = [7u8; 32];
+        let hex = hex::encode(expected);
+
+        // SAFETY: test-only env mutation, serialized by ENV_MUTEX.
+        unsafe { std::env::set_var("QUARTO_HUB_SESSION_SECRET", &hex) };
+        let mut config = HubStorageConfig::new();
+        let result = resolve_session_secret(&mut config, &hub_dir);
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET") };
+
+        assert_eq!(result.unwrap(), expected);
+        // Config must not have been mutated (no file I/O path)
+        assert!(config.session_secret.is_none());
+        assert!(!hub_dir.join("hub.json").exists());
+    }
+
+    #[test]
+    fn resolve_session_secret_reads_existing_config_value() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET") };
+
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join("hub");
+        fs::create_dir_all(&hub_dir).unwrap();
+
+        let expected = [9u8; 32];
+        let mut config = HubStorageConfig::new();
+        config.session_secret = Some(hex::encode(expected));
+
+        let result = resolve_session_secret(&mut config, &hub_dir).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn resolve_session_secret_generates_and_saves_when_config_empty() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET") };
+
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join("hub");
+        fs::create_dir_all(&hub_dir).unwrap();
+
+        let mut config = HubStorageConfig::new();
+        let secret = resolve_session_secret(&mut config, &hub_dir).unwrap();
+
+        let stored_hex = config.session_secret.as_ref().expect("secret persisted");
+        assert_eq!(stored_hex.len(), 64);
+        assert_eq!(hex::decode(stored_hex).unwrap().as_slice(), &secret);
+        assert!(hub_dir.join("hub.json").exists());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(hub_dir.join("hub.json"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600, "hub.json must be owner-only");
+        }
+    }
+
+    #[test]
+    fn session_secret_is_distinct_from_server_secret() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET") };
+
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join("hub");
+        fs::create_dir_all(&hub_dir).unwrap();
+
+        let mut config = HubStorageConfig::new();
+        let server = resolve_server_secret(&mut config, &hub_dir).unwrap();
+        let session = resolve_session_secret(&mut config, &hub_dir).unwrap();
+        assert_ne!(
+            server, session,
+            "session secret must never equal the actor-id server secret"
+        );
+    }
+
+    #[test]
+    fn session_secret_survives_restart() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET") };
+
+        let temp = TempDir::new().unwrap();
+
+        let first = {
+            let manager = StorageManager::new(temp.path()).unwrap();
+            *manager.session_secret()
+        }; // manager dropped → lock released
+
+        let manager = StorageManager::new(temp.path()).unwrap();
+        assert_eq!(
+            *manager.session_secret(),
+            first,
+            "session secret must be stable across hub restarts"
+        );
+    }
+
+    // ── resolve_previous_session_secret (C5b, bd-6kll0jr6) ───────
+
+    #[test]
+    fn previous_secret_none_when_unconfigured() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_ROTATED_AT") };
+
+        let config = HubStorageConfig::new();
+        assert_eq!(
+            resolve_previous_session_secret(&config, 3600, 1_000_000).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn previous_secret_from_config_inside_window() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") };
+
+        let expected = [3u8; 32];
+        let mut config = HubStorageConfig::new();
+        config.previous_session_secret = Some(hex::encode(expected));
+        config.session_secret_rotated_at = Some(1_000_000);
+
+        // Inside the window (idle = 3600): still verifies.
+        let got = resolve_previous_session_secret(&config, 3600, 1_000_000 + 3599).unwrap();
+        assert_eq!(got, Some(expected));
+    }
+
+    #[test]
+    fn previous_secret_dropped_after_window_lapses() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") };
+
+        let mut config = HubStorageConfig::new();
+        config.previous_session_secret = Some(hex::encode([3u8; 32]));
+        config.session_secret_rotated_at = Some(1_000_000);
+
+        // rotated_at + idle <= now → auto-dropped.
+        let got = resolve_previous_session_secret(&config, 3600, 1_000_000 + 3600).unwrap();
+        assert_eq!(got, None);
+    }
+
+    #[test]
+    fn previous_secret_without_rotated_at_is_config_error() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") };
+
+        let mut config = HubStorageConfig::new();
+        config.previous_session_secret = Some(hex::encode([3u8; 32]));
+        // No session_secret_rotated_at: an unbounded overlap window
+        // would silently defeat the rotation.
+        let result = resolve_previous_session_secret(&config, 3600, 1_000_000);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("session_secret_rotated_at")
+        );
+    }
+
+    #[test]
+    fn previous_secret_from_env_pair() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        let expected = [4u8; 32];
+        unsafe { std::env::set_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS", hex::encode(expected)) };
+        unsafe { std::env::set_var("QUARTO_HUB_SESSION_SECRET_ROTATED_AT", "1000000") };
+        let config = HubStorageConfig::new();
+        let inside = resolve_previous_session_secret(&config, 3600, 1_000_000 + 10);
+        let lapsed = resolve_previous_session_secret(&config, 3600, 1_000_000 + 3600);
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_ROTATED_AT") };
+
+        assert_eq!(inside.unwrap(), Some(expected));
+        assert_eq!(lapsed.unwrap(), None);
+    }
+
+    #[test]
+    fn previous_secret_env_without_rotated_at_is_config_error() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        unsafe { std::env::set_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS", hex::encode([4u8; 32])) };
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_ROTATED_AT") };
+        let config = HubStorageConfig::new();
+        let result = resolve_previous_session_secret(&config, 3600, 1_000_000);
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") };
+
+        assert!(result.is_err());
+    }
+
+    // ── hub-dir .gitignore hygiene (C1, bd-sekcpmv1) ─────────────
+
+    #[test]
+    fn init_writes_catch_all_gitignore() {
+        let temp = TempDir::new().unwrap();
+        let manager = StorageManager::new(temp.path()).unwrap();
+
+        let gitignore = manager.hub_dir().join(".gitignore");
+        assert!(gitignore.exists(), ".gitignore created on fresh init");
+        assert_eq!(fs::read_to_string(&gitignore).unwrap(), "*\n");
+    }
+
+    #[test]
+    fn init_adds_gitignore_to_existing_hub_dir_lacking_it() {
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join(".quarto").join("hub");
+        // Pre-existing hub dir from an older hub version: config file
+        // present, no .gitignore.
+        fs::create_dir_all(&hub_dir).unwrap();
+        fs::write(
+            hub_dir.join("hub.json"),
+            r#"{"version": 1, "created_at": "123456"}"#,
+        )
+        .unwrap();
+
+        let manager = StorageManager::new(temp.path()).unwrap();
+        let gitignore = manager.hub_dir().join(".gitignore");
+        assert!(gitignore.exists(), ".gitignore added to existing hub dir");
+        assert_eq!(fs::read_to_string(&gitignore).unwrap(), "*\n");
+    }
+
+    #[test]
+    fn init_preserves_user_modified_gitignore() {
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join(".quarto").join("hub");
+        fs::create_dir_all(&hub_dir).unwrap();
+        // An operator who deliberately narrowed the ignore keeps their
+        // version — we only create, never overwrite.
+        fs::write(hub_dir.join(".gitignore"), "hub.json\n").unwrap();
+
+        let _manager = StorageManager::new(temp.path()).unwrap();
+        assert_eq!(
+            fs::read_to_string(hub_dir.join(".gitignore")).unwrap(),
+            "hub.json\n"
+        );
     }
 
     #[test]
