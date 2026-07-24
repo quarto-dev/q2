@@ -303,8 +303,10 @@ until purge.
 
 ## Work items
 
-- [ ] Phase A: metadata envelope (tests first; `create_capture_document`
-      + three writers)
+- [x] Phase A: metadata envelope (commit 38af41d3) — includes
+      `read_capture_meta` and the `create_capture_document_at` test
+      seam for the age gate; `CAPTURE_MIME_TYPE` consolidated into
+      quarto-hub.
 - [ ] Phase B1: `classify.rs` + unit tests
 - [ ] Phase B2: `scan` + manifest + integration tests
 - [ ] Phase B3: `collect` (quarantine) + `restore` + `purge` + lock
