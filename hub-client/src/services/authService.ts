@@ -15,7 +15,12 @@ export interface AuthState {
   email: string;
   name: string | null;
   picture: string | null;
-  /** Token expiry in ms-epoch (from the server's `exp`). Absent on older servers. */
+  /**
+   * Session expiry in ms-epoch (from the server's `exp`). **Sliding**:
+   * the hub re-issues the session cookie on authenticated activity, so
+   * this moves forward over time (typically days out). Absent on older
+   * servers.
+   */
   expiresAt?: number;
 }
 
