@@ -307,8 +307,14 @@ until purge.
       `read_capture_meta` and the `create_capture_document_at` test
       seam for the age gate; `CAPTURE_MIME_TYPE` consolidated into
       quarto-hub.
-- [ ] Phase B1: `classify.rs` + unit tests
-- [ ] Phase B2: `scan` + manifest + integration tests
+- [x] Phase B1: `classify.rs` + unit tests
+- [x] Phase B2: `scan` + manifest + integration tests (commit
+      e1ed2c3b). Implementation note: whole-store enumeration cannot
+      use `Storage::load_range([])` — the filesystem adapter splays
+      doc ids across two path components and load_range returns raw
+      components; enumeration is an explicit backend-specific step
+      (`list_doc_ids_filesystem`), per-doc chunk loads stay on the
+      adapter. Caught by the real-store integration test.
 - [ ] Phase B3: `collect` (quarantine) + `restore` + `purge` + lock
       guard + integration tests
 - [ ] Phase B4: CLI wiring (`hub admin`), E2E against a real local
