@@ -520,24 +520,16 @@ impl HubContext {
         &self.audit_policy
     }
 
-    /// Authenticate a request. If auth is disabled, always succeeds.
-    /// If auth is enabled, token must be present and valid.
-    /// Used by both REST and WebSocket handlers.
-    pub async fn authenticate(&self, token: Option<&str>) -> std::result::Result<(), StatusCode> {
-        if self.auth_config().is_none() {
-            return Ok(()); // Auth disabled — allow all.
-        }
-        self.authenticate_claims(token).await.map(|_| ())
-    }
-
-    /// Authenticate a request and return the decoded claims.
-    /// Unlike `authenticate()`, this returns `Err` when auth is disabled
-    /// (because there are no claims to return). Used by `/auth/me`.
+    /// Validate a **Google ID token** against JWKS and return its
+    /// claims. Returns `Err` when auth is disabled (there are no claims
+    /// to return).
     ///
-    /// The audit-log fields plumbed through `tracing::event!` are
-    /// shared between the cookie and Bearer paths — both invoke this
-    /// method. `credential_kind` distinguishes the two and is required
-    /// by Phase 2 of the device-flow plan.
+    /// Since the sliding-sessions cutover this is never a request-
+    /// credential path by itself: it is reachable only from the Bearer
+    /// branch of [`Self::authenticate_credential`] and from the
+    /// mint-time validation in `auth_callback`/`auth_refresh`, whose
+    /// input is a fresh Google credential from the request body — never
+    /// the cookie (that path is [`Self::authenticate_session`]).
     pub async fn authenticate_claims(
         &self,
         token: Option<&str>,
@@ -545,11 +537,9 @@ impl HubContext {
         self.authenticate_claims_for_kind(token, "unknown").await
     }
 
-    /// Internal variant of [`authenticate_claims`] that records the
-    /// `credential_kind` (`"cookie"` / `"bearer"`) on every audit event.
-    /// The public [`authenticate_claims`] tags events with `"unknown"`
-    /// so callers that have not yet been migrated still emit audit
-    /// entries, just without distinguishing the credential source.
+    /// Variant of [`authenticate_claims`] that records the
+    /// `credential_kind` (`"bearer"` / `"unknown"`) on every audit
+    /// event, as required by Phase 2 of the device-flow plan.
     pub async fn authenticate_claims_for_kind(
         &self,
         token: Option<&str>,

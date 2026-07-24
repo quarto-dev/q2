@@ -840,6 +840,49 @@ mod tests {
         );
     }
 
+    /// Algorithm-confusion (C4 review): an asymmetric token stamped
+    /// with the hub session `kid` must not reach signature evaluation
+    /// under the wrong scheme — the session branch pins `[HS256]`.
+    #[test]
+    fn rs256_with_hub_kid_rejected() {
+        let t = now();
+        let lt = SessionLifetimes::default();
+        let claims = SessionClaims {
+            iss: SESSION_ISSUER.to_string(),
+            sub: "s".into(),
+            email: "user@posit.co".into(),
+            email_verified: true,
+            name: None,
+            picture: None,
+            iat: t,
+            auth_time: t,
+            exp: t + 600,
+            sid: "f00df00df00df00df00df00df00df00d".into(),
+        };
+        // A syntactically valid JWT whose header says RS256 + our kid.
+        // The signature bytes are irrelevant: the pinned algorithm set
+        // must reject before any key/signature confusion can matter.
+        let header = serde_json::json!({
+            "alg": "RS256",
+            "typ": "JWT",
+            "kid": keys().current().kid(),
+        });
+        let b64 = |bytes: &[u8]| {
+            use base64::Engine as _;
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+        };
+        let token = format!(
+            "{}.{}.{}",
+            b64(serde_json::to_string(&header).unwrap().as_bytes()),
+            b64(serde_json::to_string(&claims).unwrap().as_bytes()),
+            b64(&[0u8; 256]),
+        );
+        assert_eq!(
+            verify_session(&keys(), lt, &token, t),
+            Err(SessionVerifyError::Tampered)
+        );
+    }
+
     #[test]
     fn garbage_token_rejected_without_panic() {
         let lt = SessionLifetimes::default();
