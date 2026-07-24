@@ -122,6 +122,51 @@ pub struct SessionIdentity {
     pub picture: Option<String>,
 }
 
+/// Cap on the `name` claim carried into a session token (chars).
+const IDENTITY_NAME_MAX_CHARS: usize = 200;
+
+/// Cap on the `picture` URL carried into a session token (bytes);
+/// longer values are dropped rather than truncated (a truncated URL is
+/// useless).
+const IDENTITY_PICTURE_MAX_BYTES: usize = 500;
+
+impl SessionIdentity {
+    /// Build the mint identity from validated Google claims.
+    ///
+    /// Defensively caps `name`/`picture`: identity claims are stamped
+    /// into the cookie, so pathological IdP values must not push the
+    /// session token toward the ~4096-byte browser cookie drop the
+    /// compact format exists to avoid.
+    pub fn from_oidc(claims: &crate::auth::OidcClaims) -> Self {
+        let name = claims.name.clone().map(|n| {
+            if n.chars().count() > IDENTITY_NAME_MAX_CHARS {
+                n.chars().take(IDENTITY_NAME_MAX_CHARS).collect()
+            } else {
+                n
+            }
+        });
+        let picture = claims
+            .picture
+            .clone()
+            .filter(|p| p.len() <= IDENTITY_PICTURE_MAX_BYTES);
+        Self {
+            sub: claims.sub.clone(),
+            email: claims.email.clone(),
+            email_verified: claims.email_verified,
+            name,
+            picture,
+        }
+    }
+}
+
+/// Current unix time in seconds — the shared clock for production
+/// mint/verify call sites (tests inject their own `now`).
+pub fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64)
+}
+
 /// Sliding-session lifetime configuration (idle + absolute caps).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SessionLifetimes {
@@ -863,6 +908,39 @@ mod tests {
         assert_eq!(
             verify_session(&keys(), lt, &token, t),
             Err(SessionVerifyError::UnknownKid)
+        );
+    }
+
+    // ── identity caps (C3) ────────────────────────────────────────
+
+    #[test]
+    fn from_oidc_caps_pathological_identity_claims() {
+        let claims = crate::auth::OidcClaims {
+            sub: "s".into(),
+            email: "user@posit.co".into(),
+            email_verified: true,
+            name: Some("x".repeat(4000)),
+            picture: Some(format!("https://example.com/{}", "y".repeat(4000))),
+            aud: vec![],
+            azp: None,
+            iat: None,
+            exp: 0,
+        };
+        let id = SessionIdentity::from_oidc(&claims);
+        assert_eq!(id.name.as_ref().unwrap().chars().count(), 200);
+        assert!(id.picture.is_none(), "oversized picture URL dropped");
+
+        // Sane values pass through untouched.
+        let claims = crate::auth::OidcClaims {
+            name: Some("Test User".into()),
+            picture: Some("https://lh3.googleusercontent.com/p".into()),
+            ..claims
+        };
+        let id = SessionIdentity::from_oidc(&claims);
+        assert_eq!(id.name.as_deref(), Some("Test User"));
+        assert_eq!(
+            id.picture.as_deref(),
+            Some("https://lh3.googleusercontent.com/p")
         );
     }
 

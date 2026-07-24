@@ -458,52 +458,13 @@ async fn ws_upgrade_with_cookie_still_requires_origin() {
     );
 }
 
-// ── Cookie still works (regression) ──────────────────────────────
-
-#[tokio::test]
-async fn cookie_still_authenticates() {
-    let (provider, hub) = shared_setup().await;
-    let token = provider.sign(
-        &ClaimsBuilder::from_provider(provider)
-            .sub("cookie-regression")
-            .to_value(),
-    );
-
-    let resp = hub
-        .get_auth_me()
-        .header("cookie", format!("quarto_hub_token={token}"))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), 200);
-}
-
-// ── /auth/me reports token expiry (bd-3o8zmz46) ──────────────────
-
-#[tokio::test]
-async fn auth_me_returns_token_exp() {
-    let (provider, hub) = shared_setup().await;
-    let exp = chrono::Utc::now().timestamp() + 600;
-    let token = provider.sign(
-        &ClaimsBuilder::from_provider(provider)
-            .sub("auth-me-exp")
-            .exp(exp)
-            .to_value(),
-    );
-
-    let resp = hub
-        .get_auth_me()
-        .header("cookie", format!("quarto_hub_token={token}"))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), 200);
-    let body: serde_json::Value = resp.json().await.unwrap();
-    assert_eq!(
-        body["exp"], exp,
-        "client schedules refresh from the real token expiry"
-    );
-}
+// NOTE: `cookie_still_authenticates` and `auth_me_returns_token_exp`
+// (both driving /auth/me with a Google JWT in the cookie) were retired
+// by the sliding-sessions cutover — Google-JWT cookies now 401 (§6
+// hard break). Their successors live in `session_auth.rs`:
+// `session_cookie_authenticates_on_extractor_endpoint`,
+// `auth_me_returns_sliding_exp_from_session`, and
+// `auth_me_rejects_legacy_google_cookie`.
 
 // ── Dual-credential 400 (bd-wzhsf CVE) ───────────────────────────
 
