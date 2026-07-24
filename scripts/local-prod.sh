@@ -8,8 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 HUB_CLIENT_DIR="$PROJECT_ROOT/hub-client"
 DATA_DIR="$PROJECT_ROOT/.local-prod-data"
-HUB_PORT=3001
-STATIC_PORT=8080
+STATIC_PORT="$(node "$SCRIPT_DIR/local-prod-port.mjs" "$@")"
+HUB_PORT=3000
 Q2_SANDBOXED_PREVIEW_PORT=8081
 
 # Color output

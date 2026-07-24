@@ -12,7 +12,7 @@ Two modes available:
 ### What it does
 
 Mirrors the production deployment architecture:
-- Starts the `hub` binary (Rust server) on port 3001
+- Starts the `hub` binary (Rust server) on port 3000
 - Serves the built hub-client on port 8080
 - Serves q2-sandboxed-preview.html on port 8081 (sandboxed, simulates separate domain)
 - Proxies `/auth` and `/ws` requests to the hub server
@@ -29,11 +29,15 @@ cd hub-client && npm run build:local-prod && cd ..
 cd hub-client
 npm run local-prod
 
+# Use a different port (pass it to both build and run)
+npm run build:local-prod -- --port 9000
+npm run local-prod -- --port 9000
+
 # Or run directly
 ./scripts/local-prod.sh
 ```
 
-**Important:** Use `npm run build:local-prod` (NOT `build:all`) to build with the correct sync server URL (`ws://127.0.0.1:8080/ws`) baked in.
+**Important:** Use `npm run build:local-prod` (NOT `build:all`) to build with the local sync server URL baked in. If using a non-default port, pass `--port PORT` to both `build:local-prod` and `local-prod`.
 
 Open `http://127.0.0.1:8080` in your browser. Press **Ctrl-C** to shut down gracefully.
 
@@ -41,15 +45,15 @@ Open `http://127.0.0.1:8080` in your browser. Press **Ctrl-C** to shut down grac
 
 ```
 Browser → http://127.0.0.1:8080 (Node.js proxy - main app)
-  ├─ /auth → proxy to hub:3001
-  ├─ /ws → WebSocket upgrade to hub:3001
+  ├─ /auth → proxy to hub:3000
+  ├─ /ws → WebSocket upgrade to hub:3000
   ├─ /assets/* → serve from dist/ (immutable cache)
   └─ /* → serve from dist/ (no-cache, SPA fallback)
 
 Browser → http://127.0.0.1:8081 (q2-sandboxed-preview server - sandboxed)
   └─ /q2-sandboxed-preview.html → sandboxed AST renderer (separate origin)
   
-hub:3001 (Rust binary) → .local-prod-data/
+hub:3000 (Rust binary) → .local-prod-data/
 ```
 
 **Why q2-sandboxed-preview.html on a separate port?**
@@ -82,8 +86,8 @@ Tests the actual nginx configuration from production. Use when:
 - Debugging nginx-specific issues
 
 **Architecture differences:**
-- **Node.js mode:** Browser → Node.js proxy (port 8080) → hub (port 3001)
-- **Nginx mode:** Browser → nginx (Docker, port 8080) → hub (host, port 3001)
+- **Node.js mode:** Browser → Node.js proxy (port 8080) → hub (port 3000)
+- **Nginx mode:** Browser → nginx (Docker, port 8080) → hub (host, port 3000)
 - **Production:** Browser → nginx (native) → hub (native, port 3000)
 
 **Differences from production:** HTTP (no TLS), no OIDC auth, single-machine.
