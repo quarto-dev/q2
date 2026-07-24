@@ -16,3 +16,5 @@
 //!    retention window, dry-run by default.
 
 pub mod classify;
+pub mod manifest;
+pub mod scan;
