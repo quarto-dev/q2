@@ -990,6 +990,220 @@ async fn ws_upgrade_never_reissues_cookie() {
     );
 }
 
+// ── C5: revocation-event store ────────────────────────────────────
+
+#[tokio::test]
+async fn logout_everywhere_kills_prior_tokens_and_relogin_works() {
+    let (provider, hub) = session_setup().await;
+    let lt = SessionLifetimes::default();
+    let sub = "logout-everywhere-sub";
+
+    // Two members of the same user's token family: the presenting
+    // device (A) and a re-issued/parallel sibling (B).
+    let token_a = mint_session(
+        &test_keys(),
+        lt,
+        &identity(sub, "user@posit.co"),
+        epoch_now() - 2 * 3600,
+    )
+    .unwrap();
+    let token_b = mint_session(
+        &test_keys(),
+        lt,
+        &identity(sub, "user@posit.co"),
+        epoch_now() - 3600,
+    )
+    .unwrap();
+
+    let hub_json_before = std::fs::read_to_string(hub.data_dir.join("hub.json")).unwrap();
+
+    // Self-service revocation from device A.
+    let resp = hub
+        .client
+        .post(hub.url("/auth/logout-everywhere"))
+        .header("cookie", cookie_header(&token_a))
+        .header("x-requested-with", "XMLHttpRequest")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200, "body: {:?}", resp.text().await);
+    let (value, attrs) = TestHub::set_auth_cookie(&resp).expect("clearing cookie");
+    assert_eq!(value, "", "caller's cookie is cleared");
+    assert!(attrs.contains("Max-Age=0"));
+
+    // The whole family is dead — including the re-issued sibling — and
+    // dead tokens are never re-issued.
+    for token in [&token_a, &token_b] {
+        let r = hub
+            .get_health()
+            .header("cookie", cookie_header(token))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), 401, "revoked family member must be rejected");
+        assert!(TestHub::set_auth_cookie(&r).is_none());
+    }
+
+    // Immediate re-login works (auth_time >= not_before).
+    let google = provider.sign(&ClaimsBuilder::from_provider(provider).sub(sub).to_value());
+    let r = hub
+        .client
+        .post(hub.url("/auth/refresh"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": google }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let (fresh, _) = TestHub::set_auth_cookie(&r).expect("fresh session");
+    let r = hub
+        .get_health()
+        .header("cookie", cookie_header(&fresh))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200, "fresh post-revocation login authenticates");
+
+    // Revocations persist in their own file and never touch hub.json
+    // (which holds the signing secrets).
+    assert!(hub.data_dir.join("revocations.json").exists());
+    let hub_json_after = std::fs::read_to_string(hub.data_dir.join("hub.json")).unwrap();
+    assert_eq!(
+        hub_json_before, hub_json_after,
+        "revocation writes must never touch hub.json"
+    );
+    let dir_has_tmp = std::fs::read_dir(&hub.data_dir)
+        .unwrap()
+        .any(|e| e.unwrap().file_name().to_string_lossy().ends_with(".tmp"));
+    assert!(!dir_has_tmp, "atomic persist must not leave temp files");
+}
+
+#[tokio::test]
+async fn ban_gates_verify_and_mint() {
+    // The builder pre-writes revocations.json with the ban — this IS
+    // the documented stopped-hub operator procedure, so this test also
+    // covers "hand-added ban enforced after restart" (the load path).
+    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
+        tokio::sync::OnceCell::const_new();
+    let (provider, hub) = SETUP
+        .get_or_init(|| async {
+            install_tracing_once();
+            let provider = MockOidcProvider::start().await;
+            let hub = TestHubBuilder::new()
+                .session_secret(TEST_SESSION_SECRET)
+                .banned_subs(&["banned-sub"])
+                .start(&provider)
+                .await;
+            (provider, hub)
+        })
+        .await;
+
+    // Verify path: a valid, unexpired session token for the banned sub
+    // is refused.
+    let token = mint_test_session("banned-sub", "banned@posit.co");
+    let r = hub
+        .get_health()
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403, "banned sub must be refused at verify");
+    assert!(TestHub::set_auth_cookie(&r).is_none());
+
+    // Mint path: a banned sub re-logging in via Google is refused —
+    // otherwise a ban is just one OAuth round-trip away from useless.
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("banned-sub")
+            .email("banned@posit.co")
+            .to_value(),
+    );
+    let r = hub
+        .client
+        .post(hub.url("/auth/refresh"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": google }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403, "banned sub must be refused at mint");
+    assert!(TestHub::set_auth_cookie(&r).is_none());
+
+    // Other users are unaffected.
+    let ok = mint_test_session("not-banned-sub", "user@posit.co");
+    let r = hub
+        .get_health()
+        .header("cookie", cookie_header(&ok))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+}
+
+#[tokio::test]
+async fn logout_everywhere_requires_csrf_and_cookie_kind() {
+    let (provider, hub) = session_setup().await;
+    let token = mint_test_session("logout-gates-sub", "user@posit.co");
+
+    // Cookie without the CSRF header → 403.
+    let r = hub
+        .client
+        .post(hub.url("/auth/logout-everywhere"))
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403, "CSRF header required");
+
+    // Bearer-kind caller → rejected (revocation is a browser-session
+    // self-service action).
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("logout-gates-sub")
+            .to_value(),
+    );
+    let r = hub
+        .client
+        .post(hub.url("/auth/logout-everywhere"))
+        .bearer_auth(&google)
+        .header("x-requested-with", "XMLHttpRequest")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403, "Bearer-kind callers are rejected");
+
+    // Dual credential → 400 wins.
+    let r = hub
+        .client
+        .post(hub.url("/auth/logout-everywhere"))
+        .bearer_auth(&google)
+        .header("cookie", cookie_header(&token))
+        .header("x-requested-with", "XMLHttpRequest")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 400);
+
+    // No credential → 401.
+    let r = hub
+        .client
+        .post(hub.url("/auth/logout-everywhere"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 401);
+
+    // The gate checks must not have revoked anything: the token still works.
+    let r = hub
+        .get_health()
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+}
+
 // ── C2: Bearer path untouched by session routing ──────────────────
 
 #[tokio::test]

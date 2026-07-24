@@ -320,6 +320,10 @@ pub const TEST_SESSION_SECRET: [u8; 32] = [0x42; 32];
 pub struct TestHub {
     pub base_url: String,
     pub client: reqwest::Client,
+    /// The hub's data dir (`hub.json`, `revocations.json`, …), kept
+    /// alive by leaking the TempDir. Exposed so tests can assert
+    /// on-disk effects (e.g. revocation persistence).
+    pub data_dir: std::path::PathBuf,
 }
 
 /// Configurable fixture hub. Defaults: standalone mode, two allowlisted
@@ -330,6 +334,7 @@ pub struct TestHubBuilder {
     allow_insecure_auth: bool,
     session_secret: Option<[u8; 32]>,
     google_provider: bool,
+    banned_subs: Vec<String>,
 }
 
 impl Default for TestHubBuilder {
@@ -345,6 +350,7 @@ impl TestHubBuilder {
             allow_insecure_auth: true,
             session_secret: None,
             google_provider: false,
+            banned_subs: Vec::new(),
         }
     }
 
@@ -371,6 +377,14 @@ impl TestHubBuilder {
     /// registered. The issuer still points at the mock provider.
     pub fn google_provider(mut self) -> Self {
         self.google_provider = true;
+        self
+    }
+
+    /// Pre-write `revocations.json` with ban entries before the hub
+    /// starts — exactly the documented operator ban procedure (edit the
+    /// file with the hub stopped; enforced after startup).
+    pub fn banned_subs(mut self, subs: &[&str]) -> Self {
+        self.banned_subs = subs.iter().map(|s| s.to_string()).collect();
         self
     }
 
@@ -406,6 +420,22 @@ impl TestHubBuilder {
             std::fs::write(temp.path().join("hub.json"), config.to_string()).unwrap();
         }
 
+        // Pre-write revocations.json with ban entries (the documented
+        // stopped-hub operator procedure).
+        if !self.banned_subs.is_empty() {
+            let revocations = serde_json::json!({
+                "version": 1,
+                "not_before": {},
+                "banned": self.banned_subs,
+            });
+            std::fs::write(
+                temp.path().join("revocations.json"),
+                revocations.to_string(),
+            )
+            .unwrap();
+        }
+
+        let data_dir = temp.path().to_path_buf();
         let storage = StorageManager::new_standalone(temp.path()).unwrap();
         // Keep the TempDir alive for the hub's lifetime by leaking it —
         // tests are short-lived; the TempDir would otherwise drop before
@@ -455,7 +485,11 @@ impl TestHubBuilder {
             .build()
             .unwrap();
 
-        TestHub { base_url, client }
+        TestHub {
+            base_url,
+            client,
+            data_dir,
+        }
     }
 }
 
