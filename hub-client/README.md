@@ -106,10 +106,15 @@ This produces a complete production build in `dist/`.
 Test hub-client in a production-like setup locally:
 
 ```bash
-# Build + run
-npm run local-prod:fresh
+# Build + run on the default port
+npm run build:local-prod
+npm run local-prod
 
-# Open http://127.0.0.1:8080
+# Build + run on a different port
+npm run build:local-prod -- --port 9000
+npm run local-prod -- --port 9000
+
+# Open http://127.0.0.1:8080 (or the selected port)
 ```
 
 Two modes available:

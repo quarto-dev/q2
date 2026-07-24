@@ -48,7 +48,7 @@ Add `npm run local-prod` command that mirrors production deployment architecture
 - Implements same cache headers as production (`/assets/` immutable, others no-cache)
 - Handles WebSocket upgrades for `/ws` route
 - Hub runs with `--allow-insecure-auth` for local development
-- Port 3001 for hub, 8080 for static server
+- Port 3000 for hub, 8080 for static server
 - Logs written to `.local-prod-data/{hub,static}.log`
 - Added `npm run build:local-prod` script that sets `VITE_DEFAULT_SYNC_SERVER=ws://127.0.0.1:8080/ws` at build time
   - This is required because Vite bakes env vars into the bundle
@@ -59,7 +59,7 @@ Add `npm run local-prod` command that mirrors production deployment architecture
 cargo build --bin hub
 ./target/debug/hub \
   --data-dir ./.local-prod-data \
-  -P 3001 \
+  -P 3000 \
   -H 127.0.0.1
 ```
 
@@ -76,7 +76,7 @@ cargo build --bin hub
 - [x] Service: hub-health-check (waits for hub before nginx starts)
 - [x] Create `config/local-nginx.conf` (adapted from production)
   - HTTP only (no TLS for local)
-  - Routes `/ws` → `host.docker.internal:3001` with WebSocket upgrade
+   - Routes `/ws` → `host.docker.internal:3000` with WebSocket upgrade
   - Routes `/auth`, `/api`, `/health` → hub
   - Routes `/assets/` with immutable cache headers
   - Routes `/` to static files with no-cache
@@ -88,7 +88,7 @@ cargo build --bin hub
 
 **Implementation notes:**
 - Hub runs on HOST (not Docker) to avoid Rust/WASM build complexity in containers
-- Hub binds to `0.0.0.0:3001` (not `127.0.0.1`) so Docker can reach it via `host.docker.internal`
+- Hub binds to `0.0.0.0:3000` (not `127.0.0.1`) so Docker can reach it via `host.docker.internal`
 - Health check container waits for hub before nginx starts (prevents startup race)
 - nginx uses `alias` for `/assets/` to avoid path prefix issues
 - Script follows nginx logs with `docker compose logs -f nginx`
@@ -100,7 +100,7 @@ server {
     server_name localhost;
     
     location /ws {
-        proxy_pass http://host.docker.internal:3001;
+        proxy_pass http://host.docker.internal:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
@@ -147,7 +147,7 @@ server {
 ## Open Questions
 
 1. **Data persistence**: Should `.local-prod-data/` be gitignored? (Yes, probably)
-2. **Port conflicts**: What if :3001 or :8080 are taken? (Document or auto-detect)
+2. **Port conflicts**: What if :3000 or :8080 are taken? (Document or auto-detect)
 3. **OAuth/auth**: Production uses OIDC. Do we need a mock? (Phase 1: skip auth)
 4. **TLS in dev**: Worth the cert complexity? (No, HTTP is fine for local)
 5. **Service worker**: Disable in local-prod like E2E tests? (Yes, cache interference)
