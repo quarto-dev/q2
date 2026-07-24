@@ -18,7 +18,7 @@ fn fixture_path(name: &str) -> std::path::PathBuf {
 fn load_template(name: &str) -> Template {
     let path = fixture_path(name);
     Template::compile_from_file(&path)
-        .unwrap_or_else(|_| panic!("Failed to load template: {}", name))
+        .unwrap_or_else(|e| panic!("Failed to load template {}: {}", name, e))
 }
 
 #[test]

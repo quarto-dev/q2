@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-24
+
+- [`ee905592`](https://github.com/quarto-dev/q2/commits/ee905592): Signed-in sessions now stay alive as long as you keep using the app — the hub issues its own sliding session (7-day idle timeout, 30-day maximum) instead of expiring hourly with the Google token, so work no longer stalls on environments where Google One Tap is blocked. The app quietly confirms the session once an hour while connected.
+
 ### 2026-07-23
 
 - [`79f3d808`](https://github.com/quarto-dev/q2/commits/79f3d808): New-project scaffolds upgraded: website projects now include an About page, a starter stylesheet, and a navbar wired to the site title (previously the title was placed where the website pipeline never read it); default projects gain a starter document. Shared with the new `q2 create` CLI command, so projects created in the hub and on the command line match.

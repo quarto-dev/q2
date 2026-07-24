@@ -39,6 +39,7 @@ import { useRouting } from './hooks/useRouting';
 import { useCollectionSets } from './hooks/useCollectionSets';
 import { useAuth } from './hooks/useAuth';
 import { useAuthProbe } from './hooks/useAuthProbe';
+import { useSessionKeepAlive } from './hooks/useSessionKeepAlive';
 import { useExecutionChannel } from './hooks/useExecutionChannel';
 import { resolveActorId as resolveActorIdRequest } from './services/authService';
 import type { Route, ShareRoute, LinkProjectSetRoute } from './utils/routing';
@@ -94,6 +95,7 @@ function App() {
     triggerRefresh,
     sessionExpired,
     expireSession,
+    applyAuth,
   } = useAuth();
 
   const [project, setProject] = useState<ProjectEntry | null>(null);
@@ -131,6 +133,16 @@ function App() {
     enabled: AUTH_ENABLED && !!auth && !!project && !isOnline,
     triggerRefresh,
     onAuthRejected: expireSession,
+  });
+
+  // While sync is online, keep the sliding session alive: WS traffic
+  // never slides the server-side idle window (validate-once at
+  // upgrade), so a periodic /auth/me is the keep-alive — and its
+  // response carries the slid expiry back into useAuth's schedules.
+  useSessionKeepAlive({
+    enabled: AUTH_ENABLED && !!auth && isOnline,
+    onAuthState: applyAuth,
+    triggerRefresh,
   });
 
   // Project set management (synced project list)
