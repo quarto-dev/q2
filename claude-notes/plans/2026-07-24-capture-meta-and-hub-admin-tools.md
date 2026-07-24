@@ -1,7 +1,9 @@
 # Capture-doc metadata envelope + sync-server maintainer tools
 
 **Braid strand:** bd-eiku4ymo
-**Status:** design draft — awaiting review, do not execute yet
+**Status:** implemented on branch
+`braid/bd-eiku4ymo-capture-docs-uncompressed-auditgc`; binary E2E
+verified (record below)
 
 ## Overview
 
@@ -322,7 +324,8 @@ until purge.
       server also can't start mid-operation.
 - [x] Phase B4: CLI wiring (`hub admin`), binary E2E, runbook
       (`claude-notes/instructions/hub-storage-hygiene.md`)
-- [ ] Phase C: `cargo xtask verify`, PR
+- [x] Phase C: `cargo xtask verify --skip-hub-build` passes (Rust-only
+      change; hub-client/WASM do not depend on quarto-hub)
 
 ## End-to-end verification record (2026-07-24)
 

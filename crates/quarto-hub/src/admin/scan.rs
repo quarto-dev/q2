@@ -129,10 +129,7 @@ pub async fn load_all_docs<S: Storage>(storage: &S, doc_ids: &[String]) -> Vec<L
         // Snapshots load before incrementals (samod's own order);
         // then key order, for deterministic runs.
         chunks.sort_by_key(|(parts, _)| {
-            (
-                parts.get(1).map(|s| s != "snapshot").unwrap_or(true),
-                parts.clone(),
-            )
+            (parts.get(1).is_none_or(|s| s != "snapshot"), parts.clone())
         });
         let mut doc = Automerge::new();
         let mut size_bytes = 0u64;
