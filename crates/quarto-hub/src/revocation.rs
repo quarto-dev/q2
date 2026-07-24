@@ -103,17 +103,32 @@ impl RevocationLedger {
     }
 
     /// Record a logout-everywhere event: every session of `sub` whose
-    /// `auth_time` predates `now` is dead. Persists atomically; the
-    /// in-memory entry stays effective even if the persist fails (the
-    /// error is returned so the caller can surface it).
+    /// `auth_time` is at or before `now` is dead. `not_before` is
+    /// stored as `now + 1` — clocks are second-granular, so a token
+    /// minted in the same second as the revocation must die too (a
+    /// strict `<` against bare `now` let same-second logins survive;
+    /// caught by the C7 e2e run). Post-revocation mints stay possible
+    /// because the mint path bumps `auth_time` to
+    /// [`Self::min_auth_time`]. Persists atomically; the in-memory
+    /// entry stays effective even if the persist fails (the error is
+    /// returned so the caller can surface it).
     pub async fn revoke_all_for(&self, sub: &str, now: i64) -> Result<()> {
+        let not_before = now + 1;
         let mut data = self.inner.lock().await;
         // Never move not_before backwards (an older concurrent caller
         // must not shorten an existing revocation).
-        let entry = data.not_before.entry(sub.to_string()).or_insert(now);
-        *entry = (*entry).max(now);
+        let entry = data.not_before.entry(sub.to_string()).or_insert(not_before);
+        *entry = (*entry).max(not_before);
         gc(&mut data, self.absolute_secs, now);
         persist(&self.path, &data)
+    }
+
+    /// The earliest `auth_time` at which a *new* session for `sub` is
+    /// valid, if a revocation event exists. The mint path stamps
+    /// `auth_time = max(now, min_auth_time)` so an immediate
+    /// (same-second) re-login is provably post-revocation.
+    pub async fn min_auth_time(&self, sub: &str) -> Option<i64> {
+        self.inner.lock().await.not_before.get(sub).copied()
     }
 
     /// Check one session token's (`sub`, `auth_time`) against the
@@ -189,22 +204,37 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn revoke_kills_older_auth_times_only() {
+    async fn revoke_kills_same_second_and_older_auth_times() {
         let temp = TempDir::new().unwrap();
         let l = ledger(temp.path());
         l.revoke_all_for("alice", NOW).await.unwrap();
 
-        // Any token minted before the event is dead…
+        // Any token minted before OR IN the revocation second is dead —
+        // second-granularity clocks mean "same second" includes tokens
+        // minted just before the user clicked revoke (the e2e-caught
+        // gap: same-second logins survived a strict `<` against `now`).
+        assert_eq!(l.check("alice", NOW).await, RevocationStatus::Revoked);
         assert_eq!(l.check("alice", NOW - 1).await, RevocationStatus::Revoked);
         assert_eq!(
             l.check("alice", NOW - 25 * 24 * 3600).await,
             RevocationStatus::Revoked
         );
-        // …an immediate re-login (auth_time ≥ not_before) works…
-        assert_eq!(l.check("alice", NOW).await, RevocationStatus::Ok);
+        // A post-revocation mint (auth_time bumped to not_before) works…
+        assert_eq!(l.check("alice", NOW + 1).await, RevocationStatus::Ok);
         assert_eq!(l.check("alice", NOW + 10).await, RevocationStatus::Ok);
         // …and other users are untouched.
         assert_eq!(l.check("bob", NOW - 1).await, RevocationStatus::Ok);
+    }
+
+    #[tokio::test]
+    async fn min_auth_time_reports_the_relogin_floor() {
+        let temp = TempDir::new().unwrap();
+        let l = ledger(temp.path());
+        assert_eq!(l.min_auth_time("alice").await, None);
+        l.revoke_all_for("alice", NOW).await.unwrap();
+        // The mint path stamps auth_time = max(now, floor) so an
+        // immediate (same-second) re-login is provably post-revocation.
+        assert_eq!(l.min_auth_time("alice").await, Some(NOW + 1));
     }
 
     #[tokio::test]

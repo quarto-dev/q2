@@ -329,7 +329,51 @@ revocation store**, both on the credential path: review accordingly.
   unchanged. 5 new vitest cases incl. "probe keeps session sliding with no
   IdP involvement". `/auth/me` `exp` documented as sliding in
   `authService.AuthState`.)* Rely on server sliding re-issue; retire the One-Tap renewal dependency (coordinate with Part B's B2); confirm `/auth/me` `exp` semantics (now sliding); **own the keep-alive explicitly** — a WS-only client never slides the window (§2), so keep the periodic `/auth/me` probe running while a WS is open, at a cadence comfortably inside the idle timeout. Tests: renewal works where One-Tap is blocked (FedCM/3p-cookie); WS-open + probe keeps the session sliding.
-- [ ] **C7 — End-to-end verification + docs.** Real browser against a running hub: log in, idle past 1 h, keep working (no re-login, no One-Tap); confirm cookie size; exercise `logout-everywhere` across two browser sessions (revoke on device A → device B's next request 401s into the logged-out flow); confirm `q2 mcp` (Bearer) unaffected. Record invocation + observed output per the end-to-end policy.
+- [x] **C7 — End-to-end verification + docs.** *(done 2026-07-24,
+  `bd-6s83nc38`. E2E drove the **real `hub` binary** (not the test harness)
+  with a standalone mock OIDC IdP; script checked in as
+  `scripts/hub-sliding-sessions-e2e.mjs` (Node built-ins only). Invocation:*
+
+  ```
+  cargo build --bin hub
+  node scripts/hub-sliding-sessions-e2e.mjs
+  # spawns: target/debug/hub --data-dir <tmp> --port 3997 \
+  #   --oidc-client-id spa.e2e.test --oidc-issuer http://127.0.0.1:<idp> \
+  #   --allow-insecure-auth
+  ```
+
+  *Observed output (all 17 checks PASS; output inspected):*
+
+  ```
+  PASS  session cookie is compact — 411 bytes (Google token was 670 bytes)
+  PASS  exp is sliding (~7 d out, not Google's 45 s) — exp - now = 604800s
+  PASS  hard break: Google JWT in cookie -> 401
+  PASS  cross-path: session token as Bearer -> 401
+  PASS  MCP path: Google token as Bearer -> 200 (unaffected)
+  PASS  WS upgrade with session cookie -> 101
+  PASS  the Google token is now definitively expired (Bearer -> 401)
+  PASS  session cookie STILL authenticates — outlived the Google token,
+        zero IdP interaction — status=200          [after a real 120 s wait]
+  PASS  POST /auth/logout-everywhere from device A -> 200
+  PASS  device B's next request -> 401 (logged-out flow)
+  PASS  immediate re-login works after revocation — status=200
+  ```
+
+  *The **first** e2e run caught a real bug the integration tests had masked:
+  with second-granularity clocks, tokens minted in the same second as a
+  logout-everywhere survived the strict `auth_time < not_before` check
+  (devices A/B still 200 after revocation). Fixed TDD-first: revocation now
+  stores `not_before = now + 1` (kills the whole revocation second) and the
+  mint path stamps `auth_time = max(now, min_auth_time(sub))` so same-second
+  re-login stays valid; integration test extended with a same-second family
+  member; e2e re-run fully green.*
+
+  ***Not verified** (needs a human + a real Google client id): the visual
+  browser flow — Google login UI, One-Tap-free renewal in a FedCM-blocked
+  browser session, and the SPA's logged-out UX on device B. The HTTP surface
+  those flows drive is exactly what the e2e exercised. Ops docs added at
+  `dev-docs/quarto-hub/session-auth-operations.md` (rotation modes, ban
+  procedure, logout-everywhere, audit reference).* Real browser against a running hub: log in, idle past 1 h, keep working (no re-login, no One-Tap); confirm cookie size; exercise `logout-everywhere` across two browser sessions (revoke on device A → device B's next request 401s into the logged-out flow); confirm `q2 mcp` (Bearer) unaffected. Record invocation + observed output per the end-to-end policy.
 
 ## Risks
 - **Rotation-mode confusion:** a graceful rotation (overlap window) after a *compromise* would keep accepting attacker-forgeable old-`kid` cookies for up to one idle window — the emergency procedure (new secret, no previous) is the documented compromise response (§4). Post-overlap old-`kid` cookies fail closed and log as `kid` mismatch, so a mis-timed rotation surfaces in logs rather than as a mysterious mass logout.

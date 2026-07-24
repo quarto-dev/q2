@@ -998,8 +998,11 @@ async fn logout_everywhere_kills_prior_tokens_and_relogin_works() {
     let lt = SessionLifetimes::default();
     let sub = "logout-everywhere-sub";
 
-    // Two members of the same user's token family: the presenting
-    // device (A) and a re-issued/parallel sibling (B).
+    // Three members of the same user's token family: the presenting
+    // device (A), a re-issued/parallel sibling (B), and a token minted
+    // in the *same second* as the revocation (C) — the second-
+    // granularity edge the first e2e run caught: with a strict `<`
+    // against `now`, same-second logins survived logout-everywhere.
     let token_a = mint_session(
         &test_keys(),
         lt,
@@ -1012,6 +1015,13 @@ async fn logout_everywhere_kills_prior_tokens_and_relogin_works() {
         lt,
         &identity(sub, "user@posit.co"),
         epoch_now() - 3600,
+    )
+    .unwrap();
+    let token_c = mint_session(
+        &test_keys(),
+        lt,
+        &identity(sub, "user@posit.co"),
+        epoch_now(),
     )
     .unwrap();
 
@@ -1031,9 +1041,9 @@ async fn logout_everywhere_kills_prior_tokens_and_relogin_works() {
     assert_eq!(value, "", "caller's cookie is cleared");
     assert!(attrs.contains("Max-Age=0"));
 
-    // The whole family is dead — including the re-issued sibling — and
-    // dead tokens are never re-issued.
-    for token in [&token_a, &token_b] {
+    // The whole family is dead — including the re-issued sibling and
+    // the same-second mint — and dead tokens are never re-issued.
+    for token in [&token_a, &token_b, &token_c] {
         let r = hub
             .get_health()
             .header("cookie", cookie_header(token))
