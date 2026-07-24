@@ -329,6 +329,7 @@ pub struct TestHubBuilder {
     allowed_domains: Option<Vec<String>>,
     allow_insecure_auth: bool,
     session_secret: Option<[u8; 32]>,
+    google_provider: bool,
 }
 
 impl Default for TestHubBuilder {
@@ -343,6 +344,7 @@ impl TestHubBuilder {
             allowed_domains: None,
             allow_insecure_auth: true,
             session_secret: None,
+            google_provider: false,
         }
     }
 
@@ -364,6 +366,14 @@ impl TestHubBuilder {
         self
     }
 
+    /// Mark the provider as Google so provider-specific surface (the
+    /// `POST /auth/callback` form-post route, double-submit CSRF) is
+    /// registered. The issuer still points at the mock provider.
+    pub fn google_provider(mut self) -> Self {
+        self.google_provider = true;
+        self
+    }
+
     pub async fn start(self, provider: &MockOidcProvider) -> TestHub {
         // Auth config carries TWO audiences: SPA primary + MCP additional.
         // Construct directly (bypassing AuthConfig::new) so we can use the
@@ -375,7 +385,11 @@ impl TestHubBuilder {
             image_domains: vec!["lh3.googleusercontent.com".to_string()],
             allowed_emails: None,
             allowed_domains: self.allowed_domains,
-            provider: auth::OidcProvider::Generic,
+            provider: if self.google_provider {
+                auth::OidcProvider::Google
+            } else {
+                auth::OidcProvider::Generic
+            },
         };
 
         // Standalone HubContext so we don't need a project on disk.
@@ -461,6 +475,27 @@ impl TestHub {
 
     pub fn post_auth_logout(&self) -> reqwest::RequestBuilder {
         self.client.post(self.url("/auth/logout"))
+    }
+
+    /// Extract the `quarto_hub_token` value from a response's
+    /// `Set-Cookie` headers, plus the full attribute string.
+    /// Returns `None` when no auth cookie was set.
+    pub fn set_auth_cookie(resp: &reqwest::Response) -> Option<(String, String)> {
+        resp.headers()
+            .get_all(http::header::SET_COOKIE)
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .find(|v| v.starts_with("quarto_hub_token="))
+            .map(|v| {
+                let value = v
+                    .strip_prefix("quarto_hub_token=")
+                    .unwrap()
+                    .split(';')
+                    .next()
+                    .unwrap()
+                    .to_string();
+                (value, v.to_string())
+            })
     }
 
     /// WS upgrade — we drive it through reqwest as a plain GET with the

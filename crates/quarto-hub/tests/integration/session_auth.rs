@@ -16,7 +16,7 @@
 //! Plan: claude-notes/plans/2026-07-06-hub-server-minted-sliding-sessions.md
 
 use quarto_hub::session::{
-    SessionIdentity, SessionKeys, SessionLifetimes, mint_session, sign_claims,
+    SessionIdentity, SessionKeys, SessionLifetimes, mint_session, sign_claims, verify_session,
 };
 
 use crate::support::{
@@ -434,6 +434,511 @@ async fn session_verify_failures_are_logged_distinguishably() {
             );
         }
     }
+}
+
+// ── C3: login mints a session cookie ──────────────────────────────
+
+#[tokio::test]
+async fn auth_refresh_mints_session_cookie() {
+    let (provider, hub) = session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("refresh-mint-sub")
+            .email("minted@posit.co")
+            .to_value(),
+    );
+
+    let resp = hub
+        .client
+        .post(hub.url("/auth/refresh"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": google }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let (value, attrs) = TestHub::set_auth_cookie(&resp).expect("session cookie set");
+    assert_ne!(
+        value, google,
+        "cookie must hold a hub session token, not the Google JWT"
+    );
+
+    // The minted token verifies under the hub's known session secret,
+    // anchored at login time with the idle-bound sliding exp.
+    let now = epoch_now();
+    let lt = SessionLifetimes::default();
+    let v = verify_session(&test_keys(), lt, &value, now).unwrap();
+    assert_eq!(v.claims.sub, "refresh-mint-sub");
+    assert_eq!(v.claims.email, "minted@posit.co");
+    assert!(
+        (v.claims.auth_time - now).abs() <= 5,
+        "auth_time anchored at the login instant"
+    );
+    assert_eq!(v.claims.exp, v.claims.iat + lt.idle_secs);
+    assert_eq!(v.claims.sid.len(), 32, "fresh random sid");
+
+    // Cookie lifetime matches the token's sliding exp; attributes hold.
+    assert!(attrs.contains("HttpOnly"));
+    assert!(attrs.contains("SameSite=Lax"));
+    assert!(attrs.contains("Path=/"));
+    assert!(attrs.contains(&format!("Max-Age={}", lt.idle_secs)));
+}
+
+/// Google-provider hub (registers the form-POST `/auth/callback`).
+async fn google_session_setup() -> &'static (MockOidcProvider, TestHub) {
+    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
+        tokio::sync::OnceCell::const_new();
+    SETUP
+        .get_or_init(|| async {
+            install_tracing_once();
+            let provider = MockOidcProvider::start().await;
+            let hub = TestHubBuilder::new()
+                .google_provider()
+                .session_secret(TEST_SESSION_SECRET)
+                .start(&provider)
+                .await;
+            (provider, hub)
+        })
+        .await
+}
+
+#[tokio::test]
+async fn auth_callback_mints_session_cookie() {
+    let (provider, hub) = google_session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("callback-mint-sub")
+            .to_value(),
+    );
+
+    // No-redirect client so the Set-Cookie on the redirect is observable.
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    // Manual x-www-form-urlencoded body (reqwest is built without the
+    // `form` feature here); JWT characters need no escaping.
+    let resp = client
+        .post(hub.url("/auth/callback"))
+        .header("cookie", "g_csrf_token=csrf123")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(format!("credential={google}&g_csrf_token=csrf123"))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_redirection(),
+        "expected redirect, got {}",
+        resp.status()
+    );
+    assert_eq!(resp.headers().get("location").unwrap(), "/");
+    let (value, _) = TestHub::set_auth_cookie(&resp).expect("session cookie set");
+    assert_ne!(value, google);
+    let v = verify_session(
+        &test_keys(),
+        SessionLifetimes::default(),
+        &value,
+        epoch_now(),
+    )
+    .unwrap();
+    assert_eq!(v.claims.sub, "callback-mint-sub");
+}
+
+#[tokio::test]
+async fn large_google_token_no_longer_cookie_dropped() {
+    let (provider, hub) = session_setup().await;
+    // Pad a claim the session token does NOT carry (`nonce`) so the
+    // Google JWT exceeds the ~3800-byte browser cookie limit while the
+    // minted session token stays compact.
+    let mut claims = ClaimsBuilder::from_provider(provider)
+        .sub("large-token-sub")
+        .to_value();
+    claims
+        .as_object_mut()
+        .unwrap()
+        .insert("nonce".into(), serde_json::json!("x".repeat(4000)));
+    let google = provider.sign(&claims);
+    assert!(google.len() > 3800, "fixture token must exceed the limit");
+
+    let resp = hub
+        .client
+        .post(hub.url("/auth/refresh"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": google }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let (value, _) = TestHub::set_auth_cookie(&resp).expect("session cookie set");
+    assert!(
+        value.len() < 1024,
+        "session cookie stays compact ({} bytes)",
+        value.len()
+    );
+}
+
+// ── C3: /auth/me and /auth/actor on the session path ─────────────
+
+#[tokio::test]
+async fn auth_me_returns_sliding_exp_from_session() {
+    let (_provider, hub) = session_setup().await;
+    let before = epoch_now();
+    let token = mint_test_session("me-session-sub", "user@posit.co");
+
+    let resp = hub
+        .get_auth_me()
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["email"], "user@posit.co");
+    assert_eq!(body["name"], "Session Test User");
+    let exp = body["exp"].as_i64().unwrap();
+    let idle = SessionLifetimes::default().idle_secs;
+    assert!(
+        exp >= before + idle && exp <= epoch_now() + idle,
+        "exp must be the sliding session expiry (~now + idle), got {exp}"
+    );
+}
+
+#[tokio::test]
+async fn auth_me_supports_bearer() {
+    // bd-3g0aijb3: /auth/me routes through shared credential extraction,
+    // so the MCP Bearer path works there too.
+    let (provider, hub) = session_setup().await;
+    let exp = chrono::Utc::now().timestamp() + 600;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("me-bearer-sub")
+            .exp(exp)
+            .to_value(),
+    );
+
+    let resp = hub.get_auth_me().bearer_auth(&google).send().await.unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["email"], "user@posit.co");
+    assert_eq!(body["exp"], exp, "Bearer path reports the Google exp");
+}
+
+#[tokio::test]
+async fn auth_me_rejects_dual_credentials() {
+    let (provider, hub) = session_setup().await;
+    let session = mint_test_session("me-dual-sub", "user@posit.co");
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("me-dual-sub")
+            .to_value(),
+    );
+
+    let resp = hub
+        .get_auth_me()
+        .bearer_auth(&google)
+        .header("cookie", cookie_header(&session))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        400,
+        "/auth/me must apply the dual-credential rule"
+    );
+}
+
+#[tokio::test]
+async fn auth_me_rejects_legacy_google_cookie() {
+    let (provider, hub) = session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("me-legacy-sub")
+            .to_value(),
+    );
+
+    let resp = hub
+        .get_auth_me()
+        .header("cookie", cookie_header(&google))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 401, "hard break applies to /auth/me too");
+}
+
+#[tokio::test]
+async fn auth_actor_works_with_session_cookie() {
+    let (_provider, hub) = session_setup().await;
+    let token = mint_test_session("actor-session-sub", "user@posit.co");
+
+    let get = |project: &str| {
+        hub.client
+            .get(hub.url(&format!("/auth/actor?project={project}")))
+            .header("cookie", cookie_header(&token))
+    };
+
+    let r1 = get("proj-a").send().await.unwrap();
+    assert_eq!(r1.status(), 200);
+    let a1: serde_json::Value = r1.json().await.unwrap();
+    let id_a = a1["actor_id"].as_str().unwrap().to_string();
+    assert_eq!(id_a.len(), 64, "HMAC-SHA256 hex actor id");
+
+    // Deterministic per (sub, project); different across projects.
+    let r2 = get("proj-a").send().await.unwrap();
+    let a2: serde_json::Value = r2.json().await.unwrap();
+    assert_eq!(a2["actor_id"].as_str().unwrap(), id_a);
+
+    let r3 = get("proj-b").send().await.unwrap();
+    let a3: serde_json::Value = r3.json().await.unwrap();
+    assert_ne!(a3["actor_id"].as_str().unwrap(), id_a);
+}
+
+#[tokio::test]
+async fn auth_actor_supports_bearer() {
+    // bd-3g0aijb3 regression: MCP sessions must obtain the per-project
+    // HMAC actor id over Bearer — previously /auth/actor was
+    // cookie-only and audit-logged missing_credential, so agent edits
+    // fell back to random actors silently.
+    let (provider, hub) = session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("actor-bearer-sub")
+            .to_value(),
+    );
+
+    let resp = hub
+        .client
+        .get(hub.url("/auth/actor?project=proj-mcp"))
+        .bearer_auth(&google)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200, "actor acquisition over Bearer");
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let actor_id = body["actor_id"].as_str().unwrap();
+    assert_eq!(actor_id.len(), 64, "HMAC-SHA256 hex actor id");
+}
+
+// ── C3: sliding re-issue on authenticated activity ───────────────
+
+#[tokio::test]
+async fn old_session_reissued_on_activity() {
+    let (_provider, hub) = session_setup().await;
+    let lt = SessionLifetimes::default();
+    // Minted 2h ago: past the Google 1h token lifetime (no One-Tap
+    // involved) and past the 1h re-issue threshold, well within idle.
+    let minted_at = epoch_now() - 2 * 3600;
+    let token = mint_session(
+        &test_keys(),
+        lt,
+        &identity("reissue-sub", "user@posit.co"),
+        minted_at,
+    )
+    .unwrap();
+    let original = verify_session(&test_keys(), lt, &token, epoch_now())
+        .unwrap()
+        .claims;
+
+    let resp = hub
+        .get_health()
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200, "session survives past 1h, no One-Tap");
+
+    let (value, attrs) = TestHub::set_auth_cookie(&resp).expect("re-issued cookie");
+    let now = epoch_now();
+    let re = verify_session(&test_keys(), lt, &value, now)
+        .unwrap()
+        .claims;
+    assert_eq!(re.auth_time, original.auth_time, "auth_time is immutable");
+    assert_eq!(re.sid, original.sid, "sid is immutable");
+    assert!((re.iat - now).abs() <= 5, "iat advances to re-issue time");
+    assert_eq!(re.exp, re.iat + lt.idle_secs, "exp slides");
+
+    // Attributes preserved on re-issue (insecure fixture → no Secure).
+    assert!(attrs.contains("HttpOnly"));
+    assert!(attrs.contains("SameSite=Lax"));
+    assert!(attrs.contains("Path=/"));
+    assert!(!attrs.contains("Secure"));
+}
+
+#[tokio::test]
+async fn fresh_session_not_reissued() {
+    let (_provider, hub) = session_setup().await;
+    let token = mint_test_session("fresh-noreissue-sub", "user@posit.co");
+
+    let resp = hub
+        .get_health()
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    assert!(
+        TestHub::set_auth_cookie(&resp).is_none(),
+        "tokens younger than 1h must not be re-issued (Set-Cookie churn)"
+    );
+}
+
+#[tokio::test]
+async fn bearer_response_never_reissues_cookie() {
+    let (provider, hub) = session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("bearer-noreissue-sub")
+            .to_value(),
+    );
+
+    let resp = hub.get_health().bearer_auth(&google).send().await.unwrap();
+    assert_eq!(resp.status(), 200);
+    assert!(
+        TestHub::set_auth_cookie(&resp).is_none(),
+        "a Bearer/MCP response must never set a session cookie"
+    );
+}
+
+#[tokio::test]
+async fn failed_auth_never_reissues_cookie() {
+    let (_provider, hub) = session_setup().await;
+    let lt = SessionLifetimes::default();
+    let token = mint_session(
+        &test_keys(),
+        lt,
+        &identity("tamper-noreissue-sub", "user@posit.co"),
+        epoch_now() - 2 * 3600,
+    )
+    .unwrap();
+    // Tamper so validation fails while the token still "looks" old
+    // enough to trigger re-issue.
+    let mut parts: Vec<String> = token.split('.').map(String::from).collect();
+    let mut payload = parts[1].clone().into_bytes();
+    let i = payload.len() / 2;
+    payload[i] = if payload[i] == b'A' { b'B' } else { b'A' };
+    parts[1] = String::from_utf8(payload).unwrap();
+
+    let resp = hub
+        .get_health()
+        .header("cookie", cookie_header(&parts.join(".")))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 401);
+    assert!(TestHub::set_auth_cookie(&resp).is_none());
+}
+
+#[tokio::test]
+async fn non_allowlisted_old_session_not_reissued() {
+    let (_provider, hub) = session_allowlist_setup().await;
+    let lt = SessionLifetimes::default();
+    // Old enough to qualify for re-issue, but the user fails the
+    // allowlist re-check — condition (b) must block the extension.
+    let token = mint_session(
+        &test_keys(),
+        lt,
+        &identity("removed-noreissue-sub", "user@gmail.com"),
+        epoch_now() - 2 * 3600,
+    )
+    .unwrap();
+
+    let resp = hub
+        .get_health()
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 403);
+    assert!(TestHub::set_auth_cookie(&resp).is_none());
+}
+
+#[tokio::test]
+async fn reissue_preserves_secure_flag_on_secure_hub() {
+    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
+        tokio::sync::OnceCell::const_new();
+    let (_provider, hub) = SETUP
+        .get_or_init(|| async {
+            install_tracing_once();
+            let provider = MockOidcProvider::start().await;
+            let hub = TestHubBuilder::new()
+                .secure()
+                .session_secret(TEST_SESSION_SECRET)
+                .start(&provider)
+                .await;
+            (provider, hub)
+        })
+        .await;
+
+    let lt = SessionLifetimes::default();
+    let token = mint_session(
+        &test_keys(),
+        lt,
+        &identity("secure-reissue-sub", "user@posit.co"),
+        epoch_now() - 2 * 3600,
+    )
+    .unwrap();
+
+    let resp = hub
+        .get_health()
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let (_, attrs) = TestHub::set_auth_cookie(&resp).expect("re-issued cookie");
+    assert!(attrs.contains("Secure"), "Secure preserved on re-issue");
+}
+
+#[tokio::test]
+async fn logout_clear_cookie_not_overridden_by_reissue() {
+    let (_provider, hub) = session_setup().await;
+    let lt = SessionLifetimes::default();
+    // Old enough that the re-issue layer would fire — logout's clearing
+    // Set-Cookie must win.
+    let token = mint_session(
+        &test_keys(),
+        lt,
+        &identity("logout-reissue-sub", "user@posit.co"),
+        epoch_now() - 2 * 3600,
+    )
+    .unwrap();
+
+    let resp = hub
+        .post_auth_logout()
+        .header("cookie", cookie_header(&token))
+        .header("x-requested-with", "XMLHttpRequest")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let (value, attrs) = TestHub::set_auth_cookie(&resp).expect("clearing cookie");
+    assert_eq!(value, "", "logout must clear, not re-issue");
+    assert!(attrs.contains("Max-Age=0"));
+}
+
+#[tokio::test]
+async fn ws_upgrade_never_reissues_cookie() {
+    let (_provider, hub) = session_setup().await;
+    let lt = SessionLifetimes::default();
+    let token = mint_session(
+        &test_keys(),
+        lt,
+        &identity("ws-noreissue-sub", "user@posit.co"),
+        epoch_now() - 2 * 3600,
+    )
+    .unwrap();
+
+    let resp = hub
+        .ws_upgrade()
+        .header("origin", &hub.base_url)
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 101);
+    assert!(
+        TestHub::set_auth_cookie(&resp).is_none(),
+        "Set-Cookie on a 101 is unreliable; WS must never slide the window"
+    );
 }
 
 // ── C2: Bearer path untouched by session routing ──────────────────
