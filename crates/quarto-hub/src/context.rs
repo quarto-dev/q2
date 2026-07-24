@@ -371,9 +371,21 @@ impl HubContext {
         let register_root_ws = config.register_root_ws;
         let disk_write_policy = config.disk_write_policy;
 
-        let session_keys = SessionKeys::new(*storage.session_secret());
         let session_lifetimes =
             SessionLifetimes::from_env().map_err(crate::error::Error::Server)?;
+        // Graceful rotation (C5b): verify under current + previous kid
+        // during the overlap window (= one idle timeout); sign always
+        // under current. No previous configured (or window lapsed) →
+        // single-key ring; that absence is also the emergency-rotation
+        // mode (immediate global invalidation).
+        let session_keys = match crate::storage::resolve_previous_session_secret(
+            storage.config(),
+            session_lifetimes.idle_secs,
+            crate::session::unix_now(),
+        )? {
+            Some(previous) => SessionKeys::with_previous(*storage.session_secret(), previous),
+            None => SessionKeys::new(*storage.session_secret()),
+        };
         let revocations = RevocationLedger::load(
             storage.hub_dir(),
             session_lifetimes.absolute_secs,

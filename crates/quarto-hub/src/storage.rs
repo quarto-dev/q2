@@ -61,6 +61,23 @@ pub struct HubStorageConfig {
     /// not just actor-id correlation. Auto-generated on first run.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_secret: Option<String>,
+
+    /// Previous session secret during a **graceful** rotation (hex).
+    /// Verification-only; signing always uses `session_secret`. Both
+    /// verify during an overlap window of one idle timeout from
+    /// `session_secret_rotated_at`, after which this entry is ignored.
+    /// **Never set this when rotating in response to a compromise** —
+    /// an overlap window keeps accepting attacker-forgeable cookies;
+    /// the emergency procedure is a new `session_secret` with no
+    /// previous (immediate global invalidation).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_session_secret: Option<String>,
+
+    /// When the graceful rotation happened (epoch seconds). Required
+    /// whenever `previous_session_secret` is set — it bounds the
+    /// overlap window.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_secret_rotated_at: Option<i64>,
 }
 
 impl HubStorageConfig {
@@ -74,6 +91,8 @@ impl HubStorageConfig {
             peers: Vec::new(),
             server_secret: None,
             session_secret: None,
+            previous_session_secret: None,
+            session_secret_rotated_at: None,
         }
     }
 
@@ -232,6 +251,75 @@ pub fn resolve_session_secret(config: &mut HubStorageConfig, hub_dir: &Path) -> 
     config.session_secret = Some(hex::encode(bytes));
     config.save(hub_dir)?;
     Ok(bytes)
+}
+
+/// Resolve the **previous** session secret for a graceful-rotation
+/// overlap window (verification-only; C5b).
+///
+/// Sources, strictly paired (an env previous requires an env
+/// rotated-at; a `hub.json` previous requires the `hub.json` field):
+/// 1. `QUARTO_HUB_SESSION_SECRET_PREVIOUS` +
+///    `QUARTO_HUB_SESSION_SECRET_ROTATED_AT` (epoch seconds);
+/// 2. `config.previous_session_secret` + `config.session_secret_rotated_at`.
+///
+/// Returns `None` when no previous secret is configured **or the
+/// overlap window has lapsed** (`rotated_at + idle ≤ now` — every
+/// active session has re-minted under the current `kid` by then, §2c).
+/// A previous secret without its rotated-at timestamp is a hard config
+/// error: an unbounded overlap window silently defeats rotation.
+///
+/// **Emergency rotation (secret compromise)** is the *absence* of this
+/// configuration: supply only the new current secret — every
+/// outstanding token dies immediately. Never respond to a compromise
+/// with a graceful rotation; the overlap window would keep accepting
+/// attacker-minted cookies.
+pub fn resolve_previous_session_secret(
+    config: &HubStorageConfig,
+    idle_secs: i64,
+    now: i64,
+) -> Result<Option<[u8; 32]>> {
+    let (hex, rotated_at, source) =
+        if let Ok(hex) = std::env::var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") {
+            let rotated_at = match std::env::var("QUARTO_HUB_SESSION_SECRET_ROTATED_AT") {
+                Ok(raw) => raw.parse::<i64>().map_err(|e| {
+                    Error::ConfigParse(format!(
+                        "QUARTO_HUB_SESSION_SECRET_ROTATED_AT: invalid epoch seconds '{raw}': {e}"
+                    ))
+                })?,
+                Err(_) => {
+                    return Err(Error::ConfigParse(
+                        "QUARTO_HUB_SESSION_SECRET_PREVIOUS requires \
+                     QUARTO_HUB_SESSION_SECRET_ROTATED_AT (epoch seconds): an unbounded \
+                     overlap window would silently defeat the rotation"
+                            .to_string(),
+                    ));
+                }
+            };
+            (hex, rotated_at, "QUARTO_HUB_SESSION_SECRET_PREVIOUS")
+        } else if let Some(ref hex) = config.previous_session_secret {
+            let Some(rotated_at) = config.session_secret_rotated_at else {
+                return Err(Error::ConfigParse(
+                    "hub.json previous_session_secret requires session_secret_rotated_at \
+                 (epoch seconds): an unbounded overlap window would silently defeat \
+                 the rotation"
+                        .to_string(),
+                ));
+            };
+            (hex.clone(), rotated_at, "hub.json previous_session_secret")
+        } else {
+            return Ok(None);
+        };
+
+    if rotated_at + idle_secs <= now {
+        tracing::info!(
+            rotated_at,
+            "previous session secret overlap window has lapsed; ignoring it \
+             (remove it from hub.json / the environment)"
+        );
+        return Ok(None);
+    }
+
+    decode_secret_hex(&hex, source).map(Some)
 }
 
 /// Get current time as ISO 8601 string (without external crate).
@@ -788,6 +876,99 @@ mod tests {
             first,
             "session secret must be stable across hub restarts"
         );
+    }
+
+    // ── resolve_previous_session_secret (C5b, bd-6kll0jr6) ───────
+
+    #[test]
+    fn previous_secret_none_when_unconfigured() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_ROTATED_AT") };
+
+        let config = HubStorageConfig::new();
+        assert_eq!(
+            resolve_previous_session_secret(&config, 3600, 1_000_000).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn previous_secret_from_config_inside_window() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") };
+
+        let expected = [3u8; 32];
+        let mut config = HubStorageConfig::new();
+        config.previous_session_secret = Some(hex::encode(expected));
+        config.session_secret_rotated_at = Some(1_000_000);
+
+        // Inside the window (idle = 3600): still verifies.
+        let got = resolve_previous_session_secret(&config, 3600, 1_000_000 + 3599).unwrap();
+        assert_eq!(got, Some(expected));
+    }
+
+    #[test]
+    fn previous_secret_dropped_after_window_lapses() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") };
+
+        let mut config = HubStorageConfig::new();
+        config.previous_session_secret = Some(hex::encode([3u8; 32]));
+        config.session_secret_rotated_at = Some(1_000_000);
+
+        // rotated_at + idle <= now → auto-dropped.
+        let got = resolve_previous_session_secret(&config, 3600, 1_000_000 + 3600).unwrap();
+        assert_eq!(got, None);
+    }
+
+    #[test]
+    fn previous_secret_without_rotated_at_is_config_error() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") };
+
+        let mut config = HubStorageConfig::new();
+        config.previous_session_secret = Some(hex::encode([3u8; 32]));
+        // No session_secret_rotated_at: an unbounded overlap window
+        // would silently defeat the rotation.
+        let result = resolve_previous_session_secret(&config, 3600, 1_000_000);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("session_secret_rotated_at")
+        );
+    }
+
+    #[test]
+    fn previous_secret_from_env_pair() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        let expected = [4u8; 32];
+        unsafe { std::env::set_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS", hex::encode(expected)) };
+        unsafe { std::env::set_var("QUARTO_HUB_SESSION_SECRET_ROTATED_AT", "1000000") };
+        let config = HubStorageConfig::new();
+        let inside = resolve_previous_session_secret(&config, 3600, 1_000_000 + 10);
+        let lapsed = resolve_previous_session_secret(&config, 3600, 1_000_000 + 3600);
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_ROTATED_AT") };
+
+        assert_eq!(inside.unwrap(), Some(expected));
+        assert_eq!(lapsed.unwrap(), None);
+    }
+
+    #[test]
+    fn previous_secret_env_without_rotated_at_is_config_error() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        unsafe { std::env::set_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS", hex::encode([4u8; 32])) };
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_ROTATED_AT") };
+        let config = HubStorageConfig::new();
+        let result = resolve_previous_session_secret(&config, 3600, 1_000_000);
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET_PREVIOUS") };
+
+        assert!(result.is_err());
     }
 
     // ── hub-dir .gitignore hygiene (C1, bd-sekcpmv1) ─────────────

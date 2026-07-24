@@ -283,9 +283,21 @@ impl SessionKeys {
     /// Rotation-overlap configuration (C5b): sign with `current`,
     /// verify against `current` + `previous`.
     pub fn with_previous(secret: [u8; 32], previous: [u8; 32]) -> Self {
+        let current = SessionKey::new(secret);
+        let previous = SessionKey::new(previous);
+        if current.kid == previous.kid {
+            // 8-hex kid collision (~1 in 2^32) — old-kid tokens would
+            // resolve to the current key and fail as tampered instead
+            // of verifying: fail-closed, but worth surfacing.
+            tracing::warn!(
+                kid = %current.kid,
+                "current and previous session secrets derive the same kid; \
+                 tokens signed under the previous secret will not verify"
+            );
+        }
         Self {
-            current: SessionKey::new(secret),
-            previous: Some(SessionKey::new(previous)),
+            current,
+            previous: Some(previous),
         }
     }
 
@@ -1041,6 +1053,51 @@ mod tests {
         assert!(
             v.should_reissue(t + SESSION_REISSUE_MIN_AGE_SECS),
             "1 h old: re-issue"
+        );
+    }
+
+    // ── rotation keyring (C5b) ────────────────────────────────────
+
+    #[test]
+    fn rotated_keyring_verifies_both_kids_and_never_exceeds_two() {
+        let t = now();
+        let lt = SessionLifetimes::default();
+        let old = SessionKeys::new(SECRET_B);
+        let old_token = mint_session(&old, lt, &identity(), t).unwrap();
+
+        let rotated = SessionKeys::with_previous(SECRET_A, SECRET_B);
+        // Both kids deterministic and distinct; the ring is exactly
+        // current + previous (its type admits no third entry).
+        assert_eq!(rotated.current().kid(), derive_session_kid(&SECRET_A));
+        assert_eq!(
+            rotated.previous().unwrap().kid(),
+            derive_session_kid(&SECRET_B)
+        );
+        assert_ne!(rotated.current().kid(), rotated.previous().unwrap().kid());
+
+        // Old-kid token verifies during the overlap…
+        let v = verify_session(&rotated, lt, &old_token, t).unwrap();
+        assert!(!v.signed_with_current_key);
+        // …and fresh mints carry the new kid.
+        let new_token = mint_session(&rotated, lt, &identity(), t).unwrap();
+        let header = jsonwebtoken::decode_header(&new_token).unwrap();
+        assert_eq!(header.kid.as_deref(), Some(rotated.current().kid()));
+    }
+
+    #[test]
+    fn old_kid_rejected_without_previous_key() {
+        // Post-overlap (previous dropped) and emergency rotation are
+        // the same keyring shape: current only — old-kid tokens fail
+        // closed as UnknownKid.
+        let t = now();
+        let lt = SessionLifetimes::default();
+        let old = SessionKeys::new(SECRET_B);
+        let old_token = mint_session(&old, lt, &identity(), t).unwrap();
+
+        let current_only = SessionKeys::new(SECRET_A);
+        assert_eq!(
+            verify_session(&current_only, lt, &old_token, t),
+            Err(SessionVerifyError::UnknownKid)
         );
     }
 
