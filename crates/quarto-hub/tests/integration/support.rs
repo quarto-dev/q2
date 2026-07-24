@@ -333,6 +333,7 @@ pub struct TestHubBuilder {
     allowed_domains: Option<Vec<String>>,
     allow_insecure_auth: bool,
     session_secret: Option<[u8; 32]>,
+    previous_session_secret: Option<[u8; 32]>,
     google_provider: bool,
     banned_subs: Vec<String>,
 }
@@ -349,6 +350,7 @@ impl TestHubBuilder {
             allowed_domains: None,
             allow_insecure_auth: true,
             session_secret: None,
+            previous_session_secret: None,
             google_provider: false,
             banned_subs: Vec::new(),
         }
@@ -369,6 +371,15 @@ impl TestHubBuilder {
     /// into the data dir before `StorageManager` initializes.
     pub fn session_secret(mut self, secret: [u8; 32]) -> Self {
         self.session_secret = Some(secret);
+        self
+    }
+
+    /// Configure a graceful-rotation overlap: `previous_session_secret`
+    /// + `session_secret_rotated_at = now` in the pre-written
+    /// `hub.json`. Combine with [`Self::session_secret`] (the new
+    /// current secret).
+    pub fn previous_session_secret(mut self, secret: [u8; 32]) -> Self {
+        self.previous_session_secret = Some(secret);
         self
     }
 
@@ -412,11 +423,23 @@ impl TestHubBuilder {
         // Pre-write hub.json with the pinned session secret; the
         // StorageManager loads (and preserves) it at init.
         if let Some(secret) = self.session_secret {
-            let config = serde_json::json!({
+            let mut config = serde_json::json!({
                 "version": 1,
                 "created_at": "0",
                 "session_secret": hex::encode(secret),
             });
+            if let Some(previous) = self.previous_session_secret {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+                let map = config.as_object_mut().unwrap();
+                map.insert(
+                    "previous_session_secret".into(),
+                    serde_json::json!(hex::encode(previous)),
+                );
+                map.insert("session_secret_rotated_at".into(), serde_json::json!(now));
+            }
             std::fs::write(temp.path().join("hub.json"), config.to_string()).unwrap();
         }
 

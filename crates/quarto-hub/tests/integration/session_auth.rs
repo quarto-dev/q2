@@ -1204,6 +1204,134 @@ async fn logout_everywhere_requires_csrf_and_cookie_kind() {
     assert_eq!(r.status(), 200);
 }
 
+// ── C5b: secret rotation via kid overlap ──────────────────────────
+
+/// The pre-rotation secret; the rotated hub signs under
+/// `TEST_SESSION_SECRET` and verifies both during the overlap window.
+const OLD_SESSION_SECRET: [u8; 32] = [0x24; 32];
+
+/// Hub mid-graceful-rotation: current = TEST_SESSION_SECRET,
+/// previous = OLD_SESSION_SECRET, rotated_at = hub start.
+async fn rotated_session_setup() -> &'static (MockOidcProvider, TestHub) {
+    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
+        tokio::sync::OnceCell::const_new();
+    SETUP
+        .get_or_init(|| async {
+            install_tracing_once();
+            let provider = MockOidcProvider::start().await;
+            let hub = TestHubBuilder::new()
+                .session_secret(TEST_SESSION_SECRET)
+                .previous_session_secret(OLD_SESSION_SECRET)
+                .start(&provider)
+                .await;
+            (provider, hub)
+        })
+        .await
+}
+
+#[tokio::test]
+async fn graceful_rotation_old_cookie_verifies_and_is_reminted_under_new_kid() {
+    let (_provider, hub) = rotated_session_setup().await;
+    let lt = SessionLifetimes::default();
+    // A cookie minted under the OLD secret, fresh (age < 1 h): the
+    // non-current kid alone must trigger prompt re-issue (§2c).
+    let old_keys = SessionKeys::new(OLD_SESSION_SECRET);
+    let old_token = mint_session(
+        &old_keys,
+        lt,
+        &identity("rotation-sub", "user@posit.co"),
+        epoch_now(),
+    )
+    .unwrap();
+    let original = verify_session(&old_keys, lt, &old_token, epoch_now())
+        .unwrap()
+        .claims;
+
+    let resp = hub
+        .get_health()
+        .header("cookie", cookie_header(&old_token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200, "old-kid cookie verifies during overlap");
+
+    let (value, _) = TestHub::set_auth_cookie(&resp).expect("prompt re-mint under the new kid");
+    let header = jsonwebtoken::decode_header(&value).unwrap();
+    assert_eq!(
+        header.kid.as_deref(),
+        Some(SessionKeys::new(TEST_SESSION_SECRET).current().kid()),
+        "re-issued cookie carries the new kid"
+    );
+    // Session continuity across the rotation: same family, same anchor.
+    let re = verify_session(&test_keys(), lt, &value, epoch_now())
+        .unwrap()
+        .claims;
+    assert_eq!(re.auth_time, original.auth_time);
+    assert_eq!(re.sid, original.sid);
+}
+
+#[tokio::test]
+async fn new_logins_on_rotated_hub_carry_new_kid() {
+    let (provider, hub) = rotated_session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("rotation-login-sub")
+            .to_value(),
+    );
+
+    let resp = hub
+        .client
+        .post(hub.url("/auth/refresh"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": google }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let (value, _) = TestHub::set_auth_cookie(&resp).unwrap();
+    let header = jsonwebtoken::decode_header(&value).unwrap();
+    assert_eq!(
+        header.kid.as_deref(),
+        Some(SessionKeys::new(TEST_SESSION_SECRET).current().kid())
+    );
+}
+
+#[tokio::test]
+async fn emergency_rotation_rejects_old_cookies_immediately() {
+    // The regular session hub has NO previous secret — exactly the
+    // emergency-rotation keyring (and the post-overlap one): tokens
+    // under any other secret fail closed, logged as kid mismatch.
+    let (_provider, hub) = session_setup().await;
+    let old_keys = SessionKeys::new(OLD_SESSION_SECRET);
+    let old_token = mint_session(
+        &old_keys,
+        SessionLifetimes::default(),
+        &identity("emergency-sub", "user@posit.co"),
+        epoch_now(),
+    )
+    .unwrap();
+
+    let resp = hub
+        .get_health()
+        .header("cookie", cookie_header(&old_token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 401);
+    assert!(TestHub::set_auth_cookie(&resp).is_none());
+
+    let events = snapshot_events();
+    assert!(
+        events.iter().any(|e| {
+            e.fields.get("credential_kind").map(|s| s.as_str()) == Some("cookie")
+                && e.fields
+                    .get("detail")
+                    .is_some_and(|d| d.contains("kid_mismatch"))
+        }),
+        "rejection must be observable as a kid mismatch, not a generic failure"
+    );
+}
+
 // ── C2: Bearer path untouched by session routing ──────────────────
 
 #[tokio::test]
