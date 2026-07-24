@@ -236,6 +236,133 @@ fn parity_source_only_cell() {
     assert_engine_parity("x <- 1", "x = 1");
 }
 
+/// Whether the `python3` on PATH can import matplotlib. Approximation:
+/// the kernel the daemon launches resolves `python3` the same way in
+/// practice, and a false negative just skips the test. Keeps the
+/// figure-parity case from failing on machines that have jupyter but
+/// not matplotlib.
+fn matplotlib_available() -> bool {
+    std::process::Command::new("python3")
+        .args(["-c", "import matplotlib"])
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+/// Figure output parity (bd-5t6wvu7m): a plotting cell must produce
+/// the same shape from both engines — a `.cell` wrapper with the
+/// echoed source fence plus a figure display div containing an image
+/// whose target lives under `<stem>_files/figure-html/`, and a
+/// capture that reports non-empty `supporting_files` (the transport
+/// contract bd-o8pr / bd-qbhp2cvv ride on).
+///
+/// The jupyter cell ends with `;` to suppress the execute_result text
+/// (`[<matplotlib.lines.Line2D …>]`) — matplotlib both returns a
+/// value and displays the figure, while knitr's `plot()` only
+/// displays; the semicolon makes the two cells semantically
+/// equivalent (one figure, no textual value).
+#[test]
+fn parity_plot_output() {
+    if !both_engines_available() {
+        eprintln!("Skipping test: parity suite needs both knitr and jupyter installed");
+        return;
+    }
+    if !matplotlib_available() {
+        eprintln!("Skipping test: figure parity needs matplotlib importable from python3");
+        return;
+    }
+
+    let knitr = record_one(&knitr_doc("plot(1)"), "knitr");
+    let jupyter = record_one(
+        &jupyter_doc("import matplotlib.pyplot as plt\nplt.plot([1,2,3]);"),
+        "jupyter",
+    );
+
+    let k_ast = parse_capture_markdown(&knitr);
+    let j_ast = parse_capture_markdown(&jupyter);
+    assert_blocks_parity(&k_ast.blocks, &j_ast.blocks, "blocks");
+
+    for (engine, ast) in [("knitr", &k_ast), ("jupyter", &j_ast)] {
+        let images = collect_image_targets(&ast.blocks);
+        assert_eq!(
+            images.len(),
+            1,
+            "{engine}: expected exactly one figure image; got {images:?}"
+        );
+        assert!(
+            images[0].starts_with("doc_files/figure-html/"),
+            "{engine}: figure must live under doc_files/figure-html/; got {}",
+            images[0]
+        );
+    }
+
+    for (engine, capture) in [("knitr", &knitr), ("jupyter", &jupyter)] {
+        let supporting = capture
+            .result
+            .get("supporting_files")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        assert!(
+            !supporting.is_empty(),
+            "{engine}: a figure-producing run must report supporting_files"
+        );
+    }
+}
+
+/// Run one engine over `content` and return its single capture.
+fn record_one(content: &str, engine: &str) -> quarto_trace::EngineCapture {
+    let (_tmp, path, project, runtime) = fixture(content);
+    let captures =
+        pollster::block_on(record_capture(&path, &project, runtime, None)).expect("record_capture");
+    assert_eq!(captures.len(), 1, "expected one capture for {engine}");
+    assert_eq!(captures[0].engine_name, engine);
+    captures[0].clone()
+}
+
+fn parse_capture_markdown(capture: &quarto_trace::EngineCapture) -> Pandoc {
+    let result_markdown = capture
+        .result
+        .get("markdown")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let (pandoc, _, _) = pampa::readers::qmd::read(
+        result_markdown.as_bytes(),
+        false,
+        "capture-result.md",
+        &mut std::io::sink(),
+        false,
+        None,
+    )
+    .expect("parse post-engine markdown");
+    pandoc
+}
+
+/// Collect every `Image` target in the block tree (top-level Divs and
+/// Paragraphs are the only containers the cell shape produces).
+fn collect_image_targets(blocks: &[Block]) -> Vec<String> {
+    use quarto_pandoc_types::Inline;
+    fn walk_inlines(inlines: &[Inline], out: &mut Vec<String>) {
+        for inline in inlines {
+            if let Inline::Image(img) = inline {
+                out.push(img.target.0.clone());
+            }
+        }
+    }
+    fn walk(blocks: &[Block], out: &mut Vec<String>) {
+        for block in blocks {
+            match block {
+                Block::Div(d) => walk(&d.content, out),
+                Block::Paragraph(p) => walk_inlines(&p.content, out),
+                Block::Plain(p) => walk_inlines(&p.content, out),
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(blocks, &mut out);
+    out
+}
+
 /// Two cells where the second depends on state from the first — pins
 /// both kernel-state persistence within a document (through the
 /// production text path) and the multi-cell output shape.
