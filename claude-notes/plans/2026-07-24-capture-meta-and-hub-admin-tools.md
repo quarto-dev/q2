@@ -315,8 +315,42 @@ until purge.
       components; enumeration is an explicit backend-specific step
       (`list_doc_ids_filesystem`), per-doc chunk loads stay on the
       adapter. Caught by the real-store integration test.
-- [ ] Phase B3: `collect` (quarantine) + `restore` + `purge` + lock
-      guard + integration tests
-- [ ] Phase B4: CLI wiring (`hub admin`), E2E against a real local
-      hub, runbook, record in this plan
+- [x] Phase B3: `collect` (quarantine) + `restore` + `purge` + lock
+      guard + integration tests (commit 4ffc1f8f). Refinement: the
+      guard doesn't just *check* hub.lock — mutating subcommands
+      ACQUIRE the server's exclusive flock for their duration, so a
+      server also can't start mid-operation.
+- [x] Phase B4: CLI wiring (`hub admin`), binary E2E, runbook
+      (`claude-notes/instructions/hub-storage-hygiene.md`)
 - [ ] Phase C: `cargo xtask verify`, PR
+
+## End-to-end verification record (2026-07-24)
+
+Store built entirely by shipped binaries: `q2 preview` on the knitr
+repro records a (meta-stamped) capture; a real
+`POST /api/preview/re-execute` supersedes it, orphaning the old doc.
+Then the `hub` binary drives the whole pipeline
+(`scratchpad/e2e-admin/run.sh`; output inspected):
+
+1. **Live scan** (server still running, read-only): inventory
+   `engine-capture 2 / project-index 1 / text-file 1`; exactly the
+   superseded capture flagged — `22821 bytes  hello.qmd` (sourcePath
+   from the Phase A envelope). `--older-than-days=-1` exercised the
+   age-gate-disable escape hatch (fresh captures).
+2. Store copied out live (preview temp data dirs are deleted on
+   shutdown — operating on a snapshot mirrors backup-based
+   maintenance), `hub admin scan --output manifest.json` offline.
+3. `collect` dry-run: `WOULD COLLECT`, tree untouched.
+4. `collect --execute`: `QUARANTINED` into
+   `trash/20260724T162747Z-scan081c78a2`, restore command printed.
+   Post-collect scan: 0 candidates.
+5. `restore`: `RESTORED` (hash-verified); scan shows the candidate
+   again.
+6. `purge`: young batch `KEPT` at default retention;
+   `--retention-days=-1 --execute` → `PURGED`.
+
+**Bonus validation:** the first E2E attempt ran a stale `q2` binary
+(pre-Phase A) whose captures were genuinely unstamped — scan reported
+the orphan as `unstamped (pre-envelope), excluded by default` and
+collected nothing. The legacy-capture protection gate, validated with
+authentic legacy data.
