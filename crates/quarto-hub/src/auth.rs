@@ -304,7 +304,18 @@ where
 /// verification. When using `--allowed-domains`, ensure your provider
 /// actually verifies email ownership before issuing tokens.
 pub fn check_allowlists(claims: &OidcClaims, config: &AuthConfig) -> Result<(), StatusCode> {
-    if !claims.email_verified {
+    check_allowlists_for(&claims.email, claims.email_verified, config)
+}
+
+/// [`check_allowlists`] on bare identity fields — shared by the Google
+/// path (from `OidcClaims`) and the session path (from the `email` /
+/// `email_verified` claims stamped into the session token at mint).
+pub fn check_allowlists_for(
+    email: &str,
+    email_verified: bool,
+    config: &AuthConfig,
+) -> Result<(), StatusCode> {
+    if !email_verified {
         return Err(StatusCode::UNAUTHORIZED);
     }
 
@@ -322,10 +333,10 @@ pub fn check_allowlists(claims: &OidcClaims, config: &AuthConfig) -> Result<(), 
     let email_ok = config
         .allowed_emails
         .as_ref()
-        .is_some_and(|list| list.iter().any(|e| e.eq_ignore_ascii_case(&claims.email)));
+        .is_some_and(|list| list.iter().any(|e| e.eq_ignore_ascii_case(email)));
 
     let domain_ok = config.allowed_domains.as_ref().is_some_and(|list| {
-        let domain = claims.email.split('@').next_back().unwrap_or("");
+        let domain = email.split('@').next_back().unwrap_or("");
         list.iter().any(|d| d.eq_ignore_ascii_case(domain))
     });
 

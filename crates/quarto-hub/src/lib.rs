@@ -15,6 +15,7 @@ pub mod index;
 pub mod peer;
 pub mod resource;
 pub mod server;
+pub mod session;
 pub mod storage;
 pub mod sync;
 pub mod sync_state;
