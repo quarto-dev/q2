@@ -6,12 +6,23 @@
  * On mount, calls GET /auth/me to check if the user has a valid cookie.
  * If 200, stores the display info in React state. If 401, shows login.
  *
- * Expiry tracking: /auth/me reports the token's real `exp`
- * (`AuthState.expiresAt`, ms epoch; falls back to +1 h for older servers).
- * Silent refresh is scheduled ~15 minutes before that expiry via the active
- * `AuthProvider`; the fresh credential goes to POST /auth/refresh which sets
- * a new cookie. The 15-minute buffer absorbs Chrome's intensive timer
- * throttling for backgrounded tabs.
+ * Sliding sessions (bd-ey6jg70f): the cookie is a hub-minted session
+ * token whose expiry **slides** — the server re-issues it on
+ * authenticated HTTP activity, and `useSessionKeepAlive` probes
+ * /auth/me periodically while a WS is open (WS traffic never slides
+ * the window). Session renewal therefore needs no IdP round-trip; it
+ * works where One Tap is blocked (FedCM / third-party-cookie
+ * policies).
+ *
+ * Expiry tracking: /auth/me reports the session's current `exp`
+ * (`AuthState.expiresAt`, ms epoch — sliding, typically days out;
+ * falls back to +1 h for older servers). One-Tap silent renewal via
+ * the active `AuthProvider` is now a **fallback**, not the renewal
+ * path: it is scheduled ~15 minutes before the (rarely reached)
+ * expiry, and triggered on definitive 401s — e.g. after a
+ * logout-everywhere revocation, where re-login is legitimate. The
+ * fresh credential goes to POST /auth/refresh, which mints a new
+ * session cookie.
  *
  * Evidence-based logout (bd-3o8zmz46): auth is only cleared when a reachable
  * server definitively rejects us (401/403). Network errors — refocus checks,
@@ -54,10 +65,23 @@ export function useAuth() {
   // Effective expiry of the current session (0 = no session).
   const expiresAtRef = useRef<number>(0);
 
-  /** Install a (re)confirmed session; clears any expired flag. */
+  /**
+   * Install a (re)confirmed session; clears any expired flag. Keeps
+   * the previous state object when nothing changed, so the hourly
+   * keep-alive probe doesn't re-render the app (or reset the expiry
+   * schedules) unless the session actually slid.
+   */
   const applyAuth = useCallback((me: AuthState) => {
     setSessionExpired(false);
-    setAuth(me);
+    setAuth((prev) =>
+      prev
+      && prev.email === me.email
+      && prev.name === me.name
+      && prev.picture === me.picture
+      && prev.expiresAt === me.expiresAt
+        ? prev
+        : me,
+    );
   }, []);
 
   /** Evidence-based logout: the server rejected our credential. */
@@ -233,5 +257,5 @@ export function useAuth() {
     setAuth(null);
   }, [provider]);
 
-  return { auth, loading, logout, triggerRefresh, sessionExpired, expireSession };
+  return { auth, loading, logout, triggerRefresh, sessionExpired, expireSession, applyAuth };
 }

@@ -315,7 +315,20 @@ revocation store**, both on the credential path: review accordingly.
   carry the new kid. **Emergency mode** is the documented absence of the
   previous-secret config — old cookies 401 immediately, observable as
   `session_kid_mismatch`. 8 new unit + 3 integration tests.)* Keep current + previous secret in the `kid → secret` map (config per §4: `previous_session_secret` + `session_secret_rotated_at`, env equivalents), sign with the current one, verify against both during the overlap window (= one idle timeout), auto-drop the previous entry when the window lapses. Purely additive over C2's verifier — every cookie already carries its `kid`. Sliding re-issue re-mints any old-`kid` token on its next qualifying request (§2c), so active sessions migrate well inside the window. Ship the **emergency mode** alongside (new secret with no previous → immediate global invalidation) and document it as the compromise response (§4). Own PR after C5. Tests: graceful rotate → old-`kid` cookies verify during overlap and are re-minted under the new `kid` on next request; new logins carry the new `kid`; post-overlap old-`kid` cookies rejected (fail closed, logged as `kid` mismatch); emergency rotation rejects all prior cookies immediately; the map never exceeds two entries; both derived `kid`s are deterministic and distinct.
-- [ ] **C6 — Client alignment.** Rely on server sliding re-issue; retire the One-Tap renewal dependency (coordinate with Part B's B2); confirm `/auth/me` `exp` semantics (now sliding); **own the keep-alive explicitly** — a WS-only client never slides the window (§2), so keep the periodic `/auth/me` probe running while a WS is open, at a cadence comfortably inside the idle timeout. Tests: renewal works where One-Tap is blocked (FedCM/3p-cookie); WS-open + probe keeps the session sliding.
+- [x] **C6 — Client alignment.** *(done 2026-07-24, `bd-exk3hfxk`. New
+  `useSessionKeepAlive` hook: periodic `/auth/me` (cadence 1 h, matching the
+  server's re-issue age gate, comfortably inside the 7-day idle timeout)
+  while signed in and sync is **online** — WS traffic never slides the
+  window, so the probe both triggers the server-side re-issue and feeds the
+  slid expiry back into `useAuth` via the exposed `applyAuth` (change-guarded
+  to avoid hourly re-renders). One-Tap silent renewal is now a documented
+  **fallback** (post-revocation re-login, near-expiry assist), not the
+  renewal path — renewal needs no IdP round-trip, which is exactly the
+  FedCM/3p-cookie-blocked case; full One-Tap retirement stays with Part B's
+  B2 (`bd-qxgoti2b`). `useAuthProbe` (disconnected two-strike probe) is
+  unchanged. 5 new vitest cases incl. "probe keeps session sliding with no
+  IdP involvement". `/auth/me` `exp` documented as sliding in
+  `authService.AuthState`.)* Rely on server sliding re-issue; retire the One-Tap renewal dependency (coordinate with Part B's B2); confirm `/auth/me` `exp` semantics (now sliding); **own the keep-alive explicitly** — a WS-only client never slides the window (§2), so keep the periodic `/auth/me` probe running while a WS is open, at a cadence comfortably inside the idle timeout. Tests: renewal works where One-Tap is blocked (FedCM/3p-cookie); WS-open + probe keeps the session sliding.
 - [ ] **C7 — End-to-end verification + docs.** Real browser against a running hub: log in, idle past 1 h, keep working (no re-login, no One-Tap); confirm cookie size; exercise `logout-everywhere` across two browser sessions (revoke on device A → device B's next request 401s into the logged-out flow); confirm `q2 mcp` (Bearer) unaffected. Record invocation + observed output per the end-to-end policy.
 
 ## Risks
