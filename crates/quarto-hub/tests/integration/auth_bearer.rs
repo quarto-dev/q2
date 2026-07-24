@@ -1,440 +1,33 @@
 //! Phase 2 — Hub middleware: Bearer extraction + audience allowlist
 //! + dual-credential 400 + CSRF/Origin gating by credential kind.
 //!
-//! These tests spin up:
-//!   * a `MockOidcProvider` (axum server on a random localhost port)
-//!     serving `/.well-known/openid-configuration` + a JWKS endpoint;
-//!   * a `TestHub` (axum server on a random localhost port) configured
-//!     with two allowlisted audiences — the SPA's `client_id` and the
-//!     hub-mcp `additional_audiences` entry — plus an issuer pointing
-//!     at the mock OIDC provider.
+//! These tests spin up a [`crate::support::MockOidcProvider`] (axum
+//! server on a random localhost port serving discovery + JWKS) and a
+//! [`crate::support::TestHub`] configured with two allowlisted
+//! audiences — the SPA's `client_id` and the hub-mcp
+//! `additional_audiences` entry — plus an issuer pointing at the mock
+//! OIDC provider.
 //!
 //! JWTs are minted in-process with a RS256 keypair held by the
 //! provider. The corresponding public JWK is served at the JWKS URL,
 //! and `RemoteJwksDecoder` fetches it once at hub startup. The hub
 //! itself is built via `build_router_with_state` with auth-state
-//! injected through a new `build_auth_state_from_parts` constructor
-//! that skips OIDC discovery (the discovery path requires HTTPS).
+//! injected through `build_auth_state_from_parts`, which skips OIDC
+//! discovery (the discovery path requires HTTPS).
 //!
 //! Plan: claude-notes/plans/2026-05-05-hub-mcp-device-flow-implementation.md
 //! §Phase 2.
 
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::{Arc, OnceLock};
-use std::time::Duration;
-
-use axum::{Json, Router, extract::State, response::IntoResponse, routing::get};
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
-use parking_lot::Mutex;
-use rsa::{
-    RsaPrivateKey, RsaPublicKey, pkcs1::EncodeRsaPrivateKey, pkcs8::LineEnding,
-    traits::PublicKeyParts,
+use rsa::{RsaPrivateKey, pkcs1::EncodeRsaPrivateKey, pkcs8::LineEnding};
+use serde_json::json;
+
+use crate::support::{
+    ClaimsBuilder, MCP_CLIENT_ID, MockOidcProvider, SPA_CLIENT_ID, TestHub, TestHubBuilder,
+    install_tracing_once, snapshot_events,
 };
-use serde_json::{Value as JsonValue, json};
-use tokio::net::TcpListener;
 
-use quarto_hub::auth::{self, AuthConfig, AuthState};
-use quarto_hub::context::{HubConfig, HubContext, SharedContext};
-use quarto_hub::server::build_router_with_state;
-use quarto_hub::storage::StorageManager;
-
-// ── tracing capture: in-process subscriber that retains every event ──
-
-#[derive(Debug, Clone, Default)]
-struct CapturedEvent {
-    /// `tracing::Event::metadata().target()` of the captured event,
-    /// retained so future tests can filter on `"quarto_hub::audit"`.
-    #[allow(dead_code)]
-    target: String,
-    fields: HashMap<String, String>,
-}
-
-struct CaptureLayer;
-
-impl<S> tracing_subscriber::layer::Layer<S> for CaptureLayer
-where
-    S: tracing::Subscriber,
-{
-    fn on_event(
-        &self,
-        event: &tracing::Event<'_>,
-        _ctx: tracing_subscriber::layer::Context<'_, S>,
-    ) {
-        let mut fields = HashMap::new();
-        let mut visitor = FieldVisitor(&mut fields);
-        event.record(&mut visitor);
-        let captured = CapturedEvent {
-            target: event.metadata().target().to_string(),
-            fields,
-        };
-        captured_events().lock().push(captured);
-    }
-}
-
-struct FieldVisitor<'a>(&'a mut HashMap<String, String>);
-impl tracing::field::Visit for FieldVisitor<'_> {
-    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-        self.0
-            .insert(field.name().to_string(), format!("{value:?}"));
-    }
-    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        self.0.insert(field.name().to_string(), value.to_string());
-    }
-    fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
-        self.0.insert(field.name().to_string(), value.to_string());
-    }
-    fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
-        self.0.insert(field.name().to_string(), value.to_string());
-    }
-    fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
-        self.0.insert(field.name().to_string(), value.to_string());
-    }
-}
-
-fn captured_events() -> &'static Mutex<Vec<CapturedEvent>> {
-    static EVENTS: OnceLock<Mutex<Vec<CapturedEvent>>> = OnceLock::new();
-    EVENTS.get_or_init(|| Mutex::new(Vec::new()))
-}
-
-fn snapshot_events() -> Vec<CapturedEvent> {
-    captured_events().lock().clone()
-}
-
-fn install_tracing_once() {
-    use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::util::SubscriberInitExt;
-
-    static INSTALLED: OnceLock<()> = OnceLock::new();
-    INSTALLED.get_or_init(|| {
-        let _ = tracing_subscriber::registry().with(CaptureLayer).try_init();
-    });
-}
-
-// ── mock OIDC provider ────────────────────────────────────────────
-
-struct MockOidcProvider {
-    issuer: String,
-    jwks_url: String,
-    encoding_key: EncodingKey,
-    kid: String,
-}
-
-#[derive(Clone)]
-struct MockOidcState {
-    jwks_body: Arc<JsonValue>,
-    discovery_body: Arc<JsonValue>,
-}
-
-impl MockOidcProvider {
-    async fn start() -> Self {
-        // RSA-2048 keypair, one-shot per process via the global init below.
-        let (private_pem, jwk, kid) = build_test_keypair();
-
-        let encoding_key =
-            EncodingKey::from_rsa_pem(private_pem.as_bytes()).expect("valid PEM for jsonwebtoken");
-
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr: SocketAddr = listener.local_addr().unwrap();
-        let issuer = format!("http://{addr}");
-        let jwks_url = format!("{issuer}/.well-known/jwks.json");
-
-        let state = MockOidcState {
-            jwks_body: Arc::new(json!({ "keys": [jwk] })),
-            discovery_body: Arc::new(json!({
-                "issuer": issuer.clone(),
-                "jwks_uri": jwks_url.clone(),
-            })),
-        };
-
-        let app = Router::new()
-            .route("/.well-known/openid-configuration", get(serve_discovery))
-            .route("/.well-known/jwks.json", get(serve_jwks))
-            .with_state(state);
-
-        tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
-        });
-
-        Self {
-            issuer,
-            jwks_url,
-            encoding_key,
-            kid,
-        }
-    }
-
-    fn header(&self) -> Header {
-        let mut h = Header::new(Algorithm::RS256);
-        h.kid = Some(self.kid.clone());
-        h
-    }
-
-    fn sign(&self, claims: &JsonValue) -> String {
-        jsonwebtoken::encode(&self.header(), claims, &self.encoding_key).expect("sign JWT")
-    }
-}
-
-async fn serve_discovery(State(s): State<MockOidcState>) -> impl IntoResponse {
-    Json((*s.discovery_body).clone())
-}
-
-async fn serve_jwks(State(s): State<MockOidcState>) -> impl IntoResponse {
-    Json((*s.jwks_body).clone())
-}
-
-fn build_test_keypair() -> (String, JsonValue, String) {
-    static KEYPAIR: OnceLock<(String, JsonValue, String)> = OnceLock::new();
-    KEYPAIR
-        .get_or_init(|| {
-            // OsRng from rsa's re-export — matches the rand_core 0.6 version
-            // the rsa crate compiles against (workspace's `rand = 0.9` uses
-            // a newer, incompatible rand_core).
-            let mut rng = rsa::rand_core::OsRng;
-            let private = RsaPrivateKey::new(&mut rng, 2048).expect("RSA-2048 generation");
-            let public = RsaPublicKey::from(&private);
-
-            let pem = private
-                .to_pkcs1_pem(LineEnding::LF)
-                .expect("PKCS#1 PEM encode")
-                .to_string();
-
-            let n_bytes = public.n().to_bytes_be();
-            let e_bytes = public.e().to_bytes_be();
-            let kid = "test-kid-1".to_string();
-            let jwk = json!({
-                "kty": "RSA",
-                "use": "sig",
-                "alg": "RS256",
-                "kid": kid,
-                "n": URL_SAFE_NO_PAD.encode(&n_bytes),
-                "e": URL_SAFE_NO_PAD.encode(&e_bytes),
-            });
-
-            (pem, jwk, kid)
-        })
-        .clone()
-}
-
-// ── JWT claim helpers ─────────────────────────────────────────────
-
-const SPA_CLIENT_ID: &str = "spa.apps.googleusercontent.com";
-const MCP_CLIENT_ID: &str = "mcp.apps.googleusercontent.com";
-
-#[derive(Clone)]
-struct ClaimsBuilder {
-    iss: String,
-    sub: String,
-    aud: JsonValue,
-    azp: Option<String>,
-    email: String,
-    email_verified: bool,
-    name: Option<String>,
-    picture: Option<String>,
-    iat: Option<i64>,
-    nbf: Option<i64>,
-    exp: i64,
-}
-
-impl ClaimsBuilder {
-    fn from_provider(provider: &MockOidcProvider) -> Self {
-        let now = chrono::Utc::now().timestamp();
-        Self {
-            iss: provider.issuer.clone(),
-            sub: "bearer-test-sub".to_string(),
-            aud: JsonValue::String(SPA_CLIENT_ID.to_string()),
-            azp: None,
-            email: "user@posit.co".to_string(),
-            email_verified: true,
-            name: Some("Test User".to_string()),
-            picture: None,
-            iat: Some(now - 5),
-            nbf: None,
-            exp: now + 600,
-        }
-    }
-
-    fn sub(mut self, sub: impl Into<String>) -> Self {
-        self.sub = sub.into();
-        self
-    }
-    fn aud(mut self, aud: JsonValue) -> Self {
-        self.aud = aud;
-        self
-    }
-    fn azp(mut self, azp: impl Into<String>) -> Self {
-        self.azp = Some(azp.into());
-        self
-    }
-    fn no_azp(mut self) -> Self {
-        self.azp = None;
-        self
-    }
-    fn email(mut self, email: impl Into<String>) -> Self {
-        self.email = email.into();
-        self
-    }
-    fn email_verified(mut self, v: bool) -> Self {
-        self.email_verified = v;
-        self
-    }
-    fn iss(mut self, iss: impl Into<String>) -> Self {
-        self.iss = iss.into();
-        self
-    }
-    fn iat(mut self, iat: i64) -> Self {
-        self.iat = Some(iat);
-        self
-    }
-    fn exp(mut self, exp: i64) -> Self {
-        self.exp = exp;
-        self
-    }
-    fn to_value(&self) -> JsonValue {
-        let mut v = json!({
-            "iss": self.iss,
-            "sub": self.sub,
-            "aud": self.aud,
-            "email": self.email,
-            "email_verified": self.email_verified,
-            "exp": self.exp,
-        });
-        let m = v.as_object_mut().unwrap();
-        if let Some(azp) = &self.azp {
-            m.insert("azp".into(), JsonValue::String(azp.clone()));
-        }
-        if let Some(name) = &self.name {
-            m.insert("name".into(), JsonValue::String(name.clone()));
-        }
-        if let Some(picture) = &self.picture {
-            m.insert("picture".into(), JsonValue::String(picture.clone()));
-        }
-        if let Some(iat) = self.iat {
-            m.insert("iat".into(), JsonValue::Number(iat.into()));
-        }
-        if let Some(nbf) = self.nbf {
-            m.insert("nbf".into(), JsonValue::Number(nbf.into()));
-        }
-        v
-    }
-}
-
-// ── test hub ──────────────────────────────────────────────────────
-
-struct TestHub {
-    base_url: String,
-    client: reqwest::Client,
-}
-
-impl TestHub {
-    async fn start(provider: &MockOidcProvider) -> Self {
-        // Auth config carries TWO audiences: SPA primary + MCP additional.
-        // Construct directly (bypassing AuthConfig::new) so we can use the
-        // mock provider's http:// issuer URL.
-        let auth_config = AuthConfig {
-            client_id: SPA_CLIENT_ID.to_string(),
-            additional_audiences: vec![MCP_CLIENT_ID.to_string()],
-            issuer: provider.issuer.clone(),
-            image_domains: vec!["lh3.googleusercontent.com".to_string()],
-            allowed_emails: None,
-            allowed_domains: None,
-            provider: auth::OidcProvider::Generic,
-        };
-
-        // Standalone HubContext so we don't need a project on disk.
-        let temp = tempfile::TempDir::new().unwrap();
-        let storage = StorageManager::new_standalone(temp.path()).unwrap();
-        // Keep the TempDir alive for the hub's lifetime by leaking it —
-        // tests are short-lived; the TempDir would otherwise drop before
-        // the hub finishes.
-        Box::leak(Box::new(temp));
-
-        let config = HubConfig {
-            port: 0,
-            host: "127.0.0.1".to_string(),
-            peers: Vec::new(),
-            sync_interval_secs: None,
-            watch_enabled: false,
-            watch_debounce_ms: 500,
-            watch_filter: Default::default(),
-            single_file: None,
-            resource_files: Vec::new(),
-            single_file_assets: Vec::new(),
-            single_file_text_deps: Vec::new(),
-            auth_config: Some(auth_config),
-            allow_insecure_auth: true,
-            register_root_ws: false,
-            disk_write_policy: Default::default(),
-        };
-
-        let ctx = HubContext::new(storage, config).await.unwrap();
-        let ctx: SharedContext = Arc::new(ctx);
-
-        // Inject the auth state ourselves, bypassing OIDC discovery so the
-        // mock provider's http:// URLs are usable in tests.
-        let audiences = vec![SPA_CLIENT_ID.to_string(), MCP_CLIENT_ID.to_string()];
-        let auth_state: AuthState = auth::build_auth_state_from_parts(
-            provider.jwks_url.clone(),
-            vec![Algorithm::RS256],
-            audiences,
-            provider.issuer.clone(),
-        )
-        .await
-        .expect("build auth state");
-        ctx.set_auth_state(auth_state).expect("set auth state");
-
-        let router = build_router_with_state(ctx.clone()).await.unwrap();
-        let router = router.with_state(ctx);
-
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let base_url = format!("http://{addr}");
-
-        tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
-        });
-
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()
-            .unwrap();
-
-        Self { base_url, client }
-    }
-
-    fn url(&self, path: &str) -> String {
-        format!("{}{}", self.base_url, path)
-    }
-
-    /// `GET /health` — `Authenticated` extractor required.
-    fn get_health(&self) -> reqwest::RequestBuilder {
-        self.client.get(self.url("/health"))
-    }
-
-    fn get_auth_me(&self) -> reqwest::RequestBuilder {
-        self.client.get(self.url("/auth/me"))
-    }
-
-    fn post_auth_logout(&self) -> reqwest::RequestBuilder {
-        self.client.post(self.url("/auth/logout"))
-    }
-
-    /// WS upgrade — we drive it through reqwest as a plain GET with the
-    /// upgrade headers, since axum decides 101 vs error status from
-    /// inside the handler before the actual ws library kicks in.
-    fn ws_upgrade(&self) -> reqwest::RequestBuilder {
-        self.client
-            .get(self.url("/ws"))
-            .header("connection", "Upgrade")
-            .header("upgrade", "websocket")
-            .header("sec-websocket-version", "13")
-            .header("sec-websocket-key", "dGVzdHNvY2tleS0xMjM0NTY3OA==")
-    }
-}
-
-// ── shared test fixture ───────────────────────────────────────────
+// ── shared test fixtures ──────────────────────────────────────────
 
 async fn shared_setup() -> &'static (MockOidcProvider, TestHub) {
     static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
@@ -443,87 +36,39 @@ async fn shared_setup() -> &'static (MockOidcProvider, TestHub) {
         .get_or_init(|| async {
             install_tracing_once();
             let provider = MockOidcProvider::start().await;
-            let hub = TestHub::start(&provider).await;
+            let hub = TestHubBuilder::new().start(&provider).await;
             (provider, hub)
         })
         .await
 }
 
+/// Separate hub with allowed_domains = ["posit.co"]; lets us assert
+/// 403 vs 401 distinction on the allowlist path.
 async fn allowlist_setup() -> &'static (MockOidcProvider, TestHub) {
-    // Separate hub with allowed_domains = ["posit.co"]; lets us assert
-    // 403 vs 401 distinction on the allowlist path.
     static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
         tokio::sync::OnceCell::const_new();
     SETUP
         .get_or_init(|| async {
             install_tracing_once();
             let provider = MockOidcProvider::start().await;
+            let hub = TestHubBuilder::new()
+                .allowed_domains(&["posit.co"])
+                .start(&provider)
+                .await;
+            (provider, hub)
+        })
+        .await
+}
 
-            let auth_config = AuthConfig {
-                client_id: SPA_CLIENT_ID.to_string(),
-                additional_audiences: vec![MCP_CLIENT_ID.to_string()],
-                issuer: provider.issuer.clone(),
-                image_domains: vec!["lh3.googleusercontent.com".to_string()],
-                allowed_emails: None,
-                allowed_domains: Some(vec!["posit.co".to_string()]),
-                provider: auth::OidcProvider::Generic,
-            };
-
-            let temp = tempfile::TempDir::new().unwrap();
-            let storage = StorageManager::new_standalone(temp.path()).unwrap();
-            Box::leak(Box::new(temp));
-
-            let config = HubConfig {
-                port: 0,
-                host: "127.0.0.1".to_string(),
-                peers: Vec::new(),
-                sync_interval_secs: None,
-                watch_enabled: false,
-                watch_debounce_ms: 500,
-                watch_filter: Default::default(),
-                single_file: None,
-                resource_files: Vec::new(),
-                single_file_assets: Vec::new(),
-                single_file_text_deps: Vec::new(),
-                auth_config: Some(auth_config),
-                allow_insecure_auth: true,
-                register_root_ws: false,
-                disk_write_policy: Default::default(),
-            };
-
-            let ctx = HubContext::new(storage, config).await.unwrap();
-            let ctx: SharedContext = Arc::new(ctx);
-
-            let audiences = vec![SPA_CLIENT_ID.to_string(), MCP_CLIENT_ID.to_string()];
-            let auth_state = auth::build_auth_state_from_parts(
-                provider.jwks_url.clone(),
-                vec![Algorithm::RS256],
-                audiences,
-                provider.issuer.clone(),
-            )
-            .await
-            .unwrap();
-            ctx.set_auth_state(auth_state).unwrap();
-
-            let router = build_router_with_state(ctx.clone()).await.unwrap();
-            let router = router.with_state(ctx);
-
-            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let addr = listener.local_addr().unwrap();
-            let base_url = format!("http://{addr}");
-
-            tokio::spawn(async move {
-                axum::serve(listener, router).await.unwrap();
-            });
-
-            let hub = TestHub {
-                base_url,
-                client: reqwest::Client::builder()
-                    .timeout(Duration::from_secs(5))
-                    .build()
-                    .unwrap(),
-            };
-
+/// Secure (allow_insecure_auth=false) hub for the WS-Origin regression.
+async fn secure_setup() -> &'static (MockOidcProvider, TestHub) {
+    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
+        tokio::sync::OnceCell::const_new();
+    SETUP
+        .get_or_init(|| async {
+            install_tracing_once();
+            let provider = MockOidcProvider::start().await;
+            let hub = TestHubBuilder::new().secure().start(&provider).await;
             (provider, hub)
         })
         .await
@@ -891,18 +436,15 @@ async fn ws_upgrade_with_bearer_skips_origin_check() {
 
 #[tokio::test]
 async fn ws_upgrade_with_cookie_still_requires_origin() {
-    let (provider, hub) = shared_setup().await;
-    // Hub started with allow_insecure_auth=true skips the Origin check in
-    // the existing code path. To exercise the regression we need a hub
-    // with secure cookies; we build a one-off here.
-    let _ = (provider, hub);
-    let (provider2, hub2) = secure_setup().await;
-    let token = provider2.sign(
-        &ClaimsBuilder::from_provider(provider2)
+    // Hubs started with allow_insecure_auth=true skip the Origin check,
+    // so this regression needs the secure fixture.
+    let (provider, hub) = secure_setup().await;
+    let token = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
             .sub("ws-cookie-bad-origin")
             .to_value(),
     );
-    let resp = hub2
+    let resp = hub
         .ws_upgrade()
         .header("origin", "https://attacker.example.com")
         .header("cookie", format!("quarto_hub_token={token}"))
@@ -914,84 +456,6 @@ async fn ws_upgrade_with_cookie_still_requires_origin() {
         403,
         "cookie-authenticated WS upgrade with bad Origin must 403"
     );
-}
-
-// secure (allow_insecure_auth=false) hub for the WS-Origin regression
-async fn secure_setup() -> &'static (MockOidcProvider, TestHub) {
-    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
-        tokio::sync::OnceCell::const_new();
-    SETUP
-        .get_or_init(|| async {
-            install_tracing_once();
-            let provider = MockOidcProvider::start().await;
-
-            let auth_config = AuthConfig {
-                client_id: SPA_CLIENT_ID.to_string(),
-                additional_audiences: vec![MCP_CLIENT_ID.to_string()],
-                issuer: provider.issuer.clone(),
-                image_domains: vec!["lh3.googleusercontent.com".to_string()],
-                allowed_emails: None,
-                allowed_domains: None,
-                provider: auth::OidcProvider::Generic,
-            };
-
-            let temp = tempfile::TempDir::new().unwrap();
-            let storage = StorageManager::new_standalone(temp.path()).unwrap();
-            Box::leak(Box::new(temp));
-
-            let config = HubConfig {
-                port: 0,
-                host: "127.0.0.1".to_string(),
-                peers: Vec::new(),
-                sync_interval_secs: None,
-                watch_enabled: false,
-                watch_debounce_ms: 500,
-                watch_filter: Default::default(),
-                single_file: None,
-                resource_files: Vec::new(),
-                single_file_assets: Vec::new(),
-                single_file_text_deps: Vec::new(),
-                auth_config: Some(auth_config),
-                allow_insecure_auth: false, // <-- the key difference
-                register_root_ws: false,
-                disk_write_policy: Default::default(),
-            };
-
-            let ctx = HubContext::new(storage, config).await.unwrap();
-            let ctx: SharedContext = Arc::new(ctx);
-
-            let audiences = vec![SPA_CLIENT_ID.to_string(), MCP_CLIENT_ID.to_string()];
-            let auth_state = auth::build_auth_state_from_parts(
-                provider.jwks_url.clone(),
-                vec![Algorithm::RS256],
-                audiences,
-                provider.issuer.clone(),
-            )
-            .await
-            .unwrap();
-            ctx.set_auth_state(auth_state).unwrap();
-
-            let router = build_router_with_state(ctx.clone()).await.unwrap();
-            let router = router.with_state(ctx);
-
-            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let addr = listener.local_addr().unwrap();
-            let base_url = format!("http://{addr}");
-
-            tokio::spawn(async move {
-                axum::serve(listener, router).await.unwrap();
-            });
-
-            let hub = TestHub {
-                base_url,
-                client: reqwest::Client::builder()
-                    .timeout(Duration::from_secs(5))
-                    .build()
-                    .unwrap(),
-            };
-            (provider, hub)
-        })
-        .await
 }
 
 // ── Cookie still works (regression) ──────────────────────────────
@@ -1301,28 +765,11 @@ async fn mutating_endpoint_with_bearer_skips_csrf_check() {
     );
 }
 
-#[tokio::test]
-async fn mutating_endpoint_with_cookie_still_requires_csrf() {
-    let (provider, hub) = shared_setup().await;
-    let token = provider.sign(
-        &ClaimsBuilder::from_provider(provider)
-            .sub("csrf-cookie-required")
-            .to_value(),
-    );
-
-    let resp = hub
-        .post_auth_logout()
-        .header("cookie", format!("quarto_hub_token={token}"))
-        // No X-Requested-With.
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(
-        resp.status(),
-        403,
-        "cookie-authenticated POST without X-Requested-With must 403"
-    );
-}
+// NOTE: the cookie-side CSRF regression (mutating POST with a valid
+// cookie but no X-Requested-With must 403) lives in `session_auth.rs`
+// now — since the sliding-sessions cutover (§6 hard break), a Google
+// JWT in the cookie no longer authenticates, so exercising the CSRF
+// gate requires a hub-minted session cookie.
 
 #[tokio::test]
 async fn dual_credential_400_wins_over_csrf_and_origin() {

@@ -152,7 +152,7 @@ pub enum CredentialKind {
 }
 
 impl CredentialKind {
-    fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             CredentialKind::Cookie => "cookie",
             CredentialKind::Bearer => "bearer",
@@ -432,12 +432,12 @@ where
 
         let credential = credential.ok_or_else(unauthorized)?;
         let kind = credential.kind();
-        // Preserve the original status code: `authenticate_claims_for_kind`
-        // returns 401 for invalid/missing credentials but 403 for valid
-        // credentials whose user is not allowlisted. Collapsing both
-        // to 401 loses the distinction that the plan's allowlist-parity
-        // tests assert.
-        ctx.authenticate_claims_for_kind(Some(credential.token()), kind.label())
+        // Central dispatch (§5): Cookie → hub-session verify, Bearer →
+        // JWKS. Preserve the original status code: 401 for invalid
+        // credentials but 403 for valid credentials whose user is not
+        // allowlisted — the allowlist-parity tests assert the
+        // distinction.
+        ctx.authenticate_credential(&credential)
             .await
             .map_err(|status| {
                 let body = if status == StatusCode::FORBIDDEN {
@@ -934,11 +934,8 @@ async fn ws_handler(
             return status.into_response();
         }
 
-        match ctx
-            .authenticate_claims_for_kind(Some(credential.token()), credential.kind().label())
-            .await
-        {
-            Ok(claims) => Some(claims.email),
+        match ctx.authenticate_credential(&credential).await {
+            Ok(user) => Some(user.email().to_string()),
             Err(status) => return status.into_response(),
         }
     } else {

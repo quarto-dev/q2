@@ -21,6 +21,7 @@ use crate::error::Result;
 use crate::index::{IndexDocument, load_or_create_index};
 use crate::peer::spawn_peer_connection;
 use crate::resource::{create_binary_document, detect_mime_type};
+use crate::session::{SessionKeys, SessionLifetimes, VerifiedSession};
 use crate::storage::StorageManager;
 use crate::sync::{
     DiskWritePolicy, SyncAllResult, SyncResult, sync_all_documents, sync_file_by_path,
@@ -197,6 +198,14 @@ pub struct HubContext {
     /// is omitted from auth cookies.
     allow_insecure_auth: bool,
 
+    /// Session-token signing/verification keys, derived from the storage
+    /// manager's session secret at startup.
+    session_keys: SessionKeys,
+
+    /// Sliding-session lifetime configuration (idle + absolute caps),
+    /// resolved from the environment at startup.
+    session_lifetimes: SessionLifetimes,
+
     /// See [`HubConfig::register_root_ws`]. Stashed on the context so
     /// `build_router` can consult it after `HubContext::new` consumes
     /// the originating `HubConfig`.
@@ -357,6 +366,10 @@ impl HubContext {
         let register_root_ws = config.register_root_ws;
         let disk_write_policy = config.disk_write_policy;
 
+        let session_keys = SessionKeys::new(*storage.session_secret());
+        let session_lifetimes =
+            SessionLifetimes::from_env().map_err(crate::error::Error::Server)?;
+
         Ok(Self {
             storage,
             project_files,
@@ -367,6 +380,8 @@ impl HubContext {
             auth_config,
             auth_state: OnceLock::new(),
             allow_insecure_auth,
+            session_keys,
+            session_lifetimes,
             register_root_ws,
             disk_write_policy,
             peer_emails,
@@ -641,6 +656,148 @@ impl HubContext {
             sub = %token_data.claims.sub,
         );
         Ok(token_data.claims)
+    }
+
+    /// Session key material for minting/verifying hub session cookies.
+    pub fn session_keys(&self) -> &SessionKeys {
+        &self.session_keys
+    }
+
+    /// Sliding-session lifetime configuration.
+    pub fn session_lifetimes(&self) -> SessionLifetimes {
+        self.session_lifetimes
+    }
+
+    /// Verify a hub-minted session token (the Cookie credential path).
+    ///
+    /// Beyond the cryptographic/lifetime checks in
+    /// [`crate::session::verify_session`], this re-runs the allowlist
+    /// check on the session claims (`email`, `email_verified` stamped at
+    /// mint) — allowlist removal bites on the user's next request, not
+    /// at absolute expiry. Failures are audit-logged distinguishably
+    /// (`session_kid_mismatch` / `session_expired` /
+    /// `session_absolute_cap` / `session_tampered`); token contents are
+    /// never logged.
+    pub async fn authenticate_session(
+        &self,
+        token: &str,
+    ) -> std::result::Result<VerifiedSession, StatusCode> {
+        let auth_config = self.auth_config().ok_or_else(|| {
+            tracing::event!(
+                target: "quarto_hub::audit",
+                tracing::Level::WARN,
+                action = "auth_fail",
+                outcome = "deny",
+                credential_kind = "cookie",
+                detail = "auth_disabled",
+            );
+            StatusCode::UNAUTHORIZED
+        })?;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs() as i64);
+
+        let verified =
+            crate::session::verify_session(&self.session_keys, self.session_lifetimes, token, now)
+                .map_err(|err| {
+                    let detail = format!("session_{}", err.audit_class());
+                    tracing::event!(
+                        target: "quarto_hub::audit",
+                        tracing::Level::INFO,
+                        action = "auth_fail",
+                        outcome = "deny",
+                        credential_kind = "cookie",
+                        detail = %detail,
+                    );
+                    StatusCode::UNAUTHORIZED
+                })?;
+
+        // Per-request allowlist re-check on the session claims (§5).
+        if let Err(status) = auth::check_allowlists_for(
+            &verified.claims.email,
+            verified.claims.email_verified,
+            auth_config,
+        ) {
+            let detail = if status == StatusCode::FORBIDDEN {
+                "user_not_allowlisted"
+            } else {
+                "email_not_verified"
+            };
+            tracing::event!(
+                target: "quarto_hub::audit",
+                tracing::Level::INFO,
+                action = "auth_fail",
+                outcome = "deny",
+                credential_kind = "cookie",
+                sub = %verified.claims.sub,
+                detail = detail,
+            );
+            return Err(status);
+        }
+
+        tracing::event!(
+            target: "quarto_hub::audit",
+            tracing::Level::INFO,
+            action = "auth_ok",
+            outcome = "allow",
+            credential_kind = "cookie",
+            sub = %verified.claims.sub,
+        );
+        Ok(verified)
+    }
+
+    /// Central credential dispatch (§5): each credential kind gets its
+    /// own pinned verification path — the token itself never selects
+    /// how it is verified.
+    ///
+    /// * `Cookie` → hub-session HS256 verify ([`Self::authenticate_session`]).
+    /// * `Bearer` → Google ID token via JWKS, unchanged (the MCP path).
+    pub async fn authenticate_credential(
+        &self,
+        credential: &crate::server::Credential,
+    ) -> std::result::Result<AuthenticatedUser, StatusCode> {
+        match credential {
+            crate::server::Credential::Cookie(token) => self
+                .authenticate_session(token)
+                .await
+                .map(AuthenticatedUser::Session),
+            crate::server::Credential::Bearer(token) => self
+                .authenticate_claims_for_kind(
+                    Some(token),
+                    crate::server::CredentialKind::Bearer.label(),
+                )
+                .await
+                .map(AuthenticatedUser::Google),
+        }
+    }
+}
+
+/// A successfully validated request credential, tagged with the path
+/// that verified it.
+#[derive(Debug, Clone)]
+pub enum AuthenticatedUser {
+    /// Cookie path: hub-minted session token.
+    Session(VerifiedSession),
+    /// Bearer path: Google ID token verified against JWKS (MCP clients).
+    Google(OidcClaims),
+}
+
+impl AuthenticatedUser {
+    pub fn email(&self) -> &str {
+        match self {
+            AuthenticatedUser::Session(v) => &v.claims.email,
+            AuthenticatedUser::Google(c) => &c.email,
+        }
+    }
+
+    /// The JWT `sub` claim. (Named `subject` to avoid colliding with
+    /// `std::ops::Sub::sub` in method resolution/lints.)
+    pub fn subject(&self) -> &str {
+        match self {
+            AuthenticatedUser::Session(v) => &v.claims.sub,
+            AuthenticatedUser::Google(c) => &c.sub,
+        }
     }
 }
 
