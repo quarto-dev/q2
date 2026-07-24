@@ -21,6 +21,7 @@ use crate::error::Result;
 use crate::index::{IndexDocument, load_or_create_index};
 use crate::peer::spawn_peer_connection;
 use crate::resource::{create_binary_document, detect_mime_type};
+use crate::revocation::{RevocationLedger, RevocationStatus};
 use crate::session::{SessionKeys, SessionLifetimes, VerifiedSession};
 use crate::storage::StorageManager;
 use crate::sync::{
@@ -206,6 +207,10 @@ pub struct HubContext {
     /// resolved from the environment at startup.
     session_lifetimes: SessionLifetimes,
 
+    /// Revocation-event store (`revocations.json`): per-`sub`
+    /// `not_before` entries from logout-everywhere plus operator bans.
+    revocations: RevocationLedger,
+
     /// See [`HubConfig::register_root_ws`]. Stashed on the context so
     /// `build_router` can consult it after `HubContext::new` consumes
     /// the originating `HubConfig`.
@@ -369,6 +374,11 @@ impl HubContext {
         let session_keys = SessionKeys::new(*storage.session_secret());
         let session_lifetimes =
             SessionLifetimes::from_env().map_err(crate::error::Error::Server)?;
+        let revocations = RevocationLedger::load(
+            storage.hub_dir(),
+            session_lifetimes.absolute_secs,
+            crate::session::unix_now(),
+        )?;
 
         Ok(Self {
             storage,
@@ -382,6 +392,7 @@ impl HubContext {
             allow_insecure_auth,
             session_keys,
             session_lifetimes,
+            revocations,
             register_root_ws,
             disk_write_policy,
             peer_emails,
@@ -658,6 +669,26 @@ impl HubContext {
         self.session_lifetimes
     }
 
+    /// The revocation-event store (logout-everywhere + bans).
+    pub fn revocations(&self) -> &RevocationLedger {
+        &self.revocations
+    }
+
+    /// Whether verified session claims still pass the per-request
+    /// policy checks (allowlist + revocation/ban) — the silent variant
+    /// used by the sliding re-issue layer, which must never extend a
+    /// session that would fail authentication but has already had its
+    /// authoritative auth decision audit-logged by the handler path.
+    pub async fn session_policy_ok(&self, claims: &crate::session::SessionClaims) -> bool {
+        let Some(auth_config) = self.auth_config() else {
+            return false;
+        };
+        if auth::check_allowlists_for(&claims.email, claims.email_verified, auth_config).is_err() {
+            return false;
+        }
+        self.revocations.check(&claims.sub, claims.auth_time).await == RevocationStatus::Ok
+    }
+
     /// Verify a hub-minted session token (the Cookie credential path).
     ///
     /// Beyond the cryptographic/lifetime checks in
@@ -702,6 +733,40 @@ impl HubContext {
                     );
                     StatusCode::UNAUTHORIZED
                 })?;
+
+        // Revocation events (§3): bans dominate; a logout-everywhere
+        // event kills every token whose auth_time predates it.
+        match self
+            .revocations
+            .check(&verified.claims.sub, verified.claims.auth_time)
+            .await
+        {
+            RevocationStatus::Banned => {
+                tracing::event!(
+                    target: "quarto_hub::audit",
+                    tracing::Level::INFO,
+                    action = "auth_fail",
+                    outcome = "deny",
+                    credential_kind = "cookie",
+                    sub = %verified.claims.sub,
+                    detail = "user_banned",
+                );
+                return Err(StatusCode::FORBIDDEN);
+            }
+            RevocationStatus::Revoked => {
+                tracing::event!(
+                    target: "quarto_hub::audit",
+                    tracing::Level::INFO,
+                    action = "auth_fail",
+                    outcome = "deny",
+                    credential_kind = "cookie",
+                    sub = %verified.claims.sub,
+                    detail = "session_revoked",
+                );
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+            RevocationStatus::Ok => {}
+        }
 
         // Per-request allowlist re-check on the session claims (§5).
         if let Err(status) = auth::check_allowlists_for(

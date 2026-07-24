@@ -738,6 +738,21 @@ async fn auth_callback(
         Err(_status) => return Redirect::to("/?auth_error").into_response(),
     };
 
+    // Bans gate mint too (§3) — otherwise a banned user just
+    // re-logs-in via Google.
+    if ctx.revocations().is_banned(&claims.sub).await {
+        tracing::event!(
+            target: "quarto_hub::audit",
+            tracing::Level::INFO,
+            action = "auth_fail",
+            outcome = "deny",
+            credential_kind = "cookie",
+            sub = %claims.sub,
+            detail = "user_banned",
+        );
+        return Redirect::to("/?auth_error").into_response();
+    }
+
     let cookie = match mint_session_cookie(&ctx, &claims) {
         Ok(cookie) => cookie,
         Err(err) => {
@@ -884,6 +899,80 @@ async fn auth_logout(
     Ok(response)
 }
 
+/// Revoke every session of the calling user (`POST /auth/logout-everywhere`).
+///
+/// Self-service revocation (§3): records `not_before[sub] = now` in the
+/// revocation store, killing the user's entire token family — including
+/// re-issued siblings on other devices, which plain logout (a
+/// client-side cookie clear) cannot reach. Immediate re-login works
+/// (`auth_time ≥ not_before`).
+///
+/// Cookie-kind only (a browser-session self-service action; Bearer/MCP
+/// callers are rejected) and CSRF-gated. The caller's cookie is cleared
+/// in the response.
+async fn auth_logout_everywhere(
+    headers: HeaderMap,
+    State(ctx): State<SharedContext>,
+) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let credential = match extract_credential(&headers) {
+        Ok(Some(c)) => c,
+        Ok(None) => return Err(unauthorized()),
+        Err(CredentialError::Conflicting) => return Err(conflicting_credentials()),
+        Err(CredentialError::UnsupportedScheme) => return Err(unauthorized()),
+    };
+    if credential.kind() != CredentialKind::Cookie {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "cookie_session_required"})),
+        ));
+    }
+    check_csrf(&headers)
+        .map_err(|s| (s, Json(serde_json::json!({"error": "csrf check failed"}))))?;
+
+    let verified = ctx
+        .authenticate_session(credential.token())
+        .await
+        .map_err(|status| {
+            let body = if status == StatusCode::FORBIDDEN {
+                serde_json::json!({"error": "forbidden"})
+            } else {
+                serde_json::json!({"error": "unauthorized"})
+            };
+            (status, Json(body))
+        })?;
+
+    let now = crate::session::unix_now();
+    ctx.revocations()
+        .revoke_all_for(&verified.claims.sub, now)
+        .await
+        .map_err(|err| {
+            // The in-memory revocation is already effective for this
+            // process; the error reports that it may not survive a
+            // restart.
+            tracing::error!(error = %err, "failed to persist revocation");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "revocation_persist_failed"})),
+            )
+        })?;
+
+    tracing::event!(
+        target: "quarto_hub::audit",
+        tracing::Level::INFO,
+        action = "revoke_all_sessions",
+        outcome = "allow",
+        credential_kind = "cookie",
+        sub = %verified.claims.sub,
+    );
+
+    let cookie = build_clear_cookie();
+    let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
+    response
+        .headers_mut()
+        .insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+    Ok(response)
+}
+
 /// Validate a fresh OIDC JWT and set a new cookie.
 ///
 /// Called by the client after obtaining a new credential from the OIDC provider
@@ -925,6 +1014,24 @@ async fn auth_refresh(
         .authenticate_claims(Some(&body.credential))
         .await
         .map_err(|_| unauthorized())?;
+
+    // Bans gate mint too (§3) — otherwise a banned user just
+    // re-logs-in via Google.
+    if ctx.revocations().is_banned(&claims.sub).await {
+        tracing::event!(
+            target: "quarto_hub::audit",
+            tracing::Level::INFO,
+            action = "auth_fail",
+            outcome = "deny",
+            credential_kind = "cookie",
+            sub = %claims.sub,
+            detail = "user_banned",
+        );
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "forbidden"})),
+        ));
+    }
 
     let cookie = mint_session_cookie(&ctx, &claims).map_err(|err| {
         tracing::error!(error = %err, "failed to mint session token");
@@ -984,20 +1091,16 @@ async fn session_reissue_layer(
         return response;
     }
 
-    // (§2b) Full validation including the allowlist re-check.
+    // (§2b) Full validation including the allowlist re-check and the
+    // revocation/ban check — a session that would fail authentication
+    // must never be extended.
     let now = crate::session::unix_now();
     let lifetimes = ctx.session_lifetimes();
     let Ok(verified) = crate::session::verify_session(ctx.session_keys(), lifetimes, &token, now)
     else {
         return response;
     };
-    if auth::check_allowlists_for(
-        &verified.claims.email,
-        verified.claims.email_verified,
-        ctx.auth_config().expect("checked above"),
-    )
-    .is_err()
-    {
+    if !ctx.session_policy_ok(&verified.claims).await {
         return response;
     }
     // (§2c) ≥ 1 h old or non-current kid; (§2d) `reissue_session` never
@@ -1197,6 +1300,7 @@ pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<Shared
         .route("/auth/me", get(auth_me))
         .route("/auth/actor", get(auth_actor))
         .route("/auth/logout", post(auth_logout))
+        .route("/auth/logout-everywhere", post(auth_logout_everywhere))
         .route("/auth/refresh", post(auth_refresh))
         // WebSocket endpoint for automerge sync at `/ws` (hub-client +
         // q2-preview SPA's canonical path).

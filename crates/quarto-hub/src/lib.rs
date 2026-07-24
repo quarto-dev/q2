@@ -14,6 +14,7 @@ pub mod error;
 pub mod index;
 pub mod peer;
 pub mod resource;
+pub mod revocation;
 pub mod server;
 pub mod session;
 pub mod storage;
