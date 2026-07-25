@@ -1193,7 +1193,7 @@ pinned version assert (`:1460`) live in the crate root
   - [x] `2026-04-23-website-project-epic.md` — note the profile-version bump
         + new field + the cache-key extension (it owns the
         orchestrator/profile/cache).
-- [ ] User-facing docs (`docs/` website — usage, not internals): the
+- [x] User-facing docs (`docs/` website — usage, not internals): the
       `engine:` vs `engines:` distinction ("names the engines at play" vs
       "configures engines"; use `engines:` for project-wide engine config if
       you want the jupyter fallback preserved); claim tables (map form, list
@@ -1202,8 +1202,9 @@ pinned version assert (`:1460`) live in the crate root
       via priority (best-effort caveat); `generated-languages`; the
       project-wins + `!prefer` note for duplicated `engine:` entries.
       Verify with `cargo run --bin q2 -- render docs/` (never Q1).
-      (deferred — see finish decision: do-now vs follow-up strand, to be
-      surfaced to Gordon at the finishing-a-development-branch step)
+      **Landed:** `docs/guides/authoring/engines.qmd` (243 lines, created in
+      the Plan 6 commit `ca1994fa2`) covers every one of these topics —
+      box was left unticked but the work shipped (checked off 2026-07-24).
 - [x] Reconcile this checklist against reality (per finishing-a-branch
       practice), commit, then ask Gordon before any push / merge to
       `feature/ts-engine-extensions` (`--no-ff` per worktree rules).

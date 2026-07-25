@@ -1,6 +1,38 @@
 # Plan 8 — HANDLED_LANGUAGES → claiming engines: absorb #241 (mermaid) + graphviz TS extension
 
-**Status:** plan — ready to implement (two workstreams). **Created:** 2026-07-02.
+> # ⛔ TOMBSTONED — 2026-07-24
+>
+> **This plan is obsolete and will not be implemented.** Its founding premise —
+> that diagram languages (`mermaid`, `dot`) should be handled by *engines* that
+> *claim* those languages — has been overturned by work on `main`.
+>
+> **The decision on `main`: diagrams are NOT engines.** Mermaid was pivoted away
+> from the engine model to a "regular" rendering feature: a format-gated **AST
+> transform** (`crates/quarto-core/src/transforms/mermaid.rs`) that rewrites
+> ` ```mermaid ` fenced blocks into `RawBlock(HTML, …)` for `q2 render`, plus a
+> built-in React `CodeBlock` override for `q2 preview`. See
+> [`2026-07-20-mermaid-regular-rendering.md`](2026-07-20-mermaid-regular-rendering.md)
+> ("Mermaid diagrams as a *regular* rendering feature (non-engine)"; braid
+> bd-5m4ga0s1, epic bd-je48v). The engine-model branch `feature/mermaid-engine`
+> (PR #241) was **never merged to `main`**.
+>
+> Consequences, part by part:
+> - **Part A (mermaid as an implicitly-claiming built-in engine)** — dead.
+>   `MermaidEngine`/`feature/mermaid-engine` never landed; mermaid is a transform,
+>   not an engine, and there is no `HANDLED_LANGUAGES` constant left to drain (it
+>   no longer exists on `main`).
+> - **Part B (graphviz `dot` as a TS engine-extension "proving ground")** — the
+>   diagrams-are-engines premise is gone, so `dot`, like mermaid, belongs on the
+>   transform path, not an engine claim. If a TS-engine proving ground is still
+>   wanted, choose a genuine *computation* engine (not a diagram renderer) and
+>   file a fresh plan.
+> - **"Enables Plan 6 Q4 (drain `HANDLED_LANGUAGES`)"** — moot: the constant is
+>   already gone from `main`.
+>
+> Original content is preserved below for historical reference only.
+> **Do not implement any of it.**
+
+**Status:** ⛔ **TOMBSTONED 2026-07-24** — obsoleted by the "diagrams are not engines" decision on `main` (see banner). ~~plan — ready to implement (two workstreams).~~ **Created:** 2026-07-02.
 
 > **Plan 10 opportunity (noted 2026-07-04, bd-4qflzhwh):** once Plan 10 lands,
 > any TS engine implementing `checkInstallation` automatically becomes a

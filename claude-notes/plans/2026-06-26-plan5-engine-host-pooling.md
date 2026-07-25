@@ -23,6 +23,32 @@
 > pooled/recycled host must not drop or interleave interim frames of a live
 > request). See `claude-notes/research/2026-07-03-plan10-check-installation-research.md`.
 
+> **Plan 1a.6 interaction (loopback-TCP transport — landed 2026-07-23).** Plan
+> 1a.6 swapped `StdioTransport → TcpTransport` at the exact `EngineTransport`
+> seam this plan pools behind, and **deleted stdio** (`TcpTransport` is now the
+> sole transport; `ts_process.rs:243`). Three consequences, **none invalidating**:
+> - **Vindicates the abstraction.** Pooling was deliberately designed at the
+>   `EngineTransport`/host seam, transport-agnostic; a real stdio→TCP swap there
+>   with zero pooling-side change confirms that is the right level, and makes the
+>   future `WebSocketTransport`/WASM-host story a *shorter* leap (socket-based
+>   already).
+> - **Re-target the measure-first gate (§Open #1).** The respawn cost pooling
+>   avoids is now *Deno-spawn + TCP bind/accept-poll/token handshake + module-
+>   `import()`*, not just Deno-spawn + `import()`. The handshake adds a little
+>   (marginally strengthens the case), but the gate still gates — measure against
+>   the TCP transport, not the retired stdio one.
+> - **Crash/degradation must use TCP liveness, not socket-EOF.** "Dead warm
+>   subprocess re-spawns on next re-compute" leans on crash detection; under TCP a
+>   closed socket **no longer implies the process exited**. 1a.6's `handle_crash`
+>   already kills-before-`wait()` (H-CRASH-REAP, `ts_process.rs:1513`); Plan 5's
+>   poison/relaunch path inherits this — don't re-derive liveness from the
+>   connection.
+>
+> **Unchanged:** the kernel-survival premise. 1a.6 moved the *outer*
+> q2↔Deno-host control channel; the *inner* Deno-host↔julia-daemon channel is the
+> julia control server's own TCP+key, untouched. Pooling still saves only the
+> outer respawn, never the kernel rewarm — the bounded-win analysis stands.
+
 ## Driver
 
 Interactive `q2 preview` **re-compute** for TS-engine extension users. Preview is capture+replay:
@@ -40,8 +66,8 @@ jitter. Plan 5 keeps the host warm across re-computes.
   deferred.
 - **Generalizes to the WASM future.** The same shape recurs when hub-client gains a browser engine
   runtime (WASM engines). Design at the **`EngineTransport`/host abstraction**, transport-agnostic
-  (`StdioTransport` today, a future `WebSocketTransport`/WASM host) — not at the Deno-subprocess
-  level.
+  (`TcpTransport` today — stdio deleted by Plan 1a.6; a future `WebSocketTransport`/WASM host) — not
+  at the Deno-subprocess level.
 
 ## Design (decided)
 
