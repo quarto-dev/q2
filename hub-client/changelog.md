@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-27
+
+- [`e73786ed`](https://github.com/quarto-dev/q2/commits/e73786ed): When a signed-in session definitively ends (you sign out everywhere, or it reaches its 30-day maximum), the app now returns you to the sign-in screen instead of trying to silently re-authenticate through Google One Tap; day-to-day sessions still renew invisibly while you keep using the app.
+
 ### 2026-07-24
 
 - [`ee905592`](https://github.com/quarto-dev/q2/commits/ee905592): Signed-in sessions now stay alive as long as you keep using the app — the hub issues its own sliding session (7-day idle timeout, 30-day maximum) instead of expiring hourly with the Google token, so work no longer stalls on environments where Google One Tap is blocked. The app quietly confirms the session once an hour while connected.
