@@ -3,11 +3,11 @@
 **Date:** 2026-07-27
 **Braid:** bd-9fwn1504
 **Checkout:** worktree for bd-en2hvrwn (branch `main` @ `78d55deb`) — investigation only; the fix should land on its own branch.
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled (2026-07-27, see "Design decisions") — ready to implement on its own branch.
 
 ## Triage verdict
 
-**Ready to design.** The counterexample is deterministic, the root cause is identified and confirmed with a minimal hand-built repro, and the affected sites are enumerated. What remains is choosing the fix shape (three options below) — a small, well-contained change either way.
+**Ready to implement.** The counterexample is deterministic, the root cause is identified and confirmed with a minimal hand-built repro, the affected sites are enumerated, and the fix shape is decided: option (b), always store the plan, with the apply-side fallback cleanup as part of the same change.
 
 ## Issue context
 
@@ -39,29 +39,108 @@ The CI counterexample is site 1: original caption.long had 4 blocks, executed ha
 
 Full evidence, localization recipe (the proptest "debug twin" trick), preserved repro code, and cleaned dumps: `claude-notes/plans/reconcile-proptest-counterexample-investigation/`.
 
-## Proposed phases (draft)
+## Design decisions (settled with Carlos, 2026-07-27)
+
+### Fix shape: option (b) — always store the plan; delete `needs_plan` at the 4 sites
+
+Options considered: **(a)** keep the optimization behind a strict identity
+predicate (`orig.len() == exec.len()` and alignments exactly
+`KeepBefore(0..n)` in order); **(b)** always store the computed plan; **(c)**
+defensive apply-side fallbacks (rejected outright — wrong layer, loses
+source-info preservation).
+
+**Decision: (b).** The initial (a) recommendation implicitly weighed a
+compute saving that does not exist. Rationale, from the consumer audit:
+
+- **No compute is saved by dropping plans.** At all 4 sites the nested plan
+  is fully computed *before* `needs_plan` decides to discard it
+  (compute.rs:509→511, :539→545, :437→440, :466→468). The entire delta of
+  (b) is storing/applying the plan, not computing it.
+- **Plans are transient.** Computed, applied, dropped within one
+  `reconcile()` call; production callers (`engine_execution.rs:477`,
+  `apply_node_edit.rs`, wasm client) keep them only for `stats`. Nothing in
+  production serializes a plan (the `Serialize` derives are exercised only by
+  the dev-only `reconcile-viewer`).
+- **The incremental qmd writer is unaffected.** It coarsens only
+  `block_alignments` + top-level `inline_plans`
+  (`pampa/src/writers/incremental.rs:159-176`) and never reads
+  `table_plans`/`custom_node_plans`/`caption_plan`; changed tables are
+  already full-block Rewrites. (b) changes only nested-plan storage, so
+  writer behavior is identical.
+- **No consumer treats "nested plan present" as a change signal.** That
+  invariant existed only inside the crate — and it is exactly the invariant
+  that turned out to be false.
+- **Output equivalence for the identity case.** Applying an all-KeepBefore
+  identity plan *moves* the original nodes, exactly like the fallback —
+  bit-identical results. (b) changes behavior only in the buggy
+  deletion/reorder cases, which is the fix.
+- **Cost:** transient plan storage ~200-400 bytes per cell/caption/slot
+  (a pathological 10k-cell table → a few MB, per preview keystroke in WASM);
+  apply does O(n) pointer moves instead of one wholesale Vec move. Assessed
+  as negligible; no benchmark deemed necessary. If measurement ever says
+  otherwise, reintroduce the skip as a single shared, tested
+  `plan_is_identity(&plan, orig_len)` helper — an optimization layered on
+  correct (b) semantics, not four hand-rolled semantic branches.
+- **Structural argument:** this bug — and the previous reconcile bug
+  (bd-3zp3z4jx) — is a fast-path/general-path divergence. (b) deletes the
+  dual path at these sites, so the bug class cannot recur there, and the
+  property test exercises the same path production runs.
+- **Accepted cost (risk transfer):** the general apply path becomes
+  load-bearing for the ubiquitous unchanged case; a latent bug in
+  apply-with-identity-plan would now fire on every preview keystroke instead
+  of only on edits. Mitigated by the output-equivalence argument and the
+  property suite. Plan dumps also get noisier (reconcile-viewer / debugging
+  by eye), and any tests asserting plan shape (e.g. `cell_plans.is_empty()`
+  for identical tables) will churn.
+
+**Required cleanup (part of the same change, not optional):** with (b), the
+four apply-side no-plan fallbacks become unreachable for the
+both-sides-present cases — caption `apply.rs:713-719`, cells
+`apply.rs:600-612`, custom slots `apply.rs:456-464`. They must be deleted
+(or reduced to exec-preferring defensive arms where a genuinely-missing
+entry remains possible, e.g. exec-only cells from row/column growth). Their
+"no plan means content matched exactly" comments encode the false invariant;
+leaving them as live-looking code invites the bug class back through a
+future compute site. (b)'s "simpler" claim is only true with this cleanup
+done.
+
+### Phase 2 scope: deferred
+
+Tightening table `structural_eq_block` (so the property test covers cells)
+is deferred to **bd-fp069xyh**. The eq-tightening has wider blast radius —
+eq would become stricter than the hash in places (hash covers only
+`ColWidth` discriminants, not values), making hash-equal-but-eq-unequal
+pairs possible, and every compute-side `hash match → eq confirm` site needs
+review. This fix is provable without it.
+
+### Unit-test matrix: full 4×2
+
+Deletion (original-superset) **and** reorder (identical items, swapped)
+variants at each of the 4 sites — 8 small unit tests. Once the
+table/custom-node builders exist for the deletion tests, each reorder
+variant is a few lines, and under (b) each site's fallback is a distinct
+piece of code being deleted, so per-site pins are what catch a future
+regression in any one of them. The reorder manifestation (original `[a,b]`,
+executed `[b,a]` → old order restored) is guaranteed by inspection but was
+not separately run during investigation — the Phase 0 failing-test run
+confirms it.
+
+## Phases
 
 - Phase 0 — Test plan (TDD):
   - Commit `proptest-regressions/lib.txt` as the regression pin (fails first).
-  - Unit tests for each of the 4 sites: original-superset (deletion) case; plus a reorder case (identical items, swapped) for at least caption and one slot type.
+  - Unit tests, 4 sites × {deletion, reorder} (matrix above).
   - Verify each fails before the fix.
-- Phase 1 — Fix the `needs_plan` predicate (per chosen design option) at all 4 sites.
-- Phase 2 — (If agreed) tighten table `structural_eq_block` so the property test covers cells — or defer to bd-fp069xyh.
-- Phase 3 — `cargo nextest run --workspace` + `cargo xtask verify` (reconcile is in the WASM closure → full verify).
+- Phase 1 — Remove `needs_plan` at the 4 compute sites **and** delete/reduce
+  the corresponding apply-side fallbacks (required cleanup above). Update
+  any plan-shape assertions in existing tests.
+- Phase 2 — `cargo nextest run --workspace` + full `cargo xtask verify`
+  (reconcile is in the WASM closure).
 
-## Open design questions for the user
-
-1. **Fix shape.** Three options for making plan omission sound:
-   - **(a) Strict compute-side predicate:** keep the optimization but only drop the plan when it is provably the identity — `orig.len() == exec.len()` **and** alignments are exactly `KeepBefore(0), KeepBefore(1), …, KeepBefore(n-1)` in order (plus the existing no-nested-plans checks). Minimal diff, preserves the source_info-preservation fast path. My recommendation.
-   - **(b) Always store the plan:** delete the `needs_plan` optimization at these 4 sites. Simplest and hardest to get wrong, but grows plan size for the common all-unchanged case (mostly tables in executed documents).
-   - **(c) Fix apply-side fallbacks** to be defensive (e.g. fall back to *executed* content when lengths differ). Wrong layer, and loses source-info preservation in cases (a) handles — listed only for completeness.
-2. **Scope of Phase 2.** Tightening table `structural_eq_block` makes the property test actually verify cell content, but eq would then be stricter than the hash in places (e.g. hash only covers `ColWidth` discriminants, not values) — hash-equal-but-eq-unequal pairs become possible, and every compute-side `hash match → eq confirm` site needs a look. Do it in this fix, or keep this fix minimal and handle eq-tightening under bd-fp069xyh separately? (My lean: separately — the fix here is provable without it, and the eq change has wider blast radius.)
-3. **Reorder regression tests.** The reorder manifestation (original `[a,b]`, executed `[b,a]` → old order restored) is guaranteed by inspection but wasn't separately run during investigation. Include reorder unit tests for all 4 sites, or just caption + one slot type as representative?
-
-## Risks / tradeoffs (draft)
+## Risks / tradeoffs
 
 - The crate is in the WASM closure (`wasm-quarto-hub-client` → hub-client preview), so full `cargo xtask verify` is required, and behavior changes affect the live editor write-back path. The fix *reduces* how often original content is kept verbatim, so the risk is losing source-info preservation in edge cases, not corrupting content.
-- Option (a)'s in-order requirement is deliberately conservative: a permuted all-KeepBefore alignment will now carry a plan, and apply will follow the alignments (correct order) instead of using original wholesale. That's the desired behavior change.
+- Risk transfer under (b): see decision rationale above.
 - proptest shrink hit `max_shrink_iters=1024` on the CI seed; the stored case is large. Not a problem for the fix (unit tests are the debugging vehicle; the seed is just the pin).
 
 ## Work items
@@ -71,5 +150,5 @@ Full evidence, localization recipe (the proptest "debug twin" trick), preserved 
 - [x] Confirm root cause with minimal hand-built repro
 - [x] Enumerate affected sites (4) and the eq/hash asymmetry
 - [x] File discovered strand for the table structural_eq gap (bd-fp069xyh)
-- [ ] Design alignment with user (questions above)
+- [x] Design alignment with user (decisions recorded above, 2026-07-27)
 - [ ] Implement per agreed design (separate branch/session)
