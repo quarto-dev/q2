@@ -439,7 +439,7 @@ Flagged in Phase 5 rather than assumed.
 - [x] `LogoEntry::single()` exposed so a rebased logo keeps its alt text;
       `single_path()` reimplemented on top of it.
 - [x] 18 unit tests in `crates/quarto-brand/tests/integration/resolved_test.rs`
-      (49/49 in the crate pass): root, subdirectory, nested subdirectory,
+      (50/50 in the crate pass): root, subdirectory, nested subdirectory,
       logo path with its own subdirectory, sibling directory (upward `..`),
       inline brand, external URL, protocol-relative URL, rooted path, no small
       logo, light/dark pair, named logo with alt, `logo.images.*`, unknown
