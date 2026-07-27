@@ -1,24 +1,20 @@
-# Brand-aware favicon fallback (bd-97yc / bd-1elkd)
+# Brand-aware favicon fallback (bd-97yc)
 
 **Date:** 2026-07-27
-**Braid:** bd-97yc (P4, feature, filed 2026-04-27) — and its later restatement
-**bd-1elkd** (P3, feature, filed 2026-05-21), which says "Likely closes bd-97yc."
+**Braid:** bd-97yc (feature, filed 2026-04-27, raised to P3). Its duplicate
+**bd-1elkd** was closed 2026-07-27 with a `duplicates → bd-97yc` edge and its
+description folded into bd-97yc.
 **Branch:** `main` @ `dd87a8b5` (investigation committed here; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start
-implementation until the user gives the go-ahead.**
+**Status:** Design questions **answered** (2026-07-27, see below). Ready to
+implement on the user's go-ahead.
 
 ## Triage verdict
 
-**Ready to design, with one scope decision that materially changes the size of
-the work** — the code seam is clear and small (a favicon-source fallback in
-`website_config.rs` + a place to resolve `Brand` once), but Q2 currently has
-**no `_brand.yml` auto-discovery**, while Q1's favicon fallback fires precisely
-for projects that never wrote a `brand:` key. Deciding whether auto-discovery is
-in scope is the difference between a ~1-phase change and a ~3-phase change that
-touches every brand consumer.
-
-Also: **bd-97yc and bd-1elkd are the same issue**, filed twice. One of them
-should be closed as a duplicate before work starts (see design question 5).
+**Ready to implement.** The code seam is clear and small: a favicon-source
+fallback in `website_config.rs` plus a place to resolve `Brand` once. All five
+design questions have been settled; the answers are recorded in
+[§Design decisions](#design-decisions-settled-2026-07-27) below and the phase
+list has been updated to match.
 
 ## Issue context
 
@@ -158,7 +154,7 @@ Q1 also skips rebasing for external paths (`isExternalPath` → `http(s):`,
 protocol-relative). Q2's `copy_favicon` would currently try to `file_copy` such
 a URL.
 
-### Obstacle 3 — Q2 has no `_brand.yml` auto-discovery (the scope question)
+### Obstacle 3 — Q2 has no `_brand.yml` auto-discovery (resolved: by design)
 
 Q1 resolves a project brand even with **no `brand:` key at all**, probing four
 paths under the project dir (`external-sources/quarto-cli/src/project/project-shared.ts:620-629`):
@@ -175,9 +171,18 @@ layer vec when `config.get("brand")` is absent
 2026-05-20 plan documents the config surface as two explicit keys and never
 mentions discovery.
 
-So a straight port of Q1's fallback would fire only for the subset of projects
-that wrote `brand:` explicitly — a strictly narrower behavior than Q1's. Q1's
-`brand: false` opt-out has no Q2 equivalent either.
+So a straight port of Q1's fallback fires only for the subset of projects that
+wrote `brand:` explicitly — strictly narrower than Q1. Q1's `brand: false`
+opt-out has no Q2 equivalent either.
+
+**Resolved (2026-07-27): this is intended, not a gap.** Q2 is deliberately
+reducing auto-discovery relative to Q1, for two reasons: metadata merging is
+more consistent and predictable, and the diagnostics machinery is good enough
+that requiring `brand: _brand.yml` somewhere in the project is a fine thing to
+assume and to report on. Auto-discovery may become worth it for some features
+later; `_brand.yml` is not one of them yet. **Do not add discovery in this
+strand, and do not file a strand for it.** The docs should state the
+requirement explicitly — folded into the audit strand bd-qnylgu69.
 
 ### Repro at HEAD — confirmed
 
@@ -202,14 +207,106 @@ and gives up — which is why the fallback is a small change once a resolved
 `Brand` is reachable (Obstacle 1). Both outputs were inspected directly;
 `_site/` and `.quarto/` were removed before committing.
 
-## Proposed phases (draft)
+## Design decisions (settled 2026-07-27)
 
-Skeleton only — contents wait on the design discussion below, and phase count
-depends on the answer to question 1.
+1. **Auto-discovery is out of scope, and no strand should be filed for it.**
+   Q2 is deliberately reducing auto-discovery relative to Q1 — metadata merging
+   is more consistent, and diagnostics are good enough that we can assume
+   `brand: _brand.yml` appears somewhere in the project and report clearly when
+   it doesn't. Implement the fallback against the explicit `brand:` key. See
+   Obstacle 3 for the full rationale.
+
+2. **Seam: option (b)** — add a resolved `Option<Brand>` (+ its `brand_dir`) to
+   `ProjectContext`, populated in `ProjectContext::discover` (which already
+   takes a `&dyn SystemRuntime`, `crates/quarto-core/src/project/mod.rs:443`),
+   and thread it through `website_config`'s readers. Derived data stays out of
+   the user's config tree, and bd-hp3tx (navbar logo) inherits the same seam.
+
+3. **Rebasing: a pure helper in `quarto-brand`, no directory fields on `Brand`.**
+   Confirmed compatible with the ConfigValue-`!path` future — see the study
+   below.
+
+4. **External logo URLs: emit the `<link>`, copy nothing.** `copy_favicon` needs
+   an external-path guard. Note the existing `!path` rebaser already encodes
+   exactly this rule (`http://` / `https://` skipped,
+   `crates/quarto-core/src/project/mod.rs:236-239`), so reuse its predicate
+   rather than writing a second one.
+
+5. **bd-97yc survives**; bd-1elkd closed 2026-07-27 as a duplicate with a
+   `duplicates → bd-97yc` edge, its description folded into bd-97yc, priority
+   raised to P3. Done.
+
+### Study: does the helper foreclose the ConfigValue-`!path` future?
+
+**No — and the mechanism you have in mind already exists and works.** But it
+cannot reach brand paths today, for a reason worth knowing before you commit.
+
+**The machinery is real.** `ConfigValueKind::Path(String)` is a first-class
+variant meaning "path to resolve relative to source file"
+(`crates/quarto-pandoc-types/src/config_value.rs:204`). `adjust_paths_recursive`
+(`crates/quarto-core/src/project/mod.rs:229-263`) walks a `ConfigValue` tree and
+rebases every `Path` node, descending through `Array` and `Map` — so it *is*
+composable over compound values, exactly as you hoped. It already skips
+`http://`/`https://` and uses `quarto_util::is_rooted` rather than
+`Path::is_absolute` (so a POSIX-absolute path isn't mangled on Windows), and it
+emits forward slashes because the results land in HTML hrefs.
+
+**And it is already used for precisely this kind of problem.** Extensions have
+the same brand-shaped issue — a config file in one directory naming paths
+relative to itself. `crates/quarto-core/src/extension/read.rs:246-300`
+(`mark_path_valued_keys`) walks the parsed extension config and promotes known
+path-valued keys (`template`, `template-partials`, `shortcodes`, `filters`) from
+`Scalar` to `Path`; `MetadataMergeStage` then calls
+`adjust_paths_to_document_dir(&mut config, &ext_dir, &document_dir)`
+(`metadata_merge.rs:216-227`). That is the whole pattern, in production, today.
+
+**The blocker is upstream of the rebaser: `_brand.yml` never becomes a
+`ConfigValue`.** `quarto-brand`'s dependencies are `quarto-util`, `serde`,
+`serde_yaml`, `thiserror` — no `quarto-pandoc-types`, no `quarto-source-map`.
+`Brand::from_yaml_str` is a bare `serde_yaml::from_str`
+(`crates/quarto-brand/src/lib.rs:27`). A `Brand` therefore carries **no
+`SourceInfo`, no `FileId`, and no `Path` nodes at all**. Even the *inline*
+brand-block case discards them: `extract_brand_ref` converts the ConfigValue
+back down to a `serde_yaml::Value` via `config_value_to_yaml_value`
+(`crates/quarto-sass/src/config.rs:421,452`) before handing it to serde.
+
+So routing brand logo paths through the `!path` machinery means first parsing
+`_brand.yml` into a `ConfigValue` and marking `logo.*` path-valued, à la
+`mark_path_valued_keys` — a real change to `quarto-brand`'s shape, well beyond
+this strand.
+
+**Two caveats on the "reasons about where it came from" framing.** First, the
+base directory is *caller-supplied*, not self-derived: the signature is
+`adjust_paths_to_document_dir(metadata, metadata_dir, document_dir)`. Nothing
+today reads a `SourceInfo`'s `FileId` back to a path to discover its own
+directory. That is *possible* — `SourceContext` maps `FileId` → `SourceFile.path`
+and `RenderContext` carries an `Option<&SourceContext>` — but nothing does it,
+and `RenderContext`'s own docs say consumers must tolerate `None`. Second, the
+existing rebaser targets the **document dir**, whereas `copy_favicon` needs a
+**project-relative** path. Two consumers, two bases — see the risk below.
+
+**Conclusion.** A pure `quarto-brand` helper is the right call and forecloses
+nothing. It needs two inputs — the brand dir and the target dir — because
+`Brand` has no directory of its own, and both are already available at the
+quarto-core call site (`ResolvedThemeConfig::brand_dir`,
+`crates/quarto-sass/src/config.rs:276-279`). So this satisfies "no directory
+fields on `Brand`": the directory lives on the *resolution result*, where it
+already lives today. When `_brand.yml` eventually parses into a `ConfigValue`
+with `!path`-marked logo keys, the helper becomes a thin wrapper over the shared
+rebaser or disappears; nothing about choosing it now makes that harder.
+
+One consequence worth naming: the rebasing rule should be expressed once and
+shared with bd-hp3tx, not written twice. If it lives in `quarto-brand` as
+`logo_path_relative_to(...)` with `favicon_relative_to(...)` layered on top,
+the navbar work gets it for free.
+
+## Proposed phases
 
 - **Phase 0 — Test plan (TDD, failing first).**
   - `website_config.rs` unit tests: brand fallback used iff `website.favicon`
     absent; explicit `website.favicon` always wins; no brand → `None`.
+  - `quarto-brand` unit tests for the rebasing helper: same-dir, subdirectory,
+    external URL, rooted path, Windows separators.
   - `quarto-core/tests/integration/website_post_render.rs`: end-to-end sibling
     of the existing tests 31/32 — `<link>` emitted with the right *page-relative*
     href on a nested page, and the logo file copied into `_site/`.
@@ -217,71 +314,40 @@ depends on the answer to question 1.
   - `logo.small` as a light/dark pair → no favicon, no warning (deferred to
     bd-v5z8w).
   - External `logo.small` URL → `<link>` emitted, **no** copy attempted.
-- **Phase 1 — Get a resolved `Brand` into quarto-core** (seam chosen in
-  question 2), including the project-relative rebasing of logo paths
-  (question 3).
-- **Phase 2 — Fallback in `website_config.rs`** + the two call sites.
-- **Phase 3 (conditional on question 1) — `_brand.yml` auto-discovery**, shared
-  by the theme path and this one, plus a `brand: false` opt-out.
-- **Phase 4 — Docs.** `docs/guides/authoring/brand.qmd` already documents a lot
-  of Q1 brand behavior; the favicon fallback needs a line, and the
-  auto-discovery answer needs the config-surface section updated either way.
+- **Phase 1 — `Option<Brand>` + `brand_dir` on `ProjectContext`**, resolved once
+  in `ProjectContext::discover`. Adds a `quarto-brand` dependency to
+  `quarto-core`.
+- **Phase 2 — Rebasing helper in `quarto-brand`**, shaped for reuse by bd-hp3tx,
+  reusing the external-URL/rooted-path predicates from the `!path` rebaser.
+- **Phase 3 — Fallback in `website_config::website_favicon`** + the two call
+  sites, including `copy_favicon`'s external-path guard.
+- **Phase 4 — Docs.** A line on the fallback in
+  `docs/guides/authoring/brand.qmd`. The broader "does this page describe Q2 or
+  Q1?" question — including stating that Q2 needs an explicit `brand:` key — is
+  bd-qnylgu69, filed 2026-07-27, not this strand.
 - **Phase 5 — E2E verification** through `cargo run --bin q2 -- render` on the
-  committed repro fixture, output inspected and recorded.
+  committed repro fixture, output inspected and recorded here. Full
+  `cargo xtask verify` (not `--skip-hub-build`) before push — see the WASM risk.
 
-## Open design questions for the user
-
-1. **Is `_brand.yml` auto-discovery in scope here, or a separate strand?**
-   Q1's fallback fires for projects with no `brand:` key at all; Q2's would not.
-   Porting the fallback without discovery gives a feature that is technically
-   Q1-compatible but almost never observable. My recommendation: file
-   auto-discovery as its own strand (it changes *theme* behavior too, so it is
-   not a favicon change), implement the fallback now against the explicit
-   `brand:` key, and note the gap in the docs. But if you consider the fallback
-   pointless without discovery, we should do them together and this becomes a
-   bigger change.
-
-2. **Which seam carries the resolved `Brand` into quarto-core?**
-   (a) inject a derived `website.favicon` into project config metadata — smallest
-   diff, both call sites unchanged, but writes a computed value into the user's
-   config tree; or (b) add `Option<Brand>` + `brand_dir` to `ProjectContext`
-   and thread it through `website_config`'s readers — bigger diff, but it is the
-   seam bd-hp3tx (navbar logo) needs anyway, and keeps derived data out of the
-   config. I lean (b) for exactly that reason, but (a) is defensible if you want
-   this to stay a P3/P4-sized change.
-
-3. **Where does brand-relative → project-relative path rebasing belong?**
-   Q1 does it inside `Brand` (`resolvePath` uses `projectDir`/`brandDir` fields
-   set at construction). Q2's `quarto-brand` is deliberately path-agnostic and
-   its one existing consumer passes an explicit prefix. Options: give
-   `quarto-brand` an optional `brand_dir`/`project_dir` like Q1; add a
-   `favicon_relative_to(project_dir)` helper; or do the rebasing at the
-   quarto-core call site from `ResolvedThemeConfig::brand_dir`. The third keeps
-   `quarto-brand` clean but duplicates a rule bd-hp3tx will need too.
-
-4. **External logo URLs.** If `logo.small` is `https://…`, Q1 emits the `<link>`
-   and copies nothing. Q2's `copy_favicon` has no external-path notion. Confirm
-   "emit the link, skip the copy" and I'll add the guard — or should an external
-   brand logo simply not be used as a favicon fallback at all?
-
-5. **bd-97yc vs bd-1elkd — which one survives?** They are the same feature; the
-   later one (bd-1elkd, P3) has the accurate description and the earlier one
-   (bd-97yc, P4) has the stale "Q2 doesn't have brand support yet" premise and
-   the useful `discovered-from`/`parent-child` edges. My suggestion: keep
-   **bd-97yc** (it carries the epic edges), fold bd-1elkd's description into it,
-   and close bd-1elkd as `duplicates` bd-97yc. Say the word and I'll do it —
-   I have not closed anything.
-
-## Risks / tradeoffs (draft)
+## Risks / tradeoffs
 
 - **The easy test is the misleading one.** With `_brand.yml` at the project
   root, brand-relative and project-relative paths coincide, so a fallback with
   no rebasing passes the obvious test and breaks on `brand: _brand/_brand.yml`.
   The subdirectory case must be in Phase 0, not discovered later.
+- **Two consumers, two bases.** The `<link href>` wants a *page-relative* URL
+  (`WebsiteFaviconTransform` gets there via
+  `ResourceResolverContext::page_url_for`, which expects a project-relative
+  input); `copy_favicon` wants a *project-relative* source path. The existing
+  `!path` rebaser targets the **document dir**, so it is not a drop-in for
+  either. Settle on "the helper yields project-relative, and the existing
+  page-relative resolver runs on top of it" — that keeps today's `<link>` path
+  byte-identical for the explicit-`website.favicon` case, which the control
+  render already pins.
 - **Asymmetric contexts.** `WebsiteFaviconTransform` has no runtime;
   `copy_favicon` has one. Any design that "just reads the brand file" works in
-  one call site and not the other. This asymmetry is the real content of
-  question 2.
+  one call site and not the other. Resolved by decision 2 (resolve once in
+  `ProjectContext::discover`).
 - **WASM.** `copy_favicon` is `#[cfg(not(target_arch = "wasm32"))]`; the
   transform is not. Whatever carries the brand must compile for
   `wasm32-unknown-unknown` (hub-client / `q2 preview`). `quarto-brand` already
@@ -290,9 +356,14 @@ depends on the answer to question 1.
 - **Light/dark.** `Brand::favicon()` returns `None` for a `logo.small`
   light/dark pair by design, deferring the choice to the caller. Doing anything
   other than "no favicon" here would front-run bd-v5z8w.
-- **Docs drift, noted in passing (not this strand's job).**
+- **Docs drift — now tracked as bd-qnylgu69** (`related` to this strand).
   `docs/guides/authoring/brand.qmd` appears to be largely a port of Q1's brand
   documentation and describes behavior Q2 may not have — e.g. the
   `{{< brand logo … >}}` shortcode (line 734ff) and navbar logo suppression via
-  `_quarto.yml` (line 483ff), the latter being bd-hp3tx, which is open. Worth a
-  separate audit strand; flagged here so it isn't lost.
+  `_quarto.yml` (line 483ff), the latter being bd-hp3tx, which is open. The
+  audit strand also owns documenting that Q2 requires an explicit `brand:` key.
+- **Possibly related, not investigated:** bd-k5rxujiy — "`q2 preview`: logo
+  image (`logo: logo.svg`) 404s — asset walker misses meta-driven raw-HTML
+  images". Same neighbourhood (a logo path that reaches HTML but whose file
+  never gets copied for preview). If the favicon `<link>` shows the same
+  symptom under `q2 preview`, that strand is the reason.
