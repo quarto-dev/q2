@@ -479,12 +479,21 @@ pub enum LogoEntry {
 }
 
 impl LogoEntry {
-    /// If this is a single-mode logo, return its path.
-    pub fn single_path(&self) -> Option<&str> {
+    /// If this is a single-mode logo, return the resource itself
+    /// (path plus any alt text).
+    ///
+    /// A light/dark pair has no single resource; picking a side is
+    /// deferred to the light/dark work (bd-v5z8w).
+    pub fn single(&self) -> Option<&BrandLogoResource> {
         match self {
-            LogoEntry::Single(r) => Some(r.path()),
+            LogoEntry::Single(r) => Some(r),
             LogoEntry::LightDark { .. } => None,
         }
+    }
+
+    /// If this is a single-mode logo, return its path.
+    pub fn single_path(&self) -> Option<&str> {
+        self.single().map(|r| r.path())
     }
 
     /// If this is a light/dark pair, return (light_path, dark_path).
@@ -532,14 +541,15 @@ impl BrandLogoResource {
     }
 
     /// Return a copy with `path` resolved relative to `base`. Absolute
-    /// paths and `http(s)://` URLs are left unchanged.
+    /// paths and URLs are left unchanged.
     pub fn with_path_relative_to(&self, base: &Path) -> Self {
         let raw = self.path();
-        let resolved = if is_external_url(raw) || quarto_util::is_rooted(Path::new(raw)) {
-            raw.to_string()
-        } else {
-            quarto_util::to_forward_slashes(&base.join(raw))
-        };
+        let resolved =
+            if quarto_util::is_external_url(raw) || quarto_util::is_rooted(Path::new(raw)) {
+                raw.to_string()
+            } else {
+                quarto_util::to_forward_slashes(&base.join(raw))
+            };
         match self {
             BrandLogoResource::Path(_) => BrandLogoResource::Path(resolved),
             BrandLogoResource::Explicit(e) => BrandLogoResource::Explicit(BrandLogoExplicit {
@@ -548,10 +558,6 @@ impl BrandLogoResource {
             }),
         }
     }
-}
-
-fn is_external_url(s: &str) -> bool {
-    s.starts_with("http://") || s.starts_with("https://") || s.starts_with("//")
 }
 
 // ── defaults ────────────────────────────────────────────────────────

@@ -44,6 +44,7 @@ inquire = "0.9.4"
 insta = "1.46.3"
 memchr = "2.7.6"
 once_cell = "1.21"
+pathdiff = "0.2"
 proc-macro2 = { version = "1.0.106", features = ["span-locations"] }
 schemars = "1.2.1"
 serde = { version = "1.0.228", features = ["derive"] }

@@ -20,7 +20,7 @@ serde_json.workspace = true
 yaml-rust2.workspace = true
 smallvec.workspace = true
 hashlink = "0.11"
-pathdiff = "0.2"
+pathdiff.workspace = true
 sha2 = "0.11"
 hex = "0.4"
 glob = "0.3"
@@ -44,6 +44,7 @@ quarto-yaml.workspace = true
 quarto-ast-reconcile.workspace = true
 quarto-analysis.workspace = true
 quarto-sass.workspace = true
+quarto-brand.workspace = true
 quarto-trace.workspace = true
 quarto-navigation.workspace = true
 pampa = { workspace = true, features = ["lua-filter", "json-filter"] }

@@ -2098,6 +2098,7 @@ dependencies = [
 name = "quarto-brand"
 version = "0.10.0"
 dependencies = [
+ "pathdiff",
  "quarto-util",
  "serde",
  "serde_yaml",
@@ -2154,6 +2155,7 @@ dependencies = [
  "pollster",
  "quarto-analysis",
  "quarto-ast-reconcile",
+ "quarto-brand",
  "quarto-config",
  "quarto-doctemplate",
  "quarto-error-reporting",

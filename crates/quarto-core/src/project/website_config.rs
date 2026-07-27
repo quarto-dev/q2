@@ -32,8 +32,20 @@
 //! source has the same `website.<key>` shape.
 //!
 //! See `claude-notes/plans/2026-04-27-websites-phase-7.md` Decision 7.
+//!
+//! **Favicon (`bd-97yc`).** Sites 2 and 4 above no longer read
+//! `website.favicon` directly — they call
+//! [`resolved_website_favicon`], which layers the brand fallback,
+//! leading-slash normalization, URL passthrough, and website-only
+//! gating on top of the raw [`website_favicon`] read. That function is
+//! the reason the `<link rel="icon">` and the file copy cannot drift
+//! apart: there is one answer to "what is this site's favicon", and
+//! both ask for it. See
+//! `claude-notes/plans/2026-07-27-brand-aware-favicon-fallback.md`.
 
 use quarto_pandoc_types::ConfigValue;
+
+use super::{ProjectContext, ProjectKind};
 
 /// Read `website.title` from a merged metadata value.
 ///
@@ -77,6 +89,103 @@ pub fn website_favicon(meta: &ConfigValue) -> Option<String> {
 /// not a filesystem path.
 pub fn normalize_favicon_path(raw: &str) -> String {
     raw.strip_prefix('/').unwrap_or(raw).to_string()
+}
+
+/// The favicon a website page should point at, in the form its
+/// consumers want: a **project-relative path**, or an **absolute URL**.
+///
+/// This is the single answer to "what is this site's favicon", shared
+/// by the per-page `<link rel="icon">`
+/// ([`crate::transforms::WebsiteFaviconTransform`]) and the post-render
+/// file copy ([`super::website_post_render`]). Keeping one function
+/// means the two cannot disagree about precedence, normalization, or
+/// what counts as a URL.
+///
+/// Resolution order (`bd-97yc`, mirroring Q1's `website.ts:185-205`):
+///
+/// 1. An explicit `website.favicon`, used verbatim.
+/// 2. Otherwise the project brand's **small** logo, rebased from the
+///    brand's directory to project-relative form.
+///
+/// Returns `None` when neither supplies one, when the brand's small
+/// logo is a light/dark pair ([`quarto_brand::Brand::favicon`] declines
+/// to pick a side — bd-v5z8w), or when the resolved value is empty.
+///
+/// **Website projects only.** The brand fallback fires on the *absence*
+/// of `website.favicon`, so unlike the other `website.*` readers it has
+/// no key to gate itself on. Without the explicit project-kind check, a
+/// default project using `_brand.yml` purely for theming would start
+/// emitting a favicon. Q1 scopes its fallback the same way, by living
+/// inside the website project type. An explicit `website.favicon` is
+/// *not* gated — that key already means what it says.
+///
+/// The result may be a URL, which must never be resolved against the
+/// filesystem or made page-relative. Callers check with
+/// [`quarto_util::is_external_url`]; both do.
+pub fn resolved_website_favicon(
+    meta: &ConfigValue,
+    project: &ProjectContext,
+) -> Option<ResolvedFavicon> {
+    let (raw, origin) = match website_favicon(meta) {
+        Some(explicit) => (explicit, FaviconOrigin::WebsiteFavicon),
+        None => {
+            if project.config.project_kind != ProjectKind::Website {
+                return None;
+            }
+            let brand = project.config.brand.as_ref()?;
+            (
+                brand.favicon_relative_to(&project.dir)?,
+                FaviconOrigin::BrandLogo,
+            )
+        }
+    };
+
+    // A URL is already in its final form: no leading-slash
+    // normalization (a protocol-relative `//host/x` would lose a
+    // slash and become a site-rooted path).
+    if quarto_util::is_external_url(&raw) {
+        return Some(ResolvedFavicon { path: raw, origin });
+    }
+
+    let normalized = normalize_favicon_path(&raw);
+    (!normalized.is_empty()).then_some(ResolvedFavicon {
+        path: normalized,
+        origin,
+    })
+}
+
+/// A resolved favicon: where to point at it, and which piece of user
+/// config asked for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedFavicon {
+    /// Project-relative path, or an absolute URL.
+    pub path: String,
+    /// Which config supplied it.
+    pub origin: FaviconOrigin,
+}
+
+/// Which piece of user config a favicon came from.
+///
+/// Carried alongside the path so diagnostics can name the key the user
+/// actually wrote. A project relying on the brand fallback has no
+/// `website.favicon` anywhere, so blaming that key for a missing file
+/// would send the reader hunting for something that isn't there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FaviconOrigin {
+    /// An explicit `website.favicon` in the project or document config.
+    WebsiteFavicon,
+    /// The project brand's small logo (`logo.small` in `_brand.yml`).
+    BrandLogo,
+}
+
+impl FaviconOrigin {
+    /// How to refer to this source in a user-facing message.
+    pub fn describe(self) -> &'static str {
+        match self {
+            FaviconOrigin::WebsiteFavicon => "website.favicon",
+            FaviconOrigin::BrandLogo => "the brand's logo.small",
+        }
+    }
 }
 
 #[cfg(test)]
@@ -196,5 +305,232 @@ mod tests {
             normalize_favicon_path("assets/favicon.png"),
             "assets/favicon.png"
         );
+    }
+
+    /// `resolved_website_favicon` — precedence, the brand fallback,
+    /// normalization, and project-kind gating (bd-97yc).
+    mod resolved_favicon {
+        use super::*;
+        use crate::project::ProjectConfig;
+        use quarto_brand::{Brand, ResolvedBrand};
+        use std::path::PathBuf;
+
+        const PROJECT_DIR: &str = "/project";
+
+        /// A project of `kind`, optionally carrying a brand whose
+        /// `_brand.yml` lives at `<project>/<brand_subdir>`.
+        fn project(
+            kind: ProjectKind,
+            brand_yaml: Option<&str>,
+            brand_subdir: &str,
+        ) -> ProjectContext {
+            let dir = PathBuf::from(PROJECT_DIR);
+            let brand = brand_yaml.map(|yaml| {
+                let brand_dir = if brand_subdir.is_empty() {
+                    dir.clone()
+                } else {
+                    dir.join(brand_subdir)
+                };
+                ResolvedBrand::new(
+                    Brand::from_yaml_str(yaml).expect("parse brand"),
+                    Some(brand_dir),
+                )
+            });
+            ProjectContext {
+                dir: dir.clone(),
+                config: ProjectConfig {
+                    project_kind: kind,
+                    brand,
+                    ..Default::default()
+                },
+                is_single_file: false,
+                files: vec![],
+                output_dir: dir.join("_site"),
+            }
+        }
+
+        fn website_with_brand(yaml: &str, subdir: &str) -> ProjectContext {
+            project(ProjectKind::Website, Some(yaml), subdir)
+        }
+
+        fn favicon_meta(path: &str) -> ConfigValue {
+            map(vec![("website", map(vec![("favicon", s(path))]))])
+        }
+
+        /// Most tests care only about the resolved path; `origin` has
+        /// its own tests below.
+        fn favicon_path(meta: &ConfigValue, project: &ProjectContext) -> Option<String> {
+            resolved_website_favicon(meta, project).map(|f| f.path)
+        }
+
+        const SMALL_LOGO: &str = "logo:\n  small: logo.png\n";
+
+        // ── the explicit key ───────────────────────────────────────
+
+        #[test]
+        fn explicit_favicon_is_used() {
+            let p = project(ProjectKind::Website, None, "");
+            assert_eq!(
+                favicon_path(&favicon_meta("favicon.ico"), &p),
+                Some("favicon.ico".to_string())
+            );
+        }
+
+        #[test]
+        fn explicit_favicon_wins_over_brand() {
+            let p = website_with_brand(SMALL_LOGO, "");
+            assert_eq!(
+                favicon_path(&favicon_meta("favicon.ico"), &p),
+                Some("favicon.ico".to_string()),
+                "the brand is a fallback, not an override"
+            );
+        }
+
+        /// The explicit key is not project-kind gated — it already
+        /// says what it means.
+        #[test]
+        fn explicit_favicon_works_on_a_default_project() {
+            let p = project(ProjectKind::Default, None, "");
+            assert_eq!(
+                favicon_path(&favicon_meta("favicon.ico"), &p),
+                Some("favicon.ico".to_string())
+            );
+        }
+
+        #[test]
+        fn leading_slash_is_normalized_away() {
+            let p = project(ProjectKind::Website, None, "");
+            assert_eq!(
+                favicon_path(&favicon_meta("/favicon.ico"), &p),
+                Some("favicon.ico".to_string())
+            );
+        }
+
+        #[test]
+        fn empty_favicon_yields_none() {
+            let p = project(ProjectKind::Website, None, "");
+            assert_eq!(favicon_path(&favicon_meta(""), &p), None);
+            assert_eq!(favicon_path(&favicon_meta("/"), &p), None);
+        }
+
+        // ── the brand fallback ─────────────────────────────────────
+
+        #[test]
+        fn brand_small_logo_is_the_fallback() {
+            let p = website_with_brand(SMALL_LOGO, "");
+            assert_eq!(favicon_path(&map(vec![]), &p), Some("logo.png".to_string()));
+        }
+
+        #[test]
+        fn brand_logo_is_rebased_from_the_brand_directory() {
+            let p = website_with_brand(SMALL_LOGO, "_brand");
+            assert_eq!(
+                favicon_path(&map(vec![]), &p),
+                Some("_brand/logo.png".to_string())
+            );
+        }
+
+        #[test]
+        fn no_brand_and_no_key_yields_none() {
+            let p = project(ProjectKind::Website, None, "");
+            assert_eq!(favicon_path(&map(vec![]), &p), None);
+        }
+
+        #[test]
+        fn brand_without_a_small_logo_yields_none() {
+            let p = website_with_brand("logo:\n  large: big.png\n", "");
+            assert_eq!(favicon_path(&map(vec![]), &p), None);
+        }
+
+        /// Picking a side of a light/dark pair is bd-v5z8w's job.
+        #[test]
+        fn brand_light_dark_small_logo_yields_none() {
+            let p = website_with_brand("logo:\n  small:\n    light: l.png\n    dark: d.png\n", "");
+            assert_eq!(favicon_path(&map(vec![]), &p), None);
+        }
+
+        // ── project-kind gating ────────────────────────────────────
+
+        /// The fallback fires on the *absence* of `website.favicon`,
+        /// so it needs an explicit gate — a default project that uses
+        /// `_brand.yml` only for theming must not sprout a favicon.
+        #[test]
+        fn brand_fallback_is_website_only() {
+            let p = project(ProjectKind::Default, Some(SMALL_LOGO), "");
+            assert_eq!(favicon_path(&map(vec![]), &p), None);
+        }
+
+        // ── URLs ───────────────────────────────────────────────────
+
+        #[test]
+        fn brand_external_url_passes_through() {
+            let p = website_with_brand("logo:\n  small: https://cdn.example.com/l.png\n", "_brand");
+            assert_eq!(
+                favicon_path(&map(vec![]), &p),
+                Some("https://cdn.example.com/l.png".to_string()),
+                "a URL must not be rebased against the brand directory"
+            );
+        }
+
+        /// An explicit `website.favicon` URL takes the same path.
+        /// Before bd-97yc this was mangled downstream: the value went
+        /// through `page_url_for`, which produced
+        /// `../https:/example.com/f.ico`.
+        #[test]
+        fn explicit_external_url_passes_through() {
+            let p = project(ProjectKind::Website, None, "");
+            assert_eq!(
+                favicon_path(&favicon_meta("https://example.com/f.ico"), &p),
+                Some("https://example.com/f.ico".to_string())
+            );
+        }
+
+        /// A protocol-relative URL must not have its leading slash
+        /// stripped by the site-root normalization — that would turn
+        /// `//host/f.ico` into the site-rooted path `/host/f.ico`.
+        #[test]
+        fn protocol_relative_url_keeps_both_slashes() {
+            let p = project(ProjectKind::Website, None, "");
+            assert_eq!(
+                favicon_path(&favicon_meta("//cdn.example.com/f.ico"), &p),
+                Some("//cdn.example.com/f.ico".to_string())
+            );
+        }
+
+        // ── origin ─────────────────────────────────────────────────
+
+        /// `origin` exists so a missing-file warning can name the
+        /// config the user actually wrote. A project on the fallback
+        /// has no `website.favicon` to point at.
+        #[test]
+        fn origin_distinguishes_the_two_sources() {
+            let explicit = project(ProjectKind::Website, None, "");
+            assert_eq!(
+                resolved_website_favicon(&favicon_meta("favicon.ico"), &explicit).map(|f| f.origin),
+                Some(FaviconOrigin::WebsiteFavicon)
+            );
+
+            let fallback = website_with_brand(SMALL_LOGO, "");
+            assert_eq!(
+                resolved_website_favicon(&map(vec![]), &fallback).map(|f| f.origin),
+                Some(FaviconOrigin::BrandLogo)
+            );
+
+            // Precedence also decides the origin.
+            let both = website_with_brand(SMALL_LOGO, "");
+            assert_eq!(
+                resolved_website_favicon(&favicon_meta("favicon.ico"), &both).map(|f| f.origin),
+                Some(FaviconOrigin::WebsiteFavicon)
+            );
+        }
+
+        #[test]
+        fn origin_descriptions_name_user_facing_config() {
+            assert_eq!(FaviconOrigin::WebsiteFavicon.describe(), "website.favicon");
+            assert_eq!(
+                FaviconOrigin::BrandLogo.describe(),
+                "the brand's logo.small"
+            );
+        }
     }
 }

@@ -5,7 +5,7 @@ pub mod user_status;
 pub mod verbose;
 pub mod version;
 
-pub use path::{is_rooted, to_forward_slashes};
+pub use path::{is_external_url, is_rooted, to_forward_slashes};
 pub use verbose::verbose_to_filter;
 pub use version::*;
 // `user_status!` is `#[macro_export]`, so it lands at the crate root —

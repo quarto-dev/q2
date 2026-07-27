@@ -55,7 +55,7 @@ use crate::project::ProjectContext;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::project::index::ProjectIndex;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::project::website_config::{normalize_favicon_path, website_favicon, website_site_url};
+use crate::project::website_config::{resolved_website_favicon, website_site_url};
 use crate::resource_resolver::ResourceResolverContext;
 
 // ═══════════════════════════════════════════════════════════════════
@@ -129,11 +129,16 @@ pub(super) fn copy_favicon(
     let Some(meta) = project.config.metadata.as_ref() else {
         return Ok(());
     };
-    let Some(raw) = website_favicon(meta) else {
+    let Some(favicon) = resolved_website_favicon(meta, project) else {
         return Ok(());
     };
-    let normalized = normalize_favicon_path(&raw);
-    if normalized.is_empty() {
+    let normalized = favicon.path;
+
+    // An external favicon URL is served by whoever hosts it; there is
+    // nothing local to copy, and treating it as a path would probe a
+    // nonsense filename and warn about it. The `<link>` is still
+    // emitted (see `WebsiteFaviconTransform`).
+    if quarto_util::is_external_url(&normalized) {
         return Ok(());
     }
 
@@ -146,8 +151,11 @@ pub(super) fn copy_favicon(
         ))
     })?;
     if !exists {
+        // Name the config the user actually wrote: a project relying
+        // on the brand fallback has no `website.favicon` to look at.
         diagnostics.push(DiagnosticMessage::warning(format!(
-            "website.favicon refers to missing file '{}'",
+            "{} refers to missing file '{}'",
+            favicon.origin.describe(),
             normalized
         )));
         return Ok(());

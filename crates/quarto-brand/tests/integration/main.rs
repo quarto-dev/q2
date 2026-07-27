@@ -4,6 +4,7 @@
 pub mod color_test;
 pub mod logo_test;
 pub mod parse_test;
+pub mod resolved_test;
 pub mod typography_test;
 
 fn main() {}

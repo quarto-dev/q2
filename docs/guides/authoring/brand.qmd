@@ -397,11 +397,41 @@ You don't need to specify all three---Quarto will use what you provide based on 
   * Bottom right corner of slides
   * `medium`\>`small`\>`large`
 
-* * `website`/`book` project
+* * `website` project
   * `favicon` shown in browser tab
   * `small`
 
 :::
+
+#### Brand logo as favicon {#brand-favicon}
+
+In a `website` project, the `small` logo becomes the site's favicon---the icon
+shown in the browser tab---so you usually don't need to set one separately:
+
+``` {.yaml filename="_brand.yml"}
+logo:
+  small: logo.png
+```
+
+This is a fallback. If you set `website.favicon`, that wins and the brand logo
+is ignored:
+
+``` {.yaml filename="_quarto.yml"}
+website:
+  favicon: favicon.ico   # used instead of the brand's small logo
+brand: _brand.yml
+```
+
+As everywhere in `_brand.yml`, the logo path is relative to the location of
+`_brand.yml`, which is not necessarily the project root---if your brand lives
+in `_brand/_brand.yml`, then `small: logo.png` refers to `_brand/logo.png`, and
+Quarto adjusts the link and copies the file accordingly. A logo given as a URL
+is linked as-is and not copied.
+
+Two cases produce no favicon: a `small` logo specified as a
+[light/dark pair](#light-and-dark-logos), where Quarto does not yet choose
+between the two, and projects that are not `website` projects---using
+`_brand.yml` for colors and typography alone never adds a favicon.
 
 You can also specify named logos under `images` which you can reference in `small`, `medium` and `large`. In particular, this allows you to set alternative text for your logos using `alt`:
 

@@ -12,9 +12,11 @@
 
 mod error;
 mod resolve;
+mod resolved;
 mod types;
 
 pub use error::BrandError;
+pub use resolved::ResolvedBrand;
 pub use types::{
     Brand, BrandColor, BrandDefaults, BrandFont, BrandFontFile, BrandFontFileEntry,
     BrandFontGoogle, BrandFontStyle, BrandFontSystem, BrandFontWeight, BrandFontWeightAtom,
