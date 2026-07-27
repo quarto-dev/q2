@@ -1001,3 +1001,42 @@ fn pipeline_no_brand_key_emits_no_favicon() {
     let index_html = html_for_stem(&summary, "index");
     assert_no_favicon_link(&index_html, "unreferenced _brand.yml");
 }
+
+// ── Test 47 — the fallback is website-only ─────────────────────────
+
+/// Every other Phase-7 per-page transform gates itself implicitly, by
+/// reading a `website.*` key that a default project simply doesn't
+/// have. The brand fallback has no such key to key off — it fires when
+/// `website.favicon` is *absent* — so without an explicit project-kind
+/// check it would start emitting favicons for default projects that
+/// merely use `_brand.yml` for theming. Q1's fallback lives inside the
+/// website project type (`website.ts:185-205`) and has the same scope.
+///
+/// Test 39 covers the default-project case *without* a brand, so it
+/// cannot catch this.
+#[test]
+fn pipeline_default_project_with_brand_emits_no_favicon() {
+    let (project_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: default\n  output-dir: _out\n\
+             brand: _brand.yml\n",
+        );
+        write(
+            &project_dir.join("_brand.yml"),
+            "logo:\n  small: logo.png\n",
+        );
+        write_bytes(&project_dir.join("logo.png"), PNG_BYTES);
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+
+    let index_html = html_for_stem(&summary, "index");
+    assert_no_favicon_link(&index_html, "default project with a brand");
+    assert!(
+        !project_dir.join("_out/logo.png").exists(),
+        "default project must not copy a brand logo as a favicon"
+    );
+}

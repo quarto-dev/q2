@@ -446,11 +446,47 @@ a full `BrandLogoResource` — rebased path *and* alt text — and reaches both
 named logos (`small`/`medium`/`large`) and `logo.images.*`. The navbar work
 should not need to touch this crate again.
 
-### Phase 3 — The fallback itself
+### Phase 3 — The fallback itself ✅
 
-- [ ] `website_config::website_favicon` consults the brand when the key is unset.
-- [ ] `WebsiteFaviconTransform` and `copy_favicon` updated.
-- [ ] `copy_favicon` external-path guard.
+- [x] `website_config::resolved_website_favicon(meta, project)` — the single
+      answer to "what is this site's favicon", covering precedence, the brand
+      fallback, leading-slash normalization, URL passthrough, and project-kind
+      gating.
+- [x] `WebsiteFaviconTransform` consumes it; `apply_favicon` now takes the
+      resolved value instead of re-reading the key.
+- [x] `copy_favicon` consumes it, with an external-URL guard.
+- [x] 14 unit tests for `resolved_website_favicon`; the 11
+      `apply_favicon` unit tests reworked to be about link *emission* only,
+      plus 2 new URL cases.
+- [x] **Test 47** (new): a *default* project with a brand emits no favicon.
+- [x] `cargo nextest run --workspace`: **10577 passed, 0 failed**. All four
+      Phase 0 failures now pass.
+
+**One function, not two edits.** `website_config.rs` was already documented as
+the one place `website.*` keys are read (Phase 7 Decision 7). Adding
+`resolved_website_favicon` there means the `<link>` emitter and the file copier
+cannot drift on precedence, normalization, or what counts as a URL — they ask
+the same function. `website_favicon` (the raw key read) stays as-is.
+
+**The gate that wasn't obvious.** Every other Phase-7 per-page transform gates
+itself *implicitly*, by reading a `website.*` key a default project doesn't
+have. The brand fallback fires on the **absence** of `website.favicon`, so it
+has no such key — without an explicit `ProjectKind::Website` check, any default
+project using `_brand.yml` for theming would have started emitting a favicon
+and copying the logo. Existing test 39 could not catch this (its default
+project has no brand), so test 47 was added first. The explicit
+`website.favicon` key is deliberately *not* gated — it already says what it
+means, and gating it would be a regression.
+
+**Pre-existing bug fixed on the way.** An explicit
+`website.favicon: https://example.com/f.ico` used to be run through
+`ResourceResolverContext::page_url_for`, which does `site_root.join(..)` +
+`pathdiff` and emitted `../https:/example.com/f.ico`. The URL guard lives in
+the shared reader, so both the explicit and the brand path are now correct.
+Pinned by `explicit_external_url_passes_through` and
+`favicon_external_url_bypasses_the_resolver`. Protocol-relative URLs get a
+second guard: skipping `normalize_favicon_path` for URLs stops `//host/f.ico`
+from being flattened into the site-rooted `/host/f.ico`.
 
 ### Phase 4 — Docs
 
