@@ -571,6 +571,30 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
     if fs.html_float_dom && is_float_kind {
         let mut content = content;
 
+        // bd-4m2n6qf1: a table float's caption is hoisted into the
+        // synthesized `<figcaption>`, but the Table node keeps its own
+        // `caption` — so both writers would emit the text twice, as
+        // `<table><caption>` *and* as `<figcaption>`. Elide the Table's copy,
+        // matching Q1, which does the same at float-parse time
+        // (`quarto-pre/parsefiguredivs.lua`: `table.caption =
+        // pandoc.Caption{}` at L280 for the div-wrapped form,
+        // `el.caption.long = pandoc.Blocks({})` at L544 for the
+        // caption-attr form). Q2 builds the float DOM in this
+        // Finalization-phase transform, so the elision happens here.
+        //
+        // Scoped to top-level Tables in the float content — the ones whose
+        // caption became the float caption. Skipped when the float is
+        // uncaptioned, since then nothing was hoisted and the Table's
+        // caption is the only copy of that text.
+        if !is_uncaptioned {
+            for block in content.iter_mut() {
+                if let Block::Table(t) = block {
+                    t.caption.long = None;
+                    t.caption.short = None;
+                }
+            }
+        }
+
         // Q1 `get_figure_attributes`: alignment/style/forwardable classes
         // come from the first contained image (never inside a table).
         let harvested = if !matches!(content.first(), Some(Block::Table(_))) {
@@ -1607,6 +1631,85 @@ mod tests {
             panic!()
         };
         assert_eq!(s.text, "Table 1: ");
+    }
+
+    /// bd-4m2n6qf1: when a table float's caption comes from the Table's own
+    /// `caption.long`, that caption must be cleared once it has been hoisted
+    /// into the synthesized `<figcaption>` — otherwise the writers emit the
+    /// text twice, as `<table><caption>` *and* as `<figcaption>`.
+    ///
+    /// Note `table_target_renders_q1_float_shape` above supplies the caption
+    /// as a sibling paragraph, so it never exercised this path — which is why
+    /// the workspace suite missed the duplication.
+    ///
+    /// Q1 performs the same elision at float-parse time
+    /// (`quarto-pre/parsefiguredivs.lua`: `table.caption = pandoc.Caption{}`
+    /// at L280, `el.caption.long = pandoc.Blocks({})` at L544). Q2 builds the
+    /// float DOM in the Finalization-phase transform, so it elides here, at
+    /// figcaption-synthesis time.
+    #[tokio::test]
+    async fn table_float_clears_the_tables_own_caption() {
+        use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
+        let table = Block::Table(Table {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            caption: Caption {
+                short: None,
+                long: Some(vec![para("Cap")]),
+                source_info: si(),
+            },
+            colspec: vec![],
+            head: TableHead {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            bodies: vec![TableBody {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rowhead_columns: 0,
+                head: vec![],
+                body: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            foot: TableFoot {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let blocks = vec![Block::Div(Div {
+            attr: attr_id("tbl-one"),
+            content: vec![table],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })];
+        let ast = run_full(blocks).await;
+        let (_outer, fig) = float_shape(&ast.blocks[0]);
+
+        // The figcaption still carries the caption text.
+        let long = fig.caption.long.as_ref().expect("figcaption caption");
+        assert!(
+            format!("{long:?}").contains("Cap"),
+            "figcaption should carry the caption text: {long:?}"
+        );
+
+        // ...and the Table inside the aria wrapper must no longer carry it.
+        let Block::Div(content_div) = &fig.content[0] else {
+            panic!("expected the aria content wrapper")
+        };
+        let Block::Table(t) = &content_div.content[0] else {
+            panic!("expected the table inside the wrapper")
+        };
+        assert!(
+            t.caption.long.as_ref().is_none_or(|b| b.is_empty()),
+            "the table's own caption must be cleared once hoisted into the \
+             figcaption, else it renders twice: {:?}",
+            t.caption.long
+        );
     }
 
     #[tokio::test]

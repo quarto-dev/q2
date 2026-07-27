@@ -56,6 +56,22 @@ writer and the preview React renderer.
       synthesized figcaption); same-PR per Q4 decision
 - [ ] Listing (`lst`) float DOM is wired (`listing` class + left align) but
       has no e2e fixture exercising `#lst-` floats yet — add one
+- [x] **bd-4m2n6qf1 — the Table's own caption is elided at figcaption-synthesis
+      time.** Found by e2e render while preparing the PR (the workspace suite
+      missed it: `table_target_renders_q1_float_shape` supplies the caption as
+      a *sibling paragraph*, never as the Table's own `caption.long`, so the
+      duplicating path was untested). Without the elision a `#tbl-` float
+      emitted the caption twice — `<table><caption>` *and* `<figcaption>`.
+      Confirmed pre-existing on `main` (which emitted `<table><caption>` plus a
+      bare trailing text node), so this is a fix carried into the new DOM
+      rather than a regression introduced here.
+      Q1 elides at float-*parse* time — `quarto-pre/parsefiguredivs.lua` L280
+      (`table.caption = pandoc.Caption{}`, div-wrapped form) and L544
+      (`el.caption.long = pandoc.Blocks({})`, caption-attr form). Q2 builds the
+      float DOM in the Finalization-phase transform, so it elides there, scoped
+      to top-level Tables in the float content and skipped when the float is
+      uncaptioned (nothing was hoisted, so the Table's caption is the only copy).
+      TDD: `table_float_clears_the_tables_own_caption` watched RED first.
 
 ### Phase 3 — Standalone captioned figures (TDD) — DONE
 - [x] Shape 2 wrapper (`quarto-figure quarto-figure-<align>`) for
