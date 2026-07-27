@@ -400,14 +400,51 @@ correct, but whether the hub-client's **project** render path reaches
 preview) and bd-k5rxujiy (preview asset walker misses meta-driven images).
 Flagged in Phase 5 rather than assumed.
 
-### Phase 2 — Rebasing helper in `quarto-brand`
+### Phase 2 — Rebasing helper in `quarto-brand` ✅
 
-- [ ] `logo_path_relative_to(...)` + `favicon_relative_to(...)`, shaped for
-      reuse by bd-hp3tx.
-- [ ] Unit tests: same-dir, subdirectory, external URL, rooted path, Windows
-      separators.
-- [ ] Reuse the external-URL / rooted-path predicates from the `!path` rebaser
-      rather than writing a second copy.
+- [x] `quarto_util::is_external_url` — one shared predicate (6 unit tests).
+- [x] `ResolvedBrand::path_prefix_relative_to` /
+      `logo_resource_relative_to` / `favicon_relative_to`.
+- [x] `LogoEntry::single()` exposed so a rebased logo keeps its alt text;
+      `single_path()` reimplemented on top of it.
+- [x] 18 unit tests in `crates/quarto-brand/tests/integration/resolved_test.rs`
+      (49/49 in the crate pass): root, subdirectory, nested subdirectory,
+      logo path with its own subdirectory, sibling directory (upward `..`),
+      inline brand, external URL, protocol-relative URL, rooted path, no small
+      logo, light/dark pair, named logo with alt, `logo.images.*`, unknown
+      name, and the three prefix cases.
+
+**Built on what was already there, rather than beside it.** Two discoveries
+changed the shape of this phase:
+
+- `BrandLogoResource::with_path_relative_to(base)` already existed and already
+  encoded "URLs and rooted paths pass through untouched" — and it takes a
+  *prefix*, exactly Q1's `join(pathPrefix, entry)` model. So the new code
+  computes the prefix (`relative(projectDir, brandDir)`, Q1's
+  `brand.ts:248`) and delegates, instead of reimplementing the rule.
+- `quarto-brand` had a **private** `is_external_url` doing
+  `http://`/`https://`/`//`. That is now the shared
+  `quarto_util::is_external_url`, so brand paths and the rest of the tree
+  agree.
+
+**Why the predicate is not Q1's.** Q1 uses `/^\w+:/`
+(`external-sources/quarto-cli/src/core/url.ts:13`), which also matches a
+Windows drive letter — `C:\logos\brand.png` would be classified as a URL and
+emitted into HTML unrebased. Requiring a scheme of **two or more** characters
+costs nothing (no real scheme is one character) and removes the trap. Pinned by
+`external_url_does_not_match_windows_drive_letters`.
+
+**Deliberately not done here — bd-v2wgzz0h.** `adjust_paths_recursive` (the
+`ConfigValueKind::Path` rebaser) still inlines its own `http://`/`https://`
+check, so a `data:` URI in a `!path` value gets mangled by `pathdiff`.
+Switching it to the shared predicate would fix that, but it changes behavior
+for extension templates / filters / css paths — unrelated to the favicon, and
+worth its own verification. Filed as a follow-up rather than bundled in.
+
+**Bonus for bd-hp3tx.** `logo_resource_relative_to(name, project_dir)` returns
+a full `BrandLogoResource` — rebased path *and* alt text — and reaches both
+named logos (`small`/`medium`/`large`) and `logo.images.*`. The navbar work
+should not need to touch this crate again.
 
 ### Phase 3 — The fallback itself
 
