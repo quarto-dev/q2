@@ -899,6 +899,520 @@ mod tests {
             }
         }
     }
+
+    // =========================================================================
+    // Plan-omission soundness tests (bd-9fwn1504)
+    // =========================================================================
+    // A nested plan may only be omitted when the nested content is provably
+    // identical. The old `needs_plan` check inferred "identical" from
+    // "every executed-side alignment is KeepBefore", which misses deletions
+    // (original has extra items) and reorderings (KeepBefore matches by hash
+    // at any position); the apply-side fallbacks then used original content
+    // wholesale, resurrecting deleted items. One deletion + one reorder test
+    // per affected site: table caption.long, table cells, custom-node
+    // Slot::Blocks, custom-node Slot::Inlines.
+
+    fn empty_attr() -> quarto_pandoc_types::Attr {
+        (String::new(), vec![], LinkedHashMap::new())
+    }
+
+    /// One-column table with an optional caption and a single body cell.
+    fn make_table(
+        caption_long: Option<Vec<quarto_pandoc_types::Block>>,
+        cell_content: Vec<quarto_pandoc_types::Block>,
+        source: SourceInfo,
+    ) -> quarto_pandoc_types::Block {
+        use quarto_pandoc_types::table::{
+            Alignment, Cell, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
+        };
+        let attr_source = quarto_pandoc_types::AttrSourceInfo::empty;
+        quarto_pandoc_types::Block::Table(Table {
+            attr: empty_attr(),
+            caption: quarto_pandoc_types::Caption {
+                short: None,
+                long: caption_long,
+                source_info: source.clone(),
+            },
+            colspec: vec![(Alignment::Default, ColWidth::Default)],
+            head: TableHead {
+                attr: empty_attr(),
+                rows: vec![],
+                source_info: source.clone(),
+                attr_source: attr_source(),
+            },
+            bodies: vec![TableBody {
+                attr: empty_attr(),
+                rowhead_columns: 0,
+                head: vec![],
+                body: vec![Row {
+                    attr: empty_attr(),
+                    cells: vec![Cell {
+                        attr: empty_attr(),
+                        alignment: Alignment::Default,
+                        row_span: 1,
+                        col_span: 1,
+                        content: cell_content,
+                        source_info: source.clone(),
+                        attr_source: attr_source(),
+                    }],
+                    source_info: source.clone(),
+                    attr_source: attr_source(),
+                }],
+                source_info: source.clone(),
+                attr_source: attr_source(),
+            }],
+            foot: TableFoot {
+                attr: empty_attr(),
+                rows: vec![],
+                source_info: source.clone(),
+                attr_source: attr_source(),
+            },
+            source_info: source,
+            attr_source: attr_source(),
+        })
+    }
+
+    fn table_caption_long(block: &quarto_pandoc_types::Block) -> &[quarto_pandoc_types::Block] {
+        if let quarto_pandoc_types::Block::Table(t) = block {
+            t.caption.long.as_deref().expect("Expected caption.long")
+        } else {
+            panic!("Expected Table");
+        }
+    }
+
+    fn table_first_cell_content(
+        block: &quarto_pandoc_types::Block,
+    ) -> &[quarto_pandoc_types::Block] {
+        if let quarto_pandoc_types::Block::Table(t) = block {
+            &t.bodies[0].body[0].cells[0].content
+        } else {
+            panic!("Expected Table");
+        }
+    }
+
+    /// Custom block node with a single Slot::Blocks slot named "body".
+    fn make_blocks_slot_node(
+        blocks: Vec<quarto_pandoc_types::Block>,
+        source: SourceInfo,
+    ) -> quarto_pandoc_types::Block {
+        let mut slots = LinkedHashMap::new();
+        slots.insert("body".to_string(), Slot::Blocks(blocks));
+        quarto_pandoc_types::Block::Custom(CustomNode {
+            type_name: "TestPanel".to_string(),
+            slots,
+            plain_data: serde_json::json!({}),
+            attr: empty_attr(),
+            source_info: source,
+        })
+    }
+
+    /// Custom block node with a single Slot::Inlines slot named "title".
+    fn make_inlines_slot_node(
+        inlines: Vec<quarto_pandoc_types::Inline>,
+        source: SourceInfo,
+    ) -> quarto_pandoc_types::Block {
+        let mut slots = LinkedHashMap::new();
+        slots.insert("title".to_string(), Slot::Inlines(inlines));
+        quarto_pandoc_types::Block::Custom(CustomNode {
+            type_name: "TestPanel".to_string(),
+            slots,
+            plain_data: serde_json::json!({}),
+            attr: empty_attr(),
+            source_info: source,
+        })
+    }
+
+    fn blocks_slot(
+        block: &quarto_pandoc_types::Block,
+        name: &str,
+    ) -> Vec<quarto_pandoc_types::Block> {
+        if let quarto_pandoc_types::Block::Custom(cn) = block {
+            if let Some(Slot::Blocks(blocks)) = cn.slots.get(name) {
+                blocks.clone()
+            } else {
+                panic!("Expected Slot::Blocks named {name:?}");
+            }
+        } else {
+            panic!("Expected Custom block");
+        }
+    }
+
+    fn inlines_slot(
+        block: &quarto_pandoc_types::Block,
+        name: &str,
+    ) -> Vec<quarto_pandoc_types::Inline> {
+        if let quarto_pandoc_types::Block::Custom(cn) = block {
+            if let Some(Slot::Inlines(inlines)) = cn.slots.get(name) {
+                inlines.clone()
+            } else {
+                panic!("Expected Slot::Inlines named {name:?}");
+            }
+        } else {
+            panic!("Expected Custom block");
+        }
+    }
+
+    fn make_str(text: &str, source: SourceInfo) -> quarto_pandoc_types::Inline {
+        quarto_pandoc_types::Inline::Str(Str {
+            text: text.to_string(),
+            source_info: source,
+        })
+    }
+
+    fn para_text(block: &quarto_pandoc_types::Block) -> &str {
+        if let quarto_pandoc_types::Block::Paragraph(p) = block {
+            if let quarto_pandoc_types::Inline::Str(s) = &p.content[0] {
+                &s.text
+            } else {
+                panic!("Expected Str inline");
+            }
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
+
+    fn para_source(block: &quarto_pandoc_types::Block) -> &SourceInfo {
+        if let quarto_pandoc_types::Block::Paragraph(p) = block {
+            &p.source_info
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
+
+    /// Site 1, deletion: a caption block deleted between original and
+    /// executed must not be resurrected from the original.
+    #[test]
+    fn table_caption_deletion_not_resurrected() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_table(
+                Some(vec![
+                    make_para("a", source_original()),
+                    make_para("b", source_original()),
+                ]),
+                vec![make_para("cell", source_original())],
+                source_original(),
+            )],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_table(
+                Some(vec![make_para("a", source_executed())]),
+                vec![make_para("cell", source_executed())],
+                source_executed(),
+            )],
+        };
+
+        let expected = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        let result_caption = table_caption_long(&result.blocks[0]);
+        let expected_caption = table_caption_long(&expected.blocks[0]);
+        assert_eq!(
+            result_caption.len(),
+            1,
+            "deleted caption block must not be resurrected; got {result_caption:?}"
+        );
+        assert!(
+            crate::hash::structural_eq_blocks(result_caption, expected_caption),
+            "caption must be structurally equal to executed's"
+        );
+        // The surviving block was unchanged, so it must keep its ORIGINAL
+        // source info (this is what plan omission was trying to optimize,
+        // and what a use-executed-wholesale "fix" would break).
+        assert_eq!(*para_source(&result_caption[0]), source_original());
+    }
+
+    /// Site 1, reorder: identical caption blocks in a different order must
+    /// come out in the executed order.
+    #[test]
+    fn table_caption_reorder_follows_executed() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_table(
+                Some(vec![
+                    make_para("a", source_original()),
+                    make_para("b", source_original()),
+                ]),
+                vec![make_para("cell", source_original())],
+                source_original(),
+            )],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_table(
+                Some(vec![
+                    make_para("b", source_executed()),
+                    make_para("a", source_executed()),
+                ]),
+                vec![make_para("cell", source_executed())],
+                source_executed(),
+            )],
+        };
+
+        let expected = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        let result_caption = table_caption_long(&result.blocks[0]);
+        let expected_caption = table_caption_long(&expected.blocks[0]);
+        assert_eq!(
+            para_text(&result_caption[0]),
+            "b",
+            "executed order must win"
+        );
+        assert_eq!(
+            para_text(&result_caption[1]),
+            "a",
+            "executed order must win"
+        );
+        assert!(
+            crate::hash::structural_eq_blocks(result_caption, expected_caption),
+            "caption must be structurally equal to executed's"
+        );
+    }
+
+    /// Site 2, deletion: a block deleted from a cell's content must not be
+    /// resurrected from the original.
+    #[test]
+    fn table_cell_deletion_not_resurrected() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_table(
+                None,
+                vec![
+                    make_para("x", source_original()),
+                    make_para("y", source_original()),
+                ],
+                source_original(),
+            )],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_table(
+                None,
+                vec![make_para("x", source_executed())],
+                source_executed(),
+            )],
+        };
+
+        let expected = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        let result_cell = table_first_cell_content(&result.blocks[0]);
+        let expected_cell = table_first_cell_content(&expected.blocks[0]);
+        assert_eq!(
+            result_cell.len(),
+            1,
+            "deleted cell block must not be resurrected; got {result_cell:?}"
+        );
+        assert!(
+            crate::hash::structural_eq_blocks(result_cell, expected_cell),
+            "cell content must be structurally equal to executed's"
+        );
+        assert_eq!(*para_source(&result_cell[0]), source_original());
+    }
+
+    /// Site 2, reorder: identical cell blocks in a different order must come
+    /// out in the executed order.
+    #[test]
+    fn table_cell_reorder_follows_executed() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_table(
+                None,
+                vec![
+                    make_para("x", source_original()),
+                    make_para("y", source_original()),
+                ],
+                source_original(),
+            )],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_table(
+                None,
+                vec![
+                    make_para("y", source_executed()),
+                    make_para("x", source_executed()),
+                ],
+                source_executed(),
+            )],
+        };
+
+        let expected = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        let result_cell = table_first_cell_content(&result.blocks[0]);
+        let expected_cell = table_first_cell_content(&expected.blocks[0]);
+        assert_eq!(para_text(&result_cell[0]), "y", "executed order must win");
+        assert_eq!(para_text(&result_cell[1]), "x", "executed order must win");
+        assert!(
+            crate::hash::structural_eq_blocks(result_cell, expected_cell),
+            "cell content must be structurally equal to executed's"
+        );
+    }
+
+    /// Site 3, deletion: a block deleted from a Slot::Blocks slot must not
+    /// be resurrected from the original.
+    #[test]
+    fn custom_blocks_slot_deletion_not_resurrected() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_blocks_slot_node(
+                vec![
+                    make_para("a", source_original()),
+                    make_para("b", source_original()),
+                ],
+                source_original(),
+            )],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_blocks_slot_node(
+                vec![make_para("a", source_executed())],
+                source_executed(),
+            )],
+        };
+
+        let expected = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        let result_slot = blocks_slot(&result.blocks[0], "body");
+        let expected_slot = blocks_slot(&expected.blocks[0], "body");
+        assert_eq!(
+            result_slot.len(),
+            1,
+            "deleted slot block must not be resurrected; got {result_slot:?}"
+        );
+        assert!(
+            crate::hash::structural_eq_blocks(&result_slot, &expected_slot),
+            "slot content must be structurally equal to executed's"
+        );
+        assert_eq!(*para_source(&result_slot[0]), source_original());
+    }
+
+    /// Site 3, reorder: identical Slot::Blocks items in a different order
+    /// must come out in the executed order.
+    #[test]
+    fn custom_blocks_slot_reorder_follows_executed() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_blocks_slot_node(
+                vec![
+                    make_para("a", source_original()),
+                    make_para("b", source_original()),
+                ],
+                source_original(),
+            )],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_blocks_slot_node(
+                vec![
+                    make_para("b", source_executed()),
+                    make_para("a", source_executed()),
+                ],
+                source_executed(),
+            )],
+        };
+
+        let expected = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        let result_slot = blocks_slot(&result.blocks[0], "body");
+        let expected_slot = blocks_slot(&expected.blocks[0], "body");
+        assert_eq!(para_text(&result_slot[0]), "b", "executed order must win");
+        assert_eq!(para_text(&result_slot[1]), "a", "executed order must win");
+        assert!(
+            crate::hash::structural_eq_blocks(&result_slot, &expected_slot),
+            "slot content must be structurally equal to executed's"
+        );
+    }
+
+    /// Site 4, deletion: an inline deleted from a Slot::Inlines slot must
+    /// not be resurrected from the original.
+    #[test]
+    fn custom_inlines_slot_deletion_not_resurrected() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_inlines_slot_node(
+                vec![
+                    make_str("one", source_original()),
+                    make_str("two", source_original()),
+                ],
+                source_original(),
+            )],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_inlines_slot_node(
+                vec![make_str("one", source_executed())],
+                source_executed(),
+            )],
+        };
+
+        let expected = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        let result_slot = inlines_slot(&result.blocks[0], "title");
+        let expected_slot = inlines_slot(&expected.blocks[0], "title");
+        assert_eq!(
+            result_slot.len(),
+            1,
+            "deleted slot inline must not be resurrected; got {result_slot:?}"
+        );
+        assert!(
+            crate::hash::structural_eq_inlines(&result_slot, &expected_slot),
+            "slot content must be structurally equal to executed's"
+        );
+        // Unchanged inline keeps its original source info.
+        if let quarto_pandoc_types::Inline::Str(s) = &result_slot[0] {
+            assert_eq!(s.source_info, source_original());
+        } else {
+            panic!("Expected Str inline");
+        }
+    }
+
+    /// Site 4, reorder: identical Slot::Inlines items in a different order
+    /// must come out in the executed order.
+    #[test]
+    fn custom_inlines_slot_reorder_follows_executed() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_inlines_slot_node(
+                vec![
+                    make_str("one", source_original()),
+                    make_str("two", source_original()),
+                ],
+                source_original(),
+            )],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_inlines_slot_node(
+                vec![
+                    make_str("two", source_executed()),
+                    make_str("one", source_executed()),
+                ],
+                source_executed(),
+            )],
+        };
+
+        let expected = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        let result_slot = inlines_slot(&result.blocks[0], "title");
+        let expected_slot = inlines_slot(&expected.blocks[0], "title");
+        if let quarto_pandoc_types::Inline::Str(s) = &result_slot[0] {
+            assert_eq!(s.text, "two", "executed order must win");
+        } else {
+            panic!("Expected Str inline");
+        }
+        assert!(
+            crate::hash::structural_eq_inlines(&result_slot, &expected_slot),
+            "slot content must be structurally equal to executed's"
+        );
+    }
 }
 
 // =========================================================================
