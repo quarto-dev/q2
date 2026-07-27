@@ -144,6 +144,33 @@ Three traps, each of which bit the 2026-07-27 audit:
 - **A dependency can leave the tree entirely.** `serde_v8` was removed wholesale
   with `deno_core`/`rusty_v8`; the strand outlived the dependency by three months.
 
+**Before calling a "still real" upgrade *actionable*, check for a
+first-party-fork blocker.** A crate we consume from a git fork can expose the
+old dependency's types in its own public API, which makes the upgrade
+impossible for us until the fork moves — and this does not show up in
+`cargo update`, `cargo tree`, or any version comparison. It shows up only as a
+trait-bound error at the call sites, and only under `--all-targets` if the
+call sites are in test modules.
+
+```bash
+# does any git-sourced dependency still require the old major?
+cargo metadata --format-version 1 | jq -r '
+  .packages[] | select(.source == null or (.source|test("git\\+"))) | . as $p |
+  .dependencies[] | select(.name=="<crate>") | "\($p.name) \($p.version) -> \(.req)"'
+```
+
+The 2026-07-27 attempt on `rand` 0.9 → 0.10 died exactly here: `quarto-hub`
+built fine after the API fix, then `cargo xtask verify` failed at clippy
+because `samod::DocumentId::new` (our fork, `rand ^0.9.1`) takes a rand-0.9
+`impl Rng`. File the fork's move as its own strand and add a `blocks`
+dependency rather than leaving the parent looking actionable.
+
+**Also verify any "collapses a duplicate" claim by measuring**, before and
+after, with `cargo tree --duplicates --workspace --depth 0 | grep -cE '^[a-z]'`.
+Our own crate leaving a version does not remove that version if a
+dev-dependency (e.g. `proptest`) still requires it — the 2026-07-27 attempt
+predicted a collapse and measured 101 duplicates both ways.
+
 When correcting a "still real" strand, rewrite the description to the current
 facts rather than appending a note — include the exact file declaring it, the
 current upstream latest, and any transitive copies that upgrading would
