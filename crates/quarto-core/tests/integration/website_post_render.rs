@@ -665,3 +665,339 @@ fn pipeline_default_project_does_not_substitute_listing_placeholders() {
         "default project must preserve end marker too"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Tests 40–46 — brand-aware favicon fallback (bd-97yc)
+//
+// Q1 falls back to the brand's *small* logo when `website.favicon` is
+// unset (`getFavicon` in `core/brand/brand.ts`, consumed by
+// `project/types/website/website.ts:185-205`). These tests pin the Q2
+// port. Plan: claude-notes/plans/2026-07-27-brand-aware-favicon-fallback.md
+//
+// The paths in `_brand.yml` are relative to the **brand file's own
+// directory**, so the fallback has to rebase them to project-relative
+// form before the existing favicon machinery (page-relative href +
+// post-render copy) can consume them. Test 42 is the one that
+// distinguishes a correct implementation from one that only works
+// because `_brand.yml` happens to sit at the project root.
+// ═══════════════════════════════════════════════════════════════════
+
+/// Minimal PNG signature. Content is irrelevant to every assertion
+/// here; only the file's existence and extension matter.
+const PNG_BYTES: &[u8] = b"\x89PNG\r\n\x1a\n";
+
+/// Assert that `html` contains no favicon `<link>` at all.
+fn assert_no_favicon_link(html: &str, context: &str) {
+    assert!(
+        !html.contains(r#"rel="icon""#),
+        "{}: expected no favicon link, found: {}",
+        context,
+        html.lines()
+            .find(|l| l.contains("rel=\"icon\""))
+            .unwrap_or("")
+    );
+}
+
+/// Extract the single favicon `<link>` line, for failure messages.
+fn favicon_line(html: &str) -> &str {
+    html.lines()
+        .find(|l| l.contains("rel=\"icon\""))
+        .unwrap_or("<no rel=\"icon\" line>")
+}
+
+// ── Test 40 — brand logo.small becomes the favicon ─────────────────
+
+/// `website.favicon` unset + `_brand.yml` with `logo.small` → the
+/// small logo is used as the favicon, with a correctly page-relative
+/// href on a nested page (mirrors test 31's assertions).
+#[test]
+fn pipeline_brand_favicon_fallback_link_emitted_per_page() {
+    let (_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             brand: _brand.yml\n",
+        );
+        write(
+            &project_dir.join("_brand.yml"),
+            "logo:\n  small: logo.png\n",
+        );
+        write_bytes(&project_dir.join("logo.png"), PNG_BYTES);
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+        write(
+            &project_dir.join("docs/api.qmd"),
+            "---\ntitle: API\n---\n\nA.\n",
+        );
+    });
+
+    let index_html = html_for_stem(&summary, "index");
+    let api_html = html_for_stem(&summary, "api");
+    assert!(
+        index_html.contains(r#"<link rel="icon" href="logo.png" type="image/png">"#),
+        "index should use the brand's small logo as favicon: {}",
+        favicon_line(&index_html)
+    );
+    assert!(
+        api_html.contains(r#"<link rel="icon" href="../logo.png" type="image/png">"#),
+        "nested-page brand favicon href should be `../logo.png`: {}",
+        favicon_line(&api_html)
+    );
+}
+
+// ── Test 41 — the brand logo file is copied to the output dir ──────
+
+/// The fallback must feed `copy_favicon` too, not just the `<link>`:
+/// a favicon that 404s is worse than none.
+#[test]
+fn pipeline_brand_favicon_fallback_file_copied_to_output_dir() {
+    let (project_dir, _summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             brand: _brand.yml\n",
+        );
+        write(
+            &project_dir.join("_brand.yml"),
+            "logo:\n  small: logo.png\n",
+        );
+        write_bytes(&project_dir.join("logo.png"), PNG_BYTES);
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+    assert!(
+        project_dir.join("_site/logo.png").exists(),
+        "brand logo was not copied to _site/"
+    );
+}
+
+// ── Test 42 — brand in a subdirectory: paths are brand-relative ────
+
+/// **The load-bearing test.** `_brand.yml` lives in `_brand/`, so its
+/// `logo.small: logo.png` names `_brand/logo.png` in project terms.
+/// An implementation that forwards the raw YAML path unchanged emits
+/// `href="logo.png"` and copies nothing — and passes tests 40/41,
+/// where the two forms coincide.
+#[test]
+fn pipeline_brand_favicon_fallback_rebases_subdirectory_brand() {
+    let (project_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             brand: _brand/_brand.yml\n",
+        );
+        write(
+            &project_dir.join("_brand/_brand.yml"),
+            "logo:\n  small: logo.png\n",
+        );
+        write_bytes(&project_dir.join("_brand/logo.png"), PNG_BYTES);
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+        write(
+            &project_dir.join("docs/api.qmd"),
+            "---\ntitle: API\n---\n\nA.\n",
+        );
+    });
+
+    let index_html = html_for_stem(&summary, "index");
+    let api_html = html_for_stem(&summary, "api");
+    assert!(
+        index_html.contains(r#"<link rel="icon" href="_brand/logo.png" type="image/png">"#),
+        "brand-relative logo path must be rebased to project-relative: {}",
+        favicon_line(&index_html)
+    );
+    assert!(
+        api_html.contains(r#"<link rel="icon" href="../_brand/logo.png" type="image/png">"#),
+        "nested-page href for a subdirectory brand should be `../_brand/logo.png`: {}",
+        favicon_line(&api_html)
+    );
+    assert!(
+        project_dir.join("_site/_brand/logo.png").exists(),
+        "subdirectory brand logo was not copied to _site/_brand/"
+    );
+}
+
+// ── Test 43 — an explicit website.favicon still wins ───────────────
+
+/// The brand is a *fallback*. When the user names a favicon
+/// explicitly it must be used verbatim, and the brand logo must not
+/// be copied into the output.
+#[test]
+fn pipeline_explicit_website_favicon_wins_over_brand_logo() {
+    let (project_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  favicon: favicon.ico\n\
+             brand: _brand.yml\n",
+        );
+        write(
+            &project_dir.join("_brand.yml"),
+            "logo:\n  small: logo.png\n",
+        );
+        write_bytes(&project_dir.join("logo.png"), PNG_BYTES);
+        write_bytes(&project_dir.join("favicon.ico"), b"\x00\x00\x01\x00");
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+
+    let index_html = html_for_stem(&summary, "index");
+    assert!(
+        index_html.contains(r#"<link rel="icon" href="favicon.ico" type="image/x-icon">"#),
+        "explicit website.favicon must win over the brand logo: {}",
+        favicon_line(&index_html)
+    );
+    assert!(
+        !index_html.contains("logo.png"),
+        "brand logo must not appear when website.favicon is set: {}",
+        favicon_line(&index_html)
+    );
+    assert!(
+        project_dir.join("_site/favicon.ico").exists(),
+        "explicit favicon should still be copied"
+    );
+    assert!(
+        !project_dir.join("_site/logo.png").exists(),
+        "brand logo must not be copied when website.favicon is set"
+    );
+}
+
+// ── Test 44 — light/dark logo pair yields no favicon ───────────────
+
+/// `Brand::favicon()` returns `None` for a `logo.small` light/dark
+/// pair by design — picking a side is bd-v5z8w's job. Until then the
+/// fallback must decline quietly: no favicon, and no diagnostic
+/// (the user has not misconfigured anything).
+#[test]
+fn pipeline_brand_favicon_light_dark_pair_declines_quietly() {
+    let (_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             brand: _brand.yml\n",
+        );
+        write(
+            &project_dir.join("_brand.yml"),
+            "logo:\n  small:\n    light: light.png\n    dark: dark.png\n",
+        );
+        write_bytes(&project_dir.join("light.png"), PNG_BYTES);
+        write_bytes(&project_dir.join("dark.png"), PNG_BYTES);
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+
+    let index_html = html_for_stem(&summary, "index");
+    assert_no_favicon_link(&index_html, "light/dark logo pair");
+    assert!(
+        !summary
+            .project_diagnostics
+            .iter()
+            .any(|d| d.title.contains("favicon") || d.title.contains("logo")),
+        "a light/dark logo pair is valid config; expected no favicon diagnostic, got: {:?}",
+        summary
+            .project_diagnostics
+            .iter()
+            .map(|d| d.title.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+// ── Test 45 — external logo URL: link only, no copy ────────────────
+
+/// An absolute URL is not a project file. Q1 emits the `<link>` and
+/// copies nothing (`isExternalPath` in `core/brand/brand.ts`). The
+/// href must survive verbatim — in particular it must *not* be run
+/// through the page-relative resolver, which would turn
+/// `https://…/logo.png` into `../https:/…/logo.png`.
+#[test]
+fn pipeline_brand_favicon_external_url_emits_link_without_copy() {
+    let (project_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             brand: _brand.yml\n",
+        );
+        write(
+            &project_dir.join("_brand.yml"),
+            "logo:\n  small: https://example.com/logo.png\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+        write(
+            &project_dir.join("docs/api.qmd"),
+            "---\ntitle: API\n---\n\nA.\n",
+        );
+    });
+
+    let index_html = html_for_stem(&summary, "index");
+    let api_html = html_for_stem(&summary, "api");
+    let expected = r#"<link rel="icon" href="https://example.com/logo.png" type="image/png">"#;
+    assert!(
+        index_html.contains(expected),
+        "external brand logo URL must be emitted verbatim: {}",
+        favicon_line(&index_html)
+    );
+    assert!(
+        api_html.contains(expected),
+        "external URL must not be made page-relative on nested pages: {}",
+        favicon_line(&api_html)
+    );
+    // Nothing resembling the URL should have been written to disk.
+    assert!(
+        !project_dir.join("_site/https:").exists(),
+        "an external favicon URL must not produce a copied file"
+    );
+    assert!(
+        !summary
+            .project_diagnostics
+            .iter()
+            .any(|d| d.title.contains("example.com")),
+        "an external favicon URL is valid; expected no diagnostic, got: {:?}",
+        summary
+            .project_diagnostics
+            .iter()
+            .map(|d| d.title.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+// ── Test 46 — no brand key: behavior unchanged ─────────────────────
+
+/// Q2 requires an explicit `brand:` key (there is deliberately no
+/// `_brand.yml` auto-discovery — see the plan's Obstacle 3). A
+/// `_brand.yml` sitting in the project unreferenced must therefore
+/// change nothing.
+#[test]
+fn pipeline_no_brand_key_emits_no_favicon() {
+    let (_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n",
+        );
+        // Present on disk but never referenced.
+        write(
+            &project_dir.join("_brand.yml"),
+            "logo:\n  small: logo.png\n",
+        );
+        write_bytes(&project_dir.join("logo.png"), PNG_BYTES);
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+
+    let index_html = html_for_stem(&summary, "index");
+    assert_no_favicon_link(&index_html, "unreferenced _brand.yml");
+}

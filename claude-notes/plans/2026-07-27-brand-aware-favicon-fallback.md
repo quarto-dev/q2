@@ -300,34 +300,110 @@ shared with bd-hp3tx, not written twice. If it lives in `quarto-brand` as
 `logo_path_relative_to(...)` with `favicon_relative_to(...)` layered on top,
 the navbar work gets it for free.
 
-## Proposed phases
+## Work items
 
-- **Phase 0 — Test plan (TDD, failing first).**
-  - `website_config.rs` unit tests: brand fallback used iff `website.favicon`
-    absent; explicit `website.favicon` always wins; no brand → `None`.
-  - `quarto-brand` unit tests for the rebasing helper: same-dir, subdirectory,
-    external URL, rooted path, Windows separators.
-  - `quarto-core/tests/integration/website_post_render.rs`: end-to-end sibling
-    of the existing tests 31/32 — `<link>` emitted with the right *page-relative*
-    href on a nested page, and the logo file copied into `_site/`.
-  - Brand in a subdirectory (`brand: _brand/_brand.yml`) — the rebasing case.
-  - `logo.small` as a light/dark pair → no favicon, no warning (deferred to
-    bd-v5z8w).
-  - External `logo.small` URL → `<link>` emitted, **no** copy attempted.
-- **Phase 1 — `Option<Brand>` + `brand_dir` on `ProjectContext`**, resolved once
-  in `ProjectContext::discover`. Adds a `quarto-brand` dependency to
-  `quarto-core`.
-- **Phase 2 — Rebasing helper in `quarto-brand`**, shaped for reuse by bd-hp3tx,
-  reusing the external-URL/rooted-path predicates from the `!path` rebaser.
-- **Phase 3 — Fallback in `website_config::website_favicon`** + the two call
-  sites, including `copy_favicon`'s external-path guard.
-- **Phase 4 — Docs.** A line on the fallback in
-  `docs/guides/authoring/brand.qmd`. The broader "does this page describe Q2 or
-  Q1?" question — including stating that Q2 needs an explicit `brand:` key — is
-  bd-qnylgu69, filed 2026-07-27, not this strand.
-- **Phase 5 — E2E verification** through `cargo run --bin q2 -- render` on the
-  committed repro fixture, output inspected and recorded here. Full
-  `cargo xtask verify` (not `--skip-hub-build`) before push — see the WASM risk.
+Implementation started 2026-07-27. Phases run in order; each ends green
+(`cargo nextest run --workspace`) before the next begins.
+
+### Phase 0 — Tests (TDD, failing first) ✅
+
+Tests 40–46 in `crates/quarto-core/tests/integration/website_post_render.rs`.
+
+- [x] Test 40 — brand `logo.small` → `<link rel="icon">` when `website.favicon`
+      is unset, correct page-relative href on a nested page — **fails at HEAD**
+- [x] Test 41 — the logo file is copied into `_site/` — **fails at HEAD**
+- [x] Test 42 — brand in a subdirectory (`brand: _brand/_brand.yml`), the
+      rebasing case — **fails at HEAD**
+- [x] Test 45 — external `logo.small` URL → `<link>` emitted verbatim, **no**
+      copy attempted — **fails at HEAD**
+- [x] Test 43 — explicit `website.favicon` still wins over the brand logo —
+      *passes at HEAD* (guard: must keep passing)
+- [x] Test 44 — `logo.small` as a light/dark pair → no favicon, no diagnostic
+      (deferred to bd-v5z8w) — *passes vacuously at HEAD* (guard)
+- [x] Test 46 — no `brand:` key → unchanged behavior — *passes vacuously at
+      HEAD* (guard)
+
+**Baseline run** (`cargo nextest run -p quarto-core -E 'binary(integration) &
+test(website_post_render::)'`): `20 tests run: 16 passed, 4 failed`. All four
+failures are the fallback cases, each with the same message shape:
+
+```
+pipeline_brand_favicon_fallback_link_emitted_per_page
+  index should use the brand's small logo as favicon: <no rel="icon" line>
+pipeline_brand_favicon_fallback_rebases_subdirectory_brand
+  brand-relative logo path must be rebased to project-relative: <no rel="icon" line>
+pipeline_brand_favicon_external_url_emits_link_without_copy
+  external brand logo URL must be emitted verbatim: <no rel="icon" line>
+pipeline_brand_favicon_fallback_file_copied_to_output_dir
+  brand logo was not copied to _site/
+```
+
+`<no rel="icon" line>` is the *expected* failure mode — no fallback exists, so
+no favicon is emitted at all. No pre-existing test regressed.
+
+> **Note on the three guards.** 44 and 46 pass *vacuously* today (nothing emits
+> a favicon, so "no favicon" is trivially true). They are not evidence of
+> correct behavior yet — they earn their keep only after Phase 3, when
+> something could plausibly emit the wrong thing. 43 is a real pass: the
+> explicit-favicon path already works and must stay byte-identical.
+
+**Discovered while writing test 45** — `apply_favicon` runs the favicon path
+through `ResourceResolverContext::page_url_for`, which does
+`site_root.join(path)` + `pathdiff`. For an absolute URL that yields garbage
+(`../https:/example.com/logo.png`), so **the external-URL guard is needed in
+the `<link>` emission too, not just in `copy_favicon`**. This also affects an
+explicit `website.favicon: https://…` today — a pre-existing bug on the same
+line of code. Fixing it in the shared reader fixes both; that is the natural
+place, not a widening of scope. Test 45 pins the brand half; add an
+explicit-`website.favicon` external case in Phase 3.
+
+### Phase 1 — Resolved brand on `ProjectContext`
+
+- [ ] Add `quarto-brand` as a dependency of `quarto-core`.
+- [ ] Add `Option<Brand>` + `brand_dir` to `ProjectContext`, resolved once in
+      `ProjectContext::discover`.
+- [ ] Decide and document what a brand-resolution failure does here (see
+      open implementation note 1).
+
+### Phase 2 — Rebasing helper in `quarto-brand`
+
+- [ ] `logo_path_relative_to(...)` + `favicon_relative_to(...)`, shaped for
+      reuse by bd-hp3tx.
+- [ ] Unit tests: same-dir, subdirectory, external URL, rooted path, Windows
+      separators.
+- [ ] Reuse the external-URL / rooted-path predicates from the `!path` rebaser
+      rather than writing a second copy.
+
+### Phase 3 — The fallback itself
+
+- [ ] `website_config::website_favicon` consults the brand when the key is unset.
+- [ ] `WebsiteFaviconTransform` and `copy_favicon` updated.
+- [ ] `copy_favicon` external-path guard.
+
+### Phase 4 — Docs
+
+- [ ] A line on the fallback in `docs/guides/authoring/brand.qmd`. The broader
+      "does this page describe Q2 or Q1?" question — including stating that Q2
+      needs an explicit `brand:` key — is bd-qnylgu69, not this strand.
+
+### Phase 5 — Verification
+
+- [ ] E2E through `cargo run --bin q2 -- render` on the committed repro fixture;
+      output inspected and recorded in `repro-output.md`.
+- [ ] `cargo nextest run --workspace` green.
+- [ ] Full `cargo xtask verify` (**not** `--skip-hub-build`) — see the WASM risk.
+
+### Open implementation notes
+
+1. **Brand-resolution failure in `ProjectContext::discover`.** Today a bad
+   `brand:` is a hard error raised from the *theme* path
+   (`CompileThemeCssStage`, with a `Q-14-*` diagnostic). Resolving brand a
+   second time, earlier, must not turn that into a different or duplicated
+   error. Options: make `discover` tolerant (store `None`, let the theme path
+   keep owning the diagnostic), or hoist the diagnostic to `discover` and have
+   the theme path consume the already-resolved value. Prefer the second if it
+   is not disruptive — resolving the same file twice is the smell — but the
+   first is the safe default. Resolve before writing Phase 1 code.
 
 ## Risks / tradeoffs
 
