@@ -1,0 +1,7 @@
+project:
+  type: website
+website:
+  title: Brand Favicon Control
+  site-url: https://example.com
+  favicon: logo.png
+brand: _brand.yml
