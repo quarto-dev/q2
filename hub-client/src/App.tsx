@@ -760,6 +760,7 @@ function App() {
             error={connectionError}
             onSignOut={AUTH_ENABLED ? logout : undefined}
             authEmail={auth?.email}
+            authPicture={auth?.picture}
             onScreenNameChange={setScreenName}
             onColorChange={setCursorColor}
             projectSetDocId={projectSetActions.getProjectSetDocId()}
