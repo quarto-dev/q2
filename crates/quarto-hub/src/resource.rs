@@ -136,6 +136,121 @@ pub fn create_binary_document(content: &[u8], mime_type: &str) -> Result<Automer
     Ok(doc)
 }
 
+/// MIME type stamped on engine-capture binary docs. Single source of
+/// truth (bd-eiku4ymo); `quarto-preview` and `quarto-hub-provider`
+/// re-export/consume this. The TS consumers hold the same literal.
+pub const CAPTURE_MIME_TYPE: &str = "application/x-engine-capture+gzip";
+
+/// Uncompressed provenance stamped on capture binary docs
+/// (bd-eiku4ymo). Everything else about a capture lives inside the
+/// gzipped `content` payload, invisible to sync-server audits; these
+/// fields are written as a top-level automerge `meta` map so an
+/// auditor (`hub admin scan`) can read them without decompression.
+///
+/// Written once at creation, never mutated — no CRDT merge concerns.
+#[derive(Debug, Clone)]
+pub struct CaptureDocMeta {
+    /// Project-relative path of the source document, forward slashes.
+    pub source_path: String,
+    /// Engines that produced the capture sequence, in execution order.
+    pub engines: Vec<String>,
+}
+
+/// Schema version of the capture-doc `meta` map.
+const CAPTURE_META_SCHEMA_VERSION: i64 = 1;
+
+/// Create an engine-capture binary document: the standard binary-doc
+/// schema (`content`/`mimeType`/`hash`, MIME = [`CAPTURE_MIME_TYPE`])
+/// plus the uncompressed `meta` audit map:
+///
+/// ```text
+/// ROOT
+/// ├── content: Bytes
+/// ├── mimeType: String
+/// ├── hash: String
+/// └── meta: Map
+///     ├── kind: "engine-capture"
+///     ├── schemaVersion: 1
+///     ├── createdAt: String   // RFC 3339 UTC
+///     ├── sourcePath: String
+///     └── engines: List<String>
+/// ```
+///
+/// Docs created before this envelope (no `meta`) remain valid; readers
+/// of `content` are unaffected either way.
+pub fn create_capture_document(gzipped: &[u8], meta: &CaptureDocMeta) -> Result<Automerge> {
+    create_capture_document_at(gzipped, meta, &chrono::Utc::now().to_rfc3339())
+}
+
+/// Test seam: like [`create_capture_document`] with an explicit
+/// `createdAt` so age-gate tests can fabricate old captures.
+pub fn create_capture_document_at(
+    gzipped: &[u8],
+    meta: &CaptureDocMeta,
+    created_at: &str,
+) -> Result<Automerge> {
+    use automerge::ObjType;
+    let mut doc = create_binary_document(gzipped, CAPTURE_MIME_TYPE)?;
+    doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+        let meta_obj = tx.put_object(ROOT, "meta", ObjType::Map)?;
+        tx.put(&meta_obj, "kind", "engine-capture")?;
+        tx.put(&meta_obj, "schemaVersion", CAPTURE_META_SCHEMA_VERSION)?;
+        tx.put(&meta_obj, "createdAt", created_at)?;
+        tx.put(&meta_obj, "sourcePath", meta.source_path.as_str())?;
+        let engines_obj = tx.put_object(&meta_obj, "engines", ObjType::List)?;
+        for (i, engine) in meta.engines.iter().enumerate() {
+            tx.insert(&engines_obj, i, engine.as_str())?;
+        }
+        Ok(())
+    })
+    .map_err(|e| {
+        crate::error::Error::IndexDocument(format!("failed to stamp capture meta: {:?}", e))
+    })?;
+    Ok(doc)
+}
+
+/// Read the `meta` audit map back from a capture doc. `None` when the
+/// doc predates the envelope (or isn't a capture doc). Used by
+/// `hub admin scan`'s age gate and inventory.
+pub fn read_capture_meta(doc: &Automerge) -> Option<CaptureDocMetaRead> {
+    use automerge::ReadDoc;
+    let (_, meta_obj) = doc.get(ROOT, "meta").ok().flatten()?;
+    let get_str = |key: &str| -> Option<String> {
+        doc.get(&meta_obj, key)
+            .ok()
+            .flatten()
+            .and_then(|(value, _)| value.to_str().map(str::to_string))
+    };
+    let engines = match doc.get(&meta_obj, "engines").ok().flatten() {
+        Some((_, engines_obj)) => (0..doc.length(&engines_obj))
+            .filter_map(|i| {
+                doc.get(&engines_obj, i)
+                    .ok()
+                    .flatten()
+                    .and_then(|(value, _)| value.to_str().map(str::to_string))
+            })
+            .collect(),
+        None => Vec::new(),
+    };
+    Some(CaptureDocMetaRead {
+        kind: get_str("kind"),
+        created_at: get_str("createdAt"),
+        source_path: get_str("sourcePath"),
+        engines,
+    })
+}
+
+/// The `meta` map as read back from a doc — every field optional
+/// because a capture written by a future (or buggy) writer must
+/// still be inspectable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptureDocMetaRead {
+    pub kind: Option<String>,
+    pub created_at: Option<String>,
+    pub source_path: Option<String>,
+    pub engines: Vec<String>,
+}
+
 /// Document type enumeration for distinguishing text and binary documents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DocumentType {
@@ -337,5 +452,58 @@ mod tests {
         // Empty document
         let empty_doc = Automerge::new();
         assert_eq!(detect_document_type(&empty_doc), DocumentType::Invalid);
+    }
+
+    // ── bd-eiku4ymo: capture-doc meta envelope ─────────────────────
+
+    fn sample_meta() -> CaptureDocMeta {
+        CaptureDocMeta {
+            source_path: "posts/analysis.qmd".to_string(),
+            engines: vec!["knitr".to_string(), "jupyter".to_string()],
+        }
+    }
+
+    #[test]
+    fn capture_document_has_binary_schema_and_capture_mime() {
+        use automerge::ReadDoc;
+        let doc = create_capture_document(b"gzipped-bytes", &sample_meta()).unwrap();
+        // Standard binary-doc fields intact.
+        assert_eq!(detect_document_type(&doc), DocumentType::Binary);
+        let (mime, _) = doc.get(ROOT, "mimeType").unwrap().unwrap();
+        assert_eq!(mime.to_str(), Some(CAPTURE_MIME_TYPE));
+        let (hash, _) = doc.get(ROOT, "hash").unwrap().unwrap();
+        assert_eq!(hash.to_str(), Some(compute_hash(b"gzipped-bytes").as_str()));
+    }
+
+    #[test]
+    fn capture_document_meta_roundtrips() {
+        let doc = create_capture_document(b"gz", &sample_meta()).unwrap();
+        let meta = read_capture_meta(&doc).expect("meta map present");
+        assert_eq!(meta.kind.as_deref(), Some("engine-capture"));
+        assert_eq!(meta.source_path.as_deref(), Some("posts/analysis.qmd"));
+        assert_eq!(meta.engines, vec!["knitr", "jupyter"]);
+        // createdAt parses as RFC 3339 — the scan age gate depends on it.
+        let created_at = meta.created_at.expect("createdAt present");
+        chrono::DateTime::parse_from_rfc3339(&created_at)
+            .unwrap_or_else(|e| panic!("createdAt must be RFC 3339, got {created_at}: {e}"));
+    }
+
+    #[test]
+    fn capture_document_at_uses_explicit_timestamp() {
+        let doc =
+            create_capture_document_at(b"gz", &sample_meta(), "2020-01-02T03:04:05+00:00").unwrap();
+        let meta = read_capture_meta(&doc).unwrap();
+        assert_eq!(
+            meta.created_at.as_deref(),
+            Some("2020-01-02T03:04:05+00:00")
+        );
+    }
+
+    #[test]
+    fn legacy_capture_doc_without_meta_reads_none() {
+        // Pre-envelope captures (plain binary docs with the capture
+        // MIME) must read back as "no meta", not error.
+        let doc = create_binary_document(b"gz", CAPTURE_MIME_TYPE).unwrap();
+        assert!(read_capture_meta(&doc).is_none());
     }
 }
