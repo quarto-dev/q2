@@ -6,8 +6,9 @@
  * qualifies (validate-once at upgrade), so a WS-only client would idle
  * out despite being "active". This hook owns the keep-alive: a periodic
  * GET /auth/me while signed in with sync online. The slide requires no
- * IdP round-trip at all — these tests mock only fetchAuthMe; no
- * One-Tap/GIS callback is involved (the FedCM/3p-cookie-blocked case).
+ * IdP round-trip at all — these tests mock only fetchAuthMe. A definitive
+ * rejection ends the session (`onAuthRejected`); the One-Tap silent-renewal
+ * fallback was retired (bd-s042qcxj).
  *
  * @vitest-environment jsdom
  */
@@ -32,13 +33,13 @@ const me = (expiresAt: number) => ({
 
 describe('useSessionKeepAlive', () => {
   let onAuthState: ReturnType<typeof vi.fn>;
-  let triggerRefresh: ReturnType<typeof vi.fn>;
+  let onAuthRejected: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockFetchAuthMe.mockReset();
     onAuthState = vi.fn();
-    triggerRefresh = vi.fn();
+    onAuthRejected = vi.fn();
   });
 
   afterEach(() => {
@@ -48,7 +49,7 @@ describe('useSessionKeepAlive', () => {
   const render = (enabled: boolean) =>
     renderHook(
       ({ on }: { on: boolean }) =>
-        useSessionKeepAlive({ enabled: on, onAuthState, triggerRefresh }),
+        useSessionKeepAlive({ enabled: on, onAuthState, onAuthRejected }),
       { initialProps: { on: enabled } },
     );
 
@@ -80,19 +81,19 @@ describe('useSessionKeepAlive', () => {
     expect(mockFetchAuthMe).toHaveBeenCalledTimes(2);
     expect(onAuthState).toHaveBeenLastCalledWith(me(2_000_000));
     // The whole slide happened without any IdP involvement.
-    expect(triggerRefresh).not.toHaveBeenCalled();
+    expect(onAuthRejected).not.toHaveBeenCalled();
   });
 
-  it('asks for silent renewal on a definitive rejection', async () => {
+  it('ends the session on a definitive rejection', async () => {
     // e.g. the session was revoked via logout-everywhere on another
-    // device: re-login (renewal) is legitimate; the token family is
-    // dead but the account is not.
+    // device, or hit the absolute cap: the session is over and the user
+    // re-logs-in through the GIS button (no silent renewal any more).
     mockFetchAuthMe.mockResolvedValue(null);
     render(true);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(triggerRefresh).toHaveBeenCalledTimes(1);
+    expect(onAuthRejected).toHaveBeenCalledTimes(1);
     expect(onAuthState).not.toHaveBeenCalled();
   });
 
@@ -102,7 +103,7 @@ describe('useSessionKeepAlive', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SESSION_KEEP_ALIVE_INTERVAL_MS);
     });
-    expect(triggerRefresh).not.toHaveBeenCalled();
+    expect(onAuthRejected).not.toHaveBeenCalled();
     expect(onAuthState).not.toHaveBeenCalled();
   });
 

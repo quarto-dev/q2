@@ -20,7 +20,6 @@ afterEach(cleanup);
 function makeStubProvider(): AuthProvider {
   return {
     SignInButton: () => null,
-    useSilentRenewal: () => {},
     signOut: () => {},
   };
 }

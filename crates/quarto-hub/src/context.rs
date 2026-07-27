@@ -550,7 +550,7 @@ impl HubContext {
     /// Since the sliding-sessions cutover this is never a request-
     /// credential path by itself: it is reachable only from the Bearer
     /// branch of [`Self::authenticate_credential`] and from the
-    /// mint-time validation in `auth_callback`/`auth_refresh`, whose
+    /// mint-time validation in `auth_callback`/`auth_session`, whose
     /// input is a fresh Google credential from the request body — never
     /// the cookie (that path is [`Self::authenticate_session`]).
     pub async fn authenticate_claims(

@@ -488,7 +488,7 @@ async fn session_verify_failures_are_logged_distinguishably() {
 // ── C3: login mints a session cookie ──────────────────────────────
 
 #[tokio::test]
-async fn auth_refresh_mints_session_cookie() {
+async fn auth_session_mints_session_cookie() {
     let (provider, hub) = session_setup().await;
     let google = provider.sign(
         &ClaimsBuilder::from_provider(provider)
@@ -499,7 +499,7 @@ async fn auth_refresh_mints_session_cookie() {
 
     let resp = hub
         .client
-        .post(hub.url("/auth/refresh"))
+        .post(hub.url("/auth/session"))
         .header("x-requested-with", "XMLHttpRequest")
         .json(&serde_json::json!({ "credential": google }))
         .send()
@@ -531,6 +531,29 @@ async fn auth_refresh_mints_session_cookie() {
     assert!(attrs.contains("SameSite=Lax"));
     assert!(attrs.contains("Path=/"));
     assert!(attrs.contains(&format!("Max-Age={}", lt.idle_secs)));
+}
+
+/// The One-Tap renewal endpoint was renamed `/auth/refresh` → `/auth/session`
+/// (bd-s042qcxj); the old path must no longer be registered.
+#[tokio::test]
+async fn auth_refresh_old_route_is_gone() {
+    let (provider, hub) = session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("old-route-sub")
+            .to_value(),
+    );
+
+    let resp = hub
+        .client
+        .post(hub.url("/auth/refresh"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": google }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404, "old /auth/refresh route must be gone");
+    assert!(TestHub::set_auth_cookie(&resp).is_none());
 }
 
 /// Google-provider hub (registers the form-POST `/auth/callback`).
@@ -611,7 +634,7 @@ async fn large_google_token_no_longer_cookie_dropped() {
 
     let resp = hub
         .client
-        .post(hub.url("/auth/refresh"))
+        .post(hub.url("/auth/session"))
         .header("x-requested-with", "XMLHttpRequest")
         .json(&serde_json::json!({ "credential": google }))
         .send()
@@ -1058,7 +1081,7 @@ async fn logout_everywhere_kills_prior_tokens_and_relogin_works() {
     let google = provider.sign(&ClaimsBuilder::from_provider(provider).sub(sub).to_value());
     let r = hub
         .client
-        .post(hub.url("/auth/refresh"))
+        .post(hub.url("/auth/session"))
         .header("x-requested-with", "XMLHttpRequest")
         .json(&serde_json::json!({ "credential": google }))
         .send()
@@ -1130,7 +1153,7 @@ async fn ban_gates_verify_and_mint() {
     );
     let r = hub
         .client
-        .post(hub.url("/auth/refresh"))
+        .post(hub.url("/auth/session"))
         .header("x-requested-with", "XMLHttpRequest")
         .json(&serde_json::json!({ "credential": google }))
         .send()
@@ -1291,7 +1314,7 @@ async fn new_logins_on_rotated_hub_carry_new_kid() {
 
     let resp = hub
         .client
-        .post(hub.url("/auth/refresh"))
+        .post(hub.url("/auth/session"))
         .header("x-requested-with", "XMLHttpRequest")
         .json(&serde_json::json!({ "credential": google }))
         .send()

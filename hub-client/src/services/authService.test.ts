@@ -1,15 +1,17 @@
 /**
  * Unit Tests for authService
  *
- * Tests auth API helpers: fetchAuthMe, logout, refreshToken, fetchActorId.
+ * Tests auth API helpers: fetchAuthMe, logout, fetchActorId, resolveActorId.
  * Uses mocked fetch. IdP-side signout is no longer authService's
  * concern (moved to the AuthProvider boundary); see Phase 6 of
- * `claude-notes/plans/2026-05-20-auth-provider-interface.md`.
+ * `claude-notes/plans/2026-05-20-auth-provider-interface.md`. Session
+ * renewal is entirely server-side (sliding re-issue) — there is no client
+ * renewal helper since One-Tap was retired (bd-s042qcxj).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { fetchAuthMe, fetchActorId, resolveActorId, logout, refreshToken } from './authService';
+import { fetchAuthMe, fetchActorId, resolveActorId, logout } from './authService';
 
 describe('authService', () => {
   beforeEach(() => {
@@ -109,66 +111,6 @@ describe('authService', () => {
         credentials: 'same-origin',
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
       });
-    });
-  });
-
-  // ── refreshToken ────────────────────────────────────────────
-
-  describe('refreshToken', () => {
-    it('sends credential and returns fresh user info on success', async () => {
-      const user = { email: 'a@b.com', name: 'A', picture: null };
-
-      // First call: POST /auth/refresh → 200
-      // Second call: GET /auth/me → 200 with user
-      vi.mocked(fetch)
-        .mockResolvedValueOnce({ ok: true, status: 200 } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: () => Promise.resolve(user),
-        } as Response);
-
-      const result = await refreshToken('jwt.token.here');
-
-      expect(fetch).toHaveBeenNthCalledWith(1, '/auth/refresh', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-        body: JSON.stringify({ credential: 'jwt.token.here' }),
-      });
-      expect(result).toEqual(user);
-    });
-
-    it('returns null on 401', async () => {
-      vi.mocked(fetch).mockResolvedValue({
-        ok: false,
-        status: 401,
-      } as Response);
-
-      expect(await refreshToken('bad')).toBeNull();
-    });
-
-    it('returns null on 403', async () => {
-      vi.mocked(fetch).mockResolvedValue({
-        ok: false,
-        status: 403,
-      } as Response);
-
-      expect(await refreshToken('wrong-domain')).toBeNull();
-    });
-
-    it('throws on unexpected server error', async () => {
-      vi.mocked(fetch).mockResolvedValue({
-        ok: false,
-        status: 502,
-      } as Response);
-
-      await expect(refreshToken('cred')).rejects.toThrow(
-        '/auth/refresh failed: 502',
-      );
     });
   });
 
@@ -303,7 +245,7 @@ describe('authService', () => {
       expect(result).toBe('serveractor');
     });
 
-    it('returns the actor ID on success without triggering refresh', async () => {
+    it('returns the actor ID on success without ending the session', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
         status: 200,
@@ -317,7 +259,7 @@ describe('authService', () => {
       expect(onSessionExpired).not.toHaveBeenCalled();
     });
 
-    it('returns null (abandon) and triggers refresh on 401', async () => {
+    it('returns null (abandon) and ends the session on 401', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: false,
         status: 401,
@@ -327,12 +269,14 @@ describe('authService', () => {
       const result = await resolveActorId('automerge:abc', true, onSessionExpired);
 
       // null, NOT undefined: callers' `if (id === null) return` must fire so
-      // the document open is abandoned while the refresh races in the background.
+      // the document open is abandoned; onSessionExpired ends the session so
+      // the SPA shows the login screen (server-side renewal already slid a
+      // live session — a 401 here means it is definitively over).
       expect(result).toBeNull();
       expect(onSessionExpired).toHaveBeenCalledTimes(1);
     });
 
-    it('returns null (abandon) and triggers refresh on 403', async () => {
+    it('returns null (abandon) and ends the session on 403', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: false,
         status: 403,
@@ -345,7 +289,7 @@ describe('authService', () => {
       expect(onSessionExpired).toHaveBeenCalledTimes(1);
     });
 
-    it('propagates non-401/403 errors without triggering refresh', async () => {
+    it('propagates non-401/403 errors without ending the session', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: false,
         status: 500,

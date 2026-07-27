@@ -799,9 +799,9 @@ struct AuthActorResponse {
     actor_id: String,
 }
 
-/// Request body for POST /auth/refresh.
+/// Request body for POST /auth/session.
 #[derive(Deserialize)]
-struct RefreshRequest {
+struct SessionRequest {
     credential: String,
 }
 
@@ -982,21 +982,24 @@ async fn auth_logout_everywhere(
     Ok(response)
 }
 
-/// Validate a fresh OIDC JWT and set a new cookie.
+/// Validate a submitted OIDC ID token and mint a fresh session cookie.
 ///
-/// Called by the client after obtaining a new credential from the OIDC provider
-/// (e.g. Google One Tap silent refresh). The new JWT goes through the full
-/// `authenticate()` path (signature, audience, issuer, email allowlist)
-/// before setting the cookie.
+/// `POST /auth/session` is the direct-JSON credential-submission **login**
+/// endpoint: a client posts an OIDC ID token as JSON and, on success, receives
+/// a hub session cookie. It is the counterpart to the redirect/form-post
+/// `/auth/callback`, and is the *only* mint endpoint a non-Google (Generic)
+/// OIDC deployment has — `/auth/callback` is registered only for providers
+/// whose `AuthConfig::uses_form_post_callback()` is true (Google alone).
 ///
-/// This is also the recommended credential submission endpoint for non-Google
-/// OIDC frontends (instead of the Google-specific `/auth/callback`).
+/// The submitted JWT goes through the full `authenticate_claims()` path
+/// (signature, audience, issuer, email allowlist) before a session is minted;
+/// because this is a fresh login, `auth_time = now` and a new `sid` are correct.
 ///
 /// Requires `X-Requested-With: XMLHttpRequest` for CSRF protection.
-async fn auth_refresh(
+async fn auth_session(
     headers: HeaderMap,
     State(ctx): State<SharedContext>,
-    Json(body): Json<RefreshRequest>,
+    Json(body): Json<SessionRequest>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     // Dual-credential 400 wins over CSRF — same precedence as the
     // `Authenticated` extractor. Without this, a request carrying both
@@ -1016,7 +1019,7 @@ async fn auth_refresh(
             .map_err(|s| (s, Json(serde_json::json!({"error": "csrf check failed"}))))?;
     }
 
-    // Validate the NEW Google credential (not the existing cookie — it
+    // Validate the submitted OIDC credential (not the existing cookie — it
     // may be expired), then mint a fresh hub session cookie: this is a
     // new login, so `auth_time = now` and a fresh `sid` are correct.
     let claims = ctx
@@ -1025,7 +1028,7 @@ async fn auth_refresh(
         .map_err(|_| unauthorized())?;
 
     // Bans gate mint too (§3) — otherwise a banned user just
-    // re-logs-in via Google.
+    // re-logs-in via the OIDC provider.
     if ctx.revocations().is_banned(&claims.sub).await {
         tracing::event!(
             target: "quarto_hub::audit",
@@ -1310,7 +1313,7 @@ pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<Shared
         .route("/auth/actor", get(auth_actor))
         .route("/auth/logout", post(auth_logout))
         .route("/auth/logout-everywhere", post(auth_logout_everywhere))
-        .route("/auth/refresh", post(auth_refresh))
+        .route("/auth/session", post(auth_session))
         // WebSocket endpoint for automerge sync at `/ws` (hub-client +
         // q2-preview SPA's canonical path).
         .route("/ws", get(ws_handler))

@@ -8,10 +8,20 @@
  *
  * - 200 → cookie is fine, the outage is elsewhere; strike counter resets.
  * - network error → offline; never any action (offline editing must survive).
- * - 401/403 → first strike triggers silent renewal; a second consecutive
- *   strike on the next cycle calls `onAuthRejected` (evidence-based logout).
- *   The two-strike shape gives renewal a full cycle to land and avoids
- *   depending on IdP callbacks that may never fire (e.g. GIS blocked).
+ * - 401/403 → first strike is a **no-op** (just record it); a second
+ *   consecutive strike on the next cycle calls `onAuthRejected`
+ *   (evidence-based logout).
+ *
+ * Why the no-op first strike: the strike count is client-side UX, not a
+ * security boundary — the server rejects every request the instant a session
+ * ends, and this probe only runs while the WS is *already* disconnected (no
+ * new data flows, no writes persist during the window). A single transient
+ * 401 (multi-instance deploy / key-rotation race) followed by a 200 therefore
+ * must not flap the user to the login screen; two consecutive 401s are
+ * stronger evidence, and this stays within the evidence-based-logout invariant
+ * (still never a network-error logout). Session *renewal* is entirely
+ * server-side (sliding re-issue, bd-ey6jg70f); the One-Tap silent-renewal that
+ * the first strike once triggered was retired in bd-s042qcxj.
  */
 
 import { useEffect, useRef } from 'react';
@@ -23,19 +33,15 @@ export const AUTH_PROBE_INTERVAL_MS = 30_000;
 interface AuthProbeOpts {
   /** Probe only while true (auth enabled + signed in + sync disconnected). */
   enabled: boolean;
-  /** First definitive rejection: ask for silent renewal. */
-  triggerRefresh: () => void;
   /** Second consecutive rejection: the session is over. */
   onAuthRejected: () => void;
 }
 
-export function useAuthProbe({ enabled, triggerRefresh, onAuthRejected }: AuthProbeOpts) {
-  // Keep the latest callbacks in refs so the probe effect can key on
-  // `enabled` alone without re-arming the interval when they change.
-  const triggerRefreshRef = useRef(triggerRefresh);
+export function useAuthProbe({ enabled, onAuthRejected }: AuthProbeOpts) {
+  // Keep the latest callback in a ref so the probe effect can key on
+  // `enabled` alone without re-arming the interval when it changes.
   const onAuthRejectedRef = useRef(onAuthRejected);
   useEffect(() => {
-    triggerRefreshRef.current = triggerRefresh;
     onAuthRejectedRef.current = onAuthRejected;
   });
 
@@ -54,11 +60,11 @@ export function useAuthProbe({ enabled, triggerRefresh, onAuthRejected }: AuthPr
           return;
         }
         strikes += 1;
-        if (strikes === 1) {
-          triggerRefreshRef.current();
-        } else {
+        if (strikes >= 2) {
           onAuthRejectedRef.current();
         }
+        // strike 1 is a no-op: record it and give the next cycle a chance
+        // to confirm (or clear) the rejection before logging out.
       } catch {
         // Network error / unreachable hub — no evidence, no action.
       }
