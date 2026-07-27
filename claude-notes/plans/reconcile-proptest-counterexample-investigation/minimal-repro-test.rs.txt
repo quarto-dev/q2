@@ -1,0 +1,89 @@
+        /// TEMPORARY MINIMAL REPRO (bd-9fwn1504): table caption.long loses a
+        /// block between original and executed; exec's remaining block
+        /// hash-matches, so needs_plan=false drops the caption plan and apply
+        /// resurrects the deleted block from original. DO NOT COMMIT.
+        #[test]
+        fn debug_minimal_caption_repro(_x in 0..1i32) {
+            use quarto_pandoc_types::table::{Table, TableHead, TableFoot};
+            use quarto_pandoc_types::{Caption, Paragraph, Str, Block, Inline};
+            use quarto_source_map::SourceInfo;
+            use hashlink::LinkedHashMap;
+
+            fn para(text: &str) -> Block {
+                Block::Paragraph(Paragraph {
+                    content: vec![Inline::Str(Str {
+                        text: text.to_string(),
+                        source_info: SourceInfo::for_test(),
+                    })],
+                    source_info: SourceInfo::for_test(),
+                })
+            }
+            fn table(caption_long: Vec<Block>) -> Block {
+                Block::Table(Table {
+                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    caption: Caption { short: None, long: Some(caption_long), source_info: SourceInfo::for_test() },
+                    colspec: vec![],
+                    head: TableHead {
+                        attr: (String::new(), vec![], LinkedHashMap::new()),
+                        rows: vec![],
+                        source_info: SourceInfo::for_test(),
+                        attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+                    },
+                    bodies: vec![],
+                    foot: TableFoot {
+                        attr: (String::new(), vec![], LinkedHashMap::new()),
+                        rows: vec![],
+                        source_info: SourceInfo::for_test(),
+                        attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+                    },
+                    source_info: SourceInfo::for_test(),
+                    attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+                })
+            }
+            let before = Pandoc { meta: Default::default(), blocks: vec![table(vec![para("a"), para("b")])] };
+            let after = Pandoc { meta: Default::default(), blocks: vec![table(vec![para("a")])] };
+            let after_clone = after.clone();
+            let plan = compute_reconciliation(&before, &after);
+            let result = apply_reconciliation(before, after, &plan);
+            if let Block::Table(t) = &result.blocks[0] {
+                eprintln!("MINIMAL REPRO: result caption.long len = {:?} (expected 1)",
+                    t.caption.long.as_ref().map(|l| l.len()));
+            }
+            prop_assert!(
+                structural_eq_blocks(&result.blocks, &after_clone.blocks),
+                "minimal caption repro diverged"
+            );
+        }
+
+        /// TEMPORARY INVESTIGATION TWIN (bd-9fwn1504): same generators as
+        /// TEMPORARY INVESTIGATION TWIN (bd-9fwn1504): same generators as
+        /// reconciliation_preserves_structure_full_ast so proptest replays the
+        /// persisted cc seed with identical inputs, but prints the first
+        /// diverging block triple instead of asserting. DO NOT COMMIT.
+        #[test]
+        fn debug_full_ast_divergence(
+            before in gen_full_pandoc(),
+            after in gen_full_pandoc(),
+        ) {
+            use crate::hash::structural_eq_block;
+            let after_clone = after.clone();
+            let before_clone = before.clone();
+            let plan = compute_reconciliation(&before, &after);
+            let result = apply_reconciliation(before, after, &plan);
+            if !structural_eq_blocks(&result.blocks, &after_clone.blocks) {
+                eprintln!("=== DIVERGENCE FOUND ===");
+                eprintln!("result.blocks.len()={} after.blocks.len()={} before.blocks.len()={}",
+                    result.blocks.len(), after_clone.blocks.len(), before_clone.blocks.len());
+                eprintln!("plan.block_alignments: {:?}", plan.block_alignments);
+                for (i, (r, a)) in result.blocks.iter().zip(&after_clone.blocks).enumerate() {
+                    if !structural_eq_block(r, a) {
+                        eprintln!("--- first diverging block index: {i} ---");
+                        eprintln!("BEFORE[{i}]: {:#?}", before_clone.blocks.get(i));
+                        eprintln!("RESULT[{i}]: {:#?}", r);
+                        eprintln!("AFTER [{i}]: {:#?}", a);
+                        break;
+                    }
+                }
+            }
+        }
+    }
