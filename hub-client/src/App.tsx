@@ -92,7 +92,6 @@ function App() {
     auth,
     loading: authLoading,
     logout,
-    triggerRefresh,
     sessionExpired,
     expireSession,
     applyAuth,
@@ -131,7 +130,6 @@ function App() {
   // (preempting this probe's two-strike); the probe governs earlier drops.
   useAuthProbe({
     enabled: AUTH_ENABLED && !!auth && !!project && !isOnline,
-    triggerRefresh,
     onAuthRejected: expireSession,
   });
 
@@ -142,7 +140,7 @@ function App() {
   useSessionKeepAlive({
     enabled: AUTH_ENABLED && !!auth && isOnline,
     onAuthState: applyAuth,
-    triggerRefresh,
+    onAuthRejected: expireSession,
   });
 
   // Project set management (synced project list)
@@ -157,8 +155,8 @@ function App() {
   // `resolveActorIdRequest` for the three-valued contract; callers abandon
   // the open only on `null` (auth failure), proceed on `string`/`undefined`.
   const resolveActorId = useCallback(
-    (indexDocId: string) => resolveActorIdRequest(indexDocId, AUTH_ENABLED, triggerRefresh, localActorId),
-    [triggerRefresh, localActorId],
+    (indexDocId: string) => resolveActorIdRequest(indexDocId, AUTH_ENABLED, expireSession, localActorId),
+    [expireSession, localActorId],
   );
 
   // Capture auth error from redirect query param (once, before URL is cleaned).
