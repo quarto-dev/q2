@@ -53,6 +53,7 @@ interface Props {
   onProjectCreated?: (files: ProjectFile[], title: string, projectType: string, syncServer: string) => void;
   onSignOut?: () => void;
   authEmail?: string;
+  authPicture?: string | null;
   onScreenNameChange?: (name: string) => void;
   onColorChange?: (color: string) => void;
   projectSetDocId?: string | null;
@@ -219,6 +220,7 @@ export default function ProjectsHome({
   onProjectCreated,
   onSignOut,
   authEmail,
+  authPicture,
   onScreenNameChange,
   onColorChange,
   projectSetDocId,
@@ -1554,17 +1556,25 @@ export default function ProjectsHome({
           <div className="qh-menu-anchor ph-avatar-anchor">
             <button
               className="ph-avatar"
-              style={{ backgroundColor: userSettings?.userColor ?? 'var(--posit-blue)' }}
+              style={authPicture ? undefined : { backgroundColor: userSettings?.userColor ?? 'var(--posit-blue)' }}
               onClick={() => setAvatarMenuOpen((v) => !v)}
               title={userSettings?.userName}
             >
-              {initialsFor(userSettings?.userName ?? '')}
+              {authPicture ? (
+                <img src={authPicture} alt="" className="ph-avatar-img" referrerPolicy="no-referrer" />
+              ) : (
+                initialsFor(userSettings?.userName ?? '')
+              )}
             </button>
             {avatarMenuOpen && userSettings && (
               <div className="ph-menu ph-menu-right ph-avatar-menu">
                 <div className="ph-avatar-menu-id">
-                  <span className="ph-avatar big" style={{ backgroundColor: userSettings.userColor }}>
-                    {initialsFor(userSettings.userName)}
+                  <span className="ph-avatar big" style={authPicture ? undefined : { backgroundColor: userSettings.userColor }}>
+                    {authPicture ? (
+                      <img src={authPicture} alt="" className="ph-avatar-img" referrerPolicy="no-referrer" />
+                    ) : (
+                      initialsFor(userSettings.userName)
+                    )}
                   </span>
                   <div className="ph-avatar-menu-who">
                     {editingName ? (
