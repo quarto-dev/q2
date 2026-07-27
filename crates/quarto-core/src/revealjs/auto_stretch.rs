@@ -214,7 +214,32 @@ fn maybe_stretch_section(div: &mut Div, auto_stretch: bool) {
                 };
                 match outcome {
                     StretchOutcome::LeaveWrapped => Plan::LeaveWrapped,
-                    StretchOutcome::Unwrap => Plan::Replace(hoist_figure(f)),
+                    StretchOutcome::Unwrap => Plan::Replace(hoist_figure(f, "")),
+                }
+            }
+
+            // Float-figure wrapper (bd-hcp8m3ve): the crossref renderer emits
+            // `Div(.quarto-figure) > Figure > Div(aria-describedby) [content]`
+            // for HTML-family formats, reveal included. Treat it exactly like
+            // the bare `Figure` case, transferring the *outer* div's crossref
+            // id (that's where it lives in the float shape) onto the hoisted
+            // image so `@fig-id` anchors keep resolving.
+            Block::Div(d) if is_float_figure_div(d) => {
+                let outer_id = d.attr.0.clone();
+                let Some(Block::Figure(f)) = d.content.first_mut() else {
+                    unreachable!("is_float_figure_div guarantees a Figure child");
+                };
+                if count_figure_images(f) != 1 {
+                    Plan::Skip
+                } else {
+                    let outcome = match figure_image_mut(f) {
+                        Some(image) => decide_stretch(image, auto_stretch),
+                        None => StretchOutcome::LeaveWrapped,
+                    };
+                    match outcome {
+                        StretchOutcome::LeaveWrapped => Plan::LeaveWrapped,
+                        StretchOutcome::Unwrap => Plan::Replace(hoist_figure(f, &outer_id)),
+                    }
                 }
             }
 
@@ -232,6 +257,16 @@ fn maybe_stretch_section(div: &mut Div, auto_stretch: bool) {
     }
 }
 
+/// The crossref float wrapper: a `Div` with the `quarto-figure` class whose
+/// sole child is a `Figure` (bd-hcp8m3ve float shape). Layout/column divs
+/// don't match (no `quarto-figure` class), so nested-image opt-outs behave
+/// as before.
+fn is_float_figure_div(d: &Div) -> bool {
+    d.attr.1.iter().any(|c| c == "quarto-figure")
+        && d.content.len() == 1
+        && matches!(d.content[0], Block::Figure(_))
+}
+
 /// Build the hoisted replacement for a stretched captioned `Figure`: a
 /// `Plain[Image]` (the figure's lone image — now carrying `.r-stretch` — with
 /// the figure `id` transferred onto it) followed, when the figure has a
@@ -241,14 +276,18 @@ fn maybe_stretch_section(div: &mut Div, auto_stretch: bool) {
 /// The `<figure>` element itself is discarded — its image becomes a direct
 /// child of the slide `<section>` so reveal's `section > .r-stretch` selector
 /// matches it.
-fn hoist_figure(f: &mut Figure) -> Vec<Block> {
+fn hoist_figure(f: &mut Figure, fallback_id: &str) -> Vec<Block> {
     let mut image = figure_image_mut(f)
         .expect("figure has exactly one image (gated by count_figure_images)")
         .clone();
     // Q1 parity: move the figure id onto the image so an `@fig-id` anchor
-    // still resolves once the `<figure>` wrapper is gone.
+    // still resolves once the `<figure>` wrapper is gone. In the float shape
+    // (bd-hcp8m3ve) the id lives on the outer wrapper div — the caller passes
+    // it as `fallback_id`.
     if !f.attr.0.is_empty() {
         image.attr.0 = f.attr.0.clone();
+    } else if !fallback_id.is_empty() {
+        image.attr.0 = fallback_id.to_string();
     }
     let img_source = image.source_info.clone();
     let mut blocks = vec![Block::Plain(Plain {
@@ -369,14 +408,20 @@ fn count_images(blocks: &[Block]) -> usize {
 
 /// Count `Image` inlines directly inside a figure's `Paragraph`/`Plain` blocks.
 fn count_figure_images(f: &Figure) -> usize {
-    f.content
-        .iter()
-        .map(|b| match b {
-            Block::Paragraph(p) => image_count(&p.content),
-            Block::Plain(p) => image_count(&p.content),
-            _ => 0,
-        })
-        .sum()
+    fn count(blocks: &[Block]) -> usize {
+        blocks
+            .iter()
+            .map(|b| match b {
+                Block::Paragraph(p) => image_count(&p.content),
+                Block::Plain(p) => image_count(&p.content),
+                // The float shape (bd-hcp8m3ve) wraps figure content in an
+                // aria-describedby div — descend through Divs.
+                Block::Div(d) => count(&d.content),
+                _ => 0,
+            })
+            .sum()
+    }
+    count(&f.content)
 }
 
 fn image_count(inlines: &[Inline]) -> usize {
@@ -386,21 +431,57 @@ fn image_count(inlines: &[Inline]) -> usize {
         .count()
 }
 
-/// First `Image` mutable ref inside a figure's `Paragraph`/`Plain` blocks.
+/// First `Image` mutable ref inside a figure's `Paragraph`/`Plain` blocks,
+/// descending through Divs (the float shape's aria wrapper — bd-hcp8m3ve).
 fn figure_image_mut(f: &mut Figure) -> Option<&mut Image> {
-    for b in &mut f.content {
-        let inlines = match b {
-            Block::Paragraph(p) => &mut p.content,
-            Block::Plain(p) => &mut p.content,
-            _ => continue,
-        };
-        for inline in inlines {
-            if let Inline::Image(img) = inline {
-                return Some(img);
+    // Two-phase find: locate the image's block path immutably, then descend
+    // mutably along it (sidesteps the recursive-&mut-return borrowck limit).
+    fn find_path(blocks: &[Block], path: &mut Vec<usize>) -> Option<usize> {
+        for (i, b) in blocks.iter().enumerate() {
+            match b {
+                Block::Paragraph(p) => {
+                    if let Some(j) = p.content.iter().position(|x| matches!(x, Inline::Image(_))) {
+                        path.push(i);
+                        return Some(j);
+                    }
+                }
+                Block::Plain(p) => {
+                    if let Some(j) = p.content.iter().position(|x| matches!(x, Inline::Image(_))) {
+                        path.push(i);
+                        return Some(j);
+                    }
+                }
+                Block::Div(d) => {
+                    path.push(i);
+                    if let Some(j) = find_path(&d.content, path) {
+                        return Some(j);
+                    }
+                    path.pop();
+                }
+                _ => {}
             }
         }
+        None
     }
-    None
+    let mut path = Vec::new();
+    let inline_idx = find_path(&f.content, &mut path)?;
+    let mut blocks: &mut Vec<Block> = &mut f.content;
+    let (last, dirs) = path.split_last().expect("non-empty path");
+    for &i in dirs {
+        let Block::Div(d) = &mut blocks[i] else {
+            return None;
+        };
+        blocks = &mut d.content;
+    }
+    let inlines = match &mut blocks[*last] {
+        Block::Paragraph(p) => &mut p.content,
+        Block::Plain(p) => &mut p.content,
+        _ => return None,
+    };
+    match &mut inlines[inline_idx] {
+        Inline::Image(img) => Some(img),
+        _ => None,
+    }
 }
 
 /// Whether the image already carries explicit `width`/`height` sizing (an attr
