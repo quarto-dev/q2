@@ -3,5 +3,5 @@ project:
 website:
   title: Brand Favicon Control
   site-url: https://example.com
-  favicon: logo.png
+  favicon: favicon.ico
 brand: _brand.yml

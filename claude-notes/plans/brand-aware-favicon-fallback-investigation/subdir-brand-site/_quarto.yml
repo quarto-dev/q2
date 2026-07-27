@@ -1,0 +1,6 @@
+project:
+  type: website
+website:
+  title: Subdirectory Brand
+  site-url: https://example.com
+brand: _brand/_brand.yml

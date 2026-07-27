@@ -488,18 +488,46 @@ Pinned by `explicit_external_url_passes_through` and
 second guard: skipping `normalize_favicon_path` for URLs stops `//host/f.ico`
 from being flattened into the site-rooted `/host/f.ico`.
 
-### Phase 4 — Docs
+### Phase 4 — Docs ✅
 
-- [ ] A line on the fallback in `docs/guides/authoring/brand.qmd`. The broader
-      "does this page describe Q2 or Q1?" question — including stating that Q2
-      needs an explicit `brand:` key — is bd-qnylgu69, not this strand.
+- [x] New "Brand logo as favicon" section (`#brand-favicon`) in
+      `docs/guides/authoring/brand.qmd`: the fallback, `website.favicon`
+      precedence, brand-relative paths, URLs, and the two no-favicon cases
+      (light/dark pair, non-website project).
+- [x] Corrected the logo-preference table row from `website`/`book` to
+      `website`. Q2's fallback gates on `ProjectKind::Website`, and the book
+      project type is explicitly out of the websites-epic MVP — the row
+      described Q1. This one line is in scope because it documents *this*
+      feature; the page-wide "Q1 or Q2?" audit is bd-qnylgu69.
+- [x] Rendered with Q2 (`cargo run --bin q2 -- render docs/guides/authoring/brand.qmd`)
+      and the output inspected: section renders, `#brand-favicon` anchor
+      exists, and the cross-link to `#light-and-dark-logos` resolves. The two
+      `Q-13-4` warnings on that page are pre-existing broken links at lines 977
+      and 1036, unrelated to this change.
 
 ### Phase 5 — Verification
 
-- [ ] E2E through `cargo run --bin q2 -- render` on the committed repro fixture;
-      output inspected and recorded in `repro-output.md`.
-- [ ] `cargo nextest run --workspace` green.
+- [x] E2E through `cargo run --bin q2 -- render` on three fixtures; output
+      inspected and recorded in `repro-output.md`.
+- [x] `cargo nextest run --workspace`: **10577 passed, 0 failed**.
 - [ ] Full `cargo xtask verify` (**not** `--skip-hub-build`) — see the WASM risk.
+
+**E2E results** (full transcript in
+`brand-aware-favicon-fallback-investigation/repro-output.md`):
+
+| Fixture | Result |
+| --- | --- |
+| `repro-site/` (brand at root) | `<link rel="icon" href="logo.png" type="image/png">`; `_site/logo.png` copied byte-identically |
+| `subdir-brand-site/` (`brand: _brand/_brand.yml`) | root page `href="_brand/logo.png"`, nested page `href="../_brand/logo.png"`, file at `_site/_brand/logo.png` |
+| `control-site/` (explicit `favicon.ico`) | `href="favicon.ico"`; `logo.png` neither linked nor copied |
+
+The subdirectory fixture is checked by resolving the nested page's href against
+the filesystem (`ls _site/docs/../_brand/logo.png`) — it lands on the copied
+file, so the link a browser follows is real, not merely well-formed.
+
+`control-site/` originally used `favicon: logo.png`, which after this change
+proved nothing — the explicit key and the fallback would both have produced
+`logo.png`. It now names a distinct file so precedence is observable.
 
 ### Resolved implementation notes
 
