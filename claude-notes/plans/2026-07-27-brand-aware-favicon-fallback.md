@@ -357,13 +357,48 @@ line of code. Fixing it in the shared reader fixes both; that is the natural
 place, not a widening of scope. Test 45 pins the brand half; add an
 explicit-`website.favicon` external case in Phase 3.
 
-### Phase 1 — Resolved brand on `ProjectContext`
+### Phase 1 — Resolved brand on the project config ✅
 
-- [ ] Add `quarto-brand` as a dependency of `quarto-core`.
-- [ ] Add `Option<Brand>` + `brand_dir` to `ProjectContext`, resolved once in
-      `ProjectContext::discover`.
-- [ ] Decide and document what a brand-resolution failure does here (see
-      open implementation note 1).
+- [x] Add `quarto-brand` as a dependency of `quarto-core`.
+- [x] `ResolvedBrand { brand, dir }` in **`quarto-brand`**
+      (`crates/quarto-brand/src/resolved.rs`).
+- [x] `quarto_sass::resolve_brand(config, runtime, base_dir)` — one entry point
+      for "what brand does this config name?", reusing the existing
+      `extract_brand_ref` rules; `resolve_brand_layers` refactored onto it.
+- [x] `ProjectConfig::brand: Option<ResolvedBrand>`, resolved in `parse_config`.
+- [x] Failure is silent here; the theme stage keeps the diagnostic (note 1).
+- [x] Unit tests (`project::tests::project_brand`, 5/5 pass): no key → `None`;
+      root brand → `dir` = project root; subdirectory brand → `dir` =
+      the subdirectory; inline block → `dir` = `None`; unresolvable brand →
+      `discover` succeeds with `None`.
+
+**Two design choices worth recording.**
+
+*`ProjectConfig`, not `ProjectContext`.* `ProjectContext` has **192**
+struct-literal construction sites across the workspace; `ProjectConfig` has 9,
+all but one already using `..Default::default()`. So the field costs one real
+edit instead of 192 mechanical ones. It is also the better semantic home — the
+resolved brand *is* parsed project configuration, sitting next to `metadata`
+and `config_path`, and `parse_config` is the single place a `_quarto.yml`
+becomes a `ProjectConfig`, so "`config.brand` agrees with `config.metadata`'s
+`brand:` key" holds by construction.
+
+*`ResolvedBrand` lives in `quarto-brand`, not `quarto-sass`.* "A brand plus
+where it came from" is a brand concept; `quarto-sass` merely happens to be
+where brand resolution currently lives. Putting it there also gives Phase 2's
+rebasing helper its natural home — a method on `ResolvedBrand`, which already
+knows its own `dir`. That is what makes "no directory fields on `Brand`" work
+in practice: the directory lives on the *resolution result*.
+
+**Not covered — `q2 preview` / hub-client.** The fallback follows wherever
+`parse_config` runs. `create_wasm_project_context`
+(`crates/wasm-quarto-hub-client/src/lib.rs:643`) builds a single-file
+pseudo-project with `ProjectConfig::default()`, so it has no project brand and
+will not get the fallback. Single-file renders having no *project* brand is
+correct, but whether the hub-client's **project** render path reaches
+`parse_config` is unverified. Related: bd-wjg4h (browser-verify brand under
+preview) and bd-k5rxujiy (preview asset walker misses meta-driven images).
+Flagged in Phase 5 rather than assumed.
 
 ### Phase 2 — Rebasing helper in `quarto-brand`
 
@@ -393,17 +428,31 @@ explicit-`website.favicon` external case in Phase 3.
 - [ ] `cargo nextest run --workspace` green.
 - [ ] Full `cargo xtask verify` (**not** `--skip-hub-build`) — see the WASM risk.
 
-### Open implementation notes
+### Resolved implementation notes
 
-1. **Brand-resolution failure in `ProjectContext::discover`.** Today a bad
-   `brand:` is a hard error raised from the *theme* path
-   (`CompileThemeCssStage`, with a `Q-14-*` diagnostic). Resolving brand a
-   second time, earlier, must not turn that into a different or duplicated
-   error. Options: make `discover` tolerant (store `None`, let the theme path
-   keep owning the diagnostic), or hoist the diagnostic to `discover` and have
-   the theme path consume the already-resolved value. Prefer the second if it
-   is not disruptive — resolving the same file twice is the smell — but the
-   first is the safe default. Resolve before writing Phase 1 code.
+1. **Brand-resolution failure in `ProjectContext::discover` → resolve
+   tolerantly; the theme path keeps owning the diagnostic.**
+
+   The worry was that resolving brand twice is a smell. On inspection the two
+   resolutions answer *different questions*, so it isn't duplication:
+
+   - `CompileThemeCssStage` resolves from `doc.ast.meta` — the **merged**
+     project + document metadata — because a document may set its own `brand:`
+     in frontmatter and theme it individually
+     (`compile_theme_css.rs:483-486`).
+   - `ProjectContext` resolves from `project.config.metadata` — **project-level
+     only**. That is precisely the right scope for a favicon, which is a
+     site-wide artifact. Q1 agrees: it calls `project.resolveBrand()`, not the
+     per-file variant (`website.ts:190`).
+
+   Given they are different queries, `discover` stores `None` on failure rather
+   than raising. The theme path already hard-errors on a missing or malformed
+   `_brand.yml` with a source-located diagnostic
+   (`compile_theme_css.rs:487-490`); duplicating that from `discover` would
+   produce two errors for one mistake, and the earlier one would have the worse
+   message. A project whose brand cannot be resolved therefore fails in the
+   theme stage as it does today, and simply gets no favicon fallback along the
+   way — which is moot, because the render fails anyway.
 
 ## Risks / tradeoffs
 

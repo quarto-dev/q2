@@ -3642,6 +3642,7 @@ dependencies = [
  "pollster",
  "quarto-analysis",
  "quarto-ast-reconcile",
+ "quarto-brand",
  "quarto-config",
  "quarto-doctemplate",
  "quarto-error-catalog",

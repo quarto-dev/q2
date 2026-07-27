@@ -41,6 +41,7 @@ pub mod website_post_render;
 
 use std::path::{Path, PathBuf};
 
+use quarto_brand::ResolvedBrand;
 use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::config_value::ConfigValueKind;
 use quarto_system_runtime::SystemRuntime;
@@ -349,6 +350,30 @@ pub struct ProjectConfig {
     /// path to load the YAML content into a [`SourceContext`] so
     /// Ariadne can render a source snippet for the offending scalar.
     pub config_path: Option<PathBuf>,
+
+    /// The **project-level** brand named by `_quarto.yml`'s `brand:`
+    /// key, resolved once at config-parse time (`bd-97yc`).
+    ///
+    /// `None` when no `brand:` key is present — Q2 deliberately has
+    /// no `_brand.yml` auto-discovery, unlike Q1 — and also when the
+    /// brand could not be read or parsed. Failure is silent *here* on
+    /// purpose: `CompileThemeCssStage` resolves brand again from the
+    /// merged document metadata and raises the user-facing
+    /// diagnostic, with a source location this early parse doesn't
+    /// have. Raising from both sites would report one mistake twice.
+    ///
+    /// The double resolution is not redundant — the two answer
+    /// different questions. The theme stage asks "what brand applies
+    /// to *this document*", which a document can override in its own
+    /// frontmatter; this field is the **site-level** brand, which is
+    /// the right scope for site-wide artifacts like the favicon.
+    /// Quarto 1 draws the same distinction (`project.resolveBrand()`
+    /// vs. the per-file variant in `project-shared.ts`).
+    ///
+    /// Consumers: the brand-aware favicon fallback
+    /// ([`crate::project::website_config::website_favicon`]); the
+    /// navbar brand image is expected to join it (bd-hp3tx).
+    pub brand: Option<ResolvedBrand>,
 }
 
 impl ProjectConfig {
@@ -631,6 +656,19 @@ impl ProjectContext {
             &["project", "resources"],
         );
 
+        // Resolve the project-level `brand:` once, here, so every
+        // site-wide consumer reads the same answer. Relative brand
+        // paths are written against the directory holding this
+        // `_quarto.yml`, which is the project root.
+        //
+        // Errors are swallowed deliberately — see the `brand` field's
+        // docs on `ProjectConfig`. `CompileThemeCssStage` re-resolves
+        // from merged metadata and owns the user-facing diagnostic.
+        let project_dir = path.parent().unwrap_or(Path::new("."));
+        let brand = quarto_sass::resolve_brand(&metadata, runtime, project_dir)
+            .ok()
+            .flatten();
+
         Ok(ProjectConfig {
             project_kind,
             output_dir,
@@ -638,6 +676,7 @@ impl ProjectContext {
             resources,
             metadata: Some(metadata),
             config_path: Some(path.to_path_buf()),
+            brand,
         })
     }
 
@@ -1514,6 +1553,121 @@ mod tests {
                 Some("../../shared/styles.css"),
                 "Nested path should be adjusted"
             );
+        }
+    }
+
+    /// Project-level brand resolution at config-parse time (bd-97yc).
+    ///
+    /// These pin `ProjectConfig::brand` — the site-level brand that
+    /// site-wide consumers (favicon fallback today, navbar logo in
+    /// bd-hp3tx) read. They are deliberately about *resolution*, not
+    /// about any particular consumer.
+    mod project_brand {
+        use super::*;
+        use quarto_system_runtime::NativeRuntime;
+        use std::fs;
+        use tempfile::TempDir;
+
+        fn discover(dir: &Path) -> ProjectContext {
+            ProjectContext::discover(dir, &NativeRuntime::new()).expect("discover")
+        }
+
+        #[test]
+        fn no_brand_key_resolves_to_none() {
+            let temp = TempDir::new().unwrap();
+            fs::write(
+                temp.path().join("_quarto.yml"),
+                "project:\n  type: website\n",
+            )
+            .unwrap();
+            // Present on disk but unreferenced: Q2 has no auto-discovery.
+            fs::write(temp.path().join("_brand.yml"), "logo:\n  small: logo.png\n").unwrap();
+
+            assert!(
+                discover(temp.path()).config.brand.is_none(),
+                "an unreferenced _brand.yml must not be picked up"
+            );
+        }
+
+        #[test]
+        fn brand_path_resolves_with_project_root_as_dir() {
+            let temp = TempDir::new().unwrap();
+            let root = temp.path().canonicalize().unwrap();
+            fs::write(
+                root.join("_quarto.yml"),
+                "project:\n  type: website\nbrand: _brand.yml\n",
+            )
+            .unwrap();
+            fs::write(root.join("_brand.yml"), "logo:\n  small: logo.png\n").unwrap();
+
+            let project = discover(&root);
+            let resolved = project.config.brand.expect("brand should resolve");
+            assert_eq!(resolved.brand.favicon(), Some("logo.png"));
+            assert_eq!(
+                resolved.dir.as_deref(),
+                Some(root.as_path()),
+                "a root _brand.yml's dir is the project root"
+            );
+        }
+
+        #[test]
+        fn brand_in_subdirectory_records_that_subdirectory() {
+            // The case that distinguishes a correct `dir` from a
+            // hardcoded project root.
+            let temp = TempDir::new().unwrap();
+            let root = temp.path().canonicalize().unwrap();
+            fs::write(
+                root.join("_quarto.yml"),
+                "project:\n  type: website\nbrand: _brand/_brand.yml\n",
+            )
+            .unwrap();
+            fs::create_dir(root.join("_brand")).unwrap();
+            fs::write(root.join("_brand/_brand.yml"), "logo:\n  small: logo.png\n").unwrap();
+
+            let project = discover(&root);
+            let resolved = project.config.brand.expect("brand should resolve");
+            // The brand itself still reports the raw, brand-relative path.
+            assert_eq!(resolved.brand.favicon(), Some("logo.png"));
+            assert_eq!(
+                resolved.dir.as_deref(),
+                Some(root.join("_brand").as_path()),
+                "dir must be the brand file's own directory, not the project root"
+            );
+        }
+
+        #[test]
+        fn inline_brand_block_resolves_with_no_dir() {
+            let temp = TempDir::new().unwrap();
+            fs::write(
+                temp.path().join("_quarto.yml"),
+                "project:\n  type: website\nbrand:\n  logo:\n    small: logo.png\n",
+            )
+            .unwrap();
+
+            let project = discover(temp.path());
+            let resolved = project.config.brand.expect("inline brand should resolve");
+            assert_eq!(resolved.brand.favicon(), Some("logo.png"));
+            assert!(
+                resolved.dir.is_none(),
+                "an inline block has no file, so no directory of its own"
+            );
+        }
+
+        #[test]
+        fn unresolvable_brand_is_silent_here() {
+            // The theme stage owns this diagnostic (it has a source
+            // location); reporting from both sites would show one
+            // mistake twice. `discover` must not fail.
+            let temp = TempDir::new().unwrap();
+            fs::write(
+                temp.path().join("_quarto.yml"),
+                "project:\n  type: website\nbrand: does-not-exist.yml\n",
+            )
+            .unwrap();
+
+            let project = ProjectContext::discover(temp.path(), &NativeRuntime::new())
+                .expect("discover must not fail on an unresolvable brand");
+            assert!(project.config.brand.is_none());
         }
     }
 }

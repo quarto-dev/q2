@@ -28,7 +28,7 @@
 
 use std::path::{Path, PathBuf};
 
-use quarto_brand::{Brand, BrandRef};
+use quarto_brand::{Brand, BrandRef, ResolvedBrand};
 use quarto_pandoc_types::ConfigValue;
 use quarto_system_runtime::SystemRuntime;
 
@@ -310,6 +310,44 @@ impl ThemeConfig {
     }
 }
 
+/// Resolve the `brand:` key of a config into a typed [`Brand`] plus the
+/// directory it was read from.
+///
+/// This is the single entry point for "what brand does this config
+/// name?", shared by every brand consumer so the reference-extraction
+/// rules (path form, inline block, light/dark pair) are stated once.
+/// Returns `Ok(None)` when no brand is configured.
+///
+/// `base_dir` resolves a relative `brand:` path — typically the project
+/// root.
+///
+/// Consumers differ in *which* config they ask about, and the difference
+/// is meaningful: the theme path passes merged document metadata (a
+/// document may brand itself in its frontmatter), while site-level
+/// consumers such as the favicon fallback pass project metadata only.
+pub fn resolve_brand(
+    config: &ConfigValue,
+    runtime: &dyn SystemRuntime,
+    base_dir: &Path,
+) -> Result<Option<ResolvedBrand>, SassError> {
+    let Some(brand_ref) = extract_brand_ref(config.get("brand"))? else {
+        return Ok(None);
+    };
+    // Reuse ThemeConfig's brand resolution (path/inline → typed Brand).
+    let resolved = ThemeConfig {
+        themes: Vec::new(),
+        minified: true,
+        suppress_bootstrap: false,
+        title_block_layer: true,
+        brand_ref: Some(brand_ref),
+    }
+    .resolve(runtime, base_dir)?;
+
+    Ok(resolved
+        .brand
+        .map(|brand| ResolvedBrand::new(brand, resolved.brand_dir)))
+}
+
 /// Resolve a `_brand.yml` (from the `brand:` key) into SCSS layers, independent
 /// of the Bootstrap `theme:` parsing.
 ///
@@ -330,21 +368,8 @@ pub fn resolve_brand_layers(
     base_dir: &Path,
     font_path_prefix: &Path,
 ) -> Result<Vec<crate::SassLayer>, SassError> {
-    let Some(brand_ref) = extract_brand_ref(config.get("brand"))? else {
-        return Ok(Vec::new());
-    };
-    // Reuse ThemeConfig's brand resolution (path/inline → typed Brand).
-    let resolved = ThemeConfig {
-        themes: Vec::new(),
-        minified: true,
-        suppress_bootstrap: false,
-        title_block_layer: true,
-        brand_ref: Some(brand_ref),
-    }
-    .resolve(runtime, base_dir)?;
-
-    match resolved.brand {
-        Some(brand) => crate::brand_layer::brand_to_layers(&brand, font_path_prefix),
+    match resolve_brand(config, runtime, base_dir)? {
+        Some(resolved) => crate::brand_layer::brand_to_layers(&resolved.brand, font_path_prefix),
         None => Ok(Vec::new()),
     }
 }
