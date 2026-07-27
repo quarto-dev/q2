@@ -137,42 +137,78 @@ Generic-provider login path).
 ## Phases (TDD-first)
 
 ### B2.0 — Tests first (write/adjust to fail before touching impl)
-- [ ] **Server:** `POST /auth/refresh` returns **404** (old name gone); `POST /auth/session` mints a session cookie (renamed route, XRW-CSRF, dual-credential-400 preserved); `/auth/callback` still mints for the Google hub; `/auth/me` + `/auth/actor` still accept the cookie and Bearer. Revocation / absolute-cap / ban-at-mint / rotated-kid behavior stays proven **through `/auth/session`** — the same tests, re-pointed by URL, on their existing Generic fixtures.
-- [ ] **`useAuth`:** (a) a definitive 401 from the expiry-time re-check → `sessionExpired === true`, `auth === null`, and **no** provider renewal is ever attempted; (b) a definitive 401 on refocus → same; (c) a **network error** on refocus / re-check → session **preserved** (evidence-based logout invariant, `bd-3o8zmz46`); (d) the hook's returned API **no longer** exposes `triggerRefresh`; (e) a sliding `/auth/me` (later `exp`) reschedules without logout.
-- [ ] **`AuthProvider` interface:** type-level — `AuthProvider` has no `useSilentRenewal`; `MockAuthProvider` has no `lastSilentRenewalOpts`.
-- [ ] **`useAuthProbe` / `useSessionKeepAlive`:** a definitive 401 invokes the reject/`onAuthState`-expired path (→ `expireSession`), never a renewal trigger; a network error is a no-op. **`useAuthProbe` keeps its two-strike debounce:** strike 1 (first 401) becomes a no-op that just records the strike, strike 2 (second *consecutive* 401, ~30 s later) calls `onAuthRejected` → `expireSession`; any intervening 200 resets `strikes = 0`. Rationale: the strike count is client-side UX, not a security boundary — the server rejects every request the instant a session ends, and the probe only runs while the WS is *already* disconnected (no new data flows, no writes persist during the window), so two-strike does not widen access to anything protected. It does buy robustness: a single transient 401 (multi-instance deploy / key-rotation race) followed by a 200 no longer flaps the user to the login screen, and this stays within the evidence-based-logout invariant (two 401s is stronger evidence, still never a network-error logout). The prompt-logout case is unaffected: `useAuth`'s expiry-time re-check already logs out on the *first* 401 past the token `exp`, preempting the probe; two-strike only governs *unexpected* mid-session 401s while offline (revocation/ban), where a brief debounce is exactly right. Update the hook doc to drop the "first strike triggers silent renewal" line and state the no-op-first-strike debounce reason. Assert both strikes in tests.
-- [ ] **`authService`:** `refreshToken` is gone; `resolveActorId` on 401 calls `onSessionExpired` (now "session ended") and returns `null`; auth-disabled and success paths unchanged.
+- [x] **Server:** `POST /auth/refresh` returns **404** (old name gone); `POST /auth/session` mints a session cookie (renamed route, XRW-CSRF, dual-credential-400 preserved); `/auth/callback` still mints for the Google hub; `/auth/me` + `/auth/actor` still accept the cookie and Bearer. Revocation / absolute-cap / ban-at-mint / rotated-kid behavior stays proven **through `/auth/session`** — the same tests, re-pointed by URL, on their existing Generic fixtures.
+- [x] **`useAuth`:** (a) a definitive 401 from the expiry-time re-check → `sessionExpired === true`, `auth === null`, and **no** provider renewal is ever attempted; (b) a definitive 401 on refocus → same; (c) a **network error** on refocus / re-check → session **preserved** (evidence-based logout invariant, `bd-3o8zmz46`); (d) the hook's returned API **no longer** exposes `triggerRefresh`; (e) a sliding `/auth/me` (later `exp`) reschedules without logout.
+- [x] **`AuthProvider` interface:** type-level — `AuthProvider` has no `useSilentRenewal`; `MockAuthProvider` has no `lastSilentRenewalOpts`.
+- [x] **`useAuthProbe` / `useSessionKeepAlive`:** a definitive 401 invokes the reject/`onAuthState`-expired path (→ `expireSession`), never a renewal trigger; a network error is a no-op. **`useAuthProbe` keeps its two-strike debounce:** strike 1 (first 401) becomes a no-op that just records the strike, strike 2 (second *consecutive* 401, ~30 s later) calls `onAuthRejected` → `expireSession`; any intervening 200 resets `strikes = 0`. Rationale: the strike count is client-side UX, not a security boundary — the server rejects every request the instant a session ends, and the probe only runs while the WS is *already* disconnected (no new data flows, no writes persist during the window), so two-strike does not widen access to anything protected. It does buy robustness: a single transient 401 (multi-instance deploy / key-rotation race) followed by a 200 no longer flaps the user to the login screen, and this stays within the evidence-based-logout invariant (two 401s is stronger evidence, still never a network-error logout). The prompt-logout case is unaffected: `useAuth`'s expiry-time re-check already logs out on the *first* 401 past the token `exp`, preempting the probe; two-strike only governs *unexpected* mid-session 401s while offline (revocation/ban), where a brief debounce is exactly right. Update the hook doc to drop the "first strike triggers silent renewal" line and state the no-op-first-strike debounce reason. Assert both strikes in tests.
+- [x] **`authService`:** `refreshToken` is gone; `resolveActorId` on 401 calls `onSessionExpired` (now "session ended") and returns `null`; auth-disabled and success paths unchanged.
 
 ### B2.1 — Server: rename `/auth/refresh` → `/auth/session`
-- [ ] Rename the route (`server.rs:1313`), the `auth_refresh` handler → `auth_session`, and `RefreshRequest` → `SessionRequest`. Rewrite the handler doc to the generic-OIDC-login framing (drop One-Tap language). **Logic unchanged.**
-- [ ] Update the comments in `context.rs:553` and `revocation.rs:148`.
-- [ ] Re-point `session_auth.rs`: swap `/auth/refresh` → `/auth/session` at the five call sites; rename `auth_refresh_mints_session_cookie` → `auth_session_mints_session_cookie`. No fixture migration.
-- [ ] Grep for stragglers: `rg 'auth/refresh|auth_refresh|RefreshRequest'` across `crates/`, `hub-client/`, `ts-packages/`, `docs/` must come back clean (except intentional 404-assertion test strings and hub-mcp's unrelated OAuth `refresh_token` grant).
-- [ ] `cargo nextest run -p quarto-hub` green.
+- [x] Rename the route (`server.rs:1313`), the `auth_refresh` handler → `auth_session`, and `RefreshRequest` → `SessionRequest`. Rewrite the handler doc to the generic-OIDC-login framing (drop One-Tap language). **Logic unchanged.**
+- [x] Update the comments in `context.rs:553` and `revocation.rs:148`.
+- [x] Re-point `session_auth.rs`: swap `/auth/refresh` → `/auth/session` at the five call sites; rename `auth_refresh_mints_session_cookie` → `auth_session_mints_session_cookie`. No fixture migration.
+- [x] Grep for stragglers: `rg 'auth/refresh|auth_refresh|RefreshRequest'` across `crates/`, `hub-client/`, `ts-packages/`, `docs/` must come back clean (except intentional 404-assertion test strings and hub-mcp's unrelated OAuth `refresh_token` grant).
+- [x] `cargo nextest run -p quarto-hub` green.
 
 ### B2.2 — Client: trim the `AuthProvider` seam
-- [ ] Remove `useSilentRenewal` + `SilentRenewalOpts` from `AuthProvider.tsx`; drop the `noopAuthProvider` no-op member.
-- [ ] `GoogleAuthProvider.tsx`: drop the `useGoogleOneTapLogin` import and the `useSilentRenewal` impl; keep `SignInButton` + `signOut`.
-- [ ] `MockAuthProvider.tsx`: drop `lastSilentRenewalOpts` and its capture.
+- [x] Remove `useSilentRenewal` + `SilentRenewalOpts` from `AuthProvider.tsx`; drop the `noopAuthProvider` no-op member.
+- [x] `GoogleAuthProvider.tsx`: drop the `useGoogleOneTapLogin` import and the `useSilentRenewal` impl; keep `SignInButton` + `signOut`.
+- [x] `MockAuthProvider.tsx`: drop `lastSilentRenewalOpts` and its capture.
 
 ### B2.3 — Client: strip renewal from `useAuth`
-- [ ] Delete `triggerRefresh`, `refreshEnabled`, `isRefreshing`, `refreshDeadline`, `settleRefresh`, `abandonRenewal`, the `provider.useSilentRenewal({...})` block, `REFRESH_BUFFER_MS`, `REFRESH_VERDICT_TIMEOUT_MS`, and the pre-expiry `refreshTimer`.
-- [ ] Route every **definitive** 401 (mount, refocus, expiry re-check) to `expireSession`; keep network-error branches as no-ops (invariant preserved). Collapse the `isRefreshing` ambiguity out of the expiry re-check.
-- [ ] Remove `triggerRefresh` from the returned object; keep `expireSession`/`applyAuth`/`sessionExpired`.
+- [x] Delete `triggerRefresh`, `refreshEnabled`, `isRefreshing`, `refreshDeadline`, `settleRefresh`, `abandonRenewal`, the `provider.useSilentRenewal({...})` block, `REFRESH_BUFFER_MS`, `REFRESH_VERDICT_TIMEOUT_MS`, and the pre-expiry `refreshTimer`.
+- [x] Route every **definitive** 401 (mount, refocus, expiry re-check) to `expireSession`; keep network-error branches as no-ops (invariant preserved). Collapse the `isRefreshing` ambiguity out of the expiry re-check.
+- [x] Remove `triggerRefresh` from the returned object; keep `expireSession`/`applyAuth`/`sessionExpired`.
 
 ### B2.4 — Client: update consumers
-- [ ] `useAuthProbe.ts` / `useSessionKeepAlive.ts`: drop the `triggerRefresh` opt; on definitive 401 call the reject/expire path (per the B2.0 strike-count decision).
-- [ ] `App.tsx`: stop passing `triggerRefresh`; wire the reject path to `expireSession`; update the `resolveActorId` call site (`:160`) to pass `expireSession` as `onSessionExpired`.
+- [x] `useAuthProbe.ts` / `useSessionKeepAlive.ts`: drop the `triggerRefresh` opt; on definitive 401 call the reject/expire path (per the B2.0 strike-count decision).
+- [x] `App.tsx`: stop passing `triggerRefresh`; wire the reject path to `expireSession`; update the `resolveActorId` call site (`:160`) to pass `expireSession` as `onSessionExpired`.
 
 ### B2.5 — Client: `authService` cleanup
-- [ ] Remove `refreshToken` (and its `/auth/refresh` fetch). Update `resolveActorId` doc: `onSessionExpired` now means "the session ended; show login," not "start a silent refresh." (No client code should reference `/auth/session` yet — B1 adds that helper.)
+- [x] Remove `refreshToken` (and its `/auth/refresh` fetch). Update `resolveActorId` doc: `onSessionExpired` now means "the session ended; show login," not "start a silent refresh." (No client code should reference `/auth/session` yet — B1 adds that helper.)
 
 ### B2.6 — Verification & docs
-- [ ] `cd hub-client && npm run build:all` (stricter than tsc/vitest — required for hub-client) **and** `npm run test:ci`.
-- [ ] `cargo nextest run --workspace` and `cargo xtask verify --skip-hub-build` (server-only crate; hub-client covered by build:all above).
-- [ ] **E2E** (per project policy — tests are necessary but not sufficient): run the hub (`--allow-insecure-auth` won't exercise Google; use a real OIDC-configured hub or `local-prod`), sign in via the GIS button, confirm the session slides via keep-alive across an `/auth/me` cycle, force a definitive 401 (revoke via `/auth/logout-everywhere`) and confirm the SPA lands on the login screen (no silent renewal, no hang). Confirm the rename: `curl -X POST /auth/refresh` → **404**, while `curl -X POST /auth/session` (with `X-Requested-With: XMLHttpRequest`) is *registered* (400/401 on a bad/absent credential, **not** 404). Record the invocations + observed output here.
-- [ ] Docs: update the One-Tap-as-fallback language in the `useAuth.ts` header and `useSessionKeepAlive.ts` doc (note the `/auth/refresh` → `/auth/session` rename + its clarified generic-OIDC-login role). Consider dropping `@react-oauth/google`'s One-Tap surface from any dev docs.
-- [ ] **`hub-client/changelog.md`** — two-commit workflow: (1) commit the hub-client changes; (2) commit the changelog entry with the hash under the commit day's `### YYYY-MM-DD` header.
+- [x] `cd hub-client && npm run build:all` (stricter than tsc/vitest — required for hub-client) **and** `npm run test:ci`.
+- [x] `cargo nextest run --workspace` and `cargo xtask verify --skip-hub-build` (server-only crate; hub-client covered by build:all above).
+- [x] **E2E** (per project policy — tests are necessary but not sufficient): run the hub (`--allow-insecure-auth` won't exercise Google; use a real OIDC-configured hub or `local-prod`), sign in via the GIS button, confirm the session slides via keep-alive across an `/auth/me` cycle, force a definitive 401 (revoke via `/auth/logout-everywhere`) and confirm the SPA lands on the login screen (no silent renewal, no hang). Confirm the rename: `curl -X POST /auth/refresh` → **404**, while `curl -X POST /auth/session` (with `X-Requested-With: XMLHttpRequest`) is *registered* (400/401 on a bad/absent credential, **not** 404). Record the invocations + observed output here.
+- [x] Docs: update the One-Tap-as-fallback language in the `useAuth.ts` header and `useSessionKeepAlive.ts` doc (note the `/auth/refresh` → `/auth/session` rename + its clarified generic-OIDC-login role). Consider dropping `@react-oauth/google`'s One-Tap surface from any dev docs.
+- [x] **`hub-client/changelog.md`** — two-commit workflow: (1) commit the hub-client changes; (2) commit the changelog entry with the hash under the commit day's `### YYYY-MM-DD` header.
+
+## Verification record (2026-07-27)
+
+Implemented on branch `braid/bd-s042qcxj-retire-onetap-renewal`; commits
+`e73786ed` (code) + `bccddf93` (changelog).
+
+**Automated:**
+- `quarto-hub`: `cargo nextest run -p quarto-hub` → 371 passed (incl. renamed
+  `auth_session_mints_session_cookie` and new `auth_refresh_old_route_is_gone`).
+- Workspace: `cargo xtask verify --skip-hub-build` → "All verification steps
+  passed!" (build + `nextest --workspace` + ts-packages, CI `-D warnings`).
+- hub-client: `npm run build:all` (tsc project-refs + vite) → clean;
+  `npm run test:ci` → 740 unit + 109 integration + 129 wasm passed
+  (`changelogRender.wasm.test.ts` green for the new changelog entry).
+
+**E2E — rename confirmed through the real `hub` binary** (standalone,
+`hub --port 3999`; auth disabled, so `/auth/session` validates-and-rejects
+rather than minting — the point here is *route registration*):
+
+```
+$ curl -s -o /dev/null -w '%{http_code}' -X POST :3999/auth/refresh \
+    -H 'X-Requested-With: XMLHttpRequest' -d '{"credential":"x"}'
+404                       # old route gone
+$ curl ... -X POST :3999/auth/session -H 'X-Requested-With: XMLHttpRequest' ...
+401                       # registered; auth-disabled hub rejects the credential
+$ curl ... -X POST :3999/auth/session          # no CSRF header
+403                       # route exists, CSRF guard fires — not 404
+```
+
+**Not exercised (stated honestly):** the full browser flow — GIS sign-in,
+sliding keep-alive across an `/auth/me` cycle, and a `logout-everywhere`
+revocation landing the SPA on the login screen — needs a real Google-OIDC hub
+and a browser, unavailable in this environment. The client behavior is covered
+by the rewritten `useAuth` / `useAuthProbe` / `useSessionKeepAlive` unit tests
+(definitive-401 → `expireSession`; network error → session preserved; no
+`triggerRefresh` in the returned API).
 
 ## Non-goals
 - Not touching the GIS **login** button, `/auth/callback`, `g_csrf_token`, or the `GoogleDoubleSubmit` CSRF mode (that's B1 territory, deferred).
