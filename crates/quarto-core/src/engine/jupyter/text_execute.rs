@@ -11,6 +11,8 @@
 //! It parses QMD input, executes code blocks via the Jupyter daemon, and returns
 //! markdown with outputs inserted.
 
+use std::path::{Path, PathBuf};
+
 use regex::Regex;
 
 use quarto_pandoc_types::config_value::{ConfigValue, InterpretationContext};
@@ -176,6 +178,9 @@ async fn execute_blocks_inner(
     // Build output by processing blocks in order
     let mut output = String::new();
     let mut last_end = 0;
+    // Figure emission (bd-5t6wvu7m): image outputs are written under
+    // `<stem>_files/figure-html/` next to the source document.
+    let mut fig = FigureWriter::new(&ctx.source_path);
 
     for block in blocks {
         // Append content before this block
@@ -236,7 +241,13 @@ async fn execute_blocks_inner(
 
         // Emit the whole cell — echoed (option-stripped) source plus
         // outputs — in the Quarto-canonical `::: {.cell}` shape.
-        output.push_str(&render_cell(&block.language, &cell.code, &exec_result));
+        fig.begin_cell();
+        output.push_str(&render_cell(
+            &block.language,
+            &cell.code,
+            &exec_result,
+            &mut fig,
+        ));
 
         last_end = block.end;
     }
@@ -244,7 +255,14 @@ async fn execute_blocks_inner(
     // Append any remaining content after the last block
     output.push_str(&input[last_end..]);
 
-    Ok(ExecuteResult::new(output))
+    // Report the `<stem>_files` dir when figures were written —
+    // dir-level, mirroring knitr. `q2 render` copies it to the output
+    // dir (bd-o8pr) and the preview capture embeds it (bd-qbhp2cvv).
+    let mut result = ExecuteResult::new(output);
+    if fig.wrote_any {
+        result = result.with_supporting_files(vec![fig.files_dir()]);
+    }
+    Ok(result)
 }
 
 /// The `execute` scope of the document's (already merged) metadata,
@@ -384,11 +402,16 @@ fn ticks_for_code(text: &str) -> String {
 /// engine cell with exactly one wrapper Div, and the Bootstrap CSS
 /// targets `.cell .cell-output-* pre code`. A cell with no outputs
 /// still gets the wrapper (knitr wraps output-less chunks too).
-fn render_cell(language: &str, code: &str, result: &KernelExecuteResult) -> String {
+fn render_cell(
+    language: &str,
+    code: &str,
+    result: &KernelExecuteResult,
+    fig: &mut FigureWriter,
+) -> String {
     format!(
         "::: {{.cell}}\n\n{}\n{}\n:::\n",
         echoed_source_fence(language, code),
-        format_outputs(result)
+        format_outputs(result, fig)
     )
 }
 
@@ -417,6 +440,110 @@ fn fenced_output_div(classes: &str, text: &str) -> String {
     format!("\n::: {{{classes}}}\n\n{ticks}\n{text}\n{ticks}\n\n:::\n")
 }
 
+/// Writes figure files for one document run (bd-5t6wvu7m).
+///
+/// Image outputs (`image/png`, `image/jpeg`, `image/svg+xml`) are
+/// written to `<doc_dir>/<stem>_files/figure-html/` — the same layout
+/// Q1's jupyter engine (`mdImageOutput` + `figuresDir("html")`) and
+/// q2's knitr engine produce, and the layout
+/// [`JupyterEngine::intermediate_files`](super::JupyterEngine) already
+/// declares. Files are named `cell-<cell#>-output-<out#>.<ext>` (Q1's
+/// shape). When anything was written, the caller reports the
+/// `<stem>_files` directory in `ExecuteResult::supporting_files` —
+/// dir-level, mirroring knitr — which is what `q2 render` copies to
+/// the output dir and what the preview capture transport
+/// (bd-qbhp2cvv) embeds for browser replay.
+struct FigureWriter {
+    /// Absolute directory of the source document.
+    doc_dir: PathBuf,
+    /// `<stem>_files` (single path component).
+    files_dir_name: String,
+    /// 1-based index of the cell currently being rendered. Set by the
+    /// block loop before each `render_cell`.
+    cell_index: usize,
+    /// 1-based index of the next output within the current cell.
+    /// Reset by `begin_cell`.
+    output_index: usize,
+    /// Whether any figure file was successfully written.
+    wrote_any: bool,
+}
+
+impl FigureWriter {
+    fn new(source_path: &Path) -> Self {
+        let doc_dir = source_path.parent().unwrap_or(Path::new(".")).to_path_buf();
+        let stem = source_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("document");
+        Self {
+            doc_dir,
+            files_dir_name: format!("{stem}_files"),
+            cell_index: 0,
+            output_index: 0,
+            wrote_any: false,
+        }
+    }
+
+    /// Start figure numbering for the next cell.
+    fn begin_cell(&mut self) {
+        self.cell_index += 1;
+        self.output_index = 0;
+    }
+
+    /// The `<stem>_files` directory as an absolute path (for
+    /// supporting-files reporting).
+    fn files_dir(&self) -> PathBuf {
+        self.doc_dir.join(&self.files_dir_name)
+    }
+
+    /// Write one image output. Returns the doc-relative, forward-slash
+    /// path to emit in markdown, or `None` when the payload is
+    /// malformed or the write fails (caller falls back — fail-soft,
+    /// matching the engine's other output paths).
+    fn write_image(&mut self, mime: &str, value: &serde_json::Value) -> Option<String> {
+        let ext = match mime {
+            "image/png" => "png",
+            "image/jpeg" => "jpeg",
+            "image/svg+xml" => "svg",
+            _ => return None,
+        };
+        let content = extract_text_content(value);
+        // Q1 rule (`mdImageOutput`): SVG payloads that are literal
+        // `<svg` markup are written as text; everything else is
+        // base64 (strip the nbformat multiline newlines first).
+        let bytes: Vec<u8> = if ext == "svg" && content.trim_start().starts_with("<svg") {
+            content.into_bytes()
+        } else {
+            use base64::Engine as _;
+            match base64::engine::general_purpose::STANDARD.decode(content.replace('\n', "")) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    tracing::warn!(mime, error = %e, "jupyter figure: invalid base64; skipping");
+                    return None;
+                }
+            }
+        };
+
+        self.output_index += 1;
+        let file_name = format!(
+            "cell-{}-output-{}.{ext}",
+            self.cell_index, self.output_index
+        );
+        let rel = format!("{}/figure-html/{file_name}", self.files_dir_name);
+        let abs = self.doc_dir.join(&self.files_dir_name).join("figure-html");
+        if let Err(e) = std::fs::create_dir_all(&abs) {
+            tracing::warn!(dir = %abs.display(), error = %e, "jupyter figure: cannot create figures dir");
+            return None;
+        }
+        if let Err(e) = std::fs::write(abs.join(&file_name), &bytes) {
+            tracing::warn!(file = %file_name, error = %e, "jupyter figure: write failed");
+            return None;
+        }
+        self.wrote_any = true;
+        Some(rel)
+    }
+}
+
 /// Format kernel outputs as markdown.
 ///
 /// Every output becomes a `::: {.cell-output .cell-output-<type>}`
@@ -424,7 +551,16 @@ fn fenced_output_div(classes: &str, text: &str) -> String {
 /// (`outputTypeCssClass` in quarto-cli's `jupyter.ts`): streams are
 /// `-stdout` / `-stderr`, `execute_result` / `display_data` are
 /// `-display`, errors are `-error`.
-fn format_outputs(result: &KernelExecuteResult) -> String {
+///
+/// Rich-output MIME priority follows Q1's `displayDataMimeType` for
+/// HTML targets, scoped to the types q2 handles: `text/html` →
+/// `image/svg+xml` → `image/png` → `image/jpeg` → `text/plain`
+/// **last** (a matplotlib bundle carries an image plus a text
+/// fallback; the image must win). `text/markdown` and jupyter-widget
+/// payloads remain unhandled (follow-up).
+fn format_outputs(result: &KernelExecuteResult, fig: &mut FigureWriter) -> String {
+    const IMAGE_MIMES: [&str; 3] = ["image/svg+xml", "image/png", "image/jpeg"];
+
     let mut output = String::new();
 
     for cell_output in &result.outputs {
@@ -436,23 +572,43 @@ fn format_outputs(result: &KernelExecuteResult) -> String {
                 ));
             }
             CellOutput::ExecuteResult { data, .. } | CellOutput::DisplayData { data, .. } => {
-                // Rich output - pick best format
-                if let Some(text) = data.get("text/plain") {
-                    let s = extract_text_content(text);
-                    output.push_str(&fenced_output_div(
-                        ".cell-output .cell-output-display",
-                        s.trim_end(),
-                    ));
-                } else if let Some(html) = data.get("text/html") {
+                // Rich output — pick the best format (Q1 priority).
+                let image_entry = IMAGE_MIMES
+                    .iter()
+                    .find_map(|m| data.get(*m).map(|v| (*m, v)));
+                if let Some(html) = data.get("text/html") {
                     let s = extract_text_content(html);
                     let ticks = ticks_for_code(&s);
                     output.push_str(&format!(
                         "\n::: {{.cell-output .cell-output-display}}\n\n{ticks}{{=html}}\n{}\n{ticks}\n\n:::\n",
                         s
                     ));
-                } else if data.contains_key("image/png") || data.contains_key("image/svg+xml") {
-                    // TODO(bd-5t6wvu7m): save the image to a supporting
-                    // file and emit a real figure instead of a placeholder.
+                } else if let Some(rel_path) =
+                    image_entry.and_then(|(mime, value)| fig.write_image(mime, value))
+                {
+                    // Figure divs carry ONLY `cell-output-display` — no
+                    // generic `cell-output` — matching q2-knitr's
+                    // vendored figure hook (hooks.R:627) so the
+                    // cross-engine parity contract holds. (Q1's jupyter
+                    // adds `.cell-output` here and thus disagrees with
+                    // Q1's own knitr; q2 resolves the asymmetry toward
+                    // knitr. The only generic `.cell-output` consumer,
+                    // the print stylesheet, also matches `img`
+                    // directly.)
+                    output.push_str(&format!(
+                        "\n::: {{.cell-output-display}}\n\n![]({rel_path})\n\n:::\n",
+                    ));
+                } else if let Some(text) = data.get("text/plain") {
+                    let s = extract_text_content(text);
+                    output.push_str(&fenced_output_div(
+                        ".cell-output .cell-output-display",
+                        s.trim_end(),
+                    ));
+                } else if image_entry.is_some() {
+                    // An image payload we failed to write (bad base64,
+                    // I/O error) and no text fallback: keep the
+                    // pre-bd-5t6wvu7m placeholder rather than dropping
+                    // the output silently.
                     output.push_str(
                         "\n::: {.cell-output .cell-output-display}\n\n[Image output]\n\n:::\n",
                     );
@@ -679,6 +835,21 @@ print("hello")
         data
     }
 
+    /// A `FigureWriter` rooted in a fresh temp dir, positioned at cell 1.
+    /// The temp dir is leaked for the process lifetime — tests that
+    /// assert on written files create their own named `TempDir` instead.
+    fn test_fig() -> FigureWriter {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FigureWriter::new(&dir.path().join("doc.qmd"));
+        fig.begin_cell();
+        std::mem::forget(dir);
+        fig
+    }
+
+    /// Valid base64 of a 1x1 transparent PNG, split across two lines
+    /// (the nbformat multiline convention the decoder must handle).
+    const PNG_B64_MULTILINE: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk\nYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
     #[test]
     fn test_echoed_source_fence_emits_cell_code_class() {
         // `{python}` fence means "execute"; after execution the echoed
@@ -711,7 +882,7 @@ print("hello")
             text: "Hello, World!\n".to_string(),
         }]);
         assert_eq!(
-            format_outputs(&result),
+            format_outputs(&result, &mut test_fig()),
             "\n::: {.cell-output .cell-output-stdout}\n\n```\nHello, World!\n```\n\n:::\n"
         );
     }
@@ -723,7 +894,7 @@ print("hello")
             text: "warning\n".to_string(),
         }]);
         assert_eq!(
-            format_outputs(&result),
+            format_outputs(&result, &mut test_fig()),
             "\n::: {.cell-output .cell-output-stderr}\n\n```\nwarning\n```\n\n:::\n"
         );
     }
@@ -738,7 +909,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
         assert_eq!(
-            format_outputs(&result),
+            format_outputs(&result, &mut test_fig()),
             "\n::: {.cell-output .cell-output-display}\n\n```\n5\n```\n\n:::\n"
         );
     }
@@ -752,7 +923,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
         assert_eq!(
-            format_outputs(&result),
+            format_outputs(&result, &mut test_fig()),
             "\n::: {.cell-output .cell-output-display}\n\n```{=html}\n<b>5</b>\n```\n\n:::\n"
         );
     }
@@ -765,7 +936,7 @@ print("hello")
             traceback: vec!["Traceback...".to_string()],
         }]);
         assert_eq!(
-            format_outputs(&result),
+            format_outputs(&result, &mut test_fig()),
             "\n::: {.cell-output .cell-output-error}\n\n```\nNameError: name 'x' is not defined\nTraceback...\n```\n\n:::\n"
         );
     }
@@ -779,7 +950,7 @@ print("hello")
             text: "```\n".to_string(),
         }]);
         assert_eq!(
-            format_outputs(&result),
+            format_outputs(&result, &mut test_fig()),
             "\n::: {.cell-output .cell-output-stdout}\n\n````\n```\n````\n\n:::\n"
         );
     }
@@ -792,9 +963,184 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
         assert_eq!(
-            render_cell("python", "2 + 3\n", &result),
+            render_cell("python", "2 + 3\n", &result, &mut test_fig()),
             "::: {.cell}\n\n```{.python .cell-code}\n2 + 3\n```\n\n::: {.cell-output .cell-output-display}\n\n```\n5\n```\n\n:::\n\n:::\n"
         );
+    }
+
+    #[test]
+    fn test_display_bundle_with_png_and_text_prefers_image() {
+        // bd-5t6wvu7m: a matplotlib display bundle carries BOTH
+        // image/png and a text/plain fallback (`<Figure size 640x480
+        // with 1 Axes>`). The image must win — Q1's
+        // displayDataMimeType puts text/plain last. Before the fix,
+        // format_outputs checked text/plain first, so the figure
+        // rendered as its text repr.
+        let mut data = std::collections::HashMap::new();
+        // 1x1 transparent PNG, valid base64.
+        data.insert(
+            "image/png".to_string(),
+            serde_json::json!(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk\nYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+            ),
+        );
+        data.insert(
+            "text/plain".to_string(),
+            serde_json::json!("<Figure size 640x480 with 1 Axes>"),
+        );
+        let result = ok_result(vec![CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }]);
+
+        let md = format_outputs(&result, &mut test_fig());
+        assert!(
+            !md.contains("<Figure size"),
+            "image must beat the text/plain fallback; got:\n{md}"
+        );
+    }
+
+    #[test]
+    fn test_png_output_writes_file_and_emits_image_ref() {
+        // The full bd-5t6wvu7m behavior: a PNG display output writes
+        // `<stem>_files/figure-html/cell-<i>-output-<j>.png` next to
+        // the doc and emits `![](...)` inside the display div.
+        let tmp = tempfile::tempdir().unwrap();
+        let mut fig = FigureWriter::new(&tmp.path().join("pyfig.qmd"));
+        fig.begin_cell();
+
+        let mut data = std::collections::HashMap::new();
+        data.insert(
+            "image/png".to_string(),
+            serde_json::json!(PNG_B64_MULTILINE),
+        );
+        data.insert(
+            "text/plain".to_string(),
+            serde_json::json!("<Figure size 640x480 with 1 Axes>"),
+        );
+        let result = ok_result(vec![CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }]);
+
+        let md = format_outputs(&result, &mut fig);
+        assert_eq!(
+            md,
+            "\n::: {.cell-output-display}\n\n![](pyfig_files/figure-html/cell-1-output-1.png)\n\n:::\n"
+        );
+        // Multiline base64 decoded and written to disk.
+        let bytes = std::fs::read(
+            tmp.path()
+                .join("pyfig_files/figure-html/cell-1-output-1.png"),
+        )
+        .expect("figure file written");
+        assert!(
+            bytes.starts_with(b"\x89PNG\r\n"),
+            "decoded bytes must be a PNG"
+        );
+        assert!(fig.wrote_any);
+        assert_eq!(fig.files_dir(), tmp.path().join("pyfig_files"));
+    }
+
+    #[test]
+    fn test_svg_markup_written_as_text_with_svg_extension() {
+        // Q1's mdImageOutput rule: literal `<svg` payloads are written
+        // as text, not base64-decoded.
+        let tmp = tempfile::tempdir().unwrap();
+        let mut fig = FigureWriter::new(&tmp.path().join("doc.qmd"));
+        fig.begin_cell();
+
+        let mut data = std::collections::HashMap::new();
+        data.insert(
+            "image/svg+xml".to_string(),
+            serde_json::json!("<svg xmlns=\"http://www.w3.org/2000/svg\"/>"),
+        );
+        let result = ok_result(vec![CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }]);
+
+        let md = format_outputs(&result, &mut fig);
+        assert!(
+            md.contains("![](doc_files/figure-html/cell-1-output-1.svg)"),
+            "got:\n{md}"
+        );
+        let text =
+            std::fs::read_to_string(tmp.path().join("doc_files/figure-html/cell-1-output-1.svg"))
+                .expect("svg written");
+        assert!(text.starts_with("<svg"));
+    }
+
+    #[test]
+    fn test_html_still_beats_image() {
+        // Q1's html-target priority puts text/html above images
+        // (jupyter widgets and DataFrame tables ship html + png +
+        // plain; the html representation wins).
+        let mut data = std::collections::HashMap::new();
+        data.insert("text/html".to_string(), serde_json::json!("<b>table</b>"));
+        data.insert(
+            "image/png".to_string(),
+            serde_json::json!(PNG_B64_MULTILINE),
+        );
+        data.insert("text/plain".to_string(), serde_json::json!("table"));
+        let result = ok_result(vec![CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }]);
+
+        let md = format_outputs(&result, &mut test_fig());
+        assert!(md.contains("{=html}"), "html must win; got:\n{md}");
+        assert!(!md.contains("![]("), "no image when html wins; got:\n{md}");
+    }
+
+    #[test]
+    fn test_two_outputs_in_one_cell_get_distinct_names() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut fig = FigureWriter::new(&tmp.path().join("doc.qmd"));
+        fig.begin_cell();
+
+        let png_output = || {
+            let mut data = std::collections::HashMap::new();
+            data.insert(
+                "image/png".to_string(),
+                serde_json::json!(PNG_B64_MULTILINE),
+            );
+            CellOutput::DisplayData {
+                data,
+                metadata: serde_json::json!({}),
+            }
+        };
+        let result = ok_result(vec![png_output(), png_output()]);
+
+        let md = format_outputs(&result, &mut fig);
+        assert!(md.contains("cell-1-output-1.png"), "got:\n{md}");
+        assert!(md.contains("cell-1-output-2.png"), "got:\n{md}");
+        assert!(
+            tmp.path()
+                .join("doc_files/figure-html/cell-1-output-2.png")
+                .exists()
+        );
+    }
+
+    #[test]
+    fn test_invalid_base64_with_text_fallback_uses_text() {
+        // Fail-soft: an unwritable image with a text/plain sibling
+        // falls back to the text representation rather than a
+        // placeholder or a panic.
+        let mut data = std::collections::HashMap::new();
+        data.insert(
+            "image/png".to_string(),
+            serde_json::json!("!!!not-base64!!!"),
+        );
+        data.insert("text/plain".to_string(), serde_json::json!("fallback"));
+        let result = ok_result(vec![CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }]);
+
+        let md = format_outputs(&result, &mut test_fig());
+        assert!(md.contains("fallback"), "got:\n{md}");
+        assert!(!md.contains("[Image output]"), "got:\n{md}");
     }
 
     #[test]
@@ -808,7 +1154,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
         assert_eq!(
-            format_outputs(&result),
+            format_outputs(&result, &mut test_fig()),
             "\n::: {.cell-output .cell-output-display}\n\n[Image output]\n\n:::\n"
         );
     }
@@ -848,7 +1194,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
         assert_eq!(
-            format_outputs(&result),
+            format_outputs(&result, &mut test_fig()),
             "\n::: {.cell-output .cell-output-display}\n\n```\n42\n```\n\n:::\n"
         );
     }
@@ -861,7 +1207,7 @@ print("hello")
         // too.
         let result = ok_result(vec![]);
         assert_eq!(
-            render_cell("python", "x = 1\n", &result),
+            render_cell("python", "x = 1\n", &result, &mut test_fig()),
             "::: {.cell}\n\n```{.python .cell-code}\nx = 1\n```\n\n:::\n"
         );
     }

@@ -162,6 +162,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            files: Vec::new(),
         }
     }
 
@@ -244,6 +245,7 @@ mod tests {
             engine_name: "jupyter".into(),
             input_qmd: "x".into(),
             result: json!({"not_an_execute_result": true}),
+            files: Vec::new(),
         };
         let recorded_input = capture.input_qmd.clone();
         let engine = ReplayEngine::new(capture);
@@ -279,6 +281,7 @@ mod tests {
             engine_name: "knitr".into(),
             input_qmd: "input".into(),
             result: result_value,
+            files: Vec::new(),
         };
         let engine = ReplayEngine::new(capture);
         let ctx = make_test_context();

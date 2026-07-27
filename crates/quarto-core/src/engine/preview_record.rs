@@ -96,6 +96,13 @@ impl PipelineObserver for CaptureCollector {
     // Other methods inherit no-op defaults; spell out the few that
     // would otherwise spam logs to keep this observer truly silent.
     fn on_event(&self, _message: &str, _level: EventLevel) {}
+
+    // bd-qbhp2cvv: preview captures replay on machines (or browser
+    // VFSes) that cannot see this machine's disk — ask the stage to
+    // embed supporting-file bytes in the capture payload.
+    fn wants_engine_capture_files(&self) -> bool {
+        true
+    }
 }
 
 /// Build the engine-capture sub-pipeline: the q2-preview HTML pipeline
@@ -375,6 +382,75 @@ mod tests {
             .await
             .expect("pipeline runs");
         assert!(result.is_empty());
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // bd-qbhp2cvv: supporting-file bytes embedded in the capture
+    // ──────────────────────────────────────────────────────────────
+
+    /// Engine that writes a fake figure file next to the document —
+    /// the disk shape knitr produces (`<stem>_files/figure-html/…`) —
+    /// and reports the `_files` directory in `supporting_files`,
+    /// exactly like `KnitrEngine` does.
+    struct FigureWritingTestEngine {
+        doc_dir: PathBuf,
+    }
+
+    impl ExecutionEngine for FigureWritingTestEngine {
+        fn name(&self) -> &str {
+            "test-figures"
+        }
+
+        fn execute(
+            &self,
+            input: &str,
+            _ctx: &ExecutionContext,
+        ) -> Result<ExecuteResult, ExecutionError> {
+            let fig_dir = self.doc_dir.join("doc_files").join("figure-html");
+            std::fs::create_dir_all(&fig_dir).expect("create figure dir");
+            std::fs::write(fig_dir.join("fig.png"), b"FAKE-PNG-BYTES").expect("write figure");
+            let mut out = String::from(input);
+            out.push_str("\n![](doc_files/figure-html/fig.png)\n");
+            Ok(ExecuteResult::new(out).with_supporting_files(vec![self.doc_dir.join("doc_files")]))
+        }
+    }
+
+    #[tokio::test]
+    async fn capture_embeds_engine_supporting_file_bytes() {
+        // The engine writes doc_files/figure-html/fig.png during
+        // execution (as knitr does) and reports the directory in
+        // `supporting_files`. The recorded capture must embed the
+        // file's *bytes* at its doc-relative path — paths alone are
+        // useless on the replaying machine (bd-qbhp2cvv).
+        let (_tmp, path, project, runtime) =
+            fixture("---\nengine: test-figures\n---\n\n```{test-figures}\nplot(1)\n```\n");
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(FigureWritingTestEngine {
+            doc_dir: path.parent().unwrap().to_path_buf(),
+        }));
+
+        let captures = record_capture(&path, &project, runtime, Some(registry))
+            .await
+            .expect("pipeline runs");
+        let capture = captures.first().expect("capture present");
+
+        assert_eq!(
+            capture.files.len(),
+            1,
+            "capture should embed exactly the one engine-generated file; got {:?}",
+            capture.files.iter().map(|f| &f.path).collect::<Vec<_>>()
+        );
+        let file = &capture.files[0];
+        assert_eq!(
+            file.path, "doc_files/figure-html/fig.png",
+            "embedded path must be doc-relative with forward slashes"
+        );
+        use base64::Engine as _;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&file.contents_base64)
+            .expect("valid base64");
+        assert_eq!(bytes, b"FAKE-PNG-BYTES");
     }
 
     // ──────────────────────────────────────────────────────────────

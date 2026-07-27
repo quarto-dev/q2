@@ -73,14 +73,28 @@ describe('create_project', () => {
     expect(response.success).toBe(true);
 
     const byPath = new Map(response.files!.map((f) => [f.path, f]));
-    expect([...byPath.keys()].sort()).toEqual(['_quarto.yml', 'index.qmd']);
+    expect([...byPath.keys()].sort()).toEqual([
+      '_quarto.yml',
+      'about.qmd',
+      'index.qmd',
+      'styles.css',
+    ]);
 
     const quartoYml = byPath.get('_quarto.yml')!.content;
-    expect(quartoYml).toContain('title: "My Website"');
+    // Title lives under `website:` (what Q2's website pipeline reads),
+    // not under `project:`.
+    expect(quartoYml).toContain('website:\n  title: "My Website"');
     expect(quartoYml).toContain('type: website');
+    expect(quartoYml).toContain('theme: cosmo');
+    // Q2 hard-errors on an unconfigured `brand` theme marker (Q-14-1);
+    // the scaffold must not emit one.
+    expect(quartoYml).not.toContain('brand');
 
     const indexQmd = byPath.get('index.qmd')!.content;
     expect(indexQmd).toContain('title: "My Website"');
+
+    expect(byPath.get('about.qmd')!.content).toContain('title: "About"');
+    expect(byPath.get('styles.css')!.content).toContain('/* css styles */');
 
     // No template-syntax residue of either engine
     for (const file of response.files!) {
@@ -89,14 +103,19 @@ describe('create_project', () => {
     }
   });
 
-  it('creates a default project', () => {
+  it('creates a default project with a starter document', () => {
     const response = JSON.parse(
       wasm.create_project('default', 'Test Project'),
     ) as CreateProjectResponse;
     expect(response.success).toBe(true);
-    expect(response.files).toHaveLength(1);
-    expect(response.files![0].path).toBe('_quarto.yml');
-    expect(response.files![0].content).toContain('title: "Test Project"');
+
+    const byPath = new Map(response.files!.map((f) => [f.path, f]));
+    expect([...byPath.keys()].sort()).toEqual(['_quarto.yml', 'index.qmd']);
+    expect(byPath.get('_quarto.yml')!.content).toContain('title: "Test Project"');
+
+    const indexQmd = byPath.get('index.qmd')!.content;
+    expect(indexQmd).toContain('title: "Test Project"');
+    expect(indexQmd).toContain('## Quarto');
   });
 
   it('YAML-escapes special characters without HTML-escaping', () => {
@@ -105,7 +124,7 @@ describe('create_project', () => {
     ) as CreateProjectResponse;
     expect(response.success).toBe(true);
 
-    const content = response.files![0].content;
+    const content = response.files!.find((f) => f.path === '_quarto.yml')!.content;
     // `&` passes through raw. (The old EJS path HTML-escaped it to `&amp;`
     // — a latent bug for YAML output.)
     expect(content).not.toContain('&amp;');

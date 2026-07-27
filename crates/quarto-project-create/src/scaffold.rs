@@ -197,9 +197,17 @@ pub fn get_scaffold(target: &ProjectTypeWithTemplate) -> Option<ProjectScaffold>
     use crate::templates;
 
     match target.project_type {
-        ProjectType::Default => Some(ProjectScaffold::new(ProjectType::Default).add_file(
-            ScaffoldFileDef::template("_quarto.yml", templates::default::QUARTO_YML),
-        )),
+        ProjectType::Default => Some(
+            ProjectScaffold::new(ProjectType::Default)
+                .add_file(ScaffoldFileDef::template(
+                    "_quarto.yml",
+                    templates::default::QUARTO_YML,
+                ))
+                .add_file(ScaffoldFileDef::template(
+                    "index.qmd",
+                    templates::default::INDEX_QMD,
+                )),
+        ),
         ProjectType::Website => {
             match target.template.as_deref() {
                 None => Some(
@@ -211,6 +219,14 @@ pub fn get_scaffold(target: &ProjectTypeWithTemplate) -> Option<ProjectScaffold>
                         .add_file(ScaffoldFileDef::template(
                             "index.qmd",
                             templates::website::INDEX_QMD,
+                        ))
+                        .add_file(ScaffoldFileDef::static_text(
+                            "about.qmd",
+                            templates::website::ABOUT_QMD,
+                        ))
+                        .add_file(ScaffoldFileDef::static_text(
+                            "styles.css",
+                            templates::website::STYLES_CSS,
                         )),
                 ),
                 Some("blog") => {
@@ -261,19 +277,67 @@ mod tests {
     fn test_get_scaffold_default() {
         let target = ProjectTypeWithTemplate::new(ProjectType::Default);
         let scaffold = get_scaffold(&target).unwrap();
-        assert_eq!(scaffold.files.len(), 1);
-        assert_eq!(scaffold.files[0].path, "_quarto.yml");
+
+        let paths: Vec<_> = scaffold.files.iter().map(|f| f.path).collect();
+        assert_eq!(paths, ["_quarto.yml", "index.qmd"]);
     }
 
     #[test]
     fn test_get_scaffold_website() {
         let target = ProjectTypeWithTemplate::new(ProjectType::Website);
         let scaffold = get_scaffold(&target).unwrap();
-        assert_eq!(scaffold.files.len(), 2);
 
         let paths: Vec<_> = scaffold.files.iter().map(|f| f.path).collect();
-        assert!(paths.contains(&"_quarto.yml"));
-        assert!(paths.contains(&"index.qmd"));
+        assert_eq!(
+            paths,
+            ["_quarto.yml", "index.qmd", "about.qmd", "styles.css"]
+        );
+
+        // about.qmd and styles.css carry no interpolation — they must be
+        // static so they never fail template compilation.
+        for f in &scaffold.files {
+            if matches!(f.path, "about.qmd" | "styles.css") {
+                assert!(
+                    matches!(f.content, ScaffoldContent::StaticText(_)),
+                    "{} should be static text",
+                    f.path
+                );
+            }
+        }
+    }
+
+    /// Every template in every implemented choice's scaffold must compile
+    /// with the doctemplate engine, interpolate `$title$`, and carry no
+    /// EJS residue. (Static files are checked for EJS residue only.)
+    #[test]
+    fn test_all_scaffold_templates_compile() {
+        for choice in crate::choices::implemented_choices() {
+            let scaffold = get_scaffold(&choice.target)
+                .unwrap_or_else(|| panic!("implemented choice '{}' has no scaffold", choice.id));
+            for f in &scaffold.files {
+                match f.content {
+                    ScaffoldContent::Template(t) => {
+                        quarto_doctemplate::Template::compile(t).unwrap_or_else(|e| {
+                            panic!(
+                                "template {} for '{}' failed to compile: {e}",
+                                f.path, choice.id
+                            )
+                        });
+                        assert!(
+                            t.contains("$title$"),
+                            "template {} for '{}' should interpolate $title$",
+                            f.path,
+                            choice.id
+                        );
+                        assert!(!t.contains("<%"), "EJS residue in {}", f.path);
+                    }
+                    ScaffoldContent::StaticText(t) => {
+                        assert!(!t.contains("<%"), "EJS residue in {}", f.path);
+                    }
+                    ScaffoldContent::Binary { .. } => {}
+                }
+            }
+        }
     }
 
     #[test]

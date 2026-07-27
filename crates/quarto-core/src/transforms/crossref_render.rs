@@ -1147,12 +1147,19 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>) -> Inlin
     })];
     let target = (format!("#{identifier}"), String::new());
 
+    // Every crossref link carries `quarto-xref`; unresolved refs additionally
+    // carry `quarto-unresolved-ref` so downstream extensions can loudly style a
+    // missing reference (matching TS Quarto's crossref/refs.lua:94, which uses
+    // the class as its failure signal). Additive per Carlos, 2026-07-21
+    // (bd-28iqotrt, audit row 17): we keep Q2's louder `?id?` Link + the dangling
+    // `#id` target rather than switching to TS's plain Span.
+    let mut classes = vec!["quarto-xref".to_string()];
+    if !resolved {
+        classes.push("quarto-unresolved-ref".to_string());
+    }
+
     Inline::Link(Link {
-        attr: (
-            String::new(),
-            vec!["quarto-xref".to_string()],
-            hashlink::LinkedHashMap::new(),
-        ),
+        attr: (String::new(), classes, hashlink::LinkedHashMap::new()),
         content,
         target,
         source_info,
@@ -1781,6 +1788,11 @@ mod tests {
         };
         assert_eq!(s.text, "Figure\u{a0}1");
         assert!(link.attr.1.contains(&"quarto-xref".to_string()));
+        // Resolved refs must NOT carry the unresolved marker (bd-28iqotrt).
+        assert!(
+            !link.attr.1.contains(&"quarto-unresolved-ref".to_string()),
+            "resolved ref should not carry quarto-unresolved-ref"
+        );
     }
 
     #[tokio::test]
@@ -1800,6 +1812,19 @@ mod tests {
             panic!();
         };
         assert_eq!(s.text, "?fig-nope?");
+        // Unresolved refs additionally carry `quarto-unresolved-ref` (alongside
+        // the base `quarto-xref`) so downstream extensions can loudly style a
+        // missing reference — matching TS Quarto (crossref/refs.lua:94). Additive
+        // per Carlos, 2026-07-21 (bd-28iqotrt, audit row 17): Q2 keeps its louder
+        // `?id?` Link rather than TS's Span.
+        assert!(
+            link.attr.1.contains(&"quarto-xref".to_string()),
+            "unresolved ref should keep the base quarto-xref class"
+        );
+        assert!(
+            link.attr.1.contains(&"quarto-unresolved-ref".to_string()),
+            "unresolved ref should carry quarto-unresolved-ref"
+        );
     }
 
     #[tokio::test]

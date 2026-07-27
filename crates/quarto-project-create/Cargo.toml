@@ -17,5 +17,11 @@ serde.workspace = true
 # Error handling
 thiserror.workspace = true
 
+[dev-dependencies]
+# Round-trip parsing of scaffolded _quarto.yml in tests: asserting on
+# parsed YAML structure is precise (field values, not substring hits)
+# and proves the rendered config is valid YAML.
+serde_yaml.workspace = true
+
 [lints]
 workspace = true

@@ -21,7 +21,6 @@
 //! so a project with five engine-bearing docs doesn't burst five
 //! concurrent engine invocations on startup.
 
-use std::io::Write;
 use std::sync::Arc;
 
 use quarto_core::engine::EngineRegistry;
@@ -327,9 +326,11 @@ async fn write_capture_doc(
     ctx: &Arc<HubContext>,
     captures: &[EngineCapture],
 ) -> Result<String, RecordError> {
-    let json =
-        serde_json::to_vec(captures).map_err(|e| RecordError::Serialize(format!("{}", e)))?;
-    let gzipped = gzip_bytes(&json).map_err(|e| RecordError::Gzip(format!("{}", e)))?;
+    // Shared wire format (serialize + gzip + 10MB size warning,
+    // bd-qbhp2cvv) — same helper as re_execute.rs and the
+    // hub-provider exec server.
+    let gzipped = quarto_core::engine::capture_files::gzip_captures(captures)
+        .map_err(|e| RecordError::Gzip(format!("{}", e)))?;
 
     let automerge_doc = create_binary_document(&gzipped, CAPTURE_MIME_TYPE)
         .map_err(|e| RecordError::CreateBinaryDoc(format!("{}", e)))?;
@@ -341,12 +342,6 @@ async fn write_capture_doc(
         .map_err(|_stopped| RecordError::RepoStopped)?;
 
     Ok(handle.document_id().to_string())
-}
-
-fn gzip_bytes(input: &[u8]) -> std::io::Result<Vec<u8>> {
-    let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-    enc.write_all(input)?;
-    enc.finish()
 }
 
 /// Errors the driver can surface. Each variant is a short message
@@ -361,9 +356,7 @@ pub enum RecordError {
     DiscoverFailed(String),
     #[error("engine capture pipeline failed: {0}")]
     RecordFailed(String),
-    #[error("serializing capture to JSON failed: {0}")]
-    Serialize(String),
-    #[error("gzipping capture failed: {0}")]
+    #[error("serializing/gzipping capture failed: {0}")]
     Gzip(String),
     #[error("creating capture binary doc failed: {0}")]
     CreateBinaryDoc(String),

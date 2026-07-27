@@ -61,6 +61,31 @@ export interface ProjectSetPointer {
 }
 
 /**
+ * One collection the user is subscribed to: a pointer to a
+ * ProjectSetDocument acting as a collection.
+ */
+export interface CollectionPointerEntry {
+  /** Automerge document ID for the collection's ProjectSetDocument. */
+  projectSetDocId: string;
+  /** Sync server URL where the document is hosted. */
+  syncServer: string;
+}
+
+/**
+ * The root of the user's QuartoHub state: the set of collections this
+ * browser is subscribed to. Stored as a singleton in the projectSet store
+ * (key: 'collections'), alongside the legacy singleton pointer.
+ *
+ * The first entry is the personal root collection (the migrated legacy
+ * project set); later entries are additional/shared collections in
+ * subscription order.
+ */
+export interface CollectionsPointer {
+  key: 'collections';
+  collections: CollectionPointerEntry[];
+}
+
+/**
  * User identity settings for presence features.
  * Stored as a singleton in the userSettings store.
  */

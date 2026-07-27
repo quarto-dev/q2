@@ -129,9 +129,6 @@ fn build_csp(config: &auth::AuthConfig) -> String {
 /// Cookie name for the hub authentication token.
 const AUTH_COOKIE_NAME: &str = "quarto_hub_token";
 
-/// Cookie Max-Age in seconds (1 hour, matches typical OIDC ID token lifetime).
-const AUTH_COOKIE_MAX_AGE: u32 = 3600;
-
 /// JSON error body for auth failures, so clients can distinguish
 /// 401 auth errors from other HTTP errors programmatically.
 fn unauthorized() -> (StatusCode, Json<serde_json::Value>) {
@@ -152,7 +149,7 @@ pub enum CredentialKind {
 }
 
 impl CredentialKind {
-    fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             CredentialKind::Cookie => "cookie",
             CredentialKind::Bearer => "bearer",
@@ -283,29 +280,59 @@ fn cookie_token(headers: &HeaderMap) -> Option<String> {
 ///
 /// The cookie is `HttpOnly` (no JS access), `SameSite=Lax` (sent on
 /// same-site requests and top-level navigations), scoped to `Path=/`,
-/// and expires after `AUTH_COOKIE_MAX_AGE` seconds. The `Secure` flag
-/// is included unless `allow_insecure` is true (HTTP dev mode).
+/// and expires after `max_age_secs` — callers pass the session token's
+/// remaining lifetime so cookie and token expire together. The `Secure`
+/// flag is included unless `allow_insecure` is true (HTTP dev mode).
 ///
 /// Uses the `cookie` crate for correct value encoding, preventing
 /// injection of extra attributes via malformed token values.
-fn build_auth_cookie(token: &str, secure: bool) -> String {
+fn build_auth_cookie(token: &str, secure: bool, max_age_secs: i64) -> String {
     if token.len() > 3800 {
+        // Hub-minted session tokens are a few hundred bytes; this fires
+        // only if something pathological slipped past the identity caps.
         tracing::warn!(
             token_len = token.len(),
-            "JWT token exceeds 3800 bytes; browsers may silently drop the cookie \
-             (4096 byte limit including cookie metadata). Consider server-side sessions \
-             if your OIDC provider issues large tokens."
+            "session token exceeds 3800 bytes; browsers may silently drop the cookie \
+             (4096 byte limit including cookie metadata)"
         );
     }
     let mut builder = cookie::Cookie::build((AUTH_COOKIE_NAME, token))
         .http_only(true)
         .same_site(SameSite::Lax)
         .path("/")
-        .max_age(time::Duration::seconds(AUTH_COOKIE_MAX_AGE as i64));
+        .max_age(time::Duration::seconds(max_age_secs));
     if secure {
         builder = builder.secure(true);
     }
     builder.build().to_string()
+}
+
+/// Mint a fresh hub session cookie (§1) for Google-validated claims:
+/// fresh random `sid`, identity stamped from the validated Google
+/// claims, `auth_time = now` — bumped to the revocation ledger's
+/// re-login floor when one exists, so a login in the same second as a
+/// logout-everywhere doesn't die with the revoked family (clocks are
+/// second-granular). Returns the full `Set-Cookie` value.
+async fn mint_session_cookie(
+    ctx: &HubContext,
+    claims: &auth::OidcClaims,
+) -> std::result::Result<String, jsonwebtoken::errors::Error> {
+    let now = crate::session::unix_now();
+    let lifetimes = ctx.session_lifetimes();
+    let identity = crate::session::SessionIdentity::from_oidc(claims);
+    let auth_time = ctx
+        .revocations()
+        .min_auth_time(&claims.sub)
+        .await
+        .map_or(now, |floor| floor.max(now));
+    let token =
+        crate::session::mint_session_at(ctx.session_keys(), lifetimes, &identity, now, auth_time)?;
+    let max_age = lifetimes.expiry(now, auth_time) - now;
+    Ok(build_auth_cookie(
+        &token,
+        !ctx.allow_insecure_auth(),
+        max_age,
+    ))
 }
 
 /// Build a `Set-Cookie` header value that clears the auth cookie.
@@ -432,12 +459,12 @@ where
 
         let credential = credential.ok_or_else(unauthorized)?;
         let kind = credential.kind();
-        // Preserve the original status code: `authenticate_claims_for_kind`
-        // returns 401 for invalid/missing credentials but 403 for valid
-        // credentials whose user is not allowlisted. Collapsing both
-        // to 401 loses the distinction that the plan's allowlist-parity
-        // tests assert.
-        ctx.authenticate_claims_for_kind(Some(credential.token()), kind.label())
+        // Central dispatch (§5): Cookie → hub-session verify, Bearer →
+        // JWKS. Preserve the original status code: 401 for invalid
+        // credentials but 403 for valid credentials whose user is not
+        // allowlisted — the allowlist-parity tests assert the
+        // distinction.
+        ctx.authenticate_credential(&credential)
             .await
             .map_err(|status| {
                 let body = if status == StatusCode::FORBIDDEN {
@@ -713,14 +740,35 @@ async fn auth_callback(
         return Redirect::to("/?auth_error").into_response();
     }
 
-    // Validate the JWT before setting the cookie.
-    if let Err(_status) = ctx.authenticate(Some(&form.credential)).await {
+    // Validate the Google ID token once, then mint the hub session
+    // cookie (§1) — the Google token itself is never cookie'd.
+    let claims = match ctx.authenticate_claims(Some(&form.credential)).await {
+        Ok(claims) => claims,
+        Err(_status) => return Redirect::to("/?auth_error").into_response(),
+    };
+
+    // Bans gate mint too (§3) — otherwise a banned user just
+    // re-logs-in via Google.
+    if ctx.revocations().is_banned(&claims.sub).await {
+        tracing::event!(
+            target: "quarto_hub::audit",
+            tracing::Level::INFO,
+            action = "auth_fail",
+            outcome = "deny",
+            credential_kind = "cookie",
+            sub = %claims.sub,
+            detail = "user_banned",
+        );
         return Redirect::to("/?auth_error").into_response();
     }
 
-    // Set HttpOnly cookie and redirect to clean `/`.
-    let secure = !ctx.allow_insecure_auth();
-    let cookie = build_auth_cookie(&form.credential, secure);
+    let cookie = match mint_session_cookie(&ctx, &claims).await {
+        Ok(cookie) => cookie,
+        Err(err) => {
+            tracing::error!(error = %err, "failed to mint session token");
+            return Redirect::to("/?auth_error").into_response();
+        }
+    };
     let mut response = Redirect::to("/").into_response();
     response
         .headers_mut()
@@ -751,31 +799,65 @@ struct AuthActorResponse {
     actor_id: String,
 }
 
-/// Request body for POST /auth/refresh.
+/// Request body for POST /auth/session.
 #[derive(Deserialize)]
-struct RefreshRequest {
+struct SessionRequest {
     credential: String,
 }
 
-/// Return user info from a valid cookie. 401 if missing/expired.
+/// Shared credential extraction + validation for `/auth/me` and
+/// `/auth/actor`: applies the dual-credential 400 rule (these handlers
+/// used to read the cookie directly, bypassing it) and accepts Bearer
+/// alongside the session cookie (bd-3g0aijb3).
+async fn authenticate_request(
+    ctx: &HubContext,
+    headers: &HeaderMap,
+) -> std::result::Result<crate::context::AuthenticatedUser, (StatusCode, Json<serde_json::Value>)> {
+    let credential = match extract_credential(headers) {
+        Ok(Some(c)) => c,
+        Ok(None) => return Err(unauthorized()),
+        Err(CredentialError::Conflicting) => return Err(conflicting_credentials()),
+        Err(CredentialError::UnsupportedScheme) => return Err(unauthorized()),
+    };
+    ctx.authenticate_credential(&credential)
+        .await
+        .map_err(|status| {
+            let body = if status == StatusCode::FORBIDDEN {
+                serde_json::json!({"error": "forbidden"})
+            } else {
+                serde_json::json!({"error": "unauthorized"})
+            };
+            (status, Json(body))
+        })
+}
+
+/// Return user info for a valid credential. 401 if missing/expired.
 ///
 /// The client calls this on mount to check if the user is authenticated
-/// without needing to decode the JWT client-side.
+/// without needing to decode a token client-side. `exp` is the session
+/// token's **sliding** expiry on the cookie path (the SPA schedules its
+/// keep-alive probe from it), or the Google token expiry on the Bearer
+/// path.
 async fn auth_me(
     headers: HeaderMap,
     State(ctx): State<SharedContext>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let token = cookie_token(&headers);
-    let claims = ctx
-        .authenticate_claims(token.as_deref())
-        .await
-        .map_err(|_| unauthorized())?;
-    Ok(Json(AuthMeResponse {
-        email: claims.email,
-        name: claims.name,
-        picture: claims.picture,
-        exp: claims.exp,
-    }))
+    let user = authenticate_request(&ctx, &headers).await?;
+    let response = match user {
+        crate::context::AuthenticatedUser::Session(v) => AuthMeResponse {
+            email: v.claims.email,
+            name: v.claims.name,
+            picture: v.claims.picture,
+            exp: v.claims.exp,
+        },
+        crate::context::AuthenticatedUser::Google(claims) => AuthMeResponse {
+            email: claims.email,
+            name: claims.name,
+            picture: claims.picture,
+            exp: claims.exp,
+        },
+    };
+    Ok(Json(response))
 }
 
 /// Return a per-project actor ID for the authenticated user.
@@ -784,7 +866,7 @@ async fn auth_me(
 /// so the same user gets a different actor ID in each project. Cross-project
 /// correlation is impossible without the server secret.
 ///
-/// - Returns 401 if the cookie is missing or invalid.
+/// - Returns 401 if the credential is missing or invalid.
 /// - Returns 400 if the `project` query parameter is missing (Axum extractor).
 /// - No server-side project validation: an unknown `project_id` just yields an
 ///   actor ID that will never match any document content.
@@ -793,14 +875,10 @@ async fn auth_actor(
     State(ctx): State<SharedContext>,
     Query(query): Query<AuthActorQuery>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let token = cookie_token(&headers);
-    let claims = ctx
-        .authenticate_claims(token.as_deref())
-        .await
-        .map_err(|_| unauthorized())?;
+    let user = authenticate_request(&ctx, &headers).await?;
     let actor_id = crate::auth::sub_to_actor_id_for_project(
         ctx.server_secret_bytes(),
-        &claims.sub,
+        user.subject(),
         &query.project,
     );
     Ok(Json(AuthActorResponse { actor_id }))
@@ -830,21 +908,98 @@ async fn auth_logout(
     Ok(response)
 }
 
-/// Validate a fresh OIDC JWT and set a new cookie.
+/// Revoke every session of the calling user (`POST /auth/logout-everywhere`).
 ///
-/// Called by the client after obtaining a new credential from the OIDC provider
-/// (e.g. Google One Tap silent refresh). The new JWT goes through the full
-/// `authenticate()` path (signature, audience, issuer, email allowlist)
-/// before setting the cookie.
+/// Self-service revocation (§3): records `not_before[sub] = now` in the
+/// revocation store, killing the user's entire token family — including
+/// re-issued siblings on other devices, which plain logout (a
+/// client-side cookie clear) cannot reach. Immediate re-login works
+/// (`auth_time ≥ not_before`).
 ///
-/// This is also the recommended credential submission endpoint for non-Google
-/// OIDC frontends (instead of the Google-specific `/auth/callback`).
-///
-/// Requires `X-Requested-With: XMLHttpRequest` for CSRF protection.
-async fn auth_refresh(
+/// Cookie-kind only (a browser-session self-service action; Bearer/MCP
+/// callers are rejected) and CSRF-gated. The caller's cookie is cleared
+/// in the response.
+async fn auth_logout_everywhere(
     headers: HeaderMap,
     State(ctx): State<SharedContext>,
-    Json(body): Json<RefreshRequest>,
+) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let credential = match extract_credential(&headers) {
+        Ok(Some(c)) => c,
+        Ok(None) => return Err(unauthorized()),
+        Err(CredentialError::Conflicting) => return Err(conflicting_credentials()),
+        Err(CredentialError::UnsupportedScheme) => return Err(unauthorized()),
+    };
+    if credential.kind() != CredentialKind::Cookie {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "cookie_session_required"})),
+        ));
+    }
+    check_csrf(&headers)
+        .map_err(|s| (s, Json(serde_json::json!({"error": "csrf check failed"}))))?;
+
+    let verified = ctx
+        .authenticate_session(credential.token())
+        .await
+        .map_err(|status| {
+            let body = if status == StatusCode::FORBIDDEN {
+                serde_json::json!({"error": "forbidden"})
+            } else {
+                serde_json::json!({"error": "unauthorized"})
+            };
+            (status, Json(body))
+        })?;
+
+    let now = crate::session::unix_now();
+    ctx.revocations()
+        .revoke_all_for(&verified.claims.sub, now)
+        .await
+        .map_err(|err| {
+            // The in-memory revocation is already effective for this
+            // process; the error reports that it may not survive a
+            // restart.
+            tracing::error!(error = %err, "failed to persist revocation");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "revocation_persist_failed"})),
+            )
+        })?;
+
+    tracing::event!(
+        target: "quarto_hub::audit",
+        tracing::Level::INFO,
+        action = "revoke_all_sessions",
+        outcome = "allow",
+        credential_kind = "cookie",
+        sub = %verified.claims.sub,
+    );
+
+    let cookie = build_clear_cookie();
+    let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
+    response
+        .headers_mut()
+        .insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+    Ok(response)
+}
+
+/// Validate a submitted OIDC ID token and mint a fresh session cookie.
+///
+/// `POST /auth/session` is the direct-JSON credential-submission **login**
+/// endpoint: a client posts an OIDC ID token as JSON and, on success, receives
+/// a hub session cookie. It is the counterpart to the redirect/form-post
+/// `/auth/callback`, and is the *only* mint endpoint a non-Google (Generic)
+/// OIDC deployment has — `/auth/callback` is registered only for providers
+/// whose `AuthConfig::uses_form_post_callback()` is true (Google alone).
+///
+/// The submitted JWT goes through the full `authenticate_claims()` path
+/// (signature, audience, issuer, email allowlist) before a session is minted;
+/// because this is a fresh login, `auth_time = now` and a new `sid` are correct.
+///
+/// Requires `X-Requested-With: XMLHttpRequest` for CSRF protection.
+async fn auth_session(
+    headers: HeaderMap,
+    State(ctx): State<SharedContext>,
+    Json(body): Json<SessionRequest>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     // Dual-credential 400 wins over CSRF — same precedence as the
     // `Authenticated` extractor. Without this, a request carrying both
@@ -864,13 +1019,39 @@ async fn auth_refresh(
             .map_err(|s| (s, Json(serde_json::json!({"error": "csrf check failed"}))))?;
     }
 
-    // Validate the NEW credential (not the existing cookie — it may be expired).
-    ctx.authenticate(Some(&body.credential))
+    // Validate the submitted OIDC credential (not the existing cookie — it
+    // may be expired), then mint a fresh hub session cookie: this is a
+    // new login, so `auth_time = now` and a fresh `sid` are correct.
+    let claims = ctx
+        .authenticate_claims(Some(&body.credential))
         .await
         .map_err(|_| unauthorized())?;
 
-    let secure = !ctx.allow_insecure_auth();
-    let cookie = build_auth_cookie(&body.credential, secure);
+    // Bans gate mint too (§3) — otherwise a banned user just
+    // re-logs-in via the OIDC provider.
+    if ctx.revocations().is_banned(&claims.sub).await {
+        tracing::event!(
+            target: "quarto_hub::audit",
+            tracing::Level::INFO,
+            action = "auth_fail",
+            outcome = "deny",
+            credential_kind = "cookie",
+            sub = %claims.sub,
+            detail = "user_banned",
+        );
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "forbidden"})),
+        ));
+    }
+
+    let cookie = mint_session_cookie(&ctx, &claims).await.map_err(|err| {
+        tracing::error!(error = %err, "failed to mint session token");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "session_mint_failed"})),
+        )
+    })?;
     let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
     response
         .headers_mut()
@@ -881,6 +1062,83 @@ async fn auth_refresh(
 /// 404 handler
 async fn not_found() -> impl IntoResponse {
     (StatusCode::NOT_FOUND, "Not found")
+}
+
+/// Response layer implementing sliding re-issue (§2): on authenticated
+/// activity with a **Cookie**-kind credential, re-issue the session
+/// cookie when the token is ≥ 1 h old or was signed under a non-current
+/// `kid` (rotation migration, §2c).
+///
+/// The layer re-validates the token itself — signature, lifetimes,
+/// **and the allowlist re-check** — so a re-issue can only ever extend
+/// a session that would pass full authentication (§2b), independent of
+/// which handler produced the response. It stays silent in the audit
+/// log: the request's authoritative auth decision was already logged by
+/// the handler path.
+async fn session_reissue_layer(
+    State(ctx): State<SharedContext>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    // (§2a) Cookie-kind only: skip when any Authorization header is
+    // attached (a Bearer/MCP or dual-credential request must never
+    // slide the window).
+    let token = if request.headers().get(http::header::AUTHORIZATION).is_none() {
+        cookie_token(request.headers())
+    } else {
+        None
+    };
+
+    let mut response = next.run(request).await;
+
+    let Some(token) = token else { return response };
+    if ctx.auth_config().is_none() {
+        return response;
+    }
+    // Success responses only — this also skips WS upgrades (101, where
+    // Set-Cookie is unreliable) and redirects. Never clobber a cookie
+    // the handler set itself (login mint, logout clear).
+    if !response.status().is_success() || response.headers().contains_key(http::header::SET_COOKIE)
+    {
+        return response;
+    }
+
+    // (§2b) Full validation including the allowlist re-check and the
+    // revocation/ban check — a session that would fail authentication
+    // must never be extended.
+    let now = crate::session::unix_now();
+    let lifetimes = ctx.session_lifetimes();
+    let Ok(verified) = crate::session::verify_session(ctx.session_keys(), lifetimes, &token, now)
+    else {
+        return response;
+    };
+    if !ctx.session_policy_ok(&verified.claims).await {
+        return response;
+    }
+    // (§2c) ≥ 1 h old or non-current kid; (§2d) `reissue_session` never
+    // advances `auth_time`, and its exp is capped by the absolute limit.
+    if !verified.should_reissue(now) {
+        return response;
+    }
+
+    match crate::session::reissue_session(ctx.session_keys(), lifetimes, &verified.claims, now) {
+        Ok(new_token) => {
+            let max_age = lifetimes.expiry(now, verified.claims.auth_time) - now;
+            let cookie = build_auth_cookie(&new_token, !ctx.allow_insecure_auth(), max_age);
+            if let Ok(value) = cookie.parse() {
+                response
+                    .headers_mut()
+                    .insert(http::header::SET_COOKIE, value);
+            }
+        }
+        Err(err) => {
+            // Re-issue is best-effort: the request already succeeded on
+            // the old (still valid) token; the next qualifying request
+            // retries.
+            tracing::warn!(error = %err, "session re-issue failed");
+        }
+    }
+    response
 }
 
 /// WebSocket upgrade handler for automerge sync.
@@ -934,11 +1192,8 @@ async fn ws_handler(
             return status.into_response();
         }
 
-        match ctx
-            .authenticate_claims_for_kind(Some(credential.token()), credential.kind().label())
-            .await
-        {
-            Ok(claims) => Some(claims.email),
+        match ctx.authenticate_credential(&credential).await {
+            Ok(user) => Some(user.email().to_string()),
             Err(status) => return status.into_response(),
         }
     } else {
@@ -1057,7 +1312,8 @@ pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<Shared
         .route("/auth/me", get(auth_me))
         .route("/auth/actor", get(auth_actor))
         .route("/auth/logout", post(auth_logout))
-        .route("/auth/refresh", post(auth_refresh))
+        .route("/auth/logout-everywhere", post(auth_logout_everywhere))
+        .route("/auth/session", post(auth_session))
         // WebSocket endpoint for automerge sync at `/ws` (hub-client +
         // q2-preview SPA's canonical path).
         .route("/ws", get(ws_handler))
@@ -1090,6 +1346,14 @@ pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<Shared
                 .map_err(|e| crate::error::Error::Server(format!("Invalid CSP header: {e}")))?,
         ));
     }
+
+    // Sliding re-issue response layer (§2). Added last so it wraps every
+    // route, including the conditionally-registered ones above (`.layer`
+    // only wraps routes added before it).
+    router = router.layer(axum::middleware::from_fn_with_state(
+        ctx.clone(),
+        session_reissue_layer,
+    ));
 
     Ok(router)
 }
@@ -1521,7 +1785,7 @@ mod tests {
 
     #[test]
     fn build_auth_cookie_secure() {
-        let cookie = build_auth_cookie("mytoken", true);
+        let cookie = build_auth_cookie("mytoken", true, 3600);
         assert!(cookie.starts_with("quarto_hub_token=mytoken;"));
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.contains("Secure"));
@@ -1532,11 +1796,20 @@ mod tests {
 
     #[test]
     fn build_auth_cookie_insecure() {
-        let cookie = build_auth_cookie("mytoken", false);
+        let cookie = build_auth_cookie("mytoken", false, 3600);
         assert!(cookie.starts_with("quarto_hub_token=mytoken;"));
         assert!(cookie.contains("HttpOnly"));
         assert!(!cookie.contains("Secure"));
         assert!(cookie.contains("SameSite=Lax"));
+    }
+
+    #[test]
+    fn build_auth_cookie_max_age_matches_session_lifetime() {
+        // Cookie lifetime follows the token's sliding expiry, not a
+        // fixed 1h (that coupling died with the Google-JWT cookie).
+        let idle = crate::session::DEFAULT_SESSION_IDLE_SECS;
+        let cookie = build_auth_cookie("mytoken", true, idle);
+        assert!(cookie.contains(&format!("Max-Age={idle}")));
     }
 
     #[test]

@@ -155,6 +155,23 @@ main.quarto-banner-title-block > section:first-child > h4 {
   margin-top: -1px;
 }
 
+/* Title-block remainder: unconditional link + author/date/doi margins that
+   apply to every title-block variant. ported from _quarto-rules.scss:193-201
+   (bd-iq08mmnh). Q2 emits `<p class="author|date|doi">` inside
+   `<header id="title-block-header">` (the doi one wraps an `<a>`), so these
+   match live DOM. The `.quarto-title-block > div` flex/button rules that
+   follow in TS (L203-223) are NOT ported — they target the code-tools button,
+   a not-yet-emitted feature (audit row 6d, blocked). */
+#title-block-header a {
+  text-decoration: none;
+}
+
+#title-block-header .author,
+#title-block-header .date,
+#title-block-header .doi {
+  margin-block-end: 0.2rem;
+}
+
 /* Title Default */
 #title-block-header.quarto-title-block.default {
   .quarto-title-meta {

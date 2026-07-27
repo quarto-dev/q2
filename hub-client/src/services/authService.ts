@@ -4,8 +4,9 @@
  * Server-side helpers for the cookie-based auth flow. The auth token
  * lives in a server-set HttpOnly cookie — JavaScript never sees or
  * stores it. This module provides helpers to check auth status and
- * refresh tokens via server endpoints. IdP-side signout is the
- * `AuthProvider`'s concern, not this module's.
+ * clear the session via server endpoints. Session *renewal* is entirely
+ * server-side (sliding re-issue); there is no client renewal helper.
+ * IdP-side signout is the `AuthProvider`'s concern, not this module's.
  */
 
 import { hubPath } from '../utils/routing';
@@ -15,7 +16,12 @@ export interface AuthState {
   email: string;
   name: string | null;
   picture: string | null;
-  /** Token expiry in ms-epoch (from the server's `exp`). Absent on older servers. */
+  /**
+   * Session expiry in ms-epoch (from the server's `exp`). **Sliding**:
+   * the hub re-issues the session cookie on authenticated activity, so
+   * this moves forward over time (typically days out). Absent on older
+   * servers.
+   */
   expiresAt?: number;
 }
 
@@ -71,20 +77,26 @@ export async function fetchActorId(projectId: string): Promise<string | null> {
  * Resolve the per-project actor ID for a document open. Three-valued contract
  * the callers depend on:
  *   - string    → actor ID resolved; open with it
- *   - undefined → auth disabled; open with no (random) actor ID
+ *   - undefined → auth disabled and no fallback; open with a random actor ID
  *   - null      → auth failure (401/403); abandon the open
  *
- * On auth failure we fire `onSessionExpired` (a silent refresh) and return
- * `null` so callers' `=== null` guard abandons this attempt; One Tap either
- * restores the session in place or eventually clears auth via its onError path.
- * Throws propagate (e.g. 500) so callers' try/catch surfaces a connection error.
+ * When auth is disabled, `fallbackActorId` (if provided) is returned so the
+ * open uses a *stable* local actor — this is how auth-less deployments
+ * (local-prod / `--allow-insecure-auth`) still stamp a consistent identity into
+ * documents. The network is never touched in the auth-disabled branch.
+ *
+ * On auth failure we fire `onSessionExpired` — the session has ended, so the
+ * SPA shows the login screen — and return `null` so callers' `=== null` guard
+ * abandons this attempt. Throws propagate (e.g. 500) so callers' try/catch
+ * surfaces a connection error.
  */
 export async function resolveActorId(
   indexDocId: string,
   authEnabled: boolean,
   onSessionExpired: () => void,
+  fallbackActorId?: string,
 ): Promise<string | undefined | null> {
-  if (!authEnabled) return undefined;
+  if (!authEnabled) return fallbackActorId;
   const id = await fetchActorId(indexDocId);
   if (id === null) {
     onSessionExpired();
@@ -100,25 +112,4 @@ export async function logout(): Promise<void> {
     credentials: 'same-origin',
     headers: { 'X-Requested-With': 'XMLHttpRequest' },
   });
-}
-
-/**
- * Send a fresh OIDC ID token to the server for validation and cookie refresh.
- * Returns the updated user info on success, null on auth failure.
- */
-export async function refreshToken(credential: string): Promise<AuthState | null> {
-  const res = await fetch(hubPath('/auth/refresh'), {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-    body: JSON.stringify({ credential }),
-  });
-  if (res.status === 401 || res.status === 403) return null;
-  if (!res.ok) throw new Error(`/auth/refresh failed: ${res.status}`);
-
-  // After refresh, fetch fresh user info from the new cookie.
-  return fetchAuthMe();
 }

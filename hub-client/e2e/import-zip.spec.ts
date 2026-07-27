@@ -11,7 +11,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import { zipSync, strToU8 } from 'fflate';
-import { getServerUrl } from './helpers/projectFactory';
+import { getServerUrl, seedUiVariant } from './helpers/projectFactory';
 
 /**
  * Bring a fresh browser context to the project-selector landing page with
@@ -19,6 +19,9 @@ import { getServerUrl } from './helpers/projectFactory';
  * Mirrors the bootstrap in share-link-project-set.spec.ts.
  */
 async function bootstrapProjectSet(page: Page, syncServer: string): Promise<void> {
+  // This spec drives the classic ProjectSelector; the app defaults to the
+  // collections home. See seedUiVariant.
+  await seedUiVariant(page, 'classic');
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Quarto Hub' })).toBeVisible();
   await expect(

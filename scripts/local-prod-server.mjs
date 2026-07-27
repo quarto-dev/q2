@@ -14,7 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const STATIC_PORT = parseInt(process.env.STATIC_PORT || '8080');
-const HUB_PORT = parseInt(process.env.HUB_PORT || '3001');
+const HUB_PORT = parseInt(process.env.HUB_PORT || '3000');
 const DIST_DIR = path.join(__dirname, '../hub-client/dist');
 
 // MIME types for common extensions

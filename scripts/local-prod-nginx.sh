@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 HUB_CLIENT_DIR="$PROJECT_ROOT/hub-client"
 DATA_DIR="$PROJECT_ROOT/.local-prod-data"
-HUB_PORT=3001
+HUB_PORT=3000
 NGINX_PORT=8080
 Q2_SANDBOXED_PREVIEW_PORT=8081
 
@@ -226,8 +226,8 @@ log_info "q2-sandboxed-preview:    ${GREEN}http://127.0.0.1:$Q2_SANDBOXED_PREVIE
 log_info ""
 log_info "Architecture:"
 log_info "  Browser → nginx:8080 (native)"
-log_info "    ├─ /ws → hub:3001 (WebSocket)"
-log_info "    ├─ /auth → hub:3001"
+log_info "    ├─ /ws → hub:3000 (WebSocket)"
+log_info "    ├─ /auth → hub:3000"
 log_info "    └─ /* → static files"
 log_info "  Browser → nginx:8081 → q2-sandboxed-preview:8081 (sandboxed)"
 log_info ""

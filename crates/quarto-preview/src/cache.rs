@@ -215,6 +215,7 @@ mod tests {
                 "includes": [],
                 "needs_postprocess": false,
             }),
+            files: Vec::new(),
         }
     }
 

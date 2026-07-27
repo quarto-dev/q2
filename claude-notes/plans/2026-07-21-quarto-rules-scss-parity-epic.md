@@ -90,6 +90,83 @@ whether the DOM is emitted.
 The MISSING set mixes port-now (Q2 emits the DOM) and blocked (Q2 doesn't yet)
 — separating them is the whole point of the audit.
 
+## Phase 2 execution — decisions + order (Carlos, 2026-07-21)
+
+Green-lit to implement **all PORT-NOW strands** in one pass on integration
+branch `feature/quarto-rules-scss-parity` (each sub-task branches off it,
+`--no-ff` merged back per worktrees.md). The PN batch is the five themed
+strands below; **engine-output (bd-18410csp) and mermaid (bd-sehm2rha) are
+NOT in this batch** — the audit classes them as own-strand specials
+(engine-output needs *executed* jupyter/knitr fixtures; mermaid is theming),
+and bd-9fz5fweg (floats) stays blocked on the taxonomy feature bd-hcp8m3ve.
+
+Two decisions taken before starting:
+
+1. **Row 17 `.quarto-unresolved-ref` (Carlos): additive.** TS emits a
+   `Span.quarto-unresolved-ref`; Q2 emits `Link.quarto-xref` with visible
+   `?id?`. We keep Q2's louder `?id?` Link and *add* `quarto-unresolved-ref`
+   to the class vec in `crossref_render.rs::render_resolved_ref` on the
+   `!resolved` branch (so `<a class="quarto-xref quarto-unresolved-ref">`),
+   then port the CSS. Downstream extensions key off the class (element-
+   agnostic selector), so the additive form satisfies them while preserving
+   Q2's better default. This row carries a pampa emitter test in addition to
+   the compile-output assertion.
+2. **Row 29 light/dark-content (Carlos): own strand.** Pulled out of
+   bd-28iqotrt into **bd-l1rx9yzh** — the dark half is entangled with the
+   not-yet-built dark-mode feature and its own difficulties.
+
+**Execution order** (pure-CSS first to validate the mechanism, emitter-tweak
+strand last; each shifts `styles.css` so the `phase5` hash is re-captured
+per strand, sequentially):
+
+- [x] 1. **bd-iq08mmnh** title-block remainder (row 6c) — DONE 2026-07-21,
+      merged de2b9774. `#title-block-header a` + grouped `.author/.date/.doi`
+      margins → title-block.scss; styles.css hash 6eafe1bf→0fc7bc97.
+- [x] 2. **bd-dxgcpl02** tables base (row 7) — DONE 2026-07-21. All three
+      selectors verified live (`table.table` margins; `tr.header>th>p` in
+      multi-block header cells; `<caption>` for plain-caption tables, with
+      `text-align:center` overriding bootstrap's `left`). `.table-caption`
+      left BE. Ported into `_bootstrap-rules.scss`; styles.css hash
+      0fc7bc97→0a0741ba.
+- [x] 3. **bd-u5yvsdgw** code (rows 13a,b,23) — DONE 2026-07-21, merged
+      9dd840c7. DOM verification revised three sibling rows: **13d** deferred
+      (→ bd-8oyd9dg4, `$code-white-space` var is theming infra, no visible
+      gap); **13e** reclassified **PN→BE** (Q2 emits no `<span><a>` line
+      anchors); **13g** held for a design call (→ bd-bthmzyrc, Q2 already ships
+      a divergent `code a:any-link` downlit rule). styles.css 0a0741ba→0c69b852.
+- [x] 4. **bd-ih6jrf39** print (row 28) — DONE 2026-07-21, merged a4ac9b24.
+      Ported `:root{font-size:11pt}`, `#quarto-sidebar,#TOC{display:none}`,
+      `.page-columns .content` page-start, caption `#666`. `.fixed-top` skipped
+      (no DOM). **Row 24** (`:root --quarto-*` vars) relocated to bd-18410csp
+      (no consumer today → land with gt). styles.css 0c69b852→90c78796.
+- [x] 5. **bd-28iqotrt** misc (rows 1a,10,11,15a,17,22,25) — DONE 2026-07-21,
+      merged 9d532598. Ported `.hidden`, `iframe`, the `details` set,
+      `.footnote-back`, `.quarto-unresolved-ref`, `a` underline-offset,
+      `div.columns`/`div.column`; `.visually-hidden` skipped (bootstrap-
+      provided). **Row 17 additive emitter**: crossref_render.rs now emits
+      `class="quarto-xref quarto-unresolved-ref"` on unresolved refs. **Row 29**
+      split to bd-l1rx9yzh. styles.css 90c78796→b06ec21d (doc.html unchanged).
+
+### Outcome
+
+All five PORT-NOW strands complete, plus the row-13g follow-up. DOM
+verification revised the audit on several rows (documented in each commit +
+inventory): **13d** deferred (bd-8oyd9dg4), **13e** reclassified BE,
+`.fixed-top`/`.visually-hidden` found already-handled-or-BE, **row 24**
+relocated to engine-output (bd-18410csp — record kept as a comment on that
+strand). **Row 13g resolved** (Carlos, 2026-07-21): adopted Quarto 1's
+`code a:any-link{text-decoration:none}` + `code a:hover{underline}`, replacing
+Q2's gray-underline variant; merged (bd-bthmzyrc closed). Remaining epic
+children are all blocked/own-strand specials (engine-output, mermaid, floats,
+backlog) — the row-24 var work rides with engine-output.
+
+Each follows the bd-btjkyylx template (PR #406): failing `css.contains(...)`
+assertion in `crates/quarto-sass/src/compile.rs` `test_compile_default_css`
+→ port into the thematically-right existing SCSS layer with a
+`// ported from _quarto-rules.scss:<lines> (<strand>)` provenance comment →
+re-capture `phase5-single-doc-baseline/expected_hashes.txt` with a dated
+`# Re-captured` note → e2e `q2 render` grep of emitted `styles.css`.
+
 ## Phase 2 — Themed port-now strands (created by the audit)
 
 Candidate groupings to become child strands of bd-4doe9lvt (final shape decided

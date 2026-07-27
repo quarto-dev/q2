@@ -5,10 +5,6 @@
  * loading the GIS SDK. Each created mock exposes:
  *
  * - `provider` — the AuthProvider object to pass into `AuthProviderRoot`.
- * - `lastSilentRenewalOpts` — the most-recent opts passed to
- *   `useSilentRenewal`, so tests can synchronously invoke
- *   `onCredential` / `onError` to simulate IdP responses (mirrors the
- *   `oneTapCallbacks` pattern in the legacy `useAuth.test.ts`).
  * - `signInButtonClicks` — count of times the SignInButton was clicked.
  * - `lastLoginUri` — the most recent `loginUri` prop passed to
  *   SignInButton, so tests can assert the wiring without needing DOM
@@ -20,15 +16,10 @@
 
 import { useEffect } from 'react';
 
-import type {
-  AuthProvider,
-  SignInButtonProps,
-  SilentRenewalOpts,
-} from './AuthProvider';
+import type { AuthProvider, SignInButtonProps } from './AuthProvider';
 
 export interface MockAuthProvider {
   provider: AuthProvider;
-  lastSilentRenewalOpts: SilentRenewalOpts | null;
   signInButtonClicks: number;
   lastLoginUri: string | null;
   signOutCalls: number;
@@ -39,12 +30,10 @@ export interface MockAuthProvider {
 export function createMockAuthProvider(): MockAuthProvider {
   const state: MockAuthProvider = {
     provider: null as unknown as AuthProvider,
-    lastSilentRenewalOpts: null,
     signInButtonClicks: 0,
     lastLoginUri: null,
     signOutCalls: 0,
     reset() {
-      state.lastSilentRenewalOpts = null;
       state.signInButtonClicks = 0;
       state.lastLoginUri = null;
       state.signOutCalls = 0;
@@ -69,9 +58,6 @@ export function createMockAuthProvider(): MockAuthProvider {
 
   state.provider = {
     SignInButton,
-    useSilentRenewal: (opts: SilentRenewalOpts) => {
-      state.lastSilentRenewalOpts = opts;
-    },
     signOut: () => {
       state.signOutCalls += 1;
     },
