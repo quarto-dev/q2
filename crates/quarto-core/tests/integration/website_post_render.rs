@@ -1002,6 +1002,63 @@ fn pipeline_no_brand_key_emits_no_favicon() {
     assert_no_favicon_link(&index_html, "unreferenced _brand.yml");
 }
 
+// ── Test 48 — a missing brand logo blames the brand, not the key ───
+
+/// The missing-file warning must name the thing the *user wrote*. When
+/// the favicon came from the brand fallback there is no
+/// `website.favicon` key anywhere in the project, so reporting
+/// "website.favicon refers to missing file" would send the reader
+/// hunting for a key that doesn't exist.
+#[test]
+fn pipeline_missing_brand_logo_diagnoses_against_the_brand() {
+    let (project_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             brand: _brand.yml\n",
+        );
+        // Names a logo that was never created.
+        write(
+            &project_dir.join("_brand.yml"),
+            "logo:\n  small: gone.png\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+
+    // Same shape as test 38: the link is still emitted, the file is
+    // not copied, and the render completes.
+    let index_html = html_for_stem(&summary, "index");
+    assert!(
+        index_html.contains(r#"<link rel="icon" href="gone.png" type="image/png">"#),
+        "expected the link tag even when the brand logo is missing: {}",
+        favicon_line(&index_html)
+    );
+    assert!(
+        !project_dir.join("_site/gone.png").exists(),
+        "missing brand logo should not have been written"
+    );
+
+    let titles: Vec<String> = summary
+        .project_diagnostics
+        .iter()
+        .map(|d| d.title.clone())
+        .collect();
+    assert!(
+        titles.iter().any(|t| t.contains("gone.png")),
+        "expected a diagnostic naming the missing file; got: {:?}",
+        titles
+    );
+    assert!(
+        !titles.iter().any(|t| t.contains("website.favicon")),
+        "the project sets no `website.favicon`; blaming that key sends the \
+         reader after a key that isn't there. Got: {:?}",
+        titles
+    );
+}
+
 // ── Test 47 — the fallback is website-only ─────────────────────────
 
 /// Every other Phase-7 per-page transform gates itself implicitly, by

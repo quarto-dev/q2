@@ -82,21 +82,24 @@ impl ResolvedBrand {
     /// [`BrandLogoResource::with_path_relative_to`], which owns that
     /// rule for every logo consumer.
     ///
-    /// Named logos are `small` / `medium` / `large`; extra images live
-    /// under `logo.images.*` and are reached with
-    /// [`Brand::logo_image`]. Returns `None` when the name resolves to
-    /// nothing, or to a light/dark pair (which has no single path).
+    /// `name` is either a named size (`small` / `medium` / `large`) or
+    /// a key under `logo.images.*`. The two namespaces stay separate,
+    /// as they are in Q1's `getLogo` / `getLogoResource`: a named size
+    /// that exists but is a light/dark pair yields `None` rather than
+    /// falling through to an `images` entry that happens to share the
+    /// name. Returns `None` when the name resolves to nothing, or to a
+    /// light/dark pair (which has no single path).
     pub fn logo_resource_relative_to(
         &self,
         name: &str,
         project_dir: &Path,
     ) -> Option<BrandLogoResource> {
+        let resource = match self.brand.logo(name) {
+            Some(named_size) => named_size.single()?,
+            None => self.brand.logo_image(name)?,
+        };
         let prefix = self.path_prefix_relative_to(project_dir);
-        self.brand
-            .logo(name)
-            .and_then(|entry| entry.single())
-            .or_else(|| self.brand.logo_image(name))
-            .map(|resource| resource.with_path_relative_to(&prefix))
+        Some(resource.with_path_relative_to(&prefix))
     }
 
     /// Path of this brand's favicon, relative to `project_dir`.

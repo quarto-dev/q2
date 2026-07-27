@@ -184,6 +184,31 @@ fn unknown_logo_name_yields_none() {
     );
 }
 
+/// Named sizes and `logo.images.*` are separate namespaces, as in Q1's
+/// `getLogo` / `getLogoResource`. A named size that exists but is a
+/// light/dark pair must yield `None`, not silently fall through to an
+/// `images` entry that happens to share the name.
+#[test]
+fn light_dark_named_size_does_not_fall_through_to_images() {
+    let (resolved, project) = resolved_in(
+        "_brand",
+        "logo:\n  \
+         images:\n    \
+         small:\n      \
+         path: decoy.png\n  \
+         small:\n    \
+         light: l.png\n    \
+         dark: d.png\n",
+    );
+    assert!(
+        resolved
+            .logo_resource_relative_to("small", &project)
+            .is_none(),
+        "a light/dark `small` has no single resource; the `images.small` \
+         decoy must not stand in for it"
+    );
+}
+
 // ── path_prefix_relative_to ────────────────────────────────────────
 
 #[test]

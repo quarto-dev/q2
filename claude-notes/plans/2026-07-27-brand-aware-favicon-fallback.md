@@ -4,11 +4,42 @@
 **Braid:** bd-97yc (feature, filed 2026-04-27, raised to P3). Its duplicate
 **bd-1elkd** was closed 2026-07-27 with a `duplicates → bd-97yc` edge and its
 description folded into bd-97yc.
-**Branch:** `main` @ `dd87a8b5` (investigation committed here; no worktree created)
-**Status:** Design questions **answered** (2026-07-27, see below). Ready to
-implement on the user's go-ahead.
+**Branch:** `main`, based at `dd87a8b5` (no worktree created)
+**Status:** **Implemented**, Phases 0–5 complete. Unpushed.
 
-## Triage verdict
+## What shipped
+
+In a `website` project with a `brand:` key, the brand's `logo.small` becomes the
+favicon when `website.favicon` is unset — the `<link rel="icon">` on every page
+and the file copy into the output tree. Paths written relative to the
+`_brand.yml` are rebased to project-relative form, URLs are linked but never
+copied, and an explicit `website.favicon` always wins.
+
+Six commits on `main`:
+
+| Commit | Phase |
+| --- | --- |
+| `419e08f1` | 0 — failing tests |
+| `1a223f6b` | 1 — resolve the project-level brand at config-parse time |
+| `45287ff1` | 2 — rebase brand-relative logo paths |
+| `6882d57c` | 3 — the fallback itself |
+| `242aa4e5` | 4–5 — docs + E2E verification |
+| *(pending)* | self-review fix: diagnostics name the right config key |
+
+Three things surfaced during the work that the design discussion had not
+anticipated, each recorded in its phase below:
+
+1. **The fallback needed an explicit project-kind gate.** Every sibling
+   transform gates itself implicitly by reading a `website.*` key; this one
+   fires on a key's *absence*, so a default project using `_brand.yml` for
+   theming alone would have sprouted a favicon. Test 47.
+2. **An explicit `website.favicon: https://…` was already broken** — mangled to
+   `../https:/example.com/f.ico` by the page-relative resolver. The URL guard
+   went into the shared reader, so both paths are fixed.
+3. **The missing-file warning blamed a key the user never wrote.** Caught in
+   pre-commit self-review; the favicon now carries its origin. Test 48.
+
+## Triage verdict (at investigation time)
 
 **Ready to implement.** The code seam is clear and small: a favicon-source
 fallback in `website_config.rs` plus a place to resolve `Brand` once. All five
@@ -446,6 +477,13 @@ a full `BrandLogoResource` — rebased path *and* alt text — and reaches both
 named logos (`small`/`medium`/`large`) and `logo.images.*`. The navbar work
 should not need to touch this crate again.
 
+*Also caught in self-review:* the first version chained
+`.and_then(single).or_else(logo_image)`, which meant a named size that existed
+but was a light/dark pair fell through to an `images` entry of the same name.
+The two are separate namespaces in Q1 (`getLogo` vs `getLogoResource`), so the
+lookup now matches on which namespace the name is in and does not fall through.
+Pinned by `light_dark_named_size_does_not_fall_through_to_images`.
+
 ### Phase 3 — The fallback itself ✅
 
 - [x] `website_config::resolved_website_favicon(meta, project)` — the single
@@ -477,6 +515,16 @@ and copying the logo. Existing test 39 could not catch this (its default
 project has no brand), so test 47 was added first. The explicit
 `website.favicon` key is deliberately *not* gated — it already says what it
 means, and gating it would be a regression.
+
+**Caught in self-review: the missing-file warning blamed the wrong key.**
+`copy_favicon`'s warning was hardcoded to `website.favicon refers to missing
+file '…'`. Under the fallback that key doesn't exist anywhere in the project,
+so a typo'd brand logo would have sent the reader hunting for a `website.favicon`
+they never wrote. `resolved_website_favicon` now returns a `ResolvedFavicon`
+carrying a `FaviconOrigin` (`WebsiteFavicon` | `BrandLogo`), and the warning
+names the actual source — `the brand's logo.small refers to missing file
+'gone.png'`. Pinned by **test 48**, written failing first; it asserts both that
+the missing file is named *and* that `website.favicon` is not mentioned.
 
 **Pre-existing bug fixed on the way.** An explicit
 `website.favicon: https://example.com/f.ico` used to be run through
@@ -510,7 +558,13 @@ from being flattened into the site-rooted `/host/f.ico`.
 - [x] E2E through `cargo run --bin q2 -- render` on three fixtures; output
       inspected and recorded in `repro-output.md`.
 - [x] `cargo nextest run --workspace`: **10577 passed, 0 failed**.
-- [ ] Full `cargo xtask verify` (**not** `--skip-hub-build`) — see the WASM risk.
+- [x] Full `cargo xtask verify` (**not** `--skip-hub-build`): **all 14 steps
+      passed**, including the WASM rebuild and the hub-client build + tests.
+      This is the step that matters for the WASM risk below — `quarto-brand`
+      and the new `ProjectConfig` field both compile for
+      `wasm32-unknown-unknown`.
+- [x] `cargo xtask lint`: all checks passed (883 files).
+- [x] `cargo fmt --check`: clean.
 
 **E2E results** (full transcript in
 `brand-aware-favicon-fallback-investigation/repro-output.md`):

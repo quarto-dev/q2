@@ -67,7 +67,7 @@ impl AstTransform for WebsiteFaviconTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        let favicon = resolved_website_favicon(&ast.meta, ctx.project);
+        let favicon = resolved_website_favicon(&ast.meta, ctx.project).map(|f| f.path);
         apply_favicon(&mut ast.meta, favicon, ctx.resource_resolver.as_ref());
         Ok(())
     }
