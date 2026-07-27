@@ -454,13 +454,17 @@ fn apply_custom_node_reconciliation(
             let orig_slot = orig_slots.remove(&name);
             apply_inline_slot_reconciliation(orig_slot, exec_slot, inline_plan)
         } else if let Some(orig_slot) = orig_slots.remove(&name) {
-            // No plan - check if we can use original (same type = content matches)
-            if std::mem::discriminant(&orig_slot) == std::mem::discriminant(&exec_slot) {
-                // Same type, content must match (otherwise we'd have a plan)
-                orig_slot
-            } else {
-                // Type mismatch, use executed
-                exec_slot
+            match (&orig_slot, &exec_slot) {
+                // Single-node slots carry no plan when compute verified the
+                // two nodes hash- and structurally-equal (see
+                // compute_custom_node_slot_plan); the original preserves
+                // source info for identical content.
+                (Slot::Block(_), Slot::Block(_)) | (Slot::Inline(_), Slot::Inline(_)) => orig_slot,
+                // Sequence slots always carry a plan when both sides have the
+                // same slot kind, so reaching here means the kinds differ (or
+                // a plan is unexpectedly absent). Executed wins — an omitted
+                // plan is not evidence the contents matched (bd-9fwn1504).
+                _ => exec_slot,
             }
         } else {
             // No original slot, use executed
@@ -597,21 +601,14 @@ fn apply_table_reconciliation(
                             // No original cell at this position, use exec
                             exec_cell
                         }
-                    } else if let Some(orig_cell) =
-                        orig_cells.get_mut(cell_idx).and_then(|c| c.take())
-                    {
-                        // No plan means content matched exactly - use orig to preserve source_info
-                        Cell {
-                            attr: exec_cell.attr,
-                            alignment: exec_cell.alignment,
-                            row_span: exec_cell.row_span,
-                            col_span: exec_cell.col_span,
-                            attr_source: exec_cell.attr_source,
-                            source_info: orig_cell.source_info,
-                            content: orig_cell.content,
-                        }
                     } else {
-                        // No original cell, use exec
+                        // Every cell position where both tables have a cell
+                        // gets a plan at compute time (see compute_table_plan),
+                        // so no plan means there is no original cell at this
+                        // position (row/column growth). Executed wins — never
+                        // fall back to original content without a plan; an
+                        // omitted plan is not evidence the contents matched
+                        // (bd-9fwn1504).
                         exec_cell
                     };
 
@@ -691,38 +688,25 @@ fn apply_table_reconciliation(
         }),
     };
 
-    // Reconcile caption.long if we have a plan for it
-    let result_caption = if let Some(caption_plan) = &table_plan.caption_plan {
-        match (orig.caption.long, exec.caption.long) {
-            (Some(orig_long), Some(exec_long)) => quarto_pandoc_types::Caption {
-                short: exec.caption.short,
-                long: Some(apply_reconciliation_to_blocks(
-                    orig_long,
-                    exec_long,
-                    caption_plan,
-                )),
-                source_info: orig.caption.source_info,
-            },
-            (_, exec_long) => quarto_pandoc_types::Caption {
-                short: exec.caption.short,
-                long: exec_long,
-                source_info: orig.caption.source_info,
-            },
-        }
-    } else {
-        // No caption plan - use orig's long content if both exist, otherwise exec's
-        match (orig.caption.long, exec.caption.long) {
-            (Some(orig_long), Some(_)) => quarto_pandoc_types::Caption {
-                short: exec.caption.short,
-                long: Some(orig_long),
-                source_info: orig.caption.source_info,
-            },
-            (_, exec_long) => quarto_pandoc_types::Caption {
-                short: exec.caption.short,
-                long: exec_long,
-                source_info: orig.caption.source_info,
-            },
-        }
+    // Reconcile caption.long. A plan exists exactly when both tables have a
+    // long caption (see compute_table_plan); with no plan, at least one side
+    // is absent and executed's caption is authoritative. Never fall back to
+    // original content without a plan — an omitted plan is not evidence the
+    // contents matched (bd-9fwn1504).
+    let result_long = match (
+        &table_plan.caption_plan,
+        orig.caption.long,
+        exec.caption.long,
+    ) {
+        (Some(caption_plan), Some(orig_long), Some(exec_long)) => Some(
+            apply_reconciliation_to_blocks(orig_long, exec_long, caption_plan),
+        ),
+        (_, _, exec_long) => exec_long,
+    };
+    let result_caption = quarto_pandoc_types::Caption {
+        short: exec.caption.short,
+        long: result_long,
+        source_info: orig.caption.source_info,
     };
 
     Table {

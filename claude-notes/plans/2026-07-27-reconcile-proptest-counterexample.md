@@ -145,10 +145,46 @@ confirms it.
 
 ## Work items
 
+Investigation:
+
 - [x] Reproduce at HEAD with the CI seed (deterministic; only failure in the workspace)
 - [x] Localize divergence (table caption.long; debug-twin + source-info-stripping diff)
 - [x] Confirm root cause with minimal hand-built repro
 - [x] Enumerate affected sites (4) and the eq/hash asymmetry
 - [x] File discovered strand for the table structural_eq gap (bd-fp069xyh)
 - [x] Design alignment with user (decisions recorded above, 2026-07-27)
-- [ ] Implement per agreed design (separate branch/session)
+
+Implementation (branch `braid/bd-9fwn1504-quarto-ast-reconcile-proptest`):
+
+- [x] Phase 0: 4×2 unit-test matrix written (`lib.rs` `mod tests`, "Plan-omission
+  soundness tests"); all 8 verified failing with the predicted modes
+  (deletion resurrects the deleted item with original source info; reorder
+  restores original order — including the reorder cases that were previously
+  only confirmed by inspection)
+- [x] Phase 1a: compute side — `needs_plan` removed at all 4 sites (caption,
+  cells, `Slot::Blocks`, `Slot::Inlines`); plans stored unconditionally
+- [x] Phase 1b: apply side — false-invariant fallbacks removed: cell no-plan
+  branch now exec-wins, caption no-plan branch now exec-wins, custom-slot
+  fallback keeps original only for eq-verified single-node slots and
+  exec-wins for sequence kinds
+- [x] All 8 new tests pass; seeded `reconciliation_preserves_structure_full_ast`
+  passes; full crate suite 226/226; property tests pass at
+  `PROPTEST_CASES=5000` (no new counterexamples exposed by the
+  always-store path)
+- [x] Phase 0 (pin): `proptest-regressions/lib.txt` staged for the fix commit
+- [x] Phase 2: `cargo nextest run --workspace` — 10508/10508 passed, 0 regressions
+- [x] Phase 2: full `cargo xtask verify` (WASM closure) — all steps passed
+- [x] Pre-commit review checklist (`claude-notes/instructions/review.md`):
+      HashMap greps clean, clippy clean, fmt via hook, TDD fail-first
+      verified for all 8 tests, no TODOs added
+- [ ] Commit (awaiting approval per review checklist), then merge/PR per
+      user's direction
+
+Note on end-to-end verification: this fix is library-internal (the
+reconcile step of engine execution and editor write-back). It is verified
+by the property suite (incl. the CI seed and a 5000-case run), the 4×2
+unit matrix, pampa's node-edit/splice integration tests, quarto-preview's
+integration tests, and the full WASM build — no separate `q2 render`
+invocation exercises engine-driven caption deletion, because constructing
+one requires an engine runtime producing a table-caption edit; the
+workspace's existing integration tests are the end-to-end coverage here.
