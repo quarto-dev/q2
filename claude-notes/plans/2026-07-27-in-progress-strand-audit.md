@@ -104,8 +104,65 @@ Partially landed / follow-ups remain:
 ⚠️ **Unmerged work sitting on local-only branches** (at risk — these are not
 pushed anywhere; returning them to `open` does not preserve the code):
 
-- [x] bd-g4uw7d8g — q2 preview eager sync. 3 commits on local branch `beads/bd-g4uw7d8g-q2-preview-eager-sync`, not on `main`, no PR. Comment: "Awaiting Carlos's manual e2e before push."
-- [x] bd-hcp8m3ve — float/layout class taxonomy. 4 commits on local branch `braid/bd-hcp8m3ve-float-taxonomy`, not on `main` (`quarto-float-caption` absent from `main`), no PR. P3/lst-fixture/preview-WASM pending.
+- [x] bd-g4uw7d8g — q2 preview eager sync. 3 commits on local branch `beads/bd-g4uw7d8g-q2-preview-eager-sync`, not on `main`, no PR. Comment: "Awaiting Carlos's manual e2e before push." **Assessed 2026-07-27 — see below.**
+- [x] bd-hcp8m3ve — float/layout class taxonomy. 4 commits on local branch `braid/bd-hcp8m3ve-float-taxonomy`, not on `main`, no PR. **Assessed 2026-07-27 — see below.**
+
+#### Assessment of the two unmerged feature branches (2026-07-27)
+
+Both were checked for subsumption (is the work already on `main` by another
+route?) and mergeability (`git merge-tree --write-tree` against `main`).
+**Neither is subsumed; both still need a PR.**
+
+**bd-g4uw7d8g — `beads/bd-g4uw7d8g-q2-preview-eager-sync`**
+
+- 3 commits, 2026-06-10, base `a64d94d3`. `main` is **486 commits ahead** of
+  the base. ~573 insertions.
+- Content: `POST /api/preview/sync-file` endpoint
+  (`crates/quarto-preview/src/sync_file.rs`, 84 lines + 181 lines of
+  integration tests); SPA eager-sync scheduler in `PreviewApp.tsx` (300 ms
+  edit debounce, 1500 ms `no_changes` retry, visibility flush using
+  `fetch(..., {keepalive: true})`); 115 lines of channel-routing tests.
+- **Not subsumed.** `sync_file.rs` is absent from `main`; the only "eager" on
+  `main` is an unrelated eager *capture* driver. Decisively:
+  `crates/quarto-preview/src/lib.rs:343` still reads `sync_interval_secs:
+  Some(5)` under the comment *"Light periodic sync — the user can Ctrl-C any
+  time"* — the exact ≤5 s edit-persistence latency and Ctrl-C race this
+  strand was filed against are still `main`'s behavior.
+- **Merge:** one conflict, `q2-preview-spa/src/PreviewApp.tsx`. It is
+  **semantic, not just textual**: since the branch was cut, `main` gained
+  bd-jit6pdwq Phase 3, a `pagehide` handler that deliberately *disconnects*
+  the sync socket on tab-away (PreviewApp.tsx:689). The branch adds a
+  visibility flush that *POSTs* on tab-away. Someone has to decide the
+  ordering — flush before disconnect, or the keepalive fetch races a socket
+  we are intentionally tearing down. The Rust side auto-merges but carries
+  486 commits of drift and should be re-verified.
+- **Verdict:** rebase + resolve the pagehide/flush interaction + re-run the
+  e2e, then PR. Cannot be discharged.
+
+**bd-hcp8m3ve — `braid/bd-hcp8m3ve-float-taxonomy`**
+
+- 4 commits, 2026-07-21, base `cbdf27ea`. `main` is 41 commits ahead.
+  ~1708 insertions.
+- Content: design doc (`claude-notes/designs/float-layout-class-taxonomy.md`,
+  214 lines) + plan; Q1-verbatim float DOM in the pampa HTML writer (+115);
+  a substantial `crossref_render.rs` rework (+924); `auto_stretch.rs`
+  adaptation; preview React `Figure.tsx` (+79); two new test files
+  (166 + 124 lines).
+- **Not subsumed.** None of `quarto-figure`, `quarto-float-caption`,
+  `quarto-float`, or `data-qf-` appear anywhere in `crates/` or
+  `ts-packages/` on `main`. The one `main` commit touching these files since
+  the base is #408 (the epic's SCSS port) — which ports the **CSS** but not
+  the **DOM those rules target**.
+- **Merges cleanly** into `main` (textually — clean merge after 41 commits is
+  not the same as verified; needs `cargo xtask verify`).
+- **It is an active blocker.** `bd-9fz5fweg` ("Figures/floats/layout-panels
+  CSS from `_quarto-rules`") carries an explicit `blocks` dependency on
+  bd-hcp8m3ve and is still open under epic bd-4doe9lvt. The epic cannot
+  finish its figures/floats row until this DOM lands.
+- **Verdict:** highest-value, lowest-friction of the two — merges clean and
+  unblocks epic work. Run `cargo xtask verify`, then PR. Remaining scope per
+  the strand's own comment: lst e2e fixture, preview WASM-chain inspection,
+  layout-engine sub-strand (P3 standalone figures is done — commit `8f0edadd`).
 - [x] bd-e3lv7eg3 — tree-shake unused deps. `7f36c285` on `remotes/origin/chore/bd-e3lv7eg3-tree-shake-unused-deps`, **no PR was ever opened**.
 - [x] bd-7zxvdn0y — Monaco parse diagnostics. Comment describes 6 commits on `braid/bd-7zxvdn0y-monaco-parse-diagnostics`. **Followed up 2026-07-27 — verdict: unmerged, and held only on the strand author's machine.** Not a merged-then-deleted branch:
   - None of the described symbols exist on `main` — `refreshParseDiagnostics`, `useParseDiagnostics`, `getDiagnosticsForContent` appear *only* inside `.braid/snapshot.jsonl` (i.e. the strand's own comment text), nowhere in `hub-client/` or `crates/`.
