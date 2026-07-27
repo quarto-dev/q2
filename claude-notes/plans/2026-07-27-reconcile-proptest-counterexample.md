@@ -177,8 +177,9 @@ Implementation (branch `braid/bd-9fwn1504-quarto-ast-reconcile-proptest`):
 - [x] Pre-commit review checklist (`claude-notes/instructions/review.md`):
       HashMap greps clean, clippy clean, fmt via hook, TDD fail-first
       verified for all 8 tests, no TODOs added
-- [ ] Commit (awaiting approval per review checklist), then merge/PR per
-      user's direction
+- [x] Committed (804a1b38), pushed as
+      `bugfix/bd-9fwn1504-quarto-ast-reconcile-proptest`, PR #422 opened
+- [ ] CI green on PR #422, then merge (close strand on merge)
 
 Note on end-to-end verification: this fix is library-internal (the
 reconcile step of engine execution and editor write-back). It is verified
