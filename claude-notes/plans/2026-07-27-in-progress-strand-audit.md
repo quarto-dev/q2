@@ -107,7 +107,14 @@ pushed anywhere; returning them to `open` does not preserve the code):
 - [x] bd-g4uw7d8g — q2 preview eager sync. 3 commits on local branch `beads/bd-g4uw7d8g-q2-preview-eager-sync`, not on `main`, no PR. Comment: "Awaiting Carlos's manual e2e before push."
 - [x] bd-hcp8m3ve — float/layout class taxonomy. 4 commits on local branch `braid/bd-hcp8m3ve-float-taxonomy`, not on `main` (`quarto-float-caption` absent from `main`), no PR. P3/lst-fixture/preview-WASM pending.
 - [x] bd-e3lv7eg3 — tree-shake unused deps. `7f36c285` on `remotes/origin/chore/bd-e3lv7eg3-tree-shake-unused-deps`, **no PR was ever opened**.
-- [x] bd-7zxvdn0y — Monaco parse diagnostics. Comment describes 6 commits on `braid/bd-7zxvdn0y-monaco-parse-diagnostics`, but **that branch does not exist in this checkout or on origin**. Needs recovery/relocation before the work is assumed lost.
+- [x] bd-7zxvdn0y — Monaco parse diagnostics. Comment describes 6 commits on `braid/bd-7zxvdn0y-monaco-parse-diagnostics`. **Followed up 2026-07-27 — verdict: unmerged, and held only on the strand author's machine.** Not a merged-then-deleted branch:
+  - None of the described symbols exist on `main` — `refreshParseDiagnostics`, `useParseDiagnostics`, `getDiagnosticsForContent` appear *only* inside `.braid/snapshot.jsonl` (i.e. the strand's own comment text), nowhere in `hub-client/` or `crates/`.
+  - No PR ever existed: `gh pr list --state all --search "bd-7zxvdn0y"` is empty, and no closed/merged PR title mentions parse diagnostics or squiggles. The nearby merged Monaco PRs (#296, #305, #338) are highlighting and backtick-autoclose, unrelated.
+  - The branch is absent from origin (`gh api repos/quarto-dev/q2/branches`), from this checkout, and from `~/rooms/room-1` and `~/rooms/room-3`.
+  - `git fsck --dangling` has no unreachable commits from 2026-06-23; the one `error squiggles` commit in history (`22d9fd75`) is Carlos's, from Dec 2025, and is already on `main`.
+  - The plan the strand cites, `claude-notes/plans/2026-06-22-monaco-parse-error-diagnostics.md`, was never committed to any ref here either.
+
+  **Owner:** the strand was created and both comments written by **shikokuchuo** — the same developer whose bd-53501yf7 work (implemented today) is likewise not present in any local checkout. The consistent explanation is that shikokuchuo works from their own machine and this branch was never pushed. **Action: ask shikokuchuo to push `braid/bd-7zxvdn0y-monaco-parse-diagnostics` (plus the plan doc) to origin.** Nothing to recover on our side.
 
 Blocked on / owned elsewhere:
 
