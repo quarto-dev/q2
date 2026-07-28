@@ -28,8 +28,8 @@ use quarto_source_map::SourceContext;
 use serde::Serialize;
 
 use crate::commands::common::plan::{CommandFailure, FilePlan};
-use crate::commands::common::writer::{self, ExecutedFile, FileAction};
 use crate::commands::common::prompter;
+use crate::commands::common::writer::{self, ExecutedFile, FileAction};
 use artifact::{ArtifactProvider, ChoiceListing};
 
 pub fn execute(

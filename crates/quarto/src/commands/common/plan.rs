@@ -27,11 +27,15 @@ pub struct PlannedFile {
 
 /// An in-place modification of a file that may already exist.
 ///
-/// Every variant is append-only by construction. That is not a
-/// limitation we ran into and worked around — it is the property that
-/// makes editing a user's hand-written file safe: no existing byte is
-/// ever rewritten, so comments, ordering, and formatting above the
-/// insertion point survive untouched.
+/// The first two variants are **append-only**. That is not a limitation
+/// we ran into and worked around — it is the property that makes
+/// editing a user's hand-written file safe: no existing byte is ever
+/// rewritten, so comments, ordering, and formatting survive untouched.
+///
+/// [`PlannedEdit::ReplaceRange`] is the single deliberate exception,
+/// and it is narrow by construction: it rewrites an exact byte range
+/// identified by the YAML parser, and refuses if the bytes there are
+/// not what the planner saw. See its own documentation.
 #[derive(Debug)]
 pub enum PlannedEdit {
     /// Ensure each line in `lines` appears somewhere in the file,
@@ -41,6 +45,43 @@ pub enum PlannedEdit {
         /// Path relative to the plan root.
         path: PathBuf,
         lines: Vec<String>,
+    },
+
+    /// Append `block` verbatim at end of file, normalizing the newline
+    /// that separates it from what came before.
+    ///
+    /// The file **must** already exist. A missing file is an error, not
+    /// an implicit create: callers using this variant have established
+    /// the file's existence as a precondition, and a silent create
+    /// would turn a resolution bug into a plausible-looking wrong file.
+    AppendBlock {
+        /// Path relative to the plan root.
+        path: PathBuf,
+        block: String,
+    },
+
+    /// Replace the bytes in `start..end` with `replacement`.
+    ///
+    /// The only non-append edit, used to repoint an existing scalar
+    /// value rather than appending a duplicate key next to it. Two
+    /// properties keep it safe:
+    ///
+    /// - The range comes from the YAML parser's span for a specific
+    ///   scalar value — not from a regex or a line guess.
+    /// - `expected` records what the planner read there. The writer
+    ///   re-reads the file and refuses if the bytes have changed since,
+    ///   so an edit computed against one version of a file can never be
+    ///   applied to a different one.
+    ReplaceRange {
+        /// Path relative to the plan root.
+        path: PathBuf,
+        /// Byte offset of the first replaced byte.
+        start: usize,
+        /// Byte offset one past the last replaced byte.
+        end: usize,
+        replacement: String,
+        /// The text the planner saw in `start..end`.
+        expected: String,
     },
 }
 

@@ -27,6 +27,11 @@ quarto-core = { workspace = true, features = ["clap"] }
 quarto-error-catalog.workspace = true
 quarto-error-reporting = { workspace = true, features = ["json"] }
 quarto-source-map.workspace = true
+# `q2 use brand` inspects _quarto.yml with the same source-located
+# parser the render pipeline uses, so "what counts as a brand
+# declaration" cannot drift from what actually takes effect.
+quarto-yaml.workspace = true
+yaml-rust2.workspace = true
 quarto-trace.workspace = true
 quarto-trace-server.workspace = true
 quarto-util.workspace = true

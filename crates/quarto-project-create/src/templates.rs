@@ -24,6 +24,18 @@ pub mod default {
     pub const INDEX_QMD: &str = include_str!("../resources/templates/default/index.qmd.template");
 }
 
+/// Scaffold contents for `q2 use brand` (bd-1vlw8).
+///
+/// Not a project type — a single starter file added to an *existing*
+/// project. It lives here rather than in the `quarto` binary so the
+/// hub client can offer the same starter brand without duplicating it.
+pub mod brand {
+    /// Starter `_brand.yml`. Static, not a template: nothing in a
+    /// starter brand depends on the project's title or type, and a
+    /// literal file is what the user will read and edit.
+    pub const BRAND_YML: &str = include_str!("../resources/templates/brand/_brand.yml");
+}
+
 /// Scaffold contents for the website project type.
 pub mod website {
     /// `_quarto.yml` template for website projects.

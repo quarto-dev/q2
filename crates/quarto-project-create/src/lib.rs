@@ -216,6 +216,16 @@ pub fn create_scaffolded_files(
     Ok(files)
 }
 
+/// The starter `_brand.yml` written by `q2 use brand` when no source
+/// is given (bd-1vlw8).
+///
+/// Returned as text rather than written, matching this crate's
+/// no-filesystem contract — the caller (CLI or hub client) decides
+/// where it goes.
+pub fn starter_brand_yml() -> &'static str {
+    templates::brand::BRAND_YML
+}
+
 /// Get information about available project types.
 ///
 /// Returns information useful for building UI selection dialogs.
@@ -433,6 +443,25 @@ mod render_tests {
 
         let yml = parse_yaml(file_content(&files, "_quarto.yml"));
         assert_eq!(yml["project"]["title"].as_str(), Some("Line one\nLine two"));
+    }
+
+    #[test]
+    fn starter_brand_is_valid_yaml_with_usable_defaults() {
+        let yml = parse_yaml(starter_brand_yml());
+
+        // The palette-plus-reference shape is the thing we are teaching
+        // by example; if it regresses into literal hex values in the
+        // slots, the starter stops demonstrating the idea.
+        assert_eq!(yml["color"]["palette"]["accent"].as_str(), Some("#2c6fbb"));
+        assert_eq!(yml["color"]["primary"].as_str(), Some("accent"));
+        assert_eq!(
+            yml["typography"]["base"]["family"].as_str(),
+            Some("Open Sans")
+        );
+
+        // Logos are commented out: an uncommented `logo:` would point at
+        // image files that do not exist, and every render would warn.
+        assert!(yml.get("logo").is_none(), "logo slots must stay commented");
     }
 
     #[test]

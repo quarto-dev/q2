@@ -3539,6 +3539,7 @@ dependencies = [
  "quarto-trace",
  "quarto-trace-server",
  "quarto-util",
+ "quarto-yaml",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -3549,6 +3550,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "walkdir",
+ "yaml-rust2",
 ]
 
 [[package]]

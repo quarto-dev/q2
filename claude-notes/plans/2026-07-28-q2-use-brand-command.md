@@ -554,31 +554,81 @@ create-specific and had to become plan *data* rather than writer code, or
   is deliberately **not** added here; it lands in Phase 3 with its consumer
   rather than sitting unused, which `-D warnings` would flag anyway.
 
-### Phase 2 — Command plumbing + pre-flight gates
+### Phases 2–4 — the working command (landed together)
 
-- [ ] `Commands::Use` → clap subcommand enum with `brand` carrying
+Landed as one commit: the phases are mutually dependent (there is no
+observable command without gates *and* an insertion *and* something to
+write), so splitting them would have meant committing a binary that could
+not succeed. Phase 8 (`--json`) folded in too — leaving a declared flag
+inert would have been worse than implementing forty lines.
+
+- [x] `Commands::Use` → clap subcommand enum with `brand` carrying
       `--dry-run`, `--force`, `--trust`, `--no-prompt`, `--json`.
-- [ ] Mutually-exclusive flag validation (`--force`/`--trust` vs `--dry-run`).
-- [ ] `commands/use_cmd/` module replacing the stub.
-- [ ] Gate A1 — project root discovery via `find_project_config`.
-- [ ] Gate A2 — refuse on existing root `_brand.yml`/`_brand.yaml`.
-- [ ] Gate A4 — config editability (single doc, top-level mapping).
-- [ ] Cases 1, 4, 9 passing.
+- [x] Mutually-exclusive flag validation (`--force`/`--trust` vs `--dry-run`).
+- [x] `commands/use_cmd/` module replacing the stub.
+- [x] Gate A1 — project root discovery, walking up; never creates a config.
+- [x] Gate A2 — refuse on existing root `_brand.yml`/`_brand.yaml`.
+- [x] Gate A3 — detect top-level `brand:` and `format.<any>.brand:`, with
+      line numbers and value summaries in the diagnostic.
+- [x] Gate A4 — config editability (single document, top-level mapping).
+- [x] Append-at-EOF insertion with newline normalization.
+- [x] `--force` override for gates A2/A3.
+- [x] Starter `_brand.yml` in `quarto-project-create`.
+- [x] `--json` front door (Phase 8, pulled forward).
+- [x] Cases 1–9, 21 passing.
+- [x] **Case 22 (end-to-end render) passing** — the milestone that proves
+      the design.
 
-### Phase 3 — `_quarto.yml` inspection + surgical insertion
+**Design notes from execution.**
 
-- [ ] Gate A3 — detect top-level `brand:` and `format.<any>.brand:` with spans.
-- [ ] Append-at-EOF writer with newline normalization.
-- [ ] `--force` override for gates A2/A3.
-- [ ] Cases 5, 6, 7 passing.
-
-### Phase 4 — Scaffold mode (first end-to-end green)
-
-- [ ] Starter `_brand.yml` template in `quarto-project-create`.
-- [ ] `q2 use brand` with no target: plan + write + declare.
-- [ ] Cases 2, 3, 8 passing.
-- [ ] Case 22 (end-to-end render) passing — **the milestone that proves the
-      design**.
+1. **`--force` could not simply append.** Decision 14 says `--force`
+   overrides the existing-declaration gate — but appending a second
+   top-level `brand:` produces a *duplicate YAML key*, i.e. a config
+   whose meaning depends on parser tie-breaking. That is a corrupted
+   file, not an override. Resolved by splitting on what can be rewritten
+   safely:
+   - top-level `brand: <path>` (a plain scalar) → repointed in place via
+     a new `PlannedEdit::ReplaceRange`;
+   - `format.<fmt>.brand` → **still refused, even with `--force`**,
+     because a format-scoped declaration would keep overriding the
+     project-level one we just wrote, for that format. Succeeding while
+     leaving the user's render unchanged is precisely the failure mode
+     this whole strand exists to prevent;
+   - an inline brand block → refused; replacing a nested map wholesale
+     is not a safe span edit.
+2. **`ReplaceRange` carries an `expected` string.** It is the one
+   non-append edit, so it re-reads the file at write time and refuses if
+   the bytes at the recorded offsets are no longer what the planner saw.
+   Not hypothetical once fetching lands: the gap between planning and
+   writing will span a network round trip.
+3. **`scalar_value_span` declines quoted scalars.** A span whose source
+   bytes are not literally the parsed value (`"a.yml"` vs `a.yml`) is not
+   safe to overwrite with a bare replacement — it would drop the
+   quoting. Rather than model every YAML scalar style, we read the bytes
+   back and decline if they differ; the caller then reports that it
+   cannot repoint the declaration.
+4. **An empty `_quarto.yml` needed explicit handling.**
+   `quarto_yaml::parse_file` reports "No YAML document found" for an
+   empty or comment-only file. Correct for a parser, wrong as a verdict
+   here — that config is appendable, not broken. `ProjectConfigFile`
+   models it as `parsed: None` rather than letting it surface as a parse
+   error.
+5. **The end-to-end test needed correcting twice.** Output lands in
+   `_site/`, not next to the source, and the theme CSS is a separate file
+   rather than inlined — so the assertion searches the whole output tree.
+   Worth recording because the first version of the test passed
+   vacuously in neither direction: it simply could not find the file.
+6. **`ReplaceRange`'s `expected` is sliced from the config text, not
+   reused from the declaration's display summary.** They are equal
+   today; but `value_summary` exists to be *read by a human* (it renders
+   an inline block as `(inline brand block)`), and if it ever gained
+   truncation, feeding it to a byte-exact guard would break the guard
+   rather than the message.
+7. **A second render test covers the shipped starter brand.** The main
+   end-to-end test overwrites `_brand.yml` with a probe value, so it
+   never exercises the template we actually ship. A typo in the starter
+   would reach users unnoticed; `the_shipped_starter_brand_renders_without_editing`
+   renders it as-is and asserts its accent color reaches the CSS.
 
 ### Phase 5 — `quarto-source-fetch`: extraction
 
@@ -613,11 +663,16 @@ Riskiest code, landed first and alone.
 - [ ] Brand-extension detection for a better error message.
 - [ ] Cases 10, 11, 12, 16, 19, 20 passing.
 
-### Phase 8 — `--json` front door
+### Phase 8 — `--json` front door — **done** (folded into Phases 2–4)
 
-- [ ] Directive parsing (`{"use": "brand", …}`), unknown fields rejected.
-- [ ] One result object on stdout; diagnostics as JSON lines on stderr.
-- [ ] Case 21 passing.
+- [x] One result object on stdout; diagnostics as JSON lines on stderr.
+- [x] Case 21 passing.
+
+Note: unlike `q2 create`, there is no stdin *directive* — `q2 use brand`
+takes a single optional positional target, so a JSON input object would
+carry no information the flags do not. `--json` here means "machine-
+readable output", and the shape matches create's result object
+(`version`, `path`, `dry_run`, `files[]`).
 
 ### Phase 9 — Docs + close-out
 

@@ -96,14 +96,114 @@ pub fn execute_plan(plan: &FilePlan) -> Result<Vec<ExecutedFile>, CommandFailure
 fn apply_edit(plan: &FilePlan, edit: &PlannedEdit) -> Result<ExecutedFile, CommandFailure> {
     match edit {
         PlannedEdit::EnsureLines { path, lines } => ensure_lines(plan, path, lines),
+        PlannedEdit::AppendBlock { path, block } => append_block(plan, path, block),
+        PlannedEdit::ReplaceRange {
+            path,
+            start,
+            end,
+            replacement,
+            expected,
+        } => replace_range(plan, path, *start, *end, replacement, expected),
     }
+}
+
+/// Read a file that an edit requires to already exist, mapping a
+/// missing file to a clear failure rather than an implicit create.
+fn read_existing(path: &Path, rel: &Path) -> Result<String, CommandFailure> {
+    std::fs::read_to_string(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            CommandFailure::new(
+                format!("Cannot edit {}", rel.display()),
+                format!("{} does not exist.", path.display()),
+            )
+        } else {
+            io_failure(&format!("read {}", rel.display()), path, e)
+        }
+    })
+}
+
+/// Append `block` at end of file, normalizing the newline that
+/// separates it from whatever was there before.
+fn append_block(plan: &FilePlan, rel: &Path, block: &str) -> Result<ExecutedFile, CommandFailure> {
+    let path = plan.root.join(rel);
+    let existing = read_existing(&path, rel)?;
+
+    if !plan.dry_run {
+        let mut updated = existing;
+        if !updated.is_empty() && !updated.ends_with('\n') {
+            updated.push('\n');
+        }
+        updated.push_str(block);
+        if !updated.ends_with('\n') {
+            updated.push('\n');
+        }
+        std::fs::write(&path, updated)
+            .map_err(|e| io_failure(&format!("write {}", rel.display()), &path, e))?;
+    }
+
+    Ok(ExecutedFile {
+        path: rel.to_path_buf(),
+        action: FileAction::Updated,
+    })
+}
+
+/// Replace `start..end` with `replacement`, but only if the bytes there
+/// still read as `expected`.
+///
+/// The guard is what makes a non-append edit defensible. Offsets were
+/// computed against the file as the planner read it; between then and
+/// now the plan may have crossed a network fetch, a prompt, or simply
+/// enough wall-clock for the user to have saved the file in an editor.
+/// Applying stale offsets to changed content would corrupt the file
+/// silently, which is precisely the failure this whole command is
+/// careful to avoid.
+fn replace_range(
+    plan: &FilePlan,
+    rel: &Path,
+    start: usize,
+    end: usize,
+    replacement: &str,
+    expected: &str,
+) -> Result<ExecutedFile, CommandFailure> {
+    let path = plan.root.join(rel);
+    let existing = read_existing(&path, rel)?;
+
+    let stale = || {
+        CommandFailure::new(
+            format!("{} changed while the command was running", rel.display()),
+            format!(
+                "Expected to find `{expected}` at bytes {start}..{end} of {}, but the \
+                 file no longer matches. Nothing was written. Re-run the command.",
+                path.display()
+            ),
+        )
+    };
+
+    let actual = existing.get(start..end).ok_or_else(stale)?;
+    if actual != expected {
+        return Err(stale());
+    }
+
+    if !plan.dry_run {
+        let mut updated = String::with_capacity(existing.len() + replacement.len());
+        updated.push_str(&existing[..start]);
+        updated.push_str(replacement);
+        updated.push_str(&existing[end..]);
+        std::fs::write(&path, updated)
+            .map_err(|e| io_failure(&format!("write {}", rel.display()), &path, e))?;
+    }
+
+    Ok(ExecutedFile {
+        path: rel.to_path_buf(),
+        action: FileAction::Updated,
+    })
 }
 
 /// Ensure every line in `lines` is present, appending the missing ones.
 /// Creates the file when absent.
 fn ensure_lines(
     plan: &FilePlan,
-    rel: &PathBuf,
+    rel: &Path,
     lines: &[String],
 ) -> Result<ExecutedFile, CommandFailure> {
     let path = plan.root.join(rel);
@@ -119,7 +219,7 @@ fn ensure_lines(
                 .map_err(|e| io_failure(&format!("write {}", rel.display()), &path, e))?;
         }
         return Ok(ExecutedFile {
-            path: rel.clone(),
+            path: rel.to_path_buf(),
             action: FileAction::Created,
         });
     }
@@ -133,7 +233,7 @@ fn ensure_lines(
 
     if missing.is_empty() {
         return Ok(ExecutedFile {
-            path: rel.clone(),
+            path: rel.to_path_buf(),
             action: FileAction::SkippedExisting,
         });
     }
@@ -151,7 +251,7 @@ fn ensure_lines(
             .map_err(|e| io_failure(&format!("write {}", rel.display()), &path, e))?;
     }
     Ok(ExecutedFile {
-        path: rel.clone(),
+        path: rel.to_path_buf(),
         action: FileAction::Updated,
     })
 }
