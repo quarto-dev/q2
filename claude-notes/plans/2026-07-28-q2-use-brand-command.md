@@ -219,6 +219,85 @@ Round 1 (1–8) fixed the command's shape; round 2 (9–14) fixed the fetch surf
     waives the remote trust prompt. Neither implies the other — clobbering your
     own file and executing someone else's fetched content are different risks.
 
+## Quarto 1 defects we are deliberately not porting
+
+Three defects in `extension-host.ts`, all reachable from `quarto use brand`.
+Two of them share a root cause. Q2 fixes all three; the tests that pin the
+fixes are Phase 0 cases 16–18.
+
+### 1. The default branch is hardcoded to `main`
+
+`githubLatestUrlProvider.extensionUrl` (`extension-host.ts:111-116`):
+
+```ts
+if (host.modifier === undefined || host.modifier === "latest") {
+  return `https://github.com/${host.organization}/${host.repo}/archive/refs/heads/main${archiveExt}`;
+}
+```
+
+`main` is a literal. For a bare `org/repo` target with no `@ref`, this is the
+only provider that produces a URL — the tag and branch providers both require
+`host.modifier` to be set. So a repository whose default branch is `master`
+(or `trunk`, or anything else) returns 404 from the only candidate, falls off
+the end of `extensionSource`, and the user is told *"Brand not found in local
+or remote sources"* — a message that points at the wrong problem entirely.
+
+**Q2 fix.** Probe `main`, then `master`. Two HEAD-equivalent requests worst
+case, no API call, no authentication, no rate-limit exposure. This does not
+cover exotic default branches, and deliberately so: the GitHub API call that
+would (`GET /repos/{org}/{repo}`) costs an unauthenticated rate limit of 60/hr
+shared across the machine, which is a bad trade for a rare case. What Q2 does
+guarantee is that the *error message* names the real problem — "no archive
+found at branch `main` or `master`; pass an explicit `@ref`" — so the user has
+a next step. That is the actual defect: not that `master` fails, but that the
+failure is undiagnosable.
+
+### 2 & 3. The archive's root directory is *predicted* rather than *observed*
+
+Root cause for both: `archiveSubdir` computes what it thinks GitHub will name
+the top-level directory inside the archive, from the ref string.
+
+**Symptom A — refs containing `/`.** `githubBranchUrlProvider.archiveSubdir`
+(`extension-host.ts:153-160`) returns `` `${host.repo}-${host.modifier}` ``. For
+`org/repo@feature/foo` that is `repo-feature/foo` — a *two-segment path*. A
+GitHub archive has a single root directory; no flat prefix can produce a nested
+path. So the predicted subdir cannot exist, and the lookup falls through to
+`stageBrand`'s lone-subfolder rescue (`brand.ts:553-571`), which happens to
+work — but only by accident, and only when the archive has exactly one top
+level entry and no loose files.
+
+**Symptom B — tags beginning with `v`.** `tagSubDirectory`
+(`extension-host.ts:225-232`):
+
+```ts
+return tag.startsWith("v") ? tag.slice(1) : tag;
+```
+
+This is meant to model GitHub stripping the `v` from version tags (`v1.2.3` →
+`repo-1.2.3`). But it strips a leading `v` from *any* tag: `valid-release`
+becomes `alid-release`. Same fall-through-to-rescue behavior, same accidental
+recovery.
+
+**Q2 fix — derive, don't predict.** After extraction, inspect the extracted
+tree: if it contains exactly one entry and that entry is a directory, that
+directory *is* the archive root. Then apply the user's `<subdir>` beneath it.
+This is correct by construction for every ref shape, needs no model of GitHub's
+naming rules, and works identically for non-GitHub archive URLs — where Q1 has
+no prediction available at all and relies solely on the rescue heuristic.
+
+The general principle, worth stating because it generalizes past this strand:
+**replicating another service's undocumented naming behavior is a standing
+liability.** GitHub's exact rule for stripping `v` from tags is not documented
+and not something we should encode; the archive itself is authoritative and is
+already in hand by the time we need the answer. Q1 has the observation-based
+code *and* the prediction-based code, and uses the prediction first. Q2 keeps
+only the observation.
+
+*(Note: the precise directory name GitHub emits for slash-containing refs was
+not verified against the live service in this session — no network. That is not
+a gap in the argument but an illustration of it: the fix does not depend on
+knowing the answer.)*
+
 ## Proposed approach
 
 Five pieces, in dependency order.
@@ -266,19 +345,13 @@ tag `<ref>` → branch `<ref>`. Try each; first `200` wins. We request `.tar.gz`
 from GitHub (canonical and smaller); `.zip` support exists for user-supplied
 URLs and local files, not because GitHub needs it.
 
-Two Q1 bugs worth *not* porting:
-
-- `githubLatestUrlProvider` hardcodes `refs/heads/main`
-  (`extension-host.ts:114`), so a repo whose default branch is `master` silently
-  falls through every provider and reports "not found". Proposal: probe `main`,
-  then `master`. No API call, no auth, no rate limit.
-- `archiveSubdir` *predicts* the archive's root directory as
-  `<repo>-<ref>` (`extension-host.ts:117-123`), which is wrong for any ref
-  containing a `/` — GitHub renders `feature/foo` as `repo-feature-foo`, but Q1
-  computes `repo-feature/foo`. Proposal: **derive the root from the archive**
-  (the single top-level entry) instead of predicting it, then apply the
-  user's `<subdir>` beneath it. Q1 already has a lone-subfolder fallback
-  (`brand.ts:553-571`) — we make that the primary path rather than the rescue.
+Three Q1 defects are fixed rather than ported — the hardcoded `main` default
+branch, and two symptoms of predicting the archive root instead of observing it.
+See **Quarto 1 defects we are deliberately not porting** above for the full
+analysis. Net effect on this design: we probe `main` then `master`, and we
+**never compute an expected archive-root name** — the root is whatever single
+top-level directory the extracted tree contains, with `<subdir>` applied
+beneath it.
 
 **Fetch trait** modeled on `PublishHost::http_get`: a `SourceFetch` trait with a
 native `ureq`-backed impl and an in-process fake for unit tests. Streams to a
@@ -376,14 +449,30 @@ and existing key order survive untouched. The value is `_brand.yml` or
   JSON lines on stderr. The machine path never prompts, so a remote target
   without `"trust": true` fails the trust gate before downloading.
 
-## Proposed phases (draft)
+## Work items
 
-- **Phase 0 — Test plan (TDD, failing first).** New
-  `crates/quarto/tests/integration/use_brand.rs` (registered in
-  `tests/integration/main.rs`; do **not** add a top-level `tests/*.rs` —
-  `.claude/rules/integration-tests.md`), modeled on `create.rs`, spawning the
-  real binary. Plus unit tests in the fetch crate against its in-process fake.
-  Cases:
+Progress is tracked here. Each phase's tests are written and observed failing
+before that phase's implementation (CLAUDE.md TDD rule); the full test
+specification below is the contract they encode.
+
+### Phase 0 — Test specification
+
+New `crates/quarto/tests/integration/use_brand.rs` (registered in
+`tests/integration/main.rs`; do **not** add a top-level `tests/*.rs` —
+`.claude/rules/integration-tests.md`), modeled on `create.rs`, spawning the real
+binary. Plus unit tests inside `quarto-source-fetch` against its in-process fake.
+
+Cases are checked off as they are *written and passing*; the phase that
+implements each is noted.
+
+- [ ] 1–9, 21–22 written and failing (command-level; Phases 2–4, 8)
+- [ ] 13–14 written and failing (extraction; Phase 5)
+- [ ] 15–20 written and failing (network + copy; Phases 6–7)
+- [ ] 10–12 written and failing (copy mode; Phase 7)
+
+<details>
+<summary>Full case list (the contract)</summary>
+
   1. No `_quarto.yml` anywhere up the tree → non-zero exit, message names the
      missing file, **nothing written** (no `_brand.yml`, no `_quarto.yml`).
   2. `_quarto.yml` present, no brand → `_brand.yml` created *and* `brand:`
@@ -434,26 +523,90 @@ and existing key order survive untouched. The value is `_brand.yml` or
       the project and grep the emitted CSS for a brand-derived value. This is
       the test that proves the declaration step actually connects — the exact
       failure mode a Q1-faithful copy-only port would have.
-- **Phase 1 — Shared `commands/common/` extraction** (pure refactor; `create`'s
-  tests must stay green).
-- **Phase 2 — Command plumbing.** `Commands::Use` → subcommand enum;
-  `commands/use_cmd/` module; pre-flight gates A1–A4.
-- **Phase 3 — `_quarto.yml` inspection + surgical insertion** (D).
-- **Phase 4 — Scaffold mode** (C, no-target path). First end-to-end green.
-- **Phase 5 — `quarto-source-fetch` crate, extraction half first**: the
-  `extract_into` contract with both backends and the full hardening matrix, unit
-  tested against hand-built archives. No network yet. Front-loading this means
-  the riskiest code lands with the most attention on it.
-- **Phase 6 — `quarto-source-fetch`, network half**: target parsing (including
-  subdirs, default-branch probing, archive-root derivation), the `SourceFetch`
-  trait + `ureq` impl, magic-byte detection.
-- **Phase 7 — Fetch/copy mode** wired into the command: validation, asset
-  traversal, destination selection, trust prompt, `--trust`.
-- **Phase 8 — `--json` front door.**
-- **Phase 9 — Docs.** A user-facing page under `docs/` (usage, not internals).
-  Must state (a) the Q1↔Q2 difference — Q2 writes the `brand:` key because it
-  does not auto-discover; (b) the `--force` vs `--trust` split; (c) that Q1
-  brand *extensions* are not supported.
+
+</details>
+
+### Phase 1 — Shared `commands/common/` module
+
+Pure refactor; `create`'s integration tests must stay green throughout.
+
+- [ ] Move plan/writer/prompter/failure types from `commands/create/` to
+      `commands/common/`, renaming `CreatePlan` → `FilePlan`, `CreateFailure` →
+      `CommandFailure`.
+- [ ] `create` imports from `common`; behavior unchanged.
+- [ ] `cargo nextest run -p quarto` green.
+
+### Phase 2 — Command plumbing + pre-flight gates
+
+- [ ] `Commands::Use` → clap subcommand enum with `brand` carrying
+      `--dry-run`, `--force`, `--trust`, `--no-prompt`, `--json`.
+- [ ] Mutually-exclusive flag validation (`--force`/`--trust` vs `--dry-run`).
+- [ ] `commands/use_cmd/` module replacing the stub.
+- [ ] Gate A1 — project root discovery via `find_project_config`.
+- [ ] Gate A2 — refuse on existing root `_brand.yml`/`_brand.yaml`.
+- [ ] Gate A4 — config editability (single doc, top-level mapping).
+- [ ] Cases 1, 4, 9 passing.
+
+### Phase 3 — `_quarto.yml` inspection + surgical insertion
+
+- [ ] Gate A3 — detect top-level `brand:` and `format.<any>.brand:` with spans.
+- [ ] Append-at-EOF writer with newline normalization.
+- [ ] `--force` override for gates A2/A3.
+- [ ] Cases 5, 6, 7 passing.
+
+### Phase 4 — Scaffold mode (first end-to-end green)
+
+- [ ] Starter `_brand.yml` template in `quarto-project-create`.
+- [ ] `q2 use brand` with no target: plan + write + declare.
+- [ ] Cases 2, 3, 8 passing.
+- [ ] Case 22 (end-to-end render) passing — **the milestone that proves the
+      design**.
+
+### Phase 5 — `quarto-source-fetch`: extraction
+
+Riskiest code, landed first and alone.
+
+- [ ] New crate skeleton; `tar` + `zip` workspace deps added.
+- [ ] `extract_into(reader, dest, limits)` contract, tar backend.
+- [ ] Zip backend.
+- [ ] Hardening matrix: path escape, symlink, hardlink, entry count, byte cap,
+      zip declared-size mismatch — **both backends**.
+- [ ] Magic-byte format detection.
+- [ ] Cases 13, 14 passing.
+
+### Phase 6 — `quarto-source-fetch`: network
+
+- [ ] Target parsing: local, `org/repo[/subdir][@ref]`, GitHub archive URL,
+      direct URL.
+- [ ] URL candidate generation; **`main` then `master` probing** (Q1 defect 1).
+- [ ] `SourceFetch` trait + `ureq` impl + in-process fake; streaming to temp
+      file; size cap and timeout.
+- [ ] **Archive-root derivation from the extracted tree** (Q1 defects 2 & 3) —
+      no predicted names anywhere in the crate.
+- [ ] Cases 15, 17, 18 passing.
+
+### Phase 7 — Fetch/copy mode
+
+- [ ] Brand-file location within the resolved source (+ `<subdir>`).
+- [ ] `quarto-brand` validation before any write.
+- [ ] Asset traversal over the typed model; escape check on declared paths.
+- [ ] Destination selection (root vs `_brand/`) + post-fetch `_brand/` gate.
+- [ ] Trust prompt + `--trust`; fail-closed non-interactive.
+- [ ] Brand-extension detection for a better error message.
+- [ ] Cases 10, 11, 12, 16, 19, 20 passing.
+
+### Phase 8 — `--json` front door
+
+- [ ] Directive parsing (`{"use": "brand", …}`), unknown fields rejected.
+- [ ] One result object on stdout; diagnostics as JSON lines on stderr.
+- [ ] Case 21 passing.
+
+### Phase 9 — Docs + close-out
+
+- [ ] User-facing `docs/` page: usage; the Q1↔Q2 auto-discovery difference;
+      `--force` vs `--trust`; brand extensions unsupported.
+- [ ] `cargo xtask verify` (full, not `--skip-hub-build`) green.
+- [ ] End-to-end invocation + observed output recorded in this plan.
 
 ## Open design questions
 
