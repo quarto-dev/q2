@@ -3,5 +3,6 @@
 //! rather than as separate top-level `tests/*.rs` files.
 
 pub mod extract;
+pub mod network;
 
 fn main() {}

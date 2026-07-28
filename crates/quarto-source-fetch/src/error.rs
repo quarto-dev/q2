@@ -54,6 +54,29 @@ pub enum FetchError {
 
     #[error("could not read archive: {0}")]
     Archive(String),
+
+    /// The user's target string is not a path, a URL, or `org/repo`.
+    #[error("{target:?} is not a source we recognize: {reason}")]
+    UnrecognizedTarget {
+        target: String,
+        reason: &'static str,
+    },
+
+    /// Every candidate URL was tried and none served an archive.
+    #[error("could not download {description}: {detail}")]
+    NotFound { description: String, detail: String },
+
+    /// The response body exceeded the download ceiling.
+    #[error("download exceeded {limit} bytes")]
+    DownloadTooLarge { limit: u64 },
+
+    #[error("network error fetching {url}: {message}")]
+    Network { url: String, message: String },
+
+    /// A `org/repo/<subdir>` target named a directory the archive does
+    /// not contain.
+    #[error("the archive has no {subdir:?} directory ({available})")]
+    SubdirectoryNotFound { subdir: String, available: String },
 }
 
 impl FetchError {

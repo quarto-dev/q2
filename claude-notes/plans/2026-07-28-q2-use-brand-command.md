@@ -685,16 +685,50 @@ Riskiest code, landed first and alone.
    "fix" for a `None` return (falling back to `name()`) is the classic
    zip-slip mistake.
 
-### Phase 6 — `quarto-source-fetch`: network
+### Phase 6 — `quarto-source-fetch`: network — **done**
 
-- [ ] Target parsing: local, `org/repo[/subdir][@ref]`, GitHub archive URL,
-      direct URL.
-- [ ] URL candidate generation; **`main` then `master` probing** (Q1 defect 1).
-- [ ] `SourceFetch` trait + `ureq` impl + in-process fake; streaming to temp
-      file; size cap and timeout.
-- [ ] **Archive-root derivation from the extracted tree** (Q1 defects 2 & 3) —
-      no predicted names anywhere in the crate.
-- [ ] Cases 15, 17, 18 passing.
+- [x] Target parsing: local path, `org/repo[/subdir][@ref]`, any `http(s)` URL.
+- [x] URL candidate generation; **`main` then `master` probing** (Q1 defect 1).
+- [x] `SourceFetch` trait + `ureq` impl + in-process fake; streaming to a temp
+      file; download ceiling and timeout.
+- [x] **Archive-root derivation from the extracted tree** (Q1 defects 2 & 3) —
+      no predicted directory name anywhere in the crate.
+- [x] Cases 15, 16, 17, 18 passing (53 tests total in the crate).
+
+**Design notes from execution.**
+
+1. **Two levels of network test, on purpose.** A scripted `SourceFetch`
+   fake pins the *request sequence* (which URLs, in which order) — that
+   is where the Q1 defects live and the assertions state it exactly. A
+   real `TcpListener` on `127.0.0.1:0` exercises `UreqFetch` itself, so
+   the client that ships is covered rather than only the seam around it.
+   `fake_and_real_paths_agree_on_the_same_archive` feeds the same bytes
+   through both and asserts they derive the same root, so a green fake
+   test cannot be green for a reason the real path would not reproduce.
+2. **`https_only` is set per-request from the target's own scheme.**
+   That gives "an https target must not be redirected down to
+   plaintext" without banning an explicitly-`http://` target the user
+   chose — and without banning the localhost test server.
+   `max_redirects_will_error(true)` keeps a redirect chain from handing
+   back a 3xx as if it were the answer.
+3. **The `<subdir>` of a target goes through the archive sanitizer.**
+   It is joined onto the extracted tree, so `org/repo/../../etc` is the
+   same escape vector as a hostile archive entry name and gets the same
+   rejection. One rule, two callers — hence the rename to
+   `sanitize_relative_path`.
+4. **A failed fetch reports every URL it tried, with status.** Q1's
+   equivalent ("Brand not found in local or remote sources") names
+   neither, which is exactly what makes its hardcoded-`main` defect
+   undiagnosable from the outside.
+5. **Two test bugs worth recording, both "passed for the wrong reason".**
+   The v-prefixed-tag test asserted `!candidate.contains("alid-release")`
+   — but `"valid-release"` *contains* `"alid-release"`, so the assertion
+   could never fail; it now asserts on the full URL path segment. And
+   the download-ceiling test built its oversized body with
+   `tar_gz_with_root(… "a".repeat(200_000))`, which compresses to a few
+   hundred bytes on the wire and never approached the ceiling; it now
+   serves incompressible bytes. Mutation-checked afterwards: disabling
+   the ceiling turns it red.
 
 ### Phase 7 — Fetch/copy mode
 

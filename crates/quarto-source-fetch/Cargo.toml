@@ -18,6 +18,9 @@ tar = "0.4"
 # attack surface reachable from an untrusted file.
 zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 thiserror.workspace = true
+# Sync HTTP inside a sync command, matching quarto-publish's native
+# host: at most three requests, versus pulling tokio + reqwest in.
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 
 [dev-dependencies]
 tempfile = "3"

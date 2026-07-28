@@ -150,10 +150,10 @@ impl<'a> ExtractSink<'a> {
                 limit: self.limits.max_entries,
             });
         }
-        let relative = sanitize_entry_name(name)?;
+        let relative = sanitize_relative_path(name)?;
         let target = self.dest.join(&relative);
 
-        // Belt and braces. `sanitize_entry_name` already makes escape
+        // Belt and braces. `sanitize_relative_path` already makes escape
         // impossible, so this assertion should be unreachable — which
         // is exactly why it is cheap to keep: if a future change to the
         // sanitizer weakens it, this fails closed instead of writing
@@ -237,8 +237,13 @@ impl<'a> ExtractSink<'a> {
     }
 }
 
-/// Turn an archive entry name into a relative path guaranteed to stay
-/// inside the destination — or refuse it.
+/// Turn an untrusted path string into a relative path guaranteed to
+/// stay inside a destination directory — or refuse it.
+///
+/// Two callers, one rule: archive entry names, and the `<subdir>` from
+/// a `org/repo/<subdir>` target. Both are strings from outside that get
+/// joined onto a directory we own, so both are escape vectors and both
+/// get the same treatment.
 ///
 /// Operates on the raw **string**, before any `Path` parsing, because
 /// `Path` semantics are platform-dependent in exactly the ways that
@@ -247,7 +252,7 @@ impl<'a> ExtractSink<'a> {
 /// pass a `Component`-based check on Linux and mean something else
 /// entirely on Windows. Refusing on the string makes the verdict
 /// identical on every platform.
-fn sanitize_entry_name(name: &str) -> Result<PathBuf, FetchError> {
+pub(crate) fn sanitize_relative_path(name: &str) -> Result<PathBuf, FetchError> {
     let unsafe_path = |reason: &'static str| FetchError::UnsafeEntryPath {
         name: name.to_string(),
         reason,
@@ -377,7 +382,7 @@ fn extract_zip(archive: &Path, sink: &mut ExtractSink) -> Result<(), FetchError>
         let raw_name = entry.name().to_string();
 
         // `enclosed_name()` is the zip crate's own containment check,
-        // kept as a second, independent opinion — `sanitize_entry_name`
+        // kept as a second, independent opinion — `sanitize_relative_path`
         // in the sink is the primary defense and catches everything our
         // hostile-archive tests throw, so removing this check alone
         // does not turn any test red (verified by mutation). It stays
@@ -415,11 +420,11 @@ mod tests {
     #[test]
     fn sanitizer_accepts_plain_relative_names() {
         assert_eq!(
-            sanitize_entry_name("repo-main/_brand.yml").unwrap(),
+            sanitize_relative_path("repo-main/_brand.yml").unwrap(),
             PathBuf::from("repo-main").join("_brand.yml")
         );
         assert_eq!(
-            sanitize_entry_name("./a/./b.txt").unwrap(),
+            sanitize_relative_path("./a/./b.txt").unwrap(),
             PathBuf::from("a").join("b.txt")
         );
     }
@@ -437,7 +442,7 @@ mod tests {
             "..\\evil",
             "a\\..\\..\\evil",
         ] {
-            let err = sanitize_entry_name(name).unwrap_err_for(name);
+            let err = sanitize_relative_path(name).unwrap_err_for(name);
             assert!(
                 matches!(err, FetchError::UnsafeEntryPath { .. }),
                 "{name:?} should be rejected, got {err:?}"
@@ -449,7 +454,7 @@ mod tests {
     fn sanitizer_rejects_absolute_and_drive_paths() {
         for name in ["/etc/passwd", "\\windows\\system32", "C:/evil", "c:evil"] {
             assert!(
-                sanitize_entry_name(name).is_err(),
+                sanitize_relative_path(name).is_err(),
                 "{name:?} should be rejected"
             );
         }
@@ -457,9 +462,9 @@ mod tests {
 
     #[test]
     fn sanitizer_rejects_empty_and_nul() {
-        assert!(sanitize_entry_name("").is_err());
-        assert!(sanitize_entry_name("./").is_err());
-        assert!(sanitize_entry_name("a\0b").is_err());
+        assert!(sanitize_relative_path("").is_err());
+        assert!(sanitize_relative_path("./").is_err());
+        assert!(sanitize_relative_path("a\0b").is_err());
     }
 
     /// Small helper so the loop above reports which input failed.
