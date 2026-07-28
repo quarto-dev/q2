@@ -4,7 +4,7 @@
 **Braid:** bd-1vlw8 — *Implement quarto use brand scaffolding command*
 **Branch:** `main` @ `581e45c0` (investigated in the primary checkout — no worktree)
 **Pre-flight:** `cargo xtask verify --skip-hub-build` — ✓ all steps passed at this HEAD (10593 tests)
-**Status:** Design round 1 settled (2026-07-28). Round 2 questions open below. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled (rounds 1 + 2, 2026-07-28) — no open questions. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 
@@ -177,6 +177,9 @@ almost exactly this problem shape:
 
 ## Design decisions (settled with user, 2026-07-28)
 
+Round 1 (1–8) fixed the command's shape; round 2 (9–14) fixed the fetch surface.
+
+
 1. **Scope: both modes, and remote fetching is in this strand.**
    `q2 use brand` with no target scaffolds a starter `_brand.yml`; with a target
    it fetches/copies an existing brand. HTTP + archive extraction is designed and
@@ -199,6 +202,22 @@ almost exactly this problem shape:
    when `brand:` is set, so no `- brand` entry is needed, and adding one where a
    user has hand-written a `theme:` list risks the `Q-14-1` hard error.
 8. **`--json` ships in v1**, mirroring `q2 create`'s machine path.
+9. **Both `.tar.gz` and `.zip` are supported.** The `zip` crate joins `flate2`
+   (already present) and `tar` (new). Format is detected by **magic bytes**, not
+   by file extension.
+10. **Source resolution + fetch live in a new crate**, `quarto-source-fetch`, so
+    `q2 add` can reuse it when it lands.
+11. **Extraction limits:** 50 MB compressed download, 200 MB total uncompressed,
+    10 000 entries, 30 s request timeout.
+12. **Brand extensions are out of scope.** Q1 repos that ship a brand as an
+    *extension* (`_extension.yml` with `contributes.metadata.project.brand`) will
+    not work; the docs must say so, and the error message for such a repo should
+    name the reason rather than a generic "no brand file found".
+13. **Subdirectory targets ship in v1:** `org/repo/subdir@ref`.
+14. **`--trust` and `--force` are separate flags.** `--force` overrides the
+    local-state gates (existing brand file, existing declaration). `--trust`
+    waives the remote trust prompt. Neither implies the other — clobbering your
+    own file and executing someone else's fetched content are different risks.
 
 ## Proposed approach
 
@@ -230,41 +249,71 @@ point, so this is still a clean refusal.
 
 ### B. Source resolution and remote fetch
 
-**Proposed home: a new crate**, tentatively `quarto-source-fetch`. Q1 shares
-`extension-host.ts` between `use brand`, `use template`, and `add`; Q2's `q2 add`
-stub will need exactly the same machinery. Putting it in the binary crate
-guarantees a later extraction. Contents:
+New crate `quarto-source-fetch` (decision 10). Q1 shares `extension-host.ts`
+between `use brand`, `use template`, and `add`; Q2's `q2 add` stub will need
+exactly the same machinery. Contents:
 
-- **Target parsing**, ported from `extension-host.ts:168-228`:
-  - existing local path (dir or file) → `Local`
-  - `<org>/<repo>[/<subdir>][@<ref>]` (regex at `extension-host.ts:190`) → GitHub
-  - a full `https://github.com/<org>/<repo>/archive/refs/{heads,tags}/<ref>.tar.gz`
-    URL → GitHub archive
-  - any other `http(s)://` URL → direct archive
-- **URL candidates**, in Q1's order (`extension-host.ts:111-166`): default branch
-  → tag `<ref>` → branch `<ref>`. Try each; first `200` wins. Unlike Q1 we use
-  `.tar.gz` on **every** platform — Q1 only picks `.zip` on Windows because Deno
-  shells out to platform tools, a constraint Rust does not have. GitHub serves
-  `.tar.gz` universally, and it keeps `zip` out of the dependency tree.
-- **Fetch trait** modeled on `PublishHost::http_get`: a `SourceFetch` trait with
-  a native `ureq`-backed impl and an in-process fake for unit tests. Streaming to
-  a temp file (not `Vec<u8>`) since brand archives carry font/image binaries.
-- **Extraction** via `flate2` (already a workspace dep) + `tar` (new). GitHub
-  archives wrap everything in a single `<repo>-<ref>/` prefix, which Q1 strips
-  via `archiveSubdir` / the lone-subfolder heuristic (`brand.ts:545-573`); port
-  the same logic.
-- **Extraction hardening — this is the part to get right, not the happy path:**
-  - reject entries whose normalized path escapes the destination (`..`,
-    absolute paths, Windows drive prefixes) — `tar`'s `unpack_in` is the safe API,
-    but assert on it rather than trusting it;
-  - reject symlink and hardlink entries outright (a brand needs neither);
-  - cap total uncompressed bytes and entry count (decompression bombs);
-  - cap the download size and use a request timeout;
-  - rustls only, and refuse an https→http redirect.
-- **Trust prompt** for remote sources, ported from `isTrusted` (`brand.ts:602-621`).
-  Non-interactive (`--json`, `--no-prompt`, CI, non-TTY) with no explicit
-  `--force` → **refuse**. Fail closed; never download-and-run on a machine that
-  cannot ask.
+**Target parsing**, ported from `extension-host.ts:168-228`:
+
+- existing local path (dir, `.tar.gz`, or `.zip`) → `Local`
+- `<org>/<repo>[/<subdir>][@<ref>]` (regex at `extension-host.ts:190`) → GitHub
+- a full `https://github.com/<org>/<repo>/archive/refs/{heads,tags}/<ref>.{tar.gz,zip}`
+  URL → GitHub archive (Q1 does not accept a subdir on this form; match that)
+- any other `http(s)://` URL → direct archive
+
+**URL candidates**, in Q1's order (`extension-host.ts:111-166`): default branch →
+tag `<ref>` → branch `<ref>`. Try each; first `200` wins. We request `.tar.gz`
+from GitHub (canonical and smaller); `.zip` support exists for user-supplied
+URLs and local files, not because GitHub needs it.
+
+Two Q1 bugs worth *not* porting:
+
+- `githubLatestUrlProvider` hardcodes `refs/heads/main`
+  (`extension-host.ts:114`), so a repo whose default branch is `master` silently
+  falls through every provider and reports "not found". Proposal: probe `main`,
+  then `master`. No API call, no auth, no rate limit.
+- `archiveSubdir` *predicts* the archive's root directory as
+  `<repo>-<ref>` (`extension-host.ts:117-123`), which is wrong for any ref
+  containing a `/` — GitHub renders `feature/foo` as `repo-feature-foo`, but Q1
+  computes `repo-feature/foo`. Proposal: **derive the root from the archive**
+  (the single top-level entry) instead of predicting it, then apply the
+  user's `<subdir>` beneath it. Q1 already has a lone-subfolder fallback
+  (`brand.ts:553-571`) — we make that the primary path rather than the rescue.
+
+**Fetch trait** modeled on `PublishHost::http_get`: a `SourceFetch` trait with a
+native `ureq`-backed impl and an in-process fake for unit tests. Streams to a
+temp file (not `Vec<u8>`) since brand archives carry font/image binaries.
+
+**Format detection by magic bytes, never by extension** (decision 9): gzip
+`1f 8b`, zip `50 4b 03 04`. A `.zip` URL that actually serves gzip (or vice
+versa) is common enough with redirects and CDNs, and sniffing costs 4 bytes.
+Anything else → clean "unrecognized archive format" error.
+
+**Extraction** via `flate2` + `tar` for gzip, `zip` for zip. One shared
+`extract_into(reader, dest, limits)` contract with two backends, so the
+hardening below is written once per concern and not once per format.
+
+**Extraction hardening — this is the part to get right, not the happy path.**
+The two backends need the same guarantees but have different sharp edges:
+
+| Concern | tar backend | zip backend |
+|---|---|---|
+| Path escape (`..`, absolute, drive prefix) | `Entry::unpack_in` refuses, but validate the normalized path ourselves too rather than trusting it | `ZipFile::enclosed_name()` returns `None` for unsafe paths — treat `None` as a hard error, never fall back to `name()` |
+| Symlinks / hardlinks | `EntryType::{Symlink,Link}` → reject | encoded in the unix mode bits of the external attributes → reject |
+| Entry count | count while iterating | `ZipArchive::len()` is known up front — check before extracting |
+| Uncompressed size | not declared; enforce with a counting reader that aborts past the cap | `ZipFile::size()` is declared but **attacker-controlled** — check it *and* enforce the real cap with a counting reader |
+| Compression ratio | bounded by the byte cap | same; the declared-vs-actual mismatch is itself worth rejecting |
+
+Plus, common to both: cap the download at 50 MB, total uncompressed at 200 MB,
+entries at 10 000, request timeout 30 s (decision 11); rustls only; refuse an
+https→http redirect. Extract to a temp directory and only then plan the copy —
+so a limit trip leaves the project untouched.
+
+**Trust prompt** for remote sources, ported from `isTrusted`
+(`brand.ts:602-621`). Waived only by `--trust` (decision 14). Non-interactive
+(`--json`, `--no-prompt`, CI, non-TTY) without `--trust` → **refuse before
+downloading**. Fail closed; never download-and-extract on a machine that cannot
+ask.
 
 ### C. Producing the brand files
 
@@ -272,11 +321,19 @@ guarantees a later extraction. Contents:
   embedded in `quarto-project-create` — a `meta.name`, a small `color.palette` +
   `primary`, a `typography.base`, commented-out `logo` slots. Keeps that crate's
   contract (pure, no fs, WASM-safe) so hub-client can offer the same thing.
-- **Fetch/copy mode**: locate `_brand.yml`/`_brand.yaml` in the resolved source,
-  parse it with `quarto-brand` to **validate before writing anything**, then
-  traverse the typed model for referenced local logo/font paths and plan a copy
-  of the brand file plus those assets. Asset presence is what selects the
-  destination per decision 2.
+- **Fetch/copy mode**: locate `_brand.yml`/`_brand.yaml` in the resolved source
+  (after applying any `<subdir>`), parse it with `quarto-brand` to **validate
+  before writing anything**, then traverse the typed model for referenced local
+  logo/font paths and plan a copy of the brand file plus those assets. Asset
+  presence is what selects the destination per decision 2.
+  - Referenced asset paths are resolved relative to the brand file's directory
+    (Q1: `brandFileDir`, `brand.ts:311`) and must themselves stay inside the
+    source tree — the same escape check as extraction, applied to
+    brand-file-declared paths.
+  - If the source has no brand file but *does* look like a Q1 brand extension
+    (`_extension.yml` carrying `contributes.metadata.project.brand`), say so
+    explicitly rather than "no brand file found" (decision 12). Detecting it to
+    produce a better error is cheap; supporting it is what is out of scope.
 
 Both produce a `Vec<PlannedFile>`; the writer does not care which.
 
@@ -299,18 +356,25 @@ and existing key order survive untouched. The value is `_brand.yml` or
 ### E. Command plumbing
 
 - `Commands::Use` becomes a clap subcommand enum so `brand` can carry
-  `--dry-run`, `--force`, `--no-prompt`, `--json`, and later `template`/`binder`
-  can carry their own. `--force` + `--dry-run` together is an error (Q1 parity,
-  `brand.ts:237`).
+  `--dry-run`, `--force`, `--trust`, `--no-prompt`, `--json`, and later
+  `template`/`binder` can carry their own. `--force` + `--dry-run` together is an
+  error (Q1 parity, `brand.ts:237`); so is `--trust` + `--dry-run`, on the same
+  reasoning (a dry run neither writes nor needs to be trusted — but it *does*
+  download, so the trust prompt still fires interactively).
+- **Flag scopes** (decision 14), which the docs must state plainly:
+  - `--force` → overrides gates A2 and A3 (existing root brand file, existing
+    `brand:` declaration). Purely about local state.
+  - `--trust` → waives the remote trust prompt. Purely about fetched content.
+  - Neither implies the other.
 - **Shared module** (decision 6): lift the plan/writer/prompter/failure types out
   of `commands/create/` into `commands/common/`, with `create` and `use_cmd`
   both importing them. `CreatePlan` → `FilePlan`, `CreateFailure` →
   `CommandFailure`, etc. `create.rs`'s integration tests protect the refactor.
 - `--json` directive shape, mirroring create's tagged form:
-  `{"use": "brand", "target": "org/repo", "dry_run": false, "force": false}`,
+  `{"use": "brand", "target": "org/repo", "dry_run": false, "force": false, "trust": false}`,
   unknown fields rejected. Exactly one result object on stdout; diagnostics as
   JSON lines on stderr. The machine path never prompts, so a remote target
-  without `"force": true` fails the trust gate.
+  without `"trust": true` fails the trust gate before downloading.
 
 ## Proposed phases (draft)
 
@@ -331,9 +395,11 @@ and existing key order survive untouched. The value is `_brand.yml` or
   5. Top-level `brand: other.yml` already in `_quarto.yml` → refuse; diagnostic
      quotes the existing declaration.
   6. `format.html.brand:` present → same refusal, message names the location.
-  7. `--force` overrides cases 4–6.
+  7. `--force` overrides cases 4–6; `--trust` does **not** (flag scopes are
+     distinct — decision 14).
   8. `--dry-run` reports the full plan (including the `_quarto.yml` edit and the
-     chosen destination) and writes nothing; `--force` + `--dry-run` is an error.
+     chosen destination) and writes nothing; `--force` + `--dry-run` and
+     `--trust` + `--dry-run` are errors.
   9. `_quarto.yml` whose top level is a sequence, or a multi-doc stream → clean
      error, not a corrupted file.
   10. Local-path source with referenced logo/font assets → lands in `_brand/`,
@@ -341,17 +407,30 @@ and existing key order survive untouched. The value is `_brand.yml` or
   11. Local-path source that is a lone `_brand.yml` → lands at root.
   12. Source whose brand file fails `quarto-brand` validation → refuse before
       writing anything.
-  13. **Extraction hardening** (unit tests, hand-built archives): `../` escape,
-      absolute path, symlink entry, oversized entry, too many entries — each
-      rejected, destination untouched.
-  14. Remote fetch against a **localhost test server** (precedent:
+  13. **Extraction hardening** (unit tests, hand-built archives) — **run the
+      whole matrix against both backends**: `../` escape, absolute path, drive
+      prefix, symlink entry, hardlink entry, oversized total, too many entries,
+      and (zip only) a declared `size()` that understates the real stream. Each
+      rejected; destination untouched.
+  14. Format detection: a `.zip`-named file containing gzip and a `.tar.gz`-named
+      file containing zip both extract correctly (magic bytes win); a file that
+      is neither errors cleanly.
+  15. Remote fetch against a **localhost test server** (precedent:
       `quarto-preview`/`quarto-hub` integration tests bind a `TcpListener`)
-      serving a canned `.tar.gz` — no real network in CI.
-  15. Remote target in a non-interactive environment without `--force` →
-      refused at the trust gate, no download.
-  16. `--json`: one result object on stdout, diagnostics as JSON lines on
+      serving a canned archive — no real network in CI. Both formats.
+  16. Subdirectory target `org/repo/subdir@ref` selects the brand beneath the
+      archive root; a nonexistent subdir errors cleanly.
+  17. Archive-root derivation: a ref containing `/` (e.g. `@feature/foo`) works
+      — the Q1 prediction bug does not reproduce.
+  18. Default-branch probing: a repo served only at `master` resolves.
+  19. Remote target in a non-interactive environment without `--trust` →
+      refused at the trust gate, **no download attempted** (assert the test
+      server received no request).
+  20. A source with no brand file but a Q1 brand-extension `_extension.yml` →
+      error naming brand extensions as unsupported, not "no brand file found".
+  21. `--json`: one result object on stdout, diagnostics as JSON lines on
       stderr, unknown directive fields rejected.
-  17. **End-to-end (CLAUDE.md-mandated):** after `q2 use brand`, `q2 render`
+  22. **End-to-end (CLAUDE.md-mandated):** after `q2 use brand`, `q2 render`
       the project and grep the emitted CSS for a brand-derived value. This is
       the test that proves the declaration step actually connects — the exact
       failure mode a Q1-faithful copy-only port would have.
@@ -361,53 +440,36 @@ and existing key order survive untouched. The value is `_brand.yml` or
   `commands/use_cmd/` module; pre-flight gates A1–A4.
 - **Phase 3 — `_quarto.yml` inspection + surgical insertion** (D).
 - **Phase 4 — Scaffold mode** (C, no-target path). First end-to-end green.
-- **Phase 5 — `quarto-source-fetch` crate**: target parsing, fetch trait +
-  native impl, tar.gz extraction with the hardening in B.
-- **Phase 6 — Fetch/copy mode** wired in: validation, asset traversal,
-  destination selection, trust prompt.
-- **Phase 7 — `--json` front door.**
-- **Phase 8 — Docs.** A user-facing page under `docs/` (usage, not internals).
-  Must state the Q1↔Q2 difference: Q2 writes the `brand:` key because it does
-  not auto-discover.
+- **Phase 5 — `quarto-source-fetch` crate, extraction half first**: the
+  `extract_into` contract with both backends and the full hardening matrix, unit
+  tested against hand-built archives. No network yet. Front-loading this means
+  the riskiest code lands with the most attention on it.
+- **Phase 6 — `quarto-source-fetch`, network half**: target parsing (including
+  subdirs, default-branch probing, archive-root derivation), the `SourceFetch`
+  trait + `ureq` impl, magic-byte detection.
+- **Phase 7 — Fetch/copy mode** wired into the command: validation, asset
+  traversal, destination selection, trust prompt, `--trust`.
+- **Phase 8 — `--json` front door.**
+- **Phase 9 — Docs.** A user-facing page under `docs/` (usage, not internals).
+  Must state (a) the Q1↔Q2 difference — Q2 writes the `brand:` key because it
+  does not auto-discover; (b) the `--force` vs `--trust` split; (c) that Q1
+  brand *extensions* are not supported.
 
-## Open design questions — round 2
+## Open design questions
 
-Raised by pulling remote fetching into scope.
+**None.** Rounds 1 and 2 settled every question; the decisions are recorded
+above. Three choices are deliberately left to implementation time because they
+are reversible and cheap to revisit:
 
-1. **Archive formats: tar.gz only?** My proposal is `.tar.gz` everywhere
-   (`flate2` is already a workspace dep; `tar` is one small addition), and to
-   **reject `.zip`** with a clear message. Cost: a user pointing at a local
-   `.zip` or at a `.zip` archive URL is refused. Adding the `zip` crate would
-   cover it. Is tar.gz-only acceptable for v1?
+- The exact starter-`_brand.yml` template contents (Phase 4).
+- Whether the default-branch probe is `main`→`master` or something smarter, if
+  `master` turns out to be rare enough not to matter.
+- Whether the extraction limits become configurable. They ship as constants;
+  a flag is easy to add if someone hits a ceiling.
 
-2. **New crate, or a module in the `quarto` binary?** I lean **new crate**
-   (`quarto-source-fetch`) because `q2 add` will need identical machinery and
-   Q1 shares exactly this code across three commands. The cost is a crate
-   boundary for one consumer today. Agree, or keep it inside
-   `commands/use_cmd/` until `q2 add` actually lands?
-
-3. **Extraction limits — what numbers?** I need concrete caps for archive
-   download size, total uncompressed bytes, and entry count. Proposal: 50 MB
-   download, 200 MB uncompressed, 10 000 entries, 30 s request timeout. Brands
-   with several webfont families are the realistic upper end. Do these feel
-   right, or should they be configurable?
-
-4. **Brand extensions — in or out?** Q1 detects a *brand extension* by reading
-   `contributes.metadata.project.brand` from `_extension.yml`
-   (`brand.ts:39-110`), which presumes an `_extensions/` layout Q2 does not have.
-   I recommend **out of scope** — porting it drags in the extension surface —
-   but that means a Q1 brand extension repo will not work with `q2 use brand`.
-   Accept that gap, or file it as a follow-on strand?
-
-5. **Subdirectory targets.** Q1's regex accepts `org/repo/subdir@ref`. Support
-   it in v1, or accept only `org/repo[@ref]` and reject the subdir form with a
-   pointer to the full-URL escape hatch?
-
-6. **What does `--force` mean for the trust prompt?** Today I have it doing
-   double duty: overriding the existing-file/existing-declaration gates *and*
-   waiving the remote trust prompt. Those are different risks — clobbering my
-   own file versus executing someone's fetched content. Should trust get its own
-   flag (`--trust` / `--yes`), or is one `--force` fine?
+New questions surfacing during implementation should be raised before coding
+around them, per the CLAUDE.md rule about hacky workarounds signalling a bad
+plan.
 
 ## Risks / tradeoffs (draft)
 
@@ -418,9 +480,20 @@ Raised by pulling remote fetching into scope.
 - **Archive extraction is the highest-risk code in this strand.** It processes
   attacker-controllable input (a fetched archive) and writes to the user's
   project directory. Path traversal, symlink escape, and decompression bombs are
-  the named failure modes; the hardening list in B and the unit tests in Phase 0
+  the named failure modes; the hardening table in B and the unit tests in Phase 0
   case 13 exist specifically for them. This code deserves review attention out of
-  proportion to its size.
+  proportion to its size, which is why Phase 5 lands it first and alone.
+- **Supporting two archive formats doubles that surface.** Zip's sharp edges are
+  not tar's: `enclosed_name()` returning `None` is easy to paper over by falling
+  back to `name()`, and `ZipFile::size()` is a *declared* value an attacker
+  controls. The mitigation is structural — one `extract_into` contract, one
+  hardening matrix, and Phase 0 case 13 run against **both** backends rather
+  than written once for whichever was implemented first.
+- **Two override flags is a small UX cost for a real safety gain.** `--force`
+  and `--trust` will occasionally both be wanted, and someone will file a bug
+  asking for `--yes`. The split is still right: conflating "overwrite my file"
+  with "execute what you downloaded" is how a convenience flag becomes a supply
+  chain problem.
 - **Text-editing a user's config** is the second risky part. Comment loss, key
   reordering, and multi-document streams are all ways to damage a file the user
   cares about. Mitigations: parse-then-append (never re-serialize), refuse the
