@@ -3,17 +3,16 @@
 **Date:** 2026-07-28
 **Braid:** bd-dofxhzaj (task, P1, filed 2026-06-13 by Carlos while cutting v0.1.1)
 **Branch:** `main` @ `581e45c0` (invoked in the primary checkout; no worktree created — see *Where this should land* below)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled with Carlos on 2026-07-28 (see **Decisions**). Ready to implement from Phase 1. Phase 0 is done.
 
 ## Triage verdict
 
-**Ready to design.** The blocker named in the strand is genuinely gone, the two
-risks flagged in the original spike (`openssl-sys`, `aws-lc-sys`) both check out
-as musl-supported on static inspection, and the artifact-name contract with
-`install.sh` is unchanged — but nothing here can be *proven* from a mac, so the
-plan's centre of gravity is a **CI dry-run on a branch**, not a code change.
-The design questions below are about how to run that dry-run safely and whether
-to ship musl-only or musl+gnu.
+**Ready to design → design done.** The blocker named in the strand is genuinely
+gone, the two risks flagged in the original spike (`openssl-sys`, `aws-lc-sys`)
+both check out as musl-supported on static inspection, and the artifact-name
+contract with `install.sh` is unchanged — but nothing here can be *proven* from
+a mac, so the plan's centre of gravity is a **CI dry-run on a branch**, not a
+code change.
 
 ## Issue context
 
@@ -156,7 +155,7 @@ The one thing genuinely *not* de-risked by inspection is **musl's allocator
 performance**. q2 is allocation-heavy (parsing, AST traversal), and musl's
 mallocng is materially slower than glibc's under concurrent allocation. This is
 the risk most likely to show up as "the release binary is slower than my dev
-build" rather than as a build failure. See Q4.
+build" rather than as a build failure. **Explicitly accepted** — see D4.
 
 ### The artifact contract is unaffected
 
@@ -173,7 +172,7 @@ So a musl-only switch keeps `q2-<ver>-linux_amd64.tar.gz` / `linux_arm64` byte-
 for-byte identical in *name*, and `install.sh` + its test
 (`crates/quarto/tests/integration/bootstrap_sh.rs`) need **zero changes**.
 (This is precisely what makes the musl-only option cheap and the
-ship-both option expensive — Q2.)
+ship-both option expensive — see D2, where musl-only was chosen.)
 
 Also checked: `README.md` and `docs/` never mention the glibc floor, so the
 prose to update is confined to `release.yml` (header comment + matrix comment +
@@ -192,14 +191,41 @@ release-notes table) and `claude-notes/instructions/release-runbook.md:203-211`.
 - a green run *publishes a GitHub Release*.
 
 So validating musl means either burning a throwaway tag or standing up a
-separate, cheap, branch-triggered spike workflow. See Q1 — this is the main
-design decision in the whole strand.
+separate, cheap, branch-triggered spike workflow. **Decided: spike workflow**
+(D1) — this was the main design decision in the strand.
 
-## Proposed phases (draft)
+## Decisions (settled with Carlos, 2026-07-28)
 
-- **Phase 0 — Reconcile with bd-h7s7bsbk.** Confirm whether this strand
-  duplicates it; close one, or link them. (Q0. Blocks nothing else, but should
-  be settled before work starts so the record is clean.)
+All six open questions are answered. Recorded here so the phases below read as
+a real plan rather than a menu.
+
+- **D0 — bd-h7s7bsbk is a duplicate; bd-dofxhzaj survives.** ✅ *Done.*
+  bd-h7s7bsbk closed with a `duplicates` → bd-dofxhzaj edge, close reason
+  pointing at this plan.
+- **D1 — Dry-run on a throwaway branch**, not a real tag. A temporary spike
+  workflow, deleted before the PR merges.
+- **D2 — musl only.** No gnu artifact. Rationale (Carlos): the goal is *"a good,
+  universally runnable binary"*; users who need a specific libc can build from
+  source (`install.sh --from-source` already exists for exactly this). This
+  keeps `install.sh` and `bootstrap_sh.rs` untouched.
+- **D3 — Do not drop openssl here.** ✅ *Filed as `bd-r7s13dfb`* ("Unify on
+  rustls: drop native-tls/openssl from the q2 dependency tree",
+  `discovered-from: bd-dofxhzaj`). It needs a change to the samod fork, which is
+  a different blast radius. `vendored-openssl` stays exactly as-is in this work.
+- **D4 — musl allocator performance: accepted, not measured.** Carlos: *"We
+  don't care about perf right now, not without a demonstrated pathological case
+  from a real scenario."* So **no benchmark phase and no `mimalloc` change**. If
+  a real slowdown shows up in real use, that becomes its own strand with an
+  actual repro attached — which is the right trigger for an allocator decision
+  anyway.
+- **D5 — Upgrade the runners to `ubuntu-latest`** (and `ubuntu-24.04-arm`) as
+  part of this change. The jammy pin existed *only* to set the glibc floor; with
+  a static binary the runner's glibc is irrelevant, so the pin has no remaining
+  justification.
+
+## Phases
+
+- ~~**Phase 0 — Reconcile with bd-h7s7bsbk.**~~ ✅ Done (D0).
 - **Phase 1 — Branch-only musl spike.** A throwaway
   `.github/workflows/musl-spike.yml`, `workflow_dispatch` + branch push,
   no secrets, no publish. Both arches: `rustup target add`, `apt-get install
@@ -208,14 +234,15 @@ design decision in the whole strand.
   `./q2 --version` runs on the runner. This is the phase that answers the
   aws-lc/openssl question for real. Delete the workflow at the end.
 - **Phase 2 — Functional smoke on the musl artifact.** Beyond `--version`:
-  render a real fixture (`q2 render`) and, ideally, run it in an
-  `alpine:latest` container to prove the "covers every distro" claim that
-  motivates the whole strand. Alpine is the *point* of this change — not
-  testing it would leave the headline benefit unverified.
-- **Phase 3 — Flip `release.yml`.** Two matrix legs → musl targets; restore the
-  `Install musl-tools` step (`if: contains(matrix.target, 'musl')`, exactly as
-  `6080bd7a` removed it); decide the runner images (Q5); keep `vendored-openssl`
-  as-is.
+  render a real fixture (`q2 render`) and run it in an `alpine:latest`
+  container to prove the "covers every distro" claim that motivates the whole
+  strand. Alpine is the *point* of this change — not testing it would leave the
+  headline benefit unverified. (Correctness only; per D4 there is no timing
+  comparison here.)
+- **Phase 3 — Flip `release.yml`.** Two matrix legs → musl targets; runners →
+  `ubuntu-latest` / `ubuntu-24.04-arm` (D5); restore the `Install musl-tools`
+  step (`if: contains(matrix.target, 'musl')`, exactly as `6080bd7a` removed
+  it); keep `vendored-openssl` as-is (D3).
 - **Phase 4 — Prose.** `release.yml` header note (lines 48-55), the matrix
   comment (lines 341-349), the release-notes platform table (lines 661-662:
   "glibc 2.35+" → "static musl"), and `release-runbook.md:203-211`. Add a
@@ -230,64 +257,22 @@ CI config. The TDD analogue here is Phase 1: prove the build fails/succeeds in
 CI *before* touching the release path. Flag if you disagree with that reading of
 the project's TDD rule.
 
-## Open design questions for the user
+## Remaining open questions
 
-0. **bd-h7s7bsbk is the same strand — which id survives?** Both are open, both
-   `discovered-from: bd-3e3sam51`, same body. Recommendation: keep
-   **bd-dofxhzaj** (higher priority — P1 vs P2 — and its description is the more
-   complete work list, naming the musl-tools restore and the release-notes
-   prose), close bd-h7s7bsbk with a `duplicates` edge pointing at it. Say the
-   word and I'll do it; I haven't touched either beyond marking this one
-   `in_progress`.
+None on design — all six are settled in **Decisions** above. The one thing
+still genuinely unknown is empirical and only CI can answer it: **does
+`aws-lc-sys` actually build on both musl legs?** That is what Phase 1 is for.
 
-1. **How do we dry-run?** Recommendation: a **throwaway branch-triggered spike
-   workflow** (Phase 1), deleted before merge. The alternative — bumping the
-   version and burning a real tag — costs a release-shaped artifact and can only
-   be iterated by delete-and-re-push of the tag (the v0.1.0 dry-run loop the
-   runbook warns about). Do you want the spike workflow, or would you rather do
-   this the tag way to exercise the *actual* release path end to end?
-
-2. **musl only, or musl + gnu?** The strand says "one artifact per arch". That
-   is the cheap option and needs no `install.sh` change. Shipping both would
-   mean 4 linux artifacts and teaching `detect_platform` to sniff libc
-   (`ldd --version` / `/lib/ld-musl-*`), plus a matching change to
-   `bootstrap_sh.rs`. Recommendation: **musl only** — a static binary is a
-   strict superset for end users. Confirm, or is there a reason to keep a gnu
-   artifact (perf? some downstream packager?).
-
-3. **Do we also drop the second TLS stack?** q2 links both openssl (via our
-   samod fork's `native-tls` wiring) and rustls/aws-lc (via reqwest). Since we
-   own the samod fork, moving its `tungstenite` feature to rustls would let us
-   delete `vendored-openssl` and the whole openssl build leg — the "longer-term
-   sound alternative" S2 already identified. Recommendation: **out of scope
-   here, file a follow-up strand.** It touches an external fork and is
-   orthogonal to the musl switch. Agree?
-
-4. **Do we care about musl allocator performance?** Static musl uses mallocng,
-   which is slower than glibc's malloc on allocation-heavy multithreaded work —
-   which describes q2's parser. Options: (a) accept it; (b) measure it in Phase 2
-   (render a large fixture under both binaries, compare wall time); (c) pre-empt
-   it by adding `mimalloc` as the global allocator (the workspace sets none
-   today). Recommendation: **(b) — measure, then decide.** If it's within a few
-   percent, ship; if it's a real regression, file (c) as its own strand rather
-   than smuggling an allocator change into a CI-config PR.
-
-5. **Which runner images?** With musl the runner's glibc no longer constrains
-   anything, so `ubuntu-22.04`/`ubuntu-22.04-arm` can go back to
-   `ubuntu-latest`/`ubuntu-24.04-arm` (what `6080bd7a` changed away from) —
-   newer toolchains, and it may make the `minisign`-not-on-jammy runbook gotcha
-   moot for the build legs. Recommendation: **move to latest**, since the whole
-   reason for pinning jammy disappears. Any objection?
-
-## Risks / tradeoffs (draft)
+## Risks / tradeoffs
 
 - **The one unfalsifiable-from-here risk is aws-lc-sys on musl.** Static
   inspection is encouraging (pregenerated bindings + cc-builder configs for both
   musl arches) but the failure mode, if it comes, is a CI build error that only
   appears on the runner. Phase 1 exists exactly to surface it early and cheaply.
   If it does bite, the fallback ladder is: set `CC=musl-gcc` / install `cmake`
-  → force `AWS_LC_SYS_CMAKE_BUILDER` off → worst case, Q3's rustls-provider
-  change becomes a prerequisite rather than a follow-up.
+  → force `AWS_LC_SYS_CMAKE_BUILDER` off → worst case, **`bd-r7s13dfb`
+  (rustls unification) is promoted from follow-up to prerequisite**, since
+  dropping native-tls also changes which crypto provider has to build.
 - **This change is only really verified by a real release.** Everything before
   Phase 5 is a proxy. The runbook note in Phase 4 should say so plainly.
 - **Low blast radius if it goes wrong.** Reverting is the same one-line matrix
@@ -295,6 +280,13 @@ the project's TDD rule.
   bad musl artifact is fixable by a patch release, not by an installer
   migration. This is a good argument for just doing it rather than
   over-engineering the dry-run.
+- **Dropping the gnu artifact is user-visible, even though it is strictly more
+  compatible.** Anyone who was specifically fetching a dynamically-linked q2
+  (a distro packager, someone `LD_PRELOAD`-ing something) loses that option
+  silently — the filename does not change. Cheap mitigation: say so explicitly
+  in the first post-switch release notes, and point at
+  `install.sh --from-source` (D2's stated escape hatch) rather than leaving
+  people to discover it.
 - **Nothing depends on this strand** (no incoming `blocks`), so it can be
   scheduled whenever. Its value is user-facing reach (Alpine, old-glibc distros,
   containers) rather than unblocking internal work.
