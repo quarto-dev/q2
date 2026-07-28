@@ -293,26 +293,47 @@ short-circuits before the smoke steps and attribution stays unambiguous, while
 
 ### Phase 3 — Flip `release.yml`
 
-- [ ] Two linux matrix legs → `x86_64-unknown-linux-musl` /
+Written while the spike was still running, since the edits are fully
+determined by D2/D3/D5 and do not depend on *what* the spike finds — only on
+it being green. If the spike comes back red, these get amended (e.g. with a
+`CC=musl-gcc` or `cmake` step) rather than discarded.
+
+- [x] Two linux matrix legs → `x86_64-unknown-linux-musl` /
       `aarch64-unknown-linux-musl`
-- [ ] Runners → `ubuntu-latest` / `ubuntu-24.04-arm` (D5)
-- [ ] Restore the `Install musl-tools` step, `if: contains(matrix.target, 'musl')`
+- [x] Runners → `ubuntu-latest` / `ubuntu-24.04-arm` (D5)
+- [x] Restore the `Install musl-tools` step, `if: contains(matrix.target, 'musl')`
       — exactly as `6080bd7a` removed it
-- [ ] Keep `--features vendored-openssl` in `cargo_flags` (D3)
-- [ ] `actionlint` clean
+- [x] Keep `--features vendored-openssl` in `cargo_flags` (D3)
+- [x] `actionlint` clean
+- [ ] Confirmed by a green spike run (gating item — see Phase 1)
 
 ### Phase 4 — Prose
 
-- [ ] `release.yml` header note (lines 48-55) — drop the rusty_v8 history, state
-      static musl
-- [ ] `release.yml` matrix comment (lines 341-349) — drop the glibc-floor note
-- [ ] `release.yml` release-notes table (lines 661-662) — "glibc 2.35+" →
-      "static musl"
-- [ ] `release-runbook.md:203-211` — replace the "musl is viable but we haven't
-      switched" paragraph
+- [x] `release.yml` header note — replaced the "musl is viable, we just haven't
+      switched" paragraph with what is actually true, keeping the rusty_v8
+      history as parenthetical context and adding the `bd-r7s13dfb` pointer for
+      why `vendored-openssl` is still there
+- [x] `release.yml` matrix comment — dropped the glibc-floor note; **added an
+      explicit warning not to "fix" the keyring lists**, which stay libc-plural
+      on purpose (the addon must match the user's *node*, not how q2 was
+      linked — an Alpine user runs a musl node regardless)
+- [x] `release.yml` release-notes table — "glibc 2.35+" → "static, any distro",
+      plus a short paragraph telling users the linux binaries are static musl
+      and pointing anyone who wants a dynamic build at `install.sh
+      --from-source` (verified that flag exists: `install.sh:109,146`)
+- [x] `release-runbook.md` — rewrote the linux bullet; added a bullet recording
+      that the runner image no longer sets a compatibility floor, so nobody
+      re-pins it later for a reason that isn't glibc; corrected the signing
+      bullet, whose stated rationale ("jammy has no minisign") stopped being
+      true for the linux legs
+- [x] `release-runbook.md` §6 — the first post-switch release gets one extra
+      post-publish check: run the *published* artifact under `alpine:latest`.
+      CI proves it runs on the runner, not on the distros the switch is for.
+      Explicitly noted as one-time, not per-release ceremony.
+- [x] Marked D4 of the 2026-06-12 release plan **SUPERSEDED** with a pointer
+      here, keeping the historical reasoning intact rather than rewriting it
 - [ ] Add a runbook gotcha capturing whatever Phase 1 actually learned
-- [ ] Note in the runbook that the first post-switch release warrants extra
-      post-publish verification (download the linux artifact, run it on Alpine)
+      (pending the spike result)
 
 ### Phase 5 — Land and ship
 

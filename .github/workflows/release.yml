@@ -45,14 +45,21 @@
 #   are injected from repo secrets/vars into the cargo build env —
 #   release builds only; see crates/quarto-mcp-launcher/src/defaults.rs
 #   for why the Desktop-app client secret is safe to embed.
-# - Linux targets are gnu on the oldest available runners (glibc 2.35
-#   floor). Static musl was originally blocked because rusty_v8
-#   (deno_core → quarto-system-runtime) shipped no musl prebuilts —
-#   both musl legs 404'd in the v0.1.0 dry-run (run 27449454203). That
-#   dependency has since been removed (bd-3e3sam51), so musl is now
-#   viable; we simply haven't switched yet (tracked separately). The
-#   linux legs build with `--features vendored-openssl` so the binary
-#   has no runtime libssl dependency (plan D4).
+# - Linux targets are static musl — ONE artifact per arch that runs on
+#   every distro, Alpine included, with no glibc floor at all. (They
+#   were briefly gnu: rusty_v8, via deno_core → quarto-system-runtime,
+#   shipped no musl prebuilts and both musl legs 404'd in the v0.1.0
+#   dry-run, run 27449454203. That dependency was removed in
+#   bd-3e3sam51 and the switch back landed in bd-dofxhzaj.) Because the
+#   binary is static, the runner's own glibc is irrelevant, so these
+#   legs track ubuntu-latest rather than pinning an old image. No gnu
+#   artifact is published; anyone who needs a dynamically-linked build
+#   can use `install.sh --from-source`.
+# - The linux legs still build with `--features vendored-openssl` so
+#   the binary has no runtime libssl dependency. openssl reaches q2
+#   only through our samod fork's tungstenite/native-tls wiring;
+#   bd-r7s13dfb tracks moving that to rustls, which would let this
+#   feature (and the openssl build entirely) go away.
 #
 # Signing key: MINISIGN_SECRET_KEY repo secret; the public half is pinned
 # in install.sh (MINISIGN_PUBKEY) and README. The sign step verifies its
@@ -343,19 +350,24 @@ jobs:
           # node), both mac archs (Rosetta mismatch: x64 q2 under an
           # arm64 node and vice versa), both win archs (arm64 Windows
           # runs x64 q2 under emulation with a native arm64 node).
+          # NOTE the keyring lists stay libc-plural even though q2 itself
+          # is now musl-only: the addon must match the user's *node*, and
+          # an Alpine user runs a musl node while a Debian user runs a
+          # glibc one. That is independent of how q2 was linked.
           # cargo_flags: linux legs vendor openssl (no runtime libssl
           # dep); macOS/Windows TLS is security-framework/schannel, no
-          # openssl involved. ubuntu-22.04 runners set the glibc floor
-          # at 2.35.
+          # openssl involved. Both linux legs build NATIVELY (no
+          # cross-compilation), so musl-tools' musl-gcc is the right
+          # compiler on each runner.
           - platform: linux_amd64
-            target: x86_64-unknown-linux-gnu
-            os: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
             ext: tar.gz
             keyring: linux-x64-gnu,linux-x64-musl
             cargo_flags: --features vendored-openssl
           - platform: linux_arm64
-            target: aarch64-unknown-linux-gnu
-            os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
             ext: tar.gz
             keyring: linux-arm64-gnu,linux-arm64-musl
             cargo_flags: --features vendored-openssl
@@ -397,6 +409,14 @@ jobs:
       - name: Add ${{ matrix.target }} to the pinned toolchain
         shell: bash
         run: rustup target add ${{ matrix.target }}
+
+      # musl-gcc, needed by the C-building deps on the linux legs
+      # (openssl-src under vendored-openssl, aws-lc-sys, tree-sitter,
+      # mlua). The `cc` crate selects it automatically for
+      # *-linux-musl targets.
+      - name: Install musl-tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -656,10 +676,14 @@ jobs:
             echo "\`q2 mcp\` (the Quarto Hub MCP server) needs [Node.js](https://nodejs.org) 24+ at runtime;"
             echo "everything else works standalone. Hub connection defaults for quarto-hub.com are built in."
             echo
+            echo "The Linux binaries are statically linked (musl): one build per architecture, no glibc"
+            echo "requirement, works on Alpine and old distros alike. If you specifically need a"
+            echo "dynamically-linked build, \`install.sh --from-source\` builds one."
+            echo
             echo "| Platform | File |"
             echo "|---|---|"
-            echo "| Linux x86_64 (glibc 2.35+) | \`q2-${VERSION}-linux_amd64.tar.gz\` |"
-            echo "| Linux ARM64 (glibc 2.35+) | \`q2-${VERSION}-linux_arm64.tar.gz\` |"
+            echo "| Linux x86_64 (static, any distro) | \`q2-${VERSION}-linux_amd64.tar.gz\` |"
+            echo "| Linux ARM64 (static, any distro) | \`q2-${VERSION}-linux_arm64.tar.gz\` |"
             echo "| macOS Intel | \`q2-${VERSION}-darwin_amd64.tar.gz\` |"
             echo "| macOS Apple Silicon | \`q2-${VERSION}-darwin_arm64.tar.gz\` |"
             echo "| Windows x86_64 | \`q2-${VERSION}-windows_amd64.zip\` |"
