@@ -223,6 +223,10 @@ pub struct ClaimsBuilder {
     iat: Option<i64>,
     nbf: Option<i64>,
     exp: i64,
+    /// OIDC `nonce`, echoed by the IdP from the authorization request.
+    /// Omitted from the payload when `None`, which is what a pre-H2
+    /// client (or a replayed token from another login) looks like.
+    nonce: Option<String>,
 }
 
 impl ClaimsBuilder {
@@ -240,6 +244,7 @@ impl ClaimsBuilder {
             iat: Some(now - 5),
             nbf: None,
             exp: now + 600,
+            nonce: None,
         }
     }
 
@@ -281,6 +286,12 @@ impl ClaimsBuilder {
         self.exp = exp;
         self
     }
+    /// Set the OIDC `nonce` claim (H2). Leave unset to model a token
+    /// that carries none.
+    pub fn nonce(mut self, nonce: impl Into<String>) -> Self {
+        self.nonce = Some(nonce.into());
+        self
+    }
     pub fn to_value(&self) -> JsonValue {
         let mut v = json!({
             "iss": self.iss,
@@ -306,6 +317,9 @@ impl ClaimsBuilder {
         if let Some(nbf) = self.nbf {
             m.insert("nbf".into(), JsonValue::Number(nbf.into()));
         }
+        if let Some(nonce) = &self.nonce {
+            m.insert("nonce".into(), JsonValue::String(nonce.clone()));
+        }
         v
     }
 }
@@ -324,6 +338,14 @@ pub const AUTH_COOKIE_NAME_SECURE: &str = "__Host-quarto_hub_token";
 /// pre-H3 name everywhere. `__Host-` requires `Secure`, which requires
 /// TLS, so insecure mode cannot use the prefixed form.
 pub const AUTH_COOKIE_NAME_LEGACY: &str = "quarto_hub_token";
+
+/// Sealed login-state cookie name in secure mode (H2). `__Secure-`
+/// rather than `__Host-` because the cookie is scoped to `Path=/auth`,
+/// which `__Host-` forbids.
+pub const LOGIN_STATE_COOKIE_SECURE: &str = "__Secure-quarto_hub_login";
+
+/// Sealed login-state cookie name under `--allow-insecure-auth`.
+pub const LOGIN_STATE_COOKIE_LEGACY: &str = "quarto_hub_login";
 
 pub struct TestHub {
     pub base_url: String,

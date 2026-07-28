@@ -48,6 +48,43 @@ Notes:
   H3 rollout invalidates outstanding sessions once (users re-log-in);
   a login also emits a clear for the bare name so it doesn't linger.
 
+## Login nonce (Google flow)
+
+The Google login is a two-request flow. `GET /auth/nonce` mints a random
+nonce, returns it to the SPA (which hands it to Google Identity
+Services), and seals a copy into a short-lived HMAC-signed cookie —
+`__Secure-quarto_hub_login`, `SameSite=None; HttpOnly; Path=/auth`, 10
+minute lifetime. `POST /auth/callback` then requires the ID token's
+`nonce` claim to match that cookie.
+
+This is what stops a **captured ID token from being replayed** to mint a
+session: signature, `iss`, `aud`, and `exp` all still validate for a
+stolen token, so before the nonce the hub had no way to tell whether a
+token belonged to a login *it* started. The blob is single-use — the
+callback clears the cookie on every exit path.
+
+Operational notes:
+
+- **`SameSite=None` is required, not lax.** Google delivers the
+  credential by cross-site form POST; a `Lax` cookie is not attached to
+  it. That in turn requires `Secure`, hence TLS.
+- **Enforcement is unconditional in secure mode**, and **skipped under
+  `--allow-insecure-auth`** (that cookie cannot work over plain HTTP).
+  The skip logs at WARN on every login — if you see
+  `nonce verification skipped` in a deployment that is meant to be
+  production, the hub is running with the dev flag.
+- **Rejections** appear as `auth_fail` with
+  `detail=login_state_<class>`: `login_state_missing` (no cookie —
+  the replay shape), `nonce_mismatch`, `token_nonce_missing` (client too
+  old to send one), `expired`, `tampered`, `kid_mismatch`.
+- **Rollout:** a user holding a stale SPA bundle fails login once to
+  `/?auth_error` and recovers on reload. Hub and client deploy together.
+- **Scope:** the Google callback only. `/auth/session` (the Generic
+  provider's JSON mint) is not nonce-bound and remains replay-able
+  within the submitted token's validity.
+- Sealed blobs verify against the **previous** secret during a graceful
+  rotation overlap, so a login started just before a rotation completes.
+
 ## Rotating the session secret
 
 Two modes. **The distinction is security-critical.**

@@ -316,6 +316,22 @@ impl SessionKeys {
         }
         self.previous.as_ref().filter(|p| p.kid == kid)
     }
+
+    /// Raw current secret, for signing the *other* payload type that
+    /// shares this keyring: sealed login state
+    /// ([`crate::login_state`]). Crate-private — the secret must not
+    /// leak past the two modules that sign with it, and sharing the
+    /// keyring is only safe because those payloads are domain-separated
+    /// (see that module's docs).
+    pub(crate) fn current_secret(&self) -> &[u8; 32] {
+        &self.current.secret
+    }
+
+    /// Exact-match `kid` → raw secret, the verification counterpart to
+    /// [`Self::current_secret`]. Fails closed on unknown kids.
+    pub(crate) fn secret_for_kid(&self, kid: &str) -> Option<&[u8; 32]> {
+        self.key_for_kid(kid).map(|k| &k.secret)
+    }
 }
 
 /// Why a session token failed verification. The variants map 1:1 to the
@@ -1029,6 +1045,7 @@ mod tests {
             azp: None,
             iat: None,
             exp: 0,
+            nonce: None,
         };
         let id = SessionIdentity::from_oidc(&claims);
         assert_eq!(id.name.as_ref().unwrap().chars().count(), 200);

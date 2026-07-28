@@ -71,7 +71,7 @@ The four items, by payoff-per-effort:
 
 ### Phase 2 — the substantive win (H2)
 
-- [ ] **H2 — server-verified `nonce` in the GIS login.**
+- [x] **H2 — server-verified `nonce` in the GIS login.**
   Today the hub validates signature/`iss`/`aud`/`exp` but cannot bind an ID
   token to a login attempt: **any captured Google ID token can be replayed to a
   mint endpoint for its ~1 h validity.** GIS supports a `nonce` at
@@ -146,6 +146,80 @@ The four items, by payoff-per-effort:
 - What this plan **cannot** deliver (only pattern (ii) can): removing the GIS
   third-party script, and a single-use PKCE-bound login exchange — though H2
   captures most of the latter's replay protection.
+
+## Verification record (as implemented)
+
+Branch `feature/auth-hardening-current-flow`. Strands filed at kickoff:
+H1 `bd-zbep24xd`, H2 `bd-uqjiac5a`, H3 `bd-gt2hhrcg`, H5 `bd-k2xvvh9f`
+(all children of `bd-uv8xynxk`).
+
+### E2E actually performed (and what could not be)
+
+`npm run local-prod` (Node-proxy mode) against a freshly built
+`target/debug/hub`: H1 confirmed **through the real binary** — with auth
+disabled, `POST /auth/session` → 404 and `POST /auth/callback` → 404
+while `GET /health` → 200.
+
+**Not done, explicitly:** no real GIS browser login. It needs a Google
+client ID whose authorized origin includes the local-prod host, which
+this session does not have, and no browser-automation tooling was
+available. H2's nonce round-trip is therefore covered only by the
+integration and client tests, not by a browser. This gap should close
+with a TLS-fronted staging login before sign-off.
+
+### H2 — implementation notes
+
+The sealed-state helper landed as its **own module**,
+`crates/quarto-hub/src/login_state.rs`, rather than inside `session.rs`
+(already 1100+ lines) — the plan allowed either, and a sibling module
+makes the pattern-(ii) reuse obvious. It needed two crate-private
+accessors on `SessionKeys` (`current_secret`, `secret_for_kid`), since
+the raw secrets are otherwise private to `session.rs`.
+
+**Domain separation is doubled, not single.** The plan called for a
+distinct `typ`; the implementation also uses a distinct `iss`
+(`quarto-hub-login` vs `quarto-hub`), because both verifiers pin their
+issuer via `set_issuer`. Either barrier alone suffices; both are asserted,
+**in both directions**, at the unit level (a session token must not open
+as login state, and a login blob must not verify as a session) and again
+across the HTTP surface (`a_sealed_login_blob_is_not_a_session_cookie`,
+`a_session_token_is_not_a_login_state_cookie`).
+
+Two deviations from the plan's letter, both deliberate:
+
+- **`GET /auth/nonce` is registered whenever auth is enabled**, not only
+  for form-post providers. The SPA then has one unconditional way to get
+  a nonce and never branches on the deployment's provider. *Enforcement*
+  stays exactly as scoped — only `/auth/callback` checks it.
+- **The `login_mint` audit event lives in `mint_session_cookie`**, not
+  duplicated in the two handlers as the plan described. Same events, but
+  a future third mint call site cannot forget to log.
+
+`@react-oauth/google@0.13.4` was verified to forward `nonce` to
+`google.accounts.id.initialize` — it is part of `IdConfiguration`, which
+`GoogleLoginProps` spreads through. **But its effect's dependency array
+does not include `nonce`**, so a nonce arriving after the first render
+would never reach GIS and every login would fail the server check.
+`SignInButton` therefore renders nothing until the fetch resolves, and
+renders an error rather than a nonce-less button if it fails. A test pins
+that ordering explicitly (`does not render GIS before the nonce arrives`)
+because it would otherwise look like a removable loading state.
+
+Note: `GoogleOAuthProvider`'s own `nonce` prop is unrelated — it sets the
+CSP nonce on the injected `<script>` tag. Do not pass the login nonce
+there.
+
+### Divergences found in passing (filed, not fixed here)
+
+- `scripts/hub-sliding-sessions-e2e.mjs` still logs in via the removed
+  `POST /auth/refresh` route, so the session-auth E2E script the
+  operator guide points at is already broken (`bd-gppva1ee`).
+- The local-prod Node proxy only forwards `/auth` and `/ws`, so
+  `/health` and `/api` are served as the SPA fallback instead of being
+  proxied to the hub — nginx forwards `^/(auth|api|health)`. Pre-existing
+  parity gap (`bd-r28nr1fc`).
+- `scripts/local-prod-port.test.mjs` is not wired into any test runner
+  (`bd-h2jdelwm`).
 
 ## Verification
 

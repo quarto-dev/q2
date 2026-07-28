@@ -153,6 +153,84 @@ fn auth_cookie_name(secure: bool) -> &'static str {
     }
 }
 
+/// Cookie carrying the sealed login-state blob in secure mode (H2).
+///
+/// `__Secure-` rather than `__Host-`: the cookie is scoped to
+/// `Path=/auth`, which `__Host-` forbids. The cookie-tossing risk that
+/// `__Host-` would cover is already covered here by the HMAC — a tossed
+/// blob cannot be forged, and a *replayed* one is bounded by its `exp`.
+const LOGIN_STATE_COOKIE_SECURE: &str = "__Secure-quarto_hub_login";
+
+/// Login-state cookie name under `--allow-insecure-auth`, where neither
+/// `__Secure-` nor `SameSite=None` can work (both require TLS).
+const LOGIN_STATE_COOKIE_LEGACY: &str = "quarto_hub_login";
+
+/// The login-state cookie name for the current TLS mode.
+fn login_state_cookie_name(secure: bool) -> &'static str {
+    if secure {
+        LOGIN_STATE_COOKIE_SECURE
+    } else {
+        LOGIN_STATE_COOKIE_LEGACY
+    }
+}
+
+/// Build the `Set-Cookie` carrying a sealed login-state blob.
+///
+/// `SameSite=None` in secure mode is **load-bearing, not laxity**:
+/// Google delivers the credential by cross-site form POST to
+/// `/auth/callback`, and a `Lax` cookie is not attached to that. (The
+/// `g_csrf` cookie only survives it via Chrome's 2-minute
+/// Lax-by-default grace period — not something to depend on.) Since
+/// `SameSite=None` requires `Secure`, insecure mode falls back to `Lax`;
+/// the callback skips enforcement there anyway.
+///
+/// `Path=/auth` scopes it to the two routes that use it: this cookie is
+/// attached to a cross-site POST, so it should not ride along on
+/// anything else.
+fn build_login_state_cookie(blob: &str, secure: bool) -> String {
+    let mut builder = cookie::Cookie::build((login_state_cookie_name(secure), blob))
+        .http_only(true)
+        .path("/auth")
+        .max_age(time::Duration::seconds(
+            crate::login_state::LOGIN_STATE_TTL_SECS,
+        ));
+    builder = if secure {
+        builder.secure(true).same_site(SameSite::None)
+    } else {
+        builder.same_site(SameSite::Lax)
+    };
+    builder.build().to_string()
+}
+
+/// Build a `Set-Cookie` that clears the login-state cookie.
+///
+/// The blob is single-use: the callback clears it on **every** exit path,
+/// so one pre-flight can complete at most one login.
+fn build_clear_login_state_cookie(secure: bool) -> String {
+    let mut builder = cookie::Cookie::build((login_state_cookie_name(secure), ""))
+        .http_only(true)
+        .path("/auth")
+        .max_age(time::Duration::ZERO);
+    builder = if secure {
+        builder.secure(true).same_site(SameSite::None)
+    } else {
+        builder.same_site(SameSite::Lax)
+    };
+    builder.build().to_string()
+}
+
+/// Read the sealed login-state blob from the `Cookie` header.
+fn login_state_cookie(headers: &HeaderMap, secure: bool) -> Option<String> {
+    let name = login_state_cookie_name(secure);
+    let cookies = headers.get("cookie")?.to_str().ok()?;
+    cookies
+        .split(';')
+        .filter_map(|s| cookie::Cookie::parse(s.trim()).ok())
+        .find(|c| c.name() == name)
+        .map(|c| c.value().to_owned())
+        .filter(|v| !v.is_empty())
+}
+
 /// JSON error body for auth failures, so clients can distinguish
 /// 401 auth errors from other HTTP errors programmatically.
 fn unauthorized() -> (StatusCode, Json<serde_json::Value>) {
@@ -840,6 +918,103 @@ fn validate_callback_csrf(
     }
 }
 
+/// Response for `GET /auth/nonce`.
+#[derive(Serialize)]
+struct AuthNonceResponse {
+    nonce: String,
+}
+
+/// Handle `GET /auth/nonce` — the login pre-flight (H2).
+///
+/// Mints a random nonce, returns it to the SPA (which passes it to the
+/// IdP), and seals a copy into an HttpOnly cookie so the callback can
+/// verify the IdP echoed *this* login attempt's value back. No
+/// server-side state: the cookie is the state, and the HMAC is what
+/// makes trusting it safe.
+///
+/// Unauthenticated by necessity — it runs before there is a session. It
+/// is a GET, so no CSRF gate applies; it reveals nothing and its only
+/// side effect is a cookie on the caller's own jar.
+async fn auth_nonce(State(ctx): State<SharedContext>) -> impl IntoResponse {
+    let secure = !ctx.allow_insecure_auth();
+    let nonce = crate::login_state::generate_login_nonce();
+    let blob = match crate::login_state::seal_login_state(
+        ctx.session_keys(),
+        &nonce,
+        crate::session::unix_now(),
+        crate::login_state::LOGIN_STATE_TTL_SECS,
+    ) {
+        Ok(blob) => blob,
+        Err(err) => {
+            tracing::error!(error = %err, "failed to seal login state");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "login_state_seal_failed"})),
+            )
+                .into_response();
+        }
+    };
+
+    let mut response = Json(AuthNonceResponse { nonce }).into_response();
+    attach_cookies(&mut response, &[build_login_state_cookie(&blob, secure)]);
+    response
+}
+
+/// Outcome of the callback's nonce check.
+enum NonceCheck {
+    Ok,
+    /// Enforcement was skipped — insecure mode only.
+    Skipped,
+    Failed(&'static str),
+}
+
+/// Verify that the ID token's `nonce` matches the sealed login-state
+/// cookie (H2).
+///
+/// This is what makes a captured ID token useless: without it, the hub
+/// validates signature, `iss`, `aud`, and `exp` — all of which still hold
+/// for a stolen token — and has no way to ask "did *this* browser start
+/// *this* login?".
+///
+/// Returns [`NonceCheck::Skipped`] under `--allow-insecure-auth`: the
+/// flow needs a `SameSite=None; Secure` cookie, which cannot function
+/// over plain HTTP. That is consistent with the flag's existing "never in
+/// production" contract, and the skip is logged at WARN.
+fn check_login_nonce(
+    ctx: &HubContext,
+    claims: &auth::OidcClaims,
+    headers: &HeaderMap,
+) -> NonceCheck {
+    if ctx.allow_insecure_auth() {
+        tracing::warn!(
+            "nonce verification skipped: --allow-insecure-auth cannot carry the \
+             SameSite=None; Secure login-state cookie. Never use this in production."
+        );
+        return NonceCheck::Skipped;
+    }
+
+    let Some(blob) = login_state_cookie(headers, true) else {
+        return NonceCheck::Failed("login_state_missing");
+    };
+    let sealed = match crate::login_state::open_login_state(
+        ctx.session_keys(),
+        &blob,
+        crate::session::unix_now(),
+    ) {
+        Ok(sealed) => sealed,
+        Err(err) => return NonceCheck::Failed(err.audit_class()),
+    };
+    let Some(presented) = claims.nonce.as_deref() else {
+        return NonceCheck::Failed("token_nonce_missing");
+    };
+    // Both values are hub-generated hex of fixed length, so a plain
+    // comparison leaks nothing useful about timing.
+    if presented != sealed.nonce {
+        return NonceCheck::Failed("nonce_mismatch");
+    }
+    NonceCheck::Ok
+}
+
 /// Handle `POST /auth/callback` — credential delivery via form POST.
 ///
 /// Registered for providers where [`AuthConfig::uses_form_post_callback()`]
@@ -854,6 +1029,17 @@ async fn auth_callback(
     headers: HeaderMap,
     Form(form): Form<AuthCallbackForm>,
 ) -> impl IntoResponse {
+    let secure = !ctx.allow_insecure_auth();
+    // The sealed login-state blob is single-use: every exit path from
+    // here clears it, so one pre-flight can complete at most one login.
+    // Building the failure response through a closure is what keeps that
+    // true as paths are added.
+    let auth_error = || {
+        let mut response = Redirect::to("/?auth_error").into_response();
+        attach_cookies(&mut response, &[build_clear_login_state_cookie(secure)]);
+        response
+    };
+
     let mode = ctx
         .auth_config()
         .map_or(auth::CallbackCsrfMode::GoogleDoubleSubmit, |c| {
@@ -861,15 +1047,31 @@ async fn auth_callback(
         });
 
     if !validate_callback_csrf(&mode, &form, &headers) {
-        return Redirect::to("/?auth_error").into_response();
+        return auth_error();
     }
 
     // Validate the Google ID token once, then mint the hub session
     // cookie (§1) — the Google token itself is never cookie'd.
     let claims = match ctx.authenticate_claims(Some(&form.credential)).await {
         Ok(claims) => claims,
-        Err(_status) => return Redirect::to("/?auth_error").into_response(),
+        Err(_status) => return auth_error(),
     };
+
+    // Bind the token to this login attempt (H2). Runs after signature
+    // validation — there is no point comparing claims from a token we
+    // have not authenticated — but before the ban check and the mint.
+    if let NonceCheck::Failed(detail) = check_login_nonce(&ctx, &claims, &headers) {
+        tracing::event!(
+            target: "quarto_hub::audit",
+            tracing::Level::WARN,
+            action = "auth_fail",
+            outcome = "deny",
+            credential_kind = "cookie",
+            sub = %claims.sub,
+            detail = %format!("login_state_{detail}"),
+        );
+        return auth_error();
+    }
 
     // Bans gate mint too (§3) — otherwise a banned user just
     // re-logs-in via Google.
@@ -883,18 +1085,19 @@ async fn auth_callback(
             sub = %claims.sub,
             detail = "user_banned",
         );
-        return Redirect::to("/?auth_error").into_response();
+        return auth_error();
     }
 
     let cookies = match mint_session_cookie(&ctx, &claims, LoginEndpoint::Callback).await {
         Ok(cookies) => cookies,
         Err(err) => {
             tracing::error!(error = %err, "failed to mint session token");
-            return Redirect::to("/?auth_error").into_response();
+            return auth_error();
         }
     };
     let mut response = Redirect::to("/").into_response();
     attach_cookies(&mut response, &cookies);
+    attach_cookies(&mut response, &[build_clear_login_state_cookie(secure)]);
     response
 }
 
@@ -1460,6 +1663,15 @@ pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<Shared
         .is_some_and(|c| c.uses_form_post_callback())
     {
         router = router.route("/auth/callback", post(auth_callback));
+    }
+
+    // Login pre-flight (H2). Registered whenever auth is enabled — not
+    // just for form-post providers — so the SPA has one unconditional
+    // way to obtain a nonce and never has to branch on the deployment's
+    // provider. *Enforcement* is narrower: only `/auth/callback` checks
+    // it (see `check_login_nonce`).
+    if ctx.auth_config().is_some() {
+        router = router.route("/auth/nonce", get(auth_nonce));
     }
 
     // `/auth/session` is the JSON mint endpoint, and the *only* login
