@@ -47,6 +47,12 @@ quarto-preview = { path = "../quarto-preview" }
 url = "2.5"
 quarto-publish.workspace = true
 quarto-sass.workspace = true
+# `q2 use brand` validates a fetched brand against the typed model
+# before writing anything, and walks it for referenced logo/font files.
+quarto-brand.workspace = true
+# Target resolution, download, and hardened archive extraction for
+# `q2 use brand <source>`. Shared with `q2 add` when that lands.
+quarto-source-fetch = { path = "../quarto-source-fetch" }
 quarto-test.workspace = true
 serde_yaml.workspace = true
 tempfile = "3"

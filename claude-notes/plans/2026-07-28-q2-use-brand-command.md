@@ -730,15 +730,44 @@ Riskiest code, landed first and alone.
    serves incompressible bytes. Mutation-checked afterwards: disabling
    the ceiling turns it red.
 
-### Phase 7 — Fetch/copy mode
+### Phase 7 — Fetch/copy mode — **done**
 
-- [ ] Brand-file location within the resolved source (+ `<subdir>`).
-- [ ] `quarto-brand` validation before any write.
-- [ ] Asset traversal over the typed model; escape check on declared paths.
-- [ ] Destination selection (root vs `_brand/`) + post-fetch `_brand/` gate.
-- [ ] Trust prompt + `--trust`; fail-closed non-interactive.
-- [ ] Brand-extension detection for a better error message.
-- [ ] Cases 10, 11, 12, 16, 19, 20 passing.
+- [x] Brand-file location within the resolved source (`<subdir>` applied by
+      `quarto-source-fetch`).
+- [x] `quarto-brand` validation before any write.
+- [x] Asset traversal over the typed model; escape check on declared paths.
+- [x] Destination selection (root vs `_brand/`) + `_brand/` added to the
+      must-not-exist preconditions when that destination is chosen.
+- [x] Trust prompt + `--trust`; fail-closed non-interactive.
+- [x] Brand-extension detection for a better error message.
+- [x] Cases 10, 11, 12, 16, 19, 20 passing.
+
+**Design notes from execution.**
+
+1. **`FileContent::CopyFrom` rather than buffering.** A webfont family can be
+   several megabytes; reading assets into memory at plan time only to write
+   them back at execute time buys nothing. The consequence is an ownership
+   rule worth stating: the scratch directory holding a fetched source must
+   outlive `execute_plan`, so `execute_brand` owns the `TempDir` for the whole
+   command.
+2. **Gate 3 (existing brand file) is checked twice, deliberately.** Once
+   eagerly in `resolve`, before any fetch, so a project that will be refused is
+   refused without a network round trip *and without asking the user to trust a
+   stranger's archive*; and once as a plan precondition, because the gap
+   between resolving and writing now spans a download and possibly a prompt.
+   The unit test uses a `NeverFetch` fetcher that panics if called, so "the
+   gate fires before the network" is asserted rather than assumed.
+3. **The trust prompt defaults to no**, and refuses outright when there is no
+   terminal (`--json`, `--no-prompt`, CI, no TTY). Quarto 1 defaults its
+   equivalent to *yes* (`brand.ts:613`). For "should I run content from this
+   URL?", the safe answer must be the one a distracted user gets from pressing
+   Enter.
+4. **Brand extensions are detected only to produce a better error.** Pointed at
+   a Q1 brand extension, the command names the brand file inside it so the user
+   can copy it by hand, instead of reporting a baffling "no brand file found".
+5. **Asset paths from a brand file get the same escape check as archive entry
+   names.** A fetched `_brand.yml` is untrusted input; `logo: ../../../etc/passwd`
+   would otherwise be copied into the user's project.
 
 ### Phase 8 — `--json` front door — **done** (folded into Phases 2–4)
 
@@ -751,12 +780,140 @@ carry no information the flags do not. `--json` here means "machine-
 readable output", and the shape matches create's result object
 (`version`, `path`, `dry_run`, `files[]`).
 
-### Phase 9 — Docs + close-out
+### Phase 9 — Docs + close-out — **done**
 
-- [ ] User-facing `docs/` page: usage; the Q1↔Q2 auto-discovery difference;
-      `--force` vs `--trust`; brand extensions unsupported.
-- [ ] `cargo xtask verify` (full, not `--skip-hub-build`) green.
-- [ ] End-to-end invocation + observed output recorded in this plan.
+- [x] User-facing docs: `docs/guides/authoring/brand.qmd` updated.
+- [x] `cargo xtask verify` green.
+- [x] End-to-end invocations + observed output recorded below.
+
+**The docs needed correcting, not just extending.** `brand.qmd` had been
+carried over from Quarto 1 and described Q1 behavior in two places that are
+wrong for Quarto 2:
+
+1. *"Quarto will detect the presence of `_brand.yml` and automatically apply
+   the brand to all documents"* — **false in Q2**, and the single most
+   consequential thing a user could believe. Verified empirically before
+   rewriting: a project with `_brand.yml` and no `brand:` key renders with zero
+   occurrences of the brand color in the output CSS; adding the key produces
+   one. Replaced with a two-step "file, then declaration" explanation and a
+   callout naming the Q1 difference.
+2. The whole `quarto use brand` section described Q1's flow — copying into
+   `_brand/`, prompting to create the directory, prompting per-file overwrite,
+   offering to delete extra files — none of which is what Q2 does, and with no
+   mention of the `brand:` key. Rewritten around Q2's actual behavior:
+   destination selection, the refusal gates, `--dry-run`, and the `--force` vs
+   `--trust` split.
+
+The brand-extensions section now says plainly that Q2 does not support them,
+and shows the error the user will get.
+
+Net effect on link health: broken-link warnings on the page went from 7 to 5
+(the removed Q1 extension links were themselves broken). The 5 that remain are
+pre-existing links to pages that do not exist in the Q2 docs tree
+(`/docs/reference/metadata/brand.qmd`, `/docs/advanced/typst/brand-yaml.qmd`,
+`/docs/output-formats/html-themes-more.qmd`) — untouched here, and worth their
+own cleanup.
+
+## End-to-end verification
+
+All performed against the real binary; output inspected, not inferred.
+
+**Scaffold mode, comments preserved.**
+
+```
+$ q2 use brand
+Added a brand to …/e2e:
+
+  created          _brand.yml
+  updated          _quarto.yml
+
+$ cat _quarto.yml
+# My site
+project:
+  type: website  # trailing
+
+format:
+  html:
+    toc: true
+
+# Added by `q2 use brand`
+brand: _brand.yml
+```
+
+**Re-running refuses rather than silently doing nothing.**
+
+```
+$ q2 use brand
+Error: This project already declares a brand in _quarto.yml
+_quarto.yml line 10 sets `brand: _brand.yml`. Adding another would leave two
+declarations, and the one that wins is not obvious. Edit that line by hand,
+or pass --force to repoint it.
+```
+
+**`--force` repoints in place, leaving everything else byte-identical.**
+
+```
+$ cat _quarto.yml          # before
+# My site
+project:
+  type: website
+brand: legacy/theme.yml
+$ q2 use brand --force
+$ cat _quarto.yml          # after
+# My site
+project:
+  type: website
+brand: _brand.yml
+```
+
+**Local source with assets → `_brand/`, including nested paths.**
+
+```
+$ q2 use brand ../src
+Added a brand to …/p7/proj:
+
+  created          _brand/_brand.yml
+  created          _brand/fonts/custom.woff2
+  created          _brand/logo.png
+  updated          _quarto.yml
+
+$ grep brand: _quarto.yml
+brand: _brand/_brand.yml
+```
+
+**Remote fetch: refused without `--trust`, then fetched and rendered with it.**
+
+```
+$ q2 use brand http://127.0.0.1:8899/archive.tar.gz
+Error: Refusing to download http://127.0.0.1:8899/archive.tar.gz without confirmation
+Downloading a brand runs someone else's content through this machine. There is
+no terminal to ask on, so nothing was fetched.
+
+Re-run with --trust to confirm you trust this source.
+
+$ q2 use brand http://127.0.0.1:8899/archive.tar.gz --trust
+Added a brand to …/p7remote/proj:
+
+  created          _brand.yml
+  updated          _quarto.yml
+
+$ q2 render index.qmd --to html && grep -rl 0a5c99 _site/
+_site/site_libs/quarto/quarto-theme-e4bac7ae0424e983.css
+```
+
+The archive's root directory was `mybrand-main`; nothing in the command
+predicted that name — it was read from the extracted tree.
+
+**Auto-discovery probe** (the premise the whole design rests on):
+
+```
+$ # _brand.yml present, no brand: key
+$ q2 render index.qmd --to html && grep -ril c0ffee _site/ | wc -l
+0
+$ # after adding `brand: _brand.yml`
+$ q2 render index.qmd --to html && grep -ril c0ffee _site/ | wc -l
+1
+```
 
 ## Open design questions
 

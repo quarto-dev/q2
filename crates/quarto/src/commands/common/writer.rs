@@ -74,11 +74,19 @@ pub fn execute_plan(plan: &FilePlan) -> Result<Vec<ExecutedFile>, CommandFailure
                 std::fs::create_dir_all(parent)
                     .map_err(|e| io_failure("create directory", parent, e))?;
             }
-            let write_result = match &file.content {
-                FileContent::Text(s) => std::fs::write(&target, s),
-                FileContent::Binary(b) => std::fs::write(&target, b),
-            };
-            write_result.map_err(|e| io_failure("write file", &target, e))?;
+            match &file.content {
+                FileContent::Text(s) => {
+                    std::fs::write(&target, s).map_err(|e| io_failure("write file", &target, e))?
+                }
+                FileContent::Binary(b) => {
+                    std::fs::write(&target, b).map_err(|e| io_failure("write file", &target, e))?
+                }
+                FileContent::CopyFrom(source) => {
+                    std::fs::copy(source, &target).map_err(|e| {
+                        io_failure(&format!("copy {} to", source.display()), &target, e)
+                    })?;
+                }
+            }
         }
         results.push(ExecutedFile {
             path: file.path.clone(),

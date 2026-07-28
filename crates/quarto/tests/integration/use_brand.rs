@@ -450,6 +450,206 @@ fn trust_with_dry_run_is_rejected() {
 }
 
 // ====================================================================
+// Cases 10, 11, 12, 19, 20 — brand sources
+// ====================================================================
+
+/// A directory holding a brand source.
+fn source_with(files: &[(&str, &str)]) -> TempDir {
+    let dir = TempDir::new().unwrap();
+    for (name, content) in files {
+        let path = dir.path().join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, content).unwrap();
+    }
+    dir
+}
+
+#[test]
+fn a_local_source_with_only_a_brand_file_lands_at_the_root() {
+    let tmp = project_with_config(MINIMAL_CONFIG);
+    let src = source_with(&[("_brand.yml", "color:\n  primary: \"#123456\"\n")]);
+
+    let out = run_q2_use(tmp.path(), &["brand", &src.path().to_string_lossy()]);
+    assert_succeeded(&out);
+
+    assert_eq!(
+        read(&tmp.path().join("_brand.yml")),
+        "color:\n  primary: \"#123456\"\n"
+    );
+    assert!(!tmp.path().join("_brand").exists());
+    let config = parse_yaml_file(&tmp.path().join("_quarto.yml"));
+    assert_eq!(config["brand"].as_str(), Some("_brand.yml"));
+}
+
+#[test]
+fn a_local_source_with_assets_lands_in_the_brand_directory() {
+    let tmp = project_with_config(MINIMAL_CONFIG);
+    let src = source_with(&[
+        ("_brand.yml", "logo:\n  small: logo.png\n"),
+        ("logo.png", "pretend png bytes"),
+    ]);
+
+    let out = run_q2_use(tmp.path(), &["brand", &src.path().to_string_lossy()]);
+    assert_succeeded(&out);
+
+    assert!(tmp.path().join("_brand/_brand.yml").is_file());
+    assert_eq!(
+        read(&tmp.path().join("_brand/logo.png")),
+        "pretend png bytes"
+    );
+    assert!(
+        !tmp.path().join("_brand.yml").exists(),
+        "a brand with assets should not also scatter a root _brand.yml"
+    );
+
+    let config = parse_yaml_file(&tmp.path().join("_quarto.yml"));
+    assert_eq!(
+        config["brand"].as_str(),
+        Some("_brand/_brand.yml"),
+        "the declared path must match where the brand actually landed"
+    );
+}
+
+#[test]
+fn the_source_brand_spelling_is_normalized_on_arrival() {
+    // A source may use `_brand.yaml`; what lands is always `_brand.yml`,
+    // so the declared path is predictable.
+    let tmp = project_with_config(MINIMAL_CONFIG);
+    let src = source_with(&[("_brand.yaml", "color:\n  primary: red\n")]);
+
+    assert_succeeded(&run_q2_use(
+        tmp.path(),
+        &["brand", &src.path().to_string_lossy()],
+    ));
+
+    assert!(tmp.path().join("_brand.yml").is_file());
+    assert!(!tmp.path().join("_brand.yaml").exists());
+}
+
+#[test]
+fn an_invalid_source_brand_is_refused_before_writing_anything() {
+    let tmp = project_with_config(MINIMAL_CONFIG);
+    let src = source_with(&[("_brand.yml", "color:\n  not_a_real_key: red\n")]);
+
+    let out = run_q2_use(tmp.path(), &["brand", &src.path().to_string_lossy()]);
+
+    assert_failed(&out, "valid brand");
+    assert_no_brand_files(tmp.path());
+    assert_eq!(
+        read(&tmp.path().join("_quarto.yml")),
+        MINIMAL_CONFIG,
+        "the config must not be edited for a brand we refused"
+    );
+}
+
+#[test]
+fn a_source_without_a_brand_file_says_what_it_looked_for() {
+    let tmp = project_with_config(MINIMAL_CONFIG);
+    let src = source_with(&[("README.md", "no brand here")]);
+
+    let out = run_q2_use(tmp.path(), &["brand", &src.path().to_string_lossy()]);
+    assert_failed(&out, "_brand.yml");
+    assert_no_brand_files(tmp.path());
+}
+
+#[test]
+fn a_quarto1_brand_extension_is_refused_with_an_explanation() {
+    let tmp = project_with_config(MINIMAL_CONFIG);
+    let src = source_with(&[
+        (
+            "_extension.yml",
+            "title: Acme\ncontributes:\n  metadata:\n    project:\n      brand: acme.yml\n",
+        ),
+        ("acme.yml", "color:\n  primary: red\n"),
+    ]);
+
+    let out = run_q2_use(tmp.path(), &["brand", &src.path().to_string_lossy()]);
+
+    assert_failed(&out, "brand extension");
+    let stderr = stderr_str(&out);
+    assert!(
+        stderr.contains("acme.yml"),
+        "the error should name the file so the user can copy it by hand; got:\n{stderr}"
+    );
+    assert_no_brand_files(tmp.path());
+}
+
+#[test]
+fn an_unrecognizable_target_explains_what_is_accepted() {
+    let tmp = project_with_config(MINIMAL_CONFIG);
+    let out = run_q2_use(tmp.path(), &["brand", "this is not a source"]);
+
+    assert!(!out.status.success());
+    let stderr = stderr_str(&out);
+    assert!(stderr.contains("local path"), "got:\n{stderr}");
+    assert!(stderr.contains("<org>/<repo>"), "got:\n{stderr}");
+}
+
+#[test]
+fn a_remote_target_is_refused_non_interactively_without_trust() {
+    // These tests run with CI=1 and no TTY, so there is nobody to ask.
+    // Failing closed is the point: the alternative is downloading and
+    // extracting a stranger's archive on a machine that cannot consent.
+    // The refusal happens before any request, so this needs no network.
+    let tmp = project_with_config(MINIMAL_CONFIG);
+    let out = run_q2_use(tmp.path(), &["brand", "some-org/some-brand"]);
+
+    assert_failed(&out, "--trust");
+    assert_no_brand_files(tmp.path());
+    assert_eq!(read(&tmp.path().join("_quarto.yml")), MINIMAL_CONFIG);
+}
+
+#[test]
+fn a_local_source_needs_no_trust_flag() {
+    // The trust gate is about fetched content, so a local directory
+    // must not be caught by it.
+    let tmp = project_with_config(MINIMAL_CONFIG);
+    let src = source_with(&[("_brand.yml", "color:\n  primary: red\n")]);
+
+    assert_succeeded(&run_q2_use(
+        tmp.path(),
+        &["brand", &src.path().to_string_lossy()],
+    ));
+}
+
+#[test]
+fn a_source_brand_reaches_the_render() {
+    // The end-to-end proof for the copy path, mirroring the scaffold
+    // path's version: files landing on disk is not the same as a brand
+    // taking effect.
+    let tmp = project_with_config(MINIMAL_CONFIG);
+    std::fs::write(
+        tmp.path().join("index.qmd"),
+        "---\ntitle: Test\n---\n\nHello.\n",
+    )
+    .unwrap();
+    let src = source_with(&[(
+        "_brand.yml",
+        "color:\n  palette:\n    probe: \"#fedcba\"\n  primary: probe\n",
+    )]);
+
+    assert_succeeded(&run_q2_use(
+        tmp.path(),
+        &["brand", &src.path().to_string_lossy()],
+    ));
+
+    let render = Command::new(Q2_BIN)
+        .current_dir(tmp.path())
+        .args(["render", "index.qmd", "--to", "html"])
+        .output()
+        .expect("spawn q2 render");
+    assert!(
+        render.status.success(),
+        "render failed.\nstderr: {}",
+        String::from_utf8_lossy(&render.stderr)
+    );
+    assert!(
+        tree_contains(&tmp.path().join("_site"), "fedcba"),
+        "the copied brand's color must reach the compiled CSS"
+    );
+}
+
+// ====================================================================
 // Case 21 — the machine front door
 // ====================================================================
 

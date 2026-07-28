@@ -18,6 +18,7 @@
 
 mod brand;
 mod config;
+mod source;
 
 use anyhow::{Context, Result};
 use quarto_error_reporting::{DiagnosticMessage, diagnostic_to_json};
@@ -25,6 +26,7 @@ use quarto_source_map::SourceContext;
 use serde::Serialize;
 
 use crate::commands::common::plan::{CommandFailure, FilePlan};
+use crate::commands::common::prompter::{InquirePrompter, Prompter};
 use crate::commands::common::writer::{self, ExecutedFile};
 
 /// CLI arguments for `q2 use brand`, passed through from `main`.
@@ -63,10 +65,30 @@ pub fn execute_brand(args: BrandArgs) -> Result<()> {
         dry_run: args.dry_run,
         force: args.force,
         trust: args.trust,
-        no_prompt: args.no_prompt,
     };
 
-    let resolved = match brand::resolve(&request, &cwd) {
+    // Scratch space for a downloaded/extracted source. Held for the
+    // whole command: planned files may be `CopyFrom` paths inside it,
+    // so it must outlive `execute_plan`. Dropped (and deleted) on
+    // return, whatever the outcome.
+    let work_dir = tempfile::tempdir().context("create a temporary working directory")?;
+
+    let mut inquire_prompter = InquirePrompter;
+    let prompter: Option<&mut dyn Prompter> = if allow_prompt(args.no_prompt, args.json) {
+        Some(&mut inquire_prompter)
+    } else {
+        None
+    };
+
+    let mut ctx = brand::ResolveContext {
+        cwd: &cwd,
+        work_dir: work_dir.path(),
+        fetcher: &quarto_source_fetch::UreqFetch,
+        prompter,
+        limits: quarto_source_fetch::ExtractLimits::default(),
+    };
+
+    let resolved = match brand::resolve(&request, &mut ctx) {
         Ok(r) => r,
         Err(f) => fail(&f.0, args.json),
     };
@@ -84,6 +106,21 @@ pub fn execute_brand(args: BrandArgs) -> Result<()> {
         print_human_result(&resolved.plan, &executed);
     }
     Ok(())
+}
+
+/// Whether an interactive prompt is possible.
+///
+/// Same gate as `q2 create` (Q1 parity, `cmd.ts:62-74`), plus `--json`:
+/// the machine path never prompts, so a remote source there must carry
+/// `--trust` explicitly. Prompt UI renders on stderr, hence checking
+/// both stdin and stderr.
+fn allow_prompt(no_prompt: bool, json: bool) -> bool {
+    use std::io::IsTerminal;
+    !no_prompt
+        && !json
+        && std::env::var_os("CI").is_none()
+        && std::io::stdin().is_terminal()
+        && std::io::stderr().is_terminal()
 }
 
 /// Report a fatal diagnostic on the right channel and exit non-zero.
@@ -134,9 +171,16 @@ fn print_human_result(plan: &FilePlan, files: &[ExecutedFile]) {
         // expect this step to be necessary, and a user who does not
         // know Quarto 2 skips auto-discovery has no way to guess why
         // their config was touched.
-        println!("_brand.yml now applies to this project: Quarto 2 does not");
+        let brand_path = files
+            .iter()
+            .find(|f| f.path.file_name().is_some_and(|n| n == "_brand.yml"))
+            .map_or_else(
+                || "_brand.yml".to_string(),
+                |f| f.path.display().to_string(),
+            );
+        println!("{brand_path} now applies to this project: Quarto 2 does not");
         println!("auto-discover brand files, so the `brand:` key above is what");
-        println!("makes it take effect. Edit _brand.yml, then re-render.");
+        println!("makes it take effect. Edit {brand_path}, then re-render.");
     }
 }
 

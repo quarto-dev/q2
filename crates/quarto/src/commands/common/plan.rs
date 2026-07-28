@@ -15,6 +15,15 @@ use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 pub enum FileContent {
     Text(String),
     Binary(Vec<u8>),
+    /// Copy an existing file from `PathBuf`.
+    ///
+    /// Used for brand assets fetched from a source: a webfont family
+    /// can be several megabytes, and reading it into memory at plan
+    /// time only to write it back out at execute time buys nothing. The
+    /// source path must stay valid until the plan is executed — for a
+    /// fetched source, that means the caller keeps the scratch
+    /// directory alive across `execute_plan`.
+    CopyFrom(PathBuf),
 }
 
 /// One file the command intends to write.

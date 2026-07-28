@@ -24,6 +24,13 @@ pub trait Prompter {
     /// Ask for a line of text. When `default` is given, an empty
     /// submission returns the default.
     fn input(&mut self, prompt: &str, default: Option<&str>) -> Result<String, CommandFailure>;
+
+    /// Ask a yes/no question.
+    ///
+    /// Used for consequential confirmations — today, `q2 use brand`'s
+    /// remote-source trust prompt, which passes `default: false` so the
+    /// safe answer is the one a distracted user gets from Enter.
+    fn confirm(&mut self, prompt: &str, default: bool) -> Result<bool, CommandFailure>;
 }
 
 /// Real terminal prompter backed by `inquire`.
@@ -65,5 +72,12 @@ impl Prompter for InquirePrompter {
             text = text.with_default(d);
         }
         text.prompt().map_err(map_inquire_err)
+    }
+
+    fn confirm(&mut self, prompt: &str, default: bool) -> Result<bool, CommandFailure> {
+        inquire::Confirm::new(prompt)
+            .with_default(default)
+            .prompt()
+            .map_err(map_inquire_err)
     }
 }

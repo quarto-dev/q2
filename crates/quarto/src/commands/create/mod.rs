@@ -443,6 +443,10 @@ mod interactive_tests {
                     .to_string()),
             }
         }
+
+        fn confirm(&mut self, _prompt: &str, _default: bool) -> Result<bool, CommandFailure> {
+            unreachable!("q2 create shows no confirmation prompt")
+        }
     }
 
     fn args(v: &[&str]) -> Vec<String> {
