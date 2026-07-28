@@ -165,7 +165,13 @@ client ID whose authorized origin includes the local-prod host, which
 this session does not have, and no browser-automation tooling was
 available. H2's nonce round-trip is therefore covered only by the
 integration and client tests, not by a browser. This gap should close
-with a TLS-fronted staging login before sign-off.
+with a TLS-fronted staging login before sign-off, tracked as
+`bd-fcv3q5kl` — an **open child of the epic**, so `bd-uv8xynxk` cannot
+be closed until that verification happens.
+
+Full `cargo xtask verify` (all 14 steps, including the WASM rebuild and
+the hub-client build + tests) passes at the branch tip, and the working
+tree is clean afterwards — the WASM rebuild produced no tracked diffs.
 
 ### H2 — implementation notes
 
