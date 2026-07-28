@@ -630,17 +630,60 @@ inert would have been worse than implementing forty lines.
    would reach users unnoticed; `the_shipped_starter_brand_renders_without_editing`
    renders it as-is and asserts its accent color reaches the CSS.
 
-### Phase 5 — `quarto-source-fetch`: extraction
+### Phase 5 — `quarto-source-fetch`: extraction — **done**
 
 Riskiest code, landed first and alone.
 
-- [ ] New crate skeleton; `tar` + `zip` workspace deps added.
-- [ ] `extract_into(reader, dest, limits)` contract, tar backend.
-- [ ] Zip backend.
-- [ ] Hardening matrix: path escape, symlink, hardlink, entry count, byte cap,
+- [x] New crate `quarto-source-fetch`; `tar` + `zip` deps added.
+- [x] `extract_into(archive, dest, limits)` contract, tar backend.
+- [x] Zip backend.
+- [x] Hardening matrix: path escape (`..`, absolute, drive prefix,
+      backslash), symlink, hardlink, entry count, cumulative byte cap,
       zip declared-size mismatch — **both backends**.
-- [ ] Magic-byte format detection.
-- [ ] Cases 13, 14 passing.
+- [x] Magic-byte format detection.
+- [x] Cases 13, 14 passing (20 tests).
+
+**Design notes from execution.**
+
+1. **`zip` is pulled in with `default-features = false` and only
+   `deflate-flate2-zlib-rs`.** That routes deflate through the `flate2`
+   already in the tree and keeps AES decryption, lzma/xz, zstd, bzip2,
+   and ppmd out of the dependency graph entirely. None are needed to
+   read a GitHub archive, and each is attack surface reachable from an
+   untrusted file. An archive using one now fails with a clear
+   unsupported-method error instead of being decoded.
+2. **All hardening lives in one `ExtractSink`.** Both backends decode
+   entries and hand every one to it. A rule added to the sink applies to
+   both formats by construction — which is the whole defense against the
+   realistic failure mode of "the check exists for tar and was forgotten
+   for zip".
+3. **Entry names are validated as strings, before any `Path` parsing.**
+   `Path` semantics are platform-dependent in exactly the ways that
+   matter: on Unix, `..\..\evil` is one ordinary component and `C:\evil`
+   is a legal filename, so a Windows-shaped attack would pass a
+   `Component`-based check on Linux and mean something else on Windows.
+   String validation makes the verdict identical everywhere.
+4. **The test fixtures could not be built with the safe APIs.**
+   `tar::Builder::append_data` refuses `..` and absolute paths — correct
+   for a writer, and exactly why it is unusable here: these fixtures must
+   produce what a hostile server would send. The tests write the raw
+   100-byte tar name field directly.
+5. **Mutation testing found a real gap.** Each safety rule was disabled
+   in turn to confirm a test turns red. Removing the `..` rejection and
+   the zip size cross-check were both caught. **Removing the streaming
+   byte ceiling was not** — every oversized-archive test was being caught
+   earlier by the cheap declared-size pre-check, so the defense that
+   actually stops a decompression bomb had no coverage. Fixed by
+   `a_lying_declared_size_still_trips_the_streaming_ceiling`: a zip entry
+   declaring 1 byte and delivering 64 KiB, which passes every pre-check
+   and can only be stopped while copying. Re-running the mutation now
+   turns it red.
+6. **The zip crate's `enclosed_name()` check is redundant, and stays
+   anyway.** Mutation showed removing it turns nothing red — our own
+   sanitizer catches those names first. It is kept as a second,
+   independent opinion, with a comment saying so, because the tempting
+   "fix" for a `None` return (falling back to `name()`) is the classic
+   zip-slip mistake.
 
 ### Phase 6 — `quarto-source-fetch`: network
 

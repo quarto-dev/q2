@@ -1,0 +1,34 @@
+[package]
+name = "quarto-source-fetch"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Resolve, fetch, and safely extract Quarto source archives"
+
+[dependencies]
+# gzip for `.tar.gz`. Already a workspace dependency.
+flate2.workspace = true
+tar = "0.4"
+# Deliberately minimal: only the deflate codec, routed through the
+# flate2 already in the tree. Excluding the default feature set keeps
+# AES decryption, lzma/xz, zstd, bzip2, and ppmd out of the dependency
+# graph — none are needed to read a GitHub archive, and each is
+# attack surface reachable from an untrusted file.
+zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+# Integration tests build hostile archives in-process rather than
+# committing fixture files: a checked-in malicious archive is hard to
+# review, easy to let rot, and (for the decompression-bomb cases)
+# large. That means the test binary needs the writer halves of the same
+# archive crates the library reads with.
+flate2.workspace = true
+tar = "0.4"
+zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[lints]
+workspace = true
