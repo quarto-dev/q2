@@ -28,21 +28,31 @@ const bridgeAlias = {
   },
 };
 
-await mkdir(path.join(pkgDir, 'dist'), { recursive: true });
-await esbuild.build({
-  entryPoints: [path.join(pkgDir, 'scripts/wasm-host-entry.mjs')],
-  bundle: true,
-  platform: 'node',
-  format: 'esm',
-  outfile: path.join(pkgDir, 'dist/wasm-host.mjs'),
-  plugins: [bridgeAlias],
-  // dart-sass is pure JS and the html render's theme compilation needs
-  // it, so it rides inside the host bundle (the embedded dist-bundle
-  // has no node_modules to resolve it from at runtime).
-  logLevel: 'warning',
-});
-await copyFile(
-  path.join(wasmPkg, 'wasm_quarto_hub_client_bg.wasm'),
-  path.join(pkgDir, 'dist/wasm_quarto_hub_client_bg.wasm'),
-);
-console.log('wasm-host bundled into dist/');
+/**
+ * Build the host bundle + WASM binary into `outDir`. Called with
+ * dist/ by the package build and with dist-bundle/ by bundle.mjs.
+ */
+export async function buildWasmHost(outDir) {
+  await mkdir(outDir, { recursive: true });
+  await esbuild.build({
+    entryPoints: [path.join(pkgDir, 'scripts/wasm-host-entry.mjs')],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    outfile: path.join(outDir, 'wasm-host.mjs'),
+    plugins: [bridgeAlias],
+    // dart-sass is pure JS and the html render's theme compilation
+    // needs it, so it rides inside the host bundle (the embedded
+    // dist-bundle has no node_modules to resolve it from at runtime).
+    logLevel: 'warning',
+  });
+  await copyFile(
+    path.join(wasmPkg, 'wasm_quarto_hub_client_bg.wasm'),
+    path.join(outDir, 'wasm_quarto_hub_client_bg.wasm'),
+  );
+  console.log(`wasm-host bundled into ${path.relative(pkgDir, outDir)}/`);
+}
+
+if (import.meta.url === (await import('node:url')).pathToFileURL(process.argv[1] ?? '').href) {
+  await buildWasmHost(path.join(pkgDir, 'dist'));
+}
