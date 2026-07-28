@@ -88,6 +88,8 @@ interface ServerConnection {
   ready: Promise<void>;
 }
 
+type CollectionCreationPolicy = 'server-required' | 'local-first';
+
 // ============================================================================
 // Internal State
 // ============================================================================
@@ -289,45 +291,72 @@ export async function connectCollections(
   return { connected, failed };
 }
 
+async function createCollectionDocument(
+  syncServerUrl: string,
+  name: string | undefined,
+  policy: CollectionCreationPolicy,
+): Promise<string> {
+  const server = acquireServer(syncServerUrl);
+  try {
+    if (policy === 'server-required') {
+      // Shared collections require a peer so callers know the document has
+      // reached the configured server before they publish its pointer.
+      if (!(await awaitServerReady(server, 10000))) {
+        throw new Error(
+          'Could not reach sync server. Please check your connection and try again.',
+        );
+      }
+      onConnectionChange?.(true);
+    } else {
+      // A fresh personal root is useful while offline. The websocket adapter
+      // keeps reconnecting, and the Repo will announce this handle when its
+      // first peer eventually arrives.
+      onConnectionChange?.(false);
+      void server.ready.then(() => onConnectionChange?.(true));
+    }
+
+    const initial = {
+      projects: {},
+      version: CURRENT_PROJECT_SET_SCHEMA_VERSION,
+      ...(name !== undefined ? { name } : {}),
+    } as Record<string, unknown>;
+    const doc = automergeFrom(initial);
+    const handle = server.repo.import<ProjectSetDocument>(automergeSerialize(doc));
+
+    if (policy === 'local-first') {
+      // Repo saves are normally debounced. Setup must not publish pointers
+      // until the empty root is durably available for an offline reload.
+      await server.repo.flush([handle.documentId]);
+    }
+
+    const onChange = () => notifyChange();
+    handle.on('change', onChange);
+    const conn: CollectionConnection = {
+      docId: handle.documentId,
+      syncServer: syncServerUrl,
+      handle,
+      cleanup: () => handle.off('change', onChange),
+    };
+    connections.set(conn.docId, conn);
+    notifyChange();
+    return handle.documentId;
+  } catch (err) {
+    releaseServer(syncServerUrl);
+    throw err;
+  }
+}
+
 /**
- * Create a new collection document on a sync server.
+ * Create a new shared collection document on a sync server.
  *
  * @returns The document ID of the new ProjectSetDocument.
  * @throws If the sync server is unreachable.
  */
-export async function createCollection(
+export function createCollection(
   syncServerUrl: string,
   name?: string,
 ): Promise<string> {
-  const server = acquireServer(syncServerUrl);
-  // Creation requires the server so the document actually syncs.
-  if (!(await awaitServerReady(server, 10000))) {
-    releaseServer(syncServerUrl);
-    throw new Error(
-      'Could not reach sync server. Please check your connection and try again.',
-    );
-  }
-  onConnectionChange?.(true);
-
-  const initial = {
-    projects: {},
-    version: CURRENT_PROJECT_SET_SCHEMA_VERSION,
-    ...(name !== undefined ? { name } : {}),
-  } as Record<string, unknown>;
-  const doc = automergeFrom(initial);
-  const handle = server.repo.import<ProjectSetDocument>(automergeSerialize(doc));
-
-  const onChange = () => notifyChange();
-  handle.on('change', onChange);
-  const conn: CollectionConnection = {
-    docId: handle.documentId,
-    syncServer: syncServerUrl,
-    handle,
-    cleanup: () => handle.off('change', onChange),
-  };
-  connections.set(conn.docId, conn);
-  notifyChange();
-  return handle.documentId;
+  return createCollectionDocument(syncServerUrl, name, 'server-required');
 }
 
 /**
@@ -511,9 +540,12 @@ export async function connect(
  *
  * @returns The document ID of the newly created ProjectSetDocument.
  */
-export async function createProjectSet(syncServerUrl: string): Promise<string> {
+export async function createProjectSet(
+  syncServerUrl: string,
+  name?: string,
+): Promise<string> {
   await disconnect();
-  return createCollection(syncServerUrl);
+  return createCollectionDocument(syncServerUrl, name, 'local-first');
 }
 
 /**

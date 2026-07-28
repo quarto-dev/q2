@@ -255,7 +255,7 @@ export function useCollectionSets(): [CollectionSetsState, CollectionSetsActions
     setStatus('connecting');
     setError(null);
     try {
-      const docId = await projectSetService.createCollection(syncServer, DEFAULT_ROOT_NAME);
+      const docId = await projectSetService.createProjectSet(syncServer, DEFAULT_ROOT_NAME);
       await establishRoot(docId, syncServer);
       await migrateLocalCollections(syncServer);
       setCollections(projectSetService.listCollections());
