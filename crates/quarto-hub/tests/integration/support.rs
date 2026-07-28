@@ -335,6 +335,7 @@ pub struct TestHubBuilder {
     session_secret: Option<[u8; 32]>,
     previous_session_secret: Option<[u8; 32]>,
     google_provider: bool,
+    auth_disabled: bool,
     banned_subs: Vec<String>,
 }
 
@@ -352,8 +353,17 @@ impl TestHubBuilder {
             session_secret: None,
             previous_session_secret: None,
             google_provider: false,
+            auth_disabled: false,
             banned_subs: Vec::new(),
         }
+    }
+
+    /// Start the hub with `auth_config: None` — the no-auth deployment
+    /// shape. Auth-conditional routes (`/auth/session`,
+    /// `/auth/callback`) must not be registered.
+    pub fn auth_disabled(mut self) -> Self {
+        self.auth_disabled = true;
+        self
     }
 
     pub fn allowed_domains(mut self, domains: &[&str]) -> Self {
@@ -470,7 +480,7 @@ impl TestHubBuilder {
             host: "127.0.0.1".to_string(),
             sync_interval_secs: None,
             watch_enabled: false,
-            auth_config: Some(auth_config),
+            auth_config: (!self.auth_disabled).then_some(auth_config),
             allow_insecure_auth: self.allow_insecure_auth,
             register_root_ws: false,
             ..HubConfig::default()
@@ -480,17 +490,20 @@ impl TestHubBuilder {
         let ctx: SharedContext = Arc::new(ctx);
 
         // Inject the auth state ourselves, bypassing OIDC discovery so the
-        // mock provider's http:// URLs are usable in tests.
-        let audiences = vec![SPA_CLIENT_ID.to_string(), MCP_CLIENT_ID.to_string()];
-        let auth_state = auth::build_auth_state_from_parts(
-            provider.jwks_url.clone(),
-            vec![Algorithm::RS256],
-            audiences,
-            provider.issuer.clone(),
-        )
-        .await
-        .expect("build auth state");
-        ctx.set_auth_state(auth_state).expect("set auth state");
+        // mock provider's http:// URLs are usable in tests. Skipped for a
+        // no-auth hub, which has no JWKS decoder to install.
+        if !self.auth_disabled {
+            let audiences = vec![SPA_CLIENT_ID.to_string(), MCP_CLIENT_ID.to_string()];
+            let auth_state = auth::build_auth_state_from_parts(
+                provider.jwks_url.clone(),
+                vec![Algorithm::RS256],
+                audiences,
+                provider.issuer.clone(),
+            )
+            .await
+            .expect("build auth state");
+            ctx.set_auth_state(auth_state).expect("set auth state");
+        }
 
         let router = build_router_with_state(ctx.clone()).await.unwrap();
         let router = router.with_state(ctx);

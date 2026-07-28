@@ -991,6 +991,10 @@ async fn auth_logout_everywhere(
 /// OIDC deployment has — `/auth/callback` is registered only for providers
 /// whose `AuthConfig::uses_form_post_callback()` is true (Google alone).
 ///
+/// **Registered only for Generic providers** (H1): a form-post
+/// deployment has no caller for it, so exposing it there would be a
+/// second ID-token replay sink for nothing.
+///
 /// The submitted JWT goes through the full `authenticate_claims()` path
 /// (signature, audience, issuer, email allowlist) before a session is minted;
 /// because this is a fresh login, `auth_time = now` and a new `sid` are correct.
@@ -1313,7 +1317,6 @@ pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<Shared
         .route("/auth/actor", get(auth_actor))
         .route("/auth/logout", post(auth_logout))
         .route("/auth/logout-everywhere", post(auth_logout_everywhere))
-        .route("/auth/session", post(auth_session))
         // WebSocket endpoint for automerge sync at `/ws` (hub-client +
         // q2-preview SPA's canonical path).
         .route("/ws", get(ws_handler))
@@ -1334,6 +1337,19 @@ pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<Shared
         .is_some_and(|c| c.uses_form_post_callback())
     {
         router = router.route("/auth/callback", post(auth_callback));
+    }
+
+    // `/auth/session` is the JSON mint endpoint, and the *only* login
+    // path a Generic OIDC deployment has. Form-post providers (Google)
+    // log in through `/auth/callback` and nothing calls this — leaving
+    // it registered there would publish a second ID-token replay sink
+    // for no benefit, so it is the exact inverse of the condition above
+    // (H1, bd-zbep24xd).
+    if ctx
+        .auth_config()
+        .is_some_and(|c| !c.uses_form_post_callback())
+    {
+        router = router.route("/auth/session", post(auth_session));
     }
 
     // Add Content-Security-Policy header when auth is enabled.

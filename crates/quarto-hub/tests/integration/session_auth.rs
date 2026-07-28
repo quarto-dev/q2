@@ -533,6 +533,93 @@ async fn auth_session_mints_session_cookie() {
     assert!(attrs.contains(&format!("Max-Age={}", lt.idle_secs)));
 }
 
+// ── H1: /auth/session is the Generic provider's endpoint only ─────
+
+/// `/auth/session` is the *Generic* provider's only mint endpoint.
+/// Google deployments log in through the form-post `/auth/callback`, so
+/// leaving the JSON mint registered there just publishes a second
+/// ID-token replay sink with no caller (bd-zbep24xd).
+#[tokio::test]
+async fn auth_session_not_registered_on_google_provider_hub() {
+    let (provider, hub) = google_session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("google-hub-session-sub")
+            .to_value(),
+    );
+
+    let resp = hub
+        .client
+        .post(hub.url("/auth/session"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": google }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        404,
+        "Google deployments must not expose the JSON mint endpoint"
+    );
+    assert!(TestHub::set_auth_cookie(&resp).is_none());
+
+    // The form-post callback is still the Google login path.
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let resp = client
+        .post(hub.url("/auth/callback"))
+        .header("cookie", "g_csrf_token=tok")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(format!("credential={google}&g_csrf_token=tok"))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_redirection(),
+        "form-post callback still registered, got {}",
+        resp.status()
+    );
+    assert!(TestHub::set_auth_cookie(&resp).is_some());
+}
+
+/// With auth disabled there is nothing to mint a session *from*, so
+/// neither login endpoint is registered.
+#[tokio::test]
+async fn login_endpoints_absent_when_auth_disabled() {
+    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
+        tokio::sync::OnceCell::const_new();
+    let (_provider, hub) = SETUP
+        .get_or_init(|| async {
+            install_tracing_once();
+            let provider = MockOidcProvider::start().await;
+            let hub = TestHubBuilder::new().auth_disabled().start(&provider).await;
+            (provider, hub)
+        })
+        .await;
+
+    let resp = hub
+        .client
+        .post(hub.url("/auth/session"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": "irrelevant" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404);
+
+    let resp = hub
+        .client
+        .post(hub.url("/auth/callback"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("credential=irrelevant")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404);
+}
+
 /// The One-Tap renewal endpoint was renamed `/auth/refresh` → `/auth/session`
 /// (bd-s042qcxj); the old path must no longer be registered.
 #[tokio::test]
