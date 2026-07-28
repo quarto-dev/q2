@@ -2,8 +2,10 @@
 
 **Date:** 2026-07-28
 **Braid:** bd-dofxhzaj (task, P1, filed 2026-06-13 by Carlos while cutting v0.1.1)
-**Branch:** `main` @ `581e45c0` (invoked in the primary checkout; no worktree created — see *Where this should land* below)
-**Status:** Design settled with Carlos on 2026-07-28 (see **Decisions**). Ready to implement from Phase 1. Phase 0 is done.
+**Branch:** `braid/bd-dofxhzaj-switch-linux-release-targets`, off `main` @ `581e45c0`
+(pushed as `feature/bd-dofxhzaj-switch-linux-release-targets`)
+**Status:** Implemented. Phases 0-4 done and verified by a green spike run on both
+arches; Phase 5 is the PR. See **Phase outcomes** for the evidence.
 
 ## Triage verdict
 
@@ -264,8 +266,8 @@ workflow, no secrets, no publish, deleted before the PR merges (D1).
 - [x] Assert `./q2 --version` runs on the runner
 - [x] `actionlint` clean; YAML parses; heredoc verified locally to emit the
       fixture with no leading indentation
-- [ ] Push, run, iterate to green — record the outcome in **Phase 1 outcome**
-      below (including the aws-lc build path actually taken)
+- [x] Push, run, iterate to green — **green first try on both arches**; see
+      **Phase 1 outcome** below
 
 ### Phase 2 — Functional smoke on the musl artifact
 
@@ -282,14 +284,14 @@ short-circuits before the smoke steps and attribution stays unambiguous, while
       `<strong>`, an `<a href>`, and `styles.css` > 100 KB (observed 318,718
       bytes — a good canary that the whole SCSS pipeline ran rather than
       emitting a stub).
-- [ ] Render a real `.qmd` fixture with the musl binary on the runner and
+- [x] Render a real `.qmd` fixture with the musl binary on the runner and
       inspect the output (not just the exit code)
-- [ ] Run the same binary inside an `alpine:latest` container — the "covers
+- [x] Run the same binary inside an `alpine:latest` container — the "covers
       every distro incl. Alpine" claim is the whole point of the strand, so
       leaving it untested would leave the headline benefit unverified. Alpine
       has musl and *no glibc at all*, so this doubles as the strongest
       staticness proof.
-- [ ] Record both in **Phase 2 outcome** below
+- [x] Record both in **Phase 2 outcome** below
 
 ### Phase 3 — Flip `release.yml`
 
@@ -305,7 +307,8 @@ it being green. If the spike comes back red, these get amended (e.g. with a
       — exactly as `6080bd7a` removed it
 - [x] Keep `--features vendored-openssl` in `cargo_flags` (D3)
 - [x] `actionlint` clean
-- [ ] Confirmed by a green spike run (gating item — see Phase 1)
+- [x] Confirmed by a green spike run — the spike built the *same* targets with
+      the *same* flags on the *same* runner images now in `release.yml`
 
 ### Phase 4 — Prose
 
@@ -332,12 +335,16 @@ it being green. If the spike comes back red, these get amended (e.g. with a
       Explicitly noted as one-time, not per-release ceremony.
 - [x] Marked D4 of the 2026-06-12 release plan **SUPERSEDED** with a pointer
       here, keeping the historical reasoning intact rather than rewriting it
-- [ ] Add a runbook gotcha capturing whatever Phase 1 actually learned
-      (pending the spike result)
+- [x] Added three runbook gotchas from the spike: `musl-tools` is the only
+      extra package needed (with an explicit note that a future `aws-lc-sys`
+      wanting cmake/libclang would be a regression to pin, not to paper over);
+      `file` reports the two arches with *different* wording, so any staticness
+      check must accept both; and `ldd` exits non-zero on a static binary, so it
+      cannot be a bare assertion either
 
 ### Phase 5 — Land and ship
 
-- [ ] Delete `musl-spike.yml` (D1 — it is scaffolding, not a deliverable)
+- [x] Delete `musl-spike.yml` (D1 — it is scaffolding, not a deliverable)
 - [ ] `cargo xtask verify --skip-hub-build` green
 - [ ] PR, review, merge
 - [ ] Exercised for real by the next version cut (out of scope for this strand,
@@ -352,13 +359,67 @@ touching the release path, and only then edit `release.yml`.
 _Filled in as each phase completes — the durable record of what CI actually
 did, per the project's end-to-end verification rule._
 
-### Phase 1 outcome
+### Phase 1 outcome — **green on both arches, first try**
 
-_pending_
+Run [30375857883](https://github.com/quarto-dev/q2/actions/runs/30375857883),
+2026-07-28. Every step of both jobs succeeded; nothing needed iterating.
 
-### Phase 2 outcome
+| | linux_amd64 | linux_arm64 |
+|---|---|---|
+| target | `x86_64-unknown-linux-musl` | `aarch64-unknown-linux-musl` |
+| runner | `ubuntu-latest` | `ubuntu-24.04-arm` |
+| wall clock (cold cache) | 9m 18s | 8m 24s |
+| `file` verdict | `ELF 64-bit LSB pie executable, x86-64, … static-pie linked` | `ELF 64-bit LSB executable, ARM aarch64, … statically linked` |
+| `ldd` | *not a dynamic executable* | *not a dynamic executable* |
 
-_pending_
+**The aws-lc-sys question is answered: it is a non-issue.** `aws-lc-sys
+v0.40.0` compiled in **~17s (amd64) / ~16s (arm64)** — orders of magnitude
+below a from-source cmake build of AWS-LC — with **no `bindgen` step, no
+`libclang`, and no packages installed beyond `musl-tools`**. That matches the
+static prediction: the crate ships pregenerated bindings for both musl triples
+(`src/{x86_64,aarch64}_unknown_linux_musl_crypto.rs`) plus libc-agnostic
+cc-builder configs. The "historically finicky" reputation the 2026-06 S2 spike
+recorded no longer applies at this version. Vendored openssl likewise built
+without complaint. **None of the fallback ladder in the risk section was
+needed** — no `CC=musl-gcc`, no cmake install, no promotion of bd-r7s13dfb to
+a prerequisite.
+
+**Gotcha worth keeping:** `file` describes the two arches *differently* —
+x86_64 comes out `static-pie linked`, aarch64 comes out plain `statically
+linked`. Any staticness assertion has to accept both spellings; matching only
+one would pass on one arch and fail on the other.
+
+### Phase 2 outcome — **renders correctly, including on Alpine**
+
+Same run. On the runner, the fixture rendered and every content assertion
+passed: the title `<h1>`, the `<strong>`, the `<a href>`, and
+`styles.css` at 318,718 bytes.
+
+Then, inside `alpine:latest` (Alpine **3.24.1**, which reports `musl libc
+(x86_64)` / `musl libc (aarch64)` and ships **no glibc at all**):
+
+```
++ /work/target/<triple>/release/q2 --version
+q2 (quarto 2) 0.10.0
++ /work/target/<triple>/release/q2 render smoke.qmd
+Rendering single file: /work/musl-smoke-alpine/smoke.qmd
++ test -s smoke.html
++ grep -q "musl smoke test" smoke.html
++ wc -c smoke_files/styles.css
+318718 smoke_files/styles.css
+```
+
+This is the strand's headline claim demonstrated rather than asserted: a
+single artifact per arch that runs on a distro with no glibc, no `gcompat`
+shim required.
+
+**The detail that makes this more than a smoke test:** `styles.css` came out
+**318,718 bytes on all three platforms** — the CI runner, the Alpine
+container, and my local macOS arm64 render during authoring. Byte-identical
+output across two libcs and two operating systems means the SCSS pipeline
+(`grass`) and the HTML writer are producing the same bytes, not merely
+exiting 0. A libc-sensitive difference in float formatting or collation would
+almost certainly have perturbed that number.
 
 ## Remaining open questions
 
@@ -394,10 +455,25 @@ still genuinely unknown is empirical and only CI can answer it: **does
   scheduled whenever. Its value is user-facing reach (Alpine, old-glibc distros,
   containers) rather than unblocking internal work.
 
-## Where this should land
+## Where this landed
 
-`/investigate-beads` was invoked in the **primary checkout on `main`**, so this
-plan commits there. The implementation itself — which is CI-config-only but
-wants a throwaway workflow file pushed to a branch to trigger it — would be
-better off on its own branch (`braid/bd-dofxhzaj-linux-release-static-musl`).
-Recommend setting that up before Phase 1; not doing it unilaterally.
+`/investigate-beads` was invoked in the primary checkout on `main`, which is
+where the plan skeleton was first committed. Once Carlos approved the design,
+`cargo xtask switch-task bd-dofxhzaj` created
+`braid/bd-dofxhzaj-switch-linux-release-targets` at that same commit, and local
+`main` was reset back to `origin/main` — so the whole strand, plan included,
+lands through one PR and `main` was never carrying unpushed work.
+
+### Recovering the spike workflow
+
+`musl-spike.yml` is deleted in Phase 5 by design, but it is not lost: it lives
+in this branch's history at commit `fe016a4b`. If a future dependency bump
+makes musl doubtful again, resurrect it with
+
+```bash
+git show fe016a4b:.github/workflows/musl-spike.yml > .github/workflows/musl-spike.yml
+```
+
+and adjust the `on.push.branches` patterns. That is much cheaper than
+re-deriving why `release.yml` can't be used as a dry-run harness — which is
+documented in the file's own header comment.

@@ -230,6 +230,20 @@ still matches.
   keep the glibc requirement low; with musl it bought nothing, so the
   linux legs track `ubuntu-latest`. Don't re-pin them without a reason
   that isn't glibc.
+- **`musl-tools` is the only extra package the musl legs need.** In
+  particular `aws-lc-sys` — long feared to be the hard part — is a
+  non-issue at v0.40.0: it ships pregenerated bindings for both musl
+  triples, so there is **no `bindgen` step and no `libclang`
+  requirement**, and it compiled in ~17 s per leg in the bd-dofxhzaj
+  spike (run 30375857883). If a future `aws-lc-sys` bump ever *does*
+  start wanting cmake or libclang, that is a real regression worth
+  pinning rather than papering over with extra apt packages.
+- **`file` describes the two arches differently.** x86_64 comes out
+  `static-pie linked`; aarch64 comes out plain `statically linked`. Any
+  staticness check must accept **both** spellings — matching one passes
+  on one arch and fails on the other. (`ldd` says *not a dynamic
+  executable* on both, but exits non-zero, so it cannot be used as a
+  bare assertion either.)
 - **Signing happens in the `release` job, not the build matrix.** The
   secret key is touched by exactly one job, which signs the exact bytes
   being published — and the macOS/Windows build runners have no
