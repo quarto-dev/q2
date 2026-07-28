@@ -172,9 +172,42 @@ module whose doc opens "Post-render hooks for `WebsiteProjectType`."
       -- -D warnings`, `cargo fmt --check`, `cargo xtask lint` all clean; full
       `cargo xtask verify` (with the WASM/hub leg) run.
 - [x] **Phase 6b — End-to-end verification** (see below).
-- [ ] **Phase 7 — PR.** Push to `origin` and open a PR so CI reports. Document
-      the one deliberate behavior change (scope filter) in the PR body.
-- [ ] **Phase 8 — Close out.** `braid close bd-v8gx` and `braid close bd-gdhk`.
+- [x] **Phase 7 — PR.** [PR #430](https://github.com/quarto-dev/q2/pull/430),
+      commit `478f7c37`, branch `feature/bd-v8gx-flush-project-artifacts`.
+      **All 8 CI checks green** (2x ubuntu + 2x macos test suites, WASM Tests,
+      Hub-Client E2E, license/snyk, security/snyk). The deliberate scope-filter
+      change is called out under a dedicated warning heading in the PR body.
+- [x] **Phase 8 — Close out.** bd-v8gx and bd-gdhk both closed.
+
+## Coverage (Phase 6b addendum)
+
+`cargo llvm-cov --package quarto-core --summary-only` (all targets, so integration
+tests contribute — a `--lib`-only run misleadingly reports `pass2_renderer.rs` at
+0% because its coverage comes almost entirely from integration tests):
+
+| File touched | Region | Func | Line |
+| --- | --- | --- | --- |
+| **`artifact_flush.rs`** | **98.48%** | **96.30%** | **99.39%** |
+| `render_to_file.rs` | 93.50% | 80.00% | 93.50% |
+| `resource_resolver.rs` | 95.99% | 83.33% | 95.88% |
+| `project/mod.rs` | 96.14% | 83.67% | 96.30% |
+| `project/orchestrator.rs` | 85.36% | 80.73% | 86.93% |
+| `project/pass2_renderer.rs` | 71.01% | 86.05% | 76.71% |
+| `project/website_post_render.rs` | 88.60% | 77.78% | 84.21% |
+
+`quarto-core` overall: 89.85% region / 87.96% line.
+
+`artifact_flush.rs` scores identically under `--lib` and all-targets (527 regions,
+8 missed either way), which confirms its coverage comes from the in-module unit
+tests written for this work rather than being inherited from integration suites.
+
+**Caveat, stated rather than glossed:** the *before* side of the checklist's
+before/after comparison was not measured — the `main` baseline worktree had
+already been removed after the flake investigation, and re-measuring needs
+another instrumented run. A regression on the moved code is implausible given it
+landed at 99.39% line coverage, but `website_post_render.rs` and
+`render_to_file.rs` both *lost* code, so their percentages shifted for reasons
+unrelated to test quality.
 
 ## End-to-end verification (Phase 6b)
 
