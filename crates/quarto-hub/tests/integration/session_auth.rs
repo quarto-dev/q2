@@ -558,6 +558,138 @@ async fn auth_session_mints_session_cookie() {
     assert!(attrs.contains(&format!("Max-Age={}", lt.idle_secs)));
 }
 
+// ── H5: distinct login-mint audit event ────────────────────────────
+
+/// A login mint must be distinguishable in the audit log from ordinary
+/// per-request authentication. Without it, "when did this session come
+/// into existence, and through which endpoint?" is unanswerable — every
+/// mint looked exactly like an `auth_ok` (bd-k2xvvh9f).
+#[tokio::test]
+async fn login_mint_logs_audit_event_with_sid_and_endpoint() {
+    let (provider, hub) = session_setup().await;
+    let sub = "audit-login-mint-session";
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub(sub)
+            .email("mintaudit@posit.co")
+            .to_value(),
+    );
+
+    let resp = hub
+        .client
+        .post(hub.url("/auth/session"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": google }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let (token, _) = TestHub::set_auth_cookie(&resp).expect("session cookie set");
+    let minted_sid = verify_session(
+        &test_keys(),
+        SessionLifetimes::default(),
+        &token,
+        epoch_now(),
+    )
+    .unwrap()
+    .claims
+    .sid;
+
+    let events = snapshot_events();
+    let hit = events
+        .iter()
+        .find(|e| {
+            e.fields.get("action").map(|s| s.as_str()) == Some("login_mint")
+                && e.fields.get("sub").map(|s| s.as_str()) == Some(sub)
+        })
+        .expect("expected a login_mint audit event for the minted session");
+
+    assert_eq!(hit.fields.get("outcome").map(|s| s.as_str()), Some("allow"));
+    assert_eq!(
+        hit.fields.get("endpoint").map(|s| s.as_str()),
+        Some("session"),
+        "the JSON mint endpoint identifies itself"
+    );
+    // The logged sid must name the session actually handed out, so an
+    // audit trail can be joined to a live cookie.
+    assert_eq!(
+        hit.fields.get("sid").map(|s| s.as_str()),
+        Some(minted_sid.as_str())
+    );
+}
+
+/// The form-post callback is a *different* login endpoint and says so.
+#[tokio::test]
+async fn login_mint_audit_event_names_the_callback_endpoint() {
+    let (provider, hub) = google_session_setup().await;
+    let sub = "audit-login-mint-callback";
+    let google = provider.sign(&ClaimsBuilder::from_provider(provider).sub(sub).to_value());
+
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let resp = client
+        .post(hub.url("/auth/callback"))
+        .header("cookie", "g_csrf_token=csrfmint")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(format!("credential={google}&g_csrf_token=csrfmint"))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_redirection());
+
+    let events = snapshot_events();
+    let hit = events
+        .iter()
+        .find(|e| {
+            e.fields.get("action").map(|s| s.as_str()) == Some("login_mint")
+                && e.fields.get("sub").map(|s| s.as_str()) == Some(sub)
+        })
+        .expect("expected a login_mint audit event from the callback");
+    assert_eq!(
+        hit.fields.get("endpoint").map(|s| s.as_str()),
+        Some("callback")
+    );
+    assert!(hit.fields.contains_key("sid"), "sid must be recorded");
+}
+
+/// The sliding re-issue layer stays silent by design (`server.rs`
+/// documents why): it extends an existing session rather than opening
+/// one, and the request's authoritative auth decision was already
+/// logged by the handler. A `login_mint` there would misreport a
+/// keep-alive as a fresh login.
+#[tokio::test]
+async fn session_reissue_emits_no_login_mint_event() {
+    let (_provider, hub) = session_setup().await;
+    let sub = "audit-reissue-no-mint";
+    let token = mint_session(
+        &test_keys(),
+        SessionLifetimes::default(),
+        &identity(sub, "user@posit.co"),
+        epoch_now() - 2 * 3600,
+    )
+    .unwrap();
+
+    let resp = hub
+        .get_health()
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    TestHub::set_auth_cookie(&resp).expect("re-issue fired (precondition)");
+
+    let events = snapshot_events();
+    assert!(
+        !events.iter().any(|e| {
+            e.fields.get("action").map(|s| s.as_str()) == Some("login_mint")
+                && e.fields.get("sub").map(|s| s.as_str()) == Some(sub)
+        }),
+        "a sliding re-issue is not a login"
+    );
+}
+
 // ── H3: `__Host-` prefix on the session cookie ─────────────────────
 
 /// Secure-mode mint uses the `__Host-`-prefixed name with the exact

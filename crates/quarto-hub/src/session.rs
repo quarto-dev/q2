@@ -388,15 +388,30 @@ pub fn derive_session_kid(secret: &[u8; 32]) -> String {
     hex::encode(&digest[..4])
 }
 
+/// A freshly minted session: the signed token and the `sid` of the
+/// session family it opens.
+///
+/// The `sid` is returned alongside rather than left inside the token so
+/// the login path can name the new session in the audit log without
+/// re-decoding what it just signed (H5).
+#[derive(Debug, Clone)]
+pub struct MintedSession {
+    pub token: String,
+    pub sid: String,
+}
+
 /// Mint a fresh session token at login: `auth_time = now`, fresh
 /// random `sid`, identity stamped from the validated Google claims.
+///
+/// Returns the token only. The login path uses [`mint_session_at`],
+/// which also surfaces the `sid`.
 pub fn mint_session(
     keys: &SessionKeys,
     lifetimes: SessionLifetimes,
     identity: &SessionIdentity,
     now: i64,
 ) -> Result<String, jsonwebtoken::errors::Error> {
-    mint_session_at(keys, lifetimes, identity, now, now)
+    Ok(mint_session_at(keys, lifetimes, identity, now, now)?.token)
 }
 
 /// [`mint_session`] with an explicit `auth_time` anchor.
@@ -413,7 +428,8 @@ pub fn mint_session_at(
     identity: &SessionIdentity,
     now: i64,
     auth_time: i64,
-) -> Result<String, jsonwebtoken::errors::Error> {
+) -> Result<MintedSession, jsonwebtoken::errors::Error> {
+    let sid = generate_sid();
     let claims = SessionClaims {
         iss: SESSION_ISSUER.to_string(),
         sub: identity.sub.clone(),
@@ -424,9 +440,12 @@ pub fn mint_session_at(
         iat: now,
         auth_time,
         exp: lifetimes.expiry(now, auth_time),
-        sid: generate_sid(),
+        sid: sid.clone(),
     };
-    sign_claims(keys, &claims)
+    Ok(MintedSession {
+        token: sign_claims(keys, &claims)?,
+        sid,
+    })
 }
 
 /// Re-issue a session token on authenticated activity: `iat = now`,
@@ -712,6 +731,18 @@ mod tests {
         assert_eq!(v.claims.auth_time, t, "fresh mint anchors auth_time = now");
         assert_eq!(v.claims.exp, t + DEFAULT_SESSION_IDLE_SECS);
         assert!(v.signed_with_current_key);
+    }
+
+    #[test]
+    fn mint_session_at_returns_the_sid_inside_the_token() {
+        // H5 logs the returned `sid` as the identity of the new session
+        // family. If it ever drifted from the token's claim, the audit
+        // trail would name a session that does not exist.
+        let t = now();
+        let lt = SessionLifetimes::default();
+        let minted = mint_session_at(&keys(), lt, &identity(), t, t).unwrap();
+        let v = verify_session(&keys(), lt, &minted.token, t).unwrap();
+        assert_eq!(minted.sid, v.claims.sid);
     }
 
     #[test]

@@ -343,6 +343,25 @@ fn build_auth_cookie(token: &str, secure: bool, max_age_secs: i64) -> String {
     builder.build().to_string()
 }
 
+/// Which login endpoint minted a session — the `endpoint` field of the
+/// `login_mint` audit event (H5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LoginEndpoint {
+    /// Form-post `/auth/callback` (Google).
+    Callback,
+    /// JSON `/auth/session` (Generic providers).
+    Session,
+}
+
+impl LoginEndpoint {
+    fn label(self) -> &'static str {
+        match self {
+            LoginEndpoint::Callback => "callback",
+            LoginEndpoint::Session => "session",
+        }
+    }
+}
+
 /// Mint a fresh hub session cookie (§1) for Google-validated claims:
 /// fresh random `sid`, identity stamped from the validated Google
 /// claims, `auth_time = now` — bumped to the revocation ledger's
@@ -354,9 +373,14 @@ fn build_auth_cookie(token: &str, secure: bool, max_age_secs: i64) -> String {
 /// session cookie, plus — in secure mode — a clear for the pre-H3
 /// unprefixed name. Callers **append** these (a login sets more than
 /// one cookie).
+///
+/// Emits the `login_mint` audit event (H5) on success. It lives here
+/// rather than in the two handlers so a future third mint call site
+/// cannot forget it; `endpoint` is what distinguishes them in the log.
 async fn mint_session_cookie(
     ctx: &HubContext,
     claims: &auth::OidcClaims,
+    endpoint: LoginEndpoint,
 ) -> std::result::Result<Vec<String>, jsonwebtoken::errors::Error> {
     let now = crate::session::unix_now();
     let lifetimes = ctx.session_lifetimes();
@@ -366,12 +390,26 @@ async fn mint_session_cookie(
         .min_auth_time(&claims.sub)
         .await
         .map_or(now, |floor| floor.max(now));
-    let token =
+    let minted =
         crate::session::mint_session_at(ctx.session_keys(), lifetimes, &identity, now, auth_time)?;
     let max_age = lifetimes.expiry(now, auth_time) - now;
     let secure = !ctx.allow_insecure_auth();
 
-    let mut cookies = vec![build_auth_cookie(&token, secure, max_age)];
+    // A mint is the birth of a session family, not just another
+    // authenticated request — logged distinctly so "where did this
+    // session come from?" is answerable from the audit trail alone.
+    tracing::event!(
+        target: "quarto_hub::audit",
+        tracing::Level::INFO,
+        action = "login_mint",
+        outcome = "allow",
+        credential_kind = "cookie",
+        sub = %claims.sub,
+        sid = %minted.sid,
+        endpoint = endpoint.label(),
+    );
+
+    let mut cookies = vec![build_auth_cookie(&minted.token, secure, max_age)];
     if secure {
         cookies.push(build_clear_legacy_cookie());
     }
@@ -848,7 +886,7 @@ async fn auth_callback(
         return Redirect::to("/?auth_error").into_response();
     }
 
-    let cookies = match mint_session_cookie(&ctx, &claims).await {
+    let cookies = match mint_session_cookie(&ctx, &claims, LoginEndpoint::Callback).await {
         Ok(cookies) => cookies,
         Err(err) => {
             tracing::error!(error = %err, "failed to mint session token");
@@ -1134,13 +1172,15 @@ async fn auth_session(
         ));
     }
 
-    let cookies = mint_session_cookie(&ctx, &claims).await.map_err(|err| {
-        tracing::error!(error = %err, "failed to mint session token");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "session_mint_failed"})),
-        )
-    })?;
+    let cookies = mint_session_cookie(&ctx, &claims, LoginEndpoint::Session)
+        .await
+        .map_err(|err| {
+            tracing::error!(error = %err, "failed to mint session token");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "session_mint_failed"})),
+            )
+        })?;
     let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
     attach_cookies(&mut response, &cookies);
     Ok(response)

@@ -132,3 +132,17 @@ or a legacy Google-JWT cookie), `session_expired`,
 `session_absolute_cap`, `session_tampered`, `session_revoked`,
 `user_banned`, `user_not_allowlisted`, `conflicting_credentials`.
 Token contents are never logged.
+
+Actions, by what they mean:
+
+| `action` | Meaning |
+|---|---|
+| `auth_ok` / `auth_fail` | Per-request authentication decision. |
+| `login_mint` | A **new session family** was created. Carries `sub`, the new `sid`, and `endpoint=callback\|session` (which login path). |
+| `revoke_all_sessions` | Logout-everywhere: every prior session for `sub` is dead. |
+
+`login_mint` is the one to join sessions against: `sid` is immutable
+across sliding re-issues, so it identifies a login for as long as that
+session lives. **Sliding re-issue is deliberately silent** — it extends
+a session rather than opening one, so a keep-alive never looks like a
+fresh login.
