@@ -530,11 +530,29 @@ implements each is noted.
 
 Pure refactor; `create`'s integration tests must stay green throughout.
 
-- [ ] Move plan/writer/prompter/failure types from `commands/create/` to
+- [x] Move plan/writer/prompter/failure types from `commands/create/` to
       `commands/common/`, renaming `CreatePlan` → `FilePlan`, `CreateFailure` →
-      `CommandFailure`.
-- [ ] `create` imports from `common`; behavior unchanged.
-- [ ] `cargo nextest run -p quarto` green.
+      `CommandFailure`, `ResolvedCreate` → `ResolvedPlan`.
+- [x] `create` imports from `common`; behavior unchanged.
+- [x] `cargo nextest run -p quarto` green (233 passed), `cargo clippy
+      --all-targets -- -D warnings` clean.
+
+**Design notes from execution.** Two things in the old `create/writer.rs` were
+create-specific and had to become plan *data* rather than writer code, or
+`q2 use brand` would have inherited behavior that is wrong for it:
+
+- The `_quarto.yml`-already-exists hard error was hardcoded in `execute_plan`.
+  `q2 use brand` **requires** `_quarto.yml`, so inheriting that check would have
+  made the command refuse in exactly the situation it is designed for. It is now
+  a declarative `Precondition { path, title, problem }` list on the plan, which
+  `create` populates with its two config filenames — and which `use brand` will
+  populate with its own root-brand-file gate (A2). Preconditions are checked
+  before any write and under `--dry-run`, preserving the old behavior exactly.
+- `gitignore_entries: Vec<&'static str>` was a create-shaped field on the plan.
+  It is now `PlannedEdit::EnsureLines { path, lines }` — the same primitive,
+  generalized to any file. `PlannedEdit::AppendBlock` (what `use brand` needs)
+  is deliberately **not** added here; it lands in Phase 3 with its consumer
+  rather than sitting unused, which `-D warnings` would flag anyway.
 
 ### Phase 2 — Command plumbing + pre-flight gates
 

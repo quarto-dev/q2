@@ -1,13 +1,14 @@
-//! Terminal prompting seam for `q2 create` (bd-hh1erpfx).
+//! Terminal prompting seam shared by the interactive command paths
+//! (bd-hh1erpfx; generalized for `q2 use brand` in bd-1vlw8).
 //!
-//! The [`Prompter`] trait keeps the prompt *flow* unit-testable — the
-//! tests in `mod.rs` drive it with a scripted fake, no PTY needed.
+//! The [`Prompter`] trait keeps the prompt *flow* unit-testable —
+//! tests drive it with a scripted fake, no PTY needed.
 //! [`InquirePrompter`] is the real terminal implementation, rendering
 //! via `inquire` (whose crossterm backend is the same crossterm
 //! already in the tree via pampa). Prompt UI renders on stderr,
 //! keeping stdout reserved for command output.
 
-use super::artifact::CreateFailure;
+use super::plan::CommandFailure;
 
 /// One selectable row: the label shown, plus a help/description line.
 #[derive(Clone)]
@@ -18,27 +19,27 @@ pub struct PromptItem {
 
 pub trait Prompter {
     /// Present a selection list; returns the chosen index.
-    fn select(&mut self, prompt: &str, items: &[PromptItem]) -> Result<usize, CreateFailure>;
+    fn select(&mut self, prompt: &str, items: &[PromptItem]) -> Result<usize, CommandFailure>;
 
     /// Ask for a line of text. When `default` is given, an empty
     /// submission returns the default.
-    fn input(&mut self, prompt: &str, default: Option<&str>) -> Result<String, CreateFailure>;
+    fn input(&mut self, prompt: &str, default: Option<&str>) -> Result<String, CommandFailure>;
 }
 
 /// Real terminal prompter backed by `inquire`.
 pub struct InquirePrompter;
 
-fn map_inquire_err(e: inquire::InquireError) -> CreateFailure {
+fn map_inquire_err(e: inquire::InquireError) -> CommandFailure {
     match e {
         inquire::InquireError::OperationCanceled | inquire::InquireError::OperationInterrupted => {
-            CreateFailure::cancelled()
+            CommandFailure::cancelled()
         }
-        other => CreateFailure::new("Prompt failed", other.to_string()),
+        other => CommandFailure::new("Prompt failed", other.to_string()),
     }
 }
 
 impl Prompter for InquirePrompter {
-    fn select(&mut self, prompt: &str, items: &[PromptItem]) -> Result<usize, CreateFailure> {
+    fn select(&mut self, prompt: &str, items: &[PromptItem]) -> Result<usize, CommandFailure> {
         let options: Vec<String> = items
             .iter()
             .map(|i| {
@@ -58,7 +59,7 @@ impl Prompter for InquirePrompter {
             .expect("selected option came from the offered list"))
     }
 
-    fn input(&mut self, prompt: &str, default: Option<&str>) -> Result<String, CreateFailure> {
+    fn input(&mut self, prompt: &str, default: Option<&str>) -> Result<String, CommandFailure> {
         let mut text = inquire::Text::new(prompt);
         if let Some(d) = default {
             text = text.with_default(d);
