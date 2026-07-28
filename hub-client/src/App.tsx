@@ -47,6 +47,20 @@ import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER } from './utils/routing';
 import './App.css';
 
 /**
+ * Production budget for the initial peer connect. `waitForPeer` resolves the
+ * *instant* the peer connects, so in the common (online) case this adds only
+ * the real connect latency and lets `connect()` resolve as Online — the header
+ * (which mounts only after connect() resolves) then shows Online right away
+ * with the *live* document, instead of the 1 ms probe that always resolved
+ * offline-first and made the indicator flash Offline → Online. If the connect
+ * is slower than this budget the header mounts Offline and flips to Online when
+ * the peer lands — the rare tail, and still an improvement on always-first
+ * Offline. A genuinely-offline user waits at most this long before cached
+ * content appears (bounded regression of offline-first).
+ */
+const PRODUCTION_PEER_TIMEOUT_MS = 400;
+
+/**
  * Connect to a sync server and load all file contents into a Map.
  * Shared by every code path that opens a project.
  */
@@ -62,18 +76,20 @@ async function connectAndLoadContents(
   if (import.meta.env.VITE_E2E === '1') {
     actorId = (window as any).__QUARTO_TEST_ACTOR_ID__ as string | undefined ?? actorId;
   }
-  // Production opens offline-first (the sync client's 1 ms default peer wait):
-  // a returning user sees cached content instantly while the peer connects in
-  // the background. But the smoke-all E2E env always starts with EMPTY storage
-  // and must sync every doc from the (local) server, so opening offline-first
-  // there means loadFileDocuments races the still-connecting websocket — and
-  // under CI contention the render-target doc loses that race, is marked
-  // unavailable, and the preview fails "Path not found" (stage
-  // EDITOR_NO_PREVIEW; sometimes the index loses it too → CONNECT_STALL).
-  // waitForPeer resolves the instant the peer connects, so this only adds wall
-  // time when the connection is genuinely slow — exactly the CI case we want to
-  // wait out. Tree-shaken in production, so no offline-first UX change there.
-  const peerTimeoutMs = import.meta.env.VITE_E2E === '1' ? 15000 : undefined;
+  // Production gives the peer a modest budget (PRODUCTION_PEER_TIMEOUT_MS) so
+  // the common (online) open resolves as Online with the live document, rather
+  // than the 1 ms offline-first probe that made the indicator always flash
+  // Offline → Online. waitForPeer resolves the instant the peer connects, so a
+  // fast connection pays only its real latency; a genuinely-offline user waits
+  // at most the budget before cached content appears.
+  //
+  // The smoke-all E2E env always starts with EMPTY storage and must sync every
+  // doc from the (local) server, so it needs a much longer wait: opening before
+  // the socket connects means loadFileDocuments races it — under CI contention
+  // the render-target doc loses, is marked unavailable, and the preview fails
+  // "Path not found" (stage EDITOR_NO_PREVIEW; sometimes the index loses it too
+  // → CONNECT_STALL).
+  const peerTimeoutMs = import.meta.env.VITE_E2E === '1' ? 15000 : PRODUCTION_PEER_TIMEOUT_MS;
   const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, actorId, screenName, color, peerTimeoutMs);
   const contents = new Map<string, string>();
   for (const file of files) {
