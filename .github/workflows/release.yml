@@ -548,11 +548,15 @@ jobs:
           $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
           [System.IO.File]::WriteAllText((Join-Path (Get-Location) "$archive.sha256"), "$hash  $archive`n")
 
-      # Signing happens in the release job, NOT here: ubuntu-22.04
-      # (jammy) has no minisign apt package (v0.1.0 dry-run iteration 3,
-      # run 27450999322), and centralizing the signature step means the
-      # secret key is touched by exactly one job and signs the exact
-      # bytes being published, after their artifact round-trip.
+      # Signing happens in the release job, NOT here: centralizing the
+      # signature step means the secret key is touched by exactly one
+      # job and signs the exact bytes being published, after their
+      # artifact round-trip. (The original reason was narrower — the
+      # then-jammy linux runners had no minisign apt package; v0.1.0
+      # dry-run iteration 3, run 27450999322. The linux legs are no
+      # longer on jammy, but the macOS/Windows build runners still have
+      # no minisign, and the one-job-touches-the-key property is the
+      # part actually worth keeping.)
       - uses: actions/upload-artifact@v7
         if: matrix.ext == 'tar.gz'
         with:
@@ -627,7 +631,7 @@ jobs:
       # signatures (SHA-256 only), so it has no .minisig consumer today.
       # Signing lives here (not in the build matrix) so the secret key
       # is handled by one job and signs the exact bytes being published;
-      # ubuntu-22.04 build runners also have no minisign apt package.
+      # the macOS/Windows build runners also have no minisign.
       - name: Sign tar.gz archives (minisign, Ed25519)
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
