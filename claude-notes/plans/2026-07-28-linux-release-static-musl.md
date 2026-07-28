@@ -345,7 +345,12 @@ it being green. If the spike comes back red, these get amended (e.g. with a
 ### Phase 5 — Land and ship
 
 - [x] Delete `musl-spike.yml` (D1 — it is scaffolding, not a deliverable)
-- [ ] `cargo xtask verify --skip-hub-build` green
+- [x] `cargo xtask verify --skip-hub-build` green (14/14, exit 0). An earlier
+      run of the same gate went red on an unrelated pre-existing flake in
+      `preview-renderer` — all 565 tests passed but an unhandled jsdom
+      `elementFromPoint` error from a late `requestAnimationFrame` failed the
+      run. Filed as `bd-cpyq99ps`; 3 consecutive re-runs clean, and this
+      branch's diff is `.yml` + `.md`, so it is not ours.
 - [ ] PR, review, merge
 - [ ] Exercised for real by the next version cut (out of scope for this strand,
       but the runbook note above is what makes it safe)
