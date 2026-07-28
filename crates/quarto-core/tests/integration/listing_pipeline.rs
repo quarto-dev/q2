@@ -373,7 +373,8 @@ fn vendored_js_artifacts_emit_script_tags_and_land_under_site_libs() {
     // Project-scoped artifacts when at least one listing is
     // rendered, picked up by `<script>` auto-emission via the
     // `js:` artifact-key prefix, and flushed to
-    // `_site/site_libs/listing/<file>.js` by `flush_site_libs`.
+    // `_site/site_libs/listing/<file>.js` by
+    // `flush_project_artifacts`.
     let (project_dir, outputs) = render_project(|p| {
         write(
             &p.join("_quarto.yml"),

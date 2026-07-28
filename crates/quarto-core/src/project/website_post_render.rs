@@ -2,23 +2,31 @@
  * project/website_post_render.rs
  * Copyright (c) 2026 Posit, PBC
  *
- * WebsiteProjectType post-render hooks: site_libs flush, favicon
- * copy, sitemap.xml, robots.txt.
+ * WebsiteProjectType post-render hooks: favicon copy, sitemap.xml,
+ * robots.txt.
  */
 
 //! Post-render hooks for [`WebsiteProjectType`].
 //!
 //! Each function below runs once per project, after Pass 2 has
-//! finished rendering every file. The four hooks are:
+//! finished rendering every file. The three hooks are:
 //!
-//! - [`flush_site_libs`] (Phase 5): drain the orchestrator's
-//!   project-wide artifact accumulator into `_site/site_libs/...`.
 //! - [`copy_favicon`] (Phase 7): copy `<project>/favicon-path` to
 //!   `<output_dir>/favicon-path`.
 //! - [`write_sitemap`] (Phase 7): emit `_site/sitemap.xml` when
 //!   `website.site-url` is set.
 //! - [`write_robots_txt`] (Phase 7): emit `_site/robots.txt`
 //!   pointing at the sitemap, unless the user provided one.
+//!
+//! The Phase 5 project-artifact flush used to live here too, as
+//! `flush_site_libs`. bd-v8gx moved it to
+//! [`crate::artifact_flush::flush_project_artifacts`]: two of its three
+//! callers were not website renders, and the write loop is shared with
+//! the rest of the artifact-write family.
+//!
+//! Every hook that remains here is native-only — each writes into the
+//! project's on-disk output directory, which does not exist in the
+//! in-browser preview.
 //!
 //! Each hook short-circuits cleanly when its triggering config is
 //! absent. Failures bubble up as
@@ -30,14 +38,6 @@
 //!
 //! [`WebsiteProjectType`]: super::orchestrator::WebsiteProjectType
 
-// Phase 9 sub-phase 9.2 lifted the module-level
-// `#![cfg(not(target_arch = "wasm32"))]` so `flush_site_libs` can run
-// in WASM (the hub-client preview's "deduplicate theme CSS into a
-// shared lib dir" pass). The remaining hooks (`copy_favicon`,
-// `write_sitemap`, `write_robots_txt`) stay native-only — they
-// write into the project's on-disk output directory which doesn't
-// exist in the in-browser preview.
-
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 #[cfg(not(target_arch = "wasm32"))]
@@ -45,10 +45,12 @@ use std::time::SystemTime;
 
 #[cfg(not(target_arch = "wasm32"))]
 use quarto_error_reporting::DiagnosticMessage;
+#[cfg(not(target_arch = "wasm32"))]
 use quarto_system_runtime::SystemRuntime;
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::Result;
-use crate::artifact::ArtifactStore;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::error::QuartoError;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::project::ProjectContext;
@@ -56,57 +58,6 @@ use crate::project::ProjectContext;
 use crate::project::index::ProjectIndex;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::project::website_config::{resolved_website_favicon, website_site_url};
-use crate::resource_resolver::ResourceResolverContext;
-
-// ═══════════════════════════════════════════════════════════════════
-// Site libs (Phase 5; resolver-driven since Phase 9 sub-phase 9.2)
-// ═══════════════════════════════════════════════════════════════════
-
-/// Flush every Project-scoped artifact accumulated across Pass-2
-/// renders to its resolver-determined on-disk (or VFS) location.
-///
-/// The resolver decides the destination: native website renders
-/// pass a [`ResourceResolverContext::project_root`] resolver
-/// (artifacts land under `{output_dir}/{lib_dir}/{path}`); the
-/// WASM hub-client passes a [`ResourceResolverContext::vfs_root`]
-/// resolver (artifacts land under `/{vfs_root}/{path}`).
-///
-/// Decoupling the destination from the function's logic enforces
-/// the construction-level invariant from the Phase 9 plan
-/// §Decision 4: the URL embedded in HTML by `html_url_for(Project,
-/// p)` and the on-disk write path returned by
-/// `on_disk_path_for(Project, p)` must round-trip through the same
-/// resolver. Iteration is in sorted-key order so the write order
-/// is deterministic across runs.
-pub(super) fn flush_site_libs(
-    project_artifacts: &ArtifactStore,
-    resolver: &ResourceResolverContext,
-    runtime: &dyn SystemRuntime,
-) -> Result<()> {
-    if project_artifacts.is_empty() {
-        return Ok(());
-    }
-
-    // bd-cfl67: all destructive output flows through the validated
-    // sink so we can never silently truncate a file outside the
-    // resolver's declared output roots.
-    let mut sink = crate::output_sink::OutputSink::new(resolver.allowed_output_roots());
-
-    let mut entries: Vec<(&str, &crate::artifact::Artifact)> = project_artifacts.iter().collect();
-    entries.sort_by(|a, b| a.0.cmp(b.0));
-
-    for (_, artifact) in entries {
-        let Some(path) = &artifact.path else {
-            continue;
-        };
-        let on_disk = resolver.on_disk_path_for(crate::artifact::ArtifactScope::Project, path);
-        sink.write(on_disk, artifact.content.clone())
-            .map_err(QuartoError::from)?;
-    }
-
-    sink.flush(runtime).map_err(QuartoError::from)?;
-    Ok(())
-}
 
 // ═══════════════════════════════════════════════════════════════════
 // Favicon (Phase 7) — native-only
@@ -539,96 +490,6 @@ mod tests {
     use super::*;
     #[cfg(not(target_arch = "wasm32"))]
     use std::time::Duration;
-
-    // === Phase 9 sub-phase 9.2 — resolver-driven flush_site_libs ===
-
-    /// Plan test 5 (refraled): `flush_site_libs` with a `vfs_root`
-    /// resolver writes Project-scoped artifacts to
-    /// `<vfs_root>/<artifact_path>`. The hub-client convention is
-    /// `vfs_root == "/.quarto/project-artifacts"`.
-    #[test]
-    fn flush_site_libs_vfs_root_writes_under_vfs_root() {
-        use crate::artifact::{Artifact, ArtifactScope, ArtifactStore};
-        use crate::resource_resolver::ResourceResolverContext;
-        use quarto_system_runtime::NativeRuntime;
-        use tempfile::TempDir;
-
-        let temp = TempDir::new().unwrap();
-        let vfs_root = temp.path().join(".quarto/project-artifacts");
-        let resolver = ResourceResolverContext::vfs_root(vfs_root.clone());
-
-        let mut store = ArtifactStore::new();
-        let artifact = Artifact::from_bytes(b"body { color: red; }".to_vec(), "text/css")
-            .with_path("quarto/theme.css")
-            .with_scope(ArtifactScope::Project);
-        store.store("theme", artifact);
-
-        let runtime = NativeRuntime::new();
-        flush_site_libs(&store, &resolver, &runtime).unwrap();
-
-        // The artifact landed at <vfs_root>/quarto/theme.css.
-        let written = vfs_root.join("quarto/theme.css");
-        let bytes = std::fs::read(&written).unwrap_or_else(|e| {
-            panic!("expected artifact at {}: {}", written.display(), e);
-        });
-        assert_eq!(bytes, b"body { color: red; }");
-    }
-
-    /// Plan test 6: empty artifact store → no-op (no spurious
-    /// directories created).
-    #[test]
-    fn flush_site_libs_empty_store_is_noop() {
-        use crate::artifact::ArtifactStore;
-        use crate::resource_resolver::ResourceResolverContext;
-        use quarto_system_runtime::NativeRuntime;
-        use tempfile::TempDir;
-
-        let temp = TempDir::new().unwrap();
-        let vfs_root = temp.path().join("vfs");
-        let resolver = ResourceResolverContext::vfs_root(vfs_root.clone());
-
-        let store = ArtifactStore::new();
-        let runtime = NativeRuntime::new();
-        flush_site_libs(&store, &resolver, &runtime).unwrap();
-
-        // The vfs root directory was never created.
-        assert!(!vfs_root.exists(), "no-op flush should not touch FS");
-    }
-
-    /// Plan test 7 (refraled): native website resolver routes
-    /// project-scope artifacts under `{site_root}/{lib_dir}/`.
-    /// Confirms native and WASM use the same `flush_site_libs`
-    /// function but produce different on-disk targets via the
-    /// resolver — Phase 9 §Decision 4 invariant.
-    #[cfg(not(target_arch = "wasm32"))]
-    #[test]
-    fn flush_site_libs_native_website_routes_under_site_libs() {
-        use crate::artifact::{Artifact, ArtifactScope, ArtifactStore};
-        use crate::resource_resolver::ResourceResolverContext;
-        use quarto_system_runtime::NativeRuntime;
-        use tempfile::TempDir;
-
-        let temp = TempDir::new().unwrap();
-        let site_root = temp.path().join("_site");
-        let resolver = ResourceResolverContext::project_root(site_root.clone(), "site_libs");
-
-        let mut store = ArtifactStore::new();
-        let artifact =
-            Artifact::from_bytes(b"kbd { font-family: monospace; }".to_vec(), "text/css")
-                .with_path("libs/kbd/kbd.css")
-                .with_scope(ArtifactScope::Project);
-        store.store("kbd", artifact);
-
-        let runtime = NativeRuntime::new();
-        flush_site_libs(&store, &resolver, &runtime).unwrap();
-
-        let written = site_root.join("site_libs/libs/kbd/kbd.css");
-        assert!(
-            written.exists(),
-            "expected artifact at {}",
-            written.display()
-        );
-    }
 
     /// Phase 9 §Decision 4 invariant: for every artifact, the URL
     /// embedded in HTML by `html_url_for(Project, p)` and the

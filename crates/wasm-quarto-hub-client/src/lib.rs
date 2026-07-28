@@ -1752,8 +1752,8 @@ async fn render_project_active_page_to_response(
 
     // Populate VFS with the active page's Page-scoped artifacts.
     // (Project-scoped artifacts were already flushed to VFS by
-    // `WebsiteProjectType::post_render` → `flush_site_libs` via
-    // the WASM renderer's vfs_root resolver.)
+    // `WebsiteProjectType::post_render` → `flush_project_artifacts`
+    // via the WASM renderer's vfs_root resolver.)
     //
     // The shared flush carries the bd-3gtn empty-content skip and the
     // bd-q3bxnq2e byte-identical-skip; see

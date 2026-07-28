@@ -128,7 +128,7 @@ impl ResourceResolverContext {
 
     /// Construct a resolver suitable for *project-level* hooks that
     /// only consult `Project`-scope queries (e.g.
-    /// [`crate::project::website_post_render::flush_site_libs`]).
+    /// [`crate::artifact_flush::flush_project_artifacts`]).
     ///
     /// Page-specific fields (page output, `{stem}_files/`) are
     /// stubbed out — calling [`Self::html_url_for`] with

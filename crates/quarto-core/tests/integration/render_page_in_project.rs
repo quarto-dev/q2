@@ -16,7 +16,7 @@
 //! returning [`WasmPassTwoOutput`] in-memory rather than writing to
 //! disk. The HTML is inspected for sidebar entries, cross-document
 //! link rewriting, page-scope artifacts, and project-scope artifact
-//! flush via `flush_site_libs`.
+//! flush via `flush_project_artifacts`.
 //!
 //! Pinning native coverage on this code path means a regression in
 //! the project-rendering machinery surfaces in `cargo nextest run`
@@ -59,8 +59,8 @@ fn canonical(path: &Path) -> PathBuf {
 /// the artifact root. In WASM that's an absolute path under the
 /// in-memory VFS (`/.quarto/project-artifacts`). On native
 /// `NativeRuntime`, we point it at a real subdirectory of the
-/// temp test fixture so `flush_site_libs` can actually write
-/// without bumping into read-only system paths.
+/// temp test fixture so the project-artifact flush can actually
+/// write without bumping into read-only system paths.
 fn render_active_page(project_dir: &Path, active: &Path) -> WasmPassTwoOutput {
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     // Discover from the active file first — that locates the

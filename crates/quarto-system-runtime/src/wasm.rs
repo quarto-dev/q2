@@ -323,7 +323,7 @@ impl SystemRuntime for WasmRuntime {
     fn file_write(&self, path: &Path, contents: &[u8]) -> RuntimeResult<()> {
         // Change-detection in the in-memory VFS layer (bd-q3bxnq2e
         // decision 3): byte-identical re-writes are skipped — this is
-        // what makes `flush_site_libs`'s per-render re-flush of
+        // what makes `flush_project_artifacts`'s per-render re-flush of
         // unchanged project artifacts (theme CSS, fonts, shared JS)
         // cheap. Native disk writes are intentionally not change-aware
         // (a compare there would cost a disk read per artifact).
