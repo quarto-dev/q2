@@ -225,37 +225,119 @@ a real plan rather than a menu.
 
 ## Phases
 
-- ~~**Phase 0 — Reconcile with bd-h7s7bsbk.**~~ ✅ Done (D0).
-- **Phase 1 — Branch-only musl spike.** A throwaway
-  `.github/workflows/musl-spike.yml`, `workflow_dispatch` + branch push,
-  no secrets, no publish. Both arches: `rustup target add`, `apt-get install
-  musl-tools`, `cargo build --release --locked --target <musl> -p quarto
-  --features vendored-openssl`, then assert `file q2` reports *static* and
-  `./q2 --version` runs on the runner. This is the phase that answers the
-  aws-lc/openssl question for real. Delete the workflow at the end.
-- **Phase 2 — Functional smoke on the musl artifact.** Beyond `--version`:
-  render a real fixture (`q2 render`) and run it in an `alpine:latest`
-  container to prove the "covers every distro" claim that motivates the whole
-  strand. Alpine is the *point* of this change — not testing it would leave the
-  headline benefit unverified. (Correctness only; per D4 there is no timing
-  comparison here.)
-- **Phase 3 — Flip `release.yml`.** Two matrix legs → musl targets; runners →
-  `ubuntu-latest` / `ubuntu-24.04-arm` (D5); restore the `Install musl-tools`
-  step (`if: contains(matrix.target, 'musl')`, exactly as `6080bd7a` removed
-  it); keep `vendored-openssl` as-is (D3).
-- **Phase 4 — Prose.** `release.yml` header note (lines 48-55), the matrix
-  comment (lines 341-349), the release-notes platform table (lines 661-662:
-  "glibc 2.35+" → "static musl"), and `release-runbook.md:203-211`. Add a
-  runbook gotcha capturing whatever Phase 1 learned.
-- **Phase 5 — Ship it.** The switch is only truly verified by a real release
-  run, so this lands and then gets exercised by the next version cut; the
-  runbook note should say the first post-switch release warrants extra
-  post-publish verification (download the linux artifact, run it on Alpine).
+Branch: `braid/bd-dofxhzaj-switch-linux-release-targets` (off `main` @ `581e45c0`;
+carries the two plan commits, so local `main` was reset back to `origin/main` —
+everything lands via PR).
+
+### Phase 0 — Reconcile with bd-h7s7bsbk ✅
+
+- [x] Close bd-h7s7bsbk with a `duplicates` → bd-dofxhzaj edge (D0)
+- [x] File the rustls follow-up as `bd-r7s13dfb` (D3)
+- [x] Record all six decisions in this plan
+
+### Phase 1 — Branch-only musl spike
+
+The phase that answers the aws-lc/openssl question for real. Throwaway
+workflow, no secrets, no publish, deleted before the PR merges (D1).
+
+- [x] Confirm `-p quarto` builds from a payload-less checkout — all three
+      `include_dir!` sites fall back to a placeholder dir with only a
+      `cargo:warning`, unconditionally (read
+      `crates/quarto-preview/build.rs:24-28` and the mirrored
+      `quarto-{mcp-launcher,trace-server}/build.rs`). So the spike does not
+      need the web-payloads job, and those payloads are target-independent
+      anyway — they cannot affect whether musl links.
+- [x] Write `.github/workflows/musl-spike.yml`: push on
+      `feature|braid/bd-dofxhzaj-**` + `workflow_dispatch`; matrix of
+      `x86_64-unknown-linux-musl` on `ubuntu-latest` and
+      `aarch64-unknown-linux-musl` on `ubuntu-24.04-arm`; `fail-fast: false`
+      so each arch reports independently; `if: github.repository ==
+      'quarto-dev/q2'` so forks don't burn minutes
+- [x] Steps per leg: `rustup target add` (the E0463 pinned-nightly trap
+      release.yml documents), `apt-get install -y musl-tools`, rust-cache,
+      `cargo build --release --locked --target <musl> -p quarto --features
+      vendored-openssl`
+- [x] Assert the binary is genuinely static — `file` must report
+      `static-pie linked` or `statically linked` (Rust's musl targets default
+      to `crt-static` and emit static-pie); `ldd` logged informationally only,
+      since it exits non-zero on a static binary and must not fail the step
+- [x] Assert `./q2 --version` runs on the runner
+- [x] `actionlint` clean; YAML parses; heredoc verified locally to emit the
+      fixture with no leading indentation
+- [ ] Push, run, iterate to green — record the outcome in **Phase 1 outcome**
+      below (including the aws-lc build path actually taken)
+
+### Phase 2 — Functional smoke on the musl artifact
+
+Correctness only; per D4 there is no timing comparison. **Phases 1 and 2 share
+one workflow run** — the steps are strictly ordered, so a build failure
+short-circuits before the smoke steps and attribution stays unambiguous, while
+`rust-cache` keeps re-runs cheap.
+
+- [x] Author the fixture + assertions. The fixture exercises what is most
+      likely to be libc-sensitive: YAML front matter, the tree-sitter grammars
+      (C), the HTML writer, and `grass` (the pure-Rust SCSS compiler — no
+      dart-sass subprocess on native, so nothing external to install).
+      Assertions verified against real local output: the title `<h1>`, a
+      `<strong>`, an `<a href>`, and `styles.css` > 100 KB (observed 318,718
+      bytes — a good canary that the whole SCSS pipeline ran rather than
+      emitting a stub).
+- [ ] Render a real `.qmd` fixture with the musl binary on the runner and
+      inspect the output (not just the exit code)
+- [ ] Run the same binary inside an `alpine:latest` container — the "covers
+      every distro incl. Alpine" claim is the whole point of the strand, so
+      leaving it untested would leave the headline benefit unverified. Alpine
+      has musl and *no glibc at all*, so this doubles as the strongest
+      staticness proof.
+- [ ] Record both in **Phase 2 outcome** below
+
+### Phase 3 — Flip `release.yml`
+
+- [ ] Two linux matrix legs → `x86_64-unknown-linux-musl` /
+      `aarch64-unknown-linux-musl`
+- [ ] Runners → `ubuntu-latest` / `ubuntu-24.04-arm` (D5)
+- [ ] Restore the `Install musl-tools` step, `if: contains(matrix.target, 'musl')`
+      — exactly as `6080bd7a` removed it
+- [ ] Keep `--features vendored-openssl` in `cargo_flags` (D3)
+- [ ] `actionlint` clean
+
+### Phase 4 — Prose
+
+- [ ] `release.yml` header note (lines 48-55) — drop the rusty_v8 history, state
+      static musl
+- [ ] `release.yml` matrix comment (lines 341-349) — drop the glibc-floor note
+- [ ] `release.yml` release-notes table (lines 661-662) — "glibc 2.35+" →
+      "static musl"
+- [ ] `release-runbook.md:203-211` — replace the "musl is viable but we haven't
+      switched" paragraph
+- [ ] Add a runbook gotcha capturing whatever Phase 1 actually learned
+- [ ] Note in the runbook that the first post-switch release warrants extra
+      post-publish verification (download the linux artifact, run it on Alpine)
+
+### Phase 5 — Land and ship
+
+- [ ] Delete `musl-spike.yml` (D1 — it is scaffolding, not a deliverable)
+- [ ] `cargo xtask verify --skip-hub-build` green
+- [ ] PR, review, merge
+- [ ] Exercised for real by the next version cut (out of scope for this strand,
+      but the runbook note above is what makes it safe)
 
 No `cargo nextest` test is written for any of this — the change is entirely in
-CI config. The TDD analogue here is Phase 1: prove the build fails/succeeds in
-CI *before* touching the release path. Flag if you disagree with that reading of
-the project's TDD rule.
+CI config. The TDD analogue is Phase 1: prove the build succeeds in CI *before*
+touching the release path, and only then edit `release.yml`.
+
+## Phase outcomes
+
+_Filled in as each phase completes — the durable record of what CI actually
+did, per the project's end-to-end verification rule._
+
+### Phase 1 outcome
+
+_pending_
+
+### Phase 2 outcome
+
+_pending_
 
 ## Remaining open questions
 

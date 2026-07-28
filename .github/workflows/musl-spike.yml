@@ -1,0 +1,180 @@
+# TEMPORARY — delete before this branch merges (bd-dofxhzaj, plan
+# claude-notes/plans/2026-07-28-linux-release-static-musl.md, decision D1).
+#
+# Purpose: answer the one question about the static-musl switch that cannot
+# be answered by reading code on a laptop — does `-p quarto` actually BUILD
+# for x86_64/aarch64-unknown-linux-musl, given `aws-lc-sys` (rustls crypto
+# provider) and vendored openssl?
+#
+# Why this exists at all instead of just running release.yml: release.yml is
+# repo-gated, requires an existing tag whose name equals the workspace
+# Cargo.toml version, hard-fails when the QUARTO_HUB_BUNDLED_* secrets are
+# empty, and PUBLISHES A GITHUB RELEASE when it goes green. None of that is
+# something you want in an iteration loop. This workflow builds the same
+# crate with the same flags for the same targets, and publishes nothing.
+#
+# It deliberately does NOT build the embedded web payloads (preview SPA,
+# trace viewer, MCP bundle). All three `include_dir!` sites fall back to a
+# placeholder directory when their dist/ is absent (see
+# crates/quarto-{preview,trace-server,mcp-launcher}/build.rs), so a
+# payload-less build succeeds with a cargo warning. Those payloads are
+# target-independent, so they cannot affect whether musl links.
+
+name: musl spike (temporary)
+
+on:
+  push:
+    branches:
+      - 'feature/bd-dofxhzaj-**'
+      - 'braid/bd-dofxhzaj-**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: musl-spike-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: musl build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    if: github.repository == 'quarto-dev/q2'
+    strategy:
+      # Both arches must report independently — if one fails we still want
+      # the other's verdict, since they exercise different aws-lc-sys and
+      # musl-gcc paths.
+      fail-fast: false
+      matrix:
+        include:
+          # Runner images are the post-switch ones (decision D5): with a
+          # static binary the runner's glibc no longer sets any floor, so
+          # the ubuntu-22.04 pin that release.yml carries today is dropped.
+          - platform: linux_amd64
+            target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - platform: linux_arm64
+            target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: ${{ matrix.target }}
+
+      # Same trap release.yml documents: the toolchain action adds the
+      # target to the *latest* nightly, but cargo resolves the dated
+      # nightly pinned in rust-toolchain.toml, which auto-installs with
+      # only its own declared targets. Without this, every musl build dies
+      # with E0463 "can't find crate for core".
+      - name: Add ${{ matrix.target }} to the pinned toolchain
+        run: rustup target add ${{ matrix.target }}
+
+      # musl-gcc. The `cc` crate picks it up automatically for
+      # *-linux-musl targets; openssl-src and aws-lc-sys both need a
+      # working C compiler. Native on both runners (no cross-compilation),
+      # so the host arch's musl-gcc is the right one in each case.
+      - name: Install musl-tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: musl-spike-${{ matrix.target }}
+
+      # Identical to release.yml's build step minus the bundled-defaults
+      # env gate (this build has no secrets and ships nothing).
+      - name: Build release binary
+        run: |
+          cargo build --release --locked \
+            --target ${{ matrix.target }} \
+            -p quarto --features vendored-openssl
+
+      # Staticness, asserted three ways, weakest to strongest. The Alpine
+      # step below is the real proof — a glibc-linked binary cannot run
+      # there at all — but these fail faster and localize the problem.
+      - name: Assert the binary is statically linked
+        run: |
+          BIN="target/${{ matrix.target }}/release/q2"
+          ls -la "$BIN"
+          file "$BIN"
+          # Rust's musl targets default to crt-static and produce
+          # static-pie; accept either spelling.
+          file "$BIN" | grep -Eq 'static-pie linked|statically linked' \
+            || { echo "::error::$BIN is not statically linked"; exit 1; }
+          # Informational: ldd exits non-zero on a static binary, so this
+          # must not be allowed to fail the step on its own.
+          ldd "$BIN" 2>&1 || true
+
+      - name: Assert the binary runs and reports its version
+        run: ./target/${{ matrix.target }}/release/q2 --version
+
+      # ---- Phase 2: functional smoke -------------------------------------
+      # `q2 --version` proves the binary loads, not that it works. This
+      # fixture exercises the parts most likely to be sensitive to a libc
+      # swap: YAML front matter, the tree-sitter grammars (C), the HTML
+      # writer, and grass (the pure-Rust SCSS compiler, which emits a
+      # ~300 KB stylesheet — a good canary that the whole pipeline ran).
+      - name: Create the render fixture
+        run: |
+          mkdir -p musl-smoke
+          cat > musl-smoke/smoke.qmd <<'QMD'
+          ---
+          title: "musl smoke test"
+          ---
+
+          ## A heading
+
+          Some **bold** text and a [link](https://example.com).
+
+          | a | b |
+          |---|---|
+          | 1 | 2 |
+          QMD
+
+      - name: Render on the runner and inspect the output
+        run: |
+          BIN="$PWD/target/${{ matrix.target }}/release/q2"
+          cd musl-smoke
+          "$BIN" render smoke.qmd
+          echo "--- smoke.html ---"
+          cat smoke.html
+          test -s smoke.html
+          grep -q '<h1 class="title">musl smoke test</h1>' smoke.html
+          grep -q '<strong>bold</strong>' smoke.html
+          grep -q '<a href="https://example.com">link</a>' smoke.html
+          # grass compiled the bundled SCSS if and only if this is large.
+          CSS_BYTES=$(wc -c < smoke_files/styles.css)
+          echo "styles.css: $CSS_BYTES bytes"
+          [ "$CSS_BYTES" -gt 100000 ] \
+            || { echo "::error::styles.css is only $CSS_BYTES bytes — SCSS pipeline did not run"; exit 1; }
+
+      # The headline claim of the whole change: one artifact per arch that
+      # runs on every distro, Alpine included. Alpine ships musl and no
+      # glibc whatsoever, so this is simultaneously the staticness proof
+      # and the reach proof.
+      - name: Render inside an Alpine container (no glibc present)
+        run: |
+          rm -rf musl-smoke-alpine
+          mkdir -p musl-smoke-alpine
+          cp musl-smoke/smoke.qmd musl-smoke-alpine/
+          docker run --rm \
+            -v "$PWD:/work" \
+            -w /work/musl-smoke-alpine \
+            -e BIN="/work/target/${{ matrix.target }}/release/q2" \
+            alpine:latest \
+            sh -eux -c '
+              cat /etc/alpine-release
+              ldd --version 2>&1 | head -1 || true
+              "$BIN" --version
+              "$BIN" render smoke.qmd
+              test -s smoke.html
+              grep -q "musl smoke test" smoke.html
+              wc -c smoke_files/styles.css
+            '
