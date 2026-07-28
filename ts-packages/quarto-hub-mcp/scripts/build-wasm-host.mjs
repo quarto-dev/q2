@@ -9,7 +9,7 @@
 import * as esbuild from 'esbuild';
 import { copyFile, mkdir } from 'node:fs/promises';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const pkgDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const repoRoot = path.resolve(pkgDir, '../..');
@@ -53,6 +53,6 @@ export async function buildWasmHost(outDir) {
   console.log(`wasm-host bundled into ${path.relative(pkgDir, outDir)}/`);
 }
 
-if (import.meta.url === (await import('node:url')).pathToFileURL(process.argv[1] ?? '').href) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   await buildWasmHost(path.join(pkgDir, 'dist'));
 }
