@@ -33,6 +33,7 @@ import { setSyncLogger } from '@quarto/quarto-sync-client';
 
 import { ConnectionManager } from './connection-manager.js';
 import { registerTools } from './tools.js';
+import { registerPrompts } from './prompts.js';
 import { AuthToolsState } from './auth/auth-tools.js';
 import { CredentialStore } from './auth/credential-store.js';
 import {
@@ -235,6 +236,7 @@ async function main(): Promise<void> {
     {
       capabilities: {
         tools: {},
+        prompts: {},
       },
       instructions:
         'Tools operate on a project identified by its automerge index document ID. ' +
@@ -265,6 +267,7 @@ async function main(): Promise<void> {
       : undefined;
 
   registerTools(server, manager, readOnly, authToolsState);
+  registerPrompts(server);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

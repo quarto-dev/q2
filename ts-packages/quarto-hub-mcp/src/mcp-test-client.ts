@@ -227,6 +227,33 @@ export class McpTestClient {
     return result.tools;
   }
 
+  /**
+   * List all available prompts.
+   */
+  async listPrompts(): Promise<Array<{ name: string; description?: string; arguments?: unknown }>> {
+    const response = await this.sendRequest('prompts/list');
+    if (response.error) {
+      throw new Error(`MCP error: ${response.error.message}`);
+    }
+    return (response.result as { prompts: Array<{ name: string }> }).prompts;
+  }
+
+  /**
+   * Get a prompt with arguments filled in.
+   */
+  async getPrompt(
+    name: string,
+    args: Record<string, string>,
+  ): Promise<{ messages: Array<{ role: string; content: { type: string; text: string } }> }> {
+    const response = await this.sendRequest('prompts/get', { name, arguments: args });
+    if (response.error) {
+      throw new Error(`MCP error: ${response.error.message}`);
+    }
+    return response.result as {
+      messages: Array<{ role: string; content: { type: string; text: string } }>;
+    };
+  }
+
   // ---- Internal ----
 
   private parseResponses(): void {

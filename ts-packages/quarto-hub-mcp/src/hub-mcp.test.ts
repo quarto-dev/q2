@@ -81,6 +81,15 @@ describe('MCP protocol', () => {
     });
   });
 
+  it('lists the fix-errors prompt and expands it over the protocol', async () => {
+    const prompts = await client.listPrompts();
+    expect(prompts.map((p) => p.name)).toContain('fix-errors');
+
+    const res = await client.getPrompt('fix-errors', { project: 'automerge:xyz' });
+    expect(res.messages[0]!.content.text).toContain('automerge:xyz');
+    expect(res.messages[0]!.content.text).toContain('get_errors');
+  });
+
   // A share URL whose server= names a hub other than this server's configured
   // one (--server wss://dummy.example.com) must error *before* connecting, so no
   // network is needed here. (bd-m4slev7a)
