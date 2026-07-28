@@ -286,8 +286,8 @@ pub trait ProjectType {
     /// renders pass an empty slice. The resolver argument is new
     /// — Phase 9 §Decision 4. It's the single source of truth for
     /// "where do Project-scope artifacts live on disk / VFS", so
-    /// hooks like `flush_site_libs` no longer reconstruct the path
-    /// math themselves.
+    /// hooks like the project-artifact flush no longer reconstruct
+    /// the path math themselves.
     async fn post_render(
         &self,
         _project: &ProjectContext,
@@ -338,11 +338,13 @@ impl ProjectType for WebsiteProjectType {
     /// Run the website post-render hooks.
     ///
     /// **Cross-platform** (Phase 9 sub-phase 9.2):
-    /// 1. **`flush_site_libs`** (Phase 5; resolver-driven) — drain
-    ///    Project-scoped artifacts to whatever destination the
-    ///    resolver decides — `<output_dir>/site_libs/...` natively
-    ///    or `/.quarto/project-artifacts/...` in the hub-client
-    ///    VFS.
+    /// 1. **[`flush_project_artifacts`]** (Phase 5; resolver-driven) —
+    ///    write the Project-scoped artifacts accumulated across every
+    ///    Pass-2 render to whatever destination the resolver decides:
+    ///    `<output_dir>/site_libs/...` natively, or
+    ///    `/.quarto/project-artifacts/...` in the hub-client VFS.
+    ///
+    /// [`flush_project_artifacts`]: crate::artifact_flush::flush_project_artifacts
     ///
     /// **Native-only** (the rest write into the on-disk
     /// `<output_dir>` which doesn't exist in the in-browser
@@ -358,7 +360,7 @@ impl ProjectType for WebsiteProjectType {
     ///
     /// Each hook short-circuits cleanly when its triggering config
     /// is absent, so a website project that opts in to none of
-    /// these features just runs the site_libs flush.
+    /// these features just runs the project-artifact flush.
     async fn post_render(
         &self,
         project: &ProjectContext,
@@ -369,8 +371,7 @@ impl ProjectType for WebsiteProjectType {
         runtime: &dyn quarto_system_runtime::SystemRuntime,
         diagnostics: &mut Vec<DiagnosticMessage>,
     ) -> Result<()> {
-        use super::website_post_render::flush_site_libs;
-        flush_site_libs(project_artifacts, resolver, runtime)?;
+        crate::artifact_flush::flush_project_artifacts(project_artifacts, resolver, runtime)?;
         // The remaining hooks write to the on-disk output dir,
         // which only exists natively. WASM hub-client renders skip
         // them — see Phase 9 plan §Decision 4.

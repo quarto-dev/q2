@@ -140,41 +140,116 @@ module whose doc opens "Post-render hooks for `WebsiteProjectType`."
 
 ## Phases
 
-- [x] **Phase 0 — Investigation + design** (this document; commit `5c874669` + this rewrite).
-- [ ] **Phase 1 — Tests first (TDD).** Written and failing/pinning before any move:
-  - [ ] Pin the scope-filter decision: a `Page`-scoped entry in the store handed
-        to `flush_project_artifacts` is **not** written (and `debug_assert` fires
-        in dev). This is the one deliberate behavior change.
-  - [ ] Characterize the current three pass-2/native routing sites: shared-lib
-        accumulates, no-shared-lib writes in place. Assert via
-        `route_drained_project_artifacts` so the test drives the new seam.
-  - [ ] Carry over the 4 existing `flush_site_libs_*` unit tests to the new
-        module + names, unchanged in substance.
-  - [ ] Empty store stays a no-op (no `dir_create`) — guards the dropped early return.
-- [ ] **Phase 2 — Move `enqueue_artifacts`** to `artifact_flush.rs`, drop its
-      per-fn cfg gate, fix its false doc comment. Re-export or update the two
-      `render_to_file.rs` callers.
-- [ ] **Phase 3 — Move + rename `flush_site_libs`** → `flush_project_artifacts`
-      in `artifact_flush.rs`, reimplemented over `enqueue_artifacts` + `debug_assert`.
-      Update `post_render`. Widen the `artifact_flush` module doc to describe the family.
-- [ ] **Phase 4 — bd-gdhk: add `route_drained_project_artifacts`** and convert
-      all three render sites to it.
-- [ ] **Phase 5 — Prose sweep.** The remaining `flush_site_libs` references
-      across 10 files / 3 crates (31 occurrences total). **Match on
-      `flush_site_libs`, never on `site_libs`** — see Risks.
-- [ ] **Phase 6 — Verify.** Full `cargo xtask verify` (**not** `--skip-hub-build`):
-      the function is cross-platform and named in `wasm-quarto-hub-client` and
-      `quarto-system-runtime`, so the WASM leg is in scope. Plus
-      `cargo xtask lint` and a `grep -rn 'flush_site_libs' crates/` that must
-      return empty.
+- [x] **Phase 0 — Investigation + design** (this document; commit `5c874669` + `36a70b39`).
+- [x] **Phase 1 — Tests first (TDD).** Written first; verified failing with
+      exactly the expected errors (`cannot find function flush_project_artifacts`
+      / `route_drained_project_artifacts`, nothing else) before implementing.
+  - [x] Pin the scope-filter decision — the one deliberate behavior change.
+        Two cfg'd tests: `#[cfg(debug_assertions)] #[should_panic]` for the
+        loud-in-dev guard, and a release-mode counterpart asserting the entry is
+        filtered rather than misplaced.
+  - [x] Characterize the three routing sites through the new
+        `route_drained_project_artifacts` seam (accumulate / write-in-place /
+        no-accumulator), plus the merge-conflict diagnostic naming the input doc.
+  - [x] Carry over the 3 `flush_site_libs_*` unit tests under the new names.
+  - [x] Empty store stays a no-op (no `dir_create`) — guards the dropped early return.
+- [x] **Phase 2 — Moved `enqueue_artifacts`** to `artifact_flush.rs`, dropped its
+      per-fn cfg gate, deleted its false doc comment.
+- [x] **Phase 3 — Moved + renamed** `flush_site_libs` → `flush_project_artifacts`,
+      reimplemented over `enqueue_artifacts` + `debug_assert`. `post_render`
+      updated. Module doc rewritten to describe the family as a table.
+- [x] **Phase 4 — bd-gdhk: added `route_drained_project_artifacts`**; all three
+      render sites converted (`render_to_file.rs`, both `pass2_renderer.rs` sites).
+      The two pass-2 sites were byte-identical before; they are now one call each.
+- [x] **Phase 5 — Prose sweep.** 31 → 3 occurrences. The 3 that remain are
+      deliberate history notes in prose (backticked, not doc links): two in
+      `artifact_flush.rs`'s module doc explaining why the family lives there, one
+      in `website_post_render.rs` saying where the flush went. Both stale
+      **intra-doc links** (`resource_resolver.rs`, `pass2_renderer.rs`) were
+      repointed — these are the ones CI cannot catch.
+- [x] **Phase 6 — Verify.** `cargo build --workspace`,
+      `cargo nextest run --workspace`, `cargo clippy --workspace --all-targets
+      -- -D warnings`, `cargo fmt --check`, `cargo xtask lint` all clean; full
+      `cargo xtask verify` (with the WASM/hub leg) run.
+- [x] **Phase 6b — End-to-end verification** (see below).
 - [ ] **Phase 7 — PR.** Push to `origin` and open a PR so CI reports. Document
       the one deliberate behavior change (scope filter) in the PR body.
-- [ ] **Phase 8 — Close out.** `braid close bd-v8gx` and `braid close bd-gdhk`;
-      file the discovered strand below.
+- [ ] **Phase 8 — Close out.** `braid close bd-v8gx` and `braid close bd-gdhk`.
+
+## End-to-end verification (Phase 6b)
+
+Tests alone are not sufficient here: this code is what puts `site_libs/` on disk
+during a real `q2 render`. Both routing branches were exercised through the
+actual binary and the output inspected.
+
+**Website project** (shared `lib_dir` → accumulate → `post_render` flush):
+
+```
+$ cargo run -q --bin q2 -- render <scratch>/e2e/site
+Rendering project: .../e2e/site (type: website)
+Rendered 2 of 2 files to .../e2e/site/_site
+
+$ find _site/site_libs -type f
+site_libs/bootstrap/bootstrap-icons.css
+site_libs/bootstrap/bootstrap-icons.woff
+site_libs/quarto/bootstrap.bundle.min.js
+site_libs/quarto/clipboard.min.js
+site_libs/quarto/code-copy-init.js
+site_libs/quarto/quarto-theme-127bdf77135c0e58.css
+
+$ grep -o 'href="[^"]*quarto-theme[^"]*"' _site/index.html
+href="site_libs/quarto/quarto-theme-127bdf77135c0e58.css"
+```
+
+Six Project-scope artifacts flushed, and the `<link href>` the HTML embeds
+matches the on-disk path — the Phase 9 §Decision 4 round-trip invariant holds
+through the refactor.
+
+**Standalone / default project** (`lib_dir == ""` → write in place, the bd-87fu
+path):
+
+```
+$ cargo run -q --bin q2 -- render <scratch>/e2e/standalone.qmd
+$ find standalone_files -type f
+bootstrap.bundle.min.js
+clipboard.min.js
+code-copy-init.js
+styles.css
+
+$ grep -o 'href="[^"]*\.css"' standalone.html
+href="standalone_files/styles.css"
+```
+
+Output inspected in both cases, not merely checked for absence of errors.
+
+## Note on a flaky test encountered (not ours)
+
+The first full-workspace run on this branch failed one unrelated test,
+`quarto-hub::integration admin_scan_real_store::scan_real_store_finds_orphaned_capture_only`.
+It was **investigated rather than assumed pre-existing**, because "unrelated
+flake" is exactly what an introduced regression looks like at first.
+
+Findings: the assertion diff is one document id read back with the wrong
+*letter case* (27 of 28 chars identical, differing only at index 1).
+`list_doc_ids_filesystem` (`quarto-hub/src/admin/scan.rs:80-106`) reconstructs
+doc ids as `format!("{prefix}{rest}")` from a two-level
+`<2-char prefix>/<rest>/` store layout; on macOS's case-insensitive APFS two ids
+whose prefixes case-fold together share one directory, so one reads back
+mis-cased.
+
+Reproduced **on a clean `main` worktree** at **2 failures in 60 iterations
+(~3%)**, with the same signature (`2Kd28qz…` vs `2kd28qz…`). Pre-existing,
+platform-dependent, and unreachable from this branch (no `crates/quarto-hub/`
+file changed). Filed as **bd-eb2wnxkp** with the evidence and a warning that
+verifying any fix needs a stress loop, not a single green run.
 
 Expect **no `docs/` change** — no user-facing symbol here. Confirm and move on.
 
-## Discovered work (to file as its own strand)
+## Discovered work (filed)
+
+- **bd-lameekm1** (bug, p2) — the empty-content divergence described below.
+- **bd-eb2wnxkp** (bug, p2) — `list_doc_ids_filesystem` reconstructs doc ids
+  unsoundly on case-insensitive filesystems; see the flaky-test note above.
 
 **Empty-content artifacts are skipped on the VFS path but written on the
 `OutputSink` paths.** `flush_artifacts_to_vfs` skips `artifact.content.is_empty()`
