@@ -23,6 +23,11 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-28
+
+- [`807fd96c`](https://github.com/quarto-dev/q2/commits/807fd96c): Signing in with Google is now tied to the specific sign-in you started, so a copied Google token can no longer be used to open a session on your behalf.
+- [`9a673bbc`](https://github.com/quarto-dev/q2/commits/9a673bbc): Sign-in sessions are now stored in a host-locked browser cookie (`__Host-`), which a neighbouring subdomain cannot plant or overwrite. You will be asked to sign in once more after this update.
+
 ### 2026-07-27
 
 - [`d419d32`](https://github.com/quarto-dev/q2/commits/d419d32): Opening a document now connects to the live document straight away, so the connection indicator no longer briefly shows "Offline" before switching to "Online" on a normal connection.

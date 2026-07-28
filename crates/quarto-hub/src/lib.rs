@@ -13,6 +13,7 @@ pub mod context;
 pub mod discovery;
 pub mod error;
 pub mod index;
+pub mod login_state;
 pub mod peer;
 pub mod resource;
 pub mod revocation;

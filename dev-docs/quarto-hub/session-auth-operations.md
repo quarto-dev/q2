@@ -7,8 +7,9 @@ Operational reference for the hub's server-minted sliding sessions
 ## The session model in one paragraph
 
 The hub validates a user's Google ID token **once** at login, then
-mints its own compact HS256 session token into the `quarto_hub_token`
-HttpOnly cookie (~400 bytes). The session **slides**: authenticated
+mints its own compact HS256 session token into an HttpOnly session
+cookie (~400 bytes) — named `__Host-quarto_hub_token` under TLS, or
+`quarto_hub_token` in insecure dev mode. The session **slides**: authenticated
 HTTP activity re-issues the cookie (at most ~1/hour), up to an **idle
 timeout** (default 7 days) and an **absolute lifetime cap** (default
 30 days, anchored at login — re-issue can never extend past it). The
@@ -37,9 +38,52 @@ Notes:
 - **Multi-instance:** hubs sharing `QUARTO_HUB_SESSION_SECRET` via env
   accept each other's session cookies. Per-hub auto-generated secrets
   give per-instance isolation.
-- Serve the hub from an origin with **no untrusted sibling
-  subdomains** (cookie-planting residual until a `__Host-` cookie-name
-  upgrade; see plan §6).
+- **Cookie name is TLS-mode dependent** (H3, `bd-gt2hhrcg`): secure
+  deployments use `__Host-quarto_hub_token`; only
+  `--allow-insecure-auth` uses the bare `quarto_hub_token` (the
+  `__Host-` prefix requires `Secure`, which requires TLS). The prefix
+  is browser-enforced — a sibling subdomain cannot plant one — which
+  closes the cookie-planting residual previously called out here. In
+  secure mode the bare name is **not** accepted as a credential, so the
+  H3 rollout invalidates outstanding sessions once (users re-log-in);
+  a login also emits a clear for the bare name so it doesn't linger.
+
+## Login nonce (Google flow)
+
+The Google login is a two-request flow. `GET /auth/nonce` mints a random
+nonce, returns it to the SPA (which hands it to Google Identity
+Services), and seals a copy into a short-lived HMAC-signed cookie —
+`__Secure-quarto_hub_login`, `SameSite=None; HttpOnly; Path=/auth`, 10
+minute lifetime. `POST /auth/callback` then requires the ID token's
+`nonce` claim to match that cookie.
+
+This is what stops a **captured ID token from being replayed** to mint a
+session: signature, `iss`, `aud`, and `exp` all still validate for a
+stolen token, so before the nonce the hub had no way to tell whether a
+token belonged to a login *it* started. The blob is single-use — the
+callback clears the cookie on every exit path.
+
+Operational notes:
+
+- **`SameSite=None` is required, not lax.** Google delivers the
+  credential by cross-site form POST; a `Lax` cookie is not attached to
+  it. That in turn requires `Secure`, hence TLS.
+- **Enforcement is unconditional in secure mode**, and **skipped under
+  `--allow-insecure-auth`** (that cookie cannot work over plain HTTP).
+  The skip logs at WARN on every login — if you see
+  `nonce verification skipped` in a deployment that is meant to be
+  production, the hub is running with the dev flag.
+- **Rejections** appear as `auth_fail` with
+  `detail=login_state_<class>`: `login_state_missing` (no cookie —
+  the replay shape), `nonce_mismatch`, `token_nonce_missing` (client too
+  old to send one), `expired`, `tampered`, `kid_mismatch`.
+- **Rollout:** a user holding a stale SPA bundle fails login once to
+  `/?auth_error` and recovers on reload. Hub and client deploy together.
+- **Scope:** the Google callback only. `/auth/session` (the Generic
+  provider's JSON mint) is not nonce-bound and remains replay-able
+  within the submitted token's validity.
+- Sealed blobs verify against the **previous** secret during a graceful
+  rotation overlap, so a login started just before a rotation completes.
 
 ## Rotating the session secret
 
@@ -125,3 +169,17 @@ or a legacy Google-JWT cookie), `session_expired`,
 `session_absolute_cap`, `session_tampered`, `session_revoked`,
 `user_banned`, `user_not_allowlisted`, `conflicting_credentials`.
 Token contents are never logged.
+
+Actions, by what they mean:
+
+| `action` | Meaning |
+|---|---|
+| `auth_ok` / `auth_fail` | Per-request authentication decision. |
+| `login_mint` | A **new session family** was created. Carries `sub`, the new `sid`, and `endpoint=callback\|session` (which login path). |
+| `revoke_all_sessions` | Logout-everywhere: every prior session for `sub` is dead. |
+
+`login_mint` is the one to join sessions against: `sid` is immutable
+across sliding re-issues, so it identifies a login for as long as that
+session lives. **Sliding re-issue is deliberately silent** — it extends
+a session rather than opening one, so a keep-alive never looks like a
+fresh login.

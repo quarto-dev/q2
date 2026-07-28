@@ -23,8 +23,8 @@ use rsa::{RsaPrivateKey, pkcs1::EncodeRsaPrivateKey, pkcs8::LineEnding};
 use serde_json::json;
 
 use crate::support::{
-    ClaimsBuilder, MCP_CLIENT_ID, MockOidcProvider, SPA_CLIENT_ID, TestHub, TestHubBuilder,
-    install_tracing_once, snapshot_events,
+    AUTH_COOKIE_NAME_SECURE, ClaimsBuilder, MCP_CLIENT_ID, MockOidcProvider, SPA_CLIENT_ID,
+    TestHub, TestHubBuilder, install_tracing_once, snapshot_events,
 };
 
 // ── shared test fixtures ──────────────────────────────────────────
@@ -437,7 +437,8 @@ async fn ws_upgrade_with_bearer_skips_origin_check() {
 #[tokio::test]
 async fn ws_upgrade_with_cookie_still_requires_origin() {
     // Hubs started with allow_insecure_auth=true skip the Origin check,
-    // so this regression needs the secure fixture.
+    // so this regression needs the secure fixture — which is also why
+    // the cookie carries the `__Host-` prefixed name (H3).
     let (provider, hub) = secure_setup().await;
     let token = provider.sign(
         &ClaimsBuilder::from_provider(provider)
@@ -447,7 +448,7 @@ async fn ws_upgrade_with_cookie_still_requires_origin() {
     let resp = hub
         .ws_upgrade()
         .header("origin", "https://attacker.example.com")
-        .header("cookie", format!("quarto_hub_token={token}"))
+        .header("cookie", format!("{AUTH_COOKIE_NAME_SECURE}={token}"))
         .send()
         .await
         .unwrap();
