@@ -196,6 +196,9 @@
 .editor-pane {
   position: relative;
   overflow: hidden;
+  /* Column layout so the branch bar stacks above Monaco */
+  display: flex;
+  flex-direction: column;
 }
 
 /* View Mode: Both (default) - equal split */

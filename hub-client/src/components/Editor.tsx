@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 // Side effects only: bundles Monaco + workers so no runtime CDN fetch occurs.
 import '../monacoSetup';
-import MonacoEditor from '@monaco-editor/react';
+import MonacoEditor, { DiffEditor } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
 import { isBinaryExtension, isTextExtension } from '@quarto/preview-renderer/types/project';
@@ -15,7 +15,7 @@ import {
   exportProjectAsZip,
   type EditorContentChange,
 } from '@quarto/preview-runtime';
-import { vfsAddFile, isWasmReady, clearCapture } from '@quarto/preview-runtime';
+import { vfsAddFile, isWasmReady, clearCapture, getFileContent } from '@quarto/preview-runtime';
 import { PreviewStatusBar } from './render/PreviewStatusBar';
 import { hasExecutableCells } from '../services/executableCells';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
@@ -32,6 +32,9 @@ import { useSlideThumbnails } from '../hooks/useSlideThumbnails';
 import { useCursorToSlide } from '../hooks/useCursorToSlide';
 import { useReplayMode } from '../hooks/useReplayMode';
 import { useAutomergeSync } from '../hooks/useAutomergeSync';
+import { useDocBranches } from '../hooks/useDocBranches';
+import { setActiveBranch, createBranch, mergeBranchToMain, deleteBranch } from '../services/branchService';
+import BranchBar from './BranchBar';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import FileSidebar from './FileSidebar';
@@ -198,8 +201,22 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // useIntelligenceProviders below, once wasmStatus/editorReady exist).
   const getCurrentFilePath = useCallback(() => currentFilePathRef.current, []);
 
-  // Presence for collaborative cursors
-  const { remoteUsers, userCount, onEditorMount: onPresenceEditorMount } = usePresence(currentFile?.path ?? null);
+  // Local document branches ("forks") for the current file
+  const { branches, activeBranchId } = useDocBranches(currentFile?.path ?? null);
+
+  // "Compare with main" diff view — session-only, leaves when the branch
+  // or file changes (merge/delete reset activeBranchId, so those too).
+  const [comparingWithMain, setComparingWithMain] = useState(false);
+  useEffect(() => {
+    setComparingWithMain(false);
+  }, [activeBranchId, currentFile?.path]);
+
+  // Presence for collaborative cursors — disabled while on a local branch
+  // (the branch doc is invisible to peers, so cursors would be misleading)
+  const { remoteUsers, userCount, onEditorMount: onPresenceEditorMount } = usePresence(
+    currentFile?.path ?? null,
+    { enabled: activeBranchId === null }
+  );
 
   // Intelligence for document outline
   const {
@@ -231,6 +248,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     onContentOperations,
     replayActiveRef,
     replayIsActive: replayState.isActive,
+    activeBranchId,
   });
 
   // Keep current file path ref in sync for Monaco providers
@@ -1069,11 +1087,37 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                 />
               </div>
             )}
+            {/* Local branch bar (fork / switch / merge-to-main) */}
+            {currentFile && !isBinaryExtension(currentFile.path) && viewMode !== 'preview' && (
+              <BranchBar
+                branches={branches}
+                activeBranchId={activeBranchId}
+                disabled={replayState.isActive}
+                onSwitch={(id) => setActiveBranch(currentFile.path, id)}
+                onFork={(name) => createBranch(currentFile.path, name || undefined)}
+                onMerge={(id) => mergeBranchToMain(currentFile.path, id)}
+                onDelete={(id) => deleteBranch(currentFile.path, id)}
+                comparing={comparingWithMain}
+                onToggleCompare={() => setComparingWithMain((c) => !c)}
+              />
+            )}
             {/* Always render Monaco but hide in preview mode */}
-            <div style={{ display: viewMode === 'preview' ? 'none' : 'block', height: '100%' }}>
+            <div style={{ display: viewMode === 'preview' ? 'none' : 'block', flex: 1, minHeight: 0 }}>
+              {comparingWithMain && activeBranchId !== null && currentFile ? (
+                <DiffEditor
+                  key={`diff::${currentFile.path}::${activeBranchId}`}
+                  height="100%"
+                  language={getLanguageForFile(currentFile.path)}
+                  theme={effectiveTheme === 'dark' ? 'quarto-dark' : 'quarto-light'}
+                  original={getFileContent(currentFile.path) ?? ''}
+                  modified={content}
+                  options={{ readOnly: true, renderSideBySide: true, minimap: { enabled: false } }}
+                />
+              ) : (
               <MonacoEditor
-                // Use key to force remount when switching files (resets editor state cleanly)
-                key={currentFile?.path ?? ''}
+                // Key forces remount when switching files or branches
+                // (resets editor state cleanly)
+                key={`${currentFile?.path ?? ''}::${activeBranchId ?? 'main'}`}
                 height="100%"
                 language={getLanguageForFile(currentFile?.path ?? '')}
                 theme={effectiveTheme === 'dark' ? 'quarto-dark' : 'quarto-light'}
@@ -1086,6 +1130,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                 onMount={handleEditorMount}
                 options={editorOptions}
               />
+              )}
             </div>
           </div>
         )}
