@@ -1,263 +1,219 @@
-# Rename flush_site_libs to flush_project_artifacts (bd-v8gx)
+# Consolidate the artifact-write family (bd-v8gx + bd-gdhk)
 
 **Date:** 2026-07-28
-**Braid:** bd-v8gx (chore, p4, opened 2026-05-01 by cscheid)
-**Checkout:** `/Users/cscheid/rooms/room-1/q2`, branch `main` @ `581e45c0`
-(this skill does not create branches — see "Where should this land?" below)
-**Status:** Investigation — pending design alignment with user. **Do not start
-implementation until the user gives the go-ahead.**
+**Braid:** bd-v8gx (chore, p4) — rename `flush_site_libs` → `flush_project_artifacts`
+**Braid:** bd-gdhk (chore, p3) — extract the drain-and-flush-or-merge helper
+**Branch:** `braid/bd-v8gx-flush-project-artifacts`, based on `main` @ `581e45c0`
+**Status:** Design settled with user 2026-07-28 (options: name = as-filed, scope = (c) rename+dedupe, module = move, branch + PR, both strands together). **Implementation in progress, plan-driven, TDD.**
 
-## Triage verdict
+## Summary of the decision
 
-**Ready to design, with a scope decision to make first** — the rename itself is
-mechanically valid and the code still has the shape the strand describes, but
-(a) the "one error message" the strand promises no longer exists (bd-cfl67
-deleted it), and (b) the investigation turned up a near-duplicate function,
-`render_to_file::enqueue_artifacts`, plus a *factually wrong* doc comment
-pointing at `flush_site_libs`. So the real question is whether bd-v8gx stays a
-pure rename or absorbs the small deduplication that would make the new name
-honest.
+Both strands land together on one branch, with a PR opened so CI reports on it.
+The investigation found that the two strands are really one piece of work, and
+that a **third** sibling of the same loop already exists — so the target state
+is a single `artifact_flush` module owning the whole artifact-write family.
 
-## Issue context
+## What the investigation found
 
-> `flush_site_libs` in `crates/quarto-core/src/project/website_post_render.rs`
-> is now called from both `WebsiteProjectType.post_render` (where the name is
-> accurate) and `RenderToHtmlRenderer.render` (where 'site_libs' is misleading
-> — default projects have no site_libs dir). The function body has always been
-> general (it just iterates project_artifacts and calls
-> `resolver.on_disk_path_for(Project, ...)`). Rename + update one error message
-> for clarity. Pure naming hygiene.
+### The premise holds, but the framing was incomplete
 
-Type `chore`, priority `4` (backlog), status `open`, filed 2026-05-01 —
-**~3 months old**. Never updated since creation.
+bd-v8gx says `flush_site_libs` is misleadingly named because it has two
+non-website callers. True at `581e45c0`. But three further findings reshape the
+work:
 
-## Dependency graph
+**Finding 1 — the "one error message" is already gone.** It was
+`"Failed to create site_libs subdirectory {}: {}"`, deleted by bd-cfl67
+(`ad18adcb`) when the manual `dir_create` + `file_write` pair became
+`OutputSink`. That half of bd-v8gx is overtaken; nothing to do.
 
-Small and one-directional:
+**Finding 2 — `artifact_flush.rs` already exists**
+(`crates/quarto-core/src/artifact_flush.rs`, 281 lines, added by bd-q3bxnq2e).
+It holds `flush_artifacts_to_vfs` — a **third** near-copy of the same loop, this
+one writing into the hub-client `VirtualFileSystem`. Its module doc is already
+framed as "shared artifact flush." This is the natural home for the family, and
+it means the module we would have created is already there with the right name.
 
-```
-bd-h736 (closed) ──discovered-from── bd-87fu (closed)
-                                        ├──discovered-from── bd-v8gx (this, open)
-                                        └──discovered-from── bd-gdhk (open, p3)
-```
+**Finding 3 — the three loops diverge in two ways that matter.**
 
-- **`discovered-from` → bd-87fu** (closed 2026-05-01, commit `c1af5b3b`):
-  "Default-project theme artifacts not flushed in hub-client live preview."
-  This is the whole context. bd-87fu's fix added the `lib_dir.is_empty()`
-  branch to `RenderToHtmlRenderer.render`, which is what created the second
-  caller and made the `site_libs` name misleading. bd-87fu's close reason
-  explicitly names bd-v8gx and bd-gdhk as its two follow-ups.
-- **Sibling: bd-gdhk** (open, p3, chore): "Extract drain-and-flush-or-merge
-  helper out of pass2 renderers." Same parent, and it overlaps this work — see
-  the design questions. Note bd-gdhk's cited line numbers
-  (`render_to_file.rs:264-297`, `pass2_renderer.rs:343-355`) have **both
-  drifted**; the real sites are now `render_to_file.rs:364-386` and
-  `pass2_renderer.rs:883-895` / `1170-1182`.
-- **No incoming `blocks` edges.** Nothing waits on this. Consistent with p4:
-  there is no urgency, only readability.
+| | sink | scope handling | empty content | cfg |
+| --- | --- | --- | --- | --- |
+| `flush_site_libs` (`website_post_render.rs:81`) | owns + flushes | **forces** `Project` | writes it | cross-platform |
+| `enqueue_artifacts` (`render_to_file.rs:445`) | caller's | **filters** on `scope` | writes it | native-only |
+| `flush_artifacts_to_vfs` (`artifact_flush.rs:44`) | VFS | uses `artifact.scope` | **skips** (bd-3gtn) | cross-platform |
 
-## What the code looks like today
+### The blocker that forces the module move
 
-Spot-check at `581e45c0`: **the strand's premise holds.** The function still
-exists with the general body the strand describes, and it still has two callers
-with contradictory naming.
+`pub mod render_to_file` is itself `#[cfg(not(target_arch = "wasm32"))]`
+(`lib.rs:59-60`) — so `enqueue_artifacts` is not merely gated, it **does not
+exist on wasm32**. A cross-platform `flush_project_artifacts` therefore *cannot*
+delegate to it in place. Option (c) requires moving `enqueue_artifacts` into a
+cross-platform module, and `artifact_flush.rs` (ungated, `lib.rs:40`) is it.
+The per-function gate on `enqueue_artifacts` is redundant belt-and-braces today;
+`OutputSink` itself is cross-platform (`new`/`write`/`copy`/`flush` are all
+ungated), so the body ports without change.
 
-`crates/quarto-core/src/project/website_post_render.rs:81`
+### The behavior trap to pin with a test first
+
+`flush_site_libs` calls `on_disk_path_for(Project, path)` **unconditionally**,
+ignoring `artifact.scope`. `enqueue_artifacts` **filters** on
+`artifact.scope == scope_filter`. Delegating therefore changes behavior for any
+non-Project entry in the store: today it is written at the Project root; after
+delegation it would be **silently dropped**.
+
+Does that happen? `merge_into_project` (`artifact.rs:344`) inserts entries
+**verbatim — it does not re-stamp scope**. The Project-only invariant holds
+only because every caller feeds it from `drain_project_scoped()`. Nothing
+enforces it.
+
+**Decision:** filter (adopt `enqueue_artifacts` semantics) **plus a
+`debug_assert!`** that every entry is Project-scoped. Silently routing a
+Page-scoped artifact to a Project path is arguably today's latent bug; making
+the invariant loud in dev is better than preserving an accident. This is a
+deliberate, tested change — recorded here because it is the one place this work
+is *not* behavior-preserving.
+
+Two facts that make the rest of the delegation safe:
+
+- `flush_site_libs`'s `if project_artifacts.is_empty() { return Ok(()) }` early
+  return can go: `OutputSink::flush` early-returns on empty `ops` **before**
+  materializing allowed roots (`output_sink.rs:291-293`), so no `dir_create`
+  happens either way. Existing test `flush_site_libs_empty_store_is_noop`
+  guards this.
+- Iteration is sorted-by-key in both, so flush order is unchanged.
+
+## Target state
+
+One module, `crates/quarto-core/src/artifact_flush.rs`, owning four named
+members with **one** write loop between them:
 
 ```rust
-pub(super) fn flush_site_libs(
-    project_artifacts: &ArtifactStore,
-    resolver: &ResourceResolverContext,
-    runtime: &dyn SystemRuntime,
+// The primitive. Moved from render_to_file.rs; per-fn cfg gate dropped.
+pub fn enqueue_artifacts(store, resolver, scope_filter, sink) -> Result<()>
+
+// Own-sink wrapper == bd-v8gx's rename target. Moved from
+// project/website_post_render.rs. Three lines over the primitive.
+pub(crate) fn flush_project_artifacts(store, resolver, runtime) -> Result<()>
+
+// bd-gdhk's helper: drain-and-flush-or-merge, shared by all 3 render sites.
+pub(crate) fn route_drained_project_artifacts(
+    drained, accumulator: Option<&mut ArtifactStore>, has_shared_lib,
+    resolver, sink: &mut OutputSink, input: &Path,
 ) -> Result<()>
+
+// Already present (bd-q3bxnq2e). Untouched.
+pub fn flush_artifacts_to_vfs(artifacts, resolver, vfs)
 ```
 
-Body: bail on empty → construct its **own** `OutputSink` from
-`resolver.allowed_output_roots()` → sort entries by key → for each artifact with
-a `path`, `sink.write(resolver.on_disk_path_for(Project, path), …)` →
-`sink.flush(runtime)`. Nothing in it is website-specific.
+**Name choice (Q1 resolved).** `flush_project_artifacts`, exactly as bd-v8gx
+filed it. The `enqueue_` / `flush_` verb pair already encodes the only
+distinction that matters — sink ownership — so no disambiguating suffix is
+needed. Once all four sit in one module with a doc comment naming the family,
+the collision I worried about in the skeleton stops being a hazard: a reader
+meets them together instead of discovering them one at a time. It is also
+uniquely greppable (`flush_project_artifacts` matches nothing else) and, unlike
+a `site_libs`-derived name, carries no risk of a sweep touching the 142
+legitimate `site_libs` directory references.
 
-### Callers (3)
+**Why `route_drained_project_artifacts` takes a sink rather than a runtime.**
+Each of the three render sites keeps its own sink lifecycle: `render_to_file`
+enqueues into its render-wide sink (shared with Page-scope writes and resource
+copies, flushed once), while the two pass-2 sites construct and flush their own.
+Passing the sink in preserves all three lifecycles exactly — no behavior change,
+no mode enum.
 
-| Site | Context | Is `site_libs` accurate? |
+## Call-site map (what changes where)
+
+| Site | Today | After |
 | --- | --- | --- |
-| `project/orchestrator.rs:372-373` | `WebsiteProjectType::post_render` | ✅ yes (`lib_dir == "site_libs"`) |
-| `project/pass2_renderer.rs:886` | `RenderToHtmlRenderer::render`, `lib_dir.is_empty()` branch (bd-87fu) | ❌ no — default project, no lib dir |
-| `project/pass2_renderer.rs:1173` | `RenderToPreviewAstRenderer::render`, same branch | ❌ no |
+| `orchestrator.rs:372-373` (`WebsiteProjectType::post_render`) | `flush_site_libs(...)` | `flush_project_artifacts(...)` |
+| `pass2_renderer.rs:883-895` (`RenderToHtmlRenderer::render`) | drain + `if lib_dir.is_empty()` branch, 13 lines | `route_drained_project_artifacts(...)` |
+| `pass2_renderer.rs:1170-1182` (`RenderToPreviewAstRenderer::render`) | **byte-identical** to the above | `route_drained_project_artifacts(...)` |
+| `render_to_file.rs:364-386` | drain + `match (project_artifacts, has_shared_lib)` | `route_drained_project_artifacts(...)` |
+| `render_to_file.rs:436-440` | doc comment that **falsely** claims `post_render` reaches `enqueue_artifacts` "via `flush_site_libs`" | corrected + moved with the fn |
 
-### Finding 1 — the "one error message" is already gone
+Note the honest consequence: once `route_drained_project_artifacts` owns the two
+pass-2 sites, `flush_project_artifacts` is left with exactly **one** caller —
+`post_render`, the site where `site_libs` was *accurate*. So bd-gdhk dissolves
+bd-v8gx's original motivation. The rename is still right, but for the second
+reason rather than the first: the function is general and should not live in a
+module whose doc opens "Post-render hooks for `WebsiteProjectType`."
 
-The strand says "update one error message for clarity." That message was
-`"Failed to create site_libs subdirectory {}: {}"`, and **bd-cfl67 deleted it**
-in `ad18adcb` ("route destructive writes through validated OutputSink") when the
-manual `dir_create` + `file_write` pair was replaced by `OutputSink`. Verified
-via `git show ad18adcb -- crates/quarto-core/src/project/website_post_render.rs`.
+## Phases
 
-There is no remaining `site_libs`-flavored error string in the function. So this
-half of the strand is **overtaken — nothing to do.** The rename half stands.
+- [x] **Phase 0 — Investigation + design** (this document; commit `5c874669` + this rewrite).
+- [ ] **Phase 1 — Tests first (TDD).** Written and failing/pinning before any move:
+  - [ ] Pin the scope-filter decision: a `Page`-scoped entry in the store handed
+        to `flush_project_artifacts` is **not** written (and `debug_assert` fires
+        in dev). This is the one deliberate behavior change.
+  - [ ] Characterize the current three pass-2/native routing sites: shared-lib
+        accumulates, no-shared-lib writes in place. Assert via
+        `route_drained_project_artifacts` so the test drives the new seam.
+  - [ ] Carry over the 4 existing `flush_site_libs_*` unit tests to the new
+        module + names, unchanged in substance.
+  - [ ] Empty store stays a no-op (no `dir_create`) — guards the dropped early return.
+- [ ] **Phase 2 — Move `enqueue_artifacts`** to `artifact_flush.rs`, drop its
+      per-fn cfg gate, fix its false doc comment. Re-export or update the two
+      `render_to_file.rs` callers.
+- [ ] **Phase 3 — Move + rename `flush_site_libs`** → `flush_project_artifacts`
+      in `artifact_flush.rs`, reimplemented over `enqueue_artifacts` + `debug_assert`.
+      Update `post_render`. Widen the `artifact_flush` module doc to describe the family.
+- [ ] **Phase 4 — bd-gdhk: add `route_drained_project_artifacts`** and convert
+      all three render sites to it.
+- [ ] **Phase 5 — Prose sweep.** The remaining `flush_site_libs` references
+      across 10 files / 3 crates (31 occurrences total). **Match on
+      `flush_site_libs`, never on `site_libs`** — see Risks.
+- [ ] **Phase 6 — Verify.** Full `cargo xtask verify` (**not** `--skip-hub-build`):
+      the function is cross-platform and named in `wasm-quarto-hub-client` and
+      `quarto-system-runtime`, so the WASM leg is in scope. Plus
+      `cargo xtask lint` and a `grep -rn 'flush_site_libs' crates/` that must
+      return empty.
+- [ ] **Phase 7 — PR.** Push to `origin` and open a PR so CI reports. Document
+      the one deliberate behavior change (scope filter) in the PR body.
+- [ ] **Phase 8 — Close out.** `braid close bd-v8gx` and `braid close bd-gdhk`;
+      file the discovered strand below.
 
-### Finding 2 — a near-duplicate exists, and its doc comment is wrong
+Expect **no `docs/` change** — no user-facing symbol here. Confirm and move on.
 
-`crates/quarto-core/src/render_to_file.rs:445` `pub fn enqueue_artifacts` has
-essentially the same body as `flush_site_libs`:
+## Discovered work (to file as its own strand)
 
-|  | `flush_site_libs` | `enqueue_artifacts` |
-| --- | --- | --- |
-| Sink | constructs + flushes its **own** | caller-owned, caller flushes |
-| Scope selection | assumes store is already Project-only | filters on `scope_filter` |
-| Sort | by key | by key |
-| Write | `sink.write(on_disk_path_for(Project, p), …)` | `sink.write(on_disk_path_for(a.scope, p), …)` |
-| cfg | **cross-platform** (WASM needs it) | `#[cfg(not(target_arch = "wasm32"))]` |
+**Empty-content artifacts are skipped on the VFS path but written on the
+`OutputSink` paths.** `flush_artifacts_to_vfs` skips `artifact.content.is_empty()`
+because bd-3gtn established that empty content means "manifest entry"
+(`Artifact::from_path`) whose destination "can alias the user's upload location —
+they must never be written." Neither `flush_site_libs` nor `enqueue_artifacts`
+has that skip; they rely on `OutputSink`'s allowed-roots validation instead.
+For a manifest entry with a *relative* path inside an allowed root, the
+`OutputSink` paths would write 0 bytes over it — the same class of bug bd-cfl67
+fixed. bd-cfl67 removed the producer (`ResourceCollectorTransform` no longer
+emits artifacts), so this may have no live trigger, but `Artifact::from_path`
+still exists and nothing enforces the absence. **File for investigation; do not
+fold into this branch** — it is a behavior question, not cleanup, and this
+branch should stay reviewable as "no behavior change except the documented one."
 
-The native project path does **not** call `flush_site_libs` at all — it calls
-`enqueue_artifacts(&drained, &resolver, Project, &mut sink)`
-(`render_to_file.rs:384`) on the render-wide sink.
+## Risks / tradeoffs
 
-And `enqueue_artifacts`' own doc comment (`render_to_file.rs:436-440`) claims:
-
-> Used by `render_document_to_file` (Page scope, per-doc; Project scope when
-> standalone) and by `WebsiteProjectType::post_render` for project-shared
-> artifacts (via [`crate::project::website_post_render::flush_site_libs`]).
-
-**That last clause is false.** `flush_site_libs` does not call
-`enqueue_artifacts`; it writes to its own sink directly. This is a stale doc
-link that a reader would follow to the wrong conclusion — worth fixing whatever
-we decide about the rename.
-
-### Finding 3 — the rename's real cost is the 31 textual references
-
-`flush_site_libs` occurs **31 times across 10 files**, mostly in prose (design
-comments and intra-doc links), not just at the 3 call sites:
-
-```
-crates/quarto-core/src/project/website_post_render.rs   :14 :34 :81(def) + 543-623 (4 tests, incl. fn names)
-crates/quarto-core/src/project/pass2_renderer.rs        :179 :196 :859 :872 :886 :1123 :1173
-crates/quarto-core/src/project/orchestrator.rs          :289 :341 :372 :373
-crates/quarto-core/src/project/mod.rs                   :36
-crates/quarto-core/src/resource_resolver.rs             :131
-crates/quarto-core/src/render_to_file.rs                :440
-crates/quarto-core/tests/integration/render_page_in_project.rs :19 :62
-crates/quarto-core/tests/integration/listing_pipeline.rs :376
-crates/quarto-system-runtime/src/wasm.rs                :326
-crates/wasm-quarto-hub-client/src/lib.rs                :1755
-```
-
-Two of these are `[`crate::project::website_post_render::flush_site_libs`]`
-**intra-doc links** (`resource_resolver.rs:131`, `render_to_file.rs:440`, plus
-`pass2_renderer.rs:179`). Note that **CI would not catch a stale one**: there is
-no `cargo doc` step in `.github/workflows/`, and `cargo clippy -D warnings`
-does not resolve intra-doc links. Broken links here fail silently. Grep is the
-gate, not the compiler.
-
-Three of the four unit tests carry the name in their **function names**
-(`flush_site_libs_vfs_root_writes_under_vfs_root`,
-`flush_site_libs_empty_store_is_noop`,
-`flush_site_libs_native_website_routes_under_site_libs`); renaming those changes
-nextest filter strings for anyone with muscle memory.
-
-### Not reproducible / not applicable checks
-
-Nothing to reproduce — this is naming hygiene, not a behavior bug. There is no
-fixture to capture, so `claude-notes/plans/2026-07-28-rename-flush-site-libs-investigation/`
-was not created.
-
-## Proposed phases (draft)
-
-Skeleton only — contents wait on the design discussion. **Phase 0 is not a
-TDD-style failing test**: a pure rename has no observable behavior to assert.
-The correctness gate is "the same tests still pass, unchanged in substance."
-If the answer to design question 2 is "also dedupe," Phase 0 becomes real.
-
-- **Phase 0 — Establish the no-behavior-change baseline.** Record the current
-  green `cargo nextest run -p quarto-core` result. If we take the dedupe option,
-  add a test asserting `flush_project_artifacts` and the native
-  `enqueue_artifacts(Project)` path produce identical destinations for the same
-  store + resolver — that one *is* a real new test and should be written first.
-- **Phase 1 — Rename the definition + 3 call sites.** `website_post_render.rs:81`,
-  `orchestrator.rs:372-373`, `pass2_renderer.rs:886` and `:1173`.
-- **Phase 2 — Sweep the prose.** The ~20 remaining comment / intra-doc-link
-  references across the 10 files above, including the 3 test function names.
-  Deliberately a separate phase from Phase 1 so the mechanical-but-wide diff is
-  reviewable on its own.
-- **Phase 3 — Fix the stale doc comment** at `render_to_file.rs:436-440`
-  (Finding 2) regardless of the dedupe decision.
-- **Phase 4 — (conditional on Q2) Dedupe against `enqueue_artifacts`.**
-- **Phase 5 — Verify.** `cargo xtask verify` (full, not `--skip-hub-build`):
-  `wasm-quarto-hub-client` and `quarto-system-runtime` both reference the name,
-  and the function is cross-platform, so the WASM leg is in scope.
-- **Phase 6 — Docs.** Nothing user-facing here; `docs/` does not mention this
-  symbol. Expect no `docs/` change — confirm and move on.
-
-## Open design questions for the user
-
-1. **Name.** The strand proposes `flush_project_artifacts`. That reads well
-   standalone but sits one word away from the existing
-   `enqueue_artifacts(…, ArtifactScope::Project, …)`, so a reader now meets two
-   similarly-named ways to write Project-scope artifacts and has to discover
-   from the bodies that the difference is *sink ownership*. Options:
-   `flush_project_artifacts` as filed (accept the mild collision), or something
-   that encodes the distinction such as `flush_project_artifacts_standalone` /
-   `flush_project_artifacts_own_sink`. Which do you want?
-
-2. **Scope: pure rename, or fold in the dedupe?** Finding 2 says
-   `flush_site_libs` ≈ `enqueue_artifacts` + own sink. We could make the renamed
-   function a three-line wrapper over `enqueue_artifacts`, which would make the
-   name honest by construction. **Blocker if we do:** `enqueue_artifacts` is
-   `#[cfg(not(target_arch = "wasm32"))]` and the renamed function must stay
-   cross-platform, so this requires lifting that cfg gate — no longer "pure
-   naming hygiene," and it eats part of bd-gdhk. Three ways to go:
-   (a) rename only, leave bd-gdhk untouched; (b) rename + fix the stale doc
-   comment, leave the code dedupe to bd-gdhk; (c) rename + dedupe, and close
-   bd-gdhk as absorbed. My recommendation is **(b)** — it fixes the actively
-   misleading thing (a doc link that lies) without smuggling a cfg-gate change
-   into a p4 chore.
-
-3. **Module home.** The renamed function would live in a file called
-   `website_post_render.rs`, whose module doc opens "Post-render hooks for
-   `WebsiteProjectType`" — while two of its three callers are *not* website
-   post-render. `mod.rs:36` and the module header already carry apologetic
-   comments about exactly this. Do we move it (to `project/artifact_flush.rs`,
-   or next to `enqueue_artifacts` in `render_to_file.rs`), or accept that the
-   file name stays a bit wrong and just widen the module doc? A move makes the
-   diff larger but is the change that actually removes the confusion the strand
-   is about.
-
-4. **Where should this land?** We are on `main` @ `581e45c0` in
-   `/Users/cscheid/rooms/room-1/q2` (note: `CLAUDE.local.md` here still
-   describes a bd-eiku4ymo worktree — stale). Per the skill I did not create a
-   branch. Given the width of the prose sweep, a `braid/bd-v8gx-rename-flush-site-libs`
-   branch seems right, but that is your call.
-
-5. **Worth doing at all?** p4, no dependents, 3 months old, and half the stated
-   work (the error message) is already gone. The honest counter-argument is
-   that the diff touches 10 files across 3 crates to change zero behavior, and
-   will conflict with anything else in flight in `pass2_renderer.rs` /
-   `orchestrator.rs`. Is now the time, or should this wait to ride along with
-   bd-gdhk (which has to touch the same functions anyway)? Bundling the two is
-   defensible.
-
-## Risks / tradeoffs (draft)
-
-- **Silent-failure risk on intra-doc links.** As noted in Finding 3, neither
-  clippy nor CI resolves them. If we rename, the completeness check must be
-  `grep -rn 'flush_site_libs' crates/` returning empty — do not rely on the
-  build.
+- **`site_libs` the string vastly outnumbers the symbol.** Measured at
+  `581e45c0`: `crates/**/*.rs` holds **173** occurrences of `site_libs`, of which
+  only **31** are `flush_site_libs`. The other **142 (82%)** name the real
+  output directory (`WebsiteProjectType::lib_dir()` returns `"site_libs"`,
+  `orchestrator.rs:335`) and must not be touched. A naive
+  `sed s/site_libs/project_artifacts/` would corrupt website output paths. The
+  sweep must match the full symbol.
+- **Intra-doc links fail silently.** Three references are
+  `[`crate::project::website_post_render::flush_site_libs`]` rustdoc links.
+  There is **no `cargo doc` step** in `.github/workflows/`, and
+  `cargo clippy -D warnings` does not resolve intra-doc links. Grep is the
+  completeness gate, not the compiler.
+- **One deliberate behavior change**, called out above (scope filter +
+  `debug_assert`). Everything else must be behavior-preserving; the PR body
+  should say so explicitly so review knows where to look.
 - **Merge-conflict surface.** `pass2_renderer.rs` and `orchestrator.rs` are
-  high-traffic files. A pure-rename diff conflicts loudly and resolves tediously.
-  Argues for doing it in one sitting and merging promptly, or for bundling with
-  bd-gdhk.
-- **`site_libs` the *string* stays — and it dominates.**
-  `WebsiteProjectType::lib_dir()` returns `"site_libs"` (`orchestrator.rs:335`)
-  and that is correct: it names a real directory. Measured at `581e45c0`,
-  `crates/**/*.rs` contains **173** occurrences of `site_libs`, of which only
-  **31** are `flush_site_libs`. So **142 occurrences (82%) must be left
-  untouched.** A careless `sed s/site_libs/project_artifacts/` would corrupt
-  output paths across the website pipeline. This is by far the largest risk in
-  an otherwise trivial change; the sweep must match on `flush_site_libs`, never
-  on `site_libs`.
-- **Test-name churn.** Renaming the 3 unit tests is right for consistency but
-  breaks saved nextest filters. Low cost, worth flagging.
-- **Cross-platform blast radius.** The function is cross-platform and named in
-  `wasm-quarto-hub-client` and `quarto-system-runtime`; full
-  `cargo xtask verify` (with the WASM leg) is required, not
-  `--skip-hub-build`.
+  high-traffic. Doing both strands at once is what makes this worth the
+  conflict risk — but it argues for merging promptly rather than letting the
+  branch age.
+- **Test-name churn.** Renaming the 3 `flush_site_libs_*` unit tests breaks
+  saved nextest filters. Low cost, worth flagging.
+- **`render_to_file` re-export question.** `enqueue_artifacts` is `pub` and has
+  only in-crate callers today, but moving a `pub` item is technically a
+  breaking change for any external consumer. Decide in Phase 2 whether to leave
+  a `pub use` behind; leaning no, since `quarto-core` is not published.
