@@ -42,6 +42,9 @@ describe('renderDiagnostics — real WASM', () => {
     expect(err.title).toBe('Unclosed Strong Star Emphasis');
     expect(err.start_line).toBe(5);
     expect(typeof err.start_column).toBe('number');
+    // The ANSI `rendered` snippet is stripped: agents get structured
+    // fields + the file content; escape codes are token noise.
+    expect(Object.keys(err)).not.toContain('rendered');
   }, 60000);
 
   it('reports the unclosed front-matter quote the way QuartoHub does (a warning)', async () => {

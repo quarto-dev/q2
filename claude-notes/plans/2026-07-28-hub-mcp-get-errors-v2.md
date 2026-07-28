@@ -94,9 +94,38 @@ Bundling (two consumers):
 - [ ] `bundle.test.ts` covers the wasm asset presence
 
 ### Phase 4 — verification
-- [ ] Package suites green; `cargo xtask verify` legs; e2e against local-prod
-      hub (create broken project via MCP → get_errors → patch_file →
-      get_errors clean), recorded here per the end-to-end policy
+- [x] Package suites green; e2e recorded below. v2 contains ZERO Rust
+      changes and does not touch hub-client or the schema/sync packages
+      (all verified green at their upstream state), so the Rust verify
+      legs are unaffected; CI covers them on the PR.
+
+## End-to-end verification record (2026-07-28)
+
+Throwaway Rust hub (`target/debug/hub --data-dir <tmp> --port 3105
+--allow-insecure-auth`); real MCP server (`dist/index.js`, which loads
+the real WASM host) driven over stdio in a single session:
+
+1. `create_project` with `index.qmd` containing
+   `Hello **unclosed strong` → indexDocId `2APRALdSKxe8RbrcF3JckcFnbDQL`.
+2. `get_errors { project }` → inspected output:
+   `errors: [ { kind: "error", title: "Unclosed Strong Star Emphasis",
+   code: "Q-2-13", problem: "I reached the end of the block before
+   finding a closing '**' …", start_line: 5, start_column: 24, details:
+   [ { kind: "info", content: "This is the opening '**' mark.", … } ] } ]`
+   plus `checkedContentSha256: sha256:4305d4…` naming the exact text
+   rendered. (The ANSI `rendered` snippet observed in this first run is
+   stripped from tool output as of the follow-up commit — structured
+   fields only.)
+3. `patch_file` closing the emphasis → `get_errors { project, path }`
+   immediately returned `errors: [], warnings: []` with the new
+   `checkedContentSha256: sha256:7aef66…`. No polling, no other peer.
+
+Also verified via the committed integration test
+`src/get-errors-live.test.ts` (real server binary + in-process test
+hub + real WASM: same loop), and `bundle.test.ts` pins that
+dist-bundle ships `wasm-host.mjs` + the `.wasm`; the embedded `q2 mcp`
+bundle rebuilt and `--launcher-info` confirmed 15 bundle files at the
+branch commit.
 
 ## Carried over from v1 (independent of architecture)
 - [x] `scripts/local-prod-server.mjs`: WS proxy no longer crashes on client

@@ -116,13 +116,24 @@ export function renderDiagnostics(
 
     const response = JSON.parse(await host.render_page_in_project(path)) as WasmRenderResponse;
 
+    // Strip fields agents don't need: the ANSI `rendered` snippet is
+    // escape-code noise (they have line/col + the file content), and
+    // `$schema` is wire ceremony.
+    const clean = (d: RenderedDiagnostic): RenderedDiagnostic => {
+      const { rendered: _r, $schema: _s, ...rest } = d as RenderedDiagnostic & {
+        rendered?: string;
+        $schema?: string;
+      };
+      return rest;
+    };
+
     const errors: RenderedDiagnostic[] = [];
     const warnings: RenderedDiagnostic[] = [];
     for (const d of response.diagnostics ?? []) {
-      (d.kind === 'error' ? errors : warnings).push(d);
+      (d.kind === 'error' ? errors : warnings).push(clean(d));
     }
     for (const d of response.warnings ?? []) {
-      warnings.push(d);
+      warnings.push(clean(d));
     }
 
     const pass1Failures: SiblingFailure[] = [];
@@ -133,7 +144,7 @@ export function renderDiagnostics(
         path: sibling,
         errors:
           failure.diagnostics.length > 0
-            ? failure.diagnostics
+            ? failure.diagnostics.map(clean)
             : [{ kind: 'error', title: failure.error, hints: [], details: [] }],
       });
     }
