@@ -18,8 +18,6 @@
 
 mod artifact;
 mod project;
-mod prompter;
-mod writer;
 
 use std::io::Read;
 use std::path::Path;
@@ -29,8 +27,10 @@ use quarto_error_reporting::{DiagnosticMessage, diagnostic_to_json};
 use quarto_source_map::SourceContext;
 use serde::Serialize;
 
-use artifact::{ArtifactProvider, ChoiceListing, CreateFailure, CreatePlan};
-use writer::{ExecutedFile, FileAction};
+use crate::commands::common::plan::{CommandFailure, FilePlan};
+use crate::commands::common::prompter;
+use crate::commands::common::writer::{self, ExecutedFile, FileAction};
+use artifact::{ArtifactProvider, ChoiceListing};
 
 pub fn execute(
     type_: Option<String>,
@@ -73,7 +73,7 @@ fn allow_prompt(no_prompt: bool) -> bool {
 fn select_artifact<'a>(
     providers: &'a [Box<dyn ArtifactProvider>],
     prompter: &mut dyn prompter::Prompter,
-) -> Result<&'a dyn ArtifactProvider, CreateFailure> {
+) -> Result<&'a dyn ArtifactProvider, CommandFailure> {
     let items: Vec<prompter::PromptItem> = providers
         .iter()
         .map(|p| prompter::PromptItem {
@@ -109,7 +109,7 @@ fn run_human(
         Some(type_id) => match artifact::find_provider(providers, type_id) {
             Some(p) => p,
             None => fail_human(
-                &CreateFailure::new(
+                &CommandFailure::new(
                     format!("Unknown artifact type '{type_id}'"),
                     format!("Valid types: {}", artifact::type_ids(providers)),
                 )
@@ -121,7 +121,7 @@ fn run_human(
             Err(f) => fail_human(&f.0),
         },
         None => fail_human(
-            &CreateFailure::new(
+            &CommandFailure::new(
                 "Missing artifact type",
                 format!(
                     "Valid types: {}. Usage: q2 create <type> ... (or q2 create --list)",
@@ -151,7 +151,7 @@ fn run_human(
     print_human_result(&resolved.plan, &files);
 }
 
-fn print_human_result(plan: &CreatePlan, files: &[ExecutedFile]) {
+fn print_human_result(plan: &FilePlan, files: &[ExecutedFile]) {
     if plan.dry_run {
         println!("(dry run) would create project in {}:", plan.root_display);
     } else {
@@ -220,7 +220,7 @@ fn run_json(
 ) {
     if type_.is_some() || !args.is_empty() {
         fail_json(
-            &CreateFailure::new(
+            &CommandFailure::new(
                 "Cannot combine --json with positional arguments",
                 "Pass the create directive as a JSON object on stdin instead",
             )
@@ -230,17 +230,17 @@ fn run_json(
 
     let mut input = String::new();
     if let Err(e) = std::io::stdin().read_to_string(&mut input) {
-        fail_json(&CreateFailure::new("Failed to read stdin", e.to_string()).0);
+        fail_json(&CommandFailure::new("Failed to read stdin", e.to_string()).0);
     }
     let value: serde_json::Value = match serde_json::from_str(input.trim()) {
         Ok(v) => v,
         Err(e) => {
-            fail_json(&CreateFailure::new("Invalid JSON directive on stdin", e.to_string()).0)
+            fail_json(&CommandFailure::new("Invalid JSON directive on stdin", e.to_string()).0)
         }
     };
     let serde_json::Value::Object(mut obj) = value else {
         fail_json(
-            &CreateFailure::new(
+            &CommandFailure::new(
                 "Invalid create directive",
                 "The directive must be a JSON object",
             )
@@ -253,7 +253,7 @@ fn run_json(
     let artifact_tag = match obj.remove("artifact") {
         Some(serde_json::Value::String(s)) => s,
         _ => fail_json(
-            &CreateFailure::new(
+            &CommandFailure::new(
                 "Invalid create directive",
                 format!(
                     "A string \"artifact\" field is required. Valid types: {}",
@@ -265,7 +265,7 @@ fn run_json(
     };
     let Some(provider) = artifact::find_provider(providers, &artifact_tag) else {
         fail_json(
-            &CreateFailure::new(
+            &CommandFailure::new(
                 format!("Unknown artifact type '{artifact_tag}'"),
                 format!("Valid types: {}", artifact::type_ids(providers)),
             )
@@ -302,7 +302,7 @@ fn run_json(
         Err(e) => {
             // Should be impossible for these derived shapes; keep
             // stdout clean and fail loudly on stderr.
-            fail_json(&CreateFailure::new("Failed to serialize result", e.to_string()).0);
+            fail_json(&CommandFailure::new("Failed to serialize result", e.to_string()).0);
         }
     }
 }
@@ -341,7 +341,7 @@ fn run_list(providers: &[Box<dyn ArtifactProvider>], json: bool) {
         match serde_json::to_string(&listing) {
             Ok(line) => println!("{line}"),
             Err(e) => {
-                fail_json(&CreateFailure::new("Failed to serialize listing", e.to_string()).0)
+                fail_json(&CommandFailure::new("Failed to serialize listing", e.to_string()).0)
             }
         }
         return;
@@ -377,10 +377,11 @@ fn run_list(providers: &[Box<dyn ArtifactProvider>], json: bool) {
 mod interactive_tests {
     use std::path::Path;
 
-    use super::artifact::{ArtifactProvider, CreateFailure, CreatePlan, FileContent};
+    use super::artifact::ArtifactProvider;
     use super::project::ProjectProvider;
-    use super::prompter::{PromptItem, Prompter};
     use super::select_artifact;
+    use crate::commands::common::plan::{CommandFailure, FileContent, FilePlan};
+    use crate::commands::common::prompter::{PromptItem, Prompter};
 
     /// Scripted prompter: queued answers plus a transcript of every
     /// prompt shown, so tests assert both the answers' effect and
@@ -416,22 +417,22 @@ mod interactive_tests {
     }
 
     impl Prompter for ScriptedPrompter {
-        fn select(&mut self, prompt: &str, items: &[PromptItem]) -> Result<usize, CreateFailure> {
+        fn select(&mut self, prompt: &str, items: &[PromptItem]) -> Result<usize, CommandFailure> {
             let idx = self.prompt_count;
             self.prompt_count += 1;
             if self.cancel_at == Some(idx) {
-                return Err(CreateFailure::cancelled());
+                return Err(CommandFailure::cancelled());
             }
             self.transcript.push(format!("select:{prompt}"));
             self.select_items.push(items.to_vec());
             Ok(self.select_answers.remove(0))
         }
 
-        fn input(&mut self, prompt: &str, default: Option<&str>) -> Result<String, CreateFailure> {
+        fn input(&mut self, prompt: &str, default: Option<&str>) -> Result<String, CommandFailure> {
             let idx = self.prompt_count;
             self.prompt_count += 1;
             if self.cancel_at == Some(idx) {
-                return Err(CreateFailure::cancelled());
+                return Err(CommandFailure::cancelled());
             }
             self.transcript.push(format!("input:{prompt}"));
             self.input_defaults.push(default.map(str::to_string));
@@ -442,13 +443,17 @@ mod interactive_tests {
                     .to_string()),
             }
         }
+
+        fn confirm(&mut self, _prompt: &str, _default: bool) -> Result<bool, CommandFailure> {
+            unreachable!("q2 create shows no confirmation prompt")
+        }
     }
 
     fn args(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
     }
 
-    fn quarto_yml(plan: &CreatePlan) -> &str {
+    fn quarto_yml(plan: &FilePlan) -> &str {
         plan.files
             .iter()
             .find_map(|f| match &f.content {

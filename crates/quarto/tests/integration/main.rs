@@ -14,6 +14,7 @@ pub mod revealjs_cli;
 pub mod smoke_all;
 pub mod strict_mode;
 pub mod trace_cli;
+pub mod use_brand;
 pub mod version_cli;
 
 fn main() {}
