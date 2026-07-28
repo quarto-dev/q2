@@ -126,8 +126,32 @@ fn build_csp(config: &auth::AuthConfig) -> String {
     )
 }
 
-/// Cookie name for the hub authentication token.
-const AUTH_COOKIE_NAME: &str = "quarto_hub_token";
+/// Cookie name for the hub authentication token in secure (TLS) mode.
+///
+/// The `__Host-` prefix is a browser-enforced binding: a cookie with
+/// this name is only accepted if it carries `Secure`, `Path=/`, and
+/// **no** `Domain`. That makes it un-tossable — a sibling subdomain
+/// (`evil.example.com` setting `Domain=example.com`) cannot plant one,
+/// which is the session-fixation vector the bare name leaves open (H3).
+const AUTH_COOKIE_NAME_SECURE: &str = "__Host-quarto_hub_token";
+
+/// Cookie name under `--allow-insecure-auth`, and the pre-H3 name
+/// everywhere. `__Host-` *requires* `Secure`, which requires TLS, so
+/// plain-HTTP dev mode cannot use the prefixed form.
+const AUTH_COOKIE_NAME_LEGACY: &str = "quarto_hub_token";
+
+/// The session-cookie name for the current TLS mode.
+///
+/// Mint, extract, clear, and the sliding-re-issue layer all resolve the
+/// name through here, so the two modes can never disagree about which
+/// cookie is the credential.
+fn auth_cookie_name(secure: bool) -> &'static str {
+    if secure {
+        AUTH_COOKIE_NAME_SECURE
+    } else {
+        AUTH_COOKIE_NAME_LEGACY
+    }
+}
 
 /// JSON error body for auth failures, so clients can distinguish
 /// 401 auth errors from other HTTP errors programmatically.
@@ -206,10 +230,14 @@ pub enum CredentialError {
 /// checks: a request that smuggles a stolen Bearer with a same-origin
 /// cookie must not be silently routed through one credential path or
 /// the other.
+///
+/// `secure` selects which cookie name counts as the credential — see
+/// [`auth_cookie_name`]. Callers pass `!ctx.allow_insecure_auth()`.
 pub fn extract_credential(
     headers: &HeaderMap,
+    secure: bool,
 ) -> std::result::Result<Option<Credential>, CredentialError> {
-    let cookie = cookie_token(headers);
+    let cookie = cookie_token(headers, secure);
     let auth_header = headers.get(http::header::AUTHORIZATION);
 
     let bearer = match auth_header {
@@ -266,12 +294,20 @@ fn conflicting_credentials() -> (StatusCode, Json<serde_json::Value>) {
 /// Uses the `cookie` crate parser for RFC 6265 compliance (handles
 /// quoted values and other edge cases). Returns `None` if the cookie
 /// is absent, the header is not valid UTF-8, or the value is empty.
-fn cookie_token(headers: &HeaderMap) -> Option<String> {
+///
+/// Only the name for the current mode is honoured. In secure mode a
+/// token presented under the legacy (unprefixed) name is **not** a
+/// credential: accepting both would forfeit the `__Host-` guarantee,
+/// since a subdomain-tossed unprefixed cookie would still authenticate.
+/// Sessions minted before the H3 rollout therefore die once, and the
+/// user re-logs-in.
+fn cookie_token(headers: &HeaderMap, secure: bool) -> Option<String> {
+    let name = auth_cookie_name(secure);
     let cookies = headers.get("cookie")?.to_str().ok()?;
     cookies
         .split(';')
         .filter_map(|s| cookie::Cookie::parse(s.trim()).ok())
-        .find(|c| c.name() == AUTH_COOKIE_NAME)
+        .find(|c| c.name() == name)
         .map(|c| c.value().to_owned())
         .filter(|v| !v.is_empty())
 }
@@ -296,7 +332,7 @@ fn build_auth_cookie(token: &str, secure: bool, max_age_secs: i64) -> String {
              (4096 byte limit including cookie metadata)"
         );
     }
-    let mut builder = cookie::Cookie::build((AUTH_COOKIE_NAME, token))
+    let mut builder = cookie::Cookie::build((auth_cookie_name(secure), token))
         .http_only(true)
         .same_site(SameSite::Lax)
         .path("/")
@@ -312,11 +348,16 @@ fn build_auth_cookie(token: &str, secure: bool, max_age_secs: i64) -> String {
 /// claims, `auth_time = now` — bumped to the revocation ledger's
 /// re-login floor when one exists, so a login in the same second as a
 /// logout-everywhere doesn't die with the revoked family (clocks are
-/// second-granular). Returns the full `Set-Cookie` value.
+/// second-granular).
+///
+/// Returns every `Set-Cookie` value the login response must carry: the
+/// session cookie, plus — in secure mode — a clear for the pre-H3
+/// unprefixed name. Callers **append** these (a login sets more than
+/// one cookie).
 async fn mint_session_cookie(
     ctx: &HubContext,
     claims: &auth::OidcClaims,
-) -> std::result::Result<String, jsonwebtoken::errors::Error> {
+) -> std::result::Result<Vec<String>, jsonwebtoken::errors::Error> {
     let now = crate::session::unix_now();
     let lifetimes = ctx.session_lifetimes();
     let identity = crate::session::SessionIdentity::from_oidc(claims);
@@ -328,16 +369,61 @@ async fn mint_session_cookie(
     let token =
         crate::session::mint_session_at(ctx.session_keys(), lifetimes, &identity, now, auth_time)?;
     let max_age = lifetimes.expiry(now, auth_time) - now;
-    Ok(build_auth_cookie(
-        &token,
-        !ctx.allow_insecure_auth(),
-        max_age,
-    ))
+    let secure = !ctx.allow_insecure_auth();
+
+    let mut cookies = vec![build_auth_cookie(&token, secure, max_age)];
+    if secure {
+        cookies.push(build_clear_legacy_cookie());
+    }
+    Ok(cookies)
+}
+
+/// Attach `Set-Cookie` values to a response, appending so multiple
+/// cookies survive (`insert` would keep only the last).
+fn attach_cookies(response: &mut axum::response::Response, cookies: &[String]) {
+    for cookie in cookies {
+        match cookie.parse() {
+            Ok(value) => {
+                response
+                    .headers_mut()
+                    .append(http::header::SET_COOKIE, value);
+            }
+            Err(err) => {
+                // Cookie values are built by the `cookie` crate from
+                // hub-minted tokens, so this is unreachable short of a
+                // bug — log rather than drop silently.
+                tracing::error!(error = %err, "failed to encode Set-Cookie header");
+            }
+        }
+    }
 }
 
 /// Build a `Set-Cookie` header value that clears the auth cookie.
-fn build_clear_cookie() -> String {
-    cookie::Cookie::build((AUTH_COOKIE_NAME, ""))
+///
+/// Clearing a `__Host-` cookie requires re-stating the attributes the
+/// prefix demands, or the browser rejects the clear and the cookie
+/// survives — hence `Secure`/`Path=/` in secure mode.
+fn build_clear_cookie(secure: bool) -> String {
+    let mut builder = cookie::Cookie::build((auth_cookie_name(secure), ""))
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .path("/")
+        .max_age(time::Duration::ZERO);
+    if secure {
+        builder = builder.secure(true);
+    }
+    builder.build().to_string()
+}
+
+/// Build a `Set-Cookie` that clears the *pre-H3* unprefixed cookie.
+///
+/// Emitted alongside a secure-mode login mint so a session predating
+/// the `__Host-` rollout doesn't linger in the jar — it is no longer a
+/// credential (see [`cookie_token`]), just dead weight the user can't
+/// remove themselves. Never emitted in insecure mode, where this *is*
+/// the live cookie name.
+fn build_clear_legacy_cookie() -> String {
+    cookie::Cookie::build((AUTH_COOKIE_NAME_LEGACY, ""))
         .http_only(true)
         .same_site(SameSite::Lax)
         .path("/")
@@ -439,7 +525,7 @@ where
         state: &S,
     ) -> std::result::Result<Self, Self::Rejection> {
         let ctx = SharedContext::from_ref(state);
-        let credential = match extract_credential(&parts.headers) {
+        let credential = match extract_credential(&parts.headers, !ctx.allow_insecure_auth()) {
             Ok(c) => c,
             Err(CredentialError::Conflicting) => {
                 return Err(conflicting_credentials());
@@ -762,17 +848,15 @@ async fn auth_callback(
         return Redirect::to("/?auth_error").into_response();
     }
 
-    let cookie = match mint_session_cookie(&ctx, &claims).await {
-        Ok(cookie) => cookie,
+    let cookies = match mint_session_cookie(&ctx, &claims).await {
+        Ok(cookies) => cookies,
         Err(err) => {
             tracing::error!(error = %err, "failed to mint session token");
             return Redirect::to("/?auth_error").into_response();
         }
     };
     let mut response = Redirect::to("/").into_response();
-    response
-        .headers_mut()
-        .insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+    attach_cookies(&mut response, &cookies);
     response
 }
 
@@ -813,7 +897,7 @@ async fn authenticate_request(
     ctx: &HubContext,
     headers: &HeaderMap,
 ) -> std::result::Result<crate::context::AuthenticatedUser, (StatusCode, Json<serde_json::Value>)> {
-    let credential = match extract_credential(headers) {
+    let credential = match extract_credential(headers, !ctx.allow_insecure_auth()) {
         Ok(Some(c)) => c,
         Ok(None) => return Err(unauthorized()),
         Err(CredentialError::Conflicting) => return Err(conflicting_credentials()),
@@ -893,6 +977,7 @@ async fn auth_actor(
 /// them, kept symmetric for tooling.
 async fn auth_logout(
     auth: Authenticated,
+    State(ctx): State<SharedContext>,
     headers: HeaderMap,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     if auth.credential_kind == CredentialKind::Cookie {
@@ -900,7 +985,7 @@ async fn auth_logout(
             .map_err(|s| (s, Json(serde_json::json!({"error": "csrf check failed"}))))?;
     }
 
-    let cookie = build_clear_cookie();
+    let cookie = build_clear_cookie(!ctx.allow_insecure_auth());
     let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
     response
         .headers_mut()
@@ -923,7 +1008,7 @@ async fn auth_logout_everywhere(
     headers: HeaderMap,
     State(ctx): State<SharedContext>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let credential = match extract_credential(&headers) {
+    let credential = match extract_credential(&headers, !ctx.allow_insecure_auth()) {
         Ok(Some(c)) => c,
         Ok(None) => return Err(unauthorized()),
         Err(CredentialError::Conflicting) => return Err(conflicting_credentials()),
@@ -974,7 +1059,7 @@ async fn auth_logout_everywhere(
         sub = %verified.claims.sub,
     );
 
-    let cookie = build_clear_cookie();
+    let cookie = build_clear_cookie(!ctx.allow_insecure_auth());
     let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
     response
         .headers_mut()
@@ -1009,7 +1094,7 @@ async fn auth_session(
     // `Authenticated` extractor. Without this, a request carrying both
     // a cookie and a Bearer would bypass the conflicting-credentials
     // rule on this endpoint (the cookie path runs without `Authenticated`).
-    let bearer_present = match extract_credential(&headers) {
+    let bearer_present = match extract_credential(&headers, !ctx.allow_insecure_auth()) {
         Ok(Some(c)) => matches!(c.kind(), CredentialKind::Bearer),
         Ok(None) => false,
         Err(CredentialError::Conflicting) => return Err(conflicting_credentials()),
@@ -1049,7 +1134,7 @@ async fn auth_session(
         ));
     }
 
-    let cookie = mint_session_cookie(&ctx, &claims).await.map_err(|err| {
+    let cookies = mint_session_cookie(&ctx, &claims).await.map_err(|err| {
         tracing::error!(error = %err, "failed to mint session token");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1057,9 +1142,7 @@ async fn auth_session(
         )
     })?;
     let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
-    response
-        .headers_mut()
-        .insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+    attach_cookies(&mut response, &cookies);
     Ok(response)
 }
 
@@ -1088,7 +1171,7 @@ async fn session_reissue_layer(
     // attached (a Bearer/MCP or dual-credential request must never
     // slide the window).
     let token = if request.headers().get(http::header::AUTHORIZATION).is_none() {
-        cookie_token(request.headers())
+        cookie_token(request.headers(), !ctx.allow_insecure_auth())
     } else {
         None
     };
@@ -1166,7 +1249,7 @@ async fn ws_handler(
     ws: WebSocketUpgrade,
 ) -> axum::response::Response {
     let email = if ctx.auth_config().is_some() {
-        let credential = match extract_credential(&headers) {
+        let credential = match extract_credential(&headers, !ctx.allow_insecure_auth()) {
             Ok(c) => c,
             Err(CredentialError::Conflicting) => {
                 return conflicting_credentials().into_response();
@@ -1760,7 +1843,7 @@ mod tests {
     #[test]
     fn cookie_token_extracts_value() {
         let h = headers_with(&[("cookie", "quarto_hub_token=abc123")]);
-        assert_eq!(cookie_token(&h).as_deref(), Some("abc123"));
+        assert_eq!(cookie_token(&h, false).as_deref(), Some("abc123"));
     }
 
     #[test]
@@ -1769,32 +1852,66 @@ mod tests {
             "cookie",
             "other=x; quarto_hub_token=jwt.value.here; third=y",
         )]);
-        assert_eq!(cookie_token(&h).as_deref(), Some("jwt.value.here"));
+        assert_eq!(cookie_token(&h, false).as_deref(), Some("jwt.value.here"));
     }
 
     #[test]
     fn cookie_token_missing() {
         let h = headers_with(&[("cookie", "other=x; another=y")]);
-        assert_eq!(cookie_token(&h), None);
+        assert_eq!(cookie_token(&h, false), None);
     }
 
     #[test]
     fn cookie_token_no_cookie_header() {
         let h = HeaderMap::new();
-        assert_eq!(cookie_token(&h), None);
+        assert_eq!(cookie_token(&h, false), None);
     }
 
     #[test]
     fn cookie_token_empty_value() {
         let h = headers_with(&[("cookie", "quarto_hub_token=")]);
-        assert_eq!(cookie_token(&h), None);
+        assert_eq!(cookie_token(&h, false), None);
     }
 
     #[test]
     fn cookie_token_prefix_mismatch() {
         // "quarto_hub_token_v2" should NOT match "quarto_hub_token"
         let h = headers_with(&[("cookie", "quarto_hub_token_v2=abc")]);
-        assert_eq!(cookie_token(&h), None);
+        assert_eq!(cookie_token(&h, false), None);
+    }
+
+    // ── H3: mode-aware cookie name ────────────────────────────────
+
+    #[test]
+    fn cookie_token_secure_mode_reads_host_prefixed_name() {
+        let h = headers_with(&[("cookie", "__Host-quarto_hub_token=abc123")]);
+        assert_eq!(cookie_token(&h, true).as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn cookie_token_secure_mode_ignores_legacy_name() {
+        // Accepting the unprefixed name in secure mode would forfeit the
+        // whole point of `__Host-`: a subdomain-tossed cookie would
+        // still authenticate.
+        let h = headers_with(&[("cookie", "quarto_hub_token=abc123")]);
+        assert_eq!(cookie_token(&h, true), None);
+    }
+
+    #[test]
+    fn cookie_token_insecure_mode_ignores_host_prefixed_name() {
+        let h = headers_with(&[("cookie", "__Host-quarto_hub_token=abc123")]);
+        assert_eq!(cookie_token(&h, false), None);
+    }
+
+    #[test]
+    fn cookie_token_secure_mode_picks_prefixed_among_both() {
+        // Transitional jar: a stale legacy cookie sitting next to the
+        // live prefixed one must not shadow it.
+        let h = headers_with(&[(
+            "cookie",
+            "quarto_hub_token=stale; __Host-quarto_hub_token=live",
+        )]);
+        assert_eq!(cookie_token(&h, true).as_deref(), Some("live"));
     }
 
     // ── build_auth_cookie ─────────────────────────────────────────
@@ -1802,12 +1919,14 @@ mod tests {
     #[test]
     fn build_auth_cookie_secure() {
         let cookie = build_auth_cookie("mytoken", true, 3600);
-        assert!(cookie.starts_with("quarto_hub_token=mytoken;"));
+        assert!(cookie.starts_with("__Host-quarto_hub_token=mytoken;"));
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.contains("Secure"));
         assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("Path=/"));
         assert!(cookie.contains("Max-Age=3600"));
+        // `__Host-` is only honoured without a Domain attribute.
+        assert!(!cookie.contains("Domain"));
     }
 
     #[test]
@@ -1830,10 +1949,29 @@ mod tests {
 
     #[test]
     fn build_clear_cookie_has_zero_max_age() {
-        let cookie = build_clear_cookie();
+        let cookie = build_clear_cookie(false);
         assert!(cookie.contains("Max-Age=0"));
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.starts_with("quarto_hub_token=;"));
+    }
+
+    #[test]
+    fn build_clear_cookie_secure_restates_host_prefix_attributes() {
+        // A clear for a `__Host-` cookie is itself subject to the
+        // prefix rules — drop `Secure`/`Path=/` and the browser
+        // rejects the clear, leaving the cookie in place.
+        let cookie = build_clear_cookie(true);
+        assert!(cookie.starts_with("__Host-quarto_hub_token=;"));
+        assert!(cookie.contains("Max-Age=0"));
+        assert!(cookie.contains("Secure"));
+        assert!(cookie.contains("Path=/"));
+    }
+
+    #[test]
+    fn build_clear_legacy_cookie_targets_unprefixed_name() {
+        let cookie = build_clear_legacy_cookie();
+        assert!(cookie.starts_with("quarto_hub_token=;"));
+        assert!(cookie.contains("Max-Age=0"));
     }
 
     // ── check_csrf ────────────────────────────────────────────────

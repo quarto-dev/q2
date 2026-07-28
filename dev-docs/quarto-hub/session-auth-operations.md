@@ -7,8 +7,9 @@ Operational reference for the hub's server-minted sliding sessions
 ## The session model in one paragraph
 
 The hub validates a user's Google ID token **once** at login, then
-mints its own compact HS256 session token into the `quarto_hub_token`
-HttpOnly cookie (~400 bytes). The session **slides**: authenticated
+mints its own compact HS256 session token into an HttpOnly session
+cookie (~400 bytes) — named `__Host-quarto_hub_token` under TLS, or
+`quarto_hub_token` in insecure dev mode. The session **slides**: authenticated
 HTTP activity re-issues the cookie (at most ~1/hour), up to an **idle
 timeout** (default 7 days) and an **absolute lifetime cap** (default
 30 days, anchored at login — re-issue can never extend past it). The
@@ -37,9 +38,15 @@ Notes:
 - **Multi-instance:** hubs sharing `QUARTO_HUB_SESSION_SECRET` via env
   accept each other's session cookies. Per-hub auto-generated secrets
   give per-instance isolation.
-- Serve the hub from an origin with **no untrusted sibling
-  subdomains** (cookie-planting residual until a `__Host-` cookie-name
-  upgrade; see plan §6).
+- **Cookie name is TLS-mode dependent** (H3, `bd-gt2hhrcg`): secure
+  deployments use `__Host-quarto_hub_token`; only
+  `--allow-insecure-auth` uses the bare `quarto_hub_token` (the
+  `__Host-` prefix requires `Secure`, which requires TLS). The prefix
+  is browser-enforced — a sibling subdomain cannot plant one — which
+  closes the cookie-planting residual previously called out here. In
+  secure mode the bare name is **not** accepted as a credential, so the
+  H3 rollout invalidates outstanding sessions once (users re-log-in);
+  a login also emits a clear for the bare name so it doesn't linger.
 
 ## Rotating the session secret
 

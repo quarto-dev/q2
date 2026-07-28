@@ -20,8 +20,8 @@ use quarto_hub::session::{
 };
 
 use crate::support::{
-    ClaimsBuilder, MockOidcProvider, TEST_SESSION_SECRET, TestHub, TestHubBuilder,
-    install_tracing_once, snapshot_events,
+    AUTH_COOKIE_NAME_LEGACY, AUTH_COOKIE_NAME_SECURE, ClaimsBuilder, MockOidcProvider,
+    TEST_SESSION_SECRET, TestHub, TestHubBuilder, install_tracing_once, snapshot_events,
 };
 
 // ── fixtures ──────────────────────────────────────────────────────
@@ -95,7 +95,32 @@ fn mint_test_session(sub: &str, email: &str) -> String {
 }
 
 fn cookie_header(token: &str) -> String {
-    format!("quarto_hub_token={token}")
+    format!("{AUTH_COOKIE_NAME_LEGACY}={token}")
+}
+
+/// Cookie header a browser would send to a **secure-mode** hub, where
+/// the session cookie carries the `__Host-` prefix (H3).
+fn secure_cookie_header(token: &str) -> String {
+    format!("{AUTH_COOKIE_NAME_SECURE}={token}")
+}
+
+/// Secure-mode Generic hub with the known session secret. Secure mode
+/// is what puts the `__Host-` prefix on the session cookie.
+async fn secure_session_setup() -> &'static (MockOidcProvider, TestHub) {
+    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
+        tokio::sync::OnceCell::const_new();
+    SETUP
+        .get_or_init(|| async {
+            install_tracing_once();
+            let provider = MockOidcProvider::start().await;
+            let hub = TestHubBuilder::new()
+                .secure()
+                .session_secret(TEST_SESSION_SECRET)
+                .start(&provider)
+                .await;
+            (provider, hub)
+        })
+        .await
 }
 
 // ── C2: session cookie accepted on the central path ───────────────
@@ -531,6 +556,139 @@ async fn auth_session_mints_session_cookie() {
     assert!(attrs.contains("SameSite=Lax"));
     assert!(attrs.contains("Path=/"));
     assert!(attrs.contains(&format!("Max-Age={}", lt.idle_secs)));
+}
+
+// ── H3: `__Host-` prefix on the session cookie ─────────────────────
+
+/// Secure-mode mint uses the `__Host-`-prefixed name with the exact
+/// attributes the prefix requires: `Secure`, `Path=/`, and **no**
+/// `Domain`. The prefix is what makes a sibling subdomain unable to
+/// toss a cookie into this host's jar (bd-gt2hhrcg).
+#[tokio::test]
+async fn secure_mint_sets_host_prefixed_cookie() {
+    let (provider, hub) = secure_session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("host-prefix-sub")
+            .email("hostpfx@posit.co")
+            .to_value(),
+    );
+
+    let resp = hub
+        .client
+        .post(hub.url("/auth/session"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": google }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    let (value, attrs) = TestHub::find_set_cookie(&resp, AUTH_COOKIE_NAME_SECURE)
+        .expect("__Host- prefixed session cookie set");
+    // A real hub session token, not the submitted Google JWT.
+    verify_session(
+        &test_keys(),
+        SessionLifetimes::default(),
+        &value,
+        epoch_now(),
+    )
+    .unwrap();
+
+    assert!(attrs.contains("Secure"), "__Host- requires Secure: {attrs}");
+    assert!(attrs.contains("Path=/"), "__Host- requires Path=/: {attrs}");
+    assert!(attrs.contains("HttpOnly"));
+    assert!(!attrs.contains("Domain"), "__Host- forbids Domain: {attrs}");
+}
+
+/// In secure mode the prefixed name is the credential and the legacy
+/// name is not. Accepting both would defeat the prefix: an attacker who
+/// can set cookies on a sibling subdomain could still pin a victim to a
+/// session of their choosing.
+#[tokio::test]
+async fn secure_hub_accepts_prefixed_name_and_ignores_legacy() {
+    let (_provider, hub) = secure_session_setup().await;
+    let token = mint_test_session("host-accept-sub", "user@posit.co");
+
+    let resp = hub
+        .get_health()
+        .header("cookie", secure_cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200, "__Host- name authenticates");
+
+    // Byte-identical token under the pre-H3 name: not a credential.
+    let resp = hub
+        .get_health()
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        401,
+        "legacy cookie name must not authenticate in secure mode"
+    );
+}
+
+/// Rollout hygiene: a secure-mode login clears any lingering
+/// legacy-name cookie so it cannot sit in the jar unused.
+#[tokio::test]
+async fn secure_mint_clears_legacy_cookie_name() {
+    let (provider, hub) = secure_session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("legacy-clear-sub")
+            .to_value(),
+    );
+
+    let resp = hub
+        .client
+        .post(hub.url("/auth/session"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": google }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    let (value, attrs) = TestHub::find_set_cookie(&resp, AUTH_COOKIE_NAME_LEGACY)
+        .expect("legacy-name clear emitted on login");
+    assert_eq!(value, "", "legacy cookie is cleared, not set");
+    assert!(attrs.contains("Max-Age=0"), "{attrs}");
+}
+
+/// `--allow-insecure-auth` has no TLS, and `__Host-` *requires*
+/// `Secure` — so insecure mode keeps the bare name and must not emit a
+/// clear for it (that would delete the live session).
+#[tokio::test]
+async fn insecure_hub_keeps_unprefixed_cookie_name() {
+    let (provider, hub) = session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("insecure-name-sub")
+            .to_value(),
+    );
+
+    let resp = hub
+        .client
+        .post(hub.url("/auth/session"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": google }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    assert!(
+        TestHub::find_set_cookie(&resp, AUTH_COOKIE_NAME_SECURE).is_none(),
+        "insecure mode cannot use __Host- (it requires Secure)"
+    );
+    let (value, attrs) = TestHub::find_set_cookie(&resp, AUTH_COOKIE_NAME_LEGACY)
+        .expect("bare-name session cookie set");
+    assert!(!value.is_empty(), "must be the session token, not a clear");
+    assert!(!attrs.contains("Secure"));
 }
 
 // ── H1: /auth/session is the Generic provider's endpoint only ─────
@@ -1012,20 +1170,7 @@ async fn non_allowlisted_old_session_not_reissued() {
 
 #[tokio::test]
 async fn reissue_preserves_secure_flag_on_secure_hub() {
-    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
-        tokio::sync::OnceCell::const_new();
-    let (_provider, hub) = SETUP
-        .get_or_init(|| async {
-            install_tracing_once();
-            let provider = MockOidcProvider::start().await;
-            let hub = TestHubBuilder::new()
-                .secure()
-                .session_secret(TEST_SESSION_SECRET)
-                .start(&provider)
-                .await;
-            (provider, hub)
-        })
-        .await;
+    let (_provider, hub) = secure_session_setup().await;
 
     let lt = SessionLifetimes::default();
     let token = mint_session(
@@ -1038,13 +1183,16 @@ async fn reissue_preserves_secure_flag_on_secure_hub() {
 
     let resp = hub
         .get_health()
-        .header("cookie", cookie_header(&token))
+        .header("cookie", secure_cookie_header(&token))
         .send()
         .await
         .unwrap();
     assert_eq!(resp.status(), 200);
     let (_, attrs) = TestHub::set_auth_cookie(&resp).expect("re-issued cookie");
     assert!(attrs.contains("Secure"), "Secure preserved on re-issue");
+    // Re-issue routes through the same name helper as mint, so the
+    // sliding cookie keeps the `__Host-` prefix (H3).
+    assert!(attrs.starts_with(&format!("{AUTH_COOKIE_NAME_SECURE}=")));
 }
 
 #[tokio::test]

@@ -317,6 +317,14 @@ impl ClaimsBuilder {
 /// hub accept them.
 pub const TEST_SESSION_SECRET: [u8; 32] = [0x42; 32];
 
+/// Session-cookie name in secure (TLS) mode — `__Host-` prefixed (H3).
+pub const AUTH_COOKIE_NAME_SECURE: &str = "__Host-quarto_hub_token";
+
+/// Session-cookie name under `--allow-insecure-auth`, and the
+/// pre-H3 name everywhere. `__Host-` requires `Secure`, which requires
+/// TLS, so insecure mode cannot use the prefixed form.
+pub const AUTH_COOKIE_NAME_LEGACY: &str = "quarto_hub_token";
+
 pub struct TestHub {
     pub base_url: String,
     pub client: reqwest::Client,
@@ -547,18 +555,31 @@ impl TestHub {
         self.client.post(self.url("/auth/logout"))
     }
 
-    /// Extract the `quarto_hub_token` value from a response's
-    /// `Set-Cookie` headers, plus the full attribute string.
-    /// Returns `None` when no auth cookie was set.
+    /// Extract the session-cookie value from a response's `Set-Cookie`
+    /// headers, plus the full attribute string. Returns `None` when no
+    /// auth cookie was set.
+    ///
+    /// The hub's cookie name is mode-dependent (H3): `__Host-`-prefixed
+    /// under TLS, bare under `--allow-insecure-auth`. The prefixed name
+    /// is checked **first** so a secure-mode mint — which also emits a
+    /// legacy-name *clear* — yields the real token, not the clear.
     pub fn set_auth_cookie(resp: &reqwest::Response) -> Option<(String, String)> {
+        Self::find_set_cookie(resp, AUTH_COOKIE_NAME_SECURE)
+            .or_else(|| Self::find_set_cookie(resp, AUTH_COOKIE_NAME_LEGACY))
+    }
+
+    /// Extract a specific `Set-Cookie` by cookie name, as
+    /// `(value, full_attribute_string)`.
+    pub fn find_set_cookie(resp: &reqwest::Response, name: &str) -> Option<(String, String)> {
+        let prefix = format!("{name}=");
         resp.headers()
             .get_all(http::header::SET_COOKIE)
             .iter()
             .filter_map(|v| v.to_str().ok())
-            .find(|v| v.starts_with("quarto_hub_token="))
+            .find(|v| v.starts_with(&prefix))
             .map(|v| {
                 let value = v
-                    .strip_prefix("quarto_hub_token=")
+                    .strip_prefix(&prefix)
                     .unwrap()
                     .split(';')
                     .next()
