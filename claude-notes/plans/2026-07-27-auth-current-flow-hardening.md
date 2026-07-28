@@ -209,6 +209,42 @@ Note: `GoogleOAuthProvider`'s own `nonce` prop is unrelated — it sets the
 CSP nonce on the injected `<script>` tag. Do not pass the login nonce
 there.
 
+#### Why a dedicated `GET /auth/nonce` and not something cheaper
+
+Asked and settled 2026-07-28. Three alternatives were considered:
+
+- **Embed it in the SPA document.** Impossible: the SPA HTML is served by
+  nginx / the static proxy, and the hub never sees that request.
+- **Let the client generate the nonce and have the hub seal it.** Breaks
+  the scheme outright. An attacker holding a captured ID token can read
+  its `nonce` claim (plaintext JWT payload), ask the hub to seal that
+  value, and replay. The nonce **must** be server-generated and
+  uninfluenced by the caller — which forces a round trip before the IdP
+  hop.
+- **Fold it into `GET /auth/me`,** the one pre-login request the SPA
+  already makes. Rejected: `/auth/me` doubles as the sliding-session
+  keep-alive probe (`useSessionKeepAlive`), so it would re-mint the
+  login-state cookie repeatedly — clobbering a second tab's in-flight
+  login, since the cookie is a single named slot — and it is
+  Bearer-reachable from hub-mcp, where browser login state is
+  meaningless. Two different lifetimes on one endpoint.
+
+Also rejected: carrying the sealed blob in GIS's `state` parameter
+(`GsiButtonConfiguration.state` does return with the ID token) instead of
+a cookie. Tempting, because it needs no endpoint *and* would work under
+`--allow-insecure-auth`. But `state` comes back as a **form field in the
+same POST as the credential**, making both halves of the pair
+attacker-suppliable, with no single-use clear. The cookie is not
+attacker-chosen, is HttpOnly, and is cleared after one use.
+
+The residual cost is one same-origin GET, serialized after `/auth/me`
+because `LoginScreen` renders only once auth state resolves. Not
+optimised: the GIS script must load from `accounts.google.com` before the
+button can render at all, so a local GET is very unlikely to be on the
+critical path. If it ever measures as such, the fix is a module-level
+promise cache in `GoogleAuthProvider` (no interface change), not moving
+the endpoint.
+
 ### Divergences found in passing (filed, not fixed here)
 
 - `scripts/hub-sliding-sessions-e2e.mjs` still logs in via the removed
