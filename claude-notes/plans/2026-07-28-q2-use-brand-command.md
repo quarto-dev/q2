@@ -4,16 +4,15 @@
 **Braid:** bd-1vlw8 — *Implement quarto use brand scaffolding command*
 **Branch:** `main` @ `581e45c0` (investigated in the primary checkout — no worktree)
 **Pre-flight:** `cargo xtask verify --skip-hub-build` — ✓ all steps passed at this HEAD (10593 tests)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design round 1 settled (2026-07-28). Round 2 questions open below. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 
 **Ready to design.** Every surface this touches exists and was read at HEAD; the
 architecture has a directly analogous precedent (`q2 create`, landed 2026-07-23);
-and the one hard constraint the user raised — that Q2 requires an explicit
-`brand:` declaration — is **confirmed in source**, not assumed. What is still
-open is scope (how much of Q1's `use brand` we port) and a handful of concrete
-behavioral choices, listed at the bottom.
+and the hard constraint — that Q2 requires an explicit `brand:` declaration — is
+**confirmed in source**, not assumed. Round 1 of design questions is answered;
+what remains is the surface opened up by pulling remote fetching into scope.
 
 ## Issue context
 
@@ -31,7 +30,7 @@ resolution semantics.
 a `_brand.yml` from a template. It **copies an existing brand** from a source (a
 local directory, a local zip, a GitHub `<org>/<repo>`, or a brand *extension*),
 pulling along the logo/font files that brand references. There is no starter
-template anywhere in `brand.ts`. This matters for scope — see design question 1.
+template anywhere in `brand.ts`. We are building both modes (see Decisions).
 
 ## Dependency graph
 
@@ -41,13 +40,14 @@ silent. No `discovered-from` parent, no incoming `blocks`, no `related` edges.
 That changes the calculus in both directions: there is no external pressure
 forcing this now (consistent with priority 4), *and* there is no filed context
 explaining what problem prompted it beyond the description. The design intent
-therefore has to come from the user, not from the graph — which is what the
-`/investigate-beads` invocation is doing.
+therefore has to come from the user, not from the graph.
 
 Neighbors worth reading even though they are not linked:
 
 - `claude-notes/plans/2026-07-23-q2-create-command.md` (bd-oa5kd2yr) — the
   architectural model to copy.
+- `claude-notes/plans/2026-05-03-publish-command-and-gh-pages.md` — the
+  `PublishHost::http_get` seam, our model for testable HTTP.
 - `claude-notes/plans/2026-05-20-brand-yml-support.md` — the original brand
   support work.
 - `claude-notes/plans/2026-07-27-brand-aware-favicon-fallback.md` (bd-97yc) —
@@ -150,209 +150,291 @@ almost exactly this problem shape:
   text insertion that preserves comments and key order. A serde round-trip
   would destroy both.
 - **Typed brand model.** `quarto-brand` (`types.rs`, 580 lines) with
-  `serde(deny_unknown_fields)` — usable to *validate* a copied/scaffolded brand
+  `serde(deny_unknown_fields)` — usable to *validate* a fetched/scaffolded brand
   before declaring success.
 - **Path extraction for assets.** Q1's `extractBrandFilePaths` (`brand.ts:134-212`)
   walks `logo.images.*`, `logo.{small,medium,large}` (string or `{light,dark}`),
   and `typography.fonts[].files[]` where `source: file`. `quarto-brand`'s typed
   model already has all these fields, so the Rust version is a typed traversal
   rather than Q1's untyped probing — strictly less code.
+- **A testable HTTP seam precedent.** `PublishHost::http_get`
+  (`quarto-publish/src/host.rs:143-173`) — an injectable async trait method,
+  natively backed by `ureq` 3 called on a scoped thread (the comment there
+  explains why sync-in-async beats pulling in tokio+reqwest for a one-request
+  path). `TestHost` in `quarto-publish/tests/gh_pages_e2e.rs:62-95` is the
+  in-process fake. Both patterns transfer directly.
 
 ### What does **not** exist
 
-- **No HTTP/unzip in the CLI.** `reqwest` lives in `quarto-hub`,
-  `quarto-preview`, `quarto-system-runtime`; `ureq` in `quarto-publish`. The
-  `quarto` binary crate depends on none of them for this purpose, and there is
-  no `zip` crate in the workspace at all. Q1's remote-source path
-  (`extensionSource` → GitHub archive URL → download → unzip → trust prompt) is
-  a genuinely new dependency surface. See design question 1.
+- **No HTTP or archive extraction in the `quarto` binary.** `reqwest` lives in
+  `quarto-hub`, `quarto-preview`, `quarto-system-runtime`; `ureq` 3 in
+  `quarto-publish`. `flate2` **is** a workspace dependency already
+  (`Cargo.toml:65`). `tar` is **not** in the lockfile; neither is `zip`. So
+  gzip is free, tar is one small pure-Rust crate, and zip would be a second.
 - **No extension system.** Q1's brand-*extension* detection
   (`checkForBrandExtension`, reading `contributes.metadata.project.brand` out of
   `_extension.yml`) has no Q2 counterpart — `q2 add` is a stub too.
 
+## Design decisions (settled with user, 2026-07-28)
+
+1. **Scope: both modes, and remote fetching is in this strand.**
+   `q2 use brand` with no target scaffolds a starter `_brand.yml`; with a target
+   it fetches/copies an existing brand. HTTP + archive extraction is designed and
+   built here rather than deferred.
+2. **Destination.** A source that yields a **single brand file with no
+   referenced assets** lands at the project root as `_brand.yml` — including when
+   it came from a remote fetch, because that is the layout Q1 users recognize. A
+   source that carries assets (logos, font files) lands in `_brand/`. Documented
+   as a rule with both cases spelled out; the command reports which one it chose.
+3. **Refuse if a brand file already exists.** If `_brand.yml` or `_brand.yaml`
+   exists at the project root, error out and write nothing. This is stricter than
+   `q2 create`'s skip-existing policy, and it makes a second run a **hard error**
+   rather than an idempotent no-op — deliberately, since silently doing nothing
+   would be worse than saying so.
+4. **Only `_quarto.yml` is inspected** for an existing brand declaration.
+   `_metadata.yml` layers and document front matter are not scanned.
+5. **The `brand:` key is appended at end of file.** Safest edit; no reflow.
+6. **`use` and `create` share a plan/writer module.**
+7. **`theme:` is left alone.** `from_config_value` auto-injects `ThemeSpec::Brand`
+   when `brand:` is set, so no `- brand` entry is needed, and adding one where a
+   user has hand-written a `theme:` list risks the `Q-14-1` hard error.
+8. **`--json` ships in v1**, mirroring `q2 create`'s machine path.
+
 ## Proposed approach
 
-Three pieces, in dependency order.
+Five pieces, in dependency order.
 
-### A. The `brand:` declaration step (the part that is Q2-specific)
+### A. Pre-flight gates (all before any network traffic or any write)
 
-This is the piece with no Q1 counterpart and the piece the user asked to design.
+Order matters — each gate is cheaper and more likely to fire than the next, and
+**nothing is fetched until all of them pass**:
 
-**Gate.** Resolve the project root by walking up from cwd with
-`find_project_config`. If no `_quarto.yml`/`_quarto.yaml` is found, **fail
-without writing anything** — do not synthesize one. The error should name the
-missing file and point at `q2 create project default .`. (Contrast with Q1,
-whose `ensureBrandDirectory` silently falls back to cwd in single-file mode.)
+1. **Project exists.** Walk up from cwd with `find_project_config`. No
+   `_quarto.yml`/`_quarto.yaml` → fail, naming the missing file and pointing at
+   `q2 create project default .`. Never synthesize one. (Contrast Q1, whose
+   `ensureBrandDirectory` silently falls back to cwd in single-file mode.)
+2. **No existing brand file.** `<root>/_brand.yml` or `<root>/_brand.yaml`
+   exists → fail (decision 3). The message should name the file and say to
+   remove or edit it by hand.
+3. **No existing brand declaration in `_quarto.yml`.** Parse with
+   `quarto_yaml::parse_file`; look for top-level `brand:` and `format.<any>.brand:`.
+   Present → fail, with a diagnostic anchored at the existing key's span
+   (`YamlHashEntry::key_span`). `--force` overrides gates 2 and 3.
+4. **Editability.** The config's top level must be a mapping and the file a
+   single YAML document. A top-level sequence/scalar, or a multi-document stream
+   (`---`/`...`), → fail cleanly rather than corrupt the file.
 
-**Inspect.** Parse the found config with `quarto_yaml::parse_file` and look for
-an existing brand declaration in two places:
+A second, post-fetch gate: once the destination is known to be `_brand/`, that
+directory must not already exist non-empty. Nothing has been written at that
+point, so this is still a clean refusal.
 
-1. top-level `brand:`
-2. `format.<any>.brand:`
+### B. Source resolution and remote fetch
 
-Three outcomes:
+**Proposed home: a new crate**, tentatively `quarto-source-fetch`. Q1 shares
+`extension-host.ts` between `use brand`, `use template`, and `add`; Q2's `q2 add`
+stub will need exactly the same machinery. Putting it in the binary crate
+guarantees a later extraction. Contents:
 
-- *absent* → proceed to Insert.
-- *present and already pointing at the path we are about to write* → report
-  "already configured", make the file operations idempotent, exit 0.
-- *present and pointing elsewhere* (or an inline block) → refuse by default,
-  with a diagnostic anchored at the existing key's span. `--force` overwrites.
+- **Target parsing**, ported from `extension-host.ts:168-228`:
+  - existing local path (dir or file) → `Local`
+  - `<org>/<repo>[/<subdir>][@<ref>]` (regex at `extension-host.ts:190`) → GitHub
+  - a full `https://github.com/<org>/<repo>/archive/refs/{heads,tags}/<ref>.tar.gz`
+    URL → GitHub archive
+  - any other `http(s)://` URL → direct archive
+- **URL candidates**, in Q1's order (`extension-host.ts:111-166`): default branch
+  → tag `<ref>` → branch `<ref>`. Try each; first `200` wins. Unlike Q1 we use
+  `.tar.gz` on **every** platform — Q1 only picks `.zip` on Windows because Deno
+  shells out to platform tools, a constraint Rust does not have. GitHub serves
+  `.tar.gz` universally, and it keeps `zip` out of the dependency tree.
+- **Fetch trait** modeled on `PublishHost::http_get`: a `SourceFetch` trait with
+  a native `ureq`-backed impl and an in-process fake for unit tests. Streaming to
+  a temp file (not `Vec<u8>`) since brand archives carry font/image binaries.
+- **Extraction** via `flate2` (already a workspace dep) + `tar` (new). GitHub
+  archives wrap everything in a single `<repo>-<ref>/` prefix, which Q1 strips
+  via `archiveSubdir` / the lone-subfolder heuristic (`brand.ts:545-573`); port
+  the same logic.
+- **Extraction hardening — this is the part to get right, not the happy path:**
+  - reject entries whose normalized path escapes the destination (`..`,
+    absolute paths, Windows drive prefixes) — `tar`'s `unpack_in` is the safe API,
+    but assert on it rather than trusting it;
+  - reject symlink and hardlink entries outright (a brand needs neither);
+  - cap total uncompressed bytes and entry count (decompression bombs);
+  - cap the download size and use a request timeout;
+  - rustls only, and refuse an https→http redirect.
+- **Trust prompt** for remote sources, ported from `isTrusted` (`brand.ts:602-621`).
+  Non-interactive (`--json`, `--no-prompt`, CI, non-TTY) with no explicit
+  `--force` → **refuse**. Fail closed; never download-and-run on a machine that
+  cannot ask.
 
-**Insert.** A surgical text edit, not a serialize round-trip: read
-`_quarto.yml` as a string, append
+### C. Producing the brand files
 
-```yaml
-
-brand: _brand.yml
-```
-
-at EOF (normalizing the trailing newline). A key at column 0 closes any
-preceding nested block, so appending is always structurally valid — with two
-edge cases to reject explicitly rather than corrupt: a multi-document stream
-(`---`/`...` separators) and a top-level YAML **sequence** or scalar rather than a
-mapping. Comments and existing key order survive untouched. Alternative
-placements are design question 4.
-
-### B. Getting a `_brand.yml` onto disk
-
-Depends on scope (design question 1). Two candidate modes:
-
-- **Scaffold mode** (`q2 use brand`, no target): render a starter `_brand.yml`
-  from a template embedded in `quarto-project-create` — a `meta.name`, a small
-  `color.palette` + `primary`, a `typography.base`, commented-out `logo`
-  slots. Keeps the crate's contract (pure, no fs, WASM-safe) so hub-client can
-  offer the same thing.
-- **Copy mode** (`q2 use brand <local-path>`): resolve a directory or a file,
-  find `_brand.yml`/`_brand.yaml`, parse it with `quarto-brand` to validate,
-  traverse the typed model for referenced local logo/font paths, and plan a copy
-  of the brand file plus those assets.
+- **Scaffold mode** (no target): render a starter `_brand.yml` from a template
+  embedded in `quarto-project-create` — a `meta.name`, a small `color.palette` +
+  `primary`, a `typography.base`, commented-out `logo` slots. Keeps that crate's
+  contract (pure, no fs, WASM-safe) so hub-client can offer the same thing.
+- **Fetch/copy mode**: locate `_brand.yml`/`_brand.yaml` in the resolved source,
+  parse it with `quarto-brand` to **validate before writing anything**, then
+  traverse the typed model for referenced local logo/font paths and plan a copy
+  of the brand file plus those assets. Asset presence is what selects the
+  destination per decision 2.
 
 Both produce a `Vec<PlannedFile>`; the writer does not care which.
 
-### C. Command plumbing
+### D. The `brand:` declaration
 
-- Turn `Commands::Use` into a clap subcommand enum (`Use { #[command(subcommand)] cmd: UseCommand }`)
-  so `brand` can carry `--dry-run`, `--force`, `--no-prompt`, and later
-  `template`/`binder` can carry their own. `--force` + `--dry-run` together is
-  an error (Q1 parity, `brand.ts:237`).
-- Generalize `create/writer.rs` rather than forking it: it already has
-  `FileAction::Updated` and an append-to-existing-file primitive. Proposal:
-  lift `writer.rs` + the plan types to `commands/common/` (or leave them in
-  `create/` and import), and add an `EnsureConfigKey`-style planned edit
-  alongside `PlannedFile`. Whether `use` and `create` share one engine is
-  design question 5.
-- File-collision policy: match `create` — existing files are **skipped, never
-  overwritten**, unless `--force`.
+A surgical text edit, not a serialize round-trip: read `_quarto.yml` as a
+string, append
+
+```yaml
+
+# Brand configuration added by `q2 use brand`
+brand: _brand.yml
+```
+
+at EOF (normalizing the trailing newline). A key at column 0 closes any preceding
+nested block, so appending is always structurally valid — given gate A4. Comments
+and existing key order survive untouched. The value is `_brand.yml` or
+`_brand/_brand.yml` depending on the destination chosen in C.
+
+### E. Command plumbing
+
+- `Commands::Use` becomes a clap subcommand enum so `brand` can carry
+  `--dry-run`, `--force`, `--no-prompt`, `--json`, and later `template`/`binder`
+  can carry their own. `--force` + `--dry-run` together is an error (Q1 parity,
+  `brand.ts:237`).
+- **Shared module** (decision 6): lift the plan/writer/prompter/failure types out
+  of `commands/create/` into `commands/common/`, with `create` and `use_cmd`
+  both importing them. `CreatePlan` → `FilePlan`, `CreateFailure` →
+  `CommandFailure`, etc. `create.rs`'s integration tests protect the refactor.
+- `--json` directive shape, mirroring create's tagged form:
+  `{"use": "brand", "target": "org/repo", "dry_run": false, "force": false}`,
+  unknown fields rejected. Exactly one result object on stdout; diagnostics as
+  JSON lines on stderr. The machine path never prompts, so a remote target
+  without `"force": true` fails the trust gate.
 
 ## Proposed phases (draft)
-
-Skeleton only — contents wait on the design discussion.
 
 - **Phase 0 — Test plan (TDD, failing first).** New
   `crates/quarto/tests/integration/use_brand.rs` (registered in
   `tests/integration/main.rs`; do **not** add a top-level `tests/*.rs` —
   `.claude/rules/integration-tests.md`), modeled on `create.rs`, spawning the
-  real binary. Cases:
+  real binary. Plus unit tests in the fetch crate against its in-process fake.
+  Cases:
   1. No `_quarto.yml` anywhere up the tree → non-zero exit, message names the
      missing file, **nothing written** (no `_brand.yml`, no `_quarto.yml`).
   2. `_quarto.yml` present, no brand → `_brand.yml` created *and* `brand:`
      appended; leading comments and key order preserved byte-for-byte above the
      insertion point.
   3. `_quarto.yaml` (alternate extension) honored identically.
-  4. Top-level `brand: other.yml` already present → refuse, nothing written,
-     diagnostic quotes the existing declaration.
-  5. `format.html.brand:` present → same refusal, message names the location.
-  6. Existing `_brand.yml` on disk → skipped, not overwritten (unless `--force`).
-  7. Idempotency: running twice is a clean no-op with an "already configured"
-     message and exit 0.
-  8. `--dry-run` reports the full plan (including the `_quarto.yml` edit) and
-     writes nothing; `--force` + `--dry-run` is an error.
-  9. Copy mode: local source's referenced logo/font assets land alongside.
-  10. `_quarto.yml` whose top level is a sequence / a multi-doc stream → clean
-      error, not a corrupted file.
-  11. **End-to-end (CLAUDE.md-mandated):** after `q2 use brand`, `q2 render`
+  4. Root `_brand.yml` already exists → hard error, nothing written, no network
+     traffic (decision 3).
+  5. Top-level `brand: other.yml` already in `_quarto.yml` → refuse; diagnostic
+     quotes the existing declaration.
+  6. `format.html.brand:` present → same refusal, message names the location.
+  7. `--force` overrides cases 4–6.
+  8. `--dry-run` reports the full plan (including the `_quarto.yml` edit and the
+     chosen destination) and writes nothing; `--force` + `--dry-run` is an error.
+  9. `_quarto.yml` whose top level is a sequence, or a multi-doc stream → clean
+     error, not a corrupted file.
+  10. Local-path source with referenced logo/font assets → lands in `_brand/`,
+      `brand: _brand/_brand.yml` written.
+  11. Local-path source that is a lone `_brand.yml` → lands at root.
+  12. Source whose brand file fails `quarto-brand` validation → refuse before
+      writing anything.
+  13. **Extraction hardening** (unit tests, hand-built archives): `../` escape,
+      absolute path, symlink entry, oversized entry, too many entries — each
+      rejected, destination untouched.
+  14. Remote fetch against a **localhost test server** (precedent:
+      `quarto-preview`/`quarto-hub` integration tests bind a `TcpListener`)
+      serving a canned `.tar.gz` — no real network in CI.
+  15. Remote target in a non-interactive environment without `--force` →
+      refused at the trust gate, no download.
+  16. `--json`: one result object on stdout, diagnostics as JSON lines on
+      stderr, unknown directive fields rejected.
+  17. **End-to-end (CLAUDE.md-mandated):** after `q2 use brand`, `q2 render`
       the project and grep the emitted CSS for a brand-derived value. This is
       the test that proves the declaration step actually connects — the exact
       failure mode a Q1-faithful copy-only port would have.
-- **Phase 1 — Command plumbing.** `Commands::Use` → subcommand enum;
-  `commands/use_cmd/` module; project-root gate.
-- **Phase 2 — `_quarto.yml` inspection + surgical insertion.**
-- **Phase 3 — Brand file production** (scaffold and/or local copy, per DQ 1).
-- **Phase 4 — Writer integration**, dry-run, `--force`, exit codes.
-- **Phase 5 — Remote sources** (GitHub `<org>/<repo>`, zip, trust prompt) —
-  **likely a separate strand**; new dependency surface (HTTP + unzip).
-- **Phase 6 — Docs.** `docs/` page under the user-facing site (usage, not
-  internals). Note the Q1↔Q2 difference: Q2 writes the `brand:` key because it
-  does not auto-discover.
+- **Phase 1 — Shared `commands/common/` extraction** (pure refactor; `create`'s
+  tests must stay green).
+- **Phase 2 — Command plumbing.** `Commands::Use` → subcommand enum;
+  `commands/use_cmd/` module; pre-flight gates A1–A4.
+- **Phase 3 — `_quarto.yml` inspection + surgical insertion** (D).
+- **Phase 4 — Scaffold mode** (C, no-target path). First end-to-end green.
+- **Phase 5 — `quarto-source-fetch` crate**: target parsing, fetch trait +
+  native impl, tar.gz extraction with the hardening in B.
+- **Phase 6 — Fetch/copy mode** wired in: validation, asset traversal,
+  destination selection, trust prompt.
+- **Phase 7 — `--json` front door.**
+- **Phase 8 — Docs.** A user-facing page under `docs/` (usage, not internals).
+  Must state the Q1↔Q2 difference: Q2 writes the `brand:` key because it does
+  not auto-discover.
 
-## Open design questions for the user
+## Open design questions — round 2
 
-1. **Scope: scaffold, copy, or both?** The strand says "scaffolds a `_brand.yml`",
-   but Q1's command only *copies* from a source — there is no starter template
-   in `brand.ts`. Which do you want first?
-   (a) scaffold-only (`q2 use brand` with no target writes a starter file);
-   (b) copy-only (Q1 parity, local sources);
-   (c) both, target-optional. My lean: **(c)**, with remote sources deferred to
-   their own strand, since HTTP + unzip is a new dependency surface in the CLI.
+Raised by pulling remote fetching into scope.
 
-2. **Where does the brand file land?** Q1 always uses `_brand/_brand.yml`
-   (because its auto-discovery probes that path). Q2 has no such constraint —
-   we write the key, so any path works. Options: root `_brand.yml` (what people
-   write by hand); `_brand/_brand.yml` (Q1 layout, tidier when logos/fonts come
-   along); or root-when-single-file / `_brand/`-when-assets. My lean: **root
-   `_brand.yml` for scaffold mode, `_brand/` for copy-with-assets**, but a
-   single fixed answer is simpler to document.
+1. **Archive formats: tar.gz only?** My proposal is `.tar.gz` everywhere
+   (`flate2` is already a workspace dep; `tar` is one small addition), and to
+   **reject `.zip`** with a clear message. Cost: a user pointing at a local
+   `.zip` or at a `.zip` archive URL is refused. Adding the `zip` crate would
+   cover it. Is tar.gz-only acceptable for v1?
 
-3. **How far should the "is a brand already declared?" scan reach?** You asked
-   for `_quarto.yml`'s absence of `brand:`. Concretely: top-level `brand:` only,
-   or also `format.<fmt>.brand:` inside `_quarto.yml`? And do we look at
-   `_metadata.yml` layers / document front matter at all (they can legally carry
-   a brand and would shadow ours), or ignore them? My lean: **check both shapes
-   inside `_quarto.yml` and hard-refuse; ignore `_metadata.yml` and front matter**
-   (scanning every document is expensive, and a per-document brand override is a
-   legitimate pattern we should not block).
+2. **New crate, or a module in the `quarto` binary?** I lean **new crate**
+   (`quarto-source-fetch`) because `q2 add` will need identical machinery and
+   Q1 shares exactly this code across three commands. The cost is a crate
+   boundary for one consumer today. Agree, or keep it inside
+   `commands/use_cmd/` until `q2 add` actually lands?
 
-4. **Where in `_quarto.yml` does the key go?** Append at EOF (simplest, always
-   structurally valid, no reflow) versus insert immediately after the `project:`
-   block (reads better, needs span arithmetic and a blank-line policy). My lean:
-   **append at EOF**, with a comment line above it noting what it does.
+3. **Extraction limits — what numbers?** I need concrete caps for archive
+   download size, total uncompressed bytes, and entry count. Proposal: 50 MB
+   download, 200 MB uncompressed, 10 000 entries, 30 s request timeout. Brands
+   with several webfont families are the realistic upper end. Do these feel
+   right, or should they be configurable?
 
-5. **Should `use` and `create` share the plan/writer engine?** `writer.rs`
-   already has `FileAction::Updated` and an append-to-existing-file primitive
-   (`ensure_gitignore`). Options: lift the plan/writer types into a shared
-   `commands/common/` module; import them from `create/` as-is; or fork a
-   smaller writer for `use`. My lean: **lift to shared**, because a second
-   command diverging on file-collision semantics is exactly the kind of drift
-   the `create` module docs warn about.
+4. **Brand extensions — in or out?** Q1 detects a *brand extension* by reading
+   `contributes.metadata.project.brand` from `_extension.yml`
+   (`brand.ts:39-110`), which presumes an `_extensions/` layout Q2 does not have.
+   I recommend **out of scope** — porting it drags in the extension surface —
+   but that means a Q1 brand extension repo will not work with `q2 use brand`.
+   Accept that gap, or file it as a follow-on strand?
 
-6. **Does `q2 use brand` also touch `theme:`?** A `brand` token in `theme:`
-   without a `brand:` key is a hard error (Q-14-1) — and the reverse (a `brand:`
-   key with no `theme:` token) is fine, since `from_config_value` auto-injects
-   `ThemeSpec::Brand`. So we need not touch `theme:` at all. Confirm we should
-   leave it alone rather than adding an explicit `- brand` entry.
+5. **Subdirectory targets.** Q1's regex accepts `org/repo/subdir@ref`. Support
+   it in v1, or accept only `org/repo[@ref]` and reject the subdir form with a
+   pointer to the full-URL escape hatch?
 
-7. **`--json` front door?** `q2 create` has one (stdin directive → single JSON
-   result on stdout, diagnostics as JSON lines on stderr) so tooling can drive
-   it. Worth it for `use brand` in v1, or defer?
+6. **What does `--force` mean for the trust prompt?** Today I have it doing
+   double duty: overriding the existing-file/existing-declaration gates *and*
+   waiving the remote trust prompt. Those are different risks — clobbering my
+   own file versus executing someone's fetched content. Should trust get its own
+   flag (`--trust` / `--yes`), or is one `--force` fine?
 
 ## Risks / tradeoffs (draft)
 
 - **The Q1 port is a trap.** A faithful translation of `brand.ts` produces a
   command that appears to work and changes nothing about the render — because
   Q2 does not auto-discover. Any implementation must be judged by the
-  end-to-end render test (Phase 0, case 11), not by "the files landed".
-- **Text-editing a user's config is the risky part**, not the file copy. Comment
-  loss, key reordering, and multi-document streams are all ways to damage a file
-  the user cares about. Mitigations: parse-then-append (never re-serialize),
-  refuse the shapes we cannot safely edit, `--dry-run` that shows the exact
-  resulting text.
+  end-to-end render test (Phase 0, case 17), not by "the files landed".
+- **Archive extraction is the highest-risk code in this strand.** It processes
+  attacker-controllable input (a fetched archive) and writes to the user's
+  project directory. Path traversal, symlink escape, and decompression bombs are
+  the named failure modes; the hardening list in B and the unit tests in Phase 0
+  case 13 exist specifically for them. This code deserves review attention out of
+  proportion to its size.
+- **Text-editing a user's config** is the second risky part. Comment loss, key
+  reordering, and multi-document streams are all ways to damage a file the user
+  cares about. Mitigations: parse-then-append (never re-serialize), refuse the
+  shapes we cannot safely edit, `--dry-run` that shows the exact resulting text.
+- **The shared-module refactor touches shipped code.** `q2 create` is two weeks
+  old and has real users' first impressions riding on it. Phase 1 is a pure
+  rename/move with no behavior change, and `create.rs`'s integration tests must
+  stay green throughout.
+- **Decision 3 makes re-running an error, not a no-op.** That is intentional but
+  is a UX departure from `q2 create`'s skip-existing merge semantics. The error
+  message has to be good enough that "run it again" is obviously not the fix.
 - **`Commands::Use` shape change is mildly breaking** for anyone scripting the
   current (unimplemented) flat form. Since it returns `NotImplemented` today,
   the practical risk is nil.
-- **Scope creep toward an extension system.** Q1's brand-extension detection
-  presumes `_extension.yml` and `_extensions/`, which Q2 does not have. Porting
-  it would drag in the whole extension surface; it should stay out of this
-  strand.
 - **`brand: {light:, dark:}`** is accepted by `extract_brand_ref` but the dark
   half is currently ignored (TODO in `config.rs:434`). If `use brand` ever emits
   a light/dark pair it would silently half-work. Keep to the single-path form.
