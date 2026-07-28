@@ -54,6 +54,9 @@
   display: inline-block;
   width: 18px;
   height: 18px;
+  /* Flex item in .setting-name — must not compress when the label wraps
+     or overflows (long names squeezed the box into a skinny rectangle). */
+  flex-shrink: 0;
   border: 2px solid var(--border-color);
   border-radius: var(--radius-xs);
   background: var(--bg-input);

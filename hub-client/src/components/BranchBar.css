@@ -1,0 +1,151 @@
+.branch-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--editor-header-bg);
+  border-bottom: 1px solid var(--editor-header-border);
+  min-height: 32px;
+  font-size: 12px;
+}
+
+.branch-bar-icon {
+  color: var(--editor-text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.branch-bar-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.branch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  background: none;
+  border: 1px solid var(--editor-header-border);
+  border-radius: 11px;
+  color: var(--editor-text-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.branch-chip:hover:not(:disabled) {
+  background: var(--view-toggle-hover-bg);
+  color: var(--editor-text);
+}
+
+.branch-chip.active {
+  background: var(--header-preview-bg);
+  border-color: var(--header-preview-bg);
+  color: var(--header-preview-text);
+  font-weight: 600;
+}
+
+.branch-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.branch-chip-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.6;
+}
+
+.branch-chip-delete:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.branch-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.branch-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-sizing: border-box;
+  height: 22px;
+  padding: 0 10px;
+  background: none;
+  border: 1px solid var(--editor-header-border);
+  border-radius: 6px;
+  color: var(--editor-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.branch-action-btn:hover:not(:disabled) {
+  background: var(--view-toggle-hover-bg);
+  color: var(--editor-text);
+}
+
+.branch-action-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* While the diff view is active: same filled accent as the active chip. */
+.branch-action-btn.comparing {
+  background: var(--header-preview-bg);
+  border-color: var(--header-preview-bg);
+  color: var(--header-preview-text);
+  font-weight: 600;
+}
+
+.branch-action-btn.comparing:hover:not(:disabled) {
+  background: var(--header-preview-bg);
+  color: var(--header-preview-text);
+  opacity: 0.9;
+}
+
+.branch-merge-btn {
+  background: #2da44e;
+  border-color: #2da44e;
+  color: #fff;
+  font-weight: 600;
+}
+
+.branch-merge-btn:hover:not(:disabled) {
+  background: #2c974b;
+  border-color: #2c974b;
+  color: #fff;
+}
+
+.branch-name-input {
+  height: 22px;
+  width: 130px;
+  padding: 0 8px;
+  border: 1px solid var(--editor-header-border);
+  border-radius: 6px;
+  background: var(--editor-bg, transparent);
+  color: var(--editor-text);
+  font-size: 12px;
+  outline: none;
+}

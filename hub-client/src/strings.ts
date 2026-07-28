@@ -212,6 +212,9 @@ export const tabs = {
     richText: 'Rich-text editor',
     richTextDescription:
       'Edit paragraphs and headings as formatted text (WYSIWYG) instead of raw markdown. Other blocks still use the plain text editor.',
+    documentBranches: 'Document branches (experimental)',
+    documentBranchesDescription:
+      'Fork a private local branch of a document, compare it with main, and merge it back. Branches are not shared with collaborators.',
   },
   about: {
     tagline: 'A collaborative editor for Quarto projects.',

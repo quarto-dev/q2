@@ -31,11 +31,13 @@ import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import {
   getFileContent,
   setImmediateFileChangeCallback,
+  vfsAddFile,
   type EditorContentChange,
 } from '@quarto/preview-runtime';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diffToEditorChanges } from '@quarto/preview-runtime';
 import { registerEditorTextProvider } from '../services/editorDebugRegistry';
+import { getBranchText, applyBranchEdits } from '../services/branchService';
 
 interface UseAutomergeSyncOptions {
   /** Current file being edited (null if none selected) */
@@ -48,6 +50,10 @@ interface UseAutomergeSyncOptions {
   replayActiveRef: React.RefObject<boolean>;
   /** Whether replay mode is active (for effect dependency arrays) */
   replayIsActive: boolean;
+  /** Active local branch id for the current file, or null when on main.
+   *  When non-null, Monaco is bound to the branch doc (branchService)
+   *  instead of the synced main doc. */
+  activeBranchId?: string | null;
 }
 
 interface UseAutomergeSyncResult {
@@ -72,6 +78,7 @@ export function useAutomergeSync({
   onContentOperations,
   replayActiveRef,
   replayIsActive,
+  activeBranchId = null,
 }: UseAutomergeSyncOptions): UseAutomergeSyncResult {
   const [content, setContent] = useState<string>('');
   const applyingRemoteRef = useRef(false);
@@ -92,6 +99,10 @@ export function useAutomergeSync({
   // always reads the latest value without needing it as a dependency.
   const currentFileRef = useRef(currentFile);
   currentFileRef.current = currentFile;
+
+  // Same for the active local branch (branch docs bypass the sync client).
+  const activeBranchIdRef = useRef(activeBranchId);
+  activeBranchIdRef.current = activeBranchId;
 
   const onEditorMount = useCallback((editor: Monaco.editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
@@ -142,6 +153,9 @@ export function useAutomergeSync({
     const handleImmediateSync = (path: string, newContent: string) => {
       if (path !== currentFile.path) return;
       if (replayActiveRef.current) return;
+      // On a local branch, Monaco shows the branch doc; ignore main-doc
+      // updates (they'll reconcile on switch-back or via CRDT merge).
+      if (activeBranchIdRef.current !== null) return;
 
       const editor = editorRef.current;
       const model = editor?.getModel();
@@ -208,8 +222,16 @@ export function useAutomergeSync({
     if (!currentFile) return;
     if (replayIsActive) return;
 
-    const automergeContent = getFileContent(currentFile.path);
+    // On a local branch, reconcile from the branch doc instead of main.
+    const automergeContent = activeBranchId !== null
+      ? getBranchText(currentFile.path, activeBranchId)
+      : getFileContent(currentFile.path);
     if (automergeContent === null) return;
+
+    // Keep the VFS in step with whatever the editor displays, so the
+    // preview renders the same state (covers branch switches in both
+    // directions — the sync client only maintains the VFS for main edits).
+    vfsAddFile(currentFile.path, automergeContent);
 
     const model = editorRef.current?.getModel();
     const monacoContent = model?.getValue();
@@ -230,7 +252,7 @@ export function useAutomergeSync({
     }
 
     setContent(automergeContent);
-  }, [currentFile, fileContents, replayIsActive, editorMountGen]);
+  }, [currentFile, fileContents, replayIsActive, editorMountGen, activeBranchId]);
 
   // ── Monaco → Automerge ───────────────────────────────────────────────
   //
@@ -242,7 +264,17 @@ export function useAutomergeSync({
 
     if (value !== undefined && currentFileRef.current) {
       setContent(value);
-      onContentOperations(currentFileRef.current.path, event.changes);
+      const branchId = activeBranchIdRef.current;
+      if (branchId !== null) {
+        // Local branch: edits go to the branch doc, never to the synced doc.
+        // Write the VFS too — the preview's WASM render reads the file from
+        // the VFS (the content prop is only its trigger); on main the sync
+        // client does this in onFileChanged.
+        applyBranchEdits(currentFileRef.current.path, branchId, event.changes);
+        vfsAddFile(currentFileRef.current.path, value);
+      } else {
+        onContentOperations(currentFileRef.current.path, event.changes);
+      }
     }
   }, [onContentOperations]);
 
@@ -259,6 +291,9 @@ export function useAutomergeSync({
   // If Monaco is not yet mounted, setContent keeps the preview in sync.
   const handleContentRewrite = useCallback((newContent: string) => {
     if (!currentFile) return;
+    // AST rewrites target the synced main doc; ignore while on a branch so
+    // a preview interaction can't silently write to main. (Prototype scope.)
+    if (activeBranchIdRef.current !== null) return;
 
     const oldContent = getFileContent(currentFile.path) ?? '';
     const changes = diffToEditorChanges(oldContent, newContent);
