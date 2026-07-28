@@ -41,6 +41,7 @@ describe('MCP protocol', () => {
       'create_file',
       'create_project',
       'delete_file',
+      'get_errors',
       'list_files',
       'patch_file',
       'read_file',
@@ -113,6 +114,7 @@ describe('MCP protocol (read-only mode)', () => {
     const names = tools.map(t => t.name).sort();
     expect(names).toEqual([
       'connect_project',
+      'get_errors',
       'list_files',
       'read_file',
       'wait_for_change',
