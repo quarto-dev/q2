@@ -51,7 +51,7 @@ use std::path::{Path, PathBuf};
 
 use quarto_pandoc_types::ConfigValue;
 
-use crate::project::discovery::{glob_match_path, path_to_forward_slashes, relative_to_dir};
+use crate::project::discovery::{glob_match_path_or_dir, path_to_forward_slashes, relative_to_dir};
 use crate::project::index::ProjectIndex;
 use crate::project::sidebar_membership::resolve_sidebar_membership;
 
@@ -204,8 +204,8 @@ impl ProjectDependencyGraph {
                         let cand_host_relative = relative_to_dir(&cand_str, &host_dir_str);
                         let host_match = cand_host_relative
                             .as_deref()
-                            .is_some_and(|hr| glob_match_path(glob, hr));
-                        let project_match = glob_match_path(glob, &cand_str);
+                            .is_some_and(|hr| glob_match_path_or_dir(glob, hr));
+                        let project_match = glob_match_path_or_dir(glob, &cand_str);
                         if host_match || project_match {
                             add_edge(from, &candidate.source_path);
                         }
@@ -842,6 +842,34 @@ mod tests {
         assert!(deps.contains(Path::new("posts/foo.qmd")));
         assert!(deps.contains(Path::new("posts/bar.qmd")));
         assert!(!deps.contains(Path::new("outside.qmd")));
+        assert_eq!(deps.len(), 2);
+    }
+
+    /// Test #15b — a bare directory entry (`contents: posts`, Q1's
+    /// canonical blog shape) matches everything under that directory.
+    /// See bd-9arwdicv.
+    #[test]
+    fn listing_globs_bare_directory_matches_contents() {
+        let profiles = vec![
+            listing_host("index.qmd", &["posts"]),
+            plain_doc("posts/welcome/index.qmd"),
+            plain_doc("posts/post-with-code/index.qmd"),
+            plain_doc("posts-archive/old.qmd"),
+            plain_doc("about.qmd"),
+        ];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        let deps = &g.edges[Path::new("index.qmd")];
+        assert!(deps.contains(Path::new("posts/welcome/index.qmd")));
+        assert!(deps.contains(Path::new("posts/post-with-code/index.qmd")));
+        assert!(
+            !deps.contains(Path::new("posts-archive/old.qmd")),
+            "directory match must be segment-exact, not a string prefix"
+        );
+        assert!(!deps.contains(Path::new("about.qmd")));
         assert_eq!(deps.len(), 2);
     }
 

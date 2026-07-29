@@ -28,10 +28,15 @@ use super::placeholders;
 ///
 /// The template emits this verbatim (e.g. inside a `<a>` thumbnail
 /// wrapper) so the markup must already be self-contained HTML.
-pub fn image_html(item: &ListingItem, listing: &Listing) -> String {
+pub fn image_html(item: &ListingItem, listing: &Listing, host_dir: &str) -> String {
     let Some(src) = item.image.as_deref() else {
         return String::new();
     };
+    // `item.image` is project-relative after hydration's rebase
+    // (bd-qv2lsab0); the emitted src must resolve from the host
+    // page. Remote/absolute forms pass through.
+    let src = host_relative_url(src, host_dir);
+    let src = src.as_str();
     let alt = item
         .image_alt
         .as_deref()
@@ -47,6 +52,48 @@ pub fn image_html(item: &ListingItem, listing: &Listing) -> String {
         alt,
         lazy_attr
     )
+}
+
+/// Convert a project-relative URL to a host-page-relative one.
+/// `host_dir` is the host page's project-relative directory
+/// (empty at the project root). Walks up out of the host dir with
+/// `..` segments when the target is not beneath it. Remote URLs,
+/// `data:` URIs, and root-absolute paths pass through unchanged.
+pub(crate) fn host_relative_url(project_relative: &str, host_dir: &str) -> String {
+    if is_external_src(project_relative) {
+        return project_relative.to_string();
+    }
+    if host_dir.is_empty() {
+        return project_relative.to_string();
+    }
+    let host_segs: Vec<&str> = host_dir.split('/').filter(|s| !s.is_empty()).collect();
+    let target_segs: Vec<&str> = project_relative
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
+    let common = host_segs
+        .iter()
+        .zip(target_segs.iter())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let mut out: Vec<&str> = Vec::new();
+    for _ in common..host_segs.len() {
+        out.push("..");
+    }
+    out.extend(&target_segs[common..]);
+    out.join("/")
+}
+
+/// True for src values that name no file in the project tree:
+/// remote URLs, `data:` URIs, and root-absolute paths. Shared by
+/// the hydration rebase, host-relativization, and the copy-intent
+/// registration so they agree on what "local" means (bd-qv2lsab0).
+pub(crate) fn is_external_src(src: &str) -> bool {
+    let lower = src.to_ascii_lowercase();
+    lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("data:")
+        || src.starts_with('/')
 }
 
 /// Build the `data-*` attributes string used by `list.min.js` for
@@ -246,7 +293,7 @@ mod tests {
     #[test]
     fn image_html_when_image_present() {
         let item = make_item_with_image(Some("img.png"));
-        let html = image_html(&item, &make_listing());
+        let html = image_html(&item, &make_listing(), "");
         assert!(html.contains(r#"src="img.png""#));
         assert!(html.contains(r#"class="thumbnail-image""#));
         assert!(html.contains(r#"loading="lazy""#));
@@ -255,16 +302,41 @@ mod tests {
     #[test]
     fn image_html_empty_when_no_image() {
         let item = make_item_with_image(None);
-        assert_eq!(image_html(&item, &make_listing()), "");
+        assert_eq!(image_html(&item, &make_listing(), ""), "");
     }
 
     #[test]
     fn image_html_escapes_attribute_chars() {
         let mut item = make_item_with_image(Some("a&b.png"));
         item.image_alt = Some(r#"some "alt" text"#.to_string());
-        let html = image_html(&item, &make_listing());
+        let html = image_html(&item, &make_listing(), "");
         assert!(html.contains(r#"src="a&amp;b.png""#));
         assert!(html.contains(r#"alt="some &quot;alt&quot; text""#));
+    }
+
+    #[test]
+    fn image_html_relativizes_against_host_dir() {
+        // Project-relative image, host inside the same dir → bare name.
+        let item = make_item_with_image(Some("posts/cover.png"));
+        let html = image_html(&item, &make_listing(), "posts");
+        assert!(html.contains(r#"src="cover.png""#), "got: {html}");
+        // Host at project root → project-relative passes through.
+        let html = image_html(&item, &make_listing(), "");
+        assert!(html.contains(r#"src="posts/cover.png""#), "got: {html}");
+    }
+
+    #[test]
+    fn host_relative_url_walks_up_with_dotdot() {
+        assert_eq!(
+            host_relative_url("shared/x.png", "posts"),
+            "../shared/x.png"
+        );
+        assert_eq!(host_relative_url("posts/a/x.png", "posts/b"), "../a/x.png");
+        assert_eq!(
+            host_relative_url("https://example.com/x.png", "posts"),
+            "https://example.com/x.png"
+        );
+        assert_eq!(host_relative_url("/abs.png", "posts"), "/abs.png");
     }
 
     #[test]

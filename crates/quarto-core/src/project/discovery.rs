@@ -202,6 +202,22 @@ pub fn glob_match_path(pattern: &str, path: &str) -> bool {
     glob_match(&normalize_pattern(pattern), &normalize_pattern(path))
 }
 
+/// Like [`glob_match_path`], but a *literal* pattern (no `*`/`?`)
+/// additionally matches everything under it when treated as a
+/// directory: `posts` matches `posts/welcome/index.qmd`. This is
+/// Q1's semantics for listing `contents:` entries, where a bare
+/// directory name means "all inputs beneath it" (bd-9arwdicv).
+/// Deliberately scoped to listing matching — `project.render`
+/// discovery keeps the strict glob vocabulary.
+pub fn glob_match_path_or_dir(pattern: &str, path: &str) -> bool {
+    if glob_match_path(pattern, path) {
+        return true;
+    }
+    let pattern = normalize_pattern(pattern);
+    let literal = pattern.trim_end_matches('/');
+    !literal.contains(['*', '?']) && normalize_pattern(path).starts_with(&format!("{literal}/"))
+}
+
 /// Convert a `Path` to a forward-slash project-relative string.
 /// Public so callers (e.g. listings item discovery in L3) can match
 /// the same convention `expand_patterns` uses internally.
@@ -354,6 +370,20 @@ mod tests {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(path, contents).unwrap();
+    }
+
+    #[test]
+    fn glob_match_path_or_dir_semantics() {
+        // Literal directory matches anything beneath it…
+        assert!(glob_match_path_or_dir("posts", "posts/welcome/index.qmd"));
+        assert!(glob_match_path_or_dir("posts/", "posts/a.qmd"));
+        // …segment-exact, never a string prefix…
+        assert!(!glob_match_path_or_dir("posts", "posts-archive/old.qmd"));
+        // …and a literal file entry still matches itself.
+        assert!(glob_match_path_or_dir("posts/a.qmd", "posts/a.qmd"));
+        // Patterns with metacharacters keep strict glob semantics.
+        assert!(glob_match_path_or_dir("posts/*.qmd", "posts/a.qmd"));
+        assert!(!glob_match_path_or_dir("posts/*.qmd", "posts/deep/a.qmd"));
     }
 
     #[test]
