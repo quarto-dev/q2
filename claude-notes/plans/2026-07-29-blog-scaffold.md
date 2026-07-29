@@ -173,16 +173,43 @@ back-slashes.
 
 ### Phase D: verification + handoff
 
-- [ ] D1 `cargo build --workspace` + `cargo nextest run --workspace`.
-- [ ] D2 full `cargo xtask verify` (shared-crate + quarto-core changes
+- [x] D1 `cargo build --workspace` + `cargo nextest run --workspace`.
+- [x] D2 full `cargo xtask verify` (shared-crate + quarto-core changes
       → WASM leg affected).
-- [ ] D3 **End-to-end (record here):** `cargo run --bin q2 -- create
+- [x] D3 **End-to-end (record here):** `cargo run --bin q2 -- create
       project blog myblog "My Blog"` → inspect every file on disk
       (binary jpgs byte-identical to Q1's); `cargo run --bin q2 --
       render myblog` → inspect `_site/index.html` (both posts listed,
       dates ordered desc, categories chips + sidebar, thumbnail +
       image srcs resolve, files copied), `_site/index.xml` feed,
       `about.html`. Also the `--json` directive path and `--dry-run`.
-- [ ] D4 braid: close bd-2qjnd + the two new fix strands + this strand;
+- [x] D4 braid: close bd-2qjnd + the two new fix strands + this strand;
       file the about-pages feature strand; update this plan; report the
       bd-57y4 styling caveat to Carlos.
+
+## Phase D record (2026-07-29)
+
+- D1: `cargo build --workspace` clean; `cargo nextest run --workspace`
+  **10790/10790** (after updating the three interactive-prompt tests
+  for the three-choice registry).
+- D2: full `cargo xtask verify` → "All verification steps passed!"
+  (one clippy `same_item_push` fixed along the way; one unrelated
+  flake of `quarto-hub admin_collect_lifecycle::
+  collect_lifecycle_quarantine_restore_purge` under full-parallel
+  load, 4/4 green on re-run — recorded on bd-ce1mv6xv).
+- D3 end-to-end, all through the real binary, output inspected:
+  - `q2 create project blog myblog "My Test Blog"` → 10 files
+    (9 scaffold + `.gitignore`); post dates stamped `2026-07-29` /
+    `2026-07-26`; jpgs byte-identical to the embedded sources.
+  - `q2 render myblog` → "Rendered 4 of 4 files", **no warnings**.
+    `_site/index.html`: both posts date-desc, `<img src="posts/…">`
+    resolving, category chips; `_site/posts/*/`: images copied;
+    `_site/index.xml` RSS feed present; banner title block on posts
+    (via `posts/_metadata.yml`); `_site/about.html` title-prefixed.
+  - `q2 create --json` with a blog directive → version-1 result,
+    10 files; binaries written.
+- D4: bd-2qjnd, bd-9arwdicv, bd-qv2lsab0 closed; bd-5xmy5lle (about
+  pages) filed and left open; bd-r1by4u2a closed. **Caveat flagged to
+  Carlos:** listing cards are unstyled until bd-57y4
+  (quarto-listing.scss) lands — the blog is functional but plainer
+  than Q1; the choice flip is one line to hold back if desired.
