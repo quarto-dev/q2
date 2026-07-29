@@ -968,3 +968,44 @@ fn front_matter_image_rebase_nested_host() {
     );
     assert!(dir.join("_site/posts/cover.png").exists());
 }
+
+/// The listing SCSS layer must reach the *rendered site's* theme CSS
+/// (bd-57y4). quarto-sass unit tests can't see whether the pipeline
+/// wired the layer; this is the brand_render.rs-shaped guard. The
+/// layer is unconditional (Q1 parity), so any HTML render carries it —
+/// asserted here on a listing project where it visibly matters.
+#[test]
+fn listing_css_rules_land_in_rendered_theme_css() {
+    let (dir, _outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"Blog\"\nformat:\n  html:\n    theme: cosmo\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Blog\nlisting:\n  contents: posts\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/first.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\ncategories: [news]\nformat: html\n---\n\nBody.\n",
+        );
+    });
+
+    let mut css = String::new();
+    for entry in walkdir::WalkDir::new(dir.join("_site"))
+        .into_iter()
+        .filter_map(Result::ok)
+    {
+        if entry.path().extension().and_then(|e| e.to_str()) == Some("css") {
+            css.push_str(&read(entry.path()));
+        }
+    }
+    assert!(
+        css.contains(".quarto-listing"),
+        "rendered theme CSS must contain .quarto-listing rules"
+    );
+    assert!(
+        css.contains(".listing-category"),
+        "rendered theme CSS must contain category-chip rules"
+    );
+}
