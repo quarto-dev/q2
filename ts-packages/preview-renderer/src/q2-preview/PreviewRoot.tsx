@@ -1497,9 +1497,13 @@ export function PreviewRoot(props: PreviewRootProps) {
     };
 
     // commitSubtreeEdit: send a subtree-channel PreviewNodeEditPayload (Plan 2b).
+    // The replacer strips every pool-index-carrying key: `s` (node
+    // SourceInfo), `a` (AttrSourceInfo), and `targetS` (Link/Image
+    // URL+title source refs — missing it caused InvalidSourceInfoRef
+    // on any subtree containing a link).
     const commitSubtreeEdit = (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => {
         const stripped = JSON.parse(JSON.stringify(modifiedBlock, (key, value) =>
-            key === 's' || key === 'a' ? undefined : value,
+            key === 's' || key === 'a' || key === 'targetS' ? undefined : value,
         )) as BlockNode;
         const wrappedDoc = {
             'pandoc-api-version': [1, 23, 0],
