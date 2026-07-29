@@ -27,6 +27,7 @@ website:
           href: guides/index.qmd
           contents:
             - guides/authoring/index.qmd
+            - guides/projects/create.qmd
             - guides/publishing/index.qmd
     - id: Authoring
       collapse-level: 1
