@@ -127,6 +127,12 @@ interface PreviewProps {
    */
   attributionOn: boolean;
   /**
+   * Comment-bubble display mode (three-way toggle in the replay bar:
+   * expand / show / hide). Forwarded into the q2-preview iframe.
+   * Absent ⇒ 'show'.
+   */
+  commentsMode?: 'expand' | 'show' | 'hide';
+  /**
    * Reports whether `useAttribution` is mid-build. The Attribution
    * pill animates its border while true so a long run-list build on
    * a large document gives visible feedback that work is happening.
@@ -446,6 +452,7 @@ export default function ReactPreview({
   identities,
   captures,
   attributionOn,
+  commentsMode,
   onAttributionGeneratingChange,
 }: PreviewProps) {
   // Preview state machine for error handling
@@ -843,6 +850,7 @@ export default function ReactPreview({
             renderedContent={rendered.renderedContent}
             untransformedAstJson={rendered.untransformedAstJson}
             currentActor={getActorId()}
+            commentsMode={commentsMode}
             unlockNestingCursor={unlockNestingCursor}
             richText={richText}
             nestedEditBuffers={nestedEditBuffers}

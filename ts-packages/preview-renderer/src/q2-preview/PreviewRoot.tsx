@@ -19,6 +19,7 @@ import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
 import type { BlockNode } from '../framework/types';
 import type { PreviewNodeEditPayload } from '../types/diagnostic';
 import { previewRegistry, PreviewContext } from '.';
+import type { CommentsMode } from './PreviewContext';
 import { buildSourceIndex, serializeSourceEntry } from './sourceIndex';
 import type { ResolvedSource } from './sourceIndex';
 import { outerBlockForAnchorR0, refocusTargetForAnchorR0, findReanchorCandidate, enumerateOuterBlocks, captureEditTarget, measureBlockBox, seedForRange, snapshotOuterBlockGeometry, isDirty } from './outerBlocks';
@@ -155,6 +156,8 @@ export interface PreviewRootProps {
     untransformedAstJson?: string | null;
     /** Globally disable the edit surface (bd-ov4gqk3m). */
     editingDisabled?: boolean;
+    /** Comment-bubble display mode ('expand' | 'show' | 'hide'). */
+    commentsMode?: CommentsMode;
     /**
      * P3.2: nesting-cursor mode for nested blocks. When true, the context
      * exposes nesting-cursor behaviour. Default-off (undefined/false).
@@ -1538,6 +1541,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 sourceIndex,
                 resolveSource,
                 editingDisabled: props.editingDisabled,
+                commentsMode: props.commentsMode,
                 unlockNestingCursor: props.unlockNestingCursor,
                 unlockNestingCursorRef,
                 richText: props.richText,

@@ -33,6 +33,8 @@ import type {
     StrInline,
 } from '../../framework';
 import { Block as B } from '../dispatchers';
+import { PreviewContext } from '../PreviewContext';
+import type { CommentsMode } from '../PreviewContext';
 import { usePreviewEdit } from '../usePreviewEdit';
 
 function isComment(inline: InlineNode): boolean {
@@ -58,6 +60,19 @@ function isCommentContainer(block: BlockNode): boolean {
 }
 
 const InsideCommentContainer = React.createContext(false);
+
+// Light blue placeholder tint for the comment inputs — ::placeholder
+// isn't reachable from inline styles, so inject one tiny rule per
+// document (idempotent).
+(() => {
+    if (typeof document === 'undefined') return;
+    if (document.head.querySelector('style[data-q2-comment-styles]')) return;
+    const tag = document.createElement('style');
+    tag.setAttribute('data-q2-comment-styles', '1');
+    tag.textContent =
+        '.q2-comment-input::placeholder { color: #a9c7e8; opacity: 1; }';
+    document.head.appendChild(tag);
+})();
 
 /**
  * True when the rendered block and its resolved source node are the
@@ -97,6 +112,8 @@ function commentSpanText(span: InlineNode): string {
 export const CommentBlock = (args: NodeArgs<BlockNode>) => {
     const edit = usePreviewEdit();
     const insideContainer = React.useContext(InsideCommentContainer);
+    const mode: CommentsMode =
+        React.useContext(PreviewContext)?.commentsMode ?? 'show';
     const { node: block, onNavigateToDocument, setLocalAst } = args;
 
     // Children of a comment container defer to the container's bubble.
@@ -169,15 +186,21 @@ export const CommentBlock = (args: NodeArgs<BlockNode>) => {
     const inner = (
         <B node={newBlock} onNavigateToDocument={onNavigateToDocument} setLocalAst={setLocalAst} />
     );
+    const maybeProvided = isCommentContainer(block) ? (
+        <InsideCommentContainer.Provider value={true}>
+            {inner}
+        </InsideCommentContainer.Provider>
+    ) : (
+        inner
+    );
+    // 'hide' mode: comments stay stripped from the text, but no chrome
+    // (and no wrapper div) renders at all.
+    if (mode === 'hide') {
+        return maybeProvided;
+    }
     return (
-        <CommentWrapper comments={comments} block={block} edit={edit}>
-            {isCommentContainer(block) ? (
-                <InsideCommentContainer.Provider value={true}>
-                    {inner}
-                </InsideCommentContainer.Provider>
-            ) : (
-                inner
-            )}
+        <CommentWrapper comments={comments} block={block} edit={edit} mode={mode}>
+            {maybeProvided}
         </CommentWrapper>
     );
 };
@@ -235,8 +258,15 @@ function scheduleBubbleRelayout() {
                 // pinned at its exact natural position (always the same
                 // spot, overlapping its block, ready to click); the
                 // relaxation pushes every other bubble around it. Idle
-                // bubbles float freely to resolve overlaps.
-                const clamp = e.hovered ? () => top : (y: number) => y;
+                // bubbles float freely to resolve overlaps, EXCEPT they
+                // may never be pushed above the viewport top (a bubble
+                // whose natural spot is already above it stays put —
+                // the floor only limits upward nudging).
+                const TOP_MARGIN = 8;
+                const floor = Math.min(top, TOP_MARGIN);
+                const clamp = e.hovered
+                    ? () => top
+                    : (y: number) => Math.max(y, floor);
                 return { e, top, height, left: rect.left, right: rect.right, cur: top, clamp };
             })
             .sort((a, b) => a.top - b.top);
@@ -288,15 +318,24 @@ const CommentWrapper = ({
     comments,
     block,
     edit,
+    mode,
 }: {
     children: React.ReactNode;
     comments: InlineNode[];
     block: BlockNode;
     edit: EditHandle;
+    mode: CommentsMode;
 }) => {
     const [commentText, setCommentText] = React.useState('');
-    const [showCommentsList, setShowCommentsList] = React.useState(false);
+    // No modal: clicking a compact bubble expands it in place (with the
+    // inline add-comment input open at its bottom).
+    const [selfExpanded, setSelfExpanded] = React.useState(false);
+    const [showInlineInput, setShowInlineInput] = React.useState(false);
+    const inlineInputRef = React.useRef<HTMLTextAreaElement>(null);
     const [isHovered, setIsHovered] = React.useState(false);
+    // Global 'expand' mode expands every commented bubble; a click
+    // self-expands one bubble in any mode.
+    const expanded = (mode === 'expand' && comments.length > 0) || selfExpanded;
     // Force-layout nudge (translateY) keeping this bubble clear of its
     // neighbors; nudgeRef mirrors it for the module-level relayout pass.
     const [nudge, setNudge] = React.useState(0);
@@ -307,10 +346,12 @@ const CommentWrapper = ({
     const isHoveredRef = React.useRef(false);
     const entryRef = React.useRef<BubbleEntry | null>(null);
 
+    const commentsListRef = React.useRef<HTMLDivElement>(null);
+
     // Per-comment authorship, resolved from the comment span's source
     // pool id (`s`). The lookup is only populated when the host provides
     // attribution (Authors overlay on); otherwise rows render without
-    // an author line.
+    // an author dot.
     const attributionLookup = React.useContext(AttributionLookupContext);
     const commentAuthor = (span: InlineNode) => {
         if (!attributionLookup) return null;
@@ -318,102 +359,68 @@ const CommentWrapper = ({
         if (s == null) return null;
         return attributionLookup.get(s) ?? null;
     };
-    const commentsListRef = React.useRef<HTMLDivElement>(null);
-    const commentInputRef = React.useRef<HTMLTextAreaElement>(null);
-    const popupRef = React.useRef<HTMLDivElement>(null);
-    const [popupShift, setPopupShift] = React.useState(0);
 
-    // Keep the popup inside the visible viewport: measure it when it
-    // opens or grows (and on scroll/resize while open) and translate it
-    // up/down as needed. If the anchor block itself scrolls fully out
-    // of view, close the popup instead. React bails out when the
-    // computed shift equals the current one, so including popupShift in
-    // the deps doesn't loop.
-    React.useLayoutEffect(() => {
-        if (!showCommentsList) {
-            setPopupShift(0);
-            return;
-        }
-        const clampOrClose = () => {
-            const anchor = commentsListRef.current;
-            const el = popupRef.current;
-            if (!anchor || !el) return;
-            // Close only once the block is a comfortable 50px past the
-            // viewport edge, not the instant it leaves.
-            const CLOSE_SLACK = 50;
-            const anchorRect = anchor.getBoundingClientRect();
-            if (
-                anchorRect.bottom < -CLOSE_SLACK ||
-                anchorRect.top > window.innerHeight + CLOSE_SLACK
-            ) {
-                setShowCommentsList(false);
-                return;
-            }
-            const rect = el.getBoundingClientRect();
-            const margin = 8;
-            // rect includes the currently applied shift; work from the
-            // unshifted position.
-            const top = rect.top - popupShift;
-            const bottom = rect.bottom - popupShift;
-            let shift = 0;
-            if (bottom > window.innerHeight - margin) shift = window.innerHeight - margin - bottom;
-            if (top + shift < margin) shift = margin - top;
-            setPopupShift(shift);
-        };
-        clampOrClose();
-        window.addEventListener('scroll', clampOrClose, true);
-        window.addEventListener('resize', clampOrClose);
-        return () => {
-            window.removeEventListener('scroll', clampOrClose, true);
-            window.removeEventListener('resize', clampOrClose);
-        };
-    }, [showCommentsList, comments.length, commentText, popupShift]);
-
-    // Auto-grow the input with its content (also shrinks back after
-    // submit clears it).
+    // Auto-grow the inline input with its content (also shrinks back
+    // after submit clears it).
     React.useEffect(() => {
-        const ta = commentInputRef.current;
+        const ta = inlineInputRef.current;
         if (!ta) return;
         ta.style.height = 'auto';
         ta.style.height = `${ta.scrollHeight}px`;
-    }, [commentText, showCommentsList]);
+    }, [commentText, showInlineInput]);
 
-    // Close any other open popup when this one opens; deregister on
-    // close (only if still the registered one — a newer popup may have
-    // taken over the latch).
+    // Close the inline input only once the submitted comment actually
+    // lands in the list (the commit round-trip re-renders this block
+    // with the new comment), not the moment Enter is pressed.
+    const [closeAtCount, setCloseAtCount] = React.useState<number | null>(null);
     React.useEffect(() => {
-        if (!showCommentsList) return;
-        closeOpenPopup?.();
-        const close = () => setShowCommentsList(false);
-        closeOpenPopup = close;
-        return () => {
-            if (closeOpenPopup === close) closeOpenPopup = null;
-        };
-    }, [showCommentsList]);
+        if (closeAtCount !== null && comments.length > closeAtCount) {
+            setShowInlineInput(false);
+            setCloseAtCount(null);
+        }
+    }, [comments.length, closeAtCount]);
 
+    // Focus the inline input when it opens, cursor at the end. (The
+    // block editors see `data-q2-owns-focus` on their blur
+    // relatedTarget and skip their focus-restore, so nothing steals
+    // focus back.)
     React.useEffect(() => {
-        if (!showCommentsList) return;
-        const handleClickOutside = (event: MouseEvent) => {
-            if (commentsListRef.current && !commentsListRef.current.contains(event.target as Node)) {
-                setShowCommentsList(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => { document.removeEventListener('mousedown', handleClickOutside); };
-    }, [showCommentsList]);
-
-    // Focus the input when the modal opens, with the cursor at the end
-    // of any drafted text. (The block editors see `data-q2-owns-focus`
-    // on their blur relatedTarget and skip their focus-restore, so
-    // nothing steals focus back.)
-    React.useEffect(() => {
-        const ta = commentInputRef.current;
-        if (showCommentsList && ta) {
+        const ta = inlineInputRef.current;
+        if (showInlineInput && ta) {
             ta.focus();
             const end = ta.value.length;
             ta.setSelectionRange(end, end);
         }
-    }, [showCommentsList]);
+    }, [showInlineInput]);
+
+    // Clicking outside the bubble collapses a self-expanded bubble and
+    // closes the inline input.
+    React.useEffect(() => {
+        if (!showInlineInput && !selfExpanded) return;
+        const handleClickOutside = (event: MouseEvent) => {
+            if (commentsListRef.current && !commentsListRef.current.contains(event.target as Node)) {
+                setShowInlineInput(false);
+                setSelfExpanded(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => { document.removeEventListener('mousedown', handleClickOutside); };
+    }, [showInlineInput, selfExpanded]);
+
+    // Only one self-expanded bubble at a time: expanding one collapses
+    // the previously expanded one via the module-level latch.
+    React.useEffect(() => {
+        if (!selfExpanded) return;
+        closeOpenPopup?.();
+        const close = () => {
+            setSelfExpanded(false);
+            setShowInlineInput(false);
+        };
+        closeOpenPopup = close;
+        return () => {
+            if (closeOpenPopup === close) closeOpenPopup = null;
+        };
+    }, [selfExpanded]);
 
     // Remove the index-th comment span (counting comment spans only,
     // in order) from the source node and commit.
@@ -533,7 +540,7 @@ const CommentWrapper = ({
     };
 
     const hasContent = comments.length > 0;
-    const chromeVisible = hasContent || isHovered || showCommentsList;
+    const chromeVisible = hasContent || isHovered || selfExpanded;
 
     // Register this bubble with the force layout while visible; any
     // mount/unmount (including hover chrome) reflows all bubbles.
@@ -556,7 +563,9 @@ const CommentWrapper = ({
             bubbleEntries.delete(entry);
             scheduleBubbleRelayout();
         };
-    }, [chromeVisible, comments.length]);
+        // expanded/showInlineInput change the bubble's size — re-register
+        // so the force layout re-measures.
+    }, [chromeVisible, comments.length, expanded, showInlineInput]);
 
     // Sync hover into the registry entry — the own-block clamp only
     // applies while the block is hovered, and hover changes reflow.
@@ -598,11 +607,10 @@ const CommentWrapper = ({
                         alignItems: 'center',
                         // The bubble hangs below the block's box, into
                         // the next (positioned) sibling wrapper — lift
-                        // it above so it wins hit-testing there. While
-                        // OUR popup is open, lift the whole container
-                        // further so no other block's bubble (all peers
-                        // at 100) can paint above the popup.
-                        zIndex: showCommentsList ? 1000 : 100,
+                        // it above so it wins hit-testing there. A
+                        // self-expanded bubble lifts further so no peer
+                        // bubble (all at 100) can paint above it.
+                        zIndex: selfExpanded ? 1000 : 100,
                     }}
                     // Keep chrome interactions away from the delegated
                     // click-to-edit handler on the document root —
@@ -630,148 +638,171 @@ const CommentWrapper = ({
                     <div ref={commentsListRef} style={{ position: 'relative' }}>
                         <div
                             style={{
-                                // Hovering anywhere on the block tints
-                                // its bubble, tying the two together.
-                                backgroundColor: showCommentsList || isHovered ? '#e0f0ff' : '#b3d9ff',
+                                // Near-white with just a hint of blue.
+                                backgroundColor: '#f7faff',
                                 color: '#4a7ba7',
-                                padding: '4px 8px',
-                                borderRadius: '12px',
+                                padding: '2px 6px',
+                                borderRadius: '5px',
                                 border: '1px solid #4a7ba7',
                                 fontSize: '0.7rem',
                                 cursor: 'pointer',
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                // Block hover puts an offset-free light
+                                // blue glow on the bubble.
+                                boxShadow: isHovered
+                                    ? '0 0 8px 2px rgba(140, 190, 240, 0.6)'
+                                    : '0 2px 4px rgba(0,0,0,0.2)',
+                                transition: 'box-shadow 0.15s',
                                 userSelect: 'none',
                             }}
-                            onClick={() => setShowCommentsList(!showCommentsList)}
+                            onClick={() => {
+                                // Clicking a compact bubble expands it
+                                // in place; any click opens the inline
+                                // add-comment input.
+                                if (!expanded) setSelfExpanded(true);
+                                setShowInlineInput(true);
+                            }}
                             title={`${comments.length} comment${comments.length !== 1 ? 's' : ''}`}
                         >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span>💬</span>
-                                {comments.length > 0 && (
-                                    <span style={{
+                            {/* An expanded bubble (global 'expand' mode or
+                                clicked-open) lists every comment as its own
+                                row with dividers, plus the inline input; a
+                                compact bubble previews the first comment
+                                and sums the rest as "+n more". A
+                                comment-less compact bubble is just the "+"
+                                add affordance. */}
+                            {comments.length === 0 && !expanded ? (
+                                <div>+</div>
+                            ) : expanded ? (
+                                <>
+                                {comments.map((c, i) => {
+                                    const author = commentAuthor(c);
+                                    return (
+                                    <div key={i} style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '3px 2px',
+                                        borderBottom: i < comments.length - 1
+                                            ? '1px solid rgba(74, 123, 167, 0.3)'
+                                            : 'none',
+                                    }}>
+                                        {author && (
+                                            <span
+                                                title={author.name}
+                                                style={{
+                                                    width: '8px',
+                                                    height: '8px',
+                                                    borderRadius: '50%',
+                                                    backgroundColor: author.color,
+                                                    display: 'inline-block',
+                                                    flexShrink: 0,
+                                                }}
+                                            />
+                                        )}
+                                        <span style={{
+                                            flex: 1,
+                                            minWidth: 0,
+                                            maxWidth: '160px',
+                                            overflow: 'hidden',
+                                            whiteSpace: 'nowrap',
+                                            textOverflow: 'ellipsis',
+                                        }}>
+                                            {commentSpanText(c)}
+                                        </span>
+                                        <button
+                                            onClick={(ev) => {
+                                                // Resolve without toggling
+                                                // the modal (bubble onClick).
+                                                ev.stopPropagation();
+                                                resolveCommentAtIndex(i);
+                                            }}
+                                            title="Resolve comment"
+                                            style={{
+                                                padding: '0 4px',
+                                                backgroundColor: 'transparent',
+                                                color: '#4a7ba7',
+                                                border: '1px solid #b3d9ff',
+                                                borderRadius: '4px',
+                                                fontSize: '0.65rem',
+                                                cursor: 'pointer',
+                                                flexShrink: 0,
+                                                transition: 'background-color 0.15s',
+                                            }}
+                                            onMouseEnter={(ev) => ev.currentTarget.style.backgroundColor = '#d4e8ff'}
+                                            onMouseLeave={(ev) => ev.currentTarget.style.backgroundColor = 'transparent'}
+                                        >
+                                            ✓
+                                        </button>
+                                    </div>
+                                    );
+                                })}
+                                {showInlineInput && (
+                                    <div style={{
+                                        borderTop: '1px solid rgba(74, 123, 167, 0.3)',
+                                        marginTop: '2px',
+                                        paddingTop: '5px',
+                                        paddingBottom: '2px',
+                                    }}>
+                                        <textarea
+                                            ref={inlineInputRef}
+                                            className="q2-comment-input"
+                                            rows={1}
+                                            value={commentText}
+                                            onChange={(e) => setCommentText(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    if (commentText) {
+                                                        addComment();
+                                                        // Close once the comment
+                                                        // shows up in the list.
+                                                        setCloseAtCount(comments.length);
+                                                    }
+                                                } else if (e.key === 'Escape') {
+                                                    setShowInlineInput(false);
+                                                    setSelfExpanded(false);
+                                                }
+                                            }}
+                                            placeholder="type comment here"
+                                            style={{
+                                                display: 'block',
+                                                width: '100%',
+                                                padding: '3px 2px',
+                                                fontFamily: 'inherit',
+                                                fontSize: 'inherit',
+                                                // Blend into the bubble like
+                                                // the comment rows do.
+                                                backgroundColor: 'transparent',
+                                                color: 'inherit',
+                                                border: '1px solid rgba(74, 123, 167, 0.3)',
+                                                borderRadius: '4px',
+                                                outline: 'none',
+                                                resize: 'none',
+                                                overflow: 'hidden',
+                                                boxSizing: 'border-box',
+                                            }}
+                                        />
+                                    </div>
+                                )}
+                                </>
+                            ) : (
+                                <>
+                                    <div style={{
                                         maxWidth: '140px',
                                         overflow: 'hidden',
                                         whiteSpace: 'nowrap',
                                         textOverflow: 'ellipsis',
                                     }}>
                                         {commentSpanText(comments[0])}
-                                    </span>
-                                )}
-                            </div>
-                            {comments.length > 1 && (
-                                <div style={{ color: '#6699cc', textAlign: 'right' }}>
-                                    +{comments.length - 1} more
-                                </div>
+                                    </div>
+                                    {comments.length > 1 && (
+                                        <div style={{ color: '#6699cc', textAlign: 'right' }}>
+                                            +{comments.length - 1} more
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
-                        {showCommentsList && (
-                            <div ref={popupRef} style={{
-                                position: 'absolute',
-                                top: '30px',
-                                right: '7px',
-                                transform: `translateY(${popupShift}px)`,
-                                backgroundColor: 'white',
-                                border: '1px solid #ccc',
-                                borderRadius: '8px',
-                                padding: '8px',
-                                boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-                                width: '300px',
-                                maxWidth: '80vw',
-                                minHeight: '220px',
-                                maxHeight: '50vh',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                zIndex: '9999',
-                            }}>
-                                <div style={{ flex: 1, overflowY: 'auto' }}>
-                                    {comments.map((comment, i) => {
-                                        const author = commentAuthor(comment);
-                                        return (
-                                            <div key={i} style={{
-                                                display: 'flex',
-                                                alignItems: 'flex-start',
-                                                gap: '8px',
-                                                padding: '8px',
-                                                borderBottom: i < comments.length - 1 ? '1px solid #eee' : 'none',
-                                                fontSize: '0.75rem',
-                                                color: '#333',
-                                            }}>
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    {author && (
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' }}>
-                                                            <span style={{
-                                                                width: '8px',
-                                                                height: '8px',
-                                                                borderRadius: '50%',
-                                                                backgroundColor: author.color,
-                                                                display: 'inline-block',
-                                                                flexShrink: 0,
-                                                            }} />
-                                                            <span style={{ fontWeight: 600, fontSize: '0.7rem', color: '#555' }}>
-                                                                {author.name}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                    <span style={{ wordWrap: 'break-word' }}>
-                                                        {commentSpanText(comment)}
-                                                    </span>
-                                                </div>
-                                                <button
-                                                    onClick={() => resolveCommentAtIndex(i)}
-                                                    title="Resolve comment"
-                                                    style={{
-                                                        padding: '2px 6px',
-                                                        backgroundColor: '#f0f0f0',
-                                                        color: '#4a7ba7',
-                                                        border: '1px solid #ccc',
-                                                        borderRadius: '4px',
-                                                        fontSize: '0.7rem',
-                                                        cursor: 'pointer',
-                                                        whiteSpace: 'nowrap',
-                                                    }}
-                                                >
-                                                    ✓
-                                                </button>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <textarea
-                                        ref={commentInputRef}
-                                        rows={1}
-                                        value={commentText}
-                                        onChange={(e) => setCommentText(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                if (commentText) addComment();
-                                            }
-                                        }}
-                                        placeholder="type comment here"
-                                        style={{ padding: '7px 11px', fontFamily: 'inherit', fontSize: '0.75rem', backgroundColor: '#f0f0f0', color: '#333', border: '1px solid #ccc', borderRadius: '12px', resize: 'none', overflow: 'hidden', boxSizing: 'border-box' }}
-                                    />
-                                    <button
-                                        onClick={addComment}
-                                        disabled={!commentText}
-                                        style={{
-                                            padding: '4px 8px',
-                                            backgroundColor: '#b3d9ff',
-                                            color: '#4a7ba7',
-                                            border: '1px solid #4a7ba7',
-                                            borderRadius: '12px',
-                                            fontSize: '0.7rem',
-                                            cursor: commentText ? 'pointer' : 'default',
-                                            opacity: commentText ? 1 : 0.5,
-                                            whiteSpace: 'nowrap',
-                                            alignSelf: 'flex-end',
-                                        }}
-                                    >
-                                        add comment
-                                    </button>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
             )}
