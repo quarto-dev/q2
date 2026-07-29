@@ -76,10 +76,7 @@ pub(crate) fn host_relative_url(project_relative: &str, host_dir: &str) -> Strin
         .zip(target_segs.iter())
         .take_while(|(a, b)| a == b)
         .count();
-    let mut out: Vec<&str> = Vec::new();
-    for _ in common..host_segs.len() {
-        out.push("..");
-    }
+    let mut out: Vec<&str> = std::iter::repeat_n("..", host_segs.len() - common).collect();
     out.extend(&target_segs[common..]);
     out.join("/")
 }

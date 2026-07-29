@@ -129,38 +129,47 @@ date-desc order verified. quarto-core suite: 2668/2668.
 
 ### Phase B: scaffold tests first (TDD)
 
-- [ ] B1 crate render tests: blog file set (9 files in the order
+- [x] B1 crate render tests: blog file set (9 files in the order
       above), `_quarto.yml` parsed with serde_yaml (website.title,
       description, site-url present, navbar right shape, cosmo, no
       brand/freeze/about), post front matter carries the two dates
       (fixed via `with_today`), binary files present with
       `image/jpeg` MIME and non-empty bytes, no template residue.
-- [ ] B2 scaffold registry tests: `get_scaffold(website:blog)` file
+- [x] B2 scaffold registry tests: `get_scaffold(website:blog)` file
       list; sweep-test invariant update (see "Post dates").
-- [ ] B3 CLI integration tests (`crates/quarto/tests/integration/create.rs`):
+- [x] B3 CLI integration tests (`crates/quarto/tests/integration/create.rs`):
       `create project blog myblog` writes all files incl. binaries
       (byte-compare a jpg); `--list --json` now reports
       `blog: implemented=true`; repoint the two
       unimplemented-choice tests (`unimplemented_choice_says_so`,
       `colon_form_routes_through_template_parser`) at `manuscript` /
       `website:nonexistent`-style targets so they keep their meaning.
-- [ ] B4 run all new tests; record expected failures.
+- [x] B4 run all new tests; record expected failures.
 
 ### Phase C: implementation
 
-- [ ] C1 copy `thumbnail.jpg` + `image.jpg` from
+- [x] C1 copy `thumbnail.jpg` + `image.jpg` from
       `external-sources/quarto-cli/.../templates/blog/` into
       `crates/quarto-project-create/resources/templates/website/blog/`;
       author the blog templates/static files.
-- [ ] C2 `templates.rs` blog module (`include_str!`/`include_bytes!`),
+- [x] C2 `templates.rs` blog module (`include_str!`/`include_bytes!`),
       `scaffold.rs` `Some("blog")` arm, date plumbing (`time` dep,
       `with_today`, context vars), flip the choice to implemented.
-- [ ] C3 make Phase B tests green; full `-p quarto-project-create` and
+- [x] C3 make Phase B tests green; full `-p quarto-project-create` and
       `-p quarto` suites.
-- [ ] C4 hub-client: extend `projectCreate.wasm.test.ts` (blog choice
+- [x] C4 hub-client: extend `projectCreate.wasm.test.ts` (blog choice
       listed implemented; `create_project('blog', …)` returns the file
       set with `content_type: 'binary'` + mime for the jpgs); rebuild
       WASM, run `npm run test:wasm`. Two-commit changelog rule applies.
+
+**Phases B+C completed 2026-07-29.** B4 recorded failure: compile
+error on the not-yet-existing `with_today` (API-first TDD). Crate
+suite 31/31; CLI create suite 30/30 (unimplemented-choice tests
+repointed at `manuscript` / `website:solitaire`); WASM
+`projectCreate.wasm.test.ts` 7/7 against freshly built WASM —
+`time`'s `wasm-bindgen` clock path compiles and runs, so no export
+signature change was needed. Path assertions normalized for Windows
+back-slashes.
 
 ### Phase D: verification + handoff
 

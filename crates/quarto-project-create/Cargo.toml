@@ -17,11 +17,23 @@ serde.workspace = true
 # Error handling
 thiserror.workspace = true
 
+# Post-date stamping for the blog scaffold (bd-r1by4u2a): today and
+# today-minus-3-days. Date arithmetic + formatting is wasm-safe.
+time = { version = "0.3", features = ["formatting", "macros"] }
+
+# Reading the clock on wasm32-unknown-unknown needs time's
+# wasm-bindgen feature (js Date under the hood).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+time = { version = "0.3", features = ["formatting", "macros", "wasm-bindgen"] }
+
 [dev-dependencies]
 # Round-trip parsing of scaffolded _quarto.yml in tests: asserting on
 # parsed YAML structure is precise (field values, not substring hits)
 # and proves the rendered config is valid YAML.
 serde_yaml.workspace = true
+
+# Date parsing in the clock-independent blog-date test.
+time = { version = "0.3", features = ["parsing", "macros"] }
 
 [lints]
 workspace = true
