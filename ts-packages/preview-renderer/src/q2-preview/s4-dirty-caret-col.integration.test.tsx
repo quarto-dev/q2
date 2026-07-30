@@ -81,7 +81,9 @@ const BQ_ANCHOR_SLICE = '> line one\n> line two';
 const BUFFERS: Record<string, string> = { [CHILD_SI_KEY]: CLEAN_BUFFER };
 
 function makeAstJson(): string {
-    const ast: PandocAST = {
+    // The `s` pool-index fields on blocks are a runtime extension the
+    // framework types don't declare (readers cast per-site); cast once here.
+    const ast = {
         'pandoc-api-version': [1, 23, 0],
         meta: {},
         blocks: [
@@ -102,7 +104,7 @@ function makeAstJson(): string {
             },
         ],
         astContext: { p: POOL },
-    };
+    } as unknown as PandocAST;
     return JSON.stringify(ast);
 }
 

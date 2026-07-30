@@ -14,8 +14,10 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { installLinkHandlers } from './iframeLinkHandlers';
 
+type QmdLinkClickArg = { path: string; anchor: string | null } | { anchor: string };
+
 let doc: Document;
-let onQmdLinkClick: ReturnType<typeof vi.fn>;
+let onQmdLinkClick: ReturnType<typeof vi.fn<(arg: QmdLinkClickArg) => void>>;
 let postMessageSpy: ReturnType<typeof vi.spyOn>;
 let openSpy: ReturnType<typeof vi.spyOn>;
 
@@ -25,7 +27,7 @@ beforeEach(() => {
     // returns an unattached XML doc with `body === null` under jsdom.
     doc = document.implementation.createHTMLDocument();
 
-    onQmdLinkClick = vi.fn();
+    onQmdLinkClick = vi.fn<(arg: QmdLinkClickArg) => void>();
     postMessageSpy = vi.spyOn(window.parent, 'postMessage');
     openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
 });

@@ -68,52 +68,52 @@ assertion changes needed. This bounds the fix to the two defects below.
 
 ### Phase 1 — defensive guard in CommentBlock (TDD)
 
-- [ ] Write a unit test (new file, e.g.
+- [x] Write a unit test (new file,
       `src/q2-preview/custom/CommentBlock.defensive.integration.test.tsx`):
       mount a Para through `previewRegistry` with a `PreviewContext` whose
       `resolveSource` returns a malformed entry (no `sourceNode`); assert the
-      block renders as passthrough (text present, no crash). A second case:
-      `resolveSource` throws → also worth deciding (see Open Questions).
-- [ ] Run it; verify it fails with the exact `TypeError` above.
-- [ ] Fix: in `CommentBlock.tsx` (`comments.length === 0` gate), treat a
-      resolved entry without a `sourceNode` like an unresolvable block:
-      `if (!resolved || !resolved.sourceNode || resolved.reachabilityClass === 'Opaque' || !sameCommentableKind(block, resolved.sourceNode)) return passthrough;`
-      Audit the other `resolved.sourceNode` consumers in the same file
-      (`resolveCommittable`, `addComment`, `resolveCommentAtIndex`) for the
-      same dereference and guard them consistently.
-- [ ] Run the test; verify it passes.
+      block renders as passthrough (text present, no crash). Plus a guard-not-
+      over-broad case: well-formed entry still gets comment chrome.
+- [x] Run it; verified it fails with the exact `TypeError` above.
+- [x] Fix: added `!resolved.sourceNode` to the render gate and to
+      `resolveCommittable` (which `addComment`/`resolveCommentAtIndex` both
+      funnel through — no other `sourceNode` consumers in the file).
+- [x] Run the test; passes (2/2).
 
 ### Phase 2 — honest s0 stub
 
-- [ ] Fix `makeResolveSource` in `s0-list-item-surfaces.integration.test.tsx`
-      to satisfy `ResolvedSource` for real: `sourceNode: node`,
-      `reachabilityClass: 'Descendable'` (a real union member — these are
-      nested list blocks), `sourceEntry: entry`; drop the bogus `sourceIndex`
-      property and the `as any`. Type the return without casts so future
-      drift is a compile error *once Phase 3 lands*.
-- [ ] Run the s0 suite; verify 23/23 pass.
+- [x] Fixed `makeResolveSource`: `sourceNode: node`,
+      `reachabilityClass: 'Descendable'`, typed `sourceEntry`; dropped the
+      bogus `sourceIndex` property and the `as any`.
+- [x] s0 suite: 23/23 pass.
 
 ### Phase 3 — close the type-check gap (the systemic fix)
 
-- [ ] Make test files type-check somewhere: either a
-      `tsconfig.tests.json` (extends the base, includes `src/**/*`, no
-      `exclude` of tests, `noEmit`) wired as a `typecheck` npm script and
-      called from `verify.rs` step 11, or vitest's built-in
-      `test.typecheck`. Decide based on runtime cost (see Open Questions).
-- [ ] Prove it catches the original defect: temporarily reintroduce the
-      stale stub shape, confirm the typecheck fails, revert.
-- [ ] Do the same for `preview-runtime` if the chosen mechanism is cheap to
-      extend (same step-11 leg).
+- [x] Chose the separate-tsconfig route: `tsconfig.tests.json` in
+      preview-renderer (extends base; `noEmit`; `noUnusedLocals`/
+      `noUnusedParameters` off — lint-grade noise, not drift detection),
+      exposed as `npm run typecheck:tests`, and wired into `verify.rs`
+      step 11 ahead of the test runs. Fixed the pre-existing type errors
+      it surfaced in 6 preview-renderer test files (typed `vi.fn`
+      generics, a `Mock` import, missing `setLocalAst` props, a
+      `useContext` typo'd type, tuple-typed pool fixtures, two narrow
+      casts documented in place).
+- [x] Proved it catches the original defect: reintroducing the stale stub
+      fails with `TS2322: '"Reachable"' is not assignable to
+      'ReachabilityClass'` (plus the pool-tuple errors); reverted.
+- [x] Extended to `preview-runtime` (same tsconfig + script + verify leg).
+      Surfaced real drift there too: `MockSyncClient`'s interface was
+      missing `applyEditorOperations` (impl had it), and the handler mocks
+      were untyped. Fixed; 74/74 tests still pass.
 
 ### Phase 4 — verification + landing
 
-- [ ] `npm run test` and `npm run test:integration` in
-      `ts-packages/preview-renderer` — full suites green.
-- [ ] `cd hub-client && npm run build:all` (strict production build).
-- [ ] `cargo xtask verify --skip-rust-tests` (exercises step 11 exactly as CI
-      would; Rust untouched, so skipping the Rust test leg is fine).
+- [x] `npm run test` (542 passed / 36 skipped) and `npm run test:integration`
+      (572 passed / 1 skipped) in `ts-packages/preview-renderer`.
+- [x] `cargo xtask verify --skip-rust-tests` — includes the hub-client
+      `build:all` leg and the new step-11 typecheck legs.
 - [ ] Commit; comment on bd-ddaqjb91 with the commit hash; close the strand
-      with `--reason`.
+      with `--reason`. Open PR.
 
 ## Open Questions
 

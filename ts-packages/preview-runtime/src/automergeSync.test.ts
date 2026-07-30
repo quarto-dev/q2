@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
-import type { FileEntry, Patch } from '@quarto/quarto-sync-client';
+import type { FileEntry, Patch, SyncClient } from '@quarto/quarto-sync-client';
 import {
   setSyncHandlers,
   isConnected,
@@ -34,22 +34,24 @@ vi.mock('./wasmRenderer', () => ({
 
 describe('automergeSync', () => {
   let mockClient: MockSyncClient;
-  let onFilesChange: ReturnType<typeof vi.fn>;
-  let onFileContent: ReturnType<typeof vi.fn>;
-  let onBinaryContent: ReturnType<typeof vi.fn>;
-  let onConnectionChange: ReturnType<typeof vi.fn>;
-  let onError: ReturnType<typeof vi.fn>;
+  // Mirror automergeSync's (module-private) handler signatures so the
+  // mocks satisfy setSyncHandlers under the tests typecheck.
+  let onFilesChange: ReturnType<typeof vi.fn<(files: FileEntry[]) => void>>;
+  let onFileContent: ReturnType<typeof vi.fn<(path: string, content: string, patches: Patch[]) => void>>;
+  let onBinaryContent: ReturnType<typeof vi.fn<(path: string, content: Uint8Array, mimeType: string) => void>>;
+  let onConnectionChange: ReturnType<typeof vi.fn<(connected: boolean) => void>>;
+  let onError: ReturnType<typeof vi.fn<(error: Error) => void>>;
 
   beforeEach(() => {
     // Reset the module state
     _resetForTesting();
 
     // Create mock handlers
-    onFilesChange = vi.fn();
-    onFileContent = vi.fn();
-    onBinaryContent = vi.fn();
-    onConnectionChange = vi.fn();
-    onError = vi.fn();
+    onFilesChange = vi.fn<(files: FileEntry[]) => void>();
+    onFileContent = vi.fn<(path: string, content: string, patches: Patch[]) => void>();
+    onBinaryContent = vi.fn<(path: string, content: Uint8Array, mimeType: string) => void>();
+    onConnectionChange = vi.fn<(connected: boolean) => void>();
+    onError = vi.fn<(error: Error) => void>();
 
     // Set up handlers
     setSyncHandlers({
@@ -91,7 +93,9 @@ describe('automergeSync', () => {
       );
 
       // Inject the mock client
-      _setClientForTesting(mockClient);
+      // MockSyncClient implements the subset of SyncClient these tests
+      // exercise; the seam is test-only, so widen at the boundary.
+      _setClientForTesting(mockClient as unknown as SyncClient);
     });
 
     it('should report connected state', async () => {
@@ -133,7 +137,9 @@ describe('automergeSync', () => {
         },
         { initialFiles: new Map() },
       );
-      _setClientForTesting(mockClient);
+      // MockSyncClient implements the subset of SyncClient these tests
+      // exercise; the seam is test-only, so widen at the boundary.
+      _setClientForTesting(mockClient as unknown as SyncClient);
       await mockClient.connect('ws://test', 'automerge:test');
     });
 
@@ -176,7 +182,9 @@ describe('automergeSync', () => {
         },
         { initialFiles: new Map() },
       );
-      _setClientForTesting(mockClient);
+      // MockSyncClient implements the subset of SyncClient these tests
+      // exercise; the seam is test-only, so widen at the boundary.
+      _setClientForTesting(mockClient as unknown as SyncClient);
       await mockClient.connect('ws://test', 'automerge:test');
     });
 
@@ -211,7 +219,9 @@ describe('automergeSync', () => {
         },
         { failConnection: true, connectionError: 'Server unavailable' },
       );
-      _setClientForTesting(mockClient);
+      // MockSyncClient implements the subset of SyncClient these tests
+      // exercise; the seam is test-only, so widen at the boundary.
+      _setClientForTesting(mockClient as unknown as SyncClient);
 
       await expect(mockClient.connect('ws://test', 'automerge:test')).rejects.toThrow(
         'Server unavailable',
@@ -230,7 +240,9 @@ describe('automergeSync', () => {
         },
         { initialFiles: new Map() },
       );
-      _setClientForTesting(mockClient);
+      // MockSyncClient implements the subset of SyncClient these tests
+      // exercise; the seam is test-only, so widen at the boundary.
+      _setClientForTesting(mockClient as unknown as SyncClient);
       await mockClient.connect('ws://test', 'automerge:test');
       await mockClient.createFile('test.qmd', 'hello world');
     });
@@ -275,7 +287,9 @@ describe('automergeSync', () => {
         _getCallbacksForTesting(),
         { initialFiles: new Map() },
       );
-      _setClientForTesting(mockClient);
+      // MockSyncClient implements the subset of SyncClient these tests
+      // exercise; the seam is test-only, so widen at the boundary.
+      _setClientForTesting(mockClient as unknown as SyncClient);
       await mockClient.connect('ws://test', 'automerge:test');
     });
 
@@ -384,7 +398,9 @@ describe('automergeSync', () => {
         _getCallbacksForTesting(),
         { initialFiles: new Map() },
       );
-      _setClientForTesting(mockClient);
+      // MockSyncClient implements the subset of SyncClient these tests
+      // exercise; the seam is test-only, so widen at the boundary.
+      _setClientForTesting(mockClient as unknown as SyncClient);
       await mockClient.connect('ws://test', 'automerge:test');
     });
 
@@ -503,7 +519,9 @@ describe('automergeSync', () => {
         },
         { initialFiles: new Map() },
       );
-      _setClientForTesting(mockClient);
+      // MockSyncClient implements the subset of SyncClient these tests
+      // exercise; the seam is test-only, so widen at the boundary.
+      _setClientForTesting(mockClient as unknown as SyncClient);
 
       // The callback should have been cleared by _resetForTesting
       expect(callback).not.toHaveBeenCalled();
