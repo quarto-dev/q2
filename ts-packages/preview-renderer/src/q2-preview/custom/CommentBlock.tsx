@@ -721,16 +721,16 @@ const CommentWrapper = ({
                     ref={chromeRef}
                     style={{
                         position: 'absolute',
-                        bottom: '-11px',
+                        top: '-11px',
                         right: '-10px',
                         transform: `translateY(${nudge}px)`,
                         // Animate nudge changes; the relayout pass reads
                         // the in-flight translation, so mid-animation
                         // reflows stay correct.
                         transition: 'transform 0.15s ease-out',
-                        // The bubble hangs below the block's box, into
-                        // the next (positioned) sibling wrapper — lift
-                        // it above so it wins hit-testing there. A
+                        // The bubble pokes above the block's box, into
+                        // the previous (positioned) sibling wrapper —
+                        // lift it above so it wins hit-testing there. A
                         // self-expanded bubble lifts further so no peer
                         // bubble (all at 100) can paint above it.
                         zIndex: selfExpanded ? 1000 : 100,
