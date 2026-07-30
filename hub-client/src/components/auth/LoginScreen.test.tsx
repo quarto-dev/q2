@@ -48,16 +48,58 @@ describe('LoginScreen', () => {
     expect(mock.lastLoginUri).toBe(window.location.origin + '/subpath/auth/callback');
   });
 
-  it('renders the default copy when error is false/absent', () => {
+  it('renders the default copy when no error reason is present', () => {
     render(withProvider(<LoginScreen />));
     expect(screen.getByText(/Sign in with Google to continue/i)).toBeTruthy();
-    expect(screen.queryByText(/Sign-in failed/i)).toBeNull();
+    expect(screen.queryByText(/not authorized/i)).toBeNull();
+    expect(screen.queryByText(/didn't complete/i)).toBeNull();
   });
 
-  it('renders the error copy when error={true}', () => {
-    render(withProvider(<LoginScreen error />));
-    expect(screen.getByText(/Sign-in failed/i)).toBeTruthy();
+  // One case per user-facing message. Eleven distinct causes used to
+  // collapse into the "not authorized" sentence, sending users who needed
+  // a reload to an administrator instead.
+  it('tells a stale client to reload', () => {
+    render(withProvider(<LoginScreen errorReason="stale_client" />));
+    expect(screen.getByText(/out of date.*reload the page/i)).toBeTruthy();
+    expect(screen.queryByText(/not authorized/i)).toBeNull();
+  });
+
+  it('tells a broken-down sign-in to try again', () => {
+    render(withProvider(<LoginScreen errorReason="restart" />));
+    expect(screen.getByText(/didn't complete.*try again/i)).toBeTruthy();
+    expect(screen.queryByText(/not authorized/i)).toBeNull();
+  });
+
+  it('tells a refused identity it is not authorized', () => {
+    render(withProvider(<LoginScreen errorReason="denied" />));
+    expect(screen.getByText(/not authorized to access this hub/i)).toBeTruthy();
+  });
+
+  it('reports a hub-side failure as a hub-side failure', () => {
+    render(withProvider(<LoginScreen errorReason="server" />));
+    expect(screen.getByText(/went wrong on the hub/i)).toBeTruthy();
+    expect(screen.queryByText(/not authorized/i)).toBeNull();
+  });
+
+  // A bare `/?auth_error` from a pre-E1 hub parses to `''`, which is
+  // falsy — the error must still show, and as the retry copy rather than
+  // the alarming one.
+  it('renders the retry copy for an empty reason, not nothing', () => {
+    render(withProvider(<LoginScreen errorReason="" />));
+    expect(screen.getByText(/didn't complete.*try again/i)).toBeTruthy();
     expect(screen.queryByText(/Sign in with Google to continue/i)).toBeNull();
+  });
+
+  it('renders the retry copy for an unknown reason, never "not authorized"', () => {
+    render(withProvider(<LoginScreen errorReason="something-we-do-not-know" />));
+    expect(screen.getByText(/didn't complete.*try again/i)).toBeTruthy();
+    expect(screen.queryByText(/not authorized/i)).toBeNull();
+  });
+
+  it('never renders the reason string itself', () => {
+    render(withProvider(<LoginScreen errorReason="<img src=x onerror=1>" />));
+    expect(screen.queryByText(/onerror/i)).toBeNull();
+    expect(screen.getByText(/didn't complete.*try again/i)).toBeTruthy();
   });
 
   it('renders a custom message (session expiry) instead of the default copy', () => {
@@ -67,8 +109,8 @@ describe('LoginScreen', () => {
   });
 
   it('error copy wins over a custom message', () => {
-    render(withProvider(<LoginScreen error message="Your session expired — please sign in again." />));
-    expect(screen.getByText(/Sign-in failed/i)).toBeTruthy();
+    render(withProvider(<LoginScreen errorReason="denied" message="Your session expired — please sign in again." />));
+    expect(screen.getByText(/not authorized/i)).toBeTruthy();
     expect(screen.queryByText(/session expired/i)).toBeNull();
   });
 });

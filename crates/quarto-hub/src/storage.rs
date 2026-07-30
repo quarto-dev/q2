@@ -220,6 +220,17 @@ pub fn resolve_server_secret(config: &mut HubStorageConfig, hub_dir: &Path) -> R
     rand::rng().fill_bytes(&mut bytes);
     config.server_secret = Some(hex::encode(bytes));
     config.save(hub_dir)?;
+    // Loud because it is now pinned to *this* data directory: a second
+    // instance with its own generated secret derives a different actor ID
+    // for the same user in the same project. The value itself is never
+    // logged.
+    warn!(
+        hub_dir = %hub_dir.display(),
+        "generated a new server secret and persisted it to hub.json. \
+         Multi-instance deployments must set QUARTO_HUB_SERVER_SECRET to \
+         the same value on every instance; otherwise each derives its own \
+         actor IDs."
+    );
     Ok(bytes)
 }
 
@@ -250,6 +261,19 @@ pub fn resolve_session_secret(config: &mut HubStorageConfig, hub_dir: &Path) -> 
     rand::rng().fill_bytes(&mut bytes);
     config.session_secret = Some(hex::encode(bytes));
     config.save(hub_dir)?;
+    // The multi-instance hazard this warns about is genuinely hard to
+    // diagnose from symptoms: two hubs with divergent generated secrets
+    // reject each other's session cookies and sealed login blobs, so
+    // sign-in fails intermittently and heals itself on retry. Its audit
+    // signature is a run of `*_kid_mismatch`. The value itself is never
+    // logged.
+    warn!(
+        hub_dir = %hub_dir.display(),
+        "generated a new session secret and persisted it to hub.json — it is \
+         now pinned to this data directory. Multi-instance deployments must \
+         set QUARTO_HUB_SESSION_SECRET to the same value on every instance; \
+         otherwise instances reject each other's session cookies."
+    );
     Ok(bytes)
 }
 
@@ -1041,5 +1065,159 @@ mod tests {
         // Should have generated a new secret
         assert_eq!(secret.len(), 32);
         assert!(config.server_secret.is_some());
+    }
+
+    // ── auto-generation is loud (E3, bd-sx7k3vid) ─────────────────
+
+    /// Run `f` under a scoped subscriber that captures formatted output,
+    /// so we can assert on what an operator would actually see.
+    fn capture_logs(f: impl FnOnce()) -> String {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct BufWriter(Arc<Mutex<Vec<u8>>>);
+        impl Write for BufWriter {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for BufWriter {
+            type Writer = BufWriter;
+            fn make_writer(&'a self) -> Self::Writer {
+                self.clone()
+            }
+        }
+
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(BufWriter(buf.clone()))
+            .with_ansi(false)
+            .with_max_level(tracing::Level::TRACE)
+            .finish();
+        tracing::subscriber::with_default(subscriber, f);
+        String::from_utf8(buf.lock().unwrap().clone()).unwrap()
+    }
+
+    fn fresh_hub_dir() -> (TempDir, PathBuf) {
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join("hub");
+        fs::create_dir_all(&hub_dir).unwrap();
+        (temp, hub_dir)
+    }
+
+    /// Two hubs that each auto-generate their own session secret reject
+    /// each other's cookies and sealed login blobs — an intermittent,
+    /// self-healing sign-in failure whose audit signature
+    /// (`login_state_kid_mismatch`) gives no hint about the cause. The
+    /// warning is the only thing that surfaces it at the moment the
+    /// secret gets pinned to one data directory.
+    #[test]
+    fn resolve_session_secret_warns_when_it_generates_one() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET") };
+
+        let (_temp, hub_dir) = fresh_hub_dir();
+        let mut config = HubStorageConfig::new();
+        let logs = capture_logs(|| {
+            resolve_session_secret(&mut config, &hub_dir).unwrap();
+        });
+
+        assert!(logs.contains("WARN"), "must be a warning: {logs}");
+        assert!(
+            logs.contains("QUARTO_HUB_SESSION_SECRET"),
+            "must name the way out: {logs}"
+        );
+        assert!(
+            logs.contains(&hub_dir.display().to_string()),
+            "must name the directory the secret is now pinned to: {logs}"
+        );
+
+        // Token contents are never logged, and neither is this.
+        let generated = config.session_secret.as_deref().unwrap();
+        assert!(
+            !logs.contains(generated),
+            "the secret value must never reach the log"
+        );
+    }
+
+    #[test]
+    fn resolve_session_secret_is_silent_when_a_secret_is_configured() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let (_temp, hub_dir) = fresh_hub_dir();
+
+        // Source 1: the env var — the multi-instance mechanism itself.
+        unsafe { std::env::set_var("QUARTO_HUB_SESSION_SECRET", hex::encode([3u8; 32])) };
+        let mut config = HubStorageConfig::new();
+        let env_logs = capture_logs(|| {
+            resolve_session_secret(&mut config, &hub_dir).unwrap();
+        });
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET") };
+
+        // Source 2: an existing hub.json value — already pinned, nothing
+        // new to warn about.
+        let mut config = HubStorageConfig::new();
+        config.session_secret = Some(hex::encode([5u8; 32]));
+        let config_logs = capture_logs(|| {
+            resolve_session_secret(&mut config, &hub_dir).unwrap();
+        });
+
+        assert!(!env_logs.contains("WARN"), "env branch: {env_logs}");
+        assert!(
+            !config_logs.contains("WARN"),
+            "config branch: {config_logs}"
+        );
+    }
+
+    #[test]
+    fn resolve_server_secret_warns_when_it_generates_one() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
+
+        let (_temp, hub_dir) = fresh_hub_dir();
+        let mut config = HubStorageConfig::new();
+        let logs = capture_logs(|| {
+            resolve_server_secret(&mut config, &hub_dir).unwrap();
+        });
+
+        assert!(logs.contains("WARN"), "must be a warning: {logs}");
+        assert!(
+            logs.contains("QUARTO_HUB_SERVER_SECRET"),
+            "must name the way out: {logs}"
+        );
+
+        let generated = config.server_secret.as_deref().unwrap();
+        assert!(
+            !logs.contains(generated),
+            "the secret value must never reach the log"
+        );
+    }
+
+    #[test]
+    fn resolve_server_secret_is_silent_when_a_secret_is_configured() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let (_temp, hub_dir) = fresh_hub_dir();
+
+        unsafe { std::env::set_var("QUARTO_HUB_SERVER_SECRET", hex::encode([4u8; 32])) };
+        let mut config = HubStorageConfig::new();
+        let env_logs = capture_logs(|| {
+            resolve_server_secret(&mut config, &hub_dir).unwrap();
+        });
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
+
+        let mut config = HubStorageConfig::new();
+        config.server_secret = Some(hex::encode([6u8; 32]));
+        let config_logs = capture_logs(|| {
+            resolve_server_secret(&mut config, &hub_dir).unwrap();
+        });
+
+        assert!(!env_logs.contains("WARN"), "env branch: {env_logs}");
+        assert!(
+            !config_logs.contains("WARN"),
+            "config branch: {config_logs}"
+        );
     }
 }

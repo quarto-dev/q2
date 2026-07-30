@@ -960,11 +960,18 @@ async fn auth_nonce(State(ctx): State<SharedContext>) -> impl IntoResponse {
     response
 }
 
+/// Login-state failure class for a callback that presented no cookie
+/// **and** a nonce-less token. Named because the user-facing reason
+/// mapping keys off it; every other class maps to `restart`.
+const LOGIN_STATE_STALE_CLIENT: &str = "stale_client";
+
 /// Outcome of the callback's nonce check.
 enum NonceCheck {
     Ok,
     /// Enforcement was skipped — insecure mode only.
     Skipped,
+    /// The **bare** failure class, e.g. `expired`. The emit site adds
+    /// the `login_state_` prefix, so carrying one here would double it.
     Failed(&'static str),
 }
 
@@ -994,7 +1001,22 @@ fn check_login_nonce(
     }
 
     let Some(blob) = login_state_cookie(headers, true) else {
-        return NonceCheck::Failed("login_state_missing");
+        // Two readings, opposite remedies — and the token's own `nonce`
+        // claim separates them. Reading it here is safe: the callback
+        // has already signature-validated these claims.
+        //
+        // No nonce means no current client produced this (the SPA
+        // renders no button until it holds one), so the fix is a reload
+        // — or nothing, if something is driving GIS outside the app.
+        // A nonce with no cookie means the pre-flight *did* happen and
+        // the cookie was lost in transit (fix the configuration), or a
+        // captured token is being replayed from a browser that never
+        // ran one. Per-event those two are indistinguishable.
+        return NonceCheck::Failed(if claims.nonce.is_none() {
+            LOGIN_STATE_STALE_CLIENT
+        } else {
+            "missing"
+        });
     };
     let sealed = match crate::login_state::open_login_state(
         ctx.session_keys(),
@@ -1015,6 +1037,45 @@ fn check_login_nonce(
     NonceCheck::Ok
 }
 
+/// Why `POST /auth/callback` failed, as told to the *user*.
+///
+/// Deliberately coarse. These values land in a URL the user can read and
+/// anyone can craft, so the fine distinctions — tampered blob, `kid`
+/// mismatch, nonce mismatch, which JWT claim was wrong — stay in the
+/// audit log, where they cost an attacker nothing to learn and an
+/// operator everything to lose. The mapping from cause to reason is
+/// many-to-one by design; a dozen causes collapse into these four.
+///
+/// The distinction that matters most is `Denied` vs `Restart`: `Denied`
+/// sends the user to an administrator, so it is reserved for the two
+/// causes where an identity really was established and then refused (a
+/// ban, and an allowlist miss). Everything else is a retry.
+#[derive(Clone, Copy)]
+enum AuthErrorReason {
+    /// No login-state cookie **and** a nonce-less token: an out-of-date
+    /// bundle, or a login driven outside the app.
+    StaleClient,
+    /// The attempt broke down without establishing an identity.
+    Restart,
+    /// An identity was established, then refused on policy.
+    Denied,
+    /// The hub itself failed.
+    Server,
+}
+
+impl AuthErrorReason {
+    /// The query-parameter value. Server-controlled constants only —
+    /// nothing user-supplied is ever reflected into the redirect.
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::StaleClient => "stale_client",
+            Self::Restart => "restart",
+            Self::Denied => "denied",
+            Self::Server => "server",
+        }
+    }
+}
+
 /// Handle `POST /auth/callback` — credential delivery via form POST.
 ///
 /// Registered for providers where [`AuthConfig::uses_form_post_callback()`]
@@ -1033,9 +1094,11 @@ async fn auth_callback(
     // The sealed login-state blob is single-use: every exit path from
     // here clears it, so one pre-flight can complete at most one login.
     // Building the failure response through a closure is what keeps that
-    // true as paths are added.
-    let auth_error = || {
-        let mut response = Redirect::to("/?auth_error").into_response();
+    // true as paths are added. The reason is a required parameter for the
+    // same reason — a new path cannot silently inherit someone else's.
+    let auth_error = |reason: AuthErrorReason| {
+        let mut response =
+            Redirect::to(&format!("/?auth_error={}", reason.as_str())).into_response();
         attach_cookies(&mut response, &[build_clear_login_state_cookie(secure)]);
         response
     };
@@ -1047,14 +1110,44 @@ async fn auth_callback(
         });
 
     if !validate_callback_csrf(&mode, &form, &headers) {
-        return auth_error();
+        // No `sub`: this runs before the token is parsed, so no subject
+        // has been validated — and an unvalidated one in the audit log
+        // would be worse than an absent one. Emittable by
+        // unauthenticated callers, so WARN volume here is
+        // attacker-influenceable (as it already is on the nonce path).
+        tracing::event!(
+            target: "quarto_hub::audit",
+            tracing::Level::WARN,
+            action = "auth_fail",
+            outcome = "deny",
+            credential_kind = "cookie",
+            detail = "callback_csrf",
+        );
+        return auth_error(AuthErrorReason::Restart);
     }
 
     // Validate the Google ID token once, then mint the hub session
     // cookie (§1) — the Google token itself is never cookie'd.
     let claims = match ctx.authenticate_claims(Some(&form.credential)).await {
         Ok(claims) => claims,
-        Err(_status) => return auth_error(),
+        // The status is the whole point here: `check_allowlists_for`
+        // answers 403 for "good credentials, wrong user" and 401 for
+        // everything else, which is exactly the denied/restart line.
+        // Discarding it is what made an allowlist denial indistinguish-
+        // able from a broken login.
+        Err(status) => {
+            return auth_error(if status == StatusCode::FORBIDDEN {
+                // An identity was established, then refused on policy;
+                // retrying will never help.
+                AuthErrorReason::Denied
+            } else {
+                // No identity was established, so "not authorized" would
+                // be false. On client-ID drift this fires for every user
+                // at once — telling them all their accounts were refused
+                // would be indistinguishable from a mass de-allowlisting.
+                AuthErrorReason::Restart
+            });
+        }
     };
 
     // Bind the token to this login attempt (H2). Runs after signature
@@ -1070,7 +1163,14 @@ async fn auth_callback(
             sub = %claims.sub,
             detail = %format!("login_state_{detail}"),
         );
-        return auth_error();
+        // Only the nonce-less-token-without-a-cookie class is worth a
+        // distinct user-facing reason — it is the one a reload fixes.
+        // Every other class (and any added later) is a plain retry.
+        return auth_error(if detail == LOGIN_STATE_STALE_CLIENT {
+            AuthErrorReason::StaleClient
+        } else {
+            AuthErrorReason::Restart
+        });
     }
 
     // Bans gate mint too (§3) — otherwise a banned user just
@@ -1085,14 +1185,16 @@ async fn auth_callback(
             sub = %claims.sub,
             detail = "user_banned",
         );
-        return auth_error();
+        // The other genuine denial: this identity is refused until an
+        // operator says otherwise.
+        return auth_error(AuthErrorReason::Denied);
     }
 
     let cookies = match mint_session_cookie(&ctx, &claims, LoginEndpoint::Callback).await {
         Ok(cookies) => cookies,
         Err(err) => {
             tracing::error!(error = %err, "failed to mint session token");
-            return auth_error();
+            return auth_error(AuthErrorReason::Server);
         }
     };
     let mut response = Redirect::to("/").into_response();
