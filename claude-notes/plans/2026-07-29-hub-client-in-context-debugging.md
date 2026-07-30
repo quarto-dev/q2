@@ -4,8 +4,12 @@
 **Phase strands:** bd-q93tkglb (1: am core) → bd-6ogrov5r (2: doctor + tap) →
 bd-lb1cxprv (3: panel) → bd-09aja9gl (4: iframe). Phases 1→2→3 chained with
 `blocks`; 4 is unblocked (cheap, anytime).
-**Branch:** `braid/bd-q93tkglb-phase-1-quartodebugam-core` (off `main`)
-**Status:** APPROVED 2026-07-30 — implementation in progress, Phase 1.
+**Branches:** phase branches chained off `main` — final tip
+`braid/bd-09aja9gl-phase-4-iframe-embed` contains all 9 commits
+(`1d30f39a` … `620c82d8`).
+**Status:** COMPLETE 2026-07-30 — all four phases implemented, tested,
+and end-to-end verified; all strands closed. Not yet merged/pushed
+(awaiting review).
 
 ## Overview
 
