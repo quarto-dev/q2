@@ -22,12 +22,14 @@ import {
   type CreateProjectResult,
   type FilePayload,
   type SyncDiagnostics,
+  type DocInventoryEntry,
 } from '@quarto/quarto-sync-client';
+import type { Repo } from '@automerge/automerge-repo';
 
 import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm, type ProjectFile } from './wasmRenderer';
 
 // Re-export types for use in other components
-export type { ConnectOptions, Patch, EditorContentChange, FileEntry, ActorIdentity, CaptureRef, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult };
+export type { ConnectOptions, Patch, EditorContentChange, FileEntry, ActorIdentity, CaptureRef, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult, SyncDiagnostics, DocInventoryEntry };
 
 // Event handlers for state changes
 type FilesChangeHandler = (files: FileEntry[]) => void;
@@ -308,6 +310,26 @@ export function getActorId(): string | null {
  */
 export function getSyncDiagnostics(): SyncDiagnostics {
   return ensureClient().getSyncDiagnostics();
+}
+
+/**
+ * The live Repo backing the current connection, or null when no client
+ * is connected. Debug accessor for `quartoDebug.am` (bd-q93tkglb) —
+ * observation only; mutations must keep going through the sync client.
+ * Null-safe (never throws): debug tooling probes before connect.
+ */
+export function getRepo(): Repo | null {
+  return client?.getRepo() ?? null;
+}
+
+/**
+ * Inventory of every Automerge document the current connection knows
+ * about (index doc, per-file docs, dangling entries). Empty when no
+ * client is connected. Debug accessor for `quartoDebug.am`
+ * (bd-q93tkglb); null-safe like {@link getRepo}.
+ */
+export function getDocInventory(): DocInventoryEntry[] {
+  return client?.getDocInventory() ?? [];
 }
 
 /**

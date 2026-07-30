@@ -19,6 +19,7 @@ import type {
   CreateBinaryFileResult,
   CreateProjectOptions,
   CreateProjectResult,
+  DocInventoryEntry,
 } from '@quarto/quarto-sync-client';
 import type { FileEntry } from '@quarto/quarto-automerge-schema';
 
@@ -55,6 +56,8 @@ export interface MockSyncClient {
   renameFile(oldPath: string, newPath: string): void;
   getFileHandle(path: string): { documentId: string } | null;
   getFilePaths(): string[];
+  getRepo(): unknown;
+  getDocInventory(): DocInventoryEntry[];
   createNewProject(options: CreateProjectOptions): Promise<CreateProjectResult>;
 
   // Test helpers
@@ -104,6 +107,9 @@ export function createMockSyncClient(
   let docIdCounter = 0;
 
   const generateDocId = () => `automerge:test-${docIdCounter++}`;
+
+  // Stable sentinel so getRepo() delegation can be asserted by identity.
+  const mockRepo = { __mockRepo: true };
 
   const client: MockSyncClient = {
     async connect(_syncServerUrl: string, _indexDocId: string): Promise<FileEntry[]> {
@@ -236,6 +242,36 @@ export function createMockSyncClient(
 
     getFilePaths(): string[] {
       return Array.from(files.keys());
+    },
+
+    getRepo(): unknown {
+      return connected ? mockRepo : null;
+    },
+
+    getDocInventory(): DocInventoryEntry[] {
+      if (!connected) return [];
+      const entries: DocInventoryEntry[] = [
+        {
+          docId: 'mock-index',
+          role: 'index',
+          path: null,
+          handleState: 'ready',
+          heads: ['mockhead-index'],
+          unavailableMarker: false,
+        },
+      ];
+      const paths = Array.from(files.keys()).sort((a, b) => a.localeCompare(b));
+      for (const path of paths) {
+        entries.push({
+          docId: fileHandles.get(path)?.documentId ?? `mock-doc-${path}`,
+          role: files.get(path)?.type === 'binary' ? 'binary-file' : 'file',
+          path,
+          handleState: 'ready',
+          heads: [`mockhead-${path}`],
+          unavailableMarker: false,
+        });
+      }
+      return entries;
     },
 
     async createNewProject(options: CreateProjectOptions): Promise<CreateProjectResult> {

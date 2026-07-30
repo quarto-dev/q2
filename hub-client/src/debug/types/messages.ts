@@ -12,6 +12,12 @@ export interface MessageLogEntry {
   targetId: PeerId
   documentId?: DocumentId
   dataSize?: number
+  /**
+   * Raw payload bytes; present only when the producing adapter was
+   * constructed with `includeData` (the in-context tap's 'full' mode,
+   * bd-6ogrov5r). The debug.html message log never sets it.
+   */
+  data?: Uint8Array
 }
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected'

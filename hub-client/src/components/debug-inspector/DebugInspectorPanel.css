@@ -1,0 +1,295 @@
+/*
+ * Live-inspector panel styles (bd-lb1cxprv).
+ *
+ * Everything is scoped under .quarto-debug-inspector because this
+ * chunk loads into the editor SPA — debug.css (the /debug.html
+ * stylesheet these rules are adapted from) uses global selectors
+ * (body, h1, button, *) and must NOT be imported here. The reused
+ * debug components' class names are restyled below within the scope.
+ */
+
+.quarto-debug-inspector {
+  position: fixed;
+  inset: auto 0 0 0;
+  height: 55vh;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e2e;
+  color: #cdd6f4;
+  border-top: 2px solid #89b4fa;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.45);
+  font-family: 'Source Code Pro', ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.quarto-debug-inspector button {
+  background: #313244;
+  color: #cdd6f4;
+  border: 1px solid #45475a;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.quarto-debug-inspector button:hover:not(:disabled) {
+  background: #45475a;
+}
+
+.quarto-debug-inspector button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.quarto-debug-inspector input[type='text'],
+.quarto-debug-inspector select {
+  background: #181825;
+  color: #cdd6f4;
+  border: 1px solid #45475a;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font: inherit;
+}
+
+.quarto-debug-inspector .inspector-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 12px;
+  background: #181825;
+  border-bottom: 1px solid #313244;
+  flex: 0 0 auto;
+}
+
+.quarto-debug-inspector .inspector-header h1 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+  color: #89b4fa;
+  white-space: nowrap;
+}
+
+.quarto-debug-inspector .inspector-tabs {
+  display: flex;
+  gap: 4px;
+  flex: 1 1 auto;
+}
+
+.quarto-debug-inspector .inspector-tabs button.active {
+  background: #89b4fa;
+  color: #1e1e2e;
+  border-color: #89b4fa;
+}
+
+.quarto-debug-inspector .inspector-close {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.quarto-debug-inspector .inspector-documents {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.quarto-debug-inspector .inspector-sidebar {
+  flex: 0 0 280px;
+  overflow-y: auto;
+  padding: 8px;
+  border-right: 1px solid #313244;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.quarto-debug-inspector .inspector-content {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 8px;
+}
+
+.quarto-debug-inspector h2,
+.quarto-debug-inspector h3,
+.quarto-debug-inspector h4 {
+  font-size: 12px;
+  margin: 0 0 6px 0;
+  color: #a6adc8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.quarto-debug-inspector .json-content {
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #a6e3a1;
+}
+
+/* Reused document components */
+.quarto-debug-inspector .document-panel {
+  border: 1px solid #313244;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: #181825;
+}
+
+.quarto-debug-inspector .document-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #313244;
+}
+
+.quarto-debug-inspector .document-header h3 {
+  margin: 0;
+  text-transform: none;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quarto-debug-inspector .state-badge {
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #45475a;
+}
+
+.quarto-debug-inspector .state-badge.ready {
+  background: #a6e3a1;
+  color: #1e1e2e;
+}
+
+.quarto-debug-inspector .state-badge.unavailable {
+  background: #f38ba8;
+  color: #1e1e2e;
+}
+
+.quarto-debug-inspector .document-content {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.quarto-debug-inspector .index-files {
+  padding: 6px 8px;
+  border-top: 1px solid #313244;
+}
+
+.quarto-debug-inspector .index-files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.quarto-debug-inspector .index-files-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.quarto-debug-inspector .index-files-list .file-path {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quarto-debug-inspector .document-list ul,
+.quarto-debug-inspector .document-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.quarto-debug-inspector .document-items li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.quarto-debug-inspector .doc-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+}
+
+.quarto-debug-inspector .add-document {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.quarto-debug-inspector .add-document input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.quarto-debug-inspector .empty {
+  color: #6c7086;
+  font-style: italic;
+}
+
+.quarto-debug-inspector .error {
+  color: #f38ba8;
+}
+
+/* Reused message log */
+.quarto-debug-inspector .message-log {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px;
+}
+
+.quarto-debug-inspector .log-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  margin-bottom: 6px;
+}
+
+.quarto-debug-inspector .log-filters {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.quarto-debug-inspector .log-messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.quarto-debug-inspector .log-messages .time {
+  color: #6c7086;
+  margin-right: 6px;
+}
+
+.quarto-debug-inspector .log-messages .type {
+  color: #f9e2af;
+  margin-right: 6px;
+}
+
+.quarto-debug-inspector .log-messages .size {
+  color: #6c7086;
+  margin-left: 6px;
+}
+
+/* Direction coloring in the log (incoming vs outgoing rows). */
+.quarto-debug-inspector .log-messages .incoming {
+  color: #a6e3a1;
+}
+
+.quarto-debug-inspector .log-messages .outgoing {
+  color: #89b4fa;
+}

@@ -127,4 +127,26 @@ describe('LoggingNetworkAdapter', () => {
     adapter.disconnect()
     expect(stub.disconnectCalls).toBe(1)
   })
+
+  // Payload capture is opt-in (bd-6ogrov5r): the debug.html message log
+  // wants summaries only; the in-context tap's 'full' mode needs bytes.
+  it('omits payload bytes by default', () => {
+    adapter.send(buildMessage())
+    expect(messages[0].data).toBeUndefined()
+  })
+
+  it('captures payload bytes when includeData is set', () => {
+    const entries: MessageLogEntry[] = []
+    const withData = new LoggingNetworkAdapter(
+      stub,
+      (entry) => entries.push(entry),
+      () => {},
+      { includeData: true },
+    )
+    withData.send(buildMessage())
+    stub.emit('message', buildMessage({ data: new Uint8Array([9, 9]) }))
+
+    expect(entries[0].data).toEqual(new Uint8Array([1, 2, 3, 4]))
+    expect(entries[1].data).toEqual(new Uint8Array([9, 9]))
+  })
 })
