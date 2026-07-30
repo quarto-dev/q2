@@ -70,6 +70,27 @@ async fn allowlisted_google_setup() -> &'static (MockOidcProvider, TestHub) {
         .await
 }
 
+/// As [`secure_google_setup`], with one `sub` banned — the other cause
+/// that qualifies as a genuine denial.
+async fn banned_google_setup() -> &'static (MockOidcProvider, TestHub) {
+    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
+        tokio::sync::OnceCell::const_new();
+    SETUP
+        .get_or_init(|| async {
+            install_tracing_once();
+            let provider = MockOidcProvider::start().await;
+            let hub = TestHubBuilder::new()
+                .secure()
+                .google_provider()
+                .banned_subs(&["reason-banned-sub"])
+                .session_secret(TEST_SESSION_SECRET)
+                .start(&provider)
+                .await;
+            (provider, hub)
+        })
+        .await
+}
+
 fn test_keys() -> SessionKeys {
     SessionKeys::new(TEST_SESSION_SECRET)
 }
@@ -612,6 +633,30 @@ async fn a_wrong_audience_credential_redirects_with_reason_restart() {
 
     let resp = post_callback(hub, &google, None).await;
     assert_auth_error(&resp, "restart");
+}
+
+/// The other cause that qualifies as `denied`. It is gated *after* the
+/// nonce check, so reaching it takes an otherwise flawless nonce-bound
+/// login — which is the point of testing it: a ban must refuse a login
+/// that is perfect in every other respect.
+///
+/// The pre-existing ban coverage (`session_auth.rs::ban_gates_verify_and_mint`)
+/// goes through `/auth/session`, which answers 403 rather than
+/// redirecting, so it says nothing about the reason a browser is shown.
+#[tokio::test]
+async fn a_banned_user_redirects_with_reason_denied() {
+    let (provider, hub) = banned_google_setup().await;
+    let (nonce, blob) = fetch_nonce(hub, LOGIN_STATE_COOKIE_SECURE).await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("reason-banned-sub")
+            .nonce(&nonce)
+            .to_value(),
+    );
+
+    let resp = post_callback(hub, &google, Some((LOGIN_STATE_COOKIE_SECURE, &blob))).await;
+    assert_auth_error(&resp, "denied");
+    assert_eq!(auth_fail_detail_for("reason-banned-sub"), "user_banned");
 }
 
 // ── domain separation across the HTTP surface ─────────────────────
