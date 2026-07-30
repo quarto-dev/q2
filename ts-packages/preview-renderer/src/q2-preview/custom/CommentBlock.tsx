@@ -204,9 +204,13 @@ export const CommentBlock = (args: NodeArgs<BlockNode>) => {
     // backstop. Blocks that already carry comments keep their bubble
     // for read-only display.
     if (comments.length === 0) {
+        // `resolveSource` is a pluggable context member — treat a
+        // malformed entry (no sourceNode) like an unresolvable block
+        // rather than crashing the render (bd-ddaqjb91).
         const resolved = edit.resolveSource(block);
         if (
             !resolved ||
+            !resolved.sourceNode ||
             resolved.reachabilityClass === 'Opaque' ||
             !sameCommentableKind(block, resolved.sourceNode)
         ) {
@@ -614,7 +618,7 @@ const CommentWrapper = ({
      */
     const resolveCommittable = () => {
         const resolved = edit.resolveSource(block);
-        if (!resolved) return null;
+        if (!resolved || !resolved.sourceNode) return null;
         if (resolved.reachabilityClass === 'Opaque') return null;
         if (!sameCommentableKind(block, resolved.sourceNode)) return null;
         return resolved;
