@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-30
+
+- [`1d30f39a`](https://github.com/quarto-dev/q2/commits/1d30f39a): The console debug API (`window.quartoDebug`) gained an `am` namespace for inspecting the live Automerge state (documents, heads, history, sync status, presence), plus a `help()` guide covering the whole API.
+
 ### 2026-07-28
 
 - [`807fd96c`](https://github.com/quarto-dev/q2/commits/807fd96c): Signing in with Google is now tied to the specific sign-in you started, so a copied Google token can no longer be used to open a session on your behalf.
