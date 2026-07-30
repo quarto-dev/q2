@@ -322,10 +322,55 @@ Upstream accessors (each with tests first):
       the API, of `am`, and of `am.unsafe`, plus the unsafe warning
 - [x] Wire into `installDebugApi` — no `App.tsx` change needed; `am` is fed
       from the existing `DebugApiContext.getProject`
-- [ ] `npm run build:all` + `test:ci` green (build running)
-- [ ] End-to-end: real browser session, exercise each method from console,
-      record invocations + output here
-- [ ] Close bd-q93tkglb
+- [x] `npm run build:all` green; `test:ci` legs green (781 unit / 109
+      integration / 129 wasm); typechecks green in quarto-sync-client,
+      preview-runtime, hub-client; eslint clean on changed files.
+      Committed as 1d30f39a (+ changelog commit) on
+      `braid/bd-q93tkglb-phase-1-quartodebugam-core`
+- [x] End-to-end: real browser session (2026-07-30), production build via
+      `npm run local-prod` (hub on :3000, static on :8080), driven through
+      chrome-devtools MCP. See transcript below.
+- [x] `help()` amended after e2e: time travel must go through
+      `handle.view(urlHeads).doc()` — `Automerge.view` rejects
+      automerge-repo's URL-encoded heads ("could not decode hash")
+- [x] Close bd-q93tkglb
+
+#### Phase 1 end-to-end transcript (2026-07-30)
+
+Setup: fresh `.local-prod-data`-backed hub, `localStorage.quartoDebug = '1'`
+set **before reload on a production build** (verifies the prod gate), then a
+`debug-e2e` project created through the UI (default template). Output was
+inspected at each step; no console errors or warnings for the whole session.
+
+- `quartoDebug.apiVersion` → `1`; `Object.keys(quartoDebug.am)` →
+  `[repos, docs, snapshot, history, syncStatus, presence, unsafe]`
+- `am.repos()` → 2 repos: `{name:'sync-client', syncServer:'ws://127.0.0.1:8080/ws',
+  peerId:'peer-marqjbzbl', connectedPeers:['peer-10778244625063587033'],
+  cachedHandles:3}` + a `project-set` entry (same hub peer)
+- `am.docs()` → 4 entries: index + `_quarto.yml` + `index.qmd` (roles
+  `index`/`file`, state `ready`, real bs58 heads) + the root collection doc
+  with role `project-set`
+- `am.snapshot('index')` → index doc with `files` map (paths → docIds),
+  `identities`, `version: 2`; `truncated: false`
+- `am.snapshot('index.qmd', {maxStringLength: 80})` → `truncated: true`,
+  text ends `…cont… [+103 chars]`
+- `am.history('index.qmd')` → `changeCount: 1`, actor
+  `31f7233dc77f47b9…`, timestamp populated
+- `am.syncStatus()` → `{connected: true, diagnostics: {connectedPeers: 1,
+  stranded: []}, projectSet: {…root collection 'My projects', entryCount: 1}}`
+- `am.presence()` → own identity ('Witty Falcon'), `currentFilePath:
+  'index.qmd'`, `localCursor: 0`
+- Live-mutation check: `writeFile('index.qmd', …)` → heads advanced
+  (`rBodzBSp…` → `hTbqz5AK…`), `history().changeCount` 1 → 2
+- `am.unsafe.handle('index.qmd')` → live handle (`state:'ready'`, live
+  `doc().text` includes the new edit); `am.unsafe.Automerge.getConflicts`
+  is a function
+- Time travel: `h.view(h.history()[0]).doc().text` lacks the edit while
+  `h.doc().text` has it ✓ (and `Automerge.view(doc, urlHeads)` throws
+  "could not decode hash" — hence the help() amendment)
+- Error path: `am.snapshot('nope.qmd')` → `Error: quartoDebug.am: unknown
+  doc ref 'nope.qmd' — expected a project file path, 'index', or a doc id
+  (see am.docs())`; `automerge:`-prefixed docId refs resolve ✓
 
 ### Phase 2 — `doctor()` + message tap (bd-6ogrov5r)
 

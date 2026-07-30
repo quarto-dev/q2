@@ -216,8 +216,12 @@ Escape hatches (am.unsafe.*) — console use only, NOT JSON-serializable
                                 handle.change() bypasses the sync client's caches, VFS
                                 mirroring, and Monaco sync — observe, don't mutate.
   am.unsafe.Automerge           the @automerge/automerge module: getConflicts(doc, prop),
-                                diff(doc, headsA, headsB), view(doc, heads) time travel,
                                 getAllChanges/decodeChange forensics.
+                                Time travel: use the HANDLE, not Automerge.view —
+                                handle.history() returns URL-encoded heads, which
+                                Automerge.view rejects ("could not decode hash").
+                                  const h = quartoDebug.am.unsafe.handle('index.qmd')
+                                  h.view(h.history()[0]).doc()   // doc at first change
 
 Meta
   apiVersion                    number; gate on it before relying on shapes
