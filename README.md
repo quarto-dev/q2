@@ -2,15 +2,11 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/quarto-dev/q2)
 
-> **Experimental** - This project is under active development. It's not yet ready for production use, and will not be for a while.
+> **Experimental** - This project is under active development. It's not yet ready for production use.
 
 This repository is a Rust implementation of the next version of [Quarto](https://quarto.org). The goal is to replace parts of the TypeScript/Deno runtime with a unified Rust implementation.
 
 ## Installing
-
-> Release binaries are experimental, like everything else here — they
-> exist so the team and early testers don't need a full Rust + Node
-> toolchain.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/quarto-dev/q2/main/install.sh | bash
@@ -88,8 +84,6 @@ cargo nextest run
 ## Contributing
 
 We welcome discussions about the project via GitHub issues.
-However, the Quarto team will be working on this codebase internally before we're ready to accept outside contributions or make public binary releases/announcements.
-Please feel free to use the discussions page for questions and suggestions.
 
 ## Status
 
