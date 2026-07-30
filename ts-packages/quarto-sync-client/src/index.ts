@@ -57,12 +57,14 @@ export {
   // so per-file tool errors match the sync client's diagnostics.
   fileUnavailableMessage,
   indexUnavailableMessage,
+  setNetworkAdapterWrapper,
 } from './client.js';
 export type {
   SyncClient,
   SyncDiagnostics,
   StrandedFileDiagnostic,
   DocInventoryEntry,
+  NetworkAdapterWrapper,
 } from './client.js';
 
 // Injectable diagnostic-log sink (bd-sl4o01y0): stdio hosts (hub-mcp)

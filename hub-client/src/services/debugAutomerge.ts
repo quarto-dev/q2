@@ -26,10 +26,14 @@ import {
   getDocInventory,
   getIndexHandle,
   getFileHandle,
+  getFileContent,
   getSyncDiagnostics,
   isConnected,
+  vfsListFiles,
   type SyncDiagnostics,
 } from '@quarto/preview-runtime';
+import type { FileEntry } from '@quarto/preview-renderer/types/project';
+import { getEditorTextProvider } from './editorDebugRegistry';
 import {
   getProjectSetDebugSnapshot,
   getCollectionHandle,
@@ -39,6 +43,12 @@ import {
   getPresenceDebugSnapshot,
   type PresenceDebugSnapshot,
 } from './presenceService';
+import {
+  getTapMessages,
+  getTapStatus,
+  type TapMessage,
+  type TapStatus,
+} from './debugMessageTap';
 
 // ── Result shapes ─────────────────────────────────────────────────────
 
@@ -105,6 +115,23 @@ export interface SyncStatusReport {
   projectSet: ProjectSetDebugSnapshot;
 }
 
+/**
+ * One cross-layer inconsistency found by `doctor()`. `kind` is stable
+ * (agents can dispatch on it); `detail` is a human-readable sentence
+ * with the specifics.
+ */
+export interface Discrepancy {
+  kind:
+    | 'monaco-vs-automerge'
+    | 'file-entry-without-handle'
+    | 'handle-without-file-entry'
+    | 'vfs-missing-file'
+    | 'handle-not-ready'
+    | 'stranded-file';
+  path: string | null;
+  detail: string;
+}
+
 export interface QuartoDebugAutomergeApi {
   /** Every repo in this page with peer/network summary. */
   repos(): DebugRepoInfo[];
@@ -129,6 +156,24 @@ export interface QuartoDebugAutomergeApi {
   presence(): PresenceDebugSnapshot;
 
   /**
+   * Cross-layer consistency check: Monaco model vs Automerge text,
+   * file entries vs sync-client handles, loaded files vs the WASM VFS,
+   * handle readiness, stranded docs. Empty array means healthy.
+   * Probe-safe at any lifecycle point.
+   */
+  doctor(): Discrepancy[];
+
+  /**
+   * Observed sync-protocol traffic (ring buffer, newest first) plus
+   * the tap's status. The tap attaches on the next project connect
+   * after the debug API installs; `tap.attached` says whether it did.
+   */
+  messages(opts?: { limit?: number; type?: string }): {
+    tap: TapStatus;
+    messages: TapMessage[];
+  };
+
+  /**
    * Escape hatches for interrogations the snapshot API doesn't cover.
    * Console use only; `handle.change()` bypasses the sync client's
    * caches and VFS mirroring — observe, don't mutate.
@@ -144,6 +189,8 @@ export interface QuartoDebugAutomergeApi {
 /** Live getters the API closes over (same pattern as debugApi.ts). */
 export interface AutomergeDebugContext {
   getProject: () => ProjectEntry | null;
+  /** The app's current FileEntry list (what the sidebar shows). */
+  getFiles: () => readonly FileEntry[];
 }
 
 // ── Ref resolution ────────────────────────────────────────────────────
@@ -393,6 +440,116 @@ export function makeAutomergeDebugApi(
 
     presence(): PresenceDebugSnapshot {
       return getPresenceDebugSnapshot();
+    },
+
+    messages(opts?: { limit?: number; type?: string }) {
+      return { tap: getTapStatus(), messages: getTapMessages(opts) };
+    },
+
+    doctor(): Discrepancy[] {
+      const out: Discrepancy[] = [];
+      const inventory = getDocInventory();
+      const byPath = new Map(
+        inventory
+          .filter((e) => e.path !== null)
+          .map((e) => [e.path as string, e]),
+      );
+      const files = ctx.getFiles();
+
+      // File entries vs sync-client docs. A stranded doc (index entry
+      // whose document never loaded) is one problem, reported once —
+      // not additionally as not-ready or missing-from-VFS.
+      for (const f of files) {
+        if (!byPath.has(f.path)) {
+          out.push({
+            kind: 'file-entry-without-handle',
+            path: f.path,
+            detail:
+              `file entry '${f.path}' (docId ${f.docId}) has no ` +
+              `sync-client doc — the index and the handle cache disagree`,
+          });
+        }
+      }
+      for (const [path, entry] of byPath) {
+        if (entry.unavailableMarker) {
+          out.push({
+            kind: 'stranded-file',
+            path,
+            detail:
+              `index references doc ${entry.docId} but it never loaded ` +
+              `(handle state: ${entry.handleState ?? 'none'})`,
+          });
+          continue;
+        }
+        if (entry.handleState !== 'ready') {
+          out.push({
+            kind: 'handle-not-ready',
+            path,
+            detail: `doc ${entry.docId} is in state '${entry.handleState}'`,
+          });
+        }
+        if (!files.some((f) => f.path === path)) {
+          out.push({
+            kind: 'handle-without-file-entry',
+            path,
+            detail:
+              `sync-client holds doc ${entry.docId} for '${path}' but ` +
+              `the app's file list has no such entry`,
+          });
+        }
+      }
+
+      // Loaded files vs the WASM VFS (all VFS paths use /project/).
+      let vfsPaths: Set<string> | null = null;
+      try {
+        const resp = vfsListFiles();
+        vfsPaths = Array.isArray(resp.files) ? new Set(resp.files) : null;
+      } catch {
+        vfsPaths = null; // WASM not booted — nothing to compare.
+      }
+      if (vfsPaths) {
+        for (const [path, entry] of byPath) {
+          if (entry.unavailableMarker || entry.handleState !== 'ready') continue;
+          const vfsPath = `/project/${path}`;
+          if (!vfsPaths.has(vfsPath)) {
+            out.push({
+              kind: 'vfs-missing-file',
+              path,
+              detail: `loaded file has no VFS entry at ${vfsPath}`,
+            });
+          }
+        }
+      }
+
+      // Monaco model vs Automerge text for the file the editor shows.
+      const provider = getEditorTextProvider();
+      const editorPath = provider?.getPath() ?? null;
+      const editorText = provider?.getText() ?? null;
+      if (editorPath !== null && editorText !== null) {
+        let amText: string | null = null;
+        try {
+          amText = getFileContent(editorPath);
+        } catch {
+          amText = null; // No client — nothing to compare.
+        }
+        if (amText !== null && amText !== editorText) {
+          let offset = 0;
+          const max = Math.min(amText.length, editorText.length);
+          while (offset < max && amText[offset] === editorText[offset]) {
+            offset++;
+          }
+          out.push({
+            kind: 'monaco-vs-automerge',
+            path: editorPath,
+            detail:
+              `Monaco model (${editorText.length} chars) differs from ` +
+              `Automerge text (${amText.length} chars); first difference ` +
+              `at offset ${offset}`,
+          });
+        }
+      }
+
+      return out;
     },
 
     unsafe: {

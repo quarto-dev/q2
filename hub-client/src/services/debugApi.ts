@@ -39,6 +39,7 @@ import {
   makeAutomergeDebugApi,
   type QuartoDebugAutomergeApi,
 } from './debugAutomerge';
+import { installMessageTap, uninstallMessageTap } from './debugMessageTap';
 
 export interface QuartoDebugProjectInfo {
   id: string;
@@ -210,6 +211,15 @@ Automerge layer (am.*)
   am.syncStatus()               connected flag + sync diagnostics (stranded docs, retry state)
                                 + project-set servers/collections
   am.presence()                 presence: own identity, tracked file, remote peers
+  am.doctor()                   cross-layer consistency check: Monaco vs Automerge text,
+                                file entries vs handles, VFS coverage, handle readiness,
+                                stranded docs. [] = healthy. Start debugging here.
+  am.messages(opts?)            observed sync-protocol traffic (ring of 500, newest
+                                first) + tap status; opts {limit, type}. The tap attaches
+                                on the next project connect after this API installs
+                                (tap.attached tells you). Summaries only by default; set
+                                localStorage.quartoDebugCapture = 'full' and reload to
+                                also capture payloads (base64).
 
 Escape hatches (am.unsafe.*) — console use only, NOT JSON-serializable
   am.unsafe.handle(ref)         live DocHandle (same refs as am.snapshot). WARNING: calling
@@ -355,7 +365,10 @@ function makeApi(ctx: DebugApiContext): QuartoDebugApi {
       return out;
     },
 
-    am: makeAutomergeDebugApi({ getProject: ctx.getProject }),
+    am: makeAutomergeDebugApi({
+      getProject: ctx.getProject,
+      getFiles: ctx.getFiles,
+    }),
 
     apiVersion: DEBUG_API_VERSION,
 
@@ -380,6 +393,17 @@ export function installDebugApi(ctx: DebugApiContext): () => void {
   installedApi = api;
   lastSnapshot = null;
 
+  // Sync-message tap for am.messages(). Attaches at the next project
+  // connect (Repo construction). Full payload capture is an at-enable
+  // opt-in: localStorage.quartoDebugCapture = 'full', then reload.
+  installMessageTap({
+    capture:
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('quartoDebugCapture') === 'full'
+        ? 'full'
+        : 'summary',
+  });
+
   setRenderListener((result, options) => {
     lastSnapshot = {
       documentPath: options.documentPath,
@@ -400,6 +424,7 @@ export function uninstallDebugApi(): void {
   installedApi = null;
   lastSnapshot = null;
   setRenderListener(null);
+  uninstallMessageTap();
   if (typeof window !== 'undefined') {
     delete (window as unknown as MutableGlobal)[GLOBAL_KEY];
   }

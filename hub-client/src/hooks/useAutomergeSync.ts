@@ -35,6 +35,7 @@ import {
 } from '@quarto/preview-runtime';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diffToEditorChanges } from '@quarto/preview-runtime';
+import { registerEditorTextProvider } from '../services/editorDebugRegistry';
 
 interface UseAutomergeSyncOptions {
   /** Current file being edited (null if none selected) */
@@ -95,6 +96,16 @@ export function useAutomergeSync({
   const onEditorMount = useCallback((editor: Monaco.editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
     setEditorMountGen((gen) => gen + 1);
+  }, []);
+
+  // Expose the live Monaco text to quartoDebug.am.doctor() through the
+  // debug registry (bd-6ogrov5r). Reads go through refs, so one
+  // registration per hook lifetime suffices.
+  useEffect(() => {
+    return registerEditorTextProvider({
+      getPath: () => currentFileRef.current?.path ?? null,
+      getText: () => editorRef.current?.getModel()?.getValue() ?? null,
+    });
   }, []);
 
   // ── Real-time remote edits ────────────────────────────────────────────

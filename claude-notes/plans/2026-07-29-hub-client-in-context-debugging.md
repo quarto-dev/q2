@@ -374,7 +374,73 @@ inspected at each step; no console errors or warnings for the whole session.
 
 ### Phase 2 — `doctor()` + message tap (bd-6ogrov5r)
 
-- [ ] Checklist to be detailed at phase start
+Branch: `braid/bd-6ogrov5r-phase-2-doctor-cross` (off phase-1 branch).
+
+`doctor()` — cross-layer discrepancy checks, each returning
+`{kind, path?, detail}` entries (empty array = healthy):
+
+- [x] Editor-text registry (`editorDebugRegistry.ts`); `useAutomergeSync`
+      registers a provider on mount (refs-based, one registration per
+      hook lifetime), unregisters on unmount
+- [x] Check: Monaco model text vs Automerge text for the active file
+      (reports lengths + first divergent offset)
+- [x] Check: file entries vs sync-client docs, both directions
+      (`file-entry-without-handle`, `handle-without-file-entry`)
+- [x] Check: VFS listing vs loaded files (`vfs-missing-file`)
+- [x] Check: `handle-not-ready` + `stranded-file` (a stranded doc is one
+      problem, reported once — not additionally as not-ready/VFS-missing)
+- [x] `am.doctor()` wired + help() updated; probe-safe when disconnected
+
+Message tap:
+
+- [x] `quarto-sync-client`: `setNetworkAdapterWrapper()` module-level
+      injection (follows the `setSyncLogger` precedent — **no options
+      threading through preview-runtime needed**, which dropped that
+      checklist item); applied at both connect and createNewProject Repo
+      construction; tested against the real test-hub
+- [x] hub-client `debugMessageTap.ts`: ring buffer (default 500,
+      eviction + dropped counter), summaries by default, `{capture:
+      'full'}` stores base64 payloads; `LoggingNetworkAdapter` gained an
+      opt-in `includeData` (debug.html behavior unchanged); installed/
+      uninstalled with the debug API; full capture opt-in via
+      `localStorage.quartoDebugCapture = 'full'`
+- [x] `am.messages(opts?)` → `{tap: status, messages: newest-first}` +
+      help() updated
+- [x] Suites green: sync-client 130, hub-client 802 unit + typecheck;
+      lint clean (pre-existing useAutomergeSync warnings unchanged)
+- [x] `npm run build:all` green
+- [x] End-to-end pass — transcript below. Note on manufactured faults:
+      each discrepancy kind is manufactured and asserted in unit tests
+      (including divergence offset math); manufacturing a *live* Monaco/
+      Automerge divergence from the console is inherently self-healing
+      (any console-reachable edit path flows through the sync loop and
+      reconverges), so the live pass verifies the healthy path, wiring,
+      and traffic observation.
+- [x] Close bd-6ogrov5r
+
+#### Phase 2 end-to-end transcript (2026-07-30)
+
+Setup: same local-prod deployment and `debug-e2e` project as Phase 1;
+new production bundle (had to unregister the stale PWA service worker —
+expected local-prod behavior after a rebuild — then hard reload).
+
+- `am.messages().tap` before opening a project →
+  `{installed: true, capture: 'summary', limit: 500, recorded: 0,
+  attached: false}` — installed but not attached, as documented
+- Opened the project; tap attached on connect: `{attached: true,
+  recorded: 7}`, traffic = 6 `sync` + 1 `ephemeral`, entries carry real
+  peer ids / doc ids / byte sizes, newest first
+- `am.doctor()` → `[]` on the healthy project (editor open, provider
+  registered)
+- Live edit via `writeFile(…)` → `tap.recorded` 7 → 9; newest entry is
+  an outgoing `sync` for the edited doc
+  (`documentId: 2WMN1Dsvtk…, byteLength: 199`); `doctor()` still `[]`
+  after the edit round-trip
+- Full capture: set `localStorage.quartoDebugCapture = 'full'`,
+  reload, reopen → `tap.capture: 'full'`, sync messages carry base64
+  `data` payloads alongside the summaries
+- Console: only the expected `/auth/me` 401 on the no-OIDC local hub;
+  nothing from the tap or doctor
 
 ### Phase 3 — inspector panel (bd-lb1cxprv)
 

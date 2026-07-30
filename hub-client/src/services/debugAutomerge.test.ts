@@ -11,7 +11,7 @@
  * against fabricated repos/handles without booting Automerge.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as AutomergeModule from '@automerge/automerge';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 
@@ -22,6 +22,8 @@ const previewRuntimeMocks = vi.hoisted(() => ({
   getFileHandle: vi.fn<(path: string) => unknown>(),
   getSyncDiagnostics: vi.fn<() => unknown>(),
   isConnected: vi.fn<() => boolean>(),
+  getFileContent: vi.fn<(path: string) => string | null>(),
+  vfsListFiles: vi.fn<() => { success: boolean; files?: string[] }>(),
 }));
 
 const projectSetMocks = vi.hoisted(() => ({
@@ -33,11 +35,20 @@ const presenceMocks = vi.hoisted(() => ({
   getPresenceDebugSnapshot: vi.fn<() => unknown>(),
 }));
 
+const tapMocks = vi.hoisted(() => ({
+  getTapMessages: vi.fn<(opts?: unknown) => unknown[]>(() => []),
+  getTapStatus: vi.fn<() => unknown>(() => ({ installed: false })),
+  installMessageTap: vi.fn(),
+  uninstallMessageTap: vi.fn(),
+}));
+
 vi.mock('@quarto/preview-runtime', () => previewRuntimeMocks);
 vi.mock('./projectSetService', () => projectSetMocks);
 vi.mock('./presenceService', () => presenceMocks);
+vi.mock('./debugMessageTap', () => tapMocks);
 
 import { makeAutomergeDebugApi } from './debugAutomerge';
+import { registerEditorTextProvider } from './editorDebugRegistry';
 
 // ── Fabricated handles ────────────────────────────────────────────────
 
@@ -73,10 +84,15 @@ const sampleProject: ProjectEntry = {
   lastAccessed: '2026-05-01T00:00:00Z',
 };
 
-const ctx = { getProject: (): ProjectEntry | null => sampleProject };
+const ctx = {
+  getProject: (): ProjectEntry | null => sampleProject,
+  getFiles: (): { path: string; docId: string }[] => [
+    { path: 'index.qmd', docId: 'f1' },
+  ],
+};
 
-function makeApi() {
-  return makeAutomergeDebugApi(ctx);
+function makeApi(overrides: Partial<typeof ctx> = {}) {
+  return makeAutomergeDebugApi({ ...ctx, ...overrides });
 }
 
 beforeEach(() => {
@@ -376,6 +392,186 @@ describe('am.presence', () => {
       localSelection: null,
       remotePresences: [],
     });
+  });
+});
+
+describe('am.messages', () => {
+  it('combines tap status with filtered messages', () => {
+    const canned = [{ at: 5, direction: 'outgoing', type: 'sync' }];
+    tapMocks.getTapMessages.mockReturnValue(canned);
+    tapMocks.getTapStatus.mockReturnValue({
+      installed: true,
+      capture: 'summary',
+      limit: 500,
+      recorded: 1,
+      dropped: 0,
+      attached: true,
+    });
+
+    const result = makeApi().messages({ type: 'sync', limit: 10 });
+
+    expect(tapMocks.getTapMessages).toHaveBeenCalledWith({
+      type: 'sync',
+      limit: 10,
+    });
+    expect(result.messages).toEqual(canned);
+    expect(result.tap.installed).toBe(true);
+  });
+});
+
+describe('am.doctor', () => {
+  let unregister: (() => void) | null = null;
+
+  beforeEach(() => {
+    // Healthy defaults: VFS mirrors the loaded file, automerge text
+    // matches what the (registered) editor shows.
+    previewRuntimeMocks.vfsListFiles.mockReturnValue({
+      success: true,
+      files: ['/project/index.qmd'],
+    });
+    previewRuntimeMocks.getFileContent.mockImplementation((path: string) =>
+      path === 'index.qmd' ? 'hello body' : null,
+    );
+  });
+
+  afterEach(() => {
+    unregister?.();
+    unregister = null;
+  });
+
+  function registerEditor(path: string | null, text: string | null) {
+    unregister = registerEditorTextProvider({
+      getPath: () => path,
+      getText: () => text,
+    });
+  }
+
+  it('returns no discrepancies for a healthy world', () => {
+    registerEditor('index.qmd', 'hello body');
+    expect(makeApi().doctor()).toEqual([]);
+  });
+
+  it('is healthy with no editor registered (monaco check skipped)', () => {
+    expect(makeApi().doctor()).toEqual([]);
+  });
+
+  it('reports Monaco/Automerge divergence with lengths and first offset', () => {
+    registerEditor('index.qmd', 'hello BODY');
+    const found = makeApi().doctor();
+    expect(found).toHaveLength(1);
+    expect(found[0].kind).toBe('monaco-vs-automerge');
+    expect(found[0].path).toBe('index.qmd');
+    expect(found[0].detail).toContain('10 chars');
+    expect(found[0].detail).toMatch(/offset 6/);
+  });
+
+  it('reports a file entry with no sync-client handle', () => {
+    const found = makeApi({
+      getFiles: () => [
+        { path: 'index.qmd', docId: 'f1' },
+        { path: 'ghost.qmd', docId: 'fx' },
+      ],
+    }).doctor();
+    expect(found).toEqual([
+      {
+        kind: 'file-entry-without-handle',
+        path: 'ghost.qmd',
+        detail: expect.stringContaining('no sync-client doc'),
+      },
+    ]);
+  });
+
+  it('reports a handle with no file entry', () => {
+    previewRuntimeMocks.getDocInventory.mockReturnValue([
+      ...previewRuntimeMocks.getDocInventory(),
+      {
+        docId: 'f9',
+        role: 'file',
+        path: 'orphan.qmd',
+        handleState: 'ready',
+        heads: ['h9'],
+        unavailableMarker: false,
+      },
+    ]);
+    previewRuntimeMocks.vfsListFiles.mockReturnValue({
+      success: true,
+      files: ['/project/index.qmd', '/project/orphan.qmd'],
+    });
+    const found = makeApi().doctor();
+    expect(found).toEqual([
+      {
+        kind: 'handle-without-file-entry',
+        path: 'orphan.qmd',
+        detail: expect.stringContaining('f9'),
+      },
+    ]);
+  });
+
+  it('reports a loaded file missing from the VFS', () => {
+    previewRuntimeMocks.vfsListFiles.mockReturnValue({ success: true, files: [] });
+    const found = makeApi().doctor();
+    expect(found).toEqual([
+      {
+        kind: 'vfs-missing-file',
+        path: 'index.qmd',
+        detail: expect.stringContaining('/project/index.qmd'),
+      },
+    ]);
+  });
+
+  it('reports non-ready handles and stranded files distinctly', () => {
+    previewRuntimeMocks.getDocInventory.mockReturnValue([
+      {
+        docId: 'idx1',
+        role: 'index',
+        path: null,
+        handleState: 'ready',
+        heads: ['h'],
+        unavailableMarker: false,
+      },
+      {
+        docId: 'f1',
+        role: 'file',
+        path: 'index.qmd',
+        handleState: 'requesting',
+        heads: null,
+        unavailableMarker: false,
+      },
+      {
+        docId: 'f2',
+        role: 'file',
+        path: 'lost.qmd',
+        handleState: 'unavailable',
+        heads: null,
+        unavailableMarker: true,
+      },
+    ]);
+    const found = makeApi({
+      getFiles: () => [
+        { path: 'index.qmd', docId: 'f1' },
+        { path: 'lost.qmd', docId: 'f2' },
+      ],
+    }).doctor();
+    const kinds = found.map((d) => [d.kind, d.path]);
+    expect(kinds).toContainEqual(['handle-not-ready', 'index.qmd']);
+    expect(kinds).toContainEqual(['stranded-file', 'lost.qmd']);
+    // A stranded file is one problem, not three: no double-reporting
+    // as not-ready or missing-from-VFS.
+    expect(found.filter((d) => d.path === 'lost.qmd')).toHaveLength(1);
+    // A not-ready file has no VFS expectation yet either.
+    expect(kinds).not.toContainEqual(['vfs-missing-file', 'index.qmd']);
+  });
+
+  it('is probe-safe when nothing is connected', () => {
+    previewRuntimeMocks.getDocInventory.mockReturnValue([]);
+    previewRuntimeMocks.vfsListFiles.mockImplementation(() => {
+      throw new Error('wasm not ready');
+    });
+    previewRuntimeMocks.getFileContent.mockImplementation(() => {
+      throw new Error('no client');
+    });
+    registerEditor('index.qmd', 'anything');
+    expect(makeApi({ getFiles: () => [] }).doctor()).toEqual([]);
   });
 });
 

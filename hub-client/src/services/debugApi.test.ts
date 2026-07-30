@@ -68,6 +68,15 @@ vi.mock('./presenceService', () => ({
   })),
 }));
 
+const tapMocks = vi.hoisted(() => ({
+  getTapMessages: vi.fn(() => []),
+  getTapStatus: vi.fn(() => ({ installed: true })),
+  installMessageTap: vi.fn(),
+  uninstallMessageTap: vi.fn(),
+}));
+
+vi.mock('./debugMessageTap', () => tapMocks);
+
 import {
   installDebugApi,
   uninstallDebugApi,
@@ -404,6 +413,30 @@ describe('debugApi', () => {
       const text = _getInstalledApiForTesting()!.help();
       expect(text).toMatch(/read-only|observation/i);
       expect(text).toMatch(/handle\.change\(\)/);
+    });
+  });
+
+  describe('message-tap lifecycle', () => {
+    afterEach(() => {
+      localStorage.removeItem('quartoDebugCapture');
+    });
+
+    it('installs the tap (summary mode) alongside the API and uninstalls with it', () => {
+      installDebugApi(makeContext());
+      expect(tapMocks.installMessageTap).toHaveBeenCalledWith({
+        capture: 'summary',
+      });
+
+      uninstallDebugApi();
+      expect(tapMocks.uninstallMessageTap).toHaveBeenCalledTimes(1);
+    });
+
+    it('honors localStorage.quartoDebugCapture = full at install time', () => {
+      localStorage.setItem('quartoDebugCapture', 'full');
+      installDebugApi(makeContext());
+      expect(tapMocks.installMessageTap).toHaveBeenCalledWith({
+        capture: 'full',
+      });
     });
   });
 

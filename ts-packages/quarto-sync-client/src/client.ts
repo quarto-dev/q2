@@ -150,6 +150,31 @@ async function buildWsAdapter(
   }) as unknown as NetworkAdapter;
 }
 
+/**
+ * Optional wrapper applied to the freshly built websocket adapter at
+ * Repo construction (module-level injection, same pattern as
+ * `setSyncLogger`). Lets a host observe sync traffic without the
+ * options plumbing — e.g. hub-client's debug message tap
+ * (bd-6ogrov5r). The wrapper must be fully forwarding (a
+ * `NetworkAdapter` that delegates connect/send/disconnect and
+ * re-emits events). Takes effect on the NEXT connect/createNewProject;
+ * existing connections are untouched. Clear with null.
+ */
+export type NetworkAdapterWrapper = (adapter: NetworkAdapter) => NetworkAdapter;
+
+let networkAdapterWrapper: NetworkAdapterWrapper | null = null;
+
+export function setNetworkAdapterWrapper(
+  fn: NetworkAdapterWrapper | null,
+): void {
+  networkAdapterWrapper = fn;
+}
+
+/** Apply the module-level wrapper, if any, to a freshly built adapter. */
+function wrapAdapter(adapter: NetworkAdapter): NetworkAdapter {
+  return networkAdapterWrapper ? networkAdapterWrapper(adapter) : adapter;
+}
+
 // FileDocument can be text or binary - use runtime detection
 type FileDocument = TextDocumentContent | BinaryDocumentContent;
 
@@ -839,7 +864,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     await disconnect();
 
     try {
-      state.wsAdapter = await buildWsAdapter(syncServerUrl, effectiveAuth, options.retryIntervalMs);
+      state.wsAdapter = wrapAdapter(
+        await buildWsAdapter(syncServerUrl, effectiveAuth, options.retryIntervalMs),
+      );
       state.repo = new Repo({
         network: [state.wsAdapter],
         storage: buildStorageAdapter(options.storage),
@@ -1576,10 +1603,12 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     await disconnect();
 
     try {
-      state.wsAdapter = await buildWsAdapter(
-        options.syncServer,
-        options.auth,
-        options.retryIntervalMs,
+      state.wsAdapter = wrapAdapter(
+        await buildWsAdapter(
+          options.syncServer,
+          options.auth,
+          options.retryIntervalMs,
+        ),
       );
       state.repo = new Repo({
         network: [state.wsAdapter],
