@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-30
+
+- [`d947fab2`](https://github.com/quarto-dev/q2/commits/d947fab2): Joining a shared collection now explains what actually went wrong — expired sign-in, no connection, or a collection missing from the sync server — instead of a cryptic "Document is unavailable", and a slow connection no longer makes the join fail spuriously.
+
 ### 2026-07-28
 
 - [`807fd96c`](https://github.com/quarto-dev/q2/commits/807fd96c): Signing in with Google is now tied to the specific sign-in you started, so a copied Google token can no longer be used to open a session on your behalf.
