@@ -1,26 +1,21 @@
 /**
- * Unit tests for the `s`-field stripping assumption used by
- * `commitSubtreeEdit` in entry.tsx.
+ * Unit tests for the sidecar-key stripping used by `commitSubtreeEdit`
+ * in PreviewRoot.tsx.
  *
  * `apply_node_edit` (Rust) throws `InvalidSourceInfoRef` when the
- * replacement subtree JSON contains `s` pool-index fields, because the
- * replacement doc carries no pool.  `commitSubtreeEdit` strips them with
- * a JSON.stringify replacer before sending.  These tests verify that the
- * replacer actually removes `s` at every nesting depth.
+ * replacement subtree JSON contains pool-index sidecar fields, because
+ * the replacement doc carries no pool.  `commitSubtreeEdit` strips them
+ * with `stripSourceInfoFields` before sending.  These tests verify that
+ * the shared replacer (the real one — not a copy) removes every
+ * pool-index-carrying key at every nesting depth.
+ *
+ * The authoritative key inventory lives in
+ * `crates/pampa/src/writers/json.rs`; see also `normalize_nodes` in
+ * `crates/pampa/tests/integration/lua_differential.rs`.
  */
 
 import { describe, test, expect } from 'vitest';
-
-/**
- * The exact replacer used in commitSubtreeEdit (entry.tsx).
- * Strips both `s` (block/inline SourceInfo pool-index) and `a` (AttrSourceInfo
- * object whose `id`/`classes`/`kvs` values are also pool indices).
- */
-function stripSourceInfoFields<T>(block: T): T {
-    return JSON.parse(JSON.stringify(block, (key, value) =>
-        key === 's' || key === 'a' ? undefined : value,
-    )) as T;
-}
+import { stripSourceInfoFields } from './stripSourceInfoFields';
 
 describe('s-field stripping for commitSubtreeEdit', () => {
     test('strips s from a flat block', () => {
@@ -123,5 +118,95 @@ describe('s-field stripping for commitSubtreeEdit', () => {
         const json = JSON.stringify(wrappedDoc);
         expect(json).not.toMatch(/"s":/);
         expect(json).not.toMatch(/"a":/);
+    });
+});
+
+describe('sidecar keys beyond s/a (bare pool indices on specific nodes)', () => {
+    test('strips targetS from Link — the "cannot edit anything with a link" bug (#441)', () => {
+        // targetS is [urlRef, titleRef]: pool indices for the Link/Image
+        // URL and title source spans.
+        const block = {
+            t: 'Para',
+            s: 1,
+            c: [{
+                t: 'Link',
+                s: 2,
+                a: { id: null, classes: [], kvs: [] },
+                targetS: [3, 4],
+                c: [['', [], []], [{ t: 'Str', c: 'click' }], ['https://example.com', '']],
+            }],
+        };
+        const result = stripSourceInfoFields(block);
+        const json = JSON.stringify(result);
+        expect(json).not.toMatch(/"targetS":/);
+        // The structural target (URL + title) must survive.
+        expect((result as any).c[0].c[2]).toEqual(['https://example.com', '']);
+    });
+
+    test('strips targetS from Image', () => {
+        const block = {
+            t: 'Para',
+            s: 1,
+            c: [{
+                t: 'Image',
+                s: 2,
+                targetS: [3, null],
+                c: [['', [], []], [], ['fig.png', '']],
+            }],
+        };
+        const json = JSON.stringify(stripSourceInfoFields(block));
+        expect(json).not.toMatch(/"targetS":/);
+        expect(json).toMatch(/fig\.png/);
+    });
+
+    test('strips captionS from Figure (issue #442) — a bare pool index', () => {
+        // Unlike targetS, captionS is a bare index (readers/json.rs
+        // read_caption passes it straight to resolve_source_info).
+        const block = {
+            t: 'Figure',
+            s: 1,
+            a: { id: null, classes: [], kvs: [] },
+            captionS: 7,
+            c: [
+                ['fig-1', [], []],
+                [null, [{ t: 'Plain', s: 8, c: [{ t: 'Str', c: 'A caption' }] }]],
+                [{ t: 'Plain', s: 9, c: [{ t: 'Image', s: 10, targetS: [11, null], c: [['', [], []], [], ['fig.png', '']] }] }],
+            ],
+        };
+        const result = stripSourceInfoFields(block);
+        const json = JSON.stringify(result);
+        expect(json).not.toMatch(/"captionS":/);
+        // Caption content itself must survive.
+        expect(json).toMatch(/A caption/);
+    });
+
+    test('strips citationIdS from Cite citation objects (issue #442)', () => {
+        // Citation objects carry no `t` tag; citationIdS sits next to
+        // citationId and is a bare pool index read via read_opt_source_ref.
+        const block = {
+            t: 'Para',
+            s: 1,
+            c: [{
+                t: 'Cite',
+                s: 2,
+                c: [
+                    [{
+                        citationId: 'knuth1984',
+                        citationIdS: 12,
+                        citationPrefix: [],
+                        citationSuffix: [],
+                        citationMode: { t: 'NormalCitation' },
+                        citationNoteNum: 0,
+                        citationHash: 0,
+                    }],
+                    [{ t: 'Str', c: '[@knuth1984]' }],
+                ],
+            }],
+        };
+        const result = stripSourceInfoFields(block);
+        const json = JSON.stringify(result);
+        expect(json).not.toMatch(/"citationIdS":/);
+        // The citation id itself must survive.
+        expect((result as any).c[0].c[0][0].citationId).toBe('knuth1984');
     });
 });
