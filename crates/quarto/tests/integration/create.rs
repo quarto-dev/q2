@@ -344,28 +344,89 @@ fn unknown_choice_lists_valid_choices() {
 #[test]
 fn unimplemented_choice_says_so() {
     let tmp = TempDir::new().unwrap();
-    let out = run_q2_create(tmp.path(), &["project", "blog", "myblog"]);
+    let out = run_q2_create(tmp.path(), &["project", "manuscript", "mypaper"]);
     assert!(!out.status.success());
     let stderr = stderr_str(&out);
     // The error must name the choice, not just be a generic stub.
-    assert!(stderr.contains("blog"), "stderr: {stderr}");
+    assert!(stderr.contains("manuscript"), "stderr: {stderr}");
     assert!(stderr.contains("not yet implemented"), "stderr: {stderr}");
-    assert!(!tmp.path().join("myblog").exists());
+    assert!(!tmp.path().join("mypaper").exists());
 }
 
 #[test]
 fn colon_form_routes_through_template_parser() {
     let tmp = TempDir::new().unwrap();
-    // `website:blog` is valid grammar but the blog template is not
-    // implemented yet — the error must be about implementation, not
-    // syntax.
-    let out = run_q2_create(tmp.path(), &["project", "website:blog", "d"]);
+    // `website:solitaire` is valid grammar but no such template
+    // exists — the error must be about implementation, not syntax.
+    let out = run_q2_create(tmp.path(), &["project", "website:solitaire", "d"]);
     assert!(!out.status.success());
     let stderr = stderr_str(&out);
     // The error must name the parsed target, proving the colon form was
     // accepted as grammar and rejected only on implementation status.
-    assert!(stderr.contains("website:blog"), "stderr: {stderr}");
+    assert!(stderr.contains("website:solitaire"), "stderr: {stderr}");
     assert!(stderr.contains("not yet implemented"), "stderr: {stderr}");
+}
+
+// ====================================================================
+// Blog scaffold (bd-r1by4u2a)
+// ====================================================================
+
+#[test]
+fn create_project_blog_writes_full_scaffold_including_binaries() {
+    let tmp = TempDir::new().unwrap();
+    let out = run_q2_create(tmp.path(), &["project", "blog", "myblog", "My Blog"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}\nstdout: {}",
+        stderr_str(&out),
+        stdout_str(&out)
+    );
+    let dir = tmp.path().join("myblog");
+
+    for rel in [
+        "_quarto.yml",
+        "index.qmd",
+        "about.qmd",
+        "styles.css",
+        ".gitignore",
+        "posts/_metadata.yml",
+        "posts/welcome/index.qmd",
+        "posts/welcome/thumbnail.jpg",
+        "posts/post-with-code/index.qmd",
+        "posts/post-with-code/image.jpg",
+    ] {
+        assert!(dir.join(rel).exists(), "missing {rel}");
+    }
+
+    // The binaries must round-trip byte-identical through the
+    // ScaffoldContent::Binary path and the disk writer.
+    let embedded = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../quarto-project-create/resources/templates/website/blog");
+    for (written, source) in [
+        ("posts/welcome/thumbnail.jpg", "posts/welcome/thumbnail.jpg"),
+        (
+            "posts/post-with-code/image.jpg",
+            "posts/post-with-code/image.jpg",
+        ),
+    ] {
+        let got = std::fs::read(dir.join(written)).unwrap();
+        let want = std::fs::read(embedded.join(source)).unwrap();
+        assert_eq!(got, want, "{written} must be byte-identical");
+    }
+
+    let yml = parse_yaml_file(&dir.join("_quarto.yml"));
+    assert_eq!(yml["website"]["title"].as_str(), Some("My Blog"));
+    assert_eq!(yml["project"]["type"].as_str(), Some("website"));
+
+    // The listing page carries Q1's canonical listing config.
+    let index = read(&dir.join("index.qmd"));
+    assert!(index.contains("contents: posts"), "index.qmd:\n{index}");
+    assert!(index.contains("feed: true"));
+
+    // Posts are date-stamped today / today-minus-3-days.
+    let post = read(&dir.join("posts/post-with-code/index.qmd"));
+    assert!(post.contains("date: \"2"), "post front matter:\n{post}");
+    assert!(!post.contains('$'), "template residue:\n{post}");
 }
 
 #[test]
@@ -595,7 +656,8 @@ fn list_json_emits_registry_with_implemented_flags() {
     };
     assert_eq!(by_id("website")["implemented"], true);
     assert_eq!(by_id("default")["implemented"], true);
-    assert_eq!(by_id("blog")["implemented"], false);
+    assert_eq!(by_id("blog")["implemented"], true);
+    assert_eq!(by_id("manuscript")["implemented"], false);
 }
 
 #[test]

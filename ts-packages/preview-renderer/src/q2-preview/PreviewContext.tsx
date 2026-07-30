@@ -28,6 +28,9 @@ import type { PendingOpenSelection } from './dragSelectionCapture';
 
 export type { ReachabilityClass, SourceIndexEntry, ResolvedSource };
 
+/** Comment-bubble display mode (host three-way toggle). */
+export type CommentsMode = 'expand' | 'show' | 'hide';
+
 export interface PreviewContextValue {
     currentFilePath: string;
     /** Source-info pool from the rendered AST — `astContext.p` array. */
@@ -174,6 +177,13 @@ export interface PreviewContextValue {
      * `q2 preview` without `--allow-edit`. Absent/false ⇒ editable.
      */
     editingDisabled?: boolean;
+    /**
+     * Comment-bubble display mode (three-way toggle in the host UI):
+     * 'expand' pins every commented block's popup open, 'show' is the
+     * default hover/click chrome, 'hide' renders no comment chrome at
+     * all. Absent ⇒ 'show'.
+     */
+    commentsMode?: CommentsMode;
     /**
      * P3.2: nesting-cursor mode for nested blocks. When true, nested
      * list/quote blocks are each separately editable (nesting cursor).

@@ -48,6 +48,49 @@ async fn secure_google_setup() -> &'static (MockOidcProvider, TestHub) {
         .await
 }
 
+/// As [`secure_google_setup`], plus a domain allowlist — the standard
+/// admission gate, and the only shape that can produce the 403 from
+/// `authenticate_claims`.
+async fn allowlisted_google_setup() -> &'static (MockOidcProvider, TestHub) {
+    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
+        tokio::sync::OnceCell::const_new();
+    SETUP
+        .get_or_init(|| async {
+            install_tracing_once();
+            let provider = MockOidcProvider::start().await;
+            let hub = TestHubBuilder::new()
+                .secure()
+                .google_provider()
+                .allowed_domains(&["posit.co"])
+                .session_secret(TEST_SESSION_SECRET)
+                .start(&provider)
+                .await;
+            (provider, hub)
+        })
+        .await
+}
+
+/// As [`secure_google_setup`], with one `sub` banned — the other cause
+/// that qualifies as a genuine denial.
+async fn banned_google_setup() -> &'static (MockOidcProvider, TestHub) {
+    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub)> =
+        tokio::sync::OnceCell::const_new();
+    SETUP
+        .get_or_init(|| async {
+            install_tracing_once();
+            let provider = MockOidcProvider::start().await;
+            let hub = TestHubBuilder::new()
+                .secure()
+                .google_provider()
+                .banned_subs(&["reason-banned-sub"])
+                .session_secret(TEST_SESSION_SECRET)
+                .start(&provider)
+                .await;
+            (provider, hub)
+        })
+        .await
+}
+
 fn test_keys() -> SessionKeys {
     SessionKeys::new(TEST_SESSION_SECRET)
 }
@@ -98,21 +141,74 @@ async fn post_callback(
         .unwrap()
 }
 
-fn assert_auth_error(resp: &reqwest::Response) {
+/// Assert a failed callback: a redirect to `/?auth_error=<reason>`, no
+/// session minted, and the sealed login-state cookie cleared.
+///
+/// `reason` is the coarse, user-facing class — deliberately many-to-one
+/// over the dozen causes, because it lands in a URL the user sees. The
+/// precise cause is asserted separately, against the audit log.
+fn assert_auth_error(resp: &reqwest::Response, reason: &str) {
     assert!(
         resp.status().is_redirection(),
         "expected a redirect, got {}",
         resp.status()
     );
+    let location = resp
+        .headers()
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .expect("a Location header");
     assert_eq!(
-        resp.headers().get("location").unwrap(),
-        "/?auth_error",
-        "failed nonce verification must land on the auth-error route"
+        location,
+        format!("/?auth_error={reason}"),
+        "the redirect must name which kind of failure this was"
     );
     assert!(
         TestHub::find_set_cookie(resp, AUTH_COOKIE_NAME_SECURE).is_none(),
         "no session may be minted"
     );
+    // Single use, on **every** exit path — one pre-flight can complete
+    // at most one login, and adding reasons must not open a hole in that.
+    let (value, attrs) = TestHub::find_set_cookie(resp, LOGIN_STATE_COOKIE_SECURE)
+        .expect("the login-state cookie must be cleared on every failure path");
+    assert_eq!(value, "", "cleared, not rewritten: {attrs}");
+    assert!(attrs.contains("Max-Age=0"), "{attrs}");
+}
+
+/// The `detail` of the sole `auth_fail` audit event carrying `sub`.
+///
+/// Asserted **exactly**, not by substring: the whole point of the
+/// discriminator is that an operator can tell one failure class from
+/// another, and a substring match would accept a doubled prefix.
+fn auth_fail_detail_for(sub: &str) -> String {
+    let details: Vec<String> = snapshot_events()
+        .iter()
+        .filter(|e| {
+            e.fields.get("action").map(String::as_str) == Some("auth_fail")
+                && e.fields.get("sub").map(String::as_str) == Some(sub)
+        })
+        .filter_map(|e| e.fields.get("detail").cloned())
+        .collect();
+    assert_eq!(
+        details.len(),
+        1,
+        "expected exactly one auth_fail for sub={sub}, got {details:?}"
+    );
+    details.into_iter().next().unwrap()
+}
+
+/// `detail`s of every `auth_fail` audit event carrying **no** `sub` —
+/// the pre-identity failures, where there is no validated subject to
+/// report.
+fn subless_auth_fail_details() -> Vec<String> {
+    snapshot_events()
+        .iter()
+        .filter(|e| {
+            e.fields.get("action").map(String::as_str) == Some("auth_fail")
+                && !e.fields.contains_key("sub")
+        })
+        .filter_map(|e| e.fields.get("detail").cloned())
+        .collect()
 }
 
 // ── the pre-flight endpoint ───────────────────────────────────────
@@ -228,7 +324,7 @@ async fn callback_without_a_login_cookie_is_rejected() {
     );
 
     let resp = post_callback(hub, &google, None).await;
-    assert_auth_error(&resp);
+    assert_auth_error(&resp, "restart");
 }
 
 #[tokio::test]
@@ -246,7 +342,7 @@ async fn callback_with_a_nonce_from_another_login_is_rejected() {
             .to_value(),
     );
     let resp = post_callback(hub, &google, Some((LOGIN_STATE_COOKIE_SECURE, &blob_b))).await;
-    assert_auth_error(&resp);
+    assert_auth_error(&resp, "restart");
 }
 
 #[tokio::test]
@@ -261,7 +357,7 @@ async fn callback_with_a_token_carrying_no_nonce_is_rejected() {
     );
 
     let resp = post_callback(hub, &google, Some((LOGIN_STATE_COOKIE_SECURE, &blob))).await;
-    assert_auth_error(&resp);
+    assert_auth_error(&resp, "restart");
 }
 
 #[tokio::test]
@@ -284,7 +380,7 @@ async fn callback_with_an_expired_login_blob_is_rejected() {
             .to_value(),
     );
     let resp = post_callback(hub, &google, Some((LOGIN_STATE_COOKIE_SECURE, &stale))).await;
-    assert_auth_error(&resp);
+    assert_auth_error(&resp, "restart");
 }
 
 #[tokio::test]
@@ -312,7 +408,7 @@ async fn callback_with_a_tampered_login_blob_is_rejected() {
         Some((LOGIN_STATE_COOKIE_SECURE, &parts.join("."))),
     )
     .await;
-    assert_auth_error(&resp);
+    assert_auth_error(&resp, "restart");
 }
 
 /// A forged blob claiming an attacker-chosen nonce, signed with the
@@ -337,7 +433,230 @@ async fn callback_with_a_blob_sealed_under_a_foreign_secret_is_rejected() {
             .to_value(),
     );
     let resp = post_callback(hub, &google, Some((LOGIN_STATE_COOKIE_SECURE, &forged))).await;
-    assert_auth_error(&resp);
+    assert_auth_error(&resp, "restart");
+}
+
+// ── which cookie-absent reading? (E0) ─────────────────────────────
+
+/// A cookie-absent callback has two readings, and they want opposite
+/// remedies — reload the app, or fix cookie delivery. The token's own
+/// `nonce` claim is what tells them apart, so the check must look at it
+/// rather than returning a single blanket class.
+///
+/// Nonce-less: no current client can produce this. `GoogleAuthProvider`
+/// renders nothing until it holds a nonce, so the token came from a
+/// stale bundle or from something driving GIS outside the app.
+#[tokio::test]
+async fn a_nonceless_token_without_a_cookie_audits_as_stale_client() {
+    let (provider, hub) = secure_google_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("nonce-stale-client-sub")
+            .to_value(),
+    );
+
+    let resp = post_callback(hub, &google, None).await;
+    assert_auth_error(&resp, "stale_client");
+    assert_eq!(
+        auth_fail_detail_for("nonce-stale-client-sub"),
+        "login_state_stale_client"
+    );
+}
+
+/// Nonce-bearing: a login attempt that really did do the pre-flight but
+/// arrived without its cookie (`SameSite` / `Path` / proxy — fix the
+/// configuration), *or* a captured token replayed from a browser that
+/// never did one. Indistinguishable per event; correlation tells them
+/// apart.
+#[tokio::test]
+async fn a_nonce_bearing_token_without_a_cookie_audits_as_login_state_missing() {
+    let (provider, hub) = secure_google_setup().await;
+    let (nonce, _blob) = fetch_nonce(hub, LOGIN_STATE_COOKIE_SECURE).await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("nonce-cookie-lost-sub")
+            .nonce(&nonce)
+            .to_value(),
+    );
+
+    let resp = post_callback(hub, &google, None).await;
+    assert_auth_error(&resp, "restart");
+    // Exactly this, undoubled: the emit site adds the `login_state_`
+    // prefix, so the returned class must not carry one of its own.
+    assert_eq!(
+        auth_fail_detail_for("nonce-cookie-lost-sub"),
+        "login_state_missing"
+    );
+}
+
+// ── the callback's other failure paths, in the log (E2) ───────────
+
+/// CSRF was the callback's one genuinely silent rejection: a deployment
+/// whose reverse proxy drops the `g_csrf_token` cookie failed every
+/// login with nothing whatsoever in `journalctl -u hub`.
+#[tokio::test]
+async fn a_bad_csrf_pair_is_audited_as_callback_csrf() {
+    let (provider, hub) = secure_google_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("nonce-csrf-sub")
+            .to_value(),
+    );
+
+    // The double-submit pair disagrees — cookie says one thing, form
+    // field another.
+    let resp = no_redirect_client()
+        .post(hub.url("/auth/callback"))
+        .header("cookie", "g_csrf_token=from-the-cookie")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(format!("credential={google}&g_csrf_token=from-the-form"))
+        .send()
+        .await
+        .unwrap();
+    assert_auth_error(&resp, "restart");
+
+    let events = snapshot_events();
+    let mut matching = events
+        .iter()
+        .filter(|e| e.fields.get("detail").map(String::as_str) == Some("callback_csrf"));
+    let event = matching.next().expect("a callback_csrf audit event");
+    assert!(matching.next().is_none(), "exactly one callback_csrf event");
+
+    assert_eq!(event.target, "quarto_hub::audit");
+    assert_eq!(
+        event.fields.get("action").map(String::as_str),
+        Some("auth_fail")
+    );
+    assert_eq!(
+        event.fields.get("outcome").map(String::as_str),
+        Some("deny")
+    );
+    assert_eq!(
+        event.fields.get("credential_kind").map(String::as_str),
+        Some("cookie")
+    );
+    // The check runs before the token is parsed, so no `sub` has been
+    // validated. An unvalidated one in the audit log is worse than none.
+    assert!(
+        !event.fields.contains_key("sub"),
+        "no sub is available here: {:?}",
+        event.fields
+    );
+}
+
+/// The credential paths already carry details finer than a blanket
+/// `credential_invalid`, but nothing pinned them **from the callback**.
+/// These two tests are what stops a later blanket emit from burying the
+/// specific discriminator an operator needs.
+#[tokio::test]
+async fn a_non_allowlisted_credential_is_audited_as_user_not_allowlisted() {
+    let (provider, hub) = allowlisted_google_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("nonce-allowlist-sub")
+            .email("outsider@example.com")
+            .to_value(),
+    );
+
+    // `authenticate_claims` runs before the nonce check, so this never
+    // reaches the login-state cookie — hence no `login_state_` prefix.
+    let resp = post_callback(hub, &google, None).await;
+    assert_auth_error(&resp, "denied");
+    assert_eq!(
+        auth_fail_detail_for("nonce-allowlist-sub"),
+        "user_not_allowlisted"
+    );
+}
+
+#[tokio::test]
+async fn an_undecodable_credential_is_audited_as_a_jwt_decode_failure() {
+    let (_provider, hub) = secure_google_setup().await;
+
+    let resp = post_callback(hub, "not-a-jwt", None).await;
+    assert_auth_error(&resp, "restart");
+
+    let details = subless_auth_fail_details();
+    assert_eq!(
+        details.len(),
+        1,
+        "one event, not a specific one plus a blanket one: {details:?}"
+    );
+    assert!(
+        details[0].starts_with("jwt_decode:"),
+        "expected a jwt_decode: detail, got {details:?}"
+    );
+}
+
+// ── the 403/401 split (E1) ────────────────────────────────────────
+
+/// `denied` means an identity was established and then refused, and the
+/// allowlist miss is one of exactly two causes that qualify: signature,
+/// `aud`, `azp` and `iat` all passed and the email is verified, so this
+/// user was refused on policy and will be refused again. Mapping it to
+/// `restart` would put a permanently-refused user in a retry loop.
+///
+/// This is the mapping whose failure mode is both silent and
+/// user-visible, which is why it gets a test of its own: the callback
+/// used to discard the status that draws the line.
+#[tokio::test]
+async fn an_allowlist_miss_redirects_with_reason_denied() {
+    let (provider, hub) = allowlisted_google_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("reason-denied-sub")
+            .email("stranger@example.com")
+            .to_value(),
+    );
+
+    let resp = post_callback(hub, &google, None).await;
+    assert_auth_error(&resp, "denied");
+}
+
+/// The 401 family is `restart`, never `denied` — no identity was
+/// established, so "your account is not authorized" would simply be
+/// false. A wrong `aud` is the case that matters most: on client-ID
+/// drift (the hub's configured audience diverging from the SPA's) every
+/// user in the deployment fails here at once, and `denied` would tell
+/// all of them their account was refused — indistinguishable from a mass
+/// de-allowlisting.
+#[tokio::test]
+async fn a_wrong_audience_credential_redirects_with_reason_restart() {
+    let (provider, hub) = secure_google_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("reason-restart-sub")
+            .aud(serde_json::json!(
+                "some-other-client.apps.googleusercontent.com"
+            ))
+            .to_value(),
+    );
+
+    let resp = post_callback(hub, &google, None).await;
+    assert_auth_error(&resp, "restart");
+}
+
+/// The other cause that qualifies as `denied`. It is gated *after* the
+/// nonce check, so reaching it takes an otherwise flawless nonce-bound
+/// login — which is the point of testing it: a ban must refuse a login
+/// that is perfect in every other respect.
+///
+/// The pre-existing ban coverage (`session_auth.rs::ban_gates_verify_and_mint`)
+/// goes through `/auth/session`, which answers 403 rather than
+/// redirecting, so it says nothing about the reason a browser is shown.
+#[tokio::test]
+async fn a_banned_user_redirects_with_reason_denied() {
+    let (provider, hub) = banned_google_setup().await;
+    let (nonce, blob) = fetch_nonce(hub, LOGIN_STATE_COOKIE_SECURE).await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("reason-banned-sub")
+            .nonce(&nonce)
+            .to_value(),
+    );
+
+    let resp = post_callback(hub, &google, Some((LOGIN_STATE_COOKIE_SECURE, &blob))).await;
+    assert_auth_error(&resp, "denied");
+    assert_eq!(auth_fail_detail_for("reason-banned-sub"), "user_banned");
 }
 
 // ── domain separation across the HTTP surface ─────────────────────
@@ -385,7 +704,7 @@ async fn a_session_token_is_not_a_login_state_cookie() {
             .to_value(),
     );
     let resp = post_callback(hub, &google, Some((LOGIN_STATE_COOKIE_SECURE, &session))).await;
-    assert_auth_error(&resp);
+    assert_auth_error(&resp, "restart");
 }
 
 // ── insecure mode ─────────────────────────────────────────────────

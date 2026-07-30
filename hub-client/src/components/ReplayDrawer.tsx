@@ -4,6 +4,7 @@ import { actorColor } from '../utils/palette';
 import type { ActorIdentity } from '@quarto/preview-runtime';
 import { getActorId } from '@quarto/preview-runtime';
 import './ReplayDrawer.css';
+import './ViewToggleControl.css';
 
 interface Props {
   state: ReplayState;
@@ -39,6 +40,86 @@ interface Props {
    * to a supported format restores the user's previous preference.
    */
   attributionDisabled?: boolean;
+  /**
+   * Comment-bubble display mode (three-way toggle rendered beside the
+   * Authors pill): 'expand' pins every comment popup open, 'show' is
+   * the default hover/click chrome, 'hide' removes the bubbles. Both
+   * props must be supplied to render the toggle. Session-only, like
+   * the attribution toggle.
+   */
+  commentsMode?: CommentsMode;
+  onCommentsModeChange?: (next: CommentsMode) => void;
+}
+
+type CommentsMode = 'expand' | 'show' | 'hide';
+
+/**
+ * Three small square buttons in the `view-toggle-btn` style (same CSS
+ * as the header's layout toggle): expand all comments / show bubbles /
+ * hide bubbles.
+ */
+function CommentsModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: CommentsMode;
+  onChange: (next: CommentsMode) => void;
+}) {
+  // Speech-bubble outline shared by the show/hide icons; the expand
+  // icon is the same bubble with a taller body.
+  const bubblePath =
+    'M1 0 h10 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 H5 L2 10 V7 H1 a1 1 0 0 1 -1 -1 V1 a1 1 0 0 1 1 -1 Z';
+  const tallBubblePath =
+    'M1 0 h10 a1 1 0 0 1 1 1 v6 a1 1 0 0 1 -1 1 H5 L2 10 V8 H1 a1 1 0 0 1 -1 -1 V1 a1 1 0 0 1 1 -1 Z';
+  return (
+    <div
+      className="view-toggle-control"
+      role="group"
+      aria-label="Comment display mode"
+      style={{ marginLeft: '6px' }}
+    >
+      <button
+        className={`view-toggle-btn${mode === 'expand' ? ' active' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onChange('expand');
+        }}
+        title="Expand all comments"
+        aria-label="Expand comments"
+      >
+        <svg width="12" height="10" viewBox="0 0 12 10">
+          <path d={tallBubblePath} fill="currentColor" />
+        </svg>
+      </button>
+      <button
+        className={`view-toggle-btn${mode === 'show' ? ' active' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onChange('show');
+        }}
+        title="Show comment bubbles"
+        aria-label="Show comments"
+      >
+        <svg width="12" height="10" viewBox="0 0 12 10">
+          <path d={bubblePath} fill="currentColor" />
+        </svg>
+      </button>
+      <button
+        className={`view-toggle-btn${mode === 'hide' ? ' active' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onChange('hide');
+        }}
+        title="Hide comment bubbles"
+        aria-label="Hide comments"
+      >
+        <svg width="12" height="10" viewBox="0 0 12 10">
+          <path d={bubblePath} fill="currentColor" opacity="0.25" />
+          <line x1="1" y1="9" x2="11" y2="1" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      </button>
+    </div>
+  );
 }
 
 interface AttributionToggleProps {
@@ -120,9 +201,13 @@ export default function ReplayDrawer({
   onAttributionChange,
   attributionGenerating,
   attributionDisabled,
+  commentsMode,
+  onCommentsModeChange,
 }: Props) {
   const showAttributionToggle =
     attributionOn !== undefined && onAttributionChange !== undefined;
+  const showCommentsToggle =
+    commentsMode !== undefined && onCommentsModeChange !== undefined;
   const currentActorId = getActorId();
   const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -234,6 +319,9 @@ export default function ReplayDrawer({
             disabled={!!attributionDisabled}
           />
         )}
+        {showCommentsToggle && (
+          <CommentsModeToggle mode={commentsMode!} onChange={onCommentsModeChange!} />
+        )}
       </div>
     );
   }
@@ -296,6 +384,9 @@ export default function ReplayDrawer({
             generating={!!attributionGenerating}
             disabled={!!attributionDisabled}
           />
+        )}
+        {showCommentsToggle && (
+          <CommentsModeToggle mode={commentsMode!} onChange={onCommentsModeChange!} />
         )}
       </div>
 

@@ -11,12 +11,14 @@ This directory contains SCSS resources used for Bootstrap/theme compilation in R
   - `_bootstrap-*.scss` - Quarto's Bootstrap customization files
 - `html/templates/` - HTML template SCSS files
   - `title-block.scss` - Title block styling
+  - `quarto-listing.scss` - Listing cards / table / category-chip styling (bd-57y4)
 
 ## Source
 
 These files are copied from:
 - `quarto-cli/src/resources/formats/html/bootstrap/` (Bootstrap and themes)
 - `quarto-cli/src/resources/formats/html/templates/` (title-block.scss)
+- `quarto-cli/src/resources/projects/website/listing/` (quarto-listing.scss)
 
 ## Updating
 
@@ -30,6 +32,7 @@ To update these files when quarto-cli updates Bootstrap or themes:
    cp -r external-sources/quarto-cli/src/resources/formats/html/bootstrap/themes resources/scss/bootstrap/
    cp external-sources/quarto-cli/src/resources/formats/html/bootstrap/_bootstrap-*.scss resources/scss/bootstrap/
    cp external-sources/quarto-cli/src/resources/formats/html/templates/title-block.scss resources/scss/html/templates/
+   cp external-sources/quarto-cli/src/resources/projects/website/listing/quarto-listing.scss resources/scss/html/templates/
    ```
 
 2. Regenerate the dart-sass fixtures:

@@ -20,6 +20,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { readAuthErrorReason } from './auth/authError';
 import {
   connect,
   disconnect,
@@ -175,11 +176,16 @@ function App() {
     [expireSession, localActorId],
   );
 
-  // Capture auth error from redirect query param (once, before URL is cleaned).
-  const [authError] = useState(() => {
-    const has = new URLSearchParams(window.location.search).has('auth_error');
-    if (has) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
-    return has;
+  // Capture the auth error reason from the redirect query param (once,
+  // before the URL is cleaned). `undefined` means no error; `''` means a
+  // bare `/?auth_error` from a hub predating the reason codes, which is
+  // still an error — see readAuthErrorReason.
+  const [authErrorReason] = useState(() => {
+    const reason = readAuthErrorReason(window.location.search);
+    if (reason !== undefined) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+    }
+    return reason;
   });
 
   // Load screen name from IndexedDB (for identity mapping in Automerge docs).
@@ -693,7 +699,7 @@ function App() {
   if (AUTH_ENABLED && !auth) {
     return (
       <LoginScreen
-        error={authError}
+        errorReason={authErrorReason}
         message={sessionExpired ? 'Your session expired — please sign in again.' : undefined}
       />
     );

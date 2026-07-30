@@ -107,6 +107,11 @@ interface ReactRendererProps {
    */
   currentActor?: string | null;
   /**
+   * Comment-bubble display mode (expand / show / hide), forwarded to
+   * `Q2PreviewIframe` only.
+   */
+  commentsMode?: 'expand' | 'show' | 'hide';
+  /**
    * P3.2: nesting-cursor mode for nested blocks. Forwarded to
    * `Q2PreviewIframe` only (q2-debug/slides don't support it).
    */
@@ -154,6 +159,7 @@ function ReactRenderer({
   renderedContent,
   untransformedAstJson,
   currentActor,
+  commentsMode,
   unlockNestingCursor,
   richText,
   nestedEditBuffers,
@@ -320,6 +326,7 @@ function ReactRenderer({
             renderedContent={renderedContent}
             untransformedAstJson={untransformedAstJson}
             currentActor={currentActor}
+            commentsMode={commentsMode}
             unlockNestingCursor={unlockNestingCursor}
             richText={richText}
             nestedEditBuffers={nestedEditBuffers}

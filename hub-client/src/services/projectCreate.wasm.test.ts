@@ -50,13 +50,14 @@ beforeAll(async () => {
 });
 
 describe('get_project_choices', () => {
-  it('returns implemented choices including default and website', () => {
+  it('returns implemented choices including default, website, and blog', () => {
     const response = JSON.parse(wasm.get_project_choices()) as ProjectChoicesResponse;
     expect(response.success).toBe(true);
 
     const ids = response.choices.map((c) => c.id);
     expect(ids).toContain('default');
     expect(ids).toContain('website');
+    expect(ids).toContain('blog');
   });
 });
 
@@ -116,6 +117,57 @@ describe('create_project', () => {
     const indexQmd = byPath.get('index.qmd')!.content;
     expect(indexQmd).toContain('title: "Test Project"');
     expect(indexQmd).toContain('## Quarto');
+  });
+
+  it('creates a blog project with binary post images (bd-r1by4u2a)', () => {
+    const response = JSON.parse(
+      wasm.create_project('blog', 'My Blog'),
+    ) as CreateProjectResponse;
+    expect(response.success).toBe(true);
+
+    const byPath = new Map(response.files!.map((f) => [f.path, f]));
+    expect([...byPath.keys()].sort()).toEqual([
+      '_quarto.yml',
+      'about.qmd',
+      'index.qmd',
+      'posts/_metadata.yml',
+      'posts/post-with-code/image.jpg',
+      'posts/post-with-code/index.qmd',
+      'posts/welcome/index.qmd',
+      'posts/welcome/thumbnail.jpg',
+      'styles.css',
+    ]);
+
+    const quartoYml = byPath.get('_quarto.yml')!.content;
+    expect(quartoYml).toContain('title: "My Blog"');
+    expect(quartoYml).toContain('description: "A blog built with Quarto"');
+    expect(quartoYml).not.toContain('brand');
+
+    // The listing page carries Q1's canonical listing config.
+    const indexQmd = byPath.get('index.qmd')!.content;
+    expect(indexQmd).toContain('contents: posts');
+    expect(indexQmd).toContain('sort: "date desc"');
+
+    // Binary files arrive base64-encoded with a JPEG mime; decoded
+    // bytes must start with the JPEG magic (FF D8).
+    for (const p of ['posts/welcome/thumbnail.jpg', 'posts/post-with-code/image.jpg']) {
+      const f = byPath.get(p)!;
+      expect(f.content_type).toBe('binary');
+      expect(f.mime_type).toBe('image/jpeg');
+      const bytes = Uint8Array.from(atob(f.content), (c) => c.charCodeAt(0));
+      expect(bytes.length).toBeGreaterThan(1000);
+      expect(bytes[0]).toBe(0xff);
+      expect(bytes[1]).toBe(0xd8);
+    }
+
+    // Posts are date-stamped (today / today-minus-3) with no residue.
+    const welcome = byPath.get('posts/welcome/index.qmd')!.content;
+    expect(welcome).toMatch(/date: "\d{4}-\d{2}-\d{2}"/);
+    for (const file of response.files!) {
+      if (file.content_type === 'text') {
+        expect(file.content).not.toContain('$');
+      }
+    }
   });
 
   it('YAML-escapes special characters without HTML-escaping', () => {
