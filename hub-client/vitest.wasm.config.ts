@@ -18,8 +18,13 @@ export default mergeConfig(
       environment: 'node',
       // Pass even when no test files are found (initially)
       passWithNoTests: true,
-      // Longer timeout for WASM initialization
-      testTimeout: 30000,
+      // Hang detection only — deliberately loose (5-10x typical duration),
+      // NOT a performance budget. The smoke-all sweep runs every fixture in
+      // one `it` and legitimately takes ~25s on slow CI runners; a 30s
+      // timeout flaked on main (2026-07-30). If this trips, something is
+      // wedged, not slow. See
+      // claude-notes/research/2026-07-30-test-timeouts-are-hang-detection.md
+      testTimeout: 120000,
     },
     resolve: {
       alias: {
