@@ -21,6 +21,7 @@ import type { PreviewNodeEditPayload } from '../types/diagnostic';
 import { previewRegistry, PreviewContext } from '.';
 import type { CommentsMode } from './PreviewContext';
 import { buildSourceIndex, serializeSourceEntry } from './sourceIndex';
+import { stripSourceInfoFields } from './stripSourceInfoFields';
 import type { ResolvedSource } from './sourceIndex';
 import { outerBlockForAnchorR0, refocusTargetForAnchorR0, findReanchorCandidate, enumerateOuterBlocks, captureEditTarget, measureBlockBox, seedForRange, snapshotOuterBlockGeometry, isDirty } from './outerBlocks';
 import { buildByteLineMap } from '../utils/byteLineMap';
@@ -1500,14 +1501,11 @@ export function PreviewRoot(props: PreviewRootProps) {
     };
 
     // commitSubtreeEdit: send a subtree-channel PreviewNodeEditPayload (Plan 2b).
-    // The replacer strips every pool-index-carrying key: `s` (node
-    // SourceInfo), `a` (AttrSourceInfo), and `targetS` (Link/Image
-    // URL+title source refs — missing it caused InvalidSourceInfoRef
-    // on any subtree containing a link).
+    // stripSourceInfoFields removes every pool-index-carrying sidecar key
+    // (`s`, `a`, `targetS`, …) — a surviving index caused
+    // InvalidSourceInfoRef on any subtree containing a link.
     const commitSubtreeEdit = (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => {
-        const stripped = JSON.parse(JSON.stringify(modifiedBlock, (key, value) =>
-            key === 's' || key === 'a' || key === 'targetS' ? undefined : value,
-        )) as BlockNode;
+        const stripped = stripSourceInfoFields(modifiedBlock);
         const wrappedDoc = {
             'pandoc-api-version': [1, 23, 0],
             meta: {},

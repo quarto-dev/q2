@@ -402,6 +402,25 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
             "\n━━━ Step 11/{}: Running shared preview-* package tests ━━━\n",
             TOTAL_STEPS
         );
+        // Type-check the test files first (tsconfig.tests.json): the
+        // package build excludes *.test.* from tsc and vitest only
+        // transforms with esbuild, so without this leg a test harness
+        // can silently drift from the interfaces it stubs — that's how
+        // the s0 suite broke on main (bd-ddaqjb91).
+        run_command(
+            "npm",
+            &["run", "typecheck:tests"],
+            &preview_renderer_dir,
+            None,
+            "preview-renderer test typecheck failed",
+        )?;
+        run_command(
+            "npm",
+            &["run", "typecheck:tests"],
+            &preview_runtime_dir,
+            None,
+            "preview-runtime test typecheck failed",
+        )?;
         run_command(
             "npm",
             &["test"],
