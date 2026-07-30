@@ -125,7 +125,17 @@ the suspected trigger, but the immediate goal is twofold:
 - [x] Update hub-client/changelog.md (two-commit workflow:
       d947fab2 fix + a02cde3f changelog, on
       `braid/bd-tux4m6od-join-collection-error-ux`)
-- [ ] Push branch + open PR, watch CI
+- [x] Push branch + open PR: quarto-dev/q2#439
+      (`feature/bd-tux4m6od-join-collection-error-ux`); CI watched
+      from the session
+- [x] CI green: TS Test Suite (run 30569132769) and Test Suite
+      (run 30569134654) both pass on PR head 65f52199 — run via
+      `workflow_dispatch` because GitHub's webhook event delivery
+      for the repo stalled ~17:57Z on 2026-07-30 (PR open/reopen/
+      close/synchronize all unprocessed; status page claimed
+      operational). The PR checks box shows only Snyk until the
+      backlog clears; empty commit a6340044 pushed to fire
+      `synchronize` when it does.
 - [ ] Close bd-tux4m6od with findings recorded
 
 **Open question (closed unresolved):** whether the original failing
