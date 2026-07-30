@@ -104,6 +104,117 @@ let onCollectionsChange: CollectionsChangeHandler | null = null;
 let onConnectionChange: ConnectionChangeHandler | null = null;
 
 // ============================================================================
+// Debug snapshot (quartoDebug.am, bd-q93tkglb)
+// ============================================================================
+
+/**
+ * Structural view of a Repo as the debug snapshot needs it. The real
+ * `Repo` satisfies this (PeerId is a branded string); tests fabricate it.
+ */
+export interface DebugRepoLike {
+  peerId: string;
+  peers: readonly string[];
+}
+
+/** Structural view of a collection connection for the debug snapshot. */
+export interface DebugCollectionConnectionLike {
+  docId: string;
+  syncServer: string;
+  handle: {
+    state: string;
+    heads(): readonly string[];
+    doc(): unknown;
+  };
+}
+
+export interface ProjectSetServerDebug {
+  url: string;
+  peerId: string;
+  connectedPeers: string[];
+  refCount: number;
+}
+
+export interface ProjectSetCollectionDebug {
+  docId: string;
+  syncServer: string;
+  name: string | undefined;
+  isRoot: boolean;
+  entryCount: number;
+  handleState: string;
+  heads: string[] | null;
+}
+
+/** Read-only, JSON-serializable view of this service's connections. */
+export interface ProjectSetDebugSnapshot {
+  servers: ProjectSetServerDebug[];
+  collections: ProjectSetCollectionDebug[];
+}
+
+/**
+ * Pure mapping from the service's internal maps to the debug snapshot.
+ * Exported so tests can drive it with fabricated repos/handles; the
+ * stateful shell is {@link getProjectSetDebugSnapshot}.
+ */
+export function buildProjectSetDebugSnapshot(
+  serverMap: ReadonlyMap<string, { repo: DebugRepoLike; refCount: number }>,
+  connectionMap: ReadonlyMap<string, DebugCollectionConnectionLike>,
+  rootDocId: string | null,
+): ProjectSetDebugSnapshot {
+  const serverList: ProjectSetServerDebug[] = [];
+  for (const [url, server] of serverMap) {
+    serverList.push({
+      url,
+      peerId: server.repo.peerId,
+      connectedPeers: [...server.repo.peers],
+      refCount: server.refCount,
+    });
+  }
+
+  const collectionList: ProjectSetCollectionDebug[] = [];
+  for (const conn of connectionMap.values()) {
+    const ready = conn.handle.state === 'ready';
+    const doc = ready
+      ? (conn.handle.doc() as { name?: string; projects?: Record<string, unknown> } | undefined)
+      : undefined;
+    collectionList.push({
+      docId: conn.docId,
+      syncServer: conn.syncServer,
+      name: doc?.name,
+      isRoot: conn.docId === rootDocId,
+      entryCount: doc?.projects ? Object.keys(doc.projects).length : 0,
+      handleState: conn.handle.state,
+      heads: ready ? [...conn.handle.heads()] : null,
+    });
+  }
+
+  return { servers: serverList, collections: collectionList };
+}
+
+/**
+ * Live DocHandle for a connected collection (keyed by bare doc id), or
+ * null when that collection is not connected. Debug accessor for
+ * `quartoDebug.am` (bd-q93tkglb) — observation only.
+ */
+export function getCollectionHandle(
+  collectionDocId: string,
+): DocHandle<ProjectSetDocument> | null {
+  return connections.get(collectionDocId)?.handle ?? null;
+}
+
+/**
+ * Read-only, JSON-serializable snapshot of the project-set service's
+ * live server + collection connections, for the in-context debug API
+ * `quartoDebug.am` (bd-q93tkglb). Observation only.
+ */
+export function getProjectSetDebugSnapshot(): ProjectSetDebugSnapshot {
+  return buildProjectSetDebugSnapshot(
+    servers,
+    connections,
+    rootConnection()?.docId ?? null,
+  );
+}
+
+// ============================================================================
 // Event Handlers
 // ============================================================================
 

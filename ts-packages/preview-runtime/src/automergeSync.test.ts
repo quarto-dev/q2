@@ -13,6 +13,8 @@ import {
   setSyncHandlers,
   isConnected,
   getFileContent,
+  getRepo,
+  getDocInventory,
   applyEditorOperations,
   isFileBinary,
   setImmediateFileChangeCallback,
@@ -64,6 +66,13 @@ describe('automergeSync', () => {
   describe('when no client is connected', () => {
     it('should report not connected', () => {
       expect(isConnected()).toBe(false);
+    });
+
+    // Debug accessors must be probe-safe before any connect (the
+    // quartoDebug console API calls them unconditionally).
+    it('getRepo is null and getDocInventory is empty', () => {
+      expect(getRepo()).toBeNull();
+      expect(getDocInventory()).toEqual([]);
     });
   });
 
@@ -119,6 +128,24 @@ describe('automergeSync', () => {
       const paths = mockClient.getFilePaths();
       expect(paths).toContain('index.qmd');
       expect(paths).toContain('_quarto.yml');
+    });
+
+    // Debug accessors for quartoDebug.am (bd-q93tkglb).
+    it('getRepo delegates to the live client', async () => {
+      await mockClient.connect('ws://test', 'automerge:test');
+      expect(getRepo()).not.toBeNull();
+      // Same object identity as the client's own repo — delegation, not
+      // a reconstruction.
+      expect(getRepo()).toBe(mockClient.getRepo());
+    });
+
+    it('getDocInventory delegates to the live client', async () => {
+      await mockClient.connect('ws://test', 'automerge:test');
+      const inventory = getDocInventory();
+      expect(inventory).toEqual(mockClient.getDocInventory());
+      const entry = inventory.find((e) => e.path === 'index.qmd');
+      expect(entry).toBeDefined();
+      expect(entry!.docId).toBe(mockClient.getFileHandle('index.qmd')!.documentId);
     });
   });
 

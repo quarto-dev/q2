@@ -279,6 +279,42 @@ export function updatePresence(
 }
 
 /**
+ * Read-only, JSON-serializable snapshot of the presence service's
+ * state for the in-context debug API `quartoDebug.am` (bd-q93tkglb).
+ * Probe-safe at any lifecycle point (before init, after cleanup).
+ * Returns copies — mutating the snapshot never touches live state.
+ * `identity` is the presence-relevant projection of UserSettings.
+ */
+export interface PresenceDebugSnapshot {
+  peerId: string;
+  identity: { userId: string; userName: string; userColor: string } | null;
+  currentFilePath: string | null;
+  localCursor: number | null;
+  localSelection: { start: number; end: number } | null;
+  remotePresences: PresenceState[];
+}
+
+export function getPresenceDebugSnapshot(): PresenceDebugSnapshot {
+  return {
+    peerId: state.peerId,
+    identity: state.identity
+      ? {
+          userId: state.identity.userId,
+          userName: state.identity.userName,
+          userColor: state.identity.userColor,
+        }
+      : null,
+    currentFilePath: state.currentFilePath,
+    localCursor: state.localCursor,
+    localSelection: state.localSelection ? { ...state.localSelection } : null,
+    remotePresences: Array.from(state.remotePresences.values(), (p) => ({
+      ...p,
+      selection: p.selection ? { ...p.selection } : null,
+    })),
+  };
+}
+
+/**
  * Get the current remote presences for the current file.
  */
 export function getRemotePresences(): PresenceState[] {

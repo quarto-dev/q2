@@ -35,6 +35,10 @@ import {
   type RenderResult,
   type RenderToHtmlOptions,
 } from '@quarto/preview-runtime';
+import {
+  makeAutomergeDebugApi,
+  type QuartoDebugAutomergeApi,
+} from './debugAutomerge';
 
 export interface QuartoDebugProjectInfo {
   id: string;
@@ -121,6 +125,27 @@ export interface QuartoDebugApi {
 
   /** Read a VFS file's bytes, or null if absent. */
   vfsRead(path: string): Uint8Array | null;
+
+  /**
+   * Automerge-layer introspection: repos, doc inventory, snapshots,
+   * history, sync status, presence. See `debugAutomerge.ts`
+   * (bd-q93tkglb).
+   */
+  am: QuartoDebugAutomergeApi;
+
+  /**
+   * Contract version of this API. Bump on breaking shape changes so
+   * agents can gate on it.
+   */
+  apiVersion: number;
+
+  /**
+   * Human- and agent-readable usage document for the whole API. This
+   * is the runtime contract: it must mention every method (enforced
+   * by a test) and must be updated in the same commit as any API
+   * change.
+   */
+  help(): string;
 }
 
 /**
@@ -139,6 +164,65 @@ export interface DebugApiContext {
 }
 
 const GLOBAL_KEY = 'quartoDebug';
+
+/**
+ * Contract version of `window.quartoDebug`. Bump on breaking changes
+ * to method names or result shapes (additions don't require a bump).
+ */
+export const DEBUG_API_VERSION = 1;
+
+/**
+ * Runtime usage contract, returned by `quartoDebug.help()`. Written
+ * for humans and agents alike. A test asserts it mentions every key
+ * of the API, of `am`, and of `am.unsafe` — update it in the same
+ * commit as any API change.
+ */
+const HELP_TEXT = `\
+window.quartoDebug — Quarto Hub in-context debug API (apiVersion ${DEBUG_API_VERSION})
+
+Everything is read-only/observation-only unless marked MUTATES, and
+returns JSON-serializable values unless noted. Enable outside dev
+builds with localStorage.quartoDebug = '1' (then reload).
+
+Project & files
+  project()                     project id / description / indexDocId / syncServer, or null
+  listFiles()                   project file paths (no leading slash)
+  readFile(path)                text -> string, binary -> Uint8Array, missing -> null
+  writeFile(path, contents, {mimeType?})   MUTATES via the editor's Automerge paths
+  getActiveFile()               active file path, or null
+  setActiveFile(path)           MUTATES route: switch the active page
+
+Rendering & VFS
+  rerender()                    force a render of the active page; returns the response
+  lastRenderResponse()          most recent render snapshot, or null
+  vfsList(prefix?)              WASM VFS paths (note the /project/ prefix convention)
+  vfsRead(path)                 VFS file bytes, or null
+
+Automerge layer (am.*)
+  am.repos()                    repos in this page: name, syncServer, peerId, connectedPeers, cachedHandles
+  am.docs()                     doc inventory: docId, role (index|file|binary-file|project-set),
+                                path, handleState, heads, unavailableMarker
+  am.snapshot(ref, opts?)       sanitized JSON clone of one doc. ref: file path | 'index' | docId.
+                                Strings are truncated by default; opts {maxStringLength, maxDepth,
+                                full: true}. Byte arrays always summarize as {$type:'bytes', length}
+                                (read payloads via readFile/vfsRead instead).
+  am.history(ref, opts?)        change metadata, newest first; opts {limit} (default 20)
+  am.syncStatus()               connected flag + sync diagnostics (stranded docs, retry state)
+                                + project-set servers/collections
+  am.presence()                 presence: own identity, tracked file, remote peers
+
+Escape hatches (am.unsafe.*) — console use only, NOT JSON-serializable
+  am.unsafe.handle(ref)         live DocHandle (same refs as am.snapshot). WARNING: calling
+                                handle.change() bypasses the sync client's caches, VFS
+                                mirroring, and Monaco sync — observe, don't mutate.
+  am.unsafe.Automerge           the @automerge/automerge module: getConflicts(doc, prop),
+                                diff(doc, headsA, headsB), view(doc, heads) time travel,
+                                getAllChanges/decodeChange forensics.
+
+Meta
+  apiVersion                    number; gate on it before relying on shapes
+  help()                        this text
+`;
 
 interface MutableGlobal {
   [GLOBAL_KEY]?: QuartoDebugApi;
@@ -265,6 +349,14 @@ function makeApi(ctx: DebugApiContext): QuartoDebugApi {
       const out = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
       return out;
+    },
+
+    am: makeAutomergeDebugApi({ getProject: ctx.getProject }),
+
+    apiVersion: DEBUG_API_VERSION,
+
+    help(): string {
+      return HELP_TEXT;
     },
   };
 }
