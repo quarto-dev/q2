@@ -1052,8 +1052,10 @@ fn check_login_nonce(
 /// ban, and an allowlist miss). Everything else is a retry.
 #[derive(Clone, Copy)]
 enum AuthErrorReason {
-    /// No login-state cookie **and** a nonce-less token: an out-of-date
-    /// bundle, or a login driven outside the app.
+    /// The client predates a protocol step the hub now requires — the
+    /// general slot for "your bundle is old". Map a future callback-time
+    /// break here, not to `Restart`: a client cannot render a reason
+    /// invented after it shipped.
     StaleClient,
     /// The attempt broke down without establishing an identity.
     Restart,

@@ -58,9 +58,9 @@ describe('LoginScreen', () => {
   // One case per user-facing message. Eleven distinct causes used to
   // collapse into the "not authorized" sentence, sending users who needed
   // a reload to an administrator instead.
-  it('tells a stale client to reload', () => {
+  it('tells a stale client its bundle is out of date', () => {
     render(withProvider(<LoginScreen errorReason="stale_client" />));
-    expect(screen.getByText(/out of date.*reload the page/i)).toBeTruthy();
+    expect(screen.getByText(/out of date.*try again/i)).toBeTruthy();
     expect(screen.queryByText(/not authorized/i)).toBeNull();
   });
 

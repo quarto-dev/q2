@@ -19,7 +19,7 @@ const RESTART_COPY = "Sign-in didn't complete. Please try again.";
  * so an object lookup would slip past the fallback below.
  */
 const COPY = new Map<string, string>([
-  ['stale_client', 'This version of the app is out of date. Please reload the page and try again.'],
+  ['stale_client', 'This app is out of date and updating. Please try again in a few minutes.'],
   ['restart', RESTART_COPY],
   ['denied', 'Sign-in failed. Your account is not authorized to access this hub.'],
   ['server', 'Something went wrong on the hub. Please try again shortly.'],

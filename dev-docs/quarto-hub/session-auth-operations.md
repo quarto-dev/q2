@@ -102,10 +102,15 @@ Operational notes:
   covered both readings above. Anything exact-matching that string needs
   updating; substring greps for `login_state_missing` matched both forms
   and keep working.
-- **Rollout:** a user holding a stale SPA bundle fails login once to
-  `/?auth_error=stale_client` — which the client renders as "this version
-  of the app is out of date, please reload" — and recovers on reload. Hub
-  and client deploy together.
+- **Rollout:** a user holding a stale SPA bundle fails login to
+  `/?auth_error=stale_client` but **cannot render that reason** — a bundle
+  predating 2026-07-30 shows "your account is not authorized" for every
+  reason, the opposite of the advice it needs. A manual reload does not
+  help either: the service worker's `NavigationRoute` serves `index.html`
+  from its ~63 MB precache, bypassing nginx's `no-cache` on `/`. What
+  recovers is retrying once the new worker has installed and claimed the
+  tab — the sign-in click is itself a navigation, so it fetches the new
+  bundle. Hub and client deploy together.
 - **Scope:** the Google callback only. `/auth/session` (the Generic
   provider's JSON mint) is not nonce-bound and remains replay-able
   within the submitted token's validity.
@@ -292,7 +297,7 @@ anyone can craft, so the precise cause stays in the audit log.
 
 | `reason` | What the user is told | Audit `detail` to look for |
 |---|---|---|
-| `stale_client` | This version of the app is out of date. Please reload the page and try again. | `login_state_stale_client` |
+| `stale_client` | This app is out of date and updating. Please try again in a few minutes. | `login_state_stale_client` |
 | `restart` | Sign-in didn't complete. Please try again. | `login_state_missing`, `login_state_nonce_mismatch`, `login_state_expired`, `login_state_tampered`, `login_state_kid_mismatch`, `login_state_token_nonce_missing`, `callback_csrf`, `jwt_decode:*`, `azp_or_iat_rejected`, `email_not_verified` |
 | `denied` | Sign-in failed. Your account is not authorized to access this hub. | `user_banned`, `user_not_allowlisted` |
 | `server` | Something went wrong on the hub. Please try again shortly. | (no audit event — a mint failure logs at ERROR, not `auth_fail`) |
@@ -301,8 +306,10 @@ Two properties worth knowing when reading reports:
 
 - **`denied` is exactly the two real denials** — a ban and an allowlist
   miss, the cases where an identity *was* established and then refused.
-  Everything else is a retry, so a user reporting "not authorized" really
-  does need an administrator, not a reload.
+  Everything else is a retry. **But do not infer the reason from the
+  sentence the user saw:** a bundle predating 2026-07-30 renders "not
+  authorized" for all four reasons, so match the report against the audit
+  `detail` instead. Once clients are current, the sentence is reliable.
 - **Unknown and empty reasons render as `restart`.** A pre-2026-07-30 hub
   emits a bare `/?auth_error`, and the parameter is craftable, so the
   client falls back to the retry copy rather than the alarming one. If a

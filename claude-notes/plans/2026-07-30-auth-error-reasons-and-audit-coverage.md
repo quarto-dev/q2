@@ -196,7 +196,7 @@ Then implement, server side:
 
   | Reason | Causes | Exact user-facing copy |
   |--------|--------|------------------------|
-  | `stale_client` | the E0 discriminator: no cookie **and** a nonce-less token | This version of the app is out of date. Please reload the page and try again. |
+  | `stale_client` | the E0 discriminator: no cookie **and** a nonce-less token | This app is out of date and updating. Please try again in a few minutes. |
   | `restart` | `login_state_missing` (nonce-bearing token), `nonce_mismatch`, `expired`, `tampered`, `kid_mismatch`, `token_nonce_missing`, `callback_csrf`, and the **401 family** from `authenticate_claims` (`jwt_decode:*`, `azp_or_iat_rejected`, `email_not_verified`) | Sign-in didn't complete. Please try again. |
   | `denied` | banned user; **`user_not_allowlisted`** (the 403 from `authenticate_claims`) | Sign-in failed. Your account is not authorized to access this hub. |
   | `server` | session mint failure | Something went wrong on the hub. Please try again shortly. |
@@ -361,11 +361,19 @@ present in an auth-enabled `vite build`, matching the E1 table verbatim
 
 ```
 VITE_GOOGLE_CLIENT_ID=verify.apps.googleusercontent.com npx vite build --outDir <tmp>
-1    This version of the app is out of date. Please reload the page and try again.
+1    This app is out of date and updating. Please try again in a few minutes.
 1    Sign-in didn't complete. Please try again.
 1    Sign-in failed. Your account is not authorized to access this hub.
 1    Something went wrong on the hub. Please try again shortly.
+0    (superseded) This version of the app is out of date. Please reload the page and try again.
 ```
+
+**Re-run 2026-07-30** after the `stale_client` copy was shortened; the first
+record of this leg showed the superseded sentence, so it was re-measured
+rather than edited. The `0` line is an added check — the old copy is absent,
+so no bundle carries both. The build's PWA leg reported **166 precache
+entries, 67138 KiB**, against the 63 MB recorded in
+`2026-07-30-hub-client-sw-precache-and-update.md`'s Measurements block.
 
 Note the default `npm run build` **omits** these strings entirely, and that
 is correct: `AUTH_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID`, so
@@ -418,9 +426,11 @@ keeps the diffs legible.
   untouched.
 - A client build-id / `/version` skew endpoint (the SPA sending the `gitInfo`
   commit hash from `hub-client/vite.config.ts:12` for the server to flag a
-  mismatch). Redundant: nginx serves the SPA in production, so the hub does
-  not know which client build is canonical, and `stale_client` already
-  carries the "you are out of date" signal at the moment it matters.
+  mismatch). Still rejected, but not for the reason first given: nginx serves
+  the SPA in production, so the hub does not know which client build is
+  canonical — and a skew endpoint carries the *same* one-generation lag as
+  `stale_client`, since acting on the server's answer needs client code the
+  stale client does not have. No better positioned, rather than redundant.
 
 ## Current state (verified against `e86a9275`)
 
