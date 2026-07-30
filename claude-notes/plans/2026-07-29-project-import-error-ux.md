@@ -122,8 +122,17 @@ the suspected trigger, but the immediate goal is twofold:
 
 ### Phase 4 — Wrap-up
 
-- [ ] Update hub-client/changelog.md (two-commit workflow)
+- [x] Update hub-client/changelog.md (two-commit workflow:
+      d947fab2 fix + a02cde3f changelog, on
+      `braid/bd-tux4m6od-join-collection-error-ux`)
+- [ ] Push branch + open PR, watch CI
 - [ ] Close bd-tux4m6od with findings recorded
+
+**Open question (closed unresolved):** whether the original failing
+browser hit the 401 (expired session) or the slow-101 (forceReady
+race) mode is unknowable now — the tab was lost before its Network
+panel could be checked. Moot for the fix: both modes are classified,
+and the race mode is eliminated by the wait-for-peer retry.
 
 ## Notes / Findings
 
