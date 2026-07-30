@@ -253,32 +253,51 @@ let collapseExpandedBubble: (() => void) | null = null;
 const BUBBLE_GAP = 4;
 type BubbleEntry = {
     el: HTMLElement | null;
+    /** Nudge in VIEWPORT px (applied as `nudge / scale` local px). */
     nudge: number;
     /** Block currently hovered — its bubble is pinned at its natural spot. */
     hovered: boolean;
+    /**
+     * Real accumulated ancestor scale, measured from the DOM in the
+     * relayout pass (reveal's getScale() proved unreliable — extra
+     * scaling exists between `.slides` and the blocks, and a wrong
+     * factor makes nudge round-trips drift). 1 outside decks.
+     */
+    scale: number;
     setNudge: (y: number) => void;
+    setScale: (s: number) => void;
 };
+
+// ---------------------------------------------------------------------
+// Deck scale. Reveal scales slides with a CSS transform, which would
+// shrink the bubbles to unreadable; `RevealScaleSync` (RevealDeck.tsx)
+// broadcasts reveal's actual scale — once the deck is ready and on
+// every reveal re-layout (viewport resize) — and the chrome
+// counter-scales by 1/scale. Stays 1 outside decks. Local translations
+// inside the scaled deck move `scale×` as far in viewport terms; the
+// relayout math converts accordingly.
+// MAGIC NUMBER: even with the deck's transform countered, bubbles on
+// slides come out visibly smaller than in regular previews (some
+// sizing channel we haven't pinned down — likely the deck theme's
+// root font size). Rather than chasing it, bump deck bubbles up by
+// this factor. Tune to taste; only applies inside decks (scale ≠ 1).
+const DECK_BUBBLE_FUDGE = 1.2;
+if (typeof window !== 'undefined') {
+    // Deck lifecycle signal (ready / resize / slidechanged + a slow
+    // tick while a deck is live): geometry may have changed wholesale
+    // — hidden sections never unmount, so slide switches don't
+    // re-register anything. Always reset-solve; the actual scale is
+    // measured per-bubble inside the pass.
+    window.addEventListener('q2-reveal-scale', () => {
+        scheduleBubbleRelayout(true);
+    });
+}
 const bubbleEntries = new Set<BubbleEntry>();
 let bubbleRelayoutScheduled = false;
 // When set, the next pass solves from NATURAL positions (full reset)
 // instead of from current nudges (push-only). OR-ed across schedule
 // calls in the same frame.
 let bubbleRelayoutReset = false;
-
-/** The translateY currently painted on the element. During a transform
- *  transition this is the in-flight value, not the target nudge — the
- *  relayout pass subtracts it to recover the natural position. */
-function appliedTranslateY(el: HTMLElement, fallback: number): number {
-    try {
-        const t = getComputedStyle(el).transform;
-        if (!t || t === 'none') return 0;
-        const m = t.match(/matrix\(([^)]+)\)/);
-        if (!m) return fallback;
-        return parseFloat(m[1].split(',')[5]) || 0;
-    } catch {
-        return fallback;
-    }
-}
 
 function scheduleBubbleRelayout(reset = false) {
     if (reset) bubbleRelayoutReset = true;
@@ -288,50 +307,101 @@ function scheduleBubbleRelayout(reset = false) {
         bubbleRelayoutScheduled = false;
         const resetPass = bubbleRelayoutReset;
         bubbleRelayoutReset = false;
-        const items = [...bubbleEntries]
-            .filter((e) => e.el)
-            .map((e) => {
-                const rect = e.el!.getBoundingClientRect();
-                // Subtract the currently painted translation to get the
-                // bubble's natural (untranslated) position.
-                const top = rect.top - appliedTranslateY(e.el!, e.nudge);
-                // HOVER PIN: the hovered bubble sits at its natural
-                // position (same spot every time, overlapping its
-                // block, ready to click) — except it may never sit
-                // above the top of the PAGE (a tall expanded bubble on
-                // the first block would otherwise be unreachable); its
-                // pin shifts down just enough. Going above the viewport
-                // top when scrolled is fine. Idle bubbles float freely.
-                const TOP_MARGIN = 8;
-                // Page-top expressed in viewport coords (rects are
-                // viewport-relative).
-                const pageTop = TOP_MARGIN - window.scrollY;
-                const pinnedTop = Math.max(top, pageTop);
-                const clamp = e.hovered ? () => pinnedTop : (y: number) => y;
-                // Idle bubbles START from their current (already-nudged)
-                // position — a relayout only ever PUSHES them further,
-                // never pulls them back (the settle phase below handles
-                // drifting home). A reset pass starts from naturals.
-                return {
-                    e,
-                    top,
-                    height: rect.height,
-                    left: rect.left,
-                    right: rect.right,
-                    cur: e.hovered ? pinnedTop : resetPass ? top : top + e.nudge,
-                    clamp,
-                    pinned: e.hovered,
-                };
-            })
-            // DOCUMENT order, not visual order: pushes are directional
-            // relative to it (earlier-in-document bubbles may only be
-            // pushed UP, later ones only DOWN), so document order can
-            // never be visually inverted by the layout.
-            .sort((a, b) =>
-                a.e.el!.compareDocumentPosition(b.e.el!) & Node.DOCUMENT_POSITION_FOLLOWING
-                    ? -1
-                    : 1,
-            );
+        // Measure every bubble's REAL accumulated ancestor scale from
+        // its (untransformed) wrapper: rect width is viewport px,
+        // offsetWidth is layout px. Synced to the component so the
+        // counter-scale transform uses the same factor the solve math
+        // does. Skipped inside display:none slides (offsetWidth 0).
+        for (const e of bubbleEntries) {
+            if (!e.el) continue;
+            const parent = e.el.parentElement;
+            if (parent && parent.offsetWidth > 0) {
+                let s = parent.getBoundingClientRect().width / parent.offsetWidth;
+                if (Math.abs(s - 1) < 0.02) s = 1;
+                if (s !== e.scale) {
+                    e.scale = s;
+                    e.setScale(s);
+                }
+            }
+        }
+
+        // Collect the solvable bubbles. Everything below runs in
+        // viewport px, for documents and decks alike.
+        type Item = {
+            e: BubbleEntry;
+            top: number;
+            height: number;
+            left: number;
+            right: number;
+            cur: number;
+            clamp: (y: number) => number;
+            pinned: boolean;
+        };
+        const items: Item[] = [];
+        for (const e of bubbleEntries) {
+            const el = e.el;
+            if (!el) continue;
+            // SLIDES: only bubbles contained in the CURRENT slide
+            // participate. Zero-size / visibility checks are NOT
+            // enough — reveal keeps nearby slides mounted for
+            // preloading (viewDistance) in states that still measure
+            // real rects, and their ghost bubbles shove the visible
+            // slide's bubbles around. `.present` is reveal's own
+            // marker for the active slide (and the active child of a
+            // vertical stack). Scoped to `.reveal` so document
+            // <section>s are unaffected.
+            const section = el.closest('.reveal section');
+            if (section && !section.classList.contains('present')) continue;
+            // Generic visibility gate (e.g. undisclosed fragments).
+            const cv = (el as { checkVisibility?: (o?: object) => boolean }).checkVisibility;
+            if (cv && !cv.call(el, { checkVisibilityCSS: true, visibilityProperty: true })) {
+                continue;
+            }
+            const parentRect = el.parentElement?.getBoundingClientRect();
+            if (!parentRect || parentRect.width === 0) continue;
+            const rect = el.getBoundingClientRect();
+            if (rect.width === 0) continue;
+            // Natural anchor derived from the UNTRANSFORMED wrapper —
+            // the chrome anchors at `top: -11px` local px above the
+            // wrapper top (keep in sync with the chrome's `top`
+            // style), × scale for viewport. Never read back from our
+            // own transform: that round-trip proved fragile.
+            const top = parentRect.top - 11 * e.scale;
+            // HOVER PIN: the hovered bubble sits at its natural
+            // position (same spot every time, overlapping its block,
+            // ready to click) — except it may never sit above the top
+            // of the PAGE (a tall expanded bubble on the first block
+            // would otherwise be unreachable); its pin shifts down
+            // just enough. Going above the viewport top when scrolled
+            // is fine. Idle bubbles float freely.
+            const TOP_MARGIN = 8;
+            const pageTop = TOP_MARGIN - window.scrollY;
+            const pinnedTop = Math.max(top, pageTop);
+            const clamp = e.hovered ? () => pinnedTop : (y: number) => y;
+            // Idle bubbles START from their current (already-nudged)
+            // position — a relayout only ever PUSHES them further,
+            // never pulls them back (the settle phase below handles
+            // drifting home). A reset pass starts from naturals.
+            items.push({
+                e,
+                top,
+                height: rect.height,
+                left: rect.left,
+                right: rect.right,
+                cur: e.hovered ? pinnedTop : resetPass ? top : top + e.nudge,
+                clamp,
+                pinned: e.hovered,
+            });
+        }
+        // DOCUMENT order, not visual order: pushes are directional
+        // relative to it (earlier-in-document bubbles may only be
+        // pushed UP, later ones only DOWN), so document order can
+        // never be visually inverted by the layout.
+        items.sort((a, b) =>
+            a.e.el!.compareDocumentPosition(b.e.el!) & Node.DOCUMENT_POSITION_FOLLOWING
+                ? -1
+                : 1,
+        );
         const overlapsH = (
             a: { left: number; right: number },
             b: { left: number; right: number },
@@ -450,6 +520,11 @@ const CommentWrapper = ({
     // neighbors; nudgeRef mirrors it for the module-level relayout pass.
     const [nudge, setNudge] = React.useState(0);
     const nudgeRef = React.useRef(0);
+    // Real ancestor scale, measured by the relayout pass (1 outside
+    // reveal decks); the chrome counter-scales by 1/scale so bubbles
+    // stay normal-sized on scaled slides.
+    const [scale, setScale] = React.useState(1);
+    const scaleRef = React.useRef(1);
     const chromeRef = React.useRef<HTMLDivElement>(null);
     // Mirror of isHovered for the registry (re-registrations read it),
     // plus the live entry so hover changes can update it in place.
@@ -654,9 +729,14 @@ const CommentWrapper = ({
             el: chromeRef.current,
             nudge: nudgeRef.current,
             hovered: isHoveredRef.current,
+            scale: scaleRef.current,
             setNudge: (y) => {
                 nudgeRef.current = y;
                 setNudge(y);
+            },
+            setScale: (s) => {
+                scaleRef.current = s;
+                setScale(s);
             },
         };
         entryRef.current = entry;
@@ -723,7 +803,12 @@ const CommentWrapper = ({
                         position: 'absolute',
                         top: '-11px',
                         right: '-10px',
-                        transform: `translateY(${nudge}px)`,
+                        // Nudge is viewport px → local px via /scale;
+                        // the counter-scale keeps the bubble at normal
+                        // size inside scaled reveal slides (plus the
+                        // fudge factor — see DECK_BUBBLE_FUDGE).
+                        transform: `translateY(${nudge / scale}px) scale(${scale === 1 ? 1 : DECK_BUBBLE_FUDGE / scale})`,
+                        transformOrigin: 'top right',
                         // Animate nudge changes; the relayout pass reads
                         // the in-flight translation, so mid-animation
                         // reflows stay correct.

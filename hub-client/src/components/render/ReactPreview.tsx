@@ -169,6 +169,22 @@ type RenderResult = {
   diagnostics: Diagnostic[];
 }
 
+/**
+ * True when a format renders AND edits through the q2-preview
+ * pipeline. `format: revealjs` converged onto the shared q2-preview
+ * iframe (bd-vwp4y5ku) but is not in `pipelineKindForFormat`'s
+ * Rust-mirrored table — it reaches the preview pipeline via the
+ * `revealjs → q2-slides` pseudo-format substitution instead. Both the
+ * render dispatch (doRender) and the edit-back dispatch (handleSetAst)
+ * must use THIS predicate: gating only the render side left deck
+ * commits falling into the whole-AST `incrementalWriteQmd` branch,
+ * which rejects PreviewNodeEditPayloads ("Missing required field:
+ * meta").
+ */
+function usesPreviewPipeline(format: string): boolean {
+  return format === 'revealjs' || pipelineKindForFormat(format) === 'preview';
+}
+
 // Render QMD content to AST JSON for the iframe-based preview.
 //
 // Dispatches on `pipelineKindForFormat(format)`:
@@ -227,7 +243,7 @@ async function doRender(
   // reveal's stock `white.css` (uppercase headings, centered content).
   const isSlidesPreview = options.format === 'revealjs';
 
-  if (isSlidesPreview || pipelineKindForFormat(options.format) === 'preview') {
+  if (usesPreviewPipeline(options.format)) {
     if (!options.documentPath) {
       return {
         success: false,
@@ -766,7 +782,7 @@ export default function ReactPreview({
   // and calls incrementalWriteQmd as before.
   const handleSetAst = useCallback(
     (newAst: any) => {
-      if (pipelineKindForFormat(format) === 'preview') {
+      if (usesPreviewPipeline(format)) {
         const edit = newAst as PreviewNodeEditPayload;
         if (!edit.__isPreviewNodeEdit) {
           console.warn(
