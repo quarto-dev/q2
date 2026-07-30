@@ -322,7 +322,7 @@ fn build_item_map(
     );
 
     // Pre-rendered helper strings.
-    let img_html = helpers::image_html(item, listing);
+    let img_html = helpers::image_html(item, listing, host_dir);
     m.insert("image-html".to_string(), TemplateValue::String(img_html));
     m.insert(
         "metadata-attrs".to_string(),

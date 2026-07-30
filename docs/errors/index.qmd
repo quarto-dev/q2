@@ -11,14 +11,12 @@ listing:
     subsystem: "Subsystem"
     status: "Status"
   field-links: [code, title]
-  # Workarounds for two Q2 listing limitations:
-  # - bd-2qjnd: parse_sort scalar arm rejects PandocInlines, so we
-  #   use the array form which goes through as_plain_text().
-  # - bd-otmqu: only built-in sort fields are recognized. `code`
-  #   would be ideal but isn't recognized; we sort by `filename`
-  #   instead (Q-1-10.qmd, Q-1-11.qmd, ... sorts close enough
-  #   alphanumerically, though Q-1-10 sorts before Q-1-2).
-  sort: [filename]
+  # Workaround for a Q2 listing limitation (bd-otmqu): only built-in
+  # sort fields are recognized. `code` would be ideal but isn't
+  # recognized; we sort by `filename` instead (Q-1-10.qmd,
+  # Q-1-11.qmd, ... sorts close enough alphanumerically, though
+  # Q-1-10 sorts before Q-1-2).
+  sort: filename
   categories: numbered
   filter-ui: true
   sort-ui: true

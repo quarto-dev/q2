@@ -193,6 +193,11 @@ interface UpdateAstPayload {
      */
     editingDisabled?: boolean;
     /**
+     * Comment-bubble display mode (host three-way toggle). Forwarded
+     * into `PreviewContext.commentsMode`. Absent ⇒ 'show'.
+     */
+    commentsMode?: 'expand' | 'show' | 'hide';
+    /**
      * P3.2: nesting-cursor mode for nested blocks. Forwarded into
      * `PreviewContext.unlockNestingCursor`. Default-off (undefined/false).
      */
@@ -339,6 +344,7 @@ function updateAst(payload: UpdateAstPayload) {
         untransformedAstJson,
         currentActor,
         editingDisabled,
+        commentsMode,
         unlockNestingCursor,
         richText,
         nestedEditBuffers,
@@ -365,6 +371,7 @@ function updateAst(payload: UpdateAstPayload) {
                 untransformedAstJson={untransformedAstJson}
                 currentActor={currentActor ?? null}
                 editingDisabled={editingDisabled}
+                commentsMode={commentsMode}
                 unlockNestingCursor={unlockNestingCursor}
                 richText={richText}
                 nestedEditBuffers={nestedEditBuffers}

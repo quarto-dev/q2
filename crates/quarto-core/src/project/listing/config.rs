@@ -692,9 +692,16 @@ fn parse_field_types(
 }
 
 fn parse_sort(value: &ConfigValue, diagnostics: &mut Vec<DiagnosticMessage>) -> Vec<ListingSort> {
+    if let ConfigValueKind::Scalar(Yaml::Boolean(false)) = &value.value {
+        return Vec::new();
+    }
+    // String-shaped values (including the routine PandocInlines
+    // wrapping of front-matter strings) flatten via `as_plain_text`,
+    // mirroring `parse_contents` — see bd-2qjnd / bd-nwyp.
+    if let Some(s) = value.as_plain_text() {
+        return vec![parse_one_sort_key(&s)];
+    }
     match &value.value {
-        ConfigValueKind::Scalar(Yaml::Boolean(false)) => Vec::new(),
-        ConfigValueKind::Scalar(Yaml::String(s)) => vec![parse_one_sort_key(s)],
         ConfigValueKind::Array(items) => items
             .iter()
             .filter_map(|v| v.as_plain_text())
@@ -1160,6 +1167,29 @@ mod tests {
         let sort = listings[0].sort.as_ref().unwrap();
         assert_eq!(sort[0].field, "date");
         assert_eq!(sort[0].direction, SortDirection::Desc);
+    }
+
+    // 9b. A scalar `sort: "date desc"` routinely arrives as
+    // `PandocInlines` (front-matter strings hit the markdown
+    // sublexer). The scalar arm must route through `as_plain_text`
+    // like the array arm does, instead of falling through to the
+    // Q-12-3 diagnostic with an empty sort. See bd-2qjnd.
+    #[test]
+    fn sort_pandoc_inlines_scalar_parses() {
+        use quarto_pandoc_types::inline::{Inline, Str};
+        let inlines: quarto_pandoc_types::inline::Inlines = vec![Inline::Str(Str {
+            text: "date desc".to_string(),
+            source_info: SourceInfo::for_test(),
+        })];
+        let sort_val = ConfigValue::new_inlines(inlines, SourceInfo::for_test());
+        let (listings, diags) = parse(map(vec![("sort", sort_val)]));
+        let sort = listings[0]
+            .sort
+            .as_ref()
+            .unwrap_or_else(|| panic!("sort dropped; diags: {diags:?}"));
+        assert_eq!(sort[0].field, "date");
+        assert_eq!(sort[0].direction, SortDirection::Desc);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
     }
 
     // 10. multi-key sort preserves order

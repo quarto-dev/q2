@@ -229,10 +229,59 @@ pub fn get_scaffold(target: &ProjectTypeWithTemplate) -> Option<ProjectScaffold>
                             templates::website::STYLES_CSS,
                         )),
                 ),
-                Some("blog") => {
-                    // Blog template - not yet implemented, will be added later
-                    None
-                }
+                Some("blog") => Some(
+                    ProjectScaffold::with_template(ProjectType::Website, "blog")
+                        .add_file(ScaffoldFileDef::template(
+                            "_quarto.yml",
+                            templates::blog::QUARTO_YML,
+                        ))
+                        .add_file(ScaffoldFileDef::template(
+                            "index.qmd",
+                            templates::blog::INDEX_QMD,
+                        ))
+                        .add_file(ScaffoldFileDef::static_text(
+                            "about.qmd",
+                            templates::blog::ABOUT_QMD,
+                        ))
+                        .add_file(ScaffoldFileDef::static_text(
+                            "styles.css",
+                            templates::website::STYLES_CSS,
+                        ))
+                        .add_file(
+                            ScaffoldFileDef::static_text(
+                                "_metadata.yml",
+                                templates::blog::POSTS_METADATA_YML,
+                            )
+                            .in_subdirectory("posts"),
+                        )
+                        .add_file(
+                            ScaffoldFileDef::template("index.qmd", templates::blog::WELCOME_QMD)
+                                .in_subdirectory("posts/welcome"),
+                        )
+                        .add_file(
+                            ScaffoldFileDef::binary(
+                                "thumbnail.jpg",
+                                templates::blog::THUMBNAIL_JPG,
+                                "image/jpeg",
+                            )
+                            .in_subdirectory("posts/welcome"),
+                        )
+                        .add_file(
+                            ScaffoldFileDef::template(
+                                "index.qmd",
+                                templates::blog::POST_WITH_CODE_QMD,
+                            )
+                            .in_subdirectory("posts/post-with-code"),
+                        )
+                        .add_file(
+                            ScaffoldFileDef::binary(
+                                "image.jpg",
+                                templates::blog::IMAGE_JPG,
+                                "image/jpeg",
+                            )
+                            .in_subdirectory("posts/post-with-code"),
+                        ),
+                ),
                 Some(_) => None, // Unknown template
             }
         }
@@ -307,8 +356,9 @@ mod tests {
     }
 
     /// Every template in every implemented choice's scaffold must compile
-    /// with the doctemplate engine, interpolate `$title$`, and carry no
-    /// EJS residue. (Static files are checked for EJS residue only.)
+    /// with the doctemplate engine, interpolate at least one context
+    /// variable (a Template with none should be StaticText), and carry
+    /// no EJS residue. (Static files are checked for EJS residue only.)
     #[test]
     fn test_all_scaffold_templates_compile() {
         for choice in crate::choices::implemented_choices() {
@@ -324,8 +374,8 @@ mod tests {
                             )
                         });
                         assert!(
-                            t.contains("$title$"),
-                            "template {} for '{}' should interpolate $title$",
+                            t.contains('$'),
+                            "template {} for '{}' interpolates nothing — make it StaticText",
                             f.path,
                             choice.id
                         );
@@ -338,6 +388,41 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_get_scaffold_blog() {
+        let target = ProjectTypeWithTemplate::with_template(ProjectType::Website, "blog");
+        let scaffold = get_scaffold(&target).expect("blog scaffold");
+
+        let paths: Vec<_> = scaffold
+            .files
+            .iter()
+            .map(|f| f.full_path().to_str().unwrap().replace('\\', "/"))
+            .collect();
+        assert_eq!(
+            paths,
+            [
+                "_quarto.yml",
+                "index.qmd",
+                "about.qmd",
+                "styles.css",
+                "posts/_metadata.yml",
+                "posts/welcome/index.qmd",
+                "posts/welcome/thumbnail.jpg",
+                "posts/post-with-code/index.qmd",
+                "posts/post-with-code/image.jpg",
+            ]
+        );
+
+        // The two post images are the first users of the Binary path.
+        let binaries: Vec<_> = scaffold
+            .files
+            .iter()
+            .filter(|f| matches!(f.content, ScaffoldContent::Binary { .. }))
+            .map(|f| f.full_path())
+            .collect();
+        assert_eq!(binaries.len(), 2, "exactly the two post images");
     }
 
     #[test]

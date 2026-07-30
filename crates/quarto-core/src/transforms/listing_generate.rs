@@ -31,7 +31,7 @@
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
-use crate::project::discovery::{glob_match_path, path_to_forward_slashes, relative_to_dir};
+use crate::project::discovery::{glob_match_path_or_dir, path_to_forward_slashes, relative_to_dir};
 use crate::project::listing::filter::apply_filters;
 use crate::project::listing::sort::apply_sort;
 use crate::project::listing::{ListingContents, ResolvedListing, hydrate_item, parse_listings};
@@ -143,6 +143,25 @@ impl AstTransform for ListingGenerateTransform {
                 items.truncate(max as usize);
             }
 
+            // bd-qv2lsab0: an author-supplied front-matter `image:`
+            // is typically referenced by no page body, so nothing
+            // else copies it into the output tree. Register a copy
+            // intent per project-relative item image; they flush
+            // with the host page's other copies.
+            for item in &items {
+                if let Some(img) = item.image.as_deref()
+                    && !crate::project::listing::helpers::is_external_src(img)
+                {
+                    ctx.resource_copies.push(crate::render::ResourceCopyIntent {
+                        src: ctx.project.dir.join(img),
+                        dest: ctx.project.output_dir.join(img),
+                        origin: quarto_source_map::SourceInfo::generated(
+                            quarto_source_map::By::programmatic_config(),
+                        ),
+                    });
+                }
+            }
+
             resolved.push(ResolvedListing { listing, items });
         }
 
@@ -164,9 +183,11 @@ fn matches_any_glob(
         ListingContents::Glob(pattern) => {
             // Try host-relative first (Q1 default `*.qmd` is host-
             // relative). If that misses, try project-relative for
-            // explicit patterns like `posts/**/*.qmd`.
-            host_relative.is_some_and(|hr| glob_match_path(pattern, hr))
-                || glob_match_path(pattern, project_relative)
+            // explicit patterns like `posts/**/*.qmd`. The dir-aware
+            // variant lets a bare `contents: posts` match everything
+            // under the directory (Q1 parity, bd-9arwdicv).
+            host_relative.is_some_and(|hr| glob_match_path_or_dir(pattern, hr))
+                || glob_match_path_or_dir(pattern, project_relative)
         }
         ListingContents::Inline(_) => false,
     })
@@ -208,6 +229,33 @@ mod tests {
             })
             .collect();
         ConfigValue::new_map(map_entries, SourceInfo::for_test())
+    }
+
+    /// A bare directory entry (`contents: posts`) matches everything
+    /// under the directory, in both path views; segment-exact, so a
+    /// sibling `posts-archive/` never matches. See bd-9arwdicv.
+    #[test]
+    fn matches_any_glob_bare_directory() {
+        let contents = vec![ListingContents::Glob("posts".to_string())];
+        assert!(matches_any_glob(
+            &contents,
+            "posts/welcome/index.qmd",
+            Some("posts/welcome/index.qmd"),
+        ));
+        // Project-relative fallback (host in a sub-directory).
+        assert!(matches_any_glob(&contents, "posts/welcome/index.qmd", None));
+        assert!(!matches_any_glob(
+            &contents,
+            "posts-archive/old.qmd",
+            Some("posts-archive/old.qmd"),
+        ));
+        // A literal file entry still matches itself exactly.
+        let file_entry = vec![ListingContents::Glob("posts/welcome/index.qmd".to_string())];
+        assert!(matches_any_glob(
+            &file_entry,
+            "posts/welcome/index.qmd",
+            None
+        ));
     }
 
     fn make_profile(source: &str, output_href: &str, title: &str) -> DocumentProfile {

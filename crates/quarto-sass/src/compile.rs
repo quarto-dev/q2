@@ -74,7 +74,7 @@ pub fn assemble_theme_scss(
     context: &ThemeContext<'_>,
 ) -> Result<(String, Vec<PathBuf>), SassError> {
     use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_highlight_layer,
+        load_copy_code_layer, load_embed_example_layer, load_highlight_layer, load_listing_layer,
         load_title_block_layer,
     };
 
@@ -88,13 +88,19 @@ pub fn assemble_theme_scss(
     let highlight_layer = load_highlight_layer()?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
+    let listing_layer = load_listing_layer()?;
     let mut user_layers = Vec::new();
     // `title-block-style: plain|none` drops the title-block layer
     // (bd-gx9cic8z P6); all other built-in layers are unconditional.
     if config.title_block_layer {
         user_layers.push(load_title_block_layer()?);
     }
-    user_layers.extend([highlight_layer, embed_example_layer, copy_code_layer]);
+    user_layers.extend([
+        highlight_layer,
+        embed_example_layer,
+        copy_code_layer,
+        listing_layer,
+    ]);
     user_layers.extend(result.layers);
 
     // Assemble SCSS
@@ -197,7 +203,7 @@ pub fn compile_with_doc_vars(
     doc_vars: &crate::SassLayer,
 ) -> Result<String, SassError> {
     use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_highlight_layer,
+        load_copy_code_layer, load_embed_example_layer, load_highlight_layer, load_listing_layer,
         load_title_block_layer,
     };
     use crate::themes::process_theme_specs;
@@ -226,11 +232,17 @@ pub fn compile_with_doc_vars(
     let highlight_layer = load_highlight_layer()?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
+    let listing_layer = load_listing_layer()?;
     let mut user_layers = Vec::new();
     if config.title_block_layer {
         user_layers.push(load_title_block_layer()?);
     }
-    user_layers.extend([highlight_layer, embed_example_layer, copy_code_layer]);
+    user_layers.extend([
+        highlight_layer,
+        embed_example_layer,
+        copy_code_layer,
+        listing_layer,
+    ]);
 
     let mut load_paths = default_load_paths();
     if config.has_themes() {
@@ -344,7 +356,7 @@ pub fn compile_default_css(
     minified: bool,
 ) -> Result<String, SassError> {
     use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_highlight_layer,
+        load_copy_code_layer, load_embed_example_layer, load_highlight_layer, load_listing_layer,
         load_title_block_layer,
     };
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
@@ -360,13 +372,16 @@ pub fn compile_default_css(
     let highlight_layer = load_highlight_layer()?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
+    let listing_layer = load_listing_layer()?;
 
-    // Assemble SCSS: Bootstrap + Quarto + title block + highlight + embed-example defaults
+    // Assemble SCSS: Bootstrap + Quarto + title block + highlight +
+    // embed-example + copy-code + listing defaults
     let scss = assemble_with_user_layers(&[
         title_block_layer,
         highlight_layer,
         embed_example_layer,
         copy_code_layer,
+        listing_layer,
     ])?;
 
     // Get load paths and resources
@@ -478,7 +493,7 @@ pub async fn compile_with_doc_vars(
     doc_vars: &crate::SassLayer,
 ) -> Result<String, SassError> {
     use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_highlight_layer,
+        load_copy_code_layer, load_embed_example_layer, load_highlight_layer, load_listing_layer,
         load_title_block_layer,
     };
     use crate::themes::process_theme_specs;
@@ -498,11 +513,17 @@ pub async fn compile_with_doc_vars(
     let highlight_layer = load_highlight_layer()?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
+    let listing_layer = load_listing_layer()?;
     let mut user_layers = Vec::new();
     if config.title_block_layer {
         user_layers.push(load_title_block_layer()?);
     }
-    user_layers.extend([highlight_layer, embed_example_layer, copy_code_layer]);
+    user_layers.extend([
+        highlight_layer,
+        embed_example_layer,
+        copy_code_layer,
+        listing_layer,
+    ]);
 
     let mut load_paths = default_load_paths();
     if config.has_themes() {
@@ -568,7 +589,7 @@ pub async fn compile_default_css(
     minified: bool,
 ) -> Result<String, SassError> {
     use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_highlight_layer,
+        load_copy_code_layer, load_embed_example_layer, load_highlight_layer, load_listing_layer,
         load_title_block_layer,
     };
 
@@ -590,13 +611,16 @@ pub async fn compile_default_css(
     let highlight_layer = load_highlight_layer()?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
+    let listing_layer = load_listing_layer()?;
 
-    // Assemble SCSS: Bootstrap + Quarto + title block + highlight + embed-example defaults
+    // Assemble SCSS: Bootstrap + Quarto + title block + highlight +
+    // embed-example + copy-code + listing defaults
     let scss = assemble_with_user_layers(&[
         title_block_layer,
         highlight_layer,
         embed_example_layer,
         copy_code_layer,
+        listing_layer,
     ])?;
 
     // Get load paths (these point to VFS paths populated by wasm-quarto-hub-client)
@@ -990,6 +1014,81 @@ mod tests {
         // Should have Bootstrap classes
         assert!(css.contains(".btn"));
         assert!(css.contains(".container"));
+    }
+
+    /// Listing card/table/category styling ships as a built-in layer
+    /// (bd-57y4). Like Q1, the layer is unconditional for HTML — one
+    /// assertion per assembly path, matching the highlight/copy-code
+    /// regression pattern.
+    #[test]
+    fn test_compile_default_css_includes_listing_rules() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, true).unwrap();
+        assert!(
+            css.contains(".quarto-listing"),
+            "default CSS must contain .quarto-listing rules from quarto-listing.scss"
+        );
+        assert!(
+            css.contains(".listing-category"),
+            "default CSS must contain category-chip rules"
+        );
+    }
+
+    #[test]
+    fn test_compile_theme_css_builtin_theme_includes_listing_rules() {
+        let runtime = NativeRuntime::new();
+        let themes = vec![ThemeSpec::parse("cosmo").unwrap()];
+        let config = ThemeConfig::new(themes, true);
+        let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+
+        let css = compile_theme_css(&config, &context).unwrap();
+        assert!(
+            css.contains(".quarto-listing"),
+            "themed CSS must contain .quarto-listing rules from quarto-listing.scss"
+        );
+        assert!(
+            css.contains(".listing-pagination"),
+            "themed CSS must contain pagination rules"
+        );
+    }
+
+    /// Q1's listing SCSS carries a per-theme override map keyed on
+    /// `$theme-name` (chip borders / form colors for the dark
+    /// built-ins). `$theme-name` already flows from the vendored
+    /// bootstrap layer (`$theme: "darkly" !default` +
+    /// `_bootstrap-variables.scss`), so darkly's map entry fires and
+    /// chips get a border — which the default (border-free) path never
+    /// emits. The border color is the *bootstrap-default* gray-600
+    /// (#6c757d), not darkly's, because the listing file's
+    /// `scss:variables` block rides in the functions band ahead of the
+    /// theme's defaults — the same quirk Q1's identical parser has, so
+    /// this is parity, not a bug (see load_listing_layer docs).
+    #[test]
+    fn test_compile_theme_css_darkly_activates_listing_theme_overrides() {
+        let runtime = NativeRuntime::new();
+
+        let darkly_css = {
+            let themes = vec![ThemeSpec::parse("darkly").unwrap()];
+            let config = ThemeConfig::new(themes, false);
+            let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+            compile_theme_css(&config, &context).unwrap()
+        };
+        assert!(
+            darkly_css.contains("border: solid #6c757d 1px"),
+            "darkly's $theme-name override must put a border on category chips"
+        );
+
+        // Control: cosmo has no map entry → no chip border emitted.
+        let cosmo_css = {
+            let themes = vec![ThemeSpec::parse("cosmo").unwrap()];
+            let config = ThemeConfig::new(themes, false);
+            let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+            compile_theme_css(&config, &context).unwrap()
+        };
+        assert!(
+            !cosmo_css.contains("border: solid #6c757d 1px"),
+            "cosmo must not inherit darkly's chip border"
+        );
     }
 
     #[test]

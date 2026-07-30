@@ -19,6 +19,7 @@ import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
 import type { BlockNode } from '../framework/types';
 import type { PreviewNodeEditPayload } from '../types/diagnostic';
 import { previewRegistry, PreviewContext } from '.';
+import type { CommentsMode } from './PreviewContext';
 import { buildSourceIndex, serializeSourceEntry } from './sourceIndex';
 import type { ResolvedSource } from './sourceIndex';
 import { outerBlockForAnchorR0, refocusTargetForAnchorR0, findReanchorCandidate, enumerateOuterBlocks, captureEditTarget, measureBlockBox, seedForRange, snapshotOuterBlockGeometry, isDirty } from './outerBlocks';
@@ -155,6 +156,8 @@ export interface PreviewRootProps {
     untransformedAstJson?: string | null;
     /** Globally disable the edit surface (bd-ov4gqk3m). */
     editingDisabled?: boolean;
+    /** Comment-bubble display mode ('expand' | 'show' | 'hide'). */
+    commentsMode?: CommentsMode;
     /**
      * P3.2: nesting-cursor mode for nested blocks. When true, the context
      * exposes nesting-cursor behaviour. Default-off (undefined/false).
@@ -1497,9 +1500,13 @@ export function PreviewRoot(props: PreviewRootProps) {
     };
 
     // commitSubtreeEdit: send a subtree-channel PreviewNodeEditPayload (Plan 2b).
+    // The replacer strips every pool-index-carrying key: `s` (node
+    // SourceInfo), `a` (AttrSourceInfo), and `targetS` (Link/Image
+    // URL+title source refs — missing it caused InvalidSourceInfoRef
+    // on any subtree containing a link).
     const commitSubtreeEdit = (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => {
         const stripped = JSON.parse(JSON.stringify(modifiedBlock, (key, value) =>
-            key === 's' || key === 'a' ? undefined : value,
+            key === 's' || key === 'a' || key === 'targetS' ? undefined : value,
         )) as BlockNode;
         const wrappedDoc = {
             'pandoc-api-version': [1, 23, 0],
@@ -1534,6 +1541,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 sourceIndex,
                 resolveSource,
                 editingDisabled: props.editingDisabled,
+                commentsMode: props.commentsMode,
                 unlockNestingCursor: props.unlockNestingCursor,
                 unlockNestingCursorRef,
                 richText: props.richText,

@@ -48,3 +48,29 @@ if (!globalThis.IntersectionObserver) {
     if (proto && typeof proto.getBoundingClientRect !== 'function') proto.getBoundingClientRect = zeroRect;
   }
 }
+
+// Same shape as the block above, different missing API (bd-cpyq99ps). jsdom does
+// not implement elementFromPoint, and ProseMirror's posAtCoords calls
+//   (view.root.elementFromPoint ? view.root : doc).elementFromPoint(x, y)
+// — with neither implemented it takes the `doc` branch and throws
+// "elementFromPoint is not a function" whenever a mounted tiptap editor replays
+// an opening click (RichTextEditor's placement rAF, bd-q9lyghv2).
+//
+// That made it a FLAKE rather than a failure: because the call happens in a
+// requestAnimationFrame, the throw escaped as an *unhandled* error whenever the
+// frame fired after its test had finished, and vitest failed the entire run
+// with every test passing.
+//
+// null is the honest jsdom answer — there is no layout, so no element is under
+// any point. posAtCoords treats a null hit as "outside the editor" and returns
+// null, which is precisely the miss that caretFromClick.ts documents and that
+// its callers already handle by falling back to end-of-block focus. Pinned by
+// caretFromClick.integration.test.ts against a real ProseMirror view.
+{
+  const proto = globalThis.Document?.prototype as
+    | { elementFromPoint?: unknown }
+    | undefined;
+  if (proto && typeof proto.elementFromPoint !== 'function') {
+    proto.elementFromPoint = () => null;
+  }
+}

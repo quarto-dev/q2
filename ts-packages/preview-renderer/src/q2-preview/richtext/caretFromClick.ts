@@ -10,9 +10,17 @@
 //
 // This works because the editor renders the SAME visual text in the SAME measured
 // box as the rendered block (same theme CSS), so the click's viewport coordinates
-// land on the same glyph. Geometry correctness is browser-verified (jsdom returns
-// null from posAtCoords); the unit tests here cover the hit/miss logic with a fake
-// editor.
+// land on the same glyph. Geometry correctness is browser-verified; the unit tests
+// here cover the hit/miss logic with a fake editor.
+//
+// Under jsdom every lookup is a MISS (posAtCoords returns null), so callers take
+// their fallback path. That is only true because `src/test-utils/setup.ts` stubs
+// `Document.prototype.elementFromPoint` — jsdom does not implement it, and without
+// the stub ProseMirror's posAtCoords THROWS rather than returning null
+// (bd-cpyq99ps: it escaped a requestAnimationFrame as an unhandled error and
+// reddened the whole suite intermittently). `caretFromClick.integration.test.ts`
+// pins the miss contract against a real ProseMirror view so it cannot silently
+// become a throw again.
 
 import type { Editor } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
