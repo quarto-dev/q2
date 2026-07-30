@@ -23,6 +23,11 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-30
+
+- [`047903c3`](https://github.com/quarto-dev/q2/commits/047903c3): The out-of-date sign-in message no longer asks you to reload the page, which the app's cached bundle would have ignored; it now tells you the app is updating and to try again in a few minutes.
+- [`d2582ed9`](https://github.com/quarto-dev/q2/commits/d2582ed9): A failed sign-in now says what actually went wrong — an interrupted sign-in asks you to try again, an out-of-date app says it is out of date, and only a genuinely refused account is told it is not authorized.
+
 ### 2026-07-29
 
 - [`d866c6ae`](https://github.com/quarto-dev/q2/commits/d866c6ae): New projects can now be created from a Blog template — a listing home page, two starter posts with images, an about page, and an RSS-ready configuration.
