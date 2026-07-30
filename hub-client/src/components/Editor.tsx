@@ -256,6 +256,10 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // than a setting: resets on reload so a previously-curious view
   // doesn't bleed into the next session.
   const [attributionOn, setAttributionOn] = useState(false);
+  // Comment-bubble display mode (session-only, like attribution):
+  // three-way toggle in the replay bar, threaded into the q2-preview
+  // iframe where CommentBlock consumes it.
+  const [commentsMode, setCommentsMode] = useState<'expand' | 'show' | 'hide'>('show');
   // `useAttribution` (inside ReactPreview) reports whether it's
   // mid-build via `onAttributionGeneratingChange`; the flag drives
   // the rotating-gradient border on the Attribution pill so a slow
@@ -1137,6 +1141,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             identities={identities}
             captures={captures}
             attributionOn={attributionOn}
+            commentsMode={commentsMode}
             onAttributionGeneratingChange={setAttributionGenerating}
           />
         </div>
@@ -1151,6 +1156,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           identities={identities}
           attributionOn={attributionOn}
           onAttributionChange={setAttributionOn}
+          commentsMode={commentsMode}
+          onCommentsModeChange={setCommentsMode}
           attributionGenerating={attributionGenerating}
           attributionDisabled={
             currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview'

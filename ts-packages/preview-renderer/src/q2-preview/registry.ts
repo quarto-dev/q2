@@ -2,7 +2,8 @@ import type { FormatRegistry } from '../framework';
 import * as Blocks from './blocks';
 import * as Inlines from './inlines';
 import * as Custom from './custom';
-import { Block, Inline, CustomBlock, CustomInline } from './dispatchers';
+import { Inline, CustomBlock, CustomInline } from './dispatchers';
+import { CommentBlock } from './custom/CommentBlock';
 import { MermaidCodeBlock } from './blocks/MermaidCodeBlock';
 import { PreviewDocument } from './PreviewDocument';
 
@@ -47,7 +48,12 @@ export const previewRegistry: FormatRegistry = {
     CodeBlock: MermaidCodeBlock,
     __fallback__: Custom.Fallback,
     __title_block__: Custom.PreviewTitleBlock,
-    Block,
+    // Default comment/reaction chrome (custom/CommentBlock.tsx): wraps
+    // the dispatchers.tsx Block dispatcher, extracting
+    // `quarto-edit-comment` spans into corner chrome. A user
+    // render-components override of `Block` still wins via
+    // mergedPreviewRegistry.
+    Block: CommentBlock,
     Inline,
     CustomBlock,
     CustomInline,
