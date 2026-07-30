@@ -77,14 +77,18 @@ const PARA = (...inlines: any[]) => ({ t: 'Para', c: inlines });
 const noopNav = () => {};
 const noopSet = () => {};
 
-/** Minimal resolveSource that returns non-Opaque for any node that has .s */
+/** Minimal resolveSource that returns non-Opaque for any node that has .s.
+ * Must satisfy the real ResolvedSource shape — CommentBlock (the registry's
+ * Block wrapper since Comments v1) consumes `sourceNode` on every block
+ * render, so a stale stub crashes the whole suite (bd-ddaqjb91). These
+ * fixtures are their own source, so the node doubles as its sourceNode. */
 function makeResolveSource(pool: any[]) {
     return (node: any): ResolvedSource | null => {
         const s = node?.s;
         if (s === undefined || s === null) return null;
-        const entry = pool[s];
+        const entry = pool[s] as { t: 0; r: [number, number]; d: number } | undefined;
         if (!entry) return null;
-        return { reachabilityClass: 'Reachable', sourceEntry: entry, sourceIndex: null as any };
+        return { sourceNode: node, reachabilityClass: 'Descendable', sourceEntry: entry };
     };
 }
 
@@ -269,7 +273,7 @@ describe('0.a — measureLeadingBlockBox: Range-aware leading-block measure', ()
  * ─────────────────────────────────────────────────────────────────────────── */
 
 describe('0.b — tight single-block BulletList: <li> borrows leading Plain pool-id', () => {
-    const POOL_0B = [
+    const POOL_0B: Array<{ t: number; r: [number, number]; d: number }> = [
         { t: 0, r: [2, 7],   d: 0 },  // pool[0] Plain "apple"
         { t: 0, r: [10, 16], d: 0 }, // pool[1] Plain "banana"
         { t: 0, r: [0, 18],  d: 0 }, // pool[2] BulletList
@@ -358,7 +362,7 @@ describe('0.b — tight single-block BulletList: <li> borrows leading Plain pool
  * ─────────────────────────────────────────────────────────────────────────── */
 
 describe('0.c — text-with-sublist item: Range measure excludes sublist height', () => {
-    const POOL_0C = [
+    const POOL_0C: Array<{ t: number; r: [number, number]; d: number }> = [
         { t: 0, r: [2, 7],   d: 0 },  // pool[0] Plain "intro"
         { t: 0, r: [8, 20],  d: 0 },  // pool[1] inner BulletList
         { t: 0, r: [0, 22],  d: 0 },  // pool[2] outer BulletList

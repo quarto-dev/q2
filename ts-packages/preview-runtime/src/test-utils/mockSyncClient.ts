@@ -48,6 +48,7 @@ export interface MockSyncClient {
   getFileContent(path: string): string | null;
   getBinaryFileContent(path: string): { content: Uint8Array; mimeType: string } | null;
   updateFileContent(path: string, content: string): void;
+  applyEditorOperations(path: string, changes: EditorContentChange[]): void;
   createFile(path: string, content?: string): Promise<void>;
   createBinaryFile(path: string, content: Uint8Array, mimeType: string): Promise<CreateBinaryFileResult>;
   deleteFile(path: string): void;
