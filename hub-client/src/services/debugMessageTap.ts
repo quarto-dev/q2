@@ -124,6 +124,11 @@ export function uninstallMessageTap(): void {
   setNetworkAdapterWrapper(null);
 }
 
+/** Empty the ring (session totals in status keep counting). */
+export function clearTapMessages(): void {
+  ring = [];
+}
+
 /** Observed messages, newest first. */
 export function getTapMessages(opts?: {
   limit?: number;

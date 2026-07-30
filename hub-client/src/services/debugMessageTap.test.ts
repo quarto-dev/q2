@@ -28,6 +28,7 @@ import {
   uninstallMessageTap,
   getTapMessages,
   getTapStatus,
+  clearTapMessages,
 } from './debugMessageTap';
 
 class StubAdapter extends NetworkAdapter {
@@ -157,6 +158,17 @@ describe('installMessageTap', () => {
     installMessageTap();
     expect(getTapMessages()).toEqual([]);
     expect(getTapStatus().recorded).toBe(0);
+  });
+
+  it('clearTapMessages empties the ring but keeps the tap counting', () => {
+    const { wrapped } = installAndWrap();
+    wrapped.send(buildMessage());
+    clearTapMessages();
+    expect(getTapMessages()).toEqual([]);
+    // recorded keeps counting across a clear (it's a session total).
+    wrapped.send(buildMessage());
+    expect(getTapMessages()).toHaveLength(1);
+    expect(getTapStatus().recorded).toBe(2);
   });
 
   it('uninstall clears the wrapper but keeps messages for post-mortem', () => {

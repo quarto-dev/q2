@@ -77,6 +77,14 @@ const tapMocks = vi.hoisted(() => ({
 
 vi.mock('./debugMessageTap', () => tapMocks);
 
+const inspectorMocks = vi.hoisted(() => ({
+  openInspector: vi.fn(() => Promise.resolve()),
+  closeInspector: vi.fn(),
+  isInspectorOpen: vi.fn(() => false),
+}));
+
+vi.mock('./debugInspector', () => inspectorMocks);
+
 import {
   installDebugApi,
   uninstallDebugApi,
@@ -413,6 +421,27 @@ describe('debugApi', () => {
       const text = _getInstalledApiForTesting()!.help();
       expect(text).toMatch(/read-only|observation/i);
       expect(text).toMatch(/handle\.change\(\)/);
+    });
+  });
+
+  describe('inspector wiring', () => {
+    it('openInspector delegates with the api’s own am instance', async () => {
+      installDebugApi(makeContext());
+      const api = _getInstalledApiForTesting()!;
+      await api.openInspector();
+      expect(inspectorMocks.openInspector).toHaveBeenCalledWith(api.am);
+    });
+
+    it('closeInspector delegates', () => {
+      installDebugApi(makeContext());
+      _getInstalledApiForTesting()!.closeInspector();
+      expect(inspectorMocks.closeInspector).toHaveBeenCalledTimes(1);
+    });
+
+    it('uninstalling the API closes an open inspector', () => {
+      installDebugApi(makeContext());
+      uninstallDebugApi();
+      expect(inspectorMocks.closeInspector).toHaveBeenCalled();
     });
   });
 

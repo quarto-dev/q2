@@ -444,7 +444,59 @@ expected local-prod behavior after a rebuild — then hard reload).
 
 ### Phase 3 — inspector panel (bd-lb1cxprv)
 
-- [ ] Checklist to be detailed at phase start
+Branch: `braid/bd-lb1cxprv-phase-3-context-inspector`.
+
+Scope decisions at phase start:
+
+- The panel mounts in a **second React root** (own `createRoot` on a
+  body-appended div), not inside the App tree — a debugging surface
+  should not depend on the app tree's health, and debug.html precedent
+  shows multiple roots are fine. The panel component + reused debug
+  components + CSS load as a **lazy chunk** via dynamic `import()` in
+  `openInspector()`.
+- `debug.css` has global selectors (`*`, `body`, `h1`, `button`…), so
+  the panel gets its **own stylesheet scoped under
+  `.quarto-debug-inspector`**, restyling the reused components' class
+  names; debug.html's file is untouched.
+- Panel covers the **sync-client repo only** (RepoContext mount);
+  project-set/collections state appears in the Sync pane as JSON. The
+  original sketch's repo-selection toolbar is dropped — project-set
+  Repos are deliberately not exposed as live objects (one escape
+  surface is enough).
+
+Checklist:
+
+- [x] `clearTapMessages()` on the tap (MessageLog reuse needs onClear)
+- [x] `debugInspector.ts`: singleton second root, lazy panel import,
+      no-repo error, idempotent close; 4 tests (real Repo + real chunk)
+- [x] `DebugInspectorPanel.tsx`: header + close (button & Esc); tabs
+      Documents / Sync / Presence / Doctor / Messages as designed;
+      index doc auto-seeded; JSON panes auto-refresh (2s), messages
+      poll (1s) feeding the reused MessageLog
+- [x] Scoped panel CSS (`.quarto-debug-inspector` prefix throughout)
+- [x] `quartoDebug.openInspector()`/`closeInspector()` wired (closure
+      over `am`, works when destructured) + uninstall closes the panel
+      + help() updated
+- [x] Component tests (5) mounting the panel with a storage-less Repo
+- [x] Playwright e2e `e2e/debug-inspector.spec.ts` — passing
+- [x] Suites + build:all green; panel splits into its own lazy assets
+      (`DebugInspectorPanel-*.js` ~ separate chunk, not in main bundle)
+- [x] Close bd-lb1cxprv
+
+#### Phase 3 end-to-end evidence (2026-07-30)
+
+The Playwright spec `e2e/debug-inspector.spec.ts` is itself a real
+browser session against a running hub (globalSetup hub on :3031, prod
+bundle via vite preview): it creates a project on the server through
+quarto-sync-client, opens it in the editor, enables the gate via
+localStorage before boot, waits for the live sync-client repo, then
+drives `quartoDebug.openInspector()` and asserts: panel heading
+visible; the seeded index doc's JSON (live repo, same doc the editor
+edits) contains `index.qmd`; Doctor pane shows `[]`; Messages pane
+shows `sync` traffic from the editor's own connection; Esc unmounts
+the second root completely. First run caught an over-specified
+assertion (the first protocol message is a doc `request`, not `sync`)
+— fixed to assert presence, not position. Passing in 2.3s.
 
 ### Phase 4 — iframe embed (bd-09aja9gl)
 

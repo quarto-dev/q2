@@ -40,6 +40,7 @@ import {
   type QuartoDebugAutomergeApi,
 } from './debugAutomerge';
 import { installMessageTap, uninstallMessageTap } from './debugMessageTap';
+import { openInspector, closeInspector } from './debugInspector';
 
 export interface QuartoDebugProjectInfo {
   id: string;
@@ -133,6 +134,15 @@ export interface QuartoDebugApi {
    * (bd-q93tkglb).
    */
   am: QuartoDebugAutomergeApi;
+
+  /**
+   * Open the visual live inspector (lazy-loaded panel over the live
+   * sync-client Repo). Requires a connected project. No-op if open.
+   */
+  openInspector(): Promise<void>;
+
+  /** Close the live inspector if open. Idempotent. */
+  closeInspector(): void;
 
   /**
    * Contract version of this API. Bump on breaking shape changes so
@@ -233,6 +243,13 @@ Escape hatches (am.unsafe.*) — console use only, NOT JSON-serializable
                                   const h = quartoDebug.am.unsafe.handle('index.qmd')
                                   h.view(h.history()[0]).doc()   // doc at first change
 
+Visual inspector
+  openInspector()               open the live inspector panel (lazy-loaded second
+                                React root over the live sync-client Repo): document
+                                viewer with per-file subscribe, sync/presence/doctor
+                                panes, message log. Requires an open project.
+  closeInspector()              close it (Esc works too)
+
 Meta
   apiVersion                    number; gate on it before relying on shapes
   help()                        this text
@@ -253,6 +270,10 @@ function findFile(
 }
 
 function makeApi(ctx: DebugApiContext): QuartoDebugApi {
+  const am = makeAutomergeDebugApi({
+    getProject: ctx.getProject,
+    getFiles: ctx.getFiles,
+  });
   return {
     project(): QuartoDebugProjectInfo | null {
       const p = ctx.getProject();
@@ -365,10 +386,17 @@ function makeApi(ctx: DebugApiContext): QuartoDebugApi {
       return out;
     },
 
-    am: makeAutomergeDebugApi({
-      getProject: ctx.getProject,
-      getFiles: ctx.getFiles,
-    }),
+    am,
+
+    // Closure over `am`, not `this` — the API is often destructured
+    // or called through CDP evaluate wrappers.
+    openInspector(): Promise<void> {
+      return openInspector(am);
+    },
+
+    closeInspector(): void {
+      closeInspector();
+    },
 
     apiVersion: DEBUG_API_VERSION,
 
@@ -425,6 +453,7 @@ export function uninstallDebugApi(): void {
   lastSnapshot = null;
   setRenderListener(null);
   uninstallMessageTap();
+  closeInspector();
   if (typeof window !== 'undefined') {
     delete (window as unknown as MutableGlobal)[GLOBAL_KEY];
   }
