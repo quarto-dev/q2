@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-07-30
 
+- [`12412aba`](https://github.com/quarto-dev/q2/commits/12412aba): `quartoDebug.openInspector()` opens a live inspector panel inside the editor — document viewer, sync status, presence, consistency doctor, and message log over the session's own synced state (loaded on demand, never part of the normal page load).
 - [`41432f73`](https://github.com/quarto-dev/q2/commits/41432f73): The console debug API gained `quartoDebug.am.doctor()` — a one-call cross-layer consistency check (editor text vs synced document vs virtual filesystem) — and `quartoDebug.am.messages()`, which observes the editor's own sync-protocol traffic.
 - [`1d30f39a`](https://github.com/quarto-dev/q2/commits/1d30f39a): The console debug API (`window.quartoDebug`) gained an `am` namespace for inspecting the live Automerge state (documents, heads, history, sync status, presence), plus a `help()` guide covering the whole API.
 
