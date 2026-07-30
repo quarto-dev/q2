@@ -465,9 +465,9 @@ mod interactive_tests {
 
     #[test]
     fn no_args_prompts_type_directory_title() {
-        // Registry order of implemented choices is [default, website];
-        // select index 1 = website, type a directory, accept the
-        // default title.
+        // Registry order of implemented choices is [default, website,
+        // blog]; select index 1 = website, type a directory, accept
+        // the default title.
         let mut p = ScriptedPrompter::new(vec![1], vec![Some("mysite"), None]);
         let resolved = ProjectProvider
             .resolve_interactive(&args(&[]), Path::new("/x"), false, &mut p)
@@ -479,7 +479,7 @@ mod interactive_tests {
         );
         // Only implemented choices are offered.
         let labels: Vec<&str> = p.select_items[0].iter().map(|i| i.label.as_str()).collect();
-        assert_eq!(labels, ["Default", "Website"]);
+        assert_eq!(labels, ["Default", "Website", "Blog"]);
         // The accepted default title is the directory name, and the
         // interactive path emits no defaulted-title warning — the user
         // saw and accepted the default.
@@ -549,7 +549,7 @@ mod interactive_tests {
     fn typed_unimplemented_choice_errors_without_prompting_further() {
         let mut p = ScriptedPrompter::new(vec![], vec![]);
         let err = ProjectProvider
-            .resolve_interactive(&args(&["blog", "d"]), Path::new("/x"), false, &mut p)
+            .resolve_interactive(&args(&["manuscript", "d"]), Path::new("/x"), false, &mut p)
             .unwrap_err();
         assert!(err.0.to_text(None).contains("not yet implemented"));
     }

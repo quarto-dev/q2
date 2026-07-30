@@ -70,7 +70,17 @@ pub fn hydrate_item(profile: &DocumentProfile) -> ListingItem {
         .description
         .clone()
         .or_else(|| profile.description.clone());
-    let image = li.image.clone().or_else(|| profile.image.clone());
+    // Front-matter `image:` values are document-relative (Q1
+    // semantics). Rebase to project-relative here so every consumer
+    // — the host-page template (which re-relativizes against the
+    // host dir), the RSS feed builder (which joins with the project
+    // dir), the copy intent — sees one convention. Remote/absolute
+    // URLs and data: URIs pass through untouched. See bd-qv2lsab0.
+    let image = li
+        .image
+        .clone()
+        .or_else(|| profile.image.clone())
+        .map(|img| rebase_image(&img, &profile.source_path));
     let image_alt = li.image_alt.clone();
     let date = li.date.clone().or_else(|| profile.date.clone());
     // `date_modified` only lives on `listing_item` — there is no
@@ -109,6 +119,34 @@ pub fn hydrate_item(profile: &DocumentProfile) -> ListingItem {
         output_href: profile.output_href.clone(),
         extra: li.extra.clone(),
     }
+}
+
+/// Rebase a document-relative image path onto the document's
+/// project-relative directory, normalizing `.`/`..` segments.
+/// Absolute URLs, `data:` URIs, and root-absolute paths pass
+/// through unchanged.
+fn rebase_image(src: &str, source_path: &std::path::Path) -> String {
+    if super::helpers::is_external_src(src) {
+        return src.to_string();
+    }
+    let dir = source_path.parent().unwrap_or(std::path::Path::new(""));
+    let mut segments: Vec<&str> = dir
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(os) => os.to_str(),
+            _ => None,
+        })
+        .collect();
+    for seg in src.split('/') {
+        match seg {
+            "" | "." => {}
+            ".." => {
+                segments.pop();
+            }
+            s => segments.push(s),
+        }
+    }
+    segments.join("/")
 }
 
 fn join_authors(authors: &[String]) -> Option<String> {
@@ -165,6 +203,46 @@ mod tests {
         };
         let item = hydrate_item(&p);
         assert_eq!(item.title, "2026-thoughts");
+    }
+
+    // Front-matter image paths rebase onto the document's directory
+    // (project-relative), leaving remote/absolute values untouched.
+    // See bd-qv2lsab0.
+    #[test]
+    fn hydration_rebases_relative_image_to_project_relative() {
+        let li = ListingItemInfo {
+            image: Some("cover.png".to_string()),
+            ..ListingItemInfo::default()
+        };
+        let item = hydrate_item(&profile_with(li));
+        assert_eq!(item.image.as_deref(), Some("posts/cover.png"));
+    }
+
+    #[test]
+    fn hydration_image_rebase_normalizes_dotdot() {
+        let li = ListingItemInfo {
+            image: Some("../shared/cover.png".to_string()),
+            ..ListingItemInfo::default()
+        };
+        let item = hydrate_item(&profile_with(li));
+        assert_eq!(item.image.as_deref(), Some("shared/cover.png"));
+    }
+
+    #[test]
+    fn hydration_image_passes_through_absolute_forms() {
+        for src in [
+            "https://example.com/x.png",
+            "http://example.com/x.png",
+            "data:image/png;base64,AAAA",
+            "/site-absolute.png",
+        ] {
+            let li = ListingItemInfo {
+                image: Some(src.to_string()),
+                ..ListingItemInfo::default()
+            };
+            let item = hydrate_item(&profile_with(li));
+            assert_eq!(item.image.as_deref(), Some(src));
+        }
     }
 
     // 18. item_extra_present_in_binding (via hydrate_item — the

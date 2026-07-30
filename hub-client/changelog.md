@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-07-29
+
+- [`d866c6ae`](https://github.com/quarto-dev/q2/commits/d866c6ae): New projects can now be created from a Blog template — a listing home page, two starter posts with images, an about page, and an RSS-ready configuration.
+
 ### 2026-07-28
 
 - [`807fd96c`](https://github.com/quarto-dev/q2/commits/807fd96c): Signing in with Google is now tied to the specific sign-in you started, so a copied Google token can no longer be used to open a session on your behalf.

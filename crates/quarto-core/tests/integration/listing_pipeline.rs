@@ -887,3 +887,84 @@ format: html
     let host = html_for(&outputs, "hub");
     insta::assert_snapshot!(extract_sidebar_block(host));
 }
+
+/// A post's author-supplied front-matter `image:` is document-
+/// relative (Q1 semantics). The listing host page must emit a src
+/// that resolves from the host, and the file must be copied into
+/// the output tree even though no page body references it. The
+/// same project-relative form is what the RSS feed builder expects
+/// (`build_item_image` joins it with the project dir). See
+/// bd-qv2lsab0.
+#[test]
+fn front_matter_image_is_rebased_and_copied() {
+    let (dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"Blog\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Blog\nlisting:\n  contents: posts\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/first.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\nimage: \"cover.png\"\nformat: html\n---\n\nBody.\n",
+        );
+        // Content is irrelevant to the copy machinery; any bytes do.
+        write(&p.join("posts/cover.png"), "not-really-a-png");
+    });
+
+    let host = html_for(&outputs, "index");
+    assert!(
+        host.contains(r#"src="posts/cover.png""#),
+        "front-matter image src must be rebased to resolve from the host page; got:\n{}",
+        host
+    );
+    assert!(
+        !host.contains(r#"src="cover.png""#),
+        "raw document-relative src must not leak into the host page"
+    );
+    assert!(
+        dir.join("_site/posts/cover.png").exists(),
+        "front-matter image must be copied into the output tree"
+    );
+}
+
+/// Same rebase, nested host: a listing page *inside* posts/ whose
+/// item images live beside the items. Host-relative src, no
+/// `posts/` prefix.
+#[test]
+fn front_matter_image_rebase_nested_host() {
+    let (dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"Blog\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Home\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/index.qmd"),
+            "---\ntitle: Posts\nlisting:\n  contents: \"*.qmd\"\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/first.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\nimage: \"cover.png\"\nformat: html\n---\n\nBody.\n",
+        );
+        write(&p.join("posts/cover.png"), "not-really-a-png");
+    });
+
+    // Two outputs share the stem `index`; find the posts one by content.
+    let host = outputs
+        .iter()
+        .find(|(_, h)| h.contains("quarto-listing"))
+        .map(|(_, h)| h.as_str())
+        .expect("posts listing output");
+    assert!(
+        host.contains(r#"src="cover.png""#),
+        "nested host: src must be host-relative; got:\n{}",
+        host
+    );
+    assert!(dir.join("_site/posts/cover.png").exists());
+}

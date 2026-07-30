@@ -4008,6 +4008,7 @@ dependencies = [
  "serde",
  "serde_yaml",
  "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]
@@ -5543,6 +5544,7 @@ checksum = "743bd48c283afc0388f9b8827b976905fb217ad9e647fae3a379a9283c4def2c"
 dependencies = [
  "deranged",
  "itoa",
+ "js-sys",
  "num-conv",
  "powerfmt",
  "serde_core",

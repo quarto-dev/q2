@@ -119,7 +119,7 @@ impl ProjectProvider {
             }
         };
 
-        let files = create_scaffolded_files(&scaffold, &title)
+        let files = create_scaffolded_files(&scaffold, &title, None)
             .map_err(|e| CommandFailure::new("Failed to render project scaffold", e.to_string()))?;
 
         Ok(ResolvedPlan {
