@@ -213,7 +213,9 @@ async fn ws_upgrade_rejects_legacy_google_cookie() {
 }
 
 /// The failure path of the cutover is a clean logged-out flow: one
-/// redirect to `/?auth_error`, no cookie set, no loop.
+/// redirect to `/?auth_error=<reason>`, no cookie set, no loop.
+/// An undecodable credential is a 401 — no identity was established, so
+/// the reason is `restart` rather than `denied`.
 #[tokio::test]
 async fn callback_failure_redirects_once_without_cookie() {
     let (_provider, hub) = google_session_setup().await;
@@ -231,7 +233,10 @@ async fn callback_failure_redirects_once_without_cookie() {
         .await
         .unwrap();
     assert!(resp.status().is_redirection());
-    assert_eq!(resp.headers().get("location").unwrap(), "/?auth_error");
+    assert_eq!(
+        resp.headers().get("location").unwrap(),
+        "/?auth_error=restart"
+    );
     assert!(
         TestHub::set_auth_cookie(&resp).is_none(),
         "no cookie may be set on a failed login"
