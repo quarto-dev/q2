@@ -1044,6 +1044,24 @@ select.ph-input { appearance: auto; }
 
 .ph-error.inline { margin: 12px 0 0; }
 
+/* Recovery action inside an error banner (e.g. "Sign in again" on an
+   expired-session join failure). */
+.ph-error-action {
+  display: block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--error-text);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--error-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ph-error-action:hover {
+  background: var(--error-bg-subtle);
+}
+
 .ph-empty-state {
   text-align: center;
   padding: 90px 20px;
