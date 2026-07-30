@@ -500,7 +500,41 @@ assertion (the first protocol message is a doc `request`, not `sync`)
 
 ### Phase 4 — iframe embed (bd-09aja9gl)
 
-- [ ] Checklist to be detailed at phase start
+Branch: `braid/bd-09aja9gl-phase-4-iframe-embed`. Scope note: plain-DOM
+overlay (header + close + iframe), no React and no lazy chunk needed —
+the payload IS the iframe; `debug.html`'s existing `#doc=` hash seed
+does the rest. Verification is unit tests + a manual local-prod pass
+(a Playwright spec would mostly re-test debug.html, which has its own
+coverage).
+
+- [x] `debugServerInspector.ts`: singleton overlay, iframe src
+      `debug.html#doc=automerge:<indexDocId>` (prefix-safe), throws
+      with no project; 5 unit tests
+- [x] `quartoDebug.openServerInspector()`/`closeServerInspector()`
+      wired + help(); uninstall closes it
+- [x] Suites green (hub-client 823 unit; sync-client + preview-runtime
+      re-verified) + build:all
+- [x] Manual local-prod verification (below)
+- [x] Close bd-09aja9gl + close parent bd-aim2gqis
+
+#### Phase 4 end-to-end transcript (2026-07-30)
+
+Local-prod, production bundle, `debug-e2e` project open in the editor:
+
+- `quartoDebug.openServerInspector()` → overlay iframe with
+  `src = http://127.0.0.1:8080/debug.html#doc=automerge:48HdT9WT…`
+  (the project's index doc)
+- `openInspector()` at the same time → both surfaces coexist
+  (live panel + server-view iframe)
+- Inside the iframe (same-origin read): heading "Quarto Hub — Automerge
+  Debugger", **Connected** with its own peer id (`peer-af5akrp…`,
+  distinct from the editor's), and the hash-seeded index doc panel in
+  state `ready` showing the same files map the editor holds — the
+  live-vs-server comparison this phase exists for
+- `closeServerInspector()` / `closeInspector()` both fully remove
+  their DOM; `help()` documents the new methods
+- Console: only the expected `/auth/me` 401 probes (SPA + embedded
+  debugger auth gate) on the no-OIDC local hub
 
 ## References
 

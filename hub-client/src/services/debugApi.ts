@@ -41,6 +41,10 @@ import {
 } from './debugAutomerge';
 import { installMessageTap, uninstallMessageTap } from './debugMessageTap';
 import { openInspector, closeInspector } from './debugInspector';
+import {
+  openServerInspector,
+  closeServerInspector,
+} from './debugServerInspector';
 
 export interface QuartoDebugProjectInfo {
   id: string;
@@ -143,6 +147,16 @@ export interface QuartoDebugApi {
 
   /** Close the live inspector if open. Idempotent. */
   closeInspector(): void;
+
+  /**
+   * Embed /debug.html (its own SERVER-connected Repo) in an overlay
+   * iframe, seeded with the current project's index doc — for
+   * live-vs-server comparison next to the live inspector.
+   */
+  openServerInspector(): void;
+
+  /** Close the embedded server-view debugger if open. Idempotent. */
+  closeServerInspector(): void;
 
   /**
    * Contract version of this API. Bump on breaking shape changes so
@@ -249,6 +263,12 @@ Visual inspector
                                 viewer with per-file subscribe, sync/presence/doctor
                                 panes, message log. Requires an open project.
   closeInspector()              close it (Esc works too)
+  openServerInspector()         embed /debug.html in an overlay iframe, seeded with
+                                this project's index doc. It keeps its OWN
+                                server-connected Repo — put it next to the live
+                                inspector to compare the editor's in-memory heads
+                                against the sync server's view of the same docs.
+  closeServerInspector()        close the embedded server-view debugger
 
 Meta
   apiVersion                    number; gate on it before relying on shapes
@@ -398,6 +418,14 @@ function makeApi(ctx: DebugApiContext): QuartoDebugApi {
       closeInspector();
     },
 
+    openServerInspector(): void {
+      openServerInspector(ctx.getProject()?.indexDocId ?? null);
+    },
+
+    closeServerInspector(): void {
+      closeServerInspector();
+    },
+
     apiVersion: DEBUG_API_VERSION,
 
     help(): string {
@@ -454,6 +482,7 @@ export function uninstallDebugApi(): void {
   setRenderListener(null);
   uninstallMessageTap();
   closeInspector();
+  closeServerInspector();
   if (typeof window !== 'undefined') {
     delete (window as unknown as MutableGlobal)[GLOBAL_KEY];
   }

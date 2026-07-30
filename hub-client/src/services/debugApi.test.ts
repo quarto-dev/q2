@@ -85,6 +85,14 @@ const inspectorMocks = vi.hoisted(() => ({
 
 vi.mock('./debugInspector', () => inspectorMocks);
 
+const serverInspectorMocks = vi.hoisted(() => ({
+  openServerInspector: vi.fn(),
+  closeServerInspector: vi.fn(),
+  isServerInspectorOpen: vi.fn(() => false),
+}));
+
+vi.mock('./debugServerInspector', () => serverInspectorMocks);
+
 import {
   installDebugApi,
   uninstallDebugApi,
@@ -442,6 +450,26 @@ describe('debugApi', () => {
       installDebugApi(makeContext());
       uninstallDebugApi();
       expect(inspectorMocks.closeInspector).toHaveBeenCalled();
+    });
+
+    it('openServerInspector passes the current index doc id', () => {
+      installDebugApi(makeContext());
+      _getInstalledApiForTesting()!.openServerInspector();
+      expect(serverInspectorMocks.openServerInspector).toHaveBeenCalledWith(
+        sampleProject.indexDocId,
+      );
+    });
+
+    it('openServerInspector passes null with no project (service throws)', () => {
+      installDebugApi(makeContext({ getProject: () => null }));
+      _getInstalledApiForTesting()!.openServerInspector();
+      expect(serverInspectorMocks.openServerInspector).toHaveBeenCalledWith(null);
+    });
+
+    it('uninstalling the API closes an open server inspector too', () => {
+      installDebugApi(makeContext());
+      uninstallDebugApi();
+      expect(serverInspectorMocks.closeServerInspector).toHaveBeenCalled();
     });
   });
 
