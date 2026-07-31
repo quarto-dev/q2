@@ -25,7 +25,8 @@ use quarto_core::{
     render_qmd_to_preview_ast,
 };
 use quarto_error_reporting::{
-    DiagnosticMessage, JsonDiagnostic, JsonPass1Failure, diagnostic_to_json, with_source_file,
+    DiagnosticMessage, DiagnosticMessageBuilder, JsonDiagnostic, JsonPass1Failure,
+    diagnostic_to_json, with_source_file,
 };
 use quarto_pandoc_types::ConfigValue;
 use quarto_sass::{
@@ -1770,6 +1771,11 @@ async fn render_project_active_page_to_response(
     // converts these to Monaco markers.
     let mut all_diags = active_output.diagnostics.clone();
     all_diags.extend(summary.project_diagnostics);
+    // bd-w348iu63: project render scripts can't run in the browser —
+    // surface a one-time warning instead of silently ignoring them.
+    if let Some(diag) = render_scripts_unsupported_diagnostic(&project.config) {
+        all_diags.push(diag);
+    }
     let warnings = diagnostics_to_json(&all_diags, &active_output.source_context);
 
     // Plan 2A item 11: theme fingerprint is captured at the
@@ -1841,6 +1847,34 @@ async fn render_project_active_page_to_response(
         theme_fingerprint: theme_fingerprint_from_output,
     })
     .unwrap()
+}
+
+/// bd-w348iu63: once-per-session warning when the project declares
+/// `project.pre-render` / `project.post-render` scripts, which the
+/// browser preview cannot run (no subprocesses in WASM). Returns
+/// `None` when no scripts are configured or the warning already
+/// fired. WASM is single-threaded, but `AtomicBool` keeps the static
+/// safe by construction.
+fn render_scripts_unsupported_diagnostic(config: &ProjectConfig) -> Option<DiagnosticMessage> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static WARNED: AtomicBool = AtomicBool::new(false);
+    if config.pre_render_scripts.is_empty() && config.post_render_scripts.is_empty() {
+        return None;
+    }
+    if WARNED.swap(true, Ordering::Relaxed) {
+        return None;
+    }
+    Some(
+        DiagnosticMessageBuilder::warning("Project render scripts do not run in the hub preview")
+            .with_code("Q-5-12")
+            .problem(
+                "This project configures `project.pre-render` / `project.post-render` \
+                 scripts, which cannot run in the browser. The preview renders without \
+                 them; use `q2 render` on a machine with the interpreters installed to \
+                 run the scripts.",
+            )
+            .build(),
+    )
 }
 
 /// Build a `success: false` response with no diagnostics.

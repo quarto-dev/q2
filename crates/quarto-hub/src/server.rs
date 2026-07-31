@@ -960,9 +960,9 @@ async fn auth_nonce(State(ctx): State<SharedContext>) -> impl IntoResponse {
     response
 }
 
-/// Login-state failure class for a callback that presented no cookie
-/// **and** a nonce-less token. Named because the user-facing reason
-/// mapping keys off it; every other class maps to `restart`.
+/// Login-state failure class for a callback that presented no cookie and a
+/// nonce-less token. Retained for future callback-time compatibility branches;
+/// every other login-state failure maps to `restart`.
 const LOGIN_STATE_STALE_CLIENT: &str = "stale_client";
 
 /// Outcome of the callback's nonce check.
@@ -983,10 +983,9 @@ enum NonceCheck {
 /// for a stolen token — and has no way to ask "did *this* browser start
 /// *this* login?".
 ///
-/// Returns [`NonceCheck::Skipped`] under `--allow-insecure-auth`: the
-/// flow needs a `SameSite=None; Secure` cookie, which cannot function
-/// over plain HTTP. That is consistent with the flag's existing "never in
-/// production" contract, and the skip is logged at WARN.
+/// Returns [`NonceCheck::Skipped`] for a nonce-less token while old SPA
+/// compatibility is required. Tokens that present a nonce still require an
+/// exact match against the sealed login-state cookie.
 fn check_login_nonce(
     ctx: &HubContext,
     claims: &auth::OidcClaims,
@@ -1000,23 +999,25 @@ fn check_login_nonce(
         return NonceCheck::Skipped;
     }
 
+    // TODO(bd-mc00s2ws): Reject nonce-less tokens after old SPA versions no
+    // longer need to authenticate against current hub servers.
+    if claims.nonce.is_none() {
+        tracing::warn!(
+            "nonce verification skipped for a nonce-less token to support an old SPA; \
+             restore universal nonce enforcement before removing the old SPA"
+        );
+        return NonceCheck::Skipped;
+    }
+
     let Some(blob) = login_state_cookie(headers, true) else {
         // Two readings, opposite remedies — and the token's own `nonce`
         // claim separates them. Reading it here is safe: the callback
         // has already signature-validated these claims.
         //
-        // No nonce means no current client produced this (the SPA
-        // renders no button until it holds one), so the fix is a reload
-        // — or nothing, if something is driving GIS outside the app.
-        // A nonce with no cookie means the pre-flight *did* happen and
-        // the cookie was lost in transit (fix the configuration), or a
-        // captured token is being replayed from a browser that never
-        // ran one. Per-event those two are indistinguishable.
-        return NonceCheck::Failed(if claims.nonce.is_none() {
-            LOGIN_STATE_STALE_CLIENT
-        } else {
-            "missing"
-        });
+        // A nonce with no cookie means the pre-flight did happen and the
+        // cookie was lost in transit (fix the configuration), or a captured
+        // token is being replayed from a browser that never ran one.
+        return NonceCheck::Failed("missing");
     };
     let sealed = match crate::login_state::open_login_state(
         ctx.session_keys(),
@@ -1165,9 +1166,6 @@ async fn auth_callback(
             sub = %claims.sub,
             detail = %format!("login_state_{detail}"),
         );
-        // Only the nonce-less-token-without-a-cookie class is worth a
-        // distinct user-facing reason — it is the one a reload fixes.
-        // Every other class (and any added later) is a plain retry.
         return auth_error(if detail == LOGIN_STATE_STALE_CLIENT {
             AuthErrorReason::StaleClient
         } else {
