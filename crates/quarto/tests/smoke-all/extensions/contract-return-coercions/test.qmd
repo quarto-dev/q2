@@ -1,0 +1,22 @@
+---
+title: Return value coercions
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["RET-STRING", "strong>RET-INLINE", "RET-INLINES", "RET-BLOCK", "RET-BLOCKS-1", "RET-BLOCKS-2", "RET-ARRAY"]
+---
+
+String: {{< rstr >}}
+
+Inline node: {{< rinline >}}
+
+Inlines list: {{< rinlines >}}
+
+{{< rblock >}}
+
+{{< rblocks >}}
+
+Array: {{< rarray >}}

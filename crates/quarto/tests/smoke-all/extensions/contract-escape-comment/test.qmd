@@ -1,0 +1,14 @@
+---
+title: Escaped shortcode comment form
+format: html
+_quarto:
+  tests:
+    run:
+      skip: "Known gap: Q1's {{</* */>}} comment-escape form is not in the qmd grammar (parse error). Pending decision on bd-540a976a (shortcode-extensions port, Phase 5); unskip when the grammar supports it."
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["othername"]
+---
+
+Literal: {{</* othername */>}}

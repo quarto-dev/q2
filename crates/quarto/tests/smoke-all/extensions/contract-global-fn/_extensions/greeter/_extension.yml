@@ -1,0 +1,5 @@
+title: Greeter
+author: Test
+contributes:
+  shortcodes:
+    - greeter.lua

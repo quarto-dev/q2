@@ -52,7 +52,6 @@ use std::sync::Arc;
 use quarto_analysis::AnalysisContext;
 
 use crate::Result;
-use crate::extension::discover::find_extension;
 use crate::extension::types::Extension;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
@@ -260,6 +259,19 @@ fn flatten_blocks_to_inlines(blocks: &[Block], value_source: &SourceInfo) -> Vec
     result
 }
 
+/// Lua engine plus one-shot extension-activation state.
+///
+/// The `extensions_loaded` flag lives with the engine (not the transform) so a
+/// freshly created engine can never observe a stale "already loaded" marker
+/// from a previous document.
+pub struct LuaEngineState {
+    engine: pampa::lua::LuaShortcodeEngine,
+    /// Whether every discovered extension's `contributes.shortcodes` scripts
+    /// have been loaded into this engine. Set on the first dispatch that
+    /// reaches the Lua stage.
+    extensions_loaded: bool,
+}
+
 /// Transform that resolves shortcodes in the AST.
 ///
 /// Supports both built-in Rust handlers and Lua shortcode scripts loaded from
@@ -328,10 +340,11 @@ impl ShortcodeResolveTransform {
         shortcode: &Shortcode,
         ctx: &ShortcodeContext<'_>,
         resolution_ctx: ResolutionContext,
-        lua_engine: &mut Option<pampa::lua::LuaShortcodeEngine>,
+        lua_engine: &mut Option<LuaEngineState>,
+        diagnostics: &mut Vec<DiagnosticMessage>,
     ) -> ShortcodeResult {
         let mut result = self
-            .dispatch_shortcode(shortcode, ctx, resolution_ctx, lua_engine)
+            .dispatch_shortcode(shortcode, ctx, resolution_ctx, lua_engine, diagnostics)
             .await;
         stamp_shortcode_anchors(&mut result, &shortcode.name, ctx.source_info);
         result
@@ -345,7 +358,8 @@ impl ShortcodeResolveTransform {
         shortcode: &Shortcode,
         ctx: &ShortcodeContext<'_>,
         resolution_ctx: ResolutionContext,
-        lua_engine: &mut Option<pampa::lua::LuaShortcodeEngine>,
+        lua_engine: &mut Option<LuaEngineState>,
+        diagnostics: &mut Vec<DiagnosticMessage>,
     ) -> ShortcodeResult {
         // Handle escaped shortcodes - preserve as literal text
         if shortcode.is_escaped {
@@ -359,38 +373,44 @@ impl ShortcodeResolveTransform {
             }
         }
 
-        // 2. Try Lua engine (loaded handlers)
-        if let Some(engine) = lua_engine.as_mut() {
-            // If handler is already loaded, call it
-            if engine.has_handler(&shortcode.name) {
-                return dispatch_lua_shortcode(engine, shortcode, ctx, resolution_ctx).await;
-            }
-
-            // 3. Try name-based extension lookup (on-demand loading)
-            if let Some(ext) = find_extension(&shortcode.name, &self.extensions)
-                && !ext.contributes.shortcodes.is_empty()
-            {
-                for script_path in &ext.contributes.shortcodes {
-                    if let Err(e) = engine.load_script(script_path).await {
-                        let diagnostic =
-                            DiagnosticMessageBuilder::warning("Shortcode script error")
-                                .problem(format!(
-                                    "Failed to load shortcode script `{}`: {}",
-                                    script_path.display(),
-                                    e
-                                ))
-                                .with_location(ctx.source_info.clone())
-                                .build();
-                        return ShortcodeResult::Error(ShortcodeError {
-                            key: shortcode.name.clone(),
-                            diagnostic,
-                        });
+        // 2. Lua handlers. On the first dispatch that reaches the Lua stage,
+        //    eagerly load every discovered extension's shortcode scripts.
+        //    Handler names come from the Lua table keys (or harvested globals),
+        //    decoupled from the extension id — an extension named
+        //    `quarto-tiers` may contribute a shortcode named `tier`, so
+        //    lookup-by-extension-name cannot work. Load order determines
+        //    same-name precedence (later registration wins): document
+        //    `shortcodes:` scripts (loaded at engine creation), then
+        //    extensions in discovery order (built-ins first, more-local
+        //    last). Rust built-in handlers (step 1) always win.
+        if let Some(state) = lua_engine.as_mut() {
+            if !state.extensions_loaded {
+                state.extensions_loaded = true;
+                for ext in &self.extensions {
+                    for script_path in &ext.contributes.shortcodes {
+                        if let Err(e) = state.engine.load_script(script_path).await {
+                            // A broken script must not hijack the triggering
+                            // shortcode's result (it may resolve from another
+                            // extension); warn with the extension and script
+                            // named as the cause, and keep loading the rest.
+                            diagnostics.push(
+                                DiagnosticMessageBuilder::warning("Shortcode script error")
+                                    .problem(format!(
+                                        "Failed to load shortcode script `{}` from extension `{}`: {}",
+                                        script_path.display(),
+                                        ext.id,
+                                        e
+                                    ))
+                                    .with_location(ctx.source_info.clone())
+                                    .build(),
+                            );
+                        }
                     }
                 }
-                // Retry after loading extension scripts
-                if engine.has_handler(&shortcode.name) {
-                    return dispatch_lua_shortcode(engine, shortcode, ctx, resolution_ctx).await;
-                }
+            }
+            if state.engine.has_handler(&shortcode.name) {
+                return dispatch_lua_shortcode(&mut state.engine, shortcode, ctx, resolution_ctx)
+                    .await;
             }
         }
 
@@ -830,11 +850,7 @@ pub fn extract_shortcode_paths(meta: &ConfigValue, document_dir: &std::path::Pat
     };
     items
         .iter()
-        .filter_map(|item| match &item.value {
-            ConfigValueKind::Path(s) => Some(document_dir.join(s)),
-            ConfigValueKind::Scalar(_) => item.as_str().map(|s| document_dir.join(s)),
-            _ => None,
-        })
+        .filter_map(|item| item.as_plain_text().map(|s| document_dir.join(s)))
         .collect()
 }
 
@@ -861,7 +877,9 @@ impl AstTransform for ShortcodeResolveTransform {
             let runtime = runtime.clone();
             match pampa::lua::LuaShortcodeEngine::new(&self.target_format, runtime) {
                 Ok(mut engine) => {
-                    // Load scripts from metadata-specified paths
+                    // Load scripts from metadata-specified paths. These load
+                    // before extension scripts, so a same-named extension
+                    // handler overrides a document-level one (Q1 precedence).
                     for path in &self.lua_shortcode_paths {
                         if let Err(e) = engine.load_script(path).await {
                             diagnostics.push(
@@ -875,7 +893,10 @@ impl AstTransform for ShortcodeResolveTransform {
                             );
                         }
                     }
-                    Some(engine)
+                    Some(LuaEngineState {
+                        engine,
+                        extensions_loaded: false,
+                    })
                 }
                 Err(e) => {
                     diagnostics.push(
@@ -901,7 +922,8 @@ impl AstTransform for ShortcodeResolveTransform {
         .await;
 
         // Extract Lua-registered data before the engine is dropped
-        if let Some(engine) = lua_engine.as_mut() {
+        if let Some(state) = lua_engine.as_mut() {
+            let engine = &mut state.engine;
             // Extract diagnostics from quarto.warn()/quarto.error()
             match engine.extract_diagnostics() {
                 Ok(lua_diags) => diagnostics.extend(lua_diags),
@@ -965,7 +987,7 @@ fn resolve_blocks<'a>(
     transform: &'a ShortcodeResolveTransform,
     metadata: &'a ConfigValue,
     diagnostics: &'a mut Vec<DiagnosticMessage>,
-    lua_engine: &'a mut Option<pampa::lua::LuaShortcodeEngine>,
+    lua_engine: &'a mut Option<LuaEngineState>,
 ) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
     Box::pin(async move {
         let mut i = 0;
@@ -978,7 +1000,13 @@ fn resolve_blocks<'a>(
                     source_info: &shortcode_owned.source_info,
                 };
                 match transform
-                    .resolve_shortcode(&shortcode_owned, &ctx, ResolutionContext::Block, lua_engine)
+                    .resolve_shortcode(
+                        &shortcode_owned,
+                        &ctx,
+                        ResolutionContext::Block,
+                        lua_engine,
+                        diagnostics,
+                    )
                     .await
                 {
                     ShortcodeResult::Blocks(new_blocks) => {
@@ -1051,7 +1079,7 @@ fn resolve_block<'a>(
     transform: &'a ShortcodeResolveTransform,
     metadata: &'a ConfigValue,
     diagnostics: &'a mut Vec<DiagnosticMessage>,
-    lua_engine: &'a mut Option<pampa::lua::LuaShortcodeEngine>,
+    lua_engine: &'a mut Option<LuaEngineState>,
 ) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
     Box::pin(async move {
         match block {
@@ -1210,7 +1238,7 @@ fn resolve_inlines<'a>(
     transform: &'a ShortcodeResolveTransform,
     metadata: &'a ConfigValue,
     diagnostics: &'a mut Vec<DiagnosticMessage>,
-    lua_engine: &'a mut Option<pampa::lua::LuaShortcodeEngine>,
+    lua_engine: &'a mut Option<LuaEngineState>,
 ) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
     Box::pin(async move {
         let mut i = 0;
@@ -1228,6 +1256,7 @@ fn resolve_inlines<'a>(
                         &shortcode_ctx,
                         ResolutionContext::Inline,
                         lua_engine,
+                        diagnostics,
                     )
                     .await
                 {
@@ -1288,7 +1317,7 @@ fn recurse_inline<'a>(
     transform: &'a ShortcodeResolveTransform,
     metadata: &'a ConfigValue,
     diagnostics: &'a mut Vec<DiagnosticMessage>,
-    lua_engine: &'a mut Option<pampa::lua::LuaShortcodeEngine>,
+    lua_engine: &'a mut Option<LuaEngineState>,
 ) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
     Box::pin(async move {
         match inline {
@@ -1651,7 +1680,13 @@ mod tests {
         };
 
         let result = transform
-            .resolve_shortcode(&shortcode, &ctx, ResolutionContext::Inline, &mut None)
+            .resolve_shortcode(
+                &shortcode,
+                &ctx,
+                ResolutionContext::Inline,
+                &mut None,
+                &mut Vec::new(),
+            )
             .await;
         assert!(matches!(result, ShortcodeResult::Preserve));
     }
@@ -1668,7 +1703,13 @@ mod tests {
         };
 
         let result = transform
-            .resolve_shortcode(&shortcode, &ctx, ResolutionContext::Inline, &mut None)
+            .resolve_shortcode(
+                &shortcode,
+                &ctx,
+                ResolutionContext::Inline,
+                &mut None,
+                &mut Vec::new(),
+            )
             .await;
         match result {
             ShortcodeResult::Error(err) => {
