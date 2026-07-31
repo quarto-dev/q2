@@ -95,6 +95,10 @@ pub use traits::ExecutionEngine;
 pub use jupyter::JupyterEngine;
 #[cfg(not(target_arch = "wasm32"))]
 pub use knitr::KnitrEngine;
+// Rscript discovery, shared with the project render-script dispatcher
+// (`project::render_scripts`).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use knitr::find_rscript;
 
 /// Print `perf.engine-discover jupyter=N rscript=N` to stderr when
 /// `QUARTO_PERF_STATS=1`. Call once at the end of a top-level

@@ -1062,5 +1062,40 @@
     "message_template": "A crossref identifier (e.g. a `fig-`/`tbl-` label or an explicit `#id`) is defined more than once in the same document. Each crossref id must be unique within a document, so a reference like `@fig-foo` resolves to exactly one target. Give one of the targets a different label.",
     "docs_url": "https://quarto.org/docs/errors/crossref/Q-15-1",
     "since_version": "99.9.9"
+  },
+  "Q-5-8": {
+    "subsystem": "project",
+    "title": "Project Render Script Failed",
+    "message_template": "A `project.pre-render` or `project.post-render` script exited with a non-zero status (or was terminated by a signal). The render is aborted; remaining scripts in the list do not run. The script's own output appears above the diagnostic — fix the script (or remove it from `_quarto.yml`) and render again.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-8",
+    "since_version": "99.9.9"
+  },
+  "Q-5-9": {
+    "subsystem": "project",
+    "title": "Pre-render Script Changed a Forbidden Project Setting",
+    "message_template": "While `project.pre-render` scripts ran, `_quarto.yml` changed its `project.type` or `project.output-dir`. Pre-render scripts may modify the project — add input files, edit configuration — but these two settings must stay fixed, because the scripts already received `QUARTO_PROJECT_OUTPUT_DIR` computed from them. Make the change directly in `_quarto.yml` instead of from a script.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-9",
+    "since_version": "99.9.9"
+  },
+  "Q-5-10": {
+    "subsystem": "project",
+    "title": "Project Render Script Could Not Be Launched",
+    "message_template": "Quarto could not start a `project.pre-render` / `project.post-render` script. Common causes: the interpreter is not on PATH (set `QUARTO_PYTHON`, `QUARTO_R`, or `QUARTO_NODE` to override discovery), a directly-executed script is missing its shebang line or executable bit, or the script path does not exist. The entry can also be an explicit command line, e.g. `pre-render: python3 tools/gen.py`.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-10",
+    "since_version": "99.9.9"
+  },
+  "Q-5-11": {
+    "subsystem": "project",
+    "title": "Unknown Project Key (Underscore Spelling)",
+    "message_template": "`_quarto.yml` contains `project.pre_render` or `project.post_render` (underscore spelling), which is not a recognized key and is ignored. Project render scripts are configured with the hyphenated keys `project.pre-render` / `project.post-render`.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-11",
+    "since_version": "99.9.9"
+  },
+  "Q-5-12": {
+    "subsystem": "project",
+    "title": "Project Render Scripts Unsupported in This Environment",
+    "message_template": "The project configures `project.pre-render` / `project.post-render` scripts, but the current environment (the browser-based hub preview) cannot run subprocesses, so the scripts are skipped and the preview renders without them. Run `q2 render` on a machine with the required interpreters to execute the scripts.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-12",
+    "since_version": "99.9.9"
   }
 }

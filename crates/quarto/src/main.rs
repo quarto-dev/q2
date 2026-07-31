@@ -170,6 +170,10 @@ enum Commands {
         /// non-zero. Useful in CI. Does not stop the render early.
         #[arg(long)]
         strict: bool,
+
+        /// Skip the project's `pre-render` and `post-render` scripts.
+        #[arg(long = "no-render-scripts")]
+        no_render_scripts: bool,
     },
 
     /// Start a live preview of a Quarto document or project.
@@ -754,6 +758,7 @@ fn main() -> Result<()> {
             json_errors,
             fail_fast,
             strict,
+            no_render_scripts,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
             inputs,
@@ -768,6 +773,7 @@ fn main() -> Result<()> {
             json_errors,
             fail_fast,
             strict,
+            no_render_scripts,
         }),
         Commands::Preview {
             path,

@@ -205,12 +205,23 @@ where
         .unwrap_or_else(|| config.data_dir.join("captures"));
     let registry_for_on_ready = engine_registry.clone();
     let cache_dir_for_on_ready = cache_dir.clone();
+    let project_root_for_scripts = config.project_root.clone();
     let on_ready: server::OnReadyCallback = Box::new(move |ctx| {
         let registry = registry_for_on_ready;
         let cache_dir = cache_dir_for_on_ready;
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
         let ctx_for_driver = ctx.clone();
         tokio::task::spawn_blocking(move || {
+            // bd-w348iu63 (plan D7): run the project's `pre-render`
+            // scripts once, at boot, before the eager captures — a
+            // script may generate data the engines read. Deliberately
+            // never re-run (not on file edits, not on `_quarto.yml`
+            // changes; restart the preview to re-run), and
+            // post-render scripts don't run in preview at all — both
+            // documented deviations from Quarto 1.
+            if let Some(root) = &project_root_for_scripts {
+                run_boot_pre_render_scripts(root);
+            }
             let result = pollster::block_on(capture_driver::record_eager_captures(
                 ctx_for_driver,
                 runtime,
@@ -281,6 +292,58 @@ where
     .await
     .context("quarto-hub server failed")?;
     Ok(())
+}
+
+/// bd-w348iu63: run the project's `project.pre-render` scripts once at
+/// preview boot. Failures are reported but never fatal — the preview
+/// keeps serving (matching Q1 preview's catch-and-continue), and the
+/// fix-it path is "repair the script, restart `q2 preview`".
+fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
+    use quarto_core::ProjectContext;
+    use quarto_core::project::render_scripts;
+
+    let runtime = NativeRuntime::new();
+    let project = match ProjectContext::discover(project_root, &runtime) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(error = %e, "pre-render scripts: project discovery failed");
+            return;
+        }
+    };
+    for diagnostic in render_scripts::underscore_typo_diagnostics(&project.config) {
+        eprintln!("{}", diagnostic.to_text(None));
+    }
+    if project.config.pre_render_scripts.is_empty() {
+        return;
+    }
+    let input_files: Vec<PathBuf> = project
+        .files
+        .iter()
+        .map(|f| {
+            f.input
+                .strip_prefix(&project.dir)
+                .map_or_else(|_| f.input.clone(), |r| r.to_path_buf())
+        })
+        .collect();
+    let ctx = render_scripts::RenderScriptsContext {
+        project_dir: &project.dir,
+        output_dir: &project.output_dir,
+        config_path: project.config.config_path.as_deref(),
+        render_all: true,
+        quiet: false,
+        file_count: input_files.len(),
+    };
+    if let Err(parse_error) = render_scripts::run_render_scripts(
+        render_scripts::ScriptPhase::PreRender,
+        &project.config.pre_render_scripts,
+        &ctx,
+        &input_files,
+    ) {
+        eprintln!("{parse_error}");
+        eprintln!(
+            "note: the preview keeps serving; fix the script and restart `q2 preview` to re-run it."
+        );
+    }
 }
 
 /// Construct the StorageManager. `project_root` decides project vs

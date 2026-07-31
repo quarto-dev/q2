@@ -35,6 +35,7 @@ use quarto_core::attribution::AttributionMode;
 use quarto_core::project::orchestrator::{
     DiagnosticCounts, ProjectPipeline, RenderMode, project_type_for,
 };
+use quarto_core::project::render_scripts;
 use quarto_core::{Format, ProjectContext, QuartoError, RenderToFileOptions};
 use quarto_error_reporting::{
     DiagnosticMessage, DiagnosticMessageBuilder, JsonDiagnostic, JsonPass1Failure,
@@ -97,6 +98,9 @@ pub struct RenderArgs {
     /// "stop at first *failure*" — a promoted warning does not stop
     /// the render.
     pub strict: bool,
+    /// Skip the project's `pre-render` / `post-render` scripts
+    /// (bd-w348iu63). The render itself is unaffected.
+    pub no_render_scripts: bool,
 }
 
 /// What to render after argument classification.
@@ -766,6 +770,51 @@ fn execute_project(
     let mut project = ProjectContext::discover(&project_dir, runtime_arc.as_ref())
         .context("Failed to discover project context")?;
 
+    // bd-w348iu63: warn about the likely `pre_render` / `post_render`
+    // misspellings (Q2 has no schema layer; unknown keys are
+    // otherwise silently ignored).
+    for diagnostic in render_scripts::underscore_typo_diagnostics(&project.config) {
+        eprintln!("{}", diagnostic.to_text(None));
+    }
+
+    // bd-w348iu63: run `project.pre-render` scripts, then re-discover
+    // the project so script-created inputs and config edits are
+    // picked up. `project.type` / `project.output-dir` changes are
+    // forbidden (Q1-compatible mutation guard).
+    let run_scripts = !args.no_render_scripts;
+    let render_all = targets.is_none();
+    if run_scripts && !project.config.pre_render_scripts.is_empty() {
+        let input_files = match targets.as_deref() {
+            Some(t) => paths_relative_to(t.iter(), &project.dir),
+            None => paths_relative_to(project.files.iter().map(|f| &f.input), &project.dir),
+        };
+        let ctx = render_scripts::RenderScriptsContext {
+            project_dir: &project.dir,
+            output_dir: &project.output_dir,
+            config_path: project.config.config_path.as_deref(),
+            render_all,
+            quiet: args.quiet,
+            file_count: input_files.len(),
+        };
+        if let Err(parse_error) = render_scripts::run_render_scripts(
+            render_scripts::ScriptPhase::PreRender,
+            &project.config.pre_render_scripts,
+            &ctx,
+            &input_files,
+        ) {
+            exit_with_parse_error(parse_error, args);
+        }
+
+        let re_project = ProjectContext::discover(&project_dir, runtime_arc.as_ref())
+            .context("Failed to re-discover project context after pre-render scripts")?;
+        if let Err(parse_error) =
+            render_scripts::check_forbidden_mutations(&project.config, &re_project.config)
+        {
+            exit_with_parse_error(parse_error, args);
+        }
+        project = re_project;
+    }
+
     quarto_util::user_status!(
         args.quiet,
         "Rendering project: {} (type: {})",
@@ -829,7 +878,58 @@ fn execute_project(
     if should_exit_nonzero(&summary, args.strict) {
         std::process::exit(1);
     }
+
+    // bd-w348iu63: run `project.post-render` scripts at the very end,
+    // only after a successful render (Q1-compatible: render errors
+    // skip them). The env is computed fresh from the actual results —
+    // `QUARTO_PROJECT_OUTPUT_FILES` lists what the pipeline really
+    // produced — fixing Q1's stale-env wart.
+    if run_scripts && !project.config.post_render_scripts.is_empty() {
+        let output_files =
+            paths_relative_to(summary.outputs.iter().map(|o| &o.output_path), &project.dir);
+        let ctx = render_scripts::RenderScriptsContext {
+            project_dir: &project.dir,
+            output_dir: &project.output_dir,
+            config_path: project.config.config_path.as_deref(),
+            render_all,
+            quiet: args.quiet,
+            file_count: total_files,
+        };
+        if let Err(parse_error) = render_scripts::run_render_scripts(
+            render_scripts::ScriptPhase::PostRender,
+            &project.config.post_render_scripts,
+            &ctx,
+            &output_files,
+        ) {
+            exit_with_parse_error(parse_error, args);
+        }
+    }
     Ok(())
+}
+
+/// Make each path relative to `base` (paths already relative, or
+/// outside `base`, pass through unchanged). Used for the
+/// `QUARTO_PROJECT_INPUT_FILES` / `QUARTO_PROJECT_OUTPUT_FILES`
+/// script contract, which promises project-relative paths.
+fn paths_relative_to<'a>(paths: impl Iterator<Item = &'a PathBuf>, base: &Path) -> Vec<PathBuf> {
+    paths
+        .map(|p| {
+            p.strip_prefix(base)
+                .map_or_else(|_| p.clone(), |r| r.to_path_buf())
+        })
+        .collect()
+}
+
+/// Print a render-script [`ParseError`](quarto_core::error::ParseError)
+/// through the same channel the pipeline's parse errors use
+/// (ariadne text, or NDJSON under `--json-errors`) and exit non-zero.
+fn exit_with_parse_error(parse_error: quarto_core::ParseError, args: &RenderArgs) -> ! {
+    if args.json_errors {
+        emit_parse_error_json(&parse_error, None);
+    } else {
+        eprintln!("{}", parse_error);
+    }
+    std::process::exit(1);
 }
 
 /// Strict exit policy for `quarto render` (Decision D1, bd-creo).

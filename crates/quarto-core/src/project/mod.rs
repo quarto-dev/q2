@@ -31,6 +31,7 @@ pub mod listing;
 pub mod orchestrator;
 pub mod pass2_renderer;
 pub mod profile_cache;
+pub mod render_scripts;
 pub mod sidebar_membership;
 pub mod website_config;
 // Every hook in this module is native-only (`#[cfg(not(wasm32))]`
@@ -331,6 +332,19 @@ pub struct ProjectConfig {
     /// pointing at the offending YAML scalar.
     /// Empty when `project.resources` is absent.
     pub resources: Vec<crate::project_resources::RawResourcePattern>,
+
+    /// `project.pre-render` script entries (bd-w348iu63): command
+    /// lines run before a project render, in declaration order, with
+    /// each entry's YAML source location. A bare string normalizes to
+    /// a one-element list. Empty when the key is absent (including
+    /// single-file pseudo-projects, which never run scripts). See
+    /// [`render_scripts`] for the execution contract.
+    pub pre_render_scripts: Vec<render_scripts::RenderScript>,
+
+    /// `project.post-render` script entries — run after a successful
+    /// project render. Same shape as
+    /// [`pre_render_scripts`](Self::pre_render_scripts).
+    pub post_render_scripts: Vec<render_scripts::RenderScript>,
 
     /// Full project metadata as ConfigValue with source tracking.
     ///
@@ -656,6 +670,9 @@ impl ProjectContext {
             &["project", "resources"],
         );
 
+        let pre_render_scripts = render_scripts::extract_render_scripts(&metadata, "pre-render");
+        let post_render_scripts = render_scripts::extract_render_scripts(&metadata, "post-render");
+
         // Resolve the project-level `brand:` once, here, so every
         // site-wide consumer reads the same answer. Relative brand
         // paths are written against the directory holding this
@@ -674,6 +691,8 @@ impl ProjectContext {
             output_dir,
             render_patterns,
             resources,
+            pre_render_scripts,
+            post_render_scripts,
             metadata: Some(metadata),
             config_path: Some(path.to_path_buf()),
             brand,
