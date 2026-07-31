@@ -10,10 +10,10 @@
 use std::path::Path;
 
 use quarto_system_runtime::{PathKind, SystemRuntime};
-use tracing::warn;
 
 use super::read::{read_extension, read_extension_with_org};
 use super::types::Extension;
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 
 /// Discover all extensions available for a document.
 ///
@@ -29,8 +29,9 @@ pub fn discover_extensions(
     project_dir: Option<&Path>,
     builtin_extensions_dir: Option<&Path>,
     runtime: &dyn SystemRuntime,
-) -> Vec<Extension> {
+) -> (Vec<Extension>, Vec<DiagnosticMessage>) {
     let mut extensions = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut dirs_to_search = Vec::new();
 
     // Built-in extensions first (lowest priority)
@@ -39,7 +40,7 @@ pub fn discover_extensions(
             .path_exists(builtin_dir, Some(PathKind::Directory))
             .unwrap_or(false)
     {
-        scan_extensions_dir(builtin_dir, runtime, &mut extensions);
+        scan_extensions_dir(builtin_dir, runtime, &mut extensions, &mut diagnostics);
     }
 
     let start_dir = input.parent().unwrap_or(input);
@@ -72,10 +73,10 @@ pub fn discover_extensions(
             continue;
         }
 
-        scan_extensions_dir(ext_dir, runtime, &mut extensions);
+        scan_extensions_dir(ext_dir, runtime, &mut extensions, &mut diagnostics);
     }
 
-    extensions
+    (extensions, diagnostics)
 }
 
 /// Scan all entries in an extensions directory.
@@ -83,6 +84,7 @@ fn scan_extensions_dir(
     ext_dir: &Path,
     runtime: &dyn SystemRuntime,
     extensions: &mut Vec<Extension>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
     let entries = match runtime.dir_list(ext_dir) {
         Ok(entries) => entries,
@@ -90,7 +92,7 @@ fn scan_extensions_dir(
     };
 
     for entry in entries {
-        scan_extension_entry(&entry, runtime, extensions);
+        scan_extension_entry(&entry, runtime, extensions, diagnostics);
     }
 }
 
@@ -102,6 +104,7 @@ fn scan_extension_entry(
     entry: &Path,
     runtime: &dyn SystemRuntime,
     extensions: &mut Vec<Extension>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
     let ext_file = entry.join("_extension.yml");
 
@@ -112,7 +115,7 @@ fn scan_extension_entry(
     {
         match read_extension(&ext_file, runtime) {
             Ok(ext) => extensions.push(ext),
-            Err(e) => warn!("Failed to read extension {}: {}", ext_file.display(), e),
+            Err(e) => diagnostics.push(extension_not_loaded_diagnostic(&ext_file, &e)),
         }
         return;
     }
@@ -133,10 +136,32 @@ fn scan_extension_entry(
         {
             match read_extension_with_org(&sub_ext_file, org_name.as_deref(), runtime) {
                 Ok(ext) => extensions.push(ext),
-                Err(e) => warn!("Failed to read extension {}: {}", sub_ext_file.display(), e),
+                Err(e) => diagnostics.push(extension_not_loaded_diagnostic(&sub_ext_file, &e)),
             }
         }
     }
+}
+
+/// Build the Q-16-1 diagnostic for a manifest that could not be loaded.
+///
+/// Surfacing this at discovery time (instead of a bare log line) is what
+/// prevents the failure from being misattributed later as an unknown
+/// shortcode in the user's document (bd-nzdm1wry).
+fn extension_not_loaded_diagnostic(
+    ext_file: &Path,
+    err: &crate::error::QuartoError,
+) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::warning("Extension not loaded")
+        .with_code("Q-16-1")
+        .problem(format!(
+            "The extension manifest `{}` could not be loaded: {}",
+            ext_file.display(),
+            err
+        ))
+        .add_hint(
+            "Shortcodes, filters, and formats contributed by this extension will be unavailable.",
+        )
+        .build()
 }
 
 /// Find a specific extension by name among discovered extensions.
@@ -236,7 +261,7 @@ contributes:
 
         let runtime = make_runtime();
         let input = tmp.path().join("test.qmd");
-        let extensions = discover_extensions(&input, None, None, &runtime);
+        let (extensions, _diags) = discover_extensions(&input, None, None, &runtime);
 
         assert_eq!(extensions.len(), 1);
         assert_eq!(extensions[0].id.name, "test-ext");
@@ -259,7 +284,7 @@ contributes:
 
         let runtime = make_runtime();
         let input = tmp.path().join("test.qmd");
-        let extensions = discover_extensions(&input, None, None, &runtime);
+        let (extensions, _diags) = discover_extensions(&input, None, None, &runtime);
 
         assert_eq!(extensions.len(), 1);
         assert_eq!(extensions[0].id.name, "ext");
@@ -301,7 +326,7 @@ contributes:
 
         let runtime = make_runtime();
         let input = sub_dir.join("test.qmd");
-        let extensions = discover_extensions(&input, Some(project_dir), None, &runtime);
+        let (extensions, _diags) = discover_extensions(&input, Some(project_dir), None, &runtime);
 
         assert_eq!(extensions.len(), 2);
         // Project-level should come first (lower priority)
@@ -316,7 +341,7 @@ contributes:
 
         let runtime = make_runtime();
         let input = tmp.path().join("test.qmd");
-        let extensions = discover_extensions(&input, None, None, &runtime);
+        let (extensions, _diags) = discover_extensions(&input, None, None, &runtime);
 
         assert!(extensions.is_empty());
     }
@@ -327,7 +352,7 @@ contributes:
 
         let runtime = make_runtime();
         let input = tmp.path().join("test.qmd");
-        let extensions = discover_extensions(&input, None, None, &runtime);
+        let (extensions, _diags) = discover_extensions(&input, None, None, &runtime);
 
         assert!(extensions.is_empty());
     }
@@ -348,24 +373,26 @@ contributes:
 "#,
         );
 
-        // Invalid extension (missing title)
+        // Invalid extension: unparseable YAML. (Missing title/author is NOT
+        // invalid — Q1-compat intake, bd-8b0af414.)
         write_extension(
             &tmp.path().join("_extensions/bad-ext"),
-            r#"
-author: Author
-contributes:
-  shortcodes:
-    - hello.lua
-"#,
+            "contributes: [unclosed\n  nonsense: {{{{",
         );
 
         let runtime = make_runtime();
         let input = tmp.path().join("test.qmd");
-        let extensions = discover_extensions(&input, None, None, &runtime);
+        let (extensions, diags) = discover_extensions(&input, None, None, &runtime);
 
-        // Only the valid extension should be discovered
+        // Only the valid extension should be discovered, and the broken one
+        // must surface as a Q-16-1 diagnostic naming its manifest file
+        // (bd-nzdm1wry), not vanish into a log line.
         assert_eq!(extensions.len(), 1);
         assert_eq!(extensions[0].id.name, "good-ext");
+        assert_eq!(diags.len(), 1);
+        let rendered = format!("{:?}", diags[0]);
+        assert!(rendered.contains("Q-16-1"), "diagnostic: {rendered}");
+        assert!(rendered.contains("bad-ext"), "diagnostic: {rendered}");
     }
 
     // === find_extension tests ===
@@ -374,8 +401,8 @@ contributes:
     fn test_find_extension_by_name() {
         let ext = Extension {
             id: super::super::types::ExtensionId::new("lightbox"),
-            title: "Lightbox".to_string(),
-            author: "Author".to_string(),
+            title: Some("Lightbox".to_string()),
+            author: Some("Author".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from("/ext"),
@@ -391,8 +418,8 @@ contributes:
     fn test_find_extension_by_org_name() {
         let ext = Extension {
             id: super::super::types::ExtensionId::with_organization("acm", "quarto-journals"),
-            title: "ACM".to_string(),
-            author: "Author".to_string(),
+            title: Some("ACM".to_string()),
+            author: Some("Author".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from("/ext"),
@@ -410,8 +437,8 @@ contributes:
         // Built-in (first in vec) should be overridden by user (last in vec)
         let builtin = Extension {
             id: super::super::types::ExtensionId::with_organization("lipsum", "quarto"),
-            title: "Lipsum Built-in".to_string(),
-            author: "Built-in Author".to_string(),
+            title: Some("Lipsum Built-in".to_string()),
+            author: Some("Built-in Author".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from("/builtin/quarto/lipsum"),
@@ -419,8 +446,8 @@ contributes:
         };
         let user = Extension {
             id: super::super::types::ExtensionId::new("lipsum"),
-            title: "Lipsum User".to_string(),
-            author: "User Author".to_string(),
+            title: Some("Lipsum User".to_string()),
+            author: Some("User Author".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from("/user/lipsum"),
@@ -430,15 +457,15 @@ contributes:
 
         // Name-only lookup: should find user (last match)
         let found = find_extension("lipsum", &extensions).unwrap();
-        assert_eq!(found.title, "Lipsum User");
+        assert_eq!(found.title.as_deref(), Some("Lipsum User"));
     }
 
     #[test]
     fn test_find_extension_org_name_returns_last_match() {
         let builtin = Extension {
             id: super::super::types::ExtensionId::with_organization("lipsum", "quarto"),
-            title: "Lipsum Built-in".to_string(),
-            author: "Built-in Author".to_string(),
+            title: Some("Lipsum Built-in".to_string()),
+            author: Some("Built-in Author".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from("/builtin/quarto/lipsum"),
@@ -446,8 +473,8 @@ contributes:
         };
         let user = Extension {
             id: super::super::types::ExtensionId::with_organization("lipsum", "quarto"),
-            title: "Lipsum User Override".to_string(),
-            author: "User Author".to_string(),
+            title: Some("Lipsum User Override".to_string()),
+            author: Some("User Author".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from("/user/quarto/lipsum"),
@@ -457,7 +484,7 @@ contributes:
 
         // Org/name lookup: should find user (last match)
         let found = find_extension("quarto/lipsum", &extensions).unwrap();
-        assert_eq!(found.title, "Lipsum User Override");
+        assert_eq!(found.title.as_deref(), Some("Lipsum User Override"));
     }
 
     // === Built-in extension discovery tests ===
@@ -483,7 +510,7 @@ contributes:
         fs::create_dir_all(&input_dir).unwrap();
         let input = input_dir.join("test.qmd");
 
-        let extensions = discover_extensions(&input, None, Some(&builtin_dir), &runtime);
+        let (extensions, _diags) = discover_extensions(&input, None, Some(&builtin_dir), &runtime);
 
         assert_eq!(extensions.len(), 1);
         assert_eq!(extensions[0].id.name, "lipsum");
@@ -523,17 +550,17 @@ contributes:
         let runtime = make_runtime();
         let input = project_dir.join("test.qmd");
 
-        let extensions = discover_extensions(&input, None, Some(&builtin_dir), &runtime);
+        let (extensions, _diags) = discover_extensions(&input, None, Some(&builtin_dir), &runtime);
 
         // Both should be discovered
         assert_eq!(extensions.len(), 2);
         // Built-in first, user second
-        assert_eq!(extensions[0].title, "Lipsum Built-in");
-        assert_eq!(extensions[1].title, "Lipsum User");
+        assert_eq!(extensions[0].title.as_deref(), Some("Lipsum Built-in"));
+        assert_eq!(extensions[1].title.as_deref(), Some("Lipsum User"));
 
         // find_extension should return user (last match)
         let found = find_extension("lipsum", &extensions).unwrap();
-        assert_eq!(found.title, "Lipsum User");
+        assert_eq!(found.title.as_deref(), Some("Lipsum User"));
     }
 
     #[test]
@@ -569,17 +596,17 @@ contributes:
         let runtime = make_runtime();
         let input = project_dir.join("test.qmd");
 
-        let extensions = discover_extensions(&input, None, Some(&builtin_dir), &runtime);
+        let (extensions, _diags) = discover_extensions(&input, None, Some(&builtin_dir), &runtime);
 
         assert_eq!(extensions.len(), 2);
 
         // find_extension with org/name should return user (last match)
         let found = find_extension("quarto/lipsum", &extensions).unwrap();
-        assert_eq!(found.title, "Lipsum User Org");
+        assert_eq!(found.title.as_deref(), Some("Lipsum User Org"));
 
         // find_extension with bare name should also return user
         let found = find_extension("lipsum", &extensions).unwrap();
-        assert_eq!(found.title, "Lipsum User Org");
+        assert_eq!(found.title.as_deref(), Some("Lipsum User Org"));
     }
 
     // === Format descriptor tests ===

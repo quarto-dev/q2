@@ -409,6 +409,7 @@ impl ShortcodeResolveTransform {
                             // named as the cause, and keep loading the rest.
                             diagnostics.push(
                                 DiagnosticMessageBuilder::warning("Shortcode script error")
+                                    .with_code("Q-16-2")
                                     .problem(format!(
                                         "Failed to load shortcode script `{}` from extension `{}`: {}",
                                         script_path.display(),
@@ -430,6 +431,7 @@ impl ShortcodeResolveTransform {
 
         // Unknown shortcode - create error with diagnostic
         let diagnostic = DiagnosticMessageBuilder::warning("Unknown shortcode")
+            .with_code("Q-16-3")
             .problem(format!("Shortcode `{}` is not recognized", shortcode.name))
             .add_hint("Check the shortcode name for typos")
             .with_location(ctx.source_info.clone())
@@ -566,6 +568,7 @@ async fn dispatch_lua_shortcode(
         Some(result) => lua_result_to_shortcode_result(result, ctx.source_info),
         None => {
             let diagnostic = DiagnosticMessageBuilder::warning("Shortcode handler not found")
+                .with_code("Q-16-3")
                 .problem(format!(
                     "Lua handler for shortcode `{}` was not found",
                     shortcode.name
@@ -980,6 +983,7 @@ impl AstTransform for ShortcodeResolveTransform {
                         if let Err(e) = engine.load_script(path).await {
                             diagnostics.push(
                                 DiagnosticMessageBuilder::warning("Shortcode script error")
+                                    .with_code("Q-16-2")
                                     .problem(format!(
                                         "Failed to load shortcode script `{}`: {}",
                                         path.display(),
@@ -1059,6 +1063,22 @@ impl AstTransform for ShortcodeResolveTransform {
                         .problem(format!("Failed to extract text includes: {}", e))
                         .build(),
                 ),
+            }
+
+            // Surface handler-name shadowing as informational diagnostics
+            // (D4). Info level on purpose: overriding a built-in extension
+            // is a supported pattern, so this must not trip
+            // warnings-as-errors or the smoke suite's default assertion.
+            for event in engine.take_shadow_events() {
+                diagnostics.push(
+                    DiagnosticMessageBuilder::info("Shortcode handler shadowed")
+                        .with_code("Q-16-4")
+                        .problem(format!(
+                            "Shortcode handler `{}` from `{}` is overridden by `{}` (later registration wins)",
+                            event.handler, event.previous_script, event.new_script
+                        ))
+                        .build(),
+                );
             }
         }
 
@@ -2187,8 +2207,8 @@ mod tests {
         fn make_extension(name: &str, shortcode_paths: Vec<PathBuf>) -> Extension {
             Extension {
                 id: ExtensionId::new(name),
-                title: name.to_string(),
-                author: String::new(),
+                title: Some(name.to_string()),
+                author: None,
                 version: None,
                 quarto_required: None,
                 path: PathBuf::from("/extensions").join(name),

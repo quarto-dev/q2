@@ -259,7 +259,15 @@ where the study only has static reads.
 
 ### Phase 2 — Handler contract parity + `require` (gap rows 4, 5, 7, 13)
 
-- [ ] Corpus rows from Phase 0 for calling convention + coercions green.
+- [x] Corpus rows from Phase 0 for calling convention + coercions green
+      (commit 3585a6d2): raw_args includes kwarg values (documented
+      approximation: positional-then-keyword order, exact interleaving not in
+      the AST); meta is now the full metadata tree as nested Lua tables with
+      native scalars + dotted-path `__index` (both Q1 access styles incl.
+      `authors.2` array segments); nested shortcode args resolve bottom-up
+      and arrive stringified; `pandoc.utils.stringify` handles
+      booleans/numbers (pandoc parity — also fixes video auto-stretch gate
+      under the new native-boolean meta).
 - [ ] Sandboxed, script-dir-relative `require` (native + WASM via
       `SystemRuntime`), scoped to the extension's directory; test with a
       sibling-module fixture. (This is the highest-risk item for real-world

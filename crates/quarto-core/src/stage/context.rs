@@ -225,7 +225,7 @@ impl StageContext {
         document: DocumentInfo,
     ) -> Result<Self, PipelineError> {
         let builtin_ext_path = builtin_extensions_path(runtime.as_ref());
-        let extensions = crate::extension::discover_extensions(
+        let (extensions, extension_diagnostics) = crate::extension::discover_extensions(
             &document.input,
             if project.is_single_file {
                 None
@@ -245,7 +245,7 @@ impl StageContext {
             extensions,
             artifacts: ArtifactStore::new(),
             includes: PandocIncludes::default(),
-            diagnostics: Vec::new(),
+            diagnostics: extension_diagnostics,
             ref_type_registry: None,
             crossref_index: None,
             resource_report: crate::project_resources::DocumentResourceReport::new(),

@@ -55,6 +55,15 @@ pub enum LuaShortcodeResult {
     Error(String),
 }
 
+/// A same-named shortcode handler was registered by two different scripts;
+/// the later registration won.
+#[derive(Debug, Clone)]
+pub struct ShadowEvent {
+    pub handler: String,
+    pub previous_script: String,
+    pub new_script: String,
+}
+
 /// Lua shortcode engine for loading and dispatching handlers.
 ///
 /// This is `!Send + !Sync` because it holds a `Lua` state. It must only
@@ -63,6 +72,12 @@ pub struct LuaShortcodeEngine {
     lua: Lua,
     handlers: HashMap<String, mlua::RegistryKey>,
     handler_script_dirs: HashMap<String, String>,
+    /// Which script registered each handler (full script path), for
+    /// shadowing detection.
+    handler_scripts: HashMap<String, String>,
+    /// Recorded handler-name collisions across scripts, drained by the
+    /// caller for informational diagnostics (Q-16-4).
+    shadow_events: Vec<ShadowEvent>,
     runtime: Arc<dyn SystemRuntime>,
 }
 
@@ -111,6 +126,8 @@ impl LuaShortcodeEngine {
             lua,
             handlers: HashMap::new(),
             handler_script_dirs: HashMap::new(),
+            handler_scripts: HashMap::new(),
+            shadow_events: Vec::new(),
             runtime,
         })
     }
@@ -178,6 +195,7 @@ impl LuaShortcodeEngine {
                         .lua
                         .create_registry_value(value)
                         .map_err(LuaShortcodeError::LuaError)?;
+                    self.record_registration(&name, script_path);
                     self.handler_script_dirs
                         .insert(name.clone(), script_dir.clone());
                     self.handlers.insert(name, key);
@@ -200,6 +218,7 @@ impl LuaShortcodeEngine {
                     .lua
                     .create_registry_value(value)
                     .map_err(LuaShortcodeError::LuaError)?;
+                self.record_registration(&name, script_path);
                 self.handler_script_dirs
                     .insert(name.clone(), script_dir.clone());
                 self.handlers.insert(name, key);
@@ -237,6 +256,29 @@ impl LuaShortcodeEngine {
     /// Check if a handler is registered for the given name.
     pub fn has_handler(&self, name: &str) -> bool {
         self.handlers.contains_key(name)
+    }
+
+    /// Record which script registered `name`; notes a shadow event when a
+    /// different script had already registered it. Re-registering from the
+    /// same script (e.g. a script loaded twice) is not shadowing.
+    fn record_registration(&mut self, name: &str, script_path: &Path) {
+        let new_script = script_path.to_string_lossy().to_string();
+        if let Some(prev) = self
+            .handler_scripts
+            .insert(name.to_string(), new_script.clone())
+            && prev != new_script
+        {
+            self.shadow_events.push(ShadowEvent {
+                handler: name.to_string(),
+                previous_script: prev,
+                new_script,
+            });
+        }
+    }
+
+    /// Drain recorded handler-shadowing events.
+    pub fn take_shadow_events(&mut self) -> Vec<ShadowEvent> {
+        std::mem::take(&mut self.shadow_events)
     }
 
     /// Extract diagnostics collected during shortcode execution.
@@ -975,6 +1017,45 @@ return {
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "howdy"),
+            other => panic!("Expected Text, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_shadow_events_recorded_on_cross_script_override() {
+        let tmp = TempDir::new().unwrap();
+        let first = write_script(
+            tmp.path(),
+            "first.lua",
+            r#"return { dupe = function() return "FIRST" end }"#,
+        );
+        let second = write_script(
+            tmp.path(),
+            "second.lua",
+            r#"return { dupe = function() return "SECOND" end }"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&first).await.unwrap();
+        // Same script loaded again: not a shadow event.
+        engine.load_script(&first).await.unwrap();
+        assert!(engine.take_shadow_events().is_empty());
+
+        engine.load_script(&second).await.unwrap();
+        let events = engine.take_shadow_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].handler, "dupe");
+        assert!(events[0].previous_script.ends_with("first.lua"));
+        assert!(events[0].new_script.ends_with("second.lua"));
+
+        // Later registration wins.
+        let result = engine
+            .call("dupe", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => assert_eq!(s, "SECOND"),
             other => panic!("Expected Text, got {:?}", other),
         }
     }

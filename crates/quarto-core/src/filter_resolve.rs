@@ -480,8 +480,8 @@ mod tests {
     fn make_extension(name: &str, filters: Vec<ExtensionFilter>) -> Extension {
         Extension {
             id: ExtensionId::new(name),
-            title: name.to_string(),
-            author: "Test".to_string(),
+            title: Some(name.to_string()),
+            author: Some("Test".to_string()),
             version: None,
             quarto_required: None,
             path: PathBuf::from(format!("/project/_extensions/{}", name)),
