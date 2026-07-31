@@ -1,0 +1,12 @@
+---
+title: Extension script requires sibling module
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["REQ&lt;&lt;sib&gt;&gt;"]
+---
+
+{{< decorated sib >}}

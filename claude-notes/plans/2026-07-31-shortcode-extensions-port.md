@@ -247,15 +247,20 @@ where the study only has static reads.
       (doc `shortcodes:` < extensions in discovery order < Rust built-ins);
       per-script load failures warn naming extension id + script path.
       Verified end-to-end on connect-docs (`tier` renders, 0 warnings).
-- [ ] Tests: malformed `_extension.yml` (bad YAML, bad semver, empty
-      contributes) → coded, source-mapped diagnostics; minimal Q1 manifest
-      (no title/author) loads.
-- [ ] Relax `read.rs` required fields per D3; add `Q-*` codes for manifest
-      errors (extension subsystem: decide `Q-5-*` vs new subsystem number).
-- [ ] `discover_extensions` returns structured failures; `dispatch_shortcode`'s
-      unknown-name fallthrough distinguishes "no such extension" from
-      "extension found but failed to load" (closes bd-nzdm1wry).
-- [ ] Shadowing diagnostic per D4 (closes the silent-`rfind` gap).
+- [x] Tests: malformed `_extension.yml` → Q-16-1 diagnostic naming file +
+      cause; minimal Q1 manifest (no title/author) loads
+      (`q1-compat-minimal-manifest` fixture + unit tests). Commit 5d004a3c.
+      Note: bad-semver validation deliberately not added (don't gold-plate;
+      Q2 doesn't enforce quarto-required yet — follow-on if needed).
+- [x] `read.rs` relaxed per D3; new `Q-16` extension subsystem (Q-16-1
+      manifest, Q-16-2 script load, Q-16-3 unknown shortcode, Q-16-4
+      shadowed handler).
+- [x] `discover_extensions` returns `(Vec<Extension>, Vec<DiagnosticMessage>)`;
+      failures surface at discovery (Q-16-1) and the use site keeps its own
+      Q-16-3 — verified end-to-end via `q2 render` (bd-nzdm1wry).
+- [x] Shadowing diagnostic per D4: engine records cross-script collisions,
+      drained as Q-16-4 *info* (does not trip noErrorsOrWarnings/--strict;
+      built-in override stays a supported pattern). Commit 5d004a3c.
 
 ### Phase 2 — Handler contract parity + `require` (gap rows 4, 5, 7, 13)
 

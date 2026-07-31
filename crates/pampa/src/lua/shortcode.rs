@@ -112,6 +112,11 @@ impl LuaShortcodeEngine {
         // Register quarto.json, quarto.log, quarto.utils
         register_quarto_api(&lua).map_err(LuaShortcodeError::LuaError)?;
 
+        // Script-dir-aware `require` so extension scripts can load sibling
+        // modules (Q1 parity).
+        super::quarto_api::register_scoped_require(&lua, runtime.clone())
+            .map_err(LuaShortcodeError::LuaError)?;
+
         // Register quarto.doc namespace (is_format, add_html_dependency, etc.)
         super::quarto_doc::register_quarto_doc(&lua).map_err(LuaShortcodeError::LuaError)?;
 
@@ -545,11 +550,35 @@ fn register_shortcode_api(lua: &Lua) -> Result<()> {
         .eval::<Function>()?,
     )?;
 
-    // quarto.shortcode.error_output(name, message, context)
+    // quarto.shortcode.error_output(name, message_or_args, context)
+    //
+    // TS Quarto compat: the second parameter may be a plain message string
+    // OR a table of argument values (concatenated with spaces) — Q1's own
+    // test fixture calls `error_output("shorty", args, "inline")`.
     shortcode_ns.set(
         "error_output",
         lua.create_function(
-            |lua, (name, message, context): (String, String, String)| -> Result<Value> {
+            |lua, (name, message_or_args, context): (String, Value, String)| -> Result<Value> {
+                let message = match &message_or_args {
+                    Value::Table(t) => {
+                        let mut parts: Vec<String> = Vec::new();
+                        for item in t.clone().sequence_values::<Value>() {
+                            let item = item?;
+                            parts.push(match item {
+                                Value::String(s) => s.to_str()?.to_string(),
+                                other => lua
+                                    .globals()
+                                    .get::<Table>("pandoc")?
+                                    .get::<Table>("utils")?
+                                    .get::<Function>("stringify")?
+                                    .call::<String>(other)?,
+                            });
+                        }
+                        parts.join(" ")
+                    }
+                    Value::String(s) => s.to_str()?.to_string(),
+                    other => format!("{:?}", other),
+                };
                 let err_text = format!("[Shortcode Error ({}): {}]", name, message);
                 let make_strong_inline = |text: String| -> Inline {
                     Inline::Strong(crate::pandoc::Strong {
@@ -1017,6 +1046,63 @@ return {
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "howdy"),
+            other => panic!("Expected Text, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_require_resolves_relative_to_script_dir() {
+        // Q1 extensions `require` sibling modules relative to the requiring
+        // script's directory (TS Quarto patches `require` via the
+        // script-file stack). Covers plain names, dotted paths, nested
+        // requires, and caching.
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join("modules")).unwrap();
+        write_script(
+            tmp.path(),
+            "helper.lua",
+            r#"
+local m = {}
+m.greeting = "FROM-HELPER"
+return m
+"#,
+        );
+        write_script(
+            &tmp.path().join("modules"),
+            "deep.lua",
+            r#"
+local helper = require("helper")
+return { text = "DEEP+" .. helper.greeting }
+"#,
+        );
+        let script = write_script(
+            tmp.path(),
+            "main.lua",
+            r#"
+local helper = require("helper")
+local deep = require("modules.deep")
+local helper2 = require("helper")
+return {
+    req = function()
+        local cached = tostring(helper == helper2)
+        return helper.greeting .. ";" .. deep.text .. ";cached=" .. cached
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).await.unwrap();
+
+        let result = engine
+            .call("req", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => {
+                assert_eq!(s, "FROM-HELPER;DEEP+FROM-HELPER;cached=true")
+            }
             other => panic!("Expected Text, got {:?}", other),
         }
     }
