@@ -310,17 +310,20 @@ below for the eventual follow-on strand:
 
 ### Phase 4 — Missing built-ins: `var`, `env`, `pagebreak` (gap row 8, easy tier)
 
-- [ ] `var`: `_variables.yml` loading (project-scoped, values parsed as qmd
-      inlines), dotted lookup, unknown-var diagnostic (coded, source-mapped —
-      improvement over Q1's `?var:name`); `quarto.variables.get` Lua API.
-- [ ] `env`: positional name + optional fallback arg (Q1 1.5 `#8316`); decide
-      unset-and-no-fallback behavior (Q1: `Null`; propose coded warning).
-- [ ] `pagebreak`: per-format raw table (html/latex/typst/docx/odt/context/epub,
-      `\f` fallback) — implement as Rust handler or built-in Lua extension;
-      follow the existing built-in-extension pattern
-      (`claude-notes/plans/2026-04-01-builtin-extensions.md`).
-- [ ] Each: implement in whichever tier (Rust handler vs embedded Lua ext)
-      matches its needs; document the choice in the strand.
+All landed in commit 5af6fb18; full workspace green (10,819).
+
+- [x] `var`: Rust `VarShortcodeHandler`; `_variables.yml` loaded in
+      `StageContext::new` (project-scoped; single-file mode gets none — Q1
+      parity), parsed as `DocumentMetadata` so markdown values render;
+      dotted lookup; unknown var → Q-16-5 + `?var` marker; unparseable
+      variables file warns naming the file. `quarto.variables.get` Lua API
+      **not** done — moved to Phase 6 (Lua API parity follow-on).
+- [x] `env`: Rust `EnvShortcodeHandler`; fallback arg per Q1 1.5; unset
+      without fallback → Q-16-5 coded warning (decided: stricter than Q1's
+      Null). wasm32: env reads always fail → uniformly unset.
+- [x] `pagebreak`: embedded built-in Lua extension
+      (`resources/extensions/quarto/pagebreak/`), near-verbatim Q1 port.
+      Tier choices documented in the commit message.
 
 ### Phase 5 — Unknown-shortcode policy + writer hardening (D1, gap row 9)
 

@@ -1,0 +1,15 @@
+---
+title: Declared foreign shortcodes pass through verbatim
+format: html
+shortcode-passthrough:
+  - hugoref
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["\\{\\{&lt; hugoref foo &gt;\\}\\}"]
+        - ["quarto-unresolved-shortcode"]
+---
+
+A foreign shortcode: {{< hugoref foo >}}

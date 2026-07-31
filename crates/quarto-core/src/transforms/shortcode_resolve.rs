@@ -585,6 +585,18 @@ impl ShortcodeResolveTransform {
             }
         }
 
+        // Declared foreign shortcodes (e.g. Hugo's) pass through verbatim.
+        // Unlike Q1 — which silently passed through anything unknown — the
+        // passthrough set is an explicit declaration in metadata:
+        //
+        //   shortcode-passthrough: [ref, figure]
+        //
+        // (Plan D1: explicit declaration over inference; everything not
+        // declared gets a source-mapped Q-16-3 warning below.)
+        if passthrough_names(ctx.metadata).contains(&shortcode.name) {
+            return ShortcodeResult::Preserve;
+        }
+
         // Unknown shortcode - create error with diagnostic
         let diagnostic = DiagnosticMessageBuilder::warning("Unknown shortcode")
             .with_code("Q-16-3")
@@ -687,6 +699,16 @@ impl ShortcodeResolveTransform {
         };
         *arg = ShortcodeArg::String(text);
     }
+}
+
+/// Shortcode names declared for verbatim passthrough via the
+/// `shortcode-passthrough` metadata key.
+fn passthrough_names(metadata: &ConfigValue) -> Vec<String> {
+    metadata
+        .get("shortcode-passthrough")
+        .and_then(|v| v.as_array())
+        .map(|items| items.iter().filter_map(|i| i.as_plain_text()).collect())
+        .unwrap_or_default()
 }
 
 /// Does this shortcode carry any nested shortcode arguments (positional or
