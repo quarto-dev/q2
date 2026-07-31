@@ -223,15 +223,18 @@ where the study only has static reads.
       lookup), `contract-nested-arg`. Parked with `tests.run.skip`:
       `contract-escape-comment` (grammar gap, decision pending — recommend
       targeted Q-2-x diagnostic over porting the Hugo `/* */` form).
-- [ ] Integration tests driving the real binary path (`render_document_to_file`
-      / `q2 render` on fixtures) — not `HtmlRenderConfig::default()` shortcuts.
-- [ ] Baseline probes (tests that *document* current behavior, marked
-      known-gap): shortcode in code block / attribute / link target / image src;
-      shortcode in YAML metadata values (title etc.); shortcode in grid table;
-      extension with missing `title`; extension whose Lua `require`s a sibling.
-- [ ] Pick 2–3 real published Q1 shortcode extensions (e.g. `quarto-ext/fontawesome`,
-      `shafayetShafee/bsicons` class) and add them as fixtures; record what
-      breaks. These are the acceptance tests for the whole plan.
+- [x] Integration tests drive the real render path (smoke-all runner via
+      quarto-test), plus manual `q2 render` e2e checks recorded per phase.
+- [x] Baseline probes resolved by implementation instead of enshrined:
+      missing-title manifests and sibling-`require` now *work* (fixtures
+      q1-compat-minimal-manifest, contract-require); text-position probes
+      (code block / attribute / link target / image src / grid table /
+      metadata values) deferred with Phase 3 — still unwritten, revisit when
+      Phase 3 opens.
+- [~] Real published extensions: `quarto-tiers` (Posit, real-world) verified
+      end-to-end via connect-docs (badge spans render, 0 warnings). Adding
+      copied fixtures of fontawesome-class extensions remains open — good
+      first item for a follow-up session.
 - [ ] Real-world acceptance target: `external-sources/connect-docs/docs-quarto-2`
       (Posit Connect docs). Known failure today: `{{< tier … >}}` from
       `_extensions/quarto-tiers/` → "Unknown shortcode" (gap row 3). Copy the
@@ -327,15 +330,22 @@ All landed in commit 5af6fb18; full workspace green (10,819).
 
 ### Phase 5 — Unknown-shortcode policy + writer hardening (D1, gap row 9)
 
-- [ ] Implement the D1 policy as signed off: `Q-*` code, `.with_location()`,
-      visible marker; passthrough config for foreign shortcodes.
-- [ ] HTML writer: surviving `Inline::Shortcode` is never silently dropped —
-      emit marker + diagnostic (relates to orphaned `Q-3-30`/`Q-3-42` catalog
-      entries; wire or retire them).
-- [ ] Backfill `.with_code()` on the existing uncoded warnings in
-      `shortcode_resolve.rs` (`:376`, `:398`, `:431`, extract sites).
-- [ ] bd-u145dg3y: block-level shortcode used inline → coded warning
-      (absorbed here from deferred Phase 3).
+- [x] D1 landed (commit 87644d04): Q-16-3 source-mapped warning + visible
+      marker; new `shortcode-passthrough: [names]` metadata key for declared
+      foreign shortcodes (verbatim literal, no warning) — explicit
+      declaration replacing Q1's pass-anything-unknown. Composes with
+      `--strict`. Fixture: contract-passthrough.
+- [x] HTML writer renders `<span class="quarto-unresolved-shortcode">?name`
+      for surviving `Inline::Shortcode` instead of dropping (unit test).
+      Q-3-30/Q-3-42 left unreferenced deliberately — writers have no
+      diagnostics channel; noted in commit message.
+- [x] `.with_code()` backfilled across shortcode_resolve (Q-16-2/3/5,
+      commits 5d004a3c + 5af6fb18).
+      (absorbed from deferred Phase 3): DONE, commit 4f2d2b50 — Q-16-6 when
+      flattening loses all output; partial flattens stay silent (Q1 parity).
+- [ ] Decision pending (user): Q1's `{{</* … */>}}` comment-escape form —
+      recommendation is a targeted Q-2-x parse diagnostic, not the syntax
+      (fixture parked via tests.run.skip).
 
 ### Phase 6 — Deferred / follow-on strands (file, don't implement here)
 

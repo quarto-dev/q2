@@ -1564,8 +1564,30 @@ fn resolve_inlines<'a>(
                     }
                     ShortcodeResult::Blocks(blocks) => {
                         // Graceful degradation: flatten blocks to inlines
+                        // (Q1's blocks_to_inlines behavior). When flattening
+                        // loses ALL the output (e.g. video's raw HTML block
+                        // inside a sentence), that silent vanishing is
+                        // undiagnosable — warn with the position named
+                        // (bd-u145dg3y).
                         let replacement =
                             flatten_blocks_to_inlines(&blocks, &shortcode_owned.source_info);
+                        if replacement.is_empty() && !blocks.is_empty() {
+                            diagnostics.push(
+                                DiagnosticMessageBuilder::warning(
+                                    "Block shortcode output dropped in inline position",
+                                )
+                                .with_code("Q-16-6")
+                                .problem(format!(
+                                    "The `{}` shortcode produced block-level output that cannot be placed in inline position; it was dropped",
+                                    shortcode_owned.name
+                                ))
+                                .add_hint(
+                                    "Put the shortcode in its own paragraph, surrounded by blank lines",
+                                )
+                                .with_location(shortcode_owned.source_info.clone())
+                                .build(),
+                            );
+                        }
                         let replacement_len = replacement.len();
                         inlines.splice(i..=i, replacement);
                         i += replacement_len.max(1);
