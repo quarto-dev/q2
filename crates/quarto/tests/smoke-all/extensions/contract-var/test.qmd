@@ -1,0 +1,16 @@
+---
+title: Var shortcode
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["simple-value", "nested-value", "href=\"https://example.com/vartarget\"", "VarLink"]
+---
+
+Simple: {{< var simple >}}
+
+Nested: {{< var nested.key >}}
+
+Markdown: {{< var linky >}}

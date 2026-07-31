@@ -1090,5 +1090,12 @@
     "message_template": "Two loaded shortcode scripts define a handler with the same name; the later registration wins (document `shortcodes:` scripts load first, then extensions in discovery order, so the more local definition takes precedence). This is informational — overriding a built-in extension is a supported pattern — but if the shadowing is unintentional, rename or remove one of the handlers.",
     "docs_url": "https://quarto.org/docs/errors/extension/Q-16-4",
     "since_version": "99.9.9"
+  },
+  "Q-16-5": {
+    "subsystem": "extension",
+    "title": "Shortcode Value Not Found",
+    "message_template": "A value-lookup shortcode (`meta`, `var`, `env`) could not resolve its key: the metadata key is absent, the variable is not defined in `_variables.yml`, or the environment variable is unset and no fallback argument was given. The invocation renders as a visible `?name` marker. Check the key for typos, define it at the source the shortcode reads from, or (for `env`) pass a fallback: `{{< env NAME fallback >}}`.",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-5",
+    "since_version": "99.9.9"
   }
 }

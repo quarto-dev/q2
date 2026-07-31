@@ -80,6 +80,12 @@ pub struct StageContext {
     /// Extensions discovered for this document
     pub extensions: Vec<Extension>,
 
+    /// Project variables from `_variables.yml` (project root), parsed as
+    /// document metadata so markdown values render as markdown. `None` for
+    /// single-file renders (Q1 parity: `var` is project-scoped) or when the
+    /// file does not exist.
+    pub variables: Option<quarto_pandoc_types::ConfigValue>,
+
     // === Mutable state ===
     /// Artifact store for dependencies and intermediates
     pub artifacts: ArtifactStore,
@@ -225,7 +231,7 @@ impl StageContext {
         document: DocumentInfo,
     ) -> Result<Self, PipelineError> {
         let builtin_ext_path = builtin_extensions_path(runtime.as_ref());
-        let (extensions, extension_diagnostics) = crate::extension::discover_extensions(
+        let (extensions, mut startup_diagnostics) = crate::extension::discover_extensions(
             &document.input,
             if project.is_single_file {
                 None
@@ -236,6 +242,9 @@ impl StageContext {
             runtime.as_ref(),
         );
 
+        let variables =
+            load_project_variables(runtime.as_ref(), &project, &mut startup_diagnostics);
+
         Ok(Self {
             runtime,
             format,
@@ -243,9 +252,10 @@ impl StageContext {
             document,
             temp_dir: std::sync::OnceLock::new(),
             extensions,
+            variables,
             artifacts: ArtifactStore::new(),
             includes: PandocIncludes::default(),
-            diagnostics: extension_diagnostics,
+            diagnostics: startup_diagnostics,
             ref_type_registry: None,
             crossref_index: None,
             resource_report: crate::project_resources::DocumentResourceReport::new(),
@@ -743,6 +753,47 @@ mod tests {
 /// - **Native**: extracts the embedded `ResourceBundle` to a temp dir.
 /// - **WASM**: returns the VFS path `/__quarto_resources__/extensions`
 ///   if it exists (populated during WASM init).
+/// Load `<project dir>/_variables.yml` for the `var` shortcode.
+///
+/// Project-scoped like Q1 (no variables in single-file mode). A missing
+/// file is normal; a file that exists but fails to parse produces a
+/// warning diagnostic naming the file.
+fn load_project_variables(
+    runtime: &dyn SystemRuntime,
+    project: &crate::project::ProjectContext,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Option<quarto_pandoc_types::ConfigValue> {
+    if project.is_single_file {
+        return None;
+    }
+    let path = project.dir.join("_variables.yml");
+    let content = runtime.file_read_string(&path).ok()?;
+    match quarto_yaml::parse_file(&content, &path.display().to_string()) {
+        Ok(yaml) => {
+            let mut collector = pampa::utils::diagnostic_collector::DiagnosticCollector::new();
+            Some(pampa::pandoc::yaml_to_config_value(
+                yaml,
+                quarto_pandoc_types::InterpretationContext::DocumentMetadata,
+                &mut collector,
+            ))
+        }
+        Err(e) => {
+            diagnostics.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                    "Project variables not loaded",
+                )
+                .problem(format!(
+                    "`{}` could not be parsed: {}; `var` shortcodes will not resolve",
+                    path.display(),
+                    e
+                ))
+                .build(),
+            );
+            None
+        }
+    }
+}
+
 fn builtin_extensions_path(
     _runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> Option<std::path::PathBuf> {

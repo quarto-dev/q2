@@ -1,0 +1,12 @@
+---
+title: Env shortcode fallback
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["ENV-FALLBACK-VALUE"]
+---
+
+{{< env QUARTO_SMOKE_NO_SUCH_VAR ENV-FALLBACK-VALUE >}}

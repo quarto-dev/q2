@@ -1,0 +1,6 @@
+title: Pagebreak
+author: Posit, PBC
+organization: quarto
+contributes:
+  shortcodes:
+    - pagebreak.lua

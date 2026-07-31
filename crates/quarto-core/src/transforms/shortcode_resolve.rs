@@ -150,12 +150,157 @@ impl ShortcodeHandler for MetaShortcodeHandler {
             Some(value) => ShortcodeResult::Inlines(config_value_to_inlines(value)),
             None => {
                 let diagnostic = DiagnosticMessageBuilder::warning("Unknown metadata key")
+                    .with_code("Q-16-5")
                     .problem(format!("Metadata key `{}` not found in document", key))
                     .add_hint("Check that the key exists in your YAML frontmatter")
                     .with_location(ctx.source_info.clone())
                     .build();
                 ShortcodeResult::Error(ShortcodeError {
                     key: format!("meta:{}", key),
+                    diagnostic,
+                })
+            }
+        }
+    }
+}
+
+/// Convert a scalar positional argument to its string form.
+fn positional_arg_to_string(arg: &ShortcodeArg) -> Option<String> {
+    match arg {
+        ShortcodeArg::String(s) => Some(s.clone()),
+        ShortcodeArg::Number(n) => Some(n.to_string()),
+        ShortcodeArg::Boolean(b) => Some(b.to_string()),
+        _ => None,
+    }
+}
+
+/// Built-in handler for `{{< env NAME >}}` / `{{< env NAME fallback >}}`.
+///
+/// Reads a process environment variable; the optional second positional
+/// argument is the value used when the variable is unset (Q1 1.5, #8316).
+/// Unset with no fallback is a Q-16-5 warning (Q1 warned and emitted
+/// `?env`). On wasm32 `std::env::var` always errs, so `env` behaves as
+/// uniformly-unset there.
+pub struct EnvShortcodeHandler;
+
+impl ShortcodeHandler for EnvShortcodeHandler {
+    fn name(&self) -> &str {
+        "env"
+    }
+
+    fn resolve(
+        &self,
+        shortcode: &Shortcode,
+        ctx: &ShortcodeContext,
+        _resolution_ctx: ResolutionContext,
+    ) -> ShortcodeResult {
+        let Some(name) = shortcode
+            .positional_args
+            .first()
+            .and_then(positional_arg_to_string)
+        else {
+            let diagnostic = DiagnosticMessageBuilder::warning("Missing shortcode argument")
+                .problem("The `env` shortcode requires an environment variable name")
+                .add_hint("Use `{{< env NAME >}}` or `{{< env NAME fallback >}}`")
+                .with_location(ctx.source_info.clone())
+                .build();
+            return ShortcodeResult::Error(ShortcodeError {
+                key: "env".to_string(),
+                diagnostic,
+            });
+        };
+
+        let value = std::env::var(&name).ok().or_else(|| {
+            shortcode
+                .positional_args
+                .get(1)
+                .and_then(positional_arg_to_string)
+        });
+
+        match value {
+            Some(text) => ShortcodeResult::Inlines(vec![Inline::Str(Str {
+                text,
+                source_info: ctx.source_info.clone(),
+            })]),
+            None => {
+                let diagnostic = DiagnosticMessageBuilder::warning("Environment variable not set")
+                    .with_code("Q-16-5")
+                    .problem(format!(
+                        "Environment variable `{}` is not set and no fallback was given",
+                        name
+                    ))
+                    .add_hint("Set the variable, or pass a fallback: `{{< env NAME fallback >}}`")
+                    .with_location(ctx.source_info.clone())
+                    .build();
+                ShortcodeResult::Error(ShortcodeError {
+                    key: format!("env:{}", name),
+                    diagnostic,
+                })
+            }
+        }
+    }
+}
+
+/// Built-in handler for `{{< var key >}}` — reads `_variables.yml` from the
+/// project root (project-scoped, like Q1). Values are parsed as document
+/// metadata, so markdown variable values render as markdown.
+pub struct VarShortcodeHandler {
+    variables: Option<ConfigValue>,
+}
+
+impl VarShortcodeHandler {
+    pub fn new(variables: Option<ConfigValue>) -> Self {
+        Self { variables }
+    }
+}
+
+impl ShortcodeHandler for VarShortcodeHandler {
+    fn name(&self) -> &str {
+        "var"
+    }
+
+    fn resolve(
+        &self,
+        shortcode: &Shortcode,
+        ctx: &ShortcodeContext,
+        _resolution_ctx: ResolutionContext,
+    ) -> ShortcodeResult {
+        let Some(key) = shortcode
+            .positional_args
+            .first()
+            .and_then(positional_arg_to_string)
+        else {
+            let diagnostic = DiagnosticMessageBuilder::warning("Missing shortcode argument")
+                .problem("The `var` shortcode requires a variable name")
+                .add_hint("Use `{{< var key >}}` where `key` is defined in `_variables.yml`")
+                .with_location(ctx.source_info.clone())
+                .build();
+            return ShortcodeResult::Error(ShortcodeError {
+                key: "var".to_string(),
+                diagnostic,
+            });
+        };
+
+        match self
+            .variables
+            .as_ref()
+            .and_then(|vars| vars.get_nested(&key))
+        {
+            Some(value) => ShortcodeResult::Inlines(config_value_to_inlines(value)),
+            None => {
+                let diagnostic = DiagnosticMessageBuilder::warning("Unknown variable")
+                    .with_code("Q-16-5")
+                    .problem(format!(
+                        "Variable `{}` is not defined in `_variables.yml`",
+                        key
+                    ))
+                    .add_hint(
+                        "Define the variable in `_variables.yml` next to `_quarto.yml` (variables are project-scoped)",
+                    )
+                    .with_location(ctx.source_info.clone())
+                    .build();
+                ShortcodeResult::Error(ShortcodeError {
+                    key: format!("var:{}", key),
                     diagnostic,
                 })
             }
@@ -296,12 +441,22 @@ impl ShortcodeResolveTransform {
     /// Used in tests that don't need Lua support.
     pub fn new() -> Self {
         Self {
-            handlers: vec![Box::new(MetaShortcodeHandler)],
+            handlers: Self::builtin_handlers(None),
             lua_shortcode_paths: Vec::new(),
             extensions: Vec::new(),
             runtime: None,
             target_format: String::new(),
         }
+    }
+
+    /// The built-in Rust handlers: `meta`, `env`, and `var` (fed by the
+    /// project's `_variables.yml`, when present).
+    fn builtin_handlers(variables: Option<ConfigValue>) -> Vec<Box<dyn ShortcodeHandler>> {
+        vec![
+            Box::new(MetaShortcodeHandler),
+            Box::new(EnvShortcodeHandler),
+            Box::new(VarShortcodeHandler::new(variables)),
+        ]
     }
 
     /// Create a shortcode resolve transform with Lua support.
@@ -313,9 +468,10 @@ impl ShortcodeResolveTransform {
         extensions: Vec<Extension>,
         runtime: Arc<dyn SystemRuntime>,
         target_format: String,
+        variables: Option<ConfigValue>,
     ) -> Self {
         Self {
-            handlers: vec![Box::new(MetaShortcodeHandler)],
+            handlers: Self::builtin_handlers(variables),
             lua_shortcode_paths,
             extensions,
             runtime: Some(runtime),
@@ -1699,6 +1855,108 @@ mod tests {
     }
 
     #[test]
+    fn test_env_shortcode_handler_set_and_fallback() {
+        let handler = EnvShortcodeHandler;
+        let meta = ConfigValue::new_map(vec![], dummy_source_info());
+
+        // Set variable wins over fallback.
+        // SAFETY: test-local variable name; nextest runs each test in its
+        // own process, so no cross-test env races.
+        unsafe { std::env::set_var("QUARTO_TEST_ENV_SC", "env-value") };
+        let shortcode = make_shortcode("env", vec!["QUARTO_TEST_ENV_SC", "fallback"]);
+        let ctx = ShortcodeContext {
+            metadata: &meta,
+            source_info: &shortcode.source_info,
+        };
+        match handler.resolve(&shortcode, &ctx, ResolutionContext::Inline) {
+            ShortcodeResult::Inlines(inlines) => {
+                let Inline::Str(s) = &inlines[0] else {
+                    panic!("expected Str");
+                };
+                assert_eq!(s.text, "env-value");
+            }
+            other => panic!("Expected Inlines, got {:?}", std::mem::discriminant(&other)),
+        }
+
+        // Unset variable falls back to the second positional arg (Q1 1.5).
+        let shortcode = make_shortcode("env", vec!["QUARTO_TEST_ENV_SC_UNSET", "fallback"]);
+        let ctx = ShortcodeContext {
+            metadata: &meta,
+            source_info: &shortcode.source_info,
+        };
+        match handler.resolve(&shortcode, &ctx, ResolutionContext::Inline) {
+            ShortcodeResult::Inlines(inlines) => {
+                let Inline::Str(s) = &inlines[0] else {
+                    panic!("expected Str");
+                };
+                assert_eq!(s.text, "fallback");
+            }
+            _ => panic!("Expected Inlines"),
+        }
+
+        // Unset without fallback: Q-16-5 error.
+        let shortcode = make_shortcode("env", vec!["QUARTO_TEST_ENV_SC_UNSET"]);
+        let ctx = ShortcodeContext {
+            metadata: &meta,
+            source_info: &shortcode.source_info,
+        };
+        match handler.resolve(&shortcode, &ctx, ResolutionContext::Inline) {
+            ShortcodeResult::Error(err) => {
+                assert_eq!(err.key, "env:QUARTO_TEST_ENV_SC_UNSET");
+                assert!(format!("{:?}", err.diagnostic).contains("Q-16-5"));
+            }
+            _ => panic!("Expected Error"),
+        }
+    }
+
+    #[test]
+    fn test_var_shortcode_handler_lookup_and_unknown() {
+        let vars = ConfigValue::new_map(
+            vec![make_map_entry(
+                "nested",
+                ConfigValue::new_map(
+                    vec![make_map_entry(
+                        "key",
+                        ConfigValue::new_string("nested-value", dummy_source_info()),
+                    )],
+                    dummy_source_info(),
+                ),
+            )],
+            dummy_source_info(),
+        );
+        let handler = VarShortcodeHandler::new(Some(vars));
+        let meta = ConfigValue::new_map(vec![], dummy_source_info());
+
+        let shortcode = make_shortcode("var", vec!["nested.key"]);
+        let ctx = ShortcodeContext {
+            metadata: &meta,
+            source_info: &shortcode.source_info,
+        };
+        match handler.resolve(&shortcode, &ctx, ResolutionContext::Inline) {
+            ShortcodeResult::Inlines(inlines) => {
+                let Inline::Str(s) = &inlines[0] else {
+                    panic!("expected Str");
+                };
+                assert_eq!(s.text, "nested-value");
+            }
+            _ => panic!("Expected Inlines"),
+        }
+
+        let shortcode = make_shortcode("var", vec!["missing"]);
+        let ctx = ShortcodeContext {
+            metadata: &meta,
+            source_info: &shortcode.source_info,
+        };
+        match handler.resolve(&shortcode, &ctx, ResolutionContext::Inline) {
+            ShortcodeResult::Error(err) => {
+                assert_eq!(err.key, "var:missing");
+                assert!(format!("{:?}", err.diagnostic).contains("Q-16-5"));
+            }
+            _ => panic!("Expected Error"),
+        }
+    }
+
+    #[test]
     fn test_meta_shortcode_handler_success() {
         let handler = MetaShortcodeHandler;
         let shortcode = make_shortcode("meta", vec!["title"]);
@@ -2234,6 +2492,7 @@ mod tests {
                 Vec::new(),
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             let mut ast = Pandoc {
@@ -2282,6 +2541,7 @@ mod tests {
                 vec![ext],
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             let mut ast = Pandoc {
@@ -2328,6 +2588,7 @@ mod tests {
                 Vec::new(),
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             let meta = ConfigValue::new_map(
@@ -2374,6 +2635,7 @@ mod tests {
                 Vec::new(),
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             let mut ast = Pandoc {
@@ -2426,6 +2688,7 @@ mod tests {
                 vec![ext],
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             // Shortcode alone in Para → block context
@@ -2470,6 +2733,7 @@ mod tests {
                 Vec::new(),
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             let mut ast = Pandoc {
@@ -2524,6 +2788,7 @@ mod tests {
                 Vec::new(),
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             let tok = token_si();

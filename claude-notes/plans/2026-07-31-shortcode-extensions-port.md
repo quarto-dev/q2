@@ -273,13 +273,19 @@ where the study only has static reads.
       and arrive stringified; `pandoc.utils.stringify` handles
       booleans/numbers (pandoc parity — also fixes video auto-stretch gate
       under the new native-boolean meta).
-- [ ] Sandboxed, script-dir-relative `require` (native + WASM via
-      `SystemRuntime`), scoped to the extension's directory; test with a
-      sibling-module fixture. (This is the highest-risk item for real-world
-      extensions; likely a `package.preload`-style loader rather than exposing
-      the C `package` lib.)
-- [ ] `quarto.shortcode.read_arg`/`error_output` parity vs `init.lua:1002-1032`.
-- [ ] Fix `shortcode_to_span`'s `process::exit(1)` (nested kv arg) → diagnostic.
+- [x] Script-dir-aware `require` (commit 7c3b2f10): resolves against the
+      script-dir stack top-down (sibling-relative, then extension-root-
+      relative à la Q1's `require("modules/brand/brand")`); sandboxed module
+      env; path-keyed cache; native-stdlib fallback; `SystemRuntime` I/O so
+      WASM shares the path. `contract-require` fixture + pampa unit test.
+      Note: registered in the *shortcode* engine; the filter engine should
+      get the same call — follow-on item in Phase 6.
+- [x] `read_arg` verified matching Q1; `error_output` now accepts table
+      message_or_args (Q1 contract; error_args case ported into
+      contract-doc-shortcodes). Message text deviates from Q1's `?name:msg`
+      ([Shortcode Error (name): msg]) — accepted deviation.
+- [x] `shortcode_to_span` `process::exit(1)` removed: nested kv values
+      encode Q1-style recursive param spans (commit 7c3b2f10).
 
 ### Phase 3 — DEFERRED (2026-07-31): `text` context — shortcodes in code, attributes, targets (gap row 6)
 
