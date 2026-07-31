@@ -10,10 +10,12 @@
  */
 
 use mlua::{Function, Lua, Result, Table, Value};
+use quarto_pandoc_types::config_value::{ConfigValue, ConfigValueKind};
 use quarto_source_map::{By, SourceInfo};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
+use yaml_rust2::Yaml;
 
 use crate::pandoc::{Block, Inline};
 
@@ -328,17 +330,74 @@ impl LuaShortcodeEngine {
     }
 
     fn build_meta_table(&self, args: &ShortcodeArgs) -> Result<Value> {
-        let table = self.lua.create_table()?;
-        for (key, val) in &args.metadata {
-            table.set(key.as_str(), val.as_str())?;
-        }
+        // TS Quarto compat: `meta` supports both native chaining
+        // (`meta.custom.nested.value`) via real nested tables, and Q1's
+        // dotted-string lookup (`meta["custom.nested.value"]`, documented as
+        // `meta["github.owner"]`) via a __index fallback on the top-level
+        // table. A literal top-level key containing dots wins over the
+        // dotted-path interpretation because rawget-able keys never reach
+        // __index. Numeric path segments index arrays 1-based
+        // (`meta["author.1"]`), matching Q1's `option()` navigation.
+        let v = config_value_to_lua(&self.lua, &args.metadata)?;
+        let table = match v {
+            Value::Table(t) => t,
+            _ => self.lua.create_table()?,
+        };
+        let mt = self.lua.create_table()?;
+        mt.set(
+            "__index",
+            self.lua
+                .load(
+                    r#"
+function(t, k)
+    if type(k) ~= "string" or not string.find(k, ".", 1, true) then
+        return nil
+    end
+    local cur = t
+    for part in string.gmatch(k, "[^.]+") do
+        if type(cur) ~= "table" then
+            return nil
+        end
+        local v = rawget(cur, part)
+        if v == nil then
+            local n = tonumber(part)
+            if n ~= nil then
+                v = rawget(cur, n)
+            end
+        end
+        if v == nil then
+            return nil
+        end
+        cur = v
+    end
+    return cur
+end
+"#,
+                )
+                .eval::<Function>()?,
+        )?;
+        table.set_metatable(Some(mt))?;
         Ok(Value::Table(table))
     }
 
     fn build_raw_args(&self, args: &ShortcodeArgs) -> Result<Value> {
+        // TS Quarto compat: raw_args carries ALL argument values in source
+        // order, with keyword-argument names stripped (a named arg
+        // contributes only its value). The q2 AST stores positional and
+        // keyword args separately, so the original interleaving is not
+        // recoverable; we approximate with positionals first, then keyword
+        // values in declaration order. Invocations that interleave a
+        // positional after a keyword arg are the only case that differs
+        // from Q1, and neither Q1's docs nor its built-ins ever do that.
         let table = self.lua.create_table()?;
-        for (i, arg) in args.positional.iter().enumerate() {
-            table.set(i + 1, arg.as_str())?;
+        let mut i = 0;
+        for arg in args.positional.iter() {
+            i += 1;
+            table.set(i, arg.as_str())?;
+        }
+        for (_key, val) in args.keyword.iter() {
+            i += 1;
+            table.set(i, val.as_str())?;
         }
         Ok(Value::Table(table))
     }
@@ -350,7 +409,47 @@ impl LuaShortcodeEngine {
 pub struct ShortcodeArgs {
     pub positional: Vec<String>,
     pub keyword: Vec<(String, String)>,
-    pub metadata: Vec<(String, String)>,
+    /// Full document metadata tree; converted to nested Lua tables (with a
+    /// dotted-path `__index` fallback) for the handler's `meta` parameter.
+    pub metadata: ConfigValue,
+}
+
+/// Convert a ConfigValue tree into a Lua value for the shortcode `meta` param.
+///
+/// - Scalars map to native Lua values (string/integer/number/boolean; null
+///   maps to nil)
+/// - `PandocInlines` (the storage form of bare YAML strings in front matter)
+///   map to their plain-text string — Q1 handlers stringify meta values anyway
+/// - Arrays map to 1-based tables, maps to nested tables
+/// - `PandocBlocks` and other kinds without a string form map to nil
+fn config_value_to_lua(lua: &Lua, v: &ConfigValue) -> Result<Value> {
+    Ok(match &v.value {
+        ConfigValueKind::Scalar(Yaml::Boolean(b)) => Value::Boolean(*b),
+        ConfigValueKind::Scalar(Yaml::Integer(i)) => Value::Integer(*i),
+        ConfigValueKind::Scalar(Yaml::Real(s)) => match s.parse::<f64>() {
+            Ok(f) => Value::Number(f),
+            Err(_) => Value::String(lua.create_string(s)?),
+        },
+        ConfigValueKind::Scalar(Yaml::Null) => Value::Nil,
+        ConfigValueKind::Array(items) => {
+            let t = lua.create_table()?;
+            for (i, item) in items.iter().enumerate() {
+                t.set(i + 1, config_value_to_lua(lua, item)?)?;
+            }
+            Value::Table(t)
+        }
+        ConfigValueKind::Map(entries) => {
+            let t = lua.create_table()?;
+            for entry in entries {
+                t.set(entry.key.as_str(), config_value_to_lua(lua, &entry.value)?)?;
+            }
+            Value::Table(t)
+        }
+        _ => match v.as_plain_text() {
+            Some(s) => Value::String(lua.create_string(&s)?),
+            None => Value::Nil,
+        },
+    })
 }
 
 /// Errors from the shortcode engine.
@@ -524,11 +623,28 @@ mod tests {
         path
     }
 
+    fn empty_meta() -> ConfigValue {
+        ConfigValue::new_map(vec![], SourceInfo::generated(By::programmatic_config()))
+    }
+
+    fn meta_from_pairs(pairs: &[(&str, &str)]) -> ConfigValue {
+        let si = SourceInfo::generated(By::programmatic_config());
+        let entries = pairs
+            .iter()
+            .map(|(k, v)| quarto_pandoc_types::config_value::ConfigMapEntry {
+                key: (*k).to_string(),
+                key_source: si.clone(),
+                value: ConfigValue::new_string(*v, si.clone()),
+            })
+            .collect();
+        ConfigValue::new_map(entries, si)
+    }
+
     fn make_empty_args() -> ShortcodeArgs {
         ShortcodeArgs {
             positional: vec![],
             keyword: vec![],
-            metadata: vec![],
+            metadata: empty_meta(),
         }
     }
 
@@ -817,7 +933,7 @@ return {
         let args = ShortcodeArgs {
             positional: vec!["world".to_string()],
             keyword: vec![],
-            metadata: vec![],
+            metadata: empty_meta(),
         };
         let result = engine
             .call("echo", &args, ShortcodeCallContext::Inline)
@@ -851,7 +967,7 @@ return {
         let args = ShortcodeArgs {
             positional: vec![],
             keyword: vec![("greeting".to_string(), "howdy".to_string())],
-            metadata: vec![],
+            metadata: empty_meta(),
         };
         let result = engine
             .call("kwarg", &args, ShortcodeCallContext::Inline)
@@ -859,6 +975,44 @@ return {
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "howdy"),
+            other => panic!("Expected Text, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_raw_args_includes_keyword_values() {
+        // TS Quarto compat: raw_args carries positional AND keyword values
+        // (names stripped), so `{{< v src k=fast >}}` yields raw_args of
+        // {"src", "fast"}. Q1's video.lua relies on raw_args[1] as the src
+        // fallback.
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "raw.lua",
+            r#"
+return {
+    raw = function(args, kwargs, meta, raw_args, context)
+        return tostring(#raw_args) .. ":" .. table.concat(raw_args, ",")
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).await.unwrap();
+
+        let args = ShortcodeArgs {
+            positional: vec!["src".to_string()],
+            keyword: vec![("k".to_string(), "fast".to_string())],
+            metadata: empty_meta(),
+        };
+        let result = engine
+            .call("raw", &args, ShortcodeCallContext::Inline)
+            .await
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => assert_eq!(s, "2:src,fast"),
             other => panic!("Expected Text, got {:?}", other),
         }
     }
@@ -885,7 +1039,7 @@ return {
         let args = ShortcodeArgs {
             positional: vec![],
             keyword: vec![],
-            metadata: vec![("title".to_string(), "My Doc".to_string())],
+            metadata: meta_from_pairs(&[("title", "My Doc")]),
         };
         let result = engine
             .call("meta_reader", &args, ShortcodeCallContext::Inline)
@@ -1008,7 +1162,7 @@ return {
         let args = ShortcodeArgs {
             positional: vec!["test-value".to_string()],
             keyword: vec![],
-            metadata: vec![],
+            metadata: empty_meta(),
         };
         let result = engine
             .call("readarg", &args, ShortcodeCallContext::Inline)
@@ -1204,7 +1358,7 @@ return {
         let args = ShortcodeArgs {
             positional: vec!["5".to_string()],
             keyword: vec![],
-            metadata: vec![],
+            metadata: empty_meta(),
         };
         let result = engine
             .call("stringify_arg", &args, ShortcodeCallContext::Inline)
@@ -1238,7 +1392,7 @@ return {
         let args = ShortcodeArgs {
             positional: vec!["hello".to_string()],
             keyword: vec![("key".to_string(), "val".to_string())],
-            metadata: vec![],
+            metadata: empty_meta(),
         };
         let result = engine
             .call("count_args", &args, ShortcodeCallContext::Inline)
@@ -1319,7 +1473,7 @@ return {
         let args = ShortcodeArgs {
             positional: vec!["3".to_string()],
             keyword: vec![],
-            metadata: vec![],
+            metadata: empty_meta(),
         };
         let result = engine
             .call("lipsum_pattern", &args, ShortcodeCallContext::Inline)
@@ -1358,7 +1512,7 @@ return {
         let args = ShortcodeArgs {
             positional: vec!["icon-name".to_string()],
             keyword: vec![("title".to_string(), "My Icon".to_string())],
-            metadata: vec![],
+            metadata: empty_meta(),
         };
         let result = engine
             .call("fa", &args, ShortcodeCallContext::Inline)
@@ -1403,7 +1557,7 @@ return {
         let args_with = ShortcodeArgs {
             positional: vec![],
             keyword: vec![("width".to_string(), "800".to_string())],
-            metadata: vec![],
+            metadata: empty_meta(),
         };
         let result = engine
             .call("unsplash", &args_with, ShortcodeCallContext::Inline)
@@ -1418,7 +1572,7 @@ return {
         let args_without = ShortcodeArgs {
             positional: vec![],
             keyword: vec![],
-            metadata: vec![],
+            metadata: empty_meta(),
         };
         let result = engine
             .call("unsplash", &args_without, ShortcodeCallContext::Inline)
@@ -1460,10 +1614,7 @@ return {
         let args = ShortcodeArgs {
             positional: vec![],
             keyword: vec![],
-            metadata: vec![
-                ("title".to_string(), "My Document".to_string()),
-                ("author".to_string(), "Jane".to_string()),
-            ],
+            metadata: meta_from_pairs(&[("title", "My Document"), ("author", "Jane")]),
         };
         let result = engine
             .call("meta_sc", &args, ShortcodeCallContext::Inline)
@@ -1502,7 +1653,7 @@ return {
         let args = ShortcodeArgs {
             positional: vec!["hello".to_string(), "world".to_string()],
             keyword: vec![],
-            metadata: vec![],
+            metadata: empty_meta(),
         };
         let result = engine
             .call("raw", &args, ShortcodeCallContext::Inline)

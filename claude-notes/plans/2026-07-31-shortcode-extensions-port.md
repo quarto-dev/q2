@@ -209,14 +209,20 @@ The deliverable is a fixture suite that encodes the Q1 contract, so every later
 phase has failing tests to turn green, and so we discover *actual* Q2 behavior
 where the study only has static reads.
 
-- [ ] Port Q1's smoke fixtures (`external-sources/quarto-cli/tests/docs/shortcodes/`
-      — `shorty.lua`, `custom.qmd`, the `?meta:…`/`?var:…` error expectations)
-      into local fixtures (copy, never reference `external-sources/` from tests).
-- [ ] Author a "contract extension" fixture exercising: table-return and
-      global-fn registration; dash-named shortcode; all five handler params;
-      kwargs missing-key → empty Inlines; `meta` dotted lookup incl. `\\.`
-      escape and 1-based array index; each return-value coercion row; both
-      escape forms; nested shortcode as arg and as kwarg value.
+- [x] Port Q1's smoke fixtures — `shorty.lua` + error_output ported as
+      `contract-doc-shortcodes` (passing; Q2 renders `[Shortcode Error
+      (shorty): error message]` instead of Q1's `?shorty:error message` —
+      accepted deviation, clearer text). `?var:` expectations wait for
+      Phase 4 var.
+- [x] Author contract fixtures (committed 08f29f89, passing):
+      `contract-table-return` (table-return registration, dash names,
+      block/inline context), `contract-global-fn`, `contract-return-coercions`
+      (string/Inline/Inlines/Block/Blocks/array), `contract-escape-braces`,
+      `contract-doc-shortcodes`. In-flight (failing = TDD targets, uncommitted):
+      `contract-args-kwargs` (raw_args), `contract-meta-dotted` (dotted
+      lookup), `contract-nested-arg`. Parked with `tests.run.skip`:
+      `contract-escape-comment` (grammar gap, decision pending — recommend
+      targeted Q-2-x diagnostic over porting the Hugo `/* */` form).
 - [ ] Integration tests driving the real binary path (`render_document_to_file`
       / `q2 render` on fixtures) — not `HtmlRenderConfig::default()` shortcuts.
 - [ ] Baseline probes (tests that *document* current behavior, marked
@@ -235,15 +241,12 @@ where the study only has static reads.
 
 ### Phase 1 — Extension loading: eager activation, Q1-compat intake, loud failures (D2, D3, gap row 3)
 
-- [ ] **Fix the name-keyed activation bug (gap row 3)** — need not land
-      first, but must land as part of this phase's work:
-      test with an extension whose shortcode name ≠ extension id (fixture:
-      a `quarto-tiers`-shaped extension contributing `tier`); replace the
-      `find_extension(&shortcode.name)` on-demand path with Q1's eager
-      semantics — on first shortcode dispatch, load every discovered
-      extension's `contributes.shortcodes` scripts into the engine, then
-      dispatch by registered handler name. Keep document-level laziness
-      (no Lua unless the doc contains shortcodes).
+- [x] **Fix the name-keyed activation bug (gap row 3)** — done, commit
+      08f29f89. `LuaEngineState` wraps engine + one-shot flag; eager load of
+      all extensions' scripts on first Lua-stage dispatch; D4 precedence
+      (doc `shortcodes:` < extensions in discovery order < Rust built-ins);
+      per-script load failures warn naming extension id + script path.
+      Verified end-to-end on connect-docs (`tier` renders, 0 warnings).
 - [ ] Tests: malformed `_extension.yml` (bad YAML, bad semver, empty
       contributes) → coded, source-mapped diagnostics; minimal Q1 manifest
       (no title/author) loads.

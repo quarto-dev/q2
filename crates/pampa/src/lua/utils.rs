@@ -800,6 +800,12 @@ fn stringify_value(value: &Value) -> Result<String> {
             Ok(result)
         }
         Value::String(s) => Ok(s.to_str()?.to_string()),
+        // Pandoc parity: stringify "converts booleans, numbers, and strings
+        // to their string value". Metadata booleans/numbers reach handlers
+        // as native Lua values, so these must not collapse to "".
+        Value::Boolean(b) => Ok(b.to_string()),
+        Value::Integer(i) => Ok(i.to_string()),
+        Value::Number(n) => Ok(n.to_string()),
         _ => Ok(String::new()),
     }
 }
@@ -952,6 +958,32 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_stringify_scalars() {
+        // Pandoc parity: booleans, numbers, and strings stringify to their
+        // string value (metadata scalars reach shortcode handlers as native
+        // Lua values).
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(false)")
+            .eval()
+            .unwrap();
+        assert_eq!(result, "false");
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(42)")
+            .eval()
+            .unwrap();
+        assert_eq!(result, "42");
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(2.5)")
+            .eval()
+            .unwrap();
+        assert_eq!(result, "2.5");
     }
 
     #[test]

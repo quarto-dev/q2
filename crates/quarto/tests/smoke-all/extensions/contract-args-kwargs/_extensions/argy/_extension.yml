@@ -1,0 +1,5 @@
+title: Argy
+author: Test
+contributes:
+  shortcodes:
+    - argy.lua

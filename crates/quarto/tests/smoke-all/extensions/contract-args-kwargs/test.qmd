@@ -1,0 +1,12 @@
+---
+title: args, kwargs, raw_args semantics
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["A1=hello;MODE=fast;MISSING=EMPTY;NRAW=2"]
+---
+
+{{< argy hello mode=fast >}}

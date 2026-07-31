@@ -1,0 +1,5 @@
+title: Metaget
+author: Test
+contributes:
+  shortcodes:
+    - metaget.lua

@@ -366,6 +366,20 @@ impl ShortcodeResolveTransform {
             return ShortcodeResult::Preserve;
         }
 
+        // Resolve nested shortcode arguments bottom-up (TS Quarto semantics):
+        // each `ShortcodeArg::Shortcode` is dispatched and its result
+        // stringified before the outer handler runs, so the outer handler
+        // sees a plain string argument.
+        let resolved_holder;
+        let shortcode = if has_nested_shortcode_args(shortcode) {
+            resolved_holder = self
+                .resolve_nested_args(shortcode, ctx, lua_engine, diagnostics)
+                .await;
+            &resolved_holder
+        } else {
+            shortcode
+        };
+
         // 1. Try built-in Rust handlers first
         for handler in &self.handlers {
             if handler.name() == shortcode.name {
@@ -425,6 +439,109 @@ impl ShortcodeResolveTransform {
             diagnostic,
         })
     }
+
+    /// Produce a copy of `shortcode` with every nested shortcode argument
+    /// dispatched and replaced by its stringified result.
+    ///
+    /// Mirrors TS Quarto's bottom-up traversal: the inner shortcode resolves
+    /// first (in inline context) and the outer handler receives the
+    /// stringified result as an ordinary string argument. An inner shortcode
+    /// that errors contributes an empty string (its diagnostic is still
+    /// emitted); an escaped inner shortcode contributes its literal
+    /// `{{< … >}}` text.
+    async fn resolve_nested_args(
+        &self,
+        shortcode: &Shortcode,
+        ctx: &ShortcodeContext<'_>,
+        lua_engine: &mut Option<LuaEngineState>,
+        diagnostics: &mut Vec<DiagnosticMessage>,
+    ) -> Shortcode {
+        let mut resolved = shortcode.clone();
+        for arg in resolved.positional_args.iter_mut() {
+            self.resolve_nested_arg(arg, ctx, lua_engine, diagnostics)
+                .await;
+        }
+        // The CST currently coerces keyword-argument values to strings, but
+        // the AST type permits nested shortcodes here; handle them the same
+        // way rather than silently dropping (see also the shortcode_to_span
+        // kv-arg hardening in pampa).
+        let keys: Vec<String> = resolved.keyword_args.keys().cloned().collect();
+        for key in keys {
+            if let Some(arg) = resolved.keyword_args.get_mut(&key) {
+                self.resolve_nested_arg(arg, ctx, lua_engine, diagnostics)
+                    .await;
+            }
+        }
+        resolved
+    }
+
+    /// Replace one `ShortcodeArg::Shortcode` with its stringified resolution.
+    async fn resolve_nested_arg(
+        &self,
+        arg: &mut ShortcodeArg,
+        ctx: &ShortcodeContext<'_>,
+        lua_engine: &mut Option<LuaEngineState>,
+        diagnostics: &mut Vec<DiagnosticMessage>,
+    ) {
+        let ShortcodeArg::Shortcode(inner) = arg else {
+            return;
+        };
+        let inner = inner.clone();
+        if inner.is_escaped {
+            if let Inline::Str(s) = shortcode_to_literal(&inner) {
+                *arg = ShortcodeArg::String(s.text);
+            }
+            return;
+        }
+        let inner_ctx = ShortcodeContext {
+            metadata: ctx.metadata,
+            source_info: &inner.source_info,
+        };
+        // Box the recursive call: dispatch_shortcode -> resolve_nested_args
+        // -> resolve_nested_arg -> dispatch_shortcode is async recursion.
+        let result = Box::pin(self.dispatch_shortcode(
+            &inner,
+            &inner_ctx,
+            ResolutionContext::Inline,
+            lua_engine,
+            diagnostics,
+        ))
+        .await;
+        let text = match result {
+            ShortcodeResult::Inlines(inlines) => {
+                crate::transforms::metadata_normalize::inlines_to_plain_text(&inlines)
+            }
+            ShortcodeResult::Blocks(blocks) => {
+                let inlines = flatten_blocks_to_inlines(&blocks, &inner.source_info);
+                crate::transforms::metadata_normalize::inlines_to_plain_text(&inlines)
+            }
+            ShortcodeResult::Error(error) => {
+                diagnostics.push(error.diagnostic);
+                String::new()
+            }
+            ShortcodeResult::Preserve => {
+                if let Inline::Str(s) = shortcode_to_literal(&inner) {
+                    s.text
+                } else {
+                    String::new()
+                }
+            }
+        };
+        *arg = ShortcodeArg::String(text);
+    }
+}
+
+/// Does this shortcode carry any nested shortcode arguments (positional or
+/// keyword)?
+fn has_nested_shortcode_args(shortcode: &Shortcode) -> bool {
+    shortcode
+        .positional_args
+        .iter()
+        .any(|a| matches!(a, ShortcodeArg::Shortcode(_)))
+        || shortcode
+            .keyword_args
+            .values()
+            .any(|a| matches!(a, ShortcodeArg::Shortcode(_)))
 }
 
 impl Default for ShortcodeResolveTransform {
@@ -490,35 +607,14 @@ fn shortcode_to_lua_args(
         })
         .collect();
 
-    // Extract top-level metadata as string key-value pairs for Lua.
-    //
-    // Forward scalars of every stringifiable kind, not just strings: a handler
-    // that gates on a boolean/numeric flag (e.g. the `video` shortcode reading
-    // `auto-stretch: false` to decide reveal stretching — bd-5b21rbaq) needs to
-    // see it. Booleans/ints are stringified ("false", "16"); string and
-    // PandocInlines scalars come through `as_plain_text()`. Map/array values
-    // remain dropped (no flat string form).
-    let meta_entries: Vec<(String, String)> = if let Some(entries) = metadata.as_map_entries() {
-        entries
-            .iter()
-            .filter_map(|entry| {
-                let v = &entry.value;
-                let s = v
-                    .as_bool()
-                    .map(|b| b.to_string())
-                    .or_else(|| v.as_int().map(|n| n.to_string()))
-                    .or_else(|| v.as_plain_text());
-                s.map(|s| (entry.key.clone(), s))
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-
+    // Forward the full metadata tree; pampa converts it to nested Lua tables
+    // with native scalar types (so a handler gating on a boolean/numeric flag
+    // — e.g. `video` reading `auto-stretch: false`, bd-5b21rbaq — sees the
+    // real value) plus Q1's dotted-string lookup fallback.
     pampa::lua::ShortcodeArgs {
         positional,
         keyword,
-        metadata: meta_entries,
+        metadata: metadata.clone(),
     }
 }
 
