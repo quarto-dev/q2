@@ -4,7 +4,7 @@ format: html
 _quarto:
   tests:
     run:
-      skip: "Known gap: Q1's {{</* */>}} comment-escape form is not in the qmd grammar (parse error). Pending decision on bd-540a976a (shortcode-extensions port, Phase 5); unskip when the grammar supports it."
+      skip: "Known gap: Q1's {{</* */>}} comment-escape form is not in the qmd grammar (parse error). Deferred to bd-kmo1pzc2 (Hugo interop question); unskip if that strand adds the escape form."
     html:
       noErrors: true
       ensureFileRegexMatches:

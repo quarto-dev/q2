@@ -343,7 +343,7 @@ All landed in commit 5af6fb18; full workspace green (10,819).
       commits 5d004a3c + 5af6fb18).
       (absorbed from deferred Phase 3): DONE, commit 4f2d2b50 — Q-16-6 when
       flattening loses all output; partial flattens stay silent (Q1 parity).
-- [ ] Decision pending (user): Q1's `{{</* … */>}}` comment-escape form —
+- [x] Decided 2026-07-31: deferred to strand bd-kmo1pzc2 (Hugo interop unclear;
       recommendation is a targeted Q-2-x parse diagnostic, not the syntax
       (fixture parked via tests.run.skip).
 
