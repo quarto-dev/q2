@@ -1,0 +1,16 @@
+---
+title: Pagebreak shortcode
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["page-break-after: always"]
+---
+
+Before.
+
+{{< pagebreak >}}
+
+After.

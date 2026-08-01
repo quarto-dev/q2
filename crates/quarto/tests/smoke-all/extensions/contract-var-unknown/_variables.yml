@@ -1,0 +1,4 @@
+simple: simple-value
+nested:
+  key: nested-value
+linky: "[VarLink](https://example.com/vartarget)"

@@ -1,0 +1,16 @@
+---
+title: Table-return registration, dash names, context
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["DASH-OK", "CTX-block", "CTX-inline"]
+---
+
+Inline dash: {{< dash-name >}}
+
+Inline context: {{< ctx >}} here.
+
+{{< ctx >}}

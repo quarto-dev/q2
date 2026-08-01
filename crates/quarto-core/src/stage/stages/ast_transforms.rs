@@ -141,12 +141,14 @@ impl PipelineStage for AstTransformsStage {
                     ctx.extensions.clone(),
                     ctx.runtime.clone(),
                     ctx.format.target_format.clone(),
+                    ctx.variables.clone(),
                 ),
                 _ => build_transform_pipeline(
                     shortcode_paths,
                     ctx.extensions.clone(),
                     ctx.runtime.clone(),
                     ctx.format.target_format.clone(),
+                    ctx.variables.clone(),
                 ),
             };
             &jit_pipeline

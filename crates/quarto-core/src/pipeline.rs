@@ -1176,6 +1176,7 @@ pub fn build_transform_pipeline(
     extensions: Vec<crate::extension::types::Extension>,
     runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
     target_format: String,
+    variables: Option<quarto_pandoc_types::ConfigValue>,
 ) -> TransformPipeline {
     let mut pipeline: TransformPipeline = TransformPipeline::new();
 
@@ -1199,6 +1200,7 @@ pub fn build_transform_pipeline(
         extensions,
         runtime.clone(),
         lua_format,
+        variables,
     )));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     // Date normalization (bd-gx9cic8z P4): resolves today/now/
@@ -1536,9 +1538,15 @@ pub fn build_q2_preview_transform_pipeline(
     extensions: Vec<crate::extension::types::Extension>,
     runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
     target_format: String,
+    variables: Option<quarto_pandoc_types::ConfigValue>,
 ) -> TransformPipeline {
-    let mut pipeline =
-        build_transform_pipeline(shortcode_paths, extensions, runtime, target_format);
+    let mut pipeline = build_transform_pipeline(
+        shortcode_paths,
+        extensions,
+        runtime,
+        target_format,
+        variables,
+    );
     pipeline.retain_excluding(Q2_PREVIEW_TRANSFORM_EXCLUDED);
     pipeline
 }
@@ -2695,7 +2703,7 @@ mod tests {
     #[test]
     fn q2_preview_transform_excluded_names_exist_in_html_pipeline() {
         let runtime = make_test_runtime();
-        let html = build_transform_pipeline(vec![], vec![], runtime, "html".to_string());
+        let html = build_transform_pipeline(vec![], vec![], runtime, "html".to_string(), None);
         let html_names: Vec<&str> = html.iter().map(|t| t.name()).collect();
 
         let unknown: Vec<&&str> = Q2_PREVIEW_TRANSFORM_EXCLUDED
@@ -3121,8 +3129,13 @@ mod tests {
     #[test]
     fn q2_preview_pipeline_includes_link_rewrite() {
         let runtime = make_test_runtime();
-        let pipeline =
-            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+        let pipeline = build_q2_preview_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "q2-preview".to_string(),
+            None,
+        );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
         assert!(
             names.contains(&"link-rewrite"),
@@ -3139,8 +3152,13 @@ mod tests {
     #[test]
     fn q2_preview_pipeline_includes_chrome_transforms() {
         let runtime = make_test_runtime();
-        let pipeline =
-            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+        let pipeline = build_q2_preview_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "q2-preview".to_string(),
+            None,
+        );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
         for required in [
             "navbar-render",
@@ -3186,7 +3204,7 @@ mod tests {
     #[test]
     fn html_pipeline_includes_code_block_decoration_transforms() {
         let runtime = make_test_runtime();
-        let pipeline = build_transform_pipeline(vec![], vec![], runtime, "html".to_string());
+        let pipeline = build_transform_pipeline(vec![], vec![], runtime, "html".to_string(), None);
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
 
         let gen_pos = names.iter().position(|&n| n == "code-block-generate");
@@ -3248,7 +3266,8 @@ mod tests {
         // covers them automatically.
         for format in ["html", "revealjs"] {
             let runtime = make_test_runtime();
-            let pipeline = build_transform_pipeline(vec![], vec![], runtime, format.to_string());
+            let pipeline =
+                build_transform_pipeline(vec![], vec![], runtime, format.to_string(), None);
             let steps: Vec<(&str, TransformPhase)> =
                 pipeline.iter().map(|t| (t.name(), t.phase())).collect();
 
@@ -3289,8 +3308,13 @@ mod tests {
     #[test]
     fn q2_preview_pipeline_includes_code_block_decoration_transforms() {
         let runtime = make_test_runtime();
-        let pipeline =
-            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+        let pipeline = build_q2_preview_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "q2-preview".to_string(),
+            None,
+        );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
         for required in ["code-block-generate", "code-block-render"] {
             assert!(
@@ -3309,7 +3333,8 @@ mod tests {
     fn mermaid_render_present_before_code_block_render() {
         for format in ["html", "revealjs"] {
             let runtime = make_test_runtime();
-            let pipeline = build_transform_pipeline(vec![], vec![], runtime, format.to_string());
+            let pipeline =
+                build_transform_pipeline(vec![], vec![], runtime, format.to_string(), None);
             let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
 
             let mermaid_pos = names.iter().position(|&n| n == "mermaid-render");
@@ -3335,8 +3360,13 @@ mod tests {
     fn q2_preview_pipeline_excludes_mermaid_render() {
         for format in ["q2-preview", "q2-slides"] {
             let runtime = make_test_runtime();
-            let pipeline =
-                build_q2_preview_transform_pipeline(vec![], vec![], runtime, format.to_string());
+            let pipeline = build_q2_preview_transform_pipeline(
+                vec![],
+                vec![],
+                runtime,
+                format.to_string(),
+                None,
+            );
             let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
             assert!(
                 !names.contains(&"mermaid-render"),
