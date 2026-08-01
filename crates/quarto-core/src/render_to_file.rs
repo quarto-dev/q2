@@ -125,6 +125,11 @@ pub struct RenderToFileOptions {
 /// Result of rendering a document to a file.
 #[derive(Debug)]
 pub struct RenderToFileResult {
+    /// Path to the input file this result was rendered from, as the
+    /// caller passed it. Carried so the render summary can attribute
+    /// per-page diagnostics to their page when coalescing repeated
+    /// emissions (bd-mg3ckvp7; the missing piece bd-9hlja recorded).
+    pub input_path: PathBuf,
     /// Path to the output file.
     pub output_path: PathBuf,
     /// Path to the resources directory (e.g., `document_files/`).
@@ -416,6 +421,7 @@ pub fn render_document_to_file(
 
     let resource_report = std::mem::take(&mut ctx.resource_report);
     Ok(RenderToFileResult {
+        input_path: input_path.to_path_buf(),
         output_path,
         resources_dir: resource_paths.resource_dir,
         render_output,

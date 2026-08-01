@@ -17,7 +17,7 @@ quarto-core = { path = "../quarto-core" }
 # NOTE: `quarto-error-catalog` is intentionally NOT a dependency here — the WASM
 # bridge never surfaces docs URLs, so installing the catalog would only bloat the
 # bundle past the PWA precache limit. See the comment in `init()` in src/lib.rs.
-quarto-error-reporting = { version = "0.1.0", features = ["json"] }
+quarto-error-reporting = { version = "0.2.1", features = ["json"] }
 # Direct dep so the test-only `quarto_highlight_for_test` export can
 # call the Registry-backed highlight path. Same crate quarto-core uses
 # via CodeHighlightStage — ensuring WASM tests exercise the same code
