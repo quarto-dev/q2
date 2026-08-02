@@ -1,0 +1,12 @@
+---
+title: Nested shortcode as argument
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["OUTER\\[IN\\]"]
+---
+
+{{< outer {{< inner >}} >}}

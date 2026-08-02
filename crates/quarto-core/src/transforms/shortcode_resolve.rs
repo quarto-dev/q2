@@ -52,7 +52,6 @@ use std::sync::Arc;
 use quarto_analysis::AnalysisContext;
 
 use crate::Result;
-use crate::extension::discover::find_extension;
 use crate::extension::types::Extension;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
@@ -151,12 +150,157 @@ impl ShortcodeHandler for MetaShortcodeHandler {
             Some(value) => ShortcodeResult::Inlines(config_value_to_inlines(value)),
             None => {
                 let diagnostic = DiagnosticMessageBuilder::warning("Unknown metadata key")
+                    .with_code("Q-16-5")
                     .problem(format!("Metadata key `{}` not found in document", key))
                     .add_hint("Check that the key exists in your YAML frontmatter")
                     .with_location(ctx.source_info.clone())
                     .build();
                 ShortcodeResult::Error(ShortcodeError {
                     key: format!("meta:{}", key),
+                    diagnostic,
+                })
+            }
+        }
+    }
+}
+
+/// Convert a scalar positional argument to its string form.
+fn positional_arg_to_string(arg: &ShortcodeArg) -> Option<String> {
+    match arg {
+        ShortcodeArg::String(s) => Some(s.clone()),
+        ShortcodeArg::Number(n) => Some(n.to_string()),
+        ShortcodeArg::Boolean(b) => Some(b.to_string()),
+        _ => None,
+    }
+}
+
+/// Built-in handler for `{{< env NAME >}}` / `{{< env NAME fallback >}}`.
+///
+/// Reads a process environment variable; the optional second positional
+/// argument is the value used when the variable is unset (Q1 1.5, #8316).
+/// Unset with no fallback is a Q-16-5 warning (Q1 warned and emitted
+/// `?env`). On wasm32 `std::env::var` always errs, so `env` behaves as
+/// uniformly-unset there.
+pub struct EnvShortcodeHandler;
+
+impl ShortcodeHandler for EnvShortcodeHandler {
+    fn name(&self) -> &str {
+        "env"
+    }
+
+    fn resolve(
+        &self,
+        shortcode: &Shortcode,
+        ctx: &ShortcodeContext,
+        _resolution_ctx: ResolutionContext,
+    ) -> ShortcodeResult {
+        let Some(name) = shortcode
+            .positional_args
+            .first()
+            .and_then(positional_arg_to_string)
+        else {
+            let diagnostic = DiagnosticMessageBuilder::warning("Missing shortcode argument")
+                .problem("The `env` shortcode requires an environment variable name")
+                .add_hint("Use `{{< env NAME >}}` or `{{< env NAME fallback >}}`")
+                .with_location(ctx.source_info.clone())
+                .build();
+            return ShortcodeResult::Error(ShortcodeError {
+                key: "env".to_string(),
+                diagnostic,
+            });
+        };
+
+        let value = std::env::var(&name).ok().or_else(|| {
+            shortcode
+                .positional_args
+                .get(1)
+                .and_then(positional_arg_to_string)
+        });
+
+        match value {
+            Some(text) => ShortcodeResult::Inlines(vec![Inline::Str(Str {
+                text,
+                source_info: ctx.source_info.clone(),
+            })]),
+            None => {
+                let diagnostic = DiagnosticMessageBuilder::warning("Environment variable not set")
+                    .with_code("Q-16-5")
+                    .problem(format!(
+                        "Environment variable `{}` is not set and no fallback was given",
+                        name
+                    ))
+                    .add_hint("Set the variable, or pass a fallback: `{{< env NAME fallback >}}`")
+                    .with_location(ctx.source_info.clone())
+                    .build();
+                ShortcodeResult::Error(ShortcodeError {
+                    key: format!("env:{}", name),
+                    diagnostic,
+                })
+            }
+        }
+    }
+}
+
+/// Built-in handler for `{{< var key >}}` — reads `_variables.yml` from the
+/// project root (project-scoped, like Q1). Values are parsed as document
+/// metadata, so markdown variable values render as markdown.
+pub struct VarShortcodeHandler {
+    variables: Option<ConfigValue>,
+}
+
+impl VarShortcodeHandler {
+    pub fn new(variables: Option<ConfigValue>) -> Self {
+        Self { variables }
+    }
+}
+
+impl ShortcodeHandler for VarShortcodeHandler {
+    fn name(&self) -> &str {
+        "var"
+    }
+
+    fn resolve(
+        &self,
+        shortcode: &Shortcode,
+        ctx: &ShortcodeContext,
+        _resolution_ctx: ResolutionContext,
+    ) -> ShortcodeResult {
+        let Some(key) = shortcode
+            .positional_args
+            .first()
+            .and_then(positional_arg_to_string)
+        else {
+            let diagnostic = DiagnosticMessageBuilder::warning("Missing shortcode argument")
+                .problem("The `var` shortcode requires a variable name")
+                .add_hint("Use `{{< var key >}}` where `key` is defined in `_variables.yml`")
+                .with_location(ctx.source_info.clone())
+                .build();
+            return ShortcodeResult::Error(ShortcodeError {
+                key: "var".to_string(),
+                diagnostic,
+            });
+        };
+
+        match self
+            .variables
+            .as_ref()
+            .and_then(|vars| vars.get_nested(&key))
+        {
+            Some(value) => ShortcodeResult::Inlines(config_value_to_inlines(value)),
+            None => {
+                let diagnostic = DiagnosticMessageBuilder::warning("Unknown variable")
+                    .with_code("Q-16-5")
+                    .problem(format!(
+                        "Variable `{}` is not defined in `_variables.yml`",
+                        key
+                    ))
+                    .add_hint(
+                        "Define the variable in `_variables.yml` next to `_quarto.yml` (variables are project-scoped)",
+                    )
+                    .with_location(ctx.source_info.clone())
+                    .build();
+                ShortcodeResult::Error(ShortcodeError {
+                    key: format!("var:{}", key),
                     diagnostic,
                 })
             }
@@ -260,6 +404,19 @@ fn flatten_blocks_to_inlines(blocks: &[Block], value_source: &SourceInfo) -> Vec
     result
 }
 
+/// Lua engine plus one-shot extension-activation state.
+///
+/// The `extensions_loaded` flag lives with the engine (not the transform) so a
+/// freshly created engine can never observe a stale "already loaded" marker
+/// from a previous document.
+pub struct LuaEngineState {
+    engine: pampa::lua::LuaShortcodeEngine,
+    /// Whether every discovered extension's `contributes.shortcodes` scripts
+    /// have been loaded into this engine. Set on the first dispatch that
+    /// reaches the Lua stage.
+    extensions_loaded: bool,
+}
+
 /// Transform that resolves shortcodes in the AST.
 ///
 /// Supports both built-in Rust handlers and Lua shortcode scripts loaded from
@@ -284,12 +441,22 @@ impl ShortcodeResolveTransform {
     /// Used in tests that don't need Lua support.
     pub fn new() -> Self {
         Self {
-            handlers: vec![Box::new(MetaShortcodeHandler)],
+            handlers: Self::builtin_handlers(None),
             lua_shortcode_paths: Vec::new(),
             extensions: Vec::new(),
             runtime: None,
             target_format: String::new(),
         }
+    }
+
+    /// The built-in Rust handlers: `meta`, `env`, and `var` (fed by the
+    /// project's `_variables.yml`, when present).
+    fn builtin_handlers(variables: Option<ConfigValue>) -> Vec<Box<dyn ShortcodeHandler>> {
+        vec![
+            Box::new(MetaShortcodeHandler),
+            Box::new(EnvShortcodeHandler),
+            Box::new(VarShortcodeHandler::new(variables)),
+        ]
     }
 
     /// Create a shortcode resolve transform with Lua support.
@@ -301,9 +468,10 @@ impl ShortcodeResolveTransform {
         extensions: Vec<Extension>,
         runtime: Arc<dyn SystemRuntime>,
         target_format: String,
+        variables: Option<ConfigValue>,
     ) -> Self {
         Self {
-            handlers: vec![Box::new(MetaShortcodeHandler)],
+            handlers: Self::builtin_handlers(variables),
             lua_shortcode_paths,
             extensions,
             runtime: Some(runtime),
@@ -328,10 +496,11 @@ impl ShortcodeResolveTransform {
         shortcode: &Shortcode,
         ctx: &ShortcodeContext<'_>,
         resolution_ctx: ResolutionContext,
-        lua_engine: &mut Option<pampa::lua::LuaShortcodeEngine>,
+        lua_engine: &mut Option<LuaEngineState>,
+        diagnostics: &mut Vec<DiagnosticMessage>,
     ) -> ShortcodeResult {
         let mut result = self
-            .dispatch_shortcode(shortcode, ctx, resolution_ctx, lua_engine)
+            .dispatch_shortcode(shortcode, ctx, resolution_ctx, lua_engine, diagnostics)
             .await;
         stamp_shortcode_anchors(&mut result, &shortcode.name, ctx.source_info);
         result
@@ -345,12 +514,27 @@ impl ShortcodeResolveTransform {
         shortcode: &Shortcode,
         ctx: &ShortcodeContext<'_>,
         resolution_ctx: ResolutionContext,
-        lua_engine: &mut Option<pampa::lua::LuaShortcodeEngine>,
+        lua_engine: &mut Option<LuaEngineState>,
+        diagnostics: &mut Vec<DiagnosticMessage>,
     ) -> ShortcodeResult {
         // Handle escaped shortcodes - preserve as literal text
         if shortcode.is_escaped {
             return ShortcodeResult::Preserve;
         }
+
+        // Resolve nested shortcode arguments bottom-up (TS Quarto semantics):
+        // each `ShortcodeArg::Shortcode` is dispatched and its result
+        // stringified before the outer handler runs, so the outer handler
+        // sees a plain string argument.
+        let resolved_holder;
+        let shortcode = if has_nested_shortcode_args(shortcode) {
+            resolved_holder = self
+                .resolve_nested_args(shortcode, ctx, lua_engine, diagnostics)
+                .await;
+            &resolved_holder
+        } else {
+            shortcode
+        };
 
         // 1. Try built-in Rust handlers first
         for handler in &self.handlers {
@@ -359,43 +543,63 @@ impl ShortcodeResolveTransform {
             }
         }
 
-        // 2. Try Lua engine (loaded handlers)
-        if let Some(engine) = lua_engine.as_mut() {
-            // If handler is already loaded, call it
-            if engine.has_handler(&shortcode.name) {
-                return dispatch_lua_shortcode(engine, shortcode, ctx, resolution_ctx).await;
-            }
-
-            // 3. Try name-based extension lookup (on-demand loading)
-            if let Some(ext) = find_extension(&shortcode.name, &self.extensions)
-                && !ext.contributes.shortcodes.is_empty()
-            {
-                for script_path in &ext.contributes.shortcodes {
-                    if let Err(e) = engine.load_script(script_path).await {
-                        let diagnostic =
-                            DiagnosticMessageBuilder::warning("Shortcode script error")
-                                .problem(format!(
-                                    "Failed to load shortcode script `{}`: {}",
-                                    script_path.display(),
-                                    e
-                                ))
-                                .with_location(ctx.source_info.clone())
-                                .build();
-                        return ShortcodeResult::Error(ShortcodeError {
-                            key: shortcode.name.clone(),
-                            diagnostic,
-                        });
+        // 2. Lua handlers. On the first dispatch that reaches the Lua stage,
+        //    eagerly load every discovered extension's shortcode scripts.
+        //    Handler names come from the Lua table keys (or harvested globals),
+        //    decoupled from the extension id — an extension named
+        //    `quarto-tiers` may contribute a shortcode named `tier`, so
+        //    lookup-by-extension-name cannot work. Load order determines
+        //    same-name precedence (later registration wins): document
+        //    `shortcodes:` scripts (loaded at engine creation), then
+        //    extensions in discovery order (built-ins first, more-local
+        //    last). Rust built-in handlers (step 1) always win.
+        if let Some(state) = lua_engine.as_mut() {
+            if !state.extensions_loaded {
+                state.extensions_loaded = true;
+                for ext in &self.extensions {
+                    for script_path in &ext.contributes.shortcodes {
+                        if let Err(e) = state.engine.load_script(script_path).await {
+                            // A broken script must not hijack the triggering
+                            // shortcode's result (it may resolve from another
+                            // extension); warn with the extension and script
+                            // named as the cause, and keep loading the rest.
+                            diagnostics.push(
+                                DiagnosticMessageBuilder::warning("Shortcode script error")
+                                    .with_code("Q-16-2")
+                                    .problem(format!(
+                                        "Failed to load shortcode script `{}` from extension `{}`: {}",
+                                        script_path.display(),
+                                        ext.id,
+                                        e
+                                    ))
+                                    .with_location(ctx.source_info.clone())
+                                    .build(),
+                            );
+                        }
                     }
                 }
-                // Retry after loading extension scripts
-                if engine.has_handler(&shortcode.name) {
-                    return dispatch_lua_shortcode(engine, shortcode, ctx, resolution_ctx).await;
-                }
             }
+            if state.engine.has_handler(&shortcode.name) {
+                return dispatch_lua_shortcode(&mut state.engine, shortcode, ctx, resolution_ctx)
+                    .await;
+            }
+        }
+
+        // Declared foreign shortcodes (e.g. Hugo's) pass through verbatim.
+        // Unlike Q1 — which silently passed through anything unknown — the
+        // passthrough set is an explicit declaration in metadata:
+        //
+        //   shortcode-passthrough: [ref, figure]
+        //
+        // (Plan D1: explicit declaration over inference; everything not
+        // declared gets a source-mapped Q-16-3 warning below.)
+        if passthrough_names(ctx.metadata).contains(&shortcode.name) {
+            return ShortcodeResult::Preserve;
         }
 
         // Unknown shortcode - create error with diagnostic
         let diagnostic = DiagnosticMessageBuilder::warning("Unknown shortcode")
+            .with_code("Q-16-3")
             .problem(format!("Shortcode `{}` is not recognized", shortcode.name))
             .add_hint("Check the shortcode name for typos")
             .with_location(ctx.source_info.clone())
@@ -405,6 +609,119 @@ impl ShortcodeResolveTransform {
             diagnostic,
         })
     }
+
+    /// Produce a copy of `shortcode` with every nested shortcode argument
+    /// dispatched and replaced by its stringified result.
+    ///
+    /// Mirrors TS Quarto's bottom-up traversal: the inner shortcode resolves
+    /// first (in inline context) and the outer handler receives the
+    /// stringified result as an ordinary string argument. An inner shortcode
+    /// that errors contributes an empty string (its diagnostic is still
+    /// emitted); an escaped inner shortcode contributes its literal
+    /// `{{< … >}}` text.
+    async fn resolve_nested_args(
+        &self,
+        shortcode: &Shortcode,
+        ctx: &ShortcodeContext<'_>,
+        lua_engine: &mut Option<LuaEngineState>,
+        diagnostics: &mut Vec<DiagnosticMessage>,
+    ) -> Shortcode {
+        let mut resolved = shortcode.clone();
+        for arg in resolved.positional_args.iter_mut() {
+            self.resolve_nested_arg(arg, ctx, lua_engine, diagnostics)
+                .await;
+        }
+        // The CST currently coerces keyword-argument values to strings, but
+        // the AST type permits nested shortcodes here; handle them the same
+        // way rather than silently dropping (see also the shortcode_to_span
+        // kv-arg hardening in pampa).
+        let keys: Vec<String> = resolved.keyword_args.keys().cloned().collect();
+        for key in keys {
+            if let Some(arg) = resolved.keyword_args.get_mut(&key) {
+                self.resolve_nested_arg(arg, ctx, lua_engine, diagnostics)
+                    .await;
+            }
+        }
+        resolved
+    }
+
+    /// Replace one `ShortcodeArg::Shortcode` with its stringified resolution.
+    async fn resolve_nested_arg(
+        &self,
+        arg: &mut ShortcodeArg,
+        ctx: &ShortcodeContext<'_>,
+        lua_engine: &mut Option<LuaEngineState>,
+        diagnostics: &mut Vec<DiagnosticMessage>,
+    ) {
+        let ShortcodeArg::Shortcode(inner) = arg else {
+            return;
+        };
+        let inner = inner.clone();
+        if inner.is_escaped {
+            if let Inline::Str(s) = shortcode_to_literal(&inner) {
+                *arg = ShortcodeArg::String(s.text);
+            }
+            return;
+        }
+        let inner_ctx = ShortcodeContext {
+            metadata: ctx.metadata,
+            source_info: &inner.source_info,
+        };
+        // Box the recursive call: dispatch_shortcode -> resolve_nested_args
+        // -> resolve_nested_arg -> dispatch_shortcode is async recursion.
+        let result = Box::pin(self.dispatch_shortcode(
+            &inner,
+            &inner_ctx,
+            ResolutionContext::Inline,
+            lua_engine,
+            diagnostics,
+        ))
+        .await;
+        let text = match result {
+            ShortcodeResult::Inlines(inlines) => {
+                crate::transforms::metadata_normalize::inlines_to_plain_text(&inlines)
+            }
+            ShortcodeResult::Blocks(blocks) => {
+                let inlines = flatten_blocks_to_inlines(&blocks, &inner.source_info);
+                crate::transforms::metadata_normalize::inlines_to_plain_text(&inlines)
+            }
+            ShortcodeResult::Error(error) => {
+                diagnostics.push(error.diagnostic);
+                String::new()
+            }
+            ShortcodeResult::Preserve => {
+                if let Inline::Str(s) = shortcode_to_literal(&inner) {
+                    s.text
+                } else {
+                    String::new()
+                }
+            }
+        };
+        *arg = ShortcodeArg::String(text);
+    }
+}
+
+/// Shortcode names declared for verbatim passthrough via the
+/// `shortcode-passthrough` metadata key.
+fn passthrough_names(metadata: &ConfigValue) -> Vec<String> {
+    metadata
+        .get("shortcode-passthrough")
+        .and_then(|v| v.as_array())
+        .map(|items| items.iter().filter_map(|i| i.as_plain_text()).collect())
+        .unwrap_or_default()
+}
+
+/// Does this shortcode carry any nested shortcode arguments (positional or
+/// keyword)?
+fn has_nested_shortcode_args(shortcode: &Shortcode) -> bool {
+    shortcode
+        .positional_args
+        .iter()
+        .any(|a| matches!(a, ShortcodeArg::Shortcode(_)))
+        || shortcode
+            .keyword_args
+            .values()
+            .any(|a| matches!(a, ShortcodeArg::Shortcode(_)))
 }
 
 impl Default for ShortcodeResolveTransform {
@@ -429,6 +746,7 @@ async fn dispatch_lua_shortcode(
         Some(result) => lua_result_to_shortcode_result(result, ctx.source_info),
         None => {
             let diagnostic = DiagnosticMessageBuilder::warning("Shortcode handler not found")
+                .with_code("Q-16-3")
                 .problem(format!(
                     "Lua handler for shortcode `{}` was not found",
                     shortcode.name
@@ -470,35 +788,14 @@ fn shortcode_to_lua_args(
         })
         .collect();
 
-    // Extract top-level metadata as string key-value pairs for Lua.
-    //
-    // Forward scalars of every stringifiable kind, not just strings: a handler
-    // that gates on a boolean/numeric flag (e.g. the `video` shortcode reading
-    // `auto-stretch: false` to decide reveal stretching — bd-5b21rbaq) needs to
-    // see it. Booleans/ints are stringified ("false", "16"); string and
-    // PandocInlines scalars come through `as_plain_text()`. Map/array values
-    // remain dropped (no flat string form).
-    let meta_entries: Vec<(String, String)> = if let Some(entries) = metadata.as_map_entries() {
-        entries
-            .iter()
-            .filter_map(|entry| {
-                let v = &entry.value;
-                let s = v
-                    .as_bool()
-                    .map(|b| b.to_string())
-                    .or_else(|| v.as_int().map(|n| n.to_string()))
-                    .or_else(|| v.as_plain_text());
-                s.map(|s| (entry.key.clone(), s))
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-
+    // Forward the full metadata tree; pampa converts it to nested Lua tables
+    // with native scalar types (so a handler gating on a boolean/numeric flag
+    // — e.g. `video` reading `auto-stretch: false`, bd-5b21rbaq — sees the
+    // real value) plus Q1's dotted-string lookup fallback.
     pampa::lua::ShortcodeArgs {
         positional,
         keyword,
-        metadata: meta_entries,
+        metadata: metadata.clone(),
     }
 }
 
@@ -830,11 +1127,7 @@ pub fn extract_shortcode_paths(meta: &ConfigValue, document_dir: &std::path::Pat
     };
     items
         .iter()
-        .filter_map(|item| match &item.value {
-            ConfigValueKind::Path(s) => Some(document_dir.join(s)),
-            ConfigValueKind::Scalar(_) => item.as_str().map(|s| document_dir.join(s)),
-            _ => None,
-        })
+        .filter_map(|item| item.as_plain_text().map(|s| document_dir.join(s)))
         .collect()
 }
 
@@ -861,11 +1154,14 @@ impl AstTransform for ShortcodeResolveTransform {
             let runtime = runtime.clone();
             match pampa::lua::LuaShortcodeEngine::new(&self.target_format, runtime) {
                 Ok(mut engine) => {
-                    // Load scripts from metadata-specified paths
+                    // Load scripts from metadata-specified paths. These load
+                    // before extension scripts, so a same-named extension
+                    // handler overrides a document-level one (Q1 precedence).
                     for path in &self.lua_shortcode_paths {
                         if let Err(e) = engine.load_script(path).await {
                             diagnostics.push(
                                 DiagnosticMessageBuilder::warning("Shortcode script error")
+                                    .with_code("Q-16-2")
                                     .problem(format!(
                                         "Failed to load shortcode script `{}`: {}",
                                         path.display(),
@@ -875,7 +1171,10 @@ impl AstTransform for ShortcodeResolveTransform {
                             );
                         }
                     }
-                    Some(engine)
+                    Some(LuaEngineState {
+                        engine,
+                        extensions_loaded: false,
+                    })
                 }
                 Err(e) => {
                     diagnostics.push(
@@ -901,7 +1200,8 @@ impl AstTransform for ShortcodeResolveTransform {
         .await;
 
         // Extract Lua-registered data before the engine is dropped
-        if let Some(engine) = lua_engine.as_mut() {
+        if let Some(state) = lua_engine.as_mut() {
+            let engine = &mut state.engine;
             // Extract diagnostics from quarto.warn()/quarto.error()
             match engine.extract_diagnostics() {
                 Ok(lua_diags) => diagnostics.extend(lua_diags),
@@ -942,6 +1242,22 @@ impl AstTransform for ShortcodeResolveTransform {
                         .build(),
                 ),
             }
+
+            // Surface handler-name shadowing as informational diagnostics
+            // (D4). Info level on purpose: overriding a built-in extension
+            // is a supported pattern, so this must not trip
+            // warnings-as-errors or the smoke suite's default assertion.
+            for event in engine.take_shadow_events() {
+                diagnostics.push(
+                    DiagnosticMessageBuilder::info("Shortcode handler shadowed")
+                        .with_code("Q-16-4")
+                        .problem(format!(
+                            "Shortcode handler `{}` from `{}` is overridden by `{}` (later registration wins)",
+                            event.handler, event.previous_script, event.new_script
+                        ))
+                        .build(),
+                );
+            }
         }
 
         // Add any diagnostics to the render context
@@ -965,7 +1281,7 @@ fn resolve_blocks<'a>(
     transform: &'a ShortcodeResolveTransform,
     metadata: &'a ConfigValue,
     diagnostics: &'a mut Vec<DiagnosticMessage>,
-    lua_engine: &'a mut Option<pampa::lua::LuaShortcodeEngine>,
+    lua_engine: &'a mut Option<LuaEngineState>,
 ) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
     Box::pin(async move {
         let mut i = 0;
@@ -978,7 +1294,13 @@ fn resolve_blocks<'a>(
                     source_info: &shortcode_owned.source_info,
                 };
                 match transform
-                    .resolve_shortcode(&shortcode_owned, &ctx, ResolutionContext::Block, lua_engine)
+                    .resolve_shortcode(
+                        &shortcode_owned,
+                        &ctx,
+                        ResolutionContext::Block,
+                        lua_engine,
+                        diagnostics,
+                    )
                     .await
                 {
                     ShortcodeResult::Blocks(new_blocks) => {
@@ -1051,7 +1373,7 @@ fn resolve_block<'a>(
     transform: &'a ShortcodeResolveTransform,
     metadata: &'a ConfigValue,
     diagnostics: &'a mut Vec<DiagnosticMessage>,
-    lua_engine: &'a mut Option<pampa::lua::LuaShortcodeEngine>,
+    lua_engine: &'a mut Option<LuaEngineState>,
 ) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
     Box::pin(async move {
         match block {
@@ -1210,7 +1532,7 @@ fn resolve_inlines<'a>(
     transform: &'a ShortcodeResolveTransform,
     metadata: &'a ConfigValue,
     diagnostics: &'a mut Vec<DiagnosticMessage>,
-    lua_engine: &'a mut Option<pampa::lua::LuaShortcodeEngine>,
+    lua_engine: &'a mut Option<LuaEngineState>,
 ) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
     Box::pin(async move {
         let mut i = 0;
@@ -1228,6 +1550,7 @@ fn resolve_inlines<'a>(
                         &shortcode_ctx,
                         ResolutionContext::Inline,
                         lua_engine,
+                        diagnostics,
                     )
                     .await
                 {
@@ -1241,8 +1564,30 @@ fn resolve_inlines<'a>(
                     }
                     ShortcodeResult::Blocks(blocks) => {
                         // Graceful degradation: flatten blocks to inlines
+                        // (Q1's blocks_to_inlines behavior). When flattening
+                        // loses ALL the output (e.g. video's raw HTML block
+                        // inside a sentence), that silent vanishing is
+                        // undiagnosable — warn with the position named
+                        // (bd-u145dg3y).
                         let replacement =
                             flatten_blocks_to_inlines(&blocks, &shortcode_owned.source_info);
+                        if replacement.is_empty() && !blocks.is_empty() {
+                            diagnostics.push(
+                                DiagnosticMessageBuilder::warning(
+                                    "Block shortcode output dropped in inline position",
+                                )
+                                .with_code("Q-16-6")
+                                .problem(format!(
+                                    "The `{}` shortcode produced block-level output that cannot be placed in inline position; it was dropped",
+                                    shortcode_owned.name
+                                ))
+                                .add_hint(
+                                    "Put the shortcode in its own paragraph, surrounded by blank lines",
+                                )
+                                .with_location(shortcode_owned.source_info.clone())
+                                .build(),
+                            );
+                        }
                         let replacement_len = replacement.len();
                         inlines.splice(i..=i, replacement);
                         i += replacement_len.max(1);
@@ -1288,7 +1633,7 @@ fn recurse_inline<'a>(
     transform: &'a ShortcodeResolveTransform,
     metadata: &'a ConfigValue,
     diagnostics: &'a mut Vec<DiagnosticMessage>,
-    lua_engine: &'a mut Option<pampa::lua::LuaShortcodeEngine>,
+    lua_engine: &'a mut Option<LuaEngineState>,
 ) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
     Box::pin(async move {
         match inline {
@@ -1554,6 +1899,108 @@ mod tests {
     }
 
     #[test]
+    fn test_env_shortcode_handler_set_and_fallback() {
+        let handler = EnvShortcodeHandler;
+        let meta = ConfigValue::new_map(vec![], dummy_source_info());
+
+        // Set variable wins over fallback.
+        // SAFETY: test-local variable name; nextest runs each test in its
+        // own process, so no cross-test env races.
+        unsafe { std::env::set_var("QUARTO_TEST_ENV_SC", "env-value") };
+        let shortcode = make_shortcode("env", vec!["QUARTO_TEST_ENV_SC", "fallback"]);
+        let ctx = ShortcodeContext {
+            metadata: &meta,
+            source_info: &shortcode.source_info,
+        };
+        match handler.resolve(&shortcode, &ctx, ResolutionContext::Inline) {
+            ShortcodeResult::Inlines(inlines) => {
+                let Inline::Str(s) = &inlines[0] else {
+                    panic!("expected Str");
+                };
+                assert_eq!(s.text, "env-value");
+            }
+            other => panic!("Expected Inlines, got {:?}", std::mem::discriminant(&other)),
+        }
+
+        // Unset variable falls back to the second positional arg (Q1 1.5).
+        let shortcode = make_shortcode("env", vec!["QUARTO_TEST_ENV_SC_UNSET", "fallback"]);
+        let ctx = ShortcodeContext {
+            metadata: &meta,
+            source_info: &shortcode.source_info,
+        };
+        match handler.resolve(&shortcode, &ctx, ResolutionContext::Inline) {
+            ShortcodeResult::Inlines(inlines) => {
+                let Inline::Str(s) = &inlines[0] else {
+                    panic!("expected Str");
+                };
+                assert_eq!(s.text, "fallback");
+            }
+            _ => panic!("Expected Inlines"),
+        }
+
+        // Unset without fallback: Q-16-5 error.
+        let shortcode = make_shortcode("env", vec!["QUARTO_TEST_ENV_SC_UNSET"]);
+        let ctx = ShortcodeContext {
+            metadata: &meta,
+            source_info: &shortcode.source_info,
+        };
+        match handler.resolve(&shortcode, &ctx, ResolutionContext::Inline) {
+            ShortcodeResult::Error(err) => {
+                assert_eq!(err.key, "env:QUARTO_TEST_ENV_SC_UNSET");
+                assert!(format!("{:?}", err.diagnostic).contains("Q-16-5"));
+            }
+            _ => panic!("Expected Error"),
+        }
+    }
+
+    #[test]
+    fn test_var_shortcode_handler_lookup_and_unknown() {
+        let vars = ConfigValue::new_map(
+            vec![make_map_entry(
+                "nested",
+                ConfigValue::new_map(
+                    vec![make_map_entry(
+                        "key",
+                        ConfigValue::new_string("nested-value", dummy_source_info()),
+                    )],
+                    dummy_source_info(),
+                ),
+            )],
+            dummy_source_info(),
+        );
+        let handler = VarShortcodeHandler::new(Some(vars));
+        let meta = ConfigValue::new_map(vec![], dummy_source_info());
+
+        let shortcode = make_shortcode("var", vec!["nested.key"]);
+        let ctx = ShortcodeContext {
+            metadata: &meta,
+            source_info: &shortcode.source_info,
+        };
+        match handler.resolve(&shortcode, &ctx, ResolutionContext::Inline) {
+            ShortcodeResult::Inlines(inlines) => {
+                let Inline::Str(s) = &inlines[0] else {
+                    panic!("expected Str");
+                };
+                assert_eq!(s.text, "nested-value");
+            }
+            _ => panic!("Expected Inlines"),
+        }
+
+        let shortcode = make_shortcode("var", vec!["missing"]);
+        let ctx = ShortcodeContext {
+            metadata: &meta,
+            source_info: &shortcode.source_info,
+        };
+        match handler.resolve(&shortcode, &ctx, ResolutionContext::Inline) {
+            ShortcodeResult::Error(err) => {
+                assert_eq!(err.key, "var:missing");
+                assert!(format!("{:?}", err.diagnostic).contains("Q-16-5"));
+            }
+            _ => panic!("Expected Error"),
+        }
+    }
+
+    #[test]
     fn test_meta_shortcode_handler_success() {
         let handler = MetaShortcodeHandler;
         let shortcode = make_shortcode("meta", vec!["title"]);
@@ -1651,7 +2098,13 @@ mod tests {
         };
 
         let result = transform
-            .resolve_shortcode(&shortcode, &ctx, ResolutionContext::Inline, &mut None)
+            .resolve_shortcode(
+                &shortcode,
+                &ctx,
+                ResolutionContext::Inline,
+                &mut None,
+                &mut Vec::new(),
+            )
             .await;
         assert!(matches!(result, ShortcodeResult::Preserve));
     }
@@ -1668,7 +2121,13 @@ mod tests {
         };
 
         let result = transform
-            .resolve_shortcode(&shortcode, &ctx, ResolutionContext::Inline, &mut None)
+            .resolve_shortcode(
+                &shortcode,
+                &ctx,
+                ResolutionContext::Inline,
+                &mut None,
+                &mut Vec::new(),
+            )
             .await;
         match result {
             ShortcodeResult::Error(err) => {
@@ -2050,8 +2509,8 @@ mod tests {
         fn make_extension(name: &str, shortcode_paths: Vec<PathBuf>) -> Extension {
             Extension {
                 id: ExtensionId::new(name),
-                title: name.to_string(),
-                author: String::new(),
+                title: Some(name.to_string()),
+                author: None,
                 version: None,
                 quarto_required: None,
                 path: PathBuf::from("/extensions").join(name),
@@ -2077,6 +2536,7 @@ mod tests {
                 Vec::new(),
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             let mut ast = Pandoc {
@@ -2125,6 +2585,7 @@ mod tests {
                 vec![ext],
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             let mut ast = Pandoc {
@@ -2171,6 +2632,7 @@ mod tests {
                 Vec::new(),
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             let meta = ConfigValue::new_map(
@@ -2217,6 +2679,7 @@ mod tests {
                 Vec::new(),
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             let mut ast = Pandoc {
@@ -2269,6 +2732,7 @@ mod tests {
                 vec![ext],
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             // Shortcode alone in Para → block context
@@ -2313,6 +2777,7 @@ mod tests {
                 Vec::new(),
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             let mut ast = Pandoc {
@@ -2367,6 +2832,7 @@ mod tests {
                 Vec::new(),
                 runtime,
                 "html".to_string(),
+                None,
             );
 
             let tok = token_si();

@@ -27,6 +27,11 @@ quarto-core = { workspace = true, features = ["clap"] }
 quarto-error-catalog.workspace = true
 quarto-error-reporting = { workspace = true, features = ["json"] }
 quarto-source-map.workspace = true
+# `q2 use brand` inspects _quarto.yml with the same source-located
+# parser the render pipeline uses, so "what counts as a brand
+# declaration" cannot drift from what actually takes effect.
+quarto-yaml.workspace = true
+yaml-rust2.workspace = true
 quarto-trace.workspace = true
 quarto-trace-server.workspace = true
 quarto-util.workspace = true
@@ -42,6 +47,12 @@ quarto-preview = { path = "../quarto-preview" }
 url = "2.5"
 quarto-publish.workspace = true
 quarto-sass.workspace = true
+# `q2 use brand` validates a fetched brand against the typed model
+# before writing anything, and walks it for referenced logo/font files.
+quarto-brand.workspace = true
+# Target resolution, download, and hardened archive extraction for
+# `q2 use brand <source>`. Shared with `q2 add` when that lands.
+quarto-source-fetch = { path = "../quarto-source-fetch" }
 quarto-test.workspace = true
 serde_yaml.workspace = true
 tempfile = "3"

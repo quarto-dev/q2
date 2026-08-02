@@ -22,6 +22,8 @@ import { from as automergeFrom, save as automergeSerialize } from '@automerge/au
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 import { IndexedDBStorageAdapter } from '@automerge/automerge-repo-storage-indexeddb';
 import { resolveSyncServerUrl } from '../utils/routing';
+import { fetchAuthMe } from './authService';
+import { CollectionConnectError } from './collectionConnectError';
 
 import type {
   ProjectSetDocument,
@@ -80,15 +82,45 @@ interface ServerConnection {
   /** Number of collection connections using this server. */
   refCount: number;
   /**
-   * Resolves once on the first peer connection and stays resolved. The
-   * repo's 'peer' event fires only on the initial connect, so we latch it
-   * here — otherwise the second collection sharing this server would wait
-   * forever for an event that never fires again.
+   * Number of currently-connected sync peers. Live, unlike a latched
+   * first-connect promise: it goes back to 0 when the websocket drops
+   * (e.g. the session expired and the reconnect loop is being rejected),
+   * so "is the sync connection alive right now?" has a truthful answer.
    */
-  ready: Promise<void>;
+  connectedPeers: number;
+  /**
+   * Resolve `true` as soon as a sync peer is connected (immediately if
+   * one already is), or `false` after `timeoutMs` with none. Without a
+   * timeout, wait for the next connection indefinitely.
+   */
+  whenConnected(timeoutMs?: number): Promise<boolean>;
 }
 
 type CollectionCreationPolicy = 'server-required' | 'local-first';
+
+/**
+ * Timeouts for the connectCollection find/classify path. Tests inject
+ * small values; production uses the defaults.
+ */
+export interface ConnectCollectionTuning {
+  /**
+   * Per-attempt bound on `repo.find()`. Without it a slow-to-serve doc
+   * waits out automerge-repo's ~60 s internal unavailable timeout (same
+   * rationale as quarto-sync-client's FIND_DOC_ATTEMPT_TIMEOUT_MS).
+   */
+  attemptTimeoutMs?: number;
+  /** How long to wait for a sync peer before classifying the failure. */
+  connectWaitMs?: number;
+  /** After a peer is present, how long to wait for the document to
+   * arrive before declaring it not-found on the server. */
+  docWaitMs?: number;
+}
+
+const DEFAULT_CONNECT_TUNING: Required<ConnectCollectionTuning> = {
+  attemptTimeoutMs: 5000,
+  connectWaitMs: 5000,
+  docWaitMs: 5000,
+};
 
 // ============================================================================
 // Internal State
@@ -104,6 +136,117 @@ const connections = new Map<string, CollectionConnection>();
 let onProjectsChange: ProjectsChangeHandler | null = null;
 let onCollectionsChange: CollectionsChangeHandler | null = null;
 let onConnectionChange: ConnectionChangeHandler | null = null;
+
+// ============================================================================
+// Debug snapshot (quartoDebug.am, bd-q93tkglb)
+// ============================================================================
+
+/**
+ * Structural view of a Repo as the debug snapshot needs it. The real
+ * `Repo` satisfies this (PeerId is a branded string); tests fabricate it.
+ */
+export interface DebugRepoLike {
+  peerId: string;
+  peers: readonly string[];
+}
+
+/** Structural view of a collection connection for the debug snapshot. */
+export interface DebugCollectionConnectionLike {
+  docId: string;
+  syncServer: string;
+  handle: {
+    state: string;
+    heads(): readonly string[];
+    doc(): unknown;
+  };
+}
+
+export interface ProjectSetServerDebug {
+  url: string;
+  peerId: string;
+  connectedPeers: string[];
+  refCount: number;
+}
+
+export interface ProjectSetCollectionDebug {
+  docId: string;
+  syncServer: string;
+  name: string | undefined;
+  isRoot: boolean;
+  entryCount: number;
+  handleState: string;
+  heads: string[] | null;
+}
+
+/** Read-only, JSON-serializable view of this service's connections. */
+export interface ProjectSetDebugSnapshot {
+  servers: ProjectSetServerDebug[];
+  collections: ProjectSetCollectionDebug[];
+}
+
+/**
+ * Pure mapping from the service's internal maps to the debug snapshot.
+ * Exported so tests can drive it with fabricated repos/handles; the
+ * stateful shell is {@link getProjectSetDebugSnapshot}.
+ */
+export function buildProjectSetDebugSnapshot(
+  serverMap: ReadonlyMap<string, { repo: DebugRepoLike; refCount: number }>,
+  connectionMap: ReadonlyMap<string, DebugCollectionConnectionLike>,
+  rootDocId: string | null,
+): ProjectSetDebugSnapshot {
+  const serverList: ProjectSetServerDebug[] = [];
+  for (const [url, server] of serverMap) {
+    serverList.push({
+      url,
+      peerId: server.repo.peerId,
+      connectedPeers: [...server.repo.peers],
+      refCount: server.refCount,
+    });
+  }
+
+  const collectionList: ProjectSetCollectionDebug[] = [];
+  for (const conn of connectionMap.values()) {
+    const ready = conn.handle.state === 'ready';
+    const doc = ready
+      ? (conn.handle.doc() as { name?: string; projects?: Record<string, unknown> } | undefined)
+      : undefined;
+    collectionList.push({
+      docId: conn.docId,
+      syncServer: conn.syncServer,
+      name: doc?.name,
+      isRoot: conn.docId === rootDocId,
+      entryCount: doc?.projects ? Object.keys(doc.projects).length : 0,
+      handleState: conn.handle.state,
+      heads: ready ? [...conn.handle.heads()] : null,
+    });
+  }
+
+  return { servers: serverList, collections: collectionList };
+}
+
+/**
+ * Live DocHandle for a connected collection (keyed by bare doc id), or
+ * null when that collection is not connected. Debug accessor for
+ * `quartoDebug.am` (bd-q93tkglb) — observation only.
+ */
+export function getCollectionHandle(
+  collectionDocId: string,
+): DocHandle<ProjectSetDocument> | null {
+  return connections.get(collectionDocId)?.handle ?? null;
+}
+
+/**
+ * Read-only, JSON-serializable snapshot of the project-set service's
+ * live server + collection connections, for the in-context debug API
+ * `quartoDebug.am` (bd-q93tkglb). Observation only.
+ */
+export function getProjectSetDebugSnapshot(): ProjectSetDebugSnapshot {
+  return buildProjectSetDebugSnapshot(
+    servers,
+    connections,
+    rootConnection()?.docId ?? null,
+  );
+}
 
 // ============================================================================
 // Event Handlers
@@ -173,20 +316,11 @@ function notifyChange(): void {
 }
 
 /**
- * Race a server's latched readiness against a timeout.
- * @returns true if a peer connected within the timeout, false otherwise.
- */
-function awaitServerReady(server: ServerConnection, timeoutMs: number): Promise<boolean> {
-  return Promise.race([
-    server.ready.then(() => true),
-    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
-  ]);
-}
-
-/**
- * Get or create the shared Repo for a sync server. Creation latches the
- * first 'peer' event into `server.ready`, so every collection on the
- * server can await readiness regardless of connection order.
+ * Get or create the shared Repo for a sync server. The connection keeps
+ * a live count of connected sync peers ('peer' / 'peer-disconnected'
+ * re-fire across websocket reconnects), so every collection on the
+ * server can wait for — or truthfully check — connectivity regardless
+ * of connection order.
  */
 function acquireServer(syncServerUrl: string): ServerConnection {
   const resolved = resolveSyncServerUrl(syncServerUrl);
@@ -197,10 +331,37 @@ function acquireServer(syncServerUrl: string): ServerConnection {
       network: [wsAdapter],
       storage: new IndexedDBStorageAdapter(),
     });
-    const ready = new Promise<void>((resolve) => {
-      repo.networkSubsystem.on('peer', () => resolve());
+    const conn: ServerConnection = {
+      repo,
+      wsAdapter,
+      refCount: 0,
+      connectedPeers: 0,
+      whenConnected(timeoutMs?: number): Promise<boolean> {
+        if (conn.connectedPeers > 0) return Promise.resolve(true);
+        return new Promise((resolve) => {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const onPeer = () => {
+            if (timer !== undefined) clearTimeout(timer);
+            repo.networkSubsystem.off('peer', onPeer);
+            resolve(true);
+          };
+          if (timeoutMs !== undefined) {
+            timer = setTimeout(() => {
+              repo.networkSubsystem.off('peer', onPeer);
+              resolve(false);
+            }, timeoutMs);
+          }
+          repo.networkSubsystem.on('peer', onPeer);
+        });
+      },
+    };
+    repo.networkSubsystem.on('peer', () => {
+      conn.connectedPeers += 1;
     });
-    server = { repo, wsAdapter, refCount: 0, ready };
+    repo.networkSubsystem.on('peer-disconnected', () => {
+      conn.connectedPeers = Math.max(0, conn.connectedPeers - 1);
+    });
+    server = conn;
     servers.set(resolved, server);
   }
   server.refCount++;
@@ -223,36 +384,152 @@ function releaseServer(syncServerUrl: string): void {
 // ============================================================================
 
 /**
+ * True for the retriable failure shapes of `repo.find()`: the bare
+ * "Document <id> is unavailable" rejection and our own AbortSignal
+ * timeout. Same predicate family as quarto-sync-client's findDoc
+ * (bd-jit6pdwq).
+ */
+function isRetriableFindError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/unavailable/i.test(message)) return true;
+  if (!(err instanceof Error)) return false;
+  return (
+    err.name === 'TimeoutError' ||
+    err.name === 'AbortError' ||
+    /\baborted?\b|timed?\s*out/i.test(err.message)
+  );
+}
+
+/** Race a handle's READY transition against a timeout. */
+function raceHandleReady(
+  handle: DocHandle<ProjectSetDocument>,
+  timeoutMs: number,
+): Promise<boolean> {
+  return Promise.race([
+    handle
+      .whenReady()
+      .then(() => true)
+      .catch(() => false),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+  ]);
+}
+
+/**
+ * Classify a connect failure when no sync peer could be established.
+ * Browsers hide the HTTP status of a failed websocket upgrade (a 401
+ * from an expired session looks identical to a dropped network), so we
+ * disambiguate out-of-band via GET /auth/me — the same trick as
+ * useAuthProbe (bd-3o8zmz46). In auth-disabled builds (no
+ * VITE_GOOGLE_CLIENT_ID) /auth/me always 401s, so the auth-expired
+ * verdict is only available when auth is actually on.
+ */
+async function classifyDisconnected(
+  docId: string,
+  cause: unknown,
+): Promise<CollectionConnectError> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return new CollectionConnectError('offline', docId, cause);
+  }
+  const authEnabled = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
+  try {
+    const me = await fetchAuthMe();
+    if (me === null && authEnabled) {
+      return new CollectionConnectError('auth-expired', docId, cause);
+    }
+    return new CollectionConnectError('sync-unreachable', docId, cause);
+  } catch {
+    return new CollectionConnectError('offline', docId, cause);
+  }
+}
+
+/**
+ * Find a collection document, classifying failures (bd-tux4m6od).
+ *
+ * `repo.find()` resolves from local storage without the network; when
+ * the doc isn't cached it asks connected sync peers — and rejects with
+ * the bare "unavailable" both when the server lacks the doc AND when no
+ * peer was connected yet. The websocket adapter force-marks itself
+ * ready 1 s after it starts connecting, so any handshake slower than
+ * that (or one rejected with 401) turned into an instant, misleading
+ * "Document <id> is unavailable".
+ *
+ * Strategy: try once (bounded); on a retriable failure wait for a live
+ * peer (bounded) — automerge-repo re-requests requested/unavailable
+ * docs from newly-added peers (CollectionSynchronizer.addPeer →
+ * beginSync), so a late-arriving doc still lands — then classify what
+ * remains: no peer → auth-expired / offline / sync-unreachable via the
+ * /auth/me probe; live peer but no doc → not-found.
+ */
+async function findCollectionDoc(
+  server: ServerConnection,
+  docId: DocumentId,
+  tuning: Required<ConnectCollectionTuning>,
+): Promise<DocHandle<ProjectSetDocument>> {
+  let firstError: unknown;
+  try {
+    return await server.repo.find<ProjectSetDocument>(docId, {
+      signal: AbortSignal.timeout(tuning.attemptTimeoutMs),
+    });
+  } catch (err) {
+    firstError = err;
+  }
+  if (!isRetriableFindError(firstError)) {
+    throw new CollectionConnectError('unknown', docId, firstError);
+  }
+
+  if (server.connectedPeers === 0) {
+    const connected = await server.whenConnected(tuning.connectWaitMs);
+    if (!connected) {
+      onConnectionChange?.(false);
+      throw await classifyDisconnected(docId, firstError);
+    }
+  }
+
+  // A sync peer is connected; give the re-request a bounded window.
+  let handle: DocHandle<ProjectSetDocument>;
+  try {
+    handle = await server.repo.find<ProjectSetDocument>(docId, {
+      allowableStates: ['ready', 'unavailable'],
+      signal: AbortSignal.timeout(tuning.docWaitMs),
+    });
+  } catch (err) {
+    // Stuck in 'requesting' past the deadline with a live peer: the
+    // server is connected but not answering.
+    throw new CollectionConnectError(
+      isRetriableFindError(err) ? 'sync-unreachable' : 'unknown',
+      docId,
+      err,
+    );
+  }
+  if (handle.state === 'ready') return handle;
+  if (await raceHandleReady(handle, tuning.docWaitMs)) return handle;
+  throw new CollectionConnectError('not-found', docId, firstError);
+}
+
+/**
  * Connect to one collection document. Resolves from local cache when
  * available (background-syncing after), otherwise waits for the server.
- * Idempotent per doc id.
+ * Idempotent per doc id. Failures reject with CollectionConnectError
+ * so callers can present an actionable message (bd-tux4m6od).
  */
 export async function connectCollection(
   pointer: CollectionPointerEntry,
+  tuning?: ConnectCollectionTuning,
 ): Promise<CollectionSnapshot> {
   const existing = connections.get(pointer.projectSetDocId);
   if (existing) return snapshotOf(existing);
 
+  const resolvedTuning = { ...DEFAULT_CONNECT_TUNING, ...tuning };
   const server = acquireServer(pointer.syncServer);
   try {
     const docId = pointer.projectSetDocId as DocumentId;
-    const handle = await server.repo.find<ProjectSetDocument>(docId);
+    const handle = await findCollectionDoc(server, docId, resolvedTuning);
 
-    if (!handle.doc()) {
-      // No local cache — wait for the network before declaring the doc.
-      const isOnline = await awaitServerReady(server, 5000);
-      onConnectionChange?.(isOnline);
-      await handle.whenReady();
-      if (!handle.doc()) {
-        throw new Error(
-          isOnline
-            ? 'Failed to load collection document'
-            : 'Collection not found in local storage. Connect online first to sync.',
-        );
-      }
-    } else {
-      awaitServerReady(server, 5000).then((online) => onConnectionChange?.(online));
-    }
+    // Report connection state in the background: cache hits resolve
+    // before the websocket has finished connecting.
+    void server
+      .whenConnected(resolvedTuning.connectWaitMs)
+      .then((online) => onConnectionChange?.(online));
 
     const onChange = () => notifyChange();
     handle.on('change', onChange);
@@ -301,7 +578,7 @@ async function createCollectionDocument(
     if (policy === 'server-required') {
       // Shared collections require a peer so callers know the document has
       // reached the configured server before they publish its pointer.
-      if (!(await awaitServerReady(server, 10000))) {
+      if (!(await server.whenConnected(10000))) {
         throw new Error(
           'Could not reach sync server. Please check your connection and try again.',
         );
@@ -312,7 +589,7 @@ async function createCollectionDocument(
       // keeps reconnecting, and the Repo will announce this handle when its
       // first peer eventually arrives.
       onConnectionChange?.(false);
-      void server.ready.then(() => onConnectionChange?.(true));
+      void server.whenConnected().then(() => onConnectionChange?.(true));
     }
 
     const initial = {

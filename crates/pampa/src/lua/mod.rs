@@ -47,5 +47,6 @@ pub use runtime::NativeRuntime;
 pub use runtime::{RuntimeError, RuntimeResult, SystemRuntime};
 #[allow(unused_imports)]
 pub use shortcode::{
-    LuaShortcodeEngine, LuaShortcodeError, LuaShortcodeResult, ShortcodeArgs, ShortcodeCallContext,
+    LuaShortcodeEngine, LuaShortcodeError, LuaShortcodeResult, ShadowEvent, ShortcodeArgs,
+    ShortcodeCallContext,
 };

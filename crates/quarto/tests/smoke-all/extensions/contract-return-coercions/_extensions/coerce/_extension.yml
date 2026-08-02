@@ -1,0 +1,5 @@
+title: Coerce
+author: Test
+contributes:
+  shortcodes:
+    - coerce.lua

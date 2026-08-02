@@ -11,6 +11,7 @@
 
 import { useState, useEffect } from 'react';
 import type { CollectionsStatus } from '../hooks/useCollectionSets';
+import { CollectionConnectError } from '../services/collectionConnectError';
 import type { UserSettings } from '../services/storage/types';
 import * as userSettingsService from '../services/userSettings';
 import type { JoinCollectionRoute } from '../utils/routing';
@@ -37,14 +38,33 @@ interface Props {
   onSubscribe: (collectionDocId: string, syncServer: string) => Promise<void>;
   /** Navigate home once the join completes. */
   onDone: () => void;
+  /**
+   * Recover from an expired session. Defaults to a page reload:
+   * main.tsx saves the current hash (this join route) before React
+   * mounts, the login screen appears, and the post-auth restore brings
+   * the user straight back here.
+   */
+  onSignInAgain?: () => void;
 }
 
-export default function JoinCollectionLanding({ route, status, onSubscribe, onDone }: Props) {
+/** Join failure presented to the user: message plus recovery affordance. */
+interface JoinError {
+  message: string;
+  canSignInAgain: boolean;
+}
+
+export default function JoinCollectionLanding({
+  route,
+  status,
+  onSubscribe,
+  onDone,
+  onSignInAgain = () => window.location.reload(),
+}: Props) {
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
   const [name, setName] = useState('');
   const [color, setColor] = useState(COLOR_PALETTE[0]);
   const [joining, setJoining] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<JoinError | null>(null);
 
   useEffect(() => {
     userSettingsService.getUserIdentity().then((s) => {
@@ -71,7 +91,14 @@ export default function JoinCollectionLanding({ route, status, onSubscribe, onDo
       onDone();
     } catch (err) {
       console.error('Join failed:', err);
-      setError(err instanceof Error ? err.message : 'Could not join the collection.');
+      // CollectionConnectError carries user-facing copy classified by
+      // failure mode (bd-tux4m6od); anything else falls back to its
+      // own message.
+      setError({
+        message: err instanceof Error ? err.message : 'Could not join the collection.',
+        canSignInAgain:
+          err instanceof CollectionConnectError && err.kind === 'auth-expired',
+      });
     } finally {
       setJoining(false);
     }
@@ -88,7 +115,16 @@ export default function JoinCollectionLanding({ route, status, onSubscribe, onDo
           <p className="ph-join-sub">
             A shared collection of Quarto projects — its contents sync to you when you join.
           </p>
-          {error && <div className="ph-error inline">{error}</div>}
+          {error && (
+            <div className="ph-error inline">
+              {error.message}
+              {error.canSignInAgain && (
+                <button className="ph-btn ph-error-action" onClick={onSignInAgain}>
+                  Sign in again
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="ph-join-identity">
             <div className="ph-field-label">How you'll appear to the team</div>

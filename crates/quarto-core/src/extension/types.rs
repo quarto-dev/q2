@@ -51,11 +51,15 @@ impl fmt::Display for ExtensionId {
 }
 
 /// A parsed and resolved Quarto extension.
+///
+/// Q1-compat intake: only `contributes` is structurally required in
+/// `_extension.yml`; `title`/`author` are optional metadata (real Q1
+/// extensions omit them — bd-8b0af414).
 #[derive(Debug, Clone)]
 pub struct Extension {
     pub id: ExtensionId,
-    pub title: String,
-    pub author: String,
+    pub title: Option<String>,
+    pub author: Option<String>,
     pub version: Option<String>,
     pub quarto_required: Option<String>,
     /// Absolute path to the extension directory.

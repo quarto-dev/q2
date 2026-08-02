@@ -1,0 +1,5 @@
+title: Echoer
+author: Test
+contributes:
+  shortcodes:
+    - echoer.lua

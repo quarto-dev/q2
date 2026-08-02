@@ -19,7 +19,9 @@ import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
 import type { BlockNode } from '../framework/types';
 import type { PreviewNodeEditPayload } from '../types/diagnostic';
 import { previewRegistry, PreviewContext } from '.';
+import type { CommentsMode } from './PreviewContext';
 import { buildSourceIndex, serializeSourceEntry } from './sourceIndex';
+import { stripSourceInfoFields } from './stripSourceInfoFields';
 import type { ResolvedSource } from './sourceIndex';
 import { outerBlockForAnchorR0, refocusTargetForAnchorR0, findReanchorCandidate, enumerateOuterBlocks, captureEditTarget, measureBlockBox, seedForRange, snapshotOuterBlockGeometry, isDirty } from './outerBlocks';
 import { buildByteLineMap } from '../utils/byteLineMap';
@@ -155,6 +157,8 @@ export interface PreviewRootProps {
     untransformedAstJson?: string | null;
     /** Globally disable the edit surface (bd-ov4gqk3m). */
     editingDisabled?: boolean;
+    /** Comment-bubble display mode ('expand' | 'show' | 'hide'). */
+    commentsMode?: CommentsMode;
     /**
      * P3.2: nesting-cursor mode for nested blocks. When true, the context
      * exposes nesting-cursor behaviour. Default-off (undefined/false).
@@ -1497,10 +1501,11 @@ export function PreviewRoot(props: PreviewRootProps) {
     };
 
     // commitSubtreeEdit: send a subtree-channel PreviewNodeEditPayload (Plan 2b).
+    // stripSourceInfoFields removes every pool-index-carrying sidecar key
+    // (`s`, `a`, `targetS`, …) — a surviving index caused
+    // InvalidSourceInfoRef on any subtree containing a link.
     const commitSubtreeEdit = (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => {
-        const stripped = JSON.parse(JSON.stringify(modifiedBlock, (key, value) =>
-            key === 's' || key === 'a' ? undefined : value,
-        )) as BlockNode;
+        const stripped = stripSourceInfoFields(modifiedBlock);
         const wrappedDoc = {
             'pandoc-api-version': [1, 23, 0],
             meta: {},
@@ -1534,6 +1539,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 sourceIndex,
                 resolveSource,
                 editingDisabled: props.editingDisabled,
+                commentsMode: props.commentsMode,
                 unlockNestingCursor: props.unlockNestingCursor,
                 unlockNestingCursorRef,
                 richText: props.richText,

@@ -75,37 +75,16 @@ pub fn read_extension_with_org(
         &mut diagnostics,
     );
 
-    // Extract required fields
-    let title = config
-        .get("title")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            crate::error::QuartoError::Other(format!(
-                "{}: missing required 'title' field",
-                extension_file.display()
-            ))
-        })?
-        .to_string();
+    // Optional metadata fields (Q1-compat: no named field is required —
+    // bd-8b0af414). `as_plain_text` rather than `as_str` so values that
+    // parse as PandocInlines still come through.
+    let title = config.get("title").and_then(|v| v.as_plain_text());
+    let author = config.get("author").and_then(|v| v.as_plain_text());
 
-    let author = config
-        .get("author")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            crate::error::QuartoError::Other(format!(
-                "{}: missing required 'author' field",
-                extension_file.display()
-            ))
-        })?
-        .to_string();
-
-    let version = config
-        .get("version")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+    let version = config.get("version").and_then(|v| v.as_plain_text());
     let quarto_required = config
         .get("quarto-required")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .and_then(|v| v.as_plain_text());
 
     // Extract contributes
     let contributes_cv = config.get("contributes").ok_or_else(|| {
@@ -373,6 +352,31 @@ mod tests {
     }
 
     #[test]
+    fn test_read_q1_compat_manifest_without_title_author() {
+        // Q1 requires no named fields in _extension.yml; real extensions
+        // (julia-engine, marimo) omit title/author. Only `contributes` is
+        // structurally required (bd-8b0af414).
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/bare-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+contributes:
+  shortcodes:
+    - bare.lua
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        assert_eq!(ext.id.name, "bare-ext");
+        assert_eq!(ext.title, None);
+        assert_eq!(ext.author, None);
+        assert_eq!(ext.contributes.shortcodes.len(), 1);
+    }
+
+    #[test]
     fn test_read_minimal_extension() {
         let tmp = TempDir::new().unwrap();
         let ext_dir = tmp.path().join("_extensions/test-ext");
@@ -392,8 +396,8 @@ contributes:
 
         assert_eq!(ext.id.name, "test-ext");
         assert_eq!(ext.id.organization, None);
-        assert_eq!(ext.title, "Test Extension");
-        assert_eq!(ext.author, "Test Author");
+        assert_eq!(ext.title.as_deref(), Some("Test Extension"));
+        assert_eq!(ext.author.as_deref(), Some("Test Author"));
         assert!(ext.version.is_none());
         assert_eq!(ext.contributes.shortcodes.len(), 1);
         assert_eq!(ext.contributes.shortcodes[0], ext_dir.join("hello.lua"));
@@ -505,6 +509,8 @@ contributes:
 
     #[test]
     fn test_read_extension_missing_title() {
+        // Q1-compat intake (bd-8b0af414): missing title is NOT an error;
+        // it just loads with title: None.
         let tmp = TempDir::new().unwrap();
         let ext_dir = tmp.path().join("_extensions/test-ext");
         let file = write_extension(
@@ -518,12 +524,9 @@ contributes:
         );
 
         let runtime = make_runtime();
-        let err = read_extension(&file, &runtime).unwrap_err();
-        assert!(
-            err.to_string().contains("title"),
-            "Error should mention 'title': {}",
-            err
-        );
+        let ext = read_extension(&file, &runtime).unwrap();
+        assert_eq!(ext.title, None);
+        assert_eq!(ext.author.as_deref(), Some("Author"));
     }
 
     #[test]

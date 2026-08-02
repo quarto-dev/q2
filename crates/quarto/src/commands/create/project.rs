@@ -6,7 +6,7 @@
 //! owns CLI/JSON argument resolution, title defaulting, and the
 //! mapping into a `CreatePlan`.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_project_create::{
@@ -15,11 +15,11 @@ use quarto_project_create::{
 };
 use serde::Deserialize;
 
-use super::artifact::{
-    ArtifactProvider, ChoiceListing, CreateFailure, CreatePlan, FileContent, PlannedFile,
-    ResolvedCreate,
+use super::artifact::{ArtifactProvider, ChoiceListing};
+use crate::commands::common::plan::{
+    CommandFailure, FileContent, FilePlan, PlannedEdit, PlannedFile, Precondition, ResolvedPlan,
 };
-use super::prompter::{PromptItem, Prompter};
+use crate::commands::common::prompter::{PromptItem, Prompter};
 
 pub struct ProjectProvider;
 
@@ -54,8 +54,8 @@ fn valid_choices_summary() -> String {
     )
 }
 
-fn not_yet_implemented(choice: &str) -> CreateFailure {
-    CreateFailure::new(
+fn not_yet_implemented(choice: &str) -> CommandFailure {
+    CommandFailure::new(
         format!("Project type '{choice}' is not yet implemented in Quarto 2"),
         valid_choices_summary(),
     )
@@ -65,7 +65,7 @@ fn not_yet_implemented(choice: &str) -> CreateFailure {
 /// both choice ids (`website`, `blog`) and the colon form
 /// (`website:blog`) — the latter routes through
 /// `ProjectTypeWithTemplate::parse`.
-fn resolve_target(choice: &str) -> Result<ProjectTypeWithTemplate, CreateFailure> {
+fn resolve_target(choice: &str) -> Result<ProjectTypeWithTemplate, CommandFailure> {
     if let Some(c) = find_choice(choice) {
         if !c.implemented {
             return Err(not_yet_implemented(choice));
@@ -77,7 +77,7 @@ fn resolve_target(choice: &str) -> Result<ProjectTypeWithTemplate, CreateFailure
     {
         return Ok(target);
     }
-    Err(CreateFailure::new(
+    Err(CommandFailure::new(
         format!("Unknown project type '{choice}'"),
         valid_choices_summary(),
     ))
@@ -92,7 +92,7 @@ impl ProjectProvider {
         title: Option<&str>,
         dry_run: bool,
         cwd: &Path,
-    ) -> Result<ResolvedCreate, CreateFailure> {
+    ) -> Result<ResolvedPlan, CommandFailure> {
         let target = resolve_target(choice)?;
         // A parseable target without a scaffold is a valid type/template
         // combination we simply haven't implemented (e.g. website:blog).
@@ -119,21 +119,38 @@ impl ProjectProvider {
             }
         };
 
-        let files = create_scaffolded_files(&scaffold, &title)
-            .map_err(|e| CreateFailure::new("Failed to render project scaffold", e.to_string()))?;
+        let files = create_scaffolded_files(&scaffold, &title, None)
+            .map_err(|e| CommandFailure::new("Failed to render project scaffold", e.to_string()))?;
 
-        Ok(ResolvedCreate {
-            plan: CreatePlan {
-                root: cwd.join(directory),
-                root_display: directory.to_string(),
-                files: files.into_iter().map(planned_file).collect(),
-                // Audited 2026-07-23 (see the plan): `/.quarto/` is the
-                // only Q2-written project-tree artifact worth ignoring;
-                // Q1's `**/*.quarto_ipynb` has no Q2 producer, and the
-                // output dir is deliberately left unignored.
-                gitignore_entries: vec!["/.quarto/"],
+        Ok(ResolvedPlan {
+            plan: FilePlan::new(
+                cwd.join(directory),
+                directory.to_string(),
+                files.into_iter().map(planned_file).collect(),
                 dry_run,
-            },
+            )
+            // Q1 parity (`project-create.ts`): creating *into* an
+            // existing directory is fine, but a directory that is
+            // already a Quarto project is a hard error — checked
+            // before anything is written, and under --dry-run too.
+            .with_preconditions(
+                ["_quarto.yml", "_quarto.yaml"]
+                    .into_iter()
+                    .map(|config| Precondition {
+                        path: PathBuf::from(config),
+                        title: format!("Directory '{directory}' already contains a Quarto project"),
+                        problem: format!("Found {config}. Choose a different directory."),
+                    })
+                    .collect(),
+            )
+            // Audited 2026-07-23 (see the plan): `/.quarto/` is the
+            // only Q2-written project-tree artifact worth ignoring;
+            // Q1's `**/*.quarto_ipynb` has no Q2 producer, and the
+            // output dir is deliberately left unignored.
+            .with_edits(vec![PlannedEdit::EnsureLines {
+                path: PathBuf::from(".gitignore"),
+                lines: vec!["/.quarto/".to_string()],
+            }]),
             warnings,
         })
     }
@@ -166,13 +183,13 @@ impl ArtifactProvider for ProjectProvider {
         args: &[String],
         cwd: &Path,
         dry_run: bool,
-    ) -> Result<ResolvedCreate, CreateFailure> {
+    ) -> Result<ResolvedPlan, CommandFailure> {
         match args {
-            [] => Err(CreateFailure::new(
+            [] => Err(CommandFailure::new(
                 "Missing project type",
                 valid_choices_summary(),
             )),
-            [_choice] => Err(CreateFailure::new(
+            [_choice] => Err(CommandFailure::new(
                 "Missing directory argument",
                 "Usage: q2 create project <type> <directory> [title]",
             )),
@@ -180,7 +197,7 @@ impl ArtifactProvider for ProjectProvider {
             [choice, directory, title] => {
                 self.resolve(choice, directory, Some(title), dry_run, cwd)
             }
-            [_, _, _, extra, ..] => Err(CreateFailure::new(
+            [_, _, _, extra, ..] => Err(CommandFailure::new(
                 format!("Unexpected argument '{extra}'"),
                 "Usage: q2 create project <type> <directory> [title]",
             )),
@@ -192,9 +209,9 @@ impl ArtifactProvider for ProjectProvider {
         payload: serde_json::Value,
         cwd: &Path,
         dry_run: bool,
-    ) -> Result<ResolvedCreate, CreateFailure> {
+    ) -> Result<ResolvedPlan, CommandFailure> {
         let directive: ProjectDirective = serde_json::from_value(payload)
-            .map_err(|e| CreateFailure::new("Invalid create directive", e.to_string()))?;
+            .map_err(|e| CommandFailure::new("Invalid create directive", e.to_string()))?;
         self.resolve(
             &directive.choice,
             &directive.directory,
@@ -210,9 +227,9 @@ impl ArtifactProvider for ProjectProvider {
         cwd: &Path,
         dry_run: bool,
         prompter: &mut dyn Prompter,
-    ) -> Result<ResolvedCreate, CreateFailure> {
+    ) -> Result<ResolvedPlan, CommandFailure> {
         if let [_, _, _, extra, ..] = args {
-            return Err(CreateFailure::new(
+            return Err(CommandFailure::new(
                 format!("Unexpected argument '{extra}'"),
                 "Usage: q2 create project <type> <directory> [title]",
             ));
@@ -244,7 +261,7 @@ impl ArtifactProvider for ProjectProvider {
             None => {
                 let d = prompter.input("Directory", None)?.trim().to_string();
                 if d.is_empty() {
-                    return Err(CreateFailure::new(
+                    return Err(CommandFailure::new(
                         "Directory must not be empty",
                         "Provide a directory name, or `.` for the current directory",
                     ));

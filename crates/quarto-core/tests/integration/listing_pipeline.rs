@@ -373,7 +373,8 @@ fn vendored_js_artifacts_emit_script_tags_and_land_under_site_libs() {
     // Project-scoped artifacts when at least one listing is
     // rendered, picked up by `<script>` auto-emission via the
     // `js:` artifact-key prefix, and flushed to
-    // `_site/site_libs/listing/<file>.js` by `flush_site_libs`.
+    // `_site/site_libs/listing/<file>.js` by
+    // `flush_project_artifacts`.
     let (project_dir, outputs) = render_project(|p| {
         write(
             &p.join("_quarto.yml"),
@@ -885,4 +886,126 @@ format: html
     });
     let host = html_for(&outputs, "hub");
     insta::assert_snapshot!(extract_sidebar_block(host));
+}
+
+/// A post's author-supplied front-matter `image:` is document-
+/// relative (Q1 semantics). The listing host page must emit a src
+/// that resolves from the host, and the file must be copied into
+/// the output tree even though no page body references it. The
+/// same project-relative form is what the RSS feed builder expects
+/// (`build_item_image` joins it with the project dir). See
+/// bd-qv2lsab0.
+#[test]
+fn front_matter_image_is_rebased_and_copied() {
+    let (dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"Blog\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Blog\nlisting:\n  contents: posts\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/first.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\nimage: \"cover.png\"\nformat: html\n---\n\nBody.\n",
+        );
+        // Content is irrelevant to the copy machinery; any bytes do.
+        write(&p.join("posts/cover.png"), "not-really-a-png");
+    });
+
+    let host = html_for(&outputs, "index");
+    assert!(
+        host.contains(r#"src="posts/cover.png""#),
+        "front-matter image src must be rebased to resolve from the host page; got:\n{}",
+        host
+    );
+    assert!(
+        !host.contains(r#"src="cover.png""#),
+        "raw document-relative src must not leak into the host page"
+    );
+    assert!(
+        dir.join("_site/posts/cover.png").exists(),
+        "front-matter image must be copied into the output tree"
+    );
+}
+
+/// Same rebase, nested host: a listing page *inside* posts/ whose
+/// item images live beside the items. Host-relative src, no
+/// `posts/` prefix.
+#[test]
+fn front_matter_image_rebase_nested_host() {
+    let (dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"Blog\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Home\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/index.qmd"),
+            "---\ntitle: Posts\nlisting:\n  contents: \"*.qmd\"\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/first.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\nimage: \"cover.png\"\nformat: html\n---\n\nBody.\n",
+        );
+        write(&p.join("posts/cover.png"), "not-really-a-png");
+    });
+
+    // Two outputs share the stem `index`; find the posts one by content.
+    let host = outputs
+        .iter()
+        .find(|(_, h)| h.contains("quarto-listing"))
+        .map(|(_, h)| h.as_str())
+        .expect("posts listing output");
+    assert!(
+        host.contains(r#"src="cover.png""#),
+        "nested host: src must be host-relative; got:\n{}",
+        host
+    );
+    assert!(dir.join("_site/posts/cover.png").exists());
+}
+
+/// The listing SCSS layer must reach the *rendered site's* theme CSS
+/// (bd-57y4). quarto-sass unit tests can't see whether the pipeline
+/// wired the layer; this is the brand_render.rs-shaped guard. The
+/// layer is unconditional (Q1 parity), so any HTML render carries it —
+/// asserted here on a listing project where it visibly matters.
+#[test]
+fn listing_css_rules_land_in_rendered_theme_css() {
+    let (dir, _outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"Blog\"\nformat:\n  html:\n    theme: cosmo\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Blog\nlisting:\n  contents: posts\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/first.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\ncategories: [news]\nformat: html\n---\n\nBody.\n",
+        );
+    });
+
+    let mut css = String::new();
+    for entry in walkdir::WalkDir::new(dir.join("_site"))
+        .into_iter()
+        .filter_map(Result::ok)
+    {
+        if entry.path().extension().and_then(|e| e.to_str()) == Some("css") {
+            css.push_str(&read(entry.path()));
+        }
+    }
+    assert!(
+        css.contains(".quarto-listing"),
+        "rendered theme CSS must contain .quarto-listing rules"
+    );
+    assert!(
+        css.contains(".listing-category"),
+        "rendered theme CSS must contain category-chip rules"
+    );
 }

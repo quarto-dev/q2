@@ -33,12 +33,65 @@ const wasmRendererMocks = vi.hoisted(() => ({
   vfsReadBinaryFile: vi.fn<(path: string) => { success: boolean; content?: string }>(),
 }));
 
+// Accessors consumed by the am namespace (debugAutomerge.ts); benign
+// empty-state defaults so am methods are callable in every test.
+const amRuntimeMocks = vi.hoisted(() => ({
+  getRepo: vi.fn<() => unknown>(() => null),
+  getDocInventory: vi.fn<() => unknown[]>(() => []),
+  getIndexHandle: vi.fn<() => unknown>(() => null),
+  getFileHandle: vi.fn<(path: string) => unknown>(() => null),
+  getSyncDiagnostics: vi.fn<() => unknown>(() => null),
+  isConnected: vi.fn<() => boolean>(() => false),
+}));
+
 // Both modules now live in @quarto/preview-runtime; the barrel re-exports
 // everything, so a single mock of the barrel covers both surfaces.
 vi.mock('@quarto/preview-runtime', () => ({
   ...automergeSyncMocks,
   ...wasmRendererMocks,
+  ...amRuntimeMocks,
 }));
+
+vi.mock('./projectSetService', () => ({
+  getProjectSetDebugSnapshot: vi.fn(() => ({ servers: [], collections: [] })),
+  getCollectionHandle: vi.fn(() => null),
+}));
+
+vi.mock('./presenceService', () => ({
+  getPresenceDebugSnapshot: vi.fn(() => ({
+    peerId: 'presence-peer',
+    identity: null,
+    currentFilePath: null,
+    localCursor: null,
+    localSelection: null,
+    remotePresences: [],
+  })),
+}));
+
+const tapMocks = vi.hoisted(() => ({
+  getTapMessages: vi.fn(() => []),
+  getTapStatus: vi.fn(() => ({ installed: true })),
+  installMessageTap: vi.fn(),
+  uninstallMessageTap: vi.fn(),
+}));
+
+vi.mock('./debugMessageTap', () => tapMocks);
+
+const inspectorMocks = vi.hoisted(() => ({
+  openInspector: vi.fn(() => Promise.resolve()),
+  closeInspector: vi.fn(),
+  isInspectorOpen: vi.fn(() => false),
+}));
+
+vi.mock('./debugInspector', () => inspectorMocks);
+
+const serverInspectorMocks = vi.hoisted(() => ({
+  openServerInspector: vi.fn(),
+  closeServerInspector: vi.fn(),
+  isServerInspectorOpen: vi.fn(() => false),
+}));
+
+vi.mock('./debugServerInspector', () => serverInspectorMocks);
 
 import {
   installDebugApi,
@@ -322,6 +375,125 @@ describe('debugApi', () => {
       expect(() =>
         _getInstalledApiForTesting()!.setActiveFile('does-not-exist.qmd'),
       ).toThrow(/not in the project/);
+    });
+  });
+
+  // The am namespace itself is unit-tested in debugAutomerge.test.ts;
+  // here we verify wiring: it's installed, live, and fed the same
+  // context (bd-q93tkglb).
+  describe('am namespace / help / apiVersion', () => {
+    it('exposes a working am namespace', () => {
+      installDebugApi(makeContext());
+      const api = _getInstalledApiForTesting()!;
+      expect(api.am).toBeDefined();
+      // Empty-state defaults from the mocks flow through.
+      expect(api.am.docs()).toEqual([]);
+      expect(api.am.presence().peerId).toBe('presence-peer');
+    });
+
+    it('feeds the debug context through to am.repos()', () => {
+      amRuntimeMocks.getRepo.mockReturnValue({
+        peerId: 'peer-self',
+        peers: [],
+        handles: {},
+      });
+      installDebugApi(makeContext());
+      const repos = _getInstalledApiForTesting()!.am.repos();
+      expect(repos).toHaveLength(1);
+      // syncServer comes from ctx.getProject() — proof the context is wired.
+      expect(repos[0].syncServer).toBe(sampleProject.syncServer);
+    });
+
+    it('exposes apiVersion 1', () => {
+      installDebugApi(makeContext());
+      expect(_getInstalledApiForTesting()!.apiVersion).toBe(1);
+    });
+
+    it('help() covers every API key, am key, and unsafe key', () => {
+      installDebugApi(makeContext());
+      const api = _getInstalledApiForTesting()!;
+      const text = api.help();
+      for (const key of Object.keys(api)) {
+        expect(text, `help() must mention '${key}'`).toContain(key);
+      }
+      for (const key of Object.keys(api.am)) {
+        expect(text, `help() must mention 'am.${key}'`).toContain(key);
+      }
+      for (const key of Object.keys(api.am.unsafe)) {
+        expect(text, `help() must mention 'unsafe.${key}'`).toContain(key);
+      }
+    });
+
+    it('help() carries the read-only rule and the unsafe warning', () => {
+      installDebugApi(makeContext());
+      const text = _getInstalledApiForTesting()!.help();
+      expect(text).toMatch(/read-only|observation/i);
+      expect(text).toMatch(/handle\.change\(\)/);
+    });
+  });
+
+  describe('inspector wiring', () => {
+    it('openInspector delegates with the api’s own am instance', async () => {
+      installDebugApi(makeContext());
+      const api = _getInstalledApiForTesting()!;
+      await api.openInspector();
+      expect(inspectorMocks.openInspector).toHaveBeenCalledWith(api.am);
+    });
+
+    it('closeInspector delegates', () => {
+      installDebugApi(makeContext());
+      _getInstalledApiForTesting()!.closeInspector();
+      expect(inspectorMocks.closeInspector).toHaveBeenCalledTimes(1);
+    });
+
+    it('uninstalling the API closes an open inspector', () => {
+      installDebugApi(makeContext());
+      uninstallDebugApi();
+      expect(inspectorMocks.closeInspector).toHaveBeenCalled();
+    });
+
+    it('openServerInspector passes the current index doc id', () => {
+      installDebugApi(makeContext());
+      _getInstalledApiForTesting()!.openServerInspector();
+      expect(serverInspectorMocks.openServerInspector).toHaveBeenCalledWith(
+        sampleProject.indexDocId,
+      );
+    });
+
+    it('openServerInspector passes null with no project (service throws)', () => {
+      installDebugApi(makeContext({ getProject: () => null }));
+      _getInstalledApiForTesting()!.openServerInspector();
+      expect(serverInspectorMocks.openServerInspector).toHaveBeenCalledWith(null);
+    });
+
+    it('uninstalling the API closes an open server inspector too', () => {
+      installDebugApi(makeContext());
+      uninstallDebugApi();
+      expect(serverInspectorMocks.closeServerInspector).toHaveBeenCalled();
+    });
+  });
+
+  describe('message-tap lifecycle', () => {
+    afterEach(() => {
+      localStorage.removeItem('quartoDebugCapture');
+    });
+
+    it('installs the tap (summary mode) alongside the API and uninstalls with it', () => {
+      installDebugApi(makeContext());
+      expect(tapMocks.installMessageTap).toHaveBeenCalledWith({
+        capture: 'summary',
+      });
+
+      uninstallDebugApi();
+      expect(tapMocks.uninstallMessageTap).toHaveBeenCalledTimes(1);
+    });
+
+    it('honors localStorage.quartoDebugCapture = full at install time', () => {
+      localStorage.setItem('quartoDebugCapture', 'full');
+      installDebugApi(makeContext());
+      expect(tapMocks.installMessageTap).toHaveBeenCalledWith({
+        capture: 'full',
+      });
     });
   });
 

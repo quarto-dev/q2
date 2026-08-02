@@ -170,6 +170,10 @@ enum Commands {
         /// non-zero. Useful in CI. Does not stop the render early.
         #[arg(long)]
         strict: bool,
+
+        /// Skip the project's `pre-render` and `post-render` scripts.
+        #[arg(long = "no-render-scripts")]
+        no_render_scripts: bool,
     },
 
     /// Start a live preview of a Quarto document or project.
@@ -282,12 +286,8 @@ enum Commands {
 
     /// Automate document or project setup tasks
     Use {
-        /// Type of setup task
-        #[arg(value_name = "TYPE")]
-        type_: String,
-
-        /// Target for the setup task
-        target: Option<String>,
+        #[command(subcommand)]
+        command: UseCommand,
     },
 
     /// Add an extension to this folder or project
@@ -632,6 +632,49 @@ enum Commands {
 }
 
 #[derive(Subcommand)]
+enum UseCommand {
+    /// Add a brand (`_brand.yml`) to this project and declare it in
+    /// `_quarto.yml`
+    ///
+    /// With no TARGET, writes a starter `_brand.yml` you can edit.
+    /// With a TARGET, copies a brand from a local path or a remote
+    /// source (e.g. `<gh-org>/<gh-repo>`).
+    ///
+    /// Unlike Quarto 1, Quarto 2 does not auto-discover `_brand.yml`,
+    /// so this command also writes the `brand:` key that makes the
+    /// brand take effect.
+    Brand {
+        /// Where to get the brand from: a local path, `<org>/<repo>`,
+        /// or an archive URL. Omit to scaffold a starter brand.
+        target: Option<String>,
+
+        /// Report what would happen without writing anything
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Proceed even though this project already has a brand file
+        /// or a `brand:` declaration. Does **not** waive the
+        /// remote-source trust prompt — see --trust.
+        #[arg(long)]
+        force: bool,
+
+        /// Skip the trust prompt for a remote source. Does **not**
+        /// override local-state checks — see --force.
+        #[arg(long)]
+        trust: bool,
+
+        /// Never prompt interactively, even on a terminal
+        #[arg(long)]
+        no_prompt: bool,
+
+        /// Emit one JSON result object on stdout; diagnostics go to
+        /// stderr as JSON lines
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum TraceCommand {
     /// List available traces under the `.quarto/trace/` directory.
     List {
@@ -715,6 +758,7 @@ fn main() -> Result<()> {
             json_errors,
             fail_fast,
             strict,
+            no_render_scripts,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
             inputs,
@@ -729,6 +773,7 @@ fn main() -> Result<()> {
             json_errors,
             fail_fast,
             strict,
+            no_render_scripts,
         }),
         Commands::Preview {
             path,
@@ -758,7 +803,23 @@ fn main() -> Result<()> {
             dry_run,
             no_prompt,
         } => commands::create::execute(type_, args, json, list, dry_run, no_prompt),
-        Commands::Use { .. } => commands::use_cmd::execute(),
+        Commands::Use { command } => match command {
+            UseCommand::Brand {
+                target,
+                dry_run,
+                force,
+                trust,
+                no_prompt,
+                json,
+            } => commands::use_cmd::execute_brand(commands::use_cmd::BrandArgs {
+                target,
+                dry_run,
+                force,
+                trust,
+                no_prompt,
+                json,
+            }),
+        },
         Commands::Add { .. } => commands::add::execute(),
         Commands::Update { .. } => commands::update::execute(),
         Commands::Remove { .. } => commands::remove::execute(),

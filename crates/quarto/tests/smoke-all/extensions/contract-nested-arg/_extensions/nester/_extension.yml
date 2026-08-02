@@ -1,0 +1,5 @@
+title: Nester
+author: Test
+contributes:
+  shortcodes:
+    - nester.lua

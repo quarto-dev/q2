@@ -29,6 +29,28 @@ fn shortcode_value_span(str: String) -> Inline {
     })
 }
 
+/// Key-value param whose value is itself a shortcode. Q1 convention
+/// (`lpegshortcode.lua`'s `md_keyvalue_param`): the param span carries
+/// `data-key` but NO `data-value`, and the nested shortcode span is the
+/// span's content.
+fn shortcode_key_recursive_value_span(key: String, value: Shortcode) -> Inline {
+    let mut attr_hash = LinkedHashMap::new();
+    attr_hash.insert("data-raw".to_string(), key.clone());
+    attr_hash.insert("data-key".to_string(), key);
+    attr_hash.insert("data-is-shortcode".to_string(), "1".to_string());
+
+    Inline::Span(Span {
+        attr: (
+            String::new(),
+            vec!["quarto-shortcode__-param".to_string()],
+            attr_hash,
+        ),
+        content: vec![Inline::Span(shortcode_to_span(value))],
+        source_info: empty_source_info(),
+        attr_source: AttrSourceInfo::empty(),
+    })
+}
+
 fn shortcode_key_value_span(key: String, value: String) -> Inline {
     let mut attr_hash = LinkedHashMap::new();
 
@@ -93,9 +115,8 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
                                 },
                             ));
                         }
-                        ShortcodeArg::Shortcode(_) => {
-                            eprintln!("PANIC - Quarto doesn't support nested shortcodes");
-                            std::process::exit(1);
+                        ShortcodeArg::Shortcode(inner) => {
+                            content.push(shortcode_key_recursive_value_span(key, inner));
                         }
                         _ => {
                             panic!("Unexpected ShortcodeArg type in shortcode: {:?}", value);
@@ -124,13 +145,14 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
                     },
                 ));
             }
-            ShortcodeArg::Shortcode(_) => {
-                eprintln!("PANIC - Quarto doesn't support nested shortcodes in keyword args");
-                std::process::exit(1);
+            ShortcodeArg::Shortcode(inner) => {
+                content.push(shortcode_key_recursive_value_span(key, inner));
             }
             ShortcodeArg::KeyValue(_) => {
-                eprintln!("PANIC - KeyValue shouldn't appear in keyword_args HashMap");
-                std::process::exit(1);
+                // Structurally impossible from the parser (kv values are
+                // scalars or shortcodes); degrade visibly instead of
+                // killing the process.
+                content.push(shortcode_key_value_span(key, String::new()));
             }
         }
     }
@@ -173,6 +195,46 @@ mod tests {
         } else {
             None
         }
+    }
+
+    #[test]
+    fn test_nested_shortcode_in_keyword_arg_does_not_crash() {
+        // Regression: this used to hit process::exit(1). Nested shortcode
+        // values in keyword args encode Q1-style: a param span with
+        // data-key but NO data-value, and the nested shortcode span as
+        // content ("data-key present with no data-value means the value is
+        // recursive" — lpegshortcode.lua's md_keyvalue_param).
+        let inner = Shortcode {
+            is_escaped: false,
+            name: "inner".to_string(),
+            positional_args: vec![],
+            keyword_args: LinkedHashMap::new(),
+            source_info: si(),
+        };
+        let mut kwargs = LinkedHashMap::new();
+        kwargs.insert("k".to_string(), ShortcodeArg::Shortcode(inner));
+        let sc = Shortcode {
+            is_escaped: false,
+            name: "outer".to_string(),
+            positional_args: vec![],
+            keyword_args: kwargs,
+            source_info: si(),
+        };
+
+        let span = shortcode_to_span(sc);
+
+        assert_eq!(span.content.len(), 2);
+        assert_eq!(get_span_data_key(&span.content[1]), Some("k"));
+        assert_eq!(get_span_data_value(&span.content[1]), None);
+        let Inline::Span(kv_span) = &span.content[1] else {
+            panic!("expected span");
+        };
+        assert_eq!(kv_span.content.len(), 1);
+        let Inline::Span(nested) = &kv_span.content[0] else {
+            panic!("expected nested shortcode span");
+        };
+        assert!(nested.attr.1.contains(&"quarto-shortcode__".to_string()));
+        assert_eq!(get_span_data_value(&nested.content[0]), Some("inner"));
     }
 
     #[test]

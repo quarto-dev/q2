@@ -1062,5 +1062,82 @@
     "message_template": "A crossref identifier (e.g. a `fig-`/`tbl-` label or an explicit `#id`) is defined more than once in the same document. Each crossref id must be unique within a document, so a reference like `@fig-foo` resolves to exactly one target. Give one of the targets a different label.",
     "docs_url": "https://quarto.org/docs/errors/crossref/Q-15-1",
     "since_version": "99.9.9"
+  },
+  "Q-5-8": {
+    "subsystem": "project",
+    "title": "Project Render Script Failed",
+    "message_template": "A `project.pre-render` or `project.post-render` script exited with a non-zero status (or was terminated by a signal). The render is aborted; remaining scripts in the list do not run. The script's own output appears above the diagnostic — fix the script (or remove it from `_quarto.yml`) and render again.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-8",
+    "since_version": "99.9.9"
+  },
+  "Q-5-9": {
+    "subsystem": "project",
+    "title": "Pre-render Script Changed a Forbidden Project Setting",
+    "message_template": "While `project.pre-render` scripts ran, `_quarto.yml` changed its `project.type` or `project.output-dir`. Pre-render scripts may modify the project — add input files, edit configuration — but these two settings must stay fixed, because the scripts already received `QUARTO_PROJECT_OUTPUT_DIR` computed from them. Make the change directly in `_quarto.yml` instead of from a script.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-9",
+    "since_version": "99.9.9"
+  },
+  "Q-5-10": {
+    "subsystem": "project",
+    "title": "Project Render Script Could Not Be Launched",
+    "message_template": "Quarto could not start a `project.pre-render` / `project.post-render` script. Common causes: the interpreter is not on PATH (set `QUARTO_PYTHON`, `QUARTO_R`, or `QUARTO_NODE` to override discovery), a directly-executed script is missing its shebang line or executable bit, or the script path does not exist. The entry can also be an explicit command line, e.g. `pre-render: python3 tools/gen.py`.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-10",
+    "since_version": "99.9.9"
+  },
+  "Q-5-11": {
+    "subsystem": "project",
+    "title": "Unknown Project Key (Underscore Spelling)",
+    "message_template": "`_quarto.yml` contains `project.pre_render` or `project.post_render` (underscore spelling), which is not a recognized key and is ignored. Project render scripts are configured with the hyphenated keys `project.pre-render` / `project.post-render`.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-11",
+    "since_version": "99.9.9"
+  },
+  "Q-5-12": {
+    "subsystem": "project",
+    "title": "Project Render Scripts Unsupported in This Environment",
+    "message_template": "The project configures `project.pre-render` / `project.post-render` scripts, but the current environment (the browser-based hub preview) cannot run subprocesses, so the scripts are skipped and the preview renders without them. Run `q2 render` on a machine with the required interpreters to execute the scripts.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-12",
+    "since_version": "99.9.9"
+  },
+  "Q-16-1": {
+    "subsystem": "extension",
+    "title": "Extension Not Loaded",
+    "message_template": "An `_extension.yml` manifest could not be read or parsed, so the extension it describes is not active for this render. Any shortcodes, filters, or formats it contributes will be missing (a shortcode from it will report Q-16-3 Unknown Shortcode at its use site). The message names the manifest file and the underlying cause; fix the manifest to restore the extension.",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-1",
+    "since_version": "99.9.9"
+  },
+  "Q-16-2": {
+    "subsystem": "extension",
+    "title": "Shortcode Script Load Failure",
+    "message_template": "A Lua shortcode script (from an extension's `contributes.shortcodes` or the document's `shortcodes:` list) failed to load or execute. Handlers defined by that script are unavailable; shortcodes relying on them will report Q-16-3 Unknown Shortcode. The message names the script file (and extension, when applicable) and the Lua error.",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-2",
+    "since_version": "99.9.9"
+  },
+  "Q-16-3": {
+    "subsystem": "extension",
+    "title": "Unknown Shortcode",
+    "message_template": "A shortcode invocation does not match any built-in handler, extension-contributed handler, or document-level `shortcodes:` script. The invocation renders as a visible `?name` marker. Check the shortcode name for typos, and check earlier Q-16-1/Q-16-2 warnings — a failed extension or script load surfaces here at the use site.",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-3",
+    "since_version": "99.9.9"
+  },
+  "Q-16-4": {
+    "subsystem": "extension",
+    "title": "Shortcode Handler Shadowed",
+    "message_template": "Two loaded shortcode scripts define a handler with the same name; the later registration wins (document `shortcodes:` scripts load first, then extensions in discovery order, so the more local definition takes precedence). This is informational — overriding a built-in extension is a supported pattern — but if the shadowing is unintentional, rename or remove one of the handlers.",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-4",
+    "since_version": "99.9.9"
+  },
+  "Q-16-5": {
+    "subsystem": "extension",
+    "title": "Shortcode Value Not Found",
+    "message_template": "A value-lookup shortcode (`meta`, `var`, `env`) could not resolve its key: the metadata key is absent, the variable is not defined in `_variables.yml`, or the environment variable is unset and no fallback argument was given. The invocation renders as a visible `?name` marker. Check the key for typos, define it at the source the shortcode reads from, or (for `env`) pass a fallback: `{{< env NAME fallback >}}`.",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-5",
+    "since_version": "99.9.9"
+  },
+  "Q-16-6": {
+    "subsystem": "extension",
+    "title": "Block Shortcode In Inline Position",
+    "message_template": "A shortcode used inline (inside a sentence or other inline content) produced block-level output (for example a raw HTML block from the `video` shortcode), and none of it could be carried into the inline position — the output was dropped. Put the shortcode in its own paragraph, surrounded by blank lines.",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-6",
+    "since_version": "99.9.9"
   }
 }

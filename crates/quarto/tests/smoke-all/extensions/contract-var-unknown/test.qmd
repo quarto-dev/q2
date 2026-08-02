@@ -1,0 +1,15 @@
+---
+title: Unknown var warns with Q-16-5
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      printsMessage:
+        level: WARN
+        regex: "Unknown variable"
+      ensureFileRegexMatches:
+        - ["\\?var"]
+---
+
+{{< var no-such-variable >}}

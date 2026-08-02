@@ -78,19 +78,39 @@ Currently, the formats that support **brand.yml** are: `html`, `dashboard`, `rev
 
 ### Creating Brand Files
 
-To specify a brand, create a `_brand.yml` file in the root directory of your project (i.e. alongside `_quarto.yml`).
-Quarto will detect the presence of `_brand.yml` and automatically apply the brand to all documents of the supported formats in the project.
+A brand takes effect in two steps: the brand file, and the `brand:` key that
+points at it.
 
-You can create a `_brand.yml` file outside of a Quarto project (e.g. without a `_quarto.yml`).
-In this case, `_brand.yml` will automatically apply to documents in the same directory.
+Create a `_brand.yml` in the root directory of your project (alongside
+`_quarto.yml`):
 
 ```{.yaml filename="_brand.yml"}
 color:
   background: "#eeeeee"
 ```
 
+Then declare it in `_quarto.yml`:
 
-You can also set brand options in a document by specifying brand elements under the `brand` option:
+```{.yaml filename="_quarto.yml"}
+brand: _brand.yml
+```
+
+::: callout-important
+## Quarto 2 does not auto-discover `_brand.yml`
+
+A `_brand.yml` with no `brand:` key pointing at it has **no effect** — your
+documents render exactly as if the file were not there, with no warning.
+
+This differs from Quarto 1, which applies a `_brand.yml` found at a handful
+of fixed paths whether or not anything refers to it. Quarto 2 requires the
+declaration so that a file's presence never silently changes how a project
+renders.
+:::
+
+`q2 use brand` writes both halves for you — see
+[Adding a brand with `q2 use brand`](#q2-use-brand) below.
+
+You can also set brand options directly in a document, with no separate file:
 
 ```{.yaml filename="document.qmd"}
 ---
@@ -902,79 +922,160 @@ local primary = brand.get_color('primary')
 
 ## Sharing brands across projects {#sharing-brands-across-projects}
 
-Organizations often maintain a shared brand that multiple projects should use. Quarto provides two ways to bring an external brand into your project: the `quarto use brand` command and Quarto Brand Extensions.
+Organizations often maintain a shared brand that multiple projects should use. The `q2 use brand` command brings an external brand into your project. (Quarto 1 also supports brand *extensions*; those are not yet supported in Quarto 2 — see [below](#quarto-brand-extensions).)
 
 ::: callout-warning
-Quarto requires all brand assets---including logos and font files---to live within your project directory. Both methods described below copy brand files into your project rather than referencing them externally.
+Quarto requires all brand assets---including logos and font files---to live within your project directory. `q2 use brand` copies brand files into your project rather than referencing them externally.
 
 In most cases, these assets should be committed to source control.
 :::
 
-### `quarto use brand`
+### Adding a brand with `q2 use brand` {#q2-use-brand}
 
-The `quarto use brand` command copies brand files from an external source into your project's `_brand/` directory. To use it, navigate to your project directory and run:
+`q2 use brand` puts a brand in your project **and declares it** in
+`_quarto.yml`. Both halves matter: without the `brand:` key, the files would
+land on disk and change nothing about how your project renders.
 
-``` {.bash filename="Terminal"}
-quarto use brand <source>
-```
-
-The source can be a local directory, a GitHub repository, or a URL to a zip archive:
+With no source, it writes a starter `_brand.yml` you can edit:
 
 ``` {.bash filename="Terminal"}
-quarto use brand ./path/to/brand
-quarto use brand myorg/shared-brand
-quarto use brand https://example.com/brand.zip
+q2 use brand
 ```
 
-When you run the command, Quarto walks you through the following steps:
+```
+Added a brand to /path/to/project:
 
-1.  If the source is remote, Quarto asks you to confirm that you trust the source.
-2.  If your project doesn't have a `_brand/` directory, Quarto asks to create one.
-3.  For each file that already exists in your `_brand/` directory, Quarto asks whether to overwrite it.
-4.  Quarto copies all files from the source to your `_brand/` directory.
-5.  If there are files in your `_brand/` directory that don't exist in the source, Quarto asks whether to remove them.
+  created          _brand.yml
+  updated          _quarto.yml
+```
 
-The result is that your `_brand/` directory will match the source exactly, making it easy to stay in sync with a shared brand as it evolves.
+With a source, it copies that brand instead. A source can be a local path, a
+GitHub repository, or the URL of a `.tar.gz` or `.zip` archive:
+
+``` {.bash filename="Terminal"}
+q2 use brand ./path/to/brand
+q2 use brand myorg/shared-brand
+q2 use brand myorg/shared-brand@v2.1.0
+q2 use brand myorg/monorepo/brands/dark
+q2 use brand https://example.com/brand.tar.gz
+```
+
+A GitHub source may name a tag or branch with `@<ref>`, and a subdirectory
+within the repository. With no `@<ref>`, Quarto looks for a `main` branch and
+then a `master` branch.
+
+#### Where the brand lands
+
+- A source that is **just a brand file** goes to `_brand.yml` in your project
+  root, and `_quarto.yml` gets `brand: _brand.yml`.
+- A source that **also carries logos or font files** goes to `_brand/`, so
+  those assets do not scatter across your project root. `_quarto.yml` then gets
+  `brand: _brand/_brand.yml`.
+
+Either way the command tells you what it wrote and what it declared.
+
+#### Quarto will not overwrite your work
+
+`q2 use brand` refuses, without writing anything, if:
+
+- there is no `_quarto.yml` (it will not create one — use
+  `q2 create project default .` first);
+- your project already has a `_brand.yml` or `_brand.yaml`;
+- your `_quarto.yml` already declares a `brand:`.
+
+Each refusal names what it found and where. Running the command a second time
+is therefore an error rather than a silent no-op — if you meant to replace an
+existing brand, say so with `--force`.
 
 #### Previewing changes
 
-Before making any changes, you can see exactly what would happen using the `--dry-run` option:
+`--dry-run` reports the full plan, including the `_quarto.yml` edit, and writes
+nothing:
 
 ``` {.bash filename="Terminal"}
-quarto use brand myorg/shared-brand --dry-run
+q2 use brand --dry-run
 ```
 
-This displays a summary of changes without modifying any files:
-
 ```
-Dry run - no changes will be made.
+(dry run) would add a brand to /path/to/project:
 
-Would overwrite:
- - _brand.yml
+  created          _brand.yml
+  updated          _quarto.yml
 
-Would create:
- - logo.png
- - fonts/custom-font.woff2
-
-Would remove:
- - old-logo.png
+(dry run) nothing was written.
 ```
+
+#### Trusting a remote source
+
+Downloading a brand runs someone else's content through your machine, so
+Quarto asks before fetching from a URL or a GitHub repository. The default
+answer is no.
+
+In a script, on CI, or with `--json` there is nobody to ask, and Quarto
+**refuses rather than proceeding**. Pass `--trust` to confirm in advance:
+
+``` {.bash filename="Terminal"}
+q2 use brand myorg/shared-brand --trust
+```
+
+::: callout-note
+## `--force` and `--trust` are different permissions
+
+`--force` lets Quarto overwrite **your own** files: an existing brand file, or
+an existing `brand:` declaration.
+
+`--trust` lets Quarto download **someone else's** content without asking.
+
+Neither implies the other, deliberately. A script that needs to replace a
+local brand should not thereby gain permission to execute whatever a URL
+serves.
+:::
 
 #### Non-interactive usage
 
-For scripts or automated workflows, use the `--force` option to skip all confirmation prompts:
+For scripts, combine the flags you need with `--no-prompt`, or use `--json`
+for machine-readable output:
 
 ``` {.bash filename="Terminal"}
-quarto use brand myorg/shared-brand --force
+q2 use brand myorg/shared-brand --trust --json
 ```
 
-With `--force`, Quarto trusts the source, overwrites conflicting files, creates new files, and removes files in your `_brand/` directory that aren't present in the source, all without prompting.
+`--json` writes exactly one result object on stdout and sends diagnostics to
+stderr as JSON lines:
+
+``` json
+{"version":1,"path":"/path/to/project","dry_run":false,
+ "files":[{"path":"_brand.yml","action":"created"},
+          {"path":"_quarto.yml","action":"updated"}]}
+```
 
 ### Quarto Brand Extensions
 
-Quarto also supports [brand extensions](../extensions/brand.qmd), a Quarto-specific way to distribute brand metadata and assets using a Git repository.
+Quarto 1 can also distribute a brand as an *extension* — a repository with an
+`_extension.yml` declaring `contributes.metadata.project.brand`, installed into
+`_extensions/`.
 
-Quarto extensions install to the `_extensions/` subdirectory of your project. You will have a copy of the brand metadata and assets in each project; use [`quarto update`](../extensions/managing.qmd#updating) to update the brand extension from its repository.
+::: callout-warning
+## Not supported in Quarto 2
+
+Quarto 2 has no extension system yet, so `q2 use brand` cannot install a brand
+extension. Pointed at one, it says so and names the brand file inside it, which
+you can copy into your project by hand:
+
+``` {.bash filename="Terminal"}
+q2 use brand myorg/brand-extension
+```
+
+```
+Error: myorg/brand-extension is a Quarto 1 brand extension
+It declares its brand as `contributes.metadata.project.brand: acme.yml` in an
+_extension.yml. Quarto 2 has no extension system yet, so `q2 use brand` cannot
+install it.
+
+You can still use the brand by hand: copy acme.yml into your project as
+_brand.yml and add `brand: _brand.yml` to _quarto.yml.
+```
+:::
 
 
 ## Combining brands and themes

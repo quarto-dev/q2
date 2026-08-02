@@ -1,0 +1,30 @@
+---
+title: Meta dotted lookup
+format: html
+custom:
+  nested:
+    value: deep-val
+top: top-val
+flag: false
+authors:
+  - Ada
+  - Grace
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["META\\[top-val\\]", "META\\[deep-val\\]", "META-NIL", "CHAIN\\[deep-val\\]", "BOOL\\[false\\]", "META\\[Grace\\]"]
+---
+
+Top: {{< getmeta top >}}
+
+Dotted: {{< getmeta custom.nested.value >}}
+
+Absent: {{< getmeta no-such-key >}}
+
+Chained: {{< chainmeta >}}
+
+Boolean: {{< boolmeta >}}
+
+Array index: {{< getmeta authors.2 >}}

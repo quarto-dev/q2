@@ -9,5 +9,6 @@
 pub mod admin_collect_lifecycle;
 pub mod admin_scan_real_store;
 pub mod auth_bearer;
+pub mod login_nonce;
 pub mod session_auth;
 pub mod support;

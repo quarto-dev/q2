@@ -1,0 +1,21 @@
+project:
+  type: website
+  resources:
+    - styles.css
+
+website:
+  title: "$title$"
+  description: "A blog built with Quarto"
+  site-url: https://your-website-url.example.com # you must change this appropriately for RSS feeds to work properly
+  navbar:
+    right:
+      - about.qmd
+      - icon: github
+        href: https://github.com/
+      - icon: bluesky
+        href: https://bsky.app/
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css

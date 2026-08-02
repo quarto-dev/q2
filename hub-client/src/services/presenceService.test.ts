@@ -19,6 +19,7 @@ import {
   updateSelection,
   updatePresence,
   getRemotePresences,
+  getPresenceDebugSnapshot,
   onPresenceChange,
   getLocalIdentity,
   getLocalPeerId,
@@ -214,6 +215,67 @@ describe('presenceService', () => {
       // Cursor and selection should be preserved when "switching" to same file
       expect(state.localCursor).toBe(10);
       expect(state.localSelection).toEqual({ start: 5, end: 15 });
+    });
+  });
+
+  // Read-only snapshot for the in-context debug API `quartoDebug.am`
+  // (bd-q93tkglb). Must be JSON-serializable and probe-safe at any
+  // lifecycle point.
+  describe('getPresenceDebugSnapshot', () => {
+    it('is probe-safe before initPresence', () => {
+      const snap = getPresenceDebugSnapshot();
+      expect(snap.identity).toBeNull();
+      expect(snap.currentFilePath).toBeNull();
+      expect(snap.remotePresences).toEqual([]);
+      expect(typeof snap.peerId).toBe('string');
+    });
+
+    it('reports identity, file, local cursor state, and remote presences', async () => {
+      await initPresence();
+      setCurrentFile('doc.qmd');
+      updatePresence(12, { start: 3, end: 9 });
+
+      const remote = {
+        peerId: 'peer-1',
+        userId: 'user-1',
+        userName: 'User 1',
+        userColor: '#ff0000',
+        filePath: 'doc.qmd',
+        cursor: 'cursor-stub',
+        selection: null,
+        lastSeen: Date.now(),
+      };
+      _getStateForTesting().remotePresences.set('peer-1', remote);
+
+      const snap = getPresenceDebugSnapshot();
+
+      expect(snap.peerId).toBe(getLocalPeerId());
+      expect(snap.identity).toEqual({
+        userId: 'test-user-123',
+        userName: 'Test User',
+        userColor: '#3498db',
+      });
+      expect(snap.currentFilePath).toBe('doc.qmd');
+      expect(snap.localCursor).toBe(12);
+      expect(snap.localSelection).toEqual({ start: 3, end: 9 });
+      expect(snap.remotePresences).toEqual([remote]);
+    });
+
+    it('returns copies, not live state (mutating the snapshot is inert)', async () => {
+      await initPresence();
+      setCurrentFile('doc.qmd');
+      const snap = getPresenceDebugSnapshot();
+      snap.remotePresences.push({
+        peerId: 'x',
+        userId: 'x',
+        userName: 'x',
+        userColor: '#000000',
+        filePath: 'doc.qmd',
+        cursor: null,
+        selection: null,
+        lastSeen: 0,
+      });
+      expect(getPresenceDebugSnapshot().remotePresences).toEqual([]);
     });
   });
 

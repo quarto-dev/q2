@@ -1,0 +1,13 @@
+---
+title: Block-producing shortcode in inline position warns
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      printsMessage:
+        level: WARN
+        regex: "inline position"
+---
+
+Some text {{< video https://www.youtube.com/watch?v=dQw4w9WgXcQ >}} more text.

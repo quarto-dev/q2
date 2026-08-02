@@ -487,7 +487,9 @@ describe('Callout', () => {
             title: [STR('Custom Title')],
             id: 'tip-foo',
         });
-        ast.plain_data = {
+        // Crossref fields (ref_type/kind/identifier) aren't part of the
+        // callout plain_data type; widen for this fixture.
+        (ast as { plain_data: unknown }).plain_data = {
             ...ast.plain_data,
             ref_type: 'tip',
             kind: 'Tip',

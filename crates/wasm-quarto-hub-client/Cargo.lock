@@ -2226,9 +2226,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-error-reporting"
-version = "0.1.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2aa95153b93fea9754e121137d5a6e38e30dd1184c73d2266958f698b8cb9503"
+checksum = "9ccd85f4df70f08134ac6b3997c76660e679b01d9c0bfd0f11a68e0cf32442f7"
 dependencies = [
  "ariadne",
  "quarto-source-map",
@@ -2336,6 +2336,7 @@ dependencies = [
  "quarto-doctemplate",
  "serde",
  "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]
@@ -3421,6 +3422,7 @@ checksum = "743bd48c283afc0388f9b8827b976905fb217ad9e647fae3a379a9283c4def2c"
 dependencies = [
  "deranged",
  "itoa",
+ "js-sys",
  "num-conv",
  "powerfmt",
  "serde_core",

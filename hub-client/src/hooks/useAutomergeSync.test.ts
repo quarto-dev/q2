@@ -27,6 +27,7 @@ import {
   diffToEditorChanges,
 } from '@quarto/preview-runtime';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
+import { getEditorTextProvider } from '../services/editorDebugRegistry';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { setVisibility, resetVisibility, fireWindowFocus } from '../test-utils/visibility';
 
@@ -709,6 +710,31 @@ describe('useAutomergeSync', () => {
       act(() => fireWindowFocus());
 
       expect(mockEditor.executeEdits).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // quartoDebug.am.doctor() reads the live Monaco text through this
+  // provider (bd-6ogrov5r).
+  describe('editor debug registry', () => {
+    it('exposes the current path and model text while mounted, and unregisters on unmount', () => {
+      const { result, unmount } = renderHook(() =>
+        useAutomergeSync(defaultOptions()),
+      );
+
+      const provider = getEditorTextProvider();
+      expect(provider).not.toBeNull();
+      // Before an editor mounts there is no model to read.
+      expect(provider!.getPath()).toBe('test.qmd');
+      expect(provider!.getText()).toBeNull();
+
+      const editor = createMockEditor('live text');
+      act(() => {
+        result.current.onEditorMount(editor as never);
+      });
+      expect(provider!.getText()).toBe('live text');
+
+      unmount();
+      expect(getEditorTextProvider()).toBeNull();
     });
   });
 });

@@ -1,0 +1,17 @@
+---
+title: Document-level shortcodes key
+format: html
+shortcodes:
+  - shorty.lua
+_quarto:
+  tests:
+    html:
+      ensureFileRegexMatches:
+        - ["strong>_bringit_", "Shortcode Error \\(shorty\\): error message", "Shortcode Error \\(shorty\\): error_args"]
+---
+
+{{< shorty _bringit_ >}}
+
+{{< shorty error >}}
+
+{{< shorty error_args >}}

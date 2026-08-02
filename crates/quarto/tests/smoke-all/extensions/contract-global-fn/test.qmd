@@ -1,0 +1,12 @@
+---
+title: Global-function registration
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["GREET-World"]
+---
+
+{{< greet World >}}

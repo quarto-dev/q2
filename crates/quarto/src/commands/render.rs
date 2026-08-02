@@ -35,10 +35,11 @@ use quarto_core::attribution::AttributionMode;
 use quarto_core::project::orchestrator::{
     DiagnosticCounts, ProjectPipeline, RenderMode, project_type_for,
 };
+use quarto_core::project::render_scripts;
 use quarto_core::{Format, ProjectContext, QuartoError, RenderToFileOptions};
 use quarto_error_reporting::{
-    DiagnosticMessage, DiagnosticMessageBuilder, JsonDiagnostic, JsonPass1Failure,
-    diagnostic_to_json, with_source_file,
+    CoalescedDiagnostic, DiagnosticMessage, DiagnosticMessageBuilder, JsonDiagnostic,
+    JsonPass1Failure, diagnostic_to_json, with_source_file,
 };
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
@@ -97,6 +98,9 @@ pub struct RenderArgs {
     /// "stop at first *failure*" — a promoted warning does not stop
     /// the render.
     pub strict: bool,
+    /// Skip the project's `pre-render` / `post-render` scripts
+    /// (bd-w348iu63). The render itself is unaffected.
+    pub no_render_scripts: bool,
 }
 
 /// What to render after argument classification.
@@ -694,6 +698,9 @@ fn execute_single_doc(
     let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let mut project = ProjectContext::discover(&input, runtime_arc.as_ref())
         .context("Failed to discover project context")?;
+    // Captured before the pipeline mutably borrows `project`; used to
+    // restore config-anchored source snippets at print time.
+    let config_path = project.config.config_path.clone();
 
     quarto_util::user_status!(args.quiet, "Rendering single file: {}", input.display());
 
@@ -727,7 +734,7 @@ fn execute_single_doc(
         summary.promote_warnings_to_errors();
     }
 
-    print_render_diagnostics(&summary, args);
+    print_render_diagnostics(&summary, args, config_path.as_deref());
 
     // bd-ooleh: a single-file render has no "Rendered N of M" line to
     // augment, so the error/warning counts get their own line — printed
@@ -765,6 +772,54 @@ fn execute_project(
 
     let mut project = ProjectContext::discover(&project_dir, runtime_arc.as_ref())
         .context("Failed to discover project context")?;
+    // Captured before the pipeline mutably borrows `project`; used to
+    // restore config-anchored source snippets at print time.
+    let config_path = project.config.config_path.clone();
+
+    // bd-w348iu63: warn about the likely `pre_render` / `post_render`
+    // misspellings (Q2 has no schema layer; unknown keys are
+    // otherwise silently ignored).
+    for diagnostic in render_scripts::underscore_typo_diagnostics(&project.config) {
+        eprintln!("{}", diagnostic.to_text(None));
+    }
+
+    // bd-w348iu63: run `project.pre-render` scripts, then re-discover
+    // the project so script-created inputs and config edits are
+    // picked up. `project.type` / `project.output-dir` changes are
+    // forbidden (Q1-compatible mutation guard).
+    let run_scripts = !args.no_render_scripts;
+    let render_all = targets.is_none();
+    if run_scripts && !project.config.pre_render_scripts.is_empty() {
+        let input_files = match targets.as_deref() {
+            Some(t) => paths_relative_to(t.iter(), &project.dir),
+            None => paths_relative_to(project.files.iter().map(|f| &f.input), &project.dir),
+        };
+        let ctx = render_scripts::RenderScriptsContext {
+            project_dir: &project.dir,
+            output_dir: &project.output_dir,
+            config_path: project.config.config_path.as_deref(),
+            render_all,
+            quiet: args.quiet,
+            file_count: input_files.len(),
+        };
+        if let Err(parse_error) = render_scripts::run_render_scripts(
+            render_scripts::ScriptPhase::PreRender,
+            &project.config.pre_render_scripts,
+            &ctx,
+            &input_files,
+        ) {
+            exit_with_parse_error(parse_error, args);
+        }
+
+        let re_project = ProjectContext::discover(&project_dir, runtime_arc.as_ref())
+            .context("Failed to re-discover project context after pre-render scripts")?;
+        if let Err(parse_error) =
+            render_scripts::check_forbidden_mutations(&project.config, &re_project.config)
+        {
+            exit_with_parse_error(parse_error, args);
+        }
+        project = re_project;
+    }
 
     quarto_util::user_status!(
         args.quiet,
@@ -809,7 +864,7 @@ fn execute_project(
         summary.promote_warnings_to_errors();
     }
 
-    print_render_diagnostics(&summary, args);
+    print_render_diagnostics(&summary, args, config_path.as_deref());
 
     let rendered = summary.outputs.len();
     if let Some(mut line) = render_summary_line(false, total_files, rendered, &project.output_dir) {
@@ -829,7 +884,58 @@ fn execute_project(
     if should_exit_nonzero(&summary, args.strict) {
         std::process::exit(1);
     }
+
+    // bd-w348iu63: run `project.post-render` scripts at the very end,
+    // only after a successful render (Q1-compatible: render errors
+    // skip them). The env is computed fresh from the actual results —
+    // `QUARTO_PROJECT_OUTPUT_FILES` lists what the pipeline really
+    // produced — fixing Q1's stale-env wart.
+    if run_scripts && !project.config.post_render_scripts.is_empty() {
+        let output_files =
+            paths_relative_to(summary.outputs.iter().map(|o| &o.output_path), &project.dir);
+        let ctx = render_scripts::RenderScriptsContext {
+            project_dir: &project.dir,
+            output_dir: &project.output_dir,
+            config_path: project.config.config_path.as_deref(),
+            render_all,
+            quiet: args.quiet,
+            file_count: total_files,
+        };
+        if let Err(parse_error) = render_scripts::run_render_scripts(
+            render_scripts::ScriptPhase::PostRender,
+            &project.config.post_render_scripts,
+            &ctx,
+            &output_files,
+        ) {
+            exit_with_parse_error(parse_error, args);
+        }
+    }
     Ok(())
+}
+
+/// Make each path relative to `base` (paths already relative, or
+/// outside `base`, pass through unchanged). Used for the
+/// `QUARTO_PROJECT_INPUT_FILES` / `QUARTO_PROJECT_OUTPUT_FILES`
+/// script contract, which promises project-relative paths.
+fn paths_relative_to<'a>(paths: impl Iterator<Item = &'a PathBuf>, base: &Path) -> Vec<PathBuf> {
+    paths
+        .map(|p| {
+            p.strip_prefix(base)
+                .map_or_else(|_| p.clone(), |r| r.to_path_buf())
+        })
+        .collect()
+}
+
+/// Print a render-script [`ParseError`](quarto_core::error::ParseError)
+/// through the same channel the pipeline's parse errors use
+/// (ariadne text, or NDJSON under `--json-errors`) and exit non-zero.
+fn exit_with_parse_error(parse_error: quarto_core::ParseError, args: &RenderArgs) -> ! {
+    if args.json_errors {
+        emit_parse_error_json(&parse_error, None);
+    } else {
+        eprintln!("{}", parse_error);
+    }
+    std::process::exit(1);
 }
 
 /// Strict exit policy for `quarto render` (Decision D1, bd-creo).
@@ -868,11 +974,12 @@ fn should_exit_nonzero<O: quarto_core::project::orchestrator::OutputDiagnostics>
 fn print_render_diagnostics(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
     args: &RenderArgs,
+    config_path: Option<&Path>,
 ) {
     if args.json_errors {
         print_render_diagnostics_json(summary);
     } else {
-        print_render_diagnostics_text(summary, args.quiet);
+        print_render_diagnostics_text(summary, args.quiet, config_path);
     }
 
     // bd-c5u2g: emit per-process engine-discovery counters when
@@ -888,9 +995,54 @@ fn print_render_diagnostics(
 /// Text path: the existing ariadne-formatted output. Kept verbatim
 /// from before bd-iey8o; the only change is that the perf-stats
 /// emission moved one level up into `print_render_diagnostics`.
+/// bd-mg3ckvp7 Phase 4: a config-anchored diagnostic (e.g. a Q-13-2
+/// navbar miss) carries a location whose FileId is quarto_yaml's hash
+/// of the config path, but per-document `SourceContext`s never
+/// register that file — so the ariadne snippet silently dropped and
+/// the warning named no source at all. Best-effort repair at print
+/// time: when the group's location doesn't resolve in its carried
+/// context and the FileId matches the project config file, register
+/// the config's content under that id so the snippet renders. Any
+/// failure (no config, hash mismatch, unreadable file) leaves the
+/// group unchanged — span-less render, exactly as before.
+fn attach_config_source(group: &mut CoalescedDiagnostic, config_path: Option<&Path>) {
+    use quarto_source_map::FileId;
+
+    let Some(config_path) = config_path else {
+        return;
+    };
+    let Some(loc) = group.representative.location.as_ref() else {
+        return;
+    };
+    let Some((fid, _, _)) = loc.resolve_byte_range() else {
+        return;
+    };
+    if group
+        .source_context
+        .as_ref()
+        .is_some_and(|c| c.get_file(FileId(fid)).is_some())
+    {
+        return;
+    }
+    // `parse_config` hashed `config_path.to_string_lossy()`; only a
+    // diagnostic actually anchored in this config file matches.
+    let config_str = config_path.to_string_lossy();
+    if quarto_yaml::file_id_for_filename(&config_str) != FileId(fid) {
+        return;
+    }
+    let Ok(content) = std::fs::read_to_string(config_path) else {
+        return;
+    };
+    group
+        .source_context
+        .get_or_insert_with(SourceContext::new)
+        .add_file_with_id(FileId(fid), config_str.into_owned(), Some(content));
+}
+
 fn print_render_diagnostics_text(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
     quiet: bool,
+    config_path: Option<&Path>,
 ) {
     for failure in &summary.pass1_failures {
         eprintln!(
@@ -904,14 +1056,6 @@ fn print_render_diagnostics_text(
     // emits one report listing affected pages rather than N copies.
     // Non-structured failures (no diagnostics) take the legacy
     // single-line form as before.
-    //
-    // Per-page warning diagnostics from successful renders
-    // (`outputs[i].render_output.diagnostics`) are not coalesced
-    // here in v1 because `RenderToFileResult` does not currently
-    // carry the input path; the theme-error use case lives entirely
-    // in `pass2_failures`. A follow-up could add `input_path` to
-    // `RenderToFileResult` and route the successful-render
-    // diagnostics through the coalescer too.
     {
         use quarto_error_reporting::coalesce_by_source;
 
@@ -943,20 +1087,34 @@ fn print_render_diagnostics_text(
         eprintln!("{}", diagnostic.to_text(None));
     }
 
-    for result in &summary.outputs {
-        if !quiet && !result.render_output.diagnostics.is_empty() {
-            for diagnostic in &result.render_output.diagnostics {
-                eprintln!(
-                    "{}",
-                    diagnostic.to_text(Some(&result.render_output.source_context))
-                );
-            }
+    // bd-mg3ckvp7: per-page diagnostics from *successful* renders go
+    // through the same source-location coalescer as pass2_failures, so
+    // a problem anchored in a shared file (a broken navbar href in
+    // `_quarto.yml`, a bad shortcode in a shared include) emits once
+    // with an "Affected files:" tail instead of once per page.
+    // Coalescing is print-only: `diagnostic_counts()` / `--strict`
+    // promotion ran on the un-coalesced per-page diagnostics above.
+    if !quiet {
+        use quarto_error_reporting::coalesce_by_source;
+
+        let entries = summary.outputs.iter().flat_map(|result| {
+            result.render_output.diagnostics.iter().map(|d| {
+                (
+                    result.input_path.clone(),
+                    d.clone(),
+                    Some(result.render_output.source_context.clone()),
+                )
+            })
+        });
+        for mut group in coalesce_by_source(entries) {
+            attach_config_source(&mut group, config_path);
+            eprintln!("{}", group.to_text());
         }
 
         // Per-file output line stays on `tracing::info!` (opt-in via
         // `-v`); enumerating every file is too noisy for a large
         // site, and the post-render summary covers the common case.
-        if !quiet {
+        for result in &summary.outputs {
             info!("Output: {}", result.output_path.display());
         }
     }

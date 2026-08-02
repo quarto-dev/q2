@@ -17,7 +17,7 @@
  * See claude-notes/plans/2026-06-08-revealjs-presentations.md (Phase 1P).
  */
 
-import React, { useContext, useEffect } from 'react';
+import React, { useContext, useEffect, useLayoutEffect } from 'react';
 import { Deck, Slide, Stack, useReveal } from '@revealjs/react';
 // Reveal CSS from the SAME vendored copy `q2 render` links — `resources/
 // revealjs/` — in the SAME cascade order, so render and preview cannot disagree
@@ -311,7 +311,70 @@ export function RevealNavSync(props: {
     return null;
 }
 
+/**
+ * Broadcasts reveal's slide scale to interested chrome (the comment
+ * bubbles counter-scale themselves with it). Published as a window
+ * CustomEvent to avoid coupling; fires once the deck is ready and on
+ * every reveal re-layout (viewport resize), and resets to 1 when the
+ * deck unmounts. Renders null; must sit inside `<Deck>` so
+ * `useReveal()` resolves.
+ */
+function RevealScaleSync() {
+    const reveal = useReveal();
+    useEffect(() => {
+        if (!reveal) return;
+        const api = reveal as unknown as {
+            getScale?: () => number;
+            on?: (type: string, cb: () => void) => void;
+            off?: (type: string, cb: () => void) => void;
+        };
+        const publish = () => {
+            window.dispatchEvent(
+                new CustomEvent('q2-reveal-scale', { detail: api.getScale?.() ?? 1 }),
+            );
+        };
+        publish();
+        api.on?.('ready', publish);
+        api.on?.('resize', publish);
+        // Slide changes re-publish too: hidden sections never
+        // mount/unmount bubbles, so this is what tells the bubble
+        // layout to re-solve for the newly visible slide.
+        api.on?.('slidechanged', publish);
+        // Reveal also moves content at times we can't hook exhaustively
+        // (fragments, async embeds, late layout settling) — while a
+        // deck is live, republish on a slow tick so bubbles are
+        // continuously re-positioned. Each publish triggers a bubble
+        // reset-solve, which is a no-op (no re-renders) once settled.
+        const tick = window.setInterval(publish, 250);
+        return () => {
+            window.clearInterval(tick);
+            api.off?.('ready', publish);
+            api.off?.('resize', publish);
+            api.off?.('slidechanged', publish);
+            window.dispatchEvent(new CustomEvent('q2-reveal-scale', { detail: 1 }));
+        };
+    }, [reveal]);
+    return null;
+}
+
 export function RevealDeck(props: RevealDeckProps) {
+    // Reveal sizes the deck from its container, so #root needs an
+    // explicit height while a deck is mounted. The iframe HTML doesn't
+    // style #root (a fixed 100vh there broke normal HTML pages), so
+    // apply it here, scoped to the deck's lifetime.
+    useLayoutEffect(() => {
+        const root = document.getElementById('root');
+        if (!root) return;
+        root.style.width = '100%';
+        root.style.height = '100vh';
+        root.style.overflow = 'auto';
+        return () => {
+            root.style.width = '';
+            root.style.height = '';
+            root.style.overflow = '';
+        };
+    }, []);
+
     const chrome = revealChromeFromMeta(props.ast.meta);
     const slides = props.ast.blocks.map((block, i) => {
         if (isSectionDiv(block)) {
@@ -367,6 +430,8 @@ export function RevealDeck(props: RevealDeckProps) {
                         registerSlideNavigator={props.registerSlideNavigator}
                         onSlideChange={props.onSlideChange}
                     />
+                    {/* Publishes the slide scale for the comment bubbles. */}
+                    <RevealScaleSync />
                 </Deck>
             </IncrementalContext.Provider>
         </RegistryContext.Provider>

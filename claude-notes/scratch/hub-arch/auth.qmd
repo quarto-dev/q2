@@ -1,0 +1,212 @@
+---
+title: Quarto-Hub auth model
+---
+
+# The one idea to keep in your head
+
+The hub server **verifies** identity; it does not **broker** it.
+
+Almost every "how does OAuth work" mental model assumes a confidential
+server that holds a `client_secret`, redirects you to Google, and exchanges
+an authorization code for tokens behind the scenes. **The Quarto-Hub server
+does none of that.** The entire OAuth dance happens between your *browser*
+and *Google*. The hub only ever receives a Google-signed ID token (a JWT),
+checks that Google really signed it, and checks that you're allowed in. It
+never talks to Google's token endpoint, and it holds no OAuth client secret.
+
+Everything below is an elaboration of that one sentence.
+
+# The players
+
+- **The browser + Google Identity Services (GIS).** The SPA embeds Google's
+  `gsi/client` script (via `@react-oauth/google`). This is what actually runs
+  the OAuth flow, mints the ID token, and hands it back.
+- **The hub binary** (`crates/quarto-hub`, shipped as `hub` / `quarto hub`).
+  A pure OIDC *verifier*. All auth code lives in one module,
+  `crates/quarto-hub/src/auth.rs`, with the HTTP wiring in `server.rs` and
+  the per-request check in `context.rs`.
+- **nginx**, on the deployment box, terminating TLS and reverse-proxying to
+  the hub on `127.0.0.1:3000`. The hub is never directly reachable from the
+  internet.
+- **Google's JWKS endpoint.** The hub downloads Google's *public* signing
+  keys once at startup and refreshes them in the background. Verification is
+  entirely local after that — there is no per-request round-trip to Google.
+
+Auth is **optional and off by default**. It turns on only when the hub is
+started with `--oidc-client-id` (env `OIDC_CLIENT_ID`). With no client ID,
+the SPA mounts a no-op auth provider and everyone is anonymous.
+
+# Signing in: unauthenticated → authenticated
+
+1. The browser loads the SPA. On mount it calls `GET /auth/me`. With no
+   session cookie yet, the hub answers **401**, and the SPA shows the login
+   screen.
+2. You click "Sign in with Google". The GIS button is configured in
+   *redirect* mode with `login_uri = <origin>/auth/callback`. The browser
+   navigates to Google; GIS also drops a short-lived `g_csrf_token` cookie on
+   the hub's origin.
+3. You authenticate/consent at Google. **Google then POSTs a form directly to
+   `/auth/callback`** carrying two fields: `credential` (the ID-token JWT) and
+   `g_csrf_token`.
+4. The hub's `/auth/callback` handler:
+   - **CSRF check (double-submit):** the `g_csrf_token` form field must equal
+     the `g_csrf_token` cookie. Mismatch → redirect to `/?auth_error`.
+   - **Verifies the JWT** (see next section).
+   - On success, sets the session cookie and **redirects to a clean `/`**.
+5. The SPA reloads, `GET /auth/me` now returns **200** with
+   `{ email, name, picture, exp }`, and the app renders.
+6. Before opening a project, the SPA calls `GET /auth/actor?project=<id>` to
+   get its per-project automerge actor ID (see below), then opens the sync
+   WebSocket.
+
+`/auth/callback` is only registered for the Google form-POST flow. A generic
+OIDC front-end would instead POST its own freshly-minted token to
+`/auth/refresh`.
+
+# The session *is* the JWT
+
+There is **no server-side session store.** The Google-signed JWT is the
+session token, stored verbatim in a cookie:
+
+- Name: `quarto_hub_token`
+- `HttpOnly` (JavaScript can never read it), `SameSite=Lax`, `Path=/`
+- `Secure` (unless explicitly running with `--allow-insecure-auth`)
+- `Max-Age=3600` — **one hour**
+
+On every request the hub re-verifies this JWT from scratch. There is nothing
+to "look up" — validity is a pure function of the token plus Google's public
+keys plus the allowlist.
+
+## What "verify" actually checks
+
+The verification pipeline (`context.rs` → `auth.rs`) enforces, in order:
+
+1. **Signature** against Google's cached JWKS keys.
+2. **Standard claims** — `exp` (expiry), `nbf`, issuer
+   (`https://accounts.google.com`), and **audience**. The accepted audience
+   set is the configured `--oidc-client-id` *plus* any `--additional-audiences`
+   (this is how the `q2 mcp` desktop client is allowed to share the hub).
+3. **`azp` + `iat`** — the OIDC authorized-party rule, plus rejection of
+   tokens with a future `iat`.
+4. **Allowlists** — `email_verified` must be true, and the email must match
+   the configured `--allowed-emails` or `--allowed-domains` (currently:
+   `posit.co` and a short list of individual addresses).
+
+Who signs, who verifies: **Google signs, the hub verifies.** The hub never
+issues a signature of its own — the cookie is just Google's JWT, unmodified.
+
+## Two ways to present a credential
+
+- **Cookie** — browsers, automatically, on every request.
+- **`Authorization: Bearer <jwt>`** — non-browser clients (the
+  `quarto-hub-mcp` server). Sending *both* a cookie and a Bearer header on the
+  same request is rejected with a 400.
+
+Cookie-based state-changing requests additionally require an
+`X-Requested-With: XMLHttpRequest` header (a second CSRF defense);
+`/auth/callback` can't use that trick because it's a cross-origin POST from
+Google, which is why it relies on the double-submit cookie instead.
+
+# Staying signed in (silent refresh)
+
+The cookie lives one hour, but the session outlives it via silent renewal.
+Roughly 15 minutes before expiry the SPA uses GIS One-Tap to mint a fresh ID
+token in the background and POSTs it to `/auth/refresh`, which re-verifies it
+and re-sets the cookie. No user interaction, no redirect.
+
+# Authorizing sync over the WebSocket
+
+The SPA syncs automerge documents over a WebSocket at `/ws` (nginx proxies it
+with a 24-hour idle timeout). Two things are worth understanding here, and the
+second is the important one for a security review.
+
+**Authentication happens once, at upgrade time.** When the WebSocket
+connection is established, the hub validates the credential (the cookie rides
+along automatically) using the *same* verification pipeline as HTTP requests.
+Cookie-based upgrades also get an `Origin`-vs-`Host` check to block
+cross-origin WebSocket hijacking. **Trade-off:** the token is checked only at
+connection time. A user whose token expires (or is revoked) on an
+*already-open* connection is not forcibly disconnected — the client
+re-authenticates when it notices expiry and reconnects.
+
+**Authorization is capability-based, not an access-control list.** This is the
+part that most surprises people. The hub's samod access policy
+(`access_policy.rs`) is an **audit policy**: its "is this peer allowed to
+touch this document?" check **always returns true.** It only *logs* the first
+time each `(user, document)` pair is seen, tagged with the user's email.
+
+In other words: **any authenticated user who knows a document's automerge ID
+can sync it.** There is no per-project membership check on the server. Access
+to a project is controlled by *knowledge of its (unguessable) index document
+ID* — which is exactly what a Quarto-Hub share URL contains. Sharing is
+handing someone the ID; the server does not maintain a separate "who's on this
+project" list. (This is the same capability model the MCP tooling describes:
+"the link users share to grant access.")
+
+So the two gates compose like this:
+
+- **Authentication** (are you a known, allowlisted human?) — enforced by
+  Google's signature + the email/domain allowlist.
+- **Authorization** (may you touch *this* project?) — enforced by whether you
+  possess its document ID. The server audit-logs, but does not adjudicate.
+
+# Per-project actor IDs (an aside, not a gate)
+
+Before opening documents, the SPA fetches `GET /auth/actor?project=<id>`. The
+hub returns
+`HMAC-SHA256(server_secret, sub || "\0" || project_id)` — a stable automerge
+actor ID that is:
+
+- **Per-user** (derived from the Google `sub`),
+- **Per-project** (can't be correlated across projects),
+- **Unforgeable** without the server secret.
+
+This is an *attribution/isolation* mechanism — it gives each collaborator a
+consistent identity inside a project's edit history — **not** an authorization
+check. See `data-model.qmd` for how the resulting identities show up in the
+project index document.
+
+# Secrets inventory (for reviewers)
+
+Worth being explicit about what is and isn't secret:
+
+| Thing | Secret? | Where it lives |
+|---|---|---|
+| Google **client ID** | No (public identifier) | Baked into the SPA at build time (`VITE_GOOGLE_CLIENT_ID`); passed to the hub as `--oidc-client-id`. Marked `sensitive` in Terraform out of caution, but it's a public value. |
+| Google **client secret** | — | **Does not exist in this system.** The hub is not a confidential client and never performs a code exchange. |
+| Session signing key | — | **Does not exist.** Google signs the JWT; the hub only verifies. |
+| `QUARTO_HUB_SERVER_SECRET` | **Yes** | HMAC key for per-project actor IDs. Read from env → `hub.json` → auto-generated 32 random bytes. Unrelated to OAuth. |
+| The session token | Yes (it's a bearer credential) | `HttpOnly` cookie, never exposed to JS. |
+| A project's automerge index ID | **Yes, effectively** | It *is* the access capability. Anyone who has it can read/sync the project. Share URLs carry it. |
+
+# Deployment trust boundaries
+
+On the production box (a single AWS EC2 instance):
+
+- **nginx terminates TLS** (Let's Encrypt cert for `quarto-hub.com`) and
+  reverse-proxies `/auth`, `/api`, `/health`, and `/ws` to the hub on
+  loopback. Static SPA assets are served directly by nginx from local disk.
+- The hub runs with **`--behind-tls-proxy`** so it trusts
+  `X-Forwarded-Proto` and sets `Secure` cookies correctly. With auth enabled,
+  the hub *refuses to start* over plain HTTP unless you explicitly pass
+  `--allow-insecure-auth`.
+- The **allowlist** (`--allowed-domains` / `--allowed-emails` /
+  `--additional-audiences`) is delivered as config, not baked into the binary,
+  so who-may-sign-in can change without a redeploy of the server.
+- The Google client ID reaches the box via a mode-600 env file
+  (`/etc/quarto-hub/env`); the SPA carries the same ID baked in at build time.
+  (Historical wrinkle: the server-side flag was renamed
+  `--google-client-id` → `--oidc-client-id`, so the same value travels under
+  the name `OIDC_CLIENT_ID` server-side and `VITE_GOOGLE_CLIENT_ID` in the SPA
+  build.)
+
+# Known trade-offs, stated plainly
+
+- **No per-document ACL.** Authorization = possession of the document ID.
+  Revoking one person's access to one project is not currently a server
+  operation.
+- **WebSocket auth is upgrade-time only.** Expiry/revocation doesn't tear down
+  live connections; it's caught on reconnect.
+- **One-hour token, silent refresh.** Sign-out clears the cookie, but a leaked
+  token is valid until it expires (up to an hour), and there is no server-side
+  revocation list.

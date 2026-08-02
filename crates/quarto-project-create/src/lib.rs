@@ -62,7 +62,12 @@ fn yaml_escape_double_quoted(s: &str) -> String {
 }
 
 /// Build the template context shared by all scaffold templates.
-fn template_context(title: &str, project_type: &str, template: Option<&str>) -> TemplateContext {
+fn template_context(
+    title: &str,
+    project_type: &str,
+    template: Option<&str>,
+    today: Option<time::Date>,
+) -> TemplateContext {
     let mut ctx = TemplateContext::new();
     ctx.insert(
         "title",
@@ -75,7 +80,26 @@ fn template_context(title: &str, project_type: &str, template: Option<&str>) -> 
     if let Some(template) = template {
         ctx.insert("template", TemplateValue::String(template.to_string()));
     }
+    // Post-date stamping (blog scaffold, bd-r1by4u2a). Mirrors Q1:
+    // the second post is dated today, the first three days earlier,
+    // so a fresh blog's listing sorts sensibly under `date desc`.
+    let today = today.unwrap_or_else(default_today);
+    let first = today.checked_sub(time::Duration::days(3)).unwrap_or(today);
+    ctx.insert("second-post-date", TemplateValue::String(iso_date(today)));
+    ctx.insert("first-post-date", TemplateValue::String(iso_date(first)));
     ctx
+}
+
+/// Today's date. On wasm32 this reads the JS clock via time's
+/// `wasm-bindgen` feature; on native, the system clock.
+fn default_today() -> time::Date {
+    time::OffsetDateTime::now_utc().date()
+}
+
+/// Format a date as `YYYY-MM-DD`.
+fn iso_date(d: time::Date) -> String {
+    let fmt = time::macros::format_description!("[year]-[month]-[day]");
+    d.format(&fmt).expect("static format description")
 }
 
 /// Compile and render a single scaffold template.
@@ -95,6 +119,11 @@ pub struct CreateFromChoiceOptions {
 
     /// Project title (used in templates)
     pub title: String,
+
+    /// "Today" for date-stamped scaffold content (blog post dates).
+    /// `None` (the default) reads the clock; tests pass a fixed date
+    /// for determinism.
+    pub today: Option<time::Date>,
 }
 
 impl CreateFromChoiceOptions {
@@ -103,7 +132,14 @@ impl CreateFromChoiceOptions {
         Self {
             choice_id: choice_id.into(),
             title: title.into(),
+            today: None,
         }
+    }
+
+    /// Pin "today" to a fixed date (deterministic tests).
+    pub fn with_today(mut self, today: time::Date) -> Self {
+        self.today = Some(today);
+        self
     }
 }
 
@@ -159,7 +195,7 @@ pub fn create_project_from_choice(
     })?;
 
     // Render the scaffold
-    create_scaffolded_files(&scaffold, &options.title)
+    create_scaffolded_files(&scaffold, &options.title, options.today)
 }
 
 /// Create files from a project scaffold.
@@ -172,6 +208,8 @@ pub fn create_project_from_choice(
 ///
 /// * `scaffold` - The project scaffold definition
 /// * `title` - Project title (used in templates)
+/// * `today` - Optional fixed "today" for date-stamped content
+///   (`None` reads the clock)
 ///
 /// # Returns
 ///
@@ -179,11 +217,13 @@ pub fn create_project_from_choice(
 pub fn create_scaffolded_files(
     scaffold: &ProjectScaffold,
     title: &str,
+    today: Option<time::Date>,
 ) -> Result<Vec<ScaffoldedFile>, CreateError> {
     let ctx = template_context(
         title,
         scaffold.target.project_type.id(),
         scaffold.target.template.as_deref(),
+        today,
     );
 
     let mut files = Vec::with_capacity(scaffold.files.len());
@@ -214,6 +254,16 @@ pub fn create_scaffolded_files(
     }
 
     Ok(files)
+}
+
+/// The starter `_brand.yml` written by `q2 use brand` when no source
+/// is given (bd-1vlw8).
+///
+/// Returned as text rather than written, matching this crate's
+/// no-filesystem contract — the caller (CLI or hub client) decides
+/// where it goes.
+pub fn starter_brand_yml() -> &'static str {
+    templates::brand::BRAND_YML
 }
 
 /// Get information about available project types.
@@ -307,12 +357,17 @@ mod tests {
 mod render_tests {
     use super::*;
 
+    /// Forward-slash form of a scaffolded path (Windows uses `\`).
+    fn norm(p: &std::path::Path) -> String {
+        p.to_str().unwrap().replace('\\', "/")
+    }
+
     /// Panic-on-missing lookup of a text file's content in a scaffold result.
     fn file_content<'a>(files: &'a [ScaffoldedFile], path: &str) -> &'a str {
         files
             .iter()
             .find_map(|f| match f {
-                ScaffoldedFile::Text { path: p, content } if p.to_str() == Some(path) => {
+                ScaffoldedFile::Text { path: p, content } if norm(p) == path => {
                     Some(content.as_str())
                 }
                 _ => None,
@@ -330,7 +385,7 @@ mod render_tests {
             create_project_from_choice(CreateFromChoiceOptions::new("default", "Test Project"))
                 .unwrap();
 
-        let paths: Vec<_> = files.iter().map(|f| f.path().to_str().unwrap()).collect();
+        let paths: Vec<_> = files.iter().map(|f| norm(f.path())).collect();
         assert_eq!(paths, ["_quarto.yml", "index.qmd"]);
 
         let yml = parse_yaml(file_content(&files, "_quarto.yml"));
@@ -351,7 +406,7 @@ mod render_tests {
             create_project_from_choice(CreateFromChoiceOptions::new("website", "My Website"))
                 .unwrap();
 
-        let paths: Vec<_> = files.iter().map(|f| f.path().to_str().unwrap()).collect();
+        let paths: Vec<_> = files.iter().map(|f| norm(f.path())).collect();
         assert_eq!(
             paths,
             ["_quarto.yml", "index.qmd", "about.qmd", "styles.css"]
@@ -436,6 +491,202 @@ mod render_tests {
     }
 
     #[test]
+    fn starter_brand_is_valid_yaml_with_usable_defaults() {
+        let yml = parse_yaml(starter_brand_yml());
+
+        // The palette-plus-reference shape is the thing we are teaching
+        // by example; if it regresses into literal hex values in the
+        // slots, the starter stops demonstrating the idea.
+        assert_eq!(yml["color"]["palette"]["accent"].as_str(), Some("#2c6fbb"));
+        assert_eq!(yml["color"]["primary"].as_str(), Some("accent"));
+        assert_eq!(
+            yml["typography"]["base"]["family"].as_str(),
+            Some("Open Sans")
+        );
+
+        // Logos are commented out: an uncommented `logo:` would point at
+        // image files that do not exist, and every render would warn.
+        assert!(yml.get("logo").is_none(), "logo slots must stay commented");
+    }
+
+    /// Extract and parse the YAML front matter of a `---`-fenced qmd.
+    fn front_matter(src: &str) -> serde_yaml::Value {
+        let rest = src
+            .strip_prefix("---\n")
+            .unwrap_or_else(|| panic!("no front matter fence in:\n{src}"));
+        let end = rest.find("\n---").expect("unterminated front matter");
+        serde_yaml::from_str(&rest[..end]).expect("front matter must be valid YAML")
+    }
+
+    /// Panic-on-missing lookup of a binary file in a scaffold result.
+    fn binary_file<'a>(files: &'a [ScaffoldedFile], path: &str) -> (&'a [u8], &'a str) {
+        files
+            .iter()
+            .find_map(|f| match f {
+                ScaffoldedFile::Binary {
+                    path: p,
+                    content,
+                    mime_type,
+                } if norm(p) == path => Some((content.as_slice(), mime_type.as_str())),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("expected binary file {path} in scaffold output"))
+    }
+
+    #[test]
+    fn blog_scaffold_produces_q1_familiar_file_set() {
+        let files = create_project_from_choice(
+            CreateFromChoiceOptions::new("blog", "My Blog")
+                .with_today(time::macros::date!(2026 - 07 - 29)),
+        )
+        .unwrap();
+
+        let paths: Vec<_> = files.iter().map(|f| norm(f.path())).collect();
+        assert_eq!(
+            paths,
+            [
+                "_quarto.yml",
+                "index.qmd",
+                "about.qmd",
+                "styles.css",
+                "posts/_metadata.yml",
+                "posts/welcome/index.qmd",
+                "posts/welcome/thumbnail.jpg",
+                "posts/post-with-code/index.qmd",
+                "posts/post-with-code/image.jpg",
+            ]
+        );
+
+        // ---- _quarto.yml --------------------------------------------
+        let yml_src = file_content(&files, "_quarto.yml");
+        let yml = parse_yaml(yml_src);
+        assert_eq!(yml["project"]["type"].as_str(), Some("website"));
+        assert_eq!(yml["website"]["title"].as_str(), Some("My Blog"));
+        assert_eq!(
+            yml["website"]["description"].as_str(),
+            Some("A blog built with Quarto")
+        );
+        // Q2's feed completion silently no-ops without a site-url;
+        // the scaffold must ship the Q1 placeholder.
+        assert!(
+            yml["website"]["site-url"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("https://")),
+            "site-url placeholder required for RSS"
+        );
+        let right = &yml["website"]["navbar"]["right"];
+        assert_eq!(right[0].as_str(), Some("about.qmd"));
+        assert_eq!(right[1]["icon"].as_str(), Some("github"));
+        assert_eq!(right[2]["icon"].as_str(), Some("bluesky"));
+        assert_eq!(yml["format"]["html"]["theme"].as_str(), Some("cosmo"));
+        assert_eq!(yml["format"]["html"]["css"].as_str(), Some("styles.css"));
+        // styles.css must be a declared resource (bd-b87tmmi4).
+        assert_eq!(yml["project"]["resources"][0].as_str(), Some("styles.css"));
+        // No brand marker (Q-14-1), no editor:, no freeze anywhere.
+        assert!(!yml_src.contains("brand"), "no brand marker:\n{yml_src}");
+        assert!(!yml_src.contains("editor"), "no editor knob:\n{yml_src}");
+
+        // ---- index.qmd (the listing page) ---------------------------
+        let index = file_content(&files, "index.qmd");
+        let fm = front_matter(index);
+        assert_eq!(fm["title"].as_str(), Some("My Blog"));
+        assert_eq!(fm["listing"]["contents"].as_str(), Some("posts"));
+        assert_eq!(fm["listing"]["sort"].as_str(), Some("date desc"));
+        assert_eq!(fm["listing"]["type"].as_str(), Some("default"));
+        assert_eq!(fm["listing"]["categories"].as_bool(), Some(true));
+        assert_eq!(fm["listing"]["feed"].as_bool(), Some(true));
+        assert_eq!(fm["listing"]["sort-ui"].as_bool(), Some(false));
+        assert_eq!(fm["listing"]["filter-ui"].as_bool(), Some(false));
+        assert_eq!(fm["page-layout"].as_str(), Some("full"));
+        assert_eq!(fm["title-block-banner"].as_bool(), Some(true));
+
+        // ---- posts/_metadata.yml ------------------------------------
+        let meta = file_content(&files, "posts/_metadata.yml");
+        let meta_yml = parse_yaml(meta);
+        assert_eq!(meta_yml["title-block-banner"].as_bool(), Some(true));
+        // Q2 has no freeze implementation (bd-mx5x609r); the knob is
+        // deliberately dropped from Q1's shape.
+        assert!(!meta.contains("freeze"), "no freeze knob:\n{meta}");
+
+        // ---- posts --------------------------------------------------
+        let welcome = file_content(&files, "posts/welcome/index.qmd");
+        let wfm = front_matter(welcome);
+        assert_eq!(wfm["title"].as_str(), Some("Welcome To My Blog"));
+        assert_eq!(wfm["author"].as_str(), Some("Tristan O'Malley"));
+        assert_eq!(wfm["date"].as_str(), Some("2026-07-26"), "today - 3 days");
+        assert_eq!(wfm["categories"][0].as_str(), Some("news"));
+        assert!(welcome.contains("![](thumbnail.jpg)"));
+
+        let post = file_content(&files, "posts/post-with-code/index.qmd");
+        let pfm = front_matter(post);
+        assert_eq!(pfm["title"].as_str(), Some("Post With Code"));
+        assert_eq!(pfm["author"].as_str(), Some("Harlow Malloc"));
+        assert_eq!(pfm["date"].as_str(), Some("2026-07-29"), "today");
+        assert_eq!(pfm["image"].as_str(), Some("image.jpg"));
+        assert_eq!(pfm["categories"][1].as_str(), Some("code"));
+
+        // ---- binaries (the ScaffoldContent::Binary path) ------------
+        for path in [
+            "posts/welcome/thumbnail.jpg",
+            "posts/post-with-code/image.jpg",
+        ] {
+            let (bytes, mime) = binary_file(&files, path);
+            assert_eq!(mime, "image/jpeg");
+            assert!(
+                bytes.len() > 1000 && bytes.starts_with(&[0xFF, 0xD8]),
+                "{path} must carry real JPEG bytes"
+            );
+        }
+
+        // ---- about.qmd (simplified — no Q2 about-page feature) ------
+        let about = file_content(&files, "about.qmd");
+        assert!(about.contains("title: \"About\""));
+        assert!(about.contains("About this blog"));
+        assert!(
+            !about.contains("about:") && !about.contains("profile.jpg"),
+            "Q1's about: block is dropped until bd-5xmy5lle lands:\n{about}"
+        );
+
+        // No template residue anywhere.
+        for f in &files {
+            if let ScaffoldedFile::Text { path, content } = f {
+                assert!(
+                    !content.contains('$') && !content.contains("<%"),
+                    "template residue in {}:\n{content}",
+                    path.display()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn blog_scaffold_defaults_today_to_now() {
+        // Without an explicit `today`, the crate stamps the current
+        // date. Only sanity-check the shape (YYYY-MM-DD) and the
+        // three-day stagger, to keep the test clock-independent.
+        let files =
+            create_project_from_choice(CreateFromChoiceOptions::new("blog", "My Blog")).unwrap();
+        let welcome = front_matter(file_content(&files, "posts/welcome/index.qmd"));
+        let post = front_matter(file_content(&files, "posts/post-with-code/index.qmd"));
+        let wdate = welcome["date"].as_str().unwrap();
+        let pdate = post["date"].as_str().unwrap();
+        let iso = |s: &str| {
+            time::Date::parse(
+                s,
+                &time::macros::format_description!("[year]-[month]-[day]"),
+            )
+            .unwrap_or_else(|e| panic!("bad date {s}: {e}"))
+        };
+        assert_eq!(iso(pdate) - iso(wdate), time::Duration::days(3));
+    }
+
+    #[test]
+    fn blog_choice_is_implemented() {
+        let ids: Vec<_> = implemented_choices().into_iter().map(|c| c.id).collect();
+        assert!(ids.contains(&"blog".to_string()), "choices: {ids:?}");
+    }
+
+    #[test]
     fn unknown_choice_is_rejected() {
         let result = create_project_from_choice(CreateFromChoiceOptions::new("nonexistent", "T"));
         assert!(matches!(
@@ -446,8 +697,9 @@ mod render_tests {
 
     #[test]
     fn unimplemented_choice_is_rejected() {
-        // "blog" is defined but marked as unimplemented
-        let result = create_project_from_choice(CreateFromChoiceOptions::new("blog", "My Blog"));
+        // "manuscript" is defined but marked as unimplemented
+        let result =
+            create_project_from_choice(CreateFromChoiceOptions::new("manuscript", "My Paper"));
         assert!(matches!(result.unwrap_err(), CreateError::InvalidConfig(_)));
     }
 

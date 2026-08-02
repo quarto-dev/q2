@@ -1,0 +1,274 @@
+---
+title: Creating projects with `q2 create`
+---
+
+## Overview
+
+`q2 create` scaffolds a new Quarto project: it creates a directory
+containing a `_quarto.yml` configuration file and starter documents
+that `q2 render` can build immediately.
+
+```bash
+q2 create project website mysite
+```
+
+```default
+Created project in mysite:
+
+  created  _quarto.yml
+  created  index.qmd
+  created  about.qmd
+  created  styles.css
+  created  .gitignore
+
+To render it: q2 render mysite
+```
+
+## Interactive use
+
+Run `q2 create` with no arguments on a terminal and it walks you
+through the choices: the artifact type, the project type, the
+directory, and the title (pre-filled with a sensible default you can
+accept or edit).
+
+Prompting only happens on a real interactive terminal. When stdin or
+stderr is redirected, when running under CI, or when you pass
+`--no-prompt`, missing arguments are errors instead — so scripts never
+hang waiting for input.
+
+## Command-line use
+
+The non-interactive form spells everything out:
+
+```bash
+q2 create project <type> <directory> [title]
+```
+
+- `<type>` is a project type: `default` (a minimal project) or
+  `website` (a website with navigation). The types `blog`,
+  `manuscript`, and `book` are recognized but not yet implemented in
+  Quarto 2.
+- `<directory>` is where the project is created, relative to the
+  current directory. Use `.` to scaffold into the current directory.
+- `[title]` is the project title. When omitted, the title defaults to
+  the directory name (or to the project type name when the directory
+  is `.`), and a warning tells you which default was used:
+
+  ```default
+  Warning: No title provided; using "mysite" as the project title
+  ```
+
+To see the available artifact and project types, run `q2 create --list`:
+
+```default
+Available artifact types:
+
+project (Project)
+  default      A minimal Quarto project
+  website      A Quarto website with navigation
+  blog         A blog using the Quarto blog template (not yet implemented)
+  manuscript   An academic manuscript (not yet implemented)
+  book         A multi-chapter book (not yet implemented)
+
+Usage: q2 create project <type> <directory> [title]
+```
+
+## What gets created
+
+A `website` project contains a configuration file, two pages wired
+into a navbar, and an empty stylesheet:
+
+``` {.yaml filename="_quarto.yml"}
+project:
+  type: website
+  resources:
+    - styles.css
+
+website:
+  title: "mysite"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - about.qmd
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true
+```
+
+A `default` project is a minimal `_quarto.yml` (just the project
+title) plus a starter `index.qmd`.
+
+Both project types also write a `.gitignore` containing `/.quarto/`,
+the directory Quarto uses for caches and other machinery it writes
+into the project tree.
+
+## Directory semantics
+
+- The target directory is created if it doesn't exist. Creating into
+  an **existing** directory is allowed.
+- If the directory already contains a `_quarto.yml` or `_quarto.yaml`,
+  the command fails before writing anything:
+
+  ```default
+  Error: Directory 'mysite' already contains a Quarto project
+  Found _quarto.yml. Choose a different directory.
+  ```
+
+- Files that already exist are skipped individually, so scaffolding
+  into a non-empty directory never overwrites your files:
+
+  ```default
+    created  _quarto.yml
+    created  index.qmd
+    created  about.qmd
+    skipped-existing styles.css (already exists, skipped)
+    created  .gitignore
+  ```
+
+- If a `.gitignore` already exists, the `/.quarto/` entry is appended
+  only when missing; the rest of the file is left untouched.
+
+## Dry runs
+
+Pass `--dry-run` to see the full file plan — including per-file
+created/skipped decisions and the already-a-project check — without
+writing anything:
+
+```bash
+q2 create project website mysite "My Site" --dry-run
+```
+
+```default
+(dry run) would create project in mysite:
+
+  created  _quarto.yml
+  created  index.qmd
+  created  about.qmd
+  created  styles.css
+  created  .gitignore
+
+(dry run) nothing was written.
+```
+
+## Machine interface {#machine-interface}
+
+Tools that drive project creation programmatically — editors, language
+servers, MCP servers — can use the JSON interface instead of
+positional arguments. It follows one convention throughout:
+**stdout carries exactly one JSON result; all diagnostics (errors and
+warnings) go to stderr as JSON lines.** The command never prompts in
+this mode.
+
+### Creating a project
+
+`q2 create --json` reads a single JSON *directive* from stdin and
+writes a JSON *result* to stdout:
+
+```bash
+echo '{"artifact": "project", "directory": "mysite",
+       "choice": "website", "title": "My Site"}' | q2 create --json
+```
+
+The directive fields for the `project` artifact:
+
+| Field       | Required | Meaning                                              |
+|-------------|----------|------------------------------------------------------|
+| `artifact`  | yes      | Artifact type; currently `"project"`                 |
+| `directory` | yes      | Target directory, relative to the working directory  |
+| `choice`    | yes      | Project type (`"default"`, `"website"`, …)           |
+| `title`     | no       | Project title; same defaulting as the CLI path       |
+| `dry_run`   | no       | Compute the file plan but write nothing              |
+
+Unknown fields are rejected, so misspelled keys fail loudly instead of
+being silently ignored.
+
+On success the command exits 0 and prints the result:
+
+```json
+{
+  "version": 1,
+  "path": "/absolute/path/to/mysite",
+  "dry_run": false,
+  "files": [
+    { "path": "_quarto.yml", "action": "created" },
+    { "path": "index.qmd", "action": "created" },
+    { "path": "about.qmd", "action": "created" },
+    { "path": "styles.css", "action": "created" },
+    { "path": ".gitignore", "action": "created" }
+  ]
+}
+```
+
+`version` identifies the result shape (currently `1`). `path` is the
+absolute path of the project directory. Each file reports an
+`action`: `"created"`, or `"skipped-existing"` when the file was
+already present. With `"dry_run": true` (or the `--dry-run` flag,
+which is equivalent), the same result is reported with
+`"dry_run": true` and nothing is written.
+
+### Errors and warnings
+
+On failure the command exits non-zero, writes **nothing** to stdout,
+and emits a structured error on stderr as a JSON line:
+
+```json
+{
+  "$schema": "https://quarto.org/schemas/v1/json-diagnostic.json",
+  "kind": "error",
+  "title": "Unknown project type 'nope'",
+  "problem": "Valid project types: default, website. Not yet implemented: blog, manuscript, book.",
+  "hints": [],
+  "details": []
+}
+```
+
+Warnings use the same shape with `"kind": "warning"` — for example the
+defaulted-title warning when the directive omits `title`. Since
+diagnostics never mix into stdout, callers can always parse stdout as
+a single JSON document.
+
+### Discovering capabilities
+
+`q2 create --list --json` emits the registry of artifact types and
+their choices, so tools can populate pickers without hardcoding the
+type list:
+
+```json
+{
+  "version": 1,
+  "artifacts": [
+    {
+      "type": "project",
+      "display_name": "Project",
+      "choices": [
+        {
+          "id": "default",
+          "name": "Default",
+          "description": "A minimal Quarto project",
+          "implemented": true
+        },
+        {
+          "id": "website",
+          "name": "Website",
+          "description": "A Quarto website with navigation",
+          "implemented": true
+        },
+        {
+          "id": "blog",
+          "name": "Blog",
+          "description": "A blog using the Quarto blog template",
+          "implemented": false
+        }
+      ]
+    }
+  ]
+}
+```
+
+(The full listing also includes `manuscript` and `book`.) Offer only
+choices with `"implemented": true`; the others are reserved and
+rejected if used in a directive.

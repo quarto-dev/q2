@@ -35,6 +35,16 @@ import {
   type RenderResult,
   type RenderToHtmlOptions,
 } from '@quarto/preview-runtime';
+import {
+  makeAutomergeDebugApi,
+  type QuartoDebugAutomergeApi,
+} from './debugAutomerge';
+import { installMessageTap, uninstallMessageTap } from './debugMessageTap';
+import { openInspector, closeInspector } from './debugInspector';
+import {
+  openServerInspector,
+  closeServerInspector,
+} from './debugServerInspector';
 
 export interface QuartoDebugProjectInfo {
   id: string;
@@ -121,6 +131,46 @@ export interface QuartoDebugApi {
 
   /** Read a VFS file's bytes, or null if absent. */
   vfsRead(path: string): Uint8Array | null;
+
+  /**
+   * Automerge-layer introspection: repos, doc inventory, snapshots,
+   * history, sync status, presence. See `debugAutomerge.ts`
+   * (bd-q93tkglb).
+   */
+  am: QuartoDebugAutomergeApi;
+
+  /**
+   * Open the visual live inspector (lazy-loaded panel over the live
+   * sync-client Repo). Requires a connected project. No-op if open.
+   */
+  openInspector(): Promise<void>;
+
+  /** Close the live inspector if open. Idempotent. */
+  closeInspector(): void;
+
+  /**
+   * Embed /debug.html (its own SERVER-connected Repo) in an overlay
+   * iframe, seeded with the current project's index doc — for
+   * live-vs-server comparison next to the live inspector.
+   */
+  openServerInspector(): void;
+
+  /** Close the embedded server-view debugger if open. Idempotent. */
+  closeServerInspector(): void;
+
+  /**
+   * Contract version of this API. Bump on breaking shape changes so
+   * agents can gate on it.
+   */
+  apiVersion: number;
+
+  /**
+   * Human- and agent-readable usage document for the whole API. This
+   * is the runtime contract: it must mention every method (enforced
+   * by a test) and must be updated in the same commit as any API
+   * change.
+   */
+  help(): string;
 }
 
 /**
@@ -140,6 +190,91 @@ export interface DebugApiContext {
 
 const GLOBAL_KEY = 'quartoDebug';
 
+/**
+ * Contract version of `window.quartoDebug`. Bump on breaking changes
+ * to method names or result shapes (additions don't require a bump).
+ */
+export const DEBUG_API_VERSION = 1;
+
+/**
+ * Runtime usage contract, returned by `quartoDebug.help()`. Written
+ * for humans and agents alike. A test asserts it mentions every key
+ * of the API, of `am`, and of `am.unsafe` — update it in the same
+ * commit as any API change.
+ */
+const HELP_TEXT = `\
+window.quartoDebug — Quarto Hub in-context debug API (apiVersion ${DEBUG_API_VERSION})
+
+Everything is read-only/observation-only unless marked MUTATES, and
+returns JSON-serializable values unless noted. Enable outside dev
+builds with localStorage.quartoDebug = '1' (then reload).
+
+Project & files
+  project()                     project id / description / indexDocId / syncServer, or null
+  listFiles()                   project file paths (no leading slash)
+  readFile(path)                text -> string, binary -> Uint8Array, missing -> null
+  writeFile(path, contents, {mimeType?})   MUTATES via the editor's Automerge paths
+  getActiveFile()               active file path, or null
+  setActiveFile(path)           MUTATES route: switch the active page
+
+Rendering & VFS
+  rerender()                    force a render of the active page; returns the response
+  lastRenderResponse()          most recent render snapshot, or null
+  vfsList(prefix?)              WASM VFS paths (note the /project/ prefix convention)
+  vfsRead(path)                 VFS file bytes, or null
+
+Automerge layer (am.*)
+  am.repos()                    repos in this page: name, syncServer, peerId, connectedPeers, cachedHandles
+  am.docs()                     doc inventory: docId, role (index|file|binary-file|project-set),
+                                path, handleState, heads, unavailableMarker
+  am.snapshot(ref, opts?)       sanitized JSON clone of one doc. ref: file path | 'index' | docId.
+                                Strings are truncated by default; opts {maxStringLength, maxDepth,
+                                full: true}. Byte arrays always summarize as {$type:'bytes', length}
+                                (read payloads via readFile/vfsRead instead).
+  am.history(ref, opts?)        change metadata, newest first; opts {limit} (default 20)
+  am.syncStatus()               connected flag + sync diagnostics (stranded docs, retry state)
+                                + project-set servers/collections
+  am.presence()                 presence: own identity, tracked file, remote peers
+  am.doctor()                   cross-layer consistency check: Monaco vs Automerge text,
+                                file entries vs handles, VFS coverage, handle readiness,
+                                stranded docs. [] = healthy. Start debugging here.
+  am.messages(opts?)            observed sync-protocol traffic (ring of 500, newest
+                                first) + tap status; opts {limit, type}. The tap attaches
+                                on the next project connect after this API installs
+                                (tap.attached tells you). Summaries only by default; set
+                                localStorage.quartoDebugCapture = 'full' and reload to
+                                also capture payloads (base64).
+
+Escape hatches (am.unsafe.*) — console use only, NOT JSON-serializable
+  am.unsafe.handle(ref)         live DocHandle (same refs as am.snapshot). WARNING: calling
+                                handle.change() bypasses the sync client's caches, VFS
+                                mirroring, and Monaco sync — observe, don't mutate.
+  am.unsafe.Automerge           the @automerge/automerge module: getConflicts(doc, prop),
+                                getAllChanges/decodeChange forensics.
+                                Time travel: use the HANDLE, not Automerge.view —
+                                handle.history() returns URL-encoded heads, which
+                                Automerge.view rejects ("could not decode hash").
+                                  const h = quartoDebug.am.unsafe.handle('index.qmd')
+                                  h.view(h.history()[0]).doc()   // doc at first change
+
+Visual inspector
+  openInspector()               open the live inspector panel (lazy-loaded second
+                                React root over the live sync-client Repo): document
+                                viewer with per-file subscribe, sync/presence/doctor
+                                panes, message log. Requires an open project.
+  closeInspector()              close it (Esc works too)
+  openServerInspector()         embed /debug.html in an overlay iframe, seeded with
+                                this project's index doc. It keeps its OWN
+                                server-connected Repo — put it next to the live
+                                inspector to compare the editor's in-memory heads
+                                against the sync server's view of the same docs.
+  closeServerInspector()        close the embedded server-view debugger
+
+Meta
+  apiVersion                    number; gate on it before relying on shapes
+  help()                        this text
+`;
+
 interface MutableGlobal {
   [GLOBAL_KEY]?: QuartoDebugApi;
 }
@@ -155,6 +290,10 @@ function findFile(
 }
 
 function makeApi(ctx: DebugApiContext): QuartoDebugApi {
+  const am = makeAutomergeDebugApi({
+    getProject: ctx.getProject,
+    getFiles: ctx.getFiles,
+  });
   return {
     project(): QuartoDebugProjectInfo | null {
       const p = ctx.getProject();
@@ -266,6 +405,32 @@ function makeApi(ctx: DebugApiContext): QuartoDebugApi {
       for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
       return out;
     },
+
+    am,
+
+    // Closure over `am`, not `this` — the API is often destructured
+    // or called through CDP evaluate wrappers.
+    openInspector(): Promise<void> {
+      return openInspector(am);
+    },
+
+    closeInspector(): void {
+      closeInspector();
+    },
+
+    openServerInspector(): void {
+      openServerInspector(ctx.getProject()?.indexDocId ?? null);
+    },
+
+    closeServerInspector(): void {
+      closeServerInspector();
+    },
+
+    apiVersion: DEBUG_API_VERSION,
+
+    help(): string {
+      return HELP_TEXT;
+    },
   };
 }
 
@@ -283,6 +448,17 @@ export function installDebugApi(ctx: DebugApiContext): () => void {
   const api = makeApi(ctx);
   installedApi = api;
   lastSnapshot = null;
+
+  // Sync-message tap for am.messages(). Attaches at the next project
+  // connect (Repo construction). Full payload capture is an at-enable
+  // opt-in: localStorage.quartoDebugCapture = 'full', then reload.
+  installMessageTap({
+    capture:
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('quartoDebugCapture') === 'full'
+        ? 'full'
+        : 'summary',
+  });
 
   setRenderListener((result, options) => {
     lastSnapshot = {
@@ -304,6 +480,9 @@ export function uninstallDebugApi(): void {
   installedApi = null;
   lastSnapshot = null;
   setRenderListener(null);
+  uninstallMessageTap();
+  closeInspector();
+  closeServerInspector();
   if (typeof window !== 'undefined') {
     delete (window as unknown as MutableGlobal)[GLOBAL_KEY];
   }

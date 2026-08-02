@@ -68,6 +68,7 @@ use quarto_system_runtime::SystemRuntime;
 
 use crate::Result;
 use crate::artifact::{ArtifactScope, ArtifactStore};
+use crate::artifact_flush::{enqueue_artifacts, route_drained_project_artifacts};
 use crate::error::QuartoError;
 use crate::format::Format;
 use crate::output_sink::{OutputSink, OutputSinkError};
@@ -124,6 +125,11 @@ pub struct RenderToFileOptions {
 /// Result of rendering a document to a file.
 #[derive(Debug)]
 pub struct RenderToFileResult {
+    /// Path to the input file this result was rendered from, as the
+    /// caller passed it. Carried so the render summary can attribute
+    /// per-page diagnostics to their page when coalescing repeated
+    /// emissions (bd-mg3ckvp7; the missing piece bd-9hlja recorded).
+    pub input_path: PathBuf,
     /// Path to the output file.
     pub output_path: PathBuf,
     /// Path to the resources directory (e.g., `document_files/`).
@@ -363,27 +369,20 @@ pub fn render_document_to_file(
     enqueue_artifacts(&ctx.artifacts, &resolver, ArtifactScope::Page, &mut sink)?;
     let drained = ctx.artifacts.drain_project_scoped();
 
+    // Shared with both Pass-2 renderers (bd-gdhk). Project-scope
+    // artifacts either accumulate for a once-per-project flush, or —
+    // for `lib_dir == ""` / standalone calls — enqueue into this
+    // render's sink, where the resolver routes them under
+    // `{stem}_files/` (pre-Phase-5 layout).
     let has_shared_lib = !project_type.lib_dir().is_empty();
-    match (project_artifacts, has_shared_lib) {
-        (Some(dest), true) => {
-            // Real multi-doc project (e.g. website): drain into
-            // the orchestrator's accumulator; post_render flushes.
-            dest.merge_into_project(drained).map_err(|e| {
-                QuartoError::other(format!(
-                    "Project-scoped artifact merge failed for {}: {}",
-                    input_path.display(),
-                    e
-                ))
-            })?;
-        }
-        _ => {
-            // Default project or standalone call: enqueue Project-
-            // scoped artifacts via the resolver. For lib_dir == ""
-            // the resolver routes them under `{stem}_files/`,
-            // preserving pre-Phase-5 layout.
-            enqueue_artifacts(&drained, &resolver, ArtifactScope::Project, &mut sink)?;
-        }
-    }
+    route_drained_project_artifacts(
+        drained,
+        project_artifacts,
+        has_shared_lib,
+        &resolver,
+        &mut sink,
+        input_path,
+    )?;
 
     // Drain user-resource copy intents (images etc. collected by
     // `ResourceCollectorTransform`) into the sink. The sink will
@@ -422,45 +421,12 @@ pub fn render_document_to_file(
 
     let resource_report = std::mem::take(&mut ctx.resource_report);
     Ok(RenderToFileResult {
+        input_path: input_path.to_path_buf(),
         output_path,
         resources_dir: resource_paths.resource_dir,
         render_output,
         resource_report,
     })
-}
-
-/// Enqueue every artifact in `store` whose scope matches `scope_filter`
-/// into `sink` at its resolver-determined on-disk location. Skips
-/// artifacts without a `path`.
-///
-/// The caller owns the sink lifecycle (construct, enqueue producers,
-/// flush). Used by `render_document_to_file` (Page scope, per-doc;
-/// Project scope when standalone) and by
-/// `WebsiteProjectType::post_render` for project-shared artifacts
-/// (via [`crate::project::website_post_render::flush_site_libs`]).
-///
-/// Iteration is sorted-key so the resulting flush order is
-/// deterministic across runs / platforms.
-#[cfg(not(target_arch = "wasm32"))]
-pub fn enqueue_artifacts(
-    store: &ArtifactStore,
-    resolver: &ResourceResolverContext,
-    scope_filter: ArtifactScope,
-    sink: &mut OutputSink,
-) -> Result<()> {
-    let mut entries: Vec<(&str, &crate::artifact::Artifact)> = store
-        .iter()
-        .filter(|(_, a)| a.scope == scope_filter)
-        .collect();
-    entries.sort_by(|a, b| a.0.cmp(b.0));
-
-    for (_, artifact) in entries {
-        let Some(path) = &artifact.path else { continue };
-        let on_disk = resolver.on_disk_path_for(artifact.scope, path);
-        sink.write(on_disk, artifact.content.clone())
-            .map_err(QuartoError::from)?;
-    }
-    Ok(())
 }
 
 /// When `options` has no explicit `output_path` / `output_dir`, fall

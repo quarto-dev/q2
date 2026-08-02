@@ -7,71 +7,16 @@
 //! gap-filling prompts (bd-hh1erpfx). Each artifact type (project
 //! today; extension later) implements [`ArtifactProvider`]; the
 //! command layer stays agnostic to what is being created.
+//!
+//! The plan/writer/prompter types themselves live in
+//! [`crate::commands::common`], shared with `q2 use` (bd-1vlw8).
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use serde::Serialize;
 
-/// Content of a planned scaffold file.
-#[derive(Debug)]
-pub enum FileContent {
-    Text(String),
-    Binary(Vec<u8>),
-}
-
-/// One file the create operation intends to write.
-#[derive(Debug)]
-pub struct PlannedFile {
-    /// Path relative to the target directory.
-    pub path: PathBuf,
-    pub content: FileContent,
-}
-
-/// The resolved intent of a create invocation: where to write, what
-/// to write, and whether to actually write it.
-#[derive(Debug)]
-pub struct CreatePlan {
-    /// Absolute target directory.
-    pub root: PathBuf,
-    /// The directory as the user wrote it, for messages and hints.
-    pub root_display: String,
-    pub files: Vec<PlannedFile>,
-    /// `.gitignore` entries to ensure in the target directory.
-    pub gitignore_entries: Vec<&'static str>,
-    /// When set, the writer computes the full file plan (including the
-    /// existing-project error) but writes nothing.
-    pub dry_run: bool,
-}
-
-/// A resolved create plus any non-fatal diagnostics produced while
-/// resolving (e.g. a defaulted title).
-#[derive(Debug)]
-pub struct ResolvedCreate {
-    pub plan: CreatePlan,
-    pub warnings: Vec<DiagnosticMessage>,
-}
-
-/// A create failure, carried as a structured diagnostic so the human
-/// path (pretty text) and the JSON path (wire shape) render the same
-/// content.
-#[derive(Debug)]
-pub struct CreateFailure(pub DiagnosticMessage);
-
-impl CreateFailure {
-    pub fn new(title: impl Into<String>, problem: impl Into<String>) -> Self {
-        Self(
-            DiagnosticMessageBuilder::error(title)
-                .problem(problem.into())
-                .build(),
-        )
-    }
-
-    /// The user cancelled an interactive prompt (Esc / Ctrl-C).
-    pub fn cancelled() -> Self {
-        Self::new("Create cancelled", "No files were written.")
-    }
-}
+use crate::commands::common::plan::{CommandFailure, ResolvedPlan};
+use crate::commands::common::prompter::Prompter;
 
 /// One choice row for `--list`. Kept to the fields downstream tools
 /// need to populate a picker; the `id` is what the directive's
@@ -98,7 +43,7 @@ pub trait ArtifactProvider {
         args: &[String],
         cwd: &Path,
         dry_run: bool,
-    ) -> Result<ResolvedCreate, CreateFailure>;
+    ) -> Result<ResolvedPlan, CommandFailure>;
 
     /// Resolve a JSON directive payload (the directive object minus
     /// its `artifact` tag). Implementations must reject unknown
@@ -108,7 +53,7 @@ pub trait ArtifactProvider {
         payload: serde_json::Value,
         cwd: &Path,
         dry_run: bool,
-    ) -> Result<ResolvedCreate, CreateFailure>;
+    ) -> Result<ResolvedPlan, CommandFailure>;
 
     /// Resolve with interactive gap-filling: consume whatever
     /// positional args were provided and prompt (via `prompter`) only
@@ -121,8 +66,8 @@ pub trait ArtifactProvider {
         args: &[String],
         cwd: &Path,
         dry_run: bool,
-        prompter: &mut dyn super::prompter::Prompter,
-    ) -> Result<ResolvedCreate, CreateFailure>;
+        prompter: &mut dyn Prompter,
+    ) -> Result<ResolvedPlan, CommandFailure>;
 
     /// Choices offered by this artifact type, for `--list`.
     fn choices(&self) -> Vec<ChoiceListing>;

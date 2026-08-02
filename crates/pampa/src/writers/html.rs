@@ -1055,8 +1055,19 @@ fn write_inline<W: Write>(
             }
             write!(ctx, "</span>")?;
         }
+        // A shortcode that survives to the writer was never resolved — a
+        // resolution leak. Render the Q1-style visible ?name marker so the
+        // gap is diagnosable in the output; never drop it silently
+        // (bd-540a976a Phase 5).
+        Inline::Shortcode(sc) => {
+            write!(
+                ctx,
+                "<span class=\"quarto-unresolved-shortcode\">?{}</span>",
+                escape_html(&sc.name)
+            )?;
+        }
         // Quarto extensions - render as raw HTML or skip
-        Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_) => {
+        Inline::NoteReference(_) | Inline::Attr(_) => {
             // These should not appear in final output
         }
         Inline::Insert(ins) => {
@@ -2020,6 +2031,41 @@ mod tests {
 
     fn dummy_source_info() -> SourceInfo {
         SourceInfo::for_test()
+    }
+
+    #[test]
+    fn test_unresolved_shortcode_renders_visible_marker() {
+        use crate::pandoc::ASTContext;
+
+        // An Inline::Shortcode surviving to the writer is a resolution
+        // leak. It must render as a visible ?name marker — never be
+        // silently dropped (bd-540a976a, Phase 5).
+        let ctx = ASTContext::anonymous();
+        let sc = quarto_pandoc_types::Shortcode {
+            is_escaped: false,
+            name: "mystery".to_string(),
+            positional_args: vec![],
+            keyword_args: hashlink::LinkedHashMap::new(),
+            source_info: dummy_source_info(),
+        };
+        let para = Block::Paragraph(Paragraph {
+            content: vec![Inline::Shortcode(sc)],
+            source_info: dummy_source_info(),
+        });
+        let pandoc = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![para],
+        };
+
+        let mut output = Vec::new();
+        write(&pandoc, &ctx, &mut output).unwrap();
+        let html = String::from_utf8(output).unwrap();
+
+        assert!(
+            html.contains("?mystery"),
+            "expected visible marker, got: {html}"
+        );
+        assert!(html.contains("quarto-unresolved-shortcode"));
     }
 
     #[test]

@@ -251,6 +251,13 @@ export function RichTextEditor({
       const next = e.relatedTarget as Node | null;
       // Focus stayed within the edit box (toolbar button / link input) — not a commit.
       if (next && root && root.contains(next)) return;
+      // Focus moved into UI that owns its focus (e.g. the comment
+      // popup, marked [data-q2-owns-focus]) — commit, but don't arm a
+      // focus restore that would steal focus back from it.
+      if (next && (next as Element).closest?.('[data-q2-owns-focus]')) {
+        commit(editor);
+        return;
+      }
       ctx.requestFocusRestore?.(resolved.sourceEntry.r[0]);
       commit(editor);
     };
