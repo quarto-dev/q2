@@ -217,28 +217,65 @@ errors never do*):
 
 ### Work items (TDD)
 
-- [ ] Tests first, sync-client (vitest, fake factory): scripted upgrade-401
-      fires `onAuthRejected` exactly once per episode; scripted network
-      close/error fires nothing and keeps retrying; `getBearer` throwing
-      `ReauthRequired`-shaped errors fires `token-refresh-terminal` and stops
-      the retry loop; a factory without the status capability behaves as
-      today (no report, no crash).
-- [ ] Tests first, hub-mcp (vitest): 401 evidence → forceRefresh + reprobe →
-      recovery (no user-visible state change); persistent 401 → invalidate +
-      reauth-required + next tool call returns `ReauthRequired` promptly;
-      403 evidence and initial-probe 403 → terminal message, keyring intact;
-      network-only failures never change auth state.
-- [ ] Implement adapter evidence reporting, then manager policy.
-- [ ] Extend `e2e-auth.test.ts` (real hub + mock IdP + real keyring):
-      mid-session grant revocation (mock IdP returns `invalid_grant`, short
-      TTL forces the refresh) → next tool call reports `ReauthRequired`
-      instead of hanging; with F1 landed: ban the sub mid-session → reconnect
-      → 403 → terminal message.
-- [ ] `cd hub-client && npm run build:all && npm run test:ci` (sync-client is
-      bundled from source); sync-client + hub-mcp vitest suites;
-      `cargo xtask build-hub-mcp-bundle && cargo build --bin q2` so the q2
-      embed picks the change up (verify with `q2 mcp --launcher-info`).
-- [ ] E2E through the real binary per policy; record invocation + output.
+- [x] Tests first, sync-client (7 new specs in
+      `NodeWebSocketClientAdapter.test.ts`, 4 observed failing pre-fix, 3
+      pinning must-stay behavior): upgrade-401 fires `onAuthRejected` exactly
+      once per episode with reset on peer handshake; mid-session 403 with no
+      close event (the ws unexpected-response shape) keeps the interval retry
+      alive; network close/error fires nothing and keeps retrying;
+      `ReauthRequired`-named `getBearer` failure fires `token-refresh-terminal`
+      and stops the retry loop; `TokenRefreshError`-named failures stay
+      transient; a factory without the status capability degrades to today's
+      behavior; plus a REAL-`ws` spec against a raw net server that answers
+      403 and keeps the connection open — pins both the status surfacing and
+      the no-connection-leak invariant.
+- [x] Tests first, hub-mcp (10 new specs in `connection-manager.test.ts`,
+      all observed failing pre-fix): wiring; 401 → one forceRefresh+reprobe
+      → silent recovery; persistent 401 → invalidate + reauth-required +
+      next call rejects `ReauthRequired` with zero network (scripted fetch
+      exhausted); re-auth self-heal; 403 evidence → keyring intact +
+      `HubAccessDeniedError` on the re-probe; recheck-403 maps to the same
+      denial; token-refresh-terminal skips the pointless refresh; concurrent
+      reports coalesce to one cycle; transient refresh failure is
+      state-neutral; initial-probe 403 gets the clear message.
+- [x] Implemented. Adapter: factory seam gains optional `onUpgradeStatus`
+      capability; the default `ws` factory attaches the EventEmitter-only
+      `'unexpected-response'` natively and aborts the handshake itself
+      (drain + destroy request + destroy the captured TCP socket — verified
+      empirically that a no-op handler leaks and that ws skips
+      `abortHandshake` when a listener exists); `AuthRejectionEvidence`
+      reported via `onAuthRejected`, episode-debounced, reset at
+      peer-candidate; ReauthRequired-by-name classification; `authTerminal`
+      stops the loop. Found+fixed adjacent hazard: `disconnect()` during a
+      CONNECTING real socket removed listeners then `close()`d, turning
+      ws's "closed before established" error event into an
+      uncaughtException — a swallow-only error listener now guards it.
+      Manager: `handleAuthRejected` (coalesced), `enterReauthRequired` /
+      `enterDenied` / `dropDeadProjects`, `gateAuthState` fail-fast with
+      store-presence self-heal, `HubAccessDeniedError` replacing
+      `Unexpected status 403`, wiring via `buildAuthOptions`.
+- [x] `e2e-auth.test.ts` extended (real hub binary + mock IdP + real
+      keyring): grant revoked mid-session (IdP `invalid_grant`, 45 s TTL
+      forces refresh) → next tool call returns the ReauthRequired message in
+      <10 s and the keyring is wiped; ban `test-subject-1` mid-session
+      (stopped-hub `revocations.json` write + restart, F1's enforcement) →
+      WS reconnect 403 → adapter evidence → stderr terminal message → next
+      tool call answers with the banned/allowlist message in <10 s, keyring
+      kept. `TEST_REFRESH_TOKEN` exported from `test-idp.ts` for the
+      revocation hook.
+- [x] Verification: sync-client vitest 137/137; hub-mcp vitest 246 passed /
+      3 platform-skipped; `cd hub-client && npm run build:all` ✓ and
+      `npm run test:ci` 130/130 (sync-client bundles from source; the lazy
+      `ws` import untouched); `cargo xtask build-hub-mcp-bundle && cargo
+      build --bin q2` → `q2 mcp --launcher-info` shows the fresh embed
+      (bundle-hash 0fa70f4f3a9bbdd4, gitCommit = HEAD).
+- [x] E2E through the real binaries: `npx vitest run src/e2e-auth.test.ts`
+      (ts-packages/quarto-hub-mcp) → 3/3 passed (2026-08-03), with channel B
+      driving the real `q2 mcp` launcher (embed fresh; no fallback notice).
+      Observed outputs: `create_project` after revocation → "…credentials
+      have expired or were revoked. Ask me to authenticate again." ;
+      post-ban stderr → "[hub-mcp] Your account is not allowed on this
+      Quarto Hub…" ; post-ban `read_file` → the same denial message.
 
 ## F3 — discriminate `/auth/me` `exp` (`bd-aw8f3sp8`)
 

@@ -147,6 +147,7 @@ async function buildWsAdapter(
   return new mod.NodeWebSocketClientAdapter(url, {
     getBearer: auth.getBearer,
     retryInterval: retryIntervalMs,
+    onAuthRejected: auth.onAuthRejected,
   }) as unknown as NetworkAdapter;
 }
 

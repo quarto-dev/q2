@@ -45,7 +45,7 @@ import { fileURLToPath } from 'node:url';
 import { AsyncEntry } from '@napi-rs/keyring';
 
 import { McpTestClient } from './mcp-test-client.js';
-import { startTestIdp, type TestIdp } from './test-idp.js';
+import { startTestIdp, TEST_REFRESH_TOKEN, type TestIdp } from './test-idp.js';
 
 const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.resolve(pkgRoot, '..', '..');
@@ -152,10 +152,29 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
   let idp: TestIdp;
   let hub: ChildProcess;
   let hubUrl: string;
+  let hubPort: number;
   let tmpDir: string;
   let serverEnv: NodeJS.ProcessEnv;
   let keyringAccount: string;
   let projectId: string;
+
+  function spawnHub(): ChildProcess {
+    return spawn(
+      hubBin,
+      [
+        '--data-dir', path.join(tmpDir, 'hub-data'),
+        '-P', String(hubPort),
+        '-H', '127.0.0.1',
+        '--oidc-client-id', CLIENT_ID,
+        '--oidc-issuer', idp.issuer,
+        '--allowed-emails', EMAIL,
+        '--allow-insecure-auth',
+        // Hub-side auth audit trail when debugging (DEBUG_MCP=1).
+        ...(process.env['DEBUG_MCP'] ? ['-vv'] : []),
+      ],
+      { stdio: ['ignore', 'ignore', process.env['DEBUG_MCP'] ? 'inherit' : 'ignore'] },
+    );
+  }
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'q2-e2e-auth-'));
@@ -176,23 +195,9 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
     // (ephemeral port), but clear anyway in case of port reuse.
     await new AsyncEntry(KEYRING_SERVICE, keyringAccount).deletePassword().catch(() => {});
 
-    const hubPort = await freePort();
+    hubPort = await freePort();
     hubUrl = `ws://127.0.0.1:${hubPort}/ws`;
-    hub = spawn(
-      hubBin,
-      [
-        '--data-dir', path.join(tmpDir, 'hub-data'),
-        '-P', String(hubPort),
-        '-H', '127.0.0.1',
-        '--oidc-client-id', CLIENT_ID,
-        '--oidc-issuer', idp.issuer,
-        '--allowed-emails', EMAIL,
-        '--allow-insecure-auth',
-        // Hub-side auth audit trail when debugging (DEBUG_MCP=1).
-        ...(process.env['DEBUG_MCP'] ? ['-vv'] : []),
-      ],
-      { stdio: ['ignore', 'ignore', process.env['DEBUG_MCP'] ? 'inherit' : 'ignore'] },
-    );
+    hub = spawnHub();
     await waitForHealth(`http://127.0.0.1:${hubPort}/health`);
 
     serverEnv = {
@@ -288,4 +293,109 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
       await b.stop();
     }
   }, 90000);
+
+  /** Play the browser's role in the loopback+PKCE flow for `client`. */
+  async function authenticateViaLoopback(client: McpTestClient): Promise<void> {
+    const authPromise = client.callTool('authenticate', {});
+    const urlLine = await client.waitForStderr(/open this URL to sign in: /, 15000);
+    const authUrl = urlLine.slice(urlLine.indexOf('http'));
+    const browserResp = await fetch(authUrl);
+    expect(browserResp.ok).toBe(true);
+    const result = await authPromise;
+    expect(result.content[0]!.text).toContain(EMAIL);
+  }
+
+  // ── mid-session auth rejection (bd-l3b1brn8) ─────────────────────
+
+  it('reports ReauthRequired promptly when the grant is revoked mid-session', async () => {
+    // The main test's authenticate_clear left the (never-rotated)
+    // refresh token in the IdP's revoked list — reset so this test's
+    // own session works before its revocation moment.
+    idp.counters.revokedTokens.length = 0;
+
+    const c = new McpTestClient();
+    try {
+      await c.start(['--server', hubUrl], { env: serverEnv });
+      await authenticateViaLoopback(c);
+
+      // The session works.
+      const connected = await c.callTool('connect_project', { project: projectId });
+      expect(connected.content[0]!.text).toContain('auth-e2e.qmd');
+
+      // The user revokes the grant at the IdP (the real-world analog is
+      // myaccount.google.com → Remove Access): every further refresh
+      // grant answers invalid_grant. The 45s TTL sits inside the 60s
+      // early-refresh window, so the next auth-touching tool call MUST
+      // refresh — and must fail terminally, not spin.
+      idp.counters.revokedTokens.push(TEST_REFRESH_TOKEN);
+
+      const started = Date.now();
+      const result = await c.callTool('create_project', {
+        files: [{ path: 'after-revocation.qmd', content: 'x\n' }],
+      });
+      const elapsed = Date.now() - started;
+      const resultText = result.content[0]!.text;
+      expect(resultText).toMatch(/expired or were revoked/i);
+      expect(resultText).toMatch(/authenticate/i);
+      // Fail-fast is the point: nowhere near the 15 s peer timeout.
+      expect(elapsed).toBeLessThan(10_000);
+
+      // The dead grant was wiped so a fresh `authenticate` starts clean.
+      expect(
+        await new AsyncEntry(KEYRING_SERVICE, keyringAccount).getPassword(),
+      ).toBeNull();
+    } finally {
+      idp.counters.revokedTokens.length = 0;
+      await c.stop();
+    }
+  }, 90000);
+
+  it('surfaces the terminal denial message when the sub is banned mid-session (F1 bd-jkih1ql7 + F2)', async () => {
+    idp.counters.revokedTokens.length = 0;
+
+    const c = new McpTestClient();
+    try {
+      await c.start(['--server', hubUrl], { env: serverEnv });
+      await authenticateViaLoopback(c);
+      const connected = await c.callTool('connect_project', { project: projectId });
+      expect(connected.content[0]!.text).toContain('auth-e2e.qmd');
+
+      // Operator bans the sub — the documented stopped-hub procedure.
+      const exited = new Promise((r) => hub.once('exit', r));
+      hub.kill();
+      await exited;
+      fs.writeFileSync(
+        path.join(tmpDir, 'hub-data', 'revocations.json'),
+        JSON.stringify({ version: 1, not_before: {}, banned: ['test-subject-1'] }),
+      );
+      hub = spawnHub();
+      await waitForHealth(`http://127.0.0.1:${hubPort}/health`);
+
+      // The dropped socket reconnects (≤5 s retry); the upgrade gets the
+      // hub's 403 (F1's Bearer-path ledger enforcement); the adapter
+      // reports it as evidence; the manager enters the terminal denial
+      // state — announced on stderr.
+      await c.waitForStderr(/not allowed on this Quarto Hub/i, 30000);
+
+      // The next tool call fails fast with the same clear message…
+      const started = Date.now();
+      const result = await c.callTool('read_file', {
+        project: projectId,
+        path: 'auth-e2e.qmd',
+      });
+      expect(result.content[0]!.text).toMatch(/banned|allowlist/i);
+      expect(Date.now() - started).toBeLessThan(10_000);
+
+      // …and the keyring is kept: identity denial, not credential
+      // failure — re-auth with the same account cannot help.
+      expect(
+        await new AsyncEntry(KEYRING_SERVICE, keyringAccount).getPassword(),
+      ).toBeTruthy();
+
+      await c.callTool('authenticate_clear', {}).catch(() => {});
+    } finally {
+      idp.counters.revokedTokens.length = 0;
+      await c.stop();
+    }
+  }, 120000);
 });

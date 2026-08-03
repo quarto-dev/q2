@@ -26,6 +26,14 @@ export interface TestIdpOptions {
   idTokenTtlSecs?: number;
 }
 
+/**
+ * The single, never-rotated refresh token the IdP hands out
+ * (Google-style). Exported so tests can simulate a mid-session grant
+ * revocation by pushing it into `counters.revokedTokens` — every
+ * subsequent refresh grant then answers `invalid_grant`.
+ */
+export const TEST_REFRESH_TOKEN = 'rt-test-refresh-token';
+
 export interface TestIdp {
   issuer: string;
   counters: {
@@ -51,7 +59,7 @@ export async function startTestIdp(opts: TestIdpOptions): Promise<TestIdp> {
   };
   // code -> the PKCE challenge it was issued against
   const pendingCodes = new Map<string, { challenge: string }>();
-  const REFRESH_TOKEN = 'rt-test-refresh-token';
+  const REFRESH_TOKEN = TEST_REFRESH_TOKEN;
   let issuer = ''; // assigned after listen()
 
   const b64url = (input: Buffer | string): string =>
