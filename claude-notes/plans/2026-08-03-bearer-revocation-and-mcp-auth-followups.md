@@ -1,11 +1,14 @@
 # Auth review follow-ups: Bearer revocation parity, MCP reconnect auth classification, /auth/me exp semantics
 
-**Status:** proposed — not started. **Date:** 2026-08-03.
+**Status:** implemented — all three findings landed 2026-08-03; strands and
+epic closed. **Date:** 2026-08-03.
 **Epic:** `bd-rk55baiz`. **Child strands:** F1 `bd-jkih1ql7` · F2 `bd-l3b1brn8` ·
-F3 `bd-aw8f3sp8`.
-**Branches (planned):** integration `feature/auth-review-followups`; topic
-branches `braid/<id>-<slug>` per finding, merged `--no-ff` per the worktrees
-convention.
+F3 `bd-aw8f3sp8` (all closed).
+**Branches:** integration `feature/auth-review-followups` (not yet pushed);
+topic branches `braid/bd-jkih1ql7-bearer-revocation-ledger`,
+`braid/bd-l3b1brn8-mcp-reconnect-auth-classification`,
+`braid/bd-aw8f3sp8-auth-me-exp-discriminator`, each merged `--no-ff` per the
+worktrees convention.
 
 ## Overview
 
@@ -332,6 +335,16 @@ Per CLAUDE.md: TDD per item (fail → implement → pass), full
 verify` at the epic tip (full, not `--skip-hub-build` — F2/F3 touch
 ts-packages/hub-client), and end-to-end through the real binaries with
 invocation + observed output recorded in this plan before any strand closes.
+
+**Done (2026-08-03):** workspace suite green after each finding (10863
+tests); full `cargo xtask verify` passed on the F3 branch, whose tree
+equals the epic tip modulo the changelog commit (itself gated by
+`npm run test:wasm`, 130/130) and merge commits. One flake encountered
+during the first F3 verify —
+`admin_collect_lifecycle::collect_lifecycle_quarantine_restore_purge`,
+the known case-insensitive-filesystem id-collision class — recorded as a
+sighting on `bd-ce1mv6xv`; passed in isolation and in the full re-run.
+E2E evidence per finding is recorded in each Work-items section above.
 
 ## Risks
 
