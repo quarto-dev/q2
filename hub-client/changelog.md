@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-03
+
+- [`bd8f5206`](https://github.com/quarto-dev/q2/commits/bd8f5206): The session-expiry re-check now schedules only from the server-reported expiry; `/auth/me` gained a `credential` field distinguishing sliding sessions from fixed-expiry Bearer tokens, and the obsolete 1-hour fallback lifetime was removed.
+
 ### 2026-07-30
 
 - [`9e65fcdc`](https://github.com/quarto-dev/q2/commits/9e65fcdc): `quartoDebug.openServerInspector()` embeds the standalone Automerge debugger next to the editor, pre-pointed at the current project, so the sync server's view of a document can be compared against the editor's own.

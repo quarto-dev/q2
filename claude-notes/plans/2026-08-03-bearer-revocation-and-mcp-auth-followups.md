@@ -298,15 +298,32 @@ errors never do*):
 
 ### Work items (TDD)
 
-- [ ] Tests first, hub integration: `/auth/me` with a session cookie →
-      `credential: "session"` + sliding `exp`; with a Google Bearer →
-      `credential: "bearer"` + the token's own `exp`.
-- [ ] Tests first, hub-client (vitest): `useAuth` schedules from a present
-      `exp`; absent `exp` → no scheduled expiry re-check (replaces any test
-      pinning the 1 h fallback).
-- [ ] Implement server field + doc comment; SPA type + fallback removal.
-- [ ] Full `cargo xtask verify` (touches hub + hub-client); hub-client
-      changelog two-commit workflow applies to the SPA half.
+- [x] Tests first, hub integration (extended the two existing `/auth/me`
+      tests in `session_auth.rs`, both observed failing pre-fix):
+      `auth_me_returns_sliding_exp_from_session` now asserts
+      `credential == "session"`; `auth_me_supports_bearer` asserts
+      `credential == "bearer"` alongside the token's own `exp`.
+- [x] Tests first, hub-client (both observed failing pre-fix):
+      `authService.test.ts` gains a `fetchAuthMe` mapping test
+      (`exp` → `expiresAt` ms + `credential` passthrough);
+      `useAuth.test.tsx`'s two 1 h-fallback-pinned tests rewritten to
+      schedule from an explicit server `expiresAt` (behavior coverage
+      kept), plus a new spec: absent `exp` → zero re-checks across a
+      simulated week (the retired fallback would have fired ~168×).
+- [x] Implemented: `AuthMeResponse.credential: &'static str`
+      (`"session"`/`"bearer"`, mirroring the `AuthenticatedUser`
+      variants) with `exp` re-documented as the presented credential's
+      expiry; SPA `AuthState`/`AuthMeResponse` gain
+      `credential?: AuthCredentialKind`, `DEFAULT_SESSION_MS` deleted,
+      and the expiry-re-check effect skips scheduling when `expiresAt`
+      is absent (mount/visibility/keep-alive/probe checks unchanged).
+- [x] Full `cargo xtask verify`: pass (see session log). E2E through the
+      real hub binary (scratchpad `auth-me-credential-e2e.mjs`, mock IdP):
+      Bearer `/auth/me` → 200, `credential:"bearer"`, `exp ≈ now+600 s`
+      (the token's own); `/auth/session`-minted cookie → 200,
+      `credential:"session"`, `exp ≈ now+7 d` (sliding). All checks passed
+      (2026-08-03). hub-client changelog committed via the two-commit
+      workflow.
 
 ## Verification (whole epic)
 

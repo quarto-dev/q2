@@ -1049,6 +1049,10 @@ async fn auth_me_returns_sliding_exp_from_session() {
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(body["email"], "user@posit.co");
     assert_eq!(body["name"], "Session Test User");
+    assert_eq!(
+        body["credential"], "session",
+        "cookie path must be discriminated as credential=session (bd-aw8f3sp8)"
+    );
     let exp = body["exp"].as_i64().unwrap();
     let idle = SessionLifetimes::default().idle_secs;
     assert!(
@@ -1075,6 +1079,11 @@ async fn auth_me_supports_bearer() {
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(body["email"], "user@posit.co");
     assert_eq!(body["exp"], exp, "Bearer path reports the Google exp");
+    assert_eq!(
+        body["credential"], "bearer",
+        "Bearer path must be discriminated as credential=bearer — its exp \
+         is the token's fixed expiry, not a sliding session (bd-aw8f3sp8)"
+    );
 }
 
 #[tokio::test]

@@ -79,6 +79,25 @@ describe('authService', () => {
       });
     });
 
+    it('maps exp and the credential discriminator through (bd-aw8f3sp8)', async () => {
+      const now = Math.floor(Date.now() / 1000);
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({
+          email: 'a@b.com',
+          name: 'A',
+          picture: null,
+          exp: now + 600,
+          credential: 'session',
+        }),
+      } as Response);
+
+      const result = await fetchAuthMe();
+      expect(result?.expiresAt).toBe((now + 600) * 1000);
+      expect(result?.credential).toBe('session');
+    });
+
     it('returns null on 401', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: false,

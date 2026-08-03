@@ -1209,9 +1209,18 @@ struct AuthMeResponse {
     email: String,
     name: Option<String>,
     picture: Option<String>,
-    /// Token expiry (epoch seconds) so the client can schedule silent
-    /// refresh from the real expiry instead of assuming a fixed lifetime.
+    /// Expiry (epoch seconds) **of the presented credential** — the
+    /// semantics depend on `credential`: a *sliding* session expiry on
+    /// the cookie path (authenticated activity extends it; the SPA
+    /// schedules its expiry re-check from it), but the Google token's
+    /// *fixed* expiry on the Bearer path (nothing slides; the client
+    /// refreshes at the IdP). `credential` is the discriminator
+    /// (bd-aw8f3sp8).
     exp: i64,
+    /// Which verification path authenticated this request: `"session"`
+    /// (hub-minted cookie) or `"bearer"` (Google ID token). Mirrors the
+    /// [`crate::context::AuthenticatedUser`] variants.
+    credential: &'static str,
 }
 
 /// Query parameters for GET /auth/actor.
@@ -1276,12 +1285,14 @@ async fn auth_me(
             name: v.claims.name,
             picture: v.claims.picture,
             exp: v.claims.exp,
+            credential: "session",
         },
         crate::context::AuthenticatedUser::Google(claims) => AuthMeResponse {
             email: claims.email,
             name: claims.name,
             picture: claims.picture,
             exp: claims.exp,
+            credential: "bearer",
         },
     };
     Ok(Json(response))
