@@ -13,9 +13,11 @@ cookie (~400 bytes) — named `__Host-quarto_hub_token` under TLS, or
 HTTP activity re-issues the cookie (at most ~1/hour), up to an **idle
 timeout** (default 7 days) and an **absolute lifetime cap** (default
 30 days, anchored at login — re-issue can never extend past it). The
-MCP Bearer path (`Authorization: Bearer <google_id_token>`) is
-unchanged. Legacy Google-JWT cookies are rejected (one-time re-login
-at the cutover deploy).
+MCP Bearer path (`Authorization: Bearer <google_id_token>`) keeps its
+validate-per-request model, and since `bd-jkih1ql7` it is subject to
+the same revocation ledger as sessions (bans, logout-everywhere — see
+"Revoking users"). Legacy Google-JWT cookies are rejected (one-time
+re-login at the cutover deploy).
 
 ## Configuration
 
@@ -185,7 +187,13 @@ records only revocation events:
 
 - **Self-service:** `POST /auth/logout-everywhere` (browser session +
   CSRF header) kills the calling user's entire token family across
-  devices. Immediate re-login works.
+  devices — session cookies **and** outstanding Google ID tokens on
+  the Bearer/MCP path (any token whose `iat` predates the event is
+  refused with 401 `bearer_revoked`). Immediate re-login works, and an
+  MCP client self-heals on its next token refresh (fresh `iat`). What
+  it does **not** kill is a stolen Google *refresh token* — a refresh
+  mints a fresh, passing `iat`; the levers there are a hub **ban** or
+  Google-side revocation (the MCP `authenticate_clear` tool / RFC 7009).
 - **Operator ban:** with the **hub stopped** (or restarting right
   after), add the user's Google `sub` to the `banned` array:
 
@@ -193,11 +201,13 @@ records only revocation events:
   { "version": 1, "not_before": {}, "banned": ["1234567890"] }
   ```
 
-  A ban rejects every session **and refuses new logins** for that
-  `sub`; it never expires until removed. Never hand-edit while the hub
-  runs — the hub's own atomic persist can overwrite a live edit. The
-  restart also severs the banned user's live WebSocket (expiry and
-  revocation otherwise bite on reconnect, not on open sockets).
+  A ban rejects every session, **every Bearer/MCP request** (403
+  `user_banned`), **and refuses new logins** for that `sub`; it never
+  expires until removed. Never hand-edit while the hub runs — the
+  hub's own atomic persist can overwrite a live edit. The restart also
+  severs the banned user's live WebSocket (expiry and revocation
+  otherwise bite on reconnect, not on open sockets — true for the
+  Bearer path too, which validates once at upgrade).
 - Allowlist removal (`--allowed-emails`/`--allowed-domains`) also bites
   on the user's next request — but remove-then-re-add is **not** a
   revocation: unexpired tokens resume working. Use
@@ -250,6 +260,7 @@ Auth events on target `quarto_hub::audit` carry
 legacy Google-JWT cookie, or **two instances that each auto-generated
 their own secret** — see below), `session_expired`,
 `session_absolute_cap`, `session_tampered`, `session_revoked`,
+`bearer_revoked` (a Google ID token predating a logout-everywhere),
 `user_banned`, `user_not_allowlisted`, `conflicting_credentials`,
 `login_state_stale_client` and `login_state_missing` (the two
 cookie-absent login classes — see "Login nonce" above for their opposite

@@ -27,6 +27,7 @@ import { createHash } from 'node:crypto';
 
 import {
   createSyncClient,
+  type AuthRejectionEvidence,
   type DisconnectOptions,
   type SyncClient,
   type SyncClientCallbacks,
@@ -64,6 +65,24 @@ export class InsecureTransportError extends Error {
     message: string = 'Refusing to send a Bearer token over plain ' +
       "HTTP / WS to a non-loopback host. Use 'wss://' / 'https://', " +
       'or set `QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH=1` to override.',
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * The hub returned 403 for our (valid) credentials: the identity is
+ * denied — banned or not in the allowlist. Distinct from a 401 in that
+ * re-authenticating with the same account cannot help, so the keyring
+ * is deliberately left intact (bd-l3b1brn8).
+ */
+export class HubAccessDeniedError extends Error {
+  override readonly name = 'HubAccessDeniedError';
+  constructor(
+    message: string = 'Your account is not allowed on this Quarto Hub ' +
+      '(it may be banned or not in the allowlist). Re-authenticating ' +
+      'with the same account will not help — contact the hub operator, ' +
+      'or run authenticate_clear and sign in as a different account.',
   ) {
     super(message);
   }
@@ -197,6 +216,15 @@ export class ConnectionManager {
   // proactively and the WS handshake is the backstop if the hub later
   // rejects the token.
   private authConfirmed = false;
+  // Set when a mid-session rejection ended in a wiped grant: the next
+  // tool call must fail fast with ReauthRequired instead of hanging
+  // into the peer timeout. Cleared once fresh credentials appear in
+  // the store (the user ran `authenticate`). (bd-l3b1brn8)
+  private reauthRequired = false;
+  // Coalesces concurrent onAuthRejected reports: every project adapter
+  // fires after a hub-wide event, but at most one forceRefresh+reprobe
+  // cycle runs at a time.
+  private authRecheckInflight: Promise<void> | undefined;
 
   constructor(deps: ConnectionManagerDeps | string) {
     // Backwards-compat: the prior signature was `new ConnectionManager(url)`.
@@ -230,6 +258,7 @@ export class ConnectionManager {
    * we've already connected.
    */
   async connect(indexDocId: string): Promise<ProjectState> {
+    await this.gateAuthState();
     const existing = this.projects.get(indexDocId);
     if (existing) return existing;
 
@@ -336,6 +365,7 @@ export class ConnectionManager {
   async createProject(
     files: Array<{ path: string; content: string }>,
   ): Promise<{ indexDocId: string; files: Array<{ path: string; docId: string }> }> {
+    await this.gateAuthState();
     const auth = await this.resolveAuthForConnect();
 
     const tempFiles = new Map<string, FilePayload>();
@@ -475,7 +505,7 @@ export class ConnectionManager {
     // on the happy path that's a cached, network-free call.
     if (this.authConfirmed) {
       await rm.getValidIdToken();
-      return { getBearer: () => rm.getValidIdToken() };
+      return this.buildAuthOptions(rm);
     }
 
     // Pull a valid id_token (refreshes proactively within the skew).
@@ -506,10 +536,162 @@ export class ConnectionManager {
       // probe, and hand the sync client a getter so each attach + retry
       // sees a freshly-refreshed token.
       this.authConfirmed = true;
-      return { getBearer: () => rm.getValidIdToken() };
+      return this.buildAuthOptions(rm);
+    }
+    if (status === 403) {
+      // Valid credentials, denied identity (banned / not allowlisted).
+      // Deliberately NOT invalidate(): re-auth with the same account
+      // cannot help, so keep the keyring intact.
+      throw new HubAccessDeniedError();
     }
     throw new Error(
       `Unexpected status ${status} from hub auth probe at ${this.probePath}`,
+    );
+  }
+
+  /**
+   * The auth options handed to the sync client: a fresh-token getter
+   * for every attach/retry, plus the evidence channel the adapter uses
+   * to report definitive mid-session auth rejections (bd-l3b1brn8).
+   */
+  private buildAuthOptions(rm: RefreshManager): {
+    getBearer: () => Promise<string>;
+    onAuthRejected: (evidence: AuthRejectionEvidence) => void;
+  } {
+    return {
+      getBearer: () => rm.getValidIdToken(),
+      onAuthRejected: (evidence) => {
+        void this.handleAuthRejected(evidence);
+      },
+    };
+  }
+
+  /**
+   * Fail fast when a prior mid-session rejection wiped the grant: the
+   * next tool call gets the ReauthRequired message immediately instead
+   * of hanging into the peer timeout. Fresh credentials in the store
+   * (the user ran `authenticate`) clear the gate.
+   */
+  private async gateAuthState(): Promise<void> {
+    if (!this.reauthRequired) return;
+    const bundle = this.credentialStore
+      ? await this.credentialStore.read()
+      : null;
+    if (bundle !== null) {
+      this.reauthRequired = false;
+      return;
+    }
+    throw new ReauthRequired();
+  }
+
+  /**
+   * Policy for the adapter's definitive auth-rejection evidence.
+   * Coalesced: concurrent reports from multiple project adapters run at
+   * most one cycle. Outcomes:
+   *
+   * - `token-refresh-terminal` → the refresh manager already wiped the
+   *   grant when it threw; enter reauth-required.
+   * - upgrade 401 → one forceRefresh + reprobe. 200 = recovered
+   *   (silent; the adapter's retry picks the fresh token up via
+   *   getBearer). 401 again = invalidate + reauth-required. 403 =
+   *   denial. Transient refresh/probe failures change nothing.
+   * - upgrade 403 → denial: keyring kept (identity denied, credentials
+   *   fine), projects dropped; the next connect re-probes and surfaces
+   *   {@link HubAccessDeniedError} — which also self-heals if the
+   *   operator lifts the ban.
+   */
+  async handleAuthRejected(evidence: AuthRejectionEvidence): Promise<void> {
+    if (this.authRecheckInflight) return this.authRecheckInflight;
+    const run = this.classifyAuthRejection(evidence).finally(() => {
+      this.authRecheckInflight = undefined;
+    });
+    this.authRecheckInflight = run;
+    return run;
+  }
+
+  private async classifyAuthRejection(
+    evidence: AuthRejectionEvidence,
+  ): Promise<void> {
+    const rm = this.refreshManager;
+    if (!rm) return; // no Bearer wired — nothing to decide
+
+    if (evidence.kind === 'token-refresh-terminal') {
+      await this.enterReauthRequired();
+      return;
+    }
+    if (evidence.status === 403) {
+      await this.enterDenied();
+      return;
+    }
+
+    // 401: possibly just a token the proactive refresh missed. One
+    // forceRefresh + reprobe decides; recovery is invisible to the user.
+    let token: string;
+    try {
+      token = await rm.forceRefresh();
+    } catch (err) {
+      if ((err as { name?: string } | null)?.name === 'ReauthRequired') {
+        // invalid_grant: the refresh manager wiped the grant already.
+        await this.enterReauthRequired();
+        return;
+      }
+      // TokenRefreshError / network: transient — never change auth
+      // state on non-definitive evidence; the adapter keeps retrying.
+      return;
+    }
+    let status: number;
+    try {
+      status = await this.probeAuth(token);
+    } catch {
+      return; // network error: state-neutral
+    }
+    if (status === 401) {
+      // Freshly-refreshed token still rejected — same terminal shape as
+      // the pre-connect persistent-401 path.
+      await rm.invalidate();
+      await this.enterReauthRequired();
+    } else if (status === 403) {
+      await this.enterDenied();
+    }
+    // 200: recovered. The adapter's retry loop re-pulls via getBearer.
+  }
+
+  private async enterReauthRequired(): Promise<void> {
+    this.reauthRequired = true;
+    this.authConfirmed = false;
+    console.error(
+      '[hub-mcp] Quarto Hub rejected our credentials mid-session; ' +
+        're-authentication is required. Ask me to run `authenticate`.',
+    );
+    await this.dropDeadProjects();
+  }
+
+  private async enterDenied(): Promise<void> {
+    this.authConfirmed = false; // force a fresh probe on the next connect
+    console.error(`[hub-mcp] ${new HubAccessDeniedError().message}`);
+    await this.dropDeadProjects();
+  }
+
+  /**
+   * Disconnect and drop every project handle after a terminal auth
+   * event — their sockets are dead or doomed, and a dropped handle
+   * makes the next tool call re-enter `connect()` where the fast,
+   * clearly-messaged failure paths live.
+   */
+  private async dropDeadProjects(): Promise<void> {
+    const entries = Array.from(this.projects.entries());
+    this.projects.clear();
+    await Promise.all(
+      entries.map(async ([indexDocId, s]) => {
+        try {
+          await s.client.disconnect();
+        } catch {
+          console.error(
+            `[hub-mcp] error disconnecting project ${indexDocId} after ` +
+              'an auth rejection (ignored)',
+          );
+        }
+      }),
     );
   }
 

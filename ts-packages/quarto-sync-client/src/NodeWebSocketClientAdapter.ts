@@ -30,6 +30,7 @@ import type {
 // browser `WebSocket`. This adapter is Node-only by design.
 import WebSocket from 'ws';
 import { syncLog } from './log.js';
+import type { AuthRejectionEvidence } from './types.js';
 
 const ProtocolV1 = '1';
 const READY_TIMEOUT_MS = 1000;
@@ -65,11 +66,20 @@ export interface WebSocketLike {
 /**
  * Test seam: callers can inject a WebSocket factory so unit tests don't
  * require a real server. Defaults to the `ws` constructor.
+ *
+ * `onUpgradeStatus` is an **optional capability**: a factory that can
+ * observe the HTTP status of a failed (non-101) upgrade invokes it with
+ * that status. Factories without the capability (test fakes, future
+ * transports) simply ignore it and degrade to today's behavior — the
+ * failure folds into a generic error/close.
  */
 export type WebSocketFactory = (
   url: string,
   protocols: readonly string[],
-  options: { readonly headers: Record<string, string> },
+  options: {
+    readonly headers: Record<string, string>;
+    readonly onUpgradeStatus?: (status: number) => void;
+  },
 ) => WebSocketLike;
 
 export interface NodeWebSocketClientAdapterOptions {
@@ -83,6 +93,13 @@ export interface NodeWebSocketClientAdapterOptions {
   readonly retryInterval?: number;
   /** Test hook — defaults to the `ws` constructor. */
   readonly webSocketFactory?: WebSocketFactory;
+  /**
+   * Fired on definitive auth-rejection evidence only (see
+   * {@link AuthRejectionEvidence}), debounced to one report per failure
+   * episode; the episode ends at the next successful peer handshake.
+   * Plain network close/error never fires it.
+   */
+  readonly onAuthRejected?: (evidence: AuthRejectionEvidence) => void;
 }
 
 /**
@@ -98,8 +115,36 @@ export function redactAuthorization(s: string): string {
   );
 }
 
-const defaultWebSocketFactory: WebSocketFactory = (url, protocols, options) =>
-  new WebSocket(url, [...protocols], options) as unknown as WebSocketLike;
+const defaultWebSocketFactory: WebSocketFactory = (url, protocols, options) => {
+  const socket = new WebSocket(url, [...protocols], {
+    headers: options.headers,
+  });
+  if (options.onUpgradeStatus) {
+    // 'unexpected-response' is EventEmitter-only (not reachable through
+    // addEventListener), so it must be attached natively here. Attaching
+    // it changes ws's behavior: abortHandshake is SKIPPED — no
+    // error/close fires for this socket and the underlying HTTP request
+    // stays open — so this handler must abort the handshake itself
+    // (drain the response, destroy the request) or every failed attempt
+    // leaks a connection. Retry continuity rests on the adapter's
+    // interval, not on a close event from this socket.
+    socket.on('unexpected-response', (req, res) => {
+      try {
+        options.onUpgradeStatus?.(res.statusCode ?? 0);
+      } finally {
+        // Capture the TCP socket before touching the request: once the
+        // response has completed, req.destroy() no longer closes the
+        // underlying socket (the ws#1869 caveat its own abortHandshake
+        // works around the same way).
+        const tcp = res.socket ?? req.socket;
+        res.resume();
+        req.destroy();
+        if (tcp && !tcp.destroyed) tcp.destroy();
+      }
+    });
+  }
+  return socket as unknown as WebSocketLike;
+};
 
 const cborApi = cbor as {
   encode(value: unknown): Uint8Array;
@@ -111,11 +156,20 @@ export class NodeWebSocketClientAdapter extends NetworkAdapter {
   readonly retryInterval: number;
   private readonly getBearer: () => Promise<string>;
   private readonly wsFactory: WebSocketFactory;
+  private readonly onAuthRejected?: (evidence: AuthRejectionEvidence) => void;
 
   private socket: WebSocketLike | undefined;
   private retryIntervalId: ReturnType<typeof setInterval> | undefined;
   /** Set by disconnect(); makes any later connect() a permanent no-op. */
   private stopped = false;
+  /**
+   * Set on a terminal refresh failure (ReauthRequired from getBearer):
+   * every future attempt would throw the same way, so the retry loop
+   * stops. Policy (re-auth, discarding this adapter) lives upstream.
+   */
+  private authTerminal = false;
+  /** Episode debounce for onAuthRejected; reset on peer handshake. */
+  private authRejectionReported = false;
   private ready = false;
   private readyResolver?: () => void;
   private readonly readyPromise: Promise<void>;
@@ -127,6 +181,7 @@ export class NodeWebSocketClientAdapter extends NetworkAdapter {
     this.retryInterval = opts.retryInterval ?? 5000;
     this.getBearer = opts.getBearer;
     this.wsFactory = opts.webSocketFactory ?? defaultWebSocketFactory;
+    this.onAuthRejected = opts.onAuthRejected;
     this.readyPromise = new Promise<void>((resolve) => {
       this.readyResolver = resolve;
     });
@@ -153,7 +208,9 @@ export class NodeWebSocketClientAdapter extends NetworkAdapter {
     // without this gate a discarded adapter resurrects itself and
     // retries a dead endpoint forever. Mirrors
     // StoppableWebSocketClientAdapter (the browser-side fix).
-    if (this.stopped) return;
+    // authTerminal gates the same way: a terminal refresh failure
+    // means every attempt would fail identically (bd-l3b1brn8).
+    if (this.stopped || this.authTerminal) return;
     if (!this.socket || !this.peerId) {
       this.peerId = peerId;
       this.peerMetadata = peerMetadata ?? {};
@@ -182,15 +239,29 @@ export class NodeWebSocketClientAdapter extends NetworkAdapter {
     let token: string;
     try {
       token = await this.getBearer();
-    } catch {
-      // Token-fetch failure: leave the socket unset. The retry loop
-      // will try again, and the underlying refresh manager (if any)
-      // surfaces the error to its own caller.
+    } catch (err) {
+      // Classification is by error NAME, not instanceof: sync-client
+      // cannot import hub-mcp's ReauthRequired class (the dependency
+      // direction is hub-mcp → sync-client); the refresh manager stamps
+      // `name = 'ReauthRequired'` as the cross-package contract. A
+      // ReauthRequired is terminal — every retry would throw the same
+      // way — so report it and stop the loop. Anything else
+      // (TokenRefreshError, network) is transient: leave the socket
+      // unset and let the retry loop try again, as before.
+      if ((err as { name?: string } | null)?.name === 'ReauthRequired') {
+        this.authTerminal = true;
+        if (this.retryIntervalId) {
+          clearInterval(this.retryIntervalId);
+          this.retryIntervalId = undefined;
+        }
+        this.reportAuthRejection({ kind: 'token-refresh-terminal' });
+      }
       return;
     }
 
     const socket = this.wsFactory(this.url, [], {
       headers: { Authorization: `Bearer ${token}` },
+      onUpgradeStatus: this.onUpgradeStatus,
     });
     socket.binaryType = 'arraybuffer';
     socket.addEventListener('open', this.onOpen);
@@ -213,6 +284,7 @@ export class NodeWebSocketClientAdapter extends NetworkAdapter {
     if (this.remotePeerId) {
       this.emit('peer-disconnected', { peerId: this.remotePeerId });
     }
+    if (this.authTerminal) return; // reconnecting would just re-throw
     if (this.retryInterval > 0 && !this.retryIntervalId && this.peerId) {
       const peerId = this.peerId;
       const peerMetadata = this.peerMetadata;
@@ -243,6 +315,30 @@ export class NodeWebSocketClientAdapter extends NetworkAdapter {
     );
   };
 
+  /**
+   * Upgrade-status capability callback, handed to the factory on every
+   * attempt. Only a definitive 401/403 is auth evidence; anything else
+   * (proxy 502s, redirects) stays generic and the retry loop handles it
+   * exactly as today. Retrying continues on upgrade evidence — policy
+   * upstream may fix the token so a later attempt succeeds.
+   */
+  private readonly onUpgradeStatus = (status: number): void => {
+    if (status === 401 || status === 403) {
+      this.reportAuthRejection({ kind: 'upgrade-status', status });
+    }
+  };
+
+  /** One report per failure episode; reset by the next peer handshake. */
+  private reportAuthRejection(evidence: AuthRejectionEvidence): void {
+    if (this.authRejectionReported) return;
+    this.authRejectionReported = true;
+    try {
+      this.onAuthRejected?.(evidence);
+    } catch {
+      // Observer errors must never break the transport (bd-xzspx4r9).
+    }
+  }
+
   private removeListeners(socket: WebSocketLike): void {
     socket.removeEventListener('open', this.onOpen);
     socket.removeEventListener('close', this.onClose);
@@ -266,6 +362,12 @@ export class NodeWebSocketClientAdapter extends NetworkAdapter {
     this.stopped = true;
     if (this.socket) {
       this.removeListeners(this.socket);
+      // close() on a still-CONNECTING `ws` socket emits an error event
+      // ("closed before the connection was established"); with our
+      // listeners just removed, an unhandled 'error' would crash the
+      // process. Keep a swallow-only handler attached for the socket's
+      // remaining lifetime.
+      this.socket.addEventListener('error', () => undefined);
       this.socket.close();
     }
     if (this.retryIntervalId) {
@@ -300,6 +402,9 @@ export class NodeWebSocketClientAdapter extends NetworkAdapter {
 
   private peerCandidate(remotePeerId: PeerId, peerMetadata: PeerMetadata): void {
     this.forceReady();
+    // A successful handshake ends any auth-failure episode: the next
+    // definitive rejection is new evidence and reports again.
+    this.authRejectionReported = false;
     this.remotePeerId = remotePeerId;
     this.emit('peer-candidate', { peerId: remotePeerId, peerMetadata });
   }
