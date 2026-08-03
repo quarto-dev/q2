@@ -43,7 +43,9 @@ function fixErrorsText(project: string, path?: string): string {
     `2. For ${target}: read_file it, then apply the smallest fix for each error with patch_file. ` +
       'Diagnostics carry line/column, error codes, and hints — fix the reported problem and ' +
       "preserve the author's content and intent; never rewrite beyond the minimal change.",
-    '3. Call get_errors again and repeat until `errors` is empty for every file you touched.',
+    '3. Each patch_file/write_file response includes a render check of the new content — ' +
+      'repeat the fix step until it reports clean, then call get_errors once at the end to ' +
+      'confirm `errors` is empty for every file you touched.',
     '4. Leave warnings alone unless they are trivially part of the same fix.',
     '5. Report each fix: file, line, what was wrong, and what you changed.',
   ].join('\n');

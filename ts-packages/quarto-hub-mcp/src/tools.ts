@@ -14,7 +14,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { fileUnavailableMessage, type SyncClient } from '@quarto/quarto-sync-client';
+import { fileUnavailableMessage, type FilePayload, type SyncClient } from '@quarto/quarto-sync-client';
 import { ConnectionManager } from './connection-manager.js';
 import { renderDiagnostics, type RenderedDiagnostic } from './local-render.js';
 import {
@@ -154,7 +154,10 @@ function getWriteTools(): Tool[] {
   return [
     {
       name: 'write_file',
-      description: 'Replace the entire content of a text file in a Quarto Hub project. Creates the file if it does not exist.',
+      description:
+        'Replace the entire content of a text file in a Quarto Hub project. Creates the file ' +
+        'if it does not exist. Writes to .qmd documents automatically render-check the new ' +
+        'content and report any errors in the response — fix them before moving on.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -168,7 +171,11 @@ function getWriteTools(): Tool[] {
     },
     {
       name: 'patch_file',
-      description: 'Apply a targeted edit to a text file by replacing a specific string. More context-efficient than write_file for small changes to large files.',
+      description:
+        'Apply a targeted edit to a text file by replacing a specific string. More ' +
+        'context-efficient than write_file for small changes to large files. Edits to .qmd ' +
+        'documents automatically render-check the new content and report any errors in the ' +
+        'response — fix them before moving on.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -183,7 +190,9 @@ function getWriteTools(): Tool[] {
     },
     {
       name: 'create_file',
-      description: 'Create a new text file in a Quarto Hub project.',
+      description:
+        'Create a new text file in a Quarto Hub project. New .qmd documents are automatically ' +
+        'render-checked; any errors in the initial content are reported in the response.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -534,6 +543,40 @@ async function handleGetErrors(args: ToolArgs, manager: ConnectionManager): Prom
   return text(JSON.stringify(report, null, 2));
 }
 
+/**
+ * Render-check the content a write tool just committed and return a
+ * suffix for the tool response. Validity is a function of content, so
+ * the check stages the new text over the current file map rather than
+ * waiting for the CRDT callback to land. Never fails the write: a
+ * check that cannot run degrades to a pointer at get_errors.
+ */
+async function renderCheckSuffix(
+  files: Map<string, FilePayload>,
+  path: string,
+  newText: string,
+): Promise<string> {
+  if (!path.endsWith('.qmd')) return '';
+  try {
+    const staged = new Map(files);
+    staged.set(path, { type: 'text', text: newText });
+    const result = await renderDiagnostics(staged, path);
+    if (result.errors.length > 0) {
+      const n = result.errors.length;
+      return (
+        `\nRender check: ${n} error${n === 1 ? '' : 's'} in ${path}:\n` +
+        JSON.stringify(result.errors, null, 2)
+      );
+    }
+    const w = result.warnings.length;
+    return w > 0
+      ? `\nRender check: clean (${w} warning${w === 1 ? '' : 's'}; call get_errors to see them).`
+      : '\nRender check: clean.';
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return `\nRender check unavailable (${msg}); call get_errors to verify.`;
+  }
+}
+
 async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const path = args.path as string;
@@ -550,14 +593,14 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
       return unavailableFileError(path, ghost.docId);
     }
     await state.client.createFile(path, content);
-    return text(`Created ${path}`);
+    return text(`Created ${path}` + (await renderCheckSuffix(state.files, path, content)));
   }
   if (existing.type === 'binary') {
     return error(`Error: ${path} is a binary file. Cannot write text content to it.`);
   }
 
   state.client.updateFileContent(path, content);
-  return text(`Updated ${path}`);
+  return text(`Updated ${path}` + (await renderCheckSuffix(state.files, path, content)));
 }
 
 async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -596,7 +639,7 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
     currentContent.slice(index + oldString.length);
 
   state.client.updateFileContent(path, newContent);
-  return text(`Patched ${path}`);
+  return text(`Patched ${path}` + (await renderCheckSuffix(state.files, path, newContent)));
 }
 
 async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -615,7 +658,7 @@ async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Pro
   }
 
   await state.client.createFile(path, content);
-  return text(`Created ${path}`);
+  return text(`Created ${path}` + (await renderCheckSuffix(state.files, path, content)));
 }
 
 async function handleDeleteFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {

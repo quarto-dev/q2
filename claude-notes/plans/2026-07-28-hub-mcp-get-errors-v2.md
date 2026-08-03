@@ -99,6 +99,26 @@ Bundling (two consumers):
       (all verified green at their upstream state), so the Rust verify
       legs are unaffected; CI covers them on the PR.
 
+## Follow-up: writes render-check their own content (2026-08-03)
+
+User request after the first production fix loop: error checking should be
+part of completing a set of updates, not a separate call the agent must
+remember. Since validity = f(content) and the renderer is in-process, the
+write tools now do it themselves:
+
+- `write_file` / `patch_file` / `create_file` on a `.qmd` stage the new
+  text over the current file map, render it, and append the result to the
+  tool response: `Render check: clean.` (with warning count when nonzero),
+  or the structured error list when the new content is broken.
+- Non-`.qmd` writes are unchanged; a check that cannot run degrades to
+  `Render check unavailable (…); call get_errors to verify` and never
+  fails the write (`renderCheckSuffix` in `src/tools.ts`).
+- The `fix-errors` prompt now points the loop at the in-response check,
+  with one final `get_errors` to confirm.
+- Tests: `src/write-render-check.test.ts` (7, handler-level, renderer
+  mocked at the module seam, fail-first verified); `get-errors-live.test.ts`
+  extended to pin `Render check: clean` in the real-binary patch response.
+
 ## End-to-end verification record (2026-07-28)
 
 Throwaway Rust hub (`target/debug/hub --data-dir <tmp> --port 3105

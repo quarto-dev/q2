@@ -73,6 +73,8 @@ describe('get_errors at the MCP tool surface (test hub, local WASM)', () => {
       new_string: 'Hello **closed strong**',
     });
     expect(patched.isError).not.toBe(true);
+    // The write itself carries a render check of the new content.
+    expect(patched.content[0]!.text).toMatch(/Render check: clean/);
 
     const result = await client.callTool('get_errors', {
       project: indexDocId,
