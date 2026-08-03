@@ -29,6 +29,7 @@ export {
 // Export sync client types
 export type {
   AnnotatedFileEntry,
+  AuthRejectionEvidence,
   Patch,
   EditorContentChange,
   TextFilePayload,
