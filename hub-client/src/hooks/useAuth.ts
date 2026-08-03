@@ -22,9 +22,13 @@
  * rarely-reached hard boundaries.
  *
  * Expiry tracking: /auth/me reports the session's current `exp`
- * (`AuthState.expiresAt`, ms epoch — sliding, typically days out;
- * falls back to +1 h for older servers). An expiry-time re-check runs
- * against the reported `exp`.
+ * (`AuthState.expiresAt`, ms epoch — sliding, typically days out). An
+ * expiry-time re-check runs against the reported `exp`. When the server
+ * reports no `exp` (only conceivable on a pre-sliding hub), no expiry
+ * re-check is scheduled — the mount check, visibility-change re-check,
+ * hourly keep-alive, and the disconnected-state auth probe still cover
+ * session-end detection. (The old 1 h fallback here would have probed
+ * ~168× too often against a sliding session; bd-aw8f3sp8.)
  *
  * Evidence-based logout (bd-3o8zmz46): auth is only cleared when a reachable
  * server definitively rejects us (401/403). Network errors — refocus checks,
@@ -37,9 +41,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuthProvider } from '../auth/AuthProvider';
 import type { AuthState } from '../services/authService';
 import { fetchAuthMe, logout as serverLogout } from '../services/authService';
-
-/** Assumed session lifetime when the server doesn't report `exp` (1 hour). */
-const DEFAULT_SESSION_MS = 3600 * 1000;
 
 /** Re-check interval when an expiry-time verdict couldn't be reached. */
 const EXPIRY_RECHECK_MS = 60 * 1000;
@@ -127,11 +128,14 @@ export function useAuth() {
     };
   }, [auth, applyAuth, expireSession]);
 
-  // Schedule an expiry-time server re-check from the session's real expiry.
+  // Schedule an expiry-time server re-check from the session's real
+  // expiry. No reported exp → nothing to schedule from (the other
+  // checks — mount, visibility, keep-alive, disconnected probe — still
+  // run); guessing a lifetime here mis-scheduled badly (bd-aw8f3sp8).
   useEffect(() => {
-    if (!auth) return;
+    if (!auth || auth.expiresAt === undefined) return;
 
-    const expiresAt = auth.expiresAt ?? Date.now() + DEFAULT_SESSION_MS;
+    const expiresAt = auth.expiresAt;
 
     // Expiry-time re-check. Only a definitive 401/403 clears the session;
     // network errors reschedule (logout on evidence, not on schedule).

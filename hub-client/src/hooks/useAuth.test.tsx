@@ -173,15 +173,16 @@ describe('useAuth', () => {
     });
 
     it('clears auth and flags sessionExpired on a definitive 401 at expiry', async () => {
-      const user = { email: 'a@b.com', name: 'A', picture: null };
+      const user = { email: 'a@b.com', name: 'A', picture: null, expiresAt: Date.now() + 3600 * 1000 };
+      const freshUser = { email: 'a@b.com', name: 'A', picture: null, expiresAt: Date.now() + 3600 * 1000 };
       mockFetchAuthMe
         .mockResolvedValueOnce(user) // mount
         .mockResolvedValueOnce(null); // expiry re-check → 401
 
       const { result } = renderHook(() => useAuth(), { wrapper });
-      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+      await vi.waitFor(() => expect(result.current.auth).toEqual(freshUser));
 
-      // Default 1 h lifetime (no server exp) → re-check just after +1 h.
+      // The re-check is scheduled from the server-reported exp (+1 h).
       await act(async () => {
         vi.advanceTimersByTime(3600 * 1000 + 2000);
       });
@@ -191,7 +192,7 @@ describe('useAuth', () => {
     });
 
     it('keeps auth when the server confirms a still-valid cookie at expiry', async () => {
-      const user = { email: 'a@b.com', name: 'A', picture: null };
+      const user = { email: 'a@b.com', name: 'A', picture: null, expiresAt: Date.now() + 3600 * 1000 };
       const freshUser = { email: 'a@b.com', name: 'Still Valid', picture: null };
       mockFetchAuthMe
         .mockResolvedValueOnce(user) // mount
@@ -205,6 +206,26 @@ describe('useAuth', () => {
       });
 
       await vi.waitFor(() => expect(result.current.auth).toEqual(freshUser));
+      expect(result.current.sessionExpired).toBe(false);
+    });
+
+    it('schedules no expiry re-check when the server reports no exp (bd-aw8f3sp8)', async () => {
+      // A sliding-session hub always reports exp (the field is
+      // non-optional server-side); when it is genuinely absent there is
+      // nothing sane to schedule from. The retired 1 h fallback would
+      // have re-probed ~168× over the week simulated here.
+      const user = { email: 'a@b.com', name: 'A', picture: null }; // no expiresAt
+      mockFetchAuthMe.mockResolvedValueOnce(user); // mount — and nothing more
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+
+      await act(async () => {
+        vi.advanceTimersByTime(7 * 24 * 3600 * 1000);
+      });
+
+      expect(mockFetchAuthMe).toHaveBeenCalledTimes(1); // the mount check only
+      expect(result.current.auth).toEqual(user);
       expect(result.current.sessionExpired).toBe(false);
     });
 
