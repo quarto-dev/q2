@@ -282,6 +282,13 @@ impl ClaimsBuilder {
         self.iat = Some(iat);
         self
     }
+    /// Omit the `iat` claim entirely — OIDC requires it and Google
+    /// always sends it, but `OidcClaims.iat` is `Option<i64>`, so the
+    /// fail-closed revocation anchor needs this shape covered.
+    pub fn no_iat(mut self) -> Self {
+        self.iat = None;
+        self
+    }
     pub fn exp(mut self, exp: i64) -> Self {
         self.exp = exp;
         self
@@ -367,6 +374,7 @@ pub struct TestHubBuilder {
     google_provider: bool,
     auth_disabled: bool,
     banned_subs: Vec<String>,
+    not_before_subs: Vec<(String, i64)>,
 }
 
 impl Default for TestHubBuilder {
@@ -385,6 +393,7 @@ impl TestHubBuilder {
             google_provider: false,
             auth_disabled: false,
             banned_subs: Vec::new(),
+            not_before_subs: Vec::new(),
         }
     }
 
@@ -439,6 +448,13 @@ impl TestHubBuilder {
         self
     }
 
+    /// Pre-write `revocations.json` `not_before` entries (the on-disk
+    /// shape a `logout-everywhere` leaves behind) before the hub starts.
+    pub fn not_before_subs(mut self, entries: &[(&str, i64)]) -> Self {
+        self.not_before_subs = entries.iter().map(|(s, t)| (s.to_string(), *t)).collect();
+        self
+    }
+
     pub async fn start(self, provider: &MockOidcProvider) -> TestHub {
         // Auth config carries TWO audiences: SPA primary + MCP additional.
         // Construct directly (bypassing AuthConfig::new) so we can use the
@@ -483,12 +499,17 @@ impl TestHubBuilder {
             std::fs::write(temp.path().join("hub.json"), config.to_string()).unwrap();
         }
 
-        // Pre-write revocations.json with ban entries (the documented
-        // stopped-hub operator procedure).
-        if !self.banned_subs.is_empty() {
+        // Pre-write revocations.json with ban / not_before entries (the
+        // documented stopped-hub operator procedure).
+        if !self.banned_subs.is_empty() || !self.not_before_subs.is_empty() {
+            let not_before: serde_json::Map<String, serde_json::Value> = self
+                .not_before_subs
+                .iter()
+                .map(|(sub, ts)| (sub.clone(), serde_json::json!(ts)))
+                .collect();
             let revocations = serde_json::json!({
                 "version": 1,
-                "not_before": {},
+                "not_before": not_before,
                 "banned": self.banned_subs,
             });
             std::fs::write(

@@ -91,40 +91,55 @@ lightly.
 
 ### Work items (TDD)
 
-- [ ] Tests first (extend `crates/quarto-hub/tests/integration/` —
-      `auth_bearer.rs` has the mock-IdP fixtures, `support.rs` the hub
-      builder; observe all failing):
+- [x] Tests first (extended `auth_bearer.rs` with a `revocation_setup()`
+      fixture — pre-written `revocations.json`, per-sub `not_before` floors
+      anchored to the fixture instant; `support.rs` gained
+      `TestHubBuilder::not_before_subs` and `ClaimsBuilder::no_iat`;
+      observed 5/6 failing pre-fix, the self-heal 200 already passing as
+      expected):
       - banned `sub` + otherwise-valid Google Bearer → 403 on `/health` **and**
-        on the WS upgrade; audit shows `user_banned` / `credential_kind=bearer`;
-      - `logout-everywhere` (or a direct ledger `not_before` write) then a
-        Bearer whose `iat` predates it → 401, audit `bearer_revoked`;
+        on the WS upgrade; audit shows `user_banned` / `credential_kind=bearer`
+        (`bearer_banned_sub_returns_403`, `ws_upgrade_with_banned_bearer_returns_403`);
+      - `not_before` floor then a Bearer whose `iat` predates it → 401, audit
+        `bearer_revoked` (`bearer_with_iat_before_not_before_returns_401`);
       - a Bearer with **no `iat` claim** while a `not_before` entry exists →
-        401 (the fail-closed anchor);
-      - a Bearer minted *after* the revocation instant → 200 (the self-heal
-        path);
-      - mint regression: login via `/auth/callback` immediately after
-        `logout-everywhere` still succeeds (the `min_auth_time` clamp — pins
-        that F1 didn't leak into the mint path);
-      - session-path regression: existing revocation/ban session tests
-        untouched and green.
-- [ ] Implement the ledger check on the Bearer credential path per the design
-      constraints above.
-- [ ] Docs: update `ts-packages/quarto-hub-mcp/README.md:243-249` (the
-      residual-window paragraph — the window is now closed for bans and
-      post-revocation ID tokens; refresh-token caveat stated),
-      `dev-docs/quarto-hub/session-auth-operations.md` (bans now also deny
-      Bearer/MCP; live-socket caveat unchanged), and strike the
-      `sub_denylist` future-work note in
-      `2026-05-28-hub-mcp-loopback-pkce.md` with a pointer here (it appears
-      **three times**: `:650`, `:994`, `:1189` — the future-work list entry
-      at `:1189` is the main one; annotate all three).
-- [ ] `cargo nextest run --workspace`; `cargo xtask verify --skip-hub-build`
-      (Rust-only change).
-- [ ] E2E per policy: drive the real `hub` binary + real `q2 mcp` (or the
-      hub-mcp dist bundle) with a mock IdP; ban the sub in
-      `revocations.json` (stopped-hub procedure), restart, observe the MCP
-      probe/WS get 403 while a non-banned identity still works. Record
-      invocation + output here.
+        401 (`bearer_without_iat_fails_closed_when_not_before_exists`);
+      - a Bearer minted *after* the revocation instant → 200
+        (`bearer_minted_after_revocation_authenticates`);
+      - mint regression (`bearer_revocation_does_not_leak_into_mint_path`):
+        the same credential that 401s as a Bearer still mints via
+        `POST /auth/session` — the shared-machinery mint path; `/auth/callback`
+        is Google-provider-only (sealed login-state cookie) and uses the same
+        `authenticate_claims` + `min_auth_time` clamp. Both deny-tests also
+        pin the audit ordering (no `auth_ok` for a denied sub);
+      - session-path regression: all 448 quarto-hub tests green, including
+        `ban_gates_verify_and_mint` and
+        `logout_everywhere_kills_prior_tokens_and_relogin_works`.
+- [x] Implemented: `RevocationEnforcement { Enforce, Skip }` parameter on
+      `authenticate_claims_for_kind`; ledger check inserted between the
+      allowlist check and the `auth_ok` emission, anchored at
+      `claims.iat.unwrap_or(0)`; the Bearer dispatch arm passes `Enforce`,
+      `authenticate_claims` (both mint callers) passes `Skip`.
+- [x] Docs: `ts-packages/quarto-hub-mcp/README.md` residual-window
+      paragraph rewritten (window closed for hub-side events;
+      refresh-token caveat stated); `dev-docs/quarto-hub/session-auth-operations.md`
+      updated in three spots (model paragraph, revocation section,
+      audit-detail list gains `bearer_revoked`); all three `sub_denylist`
+      notes in `2026-05-28-hub-mcp-loopback-pkce.md` annotated.
+- [x] `cargo nextest run --workspace`: 10863 passed, 0 failed.
+      `cargo xtask verify --skip-hub-build`: pass (see session log).
+- [x] E2E per policy: `scripts/hub-bearer-revocation-e2e.mjs` (committed,
+      sibling of `hub-sliding-sessions-e2e.mjs`) — mock IdP + real
+      `target/debug/hub`; baseline 200/101 for three subs; stopped-hub
+      write of `revocations.json` (ban sub A, `not_before` floor for
+      sub B); restart; observed: banned A → 403 on `/health` **and** the
+      WS upgrade (fresh token too), B pre-floor token → 401 on both,
+      B fresh-iat token → 200 (self-heal), untouched C → 200/101.
+      Invocation: `cargo build --bin hub && node scripts/hub-bearer-revocation-e2e.mjs`
+      → `ALL CHECKS PASSED` (12/12, 2026-08-03). Additionally the
+      full-stack MCP e2e (`ts-packages/quarto-hub-mcp/src/e2e-auth.test.ts`:
+      real hub binary + real keyring + loopback PKCE + Bearer WS) passes
+      against the F1-patched hub.
 
 ## F2 — MCP-side auth classification on reconnect (`bd-l3b1brn8`)
 
