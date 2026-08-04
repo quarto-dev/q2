@@ -113,7 +113,7 @@ write tools now do it themselves:
 - Non-`.qmd` writes are unchanged; a check that cannot run degrades to
   `Render check unavailable (…); call get_errors to verify` and never
   fails the write (`renderCheckSuffix` in `src/tools.ts`).
-- The `fix-errors` prompt now points the loop at the in-response check,
+- The `fix_errors` prompt now points the loop at the in-response check,
   with one final `get_errors` to confirm.
 - Tests: `src/write-render-check.test.ts` (7, handler-level, renderer
   mocked at the module seam, fail-first verified); `get-errors-live.test.ts`

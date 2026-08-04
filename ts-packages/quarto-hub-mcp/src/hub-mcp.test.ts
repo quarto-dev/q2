@@ -81,11 +81,11 @@ describe('MCP protocol', () => {
     });
   });
 
-  it('lists the fix-errors prompt and expands it over the protocol', async () => {
+  it('lists the fix_errors prompt and expands it over the protocol', async () => {
     const prompts = await client.listPrompts();
-    expect(prompts.map((p) => p.name)).toContain('fix-errors');
+    expect(prompts.map((p) => p.name)).toContain('fix_errors');
 
-    const res = await client.getPrompt('fix-errors', { project: 'automerge:xyz' });
+    const res = await client.getPrompt('fix_errors', { project: 'automerge:xyz' });
     expect(res.messages[0]!.content.text).toContain('automerge:xyz');
     expect(res.messages[0]!.content.text).toContain('get_errors');
   });

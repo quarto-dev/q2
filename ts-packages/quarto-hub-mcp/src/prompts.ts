@@ -1,6 +1,6 @@
 /**
  * MCP prompts — named prompt templates clients surface as slash
- * commands (Claude Code shows this one as /mcp__quarto-hub__fix-errors).
+ * commands (Claude Code shows this one as /mcp__quarto-hub__fix_errors).
  *
  * A prompt only instructs; the LLM does the fixing with the existing
  * tools. This is deliberately NOT a `fix_errors` tool: fixing requires
@@ -15,7 +15,7 @@ import {
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 
 const FIX_ERRORS = {
-  name: 'fix-errors',
+  name: 'fix_errors',
   description:
     'Find and fix the render errors in a Quarto Hub project: checks with ' +
     'get_errors, applies minimal fixes with patch_file, and re-checks until clean.',

@@ -1,5 +1,5 @@
 /**
- * Tests for the `fix-errors` MCP prompt — the one-command entry into
+ * Tests for the `fix_errors` MCP prompt — the one-command entry into
  * the agent fix loop. The prompt only instructs; the LLM does the
  * fixing with the existing tools (get_errors, read_file, patch_file).
  */
@@ -28,13 +28,13 @@ function harness(): { list: Handler; get: Handler } {
   return { list, get };
 }
 
-describe('fix-errors prompt', () => {
+describe('fix_errors prompt', () => {
   it('is listed with a required project argument and optional path', async () => {
     const { list } = harness();
     const res = (await list({})) as {
       prompts: Array<{ name: string; arguments?: Array<{ name: string; required?: boolean }> }>;
     };
-    const p = res.prompts.find((x) => x.name === 'fix-errors');
+    const p = res.prompts.find((x) => x.name === 'fix_errors');
     expect(p).toBeDefined();
     expect(p!.arguments).toEqual([
       expect.objectContaining({ name: 'project', required: true }),
@@ -45,7 +45,7 @@ describe('fix-errors prompt', () => {
   it('expands to loop instructions naming the project and the tools', async () => {
     const { get } = harness();
     const res = (await get({
-      params: { name: 'fix-errors', arguments: { project: 'automerge:abc123' } },
+      params: { name: 'fix_errors', arguments: { project: 'automerge:abc123' } },
     })) as { messages: Array<{ role: string; content: { type: string; text: string } }> };
 
     expect(res.messages).toHaveLength(1);
@@ -61,7 +61,7 @@ describe('fix-errors prompt', () => {
   it('scopes the instructions to a single file when path is given', async () => {
     const { get } = harness();
     const res = (await get({
-      params: { name: 'fix-errors', arguments: { project: 'abc', path: 'chapter2.qmd' } },
+      params: { name: 'fix_errors', arguments: { project: 'abc', path: 'chapter2.qmd' } },
     })) as { messages: Array<{ content: { text: string } }> };
     expect(res.messages[0]!.content.text).toContain('chapter2.qmd');
   });
@@ -73,7 +73,7 @@ describe('fix-errors prompt', () => {
 
   it('rejects a missing project argument', async () => {
     const { get } = harness();
-    await expect(get({ params: { name: 'fix-errors', arguments: {} } })).rejects.toThrow(
+    await expect(get({ params: { name: 'fix_errors', arguments: {} } })).rejects.toThrow(
       /project/i,
     );
   });
