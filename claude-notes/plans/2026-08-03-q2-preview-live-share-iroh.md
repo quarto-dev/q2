@@ -623,22 +623,23 @@ proved them on a throwaway branch that never merges.
       --skip-hub-build` unaffected *(done 2026-08-04: workspace build
       green; `cargo xtask verify --skip-hub-build` → "All verification
       steps passed!", output inspected)*
-- [ ] Re-confirm the Gate 0 static checks on the real scaffold:
+- [x] Re-confirm the Gate 0 static checks on the real scaffold:
       `cargo tree -i iroh` from `wasm-quarto-hub-client` fails; a Windows
       build compiles the crate (manual or release-workflow leg —
       test-suite CI has no Windows matrix entry); the dep set matches what
       Gate 0 measured (if it drifted — e.g. feature changes — re-measure
       Q4 and update the gate section's numbers)
-      *(2026-08-04 status: **WASM closure PASS** — `cargo tree -i iroh`
+      *(2026-08-04: **WASM closure PASS** — `cargo tree -i iroh`
       from `crates/wasm-quarto-hub-client` → "package ID specification
       'iroh' did not match any packages"; **dep set PASS** — Cargo.lock
       additions are name+version-identical to the gate branch's lockfile
       (141 external packages; iroh 1.0.3, iroh-tickets 1.0.0; only
       symmetric diff is `quarto-p2p` vs `q2-p2p-spike`), so no Q4
-      re-measure; **Windows PENDING** — needs a push (user approval) to
-      run a windows-latest `cargo check -p quarto-p2p` leg; the gate
-      proved the identical dep set compiles there on 2026-08-04, run
-      30894960520, so only the ~90-line stub crate itself is unproven)*
+      re-measure; **Windows: gate coverage accepted** — user decision
+      2026-08-04: no dedicated Windows leg for Phase 0; the gate proved
+      the identical dep set on windows-latest (run 30894960520,
+      2026-08-04) and only the ~90-line stub crate is new, so the
+      Windows signal rides the release workflow / later CI instead)*
 
 ## Phase 1 — `quarto-p2p` core (TDD)
 
