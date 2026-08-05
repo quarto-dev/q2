@@ -25,7 +25,11 @@
 #   (quarto-preview), and the trace viewer (quarto-trace-server). A
 #   build without them succeeds but ships placeholders (the 2026-05-20
 #   stale-embed incident class) — the per-target "verify binary" step
-#   fails the release if any placeholder is detected.
+#   fails the release if any placeholder is detected. The musl legs get
+#   a second gate on top of it ("assert the binary needs no glibc"),
+#   which runs the binary under alpine:latest — the runner has glibc, so
+#   only a glibc-less container can prove the static-linux promise
+#   (bd-3b47pxmm).
 # - The `web-payloads` job builds the target-INDEPENDENT payloads once
 #   (WASM → preview SPA, trace viewer; the WASM toolchain is heavy and
 #   identical for every target). The MCP bundle is built per target:
@@ -518,6 +522,65 @@ jobs:
             fi
           done
           exit $FAIL
+
+      # The no-glibc gate (bd-3b47pxmm). The step above proves the binary
+      # runs on the RUNNER, which has glibc — it cannot detect an
+      # accidental dynamic link against libc, so it cannot defend the
+      # headline promise of the musl switch ("static, any distro"). Nothing
+      # in the build pins staticness: crt-static is a *default* of the
+      # *-unknown-linux-musl targets, and a future RUSTFLAGS / cargo config
+      # / build-script link flag could flip it while every other gate stays
+      # green. alpine:latest ships musl and NO glibc at all, so a
+      # dynamically-linked binary cannot even exec there.
+      #
+      # This replaces the manual post-release check the runbook used to
+      # ask for (§6): it needed Docker on the maintainer's machine and, on
+      # Apple Silicon, would only ever have exercised one arch. Here each
+      # linux leg runs its own arch's container NATIVELY (amd64 on
+      # ubuntu-latest, arm64 on ubuntu-24.04-arm) — no qemu, no
+      # --platform. Docker is present on both runner images; the
+      # bd-dofxhzaj spike ran this exact invocation green on both.
+      #
+      # Two traps that spike paid for, do not "simplify" them away:
+      #   * `file` describes the arches DIFFERENTLY — x86_64 comes out
+      #     "static-pie linked", aarch64 plain "statically linked".
+      #     Matching one spelling passes on one arch and fails on the other.
+      #   * `ldd` says "not a dynamic executable" on a static binary but
+      #     EXITS NON-ZERO, so it can be logged and never asserted on.
+      #
+      # `q2 mcp --launcher-info` is deliberately not run in the container:
+      # it spawns Node, which alpine:latest does not have. That check
+      # belongs on the runner, where it already is.
+      - name: Assert the binary needs no glibc (Alpine)
+        if: contains(matrix.target, 'musl')
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/q2"
+
+          # Cheap and fast-failing: localizes a dynamic link to one clear
+          # message instead of an opaque container exec failure.
+          file "$BIN"
+          file "$BIN" | grep -Eq 'static-pie linked|statically linked' || {
+            echo "::error::$BIN is not statically linked — it will not run without glibc"
+            exit 1
+          }
+          ldd "$BIN" 2>&1 || true   # informational only; see above
+
+          # The real proof.
+          docker run --rm \
+            -v "$PWD:/work" -w /work \
+            -e BIN="$BIN" \
+            -e EXPECTED="${{ needs.preflight.outputs.version }}" \
+            alpine:latest \
+            sh -eux -c '
+              cat /etc/alpine-release
+              RAW=$("$BIN" --version)
+              echo "$RAW"
+              [ "${RAW##* }" = "$EXPECTED" ]
+            ' || {
+            echo "::error::$BIN failed to run under alpine:latest (no glibc present)"
+            exit 1
+          }
 
       # Unix targets ship a .tar.gz of the `q2` binary.
       - name: Package archive + checksum (tar.gz)
