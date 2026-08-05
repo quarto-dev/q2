@@ -29,6 +29,7 @@ pub mod config;
 pub mod deps;
 pub mod diagnostics;
 pub mod re_execute;
+pub mod share;
 
 pub use config::EnginePolicy;
 
@@ -122,6 +123,14 @@ pub struct PreviewConfig {
     /// document changes from *any* connected client can never be
     /// written back to the user's files.
     pub allow_edit: bool,
+    /// Share this preview session over an end-to-end encrypted iroh
+    /// tunnel (`--share`, bd-jhvkwosw). When set, [`run`] spawns a
+    /// [`share::ShareSession`] targeting `host:port` before the server
+    /// starts and prints the join banner; the tunnel is shut down after
+    /// the server exits (before the CLI drops its ephemeral `TempDir`).
+    /// Requires a pre-resolved (non-zero) `port` — the CLI probes one
+    /// before calling in.
+    pub share: bool,
 }
 
 /// Run the preview server. Returns when the server is shut down (ctrl-c
@@ -282,15 +291,51 @@ where
         });
     });
 
-    server::run_server_with(
+    // bd-jhvkwosw (live-share Phase 2): when sharing, spawn the tunnel
+    // host *before* the server starts — the ticket's inputs (host, port,
+    // token, endpoint addr) all exist already, and printing ahead of the
+    // listener bind matches the CLI boot-URL print's contract (a
+    // too-fast guest just retries via its health supervisor).
+    let share_session = if config.share {
+        anyhow::ensure!(
+            config.port != 0,
+            "--share requires a resolved port; the CLI probes a free one before starting \
+             the server, library callers must do the same"
+        );
+        let session = share::start_share_session(
+            quarto_p2p::TunnelHostConfig::default(),
+            &config.host,
+            config.port,
+            config.allow_edit,
+            |banner| println!("\n{banner}\n"),
+        )
+        .await
+        .context("starting the live-share tunnel")?;
+        Some(session)
+    } else {
+        None
+    };
+
+    let server_result = server::run_server_with(
         storage,
         hub_config,
         Some(extend_with_preview),
         Some(on_ready),
         Some(on_file_changed),
     )
-    .await
-    .context("quarto-hub server failed")?;
+    .await;
+
+    // bd-jhvkwosw: tunnel teardown joins the graceful-shutdown path —
+    // after the server (and its final filesystem sync) exits, before the
+    // CLI drops its ephemeral TempDir. Failure is logged, not fatal;
+    // the process is exiting either way.
+    if let Some(session) = share_session
+        && let Err(e) = session.shutdown().await
+    {
+        tracing::warn!(error = %e, "live-share tunnel shutdown failed");
+    }
+
+    server_result.context("quarto-hub server failed")?;
     Ok(())
 }
 

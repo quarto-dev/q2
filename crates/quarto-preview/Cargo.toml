@@ -28,6 +28,9 @@ samod = { version = "0.13.0", git = "https://github.com/quarto-dev/samod.git", b
 quarto-core.workspace = true
 quarto-error-reporting = { workspace = true, features = ["json"] }
 quarto-hub.workspace = true
+# Live-share tunnel host (`--share`, plan Phase 2). Native-only; keeps
+# all iroh usage behind quarto-p2p's API.
+quarto-p2p.workspace = true
 quarto-pandoc-types.workspace = true
 quarto-source-map.workspace = true
 quarto-system-runtime.workspace = true

@@ -61,6 +61,7 @@ async fn boot_server_for_test() -> (
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,
+        share: false,
     };
 
     let (ready_tx, ready_rx) = oneshot::channel::<Arc<HubContext>>();

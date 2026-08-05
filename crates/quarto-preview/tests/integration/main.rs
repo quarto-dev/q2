@@ -8,6 +8,7 @@ pub mod diagnostics_capture_failure;
 pub mod diagnostics_endpoint;
 pub mod eager_capture;
 pub mod render_scripts_boot;
+pub mod share;
 pub mod smoke;
 pub mod staleness;
 

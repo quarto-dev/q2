@@ -745,24 +745,45 @@ from `wasm-quarto-hub-client` still fails — output inspected for all)*
 
 ## Phase 2 — `q2 preview --share` (host)
 
+*(implemented 2026-08-05, bd-jhvkwosw; tests landed first and were
+observed failing — CLI tests via E0026 missing-field compile errors (the
+expected failure mode for a structural clap addition), share-glue tests
+4/4 FAIL at runtime on `todo!()` stubs, output inspected — then went
+green with the implementation)*
+
 **Tests first:**
 
-- [ ] CLI: `--share` parses; `--share --join x` rejected. **New tests, not an
+- [x] CLI: `--share` parses; `--share --join x` rejected. **New tests, not an
       extension** — `crates/quarto` has no clap parse tests today
       (`preview.rs:625-647` are boot-URL formatting tests; the one existing
       exclusion is a runtime bail at `preview.rs:70`), so build the small
       `try_parse_from` harness this plan's conflict matrices need
-- [ ] `quarto-preview` unit: share glue produces a ticket whose tunnel target
+      *(`cli_parse_tests` in `crates/quarto/src/main.rs`: parses, defaults
+      off, composes with `--allow-edit`, conflicts with `--join` — the
+      conflict asserted as `ErrorKind::ArgumentConflict`, so it pins a real
+      `conflicts_with`, not an unknown-arg rejection)*
+- [x] `quarto-preview` unit: share glue produces a ticket whose tunnel target
       is `127.0.0.1:{config.port}` (the port is resolved CLI-side before the
       server starts, `preview.rs:114-117` — `on_ready` does *not* carry it);
       ticket line printed via an injected writer/callback — do not scrape
       stdout
+      *(`crates/quarto-preview/tests/integration/share.rs`, hermetic-iroh:
+      the glue test fetches a marker through a `TunnelClient` bound to the
+      minted ticket, proving the target; the banner arrives via an injected
+      closure. Extra banner tests: capability wording per `--allow-edit`,
+      direct/LAN-only notice when the ticket has no relay addr, join line
+      always last (copy-paste contract))*
 
 **Implementation:**
 
-- [ ] `PreviewArgs::share` + clap flag (`crates/quarto/src/main.rs` Preview
+- [x] `PreviewArgs::share` + clap flag (`crates/quarto/src/main.rs` Preview
       variant) → `PreviewConfig::share` (`crates/quarto-preview/src/lib.rs`)
-- [ ] `quarto-preview` → `quarto-p2p` dep; when sharing: generate token, bind
+      *(also declared `--join <TICKET>` in clap now — hidden
+      (`hide = true`) with `conflicts_with = "share"` and a runtime
+      "not implemented yet (Phase 3)" bail — because the conflict test
+      needs the arg to exist; Phase 3 unhides it, implements the guest
+      path, and adds the full conflict matrix)*
+- [x] `quarto-preview` → `quarto-p2p` dep; when sharing: generate token, bind
       endpoint (`presets::N0`), `timeout(Duration::from_secs(10), online())`
       (on timeout: proceed, warn "relay unreachable — direct/LAN connections
       only"), `TunnelHost::spawn` targeting `config.port`. **Print timing:**
@@ -793,13 +814,76 @@ from `wasm-quarto-hub-client` still fails — output inspected for all)*
       nothing after it, so a triple-click / drag copy survives terminal
       wrapping; the end-to-end check below must include copy-pasting the
       wrapped line from a real terminal
-- [ ] Ctrl-C: tunnel shutdown joined into the existing graceful-shutdown path
+      *(done: `crates/quarto-preview/src/share.rs` —
+      `start_share_session(TunnelHostConfig, host, port, allow_edit,
+      announce)` → `ShareSession { ticket, handle }` +
+      `format_share_banner`; called from `run_with_on_ready` before the
+      server starts (with a `port != 0` guard — library callers must
+      pre-resolve like the CLI does). Two deviations-with-reasons from the
+      sketch: (1) the banner's relay-unreachable warning is driven by
+      inspecting the minted ticket via a new
+      `PreviewShareTicket::has_relay_addr()` — quarto-p2p's
+      `tracing::warn!` is invisible at the CLI's default `quarto=warn`
+      filter, so the banner is the user-visible signal; (2) the tunnel
+      target is `share_target(host, port)` rather than hardcoded
+      `127.0.0.1` so `--share` still works when `--host` binds a concrete
+      non-loopback interface — unspecified binds (`0.0.0.0`/`::`) and
+      hostnames still map to loopback)*
+- [x] Ctrl-C: tunnel shutdown joined into the existing graceful-shutdown path
       (before the `TempDir` drop)
-- [ ] **End-to-end (mandatory, record invocation + output here):** two
+      *(in `run_with_on_ready`: `ShareSession::shutdown()` runs after
+      `run_server_with` returns — i.e. after the hub's final filesystem
+      sync — and before control returns to the CLI where the ephemeral
+      `TempDir` drops; verified live in the e2e below: SIGINT → graceful
+      shutdown logs → `EXIT=0`)*
+- [x] **End-to-end (mandatory, record invocation + output here):** two
       terminals on one machine — host `--share` in a fixture project, guest
       `--join`; `curl http://127.0.0.1:<guest-port>/health` shows the host's
       `index_document_id`; browser on the guest port renders the document;
       live edit on host propagates
+      *(executed 2026-08-05 — see "Phase 2 end-to-end record" below; the
+      guest side used `cargo run -p quarto-p2p --example tunnel-client`
+      since `--join` itself is Phase 3)*
+
+### Phase 2 end-to-end record (2026-08-05)
+
+All output inspected; the guest was the new `tunnel-client` example
+(`crates/quarto-p2p/examples/tunnel-client.rs`) because the real `--join`
+lands in Phase 3 — the tunnel path exercised (ticket parse →
+`TunnelClient::bind` → local proxy) is exactly what Phase 3 will wrap.
+
+- **Host** (fixture project: `_quarto.yml` + `index.qmd` + `about.qmd`):
+  `q2 preview <fixture> --share --no-browser --port 9377` printed the
+  boot URL, then the banner:
+
+  ```
+  Sharing this preview session (end-to-end encrypted via iroh).
+  Anyone with the join string below can VIEW the project and RE-RUN its
+  code on this machine:
+
+  q2 preview --join q2previewadtdnwynvuwfau3ybfdlxih7yyexrw5xms6ew6dnoix7g3y…
+  ```
+
+  (224-char ticket, within the plan's 173–235 estimate; no direct/LAN
+  warning — the n0 relay was reachable.)
+- **Guest:** `tunnel-client <ticket> 9280` → "joined shared preview
+  session: http://127.0.0.1:9280/", status `Connected`. The ticket was
+  copy-pasted from the host's captured stdout and parsed round-trip;
+  the interactive triple-click-on-a-wrapped-terminal-line check still
+  wants a human eyeball (noted for the Phase 3 e2e, which a user drives).
+- **`/health` through the tunnel** returned the byte-identical payload to
+  direct, including `"index_document_id":"2GQkn7ADdeaLnaME5mQBo6eFnJvi"`
+  and `"qmd_file_count":2`.
+- **Browser (Playwright Chromium 1223** at `http://127.0.0.1:9280/?page=index.qmd`,
+  frames scanned per the Gate 0 iframe finding): document rendered
+  through the tunnel in **1.47 s**; screenshot inspected (`MARKER-0`
+  visible).
+- **Live edit:** host-side `MARKER-0`→`MARKER-1` write propagated to the
+  guest browser in **1.07 s**; post-edit screenshot inspected (rendered
+  text shows `MARKER-1`).
+- **Ctrl-C:** SIGINT to the host → "Received Ctrl-C, initiating graceful
+  shutdown…" → final filesystem sync (3 docs, 0 errors) → process
+  `EXIT=0`; the guest's status watch flipped `Connected → Reconnecting`.
 
 ## Phase 3 — `q2 preview --join <ticket>` (guest)
 

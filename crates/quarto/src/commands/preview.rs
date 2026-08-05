@@ -46,6 +46,10 @@ pub struct PreviewArgs {
     /// files on disk (bd-ov4gqk3m). Off by default: without it the
     /// preview is read-only end to end.
     pub allow_edit: bool,
+    /// Share this preview session over an end-to-end encrypted iroh
+    /// tunnel (bd-jhvkwosw). The server prints a `q2preview…` join
+    /// string; the HTTP port itself stays loopback-bound.
+    pub share: bool,
 }
 
 pub fn execute(args: PreviewArgs) -> Result<()> {
@@ -226,6 +230,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
         // (per-session; tracked as a follow-up for per-project reuse).
         cache_dir: None,
         allow_edit: args.allow_edit,
+        share: args.share,
     };
     quarto_preview::run(config).await
 }

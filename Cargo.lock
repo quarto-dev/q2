@@ -5215,7 +5215,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-p2p"
-version = "0.13.0"
+version = "0.15.0"
 dependencies = [
  "axum",
  "futures",
@@ -5272,6 +5272,7 @@ dependencies = [
  "quarto-core",
  "quarto-error-reporting",
  "quarto-hub",
+ "quarto-p2p",
  "quarto-pandoc-types",
  "quarto-source-map",
  "quarto-system-runtime",

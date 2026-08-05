@@ -240,6 +240,22 @@ enum Commands {
         /// document changes to your files.
         #[arg(long)]
         allow_edit: bool,
+
+        /// Share this preview session over an end-to-end encrypted
+        /// peer-to-peer tunnel (via iroh). Prints a join string;
+        /// anyone who has it can VIEW the project and RE-RUN its code
+        /// on this machine (and EDIT the files if --allow-edit is also
+        /// set), so treat the string like a password.
+        #[arg(long)]
+        share: bool,
+
+        /// Join a shared preview session using the `q2preview…` string
+        /// printed by `q2 preview --share` on the host machine.
+        // Hidden until the guest path lands (live-share plan Phase 3,
+        // bd-6y0p1bne); declared now so the --share conflict is real.
+        // Phase 3 unhides it and adds its full conflict matrix.
+        #[arg(long, value_name = "TICKET", conflicts_with = "share", hide = true)]
+        join: Option<String>,
     },
 
     /// Serve a Shiny interactive document
@@ -731,6 +747,70 @@ enum TraceCommand {
     },
 }
 
+#[cfg(test)]
+mod cli_parse_tests {
+    //! clap parse harness (live-share plan, Phase 2). These are the first
+    //! parse-level tests for the `q2` CLI; the Phase 3 `--join` conflict
+    //! matrix extends this module.
+
+    use clap::Parser;
+
+    use super::{Cli, Commands};
+
+    /// Parse argv (without the implicit binary name) into `Cli`.
+    fn try_parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        Cli::try_parse_from(std::iter::once("q2").chain(args.iter().copied()))
+    }
+
+    /// Unwrap a parsed `Preview` command or panic with the actual variant.
+    fn parse_preview(args: &[&str]) -> Commands {
+        let cli = try_parse(args).expect("args should parse");
+        match cli.command {
+            cmd @ Commands::Preview { .. } => cmd,
+            _ => panic!("expected a Preview command from {args:?}"),
+        }
+    }
+
+    #[test]
+    fn preview_share_flag_parses() {
+        let Commands::Preview { share, .. } = parse_preview(&["preview", "--share"]) else {
+            unreachable!()
+        };
+        assert!(share, "--share must set PreviewArgs::share");
+    }
+
+    #[test]
+    fn preview_share_defaults_off() {
+        let Commands::Preview { share, .. } = parse_preview(&["preview"]) else {
+            unreachable!()
+        };
+        assert!(!share, "share must default to false");
+    }
+
+    #[test]
+    fn preview_share_composes_with_allow_edit() {
+        // Composition from the plan's CLI surface: `--share --allow-edit`
+        // (viewer with inline-edit write-back for guests).
+        let Commands::Preview {
+            share, allow_edit, ..
+        } = parse_preview(&["preview", "--share", "--allow-edit"])
+        else {
+            unreachable!()
+        };
+        assert!(share && allow_edit, "--share --allow-edit must both parse");
+    }
+
+    #[test]
+    fn preview_share_conflicts_with_join() {
+        // (match instead of expect_err: `Cli` deliberately has no Debug impl)
+        let err = match try_parse(&["preview", "--share", "--join", "x"]) {
+            Ok(_) => panic!("--share and --join are host vs. guest; must conflict"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+}
+
 fn main() -> Result<()> {
     // Install Quarto's `Q-*` error catalog into the catalog-agnostic
     // `quarto-error-reporting` host, so diagnostics can resolve docs URLs and
@@ -796,16 +876,27 @@ fn main() -> Result<()> {
             preview_dir,
             no_project,
             allow_edit,
-        } => commands::preview::execute(commands::preview::PreviewArgs {
-            path,
-            port,
-            host,
-            no_browser,
-            data_dir,
-            preview_dir,
-            no_project,
-            allow_edit,
-        }),
+            share,
+            join,
+        } => {
+            if join.is_some() {
+                anyhow::bail!(
+                    "`q2 preview --join` is not implemented yet \
+                     (guest support lands with Phase 3 of the live-share plan)"
+                );
+            }
+            commands::preview::execute(commands::preview::PreviewArgs {
+                path,
+                port,
+                host,
+                no_browser,
+                data_dir,
+                preview_dir,
+                no_project,
+                allow_edit,
+                share,
+            })
+        }
         Commands::Serve { .. } => commands::serve::execute(),
         Commands::Create {
             type_,

@@ -39,6 +39,21 @@ struct Variant1PreviewShareTicket {
     token: [u8; TOKEN_LEN],
 }
 
+impl PreviewShareTicket {
+    /// Whether the host published a relay address into this ticket.
+    ///
+    /// `false` means the host's endpoint never came online with a relay
+    /// (or runs a hermetic test preset): guests can join over direct/LAN
+    /// paths only. Exposed so consumers can report reachability without
+    /// matching on iroh's `TransportAddr` themselves.
+    pub fn has_relay_addr(&self) -> bool {
+        self.addr
+            .addrs
+            .iter()
+            .any(|a| matches!(a, TransportAddr::Relay(_)))
+    }
+}
+
 impl Ticket for PreviewShareTicket {
     const KIND: &'static str = "q2preview";
 

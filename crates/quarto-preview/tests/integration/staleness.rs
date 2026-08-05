@@ -112,6 +112,7 @@ async fn cell_edit_flips_staleness_in_sidecar() {
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,
+        share: false,
     };
 
     // ── Boot the server, capture the HubContext via on_ready ───────

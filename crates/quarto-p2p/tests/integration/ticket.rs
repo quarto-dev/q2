@@ -82,6 +82,25 @@ fn rejects_garbage_and_foreign_kinds() {
     );
 }
 
+/// Phase 2 (bd-jhvkwosw): the share glue inspects the freshly minted
+/// ticket to tell the user whether guests can join via relay or only
+/// direct/LAN — without quarto-preview matching on iroh types itself.
+#[test]
+fn has_relay_addr_reflects_transport_addrs() {
+    let with_relay = PreviewShareTicket {
+        addr: sample_addr(),
+        token: sample_token(),
+    };
+    assert!(with_relay.has_relay_addr());
+
+    let id = SecretKey::from_bytes(&[9u8; 32]).public();
+    let direct_only = PreviewShareTicket {
+        addr: EndpointAddr::from_parts(id, [TransportAddr::Ip("127.0.0.1:4433".parse().unwrap())]),
+        token: sample_token(),
+    };
+    assert!(!direct_only.has_relay_addr());
+}
+
 #[test]
 fn debug_redacts_token() {
     let ticket = PreviewShareTicket {
