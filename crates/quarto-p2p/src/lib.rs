@@ -8,74 +8,40 @@
 //! 256-bit session token — possession of the string is the capability.
 //!
 //! Plan: `claude-notes/plans/2026-08-03-q2-preview-live-share-iroh.md`.
-//! This is the Phase 0 scaffold (bd-9gam4jqe): public API stubs only.
-//! Phase 1 (bd-v8mwzpmi) implements them tests-first.
 
-use std::net::SocketAddr;
+mod client;
+mod host;
+mod ticket;
 
-use iroh::EndpointAddr;
+pub use client::{TunnelClient, TunnelClientConfig, TunnelClientHandle};
+pub use host::{TunnelHost, TunnelHostConfig, TunnelHostHandle};
+/// Typed error for [`PreviewShareTicket`] parsing (`FromStr`).
+pub use iroh_tickets::ParseError as TicketParseError;
+pub use ticket::PreviewShareTicket;
 
-/// Join-string payload: the host's endpoint address plus the session token.
+/// ALPN for the preview tunnel protocol.
 ///
-/// Phase 1 adds the `iroh_tickets::Ticket` impl (KIND `"q2preview"`),
-/// `Display`/`FromStr`, and a manual `Debug` that redacts the token —
-/// no derived `Debug` here, ever, or the token leaks into logs.
-pub struct PreviewShareTicket {
-    pub addr: EndpointAddr,
-    pub token: [u8; 32],
-}
+/// The trailing `/0` is the protocol version tag; a breaking wire change
+/// bumps it together with the ticket KIND.
+pub const ALPN: &[u8] = b"q2/preview-tunnel/0";
 
-/// Host side of the tunnel: an iroh `Router` whose accept loop verifies the
-/// per-stream token prefix, then splices the stream onto a fresh TCP
-/// connection to the local preview server.
-pub struct TunnelHost;
+/// Session-token length in bytes (256-bit).
+pub const TOKEN_LEN: usize = 32;
 
-impl TunnelHost {
-    /// Bind an iroh endpoint, start the accept loop targeting `target`
-    /// (the loopback-bound preview server), and return the join ticket
-    /// plus a shutdown handle.
-    pub async fn spawn(
-        _target: SocketAddr,
-    ) -> Result<(PreviewShareTicket, TunnelHostHandle), TunnelError> {
-        todo!("Phase 1 (bd-v8mwzpmi)")
-    }
-}
-
-/// Handle to a running [`TunnelHost`].
-pub struct TunnelHostHandle;
-
-impl TunnelHostHandle {
-    /// Graceful shutdown: `Router::shutdown` closes the endpoint itself.
-    pub async fn shutdown(self) -> Result<(), TunnelError> {
-        todo!("Phase 1 (bd-v8mwzpmi)")
-    }
-}
-
-/// Guest side of the tunnel: dials the ticket's endpoint and serves a local
-/// TCP listener; one accepted connection = one token-prefixed QUIC
-/// bi-stream. Owns a re-dial loop with backoff.
-pub struct TunnelClient;
-
-impl TunnelClient {
-    /// Dial the ticket's endpoint and bind the local proxy on `local`
-    /// (port 0 allowed). Returns the bound address and a handle.
-    pub async fn bind(
-        _ticket: PreviewShareTicket,
-        _local: SocketAddr,
-    ) -> Result<(SocketAddr, TunnelClientHandle), TunnelError> {
-        todo!("Phase 1 (bd-v8mwzpmi)")
-    }
-}
-
-/// Handle to a running [`TunnelClient`]. Phase 1 adds a status watch
-/// channel ([`TunnelStatus`]) for CLI messaging.
-pub struct TunnelClientHandle;
-
-impl TunnelClientHandle {
-    /// Abort the accept loop and close the endpoint.
-    pub async fn shutdown(self) -> Result<(), TunnelError> {
-        todo!("Phase 1 (bd-v8mwzpmi)")
-    }
+/// Which iroh environment an endpoint binds into.
+///
+/// Production code uses [`EndpointPreset::N0`]; tests use
+/// [`EndpointPreset::HermeticLoopback`] so no n0 infrastructure (relays,
+/// pkarr, DNS) is touched in CI.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum EndpointPreset {
+    /// n0 production defaults: pkarr publish/resolve + DNS lookup +
+    /// default relays.
+    #[default]
+    N0,
+    /// Hermetic mode for tests: crypto only, relays disabled, bound to
+    /// loopback. Peers are reachable only via explicit ticket addresses.
+    HermeticLoopback,
 }
 
 /// Client connection status, surfaced to the CLI ("connected via relay",
@@ -86,7 +52,24 @@ pub enum TunnelStatus {
     Reconnecting,
 }
 
-/// Errors from the tunnel API. Variants are added by Phase 1 alongside the
-/// behavior that produces them.
+pub(crate) type BoxedError = Box<dyn std::error::Error + Send + Sync + 'static>;
+
+/// Errors from the tunnel API.
 #[derive(Debug, thiserror::Error)]
-pub enum TunnelError {}
+pub enum TunnelError {
+    /// Binding the iroh endpoint (or its UDP socket) failed.
+    #[error("failed to bind tunnel endpoint")]
+    Bind(#[source] BoxedError),
+    /// The endpoint never reported a dialable address.
+    #[error("tunnel endpoint has no dialable address")]
+    NoAddress,
+    /// Dialing the share host failed.
+    #[error("could not reach the share host")]
+    Connect(#[source] BoxedError),
+    /// The local TCP proxy listener failed.
+    #[error("local tunnel proxy error")]
+    Proxy(#[source] std::io::Error),
+    /// Graceful shutdown did not complete cleanly.
+    #[error("tunnel shutdown failed")]
+    Shutdown(#[source] BoxedError),
+}

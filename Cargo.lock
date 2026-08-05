@@ -5217,12 +5217,17 @@ dependencies = [
 name = "quarto-p2p"
 version = "0.13.0"
 dependencies = [
+ "axum",
+ "futures",
  "iroh",
  "iroh-tickets",
+ "postcard",
  "rand 0.9.4",
+ "serde",
  "subtle",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-tungstenite 0.29.0",
  "tracing",
 ]
 

@@ -15,14 +15,25 @@ description = "iroh-based P2P tunnel for q2 preview live share (--share / --join
 [dependencies]
 iroh = "1.0.3"
 iroh-tickets = "1.0"
+# Ticket wire format (postcard of {addr, token}); same encoding stack
+# iroh-tickets itself uses.
+postcard = { version = "1.1", features = ["use-std"] }
 rand = "0.9"
+serde.workspace = true
 subtle = "2"
 thiserror.workspace = true
 # io-util + net are required (io::join / copy_bidirectional / TcpListener);
-# the workspace default set (rt-multi-thread, macros) lacks them and today
-# they unify on only via quarto-hub's `full`.
-tokio = { workspace = true, features = ["io-util", "net"] }
+# time for token-read timeouts + re-dial backoff; sync for the status
+# watch channel. The workspace default set (rt-multi-thread, macros) lacks
+# all four and today they unify on only via quarto-hub's `full`.
+tokio = { workspace = true, features = ["io-util", "net", "sync", "time"] }
 tracing.workspace = true
+
+[dev-dependencies]
+# Tunnel-target servers for the integration tests (plain HTTP + /ws echo).
+axum = { version = "0.8", features = ["ws"] }
+futures = "0.3"
+tokio-tungstenite = "0.29"
 
 [lints]
 workspace = true
