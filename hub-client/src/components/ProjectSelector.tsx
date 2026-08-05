@@ -14,6 +14,8 @@ import {
   type ProjectFile,
 } from '@quarto/preview-runtime';
 import { DEFAULT_SYNC_SERVER, buildProjectSetLinkUrl } from '../utils/routing';
+import { getCollectionPointers, getProjectSetPointer } from '../services/projectSetStorage';
+import { buildProjectListExport } from '../services/projectListExport';
 import ShareDialog from './ShareDialog';
 import './ProjectSelector.css';
 
@@ -492,19 +494,20 @@ export default function ProjectSelector({
     // When using project set, export from the set; otherwise from IDB
     let json: string;
     if (useProjectSet && projectSetEntries) {
-      const exportData = {
-        schemaVersion: 4,
-        exportedAt: new Date().toISOString(),
-        projects: projectSetEntries.map((e) => ({
-          id: '', // Not meaningful for set entries
-          indexDocId: e.indexDocId,
-          syncServer: e.syncServer,
-          description: e.description,
-          createdAt: e.addedAt,
-          lastAccessed: e.lastAccessed,
+      // The classic view doesn't connect collection docs, so it exports
+      // pointer-only collections (no names) from the stored pointer array —
+      // enough for a restoring browser to re-subscribe.
+      const pointers = await getCollectionPointers();
+      const rootDocId = (await getProjectSetPointer())?.projectSetDocId;
+      json = buildProjectListExport(
+        projectSetEntries,
+        pointers.map((p) => ({
+          docId: p.projectSetDocId,
+          syncServer: p.syncServer,
+          isRoot: p.projectSetDocId === rootDocId,
+          entries: [],
         })),
-      };
-      json = JSON.stringify(exportData, null, 2);
+      );
     } else {
       json = await projectStorage.exportProjects();
     }
