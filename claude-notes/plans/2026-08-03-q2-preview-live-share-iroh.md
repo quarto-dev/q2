@@ -650,36 +650,52 @@ infrastructure in CI**.
 
 **Test specs (write these first, watch them fail):**
 
-- [ ] `ticket::roundtrip` — ticket with relay + ip addrs + token →
+*(all landed failing-first in `c146ca6d` — 10/10 FAIL via `todo!()` stubs,
+output inspected — then went green with the implementation, 2026-08-05;
+suite lives in `crates/quarto-p2p/tests/integration/{ticket,tunnel}.rs`)*
+
+- [x] `ticket::roundtrip` — ticket with relay + ip addrs + token →
       `to_string()` (starts with `q2preview`) → `parse()` → equal
-- [ ] `ticket::rejects_garbage_and_foreign_kinds` — empty string, random
+- [x] `ticket::rejects_garbage_and_foreign_kinds` — empty string, random
       base32, a bare iroh `EndpointTicket` string (`endpoint…`) all fail with
       a typed error
-- [ ] `ticket::debug_redacts_token` — `format!("{ticket:?}")` does not contain
-      the token bytes/hex
-- [ ] `tunnel::http_roundtrip_loopback` — tiny axum server as target; host
+- [x] `ticket::debug_redacts_token` — `format!("{ticket:?}")` does not contain
+      the token bytes/hex *(also asserts Debug does not embed the full join
+      string, which would leak the token via base32)*
+- [x] `tunnel::http_roundtrip_loopback` — tiny axum server as target; host
       endpoint + `TunnelHost::spawn`; client endpoint + `TunnelClient::bind`;
       raw HTTP/1.1 GET through the client's local port returns the body;
       repeat over ≥8 **concurrent** connections (concurrent QUIC streams)
-- [ ] `tunnel::websocket_frames_survive` — target is an axum `/ws` echo;
+- [x] `tunnel::websocket_frames_survive` — target is an axum `/ws` echo;
       `tokio-tungstenite` client through the local port; upgrade + a few
       frames round-trip (proves the splice handles long-lived duplex traffic)
-- [ ] `tunnel::wrong_token_rejected` — stream with a wrong/short token is
+- [x] `tunnel::wrong_token_rejected` — stream with a wrong/short token is
       reset; the target server sees **zero** TCP connections (count accepts)
-- [ ] `tunnel::client_redials_after_connection_loss` — drop the host-side
+- [x] `tunnel::client_redials_after_connection_loss` — drop the host-side
       connection; next local TCP conn succeeds after client re-dial
-- [ ] `tunnel::half_close_propagates` — guest-side TCP write-half shutdown
+      *(host restarted with fixed secret key + token + UDP port so the
+      unchanged ticket stays valid; asserts the status watch flips to
+      `Reconnecting` and back to `Connected`)*
+- [x] `tunnel::half_close_propagates` — guest-side TCP write-half shutdown
       reaches the target as read-EOF (and the reverse direction), while the
       other direction keeps flowing; guards the splice's EOF ↔
       `SendStream::finish()` mapping, which `websocket_frames_survive`'s
       symmetric traffic does not exercise
-- [ ] `tunnel::clean_shutdown` — `shutdown()` on both handles completes
+- [x] `tunnel::clean_shutdown` — `shutdown()` on both handles completes
       without hangs and unbinds the local port
 
 **Implementation:**
 
-- [ ] `ticket.rs` — struct + `iroh_tickets::Ticket` impl + `FromStr`/`Display`
-- [ ] `host.rs` — `Endpoint` (preset injectable for tests) + `Router` with a
+*(implementation complete 2026-08-05; verification: 10/10 crate tests
+green, `cargo nextest run --workspace` 10873 passed, `cargo xtask verify
+--skip-hub-build` "All verification steps passed!", `cargo tree -i iroh`
+from `wasm-quarto-hub-client` still fails — output inspected for all)*
+
+- [x] `ticket.rs` — struct + `iroh_tickets::Ticket` impl + `FromStr`/`Display`
+      *(postcard wire format follows iroh-tickets' versioned-enum convention:
+      `TicketWireFormat::Variant1 { id, addrs, token }`; manual `Debug`
+      redacts the token)*
+- [x] `host.rs` — `Endpoint` (preset injectable for tests) + `Router` with a
       `ProtocolHandler` whose `accept()` loops on `accept_bi()`, spawning per
       stream: `read_exact` 32-byte token under a 10 s timeout → constant-time
       compare → `TcpStream::connect(target)` →
@@ -690,7 +706,11 @@ infrastructure in CI**.
       `SendStream::finish()` (QUIC FIN), and a stream FIN must become TCP
       write-shutdown — verify with `tunnel::half_close_propagates` rather
       than assuming the adapter chain does it
-- [ ] **QUIC keep-alive vs. browser connection pooling:** browsers hold idle
+      *(done; preset injection is `TunnelHostConfig { preset, secret_key,
+      token, bind_addr }` — the last three exist for the hermetic
+      restart-same-identity re-dial test. N0 spawn wraps `online()` in the
+      plan's 10 s timeout and warns + degrades to direct/LAN-only on miss)*
+- [x] **QUIC keep-alive vs. browser connection pooling:** browsers hold idle
       pooled HTTP/1.1 connections open for minutes; if the iroh connection's
       idle timeout fires in between, the next request on a pooled TCP conn
       fails before the client re-dials. iroh's defaults already cover this —
@@ -702,13 +722,26 @@ infrastructure in CI**.
       (`endpoint.rs:669`) — **not** `TransportConfig`, which in iroh v1 is an
       unrelated internal socket-transport enum. Do not rely on the SPA's
       health polling to keep the tunnel warm
-- [ ] `client.rs` — endpoint + `MemoryLookup` seeded from the ticket;
+      *(verified by `tunnel::idle_pooled_conn_survives_quic_keepalive`:
+      35 s fully-idle pooled HTTP/1.1 conn through default-config hermetic
+      endpoints, then a second request on the same conn succeeds — ~40 s
+      runtime by design, the slowest test in the crate)*
+- [x] `client.rs` — endpoint + `MemoryLookup` seeded from the ticket;
       `TcpListener` accept loop; per conn: `open_bi()` on the current
       connection (re-dial with expo backoff on failure), write token, splice;
       status watch channel for CLI messaging
-- [ ] Shutdown plumbing: `router.shutdown().await?` on the host (it closes
+      *(re-dial is owned by a supervisor task parked on `conn.closed()` —
+      backoff 250 ms → 5 s cap, per-attempt 10 s connect timeout; per-conn
+      handlers wait on the status watch, budget 30 s, then drop the TCP
+      conn so browser/health-supervisor retries stay cheap. Initial dial
+      failure is a `TunnelClient::bind` error by design — Phase 3 wants
+      "host unreachable" at join time, not a silent background retry)*
+- [x] Shutdown plumbing: `router.shutdown().await?` on the host (it closes
       the endpoint itself; handle the returned `JoinError`); abort accept
       loop + close endpoint on the client
+      *(client shutdown awaits the aborted accept-loop task so the local
+      port is provably unbound before returning — asserted by
+      `tunnel::clean_shutdown`)*
 
 ## Phase 2 — `q2 preview --share` (host)
 

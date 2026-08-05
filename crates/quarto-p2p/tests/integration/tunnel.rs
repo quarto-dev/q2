@@ -281,11 +281,11 @@ async fn client_redials_after_connection_loss() {
     let deadline = Instant::now() + Duration::from_secs(30);
     let mut recovered = false;
     while Instant::now() < deadline {
-        if let Ok(response) = try_http_get_close(local, "/").await {
-            if response.contains("redial-ok") {
-                recovered = true;
-                break;
-            }
+        if let Ok(response) = try_http_get_close(local, "/").await
+            && response.contains("redial-ok")
+        {
+            recovered = true;
+            break;
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }

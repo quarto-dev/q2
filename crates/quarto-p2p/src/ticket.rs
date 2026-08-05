@@ -1,10 +1,12 @@
 //! The `q2preview…` join string: host `EndpointAddr` + session token.
 
+use std::collections::BTreeSet;
 use std::fmt;
 use std::str::FromStr;
 
-use iroh::EndpointAddr;
+use iroh::{EndpointAddr, EndpointId, TransportAddr};
 use iroh_tickets::{ParseError, Ticket};
+use serde::{Deserialize, Serialize};
 
 use crate::TOKEN_LEN;
 
@@ -22,34 +24,62 @@ pub struct PreviewShareTicket {
     pub token: [u8; TOKEN_LEN],
 }
 
+/// Wire format, following the `iroh-tickets` versioned-enum convention:
+/// the postcard enum tag doubles as the body version, alongside the KIND
+/// string that tags the protocol itself.
+#[derive(Serialize, Deserialize)]
+enum TicketWireFormat {
+    Variant1(Variant1PreviewShareTicket),
+}
+
+#[derive(Serialize, Deserialize)]
+struct Variant1PreviewShareTicket {
+    id: EndpointId,
+    addrs: BTreeSet<TransportAddr>,
+    token: [u8; TOKEN_LEN],
+}
+
 impl Ticket for PreviewShareTicket {
     const KIND: &'static str = "q2preview";
 
     fn encode_bytes(&self) -> Vec<u8> {
-        todo!("Phase 1 (bd-v8mwzpmi)")
+        let data = TicketWireFormat::Variant1(Variant1PreviewShareTicket {
+            id: self.addr.id,
+            addrs: self.addr.addrs.clone(),
+            token: self.token,
+        });
+        postcard::to_stdvec(&data).expect("postcard serialization failed")
     }
 
-    fn decode_bytes(_bytes: &[u8]) -> Result<Self, ParseError> {
-        todo!("Phase 1 (bd-v8mwzpmi)")
+    fn decode_bytes(bytes: &[u8]) -> Result<Self, ParseError> {
+        let data: TicketWireFormat = postcard::from_bytes(bytes)?;
+        let TicketWireFormat::Variant1(Variant1PreviewShareTicket { id, addrs, token }) = data;
+        Ok(Self {
+            addr: EndpointAddr { id, addrs },
+            token,
+        })
     }
 }
 
 impl fmt::Display for PreviewShareTicket {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!("Phase 1 (bd-v8mwzpmi)")
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.encode_string())
     }
 }
 
 impl FromStr for PreviewShareTicket {
     type Err = ParseError;
 
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        todo!("Phase 1 (bd-v8mwzpmi)")
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::decode_string(s)
     }
 }
 
 impl fmt::Debug for PreviewShareTicket {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!("Phase 1 (bd-v8mwzpmi)")
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PreviewShareTicket")
+            .field("addr", &self.addr)
+            .field("token", &"[redacted]")
+            .finish()
     }
 }

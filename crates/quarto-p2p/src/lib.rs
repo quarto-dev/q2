@@ -54,6 +54,48 @@ pub enum TunnelStatus {
 
 pub(crate) type BoxedError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
+/// Bind an iroh endpoint for the given preset (shared by host and client).
+///
+/// `HermeticLoopback` builds a `presets::Minimal` endpoint bound to loopback
+/// only, with relays explicitly disabled (Minimal already defaults to
+/// `RelayMode::Disabled`; the explicit setting documents the hermetic
+/// posture). `configure` lets callers add builder options (e.g. the
+/// client's `MemoryLookup`).
+pub(crate) async fn bind_endpoint(
+    preset: EndpointPreset,
+    secret_key: Option<iroh::SecretKey>,
+    bind_addr: Option<std::net::SocketAddr>,
+    configure: impl FnOnce(iroh::endpoint::Builder) -> iroh::endpoint::Builder,
+) -> Result<iroh::Endpoint, TunnelError> {
+    let mut builder = match preset {
+        EndpointPreset::N0 => iroh::Endpoint::builder(iroh::endpoint::presets::N0),
+        EndpointPreset::HermeticLoopback => {
+            iroh::Endpoint::builder(iroh::endpoint::presets::Minimal)
+                .relay_mode(iroh::RelayMode::Disabled)
+                .clear_ip_transports()
+        }
+    };
+    let bind_addr = match (preset, bind_addr) {
+        (_, Some(addr)) => Some(addr),
+        (EndpointPreset::HermeticLoopback, None) => {
+            Some("127.0.0.1:0".parse().expect("loopback socket addr"))
+        }
+        (EndpointPreset::N0, None) => None,
+    };
+    if let Some(addr) = bind_addr {
+        builder = builder
+            .bind_addr(addr)
+            .map_err(|e| TunnelError::Bind(Box::new(e)))?;
+    }
+    if let Some(secret_key) = secret_key {
+        builder = builder.secret_key(secret_key);
+    }
+    configure(builder)
+        .bind()
+        .await
+        .map_err(|e| TunnelError::Bind(Box::new(e)))
+}
+
 /// Errors from the tunnel API.
 #[derive(Debug, thiserror::Error)]
 pub enum TunnelError {
