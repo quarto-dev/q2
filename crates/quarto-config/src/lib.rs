@@ -41,6 +41,8 @@ mod convert;
 mod format;
 mod materialize;
 mod merged;
+#[cfg(feature = "span-assert")]
+pub mod span_assert;
 mod tag;
 mod types;
 mod website;
