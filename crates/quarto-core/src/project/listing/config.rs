@@ -591,15 +591,15 @@ fn parse_contents(
     value: &ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> Vec<ListingContents> {
-    // Quarto YAML routinely parses bare frontmatter strings as
-    // `PandocInlines` (e.g. when a glob like `posts/*.qmd` confuses
-    // the markdown sublexer and lands as a `Span` carrying the
-    // `yaml-markdown-syntax-error` class). Route through
-    // `as_plain_text` first so any string-shaped variant becomes a
-    // glob, mirroring `parse_listings`'s top-level shorthand
-    // handling. The bug that surfaced when L5's snapshot fixture
-    // used `contents: "posts/*.qmd"` and the broader audit of
-    // sibling parser branches is tracked under bd-nwyp.
+    // Since bd-v7ixzsp5, front-matter `contents:` strings arrive as
+    // `ConfigValueKind::Glob` — the key-path annotation table in
+    // pampa (`meta_annotations.rs`) types them at parse time, so
+    // they never take the markdown-parsing path (which used to warn
+    // Q-1-20 and could silently corrupt patterns whose asterisks
+    // parsed as emphasis). The `as_plain_text` route below is kept
+    // as a defensive fallback for string-shaped values from other
+    // sources (programmatic construction, runtime metadata, legacy
+    // `PandocInlines` values — the original bd-nwyp shape).
     if let Some(s) = value.as_plain_text() {
         return vec![ListingContents::Glob {
             pattern: s,

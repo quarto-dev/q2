@@ -174,6 +174,49 @@ fn frontmatter_glob_resolves_against_host_dir_not_project_root() {
         "no unresolved .qmd href may leak into the listing"
     );
     assert_no_code(&outputs, "Q-13-4");
+    // Phase 5 (defect #5): glob strings in `contents:` are typed as
+    // globs by the key-path annotation — no markdown-parse warning.
+    assert_no_code(&outputs, "Q-1-20");
+}
+
+// ─────────────────────────────────────────────────────────────────
+// 6. Interpretation of `contents:` entries (defects #5/#6): glob
+//    strings never take the markdown-parsing path, which used to
+//    warn (Q-1-20) on parse failure and silently corrupt the
+//    pattern on parse *success* (`p*osts*.qmd` → emphasis →
+//    `posts.qmd`).
+// ─────────────────────────────────────────────────────────────────
+
+#[test]
+fn glob_with_markdown_parseable_asterisks_survives() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Home\nlisting:\n  contents:\n    - \"p*osts*.qmd\"\n---\n",
+        );
+        write(
+            &p.join("pXosts_extra.qmd"),
+            "---\ntitle: Should Match\ndate: 2026-01-01\n---\n\nx.\n",
+        );
+        write(
+            &p.join("posts/ignore.qmd"),
+            "---\ntitle: In Subdir\n---\n\nx.\n",
+        );
+    });
+
+    let host = html_for(&outputs, "index.html");
+    assert_eq!(
+        listing_titles(&host),
+        vec!["Should Match"],
+        "the asterisks in `p*osts*.qmd` must survive the front-matter \
+         parse verbatim (previously the markdown emphasis parse \
+         silently flattened the pattern to `posts.qmd`)"
+    );
+    assert_no_code(&outputs, "Q-1-20");
 }
 
 #[test]
