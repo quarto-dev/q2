@@ -679,10 +679,15 @@ directory into the worktree.
    #460 deferred) so the two do not duplicate — a shared "Paths and
    globs" page under `docs/guides/` that both link to is probably the
    right shape.
-2. **`GlobResolution::invalid` for `sidebar.auto`** — the other three
-   consumers report invalid patterns; `auto:` still drops them into its
-   existing `Q-13-6` empty-match warning. Small, but it is the last
-   silent case.
+2. **`GlobResolution::invalid` / `::escaped` for `sidebar.auto`** —
+   filed as **bd-bd9oagvm** (P2). The other three consumers report all
+   three failure modes; `auto:` still drops invalid and escaping
+   patterns into its existing `Q-13-6` empty-match warning, which
+   blames "matched no documents" rather than naming the bad pattern.
+   The wiring is easy (`expand_spec` already carries a diagnostics
+   buffer); the catch is that `AutoSpec` has no `SourceInfo`, so the
+   diagnostics would be span-less unless provenance is threaded through
+   `quarto-navigation`'s parser first.
 
 ### Phase 7 — bookkeeping
 
