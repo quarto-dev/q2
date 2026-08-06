@@ -109,7 +109,12 @@ The verification ladder, cheapest first:
 2. **Local — `actionlint`** on the edited workflow.
 3. **CI — the real thing.** See "Open question" below.
 
-## Open question (for Carlos)
+## Open question (for Carlos) — **settled: (a)**
+
+> **Decided 2026-08-05.** Carlos picked **(a) land it; v0.11.0 exercises it.**
+> No throwaway spike workflow this time — the invocation is inherited from a
+> run that was already green on both arches, and the failure mode is a release
+> run that stops before publishing anything.
 
 How much CI dry-run does this warrant before it lands? Three options, and the
 tradeoff is real because **no musl release exists yet** — v0.10.0 predates the
@@ -162,9 +167,13 @@ run that publishes nothing.
 ### Phase 4 — Land
 
 - [x] `cargo xtask verify --skip-hub-build` green (14/14, exit 0)
-- [ ] Resolve the open question with Carlos; run whatever dry-run he picks
+- [x] Resolve the open question with Carlos — **(a)**, no spike workflow
 - [ ] PR, review, merge
 - [ ] Close bd-3b47pxmm
+- [ ] **Watch the `Assert the binary needs no glibc (Alpine)` step on the
+      v0.11.0 release run** — that is where this change gets its first real
+      execution, and per (a) it is the acceptance test. Both linux legs must
+      show the Alpine version line.
 
 ## Outcomes
 
