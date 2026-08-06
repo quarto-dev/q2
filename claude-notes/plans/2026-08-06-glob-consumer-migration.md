@@ -6,11 +6,11 @@
 `braid/bd-mt7a6uc4-glob-consumer-migration`
 **Parent plan:** `claude-notes/plans/2026-08-06-listing-glob-provenance.md`
 (decision 3)
-**Status:** in execution. Phases 0–5 complete — all four consumers are
-migrated onto the shared API and every failure mode is diagnosed. What
-remains is the final `cargo xtask verify`, a user-facing docs page, and
-one small gap (`sidebar.auto` invalid-pattern reporting); see
-"Remaining".
+**Status:** Phases 0–6 complete. All four consumers are migrated onto
+the shared API, every failure mode is diagnosed, and full
+`cargo xtask verify` (including the hub-client WASM leg) passes. Two
+small items remain — a user-facing docs page and `sidebar.auto`
+invalid-pattern reporting; see "Remaining".
 
 > **Base-branch caveat.** #460 has not been through CI (GitHub Actions
 > outage, 2026-08-06). This branch stacks on it anyway; if review
@@ -648,9 +648,10 @@ useful warning and a puzzle.
       on a real site. The 26 warnings it does emit are pre-existing
       (`Q-5-6` ×14 for missing images referenced from markdown,
       `Q-13-4` ×11 for missing link targets, `Q-12-10` ×1).
-- [ ] `cargo xtask verify` (full, incl. the WASM leg) — running; the
-      earlier run failed only on `cargo fmt` (Python-written edits
-      bypass the format hook), fixed in `82e00d6`.
+- [x] `cargo xtask verify` (full, incl. the hub-client WASM leg) —
+      **all steps passed**. An earlier run failed only on `cargo fmt`
+      (Python-written edits bypass the format hook), fixed in
+      `6e92b1f0`.
 - [x] `hub-client/changelog.md` — not needed; nothing under
       `hub-client/` changed.
 
@@ -672,14 +673,13 @@ directory into the worktree.
 
 ## Remaining
 
-1. **`cargo xtask verify` (full)** — in flight.
-2. **User-facing docs page for glob semantics.** The error pages carry
+1. **User-facing docs page for glob semantics.** The error pages carry
    the rules per-code, but there is no one page a user can read to learn
    the vocabulary. Coordinate with **bd-2nb6i1qv** (the listings guide
    #460 deferred) so the two do not duplicate — a shared "Paths and
    globs" page under `docs/guides/` that both link to is probably the
    right shape.
-3. **`GlobResolution::invalid` for `sidebar.auto`** — the other three
+2. **`GlobResolution::invalid` for `sidebar.auto`** — the other three
    consumers report invalid patterns; `auto:` still drops them into its
    existing `Q-13-6` empty-match warning. Small, but it is the last
    silent case.
