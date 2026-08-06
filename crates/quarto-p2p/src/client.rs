@@ -4,17 +4,22 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use futures::StreamExt;
 use iroh::address_lookup::memory::MemoryLookup;
-use iroh::endpoint::Connection;
+use iroh::endpoint::{Connection, ConnectionError, PathList, VarInt};
 use iroh::{Endpoint, EndpointAddr};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{RwLock, watch};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
-use crate::{ALPN, EndpointPreset, PreviewShareTicket, TOKEN_LEN, TunnelError, TunnelStatus};
+use crate::{
+    ALPN, ERROR_CODE_UNAUTHORIZED, EndpointPreset, PathKind, PreviewShareTicket, TOKEN_LEN,
+    TunnelError, TunnelStatus,
+};
 
 /// Per-attempt cap on dialing the host (QUIC handshakes against a dead
 /// UDP addr otherwise pend on retransmits for a long time).
@@ -71,15 +76,18 @@ impl TunnelClient {
         let listener = TcpListener::bind(local).await.map_err(TunnelError::Proxy)?;
         let local_addr = listener.local_addr().map_err(TunnelError::Proxy)?;
 
-        let (status_tx, status_rx) = watch::channel(TunnelStatus::Connected);
+        let (status_tx, status_rx) =
+            watch::channel(TunnelStatus::Connected(selected_path_kind(&conn.paths())));
         let shared = Arc::new(Shared {
             endpoint: endpoint.clone(),
             remote: ticket.addr,
             token: ticket.token,
-            conn: RwLock::new(conn),
+            conn: RwLock::new(conn.clone()),
+            conn_generation: AtomicU64::new(0),
             status_tx,
             status_rx: status_rx.clone(),
         });
+        tokio::spawn(watch_paths(conn, shared.clone(), 0));
 
         let supervisor = tokio::spawn(supervise_connection(shared.clone()));
         let acceptor = tokio::spawn(accept_loop(listener, shared));
@@ -106,7 +114,8 @@ pub struct TunnelClientHandle {
 }
 
 impl TunnelClientHandle {
-    /// Watch channel for CLI messaging ("connected", "reconnecting…").
+    /// Watch channel for CLI messaging ("connected via …",
+    /// "reconnecting…", "rejected").
     pub fn status(&self) -> watch::Receiver<TunnelStatus> {
         self.status_rx.clone()
     }
@@ -132,16 +141,62 @@ struct Shared {
     remote: EndpointAddr,
     token: [u8; TOKEN_LEN],
     conn: RwLock<Connection>,
+    /// Bumped on every re-dial; a path watcher only updates the status
+    /// when its connection is still the current generation, so a
+    /// straggling snapshot from a dying connection can't overwrite the
+    /// fresh connection's path kind.
+    conn_generation: AtomicU64,
     status_tx: watch::Sender<TunnelStatus>,
     status_rx: watch::Receiver<TunnelStatus>,
 }
 
+/// Classify the selected path of a connection snapshot.
+fn selected_path_kind(paths: &PathList<'_>) -> PathKind {
+    match paths.iter().find(|p| p.is_selected()) {
+        Some(p) if p.is_relay() => PathKind::Relay,
+        Some(p) if p.is_ip() => PathKind::Direct,
+        // Custom transports don't occur here; selection may also simply
+        // not have happened yet.
+        _ => PathKind::Unknown,
+    }
+}
+
+/// Follow one connection's path snapshots, updating a live `Connected`
+/// status when the selected path changes kind (e.g. relay → direct once
+/// hole-punching lands). Ends when the connection closes. Never touches
+/// `Reconnecting`/`Rejected` — those belong to the supervisor.
+async fn watch_paths(conn: Connection, shared: Arc<Shared>, generation: u64) {
+    let mut stream = std::pin::pin!(conn.paths_stream());
+    while let Some(paths) = stream.as_mut().next().await {
+        let kind = selected_path_kind(&paths);
+        if shared.conn_generation.load(Ordering::SeqCst) != generation {
+            return; // a newer connection owns the status now
+        }
+        shared.status_tx.send_if_modified(|status| match status {
+            TunnelStatus::Connected(old) if *old != kind => {
+                *status = TunnelStatus::Connected(kind);
+                true
+            }
+            _ => false,
+        });
+    }
+}
+
 /// Watches the current connection for death and re-dials with exponential
-/// backoff, updating the status channel around the outage.
+/// backoff, updating the status channel around the outage. A close carrying
+/// the host's "unauthorized" code is terminal: the session token was
+/// rejected, so re-dialing with the same ticket can never succeed.
 async fn supervise_connection(shared: Arc<Shared>) {
     loop {
         let conn = shared.conn.read().await.clone();
         let reason = conn.closed().await;
+        if let ConnectionError::ApplicationClosed(close) = &reason
+            && close.error_code == VarInt::from_u32(ERROR_CODE_UNAUTHORIZED)
+        {
+            tracing::warn!("preview tunnel: the host rejected the session token");
+            shared.status_tx.send_replace(TunnelStatus::Rejected);
+            return;
+        }
         tracing::info!(?reason, "preview tunnel: connection lost; re-dialing");
         shared.status_tx.send_replace(TunnelStatus::Reconnecting);
 
@@ -154,8 +209,14 @@ async fn supervise_connection(shared: Arc<Shared>) {
             .await
             {
                 Ok(Ok(new_conn)) => {
-                    *shared.conn.write().await = new_conn;
-                    shared.status_tx.send_replace(TunnelStatus::Connected);
+                    let generation = shared.conn_generation.fetch_add(1, Ordering::SeqCst) + 1;
+                    *shared.conn.write().await = new_conn.clone();
+                    shared
+                        .status_tx
+                        .send_replace(TunnelStatus::Connected(selected_path_kind(
+                            &new_conn.paths(),
+                        )));
+                    tokio::spawn(watch_paths(new_conn, shared.clone(), generation));
                     tracing::info!("preview tunnel: reconnected");
                     break;
                 }
@@ -201,14 +262,17 @@ async fn handle_local_conn(mut tcp: TcpStream, shared: Arc<Shared>) {
                     return; // budget exhausted; drop the TCP conn
                 };
                 let mut status = shared.status_rx.clone();
-                if timeout(
+                match timeout(
                     remaining,
-                    status.wait_for(|s| *s == TunnelStatus::Connected),
+                    status.wait_for(|s| !matches!(s, TunnelStatus::Reconnecting)),
                 )
                 .await
-                .is_err()
                 {
-                    return;
+                    // Reconnected: retry open_bi on the swapped connection.
+                    Ok(Ok(current)) if matches!(*current, TunnelStatus::Connected(_)) => {}
+                    // Rejected (terminal), channel closed, or budget
+                    // exhausted: drop the TCP conn.
+                    _ => return,
                 }
             }
         }

@@ -11,7 +11,10 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::routing::get;
 use futures::{SinkExt, StreamExt};
 use iroh::{SecretKey, TransportAddr};
-use quarto_p2p::{ALPN, EndpointPreset, TunnelClient, TunnelHost, TunnelHostConfig, TunnelStatus};
+use quarto_p2p::{
+    ALPN, EndpointPreset, PathKind, PreviewShareTicket, TunnelClient, TunnelHost, TunnelHostConfig,
+    TunnelStatus,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
@@ -246,7 +249,10 @@ async fn client_redials_after_connection_loss() {
         .await
         .expect("bind client");
     let mut status = client.status();
-    assert_eq!(*status.borrow(), TunnelStatus::Connected);
+    assert!(
+        matches!(*status.borrow(), TunnelStatus::Connected(_)),
+        "fresh client must start Connected"
+    );
 
     let first = http_get_close(local, "/").await;
     assert!(
@@ -293,7 +299,7 @@ async fn client_redials_after_connection_loss() {
 
     timeout(
         STEP_TIMEOUT,
-        status.wait_for(|s| *s == TunnelStatus::Connected),
+        status.wait_for(|s| matches!(s, TunnelStatus::Connected(_))),
     )
     .await
     .expect("status never returned to Connected")
@@ -301,6 +307,108 @@ async fn client_redials_after_connection_loss() {
 
     client.shutdown().await.expect("client shutdown");
     second_host.shutdown().await.expect("second host shutdown");
+}
+
+/// Phase 3 (bd-6y0p1bne): the status watch must say *how* the tunnel is
+/// connected — the CLI prints "connected via direct connection" vs
+/// "connected via relay". Hermetic endpoints have IP transports only, so
+/// the selected path must read as `Direct` (never `Relay`, never stuck on
+/// `Unknown`).
+#[tokio::test(flavor = "multi_thread")]
+async fn status_reports_direct_path_kind() {
+    let target = spawn_http_target(Router::new().route("/", get(|| async { "path-ok" }))).await;
+    let (local, host, client) = spawn_tunnel_pair(target).await;
+
+    let mut status = client.status();
+    timeout(
+        STEP_TIMEOUT,
+        status.wait_for(|s| *s == TunnelStatus::Connected(PathKind::Direct)),
+    )
+    .await
+    .expect("status never reported a direct path")
+    .expect("status channel closed");
+
+    // Traffic actually flows on the reported path.
+    let response = http_get_close(local, "/").await;
+    assert!(response.contains("path-ok"), "roundtrip failed: {response}");
+
+    client.shutdown().await.expect("client shutdown");
+    host.shutdown().await.expect("host shutdown");
+}
+
+/// Phase 3 (bd-6y0p1bne): a stale join string — right endpoint, wrong
+/// token (host restarted / session re-shared) — must surface as a
+/// *terminal* `Rejected` status, not an endless silent re-dial loop. The
+/// CLI turns this into "the host rejected this join string".
+#[tokio::test(flavor = "multi_thread")]
+async fn rejected_token_flips_status_terminal() {
+    // Raw TCP target that counts accepts; the rejected guest must never
+    // produce one.
+    let accepts = Arc::new(AtomicUsize::new(0));
+    let listener = TcpListener::bind(any_loopback())
+        .await
+        .expect("bind target");
+    let target = listener.local_addr().expect("target addr");
+    {
+        let accepts = accepts.clone();
+        tokio::spawn(async move {
+            loop {
+                let _ = listener.accept().await;
+                accepts.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+    }
+
+    let cfg = TunnelHostConfig {
+        preset: EndpointPreset::HermeticLoopback,
+        token: Some([0xAA; 32]),
+        ..Default::default()
+    };
+    let (ticket, host) = TunnelHost::spawn(cfg, target).await.expect("spawn host");
+
+    // The stale string: same endpoint address, zeroed token.
+    let stale = PreviewShareTicket {
+        addr: ticket.addr.clone(),
+        token: [0u8; 32],
+    };
+    let (local, client) = TunnelClient::bind(hermetic_client_cfg(), stale, any_loopback())
+        .await
+        .expect("bind client (QUIC connect itself carries no token)");
+
+    // Trigger one proxied connection: the host resets the stream and
+    // closes the connection as unauthorized. The request's outcome is
+    // irrelevant; the attempt is what trips the rejection.
+    let _ = timeout(STEP_TIMEOUT, try_http_get_close(local, "/"))
+        .await
+        .expect("rejected request should fail fast, not hang");
+
+    let mut status = client.status();
+    timeout(
+        STEP_TIMEOUT,
+        status.wait_for(|s| *s == TunnelStatus::Rejected),
+    )
+    .await
+    .expect("client never reported the token rejection")
+    .expect("status channel closed");
+
+    // Terminal: the supervisor must not re-dial its way back to
+    // Connected with a token the host refuses.
+    tokio::time::sleep(Duration::from_millis(750)).await;
+    assert_eq!(
+        *client.status().borrow(),
+        TunnelStatus::Rejected,
+        "Rejected must be terminal"
+    );
+
+    // The unauthenticated stream never reached the target.
+    assert_eq!(
+        accepts.load(Ordering::SeqCst),
+        0,
+        "rejected streams must not reach the target"
+    );
+
+    client.shutdown().await.expect("client shutdown");
+    host.shutdown().await.expect("host shutdown");
 }
 
 #[tokio::test(flavor = "multi_thread")]

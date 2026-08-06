@@ -887,12 +887,24 @@ lands in Phase 3 — the tunnel path exercised (ticket parse →
 
 ## Phase 3 — `q2 preview --join <ticket>` (guest)
 
+*(implemented 2026-08-06, bd-6y0p1bne; tests landed first and were
+observed failing — 5/6 new CLI conflict tests FAIL (only the Phase 2
+`--share` conflict pre-existed), the two new quarto-p2p status tests
+fail as E0432/E0599 compile errors (the expected failure mode for the
+`TunnelStatus` shape change, matching Phase 2's E0026 precedent) —
+then went green with the implementation)*
+
 **Tests first:**
 
-- [ ] CLI conflict matrix: `--join` × each of {path, `--share`,
+- [x] CLI conflict matrix: `--join` × each of {path, `--share`,
       `--no-project`, `--allow-edit`, `--ui editor`, `--data-dir`,
       `--preview-dir`} rejected; × {`--port`, `--no-browser`, `--host`} accepted
-- [ ] **The money test** (integration, `crates/quarto-preview` or `quarto-p2p`
+      *(done except `--ui editor`: the `--ui` flag itself is Phase 4
+      (bd-jt1etjbn, not yet implemented), so its `--join` conflict lands
+      there with the flag — noted in the Phase 4 items below. Conflicts
+      asserted as `ErrorKind::ArgumentConflict`; the accepted set is
+      pinned by `preview_join_composes_with_guest_flags`)*
+- [x] **The money test** (integration, `crates/quarto-preview` or `quarto-p2p`
       with a dev-dep on `quarto-hub`): start a real preview hub in-process on
       a fixture project (`run_server_with`), `TunnelHost` in front of it,
       `TunnelClient` on a random port (all hermetic-iroh); then through the
@@ -911,16 +923,34 @@ lands in Phase 3 — the tunnel path exercised (ticket parse →
       dials via `repo.dial(BackoffConfig, BearerDialer)` because
       `dial_websocket` cannot set auth headers (that distinction matters
       again in Phase 5)
+      *(landed as `crates/quarto-preview/tests/integration/join_tunnel.rs::guest_syncs_project_through_tunnel`,
+      via `quarto_preview::run` (which wraps `run_server_with`) — no new
+      dev-dep needed beyond `url` (samod + quarto-hub are already regular
+      deps; samod's `tungstenite` feature unifies in via quarto-hub).
+      Composition-of-tested-parts, so it passed on first run — that is
+      the expected outcome for this proof, unlike the fail-first items
+      above. Also asserts tunnel `/health` == direct `/health`)*
 
 **Implementation:**
 
-- [ ] `--join <STRING>` arg; guest path in `commands/preview.rs::run` that
+- [x] `--join <STRING>` arg; guest path in `commands/preview.rs::run` that
       bypasses project resolution/TempDir/hub entirely: parse ticket,
       `TunnelClient::bind(("127.0.0.1"|--host, --port or probed))`, print URL
-- [ ] Browser-open readiness = first successful `GET /health` **through the
+      *(clap arg unhidden + `conflicts_with_all`; `run_join` in
+      `commands/preview.rs`; `--host` resolves via `tokio::net::lookup_host`
+      so `localhost` works; explicit `--port` gets the friendly
+      `validate_explicit_port` check, otherwise the OS assigns and
+      `TunnelClient::bind` reports the bound port back — no pre-probe
+      needed since nothing must print before a second server starts)*
+- [x] Browser-open readiness = first successful `GET /health` **through the
       tunnel** (extend `wait_until_accepting`, `preview.rs:294-327` — a local
       TCP accept alone would lie when the tunnel is dead)
-- [ ] Status messaging from the client watch channel: "connected via
+      *(new `wait_until_healthy` + `health_get_ok` (hand-rolled HTTP/1.1
+      GET, no new HTTP-client dep): same backoff shape and
+      open-anyway-on-timeout floor as `wait_until_accepting`, 15 s budget,
+      5 s per-attempt cap; unit tests cover 200 / non-200-keeps-polling /
+      nothing-listening)*
+- [x] Status messaging from the client watch channel: "connected via
       <direct|relay>", "reconnecting…". API pinned:
       `Connection::paths()` returns a `PathList` whose `Path` entries
       expose `is_selected()` / `is_relay()` / `is_ip()` / `rtt()`
@@ -930,14 +960,94 @@ lands in Phase 3 — the tunnel path exercised (ticket parse →
       path's `is_relay()` is the direct-vs-relay discriminator.
       (`Endpoint::remote_info(EndpointId)` also exists, `endpoint.rs:1623`,
       but the per-connection API is the right one here)
-- [ ] Ctrl-C teardown; clear error UX for: malformed ticket, host unreachable,
+      *(API change in quarto-p2p: `TunnelStatus::Connected` now carries a
+      `PathKind` ({Direct, Relay, Unknown}, Display-able), fed by a
+      per-connection `paths_stream()` watcher task (used over
+      `path_events()` because it yields the current snapshot on first
+      poll — no missed initial selection). A `conn_generation` counter
+      guards against a dying connection's straggler snapshot overwriting
+      the re-dialed connection's kind. `futures` promoted from dev-dep to
+      dep for `StreamExt`. Pinned by `tunnel::status_reports_direct_path_kind`)*
+- [x] Ctrl-C teardown; clear error UX for: malformed ticket, host unreachable,
       token rejected (host rotated/session ended)
+      *(malformed → parse error naming `q2 preview --share` + the
+      wrapped-line copy warning, exit 1; unreachable → bounded 10 s dial
+      timeout then "could not reach the share host", exit 1; token
+      rejected → second quarto-p2p API change: the client supervisor
+      inspects `conn.closed()` and maps an `ApplicationClosed` carrying
+      the host's `ERROR_CODE_UNAUTHORIZED` (1, now a crate-shared const)
+      to a **terminal** `TunnelStatus::Rejected` — no re-dial spin, since
+      the same token can never succeed — which the CLI turns into "the
+      host rejected this join string… ask for a fresh `--share` string"
+      and a non-zero exit. Pinned hermetically by
+      `tunnel::rejected_token_flips_status_terminal` (client side; the
+      target-sees-zero-TCP-conns half was already pinned by Phase 1's
+      `wrong_token_rejected`). Ctrl-C: select on `ctrl_c()` vs the
+      status reporter, then `TunnelClientHandle::shutdown()`; measured
+      29 ms exit when Connected, 3.0 s when Reconnecting (iroh's
+      documented graceful-close budget with a dial in flight —
+      accepted))*
 - [ ] **End-to-end (mandatory, record here):** cross-machine host/guest run
       with the real n0 relay path (netns is Linux-only — same logistics as
       Gate 0 Q3: two physical machines); inspect rendered output in the
       guest browser; note "verified in browser". Join **two guests
       concurrently** at least once (v1 scope is N guests — architecture
       scope note)
+      *(single-machine leg executed 2026-08-06 with two concurrent guests —
+      see "Phase 3 end-to-end record" below; the **cross-machine n0-relay
+      leg is still open** — it needs a second physical machine (user-driven,
+      runbook analogous to Gate 0's) or a GH-Actions guest like Gate 0 Q3
+      (needs push approval). The "connected via relay" message rendering
+      is exercised only by that leg (local runs select the direct path);
+      the wrapped-ticket triple-click copy check also still wants a human
+      terminal)*
+
+### Phase 3 end-to-end record (single-machine legs, 2026-08-06)
+
+All output inspected. Binary: `target/debug/q2` at the Phase 3 tree
+(guests use the real `q2 preview --join` — no example shims). Fixture:
+`_quarto.yml` + `index.qmd` (`MARKER-0`) + `about.qmd` in a scratchpad
+dir.
+
+- **Host:** `q2 preview <fixture> --share --no-browser --port 9377`
+  printed the boot URL, then the banner ending in a bare
+  `q2 preview --join q2previewadwfpfxpcncsiqj2qf6…` line (203-char
+  ticket; relay reachable, so no direct/LAN warning).
+- **Two concurrent guests:** `q2 preview --join <ticket> --no-browser
+  --port 9280|9281` → each printed
+  `→ http://127.0.0.1:928x/` and `● connected via direct connection`.
+- **`/health` through both guest ports** returned **byte-identical**
+  payloads to direct (`diff` clean), including
+  `"index_document_id":"4VQ27RYYrpZ5W3D5Fph6NE5tmYoy"` and
+  `"qmd_file_count":2`.
+- **Browser (Playwright Chromium** at `…/?page=index.qmd`, frames
+  scanned per the Gate 0 iframe finding): document rendered through the
+  tunnel on **both** guests in **1.46 s**; screenshots inspected
+  (`MARKER-0` visible). Note: guests ran `--no-browser` and Playwright
+  drove the pages, so the auto-open itself wasn't exercised — its
+  gating helper (`wait_until_healthy`) is unit-tested and the opener is
+  the same `open_browser_or_log` host mode uses.
+- **Live edit:** host-side `MARKER-0`→`MARKER-1` propagated to the
+  already-open guest page in **~0.6 s** (marker visible 2.2 s after the
+  edit including a second page's fresh boot + both screenshots); a
+  fresh guest boot after the edit rendered `MARKER-1` in 1.45 s.
+  Post-edit screenshots inspected on both guests.
+- **Error UX, all observed:** `--join not-a-ticket` →
+  `invalid join string (wrong prefix, expected q2preview)` + guidance,
+  `EXIT=1`; SIGINT of the host flipped the surviving guest to
+  `○ connection lost — reconnecting…`; joining the dead host's ticket
+  failed after the bounded 10.0 s dial timeout with
+  `could not reach the share host …`, `EXIT=1`. Token-rejected is
+  covered hermetically (`rejected_token_flips_status_terminal`) — not
+  reproducible from the CLI without hand-crafting a wrong-token ticket.
+- **Ctrl-C teardown:** guest exit measured **29 ms** in the Connected
+  state (port unbound, `Received Ctrl-C, leaving the shared session…`);
+  **3.0 s** in the Reconnecting state (iroh close with a dial in
+  flight). Host Ctrl-C behavior unchanged from Phase 2's record.
+- **Verification at this tree:** `cargo build --workspace` green;
+  `cargo nextest run --workspace` **10897 passed**; `cargo xtask verify
+  --skip-hub-build` → "All verification steps passed!"; `cargo tree -i
+  iroh` from `wasm-quarto-hub-client` still fails (closure clean).
 
 ## Phase 4 — `q2 preview --ui editor` (independent track)
 
@@ -952,7 +1062,10 @@ required: `App.tsx:418-423`).
 
 - [ ] CLI: `--ui viewer` / `--ui editor` parse (clap `ValueEnum`, default
       `viewer`); an unknown value (`--ui monaco`) is rejected with the list
-      of valid values
+      of valid values; **`--ui` × `--join` rejected** (the one Phase 3
+      conflict-matrix entry deferred here because the flag didn't exist
+      yet — extend `--join`'s `conflicts_with_all` in `main.rs` and add
+      the parse test alongside Phase 3's `assert_join_conflict` helper)
 - [ ] Rust unit: `--ui editor` boot URL builder emits
       `http://{host}:{port}/#/share/{indexDocId}?server=%2Fws&file={rel}&name={project}`
       (doc id **without** the `automerge:` prefix — `routing.ts:420`; `file`

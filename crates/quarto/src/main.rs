@@ -251,10 +251,18 @@ enum Commands {
 
         /// Join a shared preview session using the `q2preview…` string
         /// printed by `q2 preview --share` on the host machine.
-        // Hidden until the guest path lands (live-share plan Phase 3,
-        // bd-6y0p1bne); declared now so the --share conflict is real.
-        // Phase 3 unhides it and adds its full conflict matrix.
-        #[arg(long, value_name = "TICKET", conflicts_with = "share", hide = true)]
+        ///
+        /// Runs a local proxy for the host's session — no local project
+        /// is read and nothing is written to disk on this machine, so
+        /// the host-mode flags (a path, --share, --no-project,
+        /// --allow-edit, --data-dir, --preview-dir) don't combine with
+        /// it. --port/--host pick where the local proxy listens;
+        /// --no-browser still applies.
+        #[arg(
+            long,
+            value_name = "TICKET",
+            conflicts_with_all = ["path", "share", "no_project", "allow_edit", "data_dir", "preview_dir"]
+        )]
         join: Option<String>,
     },
 
@@ -809,6 +817,95 @@ mod cli_parse_tests {
         };
         assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
     }
+
+    // ── Phase 3 (bd-6y0p1bne): `--join` conflict matrix ──────────────
+    // The guest path has no local project, hub, or disk surface, so
+    // every host-mode-only flag must be a hard parse error, not a
+    // silent no-op. (`--ui` joins this matrix in Phase 4, when the
+    // flag itself lands.)
+
+    /// Assert argv is rejected specifically as an argument conflict
+    /// (not, say, an unknown-arg error).
+    fn assert_join_conflict(args: &[&str]) {
+        let err = match try_parse(args) {
+            Ok(_) => panic!("{args:?} mixes guest mode with a host-only flag; must conflict"),
+            Err(e) => e,
+        };
+        assert_eq!(
+            err.kind(),
+            clap::error::ErrorKind::ArgumentConflict,
+            "args: {args:?}"
+        );
+    }
+
+    #[test]
+    fn preview_join_parses_and_captures_ticket() {
+        let Commands::Preview { join, .. } = parse_preview(&["preview", "--join", "q2previewabc"])
+        else {
+            unreachable!()
+        };
+        assert_eq!(join.as_deref(), Some("q2previewabc"));
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_positional_path() {
+        assert_join_conflict(&["preview", "some/project", "--join", "x"]);
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_share() {
+        assert_join_conflict(&["preview", "--join", "x", "--share"]);
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_no_project() {
+        assert_join_conflict(&["preview", "--join", "x", "--no-project"]);
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_allow_edit() {
+        assert_join_conflict(&["preview", "--join", "x", "--allow-edit"]);
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_data_dir() {
+        assert_join_conflict(&["preview", "--join", "x", "--data-dir", "d"]);
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_preview_dir() {
+        assert_join_conflict(&["preview", "--join", "x", "--preview-dir", "d"]);
+    }
+
+    #[test]
+    fn preview_join_composes_with_guest_flags() {
+        // `--port` picks the local proxy port, `--host` its bind
+        // interface, `--no-browser` suppresses the auto-open — all
+        // meaningful for a guest and must keep parsing.
+        let Commands::Preview {
+            join,
+            port,
+            host,
+            no_browser,
+            ..
+        } = parse_preview(&[
+            "preview",
+            "--join",
+            "q2previewabc",
+            "--port",
+            "9280",
+            "--host",
+            "127.0.0.1",
+            "--no-browser",
+        ])
+        else {
+            unreachable!()
+        };
+        assert_eq!(join.as_deref(), Some("q2previewabc"));
+        assert_eq!(port, Some(9280));
+        assert_eq!(host.as_deref(), Some("127.0.0.1"));
+        assert!(no_browser);
+    }
 }
 
 fn main() -> Result<()> {
@@ -879,23 +976,28 @@ fn main() -> Result<()> {
             share,
             join,
         } => {
-            if join.is_some() {
-                anyhow::bail!(
-                    "`q2 preview --join` is not implemented yet \
-                     (guest support lands with Phase 3 of the live-share plan)"
-                );
+            if let Some(ticket) = join {
+                // Guest mode (live-share plan Phase 3): clap has already
+                // rejected every host-mode flag via conflicts_with_all.
+                commands::preview::execute_join(commands::preview::JoinArgs {
+                    ticket,
+                    port,
+                    host,
+                    no_browser,
+                })
+            } else {
+                commands::preview::execute(commands::preview::PreviewArgs {
+                    path,
+                    port,
+                    host,
+                    no_browser,
+                    data_dir,
+                    preview_dir,
+                    no_project,
+                    allow_edit,
+                    share,
+                })
             }
-            commands::preview::execute(commands::preview::PreviewArgs {
-                path,
-                port,
-                host,
-                no_browser,
-                data_dir,
-                preview_dir,
-                no_project,
-                allow_edit,
-                share,
-            })
         }
         Commands::Serve { .. } => commands::serve::execute(),
         Commands::Create {

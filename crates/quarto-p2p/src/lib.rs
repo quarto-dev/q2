@@ -44,13 +44,48 @@ pub enum EndpointPreset {
     HermeticLoopback,
 }
 
+/// Which kind of network path currently carries the tunnel's traffic
+/// (the selected path's `is_relay()` is the discriminator).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathKind {
+    /// Direct IP path (LAN or hole-punched).
+    Direct,
+    /// Via a relay server (the designed fallback when hole-punching
+    /// fails; traffic stays end-to-end encrypted).
+    Relay,
+    /// No selected path is visible right now (e.g. mid-migration).
+    Unknown,
+}
+
+impl std::fmt::Display for PathKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            PathKind::Direct => "direct connection",
+            PathKind::Relay => "relay",
+            PathKind::Unknown => "unknown path",
+        })
+    }
+}
+
 /// Client connection status, surfaced to the CLI ("connected via relay",
 /// "reconnecting…").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TunnelStatus {
-    Connected,
+    /// Tunnel is up; the payload says what kind of path carries it (and
+    /// tracks upgrades, e.g. relay → direct once hole-punching lands).
+    Connected(PathKind),
+    /// Connection lost; the client is re-dialing with backoff.
     Reconnecting,
+    /// The host closed the connection as unauthorized: this join
+    /// string's token was rejected (the share session ended or the host
+    /// restarted with a fresh token). Terminal — re-dialing with the
+    /// same token cannot succeed, so the client stops trying.
+    Rejected,
 }
+
+/// QUIC application error code the host closes with when a stream fails
+/// token auth; the client maps it to [`TunnelStatus::Rejected`].
+pub(crate) const ERROR_CODE_UNAUTHORIZED: u32 = 1;
 
 pub(crate) type BoxedError = Box<dyn std::error::Error + Send + Sync + 'static>;
 

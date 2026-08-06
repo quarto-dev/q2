@@ -11,7 +11,9 @@ use iroh::{Endpoint, EndpointAddr, SecretKey, Watcher};
 use subtle::ConstantTimeEq;
 use tokio::net::TcpStream;
 
-use crate::{ALPN, EndpointPreset, PreviewShareTicket, TOKEN_LEN, TunnelError};
+use crate::{
+    ALPN, ERROR_CODE_UNAUTHORIZED, EndpointPreset, PreviewShareTicket, TOKEN_LEN, TunnelError,
+};
 
 /// How long a freshly accepted stream may take to present its token.
 const TOKEN_READ_TIMEOUT: Duration = Duration::from_secs(10);
@@ -26,8 +28,6 @@ const ONLINE_TIMEOUT: Duration = Duration::from_secs(10);
 /// dialable address.
 const ADDR_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// QUIC application error code for a stream that failed token auth.
-const ERROR_CODE_UNAUTHORIZED: u32 = 1;
 /// QUIC application error code for "the local target refused a connection".
 const ERROR_CODE_TARGET_UNAVAILABLE: u32 = 2;
 

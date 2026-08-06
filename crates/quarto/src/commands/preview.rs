@@ -65,6 +65,25 @@ pub fn execute(args: PreviewArgs) -> Result<()> {
     runtime.block_on(run(args))
 }
 
+/// Guest-mode argument shape for `q2 preview --join <TICKET>` (live-share
+/// plan Phase 3, bd-6y0p1bne). Deliberately tiny: the guest has no local
+/// project, hub, or disk surface — clap rejects every host-mode flag.
+pub struct JoinArgs {
+    /// The `q2preview…` join string printed by `q2 preview --share`.
+    pub ticket: String,
+    /// Local proxy port. Default: OS-assigned.
+    pub port: Option<u16>,
+    /// Local proxy bind host. Default: 127.0.0.1.
+    pub host: Option<String>,
+    /// Skip the browser-open step.
+    pub no_browser: bool,
+}
+
+pub fn execute_join(args: JoinArgs) -> Result<()> {
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(run_join(args))
+}
+
 async fn run(args: PreviewArgs) -> Result<()> {
     // Project mode is the default (epic plan Q5); --no-project is
     // the explicit standalone-server escape hatch. Canonicalize so
@@ -233,6 +252,191 @@ async fn run(args: PreviewArgs) -> Result<()> {
         share: args.share,
     };
     quarto_preview::run(config).await
+}
+
+/// Guest path (live-share plan Phase 3, bd-6y0p1bne): parse the join
+/// string, dial the host over iroh, serve the session on a local
+/// loopback proxy, and report connection status until Ctrl-C. Bypasses
+/// project resolution, the TempDir, and the hub entirely — the *host's*
+/// preview server serves everything through the tunnel.
+async fn run_join(args: JoinArgs) -> Result<()> {
+    let ticket: quarto_p2p::PreviewShareTicket = args.ticket.trim().parse().map_err(|e| {
+        anyhow::anyhow!(
+            "invalid join string ({e})\n\
+             Expected the `q2preview…` string printed by `q2 preview --share` on the \
+             host machine. Copy the whole string — it is long and may wrap across \
+             several terminal lines."
+        )
+    })?;
+
+    let host = args.host.unwrap_or_else(|| "127.0.0.1".to_string());
+    // An explicit --port gets the friendly availability check. Port 0 /
+    // absent means the OS assigns one; unlike host mode there is no
+    // pre-probe — `TunnelClient::bind` reports the port it bound.
+    if let Some(p) = args.port
+        && p != 0
+    {
+        validate_explicit_port(&host, p)?;
+    }
+    let requested_port = args.port.unwrap_or(0);
+    let local = tokio::net::lookup_host((host.as_str(), requested_port))
+        .await
+        .ok()
+        .and_then(|mut addrs| addrs.next())
+        .ok_or_else(|| anyhow::anyhow!("could not resolve --host {host}"))?;
+
+    println!();
+    println!("  q2 preview — joining a shared session (end-to-end encrypted via iroh)");
+
+    // The initial dial happens inside `bind`: an unreachable host is a
+    // clear error right here, not a silent background retry.
+    let (bound, handle) =
+        quarto_p2p::TunnelClient::bind(quarto_p2p::TunnelClientConfig::default(), ticket, local)
+            .await
+            .map_err(join_bind_error)?;
+
+    let url = format!("http://{bound}/");
+    println!("  → {url}");
+    println!();
+    println!("  Press Ctrl-C to leave the session.");
+    println!();
+
+    // Browser-open readiness = the first successful GET /health *through
+    // the tunnel*. A bare TCP accept (host mode's readiness signal)
+    // would lie here: the local proxy accepts even when the host is
+    // unreachable, so only an end-to-end HTTP roundtrip proves the
+    // session is usable.
+    if !args.no_browser {
+        let url_for_open = url.clone();
+        tokio::spawn(async move {
+            const READY_TIMEOUT: Duration = Duration::from_secs(15);
+            if wait_until_healthy(bound, READY_TIMEOUT).await {
+                info!(local = %bound, "shared session healthy through the tunnel; opening browser");
+            } else {
+                tracing::warn!(
+                    local = %bound,
+                    timeout_secs = READY_TIMEOUT.as_secs(),
+                    "shared session did not answer /health within the timeout; \
+                     opening the browser anyway (it may need a manual reload)"
+                );
+            }
+            open_browser_or_log(&url_for_open, false);
+        });
+    }
+
+    // Report status transitions ("connected via relay", "reconnecting…")
+    // until Ctrl-C — or fail fast when the host rejects the token.
+    let mut status = handle.status();
+    let status_reporter = async move {
+        loop {
+            match *status.borrow_and_update() {
+                quarto_p2p::TunnelStatus::Connected(kind) => {
+                    println!("  ● connected via {kind}");
+                }
+                quarto_p2p::TunnelStatus::Reconnecting => {
+                    println!("  ○ connection lost — reconnecting…");
+                }
+                quarto_p2p::TunnelStatus::Rejected => {
+                    return Err(anyhow::anyhow!(
+                        "the host rejected this join string — the share session has \
+                         ended or was restarted with a new string.\n\
+                         Ask the host for a fresh `q2 preview --share` join string."
+                    ));
+                }
+            }
+            if status.changed().await.is_err() {
+                // Sender gone = tunnel client shut down; stop reporting.
+                return Ok(());
+            }
+        }
+    };
+
+    let outcome = tokio::select! {
+        _ = tokio::signal::ctrl_c() => {
+            println!();
+            println!("  Received Ctrl-C, leaving the shared session…");
+            Ok(())
+        }
+        reported = status_reporter => reported,
+    };
+
+    if let Err(e) = handle.shutdown().await {
+        tracing::warn!(error = %e, "tunnel client shutdown failed");
+    }
+    outcome
+}
+
+/// Map a tunnel bind failure to actionable CLI guidance.
+fn join_bind_error(e: quarto_p2p::TunnelError) -> anyhow::Error {
+    use quarto_p2p::TunnelError;
+    match e {
+        TunnelError::Connect(src) => anyhow::anyhow!(
+            "could not reach the share host ({src})\n\
+             Check that `q2 preview --share` is still running on the host machine \
+             and that both machines are online, then retry with the same join string."
+        ),
+        TunnelError::Proxy(src) => anyhow::anyhow!(
+            "could not bind the local proxy port: {src}\n\
+             Pass --port 0 to let the OS pick a free port."
+        ),
+        other => anyhow::Error::new(other).context("starting the tunnel client"),
+    }
+}
+
+/// Poll `GET /health` on the local proxy until it answers 200 — i.e. the
+/// host's preview hub answered *through the tunnel* — or `total_timeout`
+/// elapses. Join mode's readiness gate; same backoff shape and
+/// open-anyway-on-timeout contract as [`wait_until_accepting`].
+async fn wait_until_healthy(addr: std::net::SocketAddr, total_timeout: Duration) -> bool {
+    const INITIAL_BACKOFF: Duration = Duration::from_millis(50);
+    const MAX_BACKOFF: Duration = Duration::from_secs(1);
+    // A tunnel roundtrip can legitimately take a relay RTT, but one
+    // wedged attempt must not eat the whole budget.
+    const ATTEMPT_TIMEOUT: Duration = Duration::from_secs(5);
+
+    let deadline = tokio::time::Instant::now() + total_timeout;
+    let mut backoff = INITIAL_BACKOFF;
+
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return false;
+        }
+        if let Ok(true) =
+            tokio::time::timeout(remaining.min(ATTEMPT_TIMEOUT), health_get_ok(addr)).await
+        {
+            return true;
+        }
+
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return false;
+        }
+        tokio::time::sleep(backoff.min(remaining)).await;
+        backoff = (backoff * 8 / 5).min(MAX_BACKOFF);
+    }
+}
+
+/// One raw HTTP/1.1 `GET /health` against `addr`; `true` iff the status
+/// line comes back 200. Hand-rolled so the CLI doesn't grow an HTTP
+/// client dependency for a one-line probe.
+async fn health_get_ok(addr: std::net::SocketAddr) -> bool {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let Ok(mut stream) = tokio::net::TcpStream::connect(addr).await else {
+        return false;
+    };
+    if stream
+        .write_all(b"GET /health HTTP/1.1\r\nHost: q2-preview-join\r\nConnection: close\r\n\r\n")
+        .await
+        .is_err()
+    {
+        return false;
+    }
+    let mut response = Vec::new();
+    if stream.read_to_end(&mut response).await.is_err() {
+        return false;
+    }
+    response.starts_with(b"HTTP/1.1 200")
 }
 
 /// Bind `host:0`, read the OS-assigned port, drop the listener.
@@ -790,5 +994,73 @@ mod tests {
             "should return well before the timeout once the listener is up; elapsed={elapsed:?}"
         );
         late.abort();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Phase 3 (bd-6y0p1bne): wait_until_healthy — join mode's
+    // browser-open gate is an HTTP /health roundtrip through the local
+    // proxy, not a bare TCP accept (which the proxy always grants,
+    // even when the tunnel's far side is gone).
+    // ──────────────────────────────────────────────────────────────
+
+    /// Serve a fixed HTTP/1.1 response to every connection on a fresh
+    /// loopback port; returns the bound address. Task dies with the test.
+    async fn spawn_canned_http(response: &'static str) -> std::net::SocketAddr {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind canned server");
+        let addr = listener.local_addr().expect("local_addr");
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut sock, _)) = listener.accept().await else {
+                    break;
+                };
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 1024];
+                    let _ = sock.read(&mut buf).await;
+                    let _ = sock.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+        addr
+    }
+
+    #[tokio::test]
+    async fn wait_until_healthy_true_on_200() {
+        let addr = spawn_canned_http(
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+        )
+        .await;
+        assert!(
+            wait_until_healthy(addr, std::time::Duration::from_secs(5)).await,
+            "a 200 /health must count as ready"
+        );
+    }
+
+    #[tokio::test]
+    async fn wait_until_healthy_false_on_non_200() {
+        // A reachable server that answers 503 (e.g. the proxy is up but
+        // the host hub is not) must NOT count as ready.
+        let addr = spawn_canned_http(
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        )
+        .await;
+        let timeout = std::time::Duration::from_millis(300);
+        let start = std::time::Instant::now();
+        let ready = wait_until_healthy(addr, timeout).await;
+        assert!(!ready, "non-200 answers must not count as healthy");
+        assert!(
+            start.elapsed() >= timeout,
+            "must keep polling until the deadline in case health recovers"
+        );
+    }
+
+    #[tokio::test]
+    async fn wait_until_healthy_false_when_nothing_listening() {
+        let port = reserve_free_port();
+        let addr: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+        let ready = wait_until_healthy(addr, std::time::Duration::from_millis(200)).await;
+        assert!(!ready, "no listener → not healthy");
     }
 }

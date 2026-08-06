@@ -13,6 +13,9 @@ license.workspace = true
 description = "iroh-based P2P tunnel for q2 preview live share (--share / --join)"
 
 [dependencies]
+# StreamExt for the client's per-connection path watcher
+# (`Connection::paths_stream`), which feeds the direct-vs-relay status.
+futures = "0.3"
 iroh = "1.0.3"
 iroh-tickets = "1.0"
 # Ticket wire format (postcard of {addr, token}); same encoding stack
