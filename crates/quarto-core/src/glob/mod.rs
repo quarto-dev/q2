@@ -46,6 +46,7 @@
 //! `[a-z]` character classes — without ever touching `std::fs` from
 //! this module.
 
+pub mod diagnostics;
 pub mod expand;
 pub mod matcher;
 pub mod pattern;

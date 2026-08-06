@@ -246,7 +246,7 @@ pub fn resolve_declared_resource_globs(
     source_context: Option<&quarto_source_map::SourceContext>,
     project_dir: &Path,
     host_dir: &str,
-) -> (Vec<crate::glob::GlobPattern>, Vec<RejectedResourcePattern>) {
+) -> (crate::glob::GlobResolution, Vec<RejectedResourcePattern>) {
     let resolution = resolve_patterns(
         patterns
             .iter()
@@ -282,7 +282,7 @@ pub fn resolve_declared_resource_globs(
         });
     }
 
-    (resolution.globs, rejected)
+    (resolution, rejected)
 }
 
 /// A declared `resources:` pattern that resolution could not use.
@@ -342,7 +342,35 @@ impl RejectedResourcePattern {
 pub fn expand_resolved(
     project_root: &Path,
     globs: &[crate::glob::GlobPattern],
+    sources: &[SourceInfo],
     runtime: &dyn quarto_system_runtime::SystemRuntime,
+    make_origin: impl FnMut() -> ResourceOrigin,
+    scope: ResourceScope,
+) -> Result<Vec<ResolvedResource>, ResourceError> {
+    expand_resolved_reporting(
+        project_root,
+        globs,
+        sources,
+        runtime,
+        &mut Vec::new(),
+        make_origin,
+        scope,
+    )
+}
+
+/// [`expand_resolved`], additionally reporting glob patterns that
+/// matched no files (`Q-5-16`).
+///
+/// A *literal* pattern that matches nothing is not reported here —
+/// it resolves to itself and the copy step names it, which is the
+/// better message ("declared resource does not exist"). Only glob
+/// patterns, where there is no single file to name, need this.
+pub fn expand_resolved_reporting(
+    project_root: &Path,
+    globs: &[crate::glob::GlobPattern],
+    sources: &[SourceInfo],
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
+    diagnostics: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
     mut make_origin: impl FnMut() -> ResourceOrigin,
     scope: ResourceScope,
 ) -> Result<Vec<ResolvedResource>, ResourceError> {
@@ -355,8 +383,18 @@ pub fn expand_resolved(
     })?;
 
     let mut out = Vec::new();
-    for glob in globs.iter().filter(|g| !g.negated) {
-        let provenance = SourceInfo::generated(By::programmatic_config());
+    for (index, glob) in globs.iter().enumerate() {
+        if glob.negated {
+            continue;
+        }
+        // Sources are aligned with `globs` (see
+        // `GlobResolution::sources`); fall back only if a caller
+        // passed a short list.
+        let provenance = sources
+            .get(index)
+            .cloned()
+            .unwrap_or_else(|| SourceInfo::generated(By::programmatic_config()));
+        let before = out.len();
         for source in expand_one(project_root, glob, &provenance, runtime)? {
             let Ok(relative) = source.strip_prefix(project_root) else {
                 continue;
@@ -371,6 +409,17 @@ pub fn expand_resolved(
                 origin: make_origin(),
                 scope: scope.clone(),
             });
+        }
+        if out.len() == before && crate::glob::has_metacharacters(&glob.pattern) {
+            diagnostics.push(
+                crate::glob::diagnostics::matched_nothing(
+                    "Q-5-16",
+                    "`resources:`",
+                    &glob.pattern,
+                    &provenance,
+                )
+                .build(),
+            );
         }
     }
     Ok(out)
@@ -778,6 +827,7 @@ pub fn collect_static_resources(
         out.extend(expand_resolved(
             project_root,
             &profile.resource_globs,
+            &profile.resource_glob_sources,
             runtime,
             || ResourceOrigin::DocumentMetadata {
                 source: doc_source_abs.clone(),
@@ -884,6 +934,7 @@ pub fn collect_static_resources_with_diagnostics(
     project: &crate::project::ProjectContext,
     index: &crate::project::index::ProjectIndex,
     runtime: &dyn quarto_system_runtime::SystemRuntime,
+    diagnostics: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> Result<Vec<ResolvedResource>, crate::error::ParseError> {
     let project_root = &project.dir;
     let mut out = Vec::new();
@@ -896,11 +947,14 @@ pub fn collect_static_resources_with_diagnostics(
         .unwrap_or_else(|| project_root.join("_quarto.yml"));
 
     if let Err(e) = (|| -> Result<(), ResourceError> {
-        out.extend(expand_patterns(
+        let resolution =
+            resolve_resource_patterns(project_root, project_root, &project.config.resources)?;
+        out.extend(expand_resolved_reporting(
             project_root,
-            project_root,
-            &project.config.resources,
+            &resolution.globs,
+            &resolution.sources,
             runtime,
+            diagnostics,
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )?);
@@ -932,10 +986,12 @@ pub fn collect_static_resources_with_diagnostics(
         }
 
         if let Err(e) = (|| -> Result<(), ResourceError> {
-            out.extend(expand_resolved(
+            out.extend(expand_resolved_reporting(
                 project_root,
                 &profile.resource_globs,
+                &profile.resource_glob_sources,
                 runtime,
+                diagnostics,
                 || ResourceOrigin::DocumentMetadata {
                     source: doc_source_abs.clone(),
                 },

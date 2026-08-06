@@ -113,14 +113,15 @@ impl PipelineStage for DocumentProfileStage {
         // directory instead of `blog/`, so the wrong files were
         // published — the same defect #456 fixed for listings, one
         // metadata key over.
-        let (resource_globs, rejected_resources) =
+        let (resource_resolution, rejected_resources) =
             crate::project_resources::resolve_declared_resource_globs(
                 &profile.resources,
                 Some(&doc.ast_context.source_context),
                 &ctx.project.dir,
                 &host_dir,
             );
-        profile.resource_globs = resource_globs;
+        profile.resource_globs = resource_resolution.globs;
+        profile.resource_glob_sources = resource_resolution.sources;
         profile.rejected_resources = rejected_resources;
 
         Ok(PipelineData::AtProfile(DocumentAtProfile {

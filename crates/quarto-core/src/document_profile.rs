@@ -500,6 +500,17 @@ pub struct DocumentProfile {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resource_globs: Vec<crate::glob::GlobPattern>,
 
+    /// Provenance for [`Self::resource_globs`], same order and
+    /// length — the YAML scalar each resolved pattern came from.
+    ///
+    /// Carried so the post-render collector's diagnostics (`Q-5-16`)
+    /// can point at what the author wrote. Without it the pattern
+    /// would be named but not located, which for a `_metadata.yml`
+    /// declaration inherited by many pages is the difference between
+    /// a useful warning and a puzzle.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_glob_sources: Vec<quarto_source_map::SourceInfo>,
+
     /// Declared `resources:` patterns resolution could not use — one
     /// that climbs above the project root, or that the glob engine
     /// rejects (bd-mt7a6uc4).
@@ -637,6 +648,7 @@ impl Default for DocumentProfile {
             // Resolution needs the document's SourceContext, so
             // `DocumentProfileStage` fills these in; `extract` stays pure.
             resource_globs: Vec::new(),
+            resource_glob_sources: Vec::new(),
             rejected_resources: Vec::new(),
             categories_raw: None,
             listing_item: ListingItemInfo::default(),
@@ -701,6 +713,7 @@ impl DocumentProfile {
             // Resolution needs the document's SourceContext, so
             // `DocumentProfileStage` fills these in; `extract` stays pure.
             resource_globs: Vec::new(),
+            resource_glob_sources: Vec::new(),
             rejected_resources: Vec::new(),
             // L0 (`bd-n8a4`): both fields wired into extract below.
             // Skeleton stage left explicit so TDD failure points at

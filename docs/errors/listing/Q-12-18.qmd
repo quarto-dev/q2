@@ -1,0 +1,50 @@
+---
+title: "Invalid Glob Pattern in Listing `contents:`"
+description: "A listing `contents:` pattern is not a valid glob and matches nothing."
+code: Q-12-18
+subsystem: listing
+status: stub
+since: "99.9.9"
+categories:
+  - listing
+---
+
+# `Q-12-18` — Invalid Glob Pattern in Listing `contents:`
+
+> A listing `contents:` pattern is not a valid glob and matches
+> nothing.
+
+## What this means
+
+Every `contents:` entry is parsed as a glob pattern. This warning
+fires when the parse fails; the message carries the parser's
+reason. The malformed entry contributes no items, and the rest of
+the listing still resolves.
+
+## Why this happens
+
+Two causes account for nearly every occurrence:
+
+- **`**` that is not a whole path segment.** `**` means "zero or
+  more directory levels" and must stand alone between slashes:
+  `posts/**/*.qmd` is valid, `posts/a**b.qmd` is not.
+- **An unclosed character class.** `[0-9]` is a class;
+  `posts/[0-9.qmd` is a parse error.
+
+## How to fix
+
+Rewrite the pattern using the supported vocabulary:
+
+| Syntax | Meaning |
+|---|---|
+| `*` | any characters within one path segment |
+| `?` | one character, never `/` |
+| `**` | zero or more whole path segments |
+| `[abc]`, `[a-z]` | character class |
+| `[!abc]` | negated character class |
+| `[*]` | a literal `*` |
+
+## Related
+
+- `Q-12-17` — pattern resolves outside the project directory.
+- `Q-12-19` — pattern is valid but matched nothing.

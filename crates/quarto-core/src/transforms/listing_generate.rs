@@ -143,6 +143,22 @@ impl AstTransform for ListingGenerateTransform {
                 .compile(&GlobOptions::LISTING)
                 .unwrap_or_else(|_| PatternSet::compile(&[], &GlobOptions::LISTING).unwrap());
 
+            // Patterns the glob engine rejected (bd-mt7a6uc4).
+            // Before, these matched nothing in silence — the same
+            // failure mode #456 fixed for asterisk-corrupted globs.
+            for invalid in &resolution.invalid {
+                diags.push(
+                    crate::glob::diagnostics::invalid_pattern(
+                        "Q-12-18",
+                        "Listing `contents:`",
+                        &invalid.raw,
+                        &invalid.message,
+                        &invalid.source,
+                    )
+                    .build(),
+                );
+            }
+
             let mut items = Vec::new();
             if let Some(index) = ctx.project_index.as_deref() {
                 for profile in index.profiles() {
@@ -153,6 +169,33 @@ impl AstTransform for ListingGenerateTransform {
                     if patterns.matches(&candidate_path_str) {
                         items.push(hydrate_item(profile));
                     }
+                }
+            }
+
+            // A pattern that compiled, stayed in the project, and
+            // still matched no document is almost always a Q1
+            // assumption about `*` (D5/D7). Checked before
+            // `include:`/`exclude:` filters run, so this reports on
+            // the *glob*, not on a filter that emptied the set.
+            for (glob, source) in resolution.positives() {
+                let matched = items.iter().any(|item| {
+                    PatternSet::compile(std::slice::from_ref(glob), &GlobOptions::LISTING)
+                        .is_ok_and(|set| set.matches_path(&item.source_path))
+                });
+                if !matched {
+                    diags.push(
+                        crate::glob::diagnostics::matched_nothing(
+                            "Q-12-19",
+                            "Listing `contents:`",
+                            &glob.pattern,
+                            source,
+                        )
+                        .add_info(
+                            "Patterns resolve against the directory of the file they are \
+                             written in; a leading `/` anchors at the project root.",
+                        )
+                        .build(),
+                    );
                 }
             }
 

@@ -1,0 +1,70 @@
+---
+title: "Listing `contents:` Pattern Matched Nothing"
+description: "A listing `contents:` pattern matched no project documents."
+code: Q-12-19
+subsystem: listing
+status: stub
+since: "99.9.9"
+categories:
+  - listing
+---
+
+# `Q-12-19` — Listing `contents:` Pattern Matched Nothing
+
+> A listing `contents:` pattern matched no project documents.
+
+## What this means
+
+A listing enumerates project documents matching its `contents:`
+patterns. This warning fires when one pattern matched none of
+them. Other patterns in the same listing still contribute their
+items; a listing whose every pattern matches nothing renders
+empty.
+
+The check runs against the matched documents, before `include:` /
+`exclude:` filters are applied — so this warning is about the
+*pattern*, not about a filter that emptied the result.
+
+## Why this happens
+
+**`*` matches one directory level.** In Quarto 1 an unanchored
+pattern searched the whole tree; in Quarto 2 it does not:
+
+```yaml
+listing:
+  contents:
+    - "*.qmd"          # siblings of this page
+    - "posts/*.qmd"    # documents directly in posts/
+    - "posts/**/*.qmd" # documents anywhere under posts/
+    - posts            # same as above
+```
+
+**Patterns resolve against the file they are written in.** Front
+matter resolves against the document's own directory,
+`_metadata.yml` against that file's directory, and `_quarto.yml`
+against the project root. A leading `/` anchors at the project
+root from anywhere:
+
+```yaml
+# in sub/index.qmd — list the project-root posts/ directory
+listing:
+  contents:
+    - "/posts/*.qmd"
+```
+
+**The documents are not in the render set.** A listing can only
+show pages the project renders. Files excluded by
+`project.render`, or whose name or directory starts with `_` or
+`.`, never appear.
+
+## How to fix
+
+Check the pattern against the project layout, and against the
+location of the file the pattern is written in. Add `**/` to
+search subdirectories, or name a directory to include everything
+beneath it.
+
+## Related
+
+- `Q-12-17` — pattern resolves outside the project directory.
+- `Q-12-18` — pattern is not a valid glob.
