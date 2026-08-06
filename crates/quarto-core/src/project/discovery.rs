@@ -32,9 +32,22 @@
 
 use std::path::{Component, Path, PathBuf};
 
+use quarto_source_map::{By, SourceInfo};
 use quarto_system_runtime::SystemRuntime;
 
 use crate::error::{QuartoError, Result};
+use crate::glob::{BaseDirContext, GlobOptions, RawGlob, resolve_patterns};
+
+/// Glob semantics for `project.render`.
+///
+/// `directory_rule: false` preserves the pre-bd-mt7a6uc4 behavior
+/// where a bare directory entry matches nothing; Phase 2 of that
+/// strand turns it on (decision D4) together with the diagnostic
+/// that explains what a pattern matched.
+const RENDER_GLOB_OPTIONS: GlobOptions = GlobOptions {
+    directory_rule: false,
+    default_positive: None,
+};
 
 /// Input describing what to discover.
 #[derive(Debug, Clone)]
@@ -145,142 +158,45 @@ fn starts_with(path: &Path, prefix: &Path) -> bool {
 }
 
 /// Expand `project.render` glob patterns relative to `project_dir`.
+///
+/// Patterns are project-root-anchored (`project.render` can only be
+/// written in `_quarto.yml`, whose directory *is* the project root)
+/// and matched against the walked `.qmd` set with the shared matcher
+/// in [`crate::glob`] — the same one listings use, so a pattern means
+/// the same thing in both places.
 fn expand_patterns(
     project_dir: &Path,
     patterns: &[String],
     runtime: &dyn SystemRuntime,
 ) -> Result<Vec<PathBuf>> {
-    // For Phase 1, expand via the native runtime's directory walk and
-    // match against the patterns. We deliberately don't pull in a new
-    // glob crate — the `wax` pattern used elsewhere in the tree can be
-    // a future optimization. The Phase-1 shape accepts exact-path
-    // patterns ("index.qmd") and `**/*.qmd`-style recursive-wildcard
-    // patterns, which is the vast majority of real-world `render:`
-    // lists.
     let walked = walk_qmd(project_dir, runtime)?;
     let mut matches = Vec::new();
     for pattern in patterns {
-        let pat = normalize_pattern(pattern);
+        // Resolve against the project root, then compile. A pattern
+        // that escapes the root or fails to compile matches nothing;
+        // bd-mt7a6uc4 Phase 2 gives both a diagnostic (D7).
+        let resolution = resolve_patterns(
+            [RawGlob::new(pattern.clone(), SourceInfo::generated(By::programmatic_config()))],
+            &BaseDirContext {
+                source_context: None,
+                project_dir,
+                fallback_dir: "",
+            },
+            &RENDER_GLOB_OPTIONS,
+        );
+        let Ok(compiled) = resolution.compile(&RENDER_GLOB_OPTIONS) else {
+            continue;
+        };
         for candidate in &walked {
             let Ok(relative) = candidate.strip_prefix(project_dir) else {
                 continue;
             };
-            let rel_str = to_forward_slashes(relative);
-            if glob_match(&pat, &rel_str) {
+            if compiled.matches_path(relative) {
                 matches.push(candidate.clone());
             }
         }
     }
     Ok(matches)
-}
-
-fn normalize_pattern(pattern: &str) -> String {
-    pattern.replace('\\', "/")
-}
-
-fn to_forward_slashes(path: &Path) -> String {
-    path.components()
-        .filter_map(|c| match c {
-            Component::Normal(os) => os.to_str().map(str::to_string),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("/")
-}
-
-/// Match a `path`-shaped string against a glob `pattern`. Both are
-/// expected to be forward-slash separated and project-relative (or
-/// host-relative — the matcher itself is purely string-based).
-///
-/// The pattern grammar is the project's narrow glob vocabulary:
-/// literal segments, `?` (single char), `*` (any chars in one
-/// segment), `**` (zero or more whole segments). This is the same
-/// matcher used internally by `expand_patterns` for `_quarto.yml`'s
-/// `project.render`. Phase-8 (incremental rebuilds) and L3
-/// (listings item discovery) reuse it without duplication.
-pub fn glob_match_path(pattern: &str, path: &str) -> bool {
-    glob_match(&normalize_pattern(pattern), &normalize_pattern(path))
-}
-
-/// Like [`glob_match_path`], but a *literal* pattern (no `*`/`?`)
-/// additionally matches everything under it when treated as a
-/// directory: `posts` matches `posts/welcome/index.qmd`. This is
-/// Q1's semantics for listing `contents:` entries, where a bare
-/// directory name means "all inputs beneath it" (bd-9arwdicv).
-/// Deliberately scoped to listing matching — `project.render`
-/// discovery keeps the strict glob vocabulary.
-pub fn glob_match_path_or_dir(pattern: &str, path: &str) -> bool {
-    if glob_match_path(pattern, path) {
-        return true;
-    }
-    let pattern = normalize_pattern(pattern);
-    let literal = pattern.trim_end_matches('/');
-    !literal.contains(['*', '?']) && normalize_pattern(path).starts_with(&format!("{literal}/"))
-}
-
-/// Convert a `Path` to a forward-slash project-relative string.
-/// Public so callers (e.g. listings item discovery in L3) can match
-/// the same convention `expand_patterns` uses internally.
-pub fn path_to_forward_slashes(path: &Path) -> String {
-    to_forward_slashes(path)
-}
-
-/// Minimal glob matcher: supports literals, `*`, `?`, and `**`.
-///
-/// This is narrow by design — we accept the glob vocabulary we want to
-/// document users relying on, and nothing else. Phase-8 (incremental
-/// rebuilds) will revisit and likely adopt the same matcher pampa
-/// already uses elsewhere for `include-in-header` globs.
-fn glob_match(pattern: &str, haystack: &str) -> bool {
-    let pat_parts: Vec<&str> = pattern.split('/').collect();
-    let hay_parts: Vec<&str> = haystack.split('/').collect();
-    segment_match(&pat_parts, &hay_parts)
-}
-
-fn segment_match(pat: &[&str], hay: &[&str]) -> bool {
-    match (pat.first(), hay.first()) {
-        (None, None) => true,
-        (Some(&"**"), _) => {
-            // `**` matches zero or more full segments.
-            if segment_match(&pat[1..], hay) {
-                return true;
-            }
-            if let Some(rest) = hay.split_first().map(|(_, r)| r) {
-                return segment_match(pat, rest);
-            }
-            pat[1..].is_empty()
-        }
-        (Some(p), Some(h)) if wildcard_match(p, h) => segment_match(&pat[1..], &hay[1..]),
-        _ => false,
-    }
-}
-
-fn wildcard_match(pat: &str, hay: &str) -> bool {
-    // Standard greedy `*` / `?` matcher within a single path segment.
-    let pat_bytes = pat.as_bytes();
-    let hay_bytes = hay.as_bytes();
-    let mut pi = 0;
-    let mut hi = 0;
-    let mut star: Option<(usize, usize)> = None;
-    while hi < hay_bytes.len() {
-        if pi < pat_bytes.len() && (pat_bytes[pi] == b'?' || pat_bytes[pi] == hay_bytes[hi]) {
-            pi += 1;
-            hi += 1;
-        } else if pi < pat_bytes.len() && pat_bytes[pi] == b'*' {
-            star = Some((pi, hi));
-            pi += 1;
-        } else if let Some((sp, sh)) = star {
-            pi = sp + 1;
-            hi = sh + 1;
-            star = Some((sp, hi));
-        } else {
-            return false;
-        }
-    }
-    while pi < pat_bytes.len() && pat_bytes[pi] == b'*' {
-        pi += 1;
-    }
-    pi == pat_bytes.len()
 }
 
 /// Recursively walk `project_dir` collecting `.qmd` files, already
@@ -345,20 +261,6 @@ mod tests {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(path, contents).unwrap();
-    }
-
-    #[test]
-    fn glob_match_path_or_dir_semantics() {
-        // Literal directory matches anything beneath it…
-        assert!(glob_match_path_or_dir("posts", "posts/welcome/index.qmd"));
-        assert!(glob_match_path_or_dir("posts/", "posts/a.qmd"));
-        // …segment-exact, never a string prefix…
-        assert!(!glob_match_path_or_dir("posts", "posts-archive/old.qmd"));
-        // …and a literal file entry still matches itself.
-        assert!(glob_match_path_or_dir("posts/a.qmd", "posts/a.qmd"));
-        // Patterns with metacharacters keep strict glob semantics.
-        assert!(glob_match_path_or_dir("posts/*.qmd", "posts/a.qmd"));
-        assert!(!glob_match_path_or_dir("posts/*.qmd", "posts/deep/a.qmd"));
     }
 
     #[test]
@@ -570,17 +472,5 @@ mod tests {
             })
             .collect();
         assert_eq!(rels, vec!["index.qmd".to_string()]);
-    }
-
-    #[test]
-    fn wildcard_matches_segments() {
-        assert!(glob_match("index.qmd", "index.qmd"));
-        assert!(glob_match("*.qmd", "about.qmd"));
-        assert!(!glob_match("*.qmd", "sub/about.qmd"));
-        assert!(glob_match("**/*.qmd", "sub/about.qmd"));
-        assert!(glob_match("**/*.qmd", "about.qmd"));
-        assert!(glob_match("docs/**/*.qmd", "docs/sub/api.qmd"));
-        assert!(!glob_match("docs/**/*.qmd", "other/api.qmd"));
-        assert!(glob_match("docs/?pi.qmd", "docs/api.qmd"));
     }
 }

@@ -67,13 +67,13 @@ use thiserror::Error;
 ///   always agree.
 /// - `8`: `bd-v7ixzsp5` (GH #456). Changes `listing_content_globs`
 ///   from `Vec<String>` (raw patterns, expanded dual-view at
-///   graph-build time) to `Vec<ListingContentGlob>` — patterns are
+///   graph-build time) to `Vec<GlobPattern>` — patterns are
 ///   now **resolved to project-relative form at profile-extraction
 ///   time** against the directory of the file each glob was written
 ///   in (front matter → host dir, `_metadata.yml` → its dir,
 ///   `_quarto.yml` → project root), and carry a `negated` flag for
 ///   `!`-prefixed exclusion patterns. Consumers match single-view
-///   via [`crate::project::listing::glob_resolve::item_matches`].
+///   via [`crate::glob::PatternSet`].
 pub const DOCUMENT_PROFILE_VERSION: u32 = 8;
 
 /// Depth used when extracting the heading outline at the profile
@@ -532,7 +532,7 @@ pub struct DocumentProfile {
     /// ([`crate::project::dependency_graph::ProjectDependencyGraph::build`])
     /// matches these patterns at graph-build time against
     /// [`crate::project::index::ProjectIndex::profiles`] (single
-    /// view, via `glob_resolve::item_matches` — the same rule the
+    /// view, via [`crate::glob::PatternSet`] — the same rule the
     /// L3 generate transform uses at render time) and produces
     /// forward edges from each host to each match. Listing hosts
     /// with non-empty entries are also added to
@@ -544,7 +544,7 @@ pub struct DocumentProfile {
     /// Added v4 → v5 (`bd-xbnf`); shape changed v7 → v8
     /// (`bd-v7ixzsp5`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub listing_content_globs: Vec<crate::project::listing::glob_resolve::ListingContentGlob>,
+    pub listing_content_globs: Vec<crate::glob::GlobPattern>,
 }
 
 /// Helper for `#[serde(skip_serializing_if = ...)]` on plain bool
@@ -1778,18 +1778,12 @@ Body.
     #[test]
     #[allow(clippy::field_reassign_with_default)] // default-then-set keeps the test readable
     fn profile_v5_listing_content_globs_round_trip() {
-        use crate::project::listing::glob_resolve::ListingContentGlob;
+        use crate::glob::GlobPattern;
         let mut p = DocumentProfile::default();
         p.source_path = PathBuf::from("idx.qmd");
         p.listing_content_globs = vec![
-            ListingContentGlob {
-                pattern: "a/*.qmd".to_string(),
-                negated: false,
-            },
-            ListingContentGlob {
-                pattern: "a/wip.qmd".to_string(),
-                negated: true,
-            },
+            GlobPattern::positive("a/*.qmd"),
+            GlobPattern::negated("a/wip.qmd"),
         ];
 
         let json = p.to_json().expect("serialize");

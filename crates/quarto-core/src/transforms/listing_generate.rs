@@ -37,9 +37,9 @@ use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
-use crate::project::discovery::path_to_forward_slashes;
+use crate::glob::{GlobOptions, PatternSet, path_to_forward_slashes};
 use crate::project::listing::filter::apply_filters;
-use crate::project::listing::glob_resolve::{item_matches, resolve_content_globs};
+use crate::project::listing::glob_resolve::resolve_content_globs;
 use crate::project::listing::sort::apply_sort;
 use crate::project::listing::{ResolvedListing, hydrate_item, parse_listings};
 use crate::render::RenderContext;
@@ -135,6 +135,14 @@ impl AstTransform for ListingGenerateTransform {
                 );
             }
 
+            // Compile once per listing, then match every candidate.
+            // Resolution already validated these patterns, so the
+            // compile cannot fail; an empty set on the impossible
+            // path simply matches nothing.
+            let patterns = resolution
+                .compile(&GlobOptions::LISTING)
+                .unwrap_or_else(|_| PatternSet::compile(&[], &GlobOptions::LISTING).unwrap());
+
             let mut items = Vec::new();
             if let Some(index) = ctx.project_index.as_deref() {
                 for profile in index.profiles() {
@@ -142,7 +150,7 @@ impl AstTransform for ListingGenerateTransform {
                     if candidate_path_str == host_path_str {
                         continue;
                     }
-                    if item_matches(&resolution.globs, &candidate_path_str) {
+                    if patterns.matches(&candidate_path_str) {
                         items.push(hydrate_item(profile));
                     }
                 }
