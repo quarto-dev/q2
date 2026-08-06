@@ -72,6 +72,7 @@ async fn guest_syncs_project_through_tunnel() {
         cache_dir: None,
         allow_edit: false,
         share: false,
+        ui: Default::default(),
     };
 
     // The real hub, exactly as `q2 preview` runs it. `run()` blocks until

@@ -118,6 +118,7 @@ async fn pre_render_scripts_run_once_at_boot() {
         cache_dir: None,
         allow_edit: false,
         share: false,
+        ui: Default::default(),
     };
 
     let server = tokio::spawn(async move {

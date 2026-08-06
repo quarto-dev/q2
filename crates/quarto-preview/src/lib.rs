@@ -38,6 +38,14 @@ pub use config::EnginePolicy;
 /// else a placeholder).
 static EMBEDDED_SPA: Dir<'_> = include_dir!("$QUARTO_PREVIEW_EMBED_DIR");
 
+/// The hub-client editor bundle embedded for `--ui editor` (live-share
+/// plan Phase 4, bd-jt1etjbn). See `build.rs`: the real
+/// `hub-client/dist-preview-embed/` when built (with files
+/// byte-identical to the viewer dist stripped — those are served
+/// through [`EMBEDDED_SPA`] by [`lookup_embedded`]), else a
+/// placeholder pointing at `cargo xtask build-hub-client-embed`.
+static EMBEDDED_EDITOR: Dir<'_> = include_dir!("$QUARTO_HUB_CLIENT_EMBED_DIR");
+
 /// Optional override pointing at a SPA bundle on disk. Set once at
 /// `run()` start and read on every SPA-fallback invocation. Process-
 /// wide because the SPA fallback handler is stateless from axum's POV
@@ -61,6 +69,28 @@ static RESOURCE_DISK_MAP: OnceLock<std::collections::HashMap<String, PathBuf>> =
 /// Same first-writer-wins OnceLock pattern as the other handler state
 /// above (one preview server per process; nextest isolates tests).
 static ALLOW_EDIT: OnceLock<bool> = OnceLock::new();
+
+/// Which embedded frontend this session serves (`--ui`, Phase 4
+/// bd-jt1etjbn). Set once at `run()` from [`PreviewConfig::ui`] and
+/// read by the SPA fallback handler. Same OnceLock pattern as above.
+static PREVIEW_UI: OnceLock<PreviewUi> = OnceLock::new();
+
+/// Which embedded frontend the preview server serves (`--ui`,
+/// live-share plan Phase 4, bd-jt1etjbn).
+///
+/// The flag *substitutes* which embedded dist the SPA fallback serves —
+/// it is not additive — and it never changes the disk write policy:
+/// UI × write policy is a real 2×2, so `--ui editor` without
+/// `--allow-edit` is a deliberate sandbox mode (guests' edits drive the
+/// live session; the host's disk stays authoritative).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PreviewUi {
+    /// The read-only preview SPA (q2-preview-spa) — the default.
+    #[default]
+    Viewer,
+    /// The full hub-client editor.
+    Editor,
+}
 
 /// Runtime configuration for the preview server.
 #[derive(Clone)]
@@ -131,6 +161,11 @@ pub struct PreviewConfig {
     /// Requires a pre-resolved (non-zero) `port` — the CLI probes one
     /// before calling in.
     pub share: bool,
+    /// Which embedded frontend to serve (`--ui`, Phase 4 bd-jt1etjbn):
+    /// the read-only preview SPA (default) or the full hub-client
+    /// editor. Orthogonal to `allow_edit` — the UI choice never changes
+    /// the disk write policy.
+    pub ui: PreviewUi,
 }
 
 /// Run the preview server. Returns when the server is shut down (ctrl-c
@@ -196,6 +231,10 @@ where
     // bd-ov4gqk3m: stash the edit-permission bit for the
     // `/api/preview/config` handler before the server starts serving.
     let _ = ALLOW_EDIT.set(config.allow_edit);
+
+    // Phase 4 (bd-jt1etjbn): stash the UI choice for the SPA fallback
+    // handler before the server starts serving.
+    let _ = PREVIEW_UI.set(config.ui);
 
     let storage = build_storage(&config).context("building storage manager")?;
     let hub_config = build_hub_config(&config);
@@ -552,6 +591,50 @@ async fn preview_config_handler() -> Response {
     axum::Json(serde_json::json!({ "allowEdit": allow_edit })).into_response()
 }
 
+/// The UI mode this session serves. Defaults to the viewer when `run()`
+/// hasn't stashed a choice (e.g. handler-level tests composing routers
+/// directly via [`extend_with_spa`]).
+fn current_ui() -> PreviewUi {
+    PREVIEW_UI.get().copied().unwrap_or_default()
+}
+
+/// Resolve `rel` against the embedded bundles for the given UI mode.
+///
+/// Editor mode looks in the editor embed first, then falls back to the
+/// viewer embed — the dedupe seam (Phase 4, bd-jt1etjbn): `build.rs`
+/// strips editor-dist files byte-identical to the viewer dist, so
+/// shared content-hashed assets (most notably the ~38 MB
+/// `wasm_quarto_hub_client_bg-*.wasm`) are embedded once, in the viewer
+/// bundle. Viewer mode never reads the editor embed.
+fn lookup_embedded(ui: PreviewUi, rel: &str) -> Option<&'static include_dir::File<'static>> {
+    match ui {
+        PreviewUi::Viewer => EMBEDDED_SPA.get_file(rel),
+        PreviewUi::Editor => EMBEDDED_EDITOR
+            .get_file(rel)
+            .or_else(|| EMBEDDED_SPA.get_file(rel)),
+    }
+}
+
+/// The editor embed's `index.html`, when present (real dist or
+/// placeholder). Pub-visible test seam: the editor-mode integration
+/// test asserts the served body equals this, pinning that `--ui editor`
+/// actually flips which embed the fallback serves.
+pub fn embedded_editor_index_html() -> Option<&'static str> {
+    EMBEDDED_EDITOR
+        .get_file("index.html")
+        .and_then(|f| f.contents_utf8())
+}
+
+/// The note announced when `--ui editor` runs without `--allow-edit`
+/// (the sandbox composition): session edits sync live to every
+/// connected client, but the host's disk stays authoritative — a
+/// host-side filesystem change converges the document back to disk
+/// content (`quarto-hub/src/sync.rs`), and nothing persists.
+pub fn editor_ephemeral_note(allow_edit: bool) -> Option<&'static str> {
+    (!allow_edit)
+        .then_some("session edits are ephemeral — pass --allow-edit to persist edits to disk")
+}
+
 async fn spa_handler(req: axum::http::Request<axum::body::Body>) -> Response {
     let path = req.uri().path();
     let rel = path.trim_start_matches('/');
@@ -561,13 +644,14 @@ async fn spa_handler(req: axum::http::Request<axum::body::Body>) -> Response {
         return serve_from_disk(override_dir, rel).await;
     }
 
+    let ui = current_ui();
     // Try the exact path first (an asset like `assets/index-<hash>.js`).
-    if let Some(file) = EMBEDDED_SPA.get_file(rel) {
+    if let Some(file) = lookup_embedded(ui, rel) {
         return asset_response(rel, file.contents().to_vec());
     }
     // SPA fallback: any non-asset path gets `index.html` for client-
     // side routing.
-    if let Some(index) = EMBEDDED_SPA.get_file("index.html") {
+    if let Some(index) = lookup_embedded(ui, "index.html") {
         return asset_response("index.html", index.contents().to_vec());
     }
     (StatusCode::NOT_FOUND, "no spa").into_response()
@@ -602,7 +686,7 @@ async fn serve_spa_index() -> Response {
     if let Some(Some(override_dir)) = SPA_DIR_OVERRIDE.get() {
         return serve_from_disk(override_dir, "index.html").await;
     }
-    if let Some(index) = EMBEDDED_SPA.get_file("index.html") {
+    if let Some(index) = lookup_embedded(current_ui(), "index.html") {
         return asset_response("index.html", index.contents().to_vec());
     }
     (StatusCode::NOT_FOUND, "no spa").into_response()
@@ -649,4 +733,168 @@ fn content_type_for(path: &str) -> HeaderValue {
         _ => "application/octet-stream",
     };
     HeaderValue::from_static(mime)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ──────────────────────────────────────────────────────────────
+    // Phase 4 (bd-jt1etjbn): `--ui` never touches the write policy.
+    // UI × write policy is a real 2×2 — `--ui editor` without
+    // `--allow-edit` is the deliberate sandbox mode (session edits
+    // sync live, disk stays authoritative).
+    // ──────────────────────────────────────────────────────────────
+
+    fn test_config(ui: PreviewUi, allow_edit: bool) -> PreviewConfig {
+        PreviewConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            project_root: None,
+            single_file: None,
+            data_dir: PathBuf::from("unused"),
+            spa_dir_override: None,
+            engine_registry: None,
+            engine_policy: EnginePolicy::Manual,
+            resource_html_files: Vec::new(),
+            cache_dir: None,
+            allow_edit,
+            share: false,
+            ui,
+        }
+    }
+
+    #[test]
+    fn ui_choice_never_changes_disk_write_policy() {
+        use quarto_hub::sync::DiskWritePolicy;
+        for ui in [PreviewUi::Viewer, PreviewUi::Editor] {
+            let read_only = build_hub_config(&test_config(ui, false));
+            assert!(
+                matches!(read_only.disk_write_policy, DiskWritePolicy::ReadOnly),
+                "{ui:?} without --allow-edit must stay ReadOnly"
+            );
+            let write_back = build_hub_config(&test_config(ui, true));
+            assert!(
+                matches!(write_back.disk_write_policy, DiskWritePolicy::WriteBack),
+                "{ui:?} with --allow-edit must write back"
+            );
+        }
+    }
+
+    #[test]
+    fn editor_ephemeral_note_emitted_only_without_allow_edit() {
+        let note = editor_ephemeral_note(false)
+            .expect("editor without --allow-edit must emit the ephemeral-session note");
+        assert!(
+            note.contains("session edits are ephemeral"),
+            "note must say what happens: {note}"
+        );
+        assert!(
+            note.contains("--allow-edit"),
+            "note must name the fix: {note}"
+        );
+        assert!(
+            editor_ephemeral_note(true).is_none(),
+            "no note when edits persist to disk"
+        );
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Phase 4: embedded-editor asset lookup + the wasm dedupe
+    // contract. The editor embed is stripped of files byte-identical
+    // to the viewer embed at the same relative path (build.rs), and
+    // the runtime lookup routes those paths to the viewer's copy —
+    // that is how one ~38 MB WASM serves both frontends.
+    // ──────────────────────────────────────────────────────────────
+
+    fn files_recursive(
+        dir: &'static include_dir::Dir<'static>,
+    ) -> Vec<&'static include_dir::File<'static>> {
+        let mut out = Vec::new();
+        let mut stack = vec![dir];
+        while let Some(d) = stack.pop() {
+            out.extend(d.files());
+            stack.extend(d.dirs());
+        }
+        out
+    }
+
+    #[test]
+    fn editor_lookup_serves_editor_index_with_react_mount() {
+        let file = lookup_embedded(PreviewUi::Editor, "index.html")
+            .expect("the editor embed always has an index.html (real dist or placeholder)");
+        let expected = EMBEDDED_EDITOR
+            .get_file("index.html")
+            .expect("editor embed index.html")
+            .contents();
+        assert_eq!(
+            file.contents(),
+            expected,
+            "editor mode must serve the *editor* embed's index, never the viewer's"
+        );
+        let html = std::str::from_utf8(file.contents()).expect("index.html is UTF-8");
+        assert!(
+            html.contains(r#"id="root""#),
+            "even the placeholder must carry the React mount point:\n{html}"
+        );
+    }
+
+    #[test]
+    fn viewer_lookup_never_reads_the_editor_embed() {
+        // Viewer mode is Phase-A behavior, byte for byte: any file that
+        // exists only in the editor embed must miss in viewer mode.
+        for editor_file in files_recursive(&EMBEDDED_EDITOR) {
+            let rel = editor_file.path().to_str().expect("utf-8 rel path");
+            if EMBEDDED_SPA.get_file(rel).is_some() {
+                continue; // viewer legitimately has its own copy
+            }
+            assert!(
+                lookup_embedded(PreviewUi::Viewer, rel).is_none(),
+                "viewer mode must not serve editor-only asset {rel}"
+            );
+        }
+    }
+
+    #[test]
+    fn editor_lookup_falls_back_to_viewer_embed_for_shared_assets() {
+        // The dedupe routing: every viewer file the editor embed does
+        // not shadow must resolve through the editor lookup with the
+        // viewer's bytes. On a placeholder tree the shared set is empty
+        // and this loop body never runs; on a built tree the ~38 MB
+        // wasm_quarto_hub_client_bg-*.wasm is the load-bearing case.
+        for viewer_file in files_recursive(&EMBEDDED_SPA) {
+            let rel = viewer_file.path().to_str().expect("utf-8 rel path");
+            if EMBEDDED_EDITOR.get_file(rel).is_some() {
+                continue; // editor's own copy wins; covered elsewhere
+            }
+            let served = lookup_embedded(PreviewUi::Editor, rel)
+                .unwrap_or_else(|| panic!("shared asset {rel} must fall back to the viewer embed"));
+            assert_eq!(
+                served.contents(),
+                viewer_file.contents(),
+                "fallback for {rel} must serve the viewer's bytes"
+            );
+        }
+    }
+
+    #[test]
+    fn editor_embed_holds_no_byte_identical_duplicates_of_viewer_files() {
+        // The build.rs strip contract behind the dedupe: anything
+        // byte-identical at the same rel path in both dists must have
+        // been stripped from the editor embed (it is served via the
+        // viewer fallback instead). Guards against a naive double-embed
+        // quietly re-adding ~38 MB to the binary.
+        for editor_file in files_recursive(&EMBEDDED_EDITOR) {
+            let rel = editor_file.path();
+            if let Some(viewer_file) = EMBEDDED_SPA.get_file(rel) {
+                assert_ne!(
+                    viewer_file.contents(),
+                    editor_file.contents(),
+                    "{} is byte-identical in both embeds — build.rs should have stripped it \
+                     from the editor embed",
+                    rel.display()
+                );
+            }
+        }
+    }
 }

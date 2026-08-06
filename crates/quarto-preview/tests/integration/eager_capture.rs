@@ -83,6 +83,7 @@ async fn eager_capture_populates_index_sidecar() {
         cache_dir: None,
         allow_edit: false,
         share: false,
+        ui: Default::default(),
     };
 
     let (ready_tx, ready_rx) = oneshot::channel::<Arc<HubContext>>();
@@ -199,6 +200,7 @@ async fn prose_only_doc_leaves_sidecar_empty() {
         cache_dir: None,
         allow_edit: false,
         share: false,
+        ui: Default::default(),
     };
 
     let (ready_tx, ready_rx) = oneshot::channel::<Arc<HubContext>>();

@@ -1093,6 +1093,15 @@ downloaded from the `p3-guest-evidence` artifact and inspected.
 
 ## Phase 4 — `q2 preview --ui editor` (independent track)
 
+*(implemented 2026-08-06, bd-jt1etjbn; tests landed first and were
+observed failing — 20+ E0432/E0425/E0560 compile errors on the
+not-yet-existing API (`PreviewUi`, `PreviewUiArg`, `EMBEDDED_EDITOR`,
+`lookup_embedded`, `build_editor_boot_url`, `pick_editor_file`,
+`editor_ephemeral_note`, `PreviewConfig::ui`), the expected failure
+mode for a structural addition per the Phase 2 E0026 precedent —
+then went green with the implementation, first against the editor
+placeholder, then against the real embed)*
+
 Serve the **full hub-client editor** from the preview server instead of the
 read-only SPA. Zero hub-client *source* changes expected — we reuse the
 `#/share/` route with a relative `server` (hub-client resolves relative sync
@@ -1102,32 +1111,60 @@ required: `App.tsx:418-423`).
 
 **Tests first:**
 
-- [ ] CLI: `--ui viewer` / `--ui editor` parse (clap `ValueEnum`, default
+- [x] CLI: `--ui viewer` / `--ui editor` parse (clap `ValueEnum`, default
       `viewer`); an unknown value (`--ui monaco`) is rejected with the list
       of valid values; **`--ui` × `--join` rejected** (the one Phase 3
       conflict-matrix entry deferred here because the flag didn't exist
       yet — extend `--join`'s `conflicts_with_all` in `main.rs` and add
       the parse test alongside Phase 3's `assert_join_conflict` helper)
-- [ ] Rust unit: `--ui editor` boot URL builder emits
+      *(6 tests in `cli_parse_tests`, incl. the `--share --ui editor
+      --allow-edit` composition; the conflict pinned as
+      `ErrorKind::ArgumentConflict`)*
+- [x] Rust unit: `--ui editor` boot URL builder emits
       `http://{host}:{port}/#/share/{indexDocId}?server=%2Fws&file={rel}&name={project}`
       (doc id **without** the `automerge:` prefix — `routing.ts:420`; `file`
       falls back to the first `.qmd` when no initial page was resolved; note
       params ride the **hash fragment**, not the URL query)
-- [ ] Rust unit: `--ui editor` leaves the write policy alone: with
+      *(`build_editor_boot_url` + `pick_editor_file` tests in
+      `commands/preview.rs`; the fallback takes the lexicographic min of
+      the index's `.qmd` paths so the unordered files map can't make the
+      boot nondeterministic; param values go through a new
+      `percent_encode_component` — also encodes `/`, matching what
+      `URLSearchParams.toString()` emits on the client)*
+- [x] Rust unit: `--ui editor` leaves the write policy alone: with
       `--allow-edit` → `DiskWritePolicy::WriteBack`; without →
       `DiskWritePolicy::ReadOnly` **and** the ephemeral-session note is
       emitted ("session edits are ephemeral — pass `--allow-edit` to
       persist to disk") — assert via an injected writer/callback, not
       stdout scraping (same style as Phase 2's ticket-line test)
-- [ ] Build-time: embed-dir placeholder fallback works on a tree without the
+      *(`ui_choice_never_changes_disk_write_policy` sweeps the full 2×2
+      through the real `build_hub_config`; the note is the pure function
+      `editor_ephemeral_note` (tested directly — the string logic, not
+      stdout), printed by the CLI when editor && !allow-edit)*
+- [x] Build-time: embed-dir placeholder fallback works on a tree without the
       editor dist (mirror the existing `QUARTO_PREVIEW_EMBED_DIR` placeholder
       test story, `crates/quarto-preview/build.rs:19-43,60-107`)
-- [ ] `cd hub-client && npm run build:all` still green (CRITICAL per
+      *(the embed tests ran green in both tree states — placeholder
+      (before `dist-preview-embed/` existed) and real embed; the editor
+      placeholder carries `<div id="root">` like the viewer's and names
+      `cargo xtask build-hub-client-embed`. Deliberate deviation: no
+      `cargo:warning` for the missing editor dist — unlike the viewer
+      it is opt-in, and warning on every build would nag everyone who
+      never uses `--ui editor`; the placeholder page is the signal.
+      Plus 4 embed-contract unit tests in `lib.rs` (editor index served
+      from the editor embed; viewer never reads the editor embed;
+      shared assets fall back to the viewer's bytes; **no file in the
+      editor embed is byte-identical to the viewer embed at the same
+      path** — the strip contract) and a server-tier integration test
+      `editor_ui.rs` pinning config → OnceLock → handler plumbing)*
+- [x] `cd hub-client && npm run build:all` still green (CRITICAL per
       CLAUDE.md); new embed build produces a servable dist
+      *(covered by the full `cargo xtask verify` recorded below; the
+      embed dist was served for real in the e2e session)*
 
 **Implementation:**
 
-- [ ] hub-client: `build:preview-embed` npm script — no `VITE_GOOGLE_CLIENT_ID`
+- [x] hub-client: `build:preview-embed` npm script — no `VITE_GOOGLE_CLIENT_ID`
       (auth UI off: `App.tsx:104`), `VITE_DEFAULT_SYNC_SERVER=/ws`, outDir
       `dist-preview-embed/` via `vite build --outDir`. Note: hub-client has
       **no** alternate-config/outDir precedent to copy — the only prior art is
@@ -1136,14 +1173,29 @@ required: `App.tsx:418-423`).
       entry points (main, debug, q2-debug, q2-preview) and run after the
       `build:wasm` + `build:sandboxed` pre-steps. **hub-client change ⇒
       two-commit changelog rule**
-- [ ] xtask: `build-hub-client-embed` (sibling of `build_q2_preview_spa.rs`)
-- [ ] `quarto-preview/build.rs`: second build-script-**emitted** env
+      *(done; same vite.config.ts, so all 4 entries + the public/ copies
+      survive. One addition beyond the plan: `VITE_DISABLE_PWA=1` + a
+      matching conditional in vite.config.ts — the PWA service worker
+      would precache the whole ~67 MB bundle (WASM included) into Cache
+      Storage for every ephemeral `q2 preview` origin (each random port
+      is its own origin), so the embed build disables it; normal builds
+      are untouched. `dist-preview-embed` added to hub-client/.gitignore
+      — the bare `dist` entry doesn't match it)*
+- [x] xtask: `build-hub-client-embed` (sibling of `build_q2_preview_spa.rs`)
+- [x] `quarto-preview/build.rs`: second build-script-**emitted** env
       (`cargo:rustc-env=QUARTO_HUB_CLIENT_EMBED_DIR=…` — mirroring how
       `QUARTO_PREVIEW_EMBED_DIR` actually works: build.rs emits it at :30-33,
       nothing reads it from the environment) + `include_dir!` + placeholder
       fallback; runtime: `--ui editor` flips which dir `spa_handler`
       (`lib.rs:490-509`) serves
-- [ ] `--ui` flag (clap `ValueEnum` `PreviewUi { Viewer, Editor }`, default
+      *(done; the emitted dir is an OUT_DIR **filtered copy** of
+      `dist-preview-embed/` — see the dedupe item. Runtime seam is
+      `lookup_embedded(ui, rel)`: viewer mode reads only `EMBEDDED_SPA`
+      (Phase-A behavior byte for byte); editor mode reads
+      `EMBEDDED_EDITOR` then falls back to `EMBEDDED_SPA`. A
+      `--preview-dir` disk override keeps taking precedence over both
+      embeds regardless of `--ui`, unchanged semantics)*
+- [x] `--ui` flag (clap `ValueEnum` `PreviewUi { Viewer, Editor }`, default
       `Viewer`) → boot URL in share-route form when `editor`. **Structural
       change required:** today the CLI builds *and prints* the boot URL and
       captures it in the browser-open task (`preview.rs:136-141`, :158-180)
@@ -1155,7 +1207,17 @@ required: `App.tsx:418-423`).
       print + browser-open path — "available in `on_ready`" is not enough by
       itself. No write-policy coupling — without `--allow-edit`, emit the
       ephemeral-session note instead of flipping `DiskWritePolicy`
-- [ ] Dedupe the shared `wasm_quarto_hub_client_bg.wasm` across the two
+      *(done via the channel-back option: the enum lives in quarto-preview
+      (`PreviewUi`, no clap dep) with a CLI-side `PreviewUiArg` ValueEnum
+      mirror; editor mode calls the already-public
+      `quarto_preview::run_with_on_ready` with a CLI closure that reads
+      `ctx.index().document_id()` + `get_all_files()`, builds the URL,
+      prints it, and gates the browser-open on the same
+      `wait_until_accepting` probe viewer mode uses. Degenerate case:
+      no `.qmd` in the index (e.g. `--no-project`) boots to the plain
+      editor project selector with a warning instead of a broken share
+      link. Viewer mode's print/open path is untouched)*
+- [x] Dedupe the shared `wasm_quarto_hub_client_bg.wasm` across the two
       embeds. **Decided from measured numbers:** the artifact
       is 38,371,765 bytes and **byte-identical** in both dists (sha256
       `a075c962…`), and Vite's content hashing even gives it the same
@@ -1167,13 +1229,84 @@ required: `App.tsx:418-423`).
       "strip from one dist, route both asset paths to the shared copy" the
       natural mechanism (exact design in this phase). Still record the
       final binary delta after dedupe
-- [ ] Known warts to document in `--help` + here: hub-client persists a
+      *(done, generalized: build.rs strips **every** file byte-identical
+      to the real viewer dist at the same rel path (not just the wasm),
+      and the runtime editor→viewer fallback serves those paths from the
+      viewer embed. Measured on the real dists: 64 of 187 files stripped,
+      45,705,880 of 69,580,949 bytes — the 38.4 MB main wasm, a 3.3 MB
+      sass chunk, the 2.7 MB automerge wasm, tree-sitter wasm, KaTeX
+      fonts — leaving 23.9 MB embedded. **Release `q2` binary:
+      153,127,632 B without the editor dist → 175,353,280 B with it =
+      +22.2 MB** (vs ~+69.6 MB naive; ~47 MB saved). Safety property:
+      only byte-identical files are stripped, so two dists built from
+      *different* wasm artifacts embed both copies — fat but correct.
+      Operational note: `build:preview-embed` reruns `build:wasm`, and a
+      regenerated wasm can differ from the one the viewer dist carries
+      (observed: sha `a075c962…` → `6a265987…` with no Rust change in
+      the WASM closure) — if the hashes diverge, rebuild the viewer
+      (`cargo xtask build-q2-preview-spa`) so the strip fires again)*
+- [x] Known warts to document in `--help` + here: hub-client persists a
       ProjectEntry + IndexedDB automerge cache per ephemeral session (stale
       entries accumulate across preview restarts — follow-up strand);
       `--share --ui editor` means the *host* picks the UI for all guests
-- [ ] End-to-end (mandatory): real browser session — editor loads, file
+      *(both in the `--ui` help text. One more wart found in the e2e:
+      on a fresh origin — which every `q2 preview` port is — the share
+      route's auto-added project entry trips hub-client's **project-set
+      migration screen** ("Upgrade: Synced Project List"); one click on
+      "Migrate Projects" proceeds, and the set syncs through the
+      preview's own `/ws`. App.tsx:240-252 already auto-establishes the
+      set silently for `join-collection` invites; extending that to
+      `share` routes would change production hub-client behavior, so it
+      goes to the follow-up strand with the IndexedDB cleanup, not into
+      this phase)*
+- [x] End-to-end (mandatory): real browser session — editor loads, file
       sidebar shows the project, Monaco edit persists to host disk (verify
       file content on disk), preview pane updates
+      *(executed 2026-08-06 — see "Phase 4 end-to-end record" below)*
+
+### Phase 4 end-to-end record (2026-08-06)
+
+All output inspected. Binary: `target/debug/q2` at the Phase 4 tree with
+the real embeds (viewer + editor rebuilt from the same wasm artifact).
+Fixture: `_quarto.yml` + `index.qmd` (`MARKER-0 here.`) + `about.qmd` in
+a scratchpad dir. Browser: Playwright Chromium, screenshots inspected
+for both legs.
+
+- **Write-back leg:** `q2 preview <fixture> --ui editor --allow-edit
+  --no-browser --port 9393` printed
+  `→ http://127.0.0.1:9393/#/share/269NF7Cd3ECERWph17EyzsTBmhuW?server=%2Fws&file=index.qmd&name=fixture`
+  (no ephemeral note — `--allow-edit` given). Browser: project-set
+  migration screen (fresh origin, the wart above) → one click →
+  **editor loaded (Monaco surface) in 0.48 s**; file sidebar lists
+  `_quarto.yml`, `about.qmd`, `index.qmd` + outline; preview pane
+  rendered `MARKER-0 here.`. Typed ` EDITED-BY-P4-E2E` at the end of
+  the marker line in Monaco → preview pane re-rendered live (checked in
+  child frames only — the iframe finding from Gate 0) → **the edit
+  landed in `index.qmd` on disk ~3 s later** (rides the hub's 5 s
+  periodic sync): `MARKER-0 here. EDITED-BY-P4-E2E`. Before/after
+  screenshots show Monaco + preview pane both carrying the edit.
+- **Sandbox leg (the 2×2's other corner):** same fixture reset, `q2
+  preview <fixture> --ui editor --no-browser --port 9394` (no
+  `--allow-edit`) printed the note `session edits are ephemeral — pass
+  --allow-edit to persist edits to disk`, then the share-route URL.
+  Editor loaded (0.47 s), typed ` SANDBOX-EDIT-P4`, preview pane
+  re-rendered live, and **`index.qmd` on disk stayed byte-identical
+  across a 12 s window** (two periodic-sync intervals) — the
+  ReadOnly policy held while the live session carried the edit.
+- **Editor-mode HTTP surface** (server-tier test + placeholder-tree
+  run): `GET /` serves the editor embed's `index.html`, unknown paths
+  fall back to it, `/health` + `/api/preview/config` keep answering
+  from the hub. On the placeholder tree the same invocation served the
+  "editor UI is not built" page naming the xtask (observed live at
+  port 9391 before the embed was built).
+- **Verification at this tree:** `cargo build --workspace` green;
+  `cargo nextest run --workspace` **10914 passed** (incl. the 17 new
+  Phase 4 tests, run against both the placeholder and the real embed);
+  clippy clean on the three touched crates; **full `cargo xtask verify`
+  (hub-client legs included, per this phase's policy) → "All
+  verification steps passed!"**, output inspected. After verify's own
+  `build:wasm` re-run, the two dists' wasm stayed byte-identical
+  (sha `6a265987…` in both) — the dedupe precondition holds.
 
 ## Phase 5 — Spike: `--join https://quarto-hub.com/#/share/…`
 

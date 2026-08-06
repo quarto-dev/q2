@@ -249,19 +249,34 @@ enum Commands {
         #[arg(long)]
         share: bool,
 
+        /// Which frontend to serve: the read-only preview UI
+        /// (`viewer`, the default) or the full collaborative editor
+        /// (`editor`: Monaco, file sidebar, live preview pane).
+        ///
+        /// Choosing `editor` never changes the write policy: without
+        /// --allow-edit, edits made in the editor drive the live
+        /// session for everyone connected but are never written to
+        /// your files (and a file change on disk converges the
+        /// session back to the disk content). Two caveats: the editor
+        /// stores a project entry and a local document cache in the
+        /// browser for every preview session, and with --share the
+        /// host's --ui choice is what all guests get.
+        #[arg(long, value_enum, default_value_t = PreviewUiArg::Viewer)]
+        ui: PreviewUiArg,
+
         /// Join a shared preview session using the `q2preview…` string
         /// printed by `q2 preview --share` on the host machine.
         ///
         /// Runs a local proxy for the host's session — no local project
         /// is read and nothing is written to disk on this machine, so
         /// the host-mode flags (a path, --share, --no-project,
-        /// --allow-edit, --data-dir, --preview-dir) don't combine with
-        /// it. --port/--host pick where the local proxy listens;
+        /// --allow-edit, --ui, --data-dir, --preview-dir) don't combine
+        /// with it. --port/--host pick where the local proxy listens;
         /// --no-browser still applies.
         #[arg(
             long,
             value_name = "TICKET",
-            conflicts_with_all = ["path", "share", "no_project", "allow_edit", "data_dir", "preview_dir"]
+            conflicts_with_all = ["path", "share", "no_project", "allow_edit", "data_dir", "preview_dir", "ui"]
         )]
         join: Option<String>,
     },
@@ -755,6 +770,27 @@ enum TraceCommand {
     },
 }
 
+/// `--ui` values for `q2 preview` (live-share plan Phase 4,
+/// bd-jt1etjbn): which embedded frontend the preview server serves.
+/// CLI-side mirror of [`quarto_preview::PreviewUi`] so the library
+/// doesn't grow a clap dependency.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum PreviewUiArg {
+    /// The read-only preview UI (the default).
+    Viewer,
+    /// The full hub-client editor. Does not imply --allow-edit.
+    Editor,
+}
+
+impl From<PreviewUiArg> for quarto_preview::PreviewUi {
+    fn from(arg: PreviewUiArg) -> Self {
+        match arg {
+            PreviewUiArg::Viewer => quarto_preview::PreviewUi::Viewer,
+            PreviewUiArg::Editor => quarto_preview::PreviewUi::Editor,
+        }
+    }
+}
+
 #[cfg(test)]
 mod cli_parse_tests {
     //! clap parse harness (live-share plan, Phase 2). These are the first
@@ -877,6 +913,73 @@ mod cli_parse_tests {
         assert_join_conflict(&["preview", "--join", "x", "--preview-dir", "d"]);
     }
 
+    // ── Phase 4 (bd-jt1etjbn): `--ui <viewer|editor>` ────────────────
+    // The flag substitutes which embedded frontend the server serves.
+    // It is orthogonal to `--allow-edit` (UI × write policy is a real
+    // 2×2) and meaningless for a guest (the host's server serves the
+    // UI through the tunnel), hence the `--join` conflict.
+
+    use super::PreviewUiArg;
+
+    #[test]
+    fn preview_ui_defaults_to_viewer() {
+        let Commands::Preview { ui, .. } = parse_preview(&["preview"]) else {
+            unreachable!()
+        };
+        assert_eq!(ui, PreviewUiArg::Viewer, "--ui must default to viewer");
+    }
+
+    #[test]
+    fn preview_ui_parses_viewer_and_editor() {
+        for (value, expected) in [
+            ("viewer", PreviewUiArg::Viewer),
+            ("editor", PreviewUiArg::Editor),
+        ] {
+            let Commands::Preview { ui, .. } = parse_preview(&["preview", "--ui", value]) else {
+                unreachable!()
+            };
+            assert_eq!(ui, expected, "--ui {value}");
+        }
+    }
+
+    #[test]
+    fn preview_ui_rejects_unknown_value_listing_the_valid_ones() {
+        let err = match try_parse(&["preview", "--ui", "monaco"]) {
+            Ok(_) => panic!("--ui monaco is not a frontend we ship; must be rejected"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), clap::error::ErrorKind::InvalidValue);
+        let msg = err.to_string();
+        assert!(
+            msg.contains("viewer") && msg.contains("editor"),
+            "the error must list the valid values; got: {msg}"
+        );
+    }
+
+    #[test]
+    fn preview_ui_composes_with_share_and_allow_edit() {
+        // The full-collaboration composition from the plan's CLI surface:
+        // `--share --ui editor --allow-edit`.
+        let Commands::Preview {
+            share,
+            ui,
+            allow_edit,
+            ..
+        } = parse_preview(&["preview", "--share", "--ui", "editor", "--allow-edit"])
+        else {
+            unreachable!()
+        };
+        assert!(share && allow_edit);
+        assert_eq!(ui, PreviewUiArg::Editor);
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_ui() {
+        // The Phase 3 conflict-matrix entry deferred to Phase 4 (the
+        // flag didn't exist yet).
+        assert_join_conflict(&["preview", "--join", "x", "--ui", "editor"]);
+    }
+
     #[test]
     fn preview_join_composes_with_guest_flags() {
         // `--port` picks the local proxy port, `--host` its bind
@@ -974,6 +1077,7 @@ fn main() -> Result<()> {
             no_project,
             allow_edit,
             share,
+            ui,
             join,
         } => {
             if let Some(ticket) = join {
@@ -996,6 +1100,7 @@ fn main() -> Result<()> {
                     no_project,
                     allow_edit,
                     share,
+                    ui: ui.into(),
                 })
             }
         }

@@ -59,6 +59,7 @@ async fn boot_server_for_test(
         cache_dir: None,
         allow_edit,
         share: false,
+        ui: Default::default(),
     };
 
     let (ready_tx, ready_rx) = oneshot::channel::<Arc<HubContext>>();

@@ -7,6 +7,7 @@ pub mod config_endpoint;
 pub mod diagnostics_capture_failure;
 pub mod diagnostics_endpoint;
 pub mod eager_capture;
+pub mod editor_ui;
 pub mod join_tunnel;
 pub mod render_scripts_boot;
 pub mod share;

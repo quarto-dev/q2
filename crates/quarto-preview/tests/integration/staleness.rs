@@ -113,6 +113,7 @@ async fn cell_edit_flips_staleness_in_sidecar() {
         cache_dir: None,
         allow_edit: false,
         share: false,
+        ui: Default::default(),
     };
 
     // ── Boot the server, capture the HubContext via on_ready ───────
