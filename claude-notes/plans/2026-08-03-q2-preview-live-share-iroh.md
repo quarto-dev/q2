@@ -987,20 +987,17 @@ then went green with the implementation)*
       29 ms exit when Connected, 3.0 s when Reconnecting (iroh's
       documented graceful-close budget with a dial in flight —
       accepted))*
-- [ ] **End-to-end (mandatory, record here):** cross-machine host/guest run
+- [x] **End-to-end (mandatory, record here):** cross-machine host/guest run
       with the real n0 relay path (netns is Linux-only — same logistics as
       Gate 0 Q3: two physical machines); inspect rendered output in the
       guest browser; note "verified in browser". Join **two guests
       concurrently** at least once (v1 scope is N guests — architecture
       scope note)
-      *(single-machine leg executed 2026-08-06 with two concurrent guests —
-      see "Phase 3 end-to-end record" below; the **cross-machine n0-relay
-      leg is still open** — it needs a second physical machine (user-driven,
-      runbook analogous to Gate 0's) or a GH-Actions guest like Gate 0 Q3
-      (needs push approval). The "connected via relay" message rendering
-      is exercised only by that leg (local runs select the direct path);
-      the wrapped-ticket triple-click copy check also still wants a human
-      terminal)*
+      *(both legs done: single-machine 2026-08-06 with two concurrent
+      guests, cross-machine 2026-08-06 via a GH-Actions guest — see the
+      records below. The only remaining human-eyeball nicety is the
+      wrapped-ticket triple-click copy check in a real terminal —
+      non-blocking, same status as Phase 2's note)*
 
 ### Phase 3 end-to-end record (single-machine legs, 2026-08-06)
 
@@ -1048,6 +1045,51 @@ dir.
   `cargo nextest run --workspace` **10897 passed**; `cargo xtask verify
   --skip-hub-build` → "All verification steps passed!"; `cargo tree -i
   iroh` from `wasm-quarto-hub-client` still fails (closure clean).
+
+### Phase 3 end-to-end record (cross-machine n0-relay leg, 2026-08-06)
+
+Executed via a **GH-Actions guest**, same logistics as Gate 0 Q3: live
+host on the dev machine (`q2 preview <fixture> --share --no-browser`
+— fixture with `MARKER-0`, plus a loop bumping `MARKER-N` every 20 s
+and logging host bump timestamps in epoch-ms), guest = `ubuntu-latest`
+runner (Azure network) that builds **the real `q2` binary** and joins
+with **the real `q2 preview --join`** — no spike shims anywhere.
+Throwaway workflow `spike-p3-join-guest.yml` + driver
+`spike/p3-guest-driver.mjs` on branch `spike/bd-6y0p1bne-p3-cross-e2e`
+(commit 07d945a1, never merged); ticket passed through the ephemeral
+`SPIKE_P3_TICKET` repo secret. **GH run 31092359776** (job green in
+12m13s, most of it the q2 build). All output and both screenshots
+downloaded from the `p3-guest-evidence` artifact and inspected.
+
+- **CLI status surface:** each guest printed exactly one
+  `● connected via relay` — the Azure↔residential pair never
+  hole-punched a direct path (exactly the relay-fallback scenario this
+  leg exists for), and zero `reconnecting`/`rejected` events over the
+  whole session. This is the leg that exercises the
+  `PathKind::Relay` rendering (local runs only ever show `direct
+  connection`).
+- **`/health` through the tunnel** (both guests, guest2 concurrent
+  with guest1): correct payload with the host's
+  `"index_document_id":"4JGt98WMiAbWRuCfaDwmp3NmPuga"`,
+  `"qmd_file_count":2`.
+- **Browser (headless Chromium on the runner):** first render through
+  the real n0 relay in **12.7 s**, ~**47.5 MB** fetched (uncompressed
+  WASM dominates — same payload confounder as Gate 0; its
+  HTTP-compression mitigation remains the first lever). Boot
+  screenshot shows `MARKER-33` rendered; final shows `MARKER-37`.
+- **Live-edit propagation over 4 marker bumps** (runner-observed ts −
+  host bump ts; includes the driver's 150 ms poll grain and
+  host↔runner NTP skew): **899 / 979 / 1043 / 1563 ms, median
+  ~1.0 s** — consistent with Gate 0's 0.81–2.34 s and the local leg.
+- **n0 relays from the runner:** euc1-1 and use1-1 probed 200/OK in
+  0.57 s / 0.32 s.
+- Caveats unchanged from Gate 0: runner egress is datacenter-class,
+  not residential; a human-driven Safari-app/lid-close session remains
+  an optional extra.
+- **Housekeeping done 2026-08-06:** `SPIKE_P3_TICKET` secret deleted,
+  remote `spike/bd-6y0p1bne-p3-cross-e2e` branch deleted (workflow was
+  throwaway, never merged; local branch kept for reference), host
+  process stopped — the session token died with it.
 
 ## Phase 4 — `q2 preview --ui editor` (independent track)
 
