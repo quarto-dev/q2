@@ -47,16 +47,18 @@ use super::{GlobOptions, path_to_forward_slashes};
 /// across platforms and runtimes. Directories are never returned —
 /// only the files beneath them.
 ///
-/// Errors only if a pattern fails to compile; a pattern that matches
-/// nothing is not an error here (the caller decides whether to
-/// diagnose that, since "no matches" is normal for a defensive
-/// exclusion and suspicious for a declared input).
+/// Two things can go wrong: a pattern fails to compile, or the walk
+/// itself fails (an unreadable directory — *not* a missing one,
+/// which simply yields no matches). A pattern that matches nothing
+/// is not an error here; the caller decides whether to diagnose
+/// that, since "no matches" is normal for a defensive exclusion and
+/// suspicious for a declared input.
 pub fn expand(
     globs: &[GlobPattern],
     project_root: &Path,
     runtime: &dyn SystemRuntime,
     options: &GlobOptions,
-) -> Result<Vec<PathBuf>, GlobCompileError> {
+) -> Result<Vec<PathBuf>, GlobExpandError> {
     let all = PatternSet::compile(globs, options)?;
     let mut out: Vec<PathBuf> = Vec::new();
 
@@ -74,7 +76,7 @@ pub fn expand(
             project_root.join(prefix)
         };
 
-        for candidate in walk_files(&start, runtime) {
+        for candidate in walk_files(&start, runtime)? {
             let Ok(relative) = candidate.strip_prefix(project_root) else {
                 continue;
             };
@@ -108,32 +110,83 @@ fn literal_prefix(pattern: &str) -> String {
     prefix.join("/")
 }
 
+/// Something went wrong turning patterns into files.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GlobExpandError {
+    /// A pattern could not be compiled.
+    Compile(GlobCompileError),
+    /// A directory could not be read. A *missing* directory is not
+    /// an error (the pattern just matches nothing); this is the
+    /// permission-denied / IO-failure case, which the caller should
+    /// surface rather than silently under-expand.
+    Walk { path: PathBuf, message: String },
+}
+
+impl std::fmt::Display for GlobExpandError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Compile(e) => write!(f, "{e}"),
+            Self::Walk { path, message } => {
+                write!(f, "could not read `{}`: {message}", path.display())
+            }
+        }
+    }
+}
+
+impl From<GlobCompileError> for GlobExpandError {
+    fn from(e: GlobCompileError) -> Self {
+        Self::Compile(e)
+    }
+}
+
 /// Every file at or beneath `start`, through the runtime.
 ///
-/// A missing or unreadable directory yields nothing rather than an
-/// error: a pattern pointing at a directory that does not exist
-/// simply matches nothing, which the caller may or may not care
-/// about. If `start` is itself a file, it is the only candidate.
-fn walk_files(start: &Path, runtime: &dyn SystemRuntime) -> Vec<PathBuf> {
+/// A **missing** directory yields nothing rather than an error: a
+/// pattern pointing at a directory that does not exist simply
+/// matches nothing. Any other read failure is surfaced, so a
+/// permission problem cannot masquerade as an empty match set. If
+/// `start` is itself a file, it is the only candidate.
+fn walk_files(start: &Path, runtime: &dyn SystemRuntime) -> Result<Vec<PathBuf>, GlobExpandError> {
     let mut out = Vec::new();
     if runtime.is_file(start).unwrap_or(false) {
         out.push(start.to_path_buf());
-        return out;
+        return Ok(out);
     }
-    walk_rec(start, runtime, &mut out);
-    out
+    walk_rec(start, runtime, &mut out)?;
+    Ok(out)
 }
 
-fn walk_rec(dir: &Path, runtime: &dyn SystemRuntime, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = runtime.dir_list(dir) else {
-        return;
+fn walk_rec(
+    dir: &Path,
+    runtime: &dyn SystemRuntime,
+    out: &mut Vec<PathBuf>,
+) -> Result<(), GlobExpandError> {
+    let entries = match runtime.dir_list(dir) {
+        Ok(entries) => entries,
+        Err(e) if is_not_found(&e) => return Ok(()),
+        Err(e) => {
+            return Err(GlobExpandError::Walk {
+                path: dir.to_path_buf(),
+                message: e.to_string(),
+            });
+        }
     };
     for entry in entries {
         if runtime.is_dir(&entry).unwrap_or(false) {
-            walk_rec(&entry, runtime, out);
+            walk_rec(&entry, runtime, out)?;
         } else {
             out.push(entry);
         }
+    }
+    Ok(())
+}
+
+/// True for "this path does not exist", which expansion treats as an
+/// empty match set rather than a failure.
+fn is_not_found(err: &quarto_system_runtime::RuntimeError) -> bool {
+    match err {
+        quarto_system_runtime::RuntimeError::Io(e) => e.kind() == std::io::ErrorKind::NotFound,
+        _ => false,
     }
 }
 

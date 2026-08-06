@@ -54,7 +54,7 @@ pub mod resolve;
 
 use std::path::{Component, Path};
 
-pub use expand::expand;
+pub use expand::{GlobExpandError, expand};
 pub use matcher::{GlobCompileError, PatternSet};
 pub use pattern::{GlobPattern, has_metacharacters, join_and_normalize, split_negation};
 pub use provenance::BaseDirContext;
@@ -106,6 +106,20 @@ impl GlobOptions {
         default_positive: Some("*.qmd"),
     };
 
+    /// `resources:` — project-level (`project.resources`) and
+    /// document-level.
+    ///
+    /// Same shape as `project.render`; the difference is what the
+    /// *enumerator* does with the result. Resources expand to files
+    /// of any extension, apply no hidden/underscore exclusions
+    /// (`.nojekyll` and `_data/` are legitimate resources), and treat
+    /// a literal path that names no existing directory as a declared
+    /// file whose absence is worth reporting.
+    pub const RESOURCES: Self = Self {
+        directory_rule: true,
+        default_positive: None,
+    };
+
     /// `project.render` in `_quarto.yml`.
     ///
     /// `default_positive` stays `None` — a render list of only
@@ -134,6 +148,7 @@ mod option_table {
         let table: &[(&str, GlobOptions)] = &[
             ("listing contents:", GlobOptions::LISTING),
             ("project.render", GlobOptions::RENDER),
+            ("resources:", GlobOptions::RESOURCES),
         ];
 
         let rendered: Vec<String> = table
@@ -151,6 +166,7 @@ mod option_table {
             vec![
                 "listing contents:: directory_rule=true, default_positive=Some(\"*.qmd\")",
                 "project.render: directory_rule=true, default_positive=None",
+                "resources:: directory_rule=true, default_positive=None",
             ]
         );
     }

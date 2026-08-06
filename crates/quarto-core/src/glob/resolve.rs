@@ -76,6 +76,18 @@ pub struct GlobResolution {
     /// Usable patterns (positive and negative), project-relative and
     /// guaranteed to compile.
     pub globs: Vec<GlobPattern>,
+    /// Provenance of each entry in [`Self::globs`], same order and
+    /// length — use [`Self::iter`] rather than indexing these in
+    /// parallel by hand.
+    ///
+    /// Resolution is where a pattern stops being a string the user
+    /// wrote and becomes a normalized one, so it is also the last
+    /// place that can hand a downstream diagnostic the span to point
+    /// at. Keeping the two lists aligned here beats having every
+    /// consumer re-pair resolved patterns with raw entries — a
+    /// pairing that silently goes wrong as soon as one entry is
+    /// dropped or injected.
+    pub sources: Vec<SourceInfo>,
     /// Patterns that escaped the project root.
     pub escaped: Vec<EscapedGlob>,
     /// Patterns that failed to compile.
@@ -83,6 +95,16 @@ pub struct GlobResolution {
 }
 
 impl GlobResolution {
+    /// Each usable pattern with the provenance it came from.
+    pub fn iter(&self) -> impl Iterator<Item = (&GlobPattern, &SourceInfo)> {
+        self.globs.iter().zip(self.sources.iter())
+    }
+
+    /// Each **positive** pattern with its provenance.
+    pub fn positives(&self) -> impl Iterator<Item = (&GlobPattern, &SourceInfo)> {
+        self.iter().filter(|(g, _)| !g.negated)
+    }
+
     /// Compile the usable patterns.
     ///
     /// Infallible in practice: [`resolve_patterns`] only emits
@@ -148,6 +170,7 @@ pub fn resolve_patterns(
         }
 
         out.globs.push(candidate);
+        out.sources.push(entry.source.clone());
     }
 
     inject_default_positive(&mut out, ctx, options);
@@ -171,6 +194,12 @@ fn inject_default_positive(
     // project-relative directory and the default is a literal.
     if let Some(pattern) = join_and_normalize(ctx.fallback_dir, default_positive) {
         out.globs.insert(0, GlobPattern::positive(pattern));
+        // The default has no YAML behind it — it is q2 supplying the
+        // set the negations subtract from.
+        out.sources.insert(
+            0,
+            SourceInfo::generated(quarto_source_map::By::programmatic_config()),
+        );
     }
 }
 
@@ -194,6 +223,27 @@ mod tests {
             project_dir: project,
             fallback_dir: fallback,
         }
+    }
+
+    #[test]
+    fn sources_stay_aligned_with_globs() {
+        let project = Path::new("/proj");
+        let r = resolve_patterns(
+            [
+                raw("a.qmd"),
+                raw("!b.qmd"),
+                raw("../escapes.qmd"),
+                raw("c.qmd"),
+            ],
+            &ctx(project, ""),
+            &GlobOptions::LISTING,
+        );
+        assert_eq!(r.globs.len(), r.sources.len());
+        // The escaping entry is not in `globs`, so a hand-rolled zip
+        // against the raw list would mis-pair everything after it.
+        let patterns: Vec<&str> = r.iter().map(|(g, _)| g.pattern.as_str()).collect();
+        assert_eq!(patterns, vec!["a.qmd", "b.qmd", "c.qmd"]);
+        assert_eq!(r.positives().count(), 2);
     }
 
     #[test]

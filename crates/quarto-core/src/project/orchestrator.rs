@@ -953,6 +953,7 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             let mut resolved = crate::project_resources::collect_static_resources_with_diagnostics(
                 self.project,
                 &index,
+                self.runtime.as_ref(),
             )
             .map_err(QuartoError::Parse)?;
             for output in &outputs {
@@ -963,6 +964,7 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                     let resolved_report = crate::project_resources::resolve_reported_resources(
                         &self.project.dir,
                         report,
+                        self.runtime.as_ref(),
                     )
                     .map_err(|e| QuartoError::other(e.to_string()))?;
                     resolved.extend(resolved_report);
