@@ -99,18 +99,20 @@ Each becomes a failing test in Phase 0/1 before any implementation.
    #460's defect 2, one metadata key over. `RawResourcePattern` already
    carries `SourceInfo`, so the fix is the #460 resolver applied to a
    different key.
-2. **`!` negation silently ignored in `project.render` and
-   `resources:`.** Q1 supports it in both. In q2 a `!drafts/*.qmd`
-   entry in `project.render` is matched literally and drops out with no
-   diagnostic. In `resources:` the glob branch matches nothing;
-   a non-glob `!data` is expected to fall through the literal branch
-   and be published as a nonexistent resource path (later surfacing as
-   `Q-5-6`) — confirm in Phase 0.
+2. **`!` negation is unsupported in `project.render` and `resources:`,
+   and fails differently in each.** Q1 supports it in both.
+   `project.render` matches the `!…` entry literally, it drops out
+   silently, and the excluded file renders anyway. `resources:` is
+   *loud but wrong*: the `!…` entry falls through to the literal-path
+   branch and aborts the whole render with
+   `Declared resource '<root>/!data/secret.csv' does not exist on disk`
+   (`project_resources.rs:800`, exit 1) — while still publishing the
+   file the author was trying to exclude. Confirmed in Phase 0.
 3. **Bare directory in `project.render` matches nothing.**
-   `render: [posts]` yields an empty render list (`glob_match("posts",
-   "posts/a.qmd")` is false), and the user sees the project-wide
-   `Q-7-7` rather than "this pattern matched nothing". Q1 and listings
-   both mean "everything beneath".
+   `render: ["index.qmd", "posts"]` renders only `index.qmd` and says
+   `Rendered 1 of 1 files` — no diagnostic at all, because the render
+   set is non-empty so even `Q-7-7` never fires. Q1 and listings both
+   mean "everything beneath".
 4. **`../` handling is three different things.** Clamped-and-diagnosed
    in listings, error-checked in resources, silently no-matching in
    `project.render`.
@@ -123,6 +125,42 @@ Each becomes a failing test in Phase 0/1 before any implementation.
 7. **No per-pattern "matched nothing" diagnostic anywhere.** A typo'd
    glob is silent in all four consumers. This is the single largest
    usability win available here (decision D7).
+8. **Character classes work in `resources:` and nowhere else**
+   (Phase 0, f7). `resources: ["data/fig-[0-9].csv"]` correctly
+   publishes `fig-3.csv` and skips `fig-x.csv`; the same class in a
+   listing `contents:` matches nothing, silently. D1's resolution fixes
+   this by construction — every consumer gets the `glob` vocabulary.
+
+## Phase 0 findings — observed behavior at `2a37d56e`
+
+Eight fixture projects (session scratchpad `phase0/`), each rendered
+with `./target/debug/q2 render .` and the output tree/HTML inspected.
+Every predicted defect reproduced; two predictions needed correcting
+(f2b, f3), both now fixed in the list above.
+
+| Fixture | Declared | Expected (post-migration) | **Observed today** |
+|---|---|---|---|
+| `f1-resources-dirmeta` | `blog/_metadata.yml`: `resources: ["data/*.csv"]`, host `blog/deep/index.qmd` | publishes `blog/data/from-blog.csv` | publishes `blog/deep/data/from-deep.csv` — anchored at the **host doc**, not the declaring file (defect 1) |
+| `f2-render-negation` | `render: ["*.qmd", "!draft.qmd"]` | `draft.qmd` excluded | `draft.html` rendered; `Rendered 3 of 3`, no diagnostic (defect 2) |
+| `f2b-resources-negation` | `resources: ["data/*.csv", "!data/secret.csv"]` | `secret.csv` not published | **render aborts**, exit 1: `Declared resource '<root>/!data/secret.csv' does not exist on disk` — *and* `_site/data/secret.csv` is written anyway (defect 2, louder than predicted) |
+| `f2c-…-literal` | `resources: ["data", "!data/secret.csv"]` | same | same abort; both CSVs published |
+| `f3-render-bare-dir` | `render: ["index.qmd", "posts"]` | `posts/a.qmd`, `posts/b.qmd` rendered | only `index.html`; `Rendered 1 of 1 files`, **no diagnostic** (defect 3 — worse than predicted: `Q-7-7` never fires because the set is non-empty) |
+| `f4-render-leading-slash` | `render: ["/index.qmd", "/sub/*.qmd"]` | both rendered | `Q-PROJECT-EMPTY`, `Rendered 0 of 0` (defect 5) |
+| `f5-listing-leading-slash` | `sub/index.qmd`: `contents: ["/posts/*.qmd"]` | root `posts/a.qmd`, `b.qmd` listed | listing renders **empty**, no diagnostic (defect 5, listings side) |
+| `f6-sidebar-auto` | `sidebar: auto: "docs/*.qmd"` | only `docs/top.qmd` | both `docs/top.html` **and** `docs/deep/nested.html` in the sidebar (defect 6) |
+| `f7-classes` | `resources: ["data/fig-[0-9].csv"]` + `contents: ["posts/p[0-9].qmd"]` | both class-filtered | resources: correct (`fig-3.csv` only). listing: **empty**, silently (defect 8) |
+
+Two structural confirmations:
+
+- **`project.render` is read only from `_quarto.yml`/`.yaml`**
+  (`ProjectConfig::parse_config`, `project/mod.rs:625`), so its base dir
+  is trivially the project root; carrying `SourceInfo` (D8) buys
+  diagnostics, not correctness. `as_str()` there already accepts
+  `ConfigValueKind::Glob`, so `!glob`-tagged entries are not dropped.
+- **Consumer sweep is complete.** A fresh grep for ad-hoc pattern
+  handling (`contains('*')`, `trim_end_matches("*")`, `GLOB_CHARS`,
+  `fn *glob*`) surfaces only the four consumers plus the two documented
+  exclusions (`system-runtime/sandbox.rs`, `qmd-syntax-helper`).
 
 ## Design
 
@@ -346,19 +384,22 @@ tests regardless:
 
 ## Phases
 
-### Phase 0 — confirm the defect inventory (before any code)
+### Phase 0 — confirm the defect inventory (before any code) ✅
 
-- [ ] Build fixture projects reproducing defects 1–6 and record observed
-      behavior at branch HEAD (`q2 render`, output inspected), the same
-      way the parent plan's assessment matrix was built.
-- [ ] Confirm defect 2's resources sub-case: what a non-glob `!data`
-      entry actually produces today (published nonexistent path →
-      `Q-5-6`?).
-- [ ] Confirm `project.render` is only ever read from `_quarto.yml`
-      (i.e. base dir is trivially the project root, and provenance buys
-      diagnostics only, not correctness).
-- [ ] Grep the tree for glob consumers this inventory missed; record the
-      deliberate exclusions (below) in the contract doc.
+- [x] Build fixture projects reproducing defects 1–6 and record observed
+      behavior at branch HEAD (`q2 render`, output inspected). Nine
+      fixtures, results in §"Phase 0 findings" above.
+- [x] Confirm defect 2's resources sub-case: a `!…` entry is **not**
+      silent — it aborts the render with "does not exist on disk"
+      (`project_resources.rs:800`) while still publishing the file the
+      author meant to exclude.
+- [x] Confirm `project.render` is only ever read from `_quarto.yml`
+      (`ProjectConfig::parse_config`) — base dir is trivially the
+      project root; provenance buys diagnostics only.
+- [x] Grep the tree for glob consumers this inventory missed — none;
+      only the four consumers plus the two documented exclusions.
+- [x] Bonus: confirm character classes work in `resources:` today and
+      match nothing in listings (f7) — the empirical basis for D1.
 
 ### Phase 1 — extract the API (pure refactor, no behavior change)
 
