@@ -29,6 +29,7 @@ pub mod language_catalog;
 pub mod language_pipeline;
 pub mod language_resolve;
 pub mod link_rewriting_pipeline;
+pub mod listing_glob_resolution;
 pub mod listing_pipeline;
 pub mod math_mode_pipeline;
 pub mod metadata_path_resolution;
