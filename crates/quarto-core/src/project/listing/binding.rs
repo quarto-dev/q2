@@ -401,11 +401,26 @@ fn host_relative_qmd(source_path: &std::path::Path, host_dir: &str) -> String {
     if host_dir.is_empty() {
         return project_relative;
     }
-    let prefix = format!("{}/", host_dir);
-    project_relative
-        .strip_prefix(&prefix)
-        .map(str::to_string)
-        .unwrap_or(project_relative)
+    // Walk off the shared directory prefix, then climb out of the
+    // remaining host segments with `..`. An item outside the host's
+    // directory (legal since bd-v7ixzsp5 — e.g. a `../rootpost.qmd`
+    // or `_quarto.yml`-declared glob) gets `../…` exactly as a
+    // hand-written body link from the host would, so
+    // `LinkRewriteTransform` resolves it to the right page-relative
+    // output URL.
+    let host_segments: Vec<&str> = host_dir.split('/').collect();
+    let path_segments: Vec<&str> = project_relative.split('/').collect();
+    let common = host_segments
+        .iter()
+        .zip(path_segments.iter())
+        .take_while(|(h, p)| h == p)
+        .count();
+    let mut out: Vec<&str> = Vec::new();
+    for _ in common..host_segments.len() {
+        out.push("..");
+    }
+    out.extend(&path_segments[common..]);
+    out.join("/")
 }
 
 fn build_project_map(meta: &ConfigValue) -> TemplateValue {

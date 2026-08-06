@@ -89,6 +89,24 @@ impl PipelineStage for DocumentProfileStage {
         // (transitive) child file the parent depends on.
         profile.includes = std::mem::take(&mut doc.recorded_includes);
 
+        // Resolve the host's `listing.*.contents:` globs to
+        // project-relative form (bd-v7ixzsp5, GH #456). Needs the
+        // document's `SourceContext` (registered YAML metadata
+        // layers) to recover each glob's declaring file, so it
+        // lives here rather than in the pure `extract`. Escaping
+        // patterns are dropped silently — the render transform owns
+        // the `Q-12-17` diagnostic.
+        let host_dir = to_forward_slash(source_path.parent().unwrap_or(Path::new("")));
+        let contents = crate::project::listing::config::flatten_content_globs(&doc.ast.meta);
+        profile.listing_content_globs =
+            crate::project::listing::glob_resolve::resolve_content_globs(
+                &contents,
+                Some(&doc.ast_context.source_context),
+                &ctx.project.dir,
+                &host_dir,
+            )
+            .globs;
+
         Ok(PipelineData::AtProfile(DocumentAtProfile {
             profile,
             ast: doc,

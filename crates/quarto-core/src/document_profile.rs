@@ -65,7 +65,16 @@ use thiserror::Error;
 ///   type and now derives its literals from the same normalization
 ///   (`metadata::authors::parse_authors_model`), so the two fields
 ///   always agree.
-pub const DOCUMENT_PROFILE_VERSION: u32 = 7;
+/// - `8`: `bd-v7ixzsp5` (GH #456). Changes `listing_content_globs`
+///   from `Vec<String>` (raw patterns, expanded dual-view at
+///   graph-build time) to `Vec<ListingContentGlob>` — patterns are
+///   now **resolved to project-relative form at profile-extraction
+///   time** against the directory of the file each glob was written
+///   in (front matter → host dir, `_metadata.yml` → its dir,
+///   `_quarto.yml` → project root), and carry a `negated` flag for
+///   `!`-prefixed exclusion patterns. Consumers match single-view
+///   via [`crate::project::listing::glob_resolve::item_matches`].
+pub const DOCUMENT_PROFILE_VERSION: u32 = 8;
 
 /// Depth used when extracting the heading outline at the profile
 /// checkpoint.
@@ -502,20 +511,29 @@ pub struct DocumentProfile {
 
     /// Glob patterns from the host's `listing.*.contents:` config,
     /// flattened across all listings declared on the page. Each
-    /// entry is a raw glob string (e.g. `"*.qmd"`,
-    /// `"posts/**/*.qmd"`) — *not* a resolved path.
+    /// entry is a **project-relative, base-resolved** pattern (e.g.
+    /// `"sub/*.qmd"`) plus a negation flag — resolved by
+    /// [`crate::project::listing::glob_resolve::resolve_content_globs`]
+    /// against the directory of the file the glob was written in
+    /// (front matter → host dir, `_metadata.yml` → its dir,
+    /// `_quarto.yml` → project root; GH #456, bd-v7ixzsp5).
+    /// Populated by `DocumentProfileStage` (the resolution needs the
+    /// document's `SourceContext`, which `extract` doesn't take);
+    /// [`DocumentProfile::extract`] leaves it empty. Patterns whose
+    /// normalization escapes the project root are dropped here (the
+    /// render transform owns the `Q-12-17` diagnostic).
     ///
-    /// Resolution is **not** cached on the profile because it
-    /// depends on the full project source set, which a per-doc
-    /// profile cannot represent safely (a new sibling `.qmd` added
-    /// to the project would not invalidate the host's profile
-    /// cache, leaving the resolution stale). Instead, the
-    /// dependency-graph builder
+    /// *Expansion* against the project's file set is still **not**
+    /// cached on the profile because it depends on the full project
+    /// source set, which a per-doc profile cannot represent safely
+    /// (a new sibling `.qmd` added to the project would not
+    /// invalidate the host's profile cache, leaving the expansion
+    /// stale). The dependency-graph builder
     /// ([`crate::project::dependency_graph::ProjectDependencyGraph::build`])
-    /// expands these globs at graph-build time against
-    /// [`crate::project::index::ProjectIndex::profiles`]
-    /// (host-relative first, project-relative fallback — same rule
-    /// the L3 generate transform uses at render time) and produces
+    /// matches these patterns at graph-build time against
+    /// [`crate::project::index::ProjectIndex::profiles`] (single
+    /// view, via `glob_resolve::item_matches` — the same rule the
+    /// L3 generate transform uses at render time) and produces
     /// forward edges from each host to each match. Listing hosts
     /// with non-empty entries are also added to
     /// [`crate::project::dependency_graph::ProjectDependencyGraph::force_render`]
@@ -523,9 +541,10 @@ pub struct DocumentProfile {
     /// in the user-named target set.
     ///
     /// Default empty; serializer omits empty lists.
-    /// Added v4 → v5 (`bd-xbnf`).
+    /// Added v4 → v5 (`bd-xbnf`); shape changed v7 → v8
+    /// (`bd-v7ixzsp5`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub listing_content_globs: Vec<String>,
+    pub listing_content_globs: Vec<crate::project::listing::glob_resolve::ListingContentGlob>,
 }
 
 /// Helper for `#[serde(skip_serializing_if = ...)]` on plain bool
@@ -642,11 +661,13 @@ impl DocumentProfile {
             // the wiring, not the field declarations.
             categories_raw: extract_categories_raw(meta),
             listing_item: extract_listing_item(meta),
-            // L6 (`bd-xbnf`): pull glob strings out of meta.listing
-            // so the dep-graph builder can expand them later. The
-            // resolution itself happens at graph-build time, not
-            // here — see the field doc for the reason.
-            listing_content_globs: crate::project::listing::config::extract_content_globs(meta),
+            // L6 (`bd-xbnf`) / v8 (`bd-v7ixzsp5`): populated by
+            // `DocumentProfileStage`, which resolves each glob's
+            // base directory from its `SourceInfo` provenance — a
+            // lookup that needs the document's `SourceContext`,
+            // which this pure extractor doesn't take. See the field
+            // doc.
+            listing_content_globs: Vec::new(),
         }
     }
 
@@ -1578,8 +1599,8 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_7() {
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 7);
+    fn document_profile_version_is_8() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 8);
     }
 
     /// A v3 profile (the pre-listings shape) must be rejected by
@@ -1696,11 +1717,15 @@ Body.
         assert!(p.listing_content_globs.is_empty());
     }
 
-    /// Test #10 — frontmatter with a listing populates the field.
-    /// Mirrors what `extract_content_globs` returns when called on
-    /// the document's `meta`.
+    /// Test #10 — `extract` leaves the field empty even when the
+    /// frontmatter declares a listing: since v8 (bd-v7ixzsp5) the
+    /// globs are resolved (base-directory + negation) by
+    /// `DocumentProfileStage`, which has the `SourceContext` the
+    /// pure extractor lacks. The stage-level population is covered
+    /// by `document_profile` stage tests and the
+    /// `listing_glob_resolution` integration suite.
     #[test]
-    fn profile_extract_populates_listing_content_globs_from_meta() {
+    fn profile_extract_leaves_listing_content_globs_to_the_stage() {
         let qmd = "\
 ---
 title: Host
@@ -1712,10 +1737,9 @@ Body.
 ";
         let ast = parse_qmd(qmd);
         let p = DocumentProfile::extract(&ast, Path::new("idx.qmd"), "idx.html", "html");
-        assert_eq!(
-            p.listing_content_globs,
-            vec!["posts/*.qmd".to_string()],
-            "extract should pull glob strings from meta.listing.contents"
+        assert!(
+            p.listing_content_globs.is_empty(),
+            "resolution happens in DocumentProfileStage, not extract"
         );
     }
 
@@ -1754,16 +1778,23 @@ Body.
     #[test]
     #[allow(clippy::field_reassign_with_default)] // default-then-set keeps the test readable
     fn profile_v5_listing_content_globs_round_trip() {
+        use crate::project::listing::glob_resolve::ListingContentGlob;
         let mut p = DocumentProfile::default();
         p.source_path = PathBuf::from("idx.qmd");
-        p.listing_content_globs = vec!["a/*.qmd".to_string(), "b/*.qmd".to_string()];
+        p.listing_content_globs = vec![
+            ListingContentGlob {
+                pattern: "a/*.qmd".to_string(),
+                negated: false,
+            },
+            ListingContentGlob {
+                pattern: "a/wip.qmd".to_string(),
+                negated: true,
+            },
+        ];
 
         let json = p.to_json().expect("serialize");
         let restored = DocumentProfile::from_json(&json).expect("deserialize");
-        assert_eq!(
-            restored.listing_content_globs,
-            vec!["a/*.qmd".to_string(), "b/*.qmd".to_string()]
-        );
+        assert_eq!(restored.listing_content_globs, p.listing_content_globs);
     }
 
     /// Test #13 — `to_json` of a default profile omits the empty

@@ -191,11 +191,17 @@ to the stage/render context. Keep the helper synchronous and pure.
       removes them; no separate change needed.
 
 ### Phase 1 — tests first (TDD)
-- [ ] Commit the five fixture projects under the integration-test convention
-      (`tests/integration/` layout; follow `.claude/rules/integration-tests.md`).
-- [ ] Failing integration tests, one per fixture, asserting: exact listing item
-      set in rendered HTML, zero `Q-13-4` warnings, resolved `.html` hrefs
-      (no `.qmd` leakage).
+- [x] Fixture projects as **inline-written temp-dir fixtures** (the repo's
+      established convention in `listing_pipeline.rs` — no committed fixture
+      dirs needed): `tests/integration/listing_glob_resolution.rs`, registered
+      in `main.rs`.
+- [x] Failing integration tests (8, all verified failing for the right
+      semantic reasons at 59500cf1): host-dir resolution, dual-view removal,
+      `_metadata.yml` base dir, `_quarto.yml` base dir, `../` traversal,
+      root-escape `Q-12-17`, negation, negation-only default. Bonus finding
+      pinned by `projmeta` test: cross-directory items currently get
+      non-relativized hrefs (`href="posts/a.qmd"` verbatim) — the fix must
+      produce page-relative hrefs for items outside the host's directory.
 - [ ] Unit tests for the resolver (provenance → base dir, incl. fallback) and
       the single-view matcher (incl. `..` normalization; escaping the project
       root matches nothing AND emits the new diagnostic code).

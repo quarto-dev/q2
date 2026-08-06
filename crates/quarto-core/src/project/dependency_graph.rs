@@ -51,7 +51,7 @@ use std::path::{Path, PathBuf};
 
 use quarto_pandoc_types::ConfigValue;
 
-use crate::project::discovery::{glob_match_path_or_dir, path_to_forward_slashes, relative_to_dir};
+use crate::project::discovery::path_to_forward_slashes;
 use crate::project::index::ProjectIndex;
 use crate::project::sidebar_membership::resolve_sidebar_membership;
 
@@ -169,15 +169,18 @@ impl ProjectDependencyGraph {
             // === Listing-content edges (L6, `bd-xbnf`) ===
             //
             // Each listing host advertises its `listing.*.contents:`
-            // globs on `profile.listing_content_globs`. We expand
-            // them against the project's source set and add a
-            // forward edge `host → content` for each match.
+            // globs on `profile.listing_content_globs` — already
+            // resolved to project-relative patterns (base directory
+            // = the file each glob was written in; bd-v7ixzsp5,
+            // GH #456). We match them against the project's source
+            // set and add a forward edge `host → content` for each
+            // match.
             //
-            // Match rule mirrors `ListingGenerateTransform` at
-            // render time (host-relative first, project-relative
-            // fallback) so graph edges line up with what the
-            // listing actually resolves. Self-edges are dropped by
-            // `add_edge`.
+            // Match rule is `glob_resolve::item_matches` — the same
+            // single-view matcher `ListingGenerateTransform` uses at
+            // render time, so graph edges line up with what the
+            // listing actually resolves (negation patterns shrink
+            // both alike). Self-edges are dropped by `add_edge`.
             //
             // Hosts with non-empty globs are added to
             // `force_render` so Mode B's
@@ -189,26 +192,16 @@ impl ProjectDependencyGraph {
             if !profile.listing_content_globs.is_empty() {
                 force_render.insert(from.clone());
 
-                let host_path_str = path_to_forward_slashes(from);
-                let host_dir_str = Path::new(&host_path_str)
-                    .parent()
-                    .map(path_to_forward_slashes)
-                    .unwrap_or_default();
-
-                for glob in &profile.listing_content_globs {
-                    for candidate in index.profiles() {
-                        if candidate.source_path == *from {
-                            continue;
-                        }
-                        let cand_str = path_to_forward_slashes(&candidate.source_path);
-                        let cand_host_relative = relative_to_dir(&cand_str, &host_dir_str);
-                        let host_match = cand_host_relative
-                            .as_deref()
-                            .is_some_and(|hr| glob_match_path_or_dir(glob, hr));
-                        let project_match = glob_match_path_or_dir(glob, &cand_str);
-                        if host_match || project_match {
-                            add_edge(from, &candidate.source_path);
-                        }
+                for candidate in index.profiles() {
+                    if candidate.source_path == *from {
+                        continue;
+                    }
+                    let cand_str = path_to_forward_slashes(&candidate.source_path);
+                    if crate::project::listing::glob_resolve::item_matches(
+                        &profile.listing_content_globs,
+                        &cand_str,
+                    ) {
+                        add_edge(from, &candidate.source_path);
                     }
                 }
             }
@@ -765,23 +758,40 @@ mod tests {
     // L6 (`bd-xbnf`): listing_content_globs become edges + force_render.
     //
     // The dep-graph builder reads each profile's
-    // `listing_content_globs` and expands them against the project's
-    // source set (host-relative first, project-relative fallback).
-    // Each match becomes a forward edge `host → content`. Hosts with
-    // non-empty entries are also added to `force_render` so Mode B's
+    // `listing_content_globs` — since v8 (bd-v7ixzsp5) these are
+    // already base-resolved, project-relative patterns — and matches
+    // them single-view against the project's source set. Each match
+    // becomes a forward edge `host → content`. Hosts with non-empty
+    // entries are also added to `force_render` so Mode B's
     // `augment_targets_with_always_render` pulls them in when any
     // matched content file is targeted.
     // ─────────────────────────────────────────────────────────────────
 
     /// A profile builder for L6 tests, with `listing_content_globs`
-    /// as its distinguishing input.
+    /// as its distinguishing input. `globs` entries are the
+    /// **resolved** project-relative patterns (a leading `!` here
+    /// marks a negated entry, mirroring what
+    /// `glob_resolve::resolve_content_globs` produces).
     fn listing_host(path: &str, globs: &[&str]) -> DocumentProfile {
+        use crate::project::listing::glob_resolve::ListingContentGlob;
         DocumentProfile {
             source_path: PathBuf::from(path),
             output_href: path.replace(".qmd", ".html"),
             format_id: "html".to_string(),
             title: Some(path.to_string()),
-            listing_content_globs: globs.iter().map(|g| g.to_string()).collect(),
+            listing_content_globs: globs
+                .iter()
+                .map(|g| match g.strip_prefix('!') {
+                    Some(rest) => ListingContentGlob {
+                        pattern: rest.to_string(),
+                        negated: true,
+                    },
+                    None => ListingContentGlob {
+                        pattern: g.to_string(),
+                        negated: false,
+                    },
+                })
+                .collect(),
             ..DocumentProfile::default()
         }
     }
@@ -823,8 +833,9 @@ mod tests {
         assert_eq!(deps.len(), 2);
     }
 
-    /// Test #15 — explicit `posts/**/*.qmd` glob matches via the
-    /// project-relative fallback. Sibling `outside.qmd` does not match.
+    /// Test #15 — explicit `posts/**/*.qmd` pattern (root host, so
+    /// the resolved form is unchanged) matches recursively; sibling
+    /// `outside.qmd` does not match.
     #[test]
     fn listing_globs_become_edges_project_relative() {
         let profiles = vec![
@@ -924,12 +935,13 @@ mod tests {
         assert!(g.force_render.is_empty());
     }
 
-    /// Test #19 — host inside a sub-directory uses host-relative
-    /// glob matching for default `"*.qmd"` and excludes itself.
+    /// Test #19 — host inside a sub-directory: the stage resolved
+    /// its default `"*.qmd"` to `posts/*.qmd`, which matches its
+    /// siblings, never itself, and never a sibling directory.
     #[test]
     fn listing_globs_dont_self_edge_in_subdir() {
         let profiles = vec![
-            listing_host("posts/index.qmd", &["*.qmd"]),
+            listing_host("posts/index.qmd", &["posts/*.qmd"]),
             plain_doc("posts/foo.qmd"),
             plain_doc("posts/bar.qmd"),
             plain_doc("other/baz.qmd"),
@@ -1011,6 +1023,30 @@ mod tests {
         assert!(deps.contains(Path::new("b/two.qmd")));
         assert!(!deps.contains(Path::new("c/three.qmd")));
         assert_eq!(deps.len(), 2);
+    }
+
+    /// Test #22b (bd-v7ixzsp5) — negated patterns shrink the edge
+    /// set exactly as they shrink the rendered listing, so excluded
+    /// items don't force host re-renders.
+    #[test]
+    fn listing_globs_negation_removes_edges() {
+        let profiles = vec![
+            listing_host("index.qmd", &["posts/*.qmd", "!posts/wip.qmd"]),
+            plain_doc("posts/foo.qmd"),
+            plain_doc("posts/wip.qmd"),
+        ];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        let deps = &g.edges[Path::new("index.qmd")];
+        assert!(deps.contains(Path::new("posts/foo.qmd")));
+        assert!(
+            !deps.contains(Path::new("posts/wip.qmd")),
+            "negated pattern must not contribute an edge"
+        );
+        assert_eq!(deps.len(), 1);
     }
 
     // ─────────────────────────────────────────────────────────────────

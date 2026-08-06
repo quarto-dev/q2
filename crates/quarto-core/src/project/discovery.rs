@@ -225,31 +225,6 @@ pub fn path_to_forward_slashes(path: &Path) -> String {
     to_forward_slashes(path)
 }
 
-/// Compute `path` relative to `base_dir`, both expressed as
-/// forward-slash project-relative strings. Returns `None` when
-/// `path` is not under `base_dir`. Empty `base_dir` means the
-/// project root, in which case the project-relative form is the
-/// host-relative form.
-///
-/// Shared by:
-///
-/// - the L3 [`crate::transforms::listing_generate::ListingGenerateTransform`]
-///   when matching a candidate sibling against a listing's `contents:`
-///   glob at render time;
-/// - the L6 [`crate::project::dependency_graph::ProjectDependencyGraph::build`]
-///   when computing dep-graph edges from the same globs at graph-build
-///   time.
-///
-/// Both call sites use the same host-relative-first / project-
-/// relative-fallback rule, so they must agree on this primitive.
-pub(crate) fn relative_to_dir(path: &str, base_dir: &str) -> Option<String> {
-    if base_dir.is_empty() {
-        return Some(path.to_string());
-    }
-    let prefix = format!("{}/", base_dir);
-    path.strip_prefix(&prefix).map(|s| s.to_string())
-}
-
 /// Minimal glob matcher: supports literals, `*`, `?`, and `**`.
 ///
 /// This is narrow by design — we accept the glob vocabulary we want to

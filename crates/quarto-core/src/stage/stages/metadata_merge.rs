@@ -227,15 +227,56 @@ impl PipelineStage for MetadataMergeStage {
         );
 
         // Layer 3: Directory metadata layers (each flattened for base format)
-        let dir_layers: Vec<_> = if !ctx.project.is_single_file {
+        let dir_layer_entries: Vec<(PathBuf, ConfigValue)> = if !ctx.project.is_single_file {
             directory_metadata_for_document(&ctx.project, &ctx.document.input, ctx.runtime.as_ref())
                 .unwrap_or_default()
-                .into_iter()
-                .map(|m| resolve_format_config(&m, base_format))
-                .collect()
         } else {
             vec![]
         };
+
+        // Register the YAML metadata layer files (`_quarto.yml` +
+        // each `_metadata.yml`) in the document's SourceContexts
+        // under their hash-based FileIds
+        // (`quarto_yaml::file_id_for_filename`), so downstream
+        // provenance consumers can map a merged value's `SourceInfo`
+        // back to the file it was written in — listing contents-glob
+        // base-dir resolution (bd-v7ixzsp5) reads this, and ariadne
+        // diagnostics gain renderable spans into these files.
+        //
+        // Registration goes to BOTH `doc.ast_context.source_context`
+        // and `doc.source_context`, appending to each in the same
+        // order: `IncludeExpansionStage` keeps the two contexts'
+        // sequential FileIds in lockstep (it debug-asserts parity),
+        // and appending to only one would desynchronize the shared
+        // index space.
+        {
+            let mut register = |path: &std::path::Path| {
+                let path_str = path.to_string_lossy().to_string();
+                let id = quarto_yaml::file_id_for_filename(&path_str);
+                let content = ctx.runtime.file_read_string(path).ok();
+                for source_context in [&mut doc.ast_context.source_context, &mut doc.source_context]
+                {
+                    // Skip when already registered (pipeline
+                    // re-entry) or on the astronomically unlikely
+                    // hash collision with a sequential doc-file id —
+                    // `add_file_with_id` would panic on a duplicate.
+                    if source_context.get_file(id).is_none() {
+                        source_context.add_file_with_id(id, path_str.clone(), content.clone());
+                    }
+                }
+            };
+            if let Some(config_path) = ctx.project.config.config_path.as_deref() {
+                register(config_path);
+            }
+            for (path, _) in &dir_layer_entries {
+                register(path);
+            }
+        }
+
+        let dir_layers: Vec<_> = dir_layer_entries
+            .into_iter()
+            .map(|(_, m)| resolve_format_config(&m, base_format))
+            .collect();
 
         // Layer 4: Document metadata (flattened for base format)
         let doc_layer = resolve_format_config(&doc.ast.meta, base_format);
