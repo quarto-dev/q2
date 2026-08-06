@@ -46,6 +46,7 @@
 //! `[a-z]` character classes — without ever touching `std::fs` from
 //! this module.
 
+pub mod expand;
 pub mod matcher;
 pub mod pattern;
 pub mod provenance;
@@ -53,6 +54,7 @@ pub mod resolve;
 
 use std::path::{Component, Path};
 
+pub use expand::expand;
 pub use matcher::{GlobCompileError, PatternSet};
 pub use pattern::{GlobPattern, has_metacharacters, join_and_normalize, split_negation};
 pub use provenance::BaseDirContext;
