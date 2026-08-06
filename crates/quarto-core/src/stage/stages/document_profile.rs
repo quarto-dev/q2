@@ -107,6 +107,22 @@ impl PipelineStage for DocumentProfileStage {
             )
             .globs;
 
+        // Same treatment for `resources:` (bd-mt7a6uc4 defect 1).
+        // Before this, a `resources:` glob written in
+        // `blog/_metadata.yml` resolved against each *host document's*
+        // directory instead of `blog/`, so the wrong files were
+        // published — the same defect #456 fixed for listings, one
+        // metadata key over.
+        let (resource_globs, rejected_resources) =
+            crate::project_resources::resolve_declared_resource_globs(
+                &profile.resources,
+                Some(&doc.ast_context.source_context),
+                &ctx.project.dir,
+                &host_dir,
+            );
+        profile.resource_globs = resource_globs;
+        profile.rejected_resources = rejected_resources;
+
         Ok(PipelineData::AtProfile(DocumentAtProfile {
             profile,
             ast: doc,

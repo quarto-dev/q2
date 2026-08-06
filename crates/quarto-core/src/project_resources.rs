@@ -231,36 +231,151 @@ pub fn extract_resource_patterns(
 // Glob expansion + path validation
 // ─────────────────────────────────────────────────────────────────────
 
-/// Expand a list of patterns into resolved resources.
+/// Resolve a document's declared `resources:` patterns to
+/// project-relative form, against the directory of the file each was
+/// written in (bd-mt7a6uc4).
 ///
-/// - `project_root`: canonical project root; every resolved source
-///   must be inside this directory or [`ResourceError::OutOfProject`]
-///   is returned.
-/// - `anchor`: directory the patterns are relative to. For project-
-///   level patterns this equals `project_root`. For doc-level
-///   patterns this is the document's parent directory.
-/// - `patterns`: raw patterns from YAML.
-/// - `make_origin`: builds the `ResourceOrigin` for each entry given
-///   the pattern that produced it. Same origin for every match of
-///   a single pattern.
-/// - `scope`: reused across every entry produced.
+/// Called from `DocumentProfileStage`, the one place with the
+/// document's [`SourceContext`] in scope. Patterns that escape the
+/// project root or fail to compile are dropped here; the post-render
+/// collector reports what survives, and the escape/compile cases keep
+/// their existing `Q-5-1` / `Q-5-2` treatment at expansion time for
+/// project-level patterns.
+pub fn resolve_declared_resource_globs(
+    patterns: &[RawResourcePattern],
+    source_context: Option<&quarto_source_map::SourceContext>,
+    project_dir: &Path,
+    host_dir: &str,
+) -> (Vec<crate::glob::GlobPattern>, Vec<RejectedResourcePattern>) {
+    let resolution = resolve_patterns(
+        patterns
+            .iter()
+            .map(|r| RawGlob::new(r.pattern.clone(), r.source_info.clone())),
+        &BaseDirContext {
+            source_context,
+            project_dir,
+            fallback_dir: host_dir,
+        },
+        &GlobOptions::RESOURCES,
+    );
+
+    // Rejections travel *with* the profile rather than being reported
+    // here. Profiles are cached: a diagnostic emitted at
+    // profile-extraction time would vanish on the next render, when
+    // the cache serves the profile and the stage never runs. The
+    // collector reports these every render instead.
+    let mut rejected = Vec::new();
+    for escaped in &resolution.escaped {
+        rejected.push(RejectedResourcePattern {
+            pattern: escaped.raw.clone(),
+            reason: ResourceRejection::OutsideProject,
+            source_info: escaped.source.clone(),
+        });
+    }
+    for invalid in &resolution.invalid {
+        rejected.push(RejectedResourcePattern {
+            pattern: invalid.raw.clone(),
+            reason: ResourceRejection::InvalidGlob {
+                message: invalid.message.clone(),
+            },
+            source_info: invalid.source.clone(),
+        });
+    }
+
+    (resolution.globs, rejected)
+}
+
+/// A declared `resources:` pattern that resolution could not use.
 ///
-/// **Leading-`/` semantics (Quarto YAML convention, TS Quarto parity).**
-/// A pattern beginning with `/` is project-root-relative — e.g.
-/// `"/docs/foo.json"` means `<project_root>/docs/foo.json`, not the
-/// filesystem path `/docs/foo.json`. This applies to YAML
-/// `resources:` declarations in both `_quarto.yml` and document
-/// headers. It does NOT apply to engine/Lua-filter contributions,
-/// which arrive through [`resolve_reported_resources`] and use
-/// real filesystem semantics for absolute paths.
+/// Carried on [`DocumentProfile`](crate::document_profile::DocumentProfile)
+/// so the post-render collector can report it on every render, not
+/// just the one that populated the profile cache.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RejectedResourcePattern {
+    /// The pattern as the author wrote it.
+    pub pattern: String,
+    /// Why it was rejected.
+    pub reason: ResourceRejection,
+    /// The YAML scalar it came from.
+    pub source_info: SourceInfo,
+}
+
+/// Why a declared `resources:` pattern could not be used.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+pub enum ResourceRejection {
+    /// Normalizing the pattern climbed above the project root.
+    OutsideProject,
+    /// The glob engine rejected the pattern.
+    InvalidGlob {
+        /// The engine's reason.
+        message: String,
+    },
+}
+
+impl RejectedResourcePattern {
+    /// The error this rejection becomes when the collector reports
+    /// it — `Q-5-1` or `Q-5-2`, with the original YAML span.
+    pub fn into_error(self, project_root: &Path) -> ResourceError {
+        match self.reason {
+            ResourceRejection::OutsideProject => ResourceError::OutOfProject {
+                pattern: self.pattern,
+                project_root: project_root.to_path_buf(),
+                source_info: self.source_info,
+            },
+            ResourceRejection::InvalidGlob { message } => ResourceError::InvalidGlob {
+                pattern: self.pattern,
+                message,
+                source_info: self.source_info,
+            },
+        }
+    }
+}
+
+/// Expand already-resolved patterns into resources.
 ///
-/// **Directory expansion (TS Quarto parity, bd-47w7o).** A literal
-/// pattern (no glob characters) that resolves to an existing
-/// directory is equivalent to the recursive glob `<dir>/**/*` —
-/// every file under the directory becomes its own resource entry.
-/// Trailing-slash form (`"data/"`) and bare-directory form
-/// (`"data"`) behave identically. Subdirectories themselves are
-/// not emitted; only their files.
+/// The document-level path uses this directly:
+/// `DocumentProfileStage` resolved those patterns against their
+/// declaring files (where the `SourceContext` was in scope), so
+/// re-resolving here against the host document's directory would
+/// undo exactly the fix bd-mt7a6uc4 makes.
+pub fn expand_resolved(
+    project_root: &Path,
+    globs: &[crate::glob::GlobPattern],
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
+    mut make_origin: impl FnMut() -> ResourceOrigin,
+    scope: ResourceScope,
+) -> Result<Vec<ResolvedResource>, ResourceError> {
+    let excluder = PatternSet::compile(globs, &GlobOptions::RESOURCES).map_err(|e| {
+        ResourceError::InvalidGlob {
+            pattern: e.pattern.clone(),
+            message: e.message.clone(),
+            source_info: SourceInfo::generated(By::programmatic_config()),
+        }
+    })?;
+
+    let mut out = Vec::new();
+    for glob in globs.iter().filter(|g| !g.negated) {
+        let provenance = SourceInfo::generated(By::programmatic_config());
+        for source in expand_one(project_root, glob, &provenance, runtime)? {
+            let Ok(relative) = source.strip_prefix(project_root) else {
+                continue;
+            };
+            let rel = crate::glob::path_to_forward_slashes(relative);
+            if excluder.excluded(&rel) {
+                continue;
+            }
+            out.push(ResolvedResource {
+                source,
+                output_relative: rel,
+                origin: make_origin(),
+                scope: scope.clone(),
+            });
+        }
+    }
+    Ok(out)
+}
+
 pub fn expand_patterns(
     project_root: &Path,
     anchor: &Path,
@@ -281,8 +396,10 @@ pub fn expand_patterns(
             let provenance = resolution
                 .iter()
                 .find(|(g, _)| g.pattern == e.pattern)
-                .map(|(_, s)| s.clone())
-                .unwrap_or_else(|| SourceInfo::generated(By::programmatic_config()));
+                .map_or_else(
+                    || SourceInfo::generated(By::programmatic_config()),
+                    |(_, s)| s.clone(),
+                );
             ResourceError::InvalidGlob {
                 pattern: e.pattern.clone(),
                 message: e.message.clone(),
@@ -646,9 +763,11 @@ pub fn collect_static_resources(
         ResourceScope::Project,
     )?);
 
-    // Document-level: anchor = doc's parent dir, scope = Page.
+    // Document-level: the profile carries patterns already resolved
+    // against their declaring files (bd-mt7a6uc4), so there is no
+    // anchor to apply here.
     for profile in index.profiles() {
-        if profile.resources.is_empty() {
+        if profile.resource_globs.is_empty() {
             continue;
         }
         let doc_source_abs = if profile.source_path.is_absolute() {
@@ -656,14 +775,9 @@ pub fn collect_static_resources(
         } else {
             project_root.join(&profile.source_path)
         };
-        let doc_dir = doc_source_abs
-            .parent()
-            .map_or_else(|| project_root.clone(), Path::to_path_buf);
-
-        out.extend(expand_patterns(
+        out.extend(expand_resolved(
             project_root,
-            &doc_dir,
-            &profile.resources,
+            &profile.resource_globs,
             runtime,
             || ResourceOrigin::DocumentMetadata {
                 source: doc_source_abs.clone(),
@@ -798,23 +912,29 @@ pub fn collect_static_resources_with_diagnostics(
     // Document-level. Errors point into the doc that declared the
     // bad pattern.
     for profile in index.profiles() {
-        if profile.resources.is_empty() {
-            continue;
-        }
         let doc_source_abs = if profile.source_path.is_absolute() {
             profile.source_path.clone()
         } else {
             project_root.join(&profile.source_path)
         };
-        let doc_dir = doc_source_abs
-            .parent()
-            .map_or_else(|| project_root.clone(), Path::to_path_buf);
+
+        // Patterns resolution rejected are reported every render,
+        // from the profile (cached or not), against the document
+        // that declared them.
+        if let Some(rejected) = profile.rejected_resources.first() {
+            return Err(resource_error_to_parse_error(
+                rejected.clone().into_error(project_root),
+                &doc_source_abs,
+            ));
+        }
+        if profile.resource_globs.is_empty() {
+            continue;
+        }
 
         if let Err(e) = (|| -> Result<(), ResourceError> {
-            out.extend(expand_patterns(
+            out.extend(expand_resolved(
                 project_root,
-                &doc_dir,
-                &profile.resources,
+                &profile.resource_globs,
                 runtime,
                 || ResourceOrigin::DocumentMetadata {
                     source: doc_source_abs.clone(),
