@@ -6,9 +6,10 @@
 `braid/bd-mt7a6uc4-glob-consumer-migration`
 **Parent plan:** `claude-notes/plans/2026-08-06-listing-glob-provenance.md`
 (decision 3)
-**Status:** in execution. Phases 0–2 complete (API extracted onto
-`glob::Pattern`; listings and `project.render` migrated). Phase 3
-(`resources:`) is next.
+**Status:** in execution. Phases 0–3 complete — the API is extracted
+onto `glob::Pattern`, and listings, `project.render`, and `resources:`
+are migrated. Phase 4 (`sidebar.auto`) is next, then diagnostics
+(Phase 5) and final verification (Phase 6).
 
 > **Base-branch caveat.** #460 has not been through CI (GitHub Actions
 > outage, 2026-08-06). This branch stacks on it anyway; if review
@@ -513,21 +514,74 @@ Two design decisions worth recording:
    text and JSON printers use it. Without this the new codes would
    have been technically correct and practically useless.
 
-### Phase 3 — `resources:`
+### Phase 3 — `resources:` ✅ (commits `ae9758a3`, `84b901e1`, `6da40f33`)
 
-- [ ] Failing tests: `_metadata.yml` base dir (defect 1), negation,
-      `[...]` classes preserved, leading `/` unchanged, bare directory
-      unchanged, out-of-project still `Q-5-1`.
-- [ ] Resolve resource patterns at profile-extraction time; profile
-      v8 → v9 (D9) + profile-cache invalidation check.
-- [ ] Swap `glob::glob` for `expand()` over `SystemRuntime` (D1);
-      route the containment check through `runtime.canonicalize()`;
-      drop the `glob` dependency from `quarto-core/Cargo.toml`.
-- [ ] WASM/VFS test: seed a `WasmRuntime` VFS under `/project/` and
-      expand a resource pattern against it (the `/project/` prefix
-      composition from §"WASM / VFS" note 2).
-- [ ] Verify `quarto-preview`'s two call sites (E) follow without
-      source changes, or adjust them.
+- [x] `glob::expand` — the runtime-driven enumeration layer, walks
+      pruned to each pattern's longest literal prefix.
+- [x] Tests: `_metadata.yml` base dir (defect 1, unit + integration +
+      fixture), negation (glob / literal dir / whole subtree /
+      order-independent), classes preserved, leading `/` unchanged,
+      bare directory unchanged, out-of-project still `Q-5-1`, missing
+      literal still reported, invalid glob carries its span.
+- [x] Resolve resource patterns at profile-extraction time; profile
+      v8 → v9 (D9), verified against a **warm** profile cache.
+- [x] Swap `glob::glob` for `expand()` over `SystemRuntime` (D1);
+      containment check routed through `runtime.canonicalize()`.
+- [x] WASM/VFS coverage — see the deviation below.
+- [x] `quarto-preview`'s call sites follow with only a `runtime`
+      argument added.
+
+Four things worth recording:
+
+1. **The `glob` dependency stays.** The plan said to drop it; that was
+   written before D1 resolved to *use* `glob::Pattern` (its pure half).
+   What went away is `glob::glob` — the walker — not the crate.
+2. **A declared literal that does not exist still resolves to itself.**
+   The literal-vs-pattern split in `expand_one` exists for exactly
+   this: the copy step reports the missing file by name, and routing
+   it through the matcher would have turned a reported mistake into a
+   silent no-match. Pinned by
+   `missing_literal_still_resolves_for_the_copy_step_to_report`.
+3. **Rejected patterns travel with the profile, not as stage
+   diagnostics.** Profiles are cached, so a diagnostic emitted at
+   profile-extraction time appears on the render that populates the
+   cache and never again. `DocumentProfile::rejected_resources` carries
+   them and the collector reports every render — verified by rendering
+   twice. (#460 avoided this trap differently: its `Q-12-17` lives in
+   the render transform, which runs every time.)
+4. **`GlobResolution::sources`** was added so resolution can hand
+   downstream diagnostics the right span. The alternative — each
+   consumer re-pairing resolved patterns with the raw list — mis-pairs
+   silently as soon as one entry is dropped or injected, which is
+   exactly what happens when a pattern escapes the project root.
+
+#### Deviation: WASM/VFS testing
+
+The plan called for seeding a `WasmRuntime` VFS. `WasmRuntime` is
+`#[cfg(target_arch = "wasm32")]`, so a native test cannot instantiate
+it. Instead `glob::expand`'s tests run against an in-memory mock
+`SystemRuntime` — which proves the property that actually matters
+(expansion never touches `std::fs`) and runs on every `cargo nextest`.
+The wasm32 build leg of `cargo xtask verify` proves it compiles for the
+browser. **What is not proven here: that resource expansion produces
+correct results against a real automerge VFS in hub-client.** No
+hub-client code calls it yet, so there is nothing to exercise; when one
+does, that is the moment for a browser-side test.
+
+The mock earned its keep immediately: it caught `Path::join("")`
+appending a trailing separator, which `NativeRuntime::read_dir`
+tolerates and a VFS keyed on exact strings would not.
+
+#### Note: preview's document-resource path
+
+`quarto-preview::resolve_deck_binary_files` extracts `resources:`
+straight from `doc.ast.meta` rather than from a profile, so it has no
+`SourceContext` and falls back to anchoring at the deck directory. That
+is right for front-matter patterns (the common case) and approximate
+for `_metadata.yml`-declared ones. Left as is: it feeds the preview's
+asset closure, not the published output, and giving it provenance means
+routing preview through a profile. Worth a follow-up strand if
+`_metadata.yml` resources ever matter for preview.
 
 ### Phase 4 — `sidebar.auto`
 
