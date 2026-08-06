@@ -6,10 +6,11 @@
 `braid/bd-mt7a6uc4-glob-consumer-migration`
 **Parent plan:** `claude-notes/plans/2026-08-06-listing-glob-provenance.md`
 (decision 3)
-**Status:** in execution. Phases 0–3 complete — the API is extracted
-onto `glob::Pattern`, and listings, `project.render`, and `resources:`
-are migrated. Phase 4 (`sidebar.auto`) is next, then diagnostics
-(Phase 5) and final verification (Phase 6).
+**Status:** in execution. Phases 0–5 complete — all four consumers are
+migrated onto the shared API and every failure mode is diagnosed. What
+remains is the final `cargo xtask verify`, a user-facing docs page, and
+one small gap (`sidebar.auto` invalid-pattern reporting); see
+"Remaining".
 
 > **Base-branch caveat.** #460 has not been through CI (GitHub Actions
 > outage, 2026-08-06). This branch stacks on it anyway; if review
@@ -583,13 +584,49 @@ asset closure, not the published output, and giving it provenance means
 routing preview through a profile. Worth a follow-up strand if
 `_metadata.yml` resources ever matter for preview.
 
-### Phase 4 — `sidebar.auto`
+### Phase 4 — `sidebar.auto` ✅ (commit `71008d94`)
 
-- [ ] Failing tests pinning the new semantics; explicit test that
-      `docs/*.qmd` no longer matches `docs/deep/nested.qmd` and that
-      `docs/**/*.qmd` does.
-- [ ] Migrate `normalize_pattern`/`matches_prefix` to the shared API.
-- [ ] Changelog + docs note for the behavior change.
+- [x] Failing tests first (4): `docs/*.qmd` no longer matches
+      `docs/deep/nested.qmd`; `docs/**/*.qmd` does; a bare directory
+      still does; classes and negation work.
+- [x] `normalize_pattern`/`matches_prefix` replaced by the shared
+      matcher under `GlobOptions::SIDEBAR`.
+- [x] `claude-notes/designs/sidebar-auto-expansion-contract.md` gains a
+      "Pattern semantics in `auto:`" section with the table and an
+      explicit note that this changed.
+
+Patterns resolve against the **project root**: `auto:` enumerates
+project pages and `AutoSpec` carries no provenance, so there is no
+declaring-file directory to anchor to. If sidebars declared in document
+front matter ever need doc-relative patterns, that is a separate change.
+
+### Phase 5 — diagnostics + docs ✅ code (commit `de7c050e`)
+
+- [x] Shared builders in `glob::diagnostics`, used by every migrated
+      consumer. Each subsystem keeps its own code family; what they stop
+      owning is four different ways of explaining the same failure. The
+      "matched nothing" builder always carries the Q1 migration hint,
+      which is the whole reason to share it.
+- [x] New codes + catalog entries + docs pages: **Q-5-13/14/15**
+      (`project.render`), **Q-5-16** (`resources:` matched nothing),
+      **Q-12-18** (invalid listing pattern), **Q-12-19** (listing
+      pattern matched nothing).
+- [ ] `docs/` user-facing page describing glob semantics once — **not
+      done**, see "Remaining" below.
+
+Two calls worth recording:
+
+- **Q-12-19 is checked before `include:`/`exclude:` filters run**, so it
+  reports on the glob rather than on a filter that emptied the set.
+- **Q-5-16 fires only for glob entries.** A literal path that does not
+  exist is already reported by name (`Q-5-6`), which is the better
+  message when there is a single file to point at.
+
+`DocumentProfile` also gained `resource_glob_sources` so the collector's
+diagnostics can point at the YAML the author wrote — without it the
+pattern would be named but not located, and for a `_metadata.yml`
+declaration inherited by many pages that is the difference between a
+useful warning and a puzzle.
 
 ### Phase 5 — diagnostics + docs
 
@@ -602,14 +639,50 @@ routing preview through a profile. Worth a follow-up strand if
 
 ### Phase 6 — verification
 
-- [ ] `cargo nextest run --workspace`.
-- [ ] `cargo xtask verify` (full, incl. hub-client WASM leg — the glob
-      module is WASM-reachable through the listing transform).
-- [ ] End-to-end `q2 render` on every Phase-0 fixture, output inspected,
-      invocations + snippets recorded in this plan.
-- [ ] Render `docs/` and diff against the base branch; explain any
-      difference.
-- [ ] `hub-client/changelog.md` if anything under `hub-client/` moves.
+- [x] `cargo nextest run --workspace` — **10979 passed**, 197 skipped
+      (base branch: 10911).
+- [x] End-to-end `q2 render` on every Phase-0 fixture; results in the
+      per-phase evidence tables above.
+- [x] Render `docs/` (182 pages): renders clean, and **none of the new
+      codes fire** — no false positives from Q-5-16 / Q-12-18 / Q-12-19
+      on a real site. The 26 warnings it does emit are pre-existing
+      (`Q-5-6` ×14 for missing images referenced from markdown,
+      `Q-13-4` ×11 for missing link targets, `Q-12-10` ×1).
+- [ ] `cargo xtask verify` (full, incl. the WASM leg) — running; the
+      earlier run failed only on `cargo fmt` (Python-written edits
+      bypass the format hook), fixed in `82e00d6`.
+- [x] `hub-client/changelog.md` — not needed; nothing under
+      `hub-client/` changed.
+
+#### Detour: `q2 render docs/` in a worktree
+
+The first `docs/` render failed with `Declared resource
+'<worktree>/docs/examples' does not exist on disk`. Not a regression:
+`docs/_quarto.yml` declares `resources: [examples]`, `docs/examples/` is
+generated (gitignored) by `cargo xtask stage-doc-examples`, and the old
+code produced the identical error for a declared literal that does not
+exist — the message even comes from `copy_resources_to_output_dir`,
+which this strand never touched.
+
+Running the xtask did not fix it, which surfaced a real bug:
+`repo_root()` resolves via `git rev-parse --git-common-dir`, so from a
+worktree it returns the **main** repo and stages `docs/examples/` there.
+Filed as **bd-32c8egkf** (P2); worked around here by copying the staged
+directory into the worktree.
+
+## Remaining
+
+1. **`cargo xtask verify` (full)** — in flight.
+2. **User-facing docs page for glob semantics.** The error pages carry
+   the rules per-code, but there is no one page a user can read to learn
+   the vocabulary. Coordinate with **bd-2nb6i1qv** (the listings guide
+   #460 deferred) so the two do not duplicate — a shared "Paths and
+   globs" page under `docs/guides/` that both link to is probably the
+   right shape.
+3. **`GlobResolution::invalid` for `sidebar.auto`** — the other three
+   consumers report invalid patterns; `auto:` still drops them into its
+   existing `Q-13-6` empty-match warning. Small, but it is the last
+   silent case.
 
 ### Phase 7 — bookkeeping
 
