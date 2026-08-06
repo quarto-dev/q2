@@ -1216,7 +1216,10 @@ mod tests {
         )
         .unwrap();
 
-        let rels: Vec<&str> = resolved.iter().map(|r| r.output_relative.as_str()).collect();
+        let rels: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.output_relative.as_str())
+            .collect();
         assert_eq!(rels, vec!["data/public.csv"]);
     }
 
@@ -1237,7 +1240,10 @@ mod tests {
         )
         .unwrap();
 
-        let rels: Vec<&str> = resolved.iter().map(|r| r.output_relative.as_str()).collect();
+        let rels: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.output_relative.as_str())
+            .collect();
         assert_eq!(rels, vec!["data/public.csv"]);
     }
 
@@ -1258,7 +1264,10 @@ mod tests {
         )
         .unwrap();
 
-        let rels: Vec<&str> = resolved.iter().map(|r| r.output_relative.as_str()).collect();
+        let rels: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.output_relative.as_str())
+            .collect();
         assert_eq!(rels, vec!["data/public.csv"]);
     }
 
@@ -1280,7 +1289,10 @@ mod tests {
         )
         .unwrap();
 
-        let rels: Vec<&str> = resolved.iter().map(|r| r.output_relative.as_str()).collect();
+        let rels: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.output_relative.as_str())
+            .collect();
         assert_eq!(rels, vec!["data/keep.csv"]);
     }
 
