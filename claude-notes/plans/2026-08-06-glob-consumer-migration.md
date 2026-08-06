@@ -6,7 +6,9 @@
 `braid/bd-mt7a6uc4-glob-consumer-migration`
 **Parent plan:** `claude-notes/plans/2026-08-06-listing-glob-provenance.md`
 (decision 3)
-**Status:** draft — awaiting review. No code written yet.
+**Status:** in execution. Phases 0–2 complete (API extracted onto
+`glob::Pattern`; listings and `project.render` migrated). Phase 3
+(`resources:`) is next.
 
 > **Base-branch caveat.** #460 has not been through CI (GitHub Actions
 > outage, 2026-08-06). This branch stacks on it anyway; if review
