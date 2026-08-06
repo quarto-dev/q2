@@ -2,7 +2,7 @@
 
 **GitHub issue:** https://github.com/quarto-dev/q2/issues/456
 **Braid strand:** bd-v7ixzsp5 (bug, P1)
-**Status:** plan draft — awaiting review/iteration with Carlos before execution.
+**Status:** in execution on branch `braid/bd-v7ixzsp5-listing-contents-globs-resolve`.
 
 ## Overview
 
@@ -202,43 +202,81 @@ to the stage/render context. Keep the helper synchronous and pure.
       pinned by `projmeta` test: cross-directory items currently get
       non-relativized hrefs (`href="posts/a.qmd"` verbatim) — the fix must
       produce page-relative hrefs for items outside the host's directory.
-- [ ] Unit tests for the resolver (provenance → base dir, incl. fallback) and
+- [x] Unit tests for the resolver (provenance → base dir, incl. fallback) and
       the single-view matcher (incl. `..` normalization; escaping the project
-      root matches nothing AND emits the new diagnostic code).
-- [ ] Unit tests for negation partition semantics.
-- [ ] Dep-graph tests updated: edges under new semantics (existing tests #14–#22
-      in `dependency_graph.rs` will need review — some encode the dual-view
-      behavior being removed).
+      root matches nothing AND emits the new diagnostic code) — in
+      `glob_resolve.rs`.
+- [x] Unit tests for negation partition semantics (`glob_resolve.rs` +
+      dep-graph test #22b).
+- [x] Dep-graph tests updated: #15/#19 rewritten for resolved patterns, #22b
+      added for negation; the rest were root-host tests that survive
+      unchanged.
 
 ### Phase 2 — resolver + data model
-- [ ] Provenance-resolver helper (shared, pure) in `project/listing/` or
-      `project/mod.rs`.
-- [ ] `ListingContents::Glob { pattern, base_dir }`; `parse_listings` threads
-      the per-entry `ConfigValue` source info into it.
-- [ ] `DocumentProfile` field change + `profile_version` bump.
+- [x] Provenance-resolver helper: `project/listing/glob_resolve.rs`
+      (`resolve_content_globs`, `item_matches`; pure, WASM-safe).
+      `MetadataMergeStage` registers `_quarto.yml`/`_metadata.yml` in BOTH
+      document SourceContexts (hash FileIds; symmetric append preserves
+      `IncludeExpansionStage`'s FileId-parity invariant — a full-suite run
+      caught the one-context version).
+- [x] `ListingContents::Glob { pattern, source }` — carries `SourceInfo`
+      rather than a pre-resolved base dir (resolution happens at the two
+      consumption points, which own the context).
+- [x] `DocumentProfile` v7 → v8: `listing_content_globs:
+      Vec<ListingContentGlob>` (resolved pattern + negated), populated by
+      `DocumentProfileStage` (extract stays pure).
 
 ### Phase 3 — matcher swap
-- [ ] Shared single-view matcher; `ListingGenerateTransform` and
-      `ProjectDependencyGraph::build` both use it; delete the dual-view logic
-      and the now-unused `relative_to_dir` host-view path if nothing else uses it.
-- [ ] Negation applied in both sites.
+- [x] Shared single-view matcher in both consumers; dual-view logic and
+      `relative_to_dir` deleted. Bonus fix surfaced by the tests:
+      `host_relative_qmd` in `binding.rs` now emits `../`-style hrefs for
+      items outside the host's directory (page-relative links were broken
+      for cross-directory items).
+- [x] Negation applied in both sites (render + dep graph). `Q-12-17`
+      registered in the catalog + docs stub page; audit script clean.
 
 ### Phase 4 — verification
-- [ ] `cargo nextest run --workspace`.
-- [ ] End-to-end: `cargo run --bin q2 -- render` on each fixture; inspect HTML;
-      record invocation + output snippets here per the E2E policy.
-- [ ] Render `docs/` with q2 and diff listing pages against main.
+- [x] `cargo nextest run --workspace` — 10890 passed at 359ad0c2 (includes
+      the 8 new integration tests, all green).
+- [x] End-to-end: `./target/debug/q2 render <fixture>` on all six scratchpad
+      fixtures at 359ad0c2; HTML inspected. Observed listing items
+      (href/title extracted from the rendered pages):
+      - `p1-basic` sub/index.html → `p1.html P1` only; **zero Q-13-4** (was:
+        Home + About phantoms + 2 warnings). Q-1-20 still fires (Phase 5).
+      - `p2-dirmeta` blog/deep/index.html → `p1.html Deep P1` (was empty).
+      - `p3-projmeta` index.html → `sub/p1.html Sub P1`.
+      - `p4-root-host` index.html → posts a+b unchanged (no regression).
+      - `p5-parent-glob` sub/index.html → `../rootpost.html Root Post`
+        (was empty; href correctly page-relative).
+      - `p6-glob-corruption` → still empty, fixed by Phase 5.
+- [x] Render `docs/` with q2 and diff against main (clean caches, both
+      sides). The errors-reference listing (`docs/errors/index.qmd`, glob
+      `*/Q-*.qmd`) is **more correct on the branch**: main's render dropped
+      `crossref/Q-15-1`, `project/Q-5-6`, `project/Q-5-7` from the listing
+      data; the branch lists all 147 on-disk `Q-*.qmd` pages exactly
+      (verified by `comm` against the file tree; includes the new
+      `Q-12-17`). No entries were lost. The legacy drop mechanism wasn't
+      chased further — the code path that caused it is deleted.
 - [ ] `cargo xtask verify` (full — quarto-core changes affect the WASM leg).
 
 ### Phase 5 — `listing.contents` interpretation (defects #5 + #6)
-- [ ] Failing test first: `p6-glob-corruption` fixture — `p*osts*.qmd` must
-      match `pXosts_extra.qmd` (glob survives with asterisks intact).
-- [ ] Annotation-source table in the front-matter interpretation path
-      (`listing.contents[*]` → `Interpretation::Glob`), designed for later
-      replacement by schema-derived annotations.
-- [ ] Remove the `PandocInlines` recovery chain in `parse_listings`.
-- [ ] Regression test: clean renders of `p1-basic`/`p4-root-host` emit zero
-      `Q-1-20` warnings.
+- [x] Failing tests first (pampa unit tests, verified failing with the
+      emphasis-corrupted value visible in the assert output; +
+      `glob_with_markdown_parseable_asterisks_survives` integration test).
+- [x] Annotation-source table: `crates/pampa/src/pandoc/meta_annotations.rs`
+      (`listing.contents` + `format.*.listing.contents` → `Glob`;
+      exact-length matching, single-segment wildcard, arrays transparent,
+      maps extend the path; explicit tags always win; module doc marks it
+      delete-on-schema-arrival). `yaml_to_config_value` threads a key path
+      internally; public signature unchanged.
+- [x] `parse_listings` recovery chain: **kept as defensive fallback** rather
+      than removed — PandocInlines/string-shaped values can still arrive from
+      non-YAML sources (programmatic construction, runtime metadata), and the
+      fallback is harmless; comment updated to reflect the new primary path.
+- [x] Regression tests: zero `Q-1-20` asserted in the integration suite;
+      E2E: `p1-basic`, `p4-root-host`, `p6-glob-corruption` all render with
+      **zero warnings** at c7b475cb and p6's listing contains `Should Match`.
+      Full workspace suite: 10911 passed.
 
 ### Phase 6 — bookkeeping
 - [ ] `braid close bd-v7ixzsp5`; comment on GH #456 with the fix summary.
