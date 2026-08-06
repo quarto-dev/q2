@@ -472,23 +472,44 @@ output trees inspected:
 | f4 `render: ["/index.qmd", "/sub/*.qmd"]` | `Q-PROJECT-EMPTY`, 0 of 0 | renders both pages |
 | f1, f2, f3, f6 (not-yet-migrated consumers) | — | byte-identical to Phase 0 |
 
-### Phase 2 — `project.render`
+### Phase 2 — `project.render` ✅ (commit `f57ef17d`)
 
-Note: leading `/` and character classes already work here as of Phase 1
-(the resolver is shared). What remains is render-specific.
+- [x] Failing tests first (9 new in `project::discovery::tests`):
+      negation, negation order-independence, bare directory, leading
+      `/`, `../` clamping, matched-nothing, invalid syntax, character
+      classes, and exclusion-policy isolation. Only the bare-directory
+      case needed the option flip; the rest passed once the shared
+      resolver was wired, which is itself the evidence that Phase 1
+      moved the semantics into one place.
+- [x] Carry `SourceInfo` on render patterns (D8):
+      `ProjectConfig::render_patterns` is `Vec<RawGlob>`.
+- [x] Flip `GlobOptions::RENDER.directory_rule` to true (D4); option
+      table updated.
+- [x] Exclusion rules stay in the enumerator, pinned by
+      `render_patterns_do_not_defeat_discovery_exclusions`.
+- [x] Diagnostics: **Q-5-13** (matched no renderable files), **Q-5-14**
+      (outside the project root), **Q-5-15** (invalid glob) —
+      registered in the catalog, docs pages written, registration test
+      added. Q-5-13 carries the Q1 migration hint for the D5
+      divergence.
 
-- [ ] Failing tests: negation, bare directory, `../` clamping,
-      per-pattern empty-match diagnostic.
-- [ ] Carry `SourceInfo` on render patterns (D8) — today
-      `expand_patterns` synthesizes `SourceInfo::generated`, which is
-      honest but leaves diagnostics unplaceable.
-- [ ] Flip `GlobOptions::RENDER.directory_rule` to true (D4) and update
-      the option table.
-- [ ] Keep the exclusion rules (underscore/hidden/`node_modules`/output
-      dir/README) in the enumerator — they are discovery policy, not
-      glob semantics (contract doc, "What does *not* belong in
-      `GlobOptions`").
-- [ ] Diagnostic registration + docs stub page.
+Two design decisions worth recording:
+
+1. **`render_pattern_diagnostics` is a pure function the orchestrator
+   calls**, not a diagnostics channel threaded through
+   `discover_project_files`. The channel version needed a
+   `ProjectContext` field, which would have broken **194** struct-literal
+   sites across 80+ files. Computing from the post-exclusion file list
+   is also more honest: a pattern matching only `_partial.qmd` really
+   did contribute nothing, which is why the message says "matched no
+   **renderable** files".
+2. **Project-level diagnostics needed a source context.** They were
+   printed with `to_text(None)`, so the first working version said
+   "at offset 99". `config_source_context` registers `_quarto.yml`
+   under its hashed FileId — the same trick `attach_config_source`
+   already played for coalesced per-page diagnostics — and both the
+   text and JSON printers use it. Without this the new codes would
+   have been technically correct and practically useless.
 
 ### Phase 3 — `resources:`
 
