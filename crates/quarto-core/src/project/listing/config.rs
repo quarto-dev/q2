@@ -1112,6 +1112,74 @@ listing:
         quarto_config::span_assert::assert_diagnostic_underlines(q124, &ctx, "dupe");
     }
 
+    // bd-2mxo: L5 captures the `categories:` *key* span here purely to
+    // anchor Q-12-12 ("categories enabled but no item has any"; see
+    // `transforms/categories_sidebar.rs:213`). Materialization used to
+    // replace every `key_source` with a programmatic-config sentinel,
+    // which left that anchor inert — the feature existed but could
+    // never point anywhere. This pins it to the real key.
+    #[test]
+    fn categories_source_anchors_the_real_categories_key() {
+        let yaml = "\
+listing:
+    contents: ./a.qmd
+    categories: true
+";
+        let (listings, _diags, ctx) = parse_from_yaml(yaml);
+        let listing = listings.first().expect("one listing");
+
+        let span = quarto_config::span_assert::resolve_span(&listing.categories_source, &ctx)
+            .expect("categories_source should be a real key span, not a sentinel");
+        assert_eq!(span.text, "categories");
+    }
+
+    // The two sites the Phase A audit deliberately left alone: each
+    // already blamed the semantically correct value, and read wrong only
+    // because that value was a container carrying a synthesized span.
+    // Fixing materialization (bd-2mxo) is what makes them right, so
+    // these assert the fix reaches beyond the call sites Phase A
+    // touched.
+
+    #[test]
+    fn q_12_2_underlines_the_whole_inline_contents_record() {
+        let yaml = "\
+listing:
+    contents:
+    - title: Inline
+      path: ./a.qmd
+";
+        let (_listings, diags, ctx) = parse_from_yaml(yaml);
+        let q122 = diag_with_code(&diags, "Q-12-2");
+
+        let span = quarto_config::span_assert::resolve_diagnostic_span(q122, &ctx)
+            .expect("Q-12-2 should resolve to a real span");
+        assert!(
+            span.text.contains("title: Inline") && span.text.contains("path: ./a.qmd"),
+            "expected the whole inline record, got {:?}",
+            span.text
+        );
+    }
+
+    #[test]
+    fn q_12_3_underlines_the_whole_sort_value() {
+        let yaml = "\
+listing:
+    contents: ./a.qmd
+    sort:
+        field: title
+";
+        let (_listings, diags, ctx) = parse_from_yaml(yaml);
+        let q123 = diag_with_code(&diags, "Q-12-3");
+
+        let span = quarto_config::span_assert::resolve_diagnostic_span(q123, &ctx)
+            .expect("Q-12-3 should resolve to a real span");
+        assert!(
+            span.text.contains("field: title"),
+            "expected the offending `sort:` value, got {:?}",
+            span.text
+        );
+    }
+
     // 1. config_parses_minimal — `listing: default` parses to a
     //    Listing with id synthesized, type Default, defaults applied.
     #[test]

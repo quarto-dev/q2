@@ -216,14 +216,30 @@ Q-12-7 had a better span available at the call site:
 | Site | Code | Verdict |
 | --- | --- | --- |
 | `parse_listings` array loop | `Q-12-4` | **Fixed.** Blamed the whole listing map; now blames the offending `id:` value via a new `map_entry_value` helper. Confirmed failing first — it underlined `"contents: ./b.qmd\n      id: dupe\n"`. |
-| `parse_contents` inline record | `Q-12-2` | **Phase B.** The diagnostic is *about* the whole inline record, so the map genuinely is the right thing to blame. It reads wrong today only because the map's span is wrong. |
+| `parse_contents` inline record | `Q-12-2` | **Already correct** — see correction below. Regression test added. |
 | `parse_listings` fallthrough | `Q-12-1` | **No change.** Blames the offending value, which is a scalar-ish kind in this branch (the code notes these never occur in practice). |
-| `parse_one_listing` non-map | `Q-12-1` | **Phase B.** Already blames the right value; if that value is an array its container span is wrong. |
-| `parse_sort` fallthrough | `Q-12-3` | **Phase B.** Already blames the `sort:` value itself; wrong only when that value is a map/array. |
+| `parse_one_listing` non-map | `Q-12-1` | **No change.** Blames the right value; array items keep real spans (see correction). |
+| `parse_sort` fallthrough | `Q-12-3` | **Fixed by Phase B.** Confirmed failing pre-fix — underlined `"title"`, the first entry's value. |
 
 The pattern: call-site fixes handle "blaming the wrong *node*"; Phase B
-handles "blaming the right node, which carries a wrong *span*". The three
-Phase B rows are why Phase A does not close this strand.
+handles "blaming the right node, which carries a wrong *span*".
+
+**Correction to this audit (found during Phase B verification).** The audit
+assumed every container carried a synthesized span. It does not:
+`materialize_cursor`'s Array arm **clones array items verbatim**
+(`item.value.value.clone()`, `item.value.source_info.clone()`) rather than
+recursing through the cursor, because array items have no path to navigate
+to. So **any container nested inside an array kept its original, correct
+span all along.** Only map-valued *keys* — the paths a cursor can navigate —
+went through the synthesizing arm.
+
+That reclassifies two rows: `Q-12-2`'s inline record lives inside the
+`contents:` array and was never broken, and `Q-12-4`'s pre-fix span was the
+*genuine* mapping span rather than a synthesized one. Phase A's `Q-12-4`
+change is still right — it blames the `id:` the message names instead of the
+whole record — but it was a wrong-node fix, not a wrong-span fix. Verified
+empirically by running each test against a stashed working tree rather than
+by re-reading the code.
 
 - [x] Span assertions added for both changed sites
       (`q_12_7_underlines_the_template_key_not_a_sibling`,
@@ -232,54 +248,83 @@ Phase B rows are why Phase A does not close this strand.
 
 ### Phase B — Preserve real spans through materialization (bd-2mxo)
 
-- [ ] Failing tests first, at the `quarto-config` level: materializing a
-      multi-layer map must yield (a) a container `source_info` that is the
-      real mapping span, not the first child's value; (b) a container span
-      for arrays that is not merely the last item's; (c) `key_source` values
-      that point at the real keys.
-- [ ] Add accessors on `MergedMap`/`MergedCursor` exposing the winning
-      layer's container `SourceInfo` and per-entry `key_source`, resolved
-      against `config.layers` the same way `keys()` and `as_value()` already
-      navigate (`merged.rs:200-245`).
-- [ ] Rewire `materialize_cursor`'s Map arm (`materialize.rs:121-165`) and
-      Array arm (`materialize.rs:93-120`) to use them.
-- [ ] Replace the three `unwrap_or_default()` fallbacks
-      (`materialize.rs:113`, `:154`, `:158`) with an explicit
-      `SourceInfo::generated(By::…)` sentinel. Do **not** rely on
-      `SourceInfo`'s `Default` — see the memo; `Original { FileId(0), 0..0 }`
-      is exactly the plausible-looking lie that hid this bug.
-- [ ] Re-check the decision at `materialize.rs:155` (a first child that is
-      itself a map currently yields the `programmatic_config` sentinel) —
-      with real container spans available it should no longer need a
-      sentinel at all.
-- [ ] Confirm L5's `categories_source` capture (`config.rs:516-521`) is now
-      receiving a real key span. It was added specifically to anchor
-      Q-12-12 and is very likely inert today; add a span assertion for it.
+- [x] Failing tests first, in `materialize.rs`'s new `tests::spans` module,
+      parsing real YAML so the spans mean something. All four failed with
+      the predicted diagnosis — map container = `"false"` (first entry's
+      value), array container = `"./b.qmd"` (last item), nested-map
+      container and every `key_source` = `Generated` sentinel. A fifth test
+      (winning layer supplies the span) **passed from the start**, which
+      usefully bounds the defect: scalar spans always survived
+      materialization.
+- [x] Add accessors on `MergedCursor`: `container_source()` and
+      `key_source(key)`, both walking `config.layers` in reverse so the span
+      follows the same highest-priority layer that `as_value`/`as_scalar`
+      already pick for the winning value. They return the layer's span
+      verbatim — a programmatically-built layer keeps saying it was
+      generated instead of borrowing a neighbour's location.
+- [x] Rewire `materialize_cursor`'s Map and Array arms to use them.
+- [x] Replace the `unwrap_or_default()` fallbacks with
+      `SourceInfo::generated(By::unknown())`, via a `container_source`
+      helper documenting why. `By::unknown()` is the contract's sanctioned
+      "we don't know" marker; `Default` would fabricate
+      `Original { FileId(0), 0..0 }` — the plausible-looking lie that hid
+      this bug in the first place.
+- [x] The nested-map sentinel case is gone: with a real container span
+      available there is nothing left to special-case, so that branch was
+      deleted rather than re-decided.
+- [x] L5's `categories_source` **was inert**, as suspected. Confirmed
+      empirically: against a stashed tree the new test fails with
+      "categories_source should be a real key span, not a sentinel:
+      Generated". It now resolves to the `categories` key itself. This is a
+      latent feature bug (Q-12-12 could never anchor anywhere) fixed as a
+      side effect.
 - [ ] Consider an xtask lint for `unwrap_or_default()` on `SourceInfo`-typed
       expressions — the crate's own doc comment promises "separate grep
       tooling" that does not exist (`crates/xtask/src/lint/` has only
-      `external_sources.rs` and `metadata_as_str.rs`). File separately if it
-      grows beyond a small rule.
+      `external_sources.rs` and `metadata_as_str.rs`). **Deferred**: doing
+      this accurately needs type information a grep-level rule lacks, and
+      the in-tree `SourceInfo` `unwrap_or_default` sites are now gone.
+      Filing separately rather than half-doing it here.
 
 ### Phase C — Verification
 
-- [ ] `cargo nextest run --workspace`.
-- [ ] `cargo xtask verify` — this touches `quarto-config` and `quarto-core`,
-      both in the WASM closure; full verify, not `--skip-hub-build`.
-- [ ] End-to-end per CLAUDE.md: render the in-repo fixture through
-      `cargo run --bin q2 -- render …`, and record here (a) the exact
-      invocation, (b) the new caret position and underlined text, (c) an
-      explicit note that the terminal output was inspected.
-- [ ] Sanity-check against the Connect docs
-      (`~/Desktop/daily-log/2026/08/05/q2-connect-docs/docs-quarto-2`) that
-      Q-12-7 now points at `template:`. The site is still expected to render
-      poorly — bd-oywyaouf and bd-lu16jgxq are the strands that address that.
-- [ ] **Snapshot report.** Phase B moves diagnostic locations tree-wide.
-      Per the CLAUDE.md snapshot policy: report the count of `.snap` files
-      changed, summarize what changed and why, and explicitly flag any
-      snapshot whose new span is *not* obviously an improvement — a
-      container span moving is expected; a scalar span moving is not, and
-      would mean Phase B overreached.
+- [x] `cargo nextest run --workspace` — **10877 passed, 197 skipped**, zero
+      failures.
+- [x] `cargo xtask verify --skip-hub-build` clean (full verify pending, see
+      below).
+- [x] End-to-end through the real binary. Invocation:
+
+      ```
+      cargo run --bin q2 -- render .tmp-e2e/index.qmd
+      ```
+
+      on a fixture reproducing the report (`sort:` before `template:`).
+      Output inspected in the terminal; the caret moved from `sort: false`
+      to the template path:
+
+      ```
+      Warning: [Q-12-7] `template:` was set but `type:` is not `custom`; …
+         ╭─[ …/.tmp-e2e/index.qmd:5:15 ]
+       5 │     template: ../template.ejs
+         │               ───────┬───────
+      ```
+
+- [x] Connect docs re-rendered
+      (`cargo run --bin q2 -- render .` in `docs-quarto-2`). **All 15
+      Q-12-7 instances** now point at `template: ../template.ejs`,
+      including the originally-reported `cookbook/vanities/index.qmd`,
+      which moved from `4:11` (`sort: false`) to `5:15`. Full run: 186 of
+      186 files rendered, 9 errors / 310 warnings — still poor, as expected;
+      bd-oywyaouf and bd-lu16jgxq address the rest. Spot-checked Q-16-3 and
+      Q-5-3 spans in the same run: both point at real shortcode
+      invocations, so nothing was collaterally moved.
+- [x] **Snapshot report: zero `.snap` files changed.** This contradicts the
+      plan's prediction of tree-wide churn, and the reason is worth
+      recording: no existing snapshot ever captured a materialized
+      *container* span. The 154-vs-12 assertion imbalance that hid the bug
+      is the same thing that made the fix invisible to the suite. Scalar
+      spans — the ones snapshots do capture — were never affected, which
+      the Phase B "winning layer" test independently confirms.
 
 ## Key references
 
