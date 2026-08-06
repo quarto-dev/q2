@@ -106,15 +106,12 @@ impl GlobOptions {
 
     /// `project.render` in `_quarto.yml`.
     ///
-    /// `directory_rule` is still off: turning it on is the
-    /// bare-directory fix (D4), which ships in bd-mt7a6uc4 Phase 2
-    /// together with the diagnostic that reports what a pattern
-    /// matched. `default_positive` stays `None` — a render list of
-    /// only exclusions means "walk the project, minus these", which
-    /// is what an empty `render:` already does, and the walk is the
+    /// `default_positive` stays `None` — a render list of only
+    /// exclusions means "walk the project, minus these", which is
+    /// what an empty `render:` already does, and the walk is the
     /// enumerator's job rather than a pattern default.
     pub const RENDER: Self = Self {
-        directory_rule: false,
+        directory_rule: true,
         default_positive: None,
     };
 }
@@ -151,7 +148,7 @@ mod option_table {
             rendered,
             vec![
                 "listing contents:: directory_rule=true, default_positive=Some(\"*.qmd\")",
-                "project.render: directory_rule=false, default_positive=None",
+                "project.render: directory_rule=true, default_positive=None",
             ]
         );
     }

@@ -161,6 +161,24 @@ impl PatternSet {
         self.matches(&path_to_forward_slashes(candidate))
     }
 
+    /// True iff `candidate` matches a **negative** pattern.
+    ///
+    /// [`Self::matches`] is the usual question. This one exists for
+    /// callers that evaluate positives one at a time — `project.render`
+    /// walks its positive patterns in the author's listed order to
+    /// keep the render order stable — but still need exclusions to
+    /// apply globally, independent of where the `!` entry was written.
+    pub fn excluded(&self, candidate: &str) -> bool {
+        self.entries
+            .iter()
+            .any(|e| e.negated && e.is_match(candidate))
+    }
+
+    /// [`Self::excluded`] for a `Path`, normalizing it first.
+    pub fn excluded_path(&self, candidate: &std::path::Path) -> bool {
+        self.excluded(&path_to_forward_slashes(candidate))
+    }
+
     /// True when there is nothing to match against — no positive
     /// pattern survived resolution.
     pub fn is_empty(&self) -> bool {

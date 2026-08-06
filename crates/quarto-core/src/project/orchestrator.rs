@@ -859,7 +859,17 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
     /// pre/post hooks). Native and WASM share the same body — only
     /// the renderer and project-type implementations differ.
     pub async fn run(&mut self) -> Result<ProjectRenderSummary<R::Output>> {
-        let initial_diagnostics = self.empty_render_set_diagnostic();
+        let mut initial_diagnostics = self.empty_render_set_diagnostic();
+        // `project.render` patterns that contributed nothing
+        // (bd-mt7a6uc4 D7). Computed here rather than inside
+        // discovery so `ProjectContext::discover` keeps its
+        // signature; the check is pure and reads the post-exclusion
+        // file list, so it reports what actually happened.
+        initial_diagnostics.extend(crate::project::discovery::render_pattern_diagnostics(
+            &self.project.dir,
+            &self.project.config.render_patterns,
+            &self.project.files,
+        ));
 
         let (profiles, pass1_failures) = self.pass_one().await;
         let index = Arc::new(ProjectIndex::new(profiles));
