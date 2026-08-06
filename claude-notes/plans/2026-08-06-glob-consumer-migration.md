@@ -401,35 +401,93 @@ tests regardless:
 - [x] Bonus: confirm character classes work in `resources:` today and
       match nothing in listings (f7) — the empirical basis for D1.
 
-### Phase 1 — extract the API (pure refactor, no behavior change)
+### Phase 1 — extract the API ✅ (commit `632f9b06`)
 
-- [ ] Move matcher + resolver into `crates/quarto-core/src/glob/`;
+Scope note: "pure refactor" was the intent, but D1 and D2 are
+*semantic* decisions living in the shared code, so two behavior deltas
+land here by construction — character classes start working in every
+consumer, and a leading `/` re-anchors at the project root everywhere.
+Both are approved and are verified end-to-end below. Everything else is
+byte-for-byte behavior-preserving, evidenced by the untouched test suite.
+
+- [x] Move matcher + resolver into `crates/quarto-core/src/glob/`
+      (four layers: `provenance` → `pattern` → `matcher` → `resolve`);
       listing keeps a thin adapter; `project/discovery.rs` keeps only
-      discovery. Existing tests move with the code and must pass
-      unchanged.
-- [ ] `GlobOptions` (incl. the exclusion-policy field, default empty) +
-      the table-driven options test.
-- [ ] Leading-`/` = project root in the resolver (D2), with the listing
-      case pinned (`contents: /posts/*.qmd` from `sub/index.qmd`).
-- [ ] Swap the hand-rolled matcher for `glob::Pattern` + the fixed
-      `MatchOptions` (D1); delete `wildcard_match`/`segment_match`.
-      Existing discovery/listing tests must pass unchanged — that is the
-      evidence the swap is semantics-preserving where it should be.
-- [ ] Decide + wire where `Pattern::new` compile errors surface (hazard
-      4), pointing at the YAML scalar.
-- [ ] Pinning tests for the sibling hazards: exclusion-policy isolation,
-      dotfile matching, separator non-crossing, class patterns.
-- [ ] `claude-notes/designs/glob-semantics.md`.
-- [ ] `cargo xtask verify --skip-hub-build` green before moving on.
+      discovery. All 8 `listing_glob_resolution` integration tests and
+      every dep-graph test pass **unchanged**.
+- [x] `GlobOptions` + the table-driven options test
+      (`glob::option_table`). Deviation from the written plan: no
+      exclusion-policy field. It turned out to belong to the
+      *enumerator*, not to glob semantics — `resources:` must publish
+      `.nojekyll` and `_data/`, `project.render` must skip them — so
+      baking it into the shared options would have been the wrong seam.
+      Recorded in the contract doc under "What does *not* belong in
+      `GlobOptions`". Fields are added when a consumer needs them, so
+      the struct never carries a knob nothing reads.
+- [x] Leading-`/` = project root in the resolver (D2), pinned at three
+      levels: `pattern::leading_slash_anchors_at_project_root`,
+      `glob_resolve::leading_slash_reaches_the_project_root_from_a_subdir_host`,
+      and end-to-end on fixture f5.
+- [x] Swap the hand-rolled matcher for `glob::Pattern` + fixed
+      `MATCH_OPTIONS` (D1); `wildcard_match`/`segment_match`/
+      `glob_match_path{,_or_dir}` deleted, their tests moved into
+      `glob::matcher` (plus a `literal_patterns_match_exactly` case so
+      the exact-match coverage from `wildcard_matches_segments` is not
+      lost).
+- [x] Decide where `Pattern::new` compile errors surface (hazard 4):
+      resolution validates every pattern by compiling it and routes
+      failures to `GlobResolution::invalid` with the offending scalar's
+      `SourceInfo`, so `PatternSet::compile` downstream cannot fail for
+      patterns this tree produced. **Wiring `invalid` to a user-visible
+      diagnostic is Phase 5** — today it stays as silent as it was
+      before (the hand-rolled matcher simply never matched), so this
+      defers a fix rather than introducing a regression.
+- [x] Contract doc: `claude-notes/designs/glob-semantics.md` — the
+      normative vocabulary/anchoring/negation/failure tables, the two
+      deliberate Q1 divergences, the matching-vs-walking invariant
+      ("nothing under `src/glob/` may call `std::fs`"), and the
+      checklist for adding a consumer.
+- [x] Pinning tests for the sibling hazards: dotfile matching
+      (`dotfiles_match_star`), separator non-crossing
+      (`star_is_one_segment`, `question_mark_is_one_char_and_does_not_cross`),
+      class patterns (`character_classes_work`,
+      `bracket_escape_matches_literal_asterisk`). Exclusion-policy
+      isolation moves to Phase 3, where the resources enumerator that
+      must *not* inherit discovery's exclusions actually exists.
+- [x] Full workspace suite green: **10941 passed** (was 10911 at the
+      base commit; +40 new glob tests, −10 that moved into the module).
+- [ ] `cargo xtask verify --skip-hub-build` — run at the end of Phase 2
+      rather than here, so the WASM leg is exercised once against a
+      settled `project.render`.
+
+#### Phase 1 end-to-end evidence
+
+`./target/debug/q2 render <fixture>` on the Phase 0 fixtures, HTML and
+output trees inspected:
+
+| Fixture | Before (Phase 0) | After Phase 1 |
+|---|---|---|
+| f5 listing `contents: ["/posts/*.qmd"]` from `sub/index.qmd` | listing empty | lists both root posts, hrefs correctly page-relative (`../posts/a.html`) |
+| f7 listing `contents: ["posts/p[0-9].qmd"]` | listing empty | matches `p1.qmd`, excludes `px.qmd` |
+| f4 `render: ["/index.qmd", "/sub/*.qmd"]` | `Q-PROJECT-EMPTY`, 0 of 0 | renders both pages |
+| f1, f2, f3, f6 (not-yet-migrated consumers) | — | byte-identical to Phase 0 |
 
 ### Phase 2 — `project.render`
 
-- [ ] Failing tests: negation, bare directory, leading `/`, `../`
-      clamping, per-pattern empty-match diagnostic.
-- [ ] Carry `SourceInfo` on render patterns (D8); migrate
-      `expand_patterns` to the shared API; keep the exclusion rules
-      (underscore/hidden/`node_modules`/output dir/README) where they
-      are — they are discovery policy, not glob semantics.
+Note: leading `/` and character classes already work here as of Phase 1
+(the resolver is shared). What remains is render-specific.
+
+- [ ] Failing tests: negation, bare directory, `../` clamping,
+      per-pattern empty-match diagnostic.
+- [ ] Carry `SourceInfo` on render patterns (D8) — today
+      `expand_patterns` synthesizes `SourceInfo::generated`, which is
+      honest but leaves diagnostics unplaceable.
+- [ ] Flip `GlobOptions::RENDER.directory_rule` to true (D4) and update
+      the option table.
+- [ ] Keep the exclusion rules (underscore/hidden/`node_modules`/output
+      dir/README) in the enumerator — they are discovery policy, not
+      glob semantics (contract doc, "What does *not* belong in
+      `GlobOptions`").
 - [ ] Diagnostic registration + docs stub page.
 
 ### Phase 3 — `resources:`

@@ -103,6 +103,58 @@ impl GlobOptions {
         directory_rule: true,
         default_positive: Some("*.qmd"),
     };
+
+    /// `project.render` in `_quarto.yml`.
+    ///
+    /// `directory_rule` is still off: turning it on is the
+    /// bare-directory fix (D4), which ships in bd-mt7a6uc4 Phase 2
+    /// together with the diagnostic that reports what a pattern
+    /// matched. `default_positive` stays `None` — a render list of
+    /// only exclusions means "walk the project, minus these", which
+    /// is what an empty `render:` already does, and the walk is the
+    /// enumerator's job rather than a pattern default.
+    pub const RENDER: Self = Self {
+        directory_rule: false,
+        default_positive: None,
+    };
+}
+
+/// Every consumer's option set in one table.
+///
+/// The contract doc (`claude-notes/designs/glob-semantics.md`)
+/// promises that per-consumer differences are few, deliberate, and
+/// written down. This test is the enforcement: a new consumer or a
+/// changed knob shows up here as a diff, which is the moment to ask
+/// whether the divergence is defensible.
+#[cfg(test)]
+mod option_table {
+    use super::GlobOptions;
+
+    #[test]
+    fn consumer_options_are_as_documented() {
+        let table: &[(&str, GlobOptions)] = &[
+            ("listing contents:", GlobOptions::LISTING),
+            ("project.render", GlobOptions::RENDER),
+        ];
+
+        let rendered: Vec<String> = table
+            .iter()
+            .map(|(name, o)| {
+                format!(
+                    "{name}: directory_rule={}, default_positive={:?}",
+                    o.directory_rule, o.default_positive
+                )
+            })
+            .collect();
+
+        assert_eq!(
+            rendered,
+            vec![
+                "listing contents:: directory_rule=true, default_positive=Some(\"*.qmd\")",
+                "project.render: directory_rule=false, default_positive=None",
+            ]
+        );
+    }
 }
 
 /// Render a path as the canonical candidate string: project-relative,

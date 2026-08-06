@@ -38,16 +38,10 @@ use quarto_system_runtime::SystemRuntime;
 use crate::error::{QuartoError, Result};
 use crate::glob::{BaseDirContext, GlobOptions, RawGlob, resolve_patterns};
 
-/// Glob semantics for `project.render`.
-///
-/// `directory_rule: false` preserves the pre-bd-mt7a6uc4 behavior
-/// where a bare directory entry matches nothing; Phase 2 of that
-/// strand turns it on (decision D4) together with the diagnostic
-/// that explains what a pattern matched.
-const RENDER_GLOB_OPTIONS: GlobOptions = GlobOptions {
-    directory_rule: false,
-    default_positive: None,
-};
+/// Glob semantics for `project.render` — see
+/// [`GlobOptions::RENDER`], where every consumer's option set lives
+/// so they can be compared at a glance.
+const RENDER_GLOB_OPTIONS: GlobOptions = GlobOptions::RENDER;
 
 /// Input describing what to discover.
 #[derive(Debug, Clone)]
