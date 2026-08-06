@@ -257,7 +257,10 @@ to the stage/render context. Keep the helper synchronous and pure.
       (verified by `comm` against the file tree; includes the new
       `Q-12-17`). No entries were lost. The legacy drop mechanism wasn't
       chased further — the code path that caused it is deleted.
-- [ ] `cargo xtask verify` (full — quarto-core changes affect the WASM leg).
+- [x] `cargo xtask verify` (full, all 14 steps incl. hub-client WASM build +
+      tests) — passed at a4c5c1e2 (post-clippy-fix commit; two clippy lints from
+      the first run fixed: `same_item_push` in binding.rs,
+      `manual_string_new` in a glob_resolve test).
 
 ### Phase 5 — `listing.contents` interpretation (defects #5 + #6)
 - [x] Failing tests first (pampa unit tests, verified failing with the
@@ -279,9 +282,13 @@ to the stage/render context. Keep the helper synchronous and pure.
       Full workspace suite: 10911 passed.
 
 ### Phase 6 — bookkeeping
-- [ ] `braid close bd-v7ixzsp5`; comment on GH #456 with the fix summary.
-- [ ] docs/ website: document listing `contents` resolution semantics
-      (user-facing, no internals).
+- [ ] `braid close bd-v7ixzsp5`; comment on GH #456 with the fix summary
+      (after PR review/merge).
+- [x] docs/ website: **deferred to bd-2nb6i1qv** (discovered-from) — docs/
+      has no listings guide at all to host the semantics write-up; the
+      Q-12-17 error page documents the project-boundary rule meanwhile.
+- [x] Follow-up strand for migrating other glob consumers onto the
+      glob-resolve API: bd-mt7a6uc4 (discovered-from).
 
 ## Decisions (Carlos, 2026-08-06)
 

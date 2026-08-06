@@ -308,7 +308,7 @@ mod tests {
         );
         assert_eq!(
             project_relative_dir_of("/proj/_quarto.yml", project),
-            Some("".into())
+            Some(String::new())
         );
     }
 

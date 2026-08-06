@@ -416,9 +416,7 @@ fn host_relative_qmd(source_path: &std::path::Path, host_dir: &str) -> String {
         .take_while(|(h, p)| h == p)
         .count();
     let mut out: Vec<&str> = Vec::new();
-    for _ in common..host_segments.len() {
-        out.push("..");
-    }
+    out.extend(std::iter::repeat_n("..", host_segments.len() - common));
     out.extend(&path_segments[common..]);
     out.join("/")
 }
