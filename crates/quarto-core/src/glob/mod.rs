@@ -120,6 +120,17 @@ impl GlobOptions {
         default_positive: None,
     };
 
+    /// `sidebar.auto:` — which project pages a sidebar enumerates.
+    ///
+    /// Same rules as everywhere else. Patterns resolve against the
+    /// project root: `auto:` lists project pages and its config
+    /// carries no provenance, so there is no declaring-file
+    /// directory to anchor to.
+    pub const SIDEBAR: Self = Self {
+        directory_rule: true,
+        default_positive: None,
+    };
+
     /// `project.render` in `_quarto.yml`.
     ///
     /// `default_positive` stays `None` — a render list of only
@@ -149,6 +160,7 @@ mod option_table {
             ("listing contents:", GlobOptions::LISTING),
             ("project.render", GlobOptions::RENDER),
             ("resources:", GlobOptions::RESOURCES),
+            ("sidebar.auto:", GlobOptions::SIDEBAR),
         ];
 
         let rendered: Vec<String> = table
@@ -167,6 +179,7 @@ mod option_table {
                 "listing contents:: directory_rule=true, default_positive=Some(\"*.qmd\")",
                 "project.render: directory_rule=true, default_positive=None",
                 "resources:: directory_rule=true, default_positive=None",
+                "sidebar.auto:: directory_rule=true, default_positive=None",
             ]
         );
     }

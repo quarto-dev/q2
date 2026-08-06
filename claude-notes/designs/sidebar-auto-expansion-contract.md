@@ -101,6 +101,32 @@ resolved sidebar, in document order, deduplicated by path
 | `contents: [a.qmd, https://example.com]` | `[a.qmd]` (external dropped) |
 | `contents: [a.qmd, a.qmd]` | `[a.qmd]` (deduped) |
 
+## Pattern semantics in `auto:`
+
+Since bd-mt7a6uc4, an `auto:` path is a **real glob**, matched with
+q2's shared glob API (`crates/quarto-core/src/glob/`, contract:
+`claude-notes/designs/glob-semantics.md`). Patterns resolve against
+the **project root** — `auto:` enumerates project pages, and
+`AutoSpec` carries no provenance, so there is no declaring-file
+directory to anchor to.
+
+| Config | Members |
+|---|---|
+| `auto: docs` | everything beneath `docs/` (bare directory rule) |
+| `auto: "docs/*"` | documents directly in `docs/`, not nested |
+| `auto: "docs/*.qmd"` | same, restricted to `.qmd` |
+| `auto: "docs/**/*.qmd"` | `.qmd` anywhere beneath `docs/` |
+| `auto: ["docs", "!docs/internal"]` | `docs/` minus `docs/internal/` |
+| `auto: "docs/ch-[0-9].qmd"` | numbered chapters only |
+
+**This changed behavior** (2026-08-06). `auto:` previously stripped
+`*.qmd` / `**` / `*` off the end of each entry and prefix-matched what
+remained, so `docs/*.qmd`, `docs/**`, `docs/` and `docs` were all the
+same pattern and every one of them swept up nested documents. A
+project relying on `docs/*.qmd` to include `docs/deep/nested.qmd` must
+now write `docs` or `docs/**/*.qmd`. The bare-directory spelling —
+by far the most common — is unaffected.
+
 ## Equivalence with Pass-2 sidebar render
 
 For a fixed `(meta, index)`:
