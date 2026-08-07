@@ -224,6 +224,12 @@ website:
             - errors/project/Q-5-3.qmd
             - errors/project/Q-5-4.qmd
             - errors/project/Q-5-5.qmd
+        - section: "include"
+          contents:
+            - errors/include/Q-17-1.qmd
+            - errors/include/Q-17-2.qmd
+            - errors/include/Q-17-3.qmd
+            - errors/include/Q-17-4.qmd
         - section: "internal"
           contents:
             - errors/internal/Q-0-1.qmd

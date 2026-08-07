@@ -1,0 +1,44 @@
+---
+title: "Include File Parse Error"
+description: "The file named by an include shortcode was read but could not be parsed as qmd."
+code: Q-17-3
+subsystem: include
+status: stub
+since: "99.9.9"
+categories:
+  - include
+---
+
+# `Q-17-3` — Include File Parse Error
+
+> The file named by an include shortcode was read but could not be
+> parsed as qmd.
+
+## What this means
+
+An `{{< include >}}` shortcode names a file that exists and was
+read, but the file's content is not valid qmd. The include is
+skipped: its content is omitted from the output.
+
+This error is a *wrapper*: it marks the include site in the
+including document, and the included file's own parse errors are
+reported immediately after it, each pointing at the offending
+location *inside the included file*. Fix those errors and the
+include will succeed.
+
+## Why this happens
+
+Any qmd parse error can fire inside an included file — the include
+mechanism parses the file with the same grammar as a top-level
+document. Included snippet files (conventionally named with a
+leading underscore, like `_common.qmd`) are excluded from project
+renders, so a parse error in one surfaces only through this
+wrapper, at its first use site.
+
+## How to fix
+
+Read the parse errors reported below this one — they carry the
+file, line, and column of each problem inside the included file.
+Fix them as you would in any document. To iterate on the snippet
+in isolation, copy it to a name without the leading underscore and
+render it directly, or simply re-render the including document.
