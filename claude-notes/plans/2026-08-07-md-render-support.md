@@ -460,16 +460,39 @@ Findings that adjusted the plan (research-report conclusions were stale):
 - [x] Stale "must be a `.qmd` file" comment at the SingleDoc fallthrough fixed
 - [x] Full workspace suite green (11022 passed)
 
-### Phase 4 — Links, navigation, dependency graph
+### Phase 4 — Links, navigation, dependency graph — **DONE 2026-08-07**
 
-- [ ] Tests: sidebar/navbar `file: admin/index.md` resolves to `admin/index.html`;
-  body link `[x](other.md)` rewritten when `other.md` is in the render list, left
-  alone when excluded (D6); dep-graph edges exist for `.md` body links
-- [ ] `navigation_href.rs:186/:243/:333`: classify by render-list membership (or
-  renderable-extension + membership) instead of `ends_with(".qmd")`
-- [ ] Verify `host_relative_qmd` (`listing/binding.rs:392`) and
-  `dependency_graph.rs:147` behave; rename `.qmd`-flavored identifiers touched
-  along the way
+Finding that shrank the phase: the href → output **rewriting was already
+membership-based** — both nav and body resolution go through
+`ProjectIndex::lookup_by_source`, which is keyed by source path and contains
+whatever discovery selected. Once Phase 1 put `.md` files in the render list,
+sidebar `file: notes.md` and body `[x](notes.md)` resolved to `notes.html`
+with no further change (pinned by e2e before any Phase-4 edit). The
+`.ends_with(".qmd")` gates control only two things:
+
+1. **Miss diagnostics** (Q-13-1..4/7): kept `.qmd`-only **deliberately** per
+   D6 — a `.md` miss may legitimately be a static resource; comments at both
+   gate sites now say so.
+2. **Pass-1 body-link target extraction** (`resolve_doc_relative_target`),
+   which feeds `DocumentProfile.body_link_targets` → dependency-graph edges:
+   extended to `.md`. Non-render-list `.md` targets are dropped by the graph
+   builder's index lookup, as designed.
+
+- [x] E2e (`md_pages_get_nav_and_body_links_rewritten`): website project with
+  sidebar `file: notes.md`, `.qmd`→`.md` and `.md`→`.qmd` body links, all
+  rewritten to `.html`; plus a subset-render (Mode B) leg pinning that links
+  into `.md` pages still rewrite when only the linking page renders
+- [x] Unit (`target_md_resolves_like_qmd`): `.md` targets extract like
+  `.qmd`, including `..` normalization and `.md`-source → `.qmd`-target
+- [x] D6 comments at both miss-diagnostic sites
+- [x] `host_relative_qmd` / `dependency_graph.rs` verified path-generic — no
+  change needed (graph filters by index, listing binding is extension-blind)
+- [x] Full workspace suite green (11024 passed)
+
+Note: the graph edges' pass-2 *augmentation* effect (always-render pages
+re-rendering when a linked `.md` changes) is exercised only at the unit
+level — an e2e needs always-render listing pages, which are out of scope
+per D8; noted for the listing follow-up strand.
 
 ### Phase 5 — Preview (scope per D9)
 

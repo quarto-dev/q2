@@ -706,6 +706,70 @@ fn md_with_non_native_format_gets_early_refusal_like_qmd() {
     );
 }
 
+/// bd-6d2wj4zp S7: render-list `.md` pages participate in navigation
+/// and body-link rewriting exactly like `.qmd` — the Connect-docs
+/// shape (`file: admin/index.md` in the sidebar, `[x](other.md)` in
+/// body text).
+#[test]
+fn md_pages_get_nav_and_body_links_rewritten() {
+    let temp = TempDir::new().unwrap();
+    let project = canonical(temp.path());
+    write_file(
+        &project.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n  render:\n    - \"*.qmd\"\n    - \"*.md\"\n\
+         website:\n  title: T\n  sidebar:\n    contents:\n      - index.qmd\n      - text: Notes\n        file: notes.md\n",
+    );
+    write_file(
+        &project.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nSee [the notes](notes.md).\n",
+    );
+    write_file(
+        &project.join("notes.md"),
+        "---\ntitle: Notes\n---\n\nBack [home](index.qmd).\n",
+    );
+
+    let out = run_q2(&project, &[]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "render failed; stderr: {stderr}");
+
+    let index_html = std::fs::read_to_string(project.join("_site/index.html")).expect("index.html");
+    assert!(
+        index_html.contains("href=\"notes.html\""),
+        "body link [the notes](notes.md) must rewrite to notes.html; got:\n{}",
+        &index_html[..index_html.len().min(4000)]
+    );
+
+    let notes_html = std::fs::read_to_string(project.join("_site/notes.html")).expect("notes.html");
+    assert!(
+        notes_html.contains("href=\"index.html\""),
+        "body link [home](index.qmd) from a .md page must rewrite to index.html"
+    );
+    // The sidebar entry `file: notes.md` must resolve on both pages.
+    assert!(
+        notes_html.contains("notes.html") && index_html.contains("notes.html"),
+        "sidebar entry for notes.md must resolve to notes.html on every page"
+    );
+
+    // Subset render (Mode B): Pass 1 profiles every project file
+    // regardless of mode, so links into a `.md` page must still
+    // rewrite when only the linking page is re-rendered. (The `.md`
+    // dependency-graph *edges* are pinned at the unit level in
+    // navigation_href.rs — their pass-2 augmentation effect only
+    // shows with always-render pages, which are listing territory.)
+    std::fs::remove_file(project.join("_site/index.html")).unwrap();
+    let out = run_q2(&project, &["index.qmd"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success(),
+        "subset render failed; stderr: {stderr}"
+    );
+    let index_html = std::fs::read_to_string(project.join("_site/index.html")).expect("index.html");
+    assert!(
+        index_html.contains("href=\"notes.html\""),
+        "subset render must still rewrite the body link into the .md page"
+    );
+}
+
 /// Regression guard for bd-87fu: native default-project renders
 /// must continue to write theme CSS to `{stem}_files/quarto/...`
 /// and embed a matching `<link>` in the HTML. The WASM-side fix
