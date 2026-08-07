@@ -123,6 +123,10 @@ async fn config_reports_read_only_and_doc_edits_never_reach_disk() {
         Some(false),
         "without --allow-edit the endpoint must report allowEdit: false; body was {body:?}"
     );
+    assert!(
+        body.get("editorBoot").is_none(),
+        "editorBoot must be absent when nothing was stashed (bd-7htq16rx); body was {body:?}"
+    );
 
     // Disk behavior: a document-side edit + explicit sync must leave
     // the file untouched (DiskWritePolicy::ReadOnly).
@@ -151,6 +155,10 @@ async fn config_reports_allow_edit_and_doc_edits_persist_to_disk() {
         Some(true),
         "with --allow-edit the endpoint must report allowEdit: true; body was {body:?}"
     );
+    assert!(
+        body.get("editorBoot").is_none(),
+        "editorBoot must be absent when nothing was stashed (bd-7htq16rx); body was {body:?}"
+    );
 
     let edited = INITIAL_QMD.replace("Hello.", "Hello, edited in the browser.");
     edit_doc_text(&ctx, "index.qmd", &edited).await;
@@ -161,6 +169,82 @@ async fn config_reports_allow_edit_and_doc_edits_persist_to_disk() {
         std::fs::read_to_string(&abs).unwrap(),
         edited,
         "with --allow-edit a synced document change must reach the file on disk"
+    );
+
+    handle.abort();
+    let _ = handle.await;
+}
+
+/// bd-7htq16rx: an editor-UI host stashes its share-route boot params
+/// (mirroring what the CLI's editor-mode `on_ready` does) and
+/// `GET /api/preview/config` then carries them as `editorBoot`, so a
+/// `--join` guest can build the same share URL (with `ephemeral=true`)
+/// against its local proxy and land straight in the document.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn config_reports_editor_boot_when_stashed() {
+    let project = tempfile::TempDir::with_prefix("q2-preview-config-editor-boot-").unwrap();
+    std::fs::write(project.path().join("index.qmd"), INITIAL_QMD).unwrap();
+    let data = tempfile::TempDir::with_prefix("q2-preview-config-editor-boot-data-").unwrap();
+
+    let port = pick_free_port();
+    let config = PreviewConfig {
+        host: "127.0.0.1".to_string(),
+        port,
+        project_root: Some(project.path().to_path_buf()),
+        single_file: None,
+        data_dir: data.path().to_path_buf(),
+        spa_dir_override: None,
+        engine_registry: None,
+        engine_policy: Default::default(),
+        resource_html_files: Vec::new(),
+        cache_dir: None,
+        allow_edit: false,
+        share: false,
+        ui: quarto_preview::PreviewUi::Editor,
+    };
+
+    let (ready_tx, ready_rx) = oneshot::channel::<String>();
+    let mut ready_tx = Some(ready_tx);
+    let handle = tokio::spawn(async move {
+        run_with_on_ready(config, move |ctx| {
+            // Mirror the CLI's editor-mode on_ready: stash the params
+            // the host's own share-route boot URL is built from.
+            let doc_id = ctx.index().document_id();
+            quarto_preview::set_editor_boot(quarto_preview::EditorBootInfo {
+                index_doc_id: doc_id.clone(),
+                file: "index.qmd".to_string(),
+                name: "fixture-project".to_string(),
+            });
+            if let Some(tx) = ready_tx.take() {
+                let _ = tx.send(doc_id);
+            }
+        })
+        .await
+    });
+
+    let doc_id = tokio::time::timeout(Duration::from_secs(10), ready_rx)
+        .await
+        .expect("server reached on_ready within 10s")
+        .expect("on_ready callback fired");
+
+    let body = fetch_config(port).await;
+    assert_eq!(
+        body.get("allowEdit").and_then(|v| v.as_bool()),
+        Some(false),
+        "allowEdit keeps reporting independently of editorBoot; body was {body:?}"
+    );
+    let boot = body
+        .get("editorBoot")
+        .expect("editorBoot must be present once stashed");
+    assert_eq!(
+        boot.get("indexDocId").and_then(|v| v.as_str()),
+        Some(doc_id.as_str()),
+        "editorBoot names the hub's index document"
+    );
+    assert_eq!(boot.get("file").and_then(|v| v.as_str()), Some("index.qmd"));
+    assert_eq!(
+        boot.get("name").and_then(|v| v.as_str()),
+        Some("fixture-project")
     );
 
     handle.abort();

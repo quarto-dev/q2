@@ -75,6 +75,44 @@ static ALLOW_EDIT: OnceLock<bool> = OnceLock::new();
 /// read by the SPA fallback handler. Same OnceLock pattern as above.
 static PREVIEW_UI: OnceLock<PreviewUi> = OnceLock::new();
 
+/// Editor-mode boot params for `--join` guests (bd-7htq16rx): the
+/// share-route coordinates the host's own boot URL is built from.
+/// Stashed by the CLI's editor-mode `on_ready` via [`set_editor_boot`]
+/// and served at `GET /api/preview/config` as `editorBoot`, so a guest
+/// can build the same share URL (with `ephemeral=true`) against its
+/// local proxy origin and land straight in the document instead of
+/// the project-set setup screen. Both `Serialize` (the host serves it)
+/// and `Deserialize` (the `q2 preview --join` CLI parses it) — one
+/// wire-shape definition, no drift.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorBootInfo {
+    /// Index document id, exactly as `HubContext::index().document_id()`
+    /// returns it (the guest-side URL builder strips any `automerge:`
+    /// prefix, same as the host's).
+    pub index_doc_id: String,
+    /// The share route's `file` param — a `.qmd` path in the project.
+    pub file: String,
+    /// Project name shown in the guest's editor UI.
+    pub name: String,
+}
+
+/// The session's editor boot params. Set once by the editor-mode
+/// caller's `on_ready` (which fires before the listener binds, so no
+/// client can fetch config ahead of it) and read by
+/// `preview_config_handler`. Same first-writer-wins OnceLock pattern
+/// as the other handler state above.
+static EDITOR_BOOT: OnceLock<EditorBootInfo> = OnceLock::new();
+
+/// Stash the editor-mode boot params so `GET /api/preview/config` can
+/// hand them to `--join` guests (bd-7htq16rx). Editor-mode callers
+/// invoke this from their `on_ready` when a share file was picked;
+/// viewer mode and `--no-project` editor boots never do, and their
+/// config answers without `editorBoot`.
+pub fn set_editor_boot(info: EditorBootInfo) {
+    let _ = EDITOR_BOOT.set(info);
+}
+
 /// Which embedded frontend the preview server serves (`--ui`,
 /// live-share plan Phase 4, bd-jt1etjbn).
 ///
@@ -586,9 +624,18 @@ pub fn extend_with_preview(
 /// `--allow-edit` CLI flag; the SPA uses it to enable or fully disable
 /// the inline block-editing surface, and the server independently
 /// enforces the same setting via [`quarto_hub::sync::DiskWritePolicy`].
+///
+/// `editorBoot` (bd-7htq16rx) is present only on editor-UI sessions
+/// that stashed their share-route boot params via [`set_editor_boot`];
+/// `q2 preview --join` reads it through the tunnel to build the
+/// guest's boot URL. The viewer SPA ignores the field.
 async fn preview_config_handler() -> Response {
     let allow_edit = ALLOW_EDIT.get().copied().unwrap_or(false);
-    axum::Json(serde_json::json!({ "allowEdit": allow_edit })).into_response()
+    let mut body = serde_json::json!({ "allowEdit": allow_edit });
+    if let Some(boot) = EDITOR_BOOT.get() {
+        body["editorBoot"] = serde_json::to_value(boot).expect("EditorBootInfo always serializes");
+    }
+    axum::Json(body).into_response()
 }
 
 /// The UI mode this session serves. Defaults to the viewer when `run()`

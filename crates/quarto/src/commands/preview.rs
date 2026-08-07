@@ -296,13 +296,25 @@ async fn run(args: PreviewArgs) -> Result<()> {
             quarto_preview::run_with_on_ready(config, move |ctx| {
                 let paths: Vec<String> = ctx.index().get_all_files().into_keys().collect();
                 let url = match pick_editor_file(initial_page.as_deref(), &paths) {
-                    Some(file) => build_editor_boot_url(
-                        &host_for_ready,
-                        port,
-                        &ctx.index().document_id(),
-                        &file,
-                        &project_name,
-                    ),
+                    Some(file) => {
+                        // bd-7htq16rx: hand `--join` guests the same
+                        // boot params via /api/preview/config so they
+                        // boot the share route (skipping the project-set
+                        // setup screen) instead of the editor's root
+                        // route, which can never join the document.
+                        quarto_preview::set_editor_boot(quarto_preview::EditorBootInfo {
+                            index_doc_id: ctx.index().document_id(),
+                            file: file.clone(),
+                            name: project_name.clone(),
+                        });
+                        build_editor_boot_url(
+                            &host_for_ready,
+                            port,
+                            &ctx.index().document_id(),
+                            &file,
+                            &project_name,
+                        )
+                    }
                     None => {
                         // No `.qmd` to seed the share route with (e.g.
                         // --no-project): boot to the editor's project
@@ -381,33 +393,45 @@ async fn run_join(args: JoinArgs) -> Result<()> {
             .await
             .map_err(join_bind_error)?;
 
-    let url = format!("http://{bound}/");
+    // Resolve the boot URL through the tunnel before printing it.
+    // Readiness = the first successful GET /health *through the
+    // tunnel*: a bare TCP accept (host mode's readiness signal) would
+    // lie here — the local proxy accepts even when the host is
+    // unreachable — so only an end-to-end HTTP roundtrip proves the
+    // session is usable. Editor-UI hosts then carry their share-route
+    // boot params in /api/preview/config (bd-7htq16rx): boot the guest
+    // to the same share URL the host printed, ephemeral flag included,
+    // so hub-client skips project-set onboarding and joins the
+    // document. Viewer-mode and older hosts answer without
+    // `editorBoot` and keep the root URL.
+    const READY_TIMEOUT: Duration = Duration::from_secs(15);
+    let url = if wait_until_healthy(bound, READY_TIMEOUT).await {
+        info!(local = %bound, "shared session healthy through the tunnel");
+        match fetch_editor_boot(bound).await {
+            Some(boot) => build_guest_editor_url(&bound, &boot),
+            None => format!("http://{bound}/"),
+        }
+    } else {
+        // We still consider a >15s startup a bug; printing the root
+        // URL anyway (rather than never) preserves the old behavior as
+        // a floor, and the warning gives the slow start visibility
+        // instead of leaving it silent.
+        tracing::warn!(
+            local = %bound,
+            timeout_secs = READY_TIMEOUT.as_secs(),
+            "shared session did not answer /health within the timeout; \
+             the URL below may need a manual reload"
+        );
+        format!("http://{bound}/")
+    };
+
     println!("  → {url}");
     println!();
     println!("  Press Ctrl-C to leave the session.");
     println!();
 
-    // Browser-open readiness = the first successful GET /health *through
-    // the tunnel*. A bare TCP accept (host mode's readiness signal)
-    // would lie here: the local proxy accepts even when the host is
-    // unreachable, so only an end-to-end HTTP roundtrip proves the
-    // session is usable.
     if !args.no_browser {
-        let url_for_open = url.clone();
-        tokio::spawn(async move {
-            const READY_TIMEOUT: Duration = Duration::from_secs(15);
-            if wait_until_healthy(bound, READY_TIMEOUT).await {
-                info!(local = %bound, "shared session healthy through the tunnel; opening browser");
-            } else {
-                tracing::warn!(
-                    local = %bound,
-                    timeout_secs = READY_TIMEOUT.as_secs(),
-                    "shared session did not answer /health within the timeout; \
-                     opening the browser anyway (it may need a manual reload)"
-                );
-            }
-            open_browser_or_log(&url_for_open, false);
-        });
+        open_browser_or_log(&url, false);
     }
 
     // Report status transitions ("connected via relay", "reconnecting…")
@@ -523,6 +547,48 @@ async fn health_get_ok(addr: std::net::SocketAddr) -> bool {
         return false;
     }
     response.starts_with(b"HTTP/1.1 200")
+}
+
+/// One raw HTTP/1.1 `GET /api/preview/config` against `addr`; the
+/// parsed `editorBoot` params when the host is an editor-UI session
+/// that stashed them (bd-7htq16rx). Hand-rolled for the same reason as
+/// [`health_get_ok`]. Any failure — connect, non-200, malformed body,
+/// absent field — is `None`, and the caller falls back to the root URL.
+async fn fetch_editor_boot(addr: std::net::SocketAddr) -> Option<quarto_preview::EditorBootInfo> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = tokio::net::TcpStream::connect(addr).await.ok()?;
+    stream
+        .write_all(
+            b"GET /api/preview/config HTTP/1.1\r\nHost: q2-preview-join\r\nConnection: close\r\n\r\n",
+        )
+        .await
+        .ok()?;
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response).await.ok()?;
+    if !response.starts_with(b"HTTP/1.1 200") {
+        return None;
+    }
+    let body_start = response.windows(4).position(|w| w == b"\r\n\r\n")? + 4;
+    parse_editor_boot(&response[body_start..])
+}
+
+/// Parse the `editorBoot` field of a `/api/preview/config` body.
+/// `None` for viewer-mode and older hosts (no field), for malformed
+/// JSON, and for a field whose doc id or file is empty — a boot URL
+/// built from those could never join the document.
+fn parse_editor_boot(body: &[u8]) -> Option<quarto_preview::EditorBootInfo> {
+    #[derive(serde::Deserialize)]
+    struct PreviewConfigWire {
+        #[serde(rename = "editorBoot")]
+        editor_boot: Option<quarto_preview::EditorBootInfo>,
+    }
+    let boot = serde_json::from_slice::<PreviewConfigWire>(body)
+        .ok()?
+        .editor_boot?;
+    if boot.index_doc_id.is_empty() || boot.file.is_empty() {
+        return None;
+    }
+    Some(boot)
 }
 
 /// Bind `host:0`, read the OS-assigned port, drop the listener.
@@ -807,14 +873,44 @@ pub(crate) fn build_editor_boot_url(
     file: &str,
     project_name: &str,
 ) -> String {
+    format!(
+        "http://{host}:{port}{}",
+        editor_share_route(index_doc_id, file, project_name)
+    )
+}
+
+/// The hub-client share route both editor boot-URL builders emit (host
+/// above, guest below). Single source for the route shape: the client's
+/// validation requires `server` / `file` / `name`, and `ephemeral=true`
+/// (bd-zf4ryvuq) marks the serving hub as a throwaway per-session
+/// preview server so the client skips project-set onboarding. The doc
+/// id travels bare: the client re-adds the `automerge:` prefix, and
+/// `buildShareableUrl` on the TS side strips it symmetrically.
+fn editor_share_route(index_doc_id: &str, file: &str, project_name: &str) -> String {
     let doc_id = index_doc_id
         .strip_prefix("automerge:")
         .unwrap_or(index_doc_id);
     format!(
-        "http://{host}:{port}/#/share/{}?server=%2Fws&file={}&name={}&ephemeral=true",
+        "/#/share/{}?server=%2Fws&file={}&name={}&ephemeral=true",
         percent_encode_component(doc_id),
         percent_encode_component(file),
         percent_encode_component(project_name),
+    )
+}
+
+/// bd-7htq16rx: build the `--join` guest's boot URL — the same share
+/// route the host prints, but against the guest's local proxy origin.
+/// The params arrive from the host's `/api/preview/config` through the
+/// tunnel ([`fetch_editor_boot`]); `server=%2Fws` resolves against the
+/// page origin, i.e. the proxy, so the guest's hub-client syncs with
+/// the host through the tunnel.
+fn build_guest_editor_url(
+    addr: &std::net::SocketAddr,
+    boot: &quarto_preview::EditorBootInfo,
+) -> String {
+    format!(
+        "http://{addr}{}",
+        editor_share_route(&boot.index_doc_id, &boot.file, &boot.name)
     )
 }
 
@@ -1106,6 +1202,79 @@ mod tests {
         assert!(
             !url.contains("automerge"),
             "the automerge: prefix must not leak into the URL; got {url}"
+        );
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // bd-7htq16rx: `--join` guests of an editor-UI host boot the same
+    // share route (ephemeral flag included) so hub-client skips
+    // project-set onboarding and joins the document. The boot params
+    // arrive from the host's `/api/preview/config` through the tunnel.
+    // ──────────────────────────────────────────────────────────────
+
+    fn guest_addr() -> std::net::SocketAddr {
+        "127.0.0.1:8080".parse().unwrap()
+    }
+
+    #[test]
+    fn guest_editor_url_is_share_route_with_ephemeral_flag() {
+        let boot = quarto_preview::EditorBootInfo {
+            index_doc_id: "4XyZabc123".to_string(),
+            file: "posts/intro.qmd".to_string(),
+            name: "My Project".to_string(),
+        };
+        assert_eq!(
+            build_guest_editor_url(&guest_addr(), &boot),
+            "http://127.0.0.1:8080/#/share/4XyZabc123?server=%2Fws&file=posts%2Fintro.qmd&name=My%20Project&ephemeral=true",
+        );
+    }
+
+    #[test]
+    fn guest_editor_url_strips_automerge_prefix() {
+        let boot = quarto_preview::EditorBootInfo {
+            index_doc_id: "automerge:4XyZ".to_string(),
+            file: "a.qmd".to_string(),
+            name: "p".to_string(),
+        };
+        let url = build_guest_editor_url(&guest_addr(), &boot);
+        assert!(
+            url.contains("#/share/4XyZ?"),
+            "the route wants the bare doc id; got {url}"
+        );
+        assert!(
+            !url.contains("automerge"),
+            "the automerge: prefix must not leak into the URL; got {url}"
+        );
+    }
+
+    #[test]
+    fn parse_editor_boot_reads_config_body() {
+        let body = br#"{"allowEdit":false,"editorBoot":{"indexDocId":"4XyZ","file":"index.qmd","name":"proj"}}"#;
+        let boot = parse_editor_boot(body).expect("editorBoot parses");
+        assert_eq!(boot.index_doc_id, "4XyZ");
+        assert_eq!(boot.file, "index.qmd");
+        assert_eq!(boot.name, "proj");
+    }
+
+    #[test]
+    fn parse_editor_boot_absent_without_the_field() {
+        // Viewer-mode (and older) hosts answer config without
+        // editorBoot — the guest falls back to the root URL.
+        assert_eq!(parse_editor_boot(br#"{"allowEdit":false}"#), None);
+    }
+
+    #[test]
+    fn parse_editor_boot_rejects_malformed_or_empty() {
+        assert_eq!(parse_editor_boot(b"not json"), None);
+        assert_eq!(parse_editor_boot(b""), None);
+        // A boot URL with an empty doc id or file can never join.
+        assert_eq!(
+            parse_editor_boot(br#"{"editorBoot":{"indexDocId":"","file":"index.qmd","name":"p"}}"#),
+            None
+        );
+        assert_eq!(
+            parse_editor_boot(br#"{"editorBoot":{"indexDocId":"4XyZ","file":"","name":"p"}}"#),
+            None
         );
     }
 
