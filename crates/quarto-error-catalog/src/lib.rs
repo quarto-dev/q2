@@ -89,6 +89,24 @@ mod tests {
         assert!(ERROR_CATALOG.get("Q-999-999").is_none()); // quarto-error-code-audit-ignore
     }
 
+    // bd-6d2wj4zp: Q-2-40 catalog presence (`.md` engine-ignored warning).
+    #[test]
+    fn error_catalog_has_q_2_40() {
+        let info = ERROR_CATALOG
+            .get("Q-2-40")
+            .expect("Q-2-40 must be in the catalog");
+        assert_eq!(info.subsystem, "markdown");
+        assert_eq!(
+            info.title,
+            "Engine Specification Ignored for Markdown Input"
+        );
+        assert!(
+            info.message_template.contains("never execute engines"),
+            "Q-2-40 message must state the policy; got: {}",
+            info.message_template
+        );
+    }
+
     // L8 / bd-rqgx: Q-12-14 catalog presence.
     #[test]
     fn error_catalog_has_q_12_14() {

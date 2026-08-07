@@ -617,6 +617,39 @@ fn rendering_md_not_in_render_list_hints_at_optin() {
     );
 }
 
+/// bd-6d2wj4zp S5: an opted-in `.md` with an `engine:` spec renders
+/// successfully (passthrough, no execution) and warns with Q-2-40
+/// through the real diagnostic path.
+#[test]
+fn md_with_engine_spec_renders_with_q_2_40_warning() {
+    let temp = TempDir::new().unwrap();
+    let project = canonical(temp.path());
+    write_file(
+        &project.join("_quarto.yml"),
+        "project:\n  type: default\n  render:\n    - \"*.md\"\n",
+    );
+    write_file(
+        &project.join("notes.md"),
+        "---\ntitle: Notes\nengine: jupyter\n---\n\n# Hello\n\nplain text\n",
+    );
+
+    let out = run_q2(&project, &[]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success(),
+        "the render itself must succeed; stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("Q-2-40"),
+        "expected the engine-ignored warning; got stderr: {stderr}",
+    );
+    let html = std::fs::read_to_string(project.join("notes.html")).expect("notes.html exists");
+    assert!(
+        html.contains("plain text"),
+        "content renders as plain markdown"
+    );
+}
+
 /// Regression guard for bd-87fu: native default-project renders
 /// must continue to write theme CSS to `{stem}_files/quarto/...`
 /// and embed a matching `<link>` in the HTML. The WASM-side fix

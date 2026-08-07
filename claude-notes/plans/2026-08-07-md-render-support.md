@@ -411,14 +411,23 @@ render path (the Connect-docs `q2 render` use case) lands before preview.
 - [ ] `Q-7-6`/`Q-7-7` wording: extension-aware hint for `.md`-not-in-render-list
   (`render.rs:1358-1378`)
 
-### Phase 2 — Engine-ignored warning
+### Phase 2 — Engine-ignored warning — **DONE 2026-08-07**
 
-- [ ] Failing test: `.md` with `engine: jupyter` (and with top-level `jupyter:`)
-  renders with warning Q-2-40, no execution; `.md` without engine metadata
-  renders warning-free; `.qmd` with `engine:` unaffected
-- [ ] Catalog entry + presence test + `docs/errors/markdown/Q-2-40.qmd`
-- [ ] Emission in `EngineExecutionStage::run` via `SourceType::from_path`
-- [ ] Run `scripts/audit-error-codes.py`
+- [x] Stage-level tests (engine_execution.rs): `engine: jupyter` and top-level
+  `jupyter:` on `.md` → exactly one Q-2-40, AST passthrough; no engine
+  metadata → silent; explicit `engine: markdown` → silent (harmless no-op,
+  warning would be noise); unknown engine on `.md` → Q-2-40 only, no
+  availability-fallback warning (skip happens before engine resolution)
+- [x] E2e test (`md_with_engine_spec_renders_with_q_2_40_warning`): opted-in
+  `.md` with `engine: jupyter` renders successfully through the real binary,
+  Q-2-40 on stderr, content in output HTML
+- [x] Catalog entry (after Q-2-39) + presence test + docs page
+  `docs/errors/markdown/Q-2-40.qmd` (status: stub)
+- [x] Emission in `EngineExecutionStage::run` gated on
+  `SourceType::from_path(&ctx.document.input)` — the dormant `SourceType`
+  seam is now live; diagnostic anchored at the `engine:` (or engine-name)
+  metadata key via `ConfigMapEntry::key_source`
+- [x] `scripts/audit-error-codes.py`: 171/171 consistent
 
 ### Phase 3 — Single-file path + output guard
 
