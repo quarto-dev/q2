@@ -533,17 +533,67 @@ per D8; noted for the listing follow-up strand.
   list, Q-2-40 pointer), added to the docs sidebar; `cargo run --bin q2 --
   render docs/` → 184 of 184 files, no warnings from the new page, its
   `.qmd` cross-links rewrote to `.html`
-- [ ] `cargo xtask verify` (full, WASM leg included) — running at session
-  end; no snapshot files changed anywhere in this strand
-- [ ] Close-out on bd-6d2wj4zp after Phase 5 decision (preview split to its
-  own session per D9)
+- [x] `cargo xtask verify` (full, all 14 steps, WASM + hub-client legs) —
+  passed clean on bb54fb7b; no snapshot files changed anywhere in this strand
+- [ ] Close-out on bd-6d2wj4zp after Phase 5 (preview) lands
 
-### Phase 5 status
+### Phase 5 status + hand-off (for the next session)
 
 Deferred to a dedicated follow-up session per D9's escape hatch — it touches
 `quarto-hub` Rust, `ts-packages/preview-renderer` TS, and the WASM/SPA
 rebuild chain, and the render-path work (Phases 1–4, 6) stands on its own.
-The strand stays open until preview lands or is split into its own strand.
+
+**How to resume:** branch `braid/bd-6d2wj4zp-md-render-support` (6 commits
+ahead of main at `9249c43d`, NOT pushed as of 2026-08-07 — ask Carlos before
+pushing). `braid show bd-6d2wj4zp` for the comment trail. Note: the main
+checkout's `CLAUDE.local.md` worktree block still references the unrelated
+bd-09aja9gl — ignore it; this plan is the context.
+
+**Scope** — make `q2 preview` treat `.md` render-list members like `.qmd`:
+synced into the preview VFS, watched for changes, links intercepted, live
+re-render on edit.
+
+**Code sites** (line numbers from the 2026-08-07 survey — re-grep, they
+drift):
+
+- `crates/quarto-hub/src/discovery.rs` (~:122-131): VFS sync — only
+  `ext == Some("qmd")` lands in `qmd_files`; single-file mode at ~:177.
+- `crates/quarto-hub/src/watch.rs` (~:244-247): `is_qmd_file`, used by
+  `WatchFilter::QmdOnly` (~:56) and `is_preview_relevant` (~:256).
+  **Existing tests pin the old behavior** — `test_watcher_ignores_non_qmd_files`
+  and siblings in `watch.rs` will need their semantics revisited, not just
+  made green.
+- TS: `ts-packages/preview-renderer/src/types/project.ts:45`
+  (`endsWith('.qmd')`), `src/utils/iframePostProcessor.ts:252`,
+  `src/utils/iframeLinkHandlers.ts:114`.
+
+**Design decision to make explicitly at session start:** the hub layer syncs
+and watches *all* `.qmd` today regardless of render-list membership — the
+render pipeline decides membership later. The symmetric (recommended) choice
+for `.md` is the same: extension-based sync/watch, membership decided by
+discovery at render time. A render-list-aware sync layer would couple the
+hub to `_quarto.yml` parsing for no user-visible gain. But note the noise
+trade-off: watching all `.md` means edits to *non-rendered* `.md` (README,
+notes) trigger preview-relevant events — check what `is_preview_relevant`
+consumers do on a file that then renders nothing.
+
+**Traps** (see CLAUDE.md "Verifying Rust changes in `q2 preview`"): a plain
+`cargo build --bin q2` does NOT rebuild the embedded WASM/SPA. Full chain:
+`cd hub-client && npm run build:wasm` → `cargo xtask build-q2-preview-spa` →
+`cargo build --bin q2`. Run `npm install` from the repo root at session
+start. hub-client changes additionally require `npm run build:all` to pass
+(stricter than typecheck+vitest).
+
+**E2e bar** (per CLAUDE.md): a real `q2 preview` browser session on a
+project with `.md` render-list members — edit a `.md`, see the preview
+update; click a nav link into a `.md` page. Unit/vitest alone is not
+sufficient; if no browser is available, say so explicitly. The
+`/preview-parity` skill exists for preview-vs-render DOM divergence.
+
+**Related work discovered during Phases 1–6** (tracked under epic
+bd-wch2dotq "Make q2 render the posit-connect docs"): bd-wpoiv8pq
+(metadata-field shortcodes expand empty), bd-rmimy728 (project-absolute
+`{{< include /path >}}` unsupported, misleading diagnostic).
 
 ## References
 
