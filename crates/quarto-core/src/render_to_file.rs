@@ -496,6 +496,25 @@ fn determine_output_paths(
         base_dir.join(format!("{}.{}", stem, extension))
     };
 
+    // Refuse an output that lands on the input itself — rendering
+    // would silently replace the source with its own output
+    // (bd-6d2wj4zp D7). Reachable via `--output <input>` today, and
+    // the guard also covers any future md-output format whose
+    // default `foo.md` → `foo.md` collides. Lexical comparison is
+    // the right level here: both paths are derived from the same
+    // (already-canonicalized) input in the default branch, and an
+    // explicit output aiming at the input through a different
+    // spelling still gets caught the moment the spellings agree —
+    // this is a safety net, not an ACL.
+    if output_path == input_path {
+        return Err(QuartoError::other(format!(
+            "Refusing to render {}: the output path would overwrite the input \
+             file itself. Pass a different `--output` / `output-file`, or let \
+             the output extension differ from the source's.",
+            input_path.display()
+        )));
+    }
+
     // Determine output directory
     let output_dir = output_path
         .parent()
@@ -533,6 +552,26 @@ mod tests {
         assert_eq!(output, PathBuf::from("/project/doc.html"));
         assert_eq!(dir, PathBuf::from("/project"));
         assert_eq!(stem, "doc");
+    }
+
+    /// bd-6d2wj4zp D7: a computed output that lands on the input
+    /// itself must refuse, not silently destroy the source. Reachable
+    /// today via `--output <input>`; will also guard the future
+    /// `foo.md` + `format: gfm` default (`foo.md` → `foo.md`).
+    #[test]
+    fn output_equal_to_input_is_refused() {
+        let input = Path::new("/project/notes.md");
+        let options = RenderToFileOptions {
+            output_path: Some(PathBuf::from("/project/notes.md")),
+            ..Default::default()
+        };
+        let err = determine_output_paths(input, "html", &options)
+            .expect_err("output == input must be an error");
+        let text = format!("{err}");
+        assert!(
+            text.contains("overwrite"),
+            "error should say it would overwrite the input: {text}"
+        );
     }
 
     #[test]

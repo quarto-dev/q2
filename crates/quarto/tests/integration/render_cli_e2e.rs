@@ -650,6 +650,62 @@ fn md_with_engine_spec_renders_with_q_2_40_warning() {
     );
 }
 
+/// bd-6d2wj4zp D7: an output path equal to the input must refuse
+/// rather than silently replace the source with rendered HTML.
+/// (Before the guard, `--output <abs input path>` destroyed the
+/// source file.)
+#[test]
+fn output_equal_to_input_refuses_and_preserves_source() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    let source = "---\ntitle: T\n---\n\nhello\n";
+    write_file(&dir.join("doc.qmd"), source);
+    let abs = dir.join("doc.qmd");
+
+    let out = run_q2(&dir, &["doc.qmd", "--output", abs.to_str().unwrap()]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "expected refusal when output == input; stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("overwrite"),
+        "error should explain the overwrite refusal; got stderr: {stderr}",
+    );
+    let after = std::fs::read_to_string(&abs).expect("source still exists");
+    assert_eq!(after, source, "source file must be untouched");
+}
+
+/// bd-6d2wj4zp S3: single-file format detection reads `.md` front
+/// matter exactly like `.qmd`. Pinned via the non-native bail-out:
+/// a `.md` declaring `format: pdf` must get the same early "not yet
+/// supported" refusal a `.qmd` gets — before the fix it rendered
+/// HTML bytes into a `p.pdf` file.
+#[test]
+fn md_with_non_native_format_gets_early_refusal_like_qmd() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("doc.md"),
+        "---\ntitle: T\nformat: pdf\n---\n\nhi\n",
+    );
+
+    let out = run_q2(&dir, &["doc.md"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "expected refusal for non-native format; stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("not yet supported"),
+        "expected the same early bail-out a .qmd gets; got stderr: {stderr}",
+    );
+    assert!(
+        !dir.join("doc.pdf").exists(),
+        "must not write a fake .pdf output"
+    );
+}
+
 /// Regression guard for bd-87fu: native default-project renders
 /// must continue to write theme CSS to `{stem}_files/quarto/...`
 /// and embed a matching `<link>` in the HTML. The WASM-side fix

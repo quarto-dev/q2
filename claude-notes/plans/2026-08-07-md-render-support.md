@@ -429,15 +429,36 @@ render path (the Connect-docs `q2 render` use case) lands before preview.
   metadata key via `ConfigMapEntry::key_source`
 - [x] `scripts/audit-error-codes.py`: 171/171 consistent
 
-### Phase 3 — Single-file path + output guard
+### Phase 3 — Single-file path + output guard — **DONE 2026-08-07**
 
-- [ ] Tests: `q2 render foo.md` outside a project honors front-matter `format:`;
-  `foo.md` + `format: gfm` errors with the collision diagnostic (D7)
-- [ ] `detect_single_input_format` accepts `.md` (`render.rs:1165`)
-- [ ] `output == input` guard (new check near `RenderContext::output_path`,
-  `render.rs:484` / `stage/context.rs:352`), with its own Q-code if reviewers
-  want one (default: reuse a generic render error)
-- [ ] Fix stale comment at `render.rs:279`
+Findings that adjusted the plan (research-report conclusions were stale):
+
+- Front-matter `format:` on a standalone `.md` was **already honored for
+  native formats** — per-document format resolution in the pipeline reads
+  front matter regardless of extension (`md_front_matter_format_revealjs_yields_reveal_deck`
+  passed before any fix; kept as a pin). The `.qmd` gate in
+  `detect_single_input_format` mattered for the **non-native bail-out**: a
+  `.md` with `format: pdf` slipped past the early "not yet supported"
+  refusal and rendered HTML bytes into `doc.pdf`. Fixed + pinned
+  (`md_with_non_native_format_gets_early_refusal_like_qmd`).
+- The D7 collision is **not** reachable via `format: gfm` today (non-native
+  formats bail; `determine_output_paths` maps unknown formats to `.html`) —
+  but `q2 render doc.qmd --output <abs path of doc.qmd>` **silently
+  destroyed the source file** (verified live). The guard lives in
+  `determine_output_paths` (`render_to_file.rs`) — the single chokepoint all
+  native single-file *and* project pass-2 renders funnel through — and
+  refuses `output == input` with an actionable error. Covers today's
+  `--output` data-loss bug and the future md-output-format default. Generic
+  render error, no dedicated Q-code (as decided).
+
+- [x] Tests: unit (`output_equal_to_input_is_refused`), e2e overwrite refusal
+  preserving the source byte-for-byte
+  (`output_equal_to_input_refuses_and_preserves_source`), `.md` revealjs pin,
+  `.md` non-native early refusal
+- [x] `detect_single_input_format` accepts `.md`
+- [x] `output == input` guard in `determine_output_paths`
+- [x] Stale "must be a `.qmd` file" comment at the SingleDoc fallthrough fixed
+- [x] Full workspace suite green (11022 passed)
 
 ### Phase 4 — Links, navigation, dependency graph
 

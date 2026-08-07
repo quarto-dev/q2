@@ -291,9 +291,12 @@ pub fn classify_inputs(
         if resolved.len() > 1 {
             return Err(DispatchError::MultiArgNonProject);
         }
-        // Single arg outside any project: must be a `.qmd` file
-        // (single-doc fallthrough). Directories outside any project
-        // are not a meaningful render target — we error.
+        // Single arg outside any project: a renderable source file
+        // (`.qmd` or `.md` — bd-6d2wj4zp) as the single-doc
+        // fallthrough. Directories outside any project are not a
+        // meaningful render target — we error. Note the extension is
+        // not checked here: any file becomes a SingleDoc, and
+        // non-source files fail downstream at parse.
         let only = &resolved[0];
         let is_dir = runtime
             .is_dir(only)
@@ -1182,7 +1185,15 @@ fn detect_single_input_format(inputs: &[String]) -> Option<String> {
         return None;
     }
     let path = std::path::Path::new(&inputs[0]);
-    if path.extension().and_then(|e| e.to_str()) != Some("qmd") || !path.is_file() {
+    // `.md` inputs read front matter exactly like `.qmd`
+    // (bd-6d2wj4zp S3/S4) — without this, a `.md` declaring a
+    // non-native format slips past the early "not yet supported"
+    // refusal below and renders HTML into a mismatched output file.
+    if !matches!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("qmd" | "md")
+    ) || !path.is_file()
+    {
         return None;
     }
     let content = std::fs::read_to_string(path).ok()?;
