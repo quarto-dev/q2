@@ -186,18 +186,15 @@ quarto-hub.com (`connect_project` + `read_file`) and spot-check the
 `darwin_amd64` artifact runs under Rosetta with both darwin keyring
 addons. See bd-c6l13j79's plan (Phase 4 record) for a worked example.
 
-**The first release after the musl switch (bd-dofxhzaj) deserves one
-extra check**, because CI proves the binary runs on the *runner*, not on
-the distros the switch is for. Download the published linux artifact and
-run it somewhere with no glibc:
-
-```bash
-docker run --rm -v "$PWD:/w" -w /w alpine:latest /w/q2 --version
-```
-
-Anything that dynamically links libc fails there instantly. Once a
-release has passed this, later ones inherit the confidence — it is a
-one-time check on the switch, not per-release ceremony.
+**You do not need to check the linux binaries against a glibc-less
+distro by hand** — CI does it every release (bd-3b47pxmm). Each musl leg
+runs its freshly built binary inside `alpine:latest` (which has musl and
+no glibc at all) and asserts `--version`, in the `Assert the binary needs
+no glibc (Alpine)` step, *before* anything is packaged or published.
+Each leg runs its own arch's container natively, so both `linux_amd64`
+and `linux_arm64` are covered — which a hand-run on an Apple Silicon
+laptop never was. If that step ever goes red, the release stops with
+nothing shipped.
 
 ### 7. Close out
 
@@ -243,7 +240,15 @@ still matches.
   staticness check must accept **both** spellings — matching one passes
   on one arch and fails on the other. (`ldd` says *not a dynamic
   executable* on both, but exits non-zero, so it cannot be used as a
-  bare assertion either.)
+  bare assertion either.) This gotcha has a live consumer: the `Assert
+  the binary needs no glibc (Alpine)` step in `release.yml` greps for
+  both spellings. Don't "tidy" it down to one.
+- **Staticness is a *default*, not a pin.** `crt-static` comes from the
+  `*-unknown-linux-musl` targets, so a stray `RUSTFLAGS`, cargo config,
+  or build-script link flag could turn the linux artifacts dynamic while
+  every other gate stays green — they'd still run fine on the runner.
+  The Alpine step is what catches that; it is a real gate, not ceremony
+  (bd-3b47pxmm).
 - **Signing happens in the `release` job, not the build matrix.** The
   secret key is touched by exactly one job, which signs the exact bytes
   being published — and the macOS/Windows build runners have no
