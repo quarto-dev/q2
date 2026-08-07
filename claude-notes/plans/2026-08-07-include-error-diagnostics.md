@@ -1,8 +1,9 @@
 # Include failure diagnostics: surface inner errors, kill spurious "Unknown shortcode"
 
 **Strand:** bd-qpvoamvu (discovered: bd-1fz3vh99 — nested-container includes)
-**Status:** approved 2026-08-07 — implementation in progress on
-branch `braid/bd-qpvoamvu-include-failure-diagnostics-surface`
+**Status:** implemented 2026-08-07 — commit 9abfda21, PR
+[#465](https://github.com/quarto-dev/q2/pull/465)
+(`feature/bd-qpvoamvu-include-failure-diagnostics`)
 
 ## Overview
 
