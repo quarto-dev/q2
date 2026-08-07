@@ -29,9 +29,14 @@ export function pickInitialPage(
   }
   // Fall-through: first .qmd in the discovered index, as the SPA
   // has done since Phase A. This is also the path taken when the
-  // CLI didn't pass a `?page=` hint at all.
+  // CLI didn't pass a `?page=` hint at all. `.md` is only a
+  // last-resort fallback (bd-6d2wj4zp Phase 5): with extension-based
+  // sync the index may contain never-rendered `.md` (a README), while
+  // a `.qmd` is always deliberate content.
   const firstQmd = files.find((f) => f.path.endsWith('.qmd'));
-  return firstQmd ? firstQmd.path : null;
+  if (firstQmd) return firstQmd.path;
+  const firstMd = files.find((f) => f.path.endsWith('.md'));
+  return firstMd ? firstMd.path : null;
 }
 
 function parsePageQuery(search: string): string | null {

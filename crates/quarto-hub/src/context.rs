@@ -57,7 +57,7 @@ pub struct HubConfig {
     pub watch_debounce_ms: u64,
 
     /// Which files surface as watch events. See [`WatchFilter`].
-    /// Default: `WatchFilter::QmdOnly` (legacy hub behaviour).
+    /// Default: `WatchFilter::SourcesOnly` (hub behaviour: `.qmd` + `.md`).
     /// `quarto-preview` overrides this to `WatchFilter::PreviewBroad`
     /// so config + asset edits trigger re-render.
     pub watch_filter: WatchFilter,

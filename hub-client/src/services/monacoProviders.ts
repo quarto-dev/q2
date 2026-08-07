@@ -20,6 +20,7 @@ import {
   type Symbol,
   type FoldingRange,
 } from './intelligenceService';
+import { isSourceFile } from '@quarto/preview-renderer/types/project';
 import type {
   SymbolKind,
   FoldingRangeKind,
@@ -225,8 +226,8 @@ export function registerIntelligenceProviders(
       ): Promise<Monaco.languages.DocumentSymbol[]> => {
         const path = getCurrentFilePath();
 
-        // Only provide symbols for .qmd files
-        if (!path?.endsWith('.qmd')) {
+        // Only provide symbols for source files (.qmd, .md)
+        if (!path || !isSourceFile(path)) {
           return [];
         }
 
@@ -252,8 +253,8 @@ export function registerIntelligenceProviders(
       ): Promise<Monaco.languages.FoldingRange[]> => {
         const path = getCurrentFilePath();
 
-        // Only provide folding ranges for .qmd files
-        if (!path?.endsWith('.qmd')) {
+        // Only provide folding ranges for source files (.qmd, .md)
+        if (!path || !isSourceFile(path)) {
           return [];
         }
 
@@ -291,7 +292,7 @@ export function registerIntelligenceProviders(
         token
       ): Promise<Monaco.languages.SemanticTokens | null> => {
         const path = getCurrentFilePath();
-        if (!path?.endsWith('.qmd')) {
+        if (!path || !isSourceFile(path)) {
           return null;
         }
 

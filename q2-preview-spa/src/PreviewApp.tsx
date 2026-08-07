@@ -389,25 +389,32 @@ function buildInitialState(): PreviewAppState {
  * `changedPath` should trigger a re-render of the page named by
  * `activeFile`, given the cached dep set `deps`.
  *
- * The filter is intentionally narrow: it ONLY filters `.qmd` edits.
- * Non-qmd files (CSS, _quarto.yml, _metadata.yml, .tsx custom
- * components, …) are project-wide signals that affect rendering
- * regardless of the active page's include-shortcode set, so they
- * always pass.
+ * The filter is intentionally narrow: it ONLY filters *source-file*
+ * edits (`.qmd`, and `.md` since bd-6d2wj4zp Phase 5 — with hub-wide
+ * extension-based sync, never-rendered `.md` like a README also watch,
+ * and must not re-render the active page). Non-source files (CSS,
+ * _quarto.yml, _metadata.yml, .tsx custom components, …) are
+ * project-wide signals that affect rendering regardless of the active
+ * page's include-shortcode set, so they always pass.
  *
  * Returns true (fail-open) when `deps` is null — the server response
  * hasn't landed yet, and we'd rather over-render than miss a change.
+ * (The deps fetch seeds the set with the active page itself, so "edit
+ * my own page" needs no special case here.)
+ *
+ * Exported for unit testing.
  */
-function shouldRerenderForTextChange(
+export function shouldRerenderForTextChange(
   changedPath: string,
   activeFile: string | null,
   deps: Set<string> | null,
 ): boolean {
   if (!activeFile) return true;
-  // Non-qmd edits always pass: they're either config (_quarto.yml,
+  // Non-source edits always pass: they're either config (_quarto.yml,
   // _metadata.yml) or project-wide assets (CSS, custom components)
   // that the include-shortcode dep extractor doesn't track.
-  if (!changedPath.toLowerCase().endsWith('.qmd')) return true;
+  const lower = changedPath.toLowerCase();
+  if (!lower.endsWith('.qmd') && !lower.endsWith('.md')) return true;
   if (deps === null) return true;
   return deps.has(changedPath);
 }

@@ -494,13 +494,85 @@ re-rendering when a linked `.md` changes) is exercised only at the unit
 level — an e2e needs always-render listing pages, which are out of scope
 per D8; noted for the listing follow-up strand.
 
-### Phase 5 — Preview (scope per D9)
+### Phase 5 — Preview (scope per D9) — decisions resolved 2026-08-07 (session 2)
 
-- [ ] Rust: `quarto-hub/src/discovery.rs:122` VFS sync + `watch.rs:244` filter
-  accept `.md`
-- [ ] TS: `preview-renderer` source-file checks (`types/project.ts:45`,
-  `iframePostProcessor.ts:252`, `iframeLinkHandlers.ts:114`)
-- [ ] Full WASM/SPA rebuild chain + `cargo xtask verify` (not `--skip-hub-build`)
+Two scope decisions made with Carlos at Phase-5 session start:
+
+- **D10 — Sync scope: hub-wide.** Extension-based sync/watch (the hand-off's
+  recommended option), applied symmetrically for `q2 preview` *and* the
+  long-lived `quarto hub` server: `.md` is a source/text file everywhere,
+  like `.qmd`. `WatchFilter::QmdOnly` becomes "source files" (`.qmd` +
+  `.md`). Membership stays a render-time (discovery) decision. No
+  render-list-aware sync layer.
+- **D11 — hub-client editor surfaces: in scope.** `PreviewRouter`,
+  `useIntelligence` / `intelligenceService`, and `FileSidebar` treat `.md`
+  as a source file (live preview, diagnostics, outline, folding), not a
+  follow-up strand.
+- **Noise check result** (the hand-off's open question): the consumer that
+  mattered is `shouldRerenderForTextChange` (`q2-preview-spa/src/PreviewApp.tsx`)
+  — today non-`.qmd` text edits *always* re-render the active page, so
+  synced `.md` edits (README etc.) would be noisy. Fix: treat `.md` like
+  `.qmd` there (dep-set-gated). With that, extension-based sync has no
+  user-visible noise cost found.
+- **New gate found beyond the hand-off list:** `quarto-preview`'s
+  `capture_driver.rs` walks `ProjectFiles::qmd_files` for **engine
+  captures** — `.md` must be skipped there or S5 (".md never executes")
+  breaks in preview.
+
+Work items (all landed 2026-08-07, session 2):
+
+- [x] Rust `quarto-hub` (tests first): `discovery.rs` walk accepts `.md`
+  into `qmd_files` (field name kept, docs note both extensions);
+  `watch.rs` `is_qmd_file` → `is_source_file`, `WatchFilter::QmdOnly`
+  renamed **`SourcesOnly`** (semantic rename, per hand-off warning) —
+  pinned tests revised: `.md` accepted by both filters, `README.md`
+  moved to the PreviewBroad *accepts* side, `.txt`/`_quarto.yml`
+  rejection semantics preserved. New tests:
+  `test_discover_md_files_as_sources`, `test_filters_accept_md_as_source`
+- [x] Rust `quarto-preview`: **no capture-driver code change needed** — the
+  S5 guard already lives at the single chokepoint (`EngineExecutionStage`'s
+  `SourceType::Markdown` skip from Phase 2), which the capture sub-pipeline
+  (`preview_record.rs`, truncated at engine execution) runs through. Pinned
+  by `md_doc_with_engine_spec_records_no_capture`, which also asserts
+  non-vacuity (the `.md` IS in the synced source set). `commands/preview.rs`
+  dir-mode initial page falls back `index.qmd` → `index.md` (2 new tests)
+- [x] TS `preview-renderer`: `isSourceFile` predicate beside `isQmdFile`
+  (`types/project.ts`); `RENDERABLE_EXTS` = `['.qmd', '.md']`
+  (`iframePostProcessor.ts` — reverse-map machinery was already
+  multi-extension-ready); `iframeLinkHandlers.ts` direct-link gate accepts
+  `.md`, `parseArtifactHref` now consults `projectFilePaths` to pick the
+  source extension (`.qmd` wins ties; `.qmd` fallback for the missing-page
+  overlay UX preserved); `PreviewStaticInfoViews` prose mentions `.md`
+- [x] TS `q2-preview-spa`: `shouldRerenderForTextChange` dep-filters `.md`
+  like `.qmd` (exported + 7-case unit test file; the deps fetch already
+  seeds the set with the active page, so self-edits re-render);
+  `pickInitialPage` falls back `.qmd`-first then `.md`
+- [x] hub-client (D11): `PreviewRouter`, `useIntelligence`,
+  `intelligenceService` (7 gates), `monacoProviders` (3 gates, with null
+  narrowing), `FileSidebar` (drag + icon) all use the source-file
+  predicate; `Editor.tsx` maps `.md` → Monaco language **`qmd`** (wires up
+  Monarch highlighting + the qmd-registered symbol/folding/semantic-token
+  providers) and `selectDefaultFile` falls back to `index.md`/any-`.md`
+  before first-file; `ReactAstSlideRenderer` link nav accepts `.md`.
+  `templateService` deliberately stays `.qmd`-only (curated built-ins)
+- [x] Full WASM/SPA rebuild chain (`build:wasm` → `build-q2-preview-spa` →
+  `cargo build --bin q2`), `npm run build:all` green, hub-client `test:ci`
+  green (unit + integration + wasm legs)
+- [x] Browser e2e (real `q2 preview` session on a fixture with
+  `render: ["**/*.qmd", "**/*.md"]`, sidebar `file: admin/index.md`, body
+  link, plus a never-rendered `README.md`): home renders with `.md`
+  sidebar entry; body link and sidebar link both navigate into the `.md`
+  page (`?page=admin/index.md`, content rendered); disk edit to the `.md`
+  live-updated the preview (`EDIT-SENTINEL-42` appeared without reload);
+  single-file `q2 preview standalone.md` boots and renders. The
+  README-noise assertion (no re-render on unrelated `.md` edit) is pinned
+  at the unit level only — the SPA emits no observable render log to
+  assert against in-browser. hub-client (quarto-hub.com editor) surfaces
+  were NOT browser-tested — covered by unit/integration tests +
+  `build:all` only.
+- [x] `cargo xtask verify` (full, all 14 steps, WASM + hub-client legs) —
+  passed clean on the Phase-5 tree (2026-08-07, session 2). No snapshot
+  files changed in this phase.
 
 ### Phase 6 — End-to-end verification + docs — **DONE 2026-08-07** (verify run below)
 
