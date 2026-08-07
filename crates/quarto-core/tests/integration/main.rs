@@ -23,6 +23,7 @@ pub mod fail_fast;
 pub mod get_config_merge;
 pub mod idempotence;
 pub mod include_expansion_diagnostics;
+pub mod include_nested_expansion;
 pub mod include_resolve_pipeline;
 pub mod incremental_rebuild;
 pub mod jupyter_integration;

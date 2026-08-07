@@ -597,14 +597,13 @@ impl ShortcodeResolveTransform {
             return ShortcodeResult::Preserve;
         }
 
-        // `include` is not a ShortcodeResolve handler: block-level
-        // includes are expanded — and failed ones removed — by
-        // IncludeExpansionStage before transforms run. Any `include`
-        // still present here is one the expansion stage never
-        // considered (e.g. inline among other content, or nested in a
-        // container — bd-1fz3vh99). "Unknown shortcode / check for
-        // typos" would be wrong for a name we do know; say what
-        // actually happened (bd-qpvoamvu).
+        // `include` is not a ShortcodeResolve handler: includes are
+        // expanded — at every block-list position (bd-1fz3vh99) — and
+        // failed ones removed by IncludeExpansionStage before
+        // transforms run. Any `include` still present here is inline
+        // among other content, the one unsupported position. "Unknown
+        // shortcode / check for typos" would be wrong for a name we do
+        // know; say what actually happened (bd-qpvoamvu).
         if shortcode.name == "include" {
             let diagnostic = DiagnosticMessageBuilder::warning("Include not expanded")
                 .with_code("Q-17-4")

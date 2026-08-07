@@ -37,10 +37,10 @@ Common causes:
 - **Missing blank lines** around the shortcode, causing it to be
   parsed as part of an adjacent paragraph instead of standing
   alone.
-- **An include nested inside a container** such as a fenced div or
-  callout. Include expansion currently only applies at the top
-  level of a document; this limitation is tracked and expected to
-  be lifted.
+
+(Includes nested inside containers — fenced divs, callouts,
+blockquotes, list items, tables — *are* expanded; only the inline
+position is unsupported.)
 
 ## How to fix
 
