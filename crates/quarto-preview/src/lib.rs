@@ -348,11 +348,17 @@ fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
 
 /// Construct the StorageManager. `project_root` decides project vs
 /// standalone mode; either way, `config.data_dir` is the storage root.
+///
+/// Secrets are always ephemeral (bd-tp1l6a0w): the preview is a
+/// short-lived embedded hub — loopback only, no auth, per-session data
+/// dir by default — so the server/session secrets live in memory only.
+/// Nothing is persisted to `hub.json`, and the hub's multi-instance
+/// secret-pinning warning does not apply.
 fn build_storage(config: &PreviewConfig) -> Result<StorageManager> {
     match &config.project_root {
-        Some(root) => StorageManager::new_with_data_dir(root, &config.data_dir)
+        Some(root) => StorageManager::new_with_data_dir_ephemeral(root, &config.data_dir)
             .map_err(|e| anyhow::anyhow!("storage init failed: {e}")),
-        None => StorageManager::new_standalone(&config.data_dir)
+        None => StorageManager::new_standalone_ephemeral(&config.data_dir)
             .map_err(|e| anyhow::anyhow!("storage init failed: {e}")),
     }
 }
