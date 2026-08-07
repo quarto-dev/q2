@@ -57,6 +57,11 @@ pub enum DiskWritePolicy {
 ///    [`DiskWritePolicy::ReadOnly`], where disk stays authoritative)
 /// 7. Update sync checkpoint
 ///
+/// Steps 3-5 are skipped under [`DiskWritePolicy::ReadOnly`] when the
+/// filesystem content is unchanged since the last checkpoint: with no
+/// disk delta there is nothing to merge, and applying the stale (never
+/// written-back) disk content would revert live doc-side edits.
+///
 /// # Arguments
 /// * `doc_handle` - Handle to the automerge document
 /// * `file_path` - Path to the filesystem file
@@ -107,38 +112,59 @@ pub fn sync_document(
             return Ok(SyncResult::NoChanges);
         }
 
-        // 3. Fork at sync checkpoint (with fallback if fork_at fails)
-        let mut forked = doc.fork_at(&last_sync_heads).unwrap_or_else(|e| {
-            warn!(
-                doc_id = %doc_id,
-                error = %e,
-                "fork_at failed, falling back to current state"
-            );
-            doc.fork()
-        });
+        // Steps 3-5 merge the filesystem delta into the document.
+        // They must only run when the filesystem actually changed:
+        // the fork-apply rewrites the fork from its checkpoint state
+        // to the current disk content, and under ReadOnly the
+        // checkpoint pairs current heads with the *disk* hash (the
+        // file is never written back), so the doc state at those
+        // heads has diverged from the disk content. Applying that
+        // stale disk content anyway would manufacture a revert of
+        // every doc-side edit older than the previous checkpoint,
+        // and merging it would delete those edits from the live
+        // document (the `--ui editor` ephemeral-editing clobber).
+        // With no disk delta there is nothing to merge; the
+        // checkpoint update below still advances the heads so the
+        // next sync doesn't re-fire. WriteBack is unaffected: its
+        // checkpoint always pairs heads with the content written
+        // back, so the fork-apply is a no-op when only the doc
+        // changed — but running it keeps the merged-content read
+        // below honest, so the gate is ReadOnly-specific.
+        let merge_fs_delta = !fs_unchanged || policy == DiskWritePolicy::WriteBack;
+        if merge_fs_delta {
+            // 3. Fork at sync checkpoint (with fallback if fork_at fails)
+            let mut forked = doc.fork_at(&last_sync_heads).unwrap_or_else(|e| {
+                warn!(
+                    doc_id = %doc_id,
+                    error = %e,
+                    "fork_at failed, falling back to current state"
+                );
+                doc.fork()
+            });
 
-        // 4. Apply filesystem content to fork
-        let text_obj = forked
-            .get(ROOT, "text")
-            .map_err(|e| Error::Sync(format!("failed to get text object: {:?}", e)))?
-            .ok_or_else(|| {
-                Error::Sync(format!(
-                    "document {} has no text field - was it initialized correctly?",
-                    doc_id
-                ))
-            })?
-            .1;
+            // 4. Apply filesystem content to fork
+            let text_obj = forked
+                .get(ROOT, "text")
+                .map_err(|e| Error::Sync(format!("failed to get text object: {:?}", e)))?
+                .ok_or_else(|| {
+                    Error::Sync(format!(
+                        "document {} has no text field - was it initialized correctly?",
+                        doc_id
+                    ))
+                })?
+                .1;
 
-        forked
-            .transact::<_, _, automerge::AutomergeError>(|tx| {
-                tx.update_text(&text_obj, &fs_content)?;
-                Ok(())
-            })
-            .map_err(|e| Error::Sync(format!("failed to update text in fork: {:?}", e)))?;
+            forked
+                .transact::<_, _, automerge::AutomergeError>(|tx| {
+                    tx.update_text(&text_obj, &fs_content)?;
+                    Ok(())
+                })
+                .map_err(|e| Error::Sync(format!("failed to update text in fork: {:?}", e)))?;
 
-        // 5. Merge fork back into main document
-        doc.merge(&mut forked)
-            .map_err(|e| Error::Sync(format!("failed to merge fork: {:?}", e)))?;
+            // 5. Merge fork back into main document
+            doc.merge(&mut forked)
+                .map_err(|e| Error::Sync(format!("failed to merge fork: {:?}", e)))?;
+        }
 
         // 6. Read merged content and write back to filesystem
         let merged_text_obj = doc
@@ -1638,6 +1664,58 @@ mod tests {
         )
         .unwrap();
         assert_eq!(third, SyncResult::NoChanges);
+        assert_eq!(
+            std::fs::read_to_string(&file_path).unwrap(),
+            "Original content"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sync_readonly_repeated_doc_edits_are_not_clobbered() {
+        // Repro for the `--ui editor --share` clobber (ephemeral editing
+        // under ReadOnly): with the disk untouched, successive periodic
+        // syncs must preserve ALL doc-side edits, not just the latest.
+        let temp = TempDir::new().unwrap();
+        let repo = create_test_repo().await;
+
+        let doc = create_doc_with_text("Original content");
+        let handle = repo.create(doc).await.unwrap();
+        let doc_id = handle.document_id().to_string();
+
+        let file_path = temp.path().join("test.qmd");
+        std::fs::write(&file_path, "Original content").unwrap();
+
+        let mut sync_state = SyncState::load(temp.path()).unwrap();
+        let heads = handle.with_document(|doc| doc.get_heads());
+        sync_state.set_checkpoint(&doc_id, &heads, &sha256_hash("Original content"));
+
+        // First browser edit; the first periodic sync absorbs it (disk
+        // untouched, doc keeps the change).
+        update_text_in_handle(&handle, "Original content\nedit-1");
+        sync_document(
+            &handle,
+            &file_path,
+            &mut sync_state,
+            DiskWritePolicy::ReadOnly,
+        )
+        .unwrap();
+        assert_eq!(read_text_from_handle(&handle), "Original content\nedit-1");
+
+        // A second browser edit lands before the next periodic sync. The
+        // disk has NOT changed, so this sync must leave both edits intact.
+        update_text_in_handle(&handle, "Original content\nedit-1\nedit-2");
+        sync_document(
+            &handle,
+            &file_path,
+            &mut sync_state,
+            DiskWritePolicy::ReadOnly,
+        )
+        .unwrap();
+        assert_eq!(
+            read_text_from_handle(&handle),
+            "Original content\nedit-1\nedit-2",
+            "the second periodic sync clobbered the first edit"
+        );
         assert_eq!(
             std::fs::read_to_string(&file_path).unwrap(),
             "Original content"
