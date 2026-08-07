@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-07
+
+- [`279d7e5e`](https://github.com/quarto-dev/q2/commits/279d7e5e): `.md` files are now first-class source files: they sync into hub projects, get live preview, outline, folding, diagnostics, and qmd highlighting in the editor, and cross-document links into `.md` pages navigate like `.qmd` ones.
+
 ### 2026-08-03
 
 - [`bd8f5206`](https://github.com/quarto-dev/q2/commits/bd8f5206): The session-expiry re-check now schedules only from the server-reported expiry; `/auth/me` gained a `credential` field distinguishing sliding sessions from fixed-expiry Bearer tokens, and the obsolete 1-hour fallback lifetime was removed.
