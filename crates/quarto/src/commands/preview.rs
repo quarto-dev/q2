@@ -793,6 +793,13 @@ fn percent_encode(s: &str, keep_slash: bool) -> String {
 /// this preview server. The doc id travels bare: the client re-adds
 /// the `automerge:` prefix, and `buildShareableUrl` on the TS side
 /// strips it symmetrically.
+///
+/// `ephemeral=true` (bd-zf4ryvuq) marks the serving hub as a throwaway
+/// per-session preview server: the client captures the flag before the
+/// share handler clears the URL, silently establishes a project-set
+/// root against `/ws`, and skips the setup/migration gate so the user
+/// lands straight in the preview. Only preview boot URLs carry it —
+/// `buildShareableUrl` never emits it.
 pub(crate) fn build_editor_boot_url(
     host: &str,
     port: u16,
@@ -804,7 +811,7 @@ pub(crate) fn build_editor_boot_url(
         .strip_prefix("automerge:")
         .unwrap_or(index_doc_id);
     format!(
-        "http://{host}:{port}/#/share/{}?server=%2Fws&file={}&name={}",
+        "http://{host}:{port}/#/share/{}?server=%2Fws&file={}&name={}&ephemeral=true",
         percent_encode_component(doc_id),
         percent_encode_component(file),
         percent_encode_component(project_name),
@@ -1070,7 +1077,19 @@ mod tests {
                 "posts/intro.qmd",
                 "My Project"
             ),
-            "http://127.0.0.1:8080/#/share/4XyZabc123?server=%2Fws&file=posts%2Fintro.qmd&name=My%20Project",
+            "http://127.0.0.1:8080/#/share/4XyZabc123?server=%2Fws&file=posts%2Fintro.qmd&name=My%20Project&ephemeral=true",
+        );
+    }
+
+    #[test]
+    fn build_editor_boot_url_marks_hub_ephemeral() {
+        // The preview hub is a throwaway per-session server; the client
+        // reads `ephemeral=true` to skip project-set onboarding and go
+        // straight to the preview (bd-zf4ryvuq).
+        let url = build_editor_boot_url("127.0.0.1", 8080, "4XyZ", "a.qmd", "p");
+        assert!(
+            url.ends_with("&ephemeral=true"),
+            "preview boot URLs must carry the ephemeral flag; got {url}"
         );
     }
 
