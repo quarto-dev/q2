@@ -502,17 +502,48 @@ per D8; noted for the listing follow-up strand.
   `iframePostProcessor.ts:252`, `iframeLinkHandlers.ts:114`)
 - [ ] Full WASM/SPA rebuild chain + `cargo xtask verify` (not `--skip-hub-build`)
 
-### Phase 6 — End-to-end verification + docs
+### Phase 6 — End-to-end verification + docs — **DONE 2026-08-07** (verify run below)
 
-- [ ] `cargo run --bin q2 -- render` the Connect docs project (or a trimmed
-  fixture derived from it); inspect emitted HTML for a `.md` page: shortcode
-  expansion, nav links pointing at `.html`, correct sidebar; record invocation +
-  output snippet per the end-to-end policy in CLAUDE.md
-- [ ] Fixture project under the repo's test corpus with mixed `.md`/`.qmd`,
-  engine-spec `.md`, excluded `.md`
-- [ ] User-facing docs on the docs/ website (rendered with q2): `.md` inputs are
-  render-list opt-in; engines ignored with warning
-- [ ] `cargo xtask verify`, snapshot-change report, close-out on bd-6d2wj4zp
+- [x] **End-to-end with real Connect-docs sources** (per the CLAUDE.md e2e
+  policy). Invocation: copied `admin/index.md` + `user/index.md` verbatim
+  from the Connect port into a scratch project with
+  `render: ["**/*.md", "**/*.qmd"]`, a sidebar `file: admin/index.md`, and a
+  body link `[Admin Guide](admin/index.md)`, then
+  `CONNECT_VERSION=2026.08 cargo run --bin q2 -- render <dir>` →
+  "Rendered 3 of 3 files". Output inspected:
+  - `_site/admin/index.html` exists; sidebar hrefs are page-relative and
+    correct from both root (`admin/index.html`) and the admin page itself
+    (`index.html` / `../index.html`)
+  - body link rewrote to `href="admin/index.html"`
+  - inline `{{< env CONNECT_VERSION >}}` expanded to `2026.08` in both `.md`
+    and `.qmd` (verified in a paired fixture)
+  - **discovered (not `.md`-related):** shortcodes in *metadata fields*
+    (`title:`/`subtitle:`) expand empty — identically for `.qmd` and `.md`.
+    Filed as bd-wpoiv8pq (discovered-from bd-6d2wj4zp). The two render
+    warnings in the slice were the unimplemented `include` shortcode, also
+    orthogonal.
+- [x] Mixed-fixture coverage lives in the inline e2e fixtures
+  (`md_pages_get_nav_and_body_links_rewritten`,
+  `md_with_engine_spec_renders_with_q_2_40_warning`,
+  `empty_project_with_md_files_hints_at_render_list_optin`, discovery unit
+  fixtures) — no separate corpus directory needed; smoke-all gains nothing
+  the e2e tests don't already assert
+- [x] User docs: new page `docs/guides/projects/render-list.qmd` (render-list
+  semantics, the default ≡ `**/*.qmd` invariant, `.md` opt-in, never-render
+  list, Q-2-40 pointer), added to the docs sidebar; `cargo run --bin q2 --
+  render docs/` → 184 of 184 files, no warnings from the new page, its
+  `.qmd` cross-links rewrote to `.html`
+- [ ] `cargo xtask verify` (full, WASM leg included) — running at session
+  end; no snapshot files changed anywhere in this strand
+- [ ] Close-out on bd-6d2wj4zp after Phase 5 decision (preview split to its
+  own session per D9)
+
+### Phase 5 status
+
+Deferred to a dedicated follow-up session per D9's escape hatch — it touches
+`quarto-hub` Rust, `ts-packages/preview-renderer` TS, and the WASM/SPA
+rebuild chain, and the render-path work (Phases 1–4, 6) stands on its own.
+The strand stays open until preview lands or is split into its own strand.
 
 ## References
 

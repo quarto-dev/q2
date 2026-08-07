@@ -28,6 +28,7 @@ website:
           contents:
             - guides/authoring/index.qmd
             - guides/projects/create.qmd
+            - guides/projects/render-list.qmd
             - guides/projects/scripts.qmd
             - guides/publishing/index.qmd
     - id: Authoring
