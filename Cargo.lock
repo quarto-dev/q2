@@ -3643,6 +3643,7 @@ version = "0.0.0"
 dependencies = [
  "indexmap",
  "insta",
+ "quarto-config",
  "quarto-error-reporting",
  "quarto-pandoc-types",
  "quarto-source-map",

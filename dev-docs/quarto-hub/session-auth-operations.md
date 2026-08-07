@@ -147,6 +147,14 @@ every instance. `QUARTO_HUB_SERVER_SECRET` warns the same way; divergence
 there means each instance derives different actor IDs for the same user.
 The secret **values** are never logged.
 
+**Embedded hubs (`q2 preview`) are exempt.** Short-lived hubs built on
+`StorageManager::new_standalone_ephemeral` / `new_with_data_dir_ephemeral`
+resolve both secrets per process — the env vars still win when set — and
+never persist or warn: their data directory is deleted on exit, so there
+is nothing to pin. Expect a `hub.json` without secret fields from such
+hubs, and fresh actor IDs on every restart (harmless there: loopback
+only, no auth).
+
 ## Rotating the session secret
 
 Two modes. **The distinction is security-critical.**

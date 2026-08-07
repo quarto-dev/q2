@@ -57,3 +57,6 @@ CLAUDE.local.md
 
 # local-prod mode data directory
 .local-prod-data/
+
+# Posit Assistant per-machine settings
+.posit/assistant/settings.json
