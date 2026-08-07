@@ -14,12 +14,17 @@
 //! ListingRenderTransform) to consume.
 //!
 //! Item discovery (D10): no filesystem walk. Each listing's
-//! `contents:` glob is matched against
-//! [`crate::project::index::ProjectIndex::profiles`], trying both
-//! host-directory-relative and project-relative path views. This
-//! gives identical behavior on native and WASM, naturally excludes
-//! files outside the project's render set, and naturally excludes
-//! the host page itself.
+//! `contents:` glob is resolved to a project-relative pattern
+//! against the directory of the file it was written in
+//! ([`crate::project::listing::glob_resolve`]; GH #456,
+//! bd-v7ixzsp5) and matched single-view against
+//! [`crate::project::index::ProjectIndex::profiles`]. This gives
+//! identical behavior on native and WASM, naturally excludes files
+//! outside the project's render set, and naturally excludes the
+//! host page itself. Patterns whose normalization escapes the
+//! project root match nothing and emit `Q-12-17` here (this
+//! transform owns the diagnostic; the profile stage drops them
+//! silently).
 //!
 //! TODO(bd-0fd0): when a Lua filter slot lands between generate and
 //! render transforms, serialize the resolved listings into
@@ -28,13 +33,15 @@
 //! `RenderContext` is the only data path between this transform
 //! and `ListingRenderTransform`.
 
+use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
-use crate::project::discovery::{glob_match_path_or_dir, path_to_forward_slashes, relative_to_dir};
+use crate::project::discovery::path_to_forward_slashes;
 use crate::project::listing::filter::apply_filters;
+use crate::project::listing::glob_resolve::{item_matches, resolve_content_globs};
 use crate::project::listing::sort::apply_sort;
-use crate::project::listing::{ListingContents, ResolvedListing, hydrate_item, parse_listings};
+use crate::project::listing::{ResolvedListing, hydrate_item, parse_listings};
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::is_feature_disabled;
@@ -102,6 +109,32 @@ impl AstTransform for ListingGenerateTransform {
         let mut resolved: Vec<ResolvedListing> = Vec::with_capacity(listings.len());
 
         for listing in listings {
+            // Resolve each glob against the directory of the file
+            // it was written in (provenance-based; GH #456).
+            let resolution = resolve_content_globs(
+                &listing.contents,
+                ctx.source_context,
+                &ctx.project.dir,
+                &host_dir_str,
+            );
+            for escaped in &resolution.escaped {
+                diags.push(
+                    DiagnosticMessageBuilder::warning(format!(
+                        "Listing `contents:` pattern `{}` points outside the project \
+                         directory and matches nothing.",
+                        escaped.raw
+                    ))
+                    .with_code("Q-12-17")
+                    .with_location(escaped.source.clone())
+                    .problem("The pattern's `..` segments climb above the project root.")
+                    .add_info(
+                        "Listing contents are limited to files inside the project. \
+                         Adjust the pattern so it stays within the project directory.",
+                    )
+                    .build(),
+                );
+            }
+
             let mut items = Vec::new();
             if let Some(index) = ctx.project_index.as_deref() {
                 for profile in index.profiles() {
@@ -109,13 +142,7 @@ impl AstTransform for ListingGenerateTransform {
                     if candidate_path_str == host_path_str {
                         continue;
                     }
-                    let host_relative_candidate =
-                        relative_to_dir(&candidate_path_str, &host_dir_str);
-                    if matches_any_glob(
-                        &listing.contents,
-                        &candidate_path_str,
-                        host_relative_candidate.as_deref(),
-                    ) {
+                    if item_matches(&resolution.globs, &candidate_path_str) {
                         items.push(hydrate_item(profile));
                     }
                 }
@@ -171,28 +198,6 @@ impl AstTransform for ListingGenerateTransform {
     }
 }
 
-/// True iff `candidate` (in either path view) matches *any* glob in
-/// `contents`. Inline-record entries are skipped (the parser already
-/// emitted `Q-12-2`).
-fn matches_any_glob(
-    contents: &[ListingContents],
-    project_relative: &str,
-    host_relative: Option<&str>,
-) -> bool {
-    contents.iter().any(|c| match c {
-        ListingContents::Glob(pattern) => {
-            // Try host-relative first (Q1 default `*.qmd` is host-
-            // relative). If that misses, try project-relative for
-            // explicit patterns like `posts/**/*.qmd`. The dir-aware
-            // variant lets a bare `contents: posts` match everything
-            // under the directory (Q1 parity, bd-9arwdicv).
-            host_relative.is_some_and(|hr| glob_match_path_or_dir(pattern, hr))
-                || glob_match_path_or_dir(pattern, project_relative)
-        }
-        ListingContents::Inline(_) => false,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,33 +234,6 @@ mod tests {
             })
             .collect();
         ConfigValue::new_map(map_entries, SourceInfo::for_test())
-    }
-
-    /// A bare directory entry (`contents: posts`) matches everything
-    /// under the directory, in both path views; segment-exact, so a
-    /// sibling `posts-archive/` never matches. See bd-9arwdicv.
-    #[test]
-    fn matches_any_glob_bare_directory() {
-        let contents = vec![ListingContents::Glob("posts".to_string())];
-        assert!(matches_any_glob(
-            &contents,
-            "posts/welcome/index.qmd",
-            Some("posts/welcome/index.qmd"),
-        ));
-        // Project-relative fallback (host in a sub-directory).
-        assert!(matches_any_glob(&contents, "posts/welcome/index.qmd", None));
-        assert!(!matches_any_glob(
-            &contents,
-            "posts-archive/old.qmd",
-            Some("posts-archive/old.qmd"),
-        ));
-        // A literal file entry still matches itself exactly.
-        let file_entry = vec![ListingContents::Glob("posts/welcome/index.qmd".to_string())];
-        assert!(matches_any_glob(
-            &file_entry,
-            "posts/welcome/index.qmd",
-            None
-        ));
     }
 
     fn make_profile(source: &str, output_href: &str, title: &str) -> DocumentProfile {

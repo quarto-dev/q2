@@ -6,6 +6,7 @@
 pub mod ast_context;
 pub mod location;
 pub mod meta;
+mod meta_annotations;
 pub mod shortcode;
 pub mod treesitter;
 pub mod treesitter_utils;

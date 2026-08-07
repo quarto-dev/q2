@@ -111,12 +111,17 @@ fn default_output_dir(dir: &Path, config: Option<&ProjectConfig>) -> PathBuf {
 ///       chapter1.qmd       # Document being rendered
 /// ```
 ///
-/// Returns: [layer0, layer1] - deeper directories later in vec
+/// Returns: [layer0, layer1] - deeper directories later in vec.
+/// Each layer carries the path of the `_metadata.yml` it was parsed
+/// from — the exact `PathBuf` whose string form was hashed into the
+/// layer's `FileId`s by `quarto_yaml::parse_file`, so callers
+/// (`MetadataMergeStage`) can register the file in the document's
+/// `SourceContext` under the matching id.
 pub fn directory_metadata_for_document(
     project: &ProjectContext,
     document_path: &Path,
     runtime: &dyn SystemRuntime,
-) -> Result<Vec<ConfigValue>> {
+) -> Result<Vec<(PathBuf, ConfigValue)>> {
     use pampa::pandoc::yaml_to_config_value;
     use pampa::utils::diagnostic_collector::DiagnosticCollector;
     use quarto_config::InterpretationContext;
@@ -188,7 +193,7 @@ pub fn directory_metadata_for_document(
             // Adjust !path values to be relative to document directory
             adjust_paths_to_document_dir(&mut metadata, &current_dir, document_dir);
 
-            layers.push(metadata);
+            layers.push((path, metadata));
         }
     }
 
@@ -1113,7 +1118,7 @@ mod tests {
                 directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
-            assert_eq!(result[0].get("toc").unwrap().as_bool(), Some(true));
+            assert_eq!(result[0].1.get("toc").unwrap().as_bool(), Some(true));
         }
 
         #[test]
@@ -1164,8 +1169,8 @@ mod tests {
             //
             // So our test should expect 2 layers, not 3.
             assert_eq!(result.len(), 2);
-            assert_eq!(result[0].get("toc").unwrap().as_bool(), Some(true));
-            assert_eq!(result[1].get("toc-depth").unwrap().as_int(), Some(2));
+            assert_eq!(result[0].1.get("toc").unwrap().as_bool(), Some(true));
+            assert_eq!(result[1].1.get("toc-depth").unwrap().as_int(), Some(2));
         }
 
         #[test]
@@ -1203,7 +1208,7 @@ mod tests {
 
             // Only the deep/_metadata.yml should be found
             assert_eq!(result.len(), 1);
-            assert_eq!(result[0].get("toc").unwrap().as_bool(), Some(true));
+            assert_eq!(result[0].1.get("toc").unwrap().as_bool(), Some(true));
         }
 
         #[test]
@@ -1222,7 +1227,7 @@ mod tests {
                 directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
-            assert_eq!(result[0].get("toc").unwrap().as_bool(), Some(true));
+            assert_eq!(result[0].1.get("toc").unwrap().as_bool(), Some(true));
         }
 
         #[test]
@@ -1336,7 +1341,7 @@ mod tests {
                 directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
-            let css_value = result[0].get("css").expect("should have css key");
+            let css_value = result[0].1.get("css").expect("should have css key");
 
             // The path should be adjusted from ../shared/styles.css to ../../shared/styles.css
             // because we went one directory deeper (chapters/intro instead of chapters/)
@@ -1369,7 +1374,7 @@ mod tests {
                 directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
-            let css_value = result[0].get("css").expect("should have css key");
+            let css_value = result[0].1.get("css").expect("should have css key");
 
             // Path should remain equivalent (pathdiff may normalize ./local.css to local.css)
             let path_str = css_value.as_str().expect("should be a string path");
@@ -1406,7 +1411,7 @@ mod tests {
                 directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
-            let theme_value = result[0].get("theme").expect("should have theme key");
+            let theme_value = result[0].1.get("theme").expect("should have theme key");
 
             // Plain string should NOT be adjusted
             assert_eq!(
@@ -1441,7 +1446,7 @@ mod tests {
                 directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
-            let css_value = result[0].get("css").expect("should have css key");
+            let css_value = result[0].1.get("css").expect("should have css key");
 
             // Absolute path should be unchanged
             assert_eq!(
@@ -1479,6 +1484,7 @@ mod tests {
 
             assert_eq!(result.len(), 1);
             let css_array = result[0]
+                .1
                 .get("css")
                 .expect("should have css key")
                 .as_array()
@@ -1523,6 +1529,7 @@ mod tests {
 
             assert_eq!(result.len(), 1);
             let resources = result[0]
+                .1
                 .get("resources")
                 .expect("should have resources key");
 
@@ -1562,6 +1569,7 @@ mod tests {
 
             assert_eq!(result.len(), 1);
             let css_value = result[0]
+                .1
                 .get("format")
                 .and_then(|f| f.get("html"))
                 .and_then(|h| h.get("css"))

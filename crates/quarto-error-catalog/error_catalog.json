@@ -993,6 +993,13 @@
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-16",
     "since_version": "99.9.9"
   },
+  "Q-12-17": {
+    "subsystem": "listing",
+    "title": "Listing Contents Pattern Outside Project",
+    "message_template": "A listing `contents:` pattern resolves outside the project directory and matches nothing. Patterns resolve relative to the directory of the file they are written in; `..` segments may not climb above the project root.",
+    "docs_url": "https://quarto.org/docs/errors/listing/Q-12-17",
+    "since_version": "99.9.9"
+  },
   "Q-13-1": {
     "subsystem": "navigation",
     "title": "Sidebar references missing document",

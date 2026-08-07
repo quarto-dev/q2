@@ -129,12 +129,28 @@ pub enum ListingType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ListingContents {
-    /// Glob pattern resolved against the project file set; see
-    /// L3 D10 (host-relative globs filtered through ProjectIndex).
-    Glob(String),
+    /// Glob pattern, kept as the user wrote it (a leading `!` marks
+    /// a negation). `source` is the provenance of the YAML scalar —
+    /// [`glob_resolve::resolve_content_globs`](super::glob_resolve::resolve_content_globs)
+    /// uses it to recover the declaring file's directory, which is
+    /// the base the pattern resolves against (GH #456,
+    /// bd-v7ixzsp5).
+    Glob { pattern: String, source: SourceInfo },
     /// Inline metadata record. Schema accepts; L3 emits `Q-12-2`
     /// and skips the entry until a follow-up bd issue lands.
     Inline(BTreeMap<String, ConfigValue>),
+}
+
+impl ListingContents {
+    /// Test/construction convenience: a glob entry with programmatic
+    /// (no-file) provenance, which resolves against the host
+    /// directory.
+    pub fn glob_no_source(pattern: impl Into<String>) -> Self {
+        ListingContents::Glob {
+            pattern: pattern.into(),
+            source: SourceInfo::generated(By::programmatic_config()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -602,36 +618,52 @@ fn parse_contents(
     value: &ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> Vec<ListingContents> {
-    // Quarto YAML routinely parses bare frontmatter strings as
-    // `PandocInlines` (e.g. when a glob like `posts/*.qmd` confuses
-    // the markdown sublexer and lands as a `Span` carrying the
-    // `yaml-markdown-syntax-error` class). Route through
-    // `as_plain_text` first so any string-shaped variant becomes a
-    // glob, mirroring `parse_listings`'s top-level shorthand
-    // handling. The bug that surfaced when L5's snapshot fixture
-    // used `contents: "posts/*.qmd"` and the broader audit of
-    // sibling parser branches is tracked under bd-nwyp.
+    // Since bd-v7ixzsp5, front-matter `contents:` strings arrive as
+    // `ConfigValueKind::Glob` — the key-path annotation table in
+    // pampa (`meta_annotations.rs`) types them at parse time, so
+    // they never take the markdown-parsing path (which used to warn
+    // Q-1-20 and could silently corrupt patterns whose asterisks
+    // parsed as emphasis). The `as_plain_text` route below is kept
+    // as a defensive fallback for string-shaped values from other
+    // sources (programmatic construction, runtime metadata, legacy
+    // `PandocInlines` values — the original bd-nwyp shape).
     if let Some(s) = value.as_plain_text() {
-        return vec![ListingContents::Glob(s)];
+        return vec![ListingContents::Glob {
+            pattern: s,
+            source: value.source_info.clone(),
+        }];
     }
     match &value.value {
         ConfigValueKind::Scalar(Yaml::String(s)) => {
-            vec![ListingContents::Glob(s.clone())]
+            vec![ListingContents::Glob {
+                pattern: s.clone(),
+                source: value.source_info.clone(),
+            }]
         }
         ConfigValueKind::Glob(pattern) => {
-            vec![ListingContents::Glob(pattern.clone())]
+            vec![ListingContents::Glob {
+                pattern: pattern.clone(),
+                source: value.source_info.clone(),
+            }]
         }
         ConfigValueKind::Array(items) => items
             .iter()
             .filter_map(|item| {
                 if let Some(s) = item.as_plain_text() {
-                    return Some(ListingContents::Glob(s));
+                    return Some(ListingContents::Glob {
+                        pattern: s,
+                        source: item.source_info.clone(),
+                    });
                 }
                 match &item.value {
-                    ConfigValueKind::Scalar(Yaml::String(s)) => {
-                        Some(ListingContents::Glob(s.clone()))
-                    }
-                    ConfigValueKind::Glob(pattern) => Some(ListingContents::Glob(pattern.clone())),
+                    ConfigValueKind::Scalar(Yaml::String(s)) => Some(ListingContents::Glob {
+                        pattern: s.clone(),
+                        source: item.source_info.clone(),
+                    }),
+                    ConfigValueKind::Glob(pattern) => Some(ListingContents::Glob {
+                        pattern: pattern.clone(),
+                        source: item.source_info.clone(),
+                    }),
                     ConfigValueKind::Map(entries) => {
                         push_diag(
                             diagnostics,
@@ -911,45 +943,31 @@ pub fn apply_type_defaults(l: &mut Listing) {
     // host page (Q1 default; the host file itself gets excluded
     // during item discovery, not here).
     if l.contents.is_empty() {
-        l.contents.push(ListingContents::Glob("*.qmd".to_string()));
+        l.contents.push(ListingContents::glob_no_source("*.qmd"));
     }
 }
 
-/// Extract just the content-glob strings from a host page's
-/// `meta.listing:` value, ignoring all other listing config.
+/// Flatten every `contents:` glob entry across all listings declared
+/// on a host page's `meta.listing:` value, ignoring all other listing
+/// config. Inline-record entries (`Q-12-2` at render time) contribute
+/// nothing.
 ///
-/// Used by [`crate::project::dependency_graph::ProjectDependencyGraph::build`]
-/// (Phase-8 / L6, `bd-xbnf`) to discover which sibling files this
-/// page's listings reference, so Mode B can re-render the host
-/// when any of those siblings is in the user-named target set.
-///
-/// Globs are flattened across all listings declared on the page —
-/// the dep graph cares about edges, not which listing produced
-/// them. Inline-record `contents:` entries (`Q-12-2` at render
-/// time) contribute nothing to the dep graph.
-///
-/// **Implementation note (`bd-bqf2`):** today this routes through
-/// [`parse_listings`] and discards the resulting diagnostics, so
-/// shape-handling stays in lockstep with the L3 generate transform
-/// without any duplicated walker logic. If profiling ever shows
-/// the redundant work as a hotspot, `bd-bqf2` tracks the refactor
-/// to a shared shape walker. For now: one source of truth, no
-/// drift risk.
-pub fn extract_content_globs(meta: &ConfigValue) -> Vec<String> {
+/// Consumers resolve the returned entries with
+/// [`super::glob_resolve::resolve_content_globs`] — see that module
+/// for the base-directory semantics. Routes through
+/// [`parse_listings`] (diagnostics discarded) so shape-handling
+/// stays in lockstep with the L3 generate transform (`bd-bqf2`).
+pub fn flatten_content_globs(meta: &ConfigValue) -> Vec<ListingContents> {
     let Some(listing_value) = meta.get("listing") else {
         return Vec::new();
     };
     let mut throwaway_diagnostics: Vec<DiagnosticMessage> = Vec::new();
     let listings = parse_listings(listing_value, &mut throwaway_diagnostics);
-    let mut out: Vec<String> = Vec::new();
-    for listing in listings {
-        for content in listing.contents {
-            if let ListingContents::Glob(g) = content {
-                out.push(g);
-            }
-        }
-    }
-    out
+    listings
+        .into_iter()
+        .flat_map(|l| l.contents)
+        .filter(|c| matches!(c, ListingContents::Glob { .. }))
+        .collect()
 }
 
 /// The value of `key` in `value`, if `value` is a map containing it.
@@ -1012,6 +1030,18 @@ mod tests {
         let mut diags = Vec::new();
         let listings = parse_listings(&value, &mut diags);
         (listings, diags)
+    }
+
+    /// The glob pattern strings of a contents list, ignoring the
+    /// per-entry provenance (which tests can't reproduce exactly).
+    fn glob_patterns(contents: &[ListingContents]) -> Vec<String> {
+        contents
+            .iter()
+            .filter_map(|c| match c {
+                ListingContents::Glob { pattern, .. } => Some(pattern.clone()),
+                ListingContents::Inline(_) => None,
+            })
+            .collect()
     }
 
     // ── real-source fixtures (bd-9yh3pzfu) ──────────────────────────
@@ -1189,10 +1219,7 @@ listing:
         assert_eq!(listings[0].id, "listing-1");
         assert_eq!(listings[0].kind, ListingType::Default);
         // Default contents glob filled in.
-        assert_eq!(
-            listings[0].contents,
-            vec![ListingContents::Glob("*.qmd".to_string())]
-        );
+        assert_eq!(glob_patterns(&listings[0].contents), vec!["*.qmd"]);
         // Default fields set.
         assert!(listings[0].fields.contains(&"title".to_string()));
         assert!(listings[0].fields.contains(&"date".to_string()));
@@ -1272,10 +1299,7 @@ listing:
             ("type", s("default")),
             ("contents", arr(vec![s("posts/**/*.qmd")])),
         ]));
-        assert_eq!(
-            listings[0].contents,
-            vec![ListingContents::Glob("posts/**/*.qmd".to_string())]
-        );
+        assert_eq!(glob_patterns(&listings[0].contents), vec!["posts/**/*.qmd"]);
     }
 
     // 6b. Quarto YAML often parses globs like `posts/*.qmd` as
@@ -1300,8 +1324,8 @@ listing:
             ("contents", contents_val),
         ]));
         assert_eq!(
-            listings[0].contents,
-            vec![ListingContents::Glob("posts/*.qmd".to_string())],
+            glob_patterns(&listings[0].contents),
+            vec!["posts/*.qmd"],
             "expected `posts/*.qmd` glob; diags: {:?}",
             diags
         );
@@ -1326,11 +1350,8 @@ listing:
         );
         let (listings, _) = parse(map(vec![("type", s("default")), ("contents", arr_val)]));
         assert_eq!(
-            listings[0].contents,
-            vec![
-                ListingContents::Glob("posts/*.qmd".to_string()),
-                ListingContents::Glob("notes/*.qmd".to_string()),
-            ]
+            glob_patterns(&listings[0].contents),
+            vec!["posts/*.qmd", "notes/*.qmd"]
         );
     }
 
@@ -1491,11 +1512,12 @@ listing:
     }
 
     // ─────────────────────────────────────────────────────────────
-    // L6 (bd-xbnf): extract_content_globs
+    // L6 (bd-xbnf): flatten_content_globs
     //
-    // The dep-graph builder calls this to read just the glob strings
-    // out of `meta.listing`, ignoring all the other listing config.
-    // It must agree with `parse_listings` on every accepted shape so
+    // The profile stage calls this to read just the glob entries
+    // out of `meta.listing` (before resolving them via
+    // `glob_resolve`), ignoring all the other listing config. It
+    // must agree with `parse_listings` on every accepted shape so
     // graph edges line up with what the L3 generate transform
     // resolves at render time.
     // ─────────────────────────────────────────────────────────────
@@ -1508,7 +1530,7 @@ listing:
     #[test]
     fn extract_globs_from_single_listing_default_shorthand() {
         let meta = meta_with_listing(b(true));
-        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
     }
 
     /// Explicit `contents:` glob list.
@@ -1516,8 +1538,8 @@ listing:
     fn extract_globs_from_single_listing_with_explicit_contents() {
         let meta = meta_with_listing(map(vec![("contents", arr(vec![s("posts/*.qmd")]))]));
         assert_eq!(
-            extract_content_globs(&meta),
-            vec!["posts/*.qmd".to_string()]
+            glob_patterns(&flatten_content_globs(&meta)),
+            vec!["posts/*.qmd"]
         );
     }
 
@@ -1526,7 +1548,7 @@ listing:
     #[test]
     fn extract_globs_from_single_listing_no_contents_shorthand() {
         let meta = meta_with_listing(map(vec![("type", s("grid"))]));
-        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
     }
 
     /// Array of listings; globs flatten across listings.
@@ -1537,12 +1559,8 @@ listing:
             map(vec![("contents", arr(vec![s("b/*.qmd"), s("c/*.qmd")]))]),
         ]));
         assert_eq!(
-            extract_content_globs(&meta),
-            vec![
-                "a/*.qmd".to_string(),
-                "b/*.qmd".to_string(),
-                "c/*.qmd".to_string(),
-            ]
+            glob_patterns(&flatten_content_globs(&meta)),
+            vec!["a/*.qmd", "b/*.qmd", "c/*.qmd"]
         );
     }
 
@@ -1554,7 +1572,7 @@ listing:
             "contents",
             arr(vec![map(vec![("title", s("foo"))]), s("*.qmd")]),
         )]));
-        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
     }
 
     /// `listing: false` → no globs (parse_listings emits Q-12-6
@@ -1562,21 +1580,21 @@ listing:
     #[test]
     fn extract_globs_listing_false_is_empty() {
         let meta = meta_with_listing(b(false));
-        assert!(extract_content_globs(&meta).is_empty());
+        assert!(flatten_content_globs(&meta).is_empty());
     }
 
     /// Meta with no `listing:` key → empty globs.
     #[test]
     fn extract_globs_no_listing_key_is_empty() {
         let meta = map(vec![("title", s("Hello"))]);
-        assert!(extract_content_globs(&meta).is_empty());
+        assert!(flatten_content_globs(&meta).is_empty());
     }
 
     /// `contents:` as a single string (not an array) — `parse_contents`
-    /// accepts this shape; `extract_content_globs` must agree.
+    /// accepts this shape; `flatten_content_globs` must agree.
     #[test]
     fn extract_globs_handles_string_shorthand_contents() {
         let meta = meta_with_listing(map(vec![("contents", s("*.qmd"))]));
-        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
     }
 }

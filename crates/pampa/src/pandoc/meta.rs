@@ -141,6 +141,22 @@ pub fn yaml_to_config_value(
     context: InterpretationContext,
     diagnostics: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
 ) -> ConfigValue {
+    let mut path: Vec<String> = Vec::new();
+    yaml_to_config_value_at(yaml, context, diagnostics, &mut path)
+}
+
+/// Recursive worker for [`yaml_to_config_value`], threading the
+/// map-key path from the metadata root so untagged scalars can
+/// consult the key-path annotation table
+/// ([`super::meta_annotations`]; bd-v7ixzsp5). `path` is maintained
+/// by the map branch (push key / recurse / pop); arrays are
+/// transparent (items share the array's path).
+fn yaml_to_config_value_at(
+    yaml: quarto_yaml::YamlWithSourceInfo,
+    context: InterpretationContext,
+    diagnostics: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
+    path: &mut Vec<String>,
+) -> ConfigValue {
     // Parse tags using quarto-config's tag parser
     let parsed_tag = if let Some((tag_str, tag_source)) = &yaml.tag {
         let mut tag_diags = Vec::new();
@@ -160,9 +176,11 @@ pub fn yaml_to_config_value(
     // Handle compound types first (arrays and maps)
     if yaml.is_array() {
         let (items, source_info) = yaml.into_array().unwrap();
+        // Arrays are transparent for the annotation path: items
+        // share the array's key path.
         let config_items: Vec<ConfigValue> = items
             .into_iter()
-            .map(|item| yaml_to_config_value(item, context, diagnostics))
+            .map(|item| yaml_to_config_value_at(item, context, diagnostics, path))
             .collect();
 
         return ConfigValue {
@@ -177,10 +195,15 @@ pub fn yaml_to_config_value(
         let config_entries: Vec<ConfigMapEntry> = entries
             .into_iter()
             .filter_map(|entry| {
-                entry.key.yaml.as_str().map(|key_str| ConfigMapEntry {
-                    key: key_str.to_string(),
-                    key_source: entry.key_span,
-                    value: yaml_to_config_value(entry.value, context, diagnostics),
+                entry.key.yaml.as_str().map(|key_str| {
+                    path.push(key_str.to_string());
+                    let value = yaml_to_config_value_at(entry.value, context, diagnostics, path);
+                    path.pop();
+                    ConfigMapEntry {
+                        key: key_str.to_string(),
+                        key_source: entry.key_span,
+                        value,
+                    }
                 })
             })
             .collect();
@@ -237,6 +260,31 @@ pub fn yaml_to_config_value(
                             attr_source: AttrSourceInfo::empty(),
                         };
                         ConfigValueKind::PandocInlines(vec![Inline::Span(span)])
+                    } else if let Some(annotated) =
+                        super::meta_annotations::annotated_interpretation(path)
+                    {
+                        // No tag, but the key path carries an
+                        // interpretation annotation (bd-v7ixzsp5;
+                        // e.g. `listing.contents` entries are globs,
+                        // never markdown). Explicit tags took the
+                        // branches above, so annotations only replace
+                        // the untagged default.
+                        match annotated {
+                            quarto_config::Interpretation::Path => ConfigValueKind::Path(s),
+                            quarto_config::Interpretation::Glob => ConfigValueKind::Glob(s),
+                            quarto_config::Interpretation::Expr => ConfigValueKind::Expr(s),
+                            quarto_config::Interpretation::PlainString => {
+                                ConfigValueKind::Scalar(Yaml::String(s))
+                            }
+                            quarto_config::Interpretation::Markdown => {
+                                parse_yaml_string_as_markdown_to_config(
+                                    &s,
+                                    &source_info,
+                                    true,
+                                    diagnostics,
+                                )
+                            }
+                        }
                     } else {
                         // No tag: Use context-dependent default
                         match context {
@@ -452,6 +500,136 @@ mod tests {
             result.value,
             ConfigValueKind::Scalar(Yaml::String(_))
         ));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Key-path interpretation annotations (bd-v7ixzsp5, GH #456).
+    //
+    // `listing.contents` entries are globs, not markdown. Without
+    // the annotation, the DocumentMetadata markdown default either
+    // warns (Q-1-20, `*.qmd` fails to parse) or silently corrupts
+    // the pattern (`p*osts*.qmd` parses as emphasis and
+    // `as_plain_text` reconstructs `posts.qmd`).
+    // ─────────────────────────────────────────────────────────────
+
+    fn convert_doc_meta(
+        yaml_text: &str,
+    ) -> (ConfigValue, Vec<quarto_error_reporting::DiagnosticMessage>) {
+        let yaml = quarto_yaml::parse(yaml_text).expect("valid yaml");
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result = yaml_to_config_value(
+            yaml,
+            InterpretationContext::DocumentMetadata,
+            &mut diagnostics,
+        );
+        (result, diagnostics.diagnostics().to_vec())
+    }
+
+    #[test]
+    fn listing_contents_array_items_are_globs_not_markdown() {
+        let (result, diags) =
+            convert_doc_meta("listing:\n  contents:\n    - \"p*osts*.qmd\"\n    - \"*.qmd\"\n");
+        let contents = result
+            .get("listing")
+            .and_then(|l| l.get("contents"))
+            .expect("listing.contents");
+        let ConfigValueKind::Array(items) = &contents.value else {
+            panic!("contents should be an array, got {:?}", contents.value);
+        };
+        assert!(
+            matches!(&items[0].value, ConfigValueKind::Glob(s) if s == "p*osts*.qmd"),
+            "asterisks must survive verbatim (no markdown emphasis parse); got {:?}",
+            items[0].value
+        );
+        assert!(
+            matches!(&items[1].value, ConfigValueKind::Glob(s) if s == "*.qmd"),
+            "got {:?}",
+            items[1].value
+        );
+        assert!(
+            diags.is_empty(),
+            "no Q-1-20 markdown-parse warning for glob strings; got {:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn listing_contents_string_shorthand_is_glob() {
+        let (result, diags) = convert_doc_meta("listing:\n  contents: \"*.qmd\"\n");
+        let contents = result
+            .get("listing")
+            .and_then(|l| l.get("contents"))
+            .expect("listing.contents");
+        assert!(
+            matches!(&contents.value, ConfigValueKind::Glob(s) if s == "*.qmd"),
+            "got {:?}",
+            contents.value
+        );
+        assert!(diags.is_empty(), "got {:?}", diags);
+    }
+
+    #[test]
+    fn listing_contents_annotation_leaves_sibling_keys_as_markdown() {
+        let (result, _) = convert_doc_meta("title: \"*bold*\"\nlisting:\n  contents: \"*.qmd\"\n");
+        let title = result.get("title").expect("title");
+        assert!(
+            matches!(&title.value, ConfigValueKind::PandocInlines(_)),
+            "title keeps the markdown default; got {:?}",
+            title.value
+        );
+    }
+
+    #[test]
+    fn listing_contents_inline_record_fields_keep_markdown() {
+        let (result, _) = convert_doc_meta(
+            "listing:\n  contents:\n    - title: \"*bold*\"\n      path: x.html\n",
+        );
+        let contents = result
+            .get("listing")
+            .and_then(|l| l.get("contents"))
+            .expect("listing.contents");
+        let ConfigValueKind::Array(items) = &contents.value else {
+            panic!("contents should be an array");
+        };
+        let title = items[0].get("title").expect("record title");
+        assert!(
+            matches!(&title.value, ConfigValueKind::PandocInlines(_)),
+            "map entries under contents extend the key path, so record \
+             fields keep the markdown default; got {:?}",
+            title.value
+        );
+    }
+
+    #[test]
+    fn listing_contents_explicit_tag_overrides_annotation() {
+        let (result, _) = convert_doc_meta("listing:\n  contents: !str \"*.qmd\"\n");
+        let contents = result
+            .get("listing")
+            .and_then(|l| l.get("contents"))
+            .expect("listing.contents");
+        assert!(
+            matches!(&contents.value, ConfigValueKind::Scalar(Yaml::String(s)) if s == "*.qmd"),
+            "explicit tags always win over the annotation; got {:?}",
+            contents.value
+        );
+    }
+
+    #[test]
+    fn listing_contents_under_format_key_is_glob() {
+        let (result, diags) =
+            convert_doc_meta("format:\n  html:\n    listing:\n      contents: \"*.qmd\"\n");
+        let contents = result
+            .get("format")
+            .and_then(|f| f.get("html"))
+            .and_then(|h| h.get("listing"))
+            .and_then(|l| l.get("contents"))
+            .expect("format.html.listing.contents");
+        assert!(
+            matches!(&contents.value, ConfigValueKind::Glob(s) if s == "*.qmd"),
+            "got {:?}",
+            contents.value
+        );
+        assert!(diags.is_empty(), "got {:?}", diags);
     }
 
     #[test]
