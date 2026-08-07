@@ -1,7 +1,7 @@
 # Include shortcode: project-absolute (root-relative) path resolution
 
 **Strand:** bd-w9koo1i2
-**Status:** planned, not yet implemented
+**Status:** implemented; PR open — https://github.com/quarto-dev/q2/pull/468
 **Date:** 2026-08-07
 
 ## Overview
