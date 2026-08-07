@@ -20,8 +20,18 @@ indexmap = "2.13"
 thiserror = { workspace = true }
 yaml-rust2 = { workspace = true }
 
+[features]
+# Test-only helpers for asserting *where* a diagnostic points, not just
+# which code it carries. Lives here because quarto-config is the lowest
+# crate in the graph with both quarto-source-map and quarto-error-reporting
+# available; quarto-core enables it as a dev-dependency. See
+# `src/span_assert.rs` for why span assertions need their own scaffolding.
+span-assert = []
+
 [dev-dependencies]
 insta = { workspace = true }
+# Self-enable so this crate's own `span_assert` unit tests compile.
+quarto-config = { path = ".", features = ["span-assert"] }
 
 [lints]
 workspace = true

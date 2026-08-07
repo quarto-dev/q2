@@ -357,7 +357,12 @@ pub fn parse_listings(
                             "Duplicate listing id `{}`; later occurrences are dropped.",
                             l.id
                         ),
-                        item,
+                        // Blame the offending `id:` value, not the whole
+                        // listing map — see `template_source` in
+                        // `parse_one_listing` for why a map's span is not
+                        // its own. A synthesized id has no `id:` entry to
+                        // point at, so fall back to the entry itself.
+                        map_entry_value(item, "id").unwrap_or(item),
                     );
                     continue;
                 }
@@ -415,6 +420,21 @@ fn parse_one_listing(
         id: fallback_id.to_string(),
         ..Default::default()
     };
+
+    // Span to blame for the cross-field `template:`/`type:` check below.
+    // Captured here rather than reusing the enclosing map's `source_info`,
+    // which is not the map's span at all: `materialize_cursor` synthesizes
+    // it from the map's *first entry's value*
+    // (`quarto-config/src/materialize.rs:142-158`), so blaming `value`
+    // underlines whichever key happens to come first — `sort: false` in
+    // the report that opened bd-9yh3pzfu.
+    //
+    // Even once materialization preserves real container spans, blaming
+    // the map would still be wrong here: quarto-yaml spans a mapping from
+    // its first key to `MappingEnd`, so the caret would cover the whole
+    // `listing:` block. A diagnostic about `template:` points at
+    // `template:`.
+    let mut template_source: Option<&ConfigValue> = None;
 
     for entry in map {
         match entry.key.as_str() {
@@ -477,6 +497,7 @@ fn parse_one_listing(
                 l.sort = Some(parse_sort(&entry.value, diagnostics));
             }
             "template" => {
+                template_source = Some(&entry.value);
                 if let Some(path) = entry.value.as_plain_text() {
                     if path.ends_with(".ejs.md") {
                         push_diag(
@@ -547,12 +568,18 @@ fn parse_one_listing(
 
     // Cross-field validation: `template:` set without `type: custom`
     // should warn (per Q-12-7) and leave the type alone.
+    //
+    // Blame the `template:` value, not the enclosing map — see the
+    // `template_source` declaration above. `template_source` is always
+    // `Some` here, since `l.template` is only set from that same entry;
+    // the fallback keeps the diagnostic alive rather than silently
+    // dropping it if that ever stops holding.
     if l.template.is_some() && l.kind != ListingType::Custom {
         push_diag(
             diagnostics,
             "Q-12-7",
             "`template:` was set but `type:` is not `custom`; falling back to the built-in template for the declared type.",
-            value,
+            template_source.unwrap_or(value),
         );
     }
 
@@ -943,6 +970,18 @@ pub fn flatten_content_globs(meta: &ConfigValue) -> Vec<ListingContents> {
         .collect()
 }
 
+/// The value of `key` in `value`, if `value` is a map containing it.
+///
+/// Used to blame a specific entry rather than its enclosing map. A map's
+/// `source_info` is not the map's span — see `template_source` in
+/// [`parse_one_listing`].
+fn map_entry_value<'a>(value: &'a ConfigValue, key: &str) -> Option<&'a ConfigValue> {
+    match &value.value {
+        ConfigValueKind::Map(entries) => entries.iter().find(|e| e.key == key).map(|e| &e.value),
+        _ => None,
+    }
+}
+
 fn push_diag(
     diagnostics: &mut Vec<DiagnosticMessage>,
     code: &str,
@@ -1003,6 +1042,172 @@ mod tests {
                 ListingContents::Inline(_) => None,
             })
             .collect()
+    }
+
+    // ── real-source fixtures (bd-9yh3pzfu) ──────────────────────────
+    //
+    // The helpers above stamp every value with `SourceInfo::for_test()`,
+    // so a diagnostic pointing at the wrong key is indistinguishable
+    // from one pointing at the right key — the span bug is invisible by
+    // construction. Tests that assert on *where* a diagnostic points
+    // must parse real text and travel the real path.
+    //
+    // That path matters: production reads `ast.meta.get("listing")`
+    // (see `transforms/listing_generate.rs:72`), and `ast.meta` is the
+    // *materialized* merge output — `MetadataMergeStage` replaces it
+    // wholesale at `stage/stages/metadata_merge.rs:266-288`. Skipping
+    // materialization would skip the defect.
+
+    const FIXTURE_FILE: &str = "index.qmd";
+
+    /// Parse YAML front-matter text the way the render pipeline does:
+    /// YAML → `ConfigValue` → merge → **materialize**, then hand back
+    /// the `listing:` value plus a `SourceContext` that can resolve the
+    /// spans it carries.
+    fn parse_from_yaml(
+        yaml: &str,
+    ) -> (
+        Vec<Listing>,
+        Vec<DiagnosticMessage>,
+        quarto_source_map::SourceContext,
+    ) {
+        use pampa::pandoc::yaml_to_config_value;
+        use pampa::utils::diagnostic_collector::DiagnosticCollector;
+        use quarto_config::{InterpretationContext, MergedConfig};
+
+        let parsed = quarto_yaml::parse_file(yaml, FIXTURE_FILE).expect("valid yaml");
+        let mut collector = DiagnosticCollector::new();
+        let doc_config = yaml_to_config_value(
+            parsed,
+            InterpretationContext::DocumentMetadata,
+            &mut collector,
+        );
+
+        let merged = MergedConfig::new(vec![&doc_config])
+            .materialize()
+            .expect("materialize");
+        let listing_value = merged.get("listing").expect("`listing:` key present");
+
+        let mut diags = Vec::new();
+        let listings = parse_listings(listing_value, &mut diags);
+        (
+            listings,
+            diags,
+            quarto_config::span_assert::context_for(FIXTURE_FILE, yaml),
+        )
+    }
+
+    fn diag_with_code<'a>(diags: &'a [DiagnosticMessage], code: &str) -> &'a DiagnosticMessage {
+        diags
+            .iter()
+            .find(|d| d.code.as_deref() == Some(code))
+            .unwrap_or_else(|| panic!("expected a {code} diagnostic; got: {diags:?}"))
+    }
+
+    // bd-9yh3pzfu: Q-12-7 talks about `template:` but blamed whichever
+    // key happened to come first in the map — here `sort:`. The key
+    // order below is load-bearing: putting `template:` first would mask
+    // the bug.
+    #[test]
+    fn q_12_7_underlines_the_template_key_not_a_sibling() {
+        let yaml = "\
+title: Vanity URLs
+listing:
+    sort: false
+    template: ../template.ejs
+    contents:
+    - ./a.qmd
+";
+        let (_listings, diags, ctx) = parse_from_yaml(yaml);
+        let q127 = diag_with_code(&diags, "Q-12-7");
+
+        quarto_config::span_assert::assert_diagnostic_underlines(q127, &ctx, "../template.ejs");
+    }
+
+    // bd-9yh3pzfu: Q-12-4 named the duplicate id in its message but
+    // blamed the whole listing map, so the caret landed on whichever
+    // key came first. `contents:` is first here to keep that visible.
+    #[test]
+    fn q_12_4_underlines_the_duplicate_id_not_a_sibling() {
+        let yaml = "\
+listing:
+    - contents: ./a.qmd
+      id: dupe
+    - contents: ./b.qmd
+      id: dupe
+";
+        let (_listings, diags, ctx) = parse_from_yaml(yaml);
+        let q124 = diag_with_code(&diags, "Q-12-4");
+
+        quarto_config::span_assert::assert_diagnostic_underlines(q124, &ctx, "dupe");
+    }
+
+    // bd-2mxo: L5 captures the `categories:` *key* span here purely to
+    // anchor Q-12-12 ("categories enabled but no item has any"; see
+    // `transforms/categories_sidebar.rs:213`). Materialization used to
+    // replace every `key_source` with a programmatic-config sentinel,
+    // which left that anchor inert — the feature existed but could
+    // never point anywhere. This pins it to the real key.
+    #[test]
+    fn categories_source_anchors_the_real_categories_key() {
+        let yaml = "\
+listing:
+    contents: ./a.qmd
+    categories: true
+";
+        let (listings, _diags, ctx) = parse_from_yaml(yaml);
+        let listing = listings.first().expect("one listing");
+
+        let span = quarto_config::span_assert::resolve_span(&listing.categories_source, &ctx)
+            .expect("categories_source should be a real key span, not a sentinel");
+        assert_eq!(span.text, "categories");
+    }
+
+    // The two sites the Phase A audit deliberately left alone: each
+    // already blamed the semantically correct value, and read wrong only
+    // because that value was a container carrying a synthesized span.
+    // Fixing materialization (bd-2mxo) is what makes them right, so
+    // these assert the fix reaches beyond the call sites Phase A
+    // touched.
+
+    #[test]
+    fn q_12_2_underlines_the_whole_inline_contents_record() {
+        let yaml = "\
+listing:
+    contents:
+    - title: Inline
+      path: ./a.qmd
+";
+        let (_listings, diags, ctx) = parse_from_yaml(yaml);
+        let q122 = diag_with_code(&diags, "Q-12-2");
+
+        let span = quarto_config::span_assert::resolve_diagnostic_span(q122, &ctx)
+            .expect("Q-12-2 should resolve to a real span");
+        assert!(
+            span.text.contains("title: Inline") && span.text.contains("path: ./a.qmd"),
+            "expected the whole inline record, got {:?}",
+            span.text
+        );
+    }
+
+    #[test]
+    fn q_12_3_underlines_the_whole_sort_value() {
+        let yaml = "\
+listing:
+    contents: ./a.qmd
+    sort:
+        field: title
+";
+        let (_listings, diags, ctx) = parse_from_yaml(yaml);
+        let q123 = diag_with_code(&diags, "Q-12-3");
+
+        let span = quarto_config::span_assert::resolve_diagnostic_span(q123, &ctx)
+            .expect("Q-12-3 should resolve to a real span");
+        assert!(
+            span.text.contains("field: title"),
+            "expected the offending `sort:` value, got {:?}",
+            span.text
+        );
     }
 
     // 1. config_parses_minimal — `listing: default` parses to a
