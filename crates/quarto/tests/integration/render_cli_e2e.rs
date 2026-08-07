@@ -559,6 +559,64 @@ fn empty_default_project_with_no_qmd_emits_diagnostic() {
     );
 }
 
+/// bd-6d2wj4zp: `.md` files render only when opted in via
+/// `project.render`. When that opt-in is the *reason* the render set
+/// came up empty, `Q-PROJECT-EMPTY` must say so — otherwise the
+/// default reads as "Quarto silently ignored my files".
+#[test]
+fn empty_project_with_md_files_hints_at_render_list_optin() {
+    let temp = TempDir::new().unwrap();
+    let project = canonical(temp.path());
+    write_file(&project.join("_quarto.yml"), "project:\n  type: default\n");
+    write_file(&project.join("notes.md"), "# notes\n");
+    write_file(&project.join("docs/guide.md"), "# guide\n");
+    // Excluded `.md` must not inflate the count.
+    write_file(&project.join("README.md"), "# readme\n");
+
+    let out = run_q2(&project, &[]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "expected non-zero exit on empty render set; stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("2 `.md` file"),
+        "hint should count the opt-in candidates; got stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("**/*.md"),
+        "hint should show the opt-in pattern; got stderr: {stderr}",
+    );
+}
+
+/// bd-6d2wj4zp: `q2 render notes.md` inside a project whose render
+/// list doesn't include it fails with Q-7-6 — and because the real
+/// cause is the `.md` opt-in policy (not underscore/hidden rules),
+/// the hint must say how to opt the file in.
+#[test]
+fn rendering_md_not_in_render_list_hints_at_optin() {
+    let temp = TempDir::new().unwrap();
+    let project = canonical(temp.path());
+    write_file(&project.join("_quarto.yml"), "project:\n  type: default\n");
+    write_file(&project.join("index.qmd"), "---\ntitle: T\n---\n\nhi\n");
+    write_file(&project.join("notes.md"), "# notes\n");
+
+    let out = run_q2(&project, &["notes.md"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "expected non-zero exit for an un-opted-in .md; stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("Q-7-6") || stderr.contains("excluded from the render list"),
+        "expected the render-list exclusion diagnostic; got stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("**/*.md"),
+        "hint should explain the `.md` opt-in; got stderr: {stderr}",
+    );
+}
+
 /// Regression guard for bd-87fu: native default-project renders
 /// must continue to write theme CSS to `{stem}_files/quarto/...`
 /// and embed a matching `<link>` in the HTML. The WASM-side fix

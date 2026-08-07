@@ -134,10 +134,13 @@ impl GlobOptions {
 
     /// `project.render` in `_quarto.yml`.
     ///
-    /// `default_positive` stays `None` — a render list of only
-    /// exclusions means "walk the project, minus these", which is
-    /// what an empty `render:` already does, and the walk is the
-    /// enumerator's job rather than a pattern default.
+    /// `default_positive` stays `None` — the default render pattern
+    /// (`**/*.qmd`) is supplied by the enumerator instead
+    /// (`project::discovery::DEFAULT_RENDER_PATTERN`), for empty and
+    /// negation-only lists alike. Keeping it out of the glob layer
+    /// means a *broken* positive pattern (`Q-5-14`/`Q-5-15`) never
+    /// silently falls back to rendering everything, and the walk
+    /// stays the enumerator's job.
     pub const RENDER: Self = Self {
         directory_rule: true,
         default_positive: None,
