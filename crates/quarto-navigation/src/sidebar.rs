@@ -100,15 +100,25 @@ pub enum SidebarTitle {
 /// An `auto:` directive expands into concrete sidebar entries at
 /// Generate time, by consulting the project's set of discovered
 /// documents.
+///
+/// Paths are **globs**, matched with q2's shared glob semantics
+/// (`claude-notes/designs/glob-semantics.md`) against project-relative
+/// document paths: `*` covers one directory level, `**` crosses
+/// levels, a bare directory name matches everything beneath it, and a
+/// leading `!` excludes. Before bd-mt7a6uc4 these were not globs at
+/// all — trailing wildcards were stripped and what remained was
+/// prefix-matched — so `docs/*` used to mean what `docs` means here.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AutoSpec {
     /// `auto: true` — every non-draft, non-index document in the
     /// project.
     All,
-    /// `auto: "docs"` or `auto: "docs/*"` — documents under a single
-    /// path / glob.
+    /// A single glob: `auto: docs` (everything beneath `docs/`),
+    /// `auto: "docs/*.qmd"` (documents directly in `docs/`), or
+    /// `auto: "docs/**/*.qmd"` (documents anywhere beneath it).
     Path(String),
-    /// `auto: ["a", "b/*"]` — the union of multiple paths / globs.
+    /// `auto: ["docs", "!docs/internal"]` — the union of several
+    /// globs, minus any the `!` entries exclude.
     Paths(Vec<String>),
 }
 

@@ -1000,6 +1000,20 @@
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-17",
     "since_version": "99.9.9"
   },
+  "Q-12-18": {
+    "subsystem": "listing",
+    "title": "Invalid Glob Pattern in Listing `contents:`",
+    "message_template": "A listing `contents:` pattern is not a valid glob and matches nothing.",
+    "docs_url": "https://quarto.org/docs/errors/listing/Q-12-18",
+    "since_version": "99.9.9"
+  },
+  "Q-12-19": {
+    "subsystem": "listing",
+    "title": "Listing `contents:` Pattern Matched Nothing",
+    "message_template": "A listing `contents:` pattern matched no project documents.",
+    "docs_url": "https://quarto.org/docs/errors/listing/Q-12-19",
+    "since_version": "99.9.9"
+  },
   "Q-13-1": {
     "subsystem": "navigation",
     "title": "Sidebar references missing document",
@@ -1103,6 +1117,34 @@
     "title": "Project Render Scripts Unsupported in This Environment",
     "message_template": "The project configures `project.pre-render` / `project.post-render` scripts, but the current environment (the browser-based hub preview) cannot run subprocesses, so the scripts are skipped and the preview renders without them. Run `q2 render` on a machine with the required interpreters to execute the scripts.",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-12",
+    "since_version": "99.9.9"
+  },
+  "Q-5-16": {
+    "subsystem": "project",
+    "title": "`resources:` Pattern Matched No Files",
+    "message_template": "A `resources:` glob matched no files, so nothing was published for it.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-16",
+    "since_version": "99.9.9"
+  },
+  "Q-5-13": {
+    "subsystem": "project",
+    "title": "`project.render` Pattern Matched No Files",
+    "message_template": "A `project.render` pattern matched no renderable `.qmd` files, so it contributed nothing to the render list.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-13",
+    "since_version": "99.9.9"
+  },
+  "Q-5-14": {
+    "subsystem": "project",
+    "title": "`project.render` Pattern Outside the Project Root",
+    "message_template": "A `project.render` pattern's `..` segments climb above the project root, so it matches nothing.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-14",
+    "since_version": "99.9.9"
+  },
+  "Q-5-15": {
+    "subsystem": "project",
+    "title": "Invalid Glob Pattern in `project.render`",
+    "message_template": "A `project.render` pattern is not a valid glob and matches nothing.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-15",
     "since_version": "99.9.9"
   },
   "Q-16-1": {

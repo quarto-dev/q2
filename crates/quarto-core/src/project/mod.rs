@@ -323,8 +323,10 @@ pub struct ProjectConfig {
     /// Output directory (relative to project root)
     pub output_dir: Option<PathBuf>,
 
-    /// Input file patterns (glob patterns)
-    pub render_patterns: Vec<String>,
+    /// Input file patterns (`project.render`), each carrying the
+    /// provenance of the YAML scalar it was written as so discovery
+    /// diagnostics can point at it (bd-mt7a6uc4 D8).
+    pub render_patterns: Vec<crate::glob::RawGlob>,
 
     /// Project-level `project.resources:` patterns (`bd-o8pr`).
     ///
@@ -665,7 +667,10 @@ impl ProjectContext {
             .and_then(|r| r.as_array())
             .map(|arr| {
                 arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
+                    .filter_map(|v| {
+                        v.as_str()
+                            .map(|s| crate::glob::RawGlob::new(s, v.source_info.clone()))
+                    })
                     .collect()
             })
             .unwrap_or_default();

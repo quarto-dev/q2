@@ -67,14 +67,20 @@ use thiserror::Error;
 ///   always agree.
 /// - `8`: `bd-v7ixzsp5` (GH #456). Changes `listing_content_globs`
 ///   from `Vec<String>` (raw patterns, expanded dual-view at
-///   graph-build time) to `Vec<ListingContentGlob>` — patterns are
+///   graph-build time) to `Vec<GlobPattern>` — patterns are
 ///   now **resolved to project-relative form at profile-extraction
 ///   time** against the directory of the file each glob was written
 ///   in (front matter → host dir, `_metadata.yml` → its dir,
 ///   `_quarto.yml` → project root), and carry a `negated` flag for
 ///   `!`-prefixed exclusion patterns. Consumers match single-view
-///   via [`crate::project::listing::glob_resolve::item_matches`].
-pub const DOCUMENT_PROFILE_VERSION: u32 = 8;
+///   via [`crate::glob::PatternSet`].
+/// - `9`: `bd-mt7a6uc4`. Adds `resource_globs: Vec<GlobPattern>` — the
+///   document's `resources:` patterns resolved to project-relative
+///   form at profile-extraction time, against the directory of the
+///   file each was written in. The raw `resources` field stays as-is
+///   because `ResourceReportStage` compares raw pattern strings to
+///   detect filter-added entries; the two answer different questions.
+pub const DOCUMENT_PROFILE_VERSION: u32 = 9;
 
 /// Depth used when extracting the heading outline at the profile
 /// checkpoint.
@@ -477,6 +483,49 @@ pub struct DocumentProfile {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<crate::project_resources::RawResourcePattern>,
 
+    /// The same `resources:` declarations, resolved to
+    /// project-relative patterns against the directory of the file
+    /// each was **written in** (bd-mt7a6uc4).
+    ///
+    /// This is what the post-render collector expands. It exists
+    /// separately from [`Self::resources`] because the two answer
+    /// different questions: this one is "which files does this
+    /// document publish", while the raw list is the frontmatter
+    /// snapshot `ResourceReportStage` diffs against post-filter
+    /// metadata to catch filter-added entries.
+    ///
+    /// Populated by `DocumentProfileStage`, which is where the
+    /// document's `SourceContext` (and therefore each pattern's
+    /// declaring file) is in scope. Default empty; added v8 → v9.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_globs: Vec<crate::glob::GlobPattern>,
+
+    /// Provenance for [`Self::resource_globs`], same order and
+    /// length — the YAML scalar each resolved pattern came from.
+    ///
+    /// Carried so the post-render collector's diagnostics (`Q-5-16`)
+    /// can point at what the author wrote. Without it the pattern
+    /// would be named but not located, which for a `_metadata.yml`
+    /// declaration inherited by many pages is the difference between
+    /// a useful warning and a puzzle.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_glob_sources: Vec<quarto_source_map::SourceInfo>,
+
+    /// Declared `resources:` patterns resolution could not use — one
+    /// that climbs above the project root, or that the glob engine
+    /// rejects (bd-mt7a6uc4).
+    ///
+    /// These travel with the profile rather than being reported at
+    /// profile-extraction time because **profiles are cached**: a
+    /// diagnostic emitted in the stage would appear on the render
+    /// that populated the cache and never again. The post-render
+    /// collector turns each of these into its `Q-5-1` / `Q-5-2`
+    /// error on every render.
+    ///
+    /// Default empty; added v8 → v9.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rejected_resources: Vec<crate::project_resources::RejectedResourcePattern>,
+
     /// Tagged form of the top-level `categories:` value as written
     /// by the author. Mirrors [`Self::categories`] but preserves
     /// `ConfigValue` merge tags (`!prefer` / `!concat`) for
@@ -532,7 +581,7 @@ pub struct DocumentProfile {
     /// ([`crate::project::dependency_graph::ProjectDependencyGraph::build`])
     /// matches these patterns at graph-build time against
     /// [`crate::project::index::ProjectIndex::profiles`] (single
-    /// view, via `glob_resolve::item_matches` — the same rule the
+    /// view, via [`crate::glob::PatternSet`] — the same rule the
     /// L3 generate transform uses at render time) and produces
     /// forward edges from each host to each match. Listing hosts
     /// with non-empty entries are also added to
@@ -544,7 +593,7 @@ pub struct DocumentProfile {
     /// Added v4 → v5 (`bd-xbnf`); shape changed v7 → v8
     /// (`bd-v7ixzsp5`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub listing_content_globs: Vec<crate::project::listing::glob_resolve::ListingContentGlob>,
+    pub listing_content_globs: Vec<crate::glob::GlobPattern>,
 }
 
 /// Helper for `#[serde(skip_serializing_if = ...)]` on plain bool
@@ -596,6 +645,11 @@ impl Default for DocumentProfile {
             always_render: false,
             body_link_targets: Vec::new(),
             resources: Vec::new(),
+            // Resolution needs the document's SourceContext, so
+            // `DocumentProfileStage` fills these in; `extract` stays pure.
+            resource_globs: Vec::new(),
+            resource_glob_sources: Vec::new(),
+            rejected_resources: Vec::new(),
             categories_raw: None,
             listing_item: ListingItemInfo::default(),
             listing_content_globs: Vec::new(),
@@ -656,6 +710,11 @@ impl DocumentProfile {
             always_render: meta_bool_path(meta, &["project", "always-render"]).unwrap_or(false),
             body_link_targets: Vec::new(),
             resources: crate::project_resources::extract_resource_patterns(meta, &["resources"]),
+            // Resolution needs the document's SourceContext, so
+            // `DocumentProfileStage` fills these in; `extract` stays pure.
+            resource_globs: Vec::new(),
+            resource_glob_sources: Vec::new(),
+            rejected_resources: Vec::new(),
             // L0 (`bd-n8a4`): both fields wired into extract below.
             // Skeleton stage left explicit so TDD failure points at
             // the wiring, not the field declarations.
@@ -1599,8 +1658,8 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_8() {
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 8);
+    fn document_profile_version_is_9() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 9);
     }
 
     /// A v3 profile (the pre-listings shape) must be rejected by
@@ -1778,18 +1837,12 @@ Body.
     #[test]
     #[allow(clippy::field_reassign_with_default)] // default-then-set keeps the test readable
     fn profile_v5_listing_content_globs_round_trip() {
-        use crate::project::listing::glob_resolve::ListingContentGlob;
+        use crate::glob::GlobPattern;
         let mut p = DocumentProfile::default();
         p.source_path = PathBuf::from("idx.qmd");
         p.listing_content_globs = vec![
-            ListingContentGlob {
-                pattern: "a/*.qmd".to_string(),
-                negated: false,
-            },
-            ListingContentGlob {
-                pattern: "a/wip.qmd".to_string(),
-                negated: true,
-            },
+            GlobPattern::positive("a/*.qmd"),
+            GlobPattern::negated("a/wip.qmd"),
         ];
 
         let json = p.to_json().expect("serialize");

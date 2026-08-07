@@ -32,9 +32,19 @@
 
 use std::path::{Component, Path, PathBuf};
 
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_system_runtime::SystemRuntime;
 
 use crate::error::{QuartoError, Result};
+use crate::glob::{
+    BaseDirContext, GlobOptions, GlobResolution, PatternSet, RawGlob, resolve_patterns,
+};
+use crate::project::DocumentInfo;
+
+/// Glob semantics for `project.render` — see
+/// [`GlobOptions::RENDER`], where every consumer's option set lives
+/// so they can be compared at a glance.
+const RENDER_GLOB_OPTIONS: GlobOptions = GlobOptions::RENDER;
 
 /// Input describing what to discover.
 #[derive(Debug, Clone)]
@@ -43,9 +53,10 @@ pub struct DiscoveryConfig<'a> {
     pub project_dir: &'a Path,
     /// Resolved project output directory (e.g. `project_dir/_site`).
     pub output_dir: &'a Path,
-    /// `project.render` globs from `_quarto.yml`. Empty = walk the
-    /// whole project directory.
-    pub render_patterns: &'a [String],
+    /// `project.render` globs from `_quarto.yml`, each with the
+    /// provenance of the YAML scalar it came from so diagnostics can
+    /// point at it. Empty = walk the whole project directory.
+    pub render_patterns: &'a [RawGlob],
 }
 
 /// Discover the list of `.qmd` files for a project.
@@ -145,28 +156,40 @@ fn starts_with(path: &Path, prefix: &Path) -> bool {
 }
 
 /// Expand `project.render` glob patterns relative to `project_dir`.
+///
+/// Patterns are project-root-anchored (`project.render` can only be
+/// written in `_quarto.yml`, whose directory *is* the project root)
+/// and matched against the walked `.qmd` set with the shared matcher
+/// in [`crate::glob`] — the same one listings use, so a pattern means
+/// the same thing in both places.
 fn expand_patterns(
     project_dir: &Path,
-    patterns: &[String],
+    patterns: &[RawGlob],
     runtime: &dyn SystemRuntime,
 ) -> Result<Vec<PathBuf>> {
-    // For Phase 1, expand via the native runtime's directory walk and
-    // match against the patterns. We deliberately don't pull in a new
-    // glob crate — the `wax` pattern used elsewhere in the tree can be
-    // a future optimization. The Phase-1 shape accepts exact-path
-    // patterns ("index.qmd") and `**/*.qmd`-style recursive-wildcard
-    // patterns, which is the vast majority of real-world `render:`
-    // lists.
     let walked = walk_qmd(project_dir, runtime)?;
+    let resolution = resolve_render_patterns(project_dir, patterns);
+    let Ok(compiled) = resolution.compile(&RENDER_GLOB_OPTIONS) else {
+        // Unreachable: resolution only emits patterns it compiled.
+        return Ok(Vec::new());
+    };
+
+    // Iterate the *positive* patterns in their listed order so the
+    // documented render order survives (within one pattern, walk
+    // order is lexicographic). Exclusions are global: a `!` entry
+    // subtracts from every positive pattern regardless of where the
+    // author wrote it.
     let mut matches = Vec::new();
-    for pattern in patterns {
-        let pat = normalize_pattern(pattern);
+    for glob in resolution.globs.iter().filter(|g| !g.negated) {
+        let Ok(single) = PatternSet::compile(std::slice::from_ref(glob), &RENDER_GLOB_OPTIONS)
+        else {
+            continue;
+        };
         for candidate in &walked {
             let Ok(relative) = candidate.strip_prefix(project_dir) else {
                 continue;
             };
-            let rel_str = to_forward_slashes(relative);
-            if glob_match(&pat, &rel_str) {
+            if single.matches_path(relative) && !compiled.excluded_path(relative) {
                 matches.push(candidate.clone());
             }
         }
@@ -174,113 +197,139 @@ fn expand_patterns(
     Ok(matches)
 }
 
-fn normalize_pattern(pattern: &str) -> String {
-    pattern.replace('\\', "/")
+/// Resolve `project.render` entries against the project root.
+///
+/// Shared by [`expand_patterns`] and
+/// [`render_pattern_diagnostics`] so the two agree by construction:
+/// what the diagnostic reports about a pattern is what discovery
+/// actually did with it.
+fn resolve_render_patterns(project_dir: &Path, patterns: &[RawGlob]) -> GlobResolution {
+    resolve_patterns(
+        patterns.iter().cloned(),
+        &BaseDirContext {
+            source_context: None,
+            project_dir,
+            fallback_dir: "",
+        },
+        &RENDER_GLOB_OPTIONS,
+    )
 }
 
-fn to_forward_slashes(path: &Path) -> String {
-    path.components()
-        .filter_map(|c| match c {
-            Component::Normal(os) => os.to_str().map(str::to_string),
-            _ => None,
+/// Report `project.render` patterns that contributed nothing.
+///
+/// Three cases, each pointed at the YAML scalar the author wrote
+/// (bd-mt7a6uc4 D7):
+///
+/// - `Q-5-14` — the pattern escapes the project root;
+/// - `Q-5-15` — the glob engine rejects it;
+/// - `Q-5-13` — it compiled but no **renderable** file matched.
+///
+/// "Renderable" is deliberate: `selected` is the post-exclusion file
+/// list, so `render: ["README.qmd"]` reports honestly rather than
+/// claiming a match discovery then dropped.
+///
+/// Negation entries are never reported — subtracting nothing is not
+/// a mistake, and a `!` pattern that matches nothing is the normal
+/// state of a defensive exclusion.
+///
+/// Pure: no filesystem access, so the orchestrator can call it after
+/// the fact instead of threading a diagnostics channel through
+/// discovery.
+pub fn render_pattern_diagnostics(
+    project_dir: &Path,
+    patterns: &[RawGlob],
+    selected: &[DocumentInfo],
+) -> Vec<DiagnosticMessage> {
+    if patterns.is_empty() {
+        return Vec::new();
+    }
+    let resolution = resolve_render_patterns(project_dir, patterns);
+    let mut out = Vec::new();
+
+    for escaped in &resolution.escaped {
+        out.push(
+            DiagnosticMessageBuilder::warning(format!(
+                "`project.render` pattern `{}` points outside the project directory",
+                escaped.raw
+            ))
+            .with_code("Q-5-14")
+            .with_location(escaped.source.clone())
+            .problem(
+                "The pattern's `..` segments climb above the project root, \
+                 so it matches nothing.",
+            )
+            .add_info(
+                "A project renders only files inside its own directory. \
+                 Adjust the pattern so it stays within the project.",
+            )
+            .build(),
+        );
+    }
+
+    for invalid in &resolution.invalid {
+        out.push(
+            DiagnosticMessageBuilder::warning(format!(
+                "`project.render` pattern `{}` is not a valid glob",
+                invalid.raw
+            ))
+            .with_code("Q-5-15")
+            .with_location(invalid.source.clone())
+            .problem(invalid.message.clone())
+            .add_info(
+                "`**` must be a whole path segment (`docs/**/*.qmd`), and \
+                 `[...]` character classes must be closed.",
+            )
+            .build(),
+        );
+    }
+
+    // Compiled-but-matched-nothing. Re-pair each resolved positive
+    // pattern with the raw entry it came from, so the diagnostic can
+    // quote what the author wrote and point at its span.
+    let positives: Vec<_> = resolution.globs.iter().filter(|g| !g.negated).collect();
+    let raw_positives: Vec<&RawGlob> = patterns
+        .iter()
+        .filter(|r| !r.raw.starts_with('!'))
+        .filter(|r| {
+            !resolution.escaped.iter().any(|e| e.raw == r.raw)
+                && !resolution.invalid.iter().any(|i| i.raw == r.raw)
         })
-        .collect::<Vec<_>>()
-        .join("/")
-}
+        .collect();
 
-/// Match a `path`-shaped string against a glob `pattern`. Both are
-/// expected to be forward-slash separated and project-relative (or
-/// host-relative — the matcher itself is purely string-based).
-///
-/// The pattern grammar is the project's narrow glob vocabulary:
-/// literal segments, `?` (single char), `*` (any chars in one
-/// segment), `**` (zero or more whole segments). This is the same
-/// matcher used internally by `expand_patterns` for `_quarto.yml`'s
-/// `project.render`. Phase-8 (incremental rebuilds) and L3
-/// (listings item discovery) reuse it without duplication.
-pub fn glob_match_path(pattern: &str, path: &str) -> bool {
-    glob_match(&normalize_pattern(pattern), &normalize_pattern(path))
-}
-
-/// Like [`glob_match_path`], but a *literal* pattern (no `*`/`?`)
-/// additionally matches everything under it when treated as a
-/// directory: `posts` matches `posts/welcome/index.qmd`. This is
-/// Q1's semantics for listing `contents:` entries, where a bare
-/// directory name means "all inputs beneath it" (bd-9arwdicv).
-/// Deliberately scoped to listing matching — `project.render`
-/// discovery keeps the strict glob vocabulary.
-pub fn glob_match_path_or_dir(pattern: &str, path: &str) -> bool {
-    if glob_match_path(pattern, path) {
-        return true;
-    }
-    let pattern = normalize_pattern(pattern);
-    let literal = pattern.trim_end_matches('/');
-    !literal.contains(['*', '?']) && normalize_pattern(path).starts_with(&format!("{literal}/"))
-}
-
-/// Convert a `Path` to a forward-slash project-relative string.
-/// Public so callers (e.g. listings item discovery in L3) can match
-/// the same convention `expand_patterns` uses internally.
-pub fn path_to_forward_slashes(path: &Path) -> String {
-    to_forward_slashes(path)
-}
-
-/// Minimal glob matcher: supports literals, `*`, `?`, and `**`.
-///
-/// This is narrow by design — we accept the glob vocabulary we want to
-/// document users relying on, and nothing else. Phase-8 (incremental
-/// rebuilds) will revisit and likely adopt the same matcher pampa
-/// already uses elsewhere for `include-in-header` globs.
-fn glob_match(pattern: &str, haystack: &str) -> bool {
-    let pat_parts: Vec<&str> = pattern.split('/').collect();
-    let hay_parts: Vec<&str> = haystack.split('/').collect();
-    segment_match(&pat_parts, &hay_parts)
-}
-
-fn segment_match(pat: &[&str], hay: &[&str]) -> bool {
-    match (pat.first(), hay.first()) {
-        (None, None) => true,
-        (Some(&"**"), _) => {
-            // `**` matches zero or more full segments.
-            if segment_match(&pat[1..], hay) {
-                return true;
-            }
-            if let Some(rest) = hay.split_first().map(|(_, r)| r) {
-                return segment_match(pat, rest);
-            }
-            pat[1..].is_empty()
-        }
-        (Some(p), Some(h)) if wildcard_match(p, h) => segment_match(&pat[1..], &hay[1..]),
-        _ => false,
-    }
-}
-
-fn wildcard_match(pat: &str, hay: &str) -> bool {
-    // Standard greedy `*` / `?` matcher within a single path segment.
-    let pat_bytes = pat.as_bytes();
-    let hay_bytes = hay.as_bytes();
-    let mut pi = 0;
-    let mut hi = 0;
-    let mut star: Option<(usize, usize)> = None;
-    while hi < hay_bytes.len() {
-        if pi < pat_bytes.len() && (pat_bytes[pi] == b'?' || pat_bytes[pi] == hay_bytes[hi]) {
-            pi += 1;
-            hi += 1;
-        } else if pi < pat_bytes.len() && pat_bytes[pi] == b'*' {
-            star = Some((pi, hi));
-            pi += 1;
-        } else if let Some((sp, sh)) = star {
-            pi = sp + 1;
-            hi = sh + 1;
-            star = Some((sp, hi));
-        } else {
-            return false;
+    for (glob, raw) in positives.iter().zip(raw_positives.iter()) {
+        let Ok(single) = PatternSet::compile(std::slice::from_ref(*glob), &RENDER_GLOB_OPTIONS)
+        else {
+            continue;
+        };
+        let matched = selected.iter().any(|doc| {
+            doc.input
+                .strip_prefix(project_dir)
+                .is_ok_and(|rel| single.matches_path(rel))
+        });
+        if !matched {
+            out.push(
+                DiagnosticMessageBuilder::warning(format!(
+                    "`project.render` pattern `{}` matched no renderable files",
+                    raw.raw
+                ))
+                .with_code("Q-5-13")
+                .with_location(raw.source.clone())
+                .problem(
+                    "No `.qmd` file in the project matches this pattern, so it \
+                     contributes nothing to the render list.",
+                )
+                .add_info(
+                    "In Quarto 2, `*` matches within one directory level — write \
+                     `**/` to search subdirectories (`posts/**/*.qmd`). Files whose \
+                     name or directory starts with `_` or `.`, and `README` files, \
+                     are never rendered.",
+                )
+                .build(),
+            );
         }
     }
-    while pi < pat_bytes.len() && pat_bytes[pi] == b'*' {
-        pi += 1;
-    }
-    pi == pat_bytes.len()
+
+    out
 }
 
 /// Recursively walk `project_dir` collecting `.qmd` files, already
@@ -328,6 +377,7 @@ fn walk_rec(
 mod tests {
     use super::*;
 
+    use quarto_source_map::{By, SourceInfo};
     use quarto_system_runtime::NativeRuntime;
     use std::fs;
     use tempfile::TempDir;
@@ -345,20 +395,6 @@ mod tests {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(path, contents).unwrap();
-    }
-
-    #[test]
-    fn glob_match_path_or_dir_semantics() {
-        // Literal directory matches anything beneath it…
-        assert!(glob_match_path_or_dir("posts", "posts/welcome/index.qmd"));
-        assert!(glob_match_path_or_dir("posts/", "posts/a.qmd"));
-        // …segment-exact, never a string prefix…
-        assert!(!glob_match_path_or_dir("posts", "posts-archive/old.qmd"));
-        // …and a literal file entry still matches itself.
-        assert!(glob_match_path_or_dir("posts/a.qmd", "posts/a.qmd"));
-        // Patterns with metacharacters keep strict glob semantics.
-        assert!(glob_match_path_or_dir("posts/*.qmd", "posts/a.qmd"));
-        assert!(!glob_match_path_or_dir("posts/*.qmd", "posts/deep/a.qmd"));
     }
 
     #[test]
@@ -407,6 +443,182 @@ mod tests {
         assert_eq!(got, expected);
     }
 
+    /// Helper: run discovery over `patterns`, returning the
+    /// project-relative matches (sorted) plus any diagnostics.
+    fn discover_with(
+        project_dir: &Path,
+        patterns: &[&str],
+    ) -> (Vec<String>, Vec<quarto_error_reporting::DiagnosticMessage>) {
+        let patterns: Vec<RawGlob> = patterns
+            .iter()
+            .map(|p| RawGlob::new(*p, SourceInfo::generated(By::programmatic_config())))
+            .collect();
+        let output_dir = project_dir.join("_site");
+        let config = DiscoveryConfig {
+            project_dir,
+            output_dir: &output_dir,
+            render_patterns: &patterns,
+        };
+        let files = discover_project_files(&config, &native()).unwrap();
+        // Diagnostics are computed from the post-exclusion file list,
+        // exactly as the orchestrator does it.
+        let selected: Vec<DocumentInfo> =
+            files.iter().cloned().map(DocumentInfo::from_path).collect();
+        let diagnostics = render_pattern_diagnostics(project_dir, &patterns, &selected);
+        let mut rels: Vec<String> = files
+            .iter()
+            .map(|p| {
+                p.strip_prefix(project_dir)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace(std::path::MAIN_SEPARATOR, "/")
+            })
+            .collect();
+        rels.sort();
+        (rels, diagnostics)
+    }
+
+    fn render_fixture() -> (TempDir, PathBuf) {
+        let temp = TempDir::new().unwrap();
+        let project_dir = canonical(temp.path());
+        write_file(&project_dir.join("index.qmd"), "# x\n");
+        write_file(&project_dir.join("draft.qmd"), "# d\n");
+        write_file(&project_dir.join("posts/a.qmd"), "# a\n");
+        write_file(&project_dir.join("posts/b.qmd"), "# b\n");
+        write_file(&project_dir.join("posts/deep/c.qmd"), "# c\n");
+        (temp, project_dir)
+    }
+
+    /// D3: `!` excludes. Before bd-mt7a6uc4 the entry was matched
+    /// literally, never matched anything, and the file rendered
+    /// anyway with no diagnostic (Phase 0 fixture f2).
+    #[test]
+    fn render_patterns_honor_negation() {
+        let (_t, dir) = render_fixture();
+        let (rels, diags) = discover_with(&dir, &["*.qmd", "!draft.qmd"]);
+        assert_eq!(rels, vec!["index.qmd".to_string()]);
+        assert!(
+            diags.is_empty(),
+            "a negation that excludes something is not a problem: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn render_patterns_negation_is_order_independent() {
+        let (_t, dir) = render_fixture();
+        let (rels, _) = discover_with(&dir, &["!draft.qmd", "*.qmd"]);
+        assert_eq!(rels, vec!["index.qmd".to_string()]);
+    }
+
+    /// D4: a bare directory means everything beneath it. Before, it
+    /// matched nothing and the render set was silently short
+    /// (Phase 0 fixture f3).
+    #[test]
+    fn render_patterns_expand_a_bare_directory() {
+        let (_t, dir) = render_fixture();
+        let (rels, diags) = discover_with(&dir, &["index.qmd", "posts"]);
+        assert_eq!(
+            rels,
+            vec![
+                "index.qmd".to_string(),
+                "posts/a.qmd".to_string(),
+                "posts/b.qmd".to_string(),
+                "posts/deep/c.qmd".to_string(),
+            ]
+        );
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    /// D2: a leading `/` anchors at the project root (which, for
+    /// `project.render`, is also its base — so this is a no-op that
+    /// must not break).
+    #[test]
+    fn render_patterns_accept_a_leading_slash() {
+        let (_t, dir) = render_fixture();
+        let (rels, _) = discover_with(&dir, &["/index.qmd", "/posts/*.qmd"]);
+        assert_eq!(
+            rels,
+            vec![
+                "index.qmd".to_string(),
+                "posts/a.qmd".to_string(),
+                "posts/b.qmd".to_string(),
+            ]
+        );
+    }
+
+    /// D7: a pattern that matches nothing is reported. This is the
+    /// migration aid for the D5 divergence from Q1 — a Q1 project
+    /// whose `*.qmd` meant "everywhere" now gets told.
+    #[test]
+    fn render_pattern_matching_nothing_is_diagnosed() {
+        let (_t, dir) = render_fixture();
+        let (rels, diags) = discover_with(&dir, &["index.qmd", "postz/*.qmd"]);
+        assert_eq!(rels, vec!["index.qmd".to_string()]);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].code.as_deref(), Some("Q-5-13"));
+        let text = format!("{:?}", diags[0]);
+        assert!(
+            text.contains("postz/*.qmd"),
+            "should name the pattern: {text}"
+        );
+    }
+
+    /// A pattern escaping the project root matches nothing and says so.
+    #[test]
+    fn render_pattern_escaping_the_project_is_diagnosed() {
+        let (_t, dir) = render_fixture();
+        let (rels, diags) = discover_with(&dir, &["../outside.qmd"]);
+        assert!(rels.is_empty());
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].code.as_deref(), Some("Q-5-14"));
+    }
+
+    /// An uncompilable pattern is reported rather than silently
+    /// matching nothing.
+    #[test]
+    fn render_pattern_with_invalid_syntax_is_diagnosed() {
+        let (_t, dir) = render_fixture();
+        let (rels, diags) = discover_with(&dir, &["a**b.qmd"]);
+        assert!(rels.is_empty());
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].code.as_deref(), Some("Q-5-15"));
+    }
+
+    #[test]
+    fn render_glob_diagnostic_codes_are_registered_in_catalog() {
+        for code in ["Q-5-13", "Q-5-14", "Q-5-15"] {
+            assert!(
+                quarto_error_catalog::ERROR_CATALOG.get(code).is_some(),
+                "{code} must be registered in the quarto-error-catalog"
+            );
+        }
+    }
+
+    /// Character classes reach `project.render` too (D1).
+    #[test]
+    fn render_patterns_support_character_classes() {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(&dir.join("ch-1.qmd"), "# 1\n");
+        write_file(&dir.join("ch-x.qmd"), "# x\n");
+        let (rels, _) = discover_with(&dir, &["ch-[0-9].qmd"]);
+        assert_eq!(rels, vec!["ch-1.qmd".to_string()]);
+    }
+
+    /// Discovery exclusions are the enumerator's policy, not glob
+    /// semantics: an explicit pattern still cannot pull in an
+    /// underscore/hidden/README path.
+    #[test]
+    fn render_patterns_do_not_defeat_discovery_exclusions() {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(&dir.join("index.qmd"), "# x\n");
+        write_file(&dir.join("_partial.qmd"), "# p\n");
+        write_file(&dir.join("README.qmd"), "# r\n");
+        let (rels, _) = discover_with(&dir, &["*.qmd"]);
+        assert_eq!(rels, vec!["index.qmd".to_string()]);
+    }
+
     #[test]
     fn discovery_honors_render_patterns() {
         let temp = TempDir::new().unwrap();
@@ -416,7 +628,10 @@ mod tests {
         write_file(&project_dir.join("docs/api.qmd"), "# api\n");
         write_file(&project_dir.join("docs/sub/nested.qmd"), "# n\n");
 
-        let patterns = vec!["index.qmd".to_string(), "docs/**/*.qmd".to_string()];
+        let patterns: Vec<RawGlob> = ["index.qmd", "docs/**/*.qmd"]
+            .iter()
+            .map(|p| RawGlob::new(*p, SourceInfo::generated(By::programmatic_config())))
+            .collect();
         let output_dir = project_dir.join("_site");
         let config = DiscoveryConfig {
             project_dir: &project_dir,
@@ -570,17 +785,5 @@ mod tests {
             })
             .collect();
         assert_eq!(rels, vec!["index.qmd".to_string()]);
-    }
-
-    #[test]
-    fn wildcard_matches_segments() {
-        assert!(glob_match("index.qmd", "index.qmd"));
-        assert!(glob_match("*.qmd", "about.qmd"));
-        assert!(!glob_match("*.qmd", "sub/about.qmd"));
-        assert!(glob_match("**/*.qmd", "sub/about.qmd"));
-        assert!(glob_match("**/*.qmd", "about.qmd"));
-        assert!(glob_match("docs/**/*.qmd", "docs/sub/api.qmd"));
-        assert!(!glob_match("docs/**/*.qmd", "other/api.qmd"));
-        assert!(glob_match("docs/?pi.qmd", "docs/api.qmd"));
     }
 }

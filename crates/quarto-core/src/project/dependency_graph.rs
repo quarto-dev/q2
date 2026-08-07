@@ -51,7 +51,7 @@ use std::path::{Path, PathBuf};
 
 use quarto_pandoc_types::ConfigValue;
 
-use crate::project::discovery::path_to_forward_slashes;
+use crate::glob::{GlobOptions, PatternSet};
 use crate::project::index::ProjectIndex;
 use crate::project::sidebar_membership::resolve_sidebar_membership;
 
@@ -176,11 +176,12 @@ impl ProjectDependencyGraph {
             // set and add a forward edge `host → content` for each
             // match.
             //
-            // Match rule is `glob_resolve::item_matches` — the same
-            // single-view matcher `ListingGenerateTransform` uses at
-            // render time, so graph edges line up with what the
-            // listing actually resolves (negation patterns shrink
-            // both alike). Self-edges are dropped by `add_edge`.
+            // Match rule is `crate::glob::PatternSet` under
+            // `GlobOptions::LISTING` — the same shared matcher
+            // `ListingGenerateTransform` uses at render time, so
+            // graph edges line up with what the listing actually
+            // resolves (negation patterns shrink both alike).
+            // Self-edges are dropped by `add_edge`.
             //
             // Hosts with non-empty globs are added to
             // `force_render` so Mode B's
@@ -192,15 +193,24 @@ impl ProjectDependencyGraph {
             if !profile.listing_content_globs.is_empty() {
                 force_render.insert(from.clone());
 
+                // Compile once per host, then match every candidate
+                // against the compiled set. A compile failure here
+                // cannot happen for patterns this tree produced —
+                // resolution validates before writing them to the
+                // profile — so a stale/corrupt profile cache is the
+                // only way in; skip the host's edges rather than
+                // fail the build.
+                let Ok(patterns) =
+                    PatternSet::compile(&profile.listing_content_globs, &GlobOptions::LISTING)
+                else {
+                    continue;
+                };
+
                 for candidate in index.profiles() {
                     if candidate.source_path == *from {
                         continue;
                     }
-                    let cand_str = path_to_forward_slashes(&candidate.source_path);
-                    if crate::project::listing::glob_resolve::item_matches(
-                        &profile.listing_content_globs,
-                        &cand_str,
-                    ) {
+                    if patterns.matches_path(&candidate.source_path) {
                         add_edge(from, &candidate.source_path);
                     }
                 }
@@ -773,7 +783,7 @@ mod tests {
     /// marks a negated entry, mirroring what
     /// `glob_resolve::resolve_content_globs` produces).
     fn listing_host(path: &str, globs: &[&str]) -> DocumentProfile {
-        use crate::project::listing::glob_resolve::ListingContentGlob;
+        use crate::glob::GlobPattern;
         DocumentProfile {
             source_path: PathBuf::from(path),
             output_href: path.replace(".qmd", ".html"),
@@ -782,14 +792,8 @@ mod tests {
             listing_content_globs: globs
                 .iter()
                 .map(|g| match g.strip_prefix('!') {
-                    Some(rest) => ListingContentGlob {
-                        pattern: rest.to_string(),
-                        negated: true,
-                    },
-                    None => ListingContentGlob {
-                        pattern: g.to_string(),
-                        negated: false,
-                    },
+                    Some(rest) => GlobPattern::negated(rest),
+                    None => GlobPattern::positive(*g),
                 })
                 .collect(),
             ..DocumentProfile::default()

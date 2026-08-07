@@ -31,6 +31,8 @@ use quarto_source_map::{By, SourceInfo};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::glob::{BaseDirContext, GlobOptions, PatternSet, RawGlob, resolve_patterns};
+
 // ─────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────
@@ -144,19 +146,19 @@ pub enum ResourceError {
         source_info: SourceInfo,
     },
 
-    #[error("invalid glob pattern '{pattern}': {source}")]
+    #[error("invalid glob pattern '{pattern}': {message}")]
     InvalidGlob {
         pattern: String,
-        #[source]
-        source: glob::PatternError,
+        /// Why the glob engine rejected it.
+        message: String,
         source_info: SourceInfo,
     },
 
-    #[error("error walking glob matches for '{pattern}': {source}")]
+    #[error("error walking glob matches for '{pattern}': {message}")]
     GlobWalk {
         pattern: String,
-        #[source]
-        source: glob::GlobError,
+        /// Which directory could not be read, and why.
+        message: String,
         source_info: SourceInfo,
     },
 }
@@ -229,58 +231,241 @@ pub fn extract_resource_patterns(
 // Glob expansion + path validation
 // ─────────────────────────────────────────────────────────────────────
 
-const GLOB_CHARS: &[char] = &['*', '?', '['];
+/// Resolve a document's declared `resources:` patterns to
+/// project-relative form, against the directory of the file each was
+/// written in (bd-mt7a6uc4).
+///
+/// Called from `DocumentProfileStage`, the one place with the
+/// document's [`SourceContext`] in scope. Patterns that escape the
+/// project root or fail to compile are dropped here; the post-render
+/// collector reports what survives, and the escape/compile cases keep
+/// their existing `Q-5-1` / `Q-5-2` treatment at expansion time for
+/// project-level patterns.
+pub fn resolve_declared_resource_globs(
+    patterns: &[RawResourcePattern],
+    source_context: Option<&quarto_source_map::SourceContext>,
+    project_dir: &Path,
+    host_dir: &str,
+) -> (crate::glob::GlobResolution, Vec<RejectedResourcePattern>) {
+    let resolution = resolve_patterns(
+        patterns
+            .iter()
+            .map(|r| RawGlob::new(r.pattern.clone(), r.source_info.clone())),
+        &BaseDirContext {
+            source_context,
+            project_dir,
+            fallback_dir: host_dir,
+        },
+        &GlobOptions::RESOURCES,
+    );
 
-fn looks_like_glob(s: &str) -> bool {
-    s.contains(|c| GLOB_CHARS.contains(&c))
+    // Rejections travel *with* the profile rather than being reported
+    // here. Profiles are cached: a diagnostic emitted at
+    // profile-extraction time would vanish on the next render, when
+    // the cache serves the profile and the stage never runs. The
+    // collector reports these every render instead.
+    let mut rejected = Vec::new();
+    for escaped in &resolution.escaped {
+        rejected.push(RejectedResourcePattern {
+            pattern: escaped.raw.clone(),
+            reason: ResourceRejection::OutsideProject,
+            source_info: escaped.source.clone(),
+        });
+    }
+    for invalid in &resolution.invalid {
+        rejected.push(RejectedResourcePattern {
+            pattern: invalid.raw.clone(),
+            reason: ResourceRejection::InvalidGlob {
+                message: invalid.message.clone(),
+            },
+            source_info: invalid.source.clone(),
+        });
+    }
+
+    (resolution, rejected)
 }
 
-/// Expand a list of patterns into resolved resources.
+/// A declared `resources:` pattern that resolution could not use.
 ///
-/// - `project_root`: canonical project root; every resolved source
-///   must be inside this directory or [`ResourceError::OutOfProject`]
-///   is returned.
-/// - `anchor`: directory the patterns are relative to. For project-
-///   level patterns this equals `project_root`. For doc-level
-///   patterns this is the document's parent directory.
-/// - `patterns`: raw patterns from YAML.
-/// - `make_origin`: builds the `ResourceOrigin` for each entry given
-///   the pattern that produced it. Same origin for every match of
-///   a single pattern.
-/// - `scope`: reused across every entry produced.
+/// Carried on [`DocumentProfile`](crate::document_profile::DocumentProfile)
+/// so the post-render collector can report it on every render, not
+/// just the one that populated the profile cache.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RejectedResourcePattern {
+    /// The pattern as the author wrote it.
+    pub pattern: String,
+    /// Why it was rejected.
+    pub reason: ResourceRejection,
+    /// The YAML scalar it came from.
+    pub source_info: SourceInfo,
+}
+
+/// Why a declared `resources:` pattern could not be used.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+pub enum ResourceRejection {
+    /// Normalizing the pattern climbed above the project root.
+    OutsideProject,
+    /// The glob engine rejected the pattern.
+    InvalidGlob {
+        /// The engine's reason.
+        message: String,
+    },
+}
+
+impl RejectedResourcePattern {
+    /// The error this rejection becomes when the collector reports
+    /// it — `Q-5-1` or `Q-5-2`, with the original YAML span.
+    pub fn into_error(self, project_root: &Path) -> ResourceError {
+        match self.reason {
+            ResourceRejection::OutsideProject => ResourceError::OutOfProject {
+                pattern: self.pattern,
+                project_root: project_root.to_path_buf(),
+                source_info: self.source_info,
+            },
+            ResourceRejection::InvalidGlob { message } => ResourceError::InvalidGlob {
+                pattern: self.pattern,
+                message,
+                source_info: self.source_info,
+            },
+        }
+    }
+}
+
+/// Expand already-resolved patterns into resources.
 ///
-/// **Leading-`/` semantics (Quarto YAML convention, TS Quarto parity).**
-/// A pattern beginning with `/` is project-root-relative — e.g.
-/// `"/docs/foo.json"` means `<project_root>/docs/foo.json`, not the
-/// filesystem path `/docs/foo.json`. This applies to YAML
-/// `resources:` declarations in both `_quarto.yml` and document
-/// headers. It does NOT apply to engine/Lua-filter contributions,
-/// which arrive through [`resolve_reported_resources`] and use
-/// real filesystem semantics for absolute paths.
+/// The document-level path uses this directly:
+/// `DocumentProfileStage` resolved those patterns against their
+/// declaring files (where the `SourceContext` was in scope), so
+/// re-resolving here against the host document's directory would
+/// undo exactly the fix bd-mt7a6uc4 makes.
+pub fn expand_resolved(
+    project_root: &Path,
+    globs: &[crate::glob::GlobPattern],
+    sources: &[SourceInfo],
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
+    make_origin: impl FnMut() -> ResourceOrigin,
+    scope: ResourceScope,
+) -> Result<Vec<ResolvedResource>, ResourceError> {
+    expand_resolved_reporting(
+        project_root,
+        globs,
+        sources,
+        runtime,
+        &mut Vec::new(),
+        make_origin,
+        scope,
+    )
+}
+
+/// [`expand_resolved`], additionally reporting glob patterns that
+/// matched no files (`Q-5-16`).
 ///
-/// **Directory expansion (TS Quarto parity, bd-47w7o).** A literal
-/// pattern (no glob characters) that resolves to an existing
-/// directory is equivalent to the recursive glob `<dir>/**/*` —
-/// every file under the directory becomes its own resource entry.
-/// Trailing-slash form (`"data/"`) and bare-directory form
-/// (`"data"`) behave identically. Subdirectories themselves are
-/// not emitted; only their files.
+/// A *literal* pattern that matches nothing is not reported here —
+/// it resolves to itself and the copy step names it, which is the
+/// better message ("declared resource does not exist"). Only glob
+/// patterns, where there is no single file to name, need this.
+pub fn expand_resolved_reporting(
+    project_root: &Path,
+    globs: &[crate::glob::GlobPattern],
+    sources: &[SourceInfo],
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
+    diagnostics: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+    mut make_origin: impl FnMut() -> ResourceOrigin,
+    scope: ResourceScope,
+) -> Result<Vec<ResolvedResource>, ResourceError> {
+    let excluder = PatternSet::compile(globs, &GlobOptions::RESOURCES).map_err(|e| {
+        ResourceError::InvalidGlob {
+            pattern: e.pattern.clone(),
+            message: e.message.clone(),
+            source_info: SourceInfo::generated(By::programmatic_config()),
+        }
+    })?;
+
+    let mut out = Vec::new();
+    for (index, glob) in globs.iter().enumerate() {
+        if glob.negated {
+            continue;
+        }
+        // Sources are aligned with `globs` (see
+        // `GlobResolution::sources`); fall back only if a caller
+        // passed a short list.
+        let provenance = sources
+            .get(index)
+            .cloned()
+            .unwrap_or_else(|| SourceInfo::generated(By::programmatic_config()));
+        let before = out.len();
+        for source in expand_one(project_root, glob, &provenance, runtime)? {
+            let Ok(relative) = source.strip_prefix(project_root) else {
+                continue;
+            };
+            let rel = crate::glob::path_to_forward_slashes(relative);
+            if excluder.excluded(&rel) {
+                continue;
+            }
+            out.push(ResolvedResource {
+                source,
+                output_relative: rel,
+                origin: make_origin(),
+                scope: scope.clone(),
+            });
+        }
+        if out.len() == before && crate::glob::has_metacharacters(&glob.pattern) {
+            diagnostics.push(
+                crate::glob::diagnostics::matched_nothing(
+                    "Q-5-16",
+                    "`resources:`",
+                    &glob.pattern,
+                    &provenance,
+                )
+                .build(),
+            );
+        }
+    }
+    Ok(out)
+}
+
 pub fn expand_patterns(
     project_root: &Path,
     anchor: &Path,
     patterns: &[RawResourcePattern],
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
     mut make_origin: impl FnMut() -> ResourceOrigin,
     scope: ResourceScope,
 ) -> Result<Vec<ResolvedResource>, ResourceError> {
+    let resolution = resolve_resource_patterns(project_root, anchor, patterns)?;
+
+    // Exclusions apply to everything the positives produced,
+    // regardless of where the `!` entry was written.
+    // Cannot fail — `resolve_resource_patterns` compiled every
+    // pattern it returned — but the error path stays honest rather
+    // than unwrapping.
+    let excluder =
+        PatternSet::compile(&resolution.globs, &GlobOptions::RESOURCES).map_err(|e| {
+            let provenance = resolution
+                .iter()
+                .find(|(g, _)| g.pattern == e.pattern)
+                .map_or_else(
+                    || SourceInfo::generated(By::programmatic_config()),
+                    |(_, s)| s.clone(),
+                );
+            ResourceError::InvalidGlob {
+                pattern: e.pattern.clone(),
+                message: e.message.clone(),
+                source_info: provenance,
+            }
+        })?;
+
     let mut out = Vec::new();
-    for raw in patterns {
-        let matched = expand_one(project_root, anchor, &raw.pattern, &raw.source_info)?;
-        for source in matched {
-            let rel = source
-                .strip_prefix(project_root)
-                .expect("expand_one verified the path is within project_root")
-                .to_string_lossy()
-                .replace('\\', "/");
+    for (glob, provenance) in resolution.positives() {
+        for source in expand_one(project_root, glob, provenance, runtime)? {
+            let Ok(relative) = source.strip_prefix(project_root) else {
+                continue;
+            };
+            let rel = crate::glob::path_to_forward_slashes(relative);
+            if excluder.excluded(&rel) {
+                continue;
+            }
             out.push(ResolvedResource {
                 source,
                 output_relative: rel,
@@ -292,88 +477,112 @@ pub fn expand_patterns(
     Ok(out)
 }
 
-fn expand_one(
+/// Resolve raw `resources:` entries to project-relative patterns.
+///
+/// Base directory is `anchor` (the project root for
+/// `project.resources`, the declaring file's directory for a
+/// document's `resources:`); a leading `/` re-anchors at the project
+/// root. Patterns that escape the root or fail to compile become
+/// [`ResourceError`]s so the existing `Q-5-1` / `Q-5-2` diagnostics
+/// keep firing, with the same YAML spans as before.
+fn resolve_resource_patterns(
     project_root: &Path,
     anchor: &Path,
-    pattern: &str,
-    source_info: &SourceInfo,
-) -> Result<Vec<PathBuf>, ResourceError> {
-    // YAML convention (TS Quarto parity, bd-wlza2): a leading `/`
-    // anchors the pattern at the project root, NOT the filesystem
-    // root. Strip exactly one `/` and rebase from `project_root` so
-    // the `join` below treats the remainder as relative. The
-    // original `pattern` string is preserved for use in any error
-    // message so the user sees what they wrote.
-    //
-    // Engine/Lua-filter channels do NOT go through `expand_one`;
-    // they enter via `resolve_reported_resources` and keep
-    // absolute-path semantics intact (engines really do return
-    // filesystem-absolute paths to on-disk supporting files).
-    let (base, pat) = match pattern.strip_prefix('/') {
-        Some(rest) => (project_root, rest),
-        None => (anchor, pattern),
-    };
-    if looks_like_glob(pat) {
-        let combined = base.join(pat);
-        return expand_glob_files(
-            project_root,
-            &combined.to_string_lossy(),
-            pattern,
-            source_info,
-        );
-    }
+    patterns: &[RawResourcePattern],
+) -> Result<crate::glob::GlobResolution, ResourceError> {
+    let fallback_dir = anchor
+        .strip_prefix(project_root)
+        .map(crate::glob::path_to_forward_slashes)
+        .unwrap_or_default();
 
-    // Literal path. Resolve and project-containment-check first; then
-    // decide whether it's a directory (TS Quarto parity, bd-47w7o:
-    // a literal directory is equivalent to the recursive glob
-    // `<dir>/**/*`) or a single file/missing path.
-    let absolute = base.join(pat);
-    let canonical = canonicalize_within_project(project_root, &absolute, pattern, source_info)?;
-    if canonical.is_dir() {
-        let dir_glob = format!("{}/**/*", canonical.display());
-        expand_glob_files(project_root, &dir_glob, pattern, source_info)
-    } else {
-        Ok(vec![canonical])
+    let resolution = resolve_patterns(
+        patterns
+            .iter()
+            .map(|r| RawGlob::new(r.pattern.clone(), r.source_info.clone())),
+        &BaseDirContext {
+            source_context: None,
+            project_dir: project_root,
+            fallback_dir: &fallback_dir,
+        },
+        &GlobOptions::RESOURCES,
+    );
+
+    if let Some(escaped) = resolution.escaped.first() {
+        return Err(ResourceError::OutOfProject {
+            pattern: escaped.raw.clone(),
+            project_root: project_root.to_path_buf(),
+            source_info: escaped.source.clone(),
+        });
     }
+    if let Some(invalid) = resolution.invalid.first() {
+        return Err(ResourceError::InvalidGlob {
+            pattern: invalid.raw.clone(),
+            message: invalid.message.clone(),
+            source_info: invalid.source.clone(),
+        });
+    }
+    Ok(resolution)
 }
 
-/// Run `glob::glob(glob_pattern)`, drop directory entries, and
-/// project-containment-check every remaining file. Shared by the
-/// glob branch of `expand_one` and the literal-directory branch
-/// (where we synthesize `<dir>/**/*`). `original_pattern` is the
-/// user-supplied YAML string, preserved for any error message;
-/// `source_info` is the YAML scalar's source location, propagated
-/// into any [`ResourceError`] this returns.
-fn expand_glob_files(
+/// Files contributed by one positive pattern.
+///
+/// Two shapes, deliberately kept apart:
+///
+/// - A **literal path that is not an existing directory** resolves to
+///   itself, *even if it does not exist*. Declaring a resource that
+///   is missing is a mistake worth reporting, and the copy step
+///   reports it by name ("Declared resource … does not exist on
+///   disk"). Routing it through the matcher instead would turn that
+///   into a silent no-match.
+/// - Everything else — globs, and literals naming a directory —
+///   expands through [`crate::glob::expand`], which walks via the
+///   runtime and applies the directory rule (`data` means everything
+///   beneath `data/`).
+fn expand_one(
     project_root: &Path,
-    glob_pattern: &str,
-    original_pattern: &str,
-    source_info: &SourceInfo,
+    glob: &crate::glob::GlobPattern,
+    provenance: &SourceInfo,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> Result<Vec<PathBuf>, ResourceError> {
-    let entries = glob::glob(glob_pattern).map_err(|e| ResourceError::InvalidGlob {
-        pattern: original_pattern.to_string(),
-        source: e,
-        source_info: source_info.clone(),
-    })?;
-    let mut matched = Vec::new();
-    for entry in entries {
-        let path = entry.map_err(|e| ResourceError::GlobWalk {
-            pattern: original_pattern.to_string(),
-            source: e,
-            source_info: source_info.clone(),
-        })?;
-        // Skip directories — only files become published resources.
-        // The recursive-copy intent is expressed elsewhere: either by
-        // the user writing `dir/**/*`, or by the literal-directory
-        // branch above synthesising that pattern for a bare `dir`.
-        if path.is_dir() {
-            continue;
-        }
-        let canonical =
-            canonicalize_within_project(project_root, &path, original_pattern, source_info)?;
-        matched.push(canonical);
+    let absolute = project_root.join(&glob.pattern);
+    let is_literal = !crate::glob::has_metacharacters(&glob.pattern);
+    let is_dir = runtime.is_dir(&absolute).unwrap_or(false);
+
+    if is_literal && !is_dir {
+        return Ok(vec![canonicalize_within_project(
+            project_root,
+            &absolute,
+            &glob.pattern,
+            provenance,
+            runtime,
+        )?]);
     }
-    Ok(matched)
+
+    let matched = crate::glob::expand(
+        std::slice::from_ref(glob),
+        project_root,
+        runtime,
+        &GlobOptions::RESOURCES,
+    )
+    .map_err(|e| match e {
+        crate::glob::GlobExpandError::Compile(c) => ResourceError::InvalidGlob {
+            pattern: c.pattern,
+            message: c.message,
+            source_info: provenance.clone(),
+        },
+        crate::glob::GlobExpandError::Walk { path, message } => ResourceError::GlobWalk {
+            pattern: glob.pattern.clone(),
+            message: format!("{}: {message}", path.display()),
+            source_info: provenance.clone(),
+        },
+    })?;
+
+    matched
+        .into_iter()
+        .map(|path| {
+            canonicalize_within_project(project_root, &path, &glob.pattern, provenance, runtime)
+        })
+        .collect()
 }
 
 fn canonicalize_within_project(
@@ -381,13 +590,20 @@ fn canonicalize_within_project(
     path: &Path,
     pattern: &str,
     source_info: &SourceInfo,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> Result<PathBuf, ResourceError> {
     // Best-effort canonicalization: if the file doesn't exist yet
     // (literal-path case for a file the user just declared but hasn't
     // created), fall back to lexical normalization. Either way the
     // out-of-project check uses the same prefix comparison.
-    let canonical = path
-        .canonicalize()
+    //
+    // Goes through the runtime rather than `Path::canonicalize` so
+    // this works against the hub-client VFS as well as a real
+    // filesystem. On native it still resolves symlinks, which is what
+    // makes the containment check catch a symlink pointing out of the
+    // project.
+    let canonical = runtime
+        .canonicalize(path)
         .unwrap_or_else(|_| lexical_normalize(path));
     if !canonical.starts_with(project_root) {
         return Err(ResourceError::OutOfProject {
@@ -515,6 +731,7 @@ impl DocumentResourceReport {
 pub fn resolve_reported_resources(
     project_root: &Path,
     report: &DocumentResourceReport,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> Result<Vec<ResolvedResource>, ResourceError> {
     let mut out = Vec::with_capacity(report.entries.len());
     for entry in &report.entries {
@@ -543,6 +760,7 @@ pub fn resolve_reported_resources(
             &absolute,
             &raw_str,
             &SourceInfo::generated(By::unknown()),
+            runtime,
         )?;
         let rel = canonical
             .strip_prefix(project_root)
@@ -579,6 +797,7 @@ pub fn resolve_reported_resources(
 pub fn collect_static_resources(
     project: &crate::project::ProjectContext,
     index: &crate::project::index::ProjectIndex,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> Result<Vec<ResolvedResource>, ResourceError> {
     let project_root = &project.dir;
     let mut out = Vec::new();
@@ -588,13 +807,16 @@ pub fn collect_static_resources(
         project_root,
         project_root,
         &project.config.resources,
+        runtime,
         || ResourceOrigin::ProjectMetadata,
         ResourceScope::Project,
     )?);
 
-    // Document-level: anchor = doc's parent dir, scope = Page.
+    // Document-level: the profile carries patterns already resolved
+    // against their declaring files (bd-mt7a6uc4), so there is no
+    // anchor to apply here.
     for profile in index.profiles() {
-        if profile.resources.is_empty() {
+        if profile.resource_globs.is_empty() {
             continue;
         }
         let doc_source_abs = if profile.source_path.is_absolute() {
@@ -602,14 +824,11 @@ pub fn collect_static_resources(
         } else {
             project_root.join(&profile.source_path)
         };
-        let doc_dir = doc_source_abs
-            .parent()
-            .map_or_else(|| project_root.clone(), Path::to_path_buf);
-
-        out.extend(expand_patterns(
+        out.extend(expand_resolved(
             project_root,
-            &doc_dir,
-            &profile.resources,
+            &profile.resource_globs,
+            &profile.resource_glob_sources,
+            runtime,
             || ResourceOrigin::DocumentMetadata {
                 source: doc_source_abs.clone(),
             },
@@ -682,22 +901,22 @@ pub fn resource_error_to_parse_error(
 
         ResourceError::InvalidGlob {
             pattern,
-            source,
+            message,
             source_info,
         } => DiagnosticMessageBuilder::error("Invalid glob pattern in `resources:`")
             .with_code("Q-5-2")
             .with_location(source_info.clone())
-            .problem(format!("`{}` is not a valid glob: {}", pattern, source))
+            .problem(format!("`{}` is not a valid glob: {}", pattern, message))
             .build(),
 
         ResourceError::GlobWalk {
             pattern,
-            source,
+            message,
             source_info,
         } => DiagnosticMessageBuilder::error("Failed walking glob matches for `resources:`")
             .with_code("Q-5-3")
             .with_location(source_info.clone())
-            .problem(format!("Walking `{}` failed: {}", pattern, source))
+            .problem(format!("Walking `{}` failed: {}", pattern, message))
             .build(),
     };
 
@@ -714,6 +933,8 @@ pub fn resource_error_to_parse_error(
 pub fn collect_static_resources_with_diagnostics(
     project: &crate::project::ProjectContext,
     index: &crate::project::index::ProjectIndex,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
+    diagnostics: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> Result<Vec<ResolvedResource>, crate::error::ParseError> {
     let project_root = &project.dir;
     let mut out = Vec::new();
@@ -726,10 +947,14 @@ pub fn collect_static_resources_with_diagnostics(
         .unwrap_or_else(|| project_root.join("_quarto.yml"));
 
     if let Err(e) = (|| -> Result<(), ResourceError> {
-        out.extend(expand_patterns(
+        let resolution =
+            resolve_resource_patterns(project_root, project_root, &project.config.resources)?;
+        out.extend(expand_resolved_reporting(
             project_root,
-            project_root,
-            &project.config.resources,
+            &resolution.globs,
+            &resolution.sources,
+            runtime,
+            diagnostics,
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )?);
@@ -741,23 +966,32 @@ pub fn collect_static_resources_with_diagnostics(
     // Document-level. Errors point into the doc that declared the
     // bad pattern.
     for profile in index.profiles() {
-        if profile.resources.is_empty() {
-            continue;
-        }
         let doc_source_abs = if profile.source_path.is_absolute() {
             profile.source_path.clone()
         } else {
             project_root.join(&profile.source_path)
         };
-        let doc_dir = doc_source_abs
-            .parent()
-            .map_or_else(|| project_root.clone(), Path::to_path_buf);
+
+        // Patterns resolution rejected are reported every render,
+        // from the profile (cached or not), against the document
+        // that declared them.
+        if let Some(rejected) = profile.rejected_resources.first() {
+            return Err(resource_error_to_parse_error(
+                rejected.clone().into_error(project_root),
+                &doc_source_abs,
+            ));
+        }
+        if profile.resource_globs.is_empty() {
+            continue;
+        }
 
         if let Err(e) = (|| -> Result<(), ResourceError> {
-            out.extend(expand_patterns(
+            out.extend(expand_resolved_reporting(
                 project_root,
-                &doc_dir,
-                &profile.resources,
+                &profile.resource_globs,
+                &profile.resource_glob_sources,
+                runtime,
+                diagnostics,
                 || ResourceOrigin::DocumentMetadata {
                     source: doc_source_abs.clone(),
                 },
@@ -950,6 +1184,13 @@ pub fn write_render_manifest(
 
 #[cfg(test)]
 mod tests {
+
+    /// Tests exercise the real filesystem (temp dirs), so the native
+    /// runtime is the right stand-in; expansion itself never calls
+    /// `std::fs` directly.
+    fn rt() -> quarto_system_runtime::NativeRuntime {
+        quarto_system_runtime::NativeRuntime::new()
+    }
     use super::*;
     use tempfile::TempDir;
 
@@ -976,11 +1217,14 @@ mod tests {
 
     #[test]
     fn looks_like_glob_basic() {
-        assert!(looks_like_glob("data/*.csv"));
-        assert!(looks_like_glob("img/?.png"));
-        assert!(looks_like_glob("[ab].txt"));
-        assert!(!looks_like_glob("plain.txt"));
-        assert!(!looks_like_glob("data/file.csv"));
+        // Metacharacter detection now lives in the shared glob API;
+        // `resources:` uses it to decide literal-path vs pattern.
+        use crate::glob::has_metacharacters;
+        assert!(has_metacharacters("data/*.csv"));
+        assert!(has_metacharacters("img/?.png"));
+        assert!(has_metacharacters("[ab].txt"));
+        assert!(!has_metacharacters("plain.txt"));
+        assert!(!has_metacharacters("data/file.csv"));
     }
 
     #[test]
@@ -993,6 +1237,7 @@ mod tests {
             &root,
             &root,
             &[raw("a.txt")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1003,6 +1248,152 @@ mod tests {
             resolved[0].source,
             root.join("a.txt").canonicalize().unwrap()
         );
+    }
+
+    /// D3: `!` excludes. Before bd-mt7a6uc4 this entry fell through
+    /// to the literal-path branch and **aborted the render** with
+    /// "Declared resource '<root>/!data/secret.csv' does not exist on
+    /// disk" — while still publishing the file it was meant to
+    /// exclude (Phase 0 fixture f2b).
+    #[test]
+    fn negation_excludes_a_glob_match() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        touch(&root.join("data/public.csv"));
+        touch(&root.join("data/secret.csv"));
+
+        let resolved = expand_patterns(
+            &root,
+            &root,
+            &[raw("data/*.csv"), raw("!data/secret.csv")],
+            &rt(),
+            || ResourceOrigin::ProjectMetadata,
+            ResourceScope::Project,
+        )
+        .unwrap();
+
+        let rels: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.output_relative.as_str())
+            .collect();
+        assert_eq!(rels, vec!["data/public.csv"]);
+    }
+
+    #[test]
+    fn negation_excludes_from_a_literal_directory() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        touch(&root.join("data/public.csv"));
+        touch(&root.join("data/secret.csv"));
+
+        let resolved = expand_patterns(
+            &root,
+            &root,
+            &[raw("data"), raw("!data/secret.csv")],
+            &rt(),
+            || ResourceOrigin::ProjectMetadata,
+            ResourceScope::Project,
+        )
+        .unwrap();
+
+        let rels: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.output_relative.as_str())
+            .collect();
+        assert_eq!(rels, vec!["data/public.csv"]);
+    }
+
+    #[test]
+    fn negation_is_order_independent() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        touch(&root.join("data/public.csv"));
+        touch(&root.join("data/secret.csv"));
+
+        let resolved = expand_patterns(
+            &root,
+            &root,
+            &[raw("!data/secret.csv"), raw("data/*.csv")],
+            &rt(),
+            || ResourceOrigin::ProjectMetadata,
+            ResourceScope::Project,
+        )
+        .unwrap();
+
+        let rels: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.output_relative.as_str())
+            .collect();
+        assert_eq!(rels, vec!["data/public.csv"]);
+    }
+
+    /// A negated pattern can also exclude a whole directory.
+    #[test]
+    fn negated_directory_excludes_everything_beneath() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        touch(&root.join("data/keep.csv"));
+        touch(&root.join("data/drafts/wip.csv"));
+
+        let resolved = expand_patterns(
+            &root,
+            &root,
+            &[raw("data"), raw("!data/drafts")],
+            &rt(),
+            || ResourceOrigin::ProjectMetadata,
+            ResourceScope::Project,
+        )
+        .unwrap();
+
+        let rels: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.output_relative.as_str())
+            .collect();
+        assert_eq!(rels, vec!["data/keep.csv"]);
+    }
+
+    /// A declared literal that does not exist still resolves to
+    /// itself, so the copy step can report it by name. Routing it
+    /// through the matcher would have turned a reported mistake into
+    /// a silent no-match.
+    #[test]
+    fn missing_literal_still_resolves_for_the_copy_step_to_report() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+
+        let resolved = expand_patterns(
+            &root,
+            &root,
+            &[raw("data/absent.csv")],
+            &rt(),
+            || ResourceOrigin::ProjectMetadata,
+            ResourceScope::Project,
+        )
+        .unwrap();
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].output_relative, "data/absent.csv");
+    }
+
+    /// An invalid glob is reported against the YAML span it came
+    /// from, not a synthetic default (Q-5-2).
+    #[test]
+    fn invalid_glob_carries_its_source_span() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+
+        let err = expand_patterns(
+            &root,
+            &root,
+            &[raw("a**b.csv")],
+            &rt(),
+            || ResourceOrigin::ProjectMetadata,
+            ResourceScope::Project,
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ResourceError::InvalidGlob { .. }), "{err:?}");
+        assert_eq!(err.pattern(), "a**b.csv");
     }
 
     #[test]
@@ -1017,6 +1408,7 @@ mod tests {
             &root,
             &root,
             &[raw("data/*.csv")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1038,6 +1430,7 @@ mod tests {
             &root,
             &root,
             &[raw("data/*")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1055,6 +1448,7 @@ mod tests {
             &root,
             &root,
             &[raw("../outside.csv")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1078,6 +1472,7 @@ mod tests {
             &root,
             &root,
             &[raw("/data/a.txt")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1101,6 +1496,7 @@ mod tests {
             &root,
             &root,
             &[raw("/data/*.csv")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1126,6 +1522,7 @@ mod tests {
             &root,
             &doc_dir,
             &[raw("/shared.js")],
+            &rt(),
             || ResourceOrigin::DocumentMetadata {
                 source: doc_source.clone(),
             },
@@ -1159,7 +1556,7 @@ mod tests {
         let mut report = DocumentResourceReport::new();
         report.add_engine_files("stub", &doc, [supporting.clone()]);
 
-        let resolved = resolve_reported_resources(&root, &report).unwrap();
+        let resolved = resolve_reported_resources(&root, &report, &rt()).unwrap();
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].source, supporting);
         assert_eq!(resolved[0].output_relative, "posts/foo_files/data.png");
@@ -1195,6 +1592,7 @@ mod tests {
             &root,
             &root,
             &[raw("demo")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1219,6 +1617,7 @@ mod tests {
             &root,
             &root,
             &[raw("demo/")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1247,6 +1646,7 @@ mod tests {
             &root,
             &root,
             &[raw("/demo")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1270,6 +1670,7 @@ mod tests {
             &root,
             &root,
             &[raw("demo")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1294,6 +1695,7 @@ mod tests {
             &root,
             &root,
             &[raw("missing.txt")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1316,6 +1718,7 @@ mod tests {
             &root,
             &root,
             &[raw("a.txt")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1341,6 +1744,7 @@ mod tests {
             &root,
             &doc_dir,
             &[raw("data/extra.html")],
+            &rt(),
             || ResourceOrigin::DocumentMetadata {
                 source: doc_source.clone(),
             },
@@ -1507,6 +1911,7 @@ mod tests {
             &root,
             &root,
             &[RawResourcePattern::new("../escape.csv", si.clone())],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1561,6 +1966,7 @@ mod tests {
             &root,
             &root,
             &[RawResourcePattern::new("../escape.csv", si.clone())],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1596,7 +2002,7 @@ mod tests {
         let mut report = DocumentResourceReport::new();
         report.add_engine_files("knitr", &doc, [supporting.clone()]);
 
-        let resolved = resolve_reported_resources(&root, &report).unwrap();
+        let resolved = resolve_reported_resources(&root, &report, &rt()).unwrap();
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].source, supporting);
         assert_eq!(
@@ -1625,7 +2031,7 @@ mod tests {
             [PathBuf::from("extras/data.csv")], // relative
         );
 
-        let resolved = resolve_reported_resources(&root, &report).unwrap();
+        let resolved = resolve_reported_resources(&root, &report, &rt()).unwrap();
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].output_relative, "posts/extras/data.csv");
     }
@@ -1641,7 +2047,7 @@ mod tests {
         let mut report = DocumentResourceReport::new();
         report.add_lua_filter_files(&doc, [supporting.clone()]);
 
-        let resolved = resolve_reported_resources(&root, &report).unwrap();
+        let resolved = resolve_reported_resources(&root, &report, &rt()).unwrap();
         assert_eq!(resolved.len(), 1);
         assert!(matches!(
             resolved[0].origin,
@@ -1658,7 +2064,7 @@ mod tests {
         let mut report = DocumentResourceReport::new();
         report.add_engine_files("stub", &doc, [PathBuf::from("../escape.csv")]);
 
-        let err = resolve_reported_resources(&root, &report).unwrap_err();
+        let err = resolve_reported_resources(&root, &report, &rt()).unwrap_err();
         assert!(matches!(err, ResourceError::OutOfProject { .. }));
     }
 }

@@ -859,7 +859,17 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
     /// pre/post hooks). Native and WASM share the same body — only
     /// the renderer and project-type implementations differ.
     pub async fn run(&mut self) -> Result<ProjectRenderSummary<R::Output>> {
-        let initial_diagnostics = self.empty_render_set_diagnostic();
+        let mut initial_diagnostics = self.empty_render_set_diagnostic();
+        // `project.render` patterns that contributed nothing
+        // (bd-mt7a6uc4 D7). Computed here rather than inside
+        // discovery so `ProjectContext::discover` keeps its
+        // signature; the check is pure and reads the post-exclusion
+        // file list, so it reports what actually happened.
+        initial_diagnostics.extend(crate::project::discovery::render_pattern_diagnostics(
+            &self.project.dir,
+            &self.project.config.render_patterns,
+            &self.project.files,
+        ));
 
         let (profiles, pass1_failures) = self.pass_one().await;
         let index = Arc::new(ProjectIndex::new(profiles));
@@ -940,11 +950,15 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // dir.
         #[cfg(not(target_arch = "wasm32"))]
         {
+            let mut resource_diagnostics = Vec::new();
             let mut resolved = crate::project_resources::collect_static_resources_with_diagnostics(
                 self.project,
                 &index,
+                self.runtime.as_ref(),
+                &mut resource_diagnostics,
             )
             .map_err(QuartoError::Parse)?;
+            project_diagnostics.extend(resource_diagnostics);
             for output in &outputs {
                 if let Some(report) = R::extract_resource_report(output) {
                     if report.is_empty() {
@@ -953,6 +967,7 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                     let resolved_report = crate::project_resources::resolve_reported_resources(
                         &self.project.dir,
                         report,
+                        self.runtime.as_ref(),
                     )
                     .map_err(|e| QuartoError::other(e.to_string()))?;
                     resolved.extend(resolved_report);

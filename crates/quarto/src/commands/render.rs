@@ -977,7 +977,7 @@ fn print_render_diagnostics(
     config_path: Option<&Path>,
 ) {
     if args.json_errors {
-        print_render_diagnostics_json(summary);
+        print_render_diagnostics_json(summary, config_path);
     } else {
         print_render_diagnostics_text(summary, args.quiet, config_path);
     }
@@ -1005,6 +1005,28 @@ fn print_render_diagnostics(
 /// the config's content under that id so the snippet renders. Any
 /// failure (no config, hash mismatch, unreadable file) leaves the
 /// group unchanged — span-less render, exactly as before.
+/// A [`SourceContext`] holding the project's `_quarto.yml`, so
+/// project-level diagnostics anchored in it (a `project.render`
+/// pattern that matched nothing, say) render an Ariadne snippet
+/// instead of a bare byte offset.
+///
+/// The FileId is the one `quarto_yaml::parse_file` derived by hashing
+/// the config path, which is what the diagnostics' `SourceInfo`
+/// carries — the same trick [`attach_config_source`] plays for
+/// coalesced per-page diagnostics.
+fn config_source_context(config_path: Option<&Path>) -> Option<SourceContext> {
+    let config_path = config_path?;
+    let config_str = config_path.to_string_lossy();
+    let content = std::fs::read_to_string(config_path).ok()?;
+    let mut ctx = SourceContext::new();
+    ctx.add_file_with_id(
+        quarto_yaml::file_id_for_filename(&config_str),
+        config_str.into_owned(),
+        Some(content),
+    );
+    Some(ctx)
+}
+
 fn attach_config_source(group: &mut CoalescedDiagnostic, config_path: Option<&Path>) {
     use quarto_source_map::FileId;
 
@@ -1083,8 +1105,9 @@ fn print_render_diagnostics_text(
             eprintln!("error: {}: {}", failure.input.display(), failure.error);
         }
     }
+    let project_ctx = config_source_context(config_path);
     for diagnostic in &summary.project_diagnostics {
-        eprintln!("{}", diagnostic.to_text(None));
+        eprintln!("{}", diagnostic.to_text(project_ctx.as_ref()));
     }
 
     // bd-mg3ckvp7: per-page diagnostics from *successful* renders go
@@ -1172,6 +1195,7 @@ fn detect_single_input_format(inputs: &[String]) -> Option<String> {
 /// emits NDJSON instead.
 fn print_render_diagnostics_json(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
+    config_path: Option<&Path>,
 ) {
     // Pass-1 failures: emit one JsonPass1Failure per failure. If the
     // failure has structured diagnostics + a source context, attach
@@ -1227,11 +1251,13 @@ fn print_render_diagnostics_json(
         }
     }
 
-    // Project-level diagnostics (e.g. Q-PROJECT-EMPTY): no source
-    // context, no source-file attribution — pure project-scope.
-    let empty_ctx = SourceContext::new();
+    // Project-level diagnostics. Most (e.g. Q-PROJECT-EMPTY) are pure
+    // project-scope with no span; those anchored in `_quarto.yml`
+    // (the `project.render` glob diagnostics, Q-5-13/14/15) resolve
+    // through the config's source context.
+    let project_ctx = config_source_context(config_path).unwrap_or_default();
     for diagnostic in &summary.project_diagnostics {
-        emit_json_line(&diagnostic_to_json(diagnostic, &empty_ctx));
+        emit_json_line(&diagnostic_to_json(diagnostic, &project_ctx));
     }
 
     // Per-page render diagnostics on successful outputs. The

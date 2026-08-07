@@ -21,12 +21,15 @@
 //!
 //! [`SidebarGenerateTransform`]: crate::transforms::SidebarGenerateTransform
 
+use std::path::Path;
+
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_navigation::{AutoSpec, NavigationItem, Sidebar, SidebarEntry};
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_source_map::{By, SourceInfo};
 
 use crate::document_profile::DocumentProfile;
+use crate::glob::{BaseDirContext, GlobOptions, PatternSet, RawGlob, resolve_patterns};
 use crate::project::index::ProjectIndex;
 
 /// Q-13-5: sidebar `auto:` dropped because no project index is
@@ -195,46 +198,63 @@ fn collect_candidates<'a>(
             (candidates, Scope::All)
         }
         AutoSpec::Path(pat) => {
-            let normalized = normalize_pattern(pat);
+            let matcher = auto_matcher(std::slice::from_ref(pat));
             let candidates: Vec<&DocumentProfile> = profiles
                 .iter()
                 .filter(|p| !p.draft)
-                .filter(|p| matches_prefix(p, &normalized))
+                .filter(|p| matches_spec(p, matcher.as_ref()))
                 .collect();
             (candidates, Scope::Flat)
         }
         AutoSpec::Paths(pats) => {
-            let normalized: Vec<String> = pats.iter().map(|p| normalize_pattern(p)).collect();
+            let matcher = auto_matcher(pats);
             let candidates: Vec<&DocumentProfile> = profiles
                 .iter()
                 .filter(|p| !p.draft)
-                .filter(|p| normalized.iter().any(|n| matches_prefix(p, n)))
+                .filter(|p| matches_spec(p, matcher.as_ref()))
                 .collect();
             // A Paths spec is always flat — grouping semantics are
-            // ambiguous when multiple prefixes overlap.
+            // ambiguous when multiple patterns overlap.
             (candidates, Scope::Flat)
         }
     }
 }
 
-/// Strip trailing glob markers so `"docs"`, `"docs/"`, `"docs/*"`,
-/// `"docs/**"`, `"docs/*.qmd"` all normalize to `"docs"`.
-fn normalize_pattern(p: &str) -> String {
-    let trimmed = p
-        .trim_end_matches("*.qmd")
-        .trim_end_matches("**")
-        .trim_end_matches('*')
-        .trim_end_matches('/');
-    trimmed.to_string()
+/// Compile an `auto:` spec's patterns with q2's shared glob
+/// semantics (bd-mt7a6uc4 D6).
+///
+/// Before this, `auto:` was not a glob implementation at all: it
+/// stripped `*.qmd` / `**` / `*` off the end of each entry and
+/// prefix-matched what was left, so `docs/*.qmd`, `docs/**` and
+/// `docs` were the same pattern and every one of them swept up
+/// nested documents. Now `*` is one directory level, `**` crosses
+/// levels, a bare directory still means everything beneath it, and
+/// `[a-z]` classes and `!` exclusions work — the same rules
+/// `contents:`, `project.render` and `resources:` follow.
+///
+/// Patterns resolve against the **project root**. `auto:` lists
+/// project pages, and `AutoSpec` carries no provenance, so there is
+/// no declaring-file directory to anchor to.
+///
+/// Returns `None` when nothing compiles, which matches nothing —
+/// the caller's existing `Q-13-6` empty-match warning covers it.
+fn auto_matcher(patterns: &[String]) -> Option<PatternSet> {
+    let resolution = resolve_patterns(
+        patterns
+            .iter()
+            .map(|p| RawGlob::new(p.clone(), SourceInfo::generated(By::programmatic_config()))),
+        &BaseDirContext {
+            source_context: None,
+            project_dir: Path::new(""),
+            fallback_dir: "",
+        },
+        &GlobOptions::SIDEBAR,
+    );
+    resolution.compile(&GlobOptions::SIDEBAR).ok()
 }
 
-fn matches_prefix(profile: &DocumentProfile, prefix: &str) -> bool {
-    let src = source_fwd_slash(profile);
-    if prefix.is_empty() {
-        return true;
-    }
-    // Exact match on a file path, or any descendant under a directory.
-    src == prefix || src.starts_with(&format!("{}/", prefix))
+fn matches_spec(profile: &DocumentProfile, matcher: Option<&PatternSet>) -> bool {
+    matcher.is_some_and(|m| m.matches(&source_fwd_slash(profile)))
 }
 
 fn source_fwd_slash(profile: &DocumentProfile) -> String {
@@ -503,14 +523,91 @@ mod tests {
         }
     }
 
-    /// `auto: docs/*` normalizes to the same as `auto: docs`.
+    /// `auto: docs/*` matches the documents directly in `docs/` —
+    /// one directory level, like `*` everywhere else in q2.
     #[test]
-    fn auto_path_with_glob_normalizes() {
+    fn auto_path_with_glob_matches_one_level() {
         let profiles = vec![make_profile("a.qmd", "A"), make_profile("docs/b.qmd", "B")];
         let index = ProjectIndex::new(profiles);
         let mut diags = Vec::new();
         let entries = expand_spec(&AutoSpec::Path("docs/*".to_string()), &index, &mut diags);
         assert_eq!(entries.len(), 1);
+    }
+
+    /// bd-mt7a6uc4 D6 — the behavior change. `auto: "docs/*.qmd"`
+    /// used to be normalized to the prefix `docs` and therefore
+    /// swept up nested documents; now `*` means one directory level
+    /// and the author writes `**/` to recurse.
+    #[test]
+    fn auto_single_star_no_longer_matches_nested_documents() {
+        let profiles = vec![
+            make_profile("docs/top.qmd", "Top"),
+            make_profile("docs/deep/nested.qmd", "Nested"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(
+            &AutoSpec::Path("docs/*.qmd".to_string()),
+            &index,
+            &mut diags,
+        );
+        assert_eq!(entries.len(), 1, "only docs/top.qmd");
+    }
+
+    #[test]
+    fn auto_double_star_matches_nested_documents() {
+        let profiles = vec![
+            make_profile("docs/top.qmd", "Top"),
+            make_profile("docs/deep/nested.qmd", "Nested"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(
+            &AutoSpec::Path("docs/**/*.qmd".to_string()),
+            &index,
+            &mut diags,
+        );
+        assert_eq!(entries.len(), 2);
+    }
+
+    /// A bare directory still means everything beneath it (D4), so
+    /// the most common spelling is unaffected by the change above.
+    #[test]
+    fn auto_bare_directory_still_matches_nested_documents() {
+        let profiles = vec![
+            make_profile("docs/top.qmd", "Top"),
+            make_profile("docs/deep/nested.qmd", "Nested"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(&AutoSpec::Path("docs".to_string()), &index, &mut diags);
+        assert_eq!(entries.len(), 2);
+    }
+
+    /// Character classes reach `auto:` too, and `!` excludes.
+    #[test]
+    fn auto_supports_classes_and_negation() {
+        let profiles = vec![
+            make_profile("docs/ch-1.qmd", "One"),
+            make_profile("docs/ch-2.qmd", "Two"),
+            make_profile("docs/notes.qmd", "Notes"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+
+        let entries = expand_spec(
+            &AutoSpec::Path("docs/ch-[0-9].qmd".to_string()),
+            &index,
+            &mut diags,
+        );
+        assert_eq!(entries.len(), 2);
+
+        let entries = expand_spec(
+            &AutoSpec::Paths(vec!["docs".to_string(), "!docs/notes.qmd".to_string()]),
+            &index,
+            &mut diags,
+        );
+        assert_eq!(entries.len(), 2, "negation excludes docs/notes.qmd");
     }
 
     /// Test 22 — `auto: true` with a subdir index.qmd produces a

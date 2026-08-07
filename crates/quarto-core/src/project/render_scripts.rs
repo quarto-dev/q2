@@ -737,7 +737,12 @@ mod tests {
         fn other_changes_are_allowed() {
             let before = config(ProjectKind::Website, Some("_site"));
             let mut after = config(ProjectKind::Website, Some("_site"));
-            after.render_patterns = vec!["*.qmd".to_string()];
+            after.render_patterns = vec![crate::glob::RawGlob::new(
+                "*.qmd",
+                quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::programmatic_config(),
+                ),
+            )];
             assert!(check_forbidden_mutations(&before, &after).is_ok());
         }
     }

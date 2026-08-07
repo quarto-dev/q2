@@ -64,9 +64,7 @@ pub use config::{
     ListingContents, ListingFeedOptions, ListingFilter, ListingSort, ListingType, SortDirection,
     parse_listings,
 };
-pub use glob_resolve::{
-    EscapedContentGlob, GlobResolution, ListingContentGlob, item_matches, resolve_content_globs,
-};
+pub use glob_resolve::resolve_content_globs;
 pub use item::{ListingItem, hydrate_item};
 
 /// One fully-resolved listing — its config plus the hydrated item
