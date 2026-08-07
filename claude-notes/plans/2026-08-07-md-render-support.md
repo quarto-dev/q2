@@ -1,9 +1,9 @@
 # `.md` render support (bd-6d2wj4zp)
 
-**Status:** design questions D1–D9 resolved with Carlos 2026-08-07 (see "Design
-decisions"). One follow-up refinement adopted: the default render list is expressed
-*literally* as `render: ["**/*.qmd"]` (see S2′). Implementation not yet started —
-awaiting explicit go-ahead.
+**Status:** COMPLETE (2026-08-07). All phases landed on
+`braid/bd-6d2wj4zp-md-render-support`: render path (Phases 1–4, 6) in session 1,
+preview + hub + hub-client (Phase 5, decisions D10/D11) in session 2
+(`279d7e5e`). Design questions D1–D11 resolved with Carlos. Branch not pushed.
 
 **Strand:** bd-6d2wj4zp — "Render .md files as inputs (explicit render-list opt-in;
 ignore engine specs with warning)". Related: bd-xxul (the original "non-.qmd input
@@ -607,7 +607,9 @@ Work items (all landed 2026-08-07, session 2):
   `.qmd` cross-links rewrote to `.html`
 - [x] `cargo xtask verify` (full, all 14 steps, WASM + hub-client legs) —
   passed clean on bb54fb7b; no snapshot files changed anywhere in this strand
-- [ ] Close-out on bd-6d2wj4zp after Phase 5 (preview) lands
+- [x] Close-out on bd-6d2wj4zp after Phase 5 (preview) lands — Phase 5
+  landed 2026-08-07 (session 2) as `279d7e5e` + changelog `0e2b1645`;
+  strand closed. Branch not pushed pending Carlos's approval.
 
 ### Phase 5 status + hand-off (for the next session)
 
