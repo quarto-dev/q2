@@ -1188,5 +1188,33 @@
     "message_template": "A shortcode used inline (inside a sentence or other inline content) produced block-level output (for example a raw HTML block from the `video` shortcode), and none of it could be carried into the inline position — the output was dropped. Put the shortcode in its own paragraph, surrounded by blank lines.",
     "docs_url": "https://quarto.org/docs/errors/extension/Q-16-6",
     "since_version": "99.9.9"
+  },
+  "Q-17-1": {
+    "subsystem": "include",
+    "title": "Circular Include",
+    "message_template": "An `{{< include >}}` chain leads back to a file that is already being included, directly or indirectly. The cyclic include is skipped and its content is omitted from the output. Break the cycle by removing one of the includes in the chain.",
+    "docs_url": "https://quarto.org/docs/errors/include/Q-17-1",
+    "since_version": "99.9.9"
+  },
+  "Q-17-2": {
+    "subsystem": "include",
+    "title": "Include File Not Found",
+    "message_template": "The file named by an `{{< include >}}` shortcode could not be read. The include is skipped and its content is omitted from the output. The path is resolved relative to the directory of the file containing the shortcode — check it for typos and check that the file exists.",
+    "docs_url": "https://quarto.org/docs/errors/include/Q-17-2",
+    "since_version": "99.9.9"
+  },
+  "Q-17-3": {
+    "subsystem": "include",
+    "title": "Include File Parse Error",
+    "message_template": "The file named by an `{{< include >}}` shortcode was read but could not be parsed as qmd. The include is skipped and its content is omitted from the output. The included file's own parse errors are reported alongside this one — fix those and the include will succeed.",
+    "docs_url": "https://quarto.org/docs/errors/include/Q-17-3",
+    "since_version": "99.9.9"
+  },
+  "Q-17-4": {
+    "subsystem": "include",
+    "title": "Include Not Expanded Here",
+    "message_template": "An `{{< include >}}` shortcode appears in a position where include expansion does not apply, so it was not expanded. Includes are only expanded when the shortcode is the sole content of its own paragraph. Put the shortcode on its own line, surrounded by blank lines.",
+    "docs_url": "https://quarto.org/docs/errors/include/Q-17-4",
+    "since_version": "99.9.9"
   }
 }

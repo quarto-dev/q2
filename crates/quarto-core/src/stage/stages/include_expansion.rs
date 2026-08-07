@@ -97,7 +97,7 @@ fn expand_includes_in_blocks(
             if include_stack.contains(&canonical) {
                 ctx.diagnostics.push(
                     quarto_error_reporting::DiagnosticMessageBuilder::warning("Circular include")
-                        .with_code("Q-5-1")
+                        .with_code("Q-17-1")
                         .with_location(doc.ast.blocks[i].source_info().clone())
                         .problem(format!(
                             "Circular include detected: '{}' is already being included",
@@ -106,7 +106,11 @@ fn expand_includes_in_blocks(
                         .add_hint("Check for files that include each other, directly or indirectly")
                         .build(),
                 );
-                i += 1;
+                // Remove the failed include's paragraph: the failure is
+                // reported; leaving the shortcode in the AST would make
+                // the shortcode-resolve transform misreport it as an
+                // unknown shortcode (bd-qpvoamvu).
+                doc.ast.blocks.remove(i);
                 continue;
             }
 
@@ -118,7 +122,7 @@ fn expand_includes_in_blocks(
                         quarto_error_reporting::DiagnosticMessageBuilder::warning(
                             "Include file not found",
                         )
-                        .with_code("Q-5-2")
+                        .with_code("Q-17-2")
                         .with_location(doc.ast.blocks[i].source_info().clone())
                         .problem(format!(
                             "Could not read included file '{}': {}",
@@ -127,7 +131,9 @@ fn expand_includes_in_blocks(
                         ))
                         .build(),
                     );
-                    i += 1;
+                    // See the circular-include arm for why the block is
+                    // removed rather than skipped.
+                    doc.ast.blocks.remove(i);
                     continue;
                 }
             };
@@ -140,21 +146,71 @@ fn expand_includes_in_blocks(
 
             let (included_pandoc, included_ast_context, _warnings) = match parse_result {
                 Ok(result) => result,
-                Err(diagnostics) => {
+                Err(inner_diagnostics) => {
+                    // Register the included file's content in both
+                    // SourceContexts so the inner diagnostics can render
+                    // ariadne snippets from it. Registering in *both* —
+                    // even though only `doc.source_context` is read here —
+                    // keeps the two contexts growing in lockstep, which
+                    // the success path's debug_assert relies on for any
+                    // later include in the same document.
+                    let content_str = String::from_utf8_lossy(&content).into_owned();
+                    let new_file_id = doc
+                        .ast_context
+                        .source_context
+                        .add_file(filename.clone(), Some(content_str.clone()));
+                    let snippet_file_id = doc
+                        .source_context
+                        .add_file(filename.clone(), Some(content_str));
+                    debug_assert_eq!(
+                        new_file_id, snippet_file_id,
+                        "FileId mismatch between ast_context.source_context and source_context"
+                    );
+
                     ctx.diagnostics.push(
                         quarto_error_reporting::DiagnosticMessageBuilder::error(
                             "Include file parse error",
                         )
-                        .with_code("Q-5-3")
+                        .with_code("Q-17-3")
                         .with_location(doc.ast.blocks[i].source_info().clone())
                         .problem(format!(
-                            "Failed to parse included file '{}': {} error(s)",
+                            "Included file '{}' has {} parse error(s), reported below",
                             resolved.display(),
-                            diagnostics.len()
+                            inner_diagnostics.len()
                         ))
                         .build(),
                     );
-                    i += 1;
+
+                    // Surface the included file's own diagnostics,
+                    // remapped from the child parse's private FileId(0)
+                    // into the parent document's SourceContext.
+                    let remap = |id: quarto_source_map::FileId| {
+                        if id == quarto_source_map::FileId(0) {
+                            new_file_id
+                        } else {
+                            id
+                        }
+                    };
+                    for mut diag in inner_diagnostics {
+                        if let Some(loc) = diag.location.as_mut() {
+                            loc.remap_file_ids(&remap);
+                        }
+                        for detail in diag.details.iter_mut() {
+                            if let Some(loc) = detail.location.as_mut() {
+                                loc.remap_file_ids(&remap);
+                            }
+                        }
+                        ctx.diagnostics.push(diag);
+                    }
+
+                    // The output still depends on the broken file's
+                    // bytes: fixing it must invalidate any cached
+                    // render, so record it like a successful include.
+                    record_include(&mut doc.recorded_includes, &canonical, &content);
+
+                    // See the circular-include arm for why the block is
+                    // removed rather than skipped.
+                    doc.ast.blocks.remove(i);
                     continue;
                 }
             };
@@ -861,6 +917,147 @@ mod tests {
 
         // Block count should be unchanged — inline include not expanded
         assert_eq!(doc.ast.blocks.len(), original_block_count);
+    }
+
+    /// Trips the parser: bare apostrophe after a plural noun reads as
+    /// an unmatched closing smart quote (Q-2-10).
+    const UNPARSEABLE_QMD: &str =
+        "This line mentions the groups' Unique IDs instead of their names.\n";
+
+    fn has_include_shortcode_block(blocks: &[Block]) -> bool {
+        blocks.iter().any(|b| extract_include_path(b).is_some())
+    }
+
+    #[test]
+    fn parse_error_include_removes_block_and_surfaces_inner_diagnostics() {
+        let runtime = Arc::new(MockFileRuntime::new(vec![(
+            "/project/bad.qmd",
+            UNPARSEABLE_QMD,
+        )]));
+        let mut ctx = make_stage_context(runtime);
+
+        let mut doc = parse_to_doc_ast(
+            "Before\n\n{{< include bad.qmd >}}\n\nAfter",
+            "/project/doc.qmd",
+        );
+
+        let mut include_stack = HashSet::new();
+        include_stack.insert(PathBuf::from("/project/doc.qmd"));
+
+        expand_includes_in_blocks(
+            &mut doc,
+            &mut ctx,
+            &PathBuf::from("/project/doc.qmd"),
+            &mut include_stack,
+        )
+        .unwrap();
+
+        // The failed include's paragraph is removed: only Before/After
+        // remain, and no include shortcode survives to later transforms.
+        assert_eq!(
+            doc.ast.blocks.len(),
+            2,
+            "expected the failed include block to be removed, got {:?}",
+            doc.ast.blocks
+        );
+        assert!(!has_include_shortcode_block(&doc.ast.blocks));
+
+        // Wrapper first, then the included file's own diagnostics.
+        assert!(
+            ctx.diagnostics.len() >= 2,
+            "expected wrapper + inner diagnostics, got: {:?}",
+            ctx.diagnostics
+        );
+        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-17-3"));
+
+        // The inner diagnostic's location must resolve — through the
+        // parent document's SourceContext — to the included file.
+        let inner = &ctx.diagnostics[1];
+        let loc = inner.location.as_ref().expect("inner has a location");
+        let mapped = loc
+            .map_offset(0, &doc.source_context)
+            .expect("inner location resolves in the parent SourceContext");
+        let file = doc
+            .source_context
+            .get_file(mapped.file_id)
+            .expect("mapped file registered");
+        assert!(
+            file.path.ends_with("bad.qmd"),
+            "inner diagnostic must point into the included file, got {}",
+            file.path
+        );
+
+        // Both source contexts grew in lockstep (the success path
+        // debug_asserts this; the error path must preserve it so a
+        // later successful include doesn't desynchronize).
+        let in_ast_ctx = doc
+            .ast_context
+            .source_context
+            .get_file(mapped.file_id)
+            .expect("included file also registered in ast_context");
+        assert!(in_ast_ctx.path.ends_with("bad.qmd"));
+    }
+
+    #[test]
+    fn missing_include_removes_block() {
+        let runtime = Arc::new(MockFileRuntime::new(vec![]));
+        let mut ctx = make_stage_context(runtime);
+
+        let mut doc = parse_to_doc_ast(
+            "Before\n\n{{< include nonexistent.qmd >}}\n\nAfter",
+            "/project/doc.qmd",
+        );
+
+        let mut include_stack = HashSet::new();
+        include_stack.insert(PathBuf::from("/project/doc.qmd"));
+
+        expand_includes_in_blocks(
+            &mut doc,
+            &mut ctx,
+            &PathBuf::from("/project/doc.qmd"),
+            &mut include_stack,
+        )
+        .unwrap();
+
+        assert_eq!(ctx.diagnostics.len(), 1);
+        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-17-2"));
+        assert_eq!(
+            doc.ast.blocks.len(),
+            2,
+            "expected the failed include block to be removed, got {:?}",
+            doc.ast.blocks
+        );
+        assert!(!has_include_shortcode_block(&doc.ast.blocks));
+    }
+
+    #[test]
+    fn circular_include_removes_block() {
+        let runtime = Arc::new(MockFileRuntime::new(vec![(
+            "/project/circular.qmd",
+            "In the loop\n\n{{< include doc.qmd >}}",
+        )]));
+        let mut ctx = make_stage_context(runtime);
+
+        let mut doc = parse_to_doc_ast("{{< include circular.qmd >}}", "/project/doc.qmd");
+
+        let mut include_stack = HashSet::new();
+        include_stack.insert(PathBuf::from("/project/doc.qmd"));
+
+        expand_includes_in_blocks(
+            &mut doc,
+            &mut ctx,
+            &PathBuf::from("/project/doc.qmd"),
+            &mut include_stack,
+        )
+        .unwrap();
+
+        assert_eq!(ctx.diagnostics.len(), 1);
+        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-17-1"));
+        assert!(
+            !has_include_shortcode_block(&doc.ast.blocks),
+            "the cyclic include block must be removed, got {:?}",
+            doc.ast.blocks
+        );
     }
 
     #[test]
