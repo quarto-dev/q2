@@ -28,6 +28,7 @@
 //! ```
 
 use crate::types::{ConfigValue, ConfigValueKind, MergeOp};
+use quarto_source_map::SourceInfo;
 use std::collections::HashSet;
 
 /// A lazily-evaluated merged configuration.
@@ -349,6 +350,47 @@ impl<'a> MergedCursor<'a> {
             config: self.config,
             path: self.path.clone(),
             keys,
+        })
+    }
+
+    /// The `SourceInfo` of the container at this path, taken from the
+    /// highest-priority layer that has a value here.
+    ///
+    /// Merged containers exist in several layers at once, so "the"
+    /// span is a choice. This picks the same layer [`as_value`] and
+    /// [`as_scalar`] pick — the highest-priority (last-wins) one — so a
+    /// container's span and its winning contents point at the same
+    /// file. For document metadata that is the layer nearest the
+    /// author: front matter over project config.
+    ///
+    /// Returns the layer's span verbatim, including `Generated` spans
+    /// from programmatically-constructed layers: a synthesized layer
+    /// should keep saying it was synthesized rather than borrow a
+    /// neighbour's location.
+    ///
+    /// [`as_value`]: MergedCursor::as_value
+    /// [`as_scalar`]: MergedCursor::as_scalar
+    pub fn container_source(&self) -> Option<&'a SourceInfo> {
+        self.config
+            .layers
+            .iter()
+            .rev()
+            .find_map(|layer| self.navigate_to(layer).map(|v| &v.source_info))
+    }
+
+    /// The `SourceInfo` of `key`'s *key token* in the map at this path,
+    /// taken from the highest-priority layer whose map declares it.
+    ///
+    /// A key can appear in several layers; this follows the layer that
+    /// supplies the winning value, so a diagnostic anchored on the key
+    /// points at the file the reader would edit to change it.
+    pub fn key_source(&self, key: &str) -> Option<&'a SourceInfo> {
+        self.config.layers.iter().rev().find_map(|layer| {
+            let value = self.navigate_to(layer)?;
+            let ConfigValueKind::Map(entries) = &value.value else {
+                return None;
+            };
+            entries.iter().find(|e| e.key == key).map(|e| &e.key_source)
         })
     }
 
