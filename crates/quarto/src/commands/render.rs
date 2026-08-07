@@ -181,14 +181,13 @@ impl std::fmt::Display for DispatchError {
             ),
             DispatchError::NotInRenderList { path, project_dir } => write!(
                 f,
-                "{} is excluded from the render list of project {} \
-                 (check `project.render` in `_quarto.yml` and the \
-                 underscore/hidden file conventions).",
+                "{} is excluded from the render list of project {} ({}).",
                 path.display(),
-                project_dir.display()
+                project_dir.display(),
+                render_list_exclusion_hint(path),
             ),
             DispatchError::NoRenderableMatches { path } => {
-                write!(f, "No renderable `.qmd` files matched: {}", path.display())
+                write!(f, "No renderable source files matched: {}", path.display())
             }
             DispatchError::Discover(msg) => write!(f, "Project discovery failed: {msg}"),
         }
@@ -196,6 +195,22 @@ impl std::fmt::Display for DispatchError {
 }
 
 impl std::error::Error for DispatchError {}
+
+/// Why is this input outside the render list, and what should the
+/// user do about it? For `.md` inputs the overwhelmingly likely
+/// cause is the opt-in policy (bd-6d2wj4zp) — `.md` renders only
+/// when a `project.render` pattern matches it — so the generic
+/// underscore/hidden advice would mislead. Shared by the
+/// [`DispatchError`] `Display` impl and the `Q-7-6` diagnostic.
+fn render_list_exclusion_hint(path: &std::path::Path) -> &'static str {
+    if path.extension().and_then(|e| e.to_str()) == Some("md") {
+        "`.md` files render only when matched by a `project.render` pattern \
+         such as `\"**/*.md\"` in `_quarto.yml`"
+    } else {
+        "check `project.render` in `_quarto.yml` and the underscore/hidden \
+         file conventions"
+    }
+}
 
 /// Classify CLI input strings into a [`RenderTarget`].
 ///
@@ -276,9 +291,12 @@ pub fn classify_inputs(
         if resolved.len() > 1 {
             return Err(DispatchError::MultiArgNonProject);
         }
-        // Single arg outside any project: must be a `.qmd` file
-        // (single-doc fallthrough). Directories outside any project
-        // are not a meaningful render target — we error.
+        // Single arg outside any project: a renderable source file
+        // (`.qmd` or `.md` — bd-6d2wj4zp) as the single-doc
+        // fallthrough. Directories outside any project are not a
+        // meaningful render target — we error. Note the extension is
+        // not checked here: any file becomes a SingleDoc, and
+        // non-source files fail downstream at parse.
         let only = &resolved[0];
         let is_dir = runtime
             .is_dir(only)
@@ -1167,7 +1185,15 @@ fn detect_single_input_format(inputs: &[String]) -> Option<String> {
         return None;
     }
     let path = std::path::Path::new(&inputs[0]);
-    if path.extension().and_then(|e| e.to_str()) != Some("qmd") || !path.is_file() {
+    // `.md` inputs read front matter exactly like `.qmd`
+    // (bd-6d2wj4zp S3/S4) — without this, a `.md` declaring a
+    // non-native format slips past the early "not yet supported"
+    // refusal below and renders HTML into a mismatched output file.
+    if !matches!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("qmd" | "md")
+    ) || !path.is_file()
+    {
         return None;
     }
     let content = std::fs::read_to_string(path).ok()?;
@@ -1355,24 +1381,22 @@ fn dispatch_error_to_diagnostic(e: &DispatchError) -> DiagnosticMessage {
                 ))
                 .build()
         }
-        DispatchError::NotInRenderList { path, project_dir } => DiagnosticMessageBuilder::error(
-            "Input Excluded From Render List",
-        )
-        .with_code("Q-7-6")
-        .problem(format!(
-            "{} is excluded from the render list of project {}.",
-            path.display(),
-            project_dir.display()
-        ))
-        .add_hint(
-            "Check `project.render` in `_quarto.yml` and the underscore/hidden file conventions.",
-        )
-        .build(),
+        DispatchError::NotInRenderList { path, project_dir } => {
+            DiagnosticMessageBuilder::error("Input Excluded From Render List")
+                .with_code("Q-7-6")
+                .problem(format!(
+                    "{} is excluded from the render list of project {}.",
+                    path.display(),
+                    project_dir.display()
+                ))
+                .add_hint(format!("{}.", render_list_exclusion_hint(path)))
+                .build()
+        }
         DispatchError::NoRenderableMatches { path } => {
             DiagnosticMessageBuilder::error("No Renderable Files Matched")
                 .with_code("Q-7-7")
                 .problem(format!(
-                    "No renderable `.qmd` files matched: {}",
+                    "No renderable source files matched: {}",
                     path.display()
                 ))
                 .build()

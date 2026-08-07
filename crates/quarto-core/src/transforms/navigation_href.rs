@@ -182,7 +182,10 @@ pub fn resolve_href_for_html(
         }
         // An index is present but the path didn't resolve — the user
         // has a project context and this looks like an intended
-        // internal link, so surface it.
+        // internal link, so surface it. Deliberately `.qmd`-only
+        // (bd-6d2wj4zp D6): a `.md` miss may legitimately be a
+        // static resource (`.md` renders only when opted into the
+        // render list), so it passes through silently.
         if path_part.ends_with(".qmd") {
             diagnostics.push(missing_document_warning(&surface, path_part, location));
         }
@@ -212,10 +215,11 @@ pub fn is_external(href: &str) -> bool {
 /// Pass-1 / static counterpart to [`resolve_doc_relative_href`].
 ///
 /// Returns the project-relative source path that an internal
-/// `.qmd` reference resolves to (after `..` / `.` / leading-`/`
-/// normalization), regardless of whether the target actually
-/// exists in the project. Returns `None` for external URLs,
-/// fragment-only anchors, and non-`.qmd` targets.
+/// renderable-source reference (`.qmd` or `.md` — bd-6d2wj4zp)
+/// resolves to (after `..` / `.` / leading-`/` normalization),
+/// regardless of whether the target actually exists in the project.
+/// Returns `None` for external URLs, fragment-only anchors, and
+/// non-source targets.
 ///
 /// **Why no index parameter?** Pass-1 (Phase 8 sub-phase 8.0d's
 /// `LinkResolutionStage`) runs *before* the project's
@@ -240,9 +244,10 @@ pub fn resolve_doc_relative_target(raw: &str, source_relative: &str) -> Option<P
         Some(i) => &raw[..i],
         None => raw,
     };
-    if !path_part.ends_with(".qmd") {
-        // Non-.qmd hrefs are static resources, not project documents.
-        // Match the diagnostic gating in resolve_doc_relative_href.
+    if !(path_part.ends_with(".qmd") || path_part.ends_with(".md")) {
+        // Other hrefs are static resources, not project documents.
+        // (`.md` targets that turn out not to be in the render list
+        // are dropped by the graph builder's index lookup.)
         return None;
     }
     let project_relative = resolve_to_project_root(source_relative, path_part);
@@ -328,8 +333,9 @@ pub fn resolve_doc_relative_href(
 
     // Miss. Surface a warning iff the target *looks like* a
     // renderable document (matches the `.qmd`-only convention from
-    // `resolve_href_for_html`). Non-qmd misses pass through silent
-    // since they may legitimately be static resources.
+    // `resolve_href_for_html`). Non-qmd misses — including `.md`,
+    // deliberately (bd-6d2wj4zp D6) — pass through silent since
+    // they may legitimately be static resources.
     if path_part.ends_with(".qmd") {
         diagnostics.push(missing_document_warning(
             &NavSurface::BodyLink,
@@ -1272,6 +1278,28 @@ mod tests {
     fn target_simple_qmd_resolves() {
         assert_eq!(
             resolve_doc_relative_target("about.qmd", "index.qmd"),
+            Some(PathBuf::from("about.qmd"))
+        );
+    }
+
+    /// bd-6d2wj4zp S7: `.md` targets are renderable sources too —
+    /// they must produce dependency-graph edges like `.qmd`. The
+    /// graph builder filters against the actual index, so a `.md`
+    /// that isn't in the render list becomes a no-op edge.
+    #[test]
+    fn target_md_resolves_like_qmd() {
+        assert_eq!(
+            resolve_doc_relative_target("notes.md", "index.qmd"),
+            Some(PathBuf::from("notes.md"))
+        );
+        assert_eq!(
+            resolve_doc_relative_target("../guide.md", "docs/api.qmd"),
+            Some(PathBuf::from("guide.md"))
+        );
+        // A `.md` source document linking to a `.qmd` (and vice
+        // versa) both extract.
+        assert_eq!(
+            resolve_doc_relative_target("about.qmd", "notes.md"),
             Some(PathBuf::from("about.qmd"))
         );
     }

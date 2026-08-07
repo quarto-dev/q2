@@ -101,9 +101,12 @@ function getLanguageForFile(filePath: string): string {
     case 'yml':
       return 'yaml';
     case 'qmd':
-      return 'qmd';
     case 'md':
-      return 'markdown';
+      // .md is a renderable source file parsed with the qmd grammar
+      // (bd-6d2wj4zp Phase 5, D11) — giving it the qmd language wires
+      // up the same Monarch highlighting and the qmd-registered
+      // symbol/folding/semantic-token providers as .qmd.
+      return 'qmd';
     default:
       return 'markdown';
   }
@@ -137,7 +140,10 @@ const editorOptions = {
   'semanticHighlighting.enabled': true as const,
 };
 
-// Select the best default file: prefer index.qmd, then first .qmd, then first file
+// Select the best default file: prefer index.qmd, then first .qmd, then
+// index.md / first .md (bd-6d2wj4zp Phase 5 — .md is a source file, but
+// only a fallback: a synced .md may be a never-rendered README while a
+// .qmd is always deliberate content), then first file.
 function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   if (files.length === 0) return null;
 
@@ -148,6 +154,12 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   // Then any .qmd file
   const anyQmd = files.find(f => f.path.endsWith('.qmd'));
   if (anyQmd) return anyQmd;
+
+  // Then index.md at root, then any .md
+  const indexMd = files.find(f => f.path === 'index.md');
+  if (indexMd) return indexMd;
+  const anyMd = files.find(f => f.path.endsWith('.md'));
+  if (anyMd) return anyMd;
 
   // Fall back to first file
   return files[0];

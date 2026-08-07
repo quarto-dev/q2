@@ -726,8 +726,8 @@ function renderInline(
       const [[id, classes, attrs], inlines, [url, title]] = linkInline.c;
       const props = attributesToProps(id, classes, attrs);
 
-      // Handle .qmd links
-      if (url.endsWith('.qmd') && onNavigateToDocument) {
+      // Handle source-file links (.qmd, and .md since bd-6d2wj4zp Phase 5)
+      if ((url.endsWith('.qmd') || url.endsWith('.md')) && onNavigateToDocument) {
         const [path, anchor] = url.split('#');
         return (
           <a

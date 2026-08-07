@@ -7,18 +7,25 @@
 
 //! Expand the set of source files a project renders.
 //!
-//! Phase-1 scope: `.qmd` only. Support for `.md`, `.ipynb`, and other
-//! renderable extensions is deferred to a follow-up — see
-//! `claude-notes/plans/2026-04-23-websites-phase-1.md` §"File-list
-//! expansion".
+//! Renderable extensions are `.qmd` (always) and `.md` (opt-in, see
+//! below). `.ipynb` / `.Rmd` remain deferred — see bd-xxul and
+//! `claude-notes/plans/2026-07-20-ipynb-surface-syntax-design.md`.
 //!
-//! Discovery rules:
+//! Discovery rules (plan:
+//! `claude-notes/plans/2026-08-07-md-render-support.md`):
 //!
-//! 1. If `render_patterns` is non-empty, treat each entry as a glob
-//!    relative to the project directory. Keep only matches with a
-//!    `.qmd` extension.
-//! 2. Otherwise, recursively walk the project directory for `.qmd`
-//!    files.
+//! 1. Every candidate comes from one recursive walk of the project
+//!    directory collecting `.qmd` and `.md` files.
+//! 2. Candidates are selected by matching them against the
+//!    `project.render` patterns. When the author wrote no *positive*
+//!    pattern — no `render:` key at all, or only `!` negations —
+//!    discovery supplies the default positive [`DEFAULT_RENDER_PATTERN`]
+//!    (`**/*.qmd`). The invariant users can be told verbatim:
+//!    **omitting `project.render` is exactly equivalent to writing
+//!    `render: ["**/*.qmd"]`**, and a negation-only list subtracts
+//!    from that same default. `.md` files therefore render only when
+//!    an explicitly written pattern matches them (a deliberate
+//!    divergence from Quarto 1, which walks `.md` in by default).
 //! 3. Exclude in either mode:
 //!    - the output directory (e.g. `_site/`)
 //!    - `.quarto/`, `.git/`, `node_modules/`
@@ -26,13 +33,18 @@
 //!      `_metadata.yml` / `_quarto*.yml`)
 //!    - any path whose component starts with `.` (hidden)
 //!    - any file whose stem is `README` (case-insensitive)
+//!    - agent-instruction markdown (`CLAUDE.md`, `CLAUDE.local.md`,
+//!      `AGENTS.md`, `AGENTS.local.md`, `*.llms.md`; case-insensitive)
 //!
-//! The project config file itself (`_quarto.yml` / `.yaml`) is
-//! naturally excluded because of the `_` prefix rule.
+//! These exclusions are hard filters: an explicit pattern naming an
+//! excluded file does not override them (the author gets `Q-5-13`
+//! instead). The project config file itself (`_quarto.yml` / `.yaml`)
+//! is naturally excluded because of the `_` prefix rule.
 
 use std::path::{Component, Path, PathBuf};
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
+use quarto_source_map::{By, SourceInfo};
 use quarto_system_runtime::SystemRuntime;
 
 use crate::error::{QuartoError, Result};
@@ -55,44 +67,113 @@ pub struct DiscoveryConfig<'a> {
     pub output_dir: &'a Path,
     /// `project.render` globs from `_quarto.yml`, each with the
     /// provenance of the YAML scalar it came from so diagnostics can
-    /// point at it. Empty = walk the whole project directory.
+    /// point at it. When no positive pattern is present (empty, or
+    /// negations only), discovery matches against
+    /// [`DEFAULT_RENDER_PATTERN`] instead.
     pub render_patterns: &'a [RawGlob],
 }
 
-/// Discover the list of `.qmd` files for a project.
+/// The positive pattern discovery supplies when the author wrote
+/// none: no `render:` key, or a list of only `!` negations. This is
+/// what makes the S2′ invariant literal — omitting `project.render`
+/// ≡ `render: ["**/*.qmd"]`.
+pub const DEFAULT_RENDER_PATTERN: &str = "**/*.qmd";
+
+/// Discover the render list for a project.
 ///
 /// Returned paths are **absolute** (joined with `project_dir`) and
-/// de-duplicated. Order is stable: render-patterns preserve their
-/// listed order (within a single pattern: lexicographic by path);
-/// the walk path uses directory-first lexicographic order.
+/// de-duplicated. Order is stable: patterns preserve their listed
+/// order (within a single pattern: lexicographic by path); the
+/// default pattern therefore yields lexicographic order.
 pub fn discover_project_files(
     config: &DiscoveryConfig<'_>,
     runtime: &dyn SystemRuntime,
 ) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-
-    let candidates: Vec<PathBuf> = if config.render_patterns.is_empty() {
-        walk_qmd(config.project_dir, runtime)?
-    } else {
-        expand_patterns(config.project_dir, config.render_patterns, runtime)?
-    };
-
-    for candidate in candidates {
-        if !is_renderable_qmd(&candidate, config) {
-            continue;
-        }
-        if seen.insert(candidate.clone()) {
-            files.push(candidate);
-        }
-    }
-
-    Ok(files)
+    let walked = walk_sources(config.project_dir, runtime)?;
+    Ok(select_from_walk(&walked, config))
 }
 
-/// True if a candidate path should be rendered under Phase-1 rules.
-fn is_renderable_qmd(candidate: &Path, config: &DiscoveryConfig<'_>) -> bool {
-    if !has_qmd_extension(candidate) {
+/// `.md` files an author may have expected to render: they survive
+/// every built-in exclusion but no render pattern selected them
+/// (with no `render:` key, that is all renderable `.md`). Pure apart
+/// from the walk; the orchestrator calls this only when explaining
+/// an empty render set (`Q-PROJECT-EMPTY`), so discovery's own
+/// signature stays lean.
+pub fn unmatched_md_files(
+    config: &DiscoveryConfig<'_>,
+    runtime: &dyn SystemRuntime,
+) -> Result<Vec<PathBuf>> {
+    let walked = walk_sources(config.project_dir, runtime)?;
+    let selected: std::collections::HashSet<PathBuf> =
+        select_from_walk(&walked, config).into_iter().collect();
+    Ok(walked
+        .into_iter()
+        .filter(|p| has_md_extension(p) && is_renderable_source(p, config))
+        .filter(|p| !selected.contains(p))
+        .collect())
+}
+
+/// The render patterns discovery actually matches against: the
+/// author's, plus [`DEFAULT_RENDER_PATTERN`] prepended when no
+/// positive pattern is present. Policy lives here in the enumerator
+/// (not in `GlobOptions::RENDER.default_positive`) per
+/// `claude-notes/designs/glob-semantics.md` — which files exist to be
+/// matched is discovery's business, and this way a broken positive
+/// pattern (`Q-5-14`/`Q-5-15`) never silently falls back to
+/// rendering everything.
+fn effective_render_patterns(user: &[RawGlob]) -> Vec<RawGlob> {
+    if user.iter().any(|r| !r.raw.starts_with('!')) {
+        return user.to_vec();
+    }
+    let mut patterns = vec![RawGlob::new(
+        DEFAULT_RENDER_PATTERN,
+        SourceInfo::generated(By::programmatic_config()),
+    )];
+    patterns.extend(user.iter().cloned());
+    patterns
+}
+
+/// Match walked candidates against the effective render patterns,
+/// applying the built-in exclusions. Iterates the *positive* patterns
+/// in their listed order so the documented render order survives
+/// (within one pattern: walk order). Exclusions are global: a `!`
+/// entry subtracts from every positive pattern regardless of where
+/// the author wrote it.
+fn select_from_walk(walked: &[PathBuf], config: &DiscoveryConfig<'_>) -> Vec<PathBuf> {
+    let patterns = effective_render_patterns(config.render_patterns);
+    let resolution = resolve_render_patterns(config.project_dir, &patterns);
+    let Ok(compiled) = resolution.compile(&RENDER_GLOB_OPTIONS) else {
+        // Unreachable: resolution only emits patterns it compiled.
+        return Vec::new();
+    };
+
+    let mut files = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for glob in resolution.globs.iter().filter(|g| !g.negated) {
+        let Ok(single) = PatternSet::compile(std::slice::from_ref(glob), &RENDER_GLOB_OPTIONS)
+        else {
+            continue;
+        };
+        for candidate in walked {
+            let Ok(relative) = candidate.strip_prefix(config.project_dir) else {
+                continue;
+            };
+            if single.matches_path(relative)
+                && !compiled.excluded_path(relative)
+                && is_renderable_source(candidate, config)
+                && seen.insert(candidate.clone())
+            {
+                files.push(candidate.clone());
+            }
+        }
+    }
+    files
+}
+
+/// True if a candidate path may appear in a render list at all:
+/// renderable extension, and none of the built-in exclusions apply.
+fn is_renderable_source(candidate: &Path, config: &DiscoveryConfig<'_>) -> bool {
+    if !has_renderable_extension(candidate) {
         return false;
     }
     let Ok(relative) = candidate.strip_prefix(config.project_dir) else {
@@ -126,11 +207,38 @@ fn is_renderable_qmd(candidate: &Path, config: &DiscoveryConfig<'_>) -> bool {
     {
         return false;
     }
+    // Agent-instruction markdown never renders (D4) — under
+    // `render: ["**/*.md"]` these would otherwise publish agent
+    // instructions into the site. Case-insensitive, like README.
+    if let Some(name) = candidate.file_name().and_then(|s| s.to_str())
+        && is_agent_instruction_md(name)
+    {
+        return false;
+    }
     true
 }
 
-fn has_qmd_extension(path: &Path) -> bool {
-    path.extension().and_then(|e| e.to_str()) == Some("qmd")
+/// File names on the agent-instruction ignore list (matched
+/// case-insensitively): `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`,
+/// `AGENTS.local.md`, and any `*.llms.md` companion file. Mirrors
+/// Quarto 1's `projectHiddenIgnoreGlob`.
+fn is_agent_instruction_md(file_name: &str) -> bool {
+    let lower = file_name.to_ascii_lowercase();
+    matches!(
+        lower.as_str(),
+        "claude.md" | "claude.local.md" | "agents.md" | "agents.local.md"
+    ) || lower.ends_with(".llms.md")
+}
+
+fn has_renderable_extension(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("qmd" | "md")
+    )
+}
+
+fn has_md_extension(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()) == Some("md")
 }
 
 fn is_excluded_component(name: &str) -> bool {
@@ -155,54 +263,15 @@ fn starts_with(path: &Path, prefix: &Path) -> bool {
     true
 }
 
-/// Expand `project.render` glob patterns relative to `project_dir`.
-///
-/// Patterns are project-root-anchored (`project.render` can only be
-/// written in `_quarto.yml`, whose directory *is* the project root)
-/// and matched against the walked `.qmd` set with the shared matcher
-/// in [`crate::glob`] — the same one listings use, so a pattern means
-/// the same thing in both places.
-fn expand_patterns(
-    project_dir: &Path,
-    patterns: &[RawGlob],
-    runtime: &dyn SystemRuntime,
-) -> Result<Vec<PathBuf>> {
-    let walked = walk_qmd(project_dir, runtime)?;
-    let resolution = resolve_render_patterns(project_dir, patterns);
-    let Ok(compiled) = resolution.compile(&RENDER_GLOB_OPTIONS) else {
-        // Unreachable: resolution only emits patterns it compiled.
-        return Ok(Vec::new());
-    };
-
-    // Iterate the *positive* patterns in their listed order so the
-    // documented render order survives (within one pattern, walk
-    // order is lexicographic). Exclusions are global: a `!` entry
-    // subtracts from every positive pattern regardless of where the
-    // author wrote it.
-    let mut matches = Vec::new();
-    for glob in resolution.globs.iter().filter(|g| !g.negated) {
-        let Ok(single) = PatternSet::compile(std::slice::from_ref(glob), &RENDER_GLOB_OPTIONS)
-        else {
-            continue;
-        };
-        for candidate in &walked {
-            let Ok(relative) = candidate.strip_prefix(project_dir) else {
-                continue;
-            };
-            if single.matches_path(relative) && !compiled.excluded_path(relative) {
-                matches.push(candidate.clone());
-            }
-        }
-    }
-    Ok(matches)
-}
-
 /// Resolve `project.render` entries against the project root.
 ///
-/// Shared by [`expand_patterns`] and
+/// Shared by [`select_from_walk`] and
 /// [`render_pattern_diagnostics`] so the two agree by construction:
 /// what the diagnostic reports about a pattern is what discovery
-/// actually did with it.
+/// actually did with it. (The diagnostics side resolves the *user's*
+/// patterns, not the effective ones — the synthesized
+/// [`DEFAULT_RENDER_PATTERN`] has no YAML behind it and is never
+/// reported.)
 fn resolve_render_patterns(project_dir: &Path, patterns: &[RawGlob]) -> GlobResolution {
     resolve_patterns(
         patterns.iter().cloned(),
@@ -315,13 +384,15 @@ pub fn render_pattern_diagnostics(
                 .with_code("Q-5-13")
                 .with_location(raw.source.clone())
                 .problem(
-                    "No `.qmd` file in the project matches this pattern, so it \
-                     contributes nothing to the render list.",
+                    "No renderable source file (`.qmd` or `.md`) in the project \
+                     matches this pattern, so it contributes nothing to the render \
+                     list.",
                 )
                 .add_info(
                     "In Quarto 2, `*` matches within one directory level — write \
                      `**/` to search subdirectories (`posts/**/*.qmd`). Files whose \
-                     name or directory starts with `_` or `.`, and `README` files, \
+                     name or directory starts with `_` or `.`, `README` files, and \
+                     agent-instruction files (`CLAUDE.md`, `AGENTS.md`, `*.llms.md`) \
                      are never rendered.",
                 )
                 .build(),
@@ -332,10 +403,10 @@ pub fn render_pattern_diagnostics(
     out
 }
 
-/// Recursively walk `project_dir` collecting `.qmd` files, already
-/// filtered against the cheap excludes (hidden, underscore, output
-/// dir). Paths are absolute.
-fn walk_qmd(project_dir: &Path, runtime: &dyn SystemRuntime) -> Result<Vec<PathBuf>> {
+/// Recursively walk `project_dir` collecting candidate source files
+/// (`.qmd` and `.md`), already filtered against the cheap excludes
+/// (hidden, underscore components). Paths are absolute and sorted.
+fn walk_sources(project_dir: &Path, runtime: &dyn SystemRuntime) -> Result<Vec<PathBuf>> {
     let mut out = Vec::new();
     walk_rec(project_dir, project_dir, runtime, &mut out)?;
     out.sort();
@@ -366,7 +437,7 @@ fn walk_rec(
             }
             continue;
         }
-        if has_qmd_extension(&entry) {
+        if has_renderable_extension(&entry) {
             out.push(entry);
         }
     }
@@ -726,6 +797,262 @@ mod tests {
             .collect();
         assert!(names.contains(&"cómo estás.qmd".to_string()));
         assert!(names.contains(&"with spaces.qmd".to_string()));
+    }
+
+    // ── .md render support (bd-6d2wj4zp) ─────────────────────────
+    //
+    // Semantics under test (plan: 2026-08-07-md-render-support.md):
+    // `.md` files render only when matched by an explicitly written
+    // `project.render` pattern. Omitting `project.render` is exactly
+    // equivalent to writing `render: ["**/*.qmd"]` (S2′), so `.md` is
+    // invisible to default discovery; once matched, built-in
+    // exclusions still apply, including the agent-file ignore list
+    // (D4).
+
+    /// Fixture with a representative mix of `.qmd`, opt-in `.md`, and
+    /// `.md` files that must never render (D4 + built-in exclusions).
+    fn md_fixture() -> (TempDir, PathBuf) {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(&dir.join("index.qmd"), "# i\n");
+        write_file(&dir.join("posts/a.qmd"), "# a\n");
+        write_file(&dir.join("notes.md"), "# n\n");
+        write_file(&dir.join("posts/note.md"), "# pn\n");
+        write_file(&dir.join("news/NEWS.md"), "# news\n");
+        (temp, dir)
+    }
+
+    /// `.md` files are invisible when `project.render` is absent.
+    /// (Deliberate divergence from Quarto 1, which walks them in.)
+    #[test]
+    fn md_is_not_discovered_without_render_patterns() {
+        let (_t, dir) = md_fixture();
+        let (rels, _) = discover_with(&dir, &[]);
+        assert_eq!(
+            rels,
+            vec!["index.qmd".to_string(), "posts/a.qmd".to_string()]
+        );
+    }
+
+    /// S2′: omitting `project.render` ≡ `render: ["**/*.qmd"]` —
+    /// same files, same order, including root-level files (`**`
+    /// matches zero segments).
+    #[test]
+    fn default_discovery_equals_explicit_qmd_globstar() {
+        let (_t, dir) = md_fixture();
+        let ordered = |patterns: &[&str]| -> Vec<PathBuf> {
+            let patterns: Vec<RawGlob> = patterns
+                .iter()
+                .map(|p| RawGlob::new(*p, SourceInfo::generated(By::programmatic_config())))
+                .collect();
+            let output_dir = dir.join("_site");
+            let config = DiscoveryConfig {
+                project_dir: &dir,
+                output_dir: &output_dir,
+                render_patterns: &patterns,
+            };
+            discover_project_files(&config, &native()).unwrap()
+        };
+        let by_default = ordered(&[]);
+        let by_pattern = ordered(&["**/*.qmd"]);
+        assert!(!by_default.is_empty());
+        assert_eq!(by_default, by_pattern, "same files in the same order");
+    }
+
+    /// D2(a): any positive pattern match opts a `.md` file in — the
+    /// pattern does not need to name the extension.
+    #[test]
+    fn md_is_included_when_matched_by_render_patterns() {
+        let (_t, dir) = md_fixture();
+
+        // Extension glob, the Connect-docs shape.
+        let (rels, diags) = discover_with(&dir, &["**/*.qmd", "**/*.md"]);
+        assert_eq!(
+            rels,
+            vec![
+                "index.qmd".to_string(),
+                "news/NEWS.md".to_string(),
+                "notes.md".to_string(),
+                "posts/a.qmd".to_string(),
+                "posts/note.md".to_string(),
+            ]
+        );
+        assert!(diags.is_empty(), "{diags:?}");
+
+        // Literal path.
+        let (rels, _) = discover_with(&dir, &["notes.md"]);
+        assert_eq!(rels, vec!["notes.md".to_string()]);
+
+        // Bare directory: everything renderable beneath it, `.md`
+        // included (the pattern is the explicit opt-in, not the
+        // extension it happens to spell).
+        let (rels, _) = discover_with(&dir, &["posts"]);
+        assert_eq!(
+            rels,
+            vec!["posts/a.qmd".to_string(), "posts/note.md".to_string()]
+        );
+    }
+
+    /// Render patterns replace the default entirely: an `.md`-only
+    /// list renders no `.qmd`.
+    #[test]
+    fn md_only_pattern_does_not_include_qmd() {
+        let (_t, dir) = md_fixture();
+        let (rels, _) = discover_with(&dir, &["**/*.md"]);
+        assert_eq!(
+            rels,
+            vec![
+                "news/NEWS.md".to_string(),
+                "notes.md".to_string(),
+                "posts/note.md".to_string(),
+            ]
+        );
+    }
+
+    /// Negations subtract `.md` matches like any other (the
+    /// Connect-docs `!news/NEWS.md` shape).
+    #[test]
+    fn negation_excludes_md_matches() {
+        let (_t, dir) = md_fixture();
+        let (rels, diags) = discover_with(&dir, &["**/*.md", "!news/NEWS.md"]);
+        assert_eq!(
+            rels,
+            vec!["notes.md".to_string(), "posts/note.md".to_string()]
+        );
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    /// S2′: a negation-only render list means "the default
+    /// `**/*.qmd`, minus these" — the documented semantics, which
+    /// previously produced an empty render set.
+    #[test]
+    fn negation_only_render_list_subtracts_from_the_default() {
+        let (_t, dir) = md_fixture();
+        let (rels, diags) = discover_with(&dir, &["!posts/a.qmd"]);
+        assert_eq!(
+            rels,
+            vec!["index.qmd".to_string()],
+            "all default-discovered `.qmd` minus the negation, no `.md`"
+        );
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    /// Built-in exclusions (underscore/dot components, README,
+    /// output dir) apply to `.md` exactly as to `.qmd`, even under a
+    /// pattern that matches them.
+    #[test]
+    fn md_respects_builtin_exclusions() {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(&dir.join("docs/guide.md"), "# g\n");
+        write_file(&dir.join("_partials/frag.md"), "# f\n");
+        write_file(&dir.join("_draft.md"), "# d\n");
+        write_file(&dir.join(".hidden.md"), "# h\n");
+        write_file(&dir.join("README.md"), "# r\n");
+        write_file(&dir.join("readme.md"), "# r2\n");
+        write_file(&dir.join("_site/stale.md"), "# s\n");
+        let (rels, _) = discover_with(&dir, &["**/*.md"]);
+        assert_eq!(rels, vec!["docs/guide.md".to_string()]);
+    }
+
+    /// D4: agent-instruction files never render, even when a pattern
+    /// matches them. Case-insensitive, like the README rule.
+    #[test]
+    fn agent_instruction_md_files_never_render() {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(&dir.join("notes.md"), "# n\n");
+        write_file(&dir.join("CLAUDE.md"), "# c\n");
+        write_file(&dir.join("CLAUDE.local.md"), "# cl\n");
+        write_file(&dir.join("AGENTS.md"), "# a\n");
+        write_file(&dir.join("agents.local.md"), "# al\n");
+        write_file(&dir.join("docs/AGENTS.md"), "# da\n");
+        write_file(&dir.join("api.llms.md"), "# llms\n");
+        let (rels, _) = discover_with(&dir, &["**/*.md"]);
+        assert_eq!(rels, vec!["notes.md".to_string()]);
+    }
+
+    /// D4′: built-in exclusions are hard filters — a literal render
+    /// entry naming an excluded file does not override them, and the
+    /// author is told the pattern contributed nothing (Q-5-13).
+    #[test]
+    fn literal_pattern_naming_an_excluded_file_is_diagnosed() {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(&dir.join("CLAUDE.md"), "# c\n");
+        write_file(&dir.join("index.qmd"), "# i\n");
+        let (rels, diags) = discover_with(&dir, &["index.qmd", "CLAUDE.md"]);
+        assert_eq!(rels, vec!["index.qmd".to_string()]);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].code.as_deref(), Some("Q-5-13"));
+    }
+
+    /// Helper: project-relative `unmatched_md_files` results, sorted.
+    fn unmatched_with(project_dir: &Path, patterns: &[&str]) -> Vec<String> {
+        let patterns: Vec<RawGlob> = patterns
+            .iter()
+            .map(|p| RawGlob::new(*p, SourceInfo::generated(By::programmatic_config())))
+            .collect();
+        let output_dir = project_dir.join("_site");
+        let config = DiscoveryConfig {
+            project_dir,
+            output_dir: &output_dir,
+            render_patterns: &patterns,
+        };
+        let mut rels: Vec<String> = unmatched_md_files(&config, &native())
+            .unwrap()
+            .iter()
+            .map(|p| {
+                p.strip_prefix(project_dir)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace(std::path::MAIN_SEPARATOR, "/")
+            })
+            .collect();
+        rels.sort();
+        rels
+    }
+
+    /// With no `render:` key, every renderable `.md` is an opt-in
+    /// candidate the author may be missing — but files the built-in
+    /// exclusions reject are not (they could never render anyway).
+    #[test]
+    fn unmatched_md_reports_optin_candidates() {
+        let (_t, dir) = md_fixture();
+        assert_eq!(
+            unmatched_with(&dir, &[]),
+            vec![
+                "news/NEWS.md".to_string(),
+                "notes.md".to_string(),
+                "posts/note.md".to_string(),
+            ]
+        );
+    }
+
+    /// Excluded `.md` (README, agent files, underscore) never counts
+    /// as unmatched: suggesting the user opt in a file that cannot
+    /// render would be a lie.
+    #[test]
+    fn unmatched_md_skips_builtin_exclusions() {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(&dir.join("guide.md"), "# g\n");
+        write_file(&dir.join("README.md"), "# r\n");
+        write_file(&dir.join("CLAUDE.md"), "# c\n");
+        write_file(&dir.join("_frag.md"), "# f\n");
+        assert_eq!(unmatched_with(&dir, &[]), vec!["guide.md".to_string()]);
+    }
+
+    /// Once patterns select the `.md` files, nothing is unmatched;
+    /// partially-selecting patterns leave the remainder.
+    #[test]
+    fn unmatched_md_shrinks_as_patterns_match() {
+        let (_t, dir) = md_fixture();
+        assert!(unmatched_with(&dir, &["**/*.qmd", "**/*.md"]).is_empty());
+        assert_eq!(
+            unmatched_with(&dir, &["posts/*.md"]),
+            vec!["news/NEWS.md".to_string(), "notes.md".to_string()]
+        );
     }
 
     #[test]

@@ -629,6 +629,42 @@ mod tests {
         assert_eq!(entry.staleness, Some(false));
     }
 
+    /// bd-6d2wj4zp Phase 5 (S5): `.md` inputs never execute engines —
+    /// even with an explicit engine spec and code cells. Now that the
+    /// hub syncs `.md` into `ProjectFiles::qmd_files` (D10), the eager
+    /// capture walk must skip them, or preview would execute engines
+    /// the render path refuses to run (Q-2-40 warns and skips there).
+    #[tokio::test]
+    async fn md_doc_with_engine_spec_records_no_capture() {
+        let (_tmp, ctx, runtime) = build_ctx_with_files(&[(
+            "notes.md",
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\n42\n```\n",
+        )])
+        .await;
+
+        // Non-vacuity: the .md must actually be in the synced source set
+        // (D10) — otherwise this test would pass for the wrong reason.
+        assert!(
+            ctx.project_files()
+                .expect("project mode")
+                .qmd_files
+                .contains(&std::path::PathBuf::from("notes.md")),
+            "notes.md should be discovered into the hub source set"
+        );
+
+        let count = record_eager_captures(
+            ctx.clone(),
+            runtime,
+            Some(make_registry()),
+            EnginePolicy::Manual,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(count, 0, ".md must be skipped by the capture walk (S5)");
+        assert!(!ctx.index().has_capture("notes.md"));
+    }
+
     #[tokio::test]
     async fn capture_binary_doc_round_trips_through_samod() {
         let (_tmp, ctx, runtime) = build_ctx_with_files(&[(

@@ -28,12 +28,12 @@ use async_trait::async_trait;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use quarto_error_reporting::DiagnosticMessage;
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 
 use crate::engine::{EngineRegistry, ExecutionContext, ExecutionEngine, detect_engine_sequence};
 use crate::stage::{
     DocumentAst, EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage,
-    StageContext,
+    SourceType, StageContext,
 };
 use crate::trace_event;
 
@@ -176,6 +176,42 @@ impl Default for EngineExecutionStage {
     }
 }
 
+/// `Q-2-40`: a `.md` document asked for an engine it will never get.
+fn md_engine_ignored_diagnostic(
+    ignored: &[&str],
+    meta: &quarto_pandoc_types::ConfigValue,
+) -> DiagnosticMessage {
+    let plural = if ignored.len() == 1 { "" } else { "s" };
+    let mut builder =
+        DiagnosticMessageBuilder::warning("Engine Specification Ignored for Markdown Input")
+            .with_code("Q-2-40")
+            .problem(
+                "`.md` documents never execute engines; the engine specification \
+                 has no effect.",
+            )
+            .add_detail(format!("Requested engine{plural}: {}.", ignored.join(", ")))
+            .add_hint("Rename the file to `.qmd` if you need executable code.");
+    if let Some(source) = engine_spec_source(meta, ignored) {
+        builder = builder.with_location(source);
+    }
+    builder.build()
+}
+
+/// The metadata key to anchor `Q-2-40` at: the explicit `engine:`
+/// key if present, else the first engine-specific top-level key
+/// (`jupyter:` / `knitr:`) that put an engine in the sequence.
+fn engine_spec_source(
+    meta: &quarto_pandoc_types::ConfigValue,
+    ignored: &[&str],
+) -> Option<quarto_source_map::SourceInfo> {
+    let entries = meta.as_map_entries()?;
+    entries
+        .iter()
+        .find(|e| e.key == "engine")
+        .or_else(|| entries.iter().find(|e| ignored.contains(&e.key.as_str())))
+        .map(|e| e.key_source.clone())
+}
+
 #[async_trait(?Send)]
 impl PipelineStage for EngineExecutionStage {
     fn name(&self) -> &str {
@@ -229,6 +265,30 @@ impl PipelineStage for EngineExecutionStage {
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+
+        // `.md` inputs never execute engines (bd-6d2wj4zp S5): the qmd
+        // dialect is fully supported in `.md`, but execution requires
+        // the `.qmd` extension. Any non-trivial engine spec — anything
+        // in the detected sequence other than the no-op `markdown` —
+        // is ignored with `Q-2-40`. The skip happens before engine
+        // resolution so availability-fallback warnings don't pile on.
+        if SourceType::from_path(&ctx.document.input) == Some(SourceType::Markdown) {
+            let ignored: Vec<&str> = sequence
+                .engines
+                .iter()
+                .filter(|e| !e.is_markdown())
+                .map(|e| e.name.as_str())
+                .collect();
+            if !ignored.is_empty() {
+                ctx.add_diagnostic(md_engine_ignored_diagnostic(&ignored, &doc_ast.ast.meta));
+            }
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "`.md` input — engine execution skipped"
+            );
+            return Ok(PipelineData::DocumentAst(doc_ast));
+        }
 
         // Step 2: Resolve each detected engine to an implementation (with
         // fallback), dropping markdown — it's a no-op, so a markdown
@@ -696,7 +756,7 @@ mod tests {
         }
     }
 
-    fn make_test_context() -> StageContext {
+    fn make_test_context_for(input: &str) -> StageContext {
         use crate::format::Format;
         use crate::project::{DocumentInfo, ProjectContext};
         use std::sync::Arc;
@@ -709,10 +769,14 @@ mod tests {
             files: vec![],
             output_dir: PathBuf::from("/project"),
         };
-        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let doc = DocumentInfo::from_path(input);
         let format = Format::html();
 
         StageContext::new(runtime, format, project, doc).unwrap()
+    }
+
+    fn make_test_context() -> StageContext {
+        make_test_context_for("/project/test.qmd")
     }
 
     fn parse_qmd_to_ast(content: &[u8], path: &str) -> DocumentAst {
@@ -802,6 +866,97 @@ mod tests {
         assert!(!result.ast.blocks.is_empty());
         assert!(!ctx.diagnostics.is_empty());
         assert!(ctx.diagnostics[0].title.contains("not available"));
+    }
+
+    // ── `.md` inputs never execute engines (bd-6d2wj4zp S5) ──────
+    //
+    // An engine specification on a `.md` document is ignored with
+    // warning `Q-2-40`; execution is skipped entirely (no fallback
+    // warnings, no engine runs). A `.md` without engine metadata —
+    // or with the explicit no-op `engine: markdown` — stays silent.
+
+    #[tokio::test]
+    async fn md_with_engine_key_warns_and_skips_execution() {
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context_for("/project/notes.md");
+
+        let content = b"---\ntitle: Test\nengine: jupyter\n---\n\n# Hello\n\nWorld";
+        let doc_ast = parse_qmd_to_ast(content, "/project/notes.md");
+        let original_block_count = doc_ast.ast.blocks.len();
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().expect("Should be DocumentAst");
+
+        assert_eq!(
+            result.ast.blocks.len(),
+            original_block_count,
+            "AST passes through unexecuted"
+        );
+        assert_eq!(ctx.diagnostics.len(), 1, "{:?}", ctx.diagnostics);
+        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-2-40"));
+        let text = format!("{:?}", ctx.diagnostics[0]);
+        assert!(text.contains("jupyter"), "names the ignored engine: {text}");
+    }
+
+    #[tokio::test]
+    async fn md_with_engine_toplevel_key_warns() {
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context_for("/project/notes.md");
+
+        let content = b"---\ntitle: Test\njupyter:\n  kernel: python3\n---\n\n# Hello";
+        let doc_ast = parse_qmd_to_ast(content, "/project/notes.md");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        stage.run(input, &mut ctx).await.unwrap();
+
+        assert_eq!(ctx.diagnostics.len(), 1, "{:?}", ctx.diagnostics);
+        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-2-40"));
+    }
+
+    #[tokio::test]
+    async fn md_without_engine_metadata_is_silent() {
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context_for("/project/notes.md");
+
+        let content = b"---\ntitle: Test\n---\n\n# Hello\n\nWorld";
+        let doc_ast = parse_qmd_to_ast(content, "/project/notes.md");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        stage.run(input, &mut ctx).await.unwrap();
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+    }
+
+    #[tokio::test]
+    async fn md_with_explicit_markdown_engine_is_silent() {
+        // `engine: markdown` asks for exactly what `.md` does anyway;
+        // warning would be noise.
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context_for("/project/notes.md");
+
+        let content = b"---\ntitle: Test\nengine: markdown\n---\n\n# Hello";
+        let doc_ast = parse_qmd_to_ast(content, "/project/notes.md");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        stage.run(input, &mut ctx).await.unwrap();
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+    }
+
+    #[tokio::test]
+    async fn md_with_unknown_engine_gets_q_2_40_not_fallback_warning() {
+        // The `.md` skip happens before engine resolution, so the
+        // "not available in this build" fallback warning must not
+        // also fire.
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context_for("/project/notes.md");
+
+        let content = b"---\ntitle: Test\nengine: unknown-engine\n---\n\n# Hello";
+        let doc_ast = parse_qmd_to_ast(content, "/project/notes.md");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        stage.run(input, &mut ctx).await.unwrap();
+        assert_eq!(ctx.diagnostics.len(), 1, "{:?}", ctx.diagnostics);
+        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-2-40"));
     }
 
     #[tokio::test]

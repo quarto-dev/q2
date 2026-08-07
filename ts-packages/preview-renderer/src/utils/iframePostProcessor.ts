@@ -35,10 +35,12 @@ const ARTIFACT_ROOT = '/.quarto/project-artifacts/';
  * in order and intercept iff the resulting project path matches
  * a real `FileEntry`.
  *
- * Today only `.qmd` is renderable; `.md` / `.ipynb` are reserved
- * for when Q2 supports them.
+ * `.qmd` first: when both `about.qmd` and `about.md` exist (a
+ * render-time output collision anyway), the reverse map stays
+ * deterministic. `.ipynb` is reserved for when Q2 supports it
+ * (bd-19nc56ao). `.md` joined with bd-6d2wj4zp Phase 5.
  */
-const RENDERABLE_EXTS: readonly string[] = ['.qmd'];
+const RENDERABLE_EXTS: readonly string[] = ['.qmd', '.md'];
 
 export interface PostProcessOptions {
   /** Current file path for resolving relative links */

@@ -19,6 +19,36 @@ const FILES: readonly string[] = [
 ];
 
 describe('reverseMapArtifactHref', () => {
+  // ─── bd-6d2wj4zp Phase 5: .md is a renderable source ────────────
+  it('reverse-maps to a source .md when no .qmd sibling exists', () => {
+    const files = ['index.qmd', 'admin/index.md', 'notes.md'];
+    expect(
+      reverseMapArtifactHref('/.quarto/project-artifacts/notes.html', files),
+    ).toEqual({ path: 'notes.md', anchor: null });
+    expect(
+      reverseMapArtifactHref(
+        '/.quarto/project-artifacts/admin/index.html#setup',
+        files,
+      ),
+    ).toEqual({ path: 'admin/index.md', anchor: 'setup' });
+  });
+
+  it('prefers .qmd over .md when both stems exist', () => {
+    // Both rendering to the same .html is a render-time collision
+    // anyway; the reverse map just needs a deterministic order.
+    const files = ['about.qmd', 'about.md'];
+    expect(
+      reverseMapArtifactHref('/.quarto/project-artifacts/about.html', files),
+    ).toEqual({ path: 'about.qmd', anchor: null });
+  });
+
+  it('maps bare artifact root to index.md when only index.md exists', () => {
+    const files = ['index.md', 'about.qmd'];
+    expect(
+      reverseMapArtifactHref('/.quarto/project-artifacts/', files),
+    ).toEqual({ path: 'index.md', anchor: null });
+  });
+
   it('reverse-maps a top-level artifact-rooted .html URL to its source .qmd', () => {
     expect(
       reverseMapArtifactHref('/.quarto/project-artifacts/about.html', FILES),

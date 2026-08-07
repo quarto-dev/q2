@@ -1,6 +1,13 @@
 //! Project file discovery
 //!
-//! Walks the project directory to find `.qmd` files, config files, and binary resources.
+//! Walks the project directory to find source files (`.qmd`, `.md`), config
+//! files, and binary resources.
+//!
+//! `.md` is a source file at this layer (bd-6d2wj4zp, D10): sync and watch
+//! are extension-based, symmetric with `.qmd`. Whether a given `.md` is
+//! actually *rendered* is decided later by quarto-core's project discovery
+//! (render-list opt-in) — the hub layer deliberately does not parse
+//! `_quarto.yml` to find out.
 
 use std::path::{Path, PathBuf};
 
@@ -12,7 +19,9 @@ use crate::resource::is_binary_extension;
 /// Discovered files in a Quarto project.
 #[derive(Debug, Default)]
 pub struct ProjectFiles {
-    /// All discovered `.qmd` files (paths relative to project root)
+    /// All discovered source files — `.qmd` and `.md` (paths relative to
+    /// project root). The historical name predates `.md` support; both
+    /// extensions ride this list identically.
     pub qmd_files: Vec<PathBuf>,
 
     /// Config files (e.g., `_quarto.yml`, paths relative to project root)
@@ -121,10 +130,10 @@ impl ProjectFiles {
                 // Get file extension for further checks
                 let ext = path.extension().and_then(|e| e.to_str());
 
-                // Check for .qmd files
-                if ext == Some("qmd") {
+                // Check for source files (.qmd, .md — see module docs re D10)
+                if ext == Some("qmd") || ext == Some("md") {
                     if let Ok(relative) = path.strip_prefix(project_root) {
-                        debug!(?relative, "Discovered .qmd file");
+                        debug!(?relative, "Discovered source file");
                         files.qmd_files.push(relative.to_path_buf());
                     }
                     continue;
@@ -341,6 +350,37 @@ mod tests {
                 .qmd_files
                 .contains(&PathBuf::from("chapters/intro.qmd"))
         );
+    }
+
+    /// bd-6d2wj4zp Phase 5 (D10): `.md` is a source file hub-wide, synced
+    /// into the VFS exactly like `.qmd`. The sync layer is extension-based;
+    /// render-list membership stays a render-time (quarto-core discovery)
+    /// decision — so even never-rendered `.md` (a README) syncs as text.
+    #[test]
+    fn test_discover_md_files_as_sources() {
+        let temp = TempDir::new().unwrap();
+
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+        fs::write(temp.path().join("notes.md"), "# Notes").unwrap();
+        fs::write(temp.path().join("README.md"), "# Readme").unwrap();
+        fs::create_dir(temp.path().join("chapters")).unwrap();
+        fs::write(temp.path().join("chapters/guide.md"), "# Guide").unwrap();
+
+        let files = ProjectFiles::discover(temp.path());
+
+        assert_eq!(files.qmd_files.len(), 4);
+        assert!(files.qmd_files.contains(&PathBuf::from("notes.md")));
+        assert!(files.qmd_files.contains(&PathBuf::from("README.md")));
+        assert!(
+            files
+                .qmd_files
+                .contains(&PathBuf::from("chapters/guide.md"))
+        );
+        assert!(files.qmd_files.contains(&PathBuf::from("index.qmd")));
+
+        // .md rides the text sync path (automerge Text doc, vfsReadFile).
+        let text: Vec<_> = files.text_files().collect();
+        assert!(text.contains(&&PathBuf::from("notes.md")));
     }
 
     #[test]

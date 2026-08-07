@@ -73,10 +73,10 @@ function isImageFile(path: string): boolean {
   return IMAGE_EXTENSIONS.includes(ext);
 }
 
-/** Check if a file path is a qmd file */
-function isQmdFile(path: string): boolean {
+/** Check if a file path is a renderable source file (.qmd or .md) */
+function isSourceFile(path: string): boolean {
   const ext = path.split('.').pop()?.toLowerCase() || '';
-  return ext === 'qmd';
+  return ext === 'qmd' || ext === 'md';
 }
 
 /** Get file icon based on extension */
@@ -360,7 +360,7 @@ export default function FileSidebar({
     let fileType: 'image' | 'qmd' | 'other' = 'other';
     if (isImageFile(file.path)) {
       fileType = 'image';
-    } else if (isQmdFile(file.path)) {
+    } else if (isSourceFile(file.path)) {
       fileType = 'qmd';
     }
 
@@ -380,7 +380,7 @@ export default function FileSidebar({
     const isRenaming = renamingFile?.path === file.path;
     // Only make images and qmd files draggable (for editor insertion)
     const isDraggable =
-      !isRenaming && (isImageFile(file.path) || isQmdFile(file.path));
+      !isRenaming && (isImageFile(file.path) || isSourceFile(file.path));
     // Parent folder of this file, used by resolveDefaultDestination when a
     // drop lands on a file row (the drop target is the file, but the
     // destination for an upload is the enclosing folder).

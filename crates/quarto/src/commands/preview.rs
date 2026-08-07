@@ -366,12 +366,13 @@ pub(crate) fn resolve_project_and_initial_page(canonical: &Path) -> Result<Resol
         .with_context(|| format!("reading metadata of {}", canonical.display()))?;
 
     if metadata.is_dir() {
-        let index = canonical.join("index.qmd");
-        let initial = if index.is_file() {
-            Some("index.qmd".to_string())
-        } else {
-            None
-        };
+        // Prefer `index.qmd`; fall back to `index.md` (bd-6d2wj4zp Phase 5 —
+        // a render-list `.md` can be the landing page). No index file →
+        // None, and the SPA falls through to its own selection.
+        let initial = ["index.qmd", "index.md"]
+            .into_iter()
+            .find(|name| canonical.join(name).is_file())
+            .map(str::to_string);
         return Ok(ResolvedProject {
             root: canonical.to_path_buf(),
             initial_page: initial,
@@ -535,6 +536,31 @@ mod tests {
         assert_eq!(resolved.root, canonical);
         assert_eq!(resolved.initial_page.as_deref(), Some("index.qmd"));
         assert!(resolved.single_file.is_none());
+    }
+
+    /// bd-6d2wj4zp Phase 5: a project whose landing page is a
+    /// render-list `.md` (e.g. the Connect docs port) should boot the
+    /// preview on `index.md` when there is no `index.qmd`.
+    #[test]
+    fn resolve_dir_with_only_index_md_returns_index_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("index.md"), "# index").unwrap();
+        std::fs::write(tmp.path().join("about.qmd"), "# about").unwrap();
+        let canonical = tmp.path().canonicalize().unwrap();
+        let resolved = resolve_project_and_initial_page(&canonical).unwrap();
+        assert_eq!(resolved.initial_page.as_deref(), Some("index.md"));
+    }
+
+    /// `index.qmd` wins over `index.md` when both exist — `.qmd` is
+    /// the canonical source; also keeps the pre-`.md` behavior stable.
+    #[test]
+    fn resolve_dir_prefers_index_qmd_over_index_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("index.qmd"), "# q").unwrap();
+        std::fs::write(tmp.path().join("index.md"), "# m").unwrap();
+        let canonical = tmp.path().canonicalize().unwrap();
+        let resolved = resolve_project_and_initial_page(&canonical).unwrap();
+        assert_eq!(resolved.initial_page.as_deref(), Some("index.qmd"));
     }
 
     #[test]

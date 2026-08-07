@@ -1045,13 +1045,35 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         )));
         let has_render_patterns = !self.project.config.render_patterns.is_empty();
         let hint = if has_render_patterns {
-            "Check `project.render` in `_quarto.yml` — its globs matched no `.qmd` files."
+            "Check `project.render` in `_quarto.yml` — its globs matched no renderable files."
         } else {
             "Add a `.qmd` file to the project, or remove `_quarto.yml` to render a single \
              standalone document."
         };
         diag.hints
             .push(quarto_error_reporting::MessageContent::from(hint));
+        // `.md` files are render-list opt-in (bd-6d2wj4zp). When the
+        // project has renderable `.md` files that no pattern matched,
+        // the empty set is likely that policy at work — say so, or
+        // the default reads as Quarto silently ignoring the files.
+        let discovery_cfg = crate::project::discovery::DiscoveryConfig {
+            project_dir: &self.project.dir,
+            output_dir: &self.project.output_dir,
+            render_patterns: &self.project.config.render_patterns,
+        };
+        if let Ok(md) =
+            crate::project::discovery::unmatched_md_files(&discovery_cfg, self.runtime.as_ref())
+            && !md.is_empty()
+        {
+            let n = md.len();
+            let plural = if n == 1 { "" } else { "s" };
+            diag.hints
+                .push(quarto_error_reporting::MessageContent::from(format!(
+                    "The project contains {n} `.md` file{plural}; `.md` files render \
+                     only when matched by a `project.render` pattern such as \
+                     `\"**/*.md\"`."
+                )));
+        }
         vec![diag]
     }
 

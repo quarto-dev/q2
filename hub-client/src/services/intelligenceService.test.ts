@@ -36,6 +36,16 @@ describe('getSemanticTokens', () => {
     expect(result).toEqual(tokens);
   });
 
+  it('treats .md as a source file and calls WASM (bd-6d2wj4zp Phase 5)', async () => {
+    // D11: .md render inputs get the same intelligence treatment as
+    // .qmd — the source-file gate must not short-circuit them.
+    const tokens = [{ line: 0, character: 0, length: 1, tokenType: 0, modifiers: 0 }];
+    lspGetSemanticTokensMock.mockReturnValue(JSON.stringify({ success: true, tokens }));
+    const result = await getSemanticTokens('notes.md');
+    expect(result).toEqual(tokens);
+    expect(lspGetSemanticTokensMock).toHaveBeenCalled();
+  });
+
   it('returns [] for a failure envelope', async () => {
     lspGetSemanticTokensMock.mockReturnValue(JSON.stringify({ success: false, error: 'boom' }));
     const result = await getSemanticTokens('doc.qmd');
