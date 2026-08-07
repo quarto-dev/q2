@@ -81,7 +81,7 @@ pub use code_highlight::CodeHighlightStage;
 pub use compile_theme_css::{CompileThemeCssStage, theme_fingerprint};
 pub use document_profile::DocumentProfileStage;
 pub use engine_execution::{ENGINE_CAPTURE_KIND, EngineExecutionStage};
-pub use include_expansion::{IncludeExpansionStage, extract_include_path};
+pub use include_expansion::{IncludeExpansionStage, collect_include_paths, extract_include_path};
 pub use include_resolve::IncludeResolveStage;
 pub use language_resolve::LanguageResolveStage;
 pub use link_resolution::LinkResolutionStage;

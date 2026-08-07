@@ -10,14 +10,19 @@
 //!
 //! Resolves block-level `{{< include file.qmd >}}` shortcodes by parsing
 //! the included file and splicing its AST blocks into the main document.
-//! Runs before engine execution so that included code cells are visible
-//! to the engine.
+//! Expansion applies at **every block-list position** — top level and
+//! nested inside divs, blockquotes, list items, tables, figures, and
+//! footnote definitions (bd-1fz3vh99); the included file is parsed
+//! standalone and its blocks become children of the containing
+//! construct. Runs before engine execution so that included code cells
+//! are visible to the engine.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 
+use quarto_pandoc_types::block::Blocks;
 use quarto_pandoc_types::shortcode::ShortcodeArg;
 use quarto_pandoc_types::{Block, Inline};
 
@@ -76,16 +81,72 @@ impl PipelineStage for IncludeExpansionStage {
     }
 }
 
-/// Expand include shortcodes in a block list, recursively.
+/// Document-level entry point: expand include shortcodes at every
+/// block-list position in the AST (bd-1fz3vh99), recursively.
 fn expand_includes_in_blocks(
     doc: &mut DocumentAst,
     ctx: &mut StageContext,
     current_file: &Path,
     include_stack: &mut HashSet<PathBuf>,
 ) -> Result<(), PipelineError> {
-    let mut i = 0;
-    while i < doc.ast.blocks.len() {
-        if let Some(include_path) = extract_include_path(&doc.ast.blocks[i]) {
+    // Destructure so the expander can hold the document-level state
+    // alongside a mutable borrow of the block tree.
+    let DocumentAst {
+        ast,
+        ast_context,
+        source_context,
+        recorded_includes,
+        ..
+    } = doc;
+    let mut expander = IncludeExpander {
+        ctx,
+        ast_context,
+        source_context,
+        recorded_includes,
+        include_stack,
+    };
+    expander.expand_blocks(&mut ast.blocks, current_file)
+}
+
+/// Walks the block tree expanding include shortcodes, carrying the
+/// document-level bookkeeping every splice needs: the two source
+/// contexts (which must grow in lockstep — each included file is
+/// registered in both under the same `FileId`), the recorded-includes
+/// side-channel for cache invalidation, and the cycle-detection stack.
+struct IncludeExpander<'a> {
+    ctx: &'a mut StageContext,
+    ast_context: &'a mut pampa::pandoc::ASTContext,
+    source_context: &'a mut quarto_source_map::SourceContext,
+    recorded_includes: &'a mut Vec<IncludeEntry>,
+    include_stack: &'a mut HashSet<PathBuf>,
+}
+
+impl IncludeExpander<'_> {
+    /// Expand includes in one block list. `current_file` is the file
+    /// whose source produced these blocks — include paths resolve
+    /// against its directory.
+    ///
+    /// An included file's blocks are recursively expanded *before*
+    /// being spliced into `blocks`, so every nesting level sees the
+    /// same shape: resolve → parse → register → remap → recurse →
+    /// splice. Blocks that are not includes have their child block
+    /// lists (div/list/table/… — see [`child_block_lists_mut`])
+    /// walked in place.
+    fn expand_blocks(
+        &mut self,
+        blocks: &mut Vec<Block>,
+        current_file: &Path,
+    ) -> Result<(), PipelineError> {
+        let mut i = 0;
+        while i < blocks.len() {
+            let Some(include_path) = extract_include_path(&blocks[i]) else {
+                for list in child_block_lists_mut(&mut blocks[i]) {
+                    self.expand_blocks(list, current_file)?;
+                }
+                i += 1;
+                continue;
+            };
+
             // Resolve relative to the including file's directory
             let base_dir = current_file.parent().unwrap_or(Path::new("."));
             let resolved = base_dir.join(&include_path);
@@ -94,11 +155,11 @@ fn expand_includes_in_blocks(
             let canonical = resolved.canonicalize().unwrap_or_else(|_| resolved.clone());
 
             // Check for circular includes
-            if include_stack.contains(&canonical) {
-                ctx.diagnostics.push(
+            if self.include_stack.contains(&canonical) {
+                self.ctx.diagnostics.push(
                     quarto_error_reporting::DiagnosticMessageBuilder::warning("Circular include")
                         .with_code("Q-17-1")
-                        .with_location(doc.ast.blocks[i].source_info().clone())
+                        .with_location(blocks[i].source_info().clone())
                         .problem(format!(
                             "Circular include detected: '{}' is already being included",
                             resolved.display()
@@ -110,20 +171,20 @@ fn expand_includes_in_blocks(
                 // reported; leaving the shortcode in the AST would make
                 // the shortcode-resolve transform misreport it as an
                 // unknown shortcode (bd-qpvoamvu).
-                doc.ast.blocks.remove(i);
+                blocks.remove(i);
                 continue;
             }
 
             // Read the included file
-            let content = match ctx.runtime.file_read(&resolved) {
+            let content = match self.ctx.runtime.file_read(&resolved) {
                 Ok(bytes) => bytes,
                 Err(e) => {
-                    ctx.diagnostics.push(
+                    self.ctx.diagnostics.push(
                         quarto_error_reporting::DiagnosticMessageBuilder::warning(
                             "Include file not found",
                         )
                         .with_code("Q-17-2")
-                        .with_location(doc.ast.blocks[i].source_info().clone())
+                        .with_location(blocks[i].source_info().clone())
                         .problem(format!(
                             "Could not read included file '{}': {}",
                             resolved.display(),
@@ -133,7 +194,7 @@ fn expand_includes_in_blocks(
                     );
                     // See the circular-include arm for why the block is
                     // removed rather than skipped.
-                    doc.ast.blocks.remove(i);
+                    blocks.remove(i);
                     continue;
                 }
             };
@@ -144,22 +205,22 @@ fn expand_includes_in_blocks(
             let parse_result =
                 pampa::readers::qmd::read(&content, false, &filename, &mut stderr_buf, true, None);
 
-            let (included_pandoc, included_ast_context, _warnings) = match parse_result {
+            let (included_pandoc, included_ast_context, included_warnings) = match parse_result {
                 Ok(result) => result,
                 Err(inner_diagnostics) => {
                     // Register the included file's content in both
                     // SourceContexts so the inner diagnostics can render
                     // ariadne snippets from it. Registering in *both* —
-                    // even though only `doc.source_context` is read here —
+                    // even though only `self.source_context` is read here —
                     // keeps the two contexts growing in lockstep, which
                     // the success path's debug_assert relies on for any
                     // later include in the same document.
                     let content_str = String::from_utf8_lossy(&content).into_owned();
-                    let new_file_id = doc
+                    let new_file_id = self
                         .ast_context
                         .source_context
                         .add_file(filename.clone(), Some(content_str.clone()));
-                    let snippet_file_id = doc
+                    let snippet_file_id = self
                         .source_context
                         .add_file(filename.clone(), Some(content_str));
                     debug_assert_eq!(
@@ -167,12 +228,12 @@ fn expand_includes_in_blocks(
                         "FileId mismatch between ast_context.source_context and source_context"
                     );
 
-                    ctx.diagnostics.push(
+                    self.ctx.diagnostics.push(
                         quarto_error_reporting::DiagnosticMessageBuilder::error(
                             "Include file parse error",
                         )
                         .with_code("Q-17-3")
-                        .with_location(doc.ast.blocks[i].source_info().clone())
+                        .with_location(blocks[i].source_info().clone())
                         .problem(format!(
                             "Included file '{}' has {} parse error(s), reported below",
                             resolved.display(),
@@ -192,25 +253,18 @@ fn expand_includes_in_blocks(
                         }
                     };
                     for mut diag in inner_diagnostics {
-                        if let Some(loc) = diag.location.as_mut() {
-                            loc.remap_file_ids(&remap);
-                        }
-                        for detail in diag.details.iter_mut() {
-                            if let Some(loc) = detail.location.as_mut() {
-                                loc.remap_file_ids(&remap);
-                            }
-                        }
-                        ctx.diagnostics.push(diag);
+                        remap_diagnostic_locations(&mut diag, &remap);
+                        self.ctx.diagnostics.push(diag);
                     }
 
                     // The output still depends on the broken file's
                     // bytes: fixing it must invalidate any cached
                     // render, so record it like a successful include.
-                    record_include(&mut doc.recorded_includes, &canonical, &content);
+                    record_include(self.recorded_includes, &canonical, &content);
 
                     // See the circular-include arm for why the block is
                     // removed rather than skipped.
-                    doc.ast.blocks.remove(i);
+                    blocks.remove(i);
                     continue;
                 }
             };
@@ -224,11 +278,11 @@ fn expand_includes_in_blocks(
                 .get_file(quarto_source_map::FileId(0))
                 .and_then(|f| f.file_info.clone())
             {
-                doc.ast_context
+                self.ast_context
                     .source_context
                     .add_file_with_info(filename.clone(), file_info)
             } else {
-                doc.ast_context
+                self.ast_context
                     .source_context
                     .add_file(filename.clone(), Some(content_str.clone()))
             };
@@ -237,7 +291,7 @@ fn expand_includes_in_blocks(
             // Use add_file which returns a new FileId, but we need the same one.
             // Since both contexts grow sequentially, they should stay in sync if
             // we register in the same order. However, to be safe we verify.
-            let snippet_file_id = doc
+            let snippet_file_id = self
                 .source_context
                 .add_file(filename.clone(), Some(content_str));
             debug_assert_eq!(
@@ -247,90 +301,149 @@ fn expand_includes_in_blocks(
 
             // Merge filenames
             for name in &included_ast_context.filenames {
-                if !doc.ast_context.filenames.contains(name) {
-                    doc.ast_context.filenames.push(name.clone());
+                if !self.ast_context.filenames.contains(name) {
+                    self.ast_context.filenames.push(name.clone());
                 }
             }
 
             // Remap FileIds in the parsed AST: FileId(0) → new_file_id
-            let mut included_blocks = included_pandoc.blocks;
-            // Remap each block's source info and all nested source info
-            let mut temp_pandoc = quarto_pandoc_types::pandoc::Pandoc {
-                meta: quarto_pandoc_types::config_value::ConfigValue::default(),
-                blocks: included_blocks,
-            };
-            quarto_ast_reconcile::remap_file_ids(&mut temp_pandoc, &|id| {
+            let remap = |id: quarto_source_map::FileId| {
                 if id == quarto_source_map::FileId(0) {
                     new_file_id
                 } else {
                     id
                 }
-            });
-            included_blocks = temp_pandoc.blocks;
-
-            // Replace the paragraph containing the shortcode with included blocks
-            doc.ast.blocks.remove(i);
-            let num_inserted = included_blocks.len();
-            for (j, block) in included_blocks.into_iter().enumerate() {
-                doc.ast.blocks.insert(i + j, block);
-            }
-
-            // Record this child in the parent's `recorded_includes`
-            // side-channel for `bd-r82e` / Phase-8 cache invalidation.
-            // The `canonical` path is what cycle detection keys on;
-            // when canonicalize fails, it falls back to the resolved
-            // path (still a stable identifier for hashing). Dedupe so
-            // a child included twice in different positions appears
-            // once.
-            record_include(&mut doc.recorded_includes, &canonical, &content);
-
-            // Recursively expand includes in the newly inserted blocks
-            include_stack.insert(canonical.clone());
-
-            // Process the inserted blocks for nested includes
-            let mut sub_doc = DocumentAst {
-                path: resolved.clone(),
-                ast: quarto_pandoc_types::pandoc::Pandoc {
-                    meta: quarto_pandoc_types::config_value::ConfigValue::default(),
-                    blocks: doc.ast.blocks.split_off(i),
-                },
-                ast_context: doc.ast_context.clone(),
-                source_context: doc.source_context.clone(),
-                warnings: vec![],
-                recorded_includes: Vec::new(),
             };
-            // Only process the newly inserted blocks
-            let remaining = sub_doc.ast.blocks.split_off(num_inserted);
-            expand_includes_in_blocks(&mut sub_doc, ctx, &resolved, include_stack)?;
+            let mut temp_pandoc = quarto_pandoc_types::pandoc::Pandoc {
+                meta: quarto_pandoc_types::config_value::ConfigValue::default(),
+                blocks: included_pandoc.blocks,
+            };
+            quarto_ast_reconcile::remap_file_ids(&mut temp_pandoc, &remap);
+            let mut children = temp_pandoc.blocks;
 
-            // Merge back: expanded blocks + remaining
-            let mut all_blocks = doc.ast.blocks.clone(); // blocks before i
-            all_blocks.extend(sub_doc.ast.blocks);
-            all_blocks.extend(remaining);
-            doc.ast.blocks = all_blocks;
-
-            // Merge back any context changes from recursion
-            doc.ast_context = sub_doc.ast_context;
-            doc.source_context = sub_doc.source_context;
-
-            // Merge back transitively-recorded includes, dedup-by-path.
-            for entry in sub_doc.recorded_includes {
-                if !doc.recorded_includes.iter().any(|e| e.path == entry.path) {
-                    doc.recorded_includes.push(entry);
-                }
+            // Surface the included file's parse *warnings* the same way
+            // the error path surfaces its errors (previously they were
+            // silently dropped — bd-1fz3vh99's folded-in gap).
+            for mut diag in included_warnings {
+                remap_diagnostic_locations(&mut diag, &remap);
+                self.ctx.diagnostics.push(diag);
             }
 
-            include_stack.remove(&canonical);
+            // Record this child in the `recorded_includes` side-channel
+            // for `bd-r82e` / Phase-8 cache invalidation. The
+            // `canonical` path is what cycle detection keys on; when
+            // canonicalize fails, it falls back to the resolved path
+            // (still a stable identifier for hashing). Dedupe so a
+            // child included twice in different positions appears once.
+            record_include(self.recorded_includes, &canonical, &content);
 
-            // Don't increment i — the new blocks at position i may themselves
-            // have already been expanded, but blocks after the inserted range
-            // still need processing. Advance past the inserted blocks.
+            // Recursively expand the included blocks BEFORE splicing:
+            // nested includes resolve against the included file's own
+            // directory, and the spliced result needs no re-walking.
+            self.include_stack.insert(canonical.clone());
+            self.expand_blocks(&mut children, &resolved)?;
+            self.include_stack.remove(&canonical);
+
+            // Replace the include block with the fully-expanded children.
+            let num_inserted = children.len();
+            blocks.splice(i..i + 1, children);
             i += num_inserted;
-        } else {
-            i += 1;
+        }
+        Ok(())
+    }
+}
+
+/// Remap the `FileId`s in a diagnostic's primary location and every
+/// detail location — used to carry an included file's parse
+/// diagnostics (errors and warnings alike) from the child parse's
+/// private `FileId(0)` into the parent document's `SourceContext`.
+fn remap_diagnostic_locations(
+    diag: &mut quarto_error_reporting::DiagnosticMessage,
+    remap: &impl Fn(quarto_source_map::FileId) -> quarto_source_map::FileId,
+) {
+    if let Some(loc) = diag.location.as_mut() {
+        loc.remap_file_ids(remap);
+    }
+    for detail in diag.details.iter_mut() {
+        if let Some(loc) = detail.location.as_mut() {
+            loc.remap_file_ids(remap);
         }
     }
-    Ok(())
+}
+
+/// The child block lists of a block — every `Blocks` position include
+/// expansion descends into. This is the **single source of truth** for
+/// "where can an include appear": both the expander
+/// ([`IncludeExpander::expand_blocks`]) and the path collector
+/// ([`collect_include_paths`], used by the preview dep-graph) walk
+/// through this accessor, so the two can never drift.
+fn child_block_lists_mut(block: &mut Block) -> Vec<&mut Blocks> {
+    match block {
+        Block::Div(div) => vec![&mut div.content],
+        Block::BlockQuote(quote) => vec![&mut quote.content],
+        Block::BulletList(list) => list.content.iter_mut().collect(),
+        Block::OrderedList(list) => list.content.iter_mut().collect(),
+        Block::DefinitionList(dl) => dl
+            .content
+            .iter_mut()
+            .flat_map(|(_term, definitions)| definitions.iter_mut())
+            .collect(),
+        Block::Figure(figure) => figure
+            .caption
+            .long
+            .iter_mut()
+            .chain(std::iter::once(&mut figure.content))
+            .collect(),
+        Block::NoteDefinitionFencedBlock(note) => vec![&mut note.content],
+        Block::Table(table) => {
+            let mut lists: Vec<&mut Blocks> = Vec::new();
+            lists.extend(table.caption.long.iter_mut());
+            let rows = table
+                .head
+                .rows
+                .iter_mut()
+                .chain(
+                    table
+                        .bodies
+                        .iter_mut()
+                        .flat_map(|body| body.head.iter_mut().chain(body.body.iter_mut())),
+                )
+                .chain(table.foot.rows.iter_mut());
+            for row in rows {
+                lists.extend(row.cells.iter_mut().map(|cell| &mut cell.content));
+            }
+            lists
+        }
+        // Custom nodes are created by AstTransformsStage, which runs
+        // after include expansion — none exist at this stage. Every
+        // other variant is a leaf: no nested block lists.
+        _ => Vec::new(),
+    }
+}
+
+/// Collect every include path recognized at any block-list position,
+/// in document order (the exact set [`IncludeExpander`] would expand).
+///
+/// Takes `&mut` — not because it mutates, but so it can share
+/// [`child_block_lists_mut`] with the expander; a parallel immutable
+/// accessor would be a second copy of the container-position list that
+/// could silently drift. Callers (the preview dep-graph scanner) own
+/// their freshly-parsed `Pandoc`, so the mutable borrow costs nothing.
+pub fn collect_include_paths(blocks: &mut Blocks) -> Vec<String> {
+    fn walk(blocks: &mut Blocks, out: &mut Vec<String>) {
+        for block in blocks.iter_mut() {
+            if let Some(path) = extract_include_path(block) {
+                out.push(path);
+                continue;
+            }
+            for list in child_block_lists_mut(block) {
+                walk(list, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(blocks, &mut out);
+    out
 }
 
 /// Append an [`IncludeEntry`] for a freshly-spliced child file,
@@ -344,8 +457,13 @@ fn record_include(out: &mut Vec<IncludeEntry>, resolved: &Path, bytes: &[u8]) {
     out.push(IncludeEntry::new(resolved.to_path_buf(), bytes));
 }
 
-/// Check if a block is a paragraph containing only an include shortcode.
-/// Returns the include path if so, None otherwise.
+/// Check if a block is a paragraph (or plain block) containing only an
+/// include shortcode. Returns the include path if so, None otherwise.
+///
+/// `Plain` is accepted alongside `Paragraph` because tight list items
+/// and table cells wrap their content in `Plain` — a lone
+/// `- {{< include … >}}` item parses as `Plain[Shortcode]`
+/// (bd-1fz3vh99).
 ///
 /// Public so other crates that need the same "what does this page
 /// include?" answer (Phase D.6's `/api/preview/deps` endpoint) share
@@ -353,16 +471,18 @@ fn record_include(out: &mut Vec<IncludeEntry>, resolved: &Path, bytes: &[u8]) {
 /// drift between "what the renderer treats as an include" and "what
 /// the preview dep filter considers a dependency."
 pub fn extract_include_path(block: &Block) -> Option<String> {
-    let Block::Paragraph(para) = block else {
-        return None;
+    let inlines = match block {
+        Block::Paragraph(para) => &para.content,
+        Block::Plain(plain) => &plain.content,
+        _ => return None,
     };
 
     // Must contain exactly one inline, and it must be a shortcode
-    if para.content.len() != 1 {
+    if inlines.len() != 1 {
         return None;
     }
 
-    let Inline::Shortcode(shortcode) = &para.content[0] else {
+    let Inline::Shortcode(shortcode) = &inlines[0] else {
         return None;
     };
 
@@ -1057,6 +1177,257 @@ mod tests {
             !has_include_shortcode_block(&doc.ast.blocks),
             "the cyclic include block must be removed, got {:?}",
             doc.ast.blocks
+        );
+    }
+
+    // === Nested-container expansion (bd-1fz3vh99) ===
+    //
+    // One rule: an include block (Paragraph/Plain whose sole inline is
+    // the include shortcode) expands at ANY block-list position. The
+    // shared driver below runs the doc-level entry point and returns
+    // (doc, ctx) for structural assertions.
+
+    /// Parses OK but emits a Q-2-9 "HTML element converted to raw
+    /// HTML" warning — used to pin warning surfacing (U10).
+    const WARNING_QMD: &str = "<div>\n\nhello\n\n</div>\n";
+
+    fn expand(main: &str, files: Vec<(&str, &str)>) -> (DocumentAst, StageContext) {
+        let runtime = Arc::new(MockFileRuntime::new(files));
+        let mut ctx = make_stage_context(runtime);
+        let mut doc = parse_to_doc_ast(main, "/project/doc.qmd");
+
+        let mut include_stack = HashSet::new();
+        include_stack.insert(PathBuf::from("/project/doc.qmd"));
+
+        expand_includes_in_blocks(
+            &mut doc,
+            &mut ctx,
+            &PathBuf::from("/project/doc.qmd"),
+            &mut include_stack,
+        )
+        .unwrap();
+        (doc, ctx)
+    }
+
+    /// Collapse a block to its plain-text content (Str/Space only) for
+    /// structural assertions.
+    fn block_text(block: &Block) -> String {
+        let inlines = match block {
+            Block::Paragraph(p) => &p.content,
+            Block::Plain(p) => &p.content,
+            _ => return String::new(),
+        };
+        inlines
+            .iter()
+            .map(|i| match i {
+                Inline::Str(s) => s.text.clone(),
+                Inline::Space(_) => " ".to_string(),
+                _ => String::new(),
+            })
+            .collect()
+    }
+
+    fn texts(blocks: &[Block]) -> Vec<String> {
+        blocks.iter().map(block_text).collect()
+    }
+
+    const INC_TWO_PARAS: &str = "Included one\n\nIncluded two\n";
+
+    #[test]
+    fn include_inside_div_expands() {
+        let (doc, ctx) = expand(
+            "::: {.note}\n{{< include inc.qmd >}}\n:::",
+            vec![("/project/inc.qmd", INC_TWO_PARAS)],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(doc.ast.blocks.len(), 1);
+        let Block::Div(div) = &doc.ast.blocks[0] else {
+            panic!("expected Div, got {:?}", doc.ast.blocks[0]);
+        };
+        assert_eq!(
+            texts(&div.content),
+            vec!["Included one", "Included two"],
+            "included blocks must land inside the div"
+        );
+    }
+
+    #[test]
+    fn include_inside_blockquote_expands() {
+        let (doc, ctx) = expand(
+            "> {{< include inc.qmd >}}",
+            vec![("/project/inc.qmd", INC_TWO_PARAS)],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(doc.ast.blocks.len(), 1);
+        let Block::BlockQuote(bq) = &doc.ast.blocks[0] else {
+            panic!("expected BlockQuote, got {:?}", doc.ast.blocks[0]);
+        };
+        assert_eq!(texts(&bq.content), vec!["Included one", "Included two"]);
+    }
+
+    #[test]
+    fn include_as_tight_bullet_item_expands() {
+        // Tight list items hold Plain, not Paragraph — the recognizer
+        // must accept both shapes.
+        let (doc, ctx) = expand(
+            "- {{< include inc.qmd >}}\n- other item",
+            vec![("/project/inc.qmd", INC_TWO_PARAS)],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        let Block::BulletList(list) = &doc.ast.blocks[0] else {
+            panic!("expected BulletList, got {:?}", doc.ast.blocks[0]);
+        };
+        assert_eq!(list.content.len(), 2, "sibling item must survive");
+        assert_eq!(
+            texts(&list.content[0]),
+            vec!["Included one", "Included two"],
+            "include expands inside its own item"
+        );
+        assert_eq!(texts(&list.content[1]), vec!["other item"]);
+    }
+
+    #[test]
+    fn include_in_ordered_list_item_expands() {
+        let (doc, ctx) = expand(
+            "1. {{< include inc.qmd >}}",
+            vec![("/project/inc.qmd", INC_TWO_PARAS)],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        let Block::OrderedList(list) = &doc.ast.blocks[0] else {
+            panic!("expected OrderedList, got {:?}", doc.ast.blocks[0]);
+        };
+        assert_eq!(
+            texts(&list.content[0]),
+            vec!["Included one", "Included two"]
+        );
+    }
+
+    #[test]
+    fn include_in_nested_divs_expands() {
+        let (doc, ctx) = expand(
+            "::: {.outer}\n\n::: {.inner}\n{{< include inc.qmd >}}\n:::\n\n:::",
+            vec![("/project/inc.qmd", "Deep content\n")],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        let Block::Div(outer) = &doc.ast.blocks[0] else {
+            panic!("expected outer Div, got {:?}", doc.ast.blocks[0]);
+        };
+        let Some(Block::Div(inner)) = outer.content.iter().find(|b| matches!(b, Block::Div(_)))
+        else {
+            panic!("expected inner Div, got {:?}", outer.content);
+        };
+        assert_eq!(texts(&inner.content), vec!["Deep content"]);
+    }
+
+    #[test]
+    fn nested_include_resolves_relative_to_declaring_file() {
+        // doc.qmd (in /project) includes sub/x.qmd inside a div;
+        // x.qmd includes y.qmd, which must resolve against /project/sub.
+        let (doc, ctx) = expand(
+            "::: {.d}\n{{< include sub/x.qmd >}}\n:::",
+            vec![
+                ("/project/sub/x.qmd", "From X\n\n{{< include y.qmd >}}"),
+                ("/project/sub/y.qmd", "From Y\n"),
+            ],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        let Block::Div(div) = &doc.ast.blocks[0] else {
+            panic!("expected Div, got {:?}", doc.ast.blocks[0]);
+        };
+        assert_eq!(texts(&div.content), vec!["From X", "From Y"]);
+    }
+
+    #[test]
+    fn cycle_through_container_reports_and_removes() {
+        // doc → (div) loop.qmd → doc: the cyclic include is removed
+        // from loop.qmd's spliced blocks, inside the div.
+        let (doc, ctx) = expand(
+            "::: {.d}\n{{< include loop.qmd >}}\n:::",
+            vec![("/project/loop.qmd", "{{< include doc.qmd >}}")],
+        );
+        assert_eq!(ctx.diagnostics.len(), 1, "{:?}", ctx.diagnostics);
+        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-17-1"));
+        let Block::Div(div) = &doc.ast.blocks[0] else {
+            panic!("expected Div, got {:?}", doc.ast.blocks[0]);
+        };
+        assert!(
+            div.content.is_empty(),
+            "cyclic include must be removed from the div: {:?}",
+            div.content
+        );
+    }
+
+    #[test]
+    fn parse_error_inside_div_reports_and_removes() {
+        let (doc, ctx) = expand(
+            "::: {.d}\n{{< include bad.qmd >}}\n:::",
+            vec![("/project/bad.qmd", UNPARSEABLE_QMD)],
+        );
+        assert!(
+            ctx.diagnostics.len() >= 2,
+            "expected wrapper + inner diagnostics, got {:?}",
+            ctx.diagnostics
+        );
+        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-17-3"));
+        let Block::Div(div) = &doc.ast.blocks[0] else {
+            panic!("expected Div, got {:?}", doc.ast.blocks[0]);
+        };
+        assert!(
+            div.content.is_empty(),
+            "failed include must be removed from the div's children: {:?}",
+            div.content
+        );
+    }
+
+    #[test]
+    fn include_in_table_cell_expands() {
+        let (doc, ctx) = expand(
+            "| {{< include inc.qmd >}} |\n|---|\n| cell |",
+            vec![("/project/inc.qmd", INC_TWO_PARAS)],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        let Block::Table(table) = &doc.ast.blocks[0] else {
+            panic!("expected Table, got {:?}", doc.ast.blocks[0]);
+        };
+        let head_cell = &table.head.rows[0].cells[0];
+        assert_eq!(
+            texts(&head_cell.content),
+            vec!["Included one", "Included two"],
+            "include expands to multi-block content inside the cell"
+        );
+    }
+
+    #[test]
+    fn included_file_parse_warnings_surface_remapped() {
+        // WARNING_QMD parses successfully but emits Q-2-9. The warning
+        // must reach ctx.diagnostics with a location that resolves —
+        // through the parent's SourceContext — to the included file.
+        let (doc, ctx) = expand(
+            "{{< include warn.qmd >}}",
+            vec![("/project/warn.qmd", WARNING_QMD)],
+        );
+        let warning = ctx
+            .diagnostics
+            .iter()
+            .find(|d| d.code.as_deref() == Some("Q-2-9"))
+            .unwrap_or_else(|| {
+                panic!(
+                    "expected included file's Q-2-9 warning to surface, got {:?}",
+                    ctx.diagnostics
+                )
+            });
+        let loc = warning.location.as_ref().expect("warning has a location");
+        let mapped = loc
+            .map_offset(0, &doc.source_context)
+            .expect("warning location resolves in the parent SourceContext");
+        let file = doc
+            .source_context
+            .get_file(mapped.file_id)
+            .expect("mapped file registered");
+        assert!(
+            file.path.ends_with("warn.qmd"),
+            "warning must point into the included file, got {}",
+            file.path
         );
     }
 

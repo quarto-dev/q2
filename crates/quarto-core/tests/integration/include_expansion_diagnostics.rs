@@ -43,7 +43,7 @@ const BAD_QMD: &str = "Some text before the error.\n\
 
 /// Write `files` into a temp dir and render `main` through the real
 /// HTML pipeline, returning the collected diagnostics + source context.
-async fn render_fixture(files: &[(&str, &str)], main: &str) -> RenderOutput {
+pub async fn render_fixture(files: &[(&str, &str)], main: &str) -> RenderOutput {
     let tmp = tempfile::TempDir::new().unwrap();
     let project_dir = tmp.path().to_path_buf();
 
@@ -93,7 +93,7 @@ fn resolved_location(d: &DiagnosticMessage, output: &RenderOutput) -> Option<(St
     Some((name, mapped.location.row))
 }
 
-fn codes(output: &RenderOutput) -> Vec<&str> {
+pub fn codes(output: &RenderOutput) -> Vec<&str> {
     output
         .diagnostics
         .iter()

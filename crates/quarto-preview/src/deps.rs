@@ -13,15 +13,19 @@
 //! walks the *block-level* shortcodes for the same shape
 //! [`IncludeExpansionStage`] uses:
 //!
-//!   - a `Block::Paragraph` containing exactly one inline,
+//!   - a `Block::Paragraph` or `Block::Plain` containing exactly one
+//!     inline (`Plain` covers tight list items and table cells),
 //!   - that inline is an `Inline::Shortcode`,
 //!   - the shortcode's `name` is `"include"`,
-//!   - the first positional argument is a string.
+//!   - the first positional argument is a string,
+//!   - at **any block-list position** — top level or nested inside
+//!     divs, blockquotes, list items, tables, … (bd-1fz3vh99).
 //!
-//! Reusing [`extract_include_path`](quarto_core::stage::stages::extract_include_path)
-//! keeps the recognition rules in lock-step with what the renderer
-//! actually treats as an include — no drift between "this file is a
-//! dep" and "this include actually expands at render time." Going
+//! Reusing [`collect_include_paths`](quarto_core::stage::stages::collect_include_paths)
+//! keeps both the recognition rules and the traversal in lock-step
+//! with what the renderer actually treats as an include — no drift
+//! between "this file is a dep" and "this include actually expands
+//! at render time." Going
 //! through the AST (rather than regex over raw text) is also what
 //! the Q1→Q2 migration is about: operate on the parsed syntax, not
 //! on substrings.
@@ -54,7 +58,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use quarto_core::stage::stages::extract_include_path;
+use quarto_core::stage::stages::collect_include_paths;
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_hub::context::SharedContext;
 use serde::{Deserialize, Serialize};
@@ -134,9 +138,10 @@ pub async fn deps_handler(
 /// Extract include-shortcode dependencies from a qmd source.
 ///
 /// Parses `source` into a Pandoc AST via `pampa::readers::qmd::read`,
-/// then walks the top-level blocks for the same "is this an include
-/// shortcode?" shape [`IncludeExpansionStage`] uses (via the shared
-/// [`extract_include_path`] helper). Paths are resolved relative to
+/// then walks every block-list position for the same "is this an
+/// include shortcode?" shape [`IncludeExpansionStage`] uses (via the
+/// shared [`collect_include_paths`] walker, which mirrors the
+/// expander's traversal exactly). Paths are resolved relative to
 /// `page_rel`'s directory and emitted as forward-slash
 /// project-relative strings, deduplicated and sorted.
 ///
@@ -158,7 +163,7 @@ pub fn extract_include_deps(source: &[u8], page_rel: &str) -> Vec<String> {
         None,  // parent SourceInfo
     );
 
-    let Ok((pandoc, _ast_context, _warnings)) = parse_result else {
+    let Ok((mut pandoc, _ast_context, _warnings)) = parse_result else {
         // bd-b9kzg: parse failures surface to the SPA via the
         // per-page sink in addition to the existing tracing line.
         // Pampa's parser is robust enough that this branch is
@@ -194,10 +199,11 @@ pub fn extract_include_deps(source: &[u8], page_rel: &str) -> Vec<String> {
         .map(Path::to_path_buf)
         .unwrap_or_default();
 
-    let mut deps: Vec<String> = pandoc
-        .blocks
-        .iter()
-        .filter_map(extract_include_path)
+    // `collect_include_paths` takes `&mut` so it can share the
+    // expander's container-position accessor (see its docs); we own
+    // this freshly-parsed AST, so that costs nothing.
+    let mut deps: Vec<String> = collect_include_paths(&mut pandoc.blocks)
+        .into_iter()
         .map(|raw| {
             // Resolve relative to the page's directory and emit a
             // forward-slash project-relative path. We don't
@@ -308,6 +314,23 @@ mod tests {
         assert!(
             deps_for(src, "index.qmd").is_empty(),
             "an inline include doesn't expand at render time, so it isn't a dep"
+        );
+    }
+
+    #[test]
+    fn includes_nested_in_containers_are_deps() {
+        // bd-1fz3vh99: the renderer expands includes at every
+        // block-list position (divs, blockquotes, list items), so the
+        // dep filter must see them too — otherwise nested includes
+        // mean stale previews, the exact bug class this module
+        // exists to prevent.
+        let src = "# A\n\n\
+            ::: {.callout-note}\n{{< include in-div.qmd >}}\n:::\n\n\
+            > {{< include in-quote.qmd >}}\n\n\
+            - {{< include in-list.qmd >}}\n- other\n";
+        assert_eq!(
+            deps_for(src, "index.qmd"),
+            vec!["in-div.qmd", "in-list.qmd", "in-quote.qmd"]
         );
     }
 
