@@ -50,7 +50,7 @@
 //! that includes too many is just the pre-D.6 behaviour, so we'd
 //! rather over-broadcast than fail closed.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use axum::{
     Json,
@@ -205,12 +205,21 @@ pub fn extract_include_deps(source: &[u8], page_rel: &str) -> Vec<String> {
     let mut deps: Vec<String> = collect_include_paths(&mut pandoc.blocks)
         .into_iter()
         .map(|raw| {
-            // Resolve relative to the page's directory and emit a
-            // forward-slash project-relative path. We don't
-            // canonicalize against the filesystem — the SPA matches
-            // these strings against paths from `onFileContent`,
-            // which arrive in the same forward-slash form.
-            let joined = page_dir.join(&raw);
+            // Resolve to a forward-slash project-relative path,
+            // mirroring `IncludeExpansionStage`'s anchors
+            // (bd-w9koo1i2): a leading `/` (or `\`) is
+            // project-root-relative — dep strings are already
+            // project-relative, so the root anchor means dropping the
+            // slash, NOT prepending the page dir. Anything else is
+            // page-relative. We don't canonicalize against the
+            // filesystem — the SPA matches these strings against
+            // paths from `onFileContent`, which arrive in the same
+            // forward-slash form.
+            let joined = if raw.starts_with('/') || raw.starts_with('\\') {
+                PathBuf::from(raw.replace('\\', "/").trim_start_matches('/'))
+            } else {
+                page_dir.join(&raw)
+            };
             normalize_forward_slash(&joined)
         })
         .collect();
@@ -286,6 +295,20 @@ mod tests {
         // page = posts/post1.qmd; include = ../shared.qmd → shared.qmd
         let src = "# Post\n\n{{< include ../shared.qmd >}}\n";
         assert_eq!(deps_for(src, "posts/post1.qmd"), vec!["shared.qmd"]);
+    }
+
+    #[test]
+    fn project_absolute_include_is_project_relative_dep() {
+        // bd-w9koo1i2: a leading `/` is project-root-relative (Quarto
+        // path convention), and dep strings are project-relative
+        // forward-slash paths — so the leading slash strips and the
+        // page directory is NOT prepended.
+        let src = "# Post\n\n{{< include /sub/_includes/x.qmd >}}\n";
+        assert_eq!(
+            deps_for(src, "sub/doc.qmd"),
+            vec!["sub/_includes/x.qmd"],
+            "leading-/ include must anchor at the project root, not the page dir"
+        );
     }
 
     #[test]

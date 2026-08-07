@@ -16,6 +16,11 @@
 //! standalone and its blocks become children of the containing
 //! construct. Runs before engine execution so that included code cells
 //! are visible to the engine.
+//!
+//! Path resolution: relative paths anchor at the including file's
+//! directory (at every nesting level); a leading `/` is
+//! **project-root-relative** per the Quarto path convention
+//! (bd-w9koo1i2, see [`resolve_include_target`]).
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -123,8 +128,9 @@ struct IncludeExpander<'a> {
 
 impl IncludeExpander<'_> {
     /// Expand includes in one block list. `current_file` is the file
-    /// whose source produced these blocks — include paths resolve
-    /// against its directory.
+    /// whose source produced these blocks — relative include paths
+    /// resolve against its directory; leading-`/` paths resolve
+    /// against the project root (see [`resolve_include_target`]).
     ///
     /// An included file's blocks are recursively expanded *before*
     /// being spliced into `blocks`, so every nesting level sees the
@@ -147,9 +153,8 @@ impl IncludeExpander<'_> {
                 continue;
             };
 
-            // Resolve relative to the including file's directory
             let base_dir = current_file.parent().unwrap_or(Path::new("."));
-            let resolved = base_dir.join(&include_path);
+            let resolved = resolve_include_target(base_dir, &self.ctx.project.dir, &include_path);
 
             // Canonicalize for cycle detection
             let canonical = resolved.canonicalize().unwrap_or_else(|_| resolved.clone());
@@ -457,6 +462,35 @@ fn record_include(out: &mut Vec<IncludeEntry>, resolved: &Path, bytes: &[u8]) {
     out.push(IncludeEntry::new(resolved.to_path_buf(), bytes));
 }
 
+/// Resolve a raw include-shortcode path against its anchor.
+///
+/// A path beginning with `/` (or `\` — Windows-authored) is
+/// **project-root-relative**, per the Quarto path convention (glob
+/// decision D2; Q1's `resolvePath` in `core/handlers/base.ts`):
+/// `/a/b.qmd` means `<project>/a/b.qmd`, never the filesystem root.
+/// For single-file renders `project_dir` is the input file's own
+/// directory ([`crate::project::ProjectContext::discover`]), which
+/// matches Q1's `rootDir = sourceDir` fallback without a branch here.
+///
+/// Everything else resolves against `base_dir`, the including file's
+/// directory — so nested relative includes anchor at each included
+/// file (bd-1fz3vh99) while the leading-`/` anchor stays fixed at the
+/// project root at every nesting level.
+///
+/// Windows drive-absolute paths (`C:\…`) are not part of the
+/// convention (Q1 defines no semantics for them either); they fall
+/// through the relative arm, where `Path::join` keeps them absolute.
+fn resolve_include_target(base_dir: &Path, project_dir: &Path, raw: &str) -> PathBuf {
+    if raw.starts_with('/') || raw.starts_with('\\') {
+        // Normalize separators before anchoring so a Windows-authored
+        // `\a\b.qmd` behaves identically everywhere.
+        let normalized = raw.replace('\\', "/");
+        project_dir.join(normalized.trim_start_matches('/'))
+    } else {
+        base_dir.join(raw)
+    }
+}
+
 /// Check if a block is a paragraph (or plain block) containing only an
 /// include shortcode. Returns the include path if so, None otherwise.
 ///
@@ -517,6 +551,52 @@ mod tests {
             })],
             source_info: SourceInfo::original(FileId(0), 0, 30),
         })
+    }
+
+    // === resolve_include_target (bd-w9koo1i2) ===
+
+    #[test]
+    fn resolve_relative_against_base_dir() {
+        assert_eq!(
+            resolve_include_target(Path::new("/proj/sub"), Path::new("/proj"), "x.qmd"),
+            Path::new("/proj/sub/x.qmd")
+        );
+        assert_eq!(
+            resolve_include_target(Path::new("/proj/sub"), Path::new("/proj"), "../up.qmd"),
+            Path::new("/proj/sub/../up.qmd")
+        );
+    }
+
+    #[test]
+    fn resolve_leading_slash_against_project_dir() {
+        assert_eq!(
+            resolve_include_target(Path::new("/proj/sub"), Path::new("/proj"), "/a/b.qmd"),
+            Path::new("/proj/a/b.qmd")
+        );
+        // Already at the root: same anchor.
+        assert_eq!(
+            resolve_include_target(Path::new("/proj"), Path::new("/proj"), "/a.qmd"),
+            Path::new("/proj/a.qmd")
+        );
+    }
+
+    #[test]
+    fn resolve_leading_backslash_is_project_root_relative() {
+        // Windows-authored separators normalize before anchoring.
+        assert_eq!(
+            resolve_include_target(Path::new("/proj/sub"), Path::new("/proj"), "\\a\\b.qmd"),
+            Path::new("/proj/a/b.qmd")
+        );
+    }
+
+    #[test]
+    fn resolve_redundant_leading_slashes_collapse() {
+        // Path comparison is component-wise, so the interior `//`
+        // in the joined form is equivalent to `/`.
+        assert_eq!(
+            resolve_include_target(Path::new("/proj/sub"), Path::new("/proj"), "//a//b.qmd"),
+            Path::new("/proj/a/b.qmd")
+        );
     }
 
     #[test]
