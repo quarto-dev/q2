@@ -314,6 +314,116 @@ impl TryFrom<&str> for ProjectKind {
     }
 }
 
+/// Advisory diagnostics about the parsed project kind (bd-ad7i1pc6).
+///
+/// `book` and `manuscript` parse successfully but currently render
+/// with default-project behavior (`project_type_for` maps them to
+/// `DefaultProjectType`). That surprise used to be silent; this
+/// returns the **Q-5-18** warning CLI drivers print next to the
+/// `underscore_typo_diagnostics` check. Span-less, mirroring Q-5-11:
+/// the config file is named in the problem text instead.
+pub fn project_kind_diagnostics(
+    config: &ProjectConfig,
+) -> Vec<quarto_error_reporting::DiagnosticMessage> {
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+
+    let kind = config.project_kind;
+    if !matches!(kind, ProjectKind::Book | ProjectKind::Manuscript) {
+        return Vec::new();
+    }
+    let config_name = config
+        .config_path
+        .as_ref()
+        .map_or_else(|| "_quarto.yml".to_string(), |p| p.display().to_string());
+    vec![
+        DiagnosticMessageBuilder::warning(format!(
+            "`{}` projects are not yet implemented",
+            kind.as_str()
+        ))
+        .with_code("Q-5-18")
+        .problem(format!(
+            "{config_name} sets `project.type: {}`, but Quarto 2 does not implement \
+             {} projects yet. The project renders with default-project behavior: \
+             documents are rendered individually, without {}-specific structure.",
+            kind.as_str(),
+            kind.as_str(),
+            kind.as_str(),
+        ))
+        .build(),
+    ]
+}
+
+/// Extract and validate `project.type` from parsed `_quarto.yml`
+/// metadata (bd-ad7i1pc6).
+///
+/// An unknown or non-string `project.type` is a hard **Q-5-17** error:
+/// the previous `.ok().unwrap_or_default()` fallback silently rendered
+/// e.g. a `type: posit-docs` website as a bare default project.
+/// Extension-contributed custom project types will be resolved here,
+/// before this error fires (bd-ad7i1pc6 Phase 3).
+///
+/// `content` is the already-read text of `config_path`, registered
+/// into the error's `SourceContext` so the diagnostic renders a
+/// snippet pointing at the offending `type:` scalar.
+fn extract_project_kind(
+    metadata: &ConfigValue,
+    config_path: &Path,
+    content: &str,
+) -> Result<ProjectKind> {
+    let Some(type_value) = metadata.get("project").and_then(|p| p.get("type")) else {
+        return Ok(ProjectKind::Default);
+    };
+
+    let problem = match type_value.as_str() {
+        Some(s) => match ProjectKind::try_from(s) {
+            Ok(kind) => return Ok(kind),
+            Err(_) => format!("`{s}` is not a recognized project type."),
+        },
+        None => "`project.type` must be a string.".to_string(),
+    };
+
+    Err(project_type_error(
+        problem,
+        type_value,
+        config_path,
+        content,
+    ))
+}
+
+/// Build the structured **Q-5-17** error for a `project.type` that
+/// could not be resolved, anchored at the `type:` value's span in the
+/// project config file.
+fn project_type_error(
+    problem: String,
+    type_value: &ConfigValue,
+    config_path: &Path,
+    content: &str,
+) -> QuartoError {
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+    use quarto_source_map::{FileId, SourceContext};
+
+    let mut source_context = SourceContext::new();
+    if let Some((fid_usize, _, _)) = type_value.source_info.resolve_byte_range() {
+        source_context.add_file_with_id(
+            FileId(fid_usize),
+            config_path.to_string_lossy().into_owned(),
+            Some(content.to_string()),
+        );
+    }
+
+    let diagnostic = DiagnosticMessageBuilder::error("Unknown project type")
+        .with_code("Q-5-17")
+        .with_location(type_value.source_info.clone())
+        .problem(problem)
+        .add_hint("Built-in project types are `default`, `website`, `book`, and `manuscript`.")
+        .build();
+
+    QuartoError::Parse(crate::error::ParseError::new(
+        vec![diagnostic],
+        source_context,
+    ))
+}
+
 /// Parsed project configuration from `_quarto.yml`
 #[derive(Debug, Clone, Default)]
 pub struct ProjectConfig {
@@ -647,13 +757,10 @@ impl ProjectContext {
         let metadata =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
 
-        // Extract project-specific settings from metadata
-        let project_kind = metadata
-            .get("project")
-            .and_then(|p| p.get("type"))
-            .and_then(|t| t.as_str())
-            .and_then(|s| ProjectKind::try_from(s).ok())
-            .unwrap_or_default();
+        // Extract project-specific settings from metadata. An
+        // unrecognized `project.type` is a hard error (Q-5-17), not a
+        // silent fall-back to the default kind (bd-ad7i1pc6).
+        let project_kind = extract_project_kind(&metadata, path, &content)?;
 
         let output_dir = metadata
             .get("project")

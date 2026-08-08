@@ -796,8 +796,14 @@ fn execute_project(
 
     // bd-w348iu63: warn about the likely `pre_render` / `post_render`
     // misspellings (Q2 has no schema layer; unknown keys are
-    // otherwise silently ignored).
-    for diagnostic in render_scripts::underscore_typo_diagnostics(&project.config) {
+    // otherwise silently ignored). bd-ad7i1pc6: also warn when the
+    // project kind (book/manuscript) renders with default behavior.
+    for diagnostic in render_scripts::underscore_typo_diagnostics(&project.config)
+        .into_iter()
+        .chain(quarto_core::project::project_kind_diagnostics(
+            &project.config,
+        ))
+    {
         eprintln!("{}", diagnostic.to_text(None));
     }
 

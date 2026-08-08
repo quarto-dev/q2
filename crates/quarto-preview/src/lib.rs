@@ -310,7 +310,12 @@ fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
             return;
         }
     };
-    for diagnostic in render_scripts::underscore_typo_diagnostics(&project.config) {
+    for diagnostic in render_scripts::underscore_typo_diagnostics(&project.config)
+        .into_iter()
+        .chain(quarto_core::project::project_kind_diagnostics(
+            &project.config,
+        ))
+    {
         eprintln!("{}", diagnostic.to_text(None));
     }
     if project.config.pre_render_scripts.is_empty() {
