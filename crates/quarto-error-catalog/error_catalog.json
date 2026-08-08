@@ -1154,6 +1154,13 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-15",
     "since_version": "99.9.9"
   },
+  "Q-5-17": {
+    "subsystem": "project",
+    "title": "Unknown Project Type",
+    "message_template": "`project.type` in `_quarto.yml` is not one of the supported types (`default`, `website`, `book`, `manuscript`), or is not a string. Quarto 1 extension project types (contributed from `_extensions/`) are not yet supported in Quarto 2; set `project.type` to the base type the extension extends (often `website`). The render stops before any document is processed — continuing under the wrong project type would scatter per-document copies of shared JS/CSS next to every source file.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-17",
+    "since_version": "99.9.9"
+  },
   "Q-16-1": {
     "subsystem": "extension",
     "title": "Extension Not Loaded",
