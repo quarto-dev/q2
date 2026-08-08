@@ -1,7 +1,7 @@
 ---
 title: "Theme file not found"
 description: "A `theme:` entry names a `.scss` or `.css` file that does not exist at its resolved location."
-code: Q-14-3
+code: Q-14-4
 subsystem: theme
 status: stub
 since: "99.9.9"
@@ -9,7 +9,7 @@ categories:
   - theme
 ---
 
-# `Q-14-3` — Theme File Not Found
+# `Q-14-4` — Theme File Not Found
 
 > A `theme:` entry names a `.scss` or `.css` file that does not
 > exist at its resolved location.
@@ -57,3 +57,5 @@ Common causes:
 
 - `Q-14-2` — unknown theme name: the value has no `.scss`/`.css`
   extension and is not a built-in theme name either.
+- `Q-14-3` — dark theme variant not yet supported: the
+  `light:`/`dark:` map form renders only the `light:` half.

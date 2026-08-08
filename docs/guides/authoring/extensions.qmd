@@ -93,7 +93,7 @@ Quarto's standard configuration merging applies, uniformly:
 
 Files the extension ships next to its manifest — SCSS themes, CSS, header includes, favicons, logos, scripts — are referenced with paths relative to the extension directory, as in the example above. Quarto resolves them automatically; your project does not need to spell out `_extensions/acme/fancy-docs/theme.scss`.
 
-The same resolution applies to format contributions (`contributes: formats:`): a format extension can bundle theme SCSS, CSS, or header includes next to its manifest and reference them by bare name. A `theme:` entry that names a `.scss`/`.css` file Quarto cannot find — bundled or otherwise — fails the render with [Q-14-3](../../errors/theme/Q-14-3.qmd).
+The same resolution applies to format contributions (`contributes: formats:`): a format extension can bundle theme SCSS, CSS, or header includes next to its manifest and reference them by bare name. A `theme:` entry that names a `.scss`/`.css` file Quarto cannot find — bundled or otherwise — fails the render with [Q-14-4](../../errors/theme/Q-14-4.qmd).
 
 ### Errors you might see
 

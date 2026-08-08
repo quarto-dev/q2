@@ -204,6 +204,17 @@ precedent). Per design decision 2, these **fail the render** (hard error).
   bundling assets; document the bundled-asset behavior if there's a natural
   home.
 
+## Renumbering note (2026-08-08, post-rebase)
+
+The diagnostic originally shipped as Q-14-3, but PR #475 (bd-o76p01wb,
+light/dark theme maps) merged first and took Q-14-3 for its
+dark-variant-ignored warning. On rebasing this branch over #475 the
+missing-theme-file error was renumbered to **Q-14-4** (code, catalog,
+docs page, tests). The `theme_locations` machinery composes with #475
+unchanged: the light half of a `light:`/`dark:` pair flows through
+`from_theme_value` → `extract_theme_specs`, so its entries carry
+locations too.
+
 ## Work items
 
 - [x] Phase 0: failing tests (read-time marking, e2e theme, Q-14-x
@@ -211,7 +222,7 @@ precedent). Per design decision 2, these **fail the render** (hard error).
       as expected, 1 no-change guard passes); smoke-all fixture
       `extensions/format-with-theme/` (fails all 3 assertions — confirms
       `css:` links are dropped too, not just theme); CLI test
-      `theme_missing_file.rs` (Q-14-3 test fails on exit 0 as expected;
+      `theme_missing_file.rs` (Q-14-4 test fails on exit 0 as expected;
       present-file control passes). Note: `as_str()` handles Path-kind
       (config_value.rs:641), so the css template path is safe by
       construction — risk retired.
@@ -219,7 +230,7 @@ precedent). Per design decision 2, these **fail the render** (hard error).
       `rebase_fragment_paths` refactored onto it; existence-driven marking
       wired into `parse_formats`. Commit `84f88c9f`; full workspace suite
       green; smoke fixture passes.
-- [x] Phase 2: Q-14-3 registered in `quarto-error-catalog`; up-front
+- [x] Phase 2: Q-14-4 registered in `quarto-error-catalog`; up-front
       validation in `compile_theme_css` (before cache-key computation) hard-
       errors on dangling custom theme entries with an ariadne span at the
       offending `theme:` entry; DEFAULT_CSS fallback retained for internal
@@ -237,11 +248,11 @@ precedent). Per design decision 2, these **fail the render** (hard error).
       `cargo run --bin q2 -- render doc.qmd` → exit 0, `doc_files/styles.css`
       is 321 KB with `.fmt-theme-marker` present (was 7 KB DEFAULT_CSS with
       0 hits). (2) Dangling entry (`theme: [cosmo, nope.scss]`): exit 1,
-      Q-14-3 ariadne diagnostic with span pinned at `nope.scss` (line 5 col
+      Q-14-4 ariadne diagnostic with span pinned at `nope.scss` (line 5 col
       20) and resolved path in the message; output inspected in both cases.
       Full `cargo xtask verify` (WASM leg included): **passed** (exit 0,
       2026-08-08).
-- [x] Phase 4: docs — new `docs/errors/theme/Q-14-3.qmd` (listing index
+- [x] Phase 4: docs — new `docs/errors/theme/Q-14-4.qmd` (listing index
       auto-globs it) + format-extension paragraph in the extensions guide's
       "Bundled files" section; verified via `q2 render docs/` (189/189,
       page renders, cross-link resolves).
