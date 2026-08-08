@@ -94,7 +94,7 @@ pub fn read_extension_with_org(
         ))
     })?;
 
-    let contributes = parse_contributes(contributes_cv, ext_dir)?;
+    let contributes = parse_contributes(contributes_cv, ext_dir, runtime)?;
 
     Ok(Extension {
         id: if let Some(org) = ext_org {
@@ -135,12 +135,16 @@ fn derive_extension_id(ext_dir: &Path) -> (String, Option<String>) {
 }
 
 /// Parse the `contributes` section of an `_extension.yml`.
-fn parse_contributes(contributes: &ConfigValue, ext_dir: &Path) -> Result<Contributes> {
+fn parse_contributes(
+    contributes: &ConfigValue,
+    ext_dir: &Path,
+    runtime: &dyn SystemRuntime,
+) -> Result<Contributes> {
     let mut result = Contributes::default();
 
     // Parse formats with "common" key merging
     if let Some(formats_cv) = contributes.get("formats") {
-        result.formats = parse_formats(formats_cv, ext_dir)?;
+        result.formats = parse_formats(formats_cv, ext_dir, runtime)?;
     }
 
     // Parse filters
@@ -177,7 +181,8 @@ fn parse_contributes(contributes: &ConfigValue, ext_dir: &Path) -> Result<Contri
 /// The `common` key's values serve as defaults for all other format keys.
 fn parse_formats(
     formats_cv: &ConfigValue,
-    _ext_dir: &Path,
+    ext_dir: &Path,
+    runtime: &dyn SystemRuntime,
 ) -> Result<HashMap<String, ConfigValue>> {
     let mut result = HashMap::new();
 
@@ -206,6 +211,11 @@ fn parse_formats(
         // Convert known path-valued keys to ConfigValueKind::Path so that
         // adjust_paths_to_document_dir() will rebase them during metadata merge.
         mark_path_valued_keys(&mut merged_value);
+
+        // Existence-driven marking for keys whose strings may be either
+        // bundled files or something else (builtin theme names, doc-relative
+        // references) — the filesystem disambiguates (bd-of20unsb).
+        super::paths::mark_bundled_format_assets(&mut merged_value, ext_dir, runtime);
 
         result.insert(entry.key.clone(), merged_value);
     }

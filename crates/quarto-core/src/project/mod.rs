@@ -702,79 +702,26 @@ const FRAGMENT_PATH_PATTERNS: &[&[&str]] = &[
 /// Rebased values become [`ConfigValueKind::Path`] so the per-document
 /// metadata merge keeps adjusting them (project root → document dir)
 /// for documents in subdirectories.
+///
+/// The pattern walk and the bundled-file existence check are shared
+/// with the `contributes.formats` marking (bd-of20unsb) via
+/// [`crate::extension::paths`].
 fn rebase_fragment_paths(
     fragment: &mut ConfigValue,
     ext_dir: &Path,
     project_dir: &Path,
     runtime: &dyn SystemRuntime,
 ) {
-    fn walk(
-        value: &mut ConfigValue,
-        active: &[&[&str]],
-        ext_dir: &Path,
-        project_dir: &Path,
-        runtime: &dyn SystemRuntime,
-    ) {
-        if active.iter().any(|p| p.is_empty()) {
-            rebase_leaves(value, ext_dir, project_dir, runtime);
+    crate::extension::paths::walk_pattern_leaves(fragment, FRAGMENT_PATH_PATTERNS, &mut |leaf| {
+        let (ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) | ConfigValueKind::Path(s)) =
+            &leaf.value
+        else {
             return;
+        };
+        if let Some(rebased) = rebase_candidate(s, ext_dir, project_dir, runtime) {
+            leaf.value = ConfigValueKind::Path(rebased);
         }
-        match &mut value.value {
-            ConfigValueKind::Map(entries) => {
-                for entry in entries {
-                    let next: Vec<&[&str]> = active
-                        .iter()
-                        .filter(|p| p[0] == "*" || p[0] == entry.key)
-                        .map(|p| &p[1..])
-                        .collect();
-                    if !next.is_empty() {
-                        walk(&mut entry.value, &next, ext_dir, project_dir, runtime);
-                    }
-                }
-            }
-            // Arrays are transparent: items share the pattern position.
-            ConfigValueKind::Array(items) => {
-                for item in items {
-                    walk(item, active, ext_dir, project_dir, runtime);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn rebase_leaves(
-        value: &mut ConfigValue,
-        ext_dir: &Path,
-        project_dir: &Path,
-        runtime: &dyn SystemRuntime,
-    ) {
-        match &mut value.value {
-            ConfigValueKind::Map(entries) => {
-                for entry in entries {
-                    rebase_leaves(&mut entry.value, ext_dir, project_dir, runtime);
-                }
-            }
-            ConfigValueKind::Array(items) => {
-                for item in items {
-                    rebase_leaves(item, ext_dir, project_dir, runtime);
-                }
-            }
-            ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) | ConfigValueKind::Path(s) => {
-                if let Some(rebased) = rebase_candidate(s, ext_dir, project_dir, runtime) {
-                    value.value = ConfigValueKind::Path(rebased);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    walk(
-        fragment,
-        FRAGMENT_PATH_PATTERNS,
-        ext_dir,
-        project_dir,
-        runtime,
-    );
+    });
 }
 
 /// Decide whether `s` names a file bundled with the extension, and if
@@ -791,14 +738,10 @@ fn rebase_candidate(
     project_dir: &Path,
     runtime: &dyn SystemRuntime,
 ) -> Option<String> {
-    if quarto_util::is_rooted(Path::new(s)) || s.starts_with("http://") || s.starts_with("https://")
-    {
+    if !crate::extension::paths::bundled_file_exists(s, ext_dir, runtime) {
         return None;
     }
     let abs = ext_dir.join(s);
-    if !runtime.path_exists(&abs, None).unwrap_or(false) {
-        return None;
-    }
     let rebased = match pathdiff::diff_paths(&abs, project_dir) {
         Some(rel)
             if !matches!(
