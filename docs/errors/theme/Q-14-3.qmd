@@ -1,0 +1,59 @@
+---
+title: "Theme file not found"
+description: "A `theme:` entry names a `.scss` or `.css` file that does not exist at its resolved location."
+code: Q-14-3
+subsystem: theme
+status: stub
+since: "99.9.9"
+categories:
+  - theme
+---
+
+# `Q-14-3` — Theme File Not Found
+
+> A `theme:` entry names a `.scss` or `.css` file that does not
+> exist at its resolved location.
+
+## What this means
+
+A value in `theme:` (under `format.html` or a similar HTML-like
+format) ends in `.scss` or `.css`, so Quarto treats it as a path
+to a custom theme file — but no file exists at the place the path
+resolves to. The error message shows the fully resolved path
+Quarto looked at, and the render stops rather than shipping CSS
+that silently omits the theme.
+
+Relative theme paths resolve against the **document's**
+directory. Themes bundled with an extension (declared in the
+extension's `contributes.formats`) must sit next to the
+extension's `_extension.yml`; Quarto then rebases them
+automatically.
+
+## Why this happens
+
+Common causes:
+
+- **A typo in the file name**, or the file was moved or renamed
+  without updating `theme:`.
+- **A path written relative to the wrong base** — e.g. relative
+  to the project root for a document living in a subdirectory.
+  Check the resolved path in the error message to see where
+  Quarto actually looked.
+- **An extension manifest referencing a file the extension does
+  not ship** — the `theme:` entry in `contributes.formats` names
+  a file that is missing from the extension directory.
+
+## How to fix
+
+- Fix the spelling, or move the file to the resolved location
+  shown in the message.
+- For documents in subdirectories, write the path relative to the
+  document (or use a project-level `theme:` in `_quarto.yml`,
+  which Quarto rebases per document automatically).
+- For extensions, ship the file next to `_extension.yml` so the
+  bundled-file resolution picks it up.
+
+## Related
+
+- `Q-14-2` — unknown theme name: the value has no `.scss`/`.css`
+  extension and is not a built-in theme name either.

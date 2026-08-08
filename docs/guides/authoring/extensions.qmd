@@ -93,6 +93,8 @@ Quarto's standard configuration merging applies, uniformly:
 
 Files the extension ships next to its manifest — SCSS themes, CSS, header includes, favicons, logos, scripts — are referenced with paths relative to the extension directory, as in the example above. Quarto resolves them automatically; your project does not need to spell out `_extensions/acme/fancy-docs/theme.scss`.
 
+The same resolution applies to format contributions (`contributes: formats:`): a format extension can bundle theme SCSS, CSS, or header includes next to its manifest and reference them by bare name. A `theme:` entry that names a `.scss`/`.css` file Quarto cannot find — bundled or otherwise — fails the render with [Q-14-3](../../errors/theme/Q-14-3.qmd).
+
 ### Errors you might see
 
 - **Unknown project type (Q-5-17)**: `project.type` is neither built-in nor provided by any extension in `_extensions/`. The message lists the project-type extensions that were found — check for typos, and check whether the extension failed to load.
