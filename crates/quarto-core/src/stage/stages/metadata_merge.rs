@@ -20,7 +20,7 @@
 //! format-flattened config. Downstream stages (AST transforms, rendering)
 //! can read metadata without knowing about the layering.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use quarto_config::{MergedConfig, resolve_format_config};
@@ -115,6 +115,46 @@ fn build_extension_metadata_layer(
     };
 
     config.map(|cv| (cv, ext.path.clone()))
+}
+
+/// Build the per-document layers from extension `contributes.metadata`
+/// (bd-ad7i1pc6 Phase 5, absorbing bd-zb2tod5f).
+///
+/// One layer per extension declaring `contributes.metadata`, in
+/// discovery order. The `project` key is stripped — it is a
+/// project-config concern, merged into the project config by
+/// `ProjectContext::parse_config` — and the rest is format-flattened
+/// like every metadata layer, with `Path`-kind values rebased from the
+/// extension dir to the document dir.
+///
+/// These layers sit at the **bottom** of the merge stack (below the
+/// project config): extension metadata fills gaps, and everything the
+/// user writes — `_quarto.yml`, directory metadata, the document —
+/// wins over it.
+fn build_metadata_contribution_layers(
+    extensions: &[Extension],
+    base_format: &str,
+    document_dir: &Path,
+) -> Vec<ConfigValue> {
+    extensions
+        .iter()
+        .filter_map(|ext| {
+            let meta = ext.contributes.metadata.as_ref()?;
+            let entries: Vec<quarto_pandoc_types::config_value::ConfigMapEntry> = meta
+                .as_map_entries()?
+                .iter()
+                .filter(|e| e.key != "project")
+                .cloned()
+                .collect();
+            if entries.is_empty() {
+                return None;
+            }
+            let wrapped = ConfigValue::new_map(entries, meta.source_info.clone());
+            let mut flattened = resolve_format_config(&wrapped, base_format);
+            adjust_paths_to_document_dir(&mut flattened, &ext.path, document_dir);
+            Some(flattened)
+        })
+        .collect()
 }
 
 /// Merge project, directory, document, and runtime metadata.
@@ -217,6 +257,12 @@ impl PipelineStage for MetadataMergeStage {
             flattened
         });
 
+        // Layer 0 (lowest priority): extension `contributes.metadata`
+        // (non-`project` keys; bd-ad7i1pc6 Phase 5). Sits below the
+        // project config so everything user-written wins over it.
+        let metadata_contribution_layers =
+            build_metadata_contribution_layers(&ctx.extensions, base_format, &document_dir);
+
         // Layer 2: Extension metadata (uses full target_format for lookup)
         // Adjust !path values from extension dir to document dir
         let extension_layer = build_extension_metadata_layer(&ctx.extensions, target_format).map(
@@ -286,8 +332,12 @@ impl PipelineStage for MetadataMergeStage {
             .as_ref()
             .map(|json| resolve_format_config(&json_to_config_value(json), base_format));
 
-        // Build merge layers: project → extension → dir[0..] → document → runtime
+        // Build merge layers: metadata-contributions → project →
+        // extension-format → dir[0..] → document → runtime
         let mut layers: Vec<&ConfigValue> = Vec::new();
+        for contrib in &metadata_contribution_layers {
+            layers.push(contrib);
+        }
         if let Some(ref proj) = project_layer {
             layers.push(proj);
         }
@@ -443,7 +493,7 @@ mod tests {
     use quarto_pandoc_types::pandoc::Pandoc;
     use quarto_source_map::SourceContext;
     use quarto_system_runtime::TempDir;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::Arc;
 
     // Mock runtime for testing
@@ -1825,6 +1875,139 @@ mod tests {
         // Regression test: with no extensions, behavior is identical to before
         let layer = build_extension_metadata_layer(&[], "html");
         assert!(layer.is_none());
+    }
+
+    // === build_metadata_contribution_layers (bd-ad7i1pc6 Phase 5) ===
+
+    fn make_metadata_extension(name: &str, metadata: ConfigValue) -> Extension {
+        Extension {
+            id: ExtensionId::new(name),
+            title: Some(name.to_string()),
+            author: Some("Test".to_string()),
+            version: None,
+            quarto_required: None,
+            path: PathBuf::from("/extensions").join(name),
+            contributes: Contributes {
+                metadata: Some(metadata),
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn metadata_contribution_layer_strips_project_and_flattens_format() {
+        let meta = config_map(vec![
+            (
+                "project",
+                config_map(vec![("pre-render", config_str("x.ts"))]),
+            ),
+            ("author-notice", config_str("from extension")),
+            (
+                "format",
+                config_map(vec![("html", config_map(vec![("toc", config_bool(true))]))]),
+            ),
+        ]);
+        let ext = make_metadata_extension("meta-ext", meta);
+
+        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"));
+        assert_eq!(layers.len(), 1);
+        let layer = &layers[0];
+        assert!(
+            layer.get("project").is_none(),
+            "`project` is a project-config concern, merged in parse_config"
+        );
+        assert_eq!(
+            layer.get("author-notice").and_then(|v| v.as_str()),
+            Some("from extension")
+        );
+        // `format.html.*` flattens for the html render, like every
+        // other metadata layer.
+        assert_eq!(layer.get("toc").and_then(|v| v.as_bool()), Some(true));
+        assert!(layer.get("format").is_none());
+    }
+
+    #[test]
+    fn metadata_contribution_layer_rebases_path_values_to_document_dir() {
+        let css = ConfigValue {
+            value: ConfigValueKind::Path("assets/extra.css".to_string()),
+            source_info: SourceInfo::for_test(),
+            merge_op: Default::default(),
+        };
+        let meta = config_map(vec![("css", css)]);
+        let ext = make_metadata_extension("meta-ext", meta);
+
+        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"));
+        assert_eq!(layers.len(), 1);
+        assert_eq!(
+            layers[0].get("css").and_then(|v| v.as_str()),
+            Some("../extensions/meta-ext/assets/extra.css"),
+            "Path-kind values rebase ext dir → document dir"
+        );
+    }
+
+    #[test]
+    fn metadata_contribution_layer_absent_when_only_project_key() {
+        let meta = config_map(vec![(
+            "project",
+            config_map(vec![("pre-render", config_str("x.ts"))]),
+        )]);
+        let ext = make_metadata_extension("meta-ext", meta);
+        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"));
+        assert!(layers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn metadata_contribution_reaches_merged_doc_meta_below_document() {
+        let runtime = Arc::new(MockRuntime);
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let mut ctx = StageContext::new(runtime, Format::html(), project, doc).unwrap();
+        ctx.extensions = vec![make_metadata_extension(
+            "meta-ext",
+            config_map(vec![
+                ("author-notice", config_str("from extension")),
+                ("subtitle", config_str("extension subtitle")),
+            ]),
+        )];
+
+        let mut doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc::default(),
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+            recorded_includes: Vec::new(),
+        };
+        // The document sets its own subtitle — it must win.
+        doc_ast.ast.meta = config_map(vec![("subtitle", config_str("doc subtitle"))]);
+
+        let stage = MetadataMergeStage::new();
+        let output = stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        assert_eq!(
+            result
+                .ast
+                .meta
+                .get("author-notice")
+                .and_then(|v| v.as_str()),
+            Some("from extension"),
+            "extension metadata fills gaps in document metadata"
+        );
+        assert_eq!(
+            result.ast.meta.get("subtitle").and_then(|v| v.as_str()),
+            Some("doc subtitle"),
+            "document metadata wins over extension metadata"
+        );
     }
 
     #[test]

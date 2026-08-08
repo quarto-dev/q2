@@ -511,17 +511,29 @@ https://github.com/posit-dev/quarto-yaml/issues/14 (bd-43lc07w1).
 
 Full workspace suite: 11,099 passed.
 
-### Phase 5 — `contributes.metadata` (absorbed bd-zb2tod5f)
-- [ ] Tests: project-level `contributes.metadata.project` merge
-      (user-wins, pre-render path rebased, multiple-extension
-      ordering); document-level layer for non-project keys
-- [ ] Project-level merge in `parse_config` (D6.1)
-- [ ] Document-level layer extension in `metadata_merge.rs` (D6.2)
-- [ ] End-to-end: quarto-openapi's contributed
-      `project.pre-render` entry appears in resolved project config for
-      q2-connect-docs (execution of the .ts script itself is out of
-      scope — bd-wch2dotq)
-- [ ] Close bd-zb2tod5f pointing here
+### Phase 5 — `contributes.metadata` (absorbed bd-zb2tod5f) ✅ 2026-08-08
+- [x] Tests: 6 project-level integration tests
+      (`extension_metadata.rs`) + 4 doc-level unit tests in
+      `metadata_merge.rs` (written first, observed failing)
+- [x] Project-level merge (D6.1):
+      `apply_metadata_project_contributions` in `parse_config` —
+      applies from **all** discovered extensions (discovery now runs
+      once in `parse_config`, shared with type resolution), user wins,
+      bundled paths rebase via the Phase-4 machinery
+- [x] Document-level layer (D6.2):
+      `build_metadata_contribution_layers` — non-`project` keys of
+      `contributes.metadata`, one layer per extension, format-
+      flattened, Path-kind values rebased ext→doc dir, inserted at
+      the **bottom** of the merge stack (below project config)
+- [x] End-to-end: real Connect docs copy with scripts enabled prints
+      `Running pre-render script:
+      _extensions/posit-dev/quarto-openapi/openapi-to-markdown.ts` —
+      the contribution lands in project config and drives execution;
+      the script then fails on Deno-style imports under Node, which is
+      the separate `.ts`-runtime gap (bd-wch2dotq)
+- [x] Close bd-zb2tod5f pointing here
+
+Full workspace suite: 11,109 passed.
 
 ### Phase 6 — docs + follow-ups
 - [ ] `docs/guides/authoring/extensions.qmd`: replace `TBD.` with at

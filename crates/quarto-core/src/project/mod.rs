@@ -396,6 +396,8 @@ fn resolve_project_type(
     metadata: &mut ConfigValue,
     config_path: &Path,
     content: &str,
+    extensions: &[crate::extension::Extension],
+    load_diagnostics: &[quarto_error_reporting::DiagnosticMessage],
     runtime: &dyn SystemRuntime,
 ) -> Result<ResolvedProjectType> {
     let Some(type_value) = metadata.get("project").and_then(|p| p.get("type")) else {
@@ -424,6 +426,8 @@ fn resolve_project_type(
         &type_source,
         config_path,
         content,
+        extensions,
+        load_diagnostics,
         runtime,
     )
 }
@@ -438,20 +442,20 @@ fn resolve_project_type(
 /// replaces the extension's outright. The only fragment surgery is
 /// stripping `project.detect` (bootstrap-only, unsupported — future
 /// strand) before the merge.
+#[allow(clippy::too_many_arguments)]
 fn resolve_custom_project_type(
     metadata: &mut ConfigValue,
     type_str: &str,
     type_source: &quarto_source_map::SourceInfo,
     config_path: &Path,
     content: &str,
+    extensions: &[crate::extension::Extension],
+    load_diagnostics: &[quarto_error_reporting::DiagnosticMessage],
     runtime: &dyn SystemRuntime,
 ) -> Result<ResolvedProjectType> {
     use quarto_config::MergedConfig;
 
     let project_dir = config_path.parent().unwrap_or(Path::new("."));
-    let builtin_dir = crate::extension::builtin_extensions_path(runtime);
-    let (extensions, load_diagnostics) =
-        crate::extension::discover_project_extensions(project_dir, builtin_dir.as_deref(), runtime);
 
     let candidates: Vec<&crate::extension::Extension> = extensions
         .iter()
@@ -483,7 +487,7 @@ fn resolve_custom_project_type(
             config_path,
             content,
             hints,
-            load_diagnostics,
+            load_diagnostics.to_vec(),
         ));
     };
 
@@ -595,6 +599,69 @@ fn resolve_custom_project_type(
         }),
         diagnostics,
     })
+}
+
+/// Merge every discovered extension's `contributes.metadata.project`
+/// into the project config (bd-ad7i1pc6 Phase 5, absorbing
+/// bd-zb2tod5f).
+///
+/// Unlike `contributes.project` (opt-in via `project.type`), this
+/// applies from **all** discovered extensions, unconditionally — the
+/// Q1 mechanism quarto-openapi uses to inject its `pre-render` script.
+/// Layering (low → high): extension contributions in discovery order,
+/// then the user's `_quarto.yml` (already fragment-merged for custom
+/// types) — so the **user wins**, deliberately diverging from Q1's
+/// `mergeExtensionMetadata`, which lets the extension override the
+/// user (an accident of implementation order, not a design).
+///
+/// Bundled file paths (scripts, resources) rebase ext-dir →
+/// project-root via the same existence-driven machinery as
+/// `contributes.project` fragments.
+///
+/// Non-`project` keys of `contributes.metadata` are a *document-level*
+/// concern, handled as a metadata layer in `MetadataMergeStage` — they
+/// must not merge into project config here.
+fn apply_metadata_project_contributions(
+    metadata: &mut ConfigValue,
+    extensions: &[crate::extension::Extension],
+    project_dir: &Path,
+    runtime: &dyn SystemRuntime,
+) {
+    use quarto_config::MergedConfig;
+    use quarto_pandoc_types::config_value::ConfigMapEntry;
+
+    let mut contribution_layers: Vec<ConfigValue> = Vec::new();
+    for ext in extensions {
+        let Some(meta) = ext.contributes.metadata.as_ref() else {
+            continue;
+        };
+        let Some(project_part) = meta.get("project") else {
+            continue;
+        };
+        // Wrap as `{project: …}` so the fragment merges at top level,
+        // then rebase bundled paths against this extension's dir.
+        let mut fragment = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "project".to_string(),
+                key_source: project_part.source_info.clone(),
+                value: project_part.clone(),
+            }],
+            meta.source_info.clone(),
+        );
+        rebase_fragment_paths(&mut fragment, &ext.path, project_dir, runtime);
+        contribution_layers.push(fragment);
+    }
+    if contribution_layers.is_empty() {
+        return;
+    }
+
+    let mut layers: Vec<&ConfigValue> = contribution_layers.iter().collect();
+    layers.push(metadata);
+    // A materialize failure (pathological nesting) keeps the user's
+    // config untouched — same tolerant posture as `MetadataMergeStage`.
+    if let Ok(merged) = MergedConfig::new(layers).materialize() {
+        *metadata = merged;
+    }
 }
 
 /// Key paths within a `contributes.project` fragment whose string
@@ -1281,15 +1348,43 @@ impl ProjectContext {
         let mut metadata =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
 
+        // Discover project-scoped extensions once (bd-ad7i1pc6): both
+        // custom-type resolution and `contributes.metadata.project`
+        // merging consume the same list. Manifest-load failures
+        // (Q-16-1) are attached to the Q-5-17 error when type
+        // resolution fails; otherwise they are dropped here — the
+        // per-document discovery in `StageContext::new` re-reports
+        // them on every render.
+        let config_dir = path.parent().unwrap_or(Path::new("."));
+        let builtin_dir = crate::extension::builtin_extensions_path(runtime);
+        let (extensions, load_diagnostics) = crate::extension::discover_project_extensions(
+            config_dir,
+            builtin_dir.as_deref(),
+            runtime,
+        );
+
         // Resolve `project.type` (bd-ad7i1pc6). Built-in names parse
-        // directly; a custom name resolves against extensions
-        // discovered at project scope, whose `contributes.project`
-        // fragment is merged *under* the user's config (mutating
-        // `metadata`) before any field below is extracted. An
-        // unresolvable `project.type` is a hard error (Q-5-17), not a
-        // silent fall-back to the default kind.
-        let resolved = resolve_project_type(&mut metadata, path, &content, runtime)?;
+        // directly; a custom name resolves against the discovered
+        // extensions, whose `contributes.project` fragment is merged
+        // *under* the user's config (mutating `metadata`) before any
+        // field below is extracted. An unresolvable `project.type` is
+        // a hard error (Q-5-17), not a silent fall-back to the
+        // default kind.
+        let resolved = resolve_project_type(
+            &mut metadata,
+            path,
+            &content,
+            &extensions,
+            &load_diagnostics,
+            runtime,
+        )?;
         let project_kind = resolved.kind;
+
+        // Merge `contributes.metadata.project` from every discovered
+        // extension (user wins; bd-zb2tod5f semantics) — before the
+        // field extraction below, so contributed `pre-render` /
+        // `resources` / `output-dir` entries take effect.
+        apply_metadata_project_contributions(&mut metadata, &extensions, config_dir, runtime);
 
         let output_dir = metadata
             .get("project")
