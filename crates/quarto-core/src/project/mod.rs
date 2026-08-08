@@ -314,11 +314,712 @@ impl TryFrom<&str> for ProjectKind {
     }
 }
 
+/// Advisory diagnostics about the parsed project kind (bd-ad7i1pc6).
+///
+/// `book` and `manuscript` parse successfully but currently render
+/// with default-project behavior (`project_type_for` maps them to
+/// `DefaultProjectType`). That surprise used to be silent; this
+/// returns the **Q-5-18** warning CLI drivers print next to the
+/// `underscore_typo_diagnostics` check. Span-less, mirroring Q-5-11:
+/// the config file is named in the problem text instead.
+pub fn project_kind_diagnostics(
+    config: &ProjectConfig,
+) -> Vec<quarto_error_reporting::DiagnosticMessage> {
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+
+    let kind = config.project_kind;
+    if !matches!(kind, ProjectKind::Book | ProjectKind::Manuscript) {
+        return Vec::new();
+    }
+    let config_name = config
+        .config_path
+        .as_ref()
+        .map_or_else(|| "_quarto.yml".to_string(), |p| p.display().to_string());
+    vec![
+        DiagnosticMessageBuilder::warning(format!(
+            "`{}` projects are not yet implemented",
+            kind.as_str()
+        ))
+        .with_code("Q-5-18")
+        .problem(format!(
+            "{config_name} sets `project.type: {}`, but Quarto 2 does not implement \
+             {} projects yet. The project renders with default-project behavior: \
+             documents are rendered individually, without {}-specific structure.",
+            kind.as_str(),
+            kind.as_str(),
+            kind.as_str(),
+        ))
+        .build(),
+    ]
+}
+
+/// Result of resolving `project.type` (bd-ad7i1pc6).
+struct ResolvedProjectType {
+    kind: ProjectKind,
+    custom: Option<CustomProjectType>,
+    /// Non-fatal resolution diagnostics (Q-16-8 ambiguity, Q-16-9
+    /// missing base type), destined for
+    /// [`ProjectConfig::config_diagnostics`].
+    diagnostics: Vec<quarto_error_reporting::DiagnosticMessage>,
+}
+
+impl ResolvedProjectType {
+    fn builtin(kind: ProjectKind) -> Self {
+        Self {
+            kind,
+            custom: None,
+            diagnostics: Vec::new(),
+        }
+    }
+}
+
+/// Resolve `project.type` from parsed `_quarto.yml` metadata
+/// (bd-ad7i1pc6).
+///
+/// Built-in names parse directly. A custom name resolves against
+/// extensions discovered at project scope
+/// ([`crate::extension::discover_project_extensions`]): the selected
+/// extension's `contributes.project` fragment is merged **under** the
+/// user's config — mutating `metadata` in place, before
+/// `parse_config` extracts any field from it — and `project.type` is
+/// rewritten to the extension's built-in base type, so every
+/// downstream consumer sees an ordinary built-in project.
+///
+/// An unknown or non-string `project.type` is a hard **Q-5-17** error:
+/// the previous `.ok().unwrap_or_default()` fallback silently rendered
+/// e.g. a `type: posit-docs` website as a bare default project.
+///
+/// `content` is the already-read text of `config_path`, registered
+/// into the error's `SourceContext` so diagnostics render a snippet
+/// pointing at the offending `type:` scalar.
+fn resolve_project_type(
+    metadata: &mut ConfigValue,
+    config_path: &Path,
+    content: &str,
+    extensions: &[crate::extension::Extension],
+    load_diagnostics: &[quarto_error_reporting::DiagnosticMessage],
+    runtime: &dyn SystemRuntime,
+) -> Result<ResolvedProjectType> {
+    let Some(type_value) = metadata.get("project").and_then(|p| p.get("type")) else {
+        return Ok(ResolvedProjectType::builtin(ProjectKind::Default));
+    };
+    let type_source = type_value.source_info.clone();
+
+    let Some(type_str) = type_value.as_str().map(str::to_owned) else {
+        return Err(project_type_error(
+            "`project.type` must be a string.".to_string(),
+            &type_source,
+            config_path,
+            content,
+            Vec::new(),
+            Vec::new(),
+        ));
+    };
+
+    if let Ok(kind) = ProjectKind::try_from(type_str.as_str()) {
+        return Ok(ResolvedProjectType::builtin(kind));
+    }
+
+    resolve_custom_project_type(
+        metadata,
+        &type_str,
+        &type_source,
+        config_path,
+        content,
+        extensions,
+        load_diagnostics,
+        runtime,
+    )
+}
+
+/// Resolve a non-built-in `project.type` against project-scoped
+/// extensions and merge the winner's `contributes.project` fragment
+/// under the user's config.
+///
+/// Merge semantics are Quarto 2's standard rules, uniformly — no
+/// Q1-style special cases: user wins scalar conflicts, arrays concat
+/// (extension entries first), and a user value tagged `!prefer`
+/// replaces the extension's outright. The only fragment surgery is
+/// stripping `project.detect` (bootstrap-only, unsupported — future
+/// strand) before the merge.
+#[allow(clippy::too_many_arguments)]
+fn resolve_custom_project_type(
+    metadata: &mut ConfigValue,
+    type_str: &str,
+    type_source: &quarto_source_map::SourceInfo,
+    config_path: &Path,
+    content: &str,
+    extensions: &[crate::extension::Extension],
+    load_diagnostics: &[quarto_error_reporting::DiagnosticMessage],
+    runtime: &dyn SystemRuntime,
+) -> Result<ResolvedProjectType> {
+    use quarto_config::MergedConfig;
+
+    let project_dir = config_path.parent().unwrap_or(Path::new("."));
+
+    let candidates: Vec<&crate::extension::Extension> = extensions
+        .iter()
+        .filter(|e| e.contributes.project.is_some())
+        .collect();
+
+    let (selected, mut diagnostics) =
+        select_project_type_extension(type_str, &candidates, config_path);
+    let Some(ext) = selected else {
+        let mut hints = Vec::new();
+        if candidates.is_empty() {
+            hints.push(
+                "No extension under `_extensions/` contributes a project type \
+                 (`contributes: project:` in `_extension.yml`)."
+                    .to_string(),
+            );
+        } else {
+            let available: Vec<String> = candidates.iter().map(|e| format!("`{}`", e.id)).collect();
+            hints.push(format!(
+                "Extensions contributing project types found: {}.",
+                available.join(", ")
+            ));
+        }
+        // A broken manifest (Q-16-1) may be exactly why the type failed
+        // to resolve — attach those diagnostics so the cause is visible.
+        return Err(project_type_error(
+            format!("`{type_str}` is not a recognized project type."),
+            type_source,
+            config_path,
+            content,
+            hints,
+            load_diagnostics.to_vec(),
+        ));
+    };
+
+    // `select_project_type_extension` only returns candidates, and
+    // candidates are filtered on `contributes.project.is_some()`.
+    let fragment_src = ext
+        .contributes
+        .project
+        .as_ref()
+        .expect("selected extension must contribute a project fragment");
+    if !fragment_src.is_map() {
+        return Err(project_contribution_error(
+            ext,
+            format!(
+                "The `contributes.project` entry in `{}` must be a mapping \
+                 (a `_quarto.yml` fragment).",
+                ext.path.join("_extension.yml").display()
+            ),
+        ));
+    }
+
+    // Base kind: the built-in type this custom type renders as.
+    let base_kind = match fragment_src
+        .get("project")
+        .and_then(|p| p.get("type"))
+        .map(|t| t.as_str().map(str::to_owned))
+    {
+        None => {
+            diagnostics.push(missing_base_type_warning(ext));
+            ProjectKind::Default
+        }
+        Some(None) => {
+            return Err(project_contribution_error(
+                ext,
+                "The `project.type` inside `contributes.project` must be a string.".to_string(),
+            ));
+        }
+        Some(Some(base)) => match ProjectKind::try_from(base.as_str()) {
+            Ok(kind @ (ProjectKind::Book | ProjectKind::Manuscript)) => {
+                return Err(project_contribution_error(
+                    ext,
+                    format!(
+                        "Extension `{}` declares base project type `{}`, which \
+                         Quarto 2 does not implement yet. Custom project types \
+                         with a `{}` base are not yet supported.",
+                        ext.id,
+                        kind.as_str(),
+                        kind.as_str()
+                    ),
+                ));
+            }
+            Ok(kind) => kind,
+            Err(_) => {
+                return Err(project_contribution_error(
+                    ext,
+                    format!(
+                        "Extension `{}` declares base project type `{base}`, which \
+                         is not a built-in project type. A custom project type must \
+                         name a built-in base (`default` or `website`); chaining \
+                         custom types is not supported.",
+                        ext.id
+                    ),
+                ));
+            }
+        },
+    };
+
+    // Strip `project.detect` (bootstrap-only) from a working copy of
+    // the fragment before merging.
+    let mut fragment = fragment_src.clone();
+    if let Some(project_entry) = fragment.get_mut("project")
+        && let ConfigValueKind::Map(entries) = &mut project_entry.value
+    {
+        entries.retain(|e| e.key != "detect");
+    }
+
+    // Rebase extension-bundled file references (theme SCSS, includes,
+    // favicon, …) from extension-dir-relative to project-root-relative
+    // so the merged config behaves as if the user had written the
+    // paths in `_quarto.yml`.
+    rebase_fragment_paths(&mut fragment, &ext.path, project_dir, runtime);
+
+    // Merge: extension fragment is the lower-priority layer; the
+    // user's `_quarto.yml` wins conflicts under standard Q2 semantics.
+    let merged = MergedConfig::new(vec![&fragment, metadata])
+        .materialize()
+        .map_err(|e| {
+            QuartoError::Other(format!(
+                "Failed to merge project config contributed by extension `{}`: {}",
+                ext.id, e
+            ))
+        })?;
+    *metadata = merged;
+
+    // Rewrite `project.type` to the base type so downstream consumers
+    // see an ordinary built-in project. The value keeps the provenance
+    // of the user's original `type:` scalar.
+    metadata.insert_path(
+        &["project", "type"],
+        ConfigValue::new_string(base_kind.as_str(), type_source.clone()),
+    );
+
+    Ok(ResolvedProjectType {
+        kind: base_kind,
+        custom: Some(CustomProjectType {
+            name: type_str.to_string(),
+            extension_id: ext.id.to_string(),
+            extension_dir: ext.path.clone(),
+        }),
+        diagnostics,
+    })
+}
+
+/// Merge every discovered extension's `contributes.metadata.project`
+/// into the project config (bd-ad7i1pc6 Phase 5, absorbing
+/// bd-zb2tod5f).
+///
+/// Unlike `contributes.project` (opt-in via `project.type`), this
+/// applies from **all** discovered extensions, unconditionally — the
+/// Q1 mechanism quarto-openapi uses to inject its `pre-render` script.
+/// Layering (low → high): extension contributions in discovery order,
+/// then the user's `_quarto.yml` (already fragment-merged for custom
+/// types) — so the **user wins**, deliberately diverging from Q1's
+/// `mergeExtensionMetadata`, which lets the extension override the
+/// user (an accident of implementation order, not a design).
+///
+/// Bundled file paths (scripts, resources) rebase ext-dir →
+/// project-root via the same existence-driven machinery as
+/// `contributes.project` fragments.
+///
+/// Non-`project` keys of `contributes.metadata` are a *document-level*
+/// concern, handled as a metadata layer in `MetadataMergeStage` — they
+/// must not merge into project config here.
+fn apply_metadata_project_contributions(
+    metadata: &mut ConfigValue,
+    extensions: &[crate::extension::Extension],
+    project_dir: &Path,
+    runtime: &dyn SystemRuntime,
+) {
+    use quarto_config::MergedConfig;
+    use quarto_pandoc_types::config_value::ConfigMapEntry;
+
+    let mut contribution_layers: Vec<ConfigValue> = Vec::new();
+    for ext in extensions {
+        let Some(meta) = ext.contributes.metadata.as_ref() else {
+            continue;
+        };
+        let Some(project_part) = meta.get("project") else {
+            continue;
+        };
+        // Wrap as `{project: …}` so the fragment merges at top level,
+        // then rebase bundled paths against this extension's dir.
+        let mut fragment = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "project".to_string(),
+                key_source: project_part.source_info.clone(),
+                value: project_part.clone(),
+            }],
+            meta.source_info.clone(),
+        );
+        rebase_fragment_paths(&mut fragment, &ext.path, project_dir, runtime);
+        contribution_layers.push(fragment);
+    }
+    if contribution_layers.is_empty() {
+        return;
+    }
+
+    let mut layers: Vec<&ConfigValue> = contribution_layers.iter().collect();
+    layers.push(metadata);
+    // A materialize failure (pathological nesting) keeps the user's
+    // config untouched — same tolerant posture as `MetadataMergeStage`.
+    if let Ok(merged) = MergedConfig::new(layers).materialize() {
+        *metadata = merged;
+    }
+}
+
+/// Key paths within a `contributes.project` fragment whose string
+/// values may name files bundled with the extension (bd-ad7i1pc6 D4).
+///
+/// `*` matches any map key; arrays are transparent (a pattern position
+/// applies to every item). When a pattern is exhausted at a node,
+/// every string leaf underneath is a rebase candidate — this is what
+/// makes the `theme: {light: […], dark: […]}` and plain-list forms
+/// work from one `["format", "*", "theme"]` entry.
+///
+/// The table narrows *where* rebasing may happen; the existence check
+/// in [`rebase_candidate`] decides *whether* an individual string is a
+/// bundled file (builtin theme names like `cosmo`, command lines, and
+/// project-relative references simply don't exist under the extension
+/// dir and pass through verbatim).
+const FRAGMENT_PATH_PATTERNS: &[&[&str]] = &[
+    &["format", "*", "theme"],
+    &["format", "*", "css"],
+    &["format", "*", "include-in-header"],
+    &["format", "*", "include-before-body"],
+    &["format", "*", "include-after-body"],
+    &["format", "*", "format-resources"],
+    &["format", "*", "template"],
+    &["format", "*", "template-partials"],
+    &["website", "favicon"],
+    &["website", "navbar", "logo"],
+    &["website", "sidebar", "logo"],
+    &["project", "pre-render"],
+    &["project", "post-render"],
+    &["project", "resources"],
+    &["brand"],
+];
+
+/// Rebase extension-bundled file references in a `contributes.project`
+/// fragment from extension-dir-relative to project-root-relative.
+///
+/// Rebased values become [`ConfigValueKind::Path`] so the per-document
+/// metadata merge keeps adjusting them (project root → document dir)
+/// for documents in subdirectories.
+fn rebase_fragment_paths(
+    fragment: &mut ConfigValue,
+    ext_dir: &Path,
+    project_dir: &Path,
+    runtime: &dyn SystemRuntime,
+) {
+    fn walk(
+        value: &mut ConfigValue,
+        active: &[&[&str]],
+        ext_dir: &Path,
+        project_dir: &Path,
+        runtime: &dyn SystemRuntime,
+    ) {
+        if active.iter().any(|p| p.is_empty()) {
+            rebase_leaves(value, ext_dir, project_dir, runtime);
+            return;
+        }
+        match &mut value.value {
+            ConfigValueKind::Map(entries) => {
+                for entry in entries {
+                    let next: Vec<&[&str]> = active
+                        .iter()
+                        .filter(|p| p[0] == "*" || p[0] == entry.key)
+                        .map(|p| &p[1..])
+                        .collect();
+                    if !next.is_empty() {
+                        walk(&mut entry.value, &next, ext_dir, project_dir, runtime);
+                    }
+                }
+            }
+            // Arrays are transparent: items share the pattern position.
+            ConfigValueKind::Array(items) => {
+                for item in items {
+                    walk(item, active, ext_dir, project_dir, runtime);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn rebase_leaves(
+        value: &mut ConfigValue,
+        ext_dir: &Path,
+        project_dir: &Path,
+        runtime: &dyn SystemRuntime,
+    ) {
+        match &mut value.value {
+            ConfigValueKind::Map(entries) => {
+                for entry in entries {
+                    rebase_leaves(&mut entry.value, ext_dir, project_dir, runtime);
+                }
+            }
+            ConfigValueKind::Array(items) => {
+                for item in items {
+                    rebase_leaves(item, ext_dir, project_dir, runtime);
+                }
+            }
+            ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) | ConfigValueKind::Path(s) => {
+                if let Some(rebased) = rebase_candidate(s, ext_dir, project_dir, runtime) {
+                    value.value = ConfigValueKind::Path(rebased);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    walk(
+        fragment,
+        FRAGMENT_PATH_PATTERNS,
+        ext_dir,
+        project_dir,
+        runtime,
+    );
+}
+
+/// Decide whether `s` names a file bundled with the extension, and if
+/// so return its rebased (forward-slash) form.
+///
+/// Rooted paths and URLs pass through. Otherwise the string is a
+/// bundled file exactly when it exists under the extension dir; the
+/// rebased form is project-root-relative when the extension lives
+/// inside the project (`_extensions/…`), absolute otherwise (embedded
+/// built-in extensions extracted to a temp dir).
+fn rebase_candidate(
+    s: &str,
+    ext_dir: &Path,
+    project_dir: &Path,
+    runtime: &dyn SystemRuntime,
+) -> Option<String> {
+    if quarto_util::is_rooted(Path::new(s)) || s.starts_with("http://") || s.starts_with("https://")
+    {
+        return None;
+    }
+    let abs = ext_dir.join(s);
+    if !runtime.path_exists(&abs, None).unwrap_or(false) {
+        return None;
+    }
+    let rebased = match pathdiff::diff_paths(&abs, project_dir) {
+        Some(rel)
+            if !matches!(
+                rel.components().next(),
+                Some(std::path::Component::ParentDir)
+            ) =>
+        {
+            quarto_util::to_forward_slashes(&rel)
+        }
+        _ => quarto_util::to_forward_slashes(&abs),
+    };
+    Some(rebased)
+}
+
+/// Select the extension backing a custom project type name.
+///
+/// Rules (Q1-compatible, made deterministic):
+/// - An extension with the same full id appearing more than once
+///   (built-in shadowed by a user copy) collapses to the **last**
+///   occurrence — user extensions are discovered after built-ins.
+/// - `org/name` form: exact id match only.
+/// - bare `name`: all candidates with that name; if several distinct
+///   ids match, the org-less one wins, then the lexicographically
+///   first organization — with a **Q-16-8** warning naming the choice
+///   and the shadowed candidates.
+fn select_project_type_extension<'a>(
+    name: &str,
+    candidates: &[&'a crate::extension::Extension],
+    config_path: &Path,
+) -> (
+    Option<&'a crate::extension::Extension>,
+    Vec<quarto_error_reporting::DiagnosticMessage>,
+) {
+    use hashlink::LinkedHashMap;
+
+    // Dedup by full id, keeping the last occurrence (user shadows
+    // built-in). LinkedHashMap keeps discovery order for determinism.
+    let mut by_id: LinkedHashMap<String, &crate::extension::Extension> = LinkedHashMap::new();
+    for ext in candidates {
+        by_id.replace(ext.id.to_string(), ext);
+    }
+
+    if let Some((org, ext_name)) = name.split_once('/') {
+        let found = by_id
+            .values()
+            .find(|e| e.id.name == ext_name && e.id.organization.as_deref() == Some(org))
+            .copied();
+        return (found, Vec::new());
+    }
+
+    let mut matches: Vec<&crate::extension::Extension> = by_id
+        .values()
+        .filter(|e| e.id.name == name)
+        .copied()
+        .collect();
+    match matches.len() {
+        0 => (None, Vec::new()),
+        1 => (Some(matches[0]), Vec::new()),
+        _ => {
+            // Deterministic preference: org-less first, then by org.
+            matches.sort_by_key(|e| e.id.organization.clone());
+            let chosen = matches
+                .iter()
+                .find(|e| e.id.organization.is_none())
+                .copied()
+                .unwrap_or(matches[0]);
+            let others: Vec<String> = matches
+                .iter()
+                .filter(|e| e.id != chosen.id)
+                .map(|e| format!("`{}`", e.id))
+                .collect();
+            let config_name = config_path.display();
+            let warning = quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                "Ambiguous project type extension",
+            )
+            .with_code("Q-16-8")
+            .problem(format!(
+                "`project.type: {name}` in {config_name} matches more than one \
+                 extension; `{}` was chosen over {}.",
+                chosen.id,
+                others.join(", ")
+            ))
+            .add_hint(format!(
+                "Use the full `organization/name` form (e.g. `type: {}`) to \
+                 disambiguate.",
+                chosen.id
+            ))
+            .build();
+            (Some(chosen), vec![warning])
+        }
+    }
+}
+
+/// Build the **Q-16-9** warning for a `contributes.project` fragment
+/// with no `project.type`: the base defaults to `default`, which is
+/// almost certainly an authoring mistake in the extension.
+fn missing_base_type_warning(
+    ext: &crate::extension::Extension,
+) -> quarto_error_reporting::DiagnosticMessage {
+    quarto_error_reporting::DiagnosticMessageBuilder::warning(
+        "Project type contribution has no base type",
+    )
+    .with_code("Q-16-9")
+    .problem(format!(
+        "Extension `{}` contributes a project type but its \
+         `contributes.project` fragment does not declare `project.type`. \
+         The project renders with the `default` base type.",
+        ext.id
+    ))
+    .add_hint(format!(
+        "Add `project: type: website` (or `default`) to `{}`.",
+        ext.path.join("_extension.yml").display()
+    ))
+    .build()
+}
+
+/// Build the structured **Q-16-7** error for an invalid
+/// `contributes.project` fragment (non-mapping, bad or unsupported
+/// base type). Span-less: the fault is in the extension manifest, not
+/// the user's `_quarto.yml`; the problem text names the extension.
+fn project_contribution_error(ext: &crate::extension::Extension, problem: String) -> QuartoError {
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+    use quarto_source_map::SourceContext;
+
+    let diagnostic = DiagnosticMessageBuilder::error("Invalid project type contribution")
+        .with_code("Q-16-7")
+        .problem(problem)
+        .add_info(format!(
+            "The extension's manifest is `{}`.",
+            ext.path.join("_extension.yml").display()
+        ))
+        .build();
+
+    QuartoError::Parse(crate::error::ParseError::new(
+        vec![diagnostic],
+        SourceContext::new(),
+    ))
+}
+
+/// Build the structured **Q-5-17** error for a `project.type` that
+/// could not be resolved, anchored at the `type:` value's span in the
+/// project config file. `extra_hints` (e.g. the list of available
+/// project-contributing extensions) follow the built-ins hint;
+/// `extra_diagnostics` (e.g. Q-16-1 manifest-load failures that may be
+/// the root cause) are attached after the main diagnostic.
+fn project_type_error(
+    problem: String,
+    type_source: &quarto_source_map::SourceInfo,
+    config_path: &Path,
+    content: &str,
+    extra_hints: Vec<String>,
+    extra_diagnostics: Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> QuartoError {
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+    use quarto_source_map::{FileId, SourceContext};
+
+    let mut source_context = SourceContext::new();
+    if let Some((fid_usize, _, _)) = type_source.resolve_byte_range() {
+        source_context.add_file_with_id(
+            FileId(fid_usize),
+            config_path.to_string_lossy().into_owned(),
+            Some(content.to_string()),
+        );
+    }
+
+    let mut builder = DiagnosticMessageBuilder::error("Unknown project type")
+        .with_code("Q-5-17")
+        .with_location(type_source.clone())
+        .problem(problem)
+        .add_hint("Built-in project types are `default`, `website`, `book`, and `manuscript`.");
+    for hint in extra_hints {
+        builder = builder.add_hint(hint);
+    }
+
+    let mut diagnostics = vec![builder.build()];
+    diagnostics.extend(extra_diagnostics);
+
+    QuartoError::Parse(crate::error::ParseError::new(diagnostics, source_context))
+}
+
+/// Record of an extension-contributed custom project type
+/// (bd-ad7i1pc6).
+///
+/// Present on [`ProjectConfig`] when `project.type` named a custom
+/// type that an extension's `contributes.project` resolved. The custom
+/// type always resolves to a built-in **base** kind before anything
+/// dispatches on it — [`ProjectConfig::project_kind`] holds that base
+/// kind, and nothing downstream behaves differently for a custom type;
+/// this record exists for diagnostics (`q2 render`'s
+/// `type: posit-docs (website)` banner) and provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CustomProjectType {
+    /// The type name as written in `_quarto.yml` (e.g. `posit-docs`).
+    pub name: String,
+    /// Resolved extension id (`org/name` or bare `name`).
+    pub extension_id: String,
+    /// Absolute path of the extension's directory (holds
+    /// `_extension.yml`); the base for rebasing contributed paths.
+    pub extension_dir: PathBuf,
+}
+
 /// Parsed project configuration from `_quarto.yml`
 #[derive(Debug, Clone, Default)]
 pub struct ProjectConfig {
     /// Project kind (the tag selected by `project.type:`).
+    ///
+    /// For extension-contributed custom types this is the resolved
+    /// **base** kind; see [`Self::custom_project_type`].
     pub project_kind: ProjectKind,
+
+    /// Set when `project.type` named an extension-contributed custom
+    /// type (bd-ad7i1pc6); `None` for built-in types.
+    pub custom_project_type: Option<CustomProjectType>,
+
+    /// Non-fatal diagnostics produced while parsing the project
+    /// config (e.g. Q-16-8 ambiguous project-type extension, Q-16-9
+    /// missing base type). CLI drivers print these once per run,
+    /// next to [`project_kind_diagnostics`] — they are *not* folded
+    /// into per-document render diagnostics, which would repeat them
+    /// for every file.
+    pub config_diagnostics: Vec<quarto_error_reporting::DiagnosticMessage>,
 
     /// Output directory (relative to project root)
     pub output_dir: Option<PathBuf>,
@@ -644,32 +1345,46 @@ impl ProjectContext {
         // Convert to ConfigValue with ProjectConfig interpretation context
         // (strings are kept literal, not parsed as markdown)
         let mut diagnostics = DiagnosticCollector::new();
-        let metadata =
+        let mut metadata =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
 
-        // Extract project-specific settings from metadata.
-        //
-        // An unrecognized (or non-string) `project.type` is a hard
-        // error (bd-sekn481x). Q2 has no extension project types, so
-        // a Quarto 1 extension type like `posit-docs` used to fall
-        // back silently to `default` — which renders in place and
-        // strews per-document copies of the shared JS/CSS through
-        // the source tree of what the user meant as a website.
-        // Quarto 1 also errors here ("Unsupported project type").
-        let project_kind = match metadata.get("project").and_then(|p| p.get("type")) {
-            None => ProjectKind::default(),
-            Some(type_value) => {
-                let type_str = type_value.as_str();
-                match type_str.map(ProjectKind::try_from) {
-                    Some(Ok(kind)) => kind,
-                    Some(Err(_)) | None => {
-                        return Err(unknown_project_type_error(
-                            type_str, type_value, path, &content,
-                        ));
-                    }
-                }
-            }
-        };
+        // Discover project-scoped extensions once (bd-ad7i1pc6): both
+        // custom-type resolution and `contributes.metadata.project`
+        // merging consume the same list. Manifest-load failures
+        // (Q-16-1) are attached to the Q-5-17 error when type
+        // resolution fails; otherwise they are dropped here — the
+        // per-document discovery in `StageContext::new` re-reports
+        // them on every render.
+        let config_dir = path.parent().unwrap_or(Path::new("."));
+        let builtin_dir = crate::extension::builtin_extensions_path(runtime);
+        let (extensions, load_diagnostics) = crate::extension::discover_project_extensions(
+            config_dir,
+            builtin_dir.as_deref(),
+            runtime,
+        );
+
+        // Resolve `project.type` (bd-ad7i1pc6). Built-in names parse
+        // directly; a custom name resolves against the discovered
+        // extensions, whose `contributes.project` fragment is merged
+        // *under* the user's config (mutating `metadata`) before any
+        // field below is extracted. An unresolvable `project.type` is
+        // a hard error (Q-5-17), not a silent fall-back to the
+        // default kind.
+        let resolved = resolve_project_type(
+            &mut metadata,
+            path,
+            &content,
+            &extensions,
+            &load_diagnostics,
+            runtime,
+        )?;
+        let project_kind = resolved.kind;
+
+        // Merge `contributes.metadata.project` from every discovered
+        // extension (user wins; bd-zb2tod5f semantics) — before the
+        // field extraction below, so contributed `pre-render` /
+        // `resources` / `output-dir` entries take effect.
+        apply_metadata_project_contributions(&mut metadata, &extensions, config_dir, runtime);
 
         let output_dir = metadata
             .get("project")
@@ -714,6 +1429,8 @@ impl ProjectContext {
 
         Ok(ProjectConfig {
             project_kind,
+            custom_project_type: resolved.custom,
+            config_diagnostics: resolved.diagnostics,
             output_dir,
             render_patterns,
             resources,
@@ -730,6 +1447,18 @@ impl ProjectContext {
         self.config.project_kind
     }
 
+    /// Human-readable project-type label for status output.
+    ///
+    /// Built-in types print their name (`website`); custom types print
+    /// the name the user wrote plus the resolved base kind:
+    /// `posit-docs (website)`.
+    pub fn project_type_label(&self) -> String {
+        match &self.config.custom_project_type {
+            Some(custom) => format!("{} ({})", custom.name, self.project_kind().as_str()),
+            None => self.project_kind().as_str().to_string(),
+        }
+    }
+
     /// Check if this is a multi-document project
     pub fn is_multi_document(&self) -> bool {
         !self.is_single_file
@@ -738,57 +1467,6 @@ impl ProjectContext {
                 ProjectKind::Website | ProjectKind::Book | ProjectKind::Manuscript
             )
     }
-}
-
-/// Build the Q-5-17 hard error for an unrecognized or non-string
-/// `project.type` (bd-sekn481x).
-///
-/// `type_str` is `Some` when the value was a string but not a known
-/// kind, `None` when it wasn't a string at all. The `ConfigValue`'s
-/// `source_info` carries the FileId `quarto_yaml::parse_file`
-/// computed for the config file; registering `content` under that
-/// exact id lets the diagnostic render an Ariadne snippet pointing
-/// at the offending scalar (same technique as
-/// `resource_error_to_parse_error`).
-fn unknown_project_type_error(
-    type_str: Option<&str>,
-    type_value: &ConfigValue,
-    config_path: &Path,
-    content: &str,
-) -> QuartoError {
-    use quarto_error_reporting::DiagnosticMessageBuilder;
-    use quarto_source_map::{FileId, SourceContext};
-
-    let mut source_context = SourceContext::new();
-    if let Some((fid_usize, _, _)) = type_value.source_info.resolve_byte_range() {
-        source_context.add_file_with_id(
-            FileId(fid_usize),
-            config_path.to_string_lossy().into_owned(),
-            Some(content.to_string()),
-        );
-    }
-
-    let builder = match type_str {
-        Some(s) => DiagnosticMessageBuilder::error(format!("Unknown project type `{s}`"))
-            .problem("`project.type` must be one of `default`, `website`, `book`, or `manuscript`.")
-            .add_info(format!(
-                "Quarto 1 extension project types (from `_extensions/`) are not yet \
-                 supported in Quarto 2. If `{s}` comes from an extension, set \
-                 `project.type` to the base type that extension extends (often `website`)."
-            )),
-        None => DiagnosticMessageBuilder::error("Invalid `project.type`").problem(
-            "`project.type` must be a string — one of `default`, `website`, `book`, or \
-             `manuscript`.",
-        ),
-    };
-    let diagnostic = builder
-        .with_code("Q-5-17")
-        .with_location(type_value.source_info.clone())
-        .build();
-    QuartoError::Parse(crate::error::ParseError::new(
-        vec![diagnostic],
-        source_context,
-    ))
 }
 
 #[cfg(test)]

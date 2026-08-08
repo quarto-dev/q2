@@ -1133,6 +1133,20 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-16",
     "since_version": "99.9.9"
   },
+  "Q-5-17": {
+    "subsystem": "project",
+    "title": "Unknown Project Type",
+    "message_template": "`_quarto.yml` sets a `project.type` that is not a string, is not a built-in project type (`default`, `website`, `book`, `manuscript`), and does not match any extension contributing a project type (`contributes: project:` in an `_extensions/` manifest), so the project cannot be rendered. The render stops before any document is processed — earlier Quarto 2 versions silently continued with default-project behavior, which hides a broken site build and scatters per-document copies of shared JS/CSS next to every source file. Check the type name for typos; the hints list the project-contributing extensions that were found, and any manifest that failed to load is reported alongside as Q-16-1 (a broken manifest is a common root cause).",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-17",
+    "since_version": "99.9.9"
+  },
+  "Q-5-18": {
+    "subsystem": "project",
+    "title": "Project Type Not Yet Implemented",
+    "message_template": "`_quarto.yml` sets `project.type: book` or `project.type: manuscript`, which Quarto 2 does not implement yet. The type name is accepted (for forward compatibility with Quarto 1 projects) but the project renders with default-project behavior: documents render individually, with no book/manuscript structure, navigation, or combined output.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-18",
+    "since_version": "99.9.9"
+  },
   "Q-5-13": {
     "subsystem": "project",
     "title": "`project.render` Pattern Matched No Files",
@@ -1152,13 +1166,6 @@
     "title": "Invalid Glob Pattern in `project.render`",
     "message_template": "A `project.render` pattern is not a valid glob and matches nothing.",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-15",
-    "since_version": "99.9.9"
-  },
-  "Q-5-17": {
-    "subsystem": "project",
-    "title": "Unknown Project Type",
-    "message_template": "`project.type` in `_quarto.yml` is not one of the supported types (`default`, `website`, `book`, `manuscript`), or is not a string. Quarto 1 extension project types (contributed from `_extensions/`) are not yet supported in Quarto 2; set `project.type` to the base type the extension extends (often `website`). The render stops before any document is processed — continuing under the wrong project type would scatter per-document copies of shared JS/CSS next to every source file.",
-    "docs_url": "https://quarto.org/docs/errors/project/Q-5-17",
     "since_version": "99.9.9"
   },
   "Q-16-1": {
@@ -1201,6 +1208,27 @@
     "title": "Block Shortcode In Inline Position",
     "message_template": "A shortcode used inline (inside a sentence or other inline content) produced block-level output (for example a raw HTML block from the `video` shortcode), and none of it could be carried into the inline position — the output was dropped. Put the shortcode in its own paragraph, surrounded by blank lines.",
     "docs_url": "https://quarto.org/docs/errors/extension/Q-16-6",
+    "since_version": "99.9.9"
+  },
+  "Q-16-7": {
+    "subsystem": "extension",
+    "title": "Invalid Project Type Contribution",
+    "message_template": "An extension resolved a custom `project.type`, but its `contributes.project` fragment is unusable: it is not a mapping, its `project.type` is not a string, it names a base type that is not built-in (chaining custom types is not supported), or it names `book`/`manuscript`, which Quarto 2 does not implement yet. The project cannot be rendered until the extension manifest is fixed (or the type is changed). The message names the extension and its `_extension.yml`.",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-7",
+    "since_version": "99.9.9"
+  },
+  "Q-16-8": {
+    "subsystem": "extension",
+    "title": "Ambiguous Project Type Extension",
+    "message_template": "A bare `project.type` name matched more than one extension contributing a project type. The org-less extension wins, then the lexicographically first organization; the message names the chosen extension and the shadowed candidates. Use the full `organization/name` form in `project.type` to disambiguate.",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-8",
+    "since_version": "99.9.9"
+  },
+  "Q-16-9": {
+    "subsystem": "extension",
+    "title": "Project Type Contribution Missing Base Type",
+    "message_template": "An extension's `contributes.project` fragment does not declare `project.type`, so the custom project type falls back to the `default` base type. This is almost always an authoring mistake in the extension — a website-styled project type without `project: type: website` silently loses all website behavior. Declare the base type in the extension's `_extension.yml`.",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-9",
     "since_version": "99.9.9"
   },
   "Q-17-1": {
