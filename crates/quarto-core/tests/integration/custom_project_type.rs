@@ -241,8 +241,6 @@ fn arrays_concat_extension_entries_first() {
 }
 
 #[test]
-#[ignore = "bd-43lc07w1: quarto-yaml drops !prefer tags on sequences/mappings, so the \
-            tag never reaches the merge; un-ignore when the upstream fix ships"]
 fn user_prefer_replaces_extension_array() {
     // No Q1-style special-casing: a project that wants to *replace* an
     // extension-contributed list uses Quarto 2's `!prefer`.

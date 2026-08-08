@@ -440,11 +440,13 @@ clean on quarto-core/quarto/quarto-preview.
 **Discovered (bd-43lc07w1, P1):** `quarto-yaml` 0.1.1 only captures
 YAML tags on *scalars* — `Event::SequenceStart`/`MappingStart` discard
 theirs — so `!prefer`/`!concat` written on an array or map in any YAML
-file never reaches the merge machinery. This blocks the sanctioned
-"replace an extension-contributed list with `!prefer`" pattern. Fix is
-upstream (posit-dev/quarto-yaml) + a version bump here. The pinning
-test `user_prefer_replaces_extension_array` is `#[ignore]`d with the
-strand id until the fix ships.
+file never reaches the merge machinery. This blocked the sanctioned
+"replace an extension-contributed list with `!prefer`" pattern.
+**Resolved 2026-08-08**: fix merged upstream
+(posit-dev/quarto-yaml#14), quarto-yaml bumped 0.1.0 → 0.1.2, the
+pinning test un-ignored and passing, and `!prefer` verified end-to-end
+through `q2 render` (user's tagged include-in-header replaces the
+extension's entry in the output HTML). bd-43lc07w1 closed.
 
 Phase 3 end-to-end evidence (2026-08-08, output inspected):
 
