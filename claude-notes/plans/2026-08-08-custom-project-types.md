@@ -476,8 +476,9 @@ Full workspace suite: 11,094 passed (1 ignored pending bd-43lc07w1).
       **bd-of20unsb** (P2, discovered-from).
 - [x] End-to-end (evidence below): fixture render with SCSS `@import`;
       **real q2-connect-docs render** on a scratch copy
-- [ ] Full `cargo xtask verify` (WASM leg) — running at end of
-      session; result recorded below when complete
+- [x] Full `cargo xtask verify` (WASM leg) — passed 2026-08-08
+      (all 14 steps incl. hub-client/WASM build + tests; one strict-
+      clippy fix in a test: `sort` → `sort_unstable`)
 
 Phase 4 end-to-end evidence (2026-08-08, output inspected):
 

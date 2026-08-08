@@ -166,7 +166,7 @@ contributes:
         .iter()
         .map(|r| r.pattern.as_str())
         .collect();
-    patterns.sort();
+    patterns.sort_unstable();
     assert_eq!(patterns, vec!["a-resource.json", "b-resource.json"]);
 }
 
