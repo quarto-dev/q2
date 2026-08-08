@@ -148,6 +148,58 @@ pub fn underscore_typo_diagnostics(config: &ProjectConfig) -> Vec<DiagnosticMess
         .collect()
 }
 
+/// Which application is hosting a WASM render (bd-pq72bplh).
+///
+/// The two hosts have different render-script semantics (D7 in
+/// `claude-notes/plans/2026-07-29-pre-post-render-scripts.md`): the
+/// hub preview runs entirely in the browser and can never execute
+/// scripts, while `q2 preview`'s native server runs
+/// `project.pre-render` scripts once at boot, before any page render
+/// (post-render scripts don't run in the preview loop — a documented
+/// deviation, as nothing consumes a materialized output dir there).
+/// Host-dependent diagnostics dispatch on this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderHost {
+    /// The hub-client web app: browser-only, no subprocesses.
+    HubClient,
+    /// The `q2 preview` SPA embedded in the `q2` binary, backed by a
+    /// native server that ran pre-render scripts at boot.
+    NativePreview,
+}
+
+/// Q-5-12: warn that configured `project.pre-render` /
+/// `project.post-render` scripts will not run — but only for the host
+/// where that is actually true ([`RenderHost::HubClient`]).
+/// [`RenderHost::NativePreview`] returns `None`: its native side
+/// already ran the pre-render scripts at boot, so the warning would
+/// be false (bd-pq72bplh).
+///
+/// Pure decision + message builder: no once-per-session gating here.
+/// The WASM caller (`wasm-quarto-hub-client`) layers an AtomicBool
+/// once-gate on top so the warning shows at most once per session.
+pub fn render_scripts_unsupported_diagnostic(
+    host: RenderHost,
+    config: &ProjectConfig,
+) -> Option<DiagnosticMessage> {
+    if host != RenderHost::HubClient {
+        return None;
+    }
+    if config.pre_render_scripts.is_empty() && config.post_render_scripts.is_empty() {
+        return None;
+    }
+    Some(
+        DiagnosticMessageBuilder::warning("Project render scripts do not run in the hub preview")
+            .with_code("Q-5-12")
+            .problem(
+                "This project configures `project.pre-render` / `project.post-render` \
+                 scripts, which cannot run in the browser. The preview renders without \
+                 them; use `q2 render` on a machine with the interpreters installed to \
+                 run the scripts.",
+            )
+            .build(),
+    )
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 mod exec {
     use std::path::{Path, PathBuf};
@@ -744,6 +796,74 @@ mod tests {
                 ),
             )];
             assert!(check_forbidden_mutations(&before, &after).is_ok());
+        }
+    }
+
+    // ── host-dependent Q-5-12 diagnostic (bd-pq72bplh) ──────────────
+
+    mod unsupported_diagnostic {
+        use super::super::{RenderHost, RenderScript, render_scripts_unsupported_diagnostic};
+        use crate::project::ProjectConfig;
+
+        fn script(cmd: &str) -> RenderScript {
+            RenderScript {
+                command: cmd.to_string(),
+                source_info: quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::programmatic_config(),
+                ),
+            }
+        }
+
+        fn config_with_scripts(pre: &[&str], post: &[&str]) -> ProjectConfig {
+            ProjectConfig {
+                pre_render_scripts: pre.iter().map(|c| script(c)).collect(),
+                post_render_scripts: post.iter().map(|c| script(c)).collect(),
+                ..Default::default()
+            }
+        }
+
+        #[test]
+        fn hub_client_with_pre_render_scripts_warns() {
+            let config = config_with_scripts(&["prepare.py"], &[]);
+            let diag = render_scripts_unsupported_diagnostic(RenderHost::HubClient, &config)
+                .expect("hub preview must warn: the browser cannot run the scripts");
+            let text = diag.to_text(None);
+            assert!(text.contains("[Q-5-12]"), "got: {text}");
+            assert!(text.contains("hub preview"), "got: {text}");
+        }
+
+        #[test]
+        fn hub_client_with_post_render_scripts_only_warns() {
+            let config = config_with_scripts(&[], &["cleanup.R"]);
+            assert!(
+                render_scripts_unsupported_diagnostic(RenderHost::HubClient, &config).is_some(),
+                "post-render-only projects must still warn in the hub preview"
+            );
+        }
+
+        #[test]
+        fn native_preview_with_scripts_is_silent() {
+            // `q2 preview`'s native host runs pre-render scripts at
+            // boot (D7, 2026-07-29 plan) — the warning would be false.
+            for config in [
+                config_with_scripts(&["prepare.py"], &[]),
+                config_with_scripts(&[], &["cleanup.R"]),
+                config_with_scripts(&["prepare.py"], &["cleanup.R"]),
+            ] {
+                assert!(
+                    render_scripts_unsupported_diagnostic(RenderHost::NativePreview, &config)
+                        .is_none(),
+                    "q2 preview must not warn: its native host runs the scripts"
+                );
+            }
+        }
+
+        #[test]
+        fn no_scripts_is_silent_for_both_hosts() {
+            let config = config_with_scripts(&[], &[]);
+            for host in [RenderHost::HubClient, RenderHost::NativePreview] {
+                assert!(render_scripts_unsupported_diagnostic(host, &config).is_none());
+            }
         }
     }
 
