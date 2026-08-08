@@ -204,8 +204,15 @@ precedent). Per design decision 2, these **fail the render** (hard error).
 
 ## Work items
 
-- [ ] Phase 0: failing tests (read-time marking, e2e theme, Q-14-x
-      diagnostic, css case)
+- [x] Phase 0: failing tests (read-time marking, e2e theme, Q-14-x
+      diagnostic, css case) — 7 unit tests in `extension/read.rs` (6 fail
+      as expected, 1 no-change guard passes); smoke-all fixture
+      `extensions/format-with-theme/` (fails all 3 assertions — confirms
+      `css:` links are dropped too, not just theme); CLI test
+      `theme_missing_file.rs` (Q-14-3 test fails on exit 0 as expected;
+      present-file control passes). Note: `as_str()` handles Path-kind
+      (config_value.rs:641), so the css template path is safe by
+      construction — risk retired.
 - [ ] Phase 1: shared helper extracted; `rebase_fragment_paths` refactored;
       existence-driven marking wired into `parse_formats`
 - [ ] Phase 2: Q-14-x registered in `quarto-error-catalog`; hard error wired;

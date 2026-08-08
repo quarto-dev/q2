@@ -1,0 +1,22 @@
+---
+title: Format With Theme Test
+format: fancyfmt-html
+_quarto:
+  tests:
+    fancyfmt-html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["fmt-theme-marker", "#0a1b2c"]
+      ensureFileRegexMatches:
+        - ["_extensions/fancyfmt/fmt-style\\.css"]
+---
+
+## Format With Theme
+
+A format extension bundling a theme SCSS (`fmt-theme.scss`) and a CSS
+file (`fmt-style.css`) next to its `_extension.yml`. The compiled CSS
+must contain the bundled theme's rule (rebased ext-dir → doc-dir,
+bd-of20unsb), and the rendered HTML must link the bundled CSS at its
+rebased path.
+
+A [span]{.fmt-theme-marker} using the theme rule.
