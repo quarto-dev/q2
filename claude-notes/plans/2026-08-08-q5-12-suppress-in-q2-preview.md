@@ -1,7 +1,7 @@
 # Suppress the Q-5-12 render-scripts warning in `q2 preview`
 
-**Strand:** bd-pq72bplh (caused-by bd-w348iu63)
-**Status:** in progress — Option A + full suppression approved by Carlos 2026-08-08.
+**Strand:** bd-pq72bplh (caused-by bd-w348iu63) — closed 2026-08-08
+**Status:** done — PR #472 merged to main (`958d331f`); strand closed.
 
 ## Overview
 
@@ -223,7 +223,7 @@ consumer.
 - [x] CI green on the PR: all 8 checks pass (test suites on
       ubuntu/macos across both workflows, WASM Tests, Hub-Client E2E,
       Snyk license/security), 2026-08-08.
-- [ ] `braid close bd-pq72bplh` (after merge).
+- [x] `braid close bd-pq72bplh` (PR #472 merged as `958d331f`).
 
 ## Open questions for review
 
