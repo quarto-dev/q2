@@ -387,6 +387,34 @@ impl PipelineStage for CompileThemeCssStage {
             }
         };
 
+        // Interim light/dark degradation (bd-o76p01wb): the parser
+        // accepted a `theme: {light: …, dark: …}` map but only the
+        // light half is honored. Make the degradation loud — one
+        // Q-14-3 *warning* per document, anchored at the ignored
+        // `dark:` key. Emitted here (not in `BootstrapJsStage`, which
+        // parses the same config) so each document warns exactly once;
+        // the CLI's source-location coalescer collapses repeats across
+        // documents that share the offending config file.
+        if let Some(dark_loc) = &theme_config.dark_theme_ignored {
+            ctx.add_diagnostic(
+                quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                    "Dark theme variant not yet supported",
+                )
+                .with_code("Q-14-3")
+                .problem(
+                    "`theme:` uses the `light:`/`dark:` map form; only the `light:` \
+                     themes are applied. The `dark:` entry is ignored and no \
+                     dark-mode toggle is emitted.",
+                )
+                .add_hint(
+                    "Remove the `dark:` entry to silence this warning, or keep it — \
+                     it will take effect when dual light/dark theme support lands.",
+                )
+                .with_location(dark_loc.clone())
+                .build(),
+            );
+        }
+
         // `theme: none` → ship the static lightweight DEFAULT_CSS without
         // compiling Bootstrap. This is the explicit opt-out path.
         if theme_config.suppress_bootstrap {
@@ -807,6 +835,38 @@ mod tests {
         }
     }
 
+    /// Metadata with the Q1 light/dark map form:
+    /// `theme: {light: [<light>], dark: [<dark>]}` (bd-o76p01wb).
+    fn meta_with_light_dark_theme(light: &str, dark: &str) -> ConfigValue {
+        let list = |name: &str| ConfigValue {
+            value: ConfigValueKind::Array(vec![ConfigValue {
+                value: ConfigValueKind::Scalar(Yaml::String(name.to_string())),
+                source_info: SourceInfo::for_test(),
+                merge_op: quarto_pandoc_types::MergeOp::Concat,
+            }]),
+            source_info: SourceInfo::for_test(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+        let entry = |key: &str, value: ConfigValue| ConfigMapEntry {
+            key: key.to_string(),
+            key_source: SourceInfo::for_test(),
+            value,
+        };
+        let theme_value = ConfigValue {
+            value: ConfigValueKind::Map(vec![
+                entry("light", list(light)),
+                entry("dark", list(dark)),
+            ]),
+            source_info: SourceInfo::for_test(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+        ConfigValue {
+            value: ConfigValueKind::Map(vec![entry("theme", theme_value)]),
+            source_info: SourceInfo::for_test(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        }
+    }
+
     /// Locate the (single) `css:theme:*` artifact stored by
     /// [`CompileThemeCssStage`] and return its content as a string.
     /// Phase 5 retires the singleton `"css:default"` key in favor
@@ -1035,6 +1095,52 @@ mod tests {
         assert!(
             css.contains(".container"),
             "compiled CSS should contain .container"
+        );
+    }
+
+    #[tokio::test]
+    async fn light_dark_theme_map_compiles_light_and_warns_q_14_3() {
+        // bd-o76p01wb interim: the Q1 `theme: {light: […], dark: […]}`
+        // map form must not fail the render. The light half compiles;
+        // the ignored dark half surfaces as exactly one Q-14-3
+        // *warning* on the stage context.
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let mut ctx = make_stage_context(runtime);
+        let stage = CompileThemeCssStage::new();
+
+        let input = make_doc_ast(meta_with_light_dark_theme("cosmo", "darkly"));
+        let output = stage
+            .run(input, &mut ctx)
+            .await
+            .expect("light/dark map form must not fail the stage");
+        assert!(output.into_document_ast().is_some());
+
+        let css = get_css_artifact(&ctx);
+        assert_ne!(
+            css, DEFAULT_CSS,
+            "light half must be compiled, not fallback"
+        );
+        assert!(
+            css.contains(".btn"),
+            "light half must produce real Bootstrap CSS"
+        );
+
+        let q14_3: Vec<_> = ctx
+            .diagnostics
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("Q-14-3"))
+            .collect();
+        assert_eq!(
+            q14_3.len(),
+            1,
+            "expected exactly one Q-14-3 warning, diagnostics: {:?}",
+            ctx.diagnostics
+        );
+        assert_eq!(
+            q14_3[0].kind,
+            quarto_error_reporting::DiagnosticKind::Warning,
+            "Q-14-3 must be warning severity, not error"
         );
     }
 
@@ -1488,6 +1594,7 @@ mod tests {
             suppress_bootstrap: false,
             title_block_layer: true,
             brand_ref: None,
+            dark_theme_ignored: None,
         }
     }
 
@@ -1498,6 +1605,7 @@ mod tests {
             suppress_bootstrap: false,
             title_block_layer: true,
             brand_ref: None,
+            dark_theme_ignored: None,
         }
     }
 
