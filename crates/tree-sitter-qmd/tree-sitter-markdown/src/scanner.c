@@ -1849,9 +1849,26 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
         return false;
     }
 
+    // bd-ly83qewg: whitespace (or EOF) immediately after '<' disqualifies
+    // every angle-bracket HTML construct — per HTML/CommonMark, a tag name
+    // (or '/', '!', '?') must immediately follow '<' — and autolinks, which
+    // admit no whitespace at all. Only a raw specifier ('{<reader}') scans
+    // past this point, so when that isn't a valid symbol either, bail out
+    // right away instead of walking to the next '>'/EOF.
+    bool html_possible = !(lexer->lookahead == ' ' || lexer->lookahead == '\t' ||
+                           lexer->lookahead == '\r' || lexer->lookahead == '\n' ||
+                           lexer->eof(lexer));
+    if (!html_possible && !valid_symbols[RAW_SPECIFIER]) {
+        if (lt_str_valid) {
+            EMIT_TOKEN(LT_STR_LITERAL);
+        }
+        return false;
+    }
+
     // consume all characters until one of:
     // - '}': that was a raw specifier
-    // - '>': that was an autolink or html_element
+    // - '>': that was an autolink or html_element (unless disqualified by
+    //   whitespace right after '<', see above)
     // - EOF: no HTML construct matched; emit LT_STR_LITERAL (bd-j9cf) so the
     //   bare '<' becomes a plain Str instead of a parse error.
 
@@ -1869,7 +1886,7 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
             lexer->advance(lexer, false); // we want to consume '>' for autolinks
             lexer->mark_end(lexer);
             EMIT_TOKEN(AUTOLINK);
-        } else if (lexer->lookahead == '>') {
+        } else if (html_possible && lexer->lookahead == '>') {
             // this token is never valid, but we emit it for error messages
             lexer->advance(lexer, false);
             lexer->mark_end(lexer);
