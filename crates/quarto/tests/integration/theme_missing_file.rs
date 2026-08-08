@@ -3,11 +3,11 @@
  * Copyright (c) 2026 Posit, PBC
  *
  * End-to-end CLI tests for the missing-custom-theme hard error
- * (bd-of20unsb, Q-14-3).
+ * (bd-of20unsb, Q-14-4).
  */
 
 //! A `theme:` entry naming a `.scss`/`.css` file that resolves to no
-//! file must fail the render with a structured Q-14-3 diagnostic.
+//! file must fail the render with a structured Q-14-4 diagnostic.
 //!
 //! Before the fix, `compile_theme_css` swallowed
 //! `SassError::CustomThemeNotFound` into a trace-level warning and
@@ -41,9 +41,9 @@ fn run_q2_render(cwd: &Path, args: &[&str]) -> std::process::Output {
 }
 
 /// The core contract: a dangling custom-theme entry fails the render
-/// with Q-14-3 instead of silently shipping DEFAULT_CSS.
+/// with Q-14-4 instead of silently shipping DEFAULT_CSS.
 #[test]
-fn missing_custom_theme_fails_with_q_14_3() {
+fn missing_custom_theme_fails_with_q_14_4() {
     let temp = TempDir::new().unwrap();
     let dir = temp.path();
     write_file(
@@ -59,8 +59,8 @@ fn missing_custom_theme_fails_with_q_14_3() {
         "missing custom theme must exit non-zero; stderr:\n{stderr}"
     );
     assert!(
-        stderr.contains("Q-14-3"),
-        "expected the Q-14-3 diagnostic on stderr; got:\n{stderr}"
+        stderr.contains("Q-14-4"),
+        "expected the Q-14-4 diagnostic on stderr; got:\n{stderr}"
     );
     assert!(
         stderr.contains("nope.scss"),

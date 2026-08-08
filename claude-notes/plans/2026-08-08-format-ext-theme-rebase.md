@@ -213,8 +213,10 @@ precedent). Per design decision 2, these **fail the render** (hard error).
       present-file control passes). Note: `as_str()` handles Path-kind
       (config_value.rs:641), so the css template path is safe by
       construction — risk retired.
-- [ ] Phase 1: shared helper extracted; `rebase_fragment_paths` refactored;
-      existence-driven marking wired into `parse_formats`
+- [x] Phase 1: shared helper extracted (`extension/paths.rs`);
+      `rebase_fragment_paths` refactored onto it; existence-driven marking
+      wired into `parse_formats`. Commit `84f88c9f`; full workspace suite
+      green; smoke fixture passes.
 - [ ] Phase 2: Q-14-x registered in `quarto-error-catalog`; hard error wired;
       fallback retained for internal compile failures only
 - [ ] Phase 3: e2e verified via real binary; full `cargo xtask verify` green

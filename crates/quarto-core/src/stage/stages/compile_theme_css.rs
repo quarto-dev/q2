@@ -36,7 +36,8 @@ use quarto_config::resolve_website_value;
 use quarto_pandoc_types::ConfigValue;
 use quarto_sass::{CSS_BUILD_ID, SassLayer, ThemeConfig, ThemeContext, compile_default_css};
 use quarto_system_runtime::{
-    SASS_CACHE_BUDGET_BYTES, SystemRuntime, cache_get_lru, cache_set_lru, ensure_namespace_version,
+    PathKind, SASS_CACHE_BUDGET_BYTES, SystemRuntime, cache_get_lru, cache_set_lru,
+    ensure_namespace_version,
 };
 
 use crate::artifact::{Artifact, ArtifactScope};
@@ -368,21 +369,10 @@ impl PipelineStage for CompileThemeCssStage {
         let theme_config = match ThemeConfig::from_config_value(&doc.ast.meta) {
             Ok(c) => c,
             Err(e) => {
-                // The error's source span can point at either the
-                // project's _quarto.yml (most common) OR the
-                // document's own frontmatter (when the document
-                // overrides `theme:`). Hand the converter both
-                // candidates with their FileId bindings:
-                // - _quarto.yml uses the YAML parser's hash-based
-                //   FileId (via `quarto_yaml::file_id_for_filename`).
-                // - The document uses pampa's primary FileId(0).
-                let mut candidates: Vec<(quarto_source_map::FileId, &std::path::Path)> = Vec::new();
-                if let Some(p) = ctx.project.config.config_path.as_deref() {
-                    let fid = quarto_yaml::file_id_for_filename(&p.to_string_lossy());
-                    candidates.push((fid, p));
-                }
-                candidates.push((quarto_source_map::FileId(0), ctx.document.input.as_path()));
-                let pe = crate::theme_diagnostic::sass_error_to_parse_error(&e, &candidates);
+                let pe = crate::theme_diagnostic::sass_error_to_parse_error(
+                    &e,
+                    &theme_error_candidates(ctx),
+                );
                 return Err(PipelineError::Structured(pe));
             }
         };
@@ -522,6 +512,37 @@ impl PipelineStage for CompileThemeCssStage {
             theme_context = theme_context.with_brand(brand, brand_dir);
         }
 
+        // Up-front validation: every custom theme entry must resolve
+        // to a real file (bd-of20unsb). Before this check, a dangling
+        // entry surfaced only as a compile failure swallowed by the
+        // DEFAULT_CSS fallback below — silently dropping the *entire*
+        // theme list, valid entries included. A dangling entry is a
+        // user-facing configuration error, so it gets the same
+        // structured hard-error treatment as the `from_config_value`
+        // path above: Q-14-4, with a span at the offending `theme:`
+        // entry.
+        for (i, spec) in theme_config.themes.iter().enumerate() {
+            let Some(path) = spec.as_custom() else {
+                continue;
+            };
+            let resolved_path = theme_context.resolve_path(path);
+            let exists = ctx
+                .runtime
+                .path_exists(&resolved_path, Some(PathKind::File))
+                .unwrap_or(false);
+            if !exists {
+                let err = quarto_sass::SassError::CustomThemeNotFound {
+                    path: resolved_path,
+                    location: theme_config.theme_locations.get(i).cloned().flatten(),
+                };
+                let pe = crate::theme_diagnostic::sass_error_to_parse_error(
+                    &err,
+                    &theme_error_candidates(ctx),
+                );
+                return Err(PipelineError::Structured(pe));
+            }
+        }
+
         let key = match cache_key(
             &theme_config,
             &theme_context,
@@ -598,6 +619,27 @@ impl PipelineStage for CompileThemeCssStage {
 
         Ok(PipelineData::DocumentAst(doc))
     }
+}
+
+/// FileId candidates for rendering a theme-config diagnostic's source
+/// span. The offending `theme:` value can live in either the project's
+/// `_quarto.yml` (most common) or the document's own frontmatter (when
+/// the document overrides `theme:`); the two use different FileId
+/// schemes:
+///
+/// - `_quarto.yml` uses the YAML parser's hash-based FileId (via
+///   `quarto_yaml::file_id_for_filename`).
+/// - The document uses pampa's primary `FileId(0)`.
+fn theme_error_candidates(
+    ctx: &StageContext,
+) -> Vec<(quarto_source_map::FileId, &std::path::Path)> {
+    let mut candidates: Vec<(quarto_source_map::FileId, &std::path::Path)> = Vec::new();
+    if let Some(p) = ctx.project.config.config_path.as_deref() {
+        let fid = quarto_yaml::file_id_for_filename(&p.to_string_lossy());
+        candidates.push((fid, p));
+    }
+    candidates.push((quarto_source_map::FileId(0), ctx.document.input.as_path()));
+    candidates
 }
 
 /// Length of the theme fingerprint hex prefix used in artifact
@@ -1591,10 +1633,7 @@ mod tests {
         ThemeConfig {
             themes: vec![spec],
             minified,
-            suppress_bootstrap: false,
-            title_block_layer: true,
-            brand_ref: None,
-            dark_theme_ignored: None,
+            ..ThemeConfig::default_bootstrap()
         }
     }
 
@@ -1602,10 +1641,7 @@ mod tests {
         ThemeConfig {
             themes: vec![ThemeSpec::Custom(PathBuf::from(path))],
             minified,
-            suppress_bootstrap: false,
-            title_block_layer: true,
-            brand_ref: None,
-            dark_theme_ignored: None,
+            ..ThemeConfig::default_bootstrap()
         }
     }
 
