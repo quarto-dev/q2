@@ -274,7 +274,10 @@ mod tests {
         // catalog, under the 'theme' subsystem.
         // Query the catalog data directly (the codes live in
         // `quarto-error-catalog` now, not in `quarto-error-reporting`).
-        for code in ["Q-14-1", "Q-14-2"] {
+        // Q-14-3 (dark-theme-variant-ignored warning, bd-o76p01wb) is
+        // emitted by CompileThemeCssStage rather than this converter,
+        // but it lives in the same subsystem and must be registered.
+        for code in ["Q-14-1", "Q-14-2", "Q-14-3"] {
             let info = quarto_error_catalog::ERROR_CATALOG.get(code);
             assert!(
                 info.is_some(),
